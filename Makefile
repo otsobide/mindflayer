@@ -36,7 +36,7 @@ lint: ## Run clippy across the workspace
 	cargo clippy --workspace --all-targets
 
 .PHONY: run
-run: ## Run the CLI — pass args via ARGS="list --scope personal"
+run: ## Run the CLI — pass args via ARGS="list"
 	$(MAKE) -C apps/cli run ARGS="$(ARGS)"
 
 .PHONY: clean
