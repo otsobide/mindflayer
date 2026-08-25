@@ -28,9 +28,20 @@ are until the marker file appears.
 
 ## Getting started
 
-```bash
-cargo build --release          # binary at target/release/mind
+From a fresh clone, one command builds the binary and puts it on your PATH:
 
+```bash
+make dev/link                  # `mind` now points at target/debug/mind
+```
+
+It is a **symlink**, not a copy, so every later `make build` updates the `mind`
+you are running without reinstalling anything. `make dev/unlink` takes it back
+off. If you only want to use the tool rather than work on it, `make install`
+puts a real copy in cargo's bin directory instead.
+
+Then:
+
+```bash
 cd ~/Projects/collapse
 mind init                      # a .mind here, with an empty .mind/skills
 
@@ -109,17 +120,35 @@ is.
 
 ## Development
 
-A root `Makefile` delegates to each app, and CI invokes the same targets:
+A root `Makefile` delegates to each app, and CI invokes the same targets, so
+`make help` is the list of everything there is to run:
 
 ```bash
 make test              # every suite
 make build             # debug build of every crate
 make fmt               # cargo fmt --all
 make lint              # clippy across the workspace
-make run ARGS="list"   # run the CLI
+make run ARGS="list"   # run the CLI without installing it
 
 make core/test         # one app: make <app>/<target>
-make cli/run ARGS="init mind"
+make cli/run ARGS="init flayer"
+```
+
+Working on it, the loop is `make dev/link` once, then:
+
+```bash
+make dev/watch         # rebuilds on every change; the symlink stays current
+```
+
+`make dev/watch` needs `cargo-watch` (`cargo install cargo-watch`) and says so
+if it is missing. Note that `make clean` deletes `target/`, which leaves the
+`dev/link` symlink dangling until the next build.
+
+`BINDIR` says where the symlink goes, if `~/.cargo/bin` is not where you want
+it:
+
+```bash
+make dev/link BINDIR=~/.local/bin
 ```
 
 ## License
