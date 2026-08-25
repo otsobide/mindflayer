@@ -44,47 +44,55 @@ clean: ## Remove build artifacts
 	cargo clean
 
 # ---------------------------------------------------------------------------
-# Getting `mind` onto your PATH
+# Getting the binaries onto your PATH
 #
 # Two ways, for two situations. `install` is a copy: it is what you want if you
-# just want to use the tool. `dev/link` is a symlink to the debug build, so
-# every `make build` updates the binary on your PATH without reinstalling
-# anything — that is what you want while working on it.
+# just want to use the tools. `dev/link` is a symlink to the debug build, so
+# every `make build` updates the binaries on your PATH without reinstalling
+# anything — that is what you want while working on them.
+#
+# Both binaries, not just `mind`: `flayer` is a second entry point into the
+# same crate, and half an install is worse than none.
 #
 # "dev" is not in APPS, so these do not collide with the <app>/<target> pattern
-# rules above. BINDIR governs the symlink; `install` goes wherever cargo puts
+# rules above. BINDIR governs the symlinks; `install` goes wherever cargo puts
 # its binaries.
 # ---------------------------------------------------------------------------
 BINDIR ?= $(HOME)/.cargo/bin
-BIN := mind
+BINS := mind flayer
 
 .PHONY: install
-install: ## Install `mind` as a copy in cargo's bin directory (re-run to update)
+install: ## Install `mind` and `flayer` as copies in cargo's bin directory
 	cargo install --path apps/cli --locked
 
 .PHONY: dev/link
-dev/link: ## Build, then symlink `mind` into BINDIR so every `make build` updates it
+dev/link: ## Build, then symlink `mind` and `flayer` into BINDIR
 	cargo build -p mindflayer-cli
 	@mkdir -p "$(BINDIR)"
-	@ln -sfn "$(CURDIR)/target/debug/$(BIN)" "$(BINDIR)/$(BIN)"
-	@echo "$(BINDIR)/$(BIN) -> $(CURDIR)/target/debug/$(BIN)"
+	@for bin in $(BINS); do \
+		ln -sfn "$(CURDIR)/target/debug/$$bin" "$(BINDIR)/$$bin"; \
+		echo "$(BINDIR)/$$bin -> $(CURDIR)/target/debug/$$bin"; \
+	done
 	@# Whether BINDIR is on PATH, not whether some `mind` is findable: another
 	@# one earlier on the PATH is exactly the case worth warning about.
 	@case ":$$PATH:" in \
 		*":$(BINDIR):"*) ;; \
-		*) echo "warning: $(BINDIR) is not on your PATH, so \`$(BIN)\` will not be found there" ;; \
+		*) echo "warning: $(BINDIR) is not on your PATH, so these will not be found there" ;; \
 	esac
 
 .PHONY: dev/unlink
-dev/unlink: ## Remove the dev/link symlink (leaves an installed copy alone)
-	@if [ -L "$(BINDIR)/$(BIN)" ]; then \
-		rm "$(BINDIR)/$(BIN)" && echo "removed $(BINDIR)/$(BIN)"; \
-	elif [ -e "$(BINDIR)/$(BIN)" ]; then \
-		echo "$(BINDIR)/$(BIN) is a real file, not a symlink: left alone"; \
-		echo "(that is an installed copy — remove it with \`cargo uninstall mindflayer-cli\`)"; \
-	else \
-		echo "nothing to remove at $(BINDIR)/$(BIN)"; \
-	fi
+dev/unlink: ## Remove the dev/link symlinks (leaves installed copies alone)
+	@for bin in $(BINS); do \
+		target="$(BINDIR)/$$bin"; \
+		if [ -L "$$target" ]; then \
+			rm "$$target" && echo "removed $$target"; \
+		elif [ -e "$$target" ]; then \
+			echo "$$target is a real file, not a symlink: left alone"; \
+			echo "(that is an installed copy — remove it with \`cargo uninstall mindflayer-cli\`)"; \
+		else \
+			echo "nothing to remove at $$target"; \
+		fi; \
+	done
 
 .PHONY: dev/watch
 dev/watch: ## Rebuild on every change, so the dev/link symlink is always current
