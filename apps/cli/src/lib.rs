@@ -31,10 +31,10 @@ pub struct Cli {
 
 #[derive(Debug, Subcommand)]
 pub enum Command {
-    /// Create a flayer workspace or a mind project here.
+    /// Create a mind project here, or a flayer workspace over several.
     Init {
         /// What to create.
-        #[arg(value_enum, default_value_t = Kind::Flayer)]
+        #[arg(value_enum, default_value_t = Kind::Mind)]
         kind: Kind,
     },
 
@@ -56,12 +56,15 @@ pub enum Command {
 }
 
 /// The two things `init` can create.
+///
+/// `Mind` is first because it is the default: holding skills is what most
+/// directories are for, and a workspace is the rarer, deliberate step above.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
 pub enum Kind {
-    /// A `.mindflayer` workspace, orchestrating several mind projects.
-    Flayer,
     /// A `.mind` project, holding skills of its own.
     Mind,
+    /// A `.mindflayer` workspace, orchestrating several mind projects.
+    Flayer,
 }
 
 impl Cli {
@@ -387,7 +390,7 @@ pub enum CliError {
     Workspace(#[from] WorkspaceError),
     #[error(
         "{} is not inside a mind project or a flayer workspace \
-         (run `mind init mind` to create a {MIND_DIR} here, or `mind init` for a {FLAYER_DIR})",
+         (run `mind init` to create a {MIND_DIR} here, or `mind init flayer` for a {FLAYER_DIR})",
         .0.display()
     )]
     Nowhere(PathBuf),

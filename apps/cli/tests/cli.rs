@@ -29,45 +29,45 @@ fn skill_file(name: &str, description: &str) -> String {
 }
 
 #[test]
-fn init_creates_a_flayer_workspace_by_default() {
+fn init_creates_a_mind_project_by_default() {
     let dir = TempDir::new().unwrap();
 
     let outcome = mind(dir.path(), &["init"]).unwrap();
 
-    assert!(dir.path().join(FLAYER_DIR).join(FLAYER_CONFIG).is_file());
+    assert!(dir.path().join(MIND_DIR).join(MIND_CONFIG).is_file());
+    assert!(dir.path().join(MIND_DIR).join("skills").is_dir());
+    assert!(!dir.path().join(FLAYER_DIR).exists(), "no workspace here");
     assert!(outcome.ok);
     assert!(
-        outcome.stdout.starts_with("initialized flayer workspace"),
+        outcome.stdout.starts_with("initialized mind project"),
         "{}",
         outcome.stdout
     );
 }
 
 #[test]
-fn init_flayer_is_the_same_as_init() {
+fn init_mind_is_the_same_as_init() {
     let bare = TempDir::new().unwrap();
     let named = TempDir::new().unwrap();
 
     mind(bare.path(), &["init"]).unwrap();
-    mind(named.path(), &["init", "flayer"]).unwrap();
+    mind(named.path(), &["init", "mind"]).unwrap();
 
-    let one = fs::read_to_string(bare.path().join(FLAYER_DIR).join(FLAYER_CONFIG)).unwrap();
-    let two = fs::read_to_string(named.path().join(FLAYER_DIR).join(FLAYER_CONFIG)).unwrap();
+    let one = fs::read_to_string(bare.path().join(MIND_DIR).join(MIND_CONFIG)).unwrap();
+    let two = fs::read_to_string(named.path().join(MIND_DIR).join(MIND_CONFIG)).unwrap();
     // Only the name differs, and it comes from the temporary directory.
     assert_eq!(one.lines().count(), two.lines().count());
-    assert!(one.contains("projects = []"));
-    assert!(two.contains("projects = []"));
 }
 
 #[test]
-fn init_mind_creates_a_project_with_a_skills_folder() {
+fn init_flayer_creates_a_workspace_with_an_empty_registry() {
     let dir = TempDir::new().unwrap();
 
-    let outcome = mind(dir.path(), &["init", "mind"]).unwrap();
+    let outcome = mind(dir.path(), &["init", "flayer"]).unwrap();
 
-    assert!(dir.path().join(MIND_DIR).join(MIND_CONFIG).is_file());
-    assert!(dir.path().join(MIND_DIR).join("skills").is_dir());
-    assert!(outcome.stdout.starts_with("initialized mind project"));
+    assert!(dir.path().join(FLAYER_DIR).join(FLAYER_CONFIG).is_file());
+    assert!(!dir.path().join(MIND_DIR).exists(), "no project here");
+    assert!(outcome.stdout.starts_with("initialized flayer workspace"));
 }
 
 #[test]
@@ -99,7 +99,10 @@ fn listing_outside_a_project_explains_what_to_run() {
     let error = mind(dir.path(), &["list"]).unwrap_err();
 
     assert!(matches!(error, CliError::Nowhere(_)));
-    assert!(error.to_string().contains("mind init mind"));
+    // Both ways out are named, because from an empty directory either could be
+    // the one that was meant.
+    assert!(error.to_string().contains("mind init"));
+    assert!(error.to_string().contains("mind init flayer"));
 }
 
 #[test]
@@ -138,7 +141,7 @@ fn listing_shows_the_project_the_name_and_the_description() {
 #[test]
 fn a_workspace_lists_the_skills_of_every_project_it_references() {
     let dir = TempDir::new().unwrap();
-    mind(dir.path(), &["init"]).unwrap();
+    mind(dir.path(), &["init", "flayer"]).unwrap();
     for name in ["alpha", "beta"] {
         let root = dir.path().join(name);
         fs::create_dir(&root).unwrap();
@@ -162,7 +165,7 @@ fn a_workspace_lists_the_skills_of_every_project_it_references() {
 #[test]
 fn a_stale_workspace_reference_is_a_warning_not_a_dead_end() {
     let dir = TempDir::new().unwrap();
-    mind(dir.path(), &["init"]).unwrap();
+    mind(dir.path(), &["init", "flayer"]).unwrap();
     let root = dir.path().join("alpha");
     fs::create_dir(&root).unwrap();
     mind(&root, &["init", "mind"]).unwrap();
