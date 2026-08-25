@@ -9,7 +9,7 @@ one line to `APPS`, never reshaping the tree.
 
 ```
 apps/core   mindflayer-core — the engine
-apps/cli    mindflayer-cli  — the `mind` binary
+apps/cli    mindflayer-cli  — the `mind` and `flayer` binaries
 ```
 
 Only two today. The layout exists because there will be more: a desktop app is
@@ -25,6 +25,14 @@ It has no idea a terminal exists.
 `mindflayer-cli` parses a command line, asks core for values, and renders them.
 It holds no rules about skills: not the name limits, not the front matter
 format, not where `.mind` lives.
+
+It ships **two binaries**, `mind` and `flayer`, and they are two entry points
+into one parser rather than one wrapping the other. `flayer <cmd>` and `mind
+flayer <cmd>` reach the same function, so there is a single implementation of
+every workspace command and the two spellings cannot drift apart or disagree
+about an exit code. A wrapper that re-executed `mind` would also have to
+forward arguments, stdio and exit codes correctly, which is three chances to
+get it wrong in exchange for nothing.
 
 The line is there so that when a second front end arrives, it cannot disagree
 with the first about what a valid skill is. Every rule that could drift lives
@@ -58,12 +66,36 @@ anywhere inside a project, like every git command.
 
 Nothing stops one directory from being both.
 
+### The command surface is split the same way
+
+`mind <cmd>` acts on the project you are standing in; `mind flayer <cmd>`, and
+therefore `flayer <cmd>`, acts on the workspace above it. The split decides two
+things that used to be guesses:
+
+- **What is in scope.** `mind list` is the project's own skills, never its
+  neighbours'. `flayer list` is every registered project. Before the split one
+  command tried to be both and its answer changed depending on which directory
+  it was run from.
+- **How a skill is labelled.** Only the workspace level qualifies a skill by
+  the project it came from, because inside a single project that says nothing.
+
+A workspace is in scope for exactly the projects it was **told** to manage. A
+project that merely sits inside the workspace directory is not one of them
+until it is linked. Guessing from the directory tree would make `flayer list`
+answer a different question after an unrelated `mkdir`.
+
 ### Why the markers are TOML written from a template
 
-They are read with serde and written from a string template, rather than
-serialized. Serializing would drop the comments, and the comment in
-`mind.toml` explaining where skills go is the first documentation anyone
-opening the file will read.
+New markers are written from a string template, not serialized. Serializing
+would drop the comments, and the comment in `mind.toml` explaining where skills
+go is the first documentation anyone opening the file will read.
+
+Editing an existing marker has the same constraint and a harder job, which is
+why `toml_edit` is a dependency: `flayer link` rewrites the one `projects`
+array and leaves every other byte alone. Reading stays serde's job. The two
+halves agree because an edit re-reads the file afterwards rather than trusting
+what it believes it wrote, and the write itself goes through a temporary file
+and a rename, so a crash leaves either the old config or the new one.
 
 Both carry a `version`. A marker written by a newer Mindflayer is refused with
 a message that says so, which is what lets the format change later without an
@@ -83,6 +115,35 @@ with no `.mind/skills` directory yet is not a failure, it is a project nobody
 has added a skill to. A `.mind/skills` that exists and cannot be listed is a
 failure.
 
+## How entries are stored
+
+`flayer link` records a project as a route **relative to the workspace**, so
+the workspace and the projects under it can be moved together without the
+registry going stale. A project with no route to the workspace at all — two
+different Windows drives — falls back to an absolute path. Entries are written
+with forward slashes, so a workspace registered on one platform still resolves
+on the other.
+
+The arithmetic is lexical (`apps/core/src/paths.rs`): it never touches the disk
+and never resolves symlinks. That is what lets a workspace register a directory
+that does not exist yet, and it keeps a path through a symlink in the shape the
+user typed. The cost is the usual one: `a/b/../c` is treated as `a/c`, which
+differs from what the kernel would do if `a/b` were a symlink.
+
+Matching is by where an entry **points**, not by how it is spelled, so
+`collapse` and `./collapse` are one entry. That is why roots are normalised on
+the way in rather than merely made absolute: a workspace resolves `../collapse`
+by joining it onto its own root, and `std::path::absolute` would leave that
+`..` sitting in every such root, where two paths naming one directory stop
+comparing equal.
+
+`link` is idempotent and `unlink` is not, deliberately. Linking twice means
+"make sure this is registered", and it is. Unlinking something that was never
+there is a typo far more often than it is a no-op, and saying so turns a silent
+success into a fixable mistake. `unlink` takes a path rather than a project
+because the entry most worth removing is one whose directory has moved away,
+and that cannot be opened as a project any more.
+
 ## Open questions
 
 - **Precedence between projects.** Two projects in one workspace can declare
@@ -90,8 +151,6 @@ failure.
   wins, because nothing here yet has to choose. Whatever resolves it (a
   workspace-level override, an explicit order in `flayer.toml`) belongs in core
   when it exists, not in a front end.
-- **Registering projects.** `flayer.toml` carries a `projects` list that is
-  read but not yet written by any command; a workspace starts empty and the
-  list is edited by hand. The command that adds to it is the next piece of
-  work, and it is the point where writing the marker file stops being a
-  template and needs to preserve comments.
+- **Creating skills.** Nothing writes a `SKILL.md` yet; they are added by hand.
+  A command that scaffolds one is the next piece of work, and the validation
+  rules it should satisfy already live in `skill.rs`.
