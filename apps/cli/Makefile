@@ -13,7 +13,7 @@ endif
 test: ## Run mindflayer-cli tests
 	cargo test -p mindflayer-cli
 
-run: ## Run the CLI — pass args via ARGS="list --scope personal"
+run: ## Run the CLI — pass args via ARGS="list"
 	cargo run -p mindflayer-cli -- $(ARGS)
 
 fmt: ## Format mindflayer-cli
