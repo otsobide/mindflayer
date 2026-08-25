@@ -9,7 +9,7 @@ one line to `APPS`, never reshaping the tree.
 
 ```
 apps/core   mindflayer-core — the engine
-apps/cli    mindflayer-cli  — the `mf` binary
+apps/cli    mindflayer-cli  — the `mind` binary
 ```
 
 Only two today. The layout exists because there will be more: a desktop app is
@@ -53,7 +53,7 @@ Both are identified by a **marker file** (`mind.toml`, `flayer.toml`), not by
 the directory alone. An empty `.mind` left behind by a failed copy is not a
 project, and saying so costs one `is_file()`.
 
-Both are found by walking up from a starting directory, so `mf list` works from
+Both are found by walking up from a starting directory, so `mind list` works from
 anywhere inside a project, like every git command.
 
 Nothing stops one directory from being both.
