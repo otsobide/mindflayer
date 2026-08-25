@@ -5,9 +5,10 @@ edition = "2021"
 license = "GPL-3.0-only"
 description = "Command-line interface for Mindflayer"
 
-# Short on purpose: this is typed all day, the way `git` is.
+# Not `mf`: that is METAFONT, which ships with every TeX distribution and is
+# already on the PATH of anyone who writes LaTeX.
 [[bin]]
-name = "mf"
+name = "mind"
 path = "src/main.rs"
 
 # The command surface is a library so integration tests (and, later, other

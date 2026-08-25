@@ -294,7 +294,7 @@ impl WorkspaceError {
 /// Walk `start` and its ancestors looking for `<dir>/<file>`.
 fn locate_marker(start: &Path, dir: &str, file: &str) -> Result<Option<PathBuf>, WorkspaceError> {
     // Absolute first: `ancestors()` on a relative path stops at the empty
-    // component, so `mf list` run from a subdirectory would find nothing.
+    // component, so `mind list` run from a subdirectory would find nothing.
     let start = absolute(start)?;
     Ok(start
         .ancestors()

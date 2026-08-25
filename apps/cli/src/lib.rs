@@ -19,7 +19,7 @@ use thiserror::Error;
 
 /// Manage agent skills across mind projects.
 #[derive(Debug, Parser)]
-#[command(name = "mf", version, about, long_about = None)]
+#[command(name = "mind", version, about, long_about = None)]
 pub struct Cli {
     #[command(subcommand)]
     pub command: Command,
@@ -387,7 +387,7 @@ pub enum CliError {
     Workspace(#[from] WorkspaceError),
     #[error(
         "{} is not inside a mind project or a flayer workspace \
-         (run `mf init mind` to create a {MIND_DIR} here, or `mf init` for a {FLAYER_DIR})",
+         (run `mind init mind` to create a {MIND_DIR} here, or `mind init` for a {FLAYER_DIR})",
         .0.display()
     )]
     Nowhere(PathBuf),
