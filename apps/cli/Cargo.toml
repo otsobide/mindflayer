@@ -13,6 +13,13 @@ description = "Manage agent skills across mind projects"
 name = "mind"
 path = "src/main.rs"
 
+# `flayer <cmd>` is `mind flayer <cmd>`. A second entry point into the same
+# parser, not a wrapper that re-executes `mind`, so the two spellings share one
+# implementation and cannot drift apart.
+[[bin]]
+name = "flayer"
+path = "src/bin/flayer.rs"
+
 # The command surface is a library so integration tests (and, later, other
 # front ends) can drive the real parser instead of shelling out to the binary.
 [lib]
