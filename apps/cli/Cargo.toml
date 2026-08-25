@@ -1,0 +1,26 @@
+[package]
+name = "mindflayer-cli"
+version = "0.1.0"
+edition = "2021"
+license = "GPL-3.0-only"
+description = "Command-line interface for Mindflayer"
+
+# Short on purpose: this is typed all day, the way `git` is.
+[[bin]]
+name = "mf"
+path = "src/main.rs"
+
+# The command surface is a library so integration tests (and, later, other
+# front ends) can drive the real parser instead of shelling out to the binary.
+[lib]
+name = "mindflayer_cli"
+path = "src/lib.rs"
+
+[dependencies]
+mindflayer-core = { path = "../core" }
+clap = { version = "4", features = ["derive"] }
+thiserror = "2"
+
+[dev-dependencies]
+mindflayer-core = { path = "../core" }
+tempfile = "3"

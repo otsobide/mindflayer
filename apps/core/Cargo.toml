@@ -1,0 +1,21 @@
+[package]
+name = "mindflayer-core"
+version = "0.1.0"
+edition = "2021"
+license = "GPL-3.0-only"
+description = "Mind projects, flayer workspaces, and the skills they hold"
+
+[dependencies]
+thiserror = "2"
+serde = { version = "1", features = ["derive"] }
+# Skill front matter is YAML, so it is parsed by a YAML parser rather than by
+# line splitting of our own: descriptions routinely use quoting and block
+# scalars, and allowed-tools is a list. serde_yaml_ng is the maintained
+# continuation of serde_yaml, which upstream archived.
+serde_yaml_ng = "0.10"
+# The marker files (.mind/mind.toml, .mindflayer/flayer.toml) are TOML: the
+# format the Rust toolchain already asks everyone here to read and write.
+toml = "0.9"
+
+[dev-dependencies]
+tempfile = "3"
