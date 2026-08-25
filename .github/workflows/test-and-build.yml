@@ -1,0 +1,234 @@
+name: test-and-build
+
+# Per app: run its tests, and only if they pass, build it. Everything runs on
+# Linux runners, with the other two platforms reserved for the shipping path
+# (see test-cross).
+on:
+  push:
+    branches: [main, dev]
+  # `labeled` is not in the default set, and without it the `full-matrix` label
+  # below would be a documented escape hatch that never fires: adding a label
+  # would change nothing until the next push.
+  pull_request:
+    types: [opened, synchronize, reopened, labeled]
+  workflow_dispatch:
+
+jobs:
+  # Runs first and everything waits on it: rustfmt and clippy need no test run,
+  # so they answer quickly, and a tree that has to be pushed again anyway is
+  # not worth a runner compiling twice.
+  #
+  # Formatting is checked on the merged result, not just per branch: two PRs
+  # that are each formatted correctly can still merge into a tree that is not,
+  # because git combines them textually and that is all it can do.
+  checks:
+    name: fmt and clippy
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - name: Cache cargo
+        uses: actions/cache@v5
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-
+
+      - name: Check formatting
+        run: make fmt/check
+
+      - name: Run clippy
+        run: make lint
+
+  # -------------------------------------------------------------------------
+  # Tests: one job per app. Job display names follow one convention,
+  # `test (<app>)` and `build (<app>)`, so a check's name says what it does and
+  # which app it belongs to.
+  # -------------------------------------------------------------------------
+  # Gate: the shared engine must pass before anything downstream runs.
+  test-core:
+    name: test (core)
+    needs: checks
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo
+        uses: actions/cache@v5
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-
+
+      - name: Test mindflayer-core
+        run: make core/test
+
+  test-cli:
+    name: test (cli)
+    needs: test-core
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo
+        uses: actions/cache@v5
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-
+
+      - name: Test mindflayer-cli
+        run: make cli/test
+
+  # The whole suite on the two platforms Linux cannot speak for. Linux runs on
+  # every push and every pull request; these two are reserved for the branches
+  # that ship, because a macOS or Windows runner costs several times a Linux
+  # one and feature work rarely needs them.
+  #
+  # They run when the code is on, or heading to, a shipping branch: any push to
+  # dev or main, or a PR from dev, main or release/*. A feature branch that does
+  # touch path handling can ask for them with the `full-matrix` label rather
+  # than being renamed.
+  #
+  # This app finds projects by walking up a directory tree and identifies them
+  # by marker files, which is exactly the kind of code that behaves differently
+  # on Windows, so the matrix earns its place from the first release.
+  test-cross:
+    name: test (${{ matrix.label }})
+    needs: test-core
+    if: >-
+      github.event_name == 'push' ||
+      github.event_name == 'workflow_dispatch' ||
+      github.head_ref == 'dev' ||
+      github.head_ref == 'main' ||
+      startsWith(github.head_ref, 'release/') ||
+      contains(github.event.pull_request.labels.*.name, 'full-matrix')
+    strategy:
+      # One platform failing must not hide the other's result.
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-latest
+            label: macos
+          - os: windows-latest
+            label: windows
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo
+        uses: actions/cache@v5
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-cross-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-cross-
+
+      # bash, not pwsh: the make targets are POSIX recipes, and Git Bash on
+      # PATH is what makes GNU make pick sh.exe instead of cmd.exe. Harmless on
+      # macOS, where bash is the default anyway.
+      - name: Run the suite
+        shell: bash
+        run: make test
+
+  # -------------------------------------------------------------------------
+  # Builds: each app builds only after its own tests pass, and never while the
+  # platforms it ships to are unproven.
+  #
+  # The `if` is spelled out rather than the usual `always() && !failure()`
+  # idiom, which is wrong twice over: a skipped dependency skips this job, so
+  # test-cross being gated off on a feature branch would take the build with
+  # it, and a job skipped because something upstream FAILED also reports
+  # `skipped`, so the idiom would happily build after test (core) had failed.
+  # -------------------------------------------------------------------------
+  build-core:
+    name: build (core)
+    needs: [test-core, test-cross]
+    if: >-
+      always() &&
+      needs.test-core.result == 'success' &&
+      (needs.test-cross.result == 'success' || needs.test-cross.result == 'skipped')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo
+        uses: actions/cache@v5
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-
+
+      - name: Build mindflayer-core
+        run: make core/build
+
+  build-cli:
+    name: build (cli)
+    needs: [test-cli, test-cross]
+    if: >-
+      always() &&
+      needs.test-cli.result == 'success' &&
+      (needs.test-cross.result == 'success' || needs.test-cross.result == 'skipped')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo
+        uses: actions/cache@v5
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-
+
+      - name: Build mindflayer-cli
+        run: make cli/build
