@@ -273,7 +273,14 @@ fn a_project_outside_the_workspace_is_stored_as_a_route_out() {
 
     let outcome = flayer(&inner, &["link", "../collapse"]).unwrap();
 
+    // Forward slashes on every platform, and — the invariant that matters —
+    // the entry the message names is the entry in the file, verbatim. On
+    // Windows `Path::display` would report `..\collapse` for a line that
+    // reads `../collapse`, and what a command says it wrote has to be what
+    // someone opening the file finds.
     assert_eq!(outcome.stdout, "linked collapse as ../collapse\n");
+    let config = fs::read_to_string(inner.join(FLAYER_DIR).join(FLAYER_CONFIG)).unwrap();
+    assert!(config.contains("\"../collapse\""), "{config}");
     assert!(flayer(&inner, &["list"]).unwrap().stdout.contains("deploy"));
 }
 

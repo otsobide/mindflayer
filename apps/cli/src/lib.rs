@@ -224,7 +224,7 @@ fn run_flayer(command: &FlayerCommand, directory: &Path) -> Result<Outcome, CliE
             let name = project.name().to_owned();
 
             let (entry, outcome) = workspace.link(&project)?;
-            let entry = entry.display();
+            let entry = as_stored(&entry);
             Ok(Outcome::plain(match outcome {
                 Registration::Added => format!("linked {name} as {entry}\n"),
                 Registration::AlreadyRegistered => {
@@ -237,7 +237,10 @@ fn run_flayer(command: &FlayerCommand, directory: &Path) -> Result<Outcome, CliE
             let mut workspace = workspace_here(directory)?;
             let target = resolve(directory, path)?;
             let removed = workspace.unlink(&target)?;
-            Ok(Outcome::plain(format!("unlinked {}\n", removed.display())))
+            Ok(Outcome::plain(format!(
+                "unlinked {}\n",
+                as_stored(&removed)
+            )))
         }
 
         FlayerCommand::List => {
@@ -281,6 +284,17 @@ fn resolve(directory: &Path, path: &Path) -> Result<PathBuf, CliError> {
         source,
     })?;
     Ok(paths::normalize(&absolute))
+}
+
+/// A registry entry spelled the way the marker file spells it.
+///
+/// Not `Path::display`, which uses the platform separator: entries are stored
+/// with forward slashes so a workspace registered on one platform resolves on
+/// the other, and on Windows `display` would report `..\collapse` for a line
+/// that reads `../collapse`. What a command says it wrote has to be what
+/// someone opening the file will find.
+fn as_stored(entry: &Path) -> String {
+    paths::to_config_string(entry).unwrap_or_else(|| entry.display().to_string())
 }
 
 /// The mind project the caller is standing in.
