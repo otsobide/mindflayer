@@ -3,11 +3,14 @@ name = "mindflayer-cli"
 version = "0.1.0"
 edition = "2021"
 license = "GPL-3.0-only"
-description = "Command-line interface for Mindflayer"
+# clap shows this as the tool's one-line `--help` summary, so it says what the
+# tool does rather than what kind of crate it is.
+description = "Manage agent skills across mind projects"
 
-# Short on purpose: this is typed all day, the way `git` is.
+# Not `mf`: that is METAFONT, which ships with every TeX distribution and is
+# already on the PATH of anyone who writes LaTeX.
 [[bin]]
-name = "mf"
+name = "mind"
 path = "src/main.rs"
 
 # The command surface is a library so integration tests (and, later, other

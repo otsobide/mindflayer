@@ -1,7 +1,7 @@
 .DEFAULT_GOAL := build
 .PHONY: build release test run fmt lint clean
 
-build: ## Build mindflayer-cli (binary: mindflayer)
+build: ## Build mindflayer-cli (binary: mind)
 	cargo build -p mindflayer-cli
 
 release: ## Release build for a Rust target triple (TARGET=aarch64-apple-darwin)
