@@ -16,6 +16,11 @@ serde_yaml_ng = "0.10"
 # The marker files (.mind/mind.toml, .mindflayer/flayer.toml) are TOML: the
 # format the Rust toolchain already asks everyone here to read and write.
 toml = "0.9"
+# Reading a marker is serde's job; *editing* one is not. Re-serializing would
+# drop the comments that explain the file, so `link` and `unlink` go through
+# toml_edit, which rewrites one array and leaves the rest of the bytes alone.
+# This is the crate cargo itself edits Cargo.toml with.
+toml_edit = "0.25"
 
 [dev-dependencies]
 tempfile = "3"
