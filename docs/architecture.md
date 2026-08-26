@@ -119,30 +119,52 @@ failure.
 
 `flayer link` records a project as a route **relative to the workspace**, so
 the workspace and the projects under it can be moved together without the
-registry going stale. A project with no route to the workspace at all — two
-different Windows drives — falls back to an absolute path. Entries are written
-with forward slashes, so a workspace registered on one platform still resolves
-on the other.
+registry going stale. Entries are written with forward slashes, so a workspace
+registered on one platform still resolves on the other, and a command reports
+the entry the way the file spells it rather than the way the local separator
+would.
 
 The arithmetic is lexical (`apps/core/src/paths.rs`): it never touches the disk
-and never resolves symlinks. That is what lets a workspace register a directory
-that does not exist yet, and it keeps a path through a symlink in the shape the
-user typed. The cost is the usual one: `a/b/../c` is treated as `a/c`, which
-differs from what the kernel would do if `a/b` were a symlink.
+and never resolves symlinks. That keeps a path in the shape the user typed and
+lets a route be computed for a directory that need not exist.
+
+But arithmetic on paths is only true when no component is a symlink. If the
+workspace root is spelled through one, a `..` climbs out of the link's target
+rather than out of the directory the name suggests, and the route points
+somewhere that does not exist — `/tmp` is a symlink to `/private/tmp` on every
+Mac, so this is not exotic. So `link` **checks its route against the
+filesystem** before storing it, and falls back to an absolute path when it does
+not land where it should. The check happens there and only there: its answer
+decides which spelling to store and is never stored itself, so entries stay
+portable rather than frozen to one machine's symlink layout.
 
 Matching is by where an entry **points**, not by how it is spelled, so
-`collapse` and `./collapse` are one entry. That is why roots are normalised on
-the way in rather than merely made absolute: a workspace resolves `../collapse`
-by joining it onto its own root, and `std::path::absolute` would leave that
-`..` sitting in every such root, where two paths naming one directory stop
-comparing equal.
+`collapse` and `./collapse` are one entry. Arithmetic settles most of it, and
+two spellings only the filesystem can equate are settled by canonicalising.
+
+`link` and `unlink` match against **the array they are about to edit**, not
+against the copy parsed when the workspace was opened. The marker file is meant
+to be editable by hand, so that copy can be stale, and acting on a stale index
+is how you remove a project nobody asked you to remove. An edit that changes
+nothing does not rewrite the file at all.
 
 `link` is idempotent and `unlink` is not, deliberately. Linking twice means
-"make sure this is registered", and it is. Unlinking something that was never
-there is a typo far more often than it is a no-op, and saying so turns a silent
-success into a fixable mistake. `unlink` takes a path rather than a project
-because the entry most worth removing is one whose directory has moved away,
-and that cannot be opened as a project any more.
+"make sure this is registered", and it is; the call reports the spelling
+already in the file rather than the one it would have written. Unlinking
+something that was never there is a typo far more often than a no-op, and
+saying so turns a silent success into a fixable mistake. `unlink` removes
+*every* entry pointing at the project, because two spellings of one directory
+are one project and removing half of them while reporting success would leave
+it registered. It takes a path rather than a project because the entry most
+worth removing is one whose directory has moved away, and that cannot be opened
+as a project any more.
+
+Rewrites go through a temporary file and a rename, so a crash leaves either the
+old config or the new one. The original's permissions are copied onto the
+temporary first, and a symlinked config is followed to the file it names —
+otherwise an edit would quietly widen a chmodded config or detach a shared one.
+A hard link is the case this cannot preserve: a rename breaks it, and keeping
+it would mean giving up the atomic write.
 
 ## Open questions
 

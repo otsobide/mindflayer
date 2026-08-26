@@ -100,9 +100,11 @@ linked collapse as ../collapse
 ```
 
 The entry is stored relative to the workspace, so the two can be moved
-together. Linking the same project twice changes nothing and says so.
-`unlink` still works on a project whose directory has moved away, which is
-exactly the entry worth removing.
+together — unless that route would not actually resolve, in which case the
+absolute path is stored instead. Linking the same project twice changes
+nothing and says so, naming the spelling already in the file. `unlink` removes
+every entry pointing at the project, and still works on one whose directory has
+moved away, which is exactly the entry worth removing.
 
 ```
 $ mind validate
