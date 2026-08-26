@@ -324,7 +324,7 @@ fn unlink_removes_only_the_entry_it_was_given() {
 
     let removed = workspace.unlink(projects[0].root()).unwrap();
 
-    assert_eq!(removed, std::path::Path::new("alpha"));
+    assert_eq!(removed, vec![std::path::PathBuf::from("alpha")]);
     assert_eq!(
         workspace.config().projects,
         vec![std::path::PathBuf::from("beta")]
@@ -351,7 +351,7 @@ fn unlink_works_on_an_entry_whose_directory_has_gone() {
     // be opened as a project.
     let removed = workspace.unlink(&dir.path().join("alpha")).unwrap();
 
-    assert_eq!(removed, std::path::Path::new("alpha"));
+    assert_eq!(removed, vec![std::path::PathBuf::from("alpha")]);
     assert!(workspace.config().projects.is_empty());
 }
 
@@ -402,4 +402,121 @@ fn a_root_is_normalized_so_two_spellings_of_one_directory_are_one_project() {
     // comparing equal to itself reached any other way.
     assert_eq!(direct.root(), roundabout.root());
     assert!(!roundabout.root().to_string_lossy().contains(".."));
+}
+
+#[test]
+fn unlink_removes_every_spelling_that_pointed_at_the_project() {
+    let (dir, workspace, projects) = workspace_with(1);
+    fs::write(
+        workspace.config_path(),
+        "version = 1\nname = \"w\"\nprojects = [\"alpha\", \"./alpha\", \"./alpha/\"]\n",
+    )
+    .unwrap();
+    let mut workspace = FlayerWorkspace::open(workspace.root()).unwrap();
+    let _ = (&dir, &projects);
+
+    let removed = workspace.unlink(projects[0].root()).unwrap();
+
+    // Removing one of three and reporting success would leave the project
+    // registered while telling the user it is gone.
+    assert_eq!(removed.len(), 3);
+    assert!(workspace.config().projects.is_empty());
+}
+
+#[test]
+fn an_already_registered_link_reports_the_spelling_in_the_file() {
+    let (_dir, workspace, projects) = workspace_with(1);
+    fs::write(
+        workspace.config_path(),
+        "version = 1\nname = \"w\"\nprojects = [\"./alpha/\"]\n",
+    )
+    .unwrap();
+    let mut workspace = FlayerWorkspace::open(workspace.root()).unwrap();
+
+    let (entry, outcome) = workspace.link(&projects[0]).unwrap();
+
+    assert_eq!(outcome, Registration::AlreadyRegistered);
+    assert_eq!(entry, std::path::Path::new("./alpha/"), "not a fresh guess");
+}
+
+#[test]
+fn a_link_that_changes_nothing_does_not_rewrite_the_file() {
+    let (_dir, mut workspace, projects) = workspace_with(1);
+    workspace.link(&projects[0]).unwrap();
+    let before = fs::metadata(workspace.config_path())
+        .unwrap()
+        .modified()
+        .unwrap();
+
+    workspace.link(&projects[0]).unwrap();
+
+    let after = fs::metadata(workspace.config_path())
+        .unwrap()
+        .modified()
+        .unwrap();
+    assert_eq!(before, after, "an idempotent link touched the file");
+}
+
+#[test]
+fn a_failed_unlink_leaves_the_file_alone() {
+    let (_dir, mut workspace, projects) = workspace_with(1);
+    workspace.link(&projects[0]).unwrap();
+    let before = fs::read_to_string(workspace.config_path()).unwrap();
+
+    let error = workspace
+        .unlink(std::path::Path::new("/nowhere"))
+        .unwrap_err();
+
+    assert!(matches!(error, WorkspaceError::NotRegistered { .. }));
+    assert_eq!(fs::read_to_string(workspace.config_path()).unwrap(), before);
+}
+
+#[cfg(unix)]
+#[test]
+fn an_entry_is_only_stored_as_a_route_when_the_route_really_resolves() {
+    use std::os::unix::fs::symlink;
+
+    // `/tmp` is a symlink to `/private/tmp` on every Mac, so a workspace
+    // reached through one is not an exotic case. A lexical `..` climbs out of
+    // the link's target, not out of the directory the name suggests.
+    let dir = TempDir::new().unwrap();
+    fs::create_dir_all(dir.path().join("real/deep/ws")).unwrap();
+    fs::create_dir(dir.path().join("real/sibling")).unwrap();
+    symlink("real/deep", dir.path().join("link")).unwrap();
+
+    let (mut workspace, _) = FlayerWorkspace::init(dir.path().join("link/ws")).unwrap();
+    let (project, _) = MindProject::init(dir.path().join("real/sibling")).unwrap();
+
+    let (entry, _) = workspace.link(&project).unwrap();
+
+    let (opened, failures) = workspace.projects();
+    assert!(
+        failures.is_empty(),
+        "the entry it just wrote does not open: {failures:?}"
+    );
+    assert_eq!(opened.len(), 1);
+    // Read back through the directory's real spelling too, which is what any
+    // later `cd` into it will use.
+    let real = FlayerWorkspace::open(dir.path().join("real/deep/ws")).unwrap();
+    assert_eq!(
+        real.projects().0.len(),
+        1,
+        "entry {} does not resolve",
+        entry.display()
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn rewriting_the_config_keeps_its_permissions() {
+    use std::os::unix::fs::PermissionsExt;
+
+    let (_dir, mut workspace, projects) = workspace_with(1);
+    let path = workspace.config_path();
+    fs::set_permissions(&path, fs::Permissions::from_mode(0o600)).unwrap();
+
+    workspace.link(&projects[0]).unwrap();
+
+    let mode = fs::metadata(&path).unwrap().permissions().mode() & 0o777;
+    assert_eq!(mode, 0o600, "a config chmodded to 600 came back {mode:o}");
 }
