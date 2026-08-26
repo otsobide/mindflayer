@@ -5,7 +5,7 @@ use std::path::Path;
 
 use clap::Parser;
 use mindflayer_cli::{run, run_flayer_cli, Cli, CliError, Failure, FlayerCli, Outcome};
-use mindflayer_core::{FLAYER_CONFIG, FLAYER_DIR, MIND_CONFIG, MIND_DIR};
+use mindflayer_core::{Kind, FLAYER_CONFIG, FLAYER_DIR, MIND_CONFIG, MIND_DIR};
 use tempfile::TempDir;
 
 /// Build an argument line with `-C dir` appended.
@@ -37,7 +37,10 @@ fn flayer(dir: &Path, args: &[&str]) -> Result<Outcome, Failure> {
 
 /// Write a skill into an already initialized mind project.
 fn write_skill(root: &Path, directory: &str, contents: &str) {
-    let dir = root.join(MIND_DIR).join("skills").join(directory);
+    let dir = root
+        .join(MIND_DIR)
+        .join(Kind::Skill.folder())
+        .join(directory);
     fs::create_dir_all(&dir).expect("create the skill directory");
     fs::write(dir.join("SKILL.md"), contents).expect("write SKILL.md");
 }
@@ -384,7 +387,7 @@ fn show_names_the_skill_it_could_not_find() {
 
     let error = mind(dir.path(), &["show", "absent"]).unwrap_err();
 
-    assert!(matches!(*error.error, CliError::UnknownSkill(name) if name == "absent"));
+    assert!(matches!(*error.error, CliError::UnknownArtifact(name) if name == "absent"));
 }
 
 #[test]
@@ -502,7 +505,7 @@ fn a_failing_command_still_reports_what_it_had_already_noticed() {
 
     // "no skill named `broken`" on its own is baffling when the file is right
     // there; the warning is the half that explains it.
-    assert!(matches!(*failure.error, CliError::UnknownSkill(_)));
+    assert!(matches!(*failure.error, CliError::UnknownArtifact(_)));
     assert_eq!(failure.warnings.len(), 1);
     assert!(failure.warnings[0].contains("front matter"));
 }
@@ -562,4 +565,182 @@ fn each_binary_describes_itself_rather_than_the_crate() {
     assert!(mind.contains("in a mind project"), "{mind}");
     assert!(flayer.contains("flayer workspace"), "{flayer}");
     assert_ne!(mind.lines().next().unwrap(), flayer.lines().next().unwrap());
+}
+
+/// Write a rule into an already initialized mind project.
+fn write_rule(root: &Path, route: &str, contents: &str) {
+    let path = root.join(MIND_DIR).join(Kind::Rule.folder()).join(route);
+    fs::create_dir_all(path.parent().unwrap()).expect("create the rule folder");
+    fs::write(path, contents).expect("write the rule");
+}
+
+// ---------------------------------------------------------------------------
+// More than one kind
+// ---------------------------------------------------------------------------
+
+#[test]
+fn init_makes_a_folder_for_every_kind() {
+    let dir = TempDir::new().unwrap();
+
+    mind(dir.path(), &["init"]).unwrap();
+
+    for kind in Kind::ALL {
+        assert!(
+            dir.path().join(MIND_DIR).join(kind.folder()).is_dir(),
+            "no folder for {kind}"
+        );
+    }
+}
+
+#[test]
+fn the_kind_column_appears_only_when_more_than_one_kind_is_in_play() {
+    let dir = TempDir::new().unwrap();
+    mind(dir.path(), &["init"]).unwrap();
+    write_skill(dir.path(), "deploy", &skill_file("deploy", "Ship it"));
+
+    let alone = mind(dir.path(), &["list"]).unwrap();
+    assert_eq!(alone.stdout, "deploy  Ship it\n");
+
+    write_rule(dir.path(), "no-force-push.md", "# Never force-push\n");
+    let mixed = mind(dir.path(), &["list"]).unwrap();
+
+    // The same rule the project column follows: qualify only when it
+    // disambiguates.
+    assert_eq!(
+        mixed.stdout,
+        "skill  deploy         Ship it\nrule   no-force-push  Never force-push\n"
+    );
+}
+
+#[test]
+fn a_kind_can_be_listed_on_its_own() {
+    let dir = TempDir::new().unwrap();
+    mind(dir.path(), &["init"]).unwrap();
+    write_skill(dir.path(), "deploy", &skill_file("deploy", "Ship it"));
+    write_rule(dir.path(), "no-force-push.md", "Never force-push.\n");
+
+    let rules = mind(dir.path(), &["list", "rules"]).unwrap();
+    let skills = mind(dir.path(), &["list", "skills"]).unwrap();
+
+    // Narrowed to one kind, the column goes away again.
+    assert_eq!(rules.stdout, "no-force-push  Never force-push.\n");
+    assert_eq!(skills.stdout, "deploy  Ship it\n");
+    // Singular is accepted too: one word in two grammatical positions.
+    assert_eq!(mind(dir.path(), &["list", "rule"]).unwrap(), rules);
+}
+
+#[test]
+fn an_unknown_kind_says_what_was_expected() {
+    let error = Cli::try_parse_from(["mind", "list", "prompts"]).unwrap_err();
+
+    let message = error.to_string();
+    assert!(message.contains("skills"), "{message}");
+    assert!(message.contains("rules"), "{message}");
+}
+
+#[test]
+fn show_takes_a_qualified_name_when_one_name_belongs_to_two_kinds() {
+    let dir = TempDir::new().unwrap();
+    mind(dir.path(), &["init"]).unwrap();
+    write_skill(dir.path(), "deploy", &skill_file("deploy", "The skill"));
+    write_rule(dir.path(), "deploy.md", "The rule.\n");
+
+    let both = mind(dir.path(), &["show", "deploy"]).unwrap();
+    let just_the_rule = mind(dir.path(), &["show", "rule/deploy"]).unwrap();
+
+    // Ambiguous on purpose: both are shown, and each is labelled by kind
+    // because that is what tells them apart.
+    assert!(both.stdout.contains("skill/deploy"));
+    assert!(both.stdout.contains("rule/deploy"));
+    assert!(both.stdout.contains("\n---\n"));
+    // Resolved, the qualifier is no longer doing any work, so it goes.
+    assert!(just_the_rule.stdout.starts_with("deploy\n"));
+    assert!(just_the_rule.stdout.contains("The rule."));
+}
+
+#[test]
+fn show_prints_no_metadata_block_for_a_rule() {
+    let dir = TempDir::new().unwrap();
+    mind(dir.path(), &["init"]).unwrap();
+    write_rule(
+        dir.path(),
+        "git/no-force-push.md",
+        "# Never force-push\n\nUse --force-with-lease.\n",
+    );
+
+    let outcome = mind(dir.path(), &["show", "git/no-force-push"]).unwrap();
+
+    let expected_head = "git/no-force-push\n";
+    assert!(
+        outcome.stdout.starts_with(expected_head),
+        "{}",
+        outcome.stdout
+    );
+    assert!(outcome.stdout.contains("no-force-push.md"));
+    assert!(outcome.stdout.contains("Use --force-with-lease."));
+    // A rule declares nothing, so it gets no metadata section rather than an
+    // empty one.
+    assert!(!outcome.stdout.contains("allowed-tools"));
+    assert!(!outcome.stdout.contains("description"));
+}
+
+#[test]
+fn validate_counts_each_kind_by_its_own_name() {
+    let dir = TempDir::new().unwrap();
+    mind(dir.path(), &["init"]).unwrap();
+    write_skill(dir.path(), "one", &skill_file("one", "Fine"));
+    write_skill(dir.path(), "two", &skill_file("two", "Fine"));
+    write_rule(dir.path(), "solo.md", "Context.\n");
+
+    let all = mind(dir.path(), &["validate"]).unwrap();
+    let rules_only = mind(dir.path(), &["validate", "rules"]).unwrap();
+
+    assert!(
+        all.stdout
+            .contains("2 skills and 1 rule checked, 0 invalid"),
+        "{}",
+        all.stdout
+    );
+    assert!(rules_only.stdout.contains("1 rule checked, 0 invalid"));
+    // Narrowed to one kind, labels stop naming it.
+    assert!(rules_only.stdout.contains("solo: ok"));
+    assert!(all.stdout.contains("rule/solo: ok"));
+}
+
+#[test]
+fn validate_can_still_be_pointed_at_one_artifact() {
+    let dir = TempDir::new().unwrap();
+    mind(dir.path(), &["init"]).unwrap();
+    write_skill(dir.path(), "good", &skill_file("good", "Fine"));
+    write_rule(dir.path(), "empty.md", "\n  \n");
+
+    let one = mind(dir.path(), &["validate", "good"]).unwrap();
+    let broken = mind(dir.path(), &["validate", "empty"]).unwrap();
+
+    assert!(one.ok);
+    assert!(one.stdout.contains("1 skill checked, 0 invalid"));
+    assert!(!broken.ok);
+    assert!(
+        broken.stdout.contains("the file has no content"),
+        "{}",
+        broken.stdout
+    );
+}
+
+#[test]
+fn a_workspace_lists_every_kind_of_every_project() {
+    let dir = workspace_with_two();
+    write_rule(&dir.path().join("alpha"), "team/style.md", "House style.\n");
+
+    let outcome = flayer(dir.path(), &["list"]).unwrap();
+
+    // Three columns now: project, kind, name — each earning its place.
+    assert_eq!(
+        outcome.stdout,
+        "alpha  skill  alpha       A skill\n\
+         beta   skill  beta        A skill\n\
+         alpha  rule   team/style  House style.\n"
+    );
+    let rules = flayer(dir.path(), &["list", "rules"]).unwrap();
+    assert_eq!(rules.stdout, "alpha  team/style  House style.\n");
 }

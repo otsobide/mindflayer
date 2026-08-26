@@ -17,8 +17,8 @@ use std::process::ExitCode;
 use clap::{Parser, Subcommand};
 use mindflayer_core::paths;
 use mindflayer_core::{
-    Catalog, FlayerWorkspace, Initialization, MindProject, Registration, Skill, SkillError,
-    WorkspaceError,
+    Artifact, ArtifactError, Catalog, Declared, FlayerWorkspace, Initialization, Kind, MindProject,
+    Reference, Registration, WorkspaceError,
 };
 use thiserror::Error;
 
@@ -55,20 +55,23 @@ pub enum Command {
     /// Create a mind project here.
     Init,
 
-    /// List this project's skills.
+    /// List this project's artifacts.
     #[command(alias = "ls")]
-    List,
-
-    /// Show one skill in full, front matter and instructions.
-    Show {
-        /// The skill's `name`, as declared in its front matter.
-        name: String,
+    List {
+        /// Only this kind: `skills` or `rules` [default: every kind].
+        kind: Option<Kind>,
     },
 
-    /// Check this project's skills against what an agent requires.
+    /// Show one artifact in full.
+    Show {
+        /// Its name, or `kind/name` when one name belongs to two kinds.
+        reference: String,
+    },
+
+    /// Check this project's artifacts against what an agent requires.
     Validate {
-        /// Check only this skill [default: all of them].
-        name: Option<String>,
+        /// A kind (`rules`), or one artifact by name [default: everything].
+        target: Option<String>,
     },
 
     /// Act on the flayer workspace instead. Also reachable as `flayer <cmd>`.
@@ -103,20 +106,23 @@ pub enum FlayerCommand {
     /// Create a flayer workspace here.
     Init,
 
-    /// List the skills of every project this workspace manages.
+    /// List the artifacts of every project this workspace manages.
     #[command(alias = "ls")]
-    List,
-
-    /// Show one skill in full, from any project this workspace manages.
-    Show {
-        /// The skill's `name`, as declared in its front matter.
-        name: String,
+    List {
+        /// Only this kind: `skills` or `rules` [default: every kind].
+        kind: Option<Kind>,
     },
 
-    /// Check every managed project's skills.
+    /// Show one artifact in full, from any project this workspace manages.
+    Show {
+        /// Its name, or `kind/name` when one name belongs to two kinds.
+        reference: String,
+    },
+
+    /// Check every managed project's artifacts.
     Validate {
-        /// Check only this skill [default: all of them].
-        name: Option<String>,
+        /// A kind (`rules`), or one artifact by name [default: everything].
+        target: Option<String>,
     },
 
     /// Register a mind project with this workspace.
@@ -224,8 +230,8 @@ impl From<WorkspaceError> for Failure {
     }
 }
 
-impl From<SkillError> for Failure {
-    fn from(error: SkillError) -> Self {
+impl From<ArtifactError> for Failure {
+    fn from(error: ArtifactError) -> Self {
         CliError::from(error).into()
     }
 }
@@ -244,20 +250,24 @@ pub fn run(cli: &Cli) -> Result<Outcome, Failure> {
                 outcome,
             )))
         }
-        Command::List => {
+        Command::List { kind } => {
             let project = project_here(&directory)?;
-            with_catalog(&[project], |catalog, projects| {
+            with_catalog(&[project], wanted(*kind), |catalog, projects| {
                 Ok(list(catalog, projects, Level::Project))
             })
         }
-        Command::Show { name } => {
+        Command::Show { reference } => {
             let project = project_here(&directory)?;
-            with_catalog(&[project], |catalog, _| show(catalog, name, Level::Project))
+            let reference = Reference::parse(reference);
+            with_catalog(&[project], wanted(reference.kind()), |catalog, _| {
+                show(catalog, &reference, Level::Project)
+            })
         }
-        Command::Validate { name } => {
+        Command::Validate { target } => {
             let project = project_here(&directory)?;
-            with_catalog(&[project], |catalog, _| {
-                validate(catalog, name.as_deref(), Level::Project)
+            let selector = Selector::parse(target.as_deref());
+            with_catalog(&[project], selector.kinds(), |catalog, _| {
+                validate(catalog, &selector, Level::Project)
             })
         }
     }
@@ -315,22 +325,27 @@ fn run_flayer(command: &FlayerCommand, directory: &Path) -> Result<Outcome, Fail
             Ok(Outcome::plain(text))
         }
 
-        FlayerCommand::List => {
+        FlayerCommand::List { kind } => {
             let (workspace, projects, warnings) = managed(directory)?;
-            with_warnings(warnings, projects, |catalog, projects| {
+            with_warnings(warnings, projects, wanted(*kind), |catalog, projects| {
                 Ok(list_workspace(catalog, projects, &workspace))
             })
         }
-        FlayerCommand::Show { name } => {
+        FlayerCommand::Show { reference } => {
             let (_, projects, warnings) = managed(directory)?;
-            with_warnings(warnings, projects, |catalog, _| {
-                show(catalog, name, Level::Workspace)
-            })
+            let reference = Reference::parse(reference);
+            with_warnings(
+                warnings,
+                projects,
+                wanted(reference.kind()),
+                |catalog, _| show(catalog, &reference, Level::Workspace),
+            )
         }
-        FlayerCommand::Validate { name } => {
+        FlayerCommand::Validate { target } => {
             let (_, projects, warnings) = managed(directory)?;
-            with_warnings(warnings, projects, |catalog, _| {
-                validate(catalog, name.as_deref(), Level::Workspace)
+            let selector = Selector::parse(target.as_deref());
+            with_warnings(warnings, projects, selector.kinds(), |catalog, _| {
+                validate(catalog, &selector, Level::Workspace)
             })
         }
     }
@@ -400,26 +415,72 @@ fn managed(directory: &Path) -> Result<(FlayerWorkspace, Vec<MindProject>, Vec<S
 // Commands that read skills
 // ---------------------------------------------------------------------------
 
+/// The kinds a command should discover, given the one it was pointed at.
+fn wanted(kind: Option<Kind>) -> Vec<Kind> {
+    kind.map_or_else(|| Kind::ALL.to_vec(), |kind| vec![kind])
+}
+
+/// What a `validate` positional named.
+///
+/// One positional serving both is a grammar the user learns once: a bare kind
+/// word selects a kind, anything else names an artifact, and `kind/name`
+/// always names an artifact. An artifact literally called `rules` is reachable
+/// as `rule/rules`.
+enum Selector {
+    /// Everything in scope.
+    Everything,
+    /// One kind of thing.
+    OneKind(Kind),
+    /// One artifact.
+    One(Reference),
+}
+
+impl Selector {
+    fn parse(word: Option<&str>) -> Self {
+        match word {
+            None => Selector::Everything,
+            Some(word) => match word.parse::<Kind>() {
+                Ok(kind) => Selector::OneKind(kind),
+                Err(_) => Selector::One(Reference::parse(word)),
+            },
+        }
+    }
+
+    /// The kinds worth discovering to answer it.
+    fn kinds(&self) -> Vec<Kind> {
+        match self {
+            Selector::Everything => Kind::ALL.to_vec(),
+            Selector::OneKind(kind) => vec![*kind],
+            Selector::One(reference) => wanted(reference.kind()),
+        }
+    }
+}
+
 /// Build a catalog over `projects` and hand it to `command`.
-fn with_catalog<F>(projects: &[MindProject], command: F) -> Result<Outcome, Failure>
+fn with_catalog<F>(
+    projects: &[MindProject],
+    kinds: Vec<Kind>,
+    command: F,
+) -> Result<Outcome, Failure>
 where
     F: FnOnce(&Catalog, &[MindProject]) -> Result<(String, bool), CliError>,
 {
-    with_warnings(Vec::new(), projects.to_vec(), command)
+    with_warnings(Vec::new(), projects.to_vec(), kinds, command)
 }
 
 /// The same, starting from warnings the caller has already collected.
 fn with_warnings<F>(
     mut stderr: Vec<String>,
     projects: Vec<MindProject>,
+    kinds: Vec<Kind>,
     command: F,
 ) -> Result<Outcome, Failure>
 where
     F: FnOnce(&Catalog, &[MindProject]) -> Result<(String, bool), CliError>,
 {
-    let catalog = Catalog::discover(&projects);
+    let catalog = Catalog::discover_kinds(&projects, &kinds);
 
-    // Unreadable skills are reported alongside whatever was found: a broken
+    // Unreadable artifacts are reported alongside whatever was found: a broken
     // file is a thing the user wants to know about, not a reason to be told
     // nothing about the forty next to it.
     stderr.extend(
@@ -446,52 +507,71 @@ where
     })
 }
 
-/// One line per skill.
+/// One line per artifact.
 fn list(catalog: &Catalog, projects: &[MindProject], level: Level) -> (String, bool) {
     if catalog.is_empty() {
-        let mut text = String::from("no skills found\n");
+        let mut text = String::from("nothing found\n");
         for project in projects {
             let _ = writeln!(
                 text,
                 "  {}: {}",
                 project.name(),
-                project.skills_dir().display()
+                project.mind_dir().display()
             );
         }
         return (text, true);
     }
 
-    let name_width = catalog
-        .skills()
+    // A kind column earns its place only when more than one kind is in play,
+    // the same rule the project column follows.
+    let name_the_kind = catalog.kinds().len() > 1;
+    let rows: Vec<Vec<String>> = catalog
+        .artifacts()
         .iter()
-        .map(|skill| skill.name().chars().count())
-        .max()
-        .unwrap_or(0);
+        .map(|artifact| {
+            let mut row = Vec::new();
+            if level == Level::Workspace {
+                row.push(project_of(artifact).to_owned());
+            }
+            if name_the_kind {
+                row.push(artifact.kind().slug().to_owned());
+            }
+            row.push(artifact.name().to_owned());
+            row.push(summary(artifact));
+            row
+        })
+        .collect();
+    (table(&rows), true)
+}
+
+/// Rows padded into columns, the last one left ragged.
+fn table(rows: &[Vec<String>]) -> String {
+    let columns = rows.first().map_or(0, Vec::len);
+    let widths: Vec<usize> = (0..columns)
+        .map(|column| {
+            rows.iter()
+                .map(|row| row[column].chars().count())
+                .max()
+                .unwrap_or(0)
+        })
+        .collect();
 
     let mut text = String::new();
-    if level == Level::Project {
-        for skill in catalog.skills() {
-            let _ = writeln!(text, "{:name_width$}  {}", skill.name(), summary(skill));
+    for row in rows {
+        let mut line = String::new();
+        for (column, cell) in row.iter().enumerate() {
+            if column + 1 == columns {
+                line.push_str(cell);
+            } else {
+                let padding = widths[column].saturating_sub(cell.chars().count());
+                let _ = write!(line, "{cell}{}  ", " ".repeat(padding));
+            }
         }
-        return (text, true);
+        // An artifact with no summary would otherwise leave the padding of the
+        // column before it hanging off the end of the line.
+        let _ = writeln!(text, "{}", line.trim_end());
     }
-
-    let project_width = catalog
-        .skills()
-        .iter()
-        .map(|skill| project_of(skill).chars().count())
-        .max()
-        .unwrap_or(0);
-    for skill in catalog.skills() {
-        let _ = writeln!(
-            text,
-            "{:project_width$}  {:name_width$}  {}",
-            project_of(skill),
-            skill.name(),
-            summary(skill),
-        );
-    }
-    (text, true)
+    text
 }
 
 /// `list` at the workspace level, where an empty result has two very
@@ -529,25 +609,37 @@ fn list_workspace(
     list(catalog, projects, Level::Workspace)
 }
 
-/// The project a skill came from, for display.
-fn project_of(skill: &Skill) -> &str {
-    skill.project_name().unwrap_or("?")
+/// The project an artifact came from, for display.
+fn project_of(artifact: &Artifact) -> &str {
+    artifact.project_name().unwrap_or("?")
 }
 
-/// How a skill is labelled in a report: bare inside one project, qualified by
-/// its project across several.
-fn label(skill: &Skill, level: Level) -> String {
+/// Whether a set of artifacts spans more than one kind, and so whether naming
+/// the kind of each tells the reader anything.
+fn spans_kinds(artifacts: &[&Artifact]) -> bool {
+    artifacts
+        .iter()
+        .any(|artifact| artifact.kind() != artifacts[0].kind())
+}
+
+/// How an artifact is labelled in a report: as bare as the context allows.
+fn label(artifact: &Artifact, level: Level, name_the_kind: bool) -> String {
+    let name = if name_the_kind {
+        artifact.qualified_name()
+    } else {
+        artifact.name().to_owned()
+    };
     match level {
-        Level::Project => skill.name().to_owned(),
-        Level::Workspace => format!("{} ({})", skill.name(), project_of(skill)),
+        Level::Project => name,
+        Level::Workspace => format!("{name} ({})", project_of(artifact)),
     }
 }
 
-/// The first line of a description, short enough to sit in a column.
-fn summary(skill: &Skill) -> String {
+/// The first line of a summary, short enough to sit in a column.
+fn summary(artifact: &Artifact) -> String {
     const BUDGET: usize = 72;
 
-    let line = skill.description().lines().next().unwrap_or("").trim();
+    let line = artifact.summary().unwrap_or("").trim();
     if line.chars().count() <= BUDGET {
         return line.to_owned();
     }
@@ -555,82 +647,117 @@ fn summary(skill: &Skill) -> String {
     format!("{}…", kept.trim_end())
 }
 
-/// One skill in full: where it is, what it declares, and its instructions.
-fn show(catalog: &Catalog, name: &str, level: Level) -> Result<(String, bool), CliError> {
-    let matches = catalog.find(name);
+/// One artifact in full: where it is, what it declares, and its contents.
+fn show(
+    catalog: &Catalog,
+    reference: &Reference,
+    level: Level,
+) -> Result<(String, bool), CliError> {
+    let matches = catalog.find(reference);
     if matches.is_empty() {
-        return Err(CliError::UnknownSkill(name.to_owned()));
+        return Err(CliError::UnknownArtifact(reference.name().to_owned()));
     }
+    let name_the_kind = spans_kinds(&matches);
 
     let mut text = String::new();
-    for (index, skill) in matches.iter().enumerate() {
-        // The same name in two projects is legal, so both are shown and the
-        // separator makes it obvious there were two rather than one.
+    for (index, artifact) in matches.iter().enumerate() {
+        // One name can belong to two kinds, or to two projects. Both are
+        // legal, so both are shown and the separator makes it obvious there
+        // was more than one.
         if index > 0 {
             text.push_str("\n---\n\n");
         }
-        let _ = writeln!(text, "{}", label(skill, level));
-        let _ = writeln!(text, "{}", skill.path().display());
+        let _ = writeln!(text, "{}", label(artifact, level, name_the_kind));
+        let _ = writeln!(text, "{}", artifact.file().display());
         let _ = writeln!(text);
-        let _ = writeln!(text, "{}", skill.description());
-        if let Some(tools) = &skill.manifest.allowed_tools {
-            let _ = writeln!(text, "\nallowed-tools: {}", tools.join(", "));
+
+        // Only what the artifact actually declares. A rule declares nothing,
+        // so it gets no metadata block rather than an empty one.
+        if let Declared::Skill(manifest) = artifact.declared() {
+            let _ = writeln!(text, "{}", manifest.description);
+            if let Some(tools) = &manifest.allowed_tools {
+                let _ = writeln!(text, "\nallowed-tools: {}", tools.join(", "));
+            }
+            if let Some(license) = &manifest.license {
+                let _ = writeln!(text, "license: {license}");
+            }
+            let _ = writeln!(text);
         }
-        if let Some(license) = &skill.manifest.license {
-            let _ = writeln!(text, "license: {license}");
-        }
-        let _ = writeln!(text, "\n{}", skill.instructions()?.trim_end());
+        let _ = writeln!(text, "{}", artifact.contents()?.trim_end());
     }
     Ok((text, true))
 }
 
-/// Every skill's problems, or a line saying it has none.
+/// Every artifact's problems, or a line saying it has none.
 fn validate(
     catalog: &Catalog,
-    name: Option<&str>,
+    selector: &Selector,
     level: Level,
 ) -> Result<(String, bool), CliError> {
-    let skills: Vec<&Skill> = match name {
-        Some(name) => {
-            let matches = catalog.find(name);
+    let artifacts: Vec<&Artifact> = match selector {
+        Selector::One(reference) => {
+            let matches = catalog.find(reference);
             if matches.is_empty() {
-                return Err(CliError::UnknownSkill(name.to_owned()));
+                return Err(CliError::UnknownArtifact(reference.name().to_owned()));
             }
             matches
         }
-        None => catalog.skills().iter().collect(),
+        // The catalog was already built for the kinds the selector wanted, so
+        // filtering again here would be filtering twice.
+        Selector::Everything | Selector::OneKind(_) => catalog.artifacts().iter().collect(),
     };
 
-    if skills.is_empty() {
-        return Ok((String::from("no skills to check\n"), true));
+    if artifacts.is_empty() {
+        return Ok((String::from("nothing to check\n"), true));
     }
+    let name_the_kind = spans_kinds(&artifacts);
 
     let mut text = String::new();
     let mut invalid = 0usize;
-    for skill in &skills {
-        let issues = skill.validate();
+    for artifact in &artifacts {
+        let issues = artifact.validate();
+        let label = label(artifact, level, name_the_kind);
         if issues.is_empty() {
-            let _ = writeln!(text, "{}: ok", label(skill, level));
+            let _ = writeln!(text, "{label}: ok");
             continue;
         }
         invalid += 1;
-        let _ = writeln!(
-            text,
-            "{}: {}",
-            label(skill, level),
-            plural(issues.len(), "problem")
-        );
+        let _ = writeln!(text, "{label}: {}", plural(issues.len(), "problem"));
         for issue in issues {
             let _ = writeln!(text, "  - {issue}");
         }
     }
 
-    let _ = writeln!(
-        text,
-        "\n{} checked, {invalid} invalid",
-        plural(skills.len(), "skill")
-    );
+    let _ = writeln!(text, "\n{} checked, {invalid} invalid", counted(&artifacts));
     Ok((text, invalid == 0))
+}
+
+/// "2 skills", "2 skills and 1 rule": what was looked at, by kind.
+///
+/// Naming the kinds only when they differ is the same rule the columns follow.
+fn counted(artifacts: &[&Artifact]) -> String {
+    let parts: Vec<String> = Kind::ALL
+        .into_iter()
+        .filter_map(|kind| {
+            let count = artifacts
+                .iter()
+                .filter(|artifact| artifact.kind() == kind)
+                .count();
+            (count > 0).then(|| {
+                let noun = if count == 1 {
+                    kind.slug()
+                } else {
+                    kind.folder()
+                };
+                format!("{count} {noun}")
+            })
+        })
+        .collect();
+    match parts.split_last() {
+        None => String::from("nothing"),
+        Some((last, [])) => last.clone(),
+        Some((last, rest)) => format!("{} and {last}", rest.join(", ")),
+    }
 }
 
 /// What `init` says it did, at either level.
@@ -671,8 +798,8 @@ pub enum CliError {
     NotInProject(PathBuf),
     #[error("{0} is not inside a flayer workspace (run `flayer init` to create one here)")]
     NotInWorkspace(PathBuf),
-    #[error("no skill named `{0}`")]
-    UnknownSkill(String),
+    #[error("nothing named `{0}` here")]
+    UnknownArtifact(String),
     #[error(transparent)]
-    Skill(#[from] SkillError),
+    Artifact(#[from] ArtifactError),
 }
