@@ -19,12 +19,12 @@ around it.
 ## Where the line between core and a front end falls
 
 `mindflayer-core` knows what a mind project is, what a flayer workspace is, and
-what a skill is. It reads and writes files, and that is the only I/O it does.
+what each kind of artifact is. It reads and writes files, and that is the only I/O it does.
 It has no idea a terminal exists.
 
 `mindflayer-cli` parses a command line, asks core for values, and renders them.
-It holds no rules about skills: not the name limits, not the front matter
-format, not where `.mind` lives.
+It holds no rules about artifacts: not the name limits, not the front matter
+format, not which folder a kind lives in.
 
 It ships **two binaries**, `mind` and `flayer`, and they are two entry points
 into one parser rather than one wrapping the other. `flayer <cmd>` and `mind
@@ -45,6 +45,86 @@ Two consequences worth stating, because they are what the split buys:
 - **Rendering happens in the front end**, and the CLI builds its output into a
   string before printing it, which is what lets its tests assert on the exact
   text a user sees.
+
+## The kinds, and how a kind is described
+
+An artifact is a skill or a rule, and the difference is a **payload**, not a
+field:
+
+```rust
+pub enum Declared {
+    Skill(SkillManifest),
+    Rule,
+}
+```
+
+`Declared` *is* the kind, so an artifact cannot carry a discriminant that
+disagrees with what was parsed — there is only one. A rule that declares a
+description is not a state the type can hold, and no `Option` field sits
+permanently `None` for one of them.
+
+Where a kind lives and what shape it has is a second, smaller thing:
+
+```rust
+pub enum Layout {
+    /// One directory per artifact, holding a manifest with a fixed name.
+    Directory { manifest: &'static str },   // skills
+    /// One file per artifact, at any depth.
+    Files { extension: &'static str },      // rules
+}
+```
+
+Discovery matches on `Layout` and nothing else has to know the difference. The
+two shapes decide the nesting rule between them: a skill's directory belongs to
+the skill, assets and all, so walking into it would turn its own files into
+artifacts — skills are therefore flat. A rule is a loose file, so folders under
+`rules/` are free to group, and a rule's name is its **route** without the
+extension. `git/no-force-push` and `ci/no-force-push` are two rules; the stem
+alone would make them one name for two files.
+
+`Kind` is a closed enum. Every kind ships in this crate, so every `match` is
+exhaustive and the compiler is the checklist for adding the next one. A
+registry that took kinds at runtime would trade that for an extensibility
+nobody has asked for.
+
+### Why a qualifier uses a colon
+
+`skill:commit-style`, not `skill/commit-style`. A rule's name *is* a route, so
+the two namespaces would otherwise share a delimiter: `.mind/rules/skills/naming.md`
+is the rule `skills/naming`, and with a slash qualifier that string would parse
+as "the skill `naming`" — a listing printing a name its own `show` rejects, or
+worse, resolves to a different artifact. A rules folder grouping rules *about
+writing skills* is not an exotic thing to have.
+
+A colon is not a path separator anywhere, and on Windows a filename cannot
+contain one at all, so the collision is gone rather than narrowed.
+
+### Where a name comes from
+
+From wherever it is declared. A skill declares one in its front matter, so that
+is its name and disagreeing with its directory is a problem `validate` reports.
+A rule declares nowhere, so its name is its route. This is why the two are not
+symmetric, and the asymmetry is the honest one.
+
+### What a listing shows for something that declares nothing
+
+A skill has a `description`. A rule has the file. Its **opening line** — the
+first line carrying any text, with leading `#` stripped — is the closest thing
+to a description it has, and it is captured when the file is loaded, because
+the file was read anyway.
+
+That one value does double duty: it is the summary a listing prints, and its
+absence is the single thing `validate` can say about a rule, since a file with
+no line of text has nothing to offer an agent. Storing the fact rather than the
+verdict is what keeps `validate` pure — every check it makes was decided when
+the file was read, so asking whether something is valid cannot itself fail.
+
+### Adding a third kind
+
+A variant on `Kind`, its folder and layout, a variant on `Declared`, a
+constructor on `Artifact`, and a match arm in discovery. Reports need nothing:
+columns, labels and counts are all driven from `Kind::ALL` and from what the
+catalog actually found.
 
 ## The two levels
 
@@ -72,12 +152,16 @@ Nothing stops one directory from being both.
 therefore `flayer <cmd>`, acts on the workspace above it. The split decides two
 things that used to be guesses:
 
-- **What is in scope.** `mind list` is the project's own skills, never its
+- **What is in scope.** `mind list` is the project's own artifacts, never its
   neighbours'. `flayer list` is every registered project. Before the split one
   command tried to be both and its answer changed depending on which directory
   it was run from.
-- **How a skill is labelled.** Only the workspace level qualifies a skill by
+- **How an artifact is labelled.** Only the workspace level qualifies one by
   the project it came from, because inside a single project that says nothing.
+  The same rule governs the kind: `mind list` grows a kind column, and
+  `validate` starts printing `rule/x` instead of `x`, only once more than one
+  kind is in play. One rule, applied twice, so a report never spends a column
+  on something the reader could not have been confused about.
 
 A workspace is in scope for exactly the projects it was **told** to manage. A
 project that merely sits inside the workspace directory is not one of them
@@ -173,6 +257,12 @@ it would mean giving up the atomic write.
   wins, because nothing here yet has to choose. Whatever resolves it (a
   workspace-level override, an explicit order in `flayer.toml`) belongs in core
   when it exists, not in a front end.
-- **Creating skills.** Nothing writes a `SKILL.md` yet; they are added by hand.
-  A command that scaffolds one is the next piece of work, and the validation
-  rules it should satisfy already live in `skill.rs`.
+- **Creating artifacts.** Nothing writes a `SKILL.md` or a rule yet; they are
+  added by hand. `mind add <kind> <name>` is the next piece of work, and it is
+  where the kinds stop sharing a code path: a skill needs a manifest scaffolded
+  and a rule needs an empty file.
+- **Rules that want to declare something.** Today a rule has no front matter,
+  so a leading `---` in one is content. If rules later want metadata, that
+  becomes a breaking reading of files written now. The escape hatch is cheap
+  and deliberate: `Declared::Rule` is a variant, so giving it a payload is a
+  local change.
