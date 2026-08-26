@@ -10,16 +10,20 @@
 //! and whatever front end comes after it, decides how to render what these
 //! types return, so the two can never disagree about what a skill is.
 
+pub mod artifact;
 pub mod catalog;
 pub mod frontmatter;
+pub mod kind;
 pub mod paths;
 pub mod skill;
 pub mod workspace;
 
-pub use catalog::{Catalog, DiscoveryFailure};
+pub use artifact::{Artifact, ArtifactError, Declared, ValidationIssue};
+pub use catalog::{Catalog, DiscoveryFailure, Reference};
 pub use frontmatter::{Document, FrontMatterError};
-pub use skill::{Skill, SkillError, SkillManifest, ValidationIssue, SKILL_FILE};
+pub use kind::{Kind, Layout, UnknownKind};
+pub use skill::{SkillManifest, MAX_DESCRIPTION_LEN, MAX_NAME_SEGMENT_LEN};
 pub use workspace::{
     FlayerConfig, FlayerWorkspace, Initialization, MindConfig, MindProject, Registration,
-    WorkspaceError, FLAYER_CONFIG, FLAYER_DIR, MIND_CONFIG, MIND_DIR, SKILLS_DIR,
+    WorkspaceError, FLAYER_CONFIG, FLAYER_DIR, MIND_CONFIG, MIND_DIR,
 };

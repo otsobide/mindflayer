@@ -3,8 +3,8 @@
 use std::fs;
 
 use mindflayer_core::{
-    FlayerWorkspace, Initialization, MindProject, Registration, WorkspaceError, FLAYER_CONFIG,
-    FLAYER_DIR, MIND_CONFIG, MIND_DIR,
+    FlayerWorkspace, Initialization, Kind, MindProject, Registration, WorkspaceError,
+    FLAYER_CONFIG, FLAYER_DIR, MIND_CONFIG, MIND_DIR,
 };
 use tempfile::TempDir;
 
@@ -16,7 +16,7 @@ fn initializing_a_mind_project_creates_its_marker_and_its_skills_folder() {
 
     assert_eq!(outcome, Initialization::Created);
     assert!(dir.path().join(MIND_DIR).join(MIND_CONFIG).is_file());
-    assert!(project.skills_dir().is_dir());
+    assert!(project.directory_for(Kind::Skill).is_dir());
     assert_eq!(project.root(), dir.path());
     assert_eq!(project.config().version, 1);
 }
@@ -50,12 +50,12 @@ fn initializing_twice_never_rewrites_the_marker() {
 fn initializing_fills_in_a_skills_folder_someone_deleted() {
     let dir = TempDir::new().unwrap();
     let (project, _) = MindProject::init(dir.path()).unwrap();
-    fs::remove_dir(project.skills_dir()).unwrap();
+    fs::remove_dir(project.directory_for(Kind::Skill)).unwrap();
 
     let (project, outcome) = MindProject::init(dir.path()).unwrap();
 
     assert_eq!(outcome, Initialization::AlreadyInitialized);
-    assert!(project.skills_dir().is_dir());
+    assert!(project.directory_for(Kind::Skill).is_dir());
 }
 
 #[test]

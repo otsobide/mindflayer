@@ -20,6 +20,7 @@ use std::path::{Path, PathBuf};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
+use crate::kind::Kind;
 use crate::paths;
 
 /// The layout version written into new marker files.
@@ -32,9 +33,6 @@ pub const FORMAT_VERSION: u32 = 1;
 pub const MIND_DIR: &str = ".mind";
 /// The marker file inside [`MIND_DIR`].
 pub const MIND_CONFIG: &str = "mind.toml";
-/// The folder holding one directory per skill, inside [`MIND_DIR`].
-pub const SKILLS_DIR: &str = "skills";
-
 /// The directory a flayer workspace is identified by.
 pub const FLAYER_DIR: &str = ".mindflayer";
 /// The marker file inside [`FLAYER_DIR`].
@@ -92,7 +90,11 @@ impl MindProject {
         let config_path = dir.join(MIND_CONFIG);
 
         create_dir(&dir)?;
-        create_dir(&dir.join(SKILLS_DIR))?;
+        // A folder per kind, so the layout is visible in a fresh project
+        // rather than being something you have to read the docs to discover.
+        for kind in Kind::ALL {
+            create_dir(&dir.join(kind.folder()))?;
+        }
 
         if config_path.is_file() {
             return Ok((Self::open(&root)?, Initialization::AlreadyInitialized));
@@ -133,9 +135,9 @@ impl MindProject {
         self.root.join(MIND_DIR)
     }
 
-    /// `.mind/skills`, whether or not it exists yet.
-    pub fn skills_dir(&self) -> PathBuf {
-        self.mind_dir().join(SKILLS_DIR)
+    /// The folder holding one kind, whether or not it exists yet.
+    pub fn directory_for(&self, kind: Kind) -> PathBuf {
+        self.mind_dir().join(kind.folder())
     }
 
     /// The project's declared name.
@@ -649,11 +651,20 @@ fn mind_template(name: &str) -> String {
     format!(
         "# Mindflayer mind project.\n\
          #\n\
-         # Skills live in {MIND_DIR}/{SKILLS_DIR}/<name>/SKILL.md. Everything under\n\
-         # {MIND_DIR} is meant to be committed: it travels with the project it describes.\n\
+         # Skills live in {MIND_DIR}/{skills}/<name>/SKILL.md: a directory each, so a\n\
+         # skill can carry scripts and references beside its instructions.\n\
+         # Rules live in {MIND_DIR}/{rules}/<name>.md: one markdown file each, giving\n\
+         # context and declaring nothing. Folders under {rules} group and mean\n\
+         # nothing else, so {rules}/git/no-force-push.md is the rule\n\
+         # `git/no-force-push`.\n\
+         #\n\
+         # Everything under {MIND_DIR} is meant to be committed: it travels with the\n\
+         # project it describes.\n\
          version = {FORMAT_VERSION}\n\
          name = {}\n",
-        toml_string(name)
+        toml_string(name),
+        skills = Kind::Skill.folder(),
+        rules = Kind::Rule.folder(),
     )
 }
 
