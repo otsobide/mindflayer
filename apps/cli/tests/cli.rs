@@ -4,7 +4,7 @@ use std::fs;
 use std::path::Path;
 
 use clap::Parser;
-use mindflayer_cli::{run, run_flayer_cli, Cli, CliError, FlayerCli, Outcome};
+use mindflayer_cli::{run, run_flayer_cli, Cli, CliError, Failure, FlayerCli, Outcome};
 use mindflayer_core::{FLAYER_CONFIG, FLAYER_DIR, MIND_CONFIG, MIND_DIR};
 use tempfile::TempDir;
 
@@ -22,14 +22,14 @@ fn line(binary: &str, args: &[&str], dir: &Path) -> Vec<String> {
 /// `try_parse_from` rather than `parse_from`: the latter exits the process on a
 /// parse error, which in a test harness kills the whole run and hides which
 /// argument line was at fault.
-fn mind(dir: &Path, args: &[&str]) -> Result<Outcome, CliError> {
+fn mind(dir: &Path, args: &[&str]) -> Result<Outcome, Failure> {
     let line = line("mind", args, dir);
     let cli = Cli::try_parse_from(&line).unwrap_or_else(|error| panic!("{line:?}: {error}"));
     run(&cli)
 }
 
 /// Run `flayer ...`, through the second binary's parser.
-fn flayer(dir: &Path, args: &[&str]) -> Result<Outcome, CliError> {
+fn flayer(dir: &Path, args: &[&str]) -> Result<Outcome, Failure> {
     let line = line("flayer", args, dir);
     let cli = FlayerCli::try_parse_from(&line).unwrap_or_else(|error| panic!("{line:?}: {error}"));
     run_flayer_cli(&cli)
@@ -159,10 +159,10 @@ fn each_level_names_the_command_that_creates_what_is_missing() {
     let project = mind(dir.path(), &["list"]).unwrap_err();
     let workspace = flayer(dir.path(), &["list"]).unwrap_err();
 
-    assert!(matches!(project, CliError::NotInProject(_)));
-    assert!(project.to_string().contains("mind init"));
-    assert!(matches!(workspace, CliError::NotInWorkspace(_)));
-    assert!(workspace.to_string().contains("flayer init"));
+    assert!(matches!(*project.error, CliError::NotInProject(_)));
+    assert!(project.error.to_string().contains("mind init"));
+    assert!(matches!(*workspace.error, CliError::NotInWorkspace(_)));
+    assert!(workspace.error.to_string().contains("flayer init"));
 }
 
 #[test]
@@ -233,7 +233,11 @@ fn link_refuses_a_directory_that_is_not_a_mind_project() {
 
     let error = flayer(dir.path(), &["link", "not-a-project"]).unwrap_err();
 
-    assert!(error.to_string().contains(MIND_DIR), "{error}");
+    assert!(
+        error.error.to_string().contains(MIND_DIR),
+        "{}",
+        error.error
+    );
 }
 
 #[test]
@@ -302,7 +306,11 @@ fn unlink_says_so_when_nothing_was_registered_under_that_path() {
 
     let error = flayer(dir.path(), &["unlink", "gamma"]).unwrap_err();
 
-    assert!(error.to_string().contains("not registered"), "{error}");
+    assert!(
+        error.error.to_string().contains("not registered"),
+        "{}",
+        error.error
+    );
 }
 
 #[test]
@@ -326,7 +334,7 @@ fn link_needs_a_workspace_not_just_a_project() {
 
     let error = flayer(dir.path(), &["link", "."]).unwrap_err();
 
-    assert!(matches!(error, CliError::NotInWorkspace(_)));
+    assert!(matches!(*error.error, CliError::NotInWorkspace(_)));
 }
 
 #[test]
@@ -376,7 +384,7 @@ fn show_names_the_skill_it_could_not_find() {
 
     let error = mind(dir.path(), &["show", "absent"]).unwrap_err();
 
-    assert!(matches!(error, CliError::UnknownSkill(name) if name == "absent"));
+    assert!(matches!(*error.error, CliError::UnknownSkill(name) if name == "absent"));
 }
 
 #[test]
@@ -461,4 +469,97 @@ fn init_run_twice_says_so_and_succeeds() {
     assert!(project.ok && workspace.ok);
     assert!(project.stdout.contains("already initialized"));
     assert!(workspace.stdout.contains("already initialized"));
+}
+
+#[test]
+fn a_workspace_whose_projects_all_broke_does_not_claim_to_manage_none() {
+    let dir = workspace_with_two();
+    fs::remove_dir_all(dir.path().join("alpha")).unwrap();
+    fs::remove_dir_all(dir.path().join("beta")).unwrap();
+
+    let outcome = flayer(dir.path(), &["list"]).unwrap();
+
+    // "manages no projects yet" would send the user to link something that is
+    // already linked; the registry has two entries that simply will not open.
+    assert!(
+        !outcome.stdout.contains("manages no projects yet"),
+        "{}",
+        outcome.stdout
+    );
+    assert!(outcome.stdout.contains("none of which could be opened"));
+    assert!(outcome.stdout.contains("flayer unlink"));
+    assert_eq!(outcome.stderr.len(), 2);
+    assert!(!outcome.ok);
+}
+
+#[test]
+fn a_failing_command_still_reports_what_it_had_already_noticed() {
+    let dir = TempDir::new().unwrap();
+    mind(dir.path(), &["init"]).unwrap();
+    write_skill(dir.path(), "broken", "# no front matter at all\n");
+
+    let failure = mind(dir.path(), &["show", "broken"]).unwrap_err();
+
+    // "no skill named `broken`" on its own is baffling when the file is right
+    // there; the warning is the half that explains it.
+    assert!(matches!(*failure.error, CliError::UnknownSkill(_)));
+    assert_eq!(failure.warnings.len(), 1);
+    assert!(failure.warnings[0].contains("front matter"));
+}
+
+#[test]
+fn unlink_reports_every_entry_it_removed() {
+    let dir = workspace_with_two();
+    fs::write(
+        dir.path().join(FLAYER_DIR).join(FLAYER_CONFIG),
+        "version = 1\nname = \"w\"\nprojects = [\"alpha\", \"./alpha\", \"beta\"]\n",
+    )
+    .unwrap();
+
+    let outcome = flayer(dir.path(), &["unlink", "alpha"]).unwrap();
+
+    assert_eq!(outcome.stdout, "unlinked alpha\nunlinked ./alpha\n");
+    // And it is genuinely gone, rather than reported gone.
+    let listed = flayer(dir.path(), &["list"]).unwrap();
+    assert!(!listed.stdout.contains("alpha"), "{}", listed.stdout);
+    assert!(listed.stdout.contains("beta"));
+}
+
+#[test]
+fn both_spellings_answer_version_and_help() {
+    // `mind flayer --version` erroring while `flayer --version` worked was the
+    // two spellings drifting, which is the one thing the shortcut must not do.
+    for line in [
+        vec!["mind", "flayer", "--version"],
+        vec!["mind", "--version"],
+    ] {
+        let error = Cli::try_parse_from(&line).unwrap_err();
+        assert_eq!(
+            error.kind(),
+            clap::error::ErrorKind::DisplayVersion,
+            "{line:?} did not answer with a version"
+        );
+    }
+    assert_eq!(
+        FlayerCli::try_parse_from(["flayer", "--version"])
+            .unwrap_err()
+            .kind(),
+        clap::error::ErrorKind::DisplayVersion
+    );
+}
+
+#[test]
+fn each_binary_describes_itself_rather_than_the_crate() {
+    let mind = Cli::try_parse_from(["mind", "--help"])
+        .unwrap_err()
+        .to_string();
+    let flayer = FlayerCli::try_parse_from(["flayer", "--help"])
+        .unwrap_err()
+        .to_string();
+
+    // One crate description cannot be right for two binaries: `mind --help`
+    // used to advertise the pre-split, cross-project scope.
+    assert!(mind.contains("in a mind project"), "{mind}");
+    assert!(flayer.contains("flayer workspace"), "{flayer}");
+    assert_ne!(mind.lines().next().unwrap(), flayer.lines().next().unwrap());
 }

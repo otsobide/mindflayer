@@ -23,8 +23,20 @@ use mindflayer_core::{
 use thiserror::Error;
 
 /// Manage the agent skills in a mind project.
+//
+// `about` is spelled out rather than taken from the crate description, which
+// is one line for a package that ships two binaries and so can only be right
+// for one of them. `propagate_version` puts `--version` on the nested
+// subcommands too, so `mind flayer --version` answers instead of erroring
+// while `flayer --version` works.
 #[derive(Debug, Parser)]
-#[command(name = "mind", version, about, long_about = None)]
+#[command(
+    name = "mind",
+    version,
+    propagate_version = true,
+    about = "Manage the agent skills in a mind project",
+    long_about = None
+)]
 pub struct Cli {
     #[command(subcommand)]
     pub command: Command,
@@ -66,7 +78,13 @@ pub enum Command {
 
 /// The `flayer` binary: a shortcut into the workspace half of `mind`.
 #[derive(Debug, Parser)]
-#[command(name = "flayer", version, about, long_about = None)]
+#[command(
+    name = "flayer",
+    version,
+    propagate_version = true,
+    about = "Manage the mind projects a flayer workspace orchestrates",
+    long_about = None
+)]
 pub struct FlayerCli {
     #[command(subcommand)]
     pub command: FlayerCommand,
@@ -162,8 +180,58 @@ impl Outcome {
     }
 }
 
+/// A command that could not run, and whatever it had already found out.
+///
+/// The warnings travel with the error rather than being dropped, because they
+/// usually explain it: `no skill named \`broken\`` is baffling on its own and
+/// obvious next to `broken/SKILL.md: the file does not start with a `---`
+/// front matter fence`.
+#[derive(Debug)]
+pub struct Failure {
+    /// Why the command stopped.
+    ///
+    /// Boxed to keep the error half of every `Result` small: a `CliError`
+    /// carries paths and an io::Error, and the success path should not pay for
+    /// that on every return.
+    pub error: Box<CliError>,
+    /// What it had already noticed before it stopped.
+    pub warnings: Vec<String>,
+}
+
+impl Failure {
+    /// Print the warnings and the error, and return the process exit code.
+    pub fn report(&self) -> ExitCode {
+        for line in &self.warnings {
+            eprintln!("{line}");
+        }
+        eprintln!("error: {}", self.error);
+        ExitCode::FAILURE
+    }
+}
+
+impl From<CliError> for Failure {
+    fn from(error: CliError) -> Self {
+        Self {
+            error: Box::new(error),
+            warnings: Vec::new(),
+        }
+    }
+}
+
+impl From<WorkspaceError> for Failure {
+    fn from(error: WorkspaceError) -> Self {
+        CliError::from(error).into()
+    }
+}
+
+impl From<SkillError> for Failure {
+    fn from(error: SkillError) -> Self {
+        CliError::from(error).into()
+    }
+}
+
 /// Run `mind`.
-pub fn run(cli: &Cli) -> Result<Outcome, CliError> {
+pub fn run(cli: &Cli) -> Result<Outcome, Failure> {
     let directory = working_directory(cli.directory.as_deref())?;
     match &cli.command {
         Command::Flayer(command) => run_flayer(command, &directory),
@@ -196,13 +264,13 @@ pub fn run(cli: &Cli) -> Result<Outcome, CliError> {
 }
 
 /// Run `flayer`, which is the same as running `mind flayer`.
-pub fn run_flayer_cli(cli: &FlayerCli) -> Result<Outcome, CliError> {
+pub fn run_flayer_cli(cli: &FlayerCli) -> Result<Outcome, Failure> {
     let directory = working_directory(cli.directory.as_deref())?;
     run_flayer(&cli.command, &directory)
 }
 
 /// The workspace half, shared by `mind flayer <cmd>` and `flayer <cmd>`.
-fn run_flayer(command: &FlayerCommand, directory: &Path) -> Result<Outcome, CliError> {
+fn run_flayer(command: &FlayerCommand, directory: &Path) -> Result<Outcome, Failure> {
     match command {
         FlayerCommand::Init => {
             let (workspace, outcome) = FlayerWorkspace::init(directory)?;
@@ -237,10 +305,14 @@ fn run_flayer(command: &FlayerCommand, directory: &Path) -> Result<Outcome, CliE
             let mut workspace = workspace_here(directory)?;
             let target = resolve(directory, path)?;
             let removed = workspace.unlink(&target)?;
-            Ok(Outcome::plain(format!(
-                "unlinked {}\n",
-                as_stored(&removed)
-            )))
+            // Every spelling that pointed at the project, not just the first:
+            // reporting "unlinked" while one entry still registers it is the
+            // failure this reports its way out of.
+            let mut text = String::new();
+            for entry in &removed {
+                let _ = writeln!(text, "unlinked {}", as_stored(entry));
+            }
+            Ok(Outcome::plain(text))
         }
 
         FlayerCommand::List => {
@@ -329,7 +401,7 @@ fn managed(directory: &Path) -> Result<(FlayerWorkspace, Vec<MindProject>, Vec<S
 // ---------------------------------------------------------------------------
 
 /// Build a catalog over `projects` and hand it to `command`.
-fn with_catalog<F>(projects: &[MindProject], command: F) -> Result<Outcome, CliError>
+fn with_catalog<F>(projects: &[MindProject], command: F) -> Result<Outcome, Failure>
 where
     F: FnOnce(&Catalog, &[MindProject]) -> Result<(String, bool), CliError>,
 {
@@ -341,7 +413,7 @@ fn with_warnings<F>(
     mut stderr: Vec<String>,
     projects: Vec<MindProject>,
     command: F,
-) -> Result<Outcome, CliError>
+) -> Result<Outcome, Failure>
 where
     F: FnOnce(&Catalog, &[MindProject]) -> Result<(String, bool), CliError>,
 {
@@ -357,7 +429,15 @@ where
             .map(|failure| format!("warning: {failure}")),
     );
 
-    let (stdout, ok) = command(&catalog, &projects)?;
+    let (stdout, ok) = match command(&catalog, &projects) {
+        Ok(reported) => reported,
+        Err(error) => {
+            return Err(Failure {
+                error: Box::new(error),
+                warnings: stderr,
+            })
+        }
+    };
     let clean = stderr.is_empty();
     Ok(Outcome {
         stdout,
@@ -414,21 +494,37 @@ fn list(catalog: &Catalog, projects: &[MindProject], level: Level) -> (String, b
     (text, true)
 }
 
-/// `list` at the workspace level, where an empty result is more often "you
-/// have not linked anything yet" than "these projects have no skills".
+/// `list` at the workspace level, where an empty result has two very
+/// different causes and only one of them is answered by linking something.
 fn list_workspace(
     catalog: &Catalog,
     projects: &[MindProject],
     workspace: &FlayerWorkspace,
 ) -> (String, bool) {
     if projects.is_empty() {
-        return (
-            format!(
-                "{} manages no projects yet\n  link one with `flayer link <path>`\n",
-                workspace.name()
-            ),
-            true,
-        );
+        let registered = workspace.config().projects.len();
+        // Saying "manages no projects yet" when the registry is full of
+        // entries that simply would not open sends the user to link something
+        // that is already linked.
+        return if registered == 0 {
+            (
+                format!(
+                    "{} manages no projects yet\n  link one with `flayer link <path>`\n",
+                    workspace.name()
+                ),
+                true,
+            )
+        } else {
+            (
+                format!(
+                    "{} manages {}, none of which could be opened\n  \
+                     see the warnings, or drop a stale entry with `flayer unlink <path>`\n",
+                    workspace.name(),
+                    plural(registered, "project"),
+                ),
+                false,
+            )
+        };
     }
     list(catalog, projects, Level::Workspace)
 }

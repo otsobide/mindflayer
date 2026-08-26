@@ -13,9 +13,6 @@ fn main() -> ExitCode {
     let cli = FlayerCli::parse();
     match run_flayer_cli(&cli) {
         Ok(outcome) => outcome.report(),
-        Err(error) => {
-            eprintln!("error: {error}");
-            ExitCode::FAILURE
-        }
+        Err(failure) => failure.report(),
     }
 }
