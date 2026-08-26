@@ -87,6 +87,18 @@ exhaustive and the compiler is the checklist for adding the next one. A
 registry that took kinds at runtime would trade that for an extensibility
 nobody has asked for.
 
+### Why a qualifier uses a colon
+
+`skill:commit-style`, not `skill/commit-style`. A rule's name *is* a route, so
+the two namespaces would otherwise share a delimiter: `.mind/rules/skills/naming.md`
+is the rule `skills/naming`, and with a slash qualifier that string would parse
+as "the skill `naming`" — a listing printing a name its own `show` rejects, or
+worse, resolves to a different artifact. A rules folder grouping rules *about
+writing skills* is not an exotic thing to have.
+
+A colon is not a path separator anywhere, and on Windows a filename cannot
+contain one at all, so the collision is gone rather than narrowed.
+
 ### Where a name comes from
 
 From wherever it is declared. A skill declares one in its front matter, so that

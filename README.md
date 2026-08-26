@@ -75,7 +75,7 @@ standing in; `flayer` acts on the workspace above it.
 ```bash
 mind init                  # create a .mind here
 mind list [KIND]           # this project's artifacts; `mind list rules` filters
-mind show <NAME>           # one artifact: path, what it declares, its contents
+mind show <NAME>           # one artifact; `rule:deploy` when a name is ambiguous
 mind validate [KIND|NAME]  # check a kind, one artifact, or everything
 
 flayer init                # create a .mindflayer here
@@ -111,7 +111,12 @@ when only one kind is in play, the project column when only one project is —
 the same rule in both cases.
 
 A name is bare until it needs qualifying. When one name belongs to two kinds,
-`mind show deploy` shows both and `mind show rule/deploy` picks one.
+`mind show deploy` shows both and `mind show rule:deploy` picks one.
+
+The qualifier is a **colon**, not a slash, because a rule's name is already a
+route: `.mind/rules/skills/naming.md` is the rule `skills/naming`, and a slash
+qualifier would have made that mean "the skill `naming`". With a colon, a name
+is always a name.
 
 A workspace lists the projects it was **told** to manage, not whatever happens
 to sit inside it, so the answer does not change with the directory you ran it
