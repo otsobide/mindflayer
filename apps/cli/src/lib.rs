@@ -1,44 +1,61 @@
-//! Command line interface for Mindflayer: create mind projects and flayer
-//! workspaces, and list, inspect and check the skills they hold.
+//! Command line interface for Mindflayer, split the way the model is.
 //!
-//! The parser, the work and the rendering all live here rather than in
-//! `main.rs` so the tests drive the real command surface instead of shelling
-//! out to a binary, and so a later front end can reuse the same entry points.
+//! `mind <cmd>` acts on the mind project you are standing in. `mind flayer
+//! <cmd>` acts on the flayer workspace above it, and the `flayer` binary is
+//! the same tree reached directly, so `flayer link x` and `mind flayer link x`
+//! are one command with two spellings.
+//!
+//! The parser, the work and the rendering all live here rather than in the
+//! binaries so the tests drive the real command surface instead of shelling
+//! out, and so both binaries cannot drift apart.
 
 use std::fmt::Write as _;
 use std::io;
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
-use clap::{Parser, Subcommand, ValueEnum};
+use clap::{Parser, Subcommand};
+use mindflayer_core::paths;
 use mindflayer_core::{
-    Catalog, FlayerWorkspace, Initialization, MindProject, Skill, SkillError, WorkspaceError,
-    FLAYER_DIR, MIND_DIR,
+    Catalog, FlayerWorkspace, Initialization, MindProject, Registration, Skill, SkillError,
+    WorkspaceError,
 };
 use thiserror::Error;
 
-/// Manage agent skills across mind projects.
+/// Manage the agent skills in a mind project.
+//
+// `about` is spelled out rather than taken from the crate description, which
+// is one line for a package that ships two binaries and so can only be right
+// for one of them. `propagate_version` puts `--version` on the nested
+// subcommands too, so `mind flayer --version` answers instead of erroring
+// while `flayer --version` works.
 #[derive(Debug, Parser)]
-#[command(name = "mind", version, about, long_about = None)]
+#[command(
+    name = "mind",
+    version,
+    propagate_version = true,
+    about = "Manage the agent skills in a mind project",
+    long_about = None
+)]
 pub struct Cli {
     #[command(subcommand)]
     pub command: Command,
 
     /// Directory to work in [default: the current directory].
-    #[arg(short = 'C', long = "path", value_name = "DIR", global = true)]
-    pub path: Option<PathBuf>,
+    ///
+    /// Named `directory` rather than `path` on purpose: a global argument
+    /// shares a namespace with every subcommand's own arguments, and `path`
+    /// is exactly what a subcommand taking one would call it.
+    #[arg(short = 'C', long = "directory", value_name = "DIR", global = true)]
+    pub directory: Option<PathBuf>,
 }
 
 #[derive(Debug, Subcommand)]
 pub enum Command {
-    /// Create a mind project here, or a flayer workspace over several.
-    Init {
-        /// What to create.
-        #[arg(value_enum, default_value_t = Kind::Mind)]
-        kind: Kind,
-    },
+    /// Create a mind project here.
+    Init,
 
-    /// List the skills in scope.
+    /// List this project's skills.
     #[command(alias = "ls")]
     List,
 
@@ -48,33 +65,81 @@ pub enum Command {
         name: String,
     },
 
-    /// Check skills against what an agent requires of them.
+    /// Check this project's skills against what an agent requires.
     Validate {
         /// Check only this skill [default: all of them].
         name: Option<String>,
     },
+
+    /// Act on the flayer workspace instead. Also reachable as `flayer <cmd>`.
+    #[command(subcommand)]
+    Flayer(FlayerCommand),
 }
 
-/// The two things `init` can create.
+/// The `flayer` binary: a shortcut into the workspace half of `mind`.
+#[derive(Debug, Parser)]
+#[command(
+    name = "flayer",
+    version,
+    propagate_version = true,
+    about = "Manage the mind projects a flayer workspace orchestrates",
+    long_about = None
+)]
+pub struct FlayerCli {
+    #[command(subcommand)]
+    pub command: FlayerCommand,
+
+    /// Directory to work in [default: the current directory].
+    ///
+    /// Named `directory` rather than `path` on purpose: a global argument
+    /// shares a namespace with every subcommand's own arguments, and `path`
+    /// is exactly what a subcommand taking one would call it.
+    #[arg(short = 'C', long = "directory", value_name = "DIR", global = true)]
+    pub directory: Option<PathBuf>,
+}
+
+#[derive(Debug, Subcommand)]
+pub enum FlayerCommand {
+    /// Create a flayer workspace here.
+    Init,
+
+    /// List the skills of every project this workspace manages.
+    #[command(alias = "ls")]
+    List,
+
+    /// Show one skill in full, from any project this workspace manages.
+    Show {
+        /// The skill's `name`, as declared in its front matter.
+        name: String,
+    },
+
+    /// Check every managed project's skills.
+    Validate {
+        /// Check only this skill [default: all of them].
+        name: Option<String>,
+    },
+
+    /// Register a mind project with this workspace.
+    Link {
+        /// The project's directory, the one holding `.mind`.
+        project: PathBuf,
+    },
+
+    /// Drop a registered mind project.
+    Unlink {
+        /// The project's directory, as registered. It need not still exist.
+        project: PathBuf,
+    },
+}
+
+/// Which level a command reports at.
 ///
-/// `Mind` is first because it is the default: holding skills is what most
-/// directories are for, and a workspace is the rarer, deliberate step above.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
-pub enum Kind {
-    /// A `.mind` project, holding skills of its own.
-    Mind,
-    /// A `.mindflayer` workspace, orchestrating several mind projects.
-    Flayer,
-}
-
-impl Cli {
-    /// The directory this invocation works in.
-    pub fn directory(&self) -> Result<PathBuf, CliError> {
-        match &self.path {
-            Some(dir) => Ok(dir.clone()),
-            None => std::env::current_dir().map_err(CliError::CurrentDirectory),
-        }
-    }
+/// It decides one thing: whether naming the project each skill came from tells
+/// the reader anything. Inside a single project it does not.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Level {
+    Project,
+    Workspace,
 }
 
 /// What a command produced.
@@ -92,6 +157,15 @@ pub struct Outcome {
 }
 
 impl Outcome {
+    /// A clean report with nothing to warn about.
+    fn plain(stdout: String) -> Self {
+        Self {
+            stdout,
+            stderr: Vec::new(),
+            ok: true,
+        }
+    }
+
     /// Print the outcome and return the code the process should exit with.
     pub fn report(&self) -> ExitCode {
         print!("{}", self.stdout);
@@ -106,90 +180,248 @@ impl Outcome {
     }
 }
 
-/// Run a parsed command line.
-pub fn run(cli: &Cli) -> Result<Outcome, CliError> {
-    let directory = cli.directory()?;
+/// A command that could not run, and whatever it had already found out.
+///
+/// The warnings travel with the error rather than being dropped, because they
+/// usually explain it: `no skill named \`broken\`` is baffling on its own and
+/// obvious next to `broken/SKILL.md: the file does not start with a `---`
+/// front matter fence`.
+#[derive(Debug)]
+pub struct Failure {
+    /// Why the command stopped.
+    ///
+    /// Boxed to keep the error half of every `Result` small: a `CliError`
+    /// carries paths and an io::Error, and the success path should not pay for
+    /// that on every return.
+    pub error: Box<CliError>,
+    /// What it had already noticed before it stopped.
+    pub warnings: Vec<String>,
+}
 
+impl Failure {
+    /// Print the warnings and the error, and return the process exit code.
+    pub fn report(&self) -> ExitCode {
+        for line in &self.warnings {
+            eprintln!("{line}");
+        }
+        eprintln!("error: {}", self.error);
+        ExitCode::FAILURE
+    }
+}
+
+impl From<CliError> for Failure {
+    fn from(error: CliError) -> Self {
+        Self {
+            error: Box::new(error),
+            warnings: Vec::new(),
+        }
+    }
+}
+
+impl From<WorkspaceError> for Failure {
+    fn from(error: WorkspaceError) -> Self {
+        CliError::from(error).into()
+    }
+}
+
+impl From<SkillError> for Failure {
+    fn from(error: SkillError) -> Self {
+        CliError::from(error).into()
+    }
+}
+
+/// Run `mind`.
+pub fn run(cli: &Cli) -> Result<Outcome, Failure> {
+    let directory = working_directory(cli.directory.as_deref())?;
     match &cli.command {
-        Command::Init { kind } => init(*kind, &directory),
-        Command::List => with_catalog(&directory, |catalog, projects| Ok(list(catalog, projects))),
-        Command::Show { name } => with_catalog(&directory, |catalog, _| show(catalog, name)),
+        Command::Flayer(command) => run_flayer(command, &directory),
+        Command::Init => {
+            let (project, outcome) = MindProject::init(&directory)?;
+            Ok(Outcome::plain(initialized(
+                "mind project",
+                project.name(),
+                &project.mind_dir(),
+                outcome,
+            )))
+        }
+        Command::List => {
+            let project = project_here(&directory)?;
+            with_catalog(&[project], |catalog, projects| {
+                Ok(list(catalog, projects, Level::Project))
+            })
+        }
+        Command::Show { name } => {
+            let project = project_here(&directory)?;
+            with_catalog(&[project], |catalog, _| show(catalog, name, Level::Project))
+        }
         Command::Validate { name } => {
-            let name = name.as_deref();
-            with_catalog(&directory, move |catalog, _| validate(catalog, name))
+            let project = project_here(&directory)?;
+            with_catalog(&[project], |catalog, _| {
+                validate(catalog, name.as_deref(), Level::Project)
+            })
+        }
+    }
+}
+
+/// Run `flayer`, which is the same as running `mind flayer`.
+pub fn run_flayer_cli(cli: &FlayerCli) -> Result<Outcome, Failure> {
+    let directory = working_directory(cli.directory.as_deref())?;
+    run_flayer(&cli.command, &directory)
+}
+
+/// The workspace half, shared by `mind flayer <cmd>` and `flayer <cmd>`.
+fn run_flayer(command: &FlayerCommand, directory: &Path) -> Result<Outcome, Failure> {
+    match command {
+        FlayerCommand::Init => {
+            let (workspace, outcome) = FlayerWorkspace::init(directory)?;
+            Ok(Outcome::plain(initialized(
+                "flayer workspace",
+                workspace.name(),
+                &workspace.flayer_dir(),
+                outcome,
+            )))
+        }
+
+        FlayerCommand::Link { project: path } => {
+            let mut workspace = workspace_here(directory)?;
+            let target = resolve(directory, path)?;
+            // Opening it is the check: a directory with no `.mind` is not a
+            // project, and registering one would only fail later, further from
+            // the command that caused it.
+            let project = MindProject::open(&target)?;
+            let name = project.name().to_owned();
+
+            let (entry, outcome) = workspace.link(&project)?;
+            let entry = as_stored(&entry);
+            Ok(Outcome::plain(match outcome {
+                Registration::Added => format!("linked {name} as {entry}\n"),
+                Registration::AlreadyRegistered => {
+                    format!("{name} is already linked as {entry}\n")
+                }
+            }))
+        }
+
+        FlayerCommand::Unlink { project: path } => {
+            let mut workspace = workspace_here(directory)?;
+            let target = resolve(directory, path)?;
+            let removed = workspace.unlink(&target)?;
+            // Every spelling that pointed at the project, not just the first:
+            // reporting "unlinked" while one entry still registers it is the
+            // failure this reports its way out of.
+            let mut text = String::new();
+            for entry in &removed {
+                let _ = writeln!(text, "unlinked {}", as_stored(entry));
+            }
+            Ok(Outcome::plain(text))
+        }
+
+        FlayerCommand::List => {
+            let (workspace, projects, warnings) = managed(directory)?;
+            with_warnings(warnings, projects, |catalog, projects| {
+                Ok(list_workspace(catalog, projects, &workspace))
+            })
+        }
+        FlayerCommand::Show { name } => {
+            let (_, projects, warnings) = managed(directory)?;
+            with_warnings(warnings, projects, |catalog, _| {
+                show(catalog, name, Level::Workspace)
+            })
+        }
+        FlayerCommand::Validate { name } => {
+            let (_, projects, warnings) = managed(directory)?;
+            with_warnings(warnings, projects, |catalog, _| {
+                validate(catalog, name.as_deref(), Level::Workspace)
+            })
         }
     }
 }
 
 // ---------------------------------------------------------------------------
-// init
+// Locating what a command acts on
 // ---------------------------------------------------------------------------
 
-/// Create a workspace or a project in `directory`.
-fn init(kind: Kind, directory: &Path) -> Result<Outcome, CliError> {
-    let (kind_name, marker, name, outcome) = match kind {
-        Kind::Flayer => {
-            let (workspace, outcome) = FlayerWorkspace::init(directory)?;
-            (
-                "flayer workspace",
-                workspace.flayer_dir(),
-                workspace.name().to_owned(),
-                outcome,
-            )
-        }
-        Kind::Mind => {
-            let (project, outcome) = MindProject::init(directory)?;
-            (
-                "mind project",
-                project.mind_dir(),
-                project.name().to_owned(),
-                outcome,
-            )
-        }
-    };
+/// The directory this invocation works in.
+fn working_directory(path: Option<&Path>) -> Result<PathBuf, CliError> {
+    match path {
+        Some(dir) => Ok(dir.to_path_buf()),
+        None => std::env::current_dir().map_err(CliError::CurrentDirectory),
+    }
+}
 
-    let stdout = match outcome {
-        Initialization::Created => {
-            format!("initialized {kind_name} `{name}` in {}\n", marker.display())
-        }
-        Initialization::AlreadyInitialized => format!(
-            "{kind_name} `{name}` already initialized in {}\n",
-            marker.display()
-        ),
-    };
+/// Resolve a path a user typed, against the directory the command works in.
+fn resolve(directory: &Path, path: &Path) -> Result<PathBuf, CliError> {
+    let joined = directory.join(path);
+    let absolute = std::path::absolute(&joined).map_err(|source| CliError::Resolve {
+        path: joined.clone(),
+        source,
+    })?;
+    Ok(paths::normalize(&absolute))
+}
 
-    Ok(Outcome {
-        stdout,
-        stderr: Vec::new(),
-        ok: true,
-    })
+/// A registry entry spelled the way the marker file spells it.
+///
+/// Not `Path::display`, which uses the platform separator: entries are stored
+/// with forward slashes so a workspace registered on one platform resolves on
+/// the other, and on Windows `display` would report `..\collapse` for a line
+/// that reads `../collapse`. What a command says it wrote has to be what
+/// someone opening the file will find.
+fn as_stored(entry: &Path) -> String {
+    paths::to_config_string(entry).unwrap_or_else(|| entry.display().to_string())
+}
+
+/// The mind project the caller is standing in.
+fn project_here(directory: &Path) -> Result<MindProject, CliError> {
+    MindProject::locate(directory)?.ok_or_else(|| CliError::NotInProject(directory.to_path_buf()))
+}
+
+/// The flayer workspace the caller is standing in.
+fn workspace_here(directory: &Path) -> Result<FlayerWorkspace, CliError> {
+    FlayerWorkspace::locate(directory)?
+        .ok_or_else(|| CliError::NotInWorkspace(directory.to_path_buf()))
+}
+
+/// The workspace here and the projects it manages.
+///
+/// Only the registered ones. A workspace manages what it was told to manage,
+/// so a project that happens to sit inside it is not in scope until it is
+/// linked — otherwise `flayer list` would answer a different question
+/// depending on which directory it was run from.
+fn managed(directory: &Path) -> Result<(FlayerWorkspace, Vec<MindProject>, Vec<String>), CliError> {
+    let workspace = workspace_here(directory)?;
+    let (projects, failures) = workspace.projects();
+    let warnings = failures
+        .iter()
+        .map(|failure| format!("warning: {failure}"))
+        .collect();
+    Ok((workspace, projects, warnings))
 }
 
 // ---------------------------------------------------------------------------
 // Commands that read skills
 // ---------------------------------------------------------------------------
 
-/// The mind projects a command works over, and what could not be reached.
-struct WorkingSet {
-    projects: Vec<MindProject>,
-    warnings: Vec<String>,
-}
-
-/// Resolve the working set, build its catalog and hand both to `command`.
-///
-/// Every reading command shares this preamble, and sharing it is what keeps
-/// them agreeing on which projects are in scope.
-fn with_catalog<F>(directory: &Path, command: F) -> Result<Outcome, CliError>
+/// Build a catalog over `projects` and hand it to `command`.
+fn with_catalog<F>(projects: &[MindProject], command: F) -> Result<Outcome, Failure>
 where
     F: FnOnce(&Catalog, &[MindProject]) -> Result<(String, bool), CliError>,
 {
-    let working = working_set(directory)?;
-    let catalog = Catalog::discover(&working.projects);
+    with_warnings(Vec::new(), projects.to_vec(), command)
+}
+
+/// The same, starting from warnings the caller has already collected.
+fn with_warnings<F>(
+    mut stderr: Vec<String>,
+    projects: Vec<MindProject>,
+    command: F,
+) -> Result<Outcome, Failure>
+where
+    F: FnOnce(&Catalog, &[MindProject]) -> Result<(String, bool), CliError>,
+{
+    let catalog = Catalog::discover(&projects);
 
     // Unreadable skills are reported alongside whatever was found: a broken
     // file is a thing the user wants to know about, not a reason to be told
     // nothing about the forty next to it.
-    let mut stderr = working.warnings;
     stderr.extend(
         catalog
             .failures()
@@ -197,7 +429,15 @@ where
             .map(|failure| format!("warning: {failure}")),
     );
 
-    let (stdout, ok) = command(&catalog, &working.projects)?;
+    let (stdout, ok) = match command(&catalog, &projects) {
+        Ok(reported) => reported,
+        Err(error) => {
+            return Err(Failure {
+                error: Box::new(error),
+                warnings: stderr,
+            })
+        }
+    };
     let clean = stderr.is_empty();
     Ok(Outcome {
         stdout,
@@ -206,37 +446,8 @@ where
     })
 }
 
-/// Which mind projects are in scope from `directory`.
-///
-/// A flayer workspace above contributes every project it references; the mind
-/// project the caller is standing in contributes itself, whether or not the
-/// workspace knows about it yet.
-fn working_set(directory: &Path) -> Result<WorkingSet, CliError> {
-    let workspace = FlayerWorkspace::locate(directory)?;
-    let here = MindProject::locate(directory)?;
-
-    let mut projects = Vec::new();
-    let mut warnings = Vec::new();
-
-    if let Some(workspace) = &workspace {
-        let (registered, failures) = workspace.projects();
-        projects.extend(registered);
-        warnings.extend(failures.iter().map(|failure| format!("warning: {failure}")));
-    }
-    if let Some(here) = here {
-        if !projects.iter().any(|other| other.root() == here.root()) {
-            projects.push(here);
-        }
-    } else if workspace.is_none() {
-        return Err(CliError::Nowhere(directory.to_path_buf()));
-    }
-
-    projects.sort_by(|a, b| a.root().cmp(b.root()));
-    Ok(WorkingSet { projects, warnings })
-}
-
-/// One line per skill: project, name, and the first line of the description.
-fn list(catalog: &Catalog, projects: &[MindProject]) -> (String, bool) {
+/// One line per skill.
+fn list(catalog: &Catalog, projects: &[MindProject], level: Level) -> (String, bool) {
     if catalog.is_empty() {
         let mut text = String::from("no skills found\n");
         for project in projects {
@@ -247,18 +458,9 @@ fn list(catalog: &Catalog, projects: &[MindProject]) -> (String, bool) {
                 project.skills_dir().display()
             );
         }
-        if projects.is_empty() {
-            text.push_str("  no mind projects in scope\n");
-        }
         return (text, true);
     }
 
-    let project_width = catalog
-        .skills()
-        .iter()
-        .map(|skill| skill.project_name().unwrap_or("?").chars().count())
-        .max()
-        .unwrap_or(0);
     let name_width = catalog
         .skills()
         .iter()
@@ -267,16 +469,78 @@ fn list(catalog: &Catalog, projects: &[MindProject]) -> (String, bool) {
         .unwrap_or(0);
 
     let mut text = String::new();
+    if level == Level::Project {
+        for skill in catalog.skills() {
+            let _ = writeln!(text, "{:name_width$}  {}", skill.name(), summary(skill));
+        }
+        return (text, true);
+    }
+
+    let project_width = catalog
+        .skills()
+        .iter()
+        .map(|skill| project_of(skill).chars().count())
+        .max()
+        .unwrap_or(0);
     for skill in catalog.skills() {
         let _ = writeln!(
             text,
             "{:project_width$}  {:name_width$}  {}",
-            skill.project_name().unwrap_or("?"),
+            project_of(skill),
             skill.name(),
             summary(skill),
         );
     }
     (text, true)
+}
+
+/// `list` at the workspace level, where an empty result has two very
+/// different causes and only one of them is answered by linking something.
+fn list_workspace(
+    catalog: &Catalog,
+    projects: &[MindProject],
+    workspace: &FlayerWorkspace,
+) -> (String, bool) {
+    if projects.is_empty() {
+        let registered = workspace.config().projects.len();
+        // Saying "manages no projects yet" when the registry is full of
+        // entries that simply would not open sends the user to link something
+        // that is already linked.
+        return if registered == 0 {
+            (
+                format!(
+                    "{} manages no projects yet\n  link one with `flayer link <path>`\n",
+                    workspace.name()
+                ),
+                true,
+            )
+        } else {
+            (
+                format!(
+                    "{} manages {}, none of which could be opened\n  \
+                     see the warnings, or drop a stale entry with `flayer unlink <path>`\n",
+                    workspace.name(),
+                    plural(registered, "project"),
+                ),
+                false,
+            )
+        };
+    }
+    list(catalog, projects, Level::Workspace)
+}
+
+/// The project a skill came from, for display.
+fn project_of(skill: &Skill) -> &str {
+    skill.project_name().unwrap_or("?")
+}
+
+/// How a skill is labelled in a report: bare inside one project, qualified by
+/// its project across several.
+fn label(skill: &Skill, level: Level) -> String {
+    match level {
+        Level::Project => skill.name().to_owned(),
+        Level::Workspace => format!("{} ({})", skill.name(), project_of(skill)),
+    }
 }
 
 /// The first line of a description, short enough to sit in a column.
@@ -292,7 +556,7 @@ fn summary(skill: &Skill) -> String {
 }
 
 /// One skill in full: where it is, what it declares, and its instructions.
-fn show(catalog: &Catalog, name: &str) -> Result<(String, bool), CliError> {
+fn show(catalog: &Catalog, name: &str, level: Level) -> Result<(String, bool), CliError> {
     let matches = catalog.find(name);
     if matches.is_empty() {
         return Err(CliError::UnknownSkill(name.to_owned()));
@@ -305,12 +569,7 @@ fn show(catalog: &Catalog, name: &str) -> Result<(String, bool), CliError> {
         if index > 0 {
             text.push_str("\n---\n\n");
         }
-        let _ = writeln!(
-            text,
-            "{} ({})",
-            skill.name(),
-            skill.project_name().unwrap_or("?")
-        );
+        let _ = writeln!(text, "{}", label(skill, level));
         let _ = writeln!(text, "{}", skill.path().display());
         let _ = writeln!(text);
         let _ = writeln!(text, "{}", skill.description());
@@ -326,7 +585,11 @@ fn show(catalog: &Catalog, name: &str) -> Result<(String, bool), CliError> {
 }
 
 /// Every skill's problems, or a line saying it has none.
-fn validate(catalog: &Catalog, name: Option<&str>) -> Result<(String, bool), CliError> {
+fn validate(
+    catalog: &Catalog,
+    name: Option<&str>,
+    level: Level,
+) -> Result<(String, bool), CliError> {
     let skills: Vec<&Skill> = match name {
         Some(name) => {
             let matches = catalog.find(name);
@@ -346,16 +609,15 @@ fn validate(catalog: &Catalog, name: Option<&str>) -> Result<(String, bool), Cli
     let mut invalid = 0usize;
     for skill in &skills {
         let issues = skill.validate();
-        let project = skill.project_name().unwrap_or("?");
         if issues.is_empty() {
-            let _ = writeln!(text, "{} ({project}): ok", skill.name());
+            let _ = writeln!(text, "{}: ok", label(skill, level));
             continue;
         }
         invalid += 1;
         let _ = writeln!(
             text,
-            "{} ({project}): {}",
-            skill.name(),
+            "{}: {}",
+            label(skill, level),
             plural(issues.len(), "problem")
         );
         for issue in issues {
@@ -369,6 +631,17 @@ fn validate(catalog: &Catalog, name: Option<&str>) -> Result<(String, bool), Cli
         plural(skills.len(), "skill")
     );
     Ok((text, invalid == 0))
+}
+
+/// What `init` says it did, at either level.
+fn initialized(kind: &str, name: &str, marker: &Path, outcome: Initialization) -> String {
+    let marker = marker.display();
+    match outcome {
+        Initialization::Created => format!("initialized {kind} `{name}` in {marker}\n"),
+        Initialization::AlreadyInitialized => {
+            format!("{kind} `{name}` already initialized in {marker}\n")
+        }
+    }
 }
 
 /// "1 skill", "2 skills".
@@ -386,14 +659,18 @@ fn plural(count: usize, noun: &str) -> String {
 pub enum CliError {
     #[error("cannot determine the current directory: {0}")]
     CurrentDirectory(#[source] io::Error),
+    #[error("{path}: cannot be resolved: {source}")]
+    Resolve {
+        path: PathBuf,
+        #[source]
+        source: io::Error,
+    },
     #[error(transparent)]
     Workspace(#[from] WorkspaceError),
-    #[error(
-        "{} is not inside a mind project or a flayer workspace \
-         (run `mind init` to create a {MIND_DIR} here, or `mind init flayer` for a {FLAYER_DIR})",
-        .0.display()
-    )]
-    Nowhere(PathBuf),
+    #[error("{0} is not inside a mind project (run `mind init` to create one here)")]
+    NotInProject(PathBuf),
+    #[error("{0} is not inside a flayer workspace (run `flayer init` to create one here)")]
+    NotInWorkspace(PathBuf),
     #[error("no skill named `{0}`")]
     UnknownSkill(String),
     #[error(transparent)]

@@ -5,12 +5,13 @@ project carries a `.mind` directory holding its skills, and a workspace above
 it carries a `.mindflayer` that orchestrates several such projects at once.
 
 One shared Rust engine (`mindflayer-core`) behind every front end. The first
-front end is the `mind` CLI; the layout leaves room for a desktop app later
-without moving the engine.
+front end is the CLI — `mind` for a project, `flayer` for a workspace — and the
+layout leaves room for a desktop app later without moving the engine.
 
 > **MVP scope.** Mindflayer is being built incrementally. Today it creates the
-> two kinds of directory and reads the skills inside them. Creating, moving and
-> syncing skills between projects is the next step, not a shipped feature.
+> two kinds of directory, registers projects with a workspace, and reads the
+> skills inside them. Creating and moving skills is the next step, not a
+> shipped feature.
 
 ## The two levels
 
@@ -31,13 +32,13 @@ are until the marker file appears.
 From a fresh clone, one command builds the binary and puts it on your PATH:
 
 ```bash
-make dev/link                  # `mind` now points at target/debug/mind
+make dev/link                  # `mind` and `flayer` now point at target/debug
 ```
 
-It is a **symlink**, not a copy, so every later `make build` updates the `mind`
-you are running without reinstalling anything. `make dev/unlink` takes it back
-off. If you only want to use the tool rather than work on it, `make install`
-puts a real copy in cargo's bin directory instead.
+They are **symlinks**, not copies, so every later `make build` updates the
+binaries you are running without reinstalling anything. `make dev/unlink` takes
+them back off. If you only want to use the tools rather than work on them,
+`make install` puts real copies in cargo's bin directory instead.
 
 Then:
 
@@ -46,7 +47,9 @@ cd ~/Projects/collapse
 mind init                      # a .mind here, with an empty .mind/skills
 
 cd ~/Projects
-mind init flayer               # a .mindflayer, to manage several of them
+flayer init                    # a .mindflayer, to manage several of them
+flayer link collapse           # tell it which projects those are
+flayer list                    # every skill across all of them
 ```
 
 `init` never overwrites an existing marker. Run it twice and it says so and
@@ -54,31 +57,60 @@ changes nothing, so it is safe in a script.
 
 ## Commands
 
-```bash
-mind init [mind|flayer]    # create a project (default) or a workspace
-mind list                  # every skill in scope
-mind show <name>           # one skill: metadata, path, instructions
-mind validate [<name>]     # check skills against what an agent requires
+The surface is split the way the model is. `mind` acts on the project you are
+standing in; `flayer` acts on the workspace above it.
 
-mind ls                    # alias for list
+```bash
+mind init                  # create a .mind here
+mind list                  # this project's skills
+mind show <name>           # one skill: metadata, path, instructions
+mind validate [<name>]     # check this project's skills
+
+flayer init                # create a .mindflayer here
+flayer link <path>         # register a mind project with it
+flayer unlink <path>       # drop one
+flayer list                # every skill across every registered project
+flayer show <name>
+flayer validate [<name>]
+
+mind flayer <cmd>          # the long way round; `flayer <cmd>` is the shortcut
+mind ls / flayer ls        # alias for list
 mind -C <dir> ...          # work in <dir> instead of the current directory
 ```
 
-**What "in scope" means.** From inside a mind project you get that project's
-skills. From inside a flayer workspace you get every project it references, and
-the one you are standing in if it is not registered yet.
+Both find what they act on the way git does, by walking up from wherever you
+are. Both levels answer a different question, and that is the point:
 
 ```
-$ mind list
+$ cd ~/Projects/collapse && mind list      # just this project
+commit-style  How this repo writes commit messages and branch names
+
+$ flayer list                              # the workspace above it
 collapse  commit-style  How this repo writes commit messages and branch names
-tanukeys  ddd-reviewer  Review a change against the DDD layering rules
+tanukeys  ddd-review    Review a change against the DDD layering rules
+```
 
+A workspace lists the projects it was **told** to manage, not whatever happens
+to sit inside it, so the answer does not change with the directory you ran it
+from. `flayer link` is how you tell it:
+
+```
+$ flayer link ../collapse
+linked collapse as ../collapse
+```
+
+The entry is stored relative to the workspace, so the two can be moved
+together — unless that route would not actually resolve, in which case the
+absolute path is stored instead. Linking the same project twice changes
+nothing and says so, naming the spelling already in the file. `unlink` removes
+every entry pointing at the project, and still works on one whose directory has
+moved away, which is exactly the entry worth removing.
+
+```
 $ mind validate
-commit-style (collapse): ok
-ddd-reviewer (tanukeys): 1 problem
-  - `name` is `ddd-reviewer` but the directory is `ddd-review`; they have to match
+commit-style: ok
 
-2 skills checked, 1 invalid
+1 skill checked, 0 invalid
 ```
 
 `validate` exits non-zero when anything is wrong, so it works in CI. A skill
@@ -112,7 +144,8 @@ adding a directory rather than reshaping the tree:
 
 ```
 apps/core   mindflayer-core — projects, workspaces, skills. No I/O beyond files.
-apps/cli    mindflayer-cli  — the `mind` binary. Parsing and rendering only.
+apps/cli    mindflayer-cli  — the `mind` and `flayer` binaries. Parsing and
+                              rendering only; both share one parser.
 ```
 
 See [docs/architecture.md](docs/architecture.md) for why the split is where it
@@ -131,7 +164,7 @@ make lint              # clippy across the workspace
 make run ARGS="list"   # run the CLI without installing it
 
 make core/test         # one app: make <app>/<target>
-make cli/run ARGS="init flayer"
+make cli/run ARGS="flayer list"
 ```
 
 Working on it, the loop is `make dev/link` once, then:

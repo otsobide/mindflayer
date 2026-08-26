@@ -9,7 +9,7 @@ one line to `APPS`, never reshaping the tree.
 
 ```
 apps/core   mindflayer-core — the engine
-apps/cli    mindflayer-cli  — the `mind` binary
+apps/cli    mindflayer-cli  — the `mind` and `flayer` binaries
 ```
 
 Only two today. The layout exists because there will be more: a desktop app is
@@ -25,6 +25,14 @@ It has no idea a terminal exists.
 `mindflayer-cli` parses a command line, asks core for values, and renders them.
 It holds no rules about skills: not the name limits, not the front matter
 format, not where `.mind` lives.
+
+It ships **two binaries**, `mind` and `flayer`, and they are two entry points
+into one parser rather than one wrapping the other. `flayer <cmd>` and `mind
+flayer <cmd>` reach the same function, so there is a single implementation of
+every workspace command and the two spellings cannot drift apart or disagree
+about an exit code. A wrapper that re-executed `mind` would also have to
+forward arguments, stdio and exit codes correctly, which is three chances to
+get it wrong in exchange for nothing.
 
 The line is there so that when a second front end arrives, it cannot disagree
 with the first about what a valid skill is. Every rule that could drift lives
@@ -58,12 +66,36 @@ anywhere inside a project, like every git command.
 
 Nothing stops one directory from being both.
 
+### The command surface is split the same way
+
+`mind <cmd>` acts on the project you are standing in; `mind flayer <cmd>`, and
+therefore `flayer <cmd>`, acts on the workspace above it. The split decides two
+things that used to be guesses:
+
+- **What is in scope.** `mind list` is the project's own skills, never its
+  neighbours'. `flayer list` is every registered project. Before the split one
+  command tried to be both and its answer changed depending on which directory
+  it was run from.
+- **How a skill is labelled.** Only the workspace level qualifies a skill by
+  the project it came from, because inside a single project that says nothing.
+
+A workspace is in scope for exactly the projects it was **told** to manage. A
+project that merely sits inside the workspace directory is not one of them
+until it is linked. Guessing from the directory tree would make `flayer list`
+answer a different question after an unrelated `mkdir`.
+
 ### Why the markers are TOML written from a template
 
-They are read with serde and written from a string template, rather than
-serialized. Serializing would drop the comments, and the comment in
-`mind.toml` explaining where skills go is the first documentation anyone
-opening the file will read.
+New markers are written from a string template, not serialized. Serializing
+would drop the comments, and the comment in `mind.toml` explaining where skills
+go is the first documentation anyone opening the file will read.
+
+Editing an existing marker has the same constraint and a harder job, which is
+why `toml_edit` is a dependency: `flayer link` rewrites the one `projects`
+array and leaves every other byte alone. Reading stays serde's job. The two
+halves agree because an edit re-reads the file afterwards rather than trusting
+what it believes it wrote, and the write itself goes through a temporary file
+and a rename, so a crash leaves either the old config or the new one.
 
 Both carry a `version`. A marker written by a newer Mindflayer is refused with
 a message that says so, which is what lets the format change later without an
@@ -83,6 +115,57 @@ with no `.mind/skills` directory yet is not a failure, it is a project nobody
 has added a skill to. A `.mind/skills` that exists and cannot be listed is a
 failure.
 
+## How entries are stored
+
+`flayer link` records a project as a route **relative to the workspace**, so
+the workspace and the projects under it can be moved together without the
+registry going stale. Entries are written with forward slashes, so a workspace
+registered on one platform still resolves on the other, and a command reports
+the entry the way the file spells it rather than the way the local separator
+would.
+
+The arithmetic is lexical (`apps/core/src/paths.rs`): it never touches the disk
+and never resolves symlinks. That keeps a path in the shape the user typed and
+lets a route be computed for a directory that need not exist.
+
+But arithmetic on paths is only true when no component is a symlink. If the
+workspace root is spelled through one, a `..` climbs out of the link's target
+rather than out of the directory the name suggests, and the route points
+somewhere that does not exist — `/tmp` is a symlink to `/private/tmp` on every
+Mac, so this is not exotic. So `link` **checks its route against the
+filesystem** before storing it, and falls back to an absolute path when it does
+not land where it should. The check happens there and only there: its answer
+decides which spelling to store and is never stored itself, so entries stay
+portable rather than frozen to one machine's symlink layout.
+
+Matching is by where an entry **points**, not by how it is spelled, so
+`collapse` and `./collapse` are one entry. Arithmetic settles most of it, and
+two spellings only the filesystem can equate are settled by canonicalising.
+
+`link` and `unlink` match against **the array they are about to edit**, not
+against the copy parsed when the workspace was opened. The marker file is meant
+to be editable by hand, so that copy can be stale, and acting on a stale index
+is how you remove a project nobody asked you to remove. An edit that changes
+nothing does not rewrite the file at all.
+
+`link` is idempotent and `unlink` is not, deliberately. Linking twice means
+"make sure this is registered", and it is; the call reports the spelling
+already in the file rather than the one it would have written. Unlinking
+something that was never there is a typo far more often than a no-op, and
+saying so turns a silent success into a fixable mistake. `unlink` removes
+*every* entry pointing at the project, because two spellings of one directory
+are one project and removing half of them while reporting success would leave
+it registered. It takes a path rather than a project because the entry most
+worth removing is one whose directory has moved away, and that cannot be opened
+as a project any more.
+
+Rewrites go through a temporary file and a rename, so a crash leaves either the
+old config or the new one. The original's permissions are copied onto the
+temporary first, and a symlinked config is followed to the file it names —
+otherwise an edit would quietly widen a chmodded config or detach a shared one.
+A hard link is the case this cannot preserve: a rename breaks it, and keeping
+it would mean giving up the atomic write.
+
 ## Open questions
 
 - **Precedence between projects.** Two projects in one workspace can declare
@@ -90,8 +173,6 @@ failure.
   wins, because nothing here yet has to choose. Whatever resolves it (a
   workspace-level override, an explicit order in `flayer.toml`) belongs in core
   when it exists, not in a front end.
-- **Registering projects.** `flayer.toml` carries a `projects` list that is
-  read but not yet written by any command; a workspace starts empty and the
-  list is edited by hand. The command that adds to it is the next piece of
-  work, and it is the point where writing the marker file stops being a
-  template and needs to preserve comments.
+- **Creating skills.** Nothing writes a `SKILL.md` yet; they are added by hand.
+  A command that scaffolds one is the next piece of work, and the validation
+  rules it should satisfy already live in `skill.rs`.

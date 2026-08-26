@@ -20,6 +20,8 @@ use std::path::{Path, PathBuf};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
+use crate::paths;
+
 /// The layout version written into new marker files.
 ///
 /// Refusing to read a version from the future is what lets the format change
@@ -48,6 +50,15 @@ pub enum Initialization {
     Created,
     /// The marker was already there and was left untouched.
     AlreadyInitialized,
+}
+
+/// What a `link` actually did.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Registration {
+    /// The project was not registered and now is.
+    Added,
+    /// The project was already registered; the file was not touched.
+    AlreadyRegistered,
 }
 
 // ---------------------------------------------------------------------------
@@ -224,6 +235,179 @@ impl FlayerWorkspace {
         &self.config
     }
 
+    /// The marker file itself.
+    pub fn config_path(&self) -> PathBuf {
+        self.flayer_dir().join(FLAYER_CONFIG)
+    }
+
+    /// The entry this workspace would store for a project directory.
+    ///
+    /// A route relative to the workspace when one genuinely resolves, so the
+    /// pair can be moved together; the absolute path otherwise.
+    pub fn entry_for(&self, project_root: &Path) -> PathBuf {
+        let absolute = paths::normalize(project_root);
+        match paths::relative_to(&absolute, &self.root) {
+            Some(route) if self.route_reaches(&route, &absolute) => route,
+            _ => absolute,
+        }
+    }
+
+    /// Whether following `route` from this workspace really lands on `target`.
+    ///
+    /// The route is arithmetic, and arithmetic on paths is only true when no
+    /// component is a symlink: if the workspace root is spelled through one,
+    /// a `..` climbs out of the link's target rather than out of the directory
+    /// the name suggests, and the stored entry points somewhere that does not
+    /// exist. `/tmp` is a symlink to `/private/tmp` on every Mac, so this is
+    /// not an exotic case.
+    ///
+    /// The filesystem is consulted here and only here. The answer decides
+    /// which spelling to store; it is never stored itself, so entries stay
+    /// portable rather than being frozen to one machine's symlink layout.
+    fn route_reaches(&self, route: &Path, target: &Path) -> bool {
+        match (
+            fs::canonicalize(self.root.join(route)),
+            fs::canonicalize(target),
+        ) {
+            (Ok(followed), Ok(wanted)) => followed == wanted,
+            // Nothing to compare against: a route that only descends is safe
+            // whatever the symlinks do, and one that climbs is not worth a
+            // guess.
+            _ => !climbs(route),
+        }
+    }
+
+    /// Register a mind project with this workspace.
+    ///
+    /// Idempotent, like `init`: registering a project that is already there
+    /// changes nothing, says so, and reports the spelling the file actually
+    /// uses rather than the one this call would have written.
+    pub fn link(
+        &mut self,
+        project: &MindProject,
+    ) -> Result<(PathBuf, Registration), WorkspaceError> {
+        let entry = self.entry_for(project.root());
+        let target = paths::normalize(project.root());
+        let written =
+            paths::to_config_string(&entry).ok_or_else(|| WorkspaceError::NonUtf8Path {
+                path: entry.clone(),
+            })?;
+        let root = self.root.clone();
+
+        // Matched against the array being edited, not against the copy parsed
+        // when this workspace was opened: the file is meant to be editable by
+        // hand, so the copy can be stale by the time we get here.
+        self.edit_projects(move |array| {
+            if let Some(existing) = entries(array)
+                .into_iter()
+                .find(|entry| points_at(&root, entry, &target))
+            {
+                return Ok((existing, Registration::AlreadyRegistered));
+            }
+            array.push(written.as_str());
+            Ok((PathBuf::from(&written), Registration::Added))
+        })
+    }
+
+    /// Drop every entry pointing at a project, returning what was removed.
+    ///
+    /// Every entry, not the first: two spellings of one directory are one
+    /// project, and removing half of them while reporting success would leave
+    /// it registered and the user believing otherwise.
+    ///
+    /// Takes a path rather than a `MindProject` on purpose: the entry worth
+    /// removing most often is one whose directory has moved away, and that
+    /// cannot be opened as a project any more.
+    ///
+    /// Unlike `link` this is not idempotent. Removing something that was never
+    /// there is a typo far more often than it is a no-op, and saying so is
+    /// what turns a silent success into a fixable mistake.
+    pub fn unlink(&mut self, project_root: &Path) -> Result<Vec<PathBuf>, WorkspaceError> {
+        let target = paths::normalize(project_root);
+        let root = self.root.clone();
+
+        let removed = self.edit_projects(move |array| {
+            let mut removed = Vec::new();
+            let mut index = 0;
+            while index < array.len() {
+                match array.get(index).and_then(|value| value.as_str()) {
+                    Some(entry) if points_at(&root, Path::new(entry), &target) => {
+                        removed.push(PathBuf::from(entry));
+                        array.remove(index);
+                    }
+                    _ => index += 1,
+                }
+            }
+            Ok(removed)
+        })?;
+
+        if removed.is_empty() {
+            return Err(WorkspaceError::NotRegistered {
+                path: project_root.to_path_buf(),
+                workspace: self.root.clone(),
+            });
+        }
+        Ok(removed)
+    }
+
+    /// Rewrite the `projects` array in place, leaving every other byte of the
+    /// file alone: comments, key order, spacing.
+    ///
+    /// This is why `toml_edit` is a dependency. Reading is serde's job, but
+    /// re-serializing to write would throw away the comment that explains what
+    /// the file is, which is the first documentation anyone opening it reads.
+    ///
+    /// The array is read from disk here rather than taken from `self.config`,
+    /// so an edit decides what to do from the file it is about to write, not
+    /// from a copy that may be minutes old.
+    fn edit_projects<F, T>(&mut self, edit: F) -> Result<T, WorkspaceError>
+    where
+        F: FnOnce(&mut toml_edit::Array) -> Result<T, String>,
+    {
+        let path = self.config_path();
+        let text = fs::read_to_string(&path).map_err(|source| WorkspaceError::Read {
+            path: path.clone(),
+            source,
+        })?;
+        let mut document: toml_edit::DocumentMut =
+            text.parse()
+                .map_err(|error: toml_edit::TomlError| WorkspaceError::Edit {
+                    path: path.clone(),
+                    detail: error.to_string(),
+                })?;
+
+        // A workspace whose `projects` key was deleted by hand still links.
+        if !document.as_table().contains_key("projects") {
+            document["projects"] = toml_edit::value(toml_edit::Array::new());
+        }
+        let array = document["projects"]
+            .as_array_mut()
+            .ok_or_else(|| WorkspaceError::Edit {
+                path: path.clone(),
+                detail: "`projects` is not an array".to_owned(),
+            })?;
+
+        let value = edit(array).map_err(|detail| WorkspaceError::Edit {
+            path: path.clone(),
+            detail,
+        })?;
+
+        // Only write when the edit changed something. An already-registered
+        // link and a failed unlink both leave the file untouched, down to its
+        // modification time.
+        let rewritten = document.to_string();
+        if rewritten != text {
+            replace_file(&path, &rewritten)?;
+        }
+
+        // Re-read, so what is in memory is what is on disk rather than what we
+        // believe we wrote.
+        let config: FlayerConfig = read_config(&path)?;
+        check_version(&path, config.version)?;
+        self.config = config;
+        Ok(value)
+    }
+
     /// Open every registered mind project.
     ///
     /// A registered path that has gone missing is reported rather than raised:
@@ -275,6 +459,12 @@ pub enum WorkspaceError {
     NotAWorkspace { path: PathBuf },
     #[error("{path}: written by a newer Mindflayer (format version {found}, this one reads {FORMAT_VERSION})")]
     Version { path: PathBuf, found: u32 },
+    #[error("{path}: cannot be edited: {detail}")]
+    Edit { path: PathBuf, detail: String },
+    #[error("{path}: not registered in the workspace at {workspace}")]
+    NotRegistered { path: PathBuf, workspace: PathBuf },
+    #[error("{path}: not valid UTF-8, so it cannot be written into a TOML file")]
+    NonUtf8Path { path: PathBuf },
 }
 
 impl WorkspaceError {
@@ -286,7 +476,10 @@ impl WorkspaceError {
             | WorkspaceError::Parse { path, .. }
             | WorkspaceError::NotAProject { path }
             | WorkspaceError::NotAWorkspace { path }
-            | WorkspaceError::Version { path, .. } => path,
+            | WorkspaceError::Version { path, .. }
+            | WorkspaceError::Edit { path, .. }
+            | WorkspaceError::NotRegistered { path, .. }
+            | WorkspaceError::NonUtf8Path { path } => path,
         }
     }
 }
@@ -354,12 +547,92 @@ fn write_new(path: &Path, contents: &str) -> Result<(), WorkspaceError> {
         })
 }
 
-/// An absolute path, without requiring the path to exist yet.
+/// The entries currently written in a `projects` array.
+fn entries(array: &toml_edit::Array) -> Vec<PathBuf> {
+    array
+        .iter()
+        .filter_map(|value| value.as_str())
+        .map(PathBuf::from)
+        .collect()
+}
+
+/// Whether a stored entry names the same directory as `target`.
+///
+/// By where they point, not how they are spelled, so `collapse` and
+/// `./collapse` are one entry. Arithmetic settles most of it; two spellings
+/// that only the filesystem can equate — a symlinked parent, `/tmp` on a Mac —
+/// need canonicalising, and a path that does not exist cannot be equated that
+/// way at all.
+fn points_at(root: &Path, entry: &Path, target: &Path) -> bool {
+    let resolved = paths::normalize(&root.join(entry));
+    if resolved == target {
+        return true;
+    }
+    match (fs::canonicalize(&resolved), fs::canonicalize(target)) {
+        (Ok(followed), Ok(wanted)) => followed == wanted,
+        _ => false,
+    }
+}
+
+/// Whether a route has to climb out of its base to get where it is going.
+fn climbs(route: &Path) -> bool {
+    route
+        .components()
+        .any(|component| matches!(component, std::path::Component::ParentDir))
+}
+
+/// Replace a file's contents through a temporary file and a rename.
+///
+/// The rename is the point: a crash mid-write leaves either the old config or
+/// the new one, never half of each. The temporary sits beside the original so
+/// the rename stays inside one filesystem, which is where it is atomic.
+fn replace_file(path: &Path, contents: &str) -> Result<(), WorkspaceError> {
+    // Follow a symlinked config to the file it names. Replacing the link
+    // itself would silently detach a workspace from a config someone chose to
+    // share, and leave the original holding stale contents.
+    let resolved = fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf());
+    let path = resolved.as_path();
+
+    let mut name = path.file_name().unwrap_or_default().to_os_string();
+    name.push(".tmp");
+    let temporary = path.with_file_name(name);
+
+    fs::write(&temporary, contents).map_err(|source| WorkspaceError::Create {
+        path: temporary.clone(),
+        source,
+    })?;
+
+    // A rename carries the temporary file's permissions with it, so the
+    // original's are copied across first: a config chmodded to 600 must not
+    // come back world readable. Best effort — a filesystem that cannot say is
+    // not a reason to refuse the edit.
+    if let Ok(metadata) = fs::metadata(path) {
+        let _ = fs::set_permissions(&temporary, metadata.permissions());
+    }
+    fs::rename(&temporary, path).map_err(|source| {
+        // A temporary left behind by a failed rename is litter nothing owns.
+        let _ = fs::remove_file(&temporary);
+        WorkspaceError::Create {
+            path: path.to_path_buf(),
+            source,
+        }
+    })
+}
+
+/// An absolute, `..`-free path, without requiring the path to exist yet.
+///
+/// The normalising half is not cosmetic. A workspace resolves an entry by
+/// joining it onto its own root, so a project registered as `../collapse`
+/// arrives here as `<workspace>/../collapse`; `std::path::absolute` leaves
+/// that `..` in place. Every root would then carry it, and two paths naming
+/// one directory would stop comparing equal — which is what `in_project` and
+/// the link deduplication are built on.
 fn absolute(path: &Path) -> Result<PathBuf, WorkspaceError> {
-    std::path::absolute(path).map_err(|source| WorkspaceError::Read {
+    let absolute = std::path::absolute(path).map_err(|source| WorkspaceError::Read {
         path: path.to_path_buf(),
         source,
-    })
+    })?;
+    Ok(paths::normalize(&absolute))
 }
 
 /// The name to give a project or workspace created in `root`.

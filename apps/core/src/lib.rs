@@ -12,6 +12,7 @@
 
 pub mod catalog;
 pub mod frontmatter;
+pub mod paths;
 pub mod skill;
 pub mod workspace;
 
@@ -19,6 +20,6 @@ pub use catalog::{Catalog, DiscoveryFailure};
 pub use frontmatter::{Document, FrontMatterError};
 pub use skill::{Skill, SkillError, SkillManifest, ValidationIssue, SKILL_FILE};
 pub use workspace::{
-    FlayerConfig, FlayerWorkspace, Initialization, MindConfig, MindProject, WorkspaceError,
-    FLAYER_CONFIG, FLAYER_DIR, MIND_CONFIG, MIND_DIR, SKILLS_DIR,
+    FlayerConfig, FlayerWorkspace, Initialization, MindConfig, MindProject, Registration,
+    WorkspaceError, FLAYER_CONFIG, FLAYER_DIR, MIND_CONFIG, MIND_DIR, SKILLS_DIR,
 };
