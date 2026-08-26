@@ -119,9 +119,14 @@ impl Artifact {
         &self.name
     }
 
-    /// `skill/commit-style`: the name qualified by its kind.
+    /// `skill:commit-style`: the name qualified by its kind.
     pub fn qualified_name(&self) -> String {
-        format!("{}/{}", self.kind().slug(), self.name)
+        format!(
+            "{}{}{}",
+            self.kind().slug(),
+            crate::catalog::QUALIFIER,
+            self.name
+        )
     }
 
     /// The directory a skill is, or the file a rule is.
@@ -210,10 +215,14 @@ impl Artifact {
                         segment: segment.to_owned(),
                     });
                 }
-                if segment.chars().count() > MAX_NAME_SEGMENT_LEN {
+                // Characters, not bytes: the limit exists to keep a name
+                // readable, and counting bytes would reject a name in a script
+                // that spends more than one per character at half the length.
+                let length = segment.chars().count();
+                if length > MAX_NAME_SEGMENT_LEN {
                     issues.push(ValidationIssue::NameSegmentTooLong {
                         segment: segment.to_owned(),
-                        length: segment.chars().count(),
+                        length,
                     });
                 }
             }
@@ -233,12 +242,11 @@ impl Artifact {
                     }
                 }
                 let description = manifest.description.trim();
+                let length = description.chars().count();
                 if description.is_empty() {
                     issues.push(ValidationIssue::DescriptionEmpty);
-                } else if description.chars().count() > MAX_DESCRIPTION_LEN {
-                    issues.push(ValidationIssue::DescriptionTooLong {
-                        length: description.chars().count(),
-                    });
+                } else if length > MAX_DESCRIPTION_LEN {
+                    issues.push(ValidationIssue::DescriptionTooLong { length });
                 }
             }
             Declared::Rule => {
@@ -271,10 +279,16 @@ fn manifest_of(kind: Kind) -> &'static str {
     }
 }
 
-/// The first line of a declared description.
+/// The first line of a declared description that carries any text.
+///
+/// Not literally the first line: a description written as a YAML block scalar
+/// often opens with a blank one, and listing that skill with no summary at all
+/// would be a formatting accident showing through.
 fn first_line(text: &str) -> Option<String> {
-    let line = text.lines().next()?.trim();
-    (!line.is_empty()).then(|| line.to_owned())
+    text.lines()
+        .map(str::trim)
+        .find(|line| !line.is_empty())
+        .map(str::to_owned)
 }
 
 /// The first line of a document that carries any text.
@@ -371,5 +385,134 @@ impl ArtifactError {
             | ArtifactError::FrontMatter { path, .. }
             | ArtifactError::Parse { path, .. } => path,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A skill built without touching the disk, to check the rules rather
+    /// than the loading.
+    fn skill(name: &str, description: &str, directory: &str) -> Artifact {
+        Artifact {
+            name: name.to_owned(),
+            path: PathBuf::from(directory),
+            project: PathBuf::from("/work/repo"),
+            declared: Declared::Skill(SkillManifest {
+                name: name.to_owned(),
+                description: description.to_owned(),
+                allowed_tools: None,
+                license: None,
+            }),
+            summary: first_line(description),
+        }
+    }
+
+    fn rule(name: &str, summary: Option<&str>) -> Artifact {
+        Artifact {
+            name: name.to_owned(),
+            path: PathBuf::from("/work/repo/.mind/rules").join(format!("{name}.md")),
+            project: PathBuf::from("/work/repo"),
+            declared: Declared::Rule,
+            summary: summary.map(str::to_owned),
+        }
+    }
+
+    #[test]
+    fn a_well_formed_skill_has_no_issues() {
+        assert_eq!(
+            skill("pdf-forms", "Fill forms", "/s/pdf-forms").validate(),
+            vec![]
+        );
+    }
+
+    #[test]
+    fn flags_a_name_the_directory_does_not_match() {
+        assert_eq!(
+            skill("pdf-forms", "Fill forms", "/s/pdf").validate(),
+            vec![ValidationIssue::NameDirectoryMismatch {
+                name: "pdf-forms".into(),
+                directory: "pdf".into(),
+            }]
+        );
+    }
+
+    #[test]
+    fn flags_a_name_that_is_not_kebab_case() {
+        let issues = skill("PDF Forms", "Fill forms", "/s/PDF Forms").validate();
+        assert!(issues.contains(&ValidationIssue::NameNotKebabCase {
+            segment: "PDF Forms".into()
+        }));
+    }
+
+    #[test]
+    fn flags_names_hyphenated_at_the_edges() {
+        for name in ["-lead", "trail-"] {
+            let issues = skill(name, "Fill forms", &format!("/s/{name}")).validate();
+            assert!(
+                issues.contains(&ValidationIssue::NameNotKebabCase {
+                    segment: name.into()
+                }),
+                "expected `{name}` to be rejected"
+            );
+        }
+    }
+
+    #[test]
+    fn flags_an_empty_or_whitespace_description() {
+        assert_eq!(
+            skill("a", "   ", "/s/a").validate(),
+            vec![ValidationIssue::DescriptionEmpty]
+        );
+    }
+
+    #[test]
+    fn flags_limits_by_characters_not_bytes() {
+        // A character that is two bytes and exactly one char, with no
+        // decomposed spelling to muddy what is being counted.
+        let name = "\u{00df}".repeat(MAX_NAME_SEGMENT_LEN + 1);
+        let issues = skill(&name, "d", &format!("/s/{name}")).validate();
+        assert!(issues.contains(&ValidationIssue::NameSegmentTooLong {
+            segment: name.clone(),
+            length: MAX_NAME_SEGMENT_LEN + 1
+        }));
+
+        let long = "\u{00df}".repeat(MAX_DESCRIPTION_LEN + 1);
+        let issues = skill("a", &long, "/s/a").validate();
+        assert!(issues.contains(&ValidationIssue::DescriptionTooLong {
+            length: MAX_DESCRIPTION_LEN + 1
+        }));
+    }
+
+    #[test]
+    fn the_length_limit_is_per_segment_so_nesting_does_not_spend_it() {
+        // Five segments of sixty characters is a deep route, not a long name.
+        let segment = "a".repeat(60);
+        let name = vec![segment; 5].join("/");
+        assert_eq!(rule(&name, Some("Context")).validate(), vec![]);
+    }
+
+    #[test]
+    fn a_rule_is_judged_only_on_what_it_has() {
+        // No description to be empty, no directory to disagree with.
+        assert_eq!(rule("git/no-force-push", Some("Never")).validate(), vec![]);
+        assert_eq!(rule("empty", None).validate(), vec![ValidationIssue::Empty]);
+    }
+
+    #[test]
+    fn a_description_opening_with_a_blank_line_still_summarises() {
+        // A YAML block scalar routinely opens with one, and listing that skill
+        // with no summary would be a formatting accident showing through.
+        let skill = skill("a", "\n\nWhat it does.\n", "/s/a");
+        assert_eq!(skill.summary(), Some("What it does."));
+    }
+
+    #[test]
+    fn an_opening_line_is_the_first_that_carries_text() {
+        assert_eq!(opening_line("# Title\n\nBody\n").as_deref(), Some("Title"));
+        assert_eq!(opening_line("\n\n  prose\n").as_deref(), Some("prose"));
+        assert_eq!(opening_line("###\n\n# Real\n").as_deref(), Some("Real"));
+        assert_eq!(opening_line("\n   \n"), None);
     }
 }

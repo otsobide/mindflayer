@@ -19,7 +19,7 @@ pub mod skill;
 pub mod workspace;
 
 pub use artifact::{Artifact, ArtifactError, Declared, ValidationIssue};
-pub use catalog::{Catalog, DiscoveryFailure, Reference};
+pub use catalog::{Catalog, DiscoveryFailure, Reference, QUALIFIER};
 pub use frontmatter::{Document, FrontMatterError};
 pub use kind::{Kind, Layout, UnknownKind};
 pub use skill::{SkillManifest, MAX_DESCRIPTION_LEN, MAX_NAME_SEGMENT_LEN};

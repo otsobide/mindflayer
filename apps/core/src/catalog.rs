@@ -40,7 +40,16 @@ impl Catalog {
                 let root = project.directory_for(*kind);
                 match kind.layout() {
                     Layout::Directory { manifest } => {
-                        catalog.take_directories(&root, manifest, *kind, project.root());
+                        // Skill is the only directory-shaped kind, so this
+                        // arm names its constructor directly. A second one
+                        // would add a match here, which is the point of a
+                        // closed enum: the compiler asks.
+                        match kind {
+                            Kind::Skill => {
+                                catalog.take_directories(&root, manifest, project.root())
+                            }
+                            Kind::Rule => unreachable!("a rule is not a directory"),
+                        }
                     }
                     Layout::Files { extension } => {
                         catalog.take_files(&root, extension, project.root());
@@ -67,7 +76,7 @@ impl Catalog {
     ///
     /// Only the immediate ones: the directory belongs to the artifact, assets
     /// and all, so walking into it would turn its own files into artifacts.
-    fn take_directories(&mut self, root: &Path, manifest: &str, kind: Kind, project: &Path) {
+    fn take_directories(&mut self, root: &Path, manifest: &str, project: &Path) {
         let mut directories = match self.read_dir(root) {
             Some(entries) => entries,
             None => return,
@@ -79,7 +88,6 @@ impl Catalog {
                 // dotfolders both land here.
                 continue;
             }
-            debug_assert_eq!(kind, Kind::Skill, "only skills are directories today");
             match Artifact::skill(path, project) {
                 Ok(artifact) => self.artifacts.push(artifact),
                 Err(error) => self.failures.push(error.into()),
@@ -100,19 +108,25 @@ impl Catalog {
                 continue;
             };
             for path in entries {
-                // A symlinked directory is not followed: a loop would hang
-                // discovery, and nothing about a rule needs one.
-                let Ok(metadata) = fs::symlink_metadata(&path) else {
+                if is_hidden(&path) {
+                    continue;
+                }
+                // Followed, so a rule shared by symlink is still a rule — but
+                // only to decide file-or-directory. A symlinked directory is
+                // not descended into, because a loop would hang discovery and
+                // nothing about a rule needs one.
+                let Ok(metadata) = fs::metadata(&path) else {
                     continue;
                 };
+                let symlinked = fs::symlink_metadata(&path)
+                    .map(|meta| meta.file_type().is_symlink())
+                    .unwrap_or(false);
+
                 if metadata.is_dir() {
-                    if !is_hidden(&path) {
+                    if !symlinked {
                         pending.push(path);
                     }
-                } else if metadata.is_file()
-                    && path.extension().is_some_and(|found| found == extension)
-                    && !is_hidden(&path)
-                {
+                } else if metadata.is_file() && has_extension(&path, extension) {
                     files.push(path);
                 }
             }
@@ -204,37 +218,39 @@ impl Catalog {
 
 /// What a user typed to name one artifact.
 ///
-/// The split is at the first `/`, and only when what precedes it is a kind
-/// word: `rule/git/no-force-push` is the rule `git/no-force-push`, while
-/// `git/no-force-push` alone is that name in any kind. A rules folder named
-/// after a kind therefore shadows, and is reached by qualifying. Deterministic
-/// beats clever: a reference that means different things depending on what
-/// happens to exist is the bug this codebase already refused once, when `list`
-/// stopped guessing its own scope.
+/// A qualifier is separated by `:`, not `/`, and that is the whole reason the
+/// two namespaces do not collide. A rule's name IS a route — `git/no-force-push`
+/// — so a `/` qualifier would make `skills/naming` mean "the skill `naming`"
+/// rather than "the rule filed under `skills/`", and a rules folder grouping
+/// rules *about skills* is not an exotic thing to have. With `:` a name is
+/// always a name: `rule:skills/naming` qualifies, `skills/naming` does not.
+///
+/// It also removes the shape from Windows entirely, where a filename cannot
+/// contain `:` at all.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Reference {
     kind: Option<Kind>,
     name: String,
+    typed: String,
 }
+
+/// What separates a kind from a name in a reference.
+pub const QUALIFIER: char = ':';
 
 impl Reference {
     /// Read what a user typed.
     pub fn parse(typed: &str) -> Self {
-        match typed.split_once('/') {
+        let (kind, name) = match typed.split_once(QUALIFIER) {
             Some((head, rest)) => match head.parse::<Kind>() {
-                Ok(kind) => Self {
-                    kind: Some(kind),
-                    name: rest.to_owned(),
-                },
-                Err(_) => Self {
-                    kind: None,
-                    name: typed.to_owned(),
-                },
+                Ok(kind) => (Some(kind), rest.to_owned()),
+                Err(_) => (None, typed.to_owned()),
             },
-            None => Self {
-                kind: None,
-                name: typed.to_owned(),
-            },
+            None => (None, typed.to_owned()),
+        };
+        Self {
+            kind,
+            name,
+            typed: typed.to_owned(),
         }
     }
 
@@ -246,6 +262,16 @@ impl Reference {
     /// The name half.
     pub fn name(&self) -> &str {
         &self.name
+    }
+
+    /// Exactly what the user typed.
+    ///
+    /// What an error quotes back. Reporting the parsed half instead would deny
+    /// the existence of a name nobody typed: `mind show skill:deploy` failing
+    /// with "nothing named `deploy` here" contradicts a listing that shows
+    /// `deploy` right there.
+    pub fn typed(&self) -> &str {
+        &self.typed
     }
 
     /// Whether this names that artifact.
@@ -286,6 +312,16 @@ fn route(root: &Path, file: &Path) -> Option<String> {
     let relative = file.strip_prefix(root).ok()?;
     let without_extension = relative.with_extension("");
     paths::to_config_string(&without_extension)
+}
+
+/// Whether a file carries an extension, whatever case it was saved in.
+///
+/// A case-insensitive filesystem will happily hand back `NOTES.MD`, and a rule
+/// invisible because of how its name was capitalised is a bad half hour.
+fn has_extension(path: &Path, extension: &str) -> bool {
+    path.extension()
+        .and_then(|found| found.to_str())
+        .is_some_and(|found| found.eq_ignore_ascii_case(extension))
 }
 
 /// Whether a path's own name starts with a dot.

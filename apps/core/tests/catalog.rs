@@ -283,23 +283,45 @@ fn a_bare_name_finds_it_in_any_kind() {
 
     let both = catalog.find(&Reference::parse("deploy"));
     assert_eq!(both.len(), 2);
-    let just_the_rule = catalog.find(&Reference::parse("rule/deploy"));
+    let just_the_rule = catalog.find(&Reference::parse("rule:deploy"));
     assert_eq!(just_the_rule.len(), 1);
     assert_eq!(just_the_rule[0].kind(), Kind::Rule);
     assert!(catalog.find(&Reference::parse("absent")).is_empty());
 }
 
 #[test]
-fn a_reference_splits_on_a_kind_word_and_nothing_else() {
-    // `git/no-force-push` is a name; `rule/git/no-force-push` is that name
-    // qualified. Splitting on any slash would make the first unreachable.
-    let bare = Reference::parse("git/no-force-push");
-    assert_eq!(bare.kind(), None);
-    assert_eq!(bare.name(), "git/no-force-push");
+fn a_qualifier_is_separated_by_a_colon_so_a_route_is_never_one() {
+    // A rule's name IS a route, so `/` cannot also mean "kind". With `:`,
+    // `skills/naming` is a rule filed under `skills/` and nothing else — and
+    // a rules folder holding rules about writing skills is not exotic.
+    for typed in ["git/no-force-push", "skills/naming", "rule/x"] {
+        let bare = Reference::parse(typed);
+        assert_eq!(bare.kind(), None, "{typed} was read as qualified");
+        assert_eq!(bare.name(), typed);
+        assert_eq!(bare.typed(), typed);
+    }
 
-    let qualified = Reference::parse("rule/git/no-force-push");
+    let qualified = Reference::parse("rule:git/no-force-push");
     assert_eq!(qualified.kind(), Some(Kind::Rule));
     assert_eq!(qualified.name(), "git/no-force-push");
+    assert_eq!(qualified.typed(), "rule:git/no-force-push");
+}
+
+#[test]
+fn a_rule_filed_under_a_kind_word_is_reachable_by_the_name_it_is_listed_under() {
+    let (_dir, one) = project("alpha");
+    write_rule(&one, "skills/naming.md", "How to name a skill.\n");
+    write_rule(&one, "naming.md", "Something else entirely.\n");
+
+    let catalog = Catalog::discover(std::slice::from_ref(&one));
+
+    // The name a listing prints has to be a name the tool accepts back, and
+    // has to mean that artifact rather than a different one.
+    let nested = catalog.find(&Reference::parse("skills/naming"));
+    assert_eq!(nested.len(), 1);
+    assert_eq!(nested[0].summary(), Some("How to name a skill."));
+    let other = catalog.find(&Reference::parse("naming"));
+    assert_eq!(other[0].summary(), Some("Something else entirely."));
 }
 
 #[test]
