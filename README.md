@@ -1,8 +1,9 @@
 # 🧠 Mindflayer
 
-Manage the **skills** your coding agents use, the way git manages code: a
-project carries a `.mind` directory holding its skills, and a workspace above
-it carries a `.mindflayer` that orchestrates several such projects at once.
+Manage what your coding agents read, the way git manages code: a project
+carries a `.mind` directory holding its **skills** and **rules**, and a
+workspace above it carries a `.mindflayer` that orchestrates several such
+projects at once.
 
 One shared Rust engine (`mindflayer-core`) behind every front end. The first
 front end is the CLI — `mind` for a project, `flayer` for a workspace — and the
@@ -17,12 +18,23 @@ layout leaves room for a desktop app later without moving the engine.
 
 | | Marker | Holds | Think of it as |
 |---|---|---|---|
-| **Mind project** | `.mind/mind.toml` | skills, in `.mind/skills/<name>/SKILL.md` | a repository's `.git` |
+| **Mind project** | `.mind/mind.toml` | its artifacts, under `.mind/` | a repository's `.git` |
 | **Flayer workspace** | `.mindflayer/flayer.toml` | references to mind projects | the directory your repos sit in |
 
 A mind project is meant to be committed: `.mind` travels with the code it
-describes, so whoever clones the repository gets its skills. A flayer workspace
-is the level above, where several projects are managed together.
+describes, so whoever clones the repository gets its skills and rules. A flayer
+workspace is the level above, where several projects are managed together.
+
+## The two kinds
+
+| | Lives in | Shape | Declares |
+|---|---|---|---|
+| **Skill** | `.mind/skills/<name>/SKILL.md` | a directory each, so it can carry scripts and references beside its instructions | front matter: `name`, `description`, optional `allowed-tools` and `license` |
+| **Rule** | `.mind/rules/<name>.md` | one markdown file each | nothing — it is context, and its name is its filename |
+
+Folders under `rules/` group and mean nothing else, so
+`.mind/rules/git/no-force-push.md` is the rule `git/no-force-push`. Skills are
+flat, because a skill's directory already belongs to it.
 
 Both are found the way git finds a repository: by walking up from wherever you
 are until the marker file appears.
@@ -62,16 +74,16 @@ standing in; `flayer` acts on the workspace above it.
 
 ```bash
 mind init                  # create a .mind here
-mind list                  # this project's skills
-mind show <name>           # one skill: metadata, path, instructions
-mind validate [<name>]     # check this project's skills
+mind list [KIND]           # this project's artifacts; `mind list rules` filters
+mind show <NAME>           # one artifact: path, what it declares, its contents
+mind validate [KIND|NAME]  # check a kind, one artifact, or everything
 
 flayer init                # create a .mindflayer here
 flayer link <path>         # register a mind project with it
 flayer unlink <path>       # drop one
-flayer list                # every skill across every registered project
-flayer show <name>
-flayer validate [<name>]
+flayer list [KIND]         # every artifact across every registered project
+flayer show <NAME>
+flayer validate [KIND|NAME]
 
 mind flayer <cmd>          # the long way round; `flayer <cmd>` is the shortcut
 mind ls / flayer ls        # alias for list
@@ -83,12 +95,23 @@ are. Both levels answer a different question, and that is the point:
 
 ```
 $ cd ~/Projects/collapse && mind list      # just this project
-commit-style  How this repo writes commit messages and branch names
+skill  commit-style       How this repo writes commit messages
+rule   git/no-force-push  Never force-push a shared branch
+
+$ mind list rules                          # narrowed to one kind
+git/no-force-push  Never force-push a shared branch
 
 $ flayer list                              # the workspace above it
-collapse  commit-style  How this repo writes commit messages and branch names
-tanukeys  ddd-review    Review a change against the DDD layering rules
+collapse  skill  commit-style       How this repo writes commit messages
+tanukeys  rule   git/no-force-push  Never force-push a shared branch
 ```
+
+A column appears only when it tells you something. The kind column is absent
+when only one kind is in play, the project column when only one project is —
+the same rule in both cases.
+
+A name is bare until it needs qualifying. When one name belongs to two kinds,
+`mind show deploy` shows both and `mind show rule/deploy` picks one.
 
 A workspace lists the projects it was **told** to manage, not whatever happens
 to sit inside it, so the answer does not change with the directory you ran it
@@ -108,14 +131,20 @@ moved away, which is exactly the entry worth removing.
 
 ```
 $ mind validate
-commit-style: ok
+skill/commit-style: ok
+rule/git/no-force-push: ok
 
-1 skill checked, 0 invalid
+1 skill and 1 rule checked, 0 invalid
 ```
 
-`validate` exits non-zero when anything is wrong, so it works in CI. A skill
-that cannot be read at all is a warning on stderr and does not hide the ones
-next to it.
+Each kind is checked against what it actually declares. A skill's name has to
+match its directory and its description has to fit; a rule declares nothing, so
+the only things left to check are that its name is usable and that the file is
+not empty.
+
+`validate` exits non-zero when anything is wrong, so it works in CI. An
+artifact that cannot be read at all is a warning on stderr and does not hide
+the ones next to it.
 
 ## What a skill looks like
 
@@ -131,11 +160,23 @@ allowed-tools: Read, Grep
 Use `<area>: <imperative summary>`, imperative and in English.
 ```
 
-`name` and `description` are required; `name` has to match the directory, be
-kebab-case and stay under 64 characters, and `description` under 1024. Those
-are the rules `mind validate` checks. `allowed-tools` accepts either a comma
-separated string or a YAML list. Anything else in the front matter is carried
-along untouched.
+`name` and `description` are required; `name` has to match the directory and
+`description` stay under 1024 characters. `allowed-tools` accepts either a
+comma separated string or a YAML list. Anything else in the front matter is
+carried along untouched.
+
+A rule is simpler, because it declares nothing at all. `.mind/rules/git/no-force-push.md`:
+
+```markdown
+# Never force-push a shared branch
+
+Use `--force-with-lease`, which refuses when someone else has pushed.
+```
+
+Its name is `git/no-force-push`, from where the file sits. Listings show its
+opening line, which is why leading with a heading or a one-line summary is
+worth doing. Every name, declared or derived, is checked segment by segment:
+lowercase letters, digits and inner hyphens, each segment under 64 characters.
 
 ## Repository layout
 
