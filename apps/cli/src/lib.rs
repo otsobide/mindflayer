@@ -173,10 +173,22 @@ impl Outcome {
     }
 
     /// Print the outcome and return the code the process should exit with.
+    ///
+    /// Written rather than printed, because `print!` panics when the pipe is
+    /// closed and `mind list | head` closes it on purpose. A reader that has
+    /// seen enough is not an error, so that case exits as if all was well.
     pub fn report(&self) -> ExitCode {
-        print!("{}", self.stdout);
+        use std::io::Write as _;
+
+        if let Err(error) = io::stdout().write_all(self.stdout.as_bytes()) {
+            return if error.kind() == io::ErrorKind::BrokenPipe {
+                ExitCode::SUCCESS
+            } else {
+                ExitCode::FAILURE
+            };
+        }
         for line in &self.stderr {
-            eprintln!("{line}");
+            let _ = writeln!(io::stderr(), "{line}");
         }
         if self.ok {
             ExitCode::SUCCESS
@@ -522,21 +534,19 @@ fn list(catalog: &Catalog, projects: &[MindProject], level: Level) -> (String, b
         return (text, true);
     }
 
-    // A kind column earns its place only when more than one kind is in play,
-    // the same rule the project column follows.
-    let name_the_kind = catalog.kinds().len() > 1;
-    let rows: Vec<Vec<String>> = catalog
-        .artifacts()
+    let artifacts: Vec<&Artifact> = catalog.artifacts().iter().collect();
+    let qualify = Qualify::over(&artifacts, level);
+    let rows: Vec<Vec<String>> = artifacts
         .iter()
         .map(|artifact| {
             let mut row = Vec::new();
-            if level == Level::Workspace {
-                row.push(project_of(artifact).to_owned());
+            if qualify.project {
+                row.push(printable(project_of(artifact)));
             }
-            if name_the_kind {
+            if qualify.kind {
                 row.push(artifact.kind().slug().to_owned());
             }
-            row.push(artifact.name().to_owned());
+            row.push(printable(artifact.name()));
             row.push(summary(artifact));
             row
         })
@@ -614,34 +624,69 @@ fn project_of(artifact: &Artifact) -> &str {
     artifact.project_name().unwrap_or("?")
 }
 
-/// Whether a set of artifacts spans more than one kind, and so whether naming
-/// the kind of each tells the reader anything.
-fn spans_kinds(artifacts: &[&Artifact]) -> bool {
-    artifacts
-        .iter()
-        .any(|artifact| artifact.kind() != artifacts[0].kind())
+/// What a report has to name to keep its rows apart.
+///
+/// One rule, asked twice. A column or a qualifier that could not have
+/// disambiguated anything is a column the reader has to skip.
+#[derive(Debug, Clone, Copy)]
+struct Qualify {
+    kind: bool,
+    project: bool,
+}
+
+impl Qualify {
+    /// What is worth naming about a set of artifacts.
+    fn over(artifacts: &[&Artifact], level: Level) -> Self {
+        let first = artifacts.first();
+        Self {
+            kind: first
+                .is_some_and(|first| artifacts.iter().any(|other| other.kind() != first.kind())),
+            // At the project level there is one project by definition, so the
+            // question only arises above it.
+            project: level == Level::Workspace
+                && first.is_some_and(|first| {
+                    artifacts
+                        .iter()
+                        .any(|other| other.project() != first.project())
+                }),
+        }
+    }
 }
 
 /// How an artifact is labelled in a report: as bare as the context allows.
-fn label(artifact: &Artifact, level: Level, name_the_kind: bool) -> String {
-    let name = if name_the_kind {
+fn label(artifact: &Artifact, qualify: Qualify) -> String {
+    let name = if qualify.kind {
         artifact.qualified_name()
     } else {
         artifact.name().to_owned()
     };
-    match level {
-        Level::Project => name,
-        Level::Workspace => format!("{name} ({})", project_of(artifact)),
+    if qualify.project {
+        format!("{name} ({})", project_of(artifact))
+    } else {
+        name
     }
+}
+
+/// Text safe to put in a row.
+///
+/// A name or an opening line comes from a file somebody wrote, and a carriage
+/// return in one would let a row overwrite the row above it on the terminal —
+/// hiding an entry, or fabricating one that looks real.
+fn printable(text: &str) -> String {
+    text.chars()
+        .map(|c| if c.is_control() { ' ' } else { c })
+        .collect::<String>()
+        .trim()
+        .to_owned()
 }
 
 /// The first line of a summary, short enough to sit in a column.
 fn summary(artifact: &Artifact) -> String {
     const BUDGET: usize = 72;
 
-    let line = artifact.summary().unwrap_or("").trim();
+    let line = printable(artifact.summary().unwrap_or(""));
     if line.chars().count() <= BUDGET {
-        return line.to_owned();
+        return line;
     }
     let kept: String = line.chars().take(BUDGET - 1).collect();
     format!("{}…", kept.trim_end())
@@ -655,9 +700,9 @@ fn show(
 ) -> Result<(String, bool), CliError> {
     let matches = catalog.find(reference);
     if matches.is_empty() {
-        return Err(CliError::UnknownArtifact(reference.name().to_owned()));
+        return Err(CliError::UnknownArtifact(reference.typed().to_owned()));
     }
-    let name_the_kind = spans_kinds(&matches);
+    let qualify = Qualify::over(&matches, level);
 
     let mut text = String::new();
     for (index, artifact) in matches.iter().enumerate() {
@@ -667,7 +712,7 @@ fn show(
         if index > 0 {
             text.push_str("\n---\n\n");
         }
-        let _ = writeln!(text, "{}", label(artifact, level, name_the_kind));
+        let _ = writeln!(text, "{}", label(artifact, qualify));
         let _ = writeln!(text, "{}", artifact.file().display());
         let _ = writeln!(text);
 
@@ -698,7 +743,7 @@ fn validate(
         Selector::One(reference) => {
             let matches = catalog.find(reference);
             if matches.is_empty() {
-                return Err(CliError::UnknownArtifact(reference.name().to_owned()));
+                return Err(CliError::UnknownArtifact(reference.typed().to_owned()));
             }
             matches
         }
@@ -710,13 +755,13 @@ fn validate(
     if artifacts.is_empty() {
         return Ok((String::from("nothing to check\n"), true));
     }
-    let name_the_kind = spans_kinds(&artifacts);
+    let qualify = Qualify::over(&artifacts, level);
 
     let mut text = String::new();
     let mut invalid = 0usize;
     for artifact in &artifacts {
         let issues = artifact.validate();
-        let label = label(artifact, level, name_the_kind);
+        let label = label(artifact, qualify);
         if issues.is_empty() {
             let _ = writeln!(text, "{label}: ok");
             continue;
@@ -728,8 +773,21 @@ fn validate(
         }
     }
 
-    let _ = writeln!(text, "\n{} checked, {invalid} invalid", counted(&artifacts));
-    Ok((text, invalid == 0))
+    // Counting only what loaded would report "0 invalid" for a project whose
+    // files could not be read at all, with the reason on stderr where a CI log
+    // will not put it next to the verdict.
+    let unreadable = catalog.failures().len();
+    let unreadable = if unreadable == 0 {
+        String::new()
+    } else {
+        format!(", {} unreadable", plural(unreadable, "file"))
+    };
+    let _ = writeln!(
+        text,
+        "\n{} checked, {invalid} invalid{unreadable}",
+        counted(&artifacts)
+    );
+    Ok((text, invalid == 0 && unreadable.is_empty()))
 }
 
 /// "2 skills", "2 skills and 1 rule": what was looked at, by kind.

@@ -646,12 +646,12 @@ fn show_takes_a_qualified_name_when_one_name_belongs_to_two_kinds() {
     write_rule(dir.path(), "deploy.md", "The rule.\n");
 
     let both = mind(dir.path(), &["show", "deploy"]).unwrap();
-    let just_the_rule = mind(dir.path(), &["show", "rule/deploy"]).unwrap();
+    let just_the_rule = mind(dir.path(), &["show", "rule:deploy"]).unwrap();
 
     // Ambiguous on purpose: both are shown, and each is labelled by kind
     // because that is what tells them apart.
-    assert!(both.stdout.contains("skill/deploy"));
-    assert!(both.stdout.contains("rule/deploy"));
+    assert!(both.stdout.contains("skill:deploy"));
+    assert!(both.stdout.contains("rule:deploy"));
     assert!(both.stdout.contains("\n---\n"));
     // Resolved, the qualifier is no longer doing any work, so it goes.
     assert!(just_the_rule.stdout.starts_with("deploy\n"));
@@ -704,7 +704,7 @@ fn validate_counts_each_kind_by_its_own_name() {
     assert!(rules_only.stdout.contains("1 rule checked, 0 invalid"));
     // Narrowed to one kind, labels stop naming it.
     assert!(rules_only.stdout.contains("solo: ok"));
-    assert!(all.stdout.contains("rule/solo: ok"));
+    assert!(all.stdout.contains("rule:solo: ok"));
 }
 
 #[test]
@@ -741,6 +741,8 @@ fn a_workspace_lists_every_kind_of_every_project() {
          beta   skill  beta        A skill\n\
          alpha  rule   team/style  House style.\n"
     );
+    // Narrowed to rules there is only one project left with any, so the
+    // project column stops telling the reader anything and goes.
     let rules = flayer(dir.path(), &["list", "rules"]).unwrap();
-    assert_eq!(rules.stdout, "alpha  team/style  House style.\n");
+    assert_eq!(rules.stdout, "team/style  House style.\n");
 }
