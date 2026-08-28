@@ -21,6 +21,7 @@ use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 use crate::kind::Kind;
+use crate::ledger::{Ledger, LedgerError, LEDGER_FILE};
 use crate::paths;
 
 /// The layout version written into new marker files.
@@ -37,6 +38,11 @@ pub const MIND_CONFIG: &str = "mind.toml";
 pub const FLAYER_DIR: &str = ".mindflayer";
 /// The marker file inside [`FLAYER_DIR`].
 pub const FLAYER_CONFIG: &str = "flayer.toml";
+/// Where a workspace keeps the clones it gathered from, inside [`FLAYER_DIR`].
+///
+/// Kept rather than discarded so a gather can be inspected after the fact, and
+/// so what a source actually contained is still there when its report is not.
+pub const CACHE_DIR: &str = "cache";
 
 /// What an `init` actually did.
 ///
@@ -240,6 +246,29 @@ impl FlayerWorkspace {
     /// The marker file itself.
     pub fn config_path(&self) -> PathBuf {
         self.flayer_dir().join(FLAYER_CONFIG)
+    }
+
+    /// Where clones are kept, whether or not it exists yet.
+    pub fn cache_dir(&self) -> PathBuf {
+        self.flayer_dir().join(CACHE_DIR)
+    }
+
+    /// Where artifacts gathered from elsewhere live, one folder per kind.
+    ///
+    /// The same shape a mind project uses, one level up, so installing one
+    /// into a project is a copy rather than a translation.
+    pub fn gathered_dir(&self, kind: Kind) -> PathBuf {
+        self.flayer_dir().join(kind.folder())
+    }
+
+    /// The database recording what was gathered and what was done.
+    pub fn ledger_path(&self) -> PathBuf {
+        self.flayer_dir().join(LEDGER_FILE)
+    }
+
+    /// Open that database, creating it if this workspace has never had one.
+    pub fn ledger(&self) -> Result<Ledger, LedgerError> {
+        Ledger::open(self.ledger_path())
     }
 
     /// The entry this workspace would store for a project directory.

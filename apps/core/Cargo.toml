@@ -21,6 +21,8 @@ toml = "0.9"
 # toml_edit, which rewrites one array and leaves the rest of the bytes alone.
 # This is the crate cargo itself edits Cargo.toml with.
 toml_edit = "0.25"
+gix = { version = "0.87", features = ["blocking-network-client", "blocking-http-transport-reqwest-rust-tls"] }
+rusqlite = { version = "0.40", default-features = false, features = ["bundled"] }
 
 [dev-dependencies]
 tempfile = "3"

@@ -13,7 +13,9 @@
 pub mod artifact;
 pub mod catalog;
 pub mod frontmatter;
+pub mod gather;
 pub mod kind;
+pub mod ledger;
 pub mod paths;
 pub mod skill;
 pub mod workspace;
@@ -21,9 +23,11 @@ pub mod workspace;
 pub use artifact::{Artifact, ArtifactError, Declared, ValidationIssue};
 pub use catalog::{Catalog, DiscoveryFailure, Reference, QUALIFIER};
 pub use frontmatter::{Document, FrontMatterError};
+pub use gather::{gather, GatherError, Report, Request, Source, DEFAULT_SUBDIRECTORY};
 pub use kind::{Kind, Layout, UnknownKind};
+pub use ledger::{Ledger, LedgerError, SourceKind, LEDGER_FILE};
 pub use skill::{SkillManifest, MAX_DESCRIPTION_LEN, MAX_NAME_SEGMENT_LEN};
 pub use workspace::{
     FlayerConfig, FlayerWorkspace, Initialization, MindConfig, MindProject, Registration,
-    WorkspaceError, FLAYER_CONFIG, FLAYER_DIR, MIND_CONFIG, MIND_DIR,
+    WorkspaceError, CACHE_DIR, FLAYER_CONFIG, FLAYER_DIR, MIND_CONFIG, MIND_DIR,
 };
