@@ -28,6 +28,7 @@ pub use kind::{Kind, Layout, UnknownKind};
 pub use ledger::{Ledger, LedgerError, SourceKind, LEDGER_FILE};
 pub use skill::{SkillManifest, MAX_DESCRIPTION_LEN, MAX_NAME_SEGMENT_LEN};
 pub use workspace::{
-    FlayerConfig, FlayerWorkspace, Initialization, MindConfig, MindProject, Registration,
-    WorkspaceError, CACHE_DIR, FLAYER_CONFIG, FLAYER_DIR, MIND_CONFIG, MIND_DIR,
+    Directories, FlayerConfig, FlayerWorkspace, Initialization, MindConfig, MindProject,
+    Registration, WorkspaceError, CACHE_DIR, DIRECTORIES_VERSION, FLAYER_CONFIG, FLAYER_DIR,
+    MIND_CONFIG, MIND_DIR,
 };

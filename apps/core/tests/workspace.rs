@@ -2,8 +2,9 @@
 
 use std::fs;
 
+use mindflayer_core::workspace::FORMAT_VERSION;
 use mindflayer_core::{
-    FlayerWorkspace, Initialization, Kind, MindProject, Registration, WorkspaceError,
+    Directories, FlayerWorkspace, Initialization, Kind, MindProject, Registration, WorkspaceError,
     FLAYER_CONFIG, FLAYER_DIR, MIND_CONFIG, MIND_DIR,
 };
 use tempfile::TempDir;
@@ -18,7 +19,7 @@ fn initializing_a_mind_project_creates_its_marker_and_its_skills_folder() {
     assert!(dir.path().join(MIND_DIR).join(MIND_CONFIG).is_file());
     assert!(project.directory_for(Kind::Skill).is_dir());
     assert_eq!(project.root(), dir.path());
-    assert_eq!(project.config().version, 1);
+    assert_eq!(project.config().version, FORMAT_VERSION);
 }
 
 #[test]
@@ -248,7 +249,7 @@ fn link_keeps_the_comments_that_explain_the_file() {
         );
     }
     // And the keys it was not asked to touch.
-    assert!(after.contains("version = 1"));
+    assert!(after.contains(&format!("version = {FORMAT_VERSION}")));
     assert!(after.contains(&format!("name = \"{}\"", workspace.name())));
 }
 
@@ -519,4 +520,140 @@ fn rewriting_the_config_keeps_its_permissions() {
 
     let mode = fs::metadata(&path).unwrap().permissions().mode() & 0o777;
     assert_eq!(mode, 0o600, "a config chmodded to 600 came back {mode:o}");
+}
+
+// ---------------------------------------------------------------------------
+// Where a project keeps its artifacts
+// ---------------------------------------------------------------------------
+
+#[test]
+fn a_new_project_keeps_its_artifacts_beside_the_code() {
+    let dir = TempDir::new().unwrap();
+
+    let (project, _) = MindProject::init(dir.path()).unwrap();
+
+    // Beside the code, not inside `.mind`: these are files the agents
+    // themselves read, and an agent does not know what a `.mind` is.
+    assert_eq!(
+        project.directory_for(Kind::Skill),
+        dir.path().join("skills")
+    );
+    assert_eq!(project.directory_for(Kind::Rule), dir.path().join("rules"));
+    assert!(dir.path().join("skills").is_dir());
+    assert!(dir.path().join("rules").is_dir());
+}
+
+#[test]
+fn the_marker_spells_out_where_each_kind_goes() {
+    let dir = TempDir::new().unwrap();
+    MindProject::init(dir.path()).unwrap();
+
+    let written = fs::read_to_string(dir.path().join(MIND_DIR).join(MIND_CONFIG)).unwrap();
+
+    // In the file, not left to a default somebody has to go and read.
+    assert!(written.contains("[directories]"), "{written}");
+    assert!(written.contains(r#"skills = "skills""#), "{written}");
+    assert!(written.contains(r#"rules = "rules""#), "{written}");
+}
+
+#[test]
+fn a_project_can_keep_its_skills_where_its_agents_look() {
+    let dir = TempDir::new().unwrap();
+    let directories = Directories::default().with(Kind::Skill, ".claude/skills");
+
+    let (project, _) = MindProject::init_with(dir.path(), &directories).unwrap();
+
+    assert_eq!(
+        project.directory_for(Kind::Skill),
+        dir.path().join(".claude/skills")
+    );
+    assert!(dir.path().join(".claude").join("skills").is_dir());
+    // The kind that was not mentioned keeps its default.
+    assert_eq!(project.directory_for(Kind::Rule), dir.path().join("rules"));
+}
+
+#[test]
+fn where_a_project_keeps_things_survives_reopening_it() {
+    let dir = TempDir::new().unwrap();
+    let directories = Directories::default().with(Kind::Skill, "docs/skills");
+    MindProject::init_with(dir.path(), &directories).unwrap();
+
+    let reopened = MindProject::open(dir.path()).unwrap();
+
+    assert_eq!(
+        reopened.directory_for(Kind::Skill),
+        dir.path().join("docs/skills")
+    );
+}
+
+#[test]
+fn a_second_init_does_not_move_where_a_project_keeps_things() {
+    let dir = TempDir::new().unwrap();
+    MindProject::init(dir.path()).unwrap();
+
+    let (project, outcome) = MindProject::init_with(
+        dir.path(),
+        &Directories::default().with(Kind::Skill, "elsewhere"),
+    )
+    .unwrap();
+
+    assert_eq!(outcome, Initialization::AlreadyInitialized);
+    // The marker already answered the question, and `init` never overwrites it.
+    assert_eq!(
+        project.directory_for(Kind::Skill),
+        dir.path().join("skills")
+    );
+    assert!(!dir.path().join("elsewhere").exists());
+}
+
+#[test]
+fn a_directory_outside_the_project_is_refused_before_anything_is_made() {
+    let dir = TempDir::new().unwrap();
+
+    for outside in ["/etc/skills", "../elsewhere"] {
+        let directories = Directories::default().with(Kind::Skill, outside);
+        let error = MindProject::init_with(dir.path(), &directories).unwrap_err();
+
+        assert!(
+            matches!(error, WorkspaceError::OutsideProject { .. }),
+            "{outside}: {error}"
+        );
+    }
+    // Refused before anything was written, not halfway through.
+    assert!(!dir.path().join(MIND_DIR).exists());
+}
+
+#[test]
+fn a_marker_written_before_directories_existed_is_read_the_way_it_was_written() {
+    let dir = TempDir::new().unwrap();
+    fs::create_dir_all(dir.path().join(MIND_DIR).join("skills")).unwrap();
+    fs::write(
+        dir.path().join(MIND_DIR).join(MIND_CONFIG),
+        "version = 1\nname = \"collapse\"\n",
+    )
+    .unwrap();
+
+    let project = MindProject::open(dir.path()).unwrap();
+
+    // Today's default would point it at a directory it has never had, and it
+    // would list nothing without saying why.
+    assert_eq!(
+        project.directory_for(Kind::Skill),
+        dir.path().join(MIND_DIR).join("skills")
+    );
+}
+
+#[test]
+fn a_marker_from_the_future_is_still_refused() {
+    let dir = TempDir::new().unwrap();
+    fs::create_dir_all(dir.path().join(MIND_DIR)).unwrap();
+    fs::write(
+        dir.path().join(MIND_DIR).join(MIND_CONFIG),
+        format!("version = {}\nname = \"x\"\n", FORMAT_VERSION + 1),
+    )
+    .unwrap();
+
+    let error = MindProject::open(dir.path()).unwrap_err();
+
+    assert!(matches!(error, WorkspaceError::Version { .. }), "{error}");
 }
