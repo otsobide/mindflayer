@@ -19,23 +19,27 @@ layout leaves room for a desktop app later without moving the engine.
 
 | | Marker | Holds | Think of it as |
 |---|---|---|---|
-| **Mind project** | `.mind/mind.toml` | its artifacts, under `.mind/` | a repository's `.git` |
+| **Mind project** | `.mind/mind.toml` | its artifacts, in the directories the marker names | a repository's `.git` |
 | **Flayer workspace** | `.mindflayer/flayer.toml` | references to mind projects | the directory your repos sit in |
 
-A mind project is meant to be committed: `.mind` travels with the code it
-describes, so whoever clones the repository gets its skills and rules. A flayer
-workspace is the level above, where several projects are managed together.
+A mind project is meant to be committed: the marker and the artifacts travel
+with the code they describe, so whoever clones the repository gets its skills
+and rules. A flayer workspace is the level above, where several projects are
+managed together.
 
 ## The two kinds
 
 | | Lives in | Shape | Declares |
 |---|---|---|---|
-| **Skill** | `.mind/skills/<name>/SKILL.md` | a directory each, so it can carry scripts and references beside its instructions | front matter: `name`, `description`, optional `allowed-tools` and `license` |
-| **Rule** | `.mind/rules/<name>.md` | one markdown file each | nothing — it is context, and its name is its filename |
+| **Skill** | `skills/<name>/SKILL.md` | a directory each, so it can carry scripts and references beside its instructions | front matter: `name`, `description`, optional `allowed-tools` and `license` |
+| **Rule** | `rules/<name>.md` | one markdown file each | nothing — it is context, and its name is its filename |
 
 Folders under `rules/` group and mean nothing else, so
-`.mind/rules/git/no-force-push.md` is the rule `git/no-force-push`. Skills are
-flat, because a skill's directory already belongs to it.
+`rules/git/no-force-push.md` is the rule `git/no-force-push`. Skills are flat,
+because a skill's directory already belongs to it.
+
+Those are the defaults, and a project can say otherwise — see [where a project
+keeps its artifacts](#where-a-project-keeps-its-artifacts).
 
 Both are found the way git finds a repository: by walking up from wherever you
 are until the marker file appears.
@@ -57,7 +61,7 @@ Then:
 
 ```bash
 cd ~/Projects/collapse
-mind init                      # a .mind here, with an empty .mind/skills
+mind init                      # a .mind marker, and empty skills/ and rules/
 
 cd ~/Projects
 flayer init                    # a .mindflayer, to manage several of them
@@ -74,7 +78,7 @@ The surface is split the way the model is. `mind` acts on the project you are
 standing in; `flayer` acts on the workspace above it.
 
 ```bash
-mind init                  # create a .mind here
+mind init [--skills DIR]   # create a .mind here, saying where its artifacts go
 mind list [KIND]           # this project's artifacts; `mind list rules` filters
 mind show <NAME>           # one artifact; `rule:deploy` when a name is ambiguous
 mind validate [KIND|NAME]  # check a kind, one artifact, or everything
@@ -118,7 +122,7 @@ A name is bare until it needs qualifying. When one name belongs to two kinds,
 `mind show deploy` shows both and `mind show rule:deploy` picks one.
 
 The qualifier is a **colon**, not a slash, because a rule's name is already a
-route: `.mind/rules/skills/naming.md` is the rule `skills/naming`, and a slash
+route: `rules/skills/naming.md` is the rule `skills/naming`, and a slash
 qualifier would have made that mean "the skill `naming`". With a colon, a name
 is always a name.
 
@@ -222,9 +226,42 @@ Timestamps are Unix seconds, so `datetime(at, 'unixepoch')` renders them:
 SELECT datetime(at, 'unixepoch'), action, outcome, detail FROM actions;
 ```
 
+## Where a project keeps its artifacts
+
+`.mind/mind.toml` is the marker and the configuration; the artifacts themselves
+sit beside the code, because these are files the **agents** read and an agent
+does not know what a `.mind` is. `mind init` writes where each kind goes:
+
+```toml
+version = 2
+name = "collapse"
+
+[directories]
+skills = "skills"
+rules = "rules"
+```
+
+Point them wherever the agents already look, and Mindflayer follows:
+
+```bash
+mind init --skills .claude/skills
+mind init --skills docs/skills --rules docs/rules
+```
+
+Both are relative to the project, and have to stay inside it — a mind project
+is meant to be committed and its artifacts with it, so `--skills /etc/skills`
+is refused rather than made. `init` never overwrites an existing marker, so a
+second `mind init --skills elsewhere` changes nothing and says so: moving a
+project's artifacts is not something `init` should do behind your back.
+
+The values are written out even when they are the defaults, so the answer to
+"where do this project's skills go" is in the file rather than in somebody's
+memory. A workspace reads them too, which is how it will know where to put a
+skill it was asked to install.
+
 ## What a skill looks like
 
-`.mind/skills/commit-style/SKILL.md`:
+`skills/commit-style/SKILL.md`:
 
 ```markdown
 ---
@@ -241,7 +278,7 @@ Use `<area>: <imperative summary>`, imperative and in English.
 comma separated string or a YAML list. Anything else in the front matter is
 carried along untouched.
 
-A rule is simpler, because it declares nothing at all. `.mind/rules/git/no-force-push.md`:
+A rule is simpler, because it declares nothing at all. `rules/git/no-force-push.md`:
 
 ```markdown
 # Never force-push a shared branch

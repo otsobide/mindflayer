@@ -19,8 +19,8 @@ use mindflayer_core::gather::{self, GatherError, Report, Request};
 use mindflayer_core::ledger::{Gathered, LedgerError};
 use mindflayer_core::paths;
 use mindflayer_core::{
-    Artifact, ArtifactError, Catalog, Declared, FlayerWorkspace, Initialization, Kind, MindProject,
-    Reference, Registration, WorkspaceError, DEFAULT_SUBDIRECTORY,
+    Artifact, ArtifactError, Catalog, Declared, Directories, FlayerWorkspace, Initialization, Kind,
+    MindProject, Reference, Registration, WorkspaceError, DEFAULT_SUBDIRECTORY,
 };
 use thiserror::Error;
 
@@ -55,7 +55,18 @@ pub struct Cli {
 #[derive(Debug, Subcommand)]
 pub enum Command {
     /// Create a mind project here.
-    Init,
+    Init {
+        /// Where this project keeps its skills [default: `skills`].
+        ///
+        /// Relative to the project. Point it wherever the agents that read
+        /// them already look, such as `.claude/skills`.
+        #[arg(long, value_name = "DIR")]
+        skills: Option<PathBuf>,
+
+        /// Where this project keeps its rules [default: `rules`].
+        #[arg(long, value_name = "DIR")]
+        rules: Option<PathBuf>,
+    },
 
     /// List this project's artifacts.
     #[command(alias = "ls")]
@@ -285,8 +296,18 @@ pub fn run(cli: &Cli) -> Result<Outcome, Failure> {
     let directory = working_directory(cli.directory.as_deref())?;
     match &cli.command {
         Command::Flayer(command) => run_flayer(command, &directory),
-        Command::Init => {
-            let (project, outcome) = MindProject::init(&directory)?;
+        Command::Init { skills, rules } => {
+            // Only what was asked for is set. A kind nobody mentioned is left
+            // to the default rather than pinned to it here, so the default
+            // lives in one place.
+            let mut directories = Directories::default();
+            if let Some(skills) = skills {
+                directories = directories.with(Kind::Skill, skills.clone());
+            }
+            if let Some(rules) = rules {
+                directories = directories.with(Kind::Rule, rules.clone());
+            }
+            let (project, outcome) = MindProject::init_with(&directory, &directories)?;
             Ok(Outcome::plain(initialized(
                 "mind project",
                 project.name(),
@@ -691,14 +712,19 @@ where
 /// One line per artifact.
 fn list(catalog: &Catalog, projects: &[MindProject], level: Level) -> (String, bool) {
     if catalog.is_empty() {
+        // Where it looked, not where the marker is: a project that keeps its
+        // skills somewhere else is exactly the one whose empty listing needs
+        // explaining.
         let mut text = String::from("nothing found\n");
         for project in projects {
-            let _ = writeln!(
-                text,
-                "  {}: {}",
-                project.name(),
-                project.mind_dir().display()
-            );
+            for kind in Kind::ALL {
+                let _ = writeln!(
+                    text,
+                    "  {}: {}",
+                    project.name(),
+                    project.directory_for(kind).display()
+                );
+            }
         }
         return (text, true);
     }

@@ -13,6 +13,7 @@
 //! marker file rather than by the directory alone, so an empty `.mind` left
 //! behind by a failed copy is not mistaken for a project.
 
+use std::collections::BTreeMap;
 use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
@@ -28,7 +29,15 @@ use crate::paths;
 ///
 /// Refusing to read a version from the future is what lets the format change
 /// later without an old binary silently misreading a newer project.
-pub const FORMAT_VERSION: u32 = 1;
+pub const FORMAT_VERSION: u32 = 2;
+
+/// The first version whose markers say where each kind's artifacts live.
+///
+/// Before it, that was not a question a project could answer: every kind lived
+/// inside `.mind`. Reading such a marker as if it used today's default would
+/// point a project at directories it has never had and list nothing, silently,
+/// which is exactly what the version field exists to prevent.
+pub const DIRECTORIES_VERSION: u32 = 2;
 
 /// The directory a mind project is identified by.
 pub const MIND_DIR: &str = ".mind";
@@ -76,6 +85,65 @@ pub struct MindConfig {
     pub version: u32,
     /// A human name for the project. Defaults to its directory's name.
     pub name: String,
+    /// Where each kind's artifacts live, relative to the project root.
+    #[serde(default)]
+    pub directories: Directories,
+}
+
+/// Where a project keeps each kind of artifact.
+///
+/// Keyed by the kind's folder name — `skills`, `rules` — which is the plural
+/// spelling the CLI already accepts, so there is no second table to keep in
+/// step. A key this build does not recognise is carried along rather than
+/// rejected, for the reason unknown front matter keys are: the format grows,
+/// and a project configured by a newer Mindflayer is still a project.
+///
+/// Empty means the defaults, which is what a marker written by hand and never
+/// touched since will be.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(transparent)]
+pub struct Directories(BTreeMap<String, PathBuf>);
+
+impl Directories {
+    /// The directory configured for `kind`, if the project named one.
+    pub fn get(&self, kind: Kind) -> Option<&Path> {
+        self.0.get(kind.folder()).map(PathBuf::as_path)
+    }
+
+    /// Say where `kind` lives.
+    pub fn with(mut self, kind: Kind, directory: impl Into<PathBuf>) -> Self {
+        self.0.insert(kind.folder().to_owned(), directory.into());
+        self
+    }
+
+    /// Whether anything was configured at all.
+    pub fn is_empty(&self) -> bool {
+        self.0.is_empty()
+    }
+
+    /// What a project uses when it says nothing: a folder per kind beside the
+    /// code, named after the kind.
+    ///
+    /// Beside the code rather than inside `.mind`, because these are files the
+    /// agents themselves read, and an agent looking for skills does not know
+    /// what a `.mind` is.
+    pub fn default_for(kind: Kind) -> PathBuf {
+        PathBuf::from(kind.folder())
+    }
+
+    /// Every kind's directory spelled out, which is what `init` writes so the
+    /// answer is in the file rather than in this function.
+    pub fn resolved(&self) -> Vec<(Kind, PathBuf)> {
+        Kind::ALL
+            .into_iter()
+            .map(|kind| {
+                let directory = self
+                    .get(kind)
+                    .map_or_else(|| Directories::default_for(kind), Path::to_path_buf);
+                (kind, directory)
+            })
+            .collect()
+    }
 }
 
 /// A directory holding skills, identified by its `.mind`.
@@ -86,29 +154,55 @@ pub struct MindProject {
 }
 
 impl MindProject {
-    /// Create `.mind`, its marker file and its skills folder under `root`.
+    /// Create `.mind` and the folders its artifacts live in, under `root`,
+    /// with every kind in its default place.
+    pub fn init(root: impl AsRef<Path>) -> Result<(Self, Initialization), WorkspaceError> {
+        Self::init_with(root, &Directories::default())
+    }
+
+    /// The same, saying where one or more kinds should live instead.
     ///
     /// Existing files are never rewritten, so running this on a project that
-    /// already exists is safe and only fills in what is missing.
-    pub fn init(root: impl AsRef<Path>) -> Result<(Self, Initialization), WorkspaceError> {
+    /// already exists is safe and only fills in what is missing. That also
+    /// means `directories` is ignored by a second run: the marker already
+    /// answered the question, and quietly moving where a project keeps its
+    /// artifacts is not something `init` should do.
+    pub fn init_with(
+        root: impl AsRef<Path>,
+        directories: &Directories,
+    ) -> Result<(Self, Initialization), WorkspaceError> {
         let root = absolute(root.as_ref())?;
         let dir = root.join(MIND_DIR);
         let config_path = dir.join(MIND_CONFIG);
 
+        for (kind, directory) in directories.resolved() {
+            check_inside(kind, &directory)?;
+        }
         create_dir(&dir)?;
+
+        let already = config_path.is_file();
+        if !already {
+            let name = directory_name(&root);
+            write_new(&config_path, &mind_template(&name, directories))?;
+        }
+
+        // Opened before the folders are made, so a second run creates what the
+        // *marker* asks for rather than what this call was passed.
+        let project = Self::open(&root)?;
         // A folder per kind, so the layout is visible in a fresh project
         // rather than being something you have to read the docs to discover.
         for kind in Kind::ALL {
-            create_dir(&dir.join(kind.folder()))?;
+            create_dir(&project.directory_for(kind))?;
         }
 
-        if config_path.is_file() {
-            return Ok((Self::open(&root)?, Initialization::AlreadyInitialized));
-        }
-
-        let name = directory_name(&root);
-        write_new(&config_path, &mind_template(&name))?;
-        Ok((Self::open(&root)?, Initialization::Created))
+        Ok((
+            project,
+            if already {
+                Initialization::AlreadyInitialized
+            } else {
+                Initialization::Created
+            },
+        ))
     }
 
     /// Open the mind project rooted at `root`.
@@ -142,8 +236,19 @@ impl MindProject {
     }
 
     /// The folder holding one kind, whether or not it exists yet.
+    ///
+    /// What the marker says, or the default when it says nothing — except for
+    /// a marker written before [`DIRECTORIES_VERSION`], which described a
+    /// layout where every kind lived inside `.mind`. Such a project is read
+    /// the way it was written.
     pub fn directory_for(&self, kind: Kind) -> PathBuf {
-        self.mind_dir().join(kind.folder())
+        match self.config.directories.get(kind) {
+            Some(directory) => self.root.join(directory),
+            None if self.config.version < DIRECTORIES_VERSION => {
+                self.mind_dir().join(kind.folder())
+            }
+            None => self.root.join(Directories::default_for(kind)),
+        }
     }
 
     /// The project's declared name.
@@ -496,6 +601,8 @@ pub enum WorkspaceError {
     NotRegistered { path: PathBuf, workspace: PathBuf },
     #[error("{path}: not valid UTF-8, so it cannot be written into a TOML file")]
     NonUtf8Path { path: PathBuf },
+    #[error("{path}: cannot hold a project's {kind}s, because it is not inside the project")]
+    OutsideProject { path: PathBuf, kind: Kind },
 }
 
 impl WorkspaceError {
@@ -510,7 +617,8 @@ impl WorkspaceError {
             | WorkspaceError::Version { path, .. }
             | WorkspaceError::Edit { path, .. }
             | WorkspaceError::NotRegistered { path, .. }
-            | WorkspaceError::NonUtf8Path { path } => path,
+            | WorkspaceError::NonUtf8Path { path }
+            | WorkspaceError::OutsideProject { path, .. } => path,
         }
     }
 }
@@ -676,24 +784,39 @@ fn directory_name(root: &Path) -> String {
 
 /// The marker files are written from templates rather than serialized, so the
 /// comments explaining the layout are in the file the user opens first.
-fn mind_template(name: &str) -> String {
+///
+/// Every kind's directory is spelled out even when it is the default, so the
+/// answer to "where do this project's skills go" is in the file rather than in
+/// a function somebody has to go and read.
+fn mind_template(name: &str, directories: &Directories) -> String {
+    let mut configured = String::new();
+    for (kind, directory) in directories.resolved() {
+        configured.push_str(&format!(
+            "{} = {}\n",
+            kind.folder(),
+            toml_string(&directory.to_string_lossy())
+        ));
+    }
+
     format!(
         "# Mindflayer mind project.\n\
          #\n\
-         # Skills live in {MIND_DIR}/{skills}/<name>/SKILL.md: a directory each, so a\n\
-         # skill can carry scripts and references beside its instructions.\n\
-         # Rules live in {MIND_DIR}/{rules}/<name>.md: one markdown file each, giving\n\
-         # context and declaring nothing. Folders under {rules} group and mean\n\
-         # nothing else, so {rules}/git/no-force-push.md is the rule\n\
-         # `git/no-force-push`.\n\
+         # Skills are a directory each, holding a SKILL.md, so a skill can carry\n\
+         # scripts and references beside its instructions. Rules are one markdown\n\
+         # file each, giving context and declaring nothing; folders under the rules\n\
+         # directory group and mean nothing else, so git/no-force-push.md is the\n\
+         # rule `git/no-force-push`.\n\
          #\n\
-         # Everything under {MIND_DIR} is meant to be committed: it travels with the\n\
-         # project it describes.\n\
+         # `directories` says where each kind lives, relative to the directory\n\
+         # holding this {MIND_DIR}. Point them wherever the agents that read them\n\
+         # already look — .claude/skills, docs/rules — and Mindflayer follows.\n\
+         # They are meant to be committed: they travel with the project.\n\
          version = {FORMAT_VERSION}\n\
-         name = {}\n",
+         name = {}\n\
+         \n\
+         [directories]\n\
+         {configured}",
         toml_string(name),
-        skills = Kind::Skill.folder(),
-        rules = Kind::Rule.folder(),
     )
 }
 
@@ -709,6 +832,33 @@ fn flayer_template(name: &str) -> String {
          projects = []\n",
         toml_string(name)
     )
+}
+
+/// Refuse a directory that would not travel with the project.
+///
+/// A mind project is meant to be committed, and its artifacts with it, so a
+/// kind's directory has to be somewhere inside it. Anything else describes a
+/// project whose skills are not the project's, and `mind init --skills /etc`
+/// should say so rather than making the folder.
+///
+/// The test is that the first component, once `.` and `..` are resolved, is a
+/// plain name. Not `is_absolute()`, which is **false on Windows** for
+/// `/etc/skills`: a path with a root but no drive letter is relative to the
+/// current drive's root, which is still not inside anything. Asking for a
+/// plain name instead covers absolute paths, rooted ones, `C:` prefixes and
+/// `..` at once, on both platforms, with one rule and no platform branch.
+fn check_inside(kind: Kind, directory: &Path) -> Result<(), WorkspaceError> {
+    let normalized = paths::normalize(directory);
+    if !matches!(
+        normalized.components().next(),
+        Some(std::path::Component::Normal(_))
+    ) {
+        return Err(WorkspaceError::OutsideProject {
+            path: directory.to_path_buf(),
+            kind,
+        });
+    }
+    Ok(())
 }
 
 /// A TOML basic string. Directory names are arbitrary, so the quoting is not
@@ -728,9 +878,14 @@ mod tests {
 
     #[test]
     fn templates_round_trip_through_the_parser() {
-        let mind: MindConfig = toml::from_str(&mind_template("collapse")).unwrap();
+        let mind: MindConfig =
+            toml::from_str(&mind_template("collapse", &Directories::default())).unwrap();
         assert_eq!(mind.version, FORMAT_VERSION);
         assert_eq!(mind.name, "collapse");
+        // Spelled out rather than left to the default, so the file answers
+        // where a project's skills go without anyone reading the source.
+        assert_eq!(mind.directories.get(Kind::Skill), Some(Path::new("skills")));
+        assert_eq!(mind.directories.get(Kind::Rule), Some(Path::new("rules")));
 
         let flayer: FlayerConfig = toml::from_str(&flayer_template("projects")).unwrap();
         assert_eq!(flayer.version, FORMAT_VERSION);
@@ -741,7 +896,8 @@ mod tests {
     #[test]
     fn a_name_needing_quotes_still_round_trips() {
         let awkward = "quote\" and \\ backslash";
-        let mind: MindConfig = toml::from_str(&mind_template(awkward)).unwrap();
+        let mind: MindConfig =
+            toml::from_str(&mind_template(awkward, &Directories::default())).unwrap();
         assert_eq!(mind.name, awkward);
     }
 }

@@ -90,7 +90,7 @@ nobody has asked for.
 ### Why a qualifier uses a colon
 
 `skill:commit-style`, not `skill/commit-style`. A rule's name *is* a route, so
-the two namespaces would otherwise share a delimiter: `.mind/rules/skills/naming.md`
+the two namespaces would otherwise share a delimiter: `rules/skills/naming.md`
 is the rule `skills/naming`, and with a slash qualifier that string would parse
 as "the skill `naming`" — a listing printing a name its own `show` rejects, or
 worse, resolves to a different artifact. A rules folder grouping rules *about
@@ -129,8 +129,8 @@ catalog actually found.
 ## The two levels
 
 A **mind project** is a directory carrying `.mind`, the way a repository
-carries `.git`. Its skills live in `.mind/skills/<name>/SKILL.md`. It is meant
-to be committed: the skills travel with the code they describe.
+carries `.git`. Its skills live in `skills/<name>/SKILL.md` by default. It is
+meant to be committed: the skills travel with the code they describe.
 
 A **flayer workspace** carries `.mindflayer` and references the mind projects
 it manages, so their skills can be handled together. It is the level above, and
@@ -167,6 +167,43 @@ A workspace is in scope for exactly the projects it was **told** to manage. A
 project that merely sits inside the workspace directory is not one of them
 until it is linked. Guessing from the directory tree would make `flayer list`
 answer a different question after an unrelated `mkdir`.
+
+### Where a project keeps its artifacts
+
+`.mind` is the marker and the configuration. The artifacts themselves sit
+beside the code, in directories the marker names:
+
+```toml
+[directories]
+skills = "skills"
+rules = "rules"
+```
+
+Beside the code rather than inside `.mind`, because these are files the
+**agents** read, and an agent looking for skills does not know what a `.mind`
+is. Every project already has a place its agents look — `.claude/skills`,
+`docs/rules` — and the marker is how a project says which, so Mindflayer
+follows the repository rather than the repository following Mindflayer.
+
+The table is keyed by the kind's folder name, which is the plural spelling the
+CLI already accepts, so there is no second table to keep in step. A key this
+build does not recognise is carried along rather than rejected, for the reason
+unknown front matter keys are.
+
+`init` writes every kind's directory even when it is the default. The answer to
+"where do this project's skills go" then lives in the file somebody opens
+rather than in a function they have to find.
+
+A directory has to be inside the project. An absolute path, or one that climbs
+out with `..`, describes a project whose artifacts are not the project's, and
+that contradicts the one thing a mind project is for. `mind init --skills
+/etc/skills` is refused rather than made, before anything is written.
+
+Because this changed where a project's artifacts are, `FORMAT_VERSION` is 2 and
+a marker written before it is read the way it was written: version 1 had no
+such question, so every kind lived inside `.mind`, and reading one with today's
+default would point it at directories it never had and list nothing without
+saying why. `DIRECTORIES_VERSION` is what draws that line.
 
 ### Why the markers are TOML written from a template
 
