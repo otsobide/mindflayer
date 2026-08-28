@@ -372,12 +372,17 @@ make dev/watch         # rebuilds on every change; the symlink stays current
 if it is missing. Note that `make clean` deletes `target/`, which leaves the
 `dev/link` symlink dangling until the next build.
 
-`BINDIR` says where the symlink goes, if `~/.cargo/bin` is not where you want
-it:
+`BINDIR` says where the symlinks go, if `~/.cargo/bin` is not where you want
+them:
 
 ```bash
 make dev/link BINDIR=~/.local/bin
+make dev/link BINDIR=.          # `./mind` and `./flayer`, right here
 ```
+
+The repository root is a fine answer if you would rather not put a
+work-in-progress binary on your PATH at all: `.gitignore` already covers both
+names.
 
 ## License
 
