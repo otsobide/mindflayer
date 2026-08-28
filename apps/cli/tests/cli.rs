@@ -746,3 +746,229 @@ fn a_workspace_lists_every_kind_of_every_project() {
     let rules = flayer(dir.path(), &["list", "rules"]).unwrap();
     assert_eq!(rules.stdout, "team/style  House style.\n");
 }
+
+// ---------------------------------------------------------------------------
+// gather
+//
+// The repository is built here rather than fetched, for the reason the core
+// suite builds one: a test that needs the network fails for reasons that have
+// nothing to do with the code.
+// ---------------------------------------------------------------------------
+
+/// A git repository holding these files, with one commit.
+fn repository(files: &[(&str, &str)]) -> TempDir {
+    let dir = TempDir::new().unwrap();
+    for (path, contents) in files {
+        let file = dir.path().join(path);
+        fs::create_dir_all(file.parent().unwrap()).unwrap();
+        fs::write(file, contents).unwrap();
+    }
+
+    let repo = gix::init(dir.path()).expect("initialize a repository");
+    let tree = write_tree(&repo, dir.path());
+    let who = gix::actor::Signature {
+        name: "Fixture".into(),
+        email: "fixture@example.com".into(),
+        time: gix::date::Time::new(0, 0),
+    };
+    let id = repo
+        .write_object(&gix::objs::Commit {
+            tree,
+            parents: Default::default(),
+            author: who.clone(),
+            committer: who,
+            encoding: None,
+            message: "fixture".into(),
+            extra_headers: Vec::new(),
+        })
+        .unwrap()
+        .detach();
+
+    let head = fs::read_to_string(dir.path().join(".git").join("HEAD")).unwrap();
+    let branch = head.trim().strip_prefix("ref: ").unwrap();
+    let reference = dir.path().join(".git").join(branch);
+    fs::create_dir_all(reference.parent().unwrap()).unwrap();
+    fs::write(reference, format!("{id}\n")).unwrap();
+    dir
+}
+
+fn write_tree(repo: &gix::Repository, dir: &Path) -> gix::ObjectId {
+    use gix::objs::tree::{Entry, EntryKind};
+
+    let mut entries = Vec::new();
+    for entry in fs::read_dir(dir).unwrap() {
+        let entry = entry.unwrap();
+        let name = entry.file_name();
+        if name == ".git" {
+            continue;
+        }
+        let path = entry.path();
+        let (kind, oid) = if path.is_dir() {
+            (EntryKind::Tree, write_tree(repo, &path))
+        } else {
+            (
+                EntryKind::Blob,
+                repo.write_blob(fs::read(&path).unwrap()).unwrap().detach(),
+            )
+        };
+        entries.push(Entry {
+            mode: kind.into(),
+            filename: name.to_string_lossy().as_bytes().into(),
+            oid,
+        });
+    }
+    entries.sort();
+    repo.write_object(&gix::objs::Tree { entries })
+        .unwrap()
+        .detach()
+}
+
+#[test]
+fn gather_reports_the_source_and_what_it_took() {
+    let source = repository(&[
+        ("skills/deploy/SKILL.md", &skill_file("deploy", "Ship it")),
+        (
+            "skills/commit-style/SKILL.md",
+            &skill_file("commit-style", "How we commit"),
+        ),
+    ]);
+    let dir = TempDir::new().unwrap();
+    flayer(dir.path(), &["init"]).unwrap();
+
+    let outcome = flayer(
+        dir.path(),
+        &["gather", "git", &source.path().to_string_lossy()],
+    )
+    .unwrap();
+
+    assert!(outcome.ok, "{:?}", outcome.stderr);
+    assert!(outcome.stdout.contains("added"), "{}", outcome.stdout);
+    assert!(
+        outcome.stdout.contains("commit-style  How we commit"),
+        "{}",
+        outcome.stdout
+    );
+    assert!(
+        outcome
+            .stdout
+            .contains("2 skills: 2 added, 0 updated, 0 unchanged"),
+        "{}",
+        outcome.stdout
+    );
+}
+
+#[test]
+fn gathering_again_says_nothing_moved() {
+    let source = repository(&[("skills/deploy/SKILL.md", &skill_file("deploy", "Ship it"))]);
+    let dir = TempDir::new().unwrap();
+    flayer(dir.path(), &["init"]).unwrap();
+    let url = source.path().to_string_lossy().into_owned();
+
+    flayer(dir.path(), &["gather", "git", &url]).unwrap();
+    let again = flayer(dir.path(), &["gather", "git", &url]).unwrap();
+
+    assert!(
+        again
+            .stdout
+            .contains("1 skill: 0 added, 0 updated, 1 unchanged"),
+        "{}",
+        again.stdout
+    );
+}
+
+#[test]
+fn a_skill_that_cannot_be_read_is_a_warning_and_a_non_zero_exit() {
+    let source = repository(&[
+        ("skills/good/SKILL.md", &skill_file("good", "Fine")),
+        ("skills/broken/SKILL.md", "no front matter\n"),
+    ]);
+    let dir = TempDir::new().unwrap();
+    flayer(dir.path(), &["init"]).unwrap();
+
+    let outcome = flayer(
+        dir.path(),
+        &["gather", "git", &source.path().to_string_lossy()],
+    )
+    .unwrap();
+
+    assert!(outcome.stdout.contains("good"));
+    assert_eq!(outcome.stderr.len(), 1);
+    assert!(outcome.stderr[0].contains("front matter"));
+    assert!(!outcome.ok);
+}
+
+#[test]
+fn gather_list_names_where_each_skill_came_from() {
+    let source = repository(&[("skills/deploy/SKILL.md", &skill_file("deploy", "Ship it"))]);
+    let dir = TempDir::new().unwrap();
+    flayer(dir.path(), &["init"]).unwrap();
+    let url = source.path().to_string_lossy().into_owned();
+    flayer(dir.path(), &["gather", "git", &url]).unwrap();
+
+    let outcome = flayer(dir.path(), &["gather", "list"]).unwrap();
+
+    assert!(outcome.ok);
+    assert!(outcome.stdout.contains("deploy"));
+    assert!(outcome.stdout.contains(&url), "{}", outcome.stdout);
+    assert!(outcome.stdout.contains("Ship it"));
+}
+
+#[test]
+fn an_empty_shelf_says_how_to_fill_it() {
+    let dir = TempDir::new().unwrap();
+    flayer(dir.path(), &["init"]).unwrap();
+
+    let outcome = flayer(dir.path(), &["gather", "list"]).unwrap();
+
+    assert!(outcome.ok);
+    assert!(outcome.stdout.starts_with("nothing gathered yet"));
+    assert!(outcome.stdout.contains("flayer gather git"));
+}
+
+#[test]
+fn gathering_outside_a_workspace_says_what_to_run() {
+    let dir = TempDir::new().unwrap();
+
+    let failure = flayer(dir.path(), &["gather", "list"]).unwrap_err();
+
+    assert!(matches!(*failure.error, CliError::NotInWorkspace(_)));
+    assert!(failure.error.to_string().contains("flayer init"));
+}
+
+#[test]
+fn gather_is_reachable_the_long_way_round_too() {
+    let source = repository(&[("skills/deploy/SKILL.md", &skill_file("deploy", "Ship it"))]);
+    let dir = TempDir::new().unwrap();
+    flayer(dir.path(), &["init"]).unwrap();
+    let url = source.path().to_string_lossy().into_owned();
+
+    let short = flayer(dir.path(), &["gather", "git", &url]).unwrap();
+    let long = mind(dir.path(), &["flayer", "gather", "list"]).unwrap();
+
+    assert!(short.ok);
+    assert!(long.stdout.contains("deploy"), "{}", long.stdout);
+}
+
+#[test]
+fn gather_list_tells_two_branches_of_one_repository_apart() {
+    let source = repository(&[("skills/deploy/SKILL.md", &skill_file("deploy", "Ship it"))]);
+    let dir = TempDir::new().unwrap();
+    flayer(dir.path(), &["init"]).unwrap();
+    let url = source.path().to_string_lossy().into_owned();
+
+    // The same URL at its default branch and at a named one: two sources, and
+    // a listing that printed the URL alone would show one origin twice.
+    let head = fs::read_to_string(source.path().join(".git").join("HEAD")).unwrap();
+    let branch = head.trim().rsplit('/').next().unwrap().to_owned();
+    flayer(dir.path(), &["gather", "git", &url]).unwrap();
+    flayer(dir.path(), &["gather", "git", &url, "--ref", &branch]).unwrap();
+
+    let outcome = flayer(dir.path(), &["gather", "list"]).unwrap();
+
+    assert_eq!(outcome.stdout.lines().count(), 2, "{}", outcome.stdout);
+    assert!(
+        outcome.stdout.contains(&format!("{url}#{branch}")),
+        "{}",
+        outcome.stdout
+    );
+}

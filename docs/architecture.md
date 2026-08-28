@@ -250,6 +250,94 @@ otherwise an edit would quietly widen a chmodded config or detach a shared one.
 A hard link is the case this cannot preserve: a rename breaks it, and keeping
 it would mean giving up the atomic write.
 
+## Gathering
+
+A workspace has a **shelf**: artifacts collected from somewhere else, held by
+the workspace and belonging to no project yet.
+
+```
+.mindflayer/
+  flayer.toml
+  mindflayer.db
+  cache/<source>/            the clone
+  skills/<source>/<name>/    what was taken out of it
+```
+
+Gathering fills that shelf and stops. Nothing is written into a mind project,
+because which of the gathered skills a project should carry is a separate
+decision made by somebody, and a `git clone` that edited repositories on the
+way past would be the wrong kind of convenient. It also keeps the two halves
+independently testable: what a source yields does not depend on what any
+project wants.
+
+### Everything is namespaced by its source
+
+Two repositories may both offer `commit-style`, and both are worth having:
+choosing between them is what the shelf exists to make possible. So each source
+owns a folder, named after its URL and recorded once, and the same name from a
+different source is a different thing rather than a collision. This is the same
+answer `Catalog::find` gives inside a project — return both, decide nothing —
+one level up.
+
+The folder a skill lands in keeps the name the **source** gave it, not the name
+the skill declares. When those disagree that is something `validate` reports;
+renaming the folder on the way in would repair the symptom and hide it.
+
+### The clone is kept, and re-made
+
+The clone stays under `cache/` so a gather can be looked at afterwards, and
+because what a source actually contained outlives the report about it.
+
+It is re-cloned rather than fetched into. The clone is shallow, so a re-clone
+costs about what a fetch would, and it is one code path instead of three:
+clone, fetch, and reconcile a checkout somebody may have edited. Gathering is
+not something anybody runs in a loop.
+
+Placing an artifact **replaces** its folder rather than merging into it, so a
+file the source deleted does not survive as a leftover of an older revision.
+An artifact that has not changed is left alone entirely, down to its
+modification times, which is what lets a second gather answer the only question
+worth asking the second time: what moved.
+
+Failures are collected, as everywhere else: one skill with broken front matter
+is a warning beside the forty that came through, not a reason to be told
+nothing.
+
+### Why `gix` rather than running `git`
+
+Nothing depends on a `git` being installed, or on which `git` is first on the
+PATH, and core keeps doing its own I/O rather than supervising a process. The
+cost is that authentication for private repositories is ours to solve rather
+than inherited from a credential helper, and it is not solved yet.
+
+`gix`'s error types are large and would become part of this crate's public API
+if they were carried, tying its version to gix's, so `GitError` keeps what they
+said and not what they were.
+
+### Why the ledger is SQLite
+
+Everything else Mindflayer writes is a file a person opens: TOML with comments
+explaining itself. `mindflayer.db` is not, and the exception is deliberate. It
+answers questions a file cannot — which of two identically named skills came
+from which repository, at which revision, and what happened the last four times
+a gather ran — and answering them from a flat file would mean writing a query
+engine badly.
+
+It sits in `.mindflayer/`, beside the marker it belongs to, so it travels with
+the workspace and two workspaces never share a history. It carries its schema
+version in SQLite's own `user_version` header field, and a database from the
+future is refused exactly as a marker file from the future is.
+
+Three things are recorded: the **sources** gathered from, the **artifacts** on
+the shelf and which source each came from, and an **action log**. The log keeps
+failures too — a log of only what worked cannot answer the question anybody
+opens it with. Timestamps are Unix seconds, which needs no date library and
+which SQLite renders with `datetime(at, 'unixepoch')`.
+
+A source's shelf folder is stored rather than derived: two URLs can reduce to
+the same readable name, and where a source's files went is a fact about the
+past that must not move when the naming rule changes.
+
 ## Open questions
 
 - **Precedence between projects.** Two projects in one workspace can declare
@@ -257,10 +345,22 @@ it would mean giving up the atomic write.
   wins, because nothing here yet has to choose. Whatever resolves it (a
   workspace-level override, an explicit order in `flayer.toml`) belongs in core
   when it exists, not in a front end.
-- **Creating artifacts.** Nothing writes a `SKILL.md` or a rule yet; they are
-  added by hand. `mind add <kind> <name>` is the next piece of work, and it is
-  where the kinds stop sharing a code path: a skill needs a manifest scaffolded
-  and a rule needs an empty file.
+- **Installing from the shelf.** Gathering puts skills in the workspace and
+  goes no further. `mind install <name>`, or `flayer install <name> --into
+  <project>`, is the other half, and it is where the precedence question above
+  stops being hypothetical: picking one of two identically named skills is
+  exactly what it has to do.
+- **Creating artifacts.** Nothing writes a `SKILL.md` or a rule from scratch;
+  they are added by hand or gathered. `mind add <kind> <name>` is where the
+  kinds stop sharing a code path: a skill needs a manifest scaffolded and a
+  rule needs an empty file.
+- **Gathering rules.** Only skills are gatherable. A rule is a loose file at any
+  depth, so harvesting one means deciding what its name is relative to — the
+  same question `Catalog::take_files` answers inside a project, asked of a
+  folder that is not one.
+- **Private repositories.** `gix` is given no credentials, so a private source
+  fails at the fetch. What it should be given — an ssh agent, a token from the
+  environment, the platform keychain — is undecided.
 - **Rules that want to declare something.** Today a rule has no front matter,
   so a leading `---` in one is content. If rules later want metadata, that
   becomes a breaking reading of files written now. The escape hatch is cheap

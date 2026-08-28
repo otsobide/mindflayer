@@ -15,10 +15,12 @@ use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
 use clap::{Parser, Subcommand};
+use mindflayer_core::gather::{self, GatherError, Report, Request};
+use mindflayer_core::ledger::{Gathered, LedgerError};
 use mindflayer_core::paths;
 use mindflayer_core::{
     Artifact, ArtifactError, Catalog, Declared, FlayerWorkspace, Initialization, Kind, MindProject,
-    Reference, Registration, WorkspaceError,
+    Reference, Registration, WorkspaceError, DEFAULT_SUBDIRECTORY,
 };
 use thiserror::Error;
 
@@ -136,6 +138,36 @@ pub enum FlayerCommand {
         /// The project's directory, as registered. It need not still exist.
         project: PathBuf,
     },
+
+    /// Collect artifacts from elsewhere onto this workspace's shelf.
+    #[command(subcommand)]
+    Gather(GatherCommand),
+}
+
+/// Where a gather takes artifacts from.
+///
+/// A subcommand per method rather than a `--from` flag: each one takes
+/// different arguments, and the next one (a directory, an archive) should have
+/// to say so rather than overloading a URL.
+#[derive(Debug, Subcommand)]
+pub enum GatherCommand {
+    /// Take skills from a git repository.
+    Git {
+        /// The repository to clone.
+        url: String,
+
+        /// The folder inside the repository to take skills from.
+        #[arg(long, value_name = "DIR", default_value = DEFAULT_SUBDIRECTORY)]
+        path: String,
+
+        /// A branch or tag to take, instead of the repository's default.
+        #[arg(long = "ref", value_name = "REF")]
+        reference: Option<String>,
+    },
+
+    /// List what has been gathered, and where each artifact came from.
+    #[command(alias = "ls")]
+    List,
 }
 
 /// Which level a command reports at.
@@ -337,6 +369,8 @@ fn run_flayer(command: &FlayerCommand, directory: &Path) -> Result<Outcome, Fail
             Ok(Outcome::plain(text))
         }
 
+        FlayerCommand::Gather(command) => run_gather(command, directory),
+
         FlayerCommand::List { kind } => {
             let (workspace, projects, warnings) = managed(directory)?;
             with_warnings(warnings, projects, wanted(*kind), |catalog, projects| {
@@ -361,6 +395,141 @@ fn run_flayer(command: &FlayerCommand, directory: &Path) -> Result<Outcome, Fail
             })
         }
     }
+}
+
+// ---------------------------------------------------------------------------
+// gather
+// ---------------------------------------------------------------------------
+
+/// Collect artifacts onto the workspace shelf, or say what is already on it.
+fn run_gather(command: &GatherCommand, directory: &Path) -> Result<Outcome, Failure> {
+    let workspace = workspace_here(directory)?;
+    let ledger = workspace.ledger().map_err(CliError::from)?;
+
+    match command {
+        GatherCommand::Git {
+            url,
+            path,
+            reference,
+        } => {
+            let request = Request::git(url.clone())
+                .from_subdirectory(path.clone())
+                .at(reference.clone());
+            let report = gather::gather(&workspace, &ledger, &request).map_err(CliError::from)?;
+            Ok(gathered(url, &report))
+        }
+        GatherCommand::List => {
+            let shelf = ledger.gathered().map_err(CliError::from)?;
+            Ok(Outcome::plain(shelf_listing(&shelf)))
+        }
+    }
+}
+
+/// What one gather did, in the order it is worth reading: the source, then
+/// every artifact and what happened to it, then the count.
+fn gathered(url: &str, report: &Report) -> Outcome {
+    let mut stdout = String::new();
+    let at = report
+        .revision
+        .as_deref()
+        .map(short)
+        .map_or_else(String::new, |revision| format!(" at {revision}"));
+    let _ = writeln!(stdout, "{url}{at}");
+
+    // Added first, then updated, then unchanged: a second gather is run to
+    // find out what moved, and what moved should not be at the bottom.
+    let mut rows: Vec<Vec<String>> = Vec::new();
+    for (label, harvested) in [
+        ("added", &report.added),
+        ("updated", &report.updated),
+        ("unchanged", &report.unchanged),
+    ] {
+        for artifact in harvested {
+            rows.push(vec![
+                label.to_owned(),
+                printable(&artifact.name),
+                printable(artifact.summary.as_deref().unwrap_or("")),
+            ]);
+        }
+    }
+    if rows.is_empty() {
+        stdout.push_str("  nothing to gather there\n");
+    } else {
+        stdout.push_str(&indent(&table(&rows)));
+        let _ = writeln!(
+            stdout,
+            "\n{}: {} added, {} updated, {} unchanged",
+            plural(report.total(), "skill"),
+            report.added.len(),
+            report.updated.len(),
+            report.unchanged.len()
+        );
+    }
+
+    // An artifact that could not be taken is a warning beside what was, not a
+    // reason to be told nothing about the rest.
+    let stderr: Vec<String> = report
+        .failures
+        .iter()
+        .map(|failure| format!("warning: {failure}"))
+        .collect();
+    let ok = stderr.is_empty();
+    Outcome { stdout, stderr, ok }
+}
+
+/// Everything on the shelf, with where each thing came from.
+fn shelf_listing(shelf: &[Gathered]) -> String {
+    if shelf.is_empty() {
+        return String::from("nothing gathered yet\n  take some with `flayer gather git <url>`\n");
+    }
+
+    // The same rule a catalog listing follows: a kind column earns its place
+    // only once more than one kind is on the shelf.
+    let mut kinds: Vec<Kind> = shelf.iter().map(|entry| entry.kind).collect();
+    kinds.sort();
+    kinds.dedup();
+    let name_kind = kinds.len() > 1;
+
+    let rows: Vec<Vec<String>> = shelf
+        .iter()
+        .map(|entry| {
+            let mut row = Vec::new();
+            if name_kind {
+                row.push(entry.kind.slug().to_owned());
+            }
+            row.push(printable(&entry.name));
+            row.push(printable(&origin(&entry.source)));
+            row.push(printable(entry.summary.as_deref().unwrap_or("")));
+            row
+        })
+        .collect();
+    table(&rows)
+}
+
+/// Where a gathered artifact came from, as one string.
+///
+/// The branch is part of the address when one was asked for: the same
+/// repository at two branches is two sources, and a listing that printed the
+/// URL alone would show the same origin twice for two different things.
+fn origin(source: &mindflayer_core::ledger::Source) -> String {
+    match &source.reference {
+        Some(reference) => format!("{}#{reference}", source.url),
+        None => source.url.clone(),
+    }
+}
+
+/// Two spaces in front of every line, so a block reads as belonging to the
+/// line above it.
+fn indent(text: &str) -> String {
+    text.lines().fold(String::new(), |mut out, line| {
+        let _ = writeln!(out, "  {line}");
+        out
+    })
+}
+
+/// A revision as a person refers to it.
+fn short(revision: &str) -> &str {
+    revision.get(..7).unwrap_or(revision)
 }
 
 // ---------------------------------------------------------------------------
@@ -860,4 +1029,8 @@ pub enum CliError {
     UnknownArtifact(String),
     #[error(transparent)]
     Artifact(#[from] ArtifactError),
+    #[error(transparent)]
+    Gather(#[from] GatherError),
+    #[error(transparent)]
+    Ledger(#[from] LedgerError),
 }
