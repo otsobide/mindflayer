@@ -16,12 +16,16 @@ $(foreach app,$(APPS),$(eval $(call APP_DELEGATE,$(app))))
 
 # ---------------------------------------------------------------------------
 # Global targets — CI invokes these, so they are the contract, not cargo.
+#
+# The aggregates are derived from APPS rather than spelled out, so that adding
+# an app really is the one line above: a name left out of `test` would be an
+# app CI silently never runs.
 # ---------------------------------------------------------------------------
 .PHONY: test
-test: core/test cli/test ## Run every test suite
+test: $(addsuffix /test,$(APPS)) ## Run every test suite
 
 .PHONY: build
-build: core/build cli/build ## Build every crate (debug)
+build: $(addsuffix /build,$(APPS)) ## Build every crate (debug)
 
 .PHONY: fmt
 fmt: ## Format all Rust code
