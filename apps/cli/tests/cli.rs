@@ -1025,8 +1025,14 @@ fn an_empty_project_says_which_directories_it_looked_in() {
     assert!(outcome.stdout.starts_with("nothing found"));
     // The configured directory, not the marker: a project that keeps its
     // skills elsewhere is exactly the one whose empty listing needs explaining.
-    assert!(outcome.stdout.contains("docs/skills"), "{}", outcome.stdout);
-    assert!(outcome.stdout.contains("rules"), "{}", outcome.stdout);
+    //
+    // Compared against what the project itself says rather than against
+    // `"docs/skills"`, because the command prints a path and Windows prints
+    // one with backslashes.
+    for kind in [Kind::Skill, Kind::Rule] {
+        let looked_in = directory_for(dir.path(), kind).display().to_string();
+        assert!(outcome.stdout.contains(&looked_in), "{}", outcome.stdout);
+    }
 }
 
 #[test]

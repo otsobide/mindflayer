@@ -610,7 +610,15 @@ fn a_second_init_does_not_move_where_a_project_keeps_things() {
 fn a_directory_outside_the_project_is_refused_before_anything_is_made() {
     let dir = TempDir::new().unwrap();
 
-    for outside in ["/etc/skills", "../elsewhere"] {
+    // `/etc/skills` is the one that used to slip through on Windows, where it
+    // is not `is_absolute()`: it names the root of the current drive, which is
+    // no more inside the project than an absolute path is. `.` is the project
+    // itself rather than a place in it, and an empty name is not a place.
+    //
+    // No `C:/skills` here: on Linux that is a directory called `C:`, and it
+    // really is inside the project. What a path means is the platform's answer
+    // to give, which is the whole reason this check asks about components.
+    for outside in ["/etc/skills", "../elsewhere", ".", ""] {
         let directories = Directories::default().with(Kind::Skill, outside);
         let error = MindProject::init_with(dir.path(), &directories).unwrap_err();
 

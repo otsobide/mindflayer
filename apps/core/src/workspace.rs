@@ -837,16 +837,22 @@ fn flayer_template(name: &str) -> String {
 /// Refuse a directory that would not travel with the project.
 ///
 /// A mind project is meant to be committed, and its artifacts with it, so a
-/// kind's directory has to be somewhere inside it. An absolute path, or one
-/// that climbs out with `..`, describes a project whose skills are not the
-/// project's — and `mind init --skills /etc` should say so rather than making
-/// the folder.
+/// kind's directory has to be somewhere inside it. Anything else describes a
+/// project whose skills are not the project's, and `mind init --skills /etc`
+/// should say so rather than making the folder.
+///
+/// The test is that the first component, once `.` and `..` are resolved, is a
+/// plain name. Not `is_absolute()`, which is **false on Windows** for
+/// `/etc/skills`: a path with a root but no drive letter is relative to the
+/// current drive's root, which is still not inside anything. Asking for a
+/// plain name instead covers absolute paths, rooted ones, `C:` prefixes and
+/// `..` at once, on both platforms, with one rule and no platform branch.
 fn check_inside(kind: Kind, directory: &Path) -> Result<(), WorkspaceError> {
-    let climbs = paths::normalize(directory)
-        .components()
-        .next()
-        .is_some_and(|first| matches!(first, std::path::Component::ParentDir));
-    if directory.is_absolute() || climbs {
+    let normalized = paths::normalize(directory);
+    if !matches!(
+        normalized.components().next(),
+        Some(std::path::Component::Normal(_))
+    ) {
         return Err(WorkspaceError::OutsideProject {
             path: directory.to_path_buf(),
             kind,
