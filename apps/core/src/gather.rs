@@ -20,6 +20,7 @@ use std::path::{Path, PathBuf};
 use thiserror::Error;
 
 use crate::artifact::{Artifact, ArtifactError};
+use crate::copy::{self, Change};
 use crate::kind::{Kind, Layout};
 use crate::ledger::{self, Action, Ledger, LedgerError, Outcome, SourceKind};
 use crate::paths;
@@ -253,7 +254,7 @@ fn harvest(
         };
         let destination = shelf.join(folder);
 
-        let change = match place(&directory, &destination) {
+        let change = match copy::replace(&directory, &destination) {
             Ok(change) => change,
             Err(source) => {
                 report.failures.push(Failure::Copy {
@@ -318,80 +319,6 @@ fn candidates(root: &Path, kind: Kind) -> Result<Vec<PathBuf>, GatherError> {
     }
     found.sort();
     Ok(found)
-}
-
-/// What placing an artifact on the shelf turned out to be.
-enum Change {
-    Added,
-    Updated,
-    Unchanged,
-}
-
-/// Copy `from` onto `to`, saying what that changed.
-///
-/// An unchanged artifact is left alone rather than rewritten, so a second
-/// gather does not touch the modification time of every file it did not
-/// change.
-fn place(from: &Path, to: &Path) -> Result<Change, io::Error> {
-    if !to.exists() {
-        copy_tree(from, to)?;
-        return Ok(Change::Added);
-    }
-    if same_tree(from, to)? {
-        return Ok(Change::Unchanged);
-    }
-    // Replaced rather than merged: a file the source has deleted must not
-    // survive on the shelf as a leftover of an older revision.
-    fs::remove_dir_all(to)?;
-    copy_tree(from, to)?;
-    Ok(Change::Updated)
-}
-
-/// Copy a directory and everything under it.
-fn copy_tree(from: &Path, to: &Path) -> Result<(), io::Error> {
-    fs::create_dir_all(to)?;
-    for entry in fs::read_dir(from)? {
-        let entry = entry?;
-        let source = entry.path();
-        let target = to.join(entry.file_name());
-        // `file_type` does not follow links, and a symlink inside a skill is
-        // copied as the file it points at: what leaves the clone has to keep
-        // working when the clone is replaced by the next gather.
-        if entry.file_type()?.is_dir() {
-            copy_tree(&source, &target)?;
-        } else {
-            fs::copy(&source, &target)?;
-        }
-    }
-    Ok(())
-}
-
-/// Whether two directories hold the same names and the same bytes.
-fn same_tree(a: &Path, b: &Path) -> Result<bool, io::Error> {
-    let (left, right) = (listing(a)?, listing(b)?);
-    if left != right {
-        return Ok(false);
-    }
-    for name in left {
-        let (one, two) = (a.join(&name), b.join(&name));
-        if one.is_dir() {
-            if !same_tree(&one, &two)? {
-                return Ok(false);
-            }
-        } else if fs::read(&one)? != fs::read(&two)? {
-            return Ok(false);
-        }
-    }
-    Ok(true)
-}
-
-/// The sorted names directly inside a directory.
-fn listing(path: &Path) -> Result<Vec<std::ffi::OsString>, io::Error> {
-    let mut names: Vec<std::ffi::OsString> = fs::read_dir(path)?
-        .map(|entry| entry.map(|entry| entry.file_name()))
-        .collect::<Result<_, _>>()?;
-    names.sort();
-    Ok(names)
 }
 
 /// A path as the ledger stores it: relative to the workspace, `/` separated,

@@ -24,7 +24,7 @@ use crate::kind::Kind;
 /// Refused if the file on disk is newer, for the same reason a marker file is:
 /// an old binary silently misreading a newer database is the failure that has
 /// no error message.
-pub const SCHEMA_VERSION: u32 = 1;
+pub const SCHEMA_VERSION: u32 = 2;
 
 /// The file name, under `.mindflayer/`.
 pub const LEDGER_FILE: &str = "mindflayer.db";
@@ -99,12 +99,18 @@ pub struct Gathered {
 pub enum Action {
     /// Harvesting artifacts from a source into the workspace.
     Gather,
+    /// Copying one from the workspace shelf into a mind project.
+    Install,
+    /// Taking one back out of a project.
+    Uninstall,
 }
 
 impl Action {
     pub const fn slug(self) -> &'static str {
         match self {
             Action::Gather => "gather",
+            Action::Install => "install",
+            Action::Uninstall => "uninstall",
         }
     }
 }
@@ -208,12 +214,17 @@ impl Ledger {
             return Ok(());
         }
 
-        // One block per version as the schema grows. Today there is only the
-        // first, applied to a database that has nothing in it.
+        // One block per version, applied in order, so a database created two
+        // versions ago arrives at the same schema as one created today.
         if found < 1 {
             self.connection
                 .execute_batch(SCHEMA_V1)
                 .map_err(|source| self.failed("creating the schema", source))?;
+        }
+        if found < 2 {
+            self.connection
+                .execute_batch(SCHEMA_V2)
+                .map_err(|source| self.failed("adding the installations table", source))?;
         }
 
         self.connection
@@ -411,6 +422,59 @@ impl Ledger {
             });
         }
         Ok(found)
+    }
+
+    /// Record that an artifact was put into a project.
+    pub fn installed(
+        &self,
+        project: &str,
+        kind: Kind,
+        name: &str,
+        source_id: Option<i64>,
+        path: &str,
+    ) -> Result<(), LedgerError> {
+        self.connection
+            .execute(
+                "INSERT INTO installations (project, kind, name, source_id, path, installed_at)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6)
+                 ON CONFLICT (project, kind, name) DO UPDATE SET
+                     source_id = excluded.source_id,
+                     path = excluded.path,
+                     installed_at = excluded.installed_at",
+                rusqlite::params![project, kind.slug(), name, source_id, path, now()],
+            )
+            .map(|_| ())
+            .map_err(|source| self.failed("recording an installation", source))
+    }
+
+    /// Forget an installation, returning whether there was one.
+    pub fn uninstalled(&self, project: &str, kind: Kind, name: &str) -> Result<bool, LedgerError> {
+        self.connection
+            .execute(
+                "DELETE FROM installations WHERE project = ?1 AND kind = ?2 AND name = ?3",
+                rusqlite::params![project, kind.slug(), name],
+            )
+            .map(|rows| rows > 0)
+            .map_err(|source| self.failed("forgetting an installation", source))
+    }
+
+    /// The names this ledger says Mindflayer put into a project.
+    ///
+    /// What separates an artifact this tool installed from one somebody wrote
+    /// by hand, which is what stops an uninstall from deleting the second.
+    pub fn installations(&self, project: &str, kind: Kind) -> Result<Vec<String>, LedgerError> {
+        let mut statement = self
+            .connection
+            .prepare(
+                "SELECT name FROM installations
+                  WHERE project = ?1 AND kind = ?2 ORDER BY name",
+            )
+            .map_err(|source| self.failed("reading installations", source))?;
+        let rows = statement
+            .query_map(rusqlite::params![project, kind.slug()], |row| row.get(0))
+            .map_err(|source| self.failed("reading installations", source))?;
+        rows.collect::<Result<Vec<String>, _>>()
+            .map_err(|source| self.failed("reading installations", source))
     }
 
     /// Append to the action log.
@@ -629,6 +693,28 @@ CREATE TABLE actions (
 
 CREATE INDEX artifacts_by_name ON artifacts (kind, name);
 CREATE INDEX actions_by_time ON actions (at);
+";
+
+/// The second schema: what has been put into a mind project.
+///
+/// `project` is stored relative to the workspace, the way a registered project
+/// is, so moving the workspace and its projects together keeps the record
+/// true. `source_id` is nulled rather than cascaded when a source is
+/// forgotten: the file is still in the project, and saying "installed, origin
+/// no longer known" is truer than pretending it was never installed.
+const SCHEMA_V2: &str = "
+CREATE TABLE installations (
+    id           INTEGER PRIMARY KEY,
+    project      TEXT    NOT NULL,
+    kind         TEXT    NOT NULL,
+    name         TEXT    NOT NULL,
+    source_id    INTEGER REFERENCES sources(id) ON DELETE SET NULL,
+    path         TEXT    NOT NULL,
+    installed_at INTEGER NOT NULL,
+    UNIQUE (project, kind, name)
+);
+
+CREATE INDEX installations_by_project ON installations (project);
 ";
 
 #[cfg(test)]
