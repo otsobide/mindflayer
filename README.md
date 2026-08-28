@@ -46,16 +46,21 @@ are until the marker file appears.
 
 ## Getting started
 
-From a fresh clone, one command builds the binary and puts it on your PATH:
+From a fresh clone, one command builds both binaries and links them:
 
 ```bash
-make dev/link                  # `mind` and `flayer` now point at target/debug
+make dev/link                  # into ~/.cargo/bin, pointing at target/debug
 ```
 
 They are **symlinks**, not copies, so every later `make build` updates the
 binaries you are running without reinstalling anything. `make dev/unlink` takes
 them back off. If you only want to use the tools rather than work on them,
-`make install` puts real copies in cargo's bin directory instead.
+`make install` puts real copies in the same place.
+
+That place is `~/.cargo/bin`, which is on your PATH if `rustup` put it there
+and is **not** if your Rust came from a system package. `make dev/link` says so
+when it is missing; `BINDIR` is how you point somewhere else, and
+[Development](#development) has the rest.
 
 Then:
 
@@ -110,9 +115,10 @@ rule   git/no-force-push  Never force-push a shared branch
 $ mind list rules                          # narrowed to one kind
 git/no-force-push  Never force-push a shared branch
 
-$ flayer list                              # the workspace above it
+$ flayer list                              # every project it manages
 collapse  skill  commit-style       How this repo writes commit messages
-tanukeys  rule   git/no-force-push  Never force-push a shared branch
+collapse  rule   git/no-force-push  Never force-push a shared branch
+tanukeys  skill  ddd-reviewer       Review a change against the DDD rules
 ```
 
 A column appears only when it tells you something. The kind column is absent
@@ -145,8 +151,8 @@ moved away, which is exactly the entry worth removing.
 
 ```
 $ mind validate
-skill/commit-style: ok
-rule/git/no-force-push: ok
+skill:commit-style: ok
+rule:git/no-force-push: ok
 
 1 skill and 1 rule checked, 0 invalid
 ```
@@ -180,7 +186,8 @@ another one, and `--ref v2` takes a branch or a tag instead of the default.
 Gathering fills the shelf and stops there. **Nothing is written into a mind
 project**: which of these a project should carry is a separate decision, and a
 `git clone` that quietly edited your repositories would be the wrong kind of
-convenient. Installing from the shelf is the next piece of work.
+convenient. [`flayer install`](#installing-into-a-project) is where that
+decision is made.
 
 Run it again and it says what moved, which is the only thing worth reading the
 second time:
@@ -200,9 +207,9 @@ records which came from where.
 
 ```
 $ flayer gather list
-commit-style  https://github.com/acme/skills   How this repo writes commit messages
-commit-style  https://github.com/other/rules   Conventional commits, strictly
-ddd-reviewer  https://github.com/acme/skills   Review a change against the DDD layering rules
+commit-style  https://github.com/acme/skills  How this repo writes commit messages
+commit-style  https://github.com/other/rules  Conventional commits, strictly
+ddd-reviewer  https://github.com/acme/skills  Review a change against the DDD layering rules
 ```
 
 A skill that cannot be read is a warning on stderr and does not stop the ones
@@ -233,14 +240,14 @@ SELECT datetime(at, 'unixepoch'), action, outcome, detail FROM actions;
 ticked where that project already holds the skill:
 
 ```
-┌ Projects ─────────────┐┏ Skills in collapse ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
-│> collapse  (1)        │┃  [x] commit-style  (not installed by mindflayer) ┃
-│  tanukeys             │┃      How this repo writes commits  [acme/skills] ┃
-│                       │┃> [x] deploy  + install                          ┃
-│                       │┃      Ship the service to staging   [acme/skills] ┃
-└───────────────────────┘┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
- ↑↓ skill   space mark   ←/esc back   a apply   q quit
- 1 to install, 0 to remove
+┌ Projects ──────────┐┏ Skills in collapse ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+│> collapse  (1)     │┃  [x] commit-style  (not installed by mindflayer) ┃
+│  tanukeys          │┃      How this repo writes commits  [acme/skills] ┃
+│                    │┃> [x] deploy  + install                           ┃
+│                    │┃      Ship the service to staging   [acme/skills] ┃
+└────────────────────┘┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
+↑↓ skill   space mark   ←/esc back   a apply   q quit
+1 to install, 0 to remove
 ```
 
 Move down the projects and the right column follows. `→` or `enter` goes into
@@ -297,8 +304,8 @@ project's artifacts is not something `init` should do behind your back.
 
 The values are written out even when they are the defaults, so the answer to
 "where do this project's skills go" is in the file rather than in somebody's
-memory. A workspace reads them too, which is how it will know where to put a
-skill it was asked to install.
+memory. A workspace reads them too: it is how `flayer install` knows where a
+skill goes, without ever assuming.
 
 ## What a skill looks like
 
@@ -369,8 +376,11 @@ make dev/watch         # rebuilds on every change; the symlink stays current
 ```
 
 `make dev/watch` needs `cargo-watch` (`cargo install cargo-watch`) and says so
-if it is missing. Note that `make clean` deletes `target/`, which leaves the
-`dev/link` symlink dangling until the next build.
+if it is missing. Watch out for the version of that message which is not about
+being missing at all: `cargo install` puts it in `~/.cargo/bin`, so if that is
+not on your PATH, `make dev/watch` reports it as uninstalled while it sits
+there installed. Note also that `make clean` deletes `target/`, which leaves
+the `dev/link` symlinks dangling until the next build.
 
 `BINDIR` says where the symlinks go, if `~/.cargo/bin` is not where you want
 them:

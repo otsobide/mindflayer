@@ -382,6 +382,19 @@ Mindflayer that writes into a mind project. A skill is copied into the
 directory that project's marker names, which is the whole point of that marker
 carrying one.
 
+### The folder is named twice, on purpose
+
+Gathering keeps the folder name the **source** used. Installing files the copy
+under the name the skill **declares**. That looks inconsistent and is not.
+
+On the shelf, renaming would repair a symptom and hide it: a skill whose
+directory disagrees with its front matter is something `validate` exists to
+report, and the shelf is a record of what a source actually contained. Inside a
+project the same mismatch is not a report, it is a skill that lists fine and
+never loads — the directory name is how an agent finds what it was told to
+invoke. So the copy is filed under the declared name, and the disagreement
+stays where it belongs, upstream.
+
 ### It only manages what it installed
 
 The ledger records every installation against `(project, kind, name)`, and that

@@ -3,7 +3,6 @@
 mod common;
 
 use std::fs;
-use std::path::Path;
 
 use common::{repository, skill, url};
 use mindflayer_core::gather::{self, Request};
@@ -264,7 +263,29 @@ fn a_shelf_entry_whose_files_have_gone_is_named_in_the_error() {
 
 #[test]
 fn the_folder_is_named_after_the_skill_rather_than_after_its_shelf_folder() {
-    let (_dir, workspace, project, ledger) = ready(&["deploy"]);
+    let dir = TempDir::new().unwrap();
+    let (workspace, _) = FlayerWorkspace::init(dir.path()).unwrap();
+    let root = dir.path().join("collapse");
+    fs::create_dir(&root).unwrap();
+    let (project, _) = MindProject::init(&root).unwrap();
+
+    // A source whose folder disagrees with what the skill declares. The shelf
+    // keeps the source's spelling, because renaming on the way in would repair
+    // the symptom and hide it from `validate`.
+    let source = repository(&[(
+        "skills/a-different-folder/SKILL.md",
+        &skill("deploy", "Ship it"),
+    )]);
+    let ledger = workspace.ledger().unwrap();
+    gather::gather(&workspace, &ledger, &Request::git(url(&source))).unwrap();
+
+    let shelved = workspace.root().join(&ledger.gathered().unwrap()[0].path);
+    assert!(
+        shelved.ends_with("a-different-folder"),
+        "the shelf keeps the source's folder: {}",
+        shelved.display()
+    );
+
     let candidates = install::survey(&workspace, &ledger, &project, Kind::Skill).unwrap();
     install::install(
         &workspace,
@@ -274,9 +295,9 @@ fn the_folder_is_named_after_the_skill_rather_than_after_its_shelf_folder() {
     )
     .unwrap();
 
-    // Inside a project a skill's directory has to match its declared name:
-    // that is what `validate` checks and what an agent uses to find it.
-    let installed = installed_at(&project, "deploy");
-    assert!(installed.is_dir());
-    assert!(Path::new(&installed).join("SKILL.md").is_file());
+    // But inside a project a skill's directory has to match its declared name:
+    // that is what `validate` checks and what an agent uses to find it. So the
+    // copy is filed under `deploy`, and the mismatch does not travel.
+    assert!(installed_at(&project, "deploy").join("SKILL.md").is_file());
+    assert!(!installed_at(&project, "a-different-folder").exists());
 }
