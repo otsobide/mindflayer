@@ -375,6 +375,54 @@ A source's shelf folder is stored rather than derived: two URLs can reduce to
 the same readable name, and where a source's files went is a fact about the
 past that must not move when the naming rule changes.
 
+## Installing
+
+Gathering fills the shelf; installing is the other half, and the only thing in
+Mindflayer that writes into a mind project. A skill is copied into the
+directory that project's marker names, which is the whole point of that marker
+carrying one.
+
+### It only manages what it installed
+
+The ledger records every installation against `(project, kind, name)`, and that
+record is what separates a file this tool put there from one somebody wrote. A
+skill present but unrecorded is `Standing::Foreign`, and Foreign is inert in
+both directions: never overwritten, never deleted, and the caller is told so
+rather than obeyed quietly.
+
+Without that, an install screen is a thing that can delete a colleague's work
+because a checkbox looked untidy. The rule costs one query and removes the
+whole class.
+
+A project has one directory per artifact name, so two shelf entries offering
+`commit-style` cannot both be installed. The screen settles it by unticking the
+other rather than letting both apply and the second win — a conflict resolved
+where somebody can see it happening.
+
+### The screen, and why it is three files
+
+`flayer install` is a two-column screen: projects on the left, the shelf as
+seen from the project under the cursor on the right. It is split so that only
+one of its three parts needs a terminal:
+
+- `install/state.rs` — what a key does. Marking a box is a statement of intent
+  and touches nothing; it is a plain state machine a test drives by pressing
+  the keys a person would.
+- `install/ui.rs` — what the screen looks like. Rendered into an in-memory
+  terminal by the tests, so the exact text a user sees is asserted on, the same
+  way every other command's output is.
+- `install.rs` — the loop that reads a real keyboard, and the batch that
+  carries out what was marked. The loop is the only part with no test, and it
+  holds nothing but the loop for that reason.
+
+Everything marked is applied in one batch, and what that batch did is printed
+afterwards as an ordinary `Outcome` — so a report from the screen reads like a
+report from any other command, warnings on stderr and a non-zero exit when
+something was left alone.
+
+`try_init` rather than `init`: this is the one command that needs a terminal,
+and being run without one deserves a sentence rather than a panic.
+
 ## Open questions
 
 - **Precedence between projects.** Two projects in one workspace can declare
@@ -382,11 +430,10 @@ past that must not move when the naming rule changes.
   wins, because nothing here yet has to choose. Whatever resolves it (a
   workspace-level override, an explicit order in `flayer.toml`) belongs in core
   when it exists, not in a front end.
-- **Installing from the shelf.** Gathering puts skills in the workspace and
-  goes no further. `mind install <name>`, or `flayer install <name> --into
-  <project>`, is the other half, and it is where the precedence question above
-  stops being hypothetical: picking one of two identically named skills is
-  exactly what it has to do.
+- **Installing without a screen.** `flayer install` is interactive only, so it
+  cannot run in CI, from a script, or under another agent. The batch it applies
+  is already a plain function over a plan; what is missing is a way to say that
+  plan on a command line.
 - **Creating artifacts.** Nothing writes a `SKILL.md` or a rule from scratch;
   they are added by hand or gathered. `mind add <kind> <name>` is where the
   kinds stop sharing a code path: a skill needs a manifest scaffolded and a

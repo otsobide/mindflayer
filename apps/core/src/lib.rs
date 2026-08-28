@@ -12,8 +12,10 @@
 
 pub mod artifact;
 pub mod catalog;
+pub mod copy;
 pub mod frontmatter;
 pub mod gather;
+pub mod install;
 pub mod kind;
 pub mod ledger;
 pub mod paths;
@@ -24,6 +26,7 @@ pub use artifact::{Artifact, ArtifactError, Declared, ValidationIssue};
 pub use catalog::{Catalog, DiscoveryFailure, Reference, QUALIFIER};
 pub use frontmatter::{Document, FrontMatterError};
 pub use gather::{gather, GatherError, Report, Request, Source, DEFAULT_SUBDIRECTORY};
+pub use install::{install, survey, uninstall, Candidate, InstallError, Standing};
 pub use kind::{Kind, Layout, UnknownKind};
 pub use ledger::{Ledger, LedgerError, SourceKind, LEDGER_FILE};
 pub use skill::{SkillManifest, MAX_DESCRIPTION_LEN, MAX_NAME_SEGMENT_LEN};

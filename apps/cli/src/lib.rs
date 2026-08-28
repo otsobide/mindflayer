@@ -24,6 +24,8 @@ use mindflayer_core::{
 };
 use thiserror::Error;
 
+pub mod install;
+
 /// Manage the agent skills in a mind project.
 //
 // `about` is spelled out rather than taken from the crate description, which
@@ -153,6 +155,9 @@ pub enum FlayerCommand {
     /// Collect artifacts from elsewhere onto this workspace's shelf.
     #[command(subcommand)]
     Gather(GatherCommand),
+
+    /// Put shelf skills into the projects this workspace manages.
+    Install,
 }
 
 /// Where a gather takes artifacts from.
@@ -391,6 +396,12 @@ fn run_flayer(command: &FlayerCommand, directory: &Path) -> Result<Outcome, Fail
         }
 
         FlayerCommand::Gather(command) => run_gather(command, directory),
+
+        FlayerCommand::Install => {
+            let workspace = workspace_here(directory)?;
+            let ledger = workspace.ledger().map_err(CliError::from)?;
+            install::run(&workspace, &ledger)
+        }
 
         FlayerCommand::List { kind } => {
             let (workspace, projects, warnings) = managed(directory)?;
@@ -1059,4 +1070,16 @@ pub enum CliError {
     Gather(#[from] GatherError),
     #[error(transparent)]
     Ledger(#[from] LedgerError),
+    #[error(transparent)]
+    Install(#[from] mindflayer_core::install::InstallError),
+    #[error("`flayer install` needs a terminal to draw on, and this is not one: {source}")]
+    NoTerminal {
+        #[source]
+        source: io::Error,
+    },
+    #[error("the screen could not be drawn: {source}")]
+    Screen {
+        #[source]
+        source: io::Error,
+    },
 }

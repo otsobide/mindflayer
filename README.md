@@ -11,9 +11,9 @@ layout leaves room for a desktop app later without moving the engine.
 
 > **MVP scope.** Mindflayer is being built incrementally. Today it creates the
 > two kinds of directory, registers projects with a workspace, gathers skills
-> from git repositories onto the workspace's shelf, and reads the skills inside
-> the projects. Installing a gathered skill into a project, and creating one
-> from scratch, are the next steps rather than shipped features.
+> from git repositories onto the workspace's shelf, installs them into the
+> projects it manages, and reads the skills inside those projects. Creating a
+> skill from scratch is the next step rather than a shipped feature.
 
 ## The two levels
 
@@ -92,6 +92,7 @@ flayer validate [KIND|NAME]
 
 flayer gather git <URL>    # collect skills from a repository onto the shelf
 flayer gather list         # what is on the shelf, and where each came from
+flayer install             # a screen for putting shelf skills into projects
 
 mind flayer <cmd>          # the long way round; `flayer <cmd>` is the shortcut
 mind ls / flayer ls        # alias for list
@@ -225,6 +226,46 @@ Timestamps are Unix seconds, so `datetime(at, 'unixepoch')` renders them:
 ```sql
 SELECT datetime(at, 'unixepoch'), action, outcome, detail FROM actions;
 ```
+
+## Installing into a project
+
+`flayer install` opens a screen. Projects on the left, the shelf on the right,
+ticked where that project already holds the skill:
+
+```
+┌ Projects ─────────────┐┏ Skills in collapse ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+│> collapse  (1)        │┃  [x] commit-style  (not installed by mindflayer) ┃
+│  tanukeys             │┃      How this repo writes commits  [acme/skills] ┃
+│                       │┃> [x] deploy  + install                          ┃
+│                       │┃      Ship the service to staging   [acme/skills] ┃
+└───────────────────────┘┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
+ ↑↓ skill   space mark   ←/esc back   a apply   q quit
+ 1 to install, 0 to remove
+```
+
+Move down the projects and the right column follows. `→` or `enter` goes into
+the skills, `space` ticks and unticks, `←` or `esc` comes back. Nothing touches
+a file until `a`, which asks first and then does everything at once — installs
+and removals together.
+
+Each project keeps its own ticks, so one pass across the list is one plan for
+the whole workspace. The number beside a project is how many of its boxes you
+have moved.
+
+**Unticking removes.** A skill is copied into the directory that project's
+marker names, and unticking it deletes that directory again. With one
+exception, which is the rule the whole command works by:
+
+> Mindflayer only manages what it installed.
+
+A skill already in the project that Mindflayer did not put there is shown
+ticked and marked `(not installed by mindflayer)`. It cannot be unticked and it
+is never overwritten or deleted — somebody wrote it. The ledger is what knows
+the difference.
+
+Two shelves can offer `commit-style`, but a project has one directory of that
+name, so ticking one unticks the other rather than letting both apply and the
+second win quietly.
 
 ## Where a project keeps its artifacts
 

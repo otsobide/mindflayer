@@ -30,6 +30,7 @@ path = "src/lib.rs"
 mindflayer-core = { path = "../core" }
 clap = { version = "4", features = ["derive"] }
 thiserror = "2"
+ratatui = "0.30.2"
 
 [dev-dependencies]
 gix = { version = "0.87", default-features = false }
