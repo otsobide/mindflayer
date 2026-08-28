@@ -10,9 +10,10 @@ front end is the CLI — `mind` for a project, `flayer` for a workspace — and 
 layout leaves room for a desktop app later without moving the engine.
 
 > **MVP scope.** Mindflayer is being built incrementally. Today it creates the
-> two kinds of directory, registers projects with a workspace, and reads the
-> skills inside them. Creating and moving skills is the next step, not a
-> shipped feature.
+> two kinds of directory, registers projects with a workspace, gathers skills
+> from git repositories onto the workspace's shelf, and reads the skills inside
+> the projects. Installing a gathered skill into a project, and creating one
+> from scratch, are the next steps rather than shipped features.
 
 ## The two levels
 
@@ -85,6 +86,9 @@ flayer list [KIND]         # every artifact across every registered project
 flayer show <NAME>
 flayer validate [KIND|NAME]
 
+flayer gather git <URL>    # collect skills from a repository onto the shelf
+flayer gather list         # what is on the shelf, and where each came from
+
 mind flayer <cmd>          # the long way round; `flayer <cmd>` is the shortcut
 mind ls / flayer ls        # alias for list
 mind -C <dir> ...          # work in <dir> instead of the current directory
@@ -150,6 +154,73 @@ not empty.
 `validate` exits non-zero when anything is wrong, so it works in CI. An
 artifact that cannot be read at all is a warning on stderr and does not hide
 the ones next to it.
+
+## Gathering skills from elsewhere
+
+A workspace has a **shelf**: skills collected from somewhere else, held by the
+workspace and belonging to no project yet.
+
+```
+$ flayer gather git https://github.com/acme/skills
+https://github.com/acme/skills at a1b2c3d
+  added  commit-style  How this repo writes commit messages
+  added  ddd-reviewer  Review a change against the DDD layering rules
+
+2 skills: 2 added, 0 updated, 0 unchanged
+```
+
+The repository's `skills` folder is what gets harvested; `--path agents` takes
+another one, and `--ref v2` takes a branch or a tag instead of the default.
+
+Gathering fills the shelf and stops there. **Nothing is written into a mind
+project**: which of these a project should carry is a separate decision, and a
+`git clone` that quietly edited your repositories would be the wrong kind of
+convenient. Installing from the shelf is the next piece of work.
+
+Run it again and it says what moved, which is the only thing worth reading the
+second time:
+
+```
+$ flayer gather git https://github.com/acme/skills
+https://github.com/acme/skills at 9f8e7d6
+  updated    commit-style  How this repo writes commit messages
+  unchanged  ddd-reviewer  Review a change against the DDD layering rules
+
+2 skills: 0 added, 1 updated, 1 unchanged
+```
+
+Two repositories may both offer `commit-style`, and both are kept: each source
+gets its own folder under `.mindflayer/skills/`, and the workspace's database
+records which came from where.
+
+```
+$ flayer gather list
+commit-style  https://github.com/acme/skills   How this repo writes commit messages
+commit-style  https://github.com/other/rules   Conventional commits, strictly
+ddd-reviewer  https://github.com/acme/skills   Review a change against the DDD layering rules
+```
+
+A skill that cannot be read is a warning on stderr and does not stop the ones
+beside it from being gathered.
+
+### What a workspace keeps
+
+```
+.mindflayer/
+  flayer.toml     the projects it manages
+  mindflayer.db   what was gathered, from where, and every action taken
+  cache/<source>/ the clone, kept so a gather can be looked at afterwards
+  skills/<source>/<name>/SKILL.md
+```
+
+`mindflayer.db` is SQLite, and it is the one thing Mindflayer writes that is
+not meant to be read by hand — it answers questions a file cannot, like which
+of two identically named skills came from which repository, at which revision.
+Timestamps are Unix seconds, so `datetime(at, 'unixepoch')` renders them:
+
+```sql
+SELECT datetime(at, 'unixepoch'), action, outcome, detail FROM actions;
+```
 
 ## What a skill looks like
 
