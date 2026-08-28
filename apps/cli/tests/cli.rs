@@ -1,11 +1,11 @@
 //! The real command surface, driven through the real clap parsers.
 
 use std::fs;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use clap::Parser;
 use mindflayer_cli::{run, run_flayer_cli, Cli, CliError, Failure, FlayerCli, Outcome};
-use mindflayer_core::{Kind, FLAYER_CONFIG, FLAYER_DIR, MIND_CONFIG, MIND_DIR};
+use mindflayer_core::{Kind, MindProject, FLAYER_CONFIG, FLAYER_DIR, MIND_CONFIG, MIND_DIR};
 use tempfile::TempDir;
 
 /// Build an argument line with `-C dir` appended.
@@ -36,11 +36,17 @@ fn flayer(dir: &Path, args: &[&str]) -> Result<Outcome, Failure> {
 }
 
 /// Write a skill into an already initialized mind project.
+/// Where an initialized project keeps a kind, asked of the project itself
+/// rather than assumed, so a test that moves one still writes to the right
+/// place.
+fn directory_for(root: &Path, kind: Kind) -> PathBuf {
+    MindProject::open(root)
+        .expect("an initialized mind project")
+        .directory_for(kind)
+}
+
 fn write_skill(root: &Path, directory: &str, contents: &str) {
-    let dir = root
-        .join(MIND_DIR)
-        .join(Kind::Skill.folder())
-        .join(directory);
+    let dir = directory_for(root, Kind::Skill).join(directory);
     fs::create_dir_all(&dir).expect("create the skill directory");
     fs::write(dir.join("SKILL.md"), contents).expect("write SKILL.md");
 }
@@ -76,7 +82,9 @@ fn mind_init_creates_a_project_and_flayer_init_a_workspace() {
     let two = flayer(workspace.path(), &["init"]).unwrap();
 
     assert!(project.path().join(MIND_DIR).join(MIND_CONFIG).is_file());
-    assert!(project.path().join(MIND_DIR).join("skills").is_dir());
+    // `.mind` is the marker and the configuration; the skills sit beside the
+    // code, where the agents that read them look.
+    assert!(project.path().join("skills").is_dir());
     assert!(!project.path().join(FLAYER_DIR).exists());
     assert!(one.stdout.starts_with("initialized mind project"));
 
@@ -569,7 +577,7 @@ fn each_binary_describes_itself_rather_than_the_crate() {
 
 /// Write a rule into an already initialized mind project.
 fn write_rule(root: &Path, route: &str, contents: &str) {
-    let path = root.join(MIND_DIR).join(Kind::Rule.folder()).join(route);
+    let path = directory_for(root, Kind::Rule).join(route);
     fs::create_dir_all(path.parent().unwrap()).expect("create the rule folder");
     fs::write(path, contents).expect("write the rule");
 }
@@ -586,7 +594,7 @@ fn init_makes_a_folder_for_every_kind() {
 
     for kind in Kind::ALL {
         assert!(
-            dir.path().join(MIND_DIR).join(kind.folder()).is_dir(),
+            dir.path().join(kind.folder()).is_dir(),
             "no folder for {kind}"
         );
     }
@@ -971,4 +979,82 @@ fn gather_list_tells_two_branches_of_one_repository_apart() {
         "{}",
         outcome.stdout
     );
+}
+
+// ---------------------------------------------------------------------------
+// Where a project keeps its artifacts
+// ---------------------------------------------------------------------------
+
+#[test]
+fn init_can_be_told_where_this_project_keeps_its_skills() {
+    let dir = TempDir::new().unwrap();
+
+    let outcome = mind(dir.path(), &["init", "--skills", ".claude/skills"]).unwrap();
+
+    assert!(outcome.ok);
+    assert!(dir.path().join(".claude").join("skills").is_dir());
+    let written = fs::read_to_string(dir.path().join(MIND_DIR).join(MIND_CONFIG)).unwrap();
+    assert!(
+        written.contains(r#"skills = ".claude/skills""#),
+        "{written}"
+    );
+    // The kind that was not mentioned keeps its default.
+    assert!(dir.path().join("rules").is_dir());
+}
+
+#[test]
+fn listing_reads_from_where_the_project_says_its_skills_are() {
+    let dir = TempDir::new().unwrap();
+    mind(dir.path(), &["init", "--skills", ".claude/skills"]).unwrap();
+    write_skill(dir.path(), "deploy", &skill_file("deploy", "Ship it"));
+
+    let outcome = mind(dir.path(), &["list", "skills"]).unwrap();
+
+    assert_eq!(outcome.stdout, "deploy  Ship it\n");
+    // And it really is the configured folder that was read.
+    assert!(dir.path().join(".claude/skills/deploy/SKILL.md").is_file());
+}
+
+#[test]
+fn an_empty_project_says_which_directories_it_looked_in() {
+    let dir = TempDir::new().unwrap();
+    mind(dir.path(), &["init", "--skills", "docs/skills"]).unwrap();
+
+    let outcome = mind(dir.path(), &["list"]).unwrap();
+
+    assert!(outcome.stdout.starts_with("nothing found"));
+    // The configured directory, not the marker: a project that keeps its
+    // skills elsewhere is exactly the one whose empty listing needs explaining.
+    assert!(outcome.stdout.contains("docs/skills"), "{}", outcome.stdout);
+    assert!(outcome.stdout.contains("rules"), "{}", outcome.stdout);
+}
+
+#[test]
+fn init_refuses_a_directory_outside_the_project() {
+    let dir = TempDir::new().unwrap();
+
+    let failure = mind(dir.path(), &["init", "--skills", "../elsewhere"]).unwrap_err();
+
+    assert!(
+        failure.error.to_string().contains("inside the project"),
+        "{}",
+        failure.error
+    );
+    assert!(!dir.path().join(MIND_DIR).exists(), "nothing was made");
+}
+
+#[test]
+fn a_workspace_sees_a_project_that_keeps_its_skills_elsewhere() {
+    let dir = TempDir::new().unwrap();
+    flayer(dir.path(), &["init"]).unwrap();
+    let project = dir.path().join("collapse");
+    fs::create_dir(&project).unwrap();
+    mind(&project, &["init", "--skills", ".claude/skills"]).unwrap();
+    write_skill(&project, "deploy", &skill_file("deploy", "Ship it"));
+    flayer(dir.path(), &["link", "collapse"]).unwrap();
+
+    let outcome = flayer(dir.path(), &["list"]).unwrap();
+
+    // The workspace reads the project's own answer rather than assuming one.
+    assert!(outcome.stdout.contains("deploy"), "{}", outcome.stdout);
 }
