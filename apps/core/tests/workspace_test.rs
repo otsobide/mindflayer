@@ -1,6 +1,7 @@
 //! Creating, finding and reading mind projects and flayer workspaces.
 
 use std::fs;
+use std::path::Path;
 
 use mindflayer_core::workspace::FORMAT_VERSION;
 use mindflayer_core::{
@@ -183,6 +184,30 @@ fn a_stale_reference_is_reported_without_losing_the_rest() {
     assert_eq!(projects.len(), 1);
     assert_eq!(failures.len(), 1);
     assert!(failures[0].to_string().contains("moved-away"));
+}
+
+#[test]
+fn members_keep_the_registry_order_and_the_entry_a_stale_one_came_from() {
+    let dir = TempDir::new().unwrap();
+    FlayerWorkspace::init(dir.path()).unwrap();
+    let root = dir.path().join("alpha");
+    fs::create_dir(&root).unwrap();
+    MindProject::init(&root).unwrap();
+    fs::write(
+        dir.path().join(FLAYER_DIR).join(FLAYER_CONFIG),
+        "version = 1\nname = \"work\"\nprojects = [\"moved-away\", \"alpha\"]\n",
+    )
+    .unwrap();
+
+    let workspace = FlayerWorkspace::open(dir.path()).unwrap();
+    let members = workspace.members();
+
+    let entries: Vec<&Path> = members.iter().map(|m| m.entry.as_path()).collect();
+    assert_eq!(entries, vec![Path::new("moved-away"), Path::new("alpha")]);
+    // The stale one keeps its entry, which is what `unlink` needs to be given.
+    assert!(members[0].project.is_err());
+    assert_eq!(members[0].root, dir.path().join("moved-away"));
+    assert_eq!(members[1].project.as_ref().unwrap().name(), "alpha");
 }
 
 #[test]
@@ -664,4 +689,51 @@ fn a_marker_from_the_future_is_still_refused() {
     let error = MindProject::open(dir.path()).unwrap_err();
 
     assert!(matches!(error, WorkspaceError::Version { .. }), "{error}");
+}
+
+#[test]
+fn with_nothing_above_the_default_workspace_is_made_in_home() {
+    let home = TempDir::new().unwrap();
+    let elsewhere = TempDir::new().unwrap();
+    assert!(FlayerWorkspace::default_at(Some(home.path()))
+        .unwrap()
+        .is_none());
+
+    let workspace = FlayerWorkspace::locate_or_default(elsewhere.path(), Some(home.path()))
+        .unwrap()
+        .expect("the one in home");
+
+    assert!(home.path().join(FLAYER_DIR).join(FLAYER_CONFIG).is_file());
+    assert!(workspace.is_default(Some(home.path())));
+    assert!(!elsewhere.path().join(FLAYER_DIR).exists());
+    // And from then on it is there to be opened without being made.
+    assert!(FlayerWorkspace::default_at(Some(home.path()))
+        .unwrap()
+        .is_some());
+}
+
+#[test]
+fn a_workspace_above_is_used_before_the_default_one() {
+    let home = TempDir::new().unwrap();
+    let dir = TempDir::new().unwrap();
+    FlayerWorkspace::init(dir.path()).unwrap();
+    let below = dir.path().join("deep/er");
+    fs::create_dir_all(&below).unwrap();
+
+    let workspace = FlayerWorkspace::locate_or_default(&below, Some(home.path()))
+        .unwrap()
+        .unwrap();
+
+    assert!(!workspace.is_default(Some(home.path())));
+    assert!(!home.path().join(FLAYER_DIR).exists());
+}
+
+#[test]
+fn with_no_home_there_is_no_default_workspace() {
+    let dir = TempDir::new().unwrap();
+
+    assert!(FlayerWorkspace::locate_or_default(dir.path(), None)
+        .unwrap()
+        .is_none());
+    assert!(FlayerWorkspace::default_at(None).unwrap().is_none());
 }

@@ -54,6 +54,56 @@ fn installed_at(project: &MindProject, name: &str) -> std::path::PathBuf {
 }
 
 #[test]
+fn a_disowned_copy_is_left_to_whoever_has_it_now() {
+    let (dir, _workspace, project, ledger) = ready(&["deploy"]);
+    let mut workspace = FlayerWorkspace::open(dir.path()).unwrap();
+    workspace.link(&project).unwrap();
+    let candidates = install::survey(&workspace, &ledger, &project, Kind::Skill).unwrap();
+    install::install(
+        &workspace,
+        &ledger,
+        &project,
+        candidate(&candidates, "deploy"),
+    )
+    .unwrap();
+
+    assert!(install::disown(&project, Kind::Skill, "deploy").unwrap());
+
+    // Still there, and now it is somebody's: shown, never overwritten or
+    // deleted by unticking it.
+    let after = install::survey(&workspace, &ledger, &project, Kind::Skill).unwrap();
+    assert_eq!(candidate(&after, "deploy").standing, Standing::Foreign);
+    assert_eq!(
+        install::uninstall(&workspace, &ledger, &project, Kind::Skill, "deploy").unwrap(),
+        Removed::Foreign {
+            name: String::from("deploy")
+        }
+    );
+    assert!(installed_at(&project, "deploy").is_dir());
+    assert!(
+        !install::disown(&project, Kind::Skill, "deploy").unwrap(),
+        "nothing left to drop"
+    );
+}
+
+#[test]
+fn disowning_asks_only_a_workspace_that_manages_the_project_and_creates_nothing() {
+    let dir = TempDir::new().unwrap();
+    let (mut workspace, _) = FlayerWorkspace::init(dir.path()).unwrap();
+    let root = dir.path().join("collapse");
+    fs::create_dir(&root).unwrap();
+    let (project, _) = MindProject::init(&root).unwrap();
+
+    assert!(!install::disown(&project, Kind::Skill, "deploy").unwrap());
+    workspace.link(&project).unwrap();
+    assert!(!install::disown(&project, Kind::Skill, "deploy").unwrap());
+
+    // A workspace that never installed anything has no ledger, and looking
+    // must not give it one.
+    assert!(!workspace.ledger_path().exists());
+}
+
+#[test]
 fn the_shelf_is_what_a_project_can_be_offered() {
     let (_dir, workspace, project, ledger) = ready(&["deploy", "commit-style"]);
 
@@ -255,7 +305,10 @@ fn the_log_records_both_directions() {
 fn a_shelf_entry_whose_files_have_gone_is_named_in_the_error() {
     let (_dir, workspace, project, ledger) = ready(&["deploy"]);
     let candidates = install::survey(&workspace, &ledger, &project, Kind::Skill).unwrap();
-    fs::remove_dir_all(workspace.root().join(&candidates[0].gathered.path)).unwrap();
+    let install::Offer::Shelf(gathered) = &candidates[0].offer else {
+        panic!("a gathered skill is offered from the shelf");
+    };
+    fs::remove_dir_all(workspace.root().join(&gathered.path)).unwrap();
 
     let error = install::install(&workspace, &ledger, &project, &candidates[0]).unwrap_err();
 
@@ -279,4 +332,72 @@ fn the_folder_is_named_after_the_skill_rather_than_after_its_shelf_folder() {
     let installed = installed_at(&project, "deploy");
     assert!(installed.is_dir());
     assert!(Path::new(&installed).join("SKILL.md").is_file());
+}
+
+// ---------------------------------------------------------------------------
+// The workspace's own skills, offered beside the shelf
+// ---------------------------------------------------------------------------
+
+/// `ready`, with the project linked and a skill of the workspace's own.
+fn with_own(shelf: &[&str], own: &[&str]) -> (TempDir, FlayerWorkspace, MindProject, Ledger) {
+    let (dir, _, project, ledger) = ready(shelf);
+    let mut workspace = FlayerWorkspace::open(dir.path()).unwrap();
+    workspace.link(&project).unwrap();
+    for name in own {
+        mindflayer_core::create(&workspace.own(), Kind::Skill, name, &format!("Our {name}"))
+            .unwrap();
+    }
+    (dir, workspace, project, ledger)
+}
+
+#[test]
+fn the_workspace_offers_its_own_skills_first_and_installs_them_like_any_other() {
+    let (_dir, workspace, project, ledger) = with_own(&["deploy"], &["commit-style"]);
+
+    let candidates = install::survey(&workspace, &ledger, &project, Kind::Skill).unwrap();
+
+    let offered: Vec<(&str, String)> = candidates
+        .iter()
+        .map(|candidate| (candidate.name(), candidate.origin()))
+        .collect();
+    assert_eq!(offered[0], ("commit-style", String::from("workspace")));
+    assert_eq!(offered.len(), 2);
+
+    install::install(&workspace, &ledger, &project, &candidates[0]).unwrap();
+
+    assert!(installed_at(&project, "commit-style")
+        .join("SKILL.md")
+        .is_file());
+    let again = install::survey(&workspace, &ledger, &project, Kind::Skill).unwrap();
+    assert_eq!(again[0].standing, Standing::Installed);
+}
+
+#[test]
+fn one_name_offered_twice_is_installed_only_from_where_it_is_asked_for() {
+    let (_dir, workspace, project, ledger) = with_own(&["deploy"], &["deploy"]);
+
+    let twice =
+        install::offered(&workspace, &ledger, &project, Kind::Skill, "deploy", None).unwrap_err();
+    let ours = install::offered(
+        &workspace,
+        &ledger,
+        &project,
+        Kind::Skill,
+        "deploy",
+        Some("workspace"),
+    )
+    .unwrap();
+    let nothing =
+        install::offered(&workspace, &ledger, &project, Kind::Skill, "absent", None).unwrap_err();
+
+    assert!(
+        matches!(twice, install::InstallError::OfferedTwice { .. }),
+        "{twice}"
+    );
+    assert!(twice.to_string().contains("--from"), "{twice}");
+    assert_eq!(ours.origin(), "workspace");
+    assert!(
+        matches!(nothing, install::InstallError::NotOffered { .. }),
+        "{nothing}"
+    );
 }
