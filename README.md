@@ -661,12 +661,12 @@ them:
 
 ```bash
 make dev/link BINDIR=~/.local/bin
-make dev/link BINDIR=.          # `./mind` and `./flayer`, right here
+make dev/link BINDIR=.          # `./mind`, `./flayer` and `./mf`, right here
 ```
 
 The repository root is a fine answer if you would rather not put a
-work-in-progress binary on your PATH at all: `.gitignore` already covers both
-names.
+work-in-progress binary on your PATH at all: `.gitignore` already covers all
+three names.
 
 ## License
 
