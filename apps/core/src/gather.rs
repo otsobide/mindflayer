@@ -254,7 +254,7 @@ fn harvest(
         };
         let destination = shelf.join(folder);
 
-        let change = match copy::replace(&directory, &destination) {
+        let change = match copy::replace(&directory, &destination, &clone.root) {
             Ok(change) => change,
             Err(source) => {
                 report.failures.push(Failure::Copy {

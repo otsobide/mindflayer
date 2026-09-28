@@ -8,24 +8,65 @@
 use std::ffi::OsString;
 use std::fs;
 use std::io;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 /// Copy a directory and everything under it.
 ///
-/// A symlink inside is copied as the file it points at: what leaves a clone
-/// has to keep working once that clone is replaced.
-pub fn tree(from: &Path, to: &Path) -> Result<(), io::Error> {
+/// A symlink inside is copied as what it points at — what leaves a clone has
+/// to keep working once that clone is replaced — but only when it points
+/// somewhere inside `within` (the clone a skill was gathered from, the
+/// workspace an installed one comes from) or inside `from` itself. One that
+/// points out of both is refused, not followed, because following it is how a
+/// key in `~/.ssh` or a `.env` ends up copied into a project that is about to
+/// be committed. A link back into a directory already being copied is
+/// refused too, rather than copied until the path is too long.
+pub fn tree(from: &Path, to: &Path, within: &Path) -> Result<(), io::Error> {
+    let bounds = [fs::canonicalize(within)?, fs::canonicalize(from)?];
+    let mut path = Vec::new();
+    copy_tree(from, to, &bounds, &mut path)
+}
+
+fn copy_tree(
+    from: &Path,
+    to: &Path,
+    bounds: &[PathBuf; 2],
+    path: &mut Vec<PathBuf>,
+) -> Result<(), io::Error> {
+    path.push(fs::canonicalize(from)?);
     fs::create_dir_all(to)?;
     for entry in fs::read_dir(from)? {
         let entry = entry?;
         let source = entry.path();
         let target = to.join(entry.file_name());
-        if entry.file_type()?.is_dir() {
-            tree(&source, &target)?;
+        let kind = entry.file_type()?;
+        if kind.is_symlink() {
+            let pointed = fs::canonicalize(&source)?;
+            if !bounds.iter().any(|bound| pointed.starts_with(bound)) {
+                return Err(io::Error::other(format!(
+                    "{} links to {}, outside {}, so it is not copied",
+                    source.display(),
+                    pointed.display(),
+                    bounds[0].display()
+                )));
+            }
+            if pointed.is_dir() {
+                if path.iter().any(|copying| copying.starts_with(&pointed)) {
+                    return Err(io::Error::other(format!(
+                        "{} links back into a directory it is being copied from, so it is not copied",
+                        source.display()
+                    )));
+                }
+                copy_tree(&pointed, &target, bounds, path)?;
+            } else {
+                fs::copy(&pointed, &target)?;
+            }
+        } else if kind.is_dir() {
+            copy_tree(&source, &target, bounds, path)?;
         } else {
             fs::copy(&source, &target)?;
         }
     }
+    path.pop();
     Ok(())
 }
 
@@ -35,17 +76,51 @@ pub fn tree(from: &Path, to: &Path) -> Result<(), io::Error> {
 /// survive as a leftover of an older revision. An identical directory is left
 /// alone entirely, down to its modification times, which is what lets a second
 /// run report what moved rather than reporting everything.
-pub fn replace(from: &Path, to: &Path) -> Result<Change, io::Error> {
-    if !to.exists() {
-        tree(from, to)?;
-        return Ok(Change::Added);
-    }
-    if same(from, to)? {
+///
+/// All or nothing: the copy is made beside `to` and only put in its place
+/// once it is whole, so a copy that fails — a refused link, a full disk —
+/// leaves `to` exactly as it was, and leaves nothing where there was nothing.
+/// `within` bounds the symlinks followed, as for [`tree`].
+pub fn replace(from: &Path, to: &Path, within: &Path) -> Result<Change, io::Error> {
+    let existed = to.exists();
+    if existed && same(from, to)? {
         return Ok(Change::Unchanged);
     }
-    fs::remove_dir_all(to)?;
-    tree(from, to)?;
+    let staging = beside(to, "new");
+    if staging.exists() {
+        fs::remove_dir_all(&staging)?;
+    }
+    if let Err(error) = tree(from, &staging, within) {
+        let _ = fs::remove_dir_all(&staging);
+        return Err(error);
+    }
+    if !existed {
+        fs::rename(&staging, to)?;
+        return Ok(Change::Added);
+    }
+    // Moved aside rather than deleted first, so there is never a moment
+    // with neither the old copy nor the new one in place.
+    let old = beside(to, "old");
+    if old.exists() {
+        fs::remove_dir_all(&old)?;
+    }
+    fs::rename(to, &old)?;
+    if let Err(error) = fs::rename(&staging, to) {
+        let _ = fs::rename(&old, to);
+        let _ = fs::remove_dir_all(&staging);
+        return Err(error);
+    }
+    fs::remove_dir_all(&old)?;
     Ok(Change::Updated)
+}
+
+/// A hidden sibling of `to`, for staging a replacement.
+fn beside(to: &Path, what: &str) -> PathBuf {
+    let name = to
+        .file_name()
+        .map(|name| name.to_string_lossy().into_owned())
+        .unwrap_or_default();
+    to.with_file_name(format!(".{name}.mindflayer-{what}"))
 }
 
 /// What replacing a directory turned out to be.
