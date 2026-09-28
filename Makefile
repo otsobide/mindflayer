@@ -58,24 +58,37 @@ clean: ## Remove build artifacts
 # Both binaries, not just `mind`: `flayer` is a second entry point into the
 # same crate, and half an install is worse than none.
 #
+# `mf` is a short name for `flayer` — the one that manages minds, so `mf init`
+# makes a workspace — linked beside the two: a symlink rather than a third
+# binary, so it cannot be a different version of the same one. Only a link,
+# never a cargo `[[bin]]`: `mf` is METAFONT wherever TeX is installed, and a
+# link is something you asked for on your own machine.
+#
 # "dev" is not in APPS, so these do not collide with the <app>/<target> pattern
 # rules above. BINDIR governs the symlinks; `install` goes wherever cargo puts
 # its binaries.
 # ---------------------------------------------------------------------------
 BINDIR ?= $(HOME)/.cargo/bin
 BINS := mind flayer
+# alias:binary pairs, linked by dev/link and removed by dev/unlink.
+ALIASES := mf:flayer
 
 .PHONY: install
 install: ## Install `mind` and `flayer` as copies in cargo's bin directory
 	cargo install --path apps/cli --locked
 
 .PHONY: dev/link
-dev/link: ## Build, then symlink `mind` and `flayer` into BINDIR
+dev/link: ## Build, then symlink `mind`, `flayer` and `mf` into BINDIR
 	cargo build -p mindflayer-cli
 	@mkdir -p "$(BINDIR)"
 	@for bin in $(BINS); do \
 		ln -sfn "$(CURDIR)/target/debug/$$bin" "$(BINDIR)/$$bin"; \
 		echo "$(BINDIR)/$$bin -> $(CURDIR)/target/debug/$$bin"; \
+	done
+	@for pair in $(ALIASES); do \
+		alias=$${pair%%:*}; bin=$${pair#*:}; \
+		ln -sfn "$(CURDIR)/target/debug/$$bin" "$(BINDIR)/$$alias"; \
+		echo "$(BINDIR)/$$alias -> $(CURDIR)/target/debug/$$bin"; \
 	done
 	@# Whether BINDIR is on PATH, not whether some `mind` is findable: another
 	@# one earlier on the PATH is exactly the case worth warning about.
@@ -86,7 +99,7 @@ dev/link: ## Build, then symlink `mind` and `flayer` into BINDIR
 
 .PHONY: dev/unlink
 dev/unlink: ## Remove the dev/link symlinks (leaves installed copies alone)
-	@for bin in $(BINS); do \
+	@for bin in $(BINS) $(foreach pair,$(ALIASES),$(firstword $(subst :, ,$(pair)))); do \
 		target="$(BINDIR)/$$bin"; \
 		if [ -L "$$target" ]; then \
 			rm "$$target" && echo "removed $$target"; \
