@@ -34,6 +34,10 @@ about an exit code. A wrapper that re-executed `mind` would also have to
 forward arguments, stdio and exit codes correctly, which is three chances to
 get it wrong in exchange for nothing.
 
+The TUI is in the same crate, behind the same parser, rather than a front end
+of its own: it does everything by running these commands. See [the
+TUI](#the-tui).
+
 The line is there so that when a second front end arrives, it cannot disagree
 with the first about what a valid skill is. Every rule that could drift lives
 in one crate, and the front ends only choose how to show its answers.
@@ -135,7 +139,8 @@ meant to be committed: the skills travel with the code they describe.
 A **flayer workspace** carries `.mindflayer` and references the mind projects
 it manages, so their skills can be handled together. It is the level above, and
 it does not have to be a repository at all — the directory your repos happen to
-sit in is the usual case.
+sit in is the usual case. It also holds skills and rules of its own: the ones
+that belong to all of its projects, written once.
 
 Both are identified by a **marker file** (`mind.toml`, `flayer.toml`), not by
 the directory alone. An empty `.mind` left behind by a failed copy is not a
@@ -167,6 +172,52 @@ A workspace is in scope for exactly the projects it was **told** to manage. A
 project that merely sits inside the workspace directory is not one of them
 until it is linked. Guessing from the directory tree would make `flayer list`
 answer a different question after an unrelated `mkdir`.
+
+### Every command, at both levels
+
+What can be done to a project can be done from the workspace, and the other
+way round where it means anything. `flayer add`, `edit`, `rename`, `remove` and
+`templates` act on the workspace's own artifacts, or on one of its projects
+with `-p`; `mind link`, `unlink`, `install` and `uninstall` act on the project
+you are in, against the workspace above it. `flayer list`, `show` and
+`validate` read everything — the workspace's own and every project's — or one
+project with `-p`. Reads look everywhere; a change needs one place, and
+without `-p` that place is the workspace.
+
+There is one implementation of each. `mind add` and `flayer add -p alpha` are
+the same function given the same project, and `flayer add` is that function
+given the workspace's own holder, so the levels differ in what they hold and
+never in the rules. What only has meaning at one level — the shelf, `gather`,
+`scan` — is reachable from the other as `mind flayer <cmd>`, which is the
+command itself rather than a copy of it.
+
+### The workspace's own artifacts
+
+They are held the way a project holds its own: in directories the marker
+names (`[directories]` in `flayer.toml`, `skills` and `rules` beside the
+projects by default), found by the same catalog, created, renamed and removed
+by the same functions. `FlayerWorkspace::own` hands the workspace out as a
+`MindProject`-shaped holder for exactly that reason — everything that touches an
+artifact asks its holder where it is, what it is called and where each kind
+lives, and a workspace answers those as a project does — so there is no second
+copy of any rule to drift.
+
+Unlike a project's, the folders are not made by `flayer init`. A workspace sits
+among other people's repositories, and puts nothing beside them until there is
+something to put: the first artifact added makes its folder.
+
+A project holds what is in its own folders, because that is what its agents
+read; the workspace's artifacts are not inherited out of sight. They reach a
+project by being installed into it — the install screen and `mind install` offer
+them beside the shelf — and are then managed there like anything else
+Mindflayer installed.
+
+When the workspace's root is itself a project it manages, a folder both keep a
+kind in is the project's (`own_kinds`), and a catalog counts each file once
+however many holders can see it: otherwise every artifact there would be listed
+twice. Reports name a workspace's own artifact's holder `workspace`, told by
+where the file sits rather than by the root it was found from, since those two
+share a root.
 
 ### Where a project keeps its artifacts
 
@@ -399,6 +450,79 @@ A project has one directory per artifact name, so two shelf entries offering
 other rather than letting both apply and the second win — a conflict resolved
 where somebody can see it happening.
 
+### Two places offer, one command takes
+
+What can be installed comes from the workspace's own skills, offered first,
+the workspaces it loads (below), and the shelf (`install::Offer`). An installation from the shelf records
+the source it came from; one of the workspace's own records none, because it
+came from nowhere but the workspace.
+
+`mind install <skill>` and `flayer install -p <project> <skill>` install one
+without the screen, through `install::offered`: the one candidate of that name,
+or an error naming every place that offers it when there is more than one —
+`--from` then says which, because which of two lands in the project's one folder
+of that name is not something to guess.
+
+### Loading: a third place, read live
+
+`flayer load <path>` adds a third place that offers: the own artifacts of
+another flayer workspace, `install::Offer::Loaded`, between the workspace's own
+and the shelf. Its entry sits in a `loaded` array in `flayer.toml`, beside
+`projects` and edited the same way (`edit_array`), rather than in the ledger:
+it is configuration a person may read and edit, like the registry, and a load
+must not create a database a workspace that never gathered does not have.
+
+Three decisions shape it:
+
+- **Live, not copied.** An offer points at the artifact where the loaded
+  workspace keeps it, so the next install of it takes whatever is there now.
+  That is the difference from gathering, which snapshots a repository onto the
+  shelf; a loaded workspace is usually one on the same disk that is still
+  being worked on. An installation from it records no source id — like the
+  workspace's own — because there is no shelf row to point at.
+- **One level deep.** Only a loaded workspace's own artifacts are offered,
+  never what it loads, so two workspaces loading each other is not a loop, and
+  what a workspace offers is what its marker names, not a graph.
+- **Into the workspace that is not the source.** Run from inside the workspace
+  being loaded, the first workspace found walking up is that one, and a
+  workspace cannot load itself. `FlayerWorkspace::locate_or_default_except`
+  walks on past it — and past every path given — to the next one, or the
+  default in your home; loading the home workspace from inside it is refused.
+
+A loaded entry's origin is `load:<entry>`: disjoint by construction from
+`workspace` and from any shelf source's address — even a repository gathered
+from the very directory that is also loaded. What `gather list` prints is what
+`--from` takes; `install::resolve_from` also turns the path given to `load`,
+typed from anywhere, into that origin.
+
+A loaded workspace is read live and is usually somebody else's, which puts
+installing's trust in the name a `SKILL.md` declares under strain. So:
+
+- **A name must be one folder name** (`install::is_folder_name`). It is joined
+  onto the project's folder, and replacing starts with deleting: `..` would
+  delete the project, an absolute path anything at all. Such an artifact is
+  not offered from anywhere, and `install`/`uninstall` refuse it outright.
+- **Symlinks are followed only inside where the artifact comes from**
+  (`copy::tree`'s `within`): the loaded workspace, the workspace's own root,
+  the clone being gathered. One pointing out is refused, not copied, because
+  copying it is how a credential ends up in a committed project.
+- **Never one folder onto another it contains.** Equal paths are left alone
+  and recorded as nothing; one inside the other is refused (`Overlaps`).
+- **Never over what a loaded workspace keeps as its own.** A project can be
+  the workspace it loads, sharing a folder; a record from before the load
+  would otherwise let install overwrite, and uninstall delete, that
+  workspace's own work (`KeptByALoad`).
+- **A folder by that name is somebody's, finished or not.** Standing counts
+  any path there, not only one with a manifest, so a folder of notes started
+  by hand is never replaced.
+
+What a load cannot offer — a workspace that has gone, an artifact that cannot
+be read, a name that is refused — is collected by `install::offered_by_loads`
+and said as `warning:` lines wherever offers are shown or used, and the
+install screen reports a row it could not apply and carries on with the rest.
+Two spellings of one loaded directory are one source; `unload_all` and
+`unlink_all` rewrite the marker once, for all of the paths or none.
+
 ### The screen, and why it is three files
 
 `flayer install` is a two-column screen: projects on the left, the shelf as
@@ -423,6 +547,209 @@ something was left alone.
 `try_init` rather than `init`: this is the one command that needs a terminal,
 and being run without one deserves a sentence rather than a panic.
 
+## The TUI
+
+`flayer` on its own opens a screen over the whole workspace. It is not a
+second front end beside the CLI: it lives in the CLI crate, and it **does
+everything by running CLI commands**.
+
+It is at both levels too. The workspace's own artifacts are its first row,
+marked `◆`, and a key on that row runs the `flayer` command where a key on a
+project's row runs `mind -C <project>`: a task carries its holder, and the
+holder decides the level of the line it becomes. `mind` on its own opens the
+same screen on the project it was run in — inside the workspace that manages
+it, where its neighbours and its installs are, or on the project alone when
+none does. Alone, the keys that belong to a workspace say so instead of
+running, and `l` is `mind link`, after which the screen is the workspace's.
+
+### Every change is a command line
+
+A key that asks for work produces a `Task`, and `Task::commands` turns it into
+the words a person would type — `flayer link beta`, `mind -C beta add skill
+deploy 'Ship it'`. Those words are parsed by `Cli` and `FlayerCli`, the parsers
+the binaries use, and run through `run` and `run_flayer_cli`, the functions the
+binaries call. The TUI has no code path of its own for linking, adding or
+gathering, and it cannot grow one, because there is nowhere in it to put one.
+
+That is what turns "every feature has a command and a place in the TUI" from a
+promise into a property. A feature is written once, as a command, and the TUI
+gains it by producing that command's words. A test parses every task's lines —
+free text shaped to break a naive command line included — so a task that could
+not be typed cannot be written.
+
+Two things follow, and both are deliberate:
+
+- **A form shows what it is about to run, as it is typed**, as the command
+  line. The TUI teaches the CLI rather than standing in front of it.
+- **Closing the TUI prints a transcript**: every command that changed
+  something, with what each said. The session can be read afterwards and
+  repeated in a script. Commands that only read — show, validate, the shelf —
+  are left out, because they changed nothing.
+
+A `-C` in those words is relative to the workspace root, which is how someone
+reading the transcript takes it, so it is resolved against the root rather than
+against wherever the process started. A command that opens a screen of its own
+— `flayer`, `flayer tui`, `flayer install` — is refused if it ever reaches that
+path, rather than drawn inside this one.
+
+The exceptions are named, not hidden: the install screen is embedded as it is,
+and applying it is the batch `flayer install` applies; re-reading the disk is
+not a command, because it changes nothing.
+
+### Split three ways, like the install screen
+
+- `tui/state.rs` — what a key does. It moves cursors, fills forms and returns
+  tasks; nothing in it touches a file, so a test drives it with the keys a
+  person presses.
+- `tui/ui.rs` — what the screen looks like, rendered into an in-memory
+  terminal by the tests.
+- `tui.rs` — the loop, reading the disk into what the screen shows, and running
+  tasks. `step` is everything the loop does between a key and the next frame,
+  and it is public so a test can do exactly that without a terminal.
+
+The loop draws a box saying what is running before it runs it, because a
+gather is the network and a frozen screen reads as a hung one. Keys pressed
+while it ran are dropped: they were aimed at a screen that has since changed.
+
+`mind edit` is the one command that needs the terminal itself, because an
+editor draws a screen of its own. For it the loop steps aside — raw mode off,
+back to the normal screen — runs the command as it runs any other, and builds
+its own screen again from scratch when the editor closes. The task says so
+(`takes_terminal`), so the loop does not have to know which commands are
+editors.
+
+### What it asks before it writes
+
+The link form offers what `flayer scan` finds under the workspace. A git
+repository that is not a mind project yet can be picked, but making it one
+writes into it, so `mind init` is asked about, not assumed — and a typed path
+that turns out to be a plain directory is asked about the same way. Unlinking
+asks too, and says that nothing on disk is deleted. A command that fails from a
+form leaves the form open with the reason in it, so a typo is fixed where it
+was made rather than typed out again.
+
+### The minds screen
+
+`m`, or `flayer minds`, lists every project the workspace links, ticked, and
+every one `flayer scan` finds under it that it does not, unticked — in one
+list by path, because the question it answers is "which of these", not "which
+kind". Ticking only marks. Applying turns the marks into lines like any other
+task: `mind -C <path> init` for each repository that is not a project yet, then
+one `flayer link` and one `flayer unlink`, each with every path at once. So the
+screen needed `link` and `unlink` to take several paths, and they take them
+**all or nothing**: every path is checked before any entry is written, so a
+refused one leaves the registry as it was rather than half changed by a
+command that reports failure.
+
+## The default workspace
+
+A workspace is found by walking up, and when nothing up there has one, the
+workspace-level commands fall back to the one at the default home:
+`FlayerWorkspace::locate_or_default` makes `~/.mindflayer` the first time it
+is needed. Home sits above most of what a person works on, so it is the one
+directory where a workspace can manage projects anywhere, and making it on
+demand means `flayer link ~/code/x` works before anyone has chosen a directory.
+
+It is only ever made by something that writes. Asking whether a project is
+managed — `mind` opening its TUI, `mind install` — uses `default_at`, which
+opens the home workspace if it exists and never creates it: reading is no
+reason to put a marker in somebody's home.
+
+Where home is comes from the front end, not from core: `--home`, then
+`$MINDFLAYER_HOME`, then the user's home directory, and empty means there is
+none. Core takes it as a parameter, which keeps it free of the environment and
+is what lets the tests run every command with the fallback switched off.
+
+## Creating and changing artifacts
+
+`mind add` writes the least that passes `validate`: a skill's front matter and
+a heading, a rule's opening line. The name is checked by
+`artifact::name_issues`, the function `validate` itself uses, so a name the tool
+creates is one the tool accepts. The front matter is serialized rather than
+formatted, because a description is free text, and one containing `: ` would
+otherwise be written as YAML that does not parse back into what was typed.
+
+Nothing is written over. A skill's folder is made with `create_dir`, so the
+check that it is not already there and the making of it are one step, and a
+folder that exists but is not a skill counts as there: it is somebody's. What
+was written is read back rather than trusted.
+
+A created artifact is its author's work, so it is not recorded in the ledger.
+To `install` it is foreign: never overwritten by a shelf entry of the same
+name, never removed by unticking one.
+
+### Templates live inside the markers
+
+`.mind/templates/` and `.mindflayer/templates/`, not beside the code: the
+artifacts are beside the code because agents read them, and nothing but
+Mindflayer reads a template. A workspace's templates count for the projects it
+manages, found by walking up, the rule every workspace-wide thing follows; of
+two templates of one kind and name, the closer wins.
+
+A template's front matter keeps whatever it says except `name` and
+`description`, which `mind add` always sets: the template's lines for those
+two are dropped, continuation lines and all, before anything parses the rest —
+so a template may write `name: {{name}}`, which is not YAML anybody could read,
+and still work. The result is parsed back before the first file is written, so
+a template with broken front matter costs nothing but the error.
+
+### Finding what to change
+
+`edit`, `rename` and `remove` find an artifact by what it declares, and then by
+where its name would put it on disk (`lifecycle::find`). The second is what
+lets a skill whose front matter does not parse be opened and fixed: it is left
+out of every listing, and it is the one most in need of opening. Only a name
+that passes the name check is turned into a place, so `../x` cannot reach out
+of the project. More than one match is an error: changing the wrong artifact is
+not something to guess about. The TUI lists unreadable files in the same way,
+by the name their place gives them (`lifecycle::identify`), so they can be
+reached with a key rather than only read about in a warning.
+
+### Rename rewrites one line
+
+A skill's name is in two places, its folder and its front matter, and they have
+to move together or `validate` fails. The front matter is somebody's writing,
+so it is not re-serialized: the one `name:` line is replaced and every other
+byte kept (`frontmatter::with_key`). A name spread over several lines is not
+touched, and neither is a manifest where the replacement would change anything
+but the name — the result is parsed back and compared, field by field, before
+anything is written. The folder moves first and the manifest is replaced
+through a temporary file; if the second fails, the folder moves back.
+
+### Remove is a dry run until it is told
+
+`mind remove` without `--yes` deletes nothing and says what it would have, the
+way `git clean` refuses without `-f`. It is the one command here that cannot be
+taken back, so it is asked for twice: once by naming what, once by saying yes.
+The TUI asks with a question and then runs the command with `--yes`, so the
+transcript shows the yes that was given.
+
+### A record must not outlive the copy it is about
+
+The ledger's record of an installation is what gives the install screen leave
+to overwrite and delete. Remove, rename or edit an installed skill and the copy
+it was about is gone, or is no longer what was installed; a record left behind
+would be inherited by whatever is written there next, and the install screen
+would then delete somebody's work because a box looked untidy. So each of them
+drops the record (`install::disown`), and `mind add` drops any stale one under
+the name it writes. An installed skill that is edited becomes its author's.
+
+## Scanning
+
+`flayer scan` walks down from the workspace root looking for mind projects and
+git repositories, and says which of them the registry already points at. It
+links nothing — a workspace manages what it was told to — it only makes the
+telling easier, which is what the TUI's link form is built on.
+
+The walk is bounded, because a workspace can sit at the top of a home
+directory. It goes three levels down (`repo`, `org/repo`,
+`github.com/org/repo`), breadth first, so a budget of listed folders runs out
+on the deepest rather than on a whole neighbouring tree, and never into hidden
+folders, symlinks, `node_modules` or `target`. A repository is a leaf, since its
+folders are its own — except the workspace root, which is also where the others
+are kept. A scan that runs out of budget says so rather than passing for
+complete.
+
 ## Open questions
 
 - **Precedence between projects.** Two projects in one workspace can declare
@@ -430,14 +757,28 @@ and being run without one deserves a sentence rather than a panic.
   wins, because nothing here yet has to choose. Whatever resolves it (a
   workspace-level override, an explicit order in `flayer.toml`) belongs in core
   when it exists, not in a front end.
-- **Installing without a screen.** `flayer install` is interactive only, so it
-  cannot run in CI, from a script, or under another agent. The batch it applies
-  is already a plain function over a plan; what is missing is a way to say that
-  plan on a command line.
-- **Creating artifacts.** Nothing writes a `SKILL.md` or a rule from scratch;
-  they are added by hand or gathered. `mind add <kind> <name>` is where the
-  kinds stop sharing a code path: a skill needs a manifest scaffolded and a
-  rule needs an empty file.
+- **Replaying the install screen.** One install at a time has a command now,
+  but what the screen applies is a batch, and its transcript line is
+  `flayer install` rather than the `install` and `uninstall` lines it amounts
+  to. Printing the batch as those lines would make a session with the screen in
+  it as repeatable as one without.
+- **Installing rules.** Installing copies a directory, so only skills can be
+  installed — from the shelf, and now from the workspace's own. The workspace's
+  own rules have no way into a project yet; a rule is one file, filed by its
+  route, and copying one means answering where its folders go.
+- **An edited copy that stays managed.** Editing an installed skill makes it
+  its author's, so updates from the shelf stop reaching it — the safe answer,
+  not the best one. A hash of what was installed, kept in the ledger, would let
+  the install screen tell an untouched copy from an edited one, and offer to
+  update the first while leaving the second alone.
+- **Disowning from elsewhere.** `install::disown` finds the workspace by
+  walking up from the project, so a workspace that links the project from
+  somewhere that is not above it keeps its stale record. Every workspace
+  linking a project would have to be findable from the project for that to
+  change.
+- **Long work in the TUI.** A gather holds the screen until it finishes, with a
+  box saying what is running, and cannot be cancelled. A background thread
+  would change that; it has not been needed yet.
 - **Gathering rules.** Only skills are gatherable. A rule is a loose file at any
   depth, so harvesting one means deciding what its name is relative to — the
   same question `Catalog::take_files` answers inside a project, asked of a
