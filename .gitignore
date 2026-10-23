@@ -4,7 +4,9 @@ CLAUDE.md
 .claude/settings.local.json
 
 # `make dev/link BINDIR=.` drops the two binaries here as symlinks into
-# target/, so `./mind` works from a fresh clone without touching your PATH.
-# Anchored, because a rule may legitimately be called `mind` further down.
+# target/, with `mf` beside them for `flayer`, so `./mind` works from a fresh
+# clone without touching your PATH. Anchored, because a rule may
+# legitimately be called `mind` further down.
 /mind
 /flayer
+/mf
