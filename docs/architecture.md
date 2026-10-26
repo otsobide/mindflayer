@@ -710,15 +710,15 @@ taken out a source, the screen is built again from the scrubbed ledger and
 each mark is made again on the row offering the same name from the same
 place, as the row it became one with does; a mark on what only the row that
 went had gathered is a warning and is not carried out. Scrubbing as the screen
-opened would have spared that, and is rejected: opening it is a read. It
-rewrites the
-sources whose URL carries a credential, each clone made from one, and the
-action log. A clone is rewritten before its row, so a clone that cannot be
-rewritten keeps its row tainted and is tried again next time, as a warning;
-what was taken out is a note, said once, since the command did what it was
-asked and an exit code that failed because of a fix would break a script for
-nothing it did. When the URL without credentials is
-already another source's, with the same branch and folder, the two are one
+opened would have spared that, and is rejected: opening it is a read.
+
+The scrub rewrites the sources whose URL carries a credential, each clone made
+from one, and the action log. A clone is rewritten before its row, so a clone
+that cannot be rewritten keeps its row tainted and is tried again next time,
+as a warning; what was taken out is a note, said once, since the command did
+what it was asked and an exit code that failed because of a fix would break a
+script for nothing it did. When the URL without credentials is already
+another source's, with the same branch and folder, the two are one
 place gathered twice and become one row: two rows would offer each skill twice
 under one origin, and SQLite's UNIQUE would refuse the rewrite outright when a
 branch is set. The row kept is the one whose shelf was filled most recently,
@@ -2105,7 +2105,11 @@ leak into the lifecycle code. Unblocks #33, #45, #62, #93, #94 and #95.
   older build can still write a token into the same file. The next ledger
   schema step (the first planned is #30's) changes that, since a build older
   than it refuses the file: the scrub can then run once, as part of that
-  migration, and stop.
+  migration, and stop. A read migrates too ([A read leaves the ledger as it
+  finds it](#a-read-leaves-the-ledger-as-it-finds-it)), so a scrub folded into
+  that step would run on a read as well, rewriting clones as well as the file,
+  and a read would then have to say what it took out, as only a command that
+  writes does now.
 - **A user name on its own in an https URL.** #25 allows a bare user name,
   and its examples are ssh's (`git@host:...`, `ssh://git@host/...`). Only ssh
   keeps one here: over http(s) a user name is refused at gather and taken out
