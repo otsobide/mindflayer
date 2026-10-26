@@ -19,7 +19,7 @@ The root `Makefile` is what CI runs, so prefer it to raw cargo. `make help`
 lists everything.
 
 ```bash
-make test                 # every suite
+make test                 # every Rust suite; the panel's is make web/test
 make fmt/check            # CI runs this first
 make lint                 # clippy --workspace --all-targets
 make run ARGS="flayer list"

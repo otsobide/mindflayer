@@ -873,7 +873,7 @@ A root `Makefile` delegates to each app, and CI invokes the same targets.
 `apps/<app>/Makefile`:
 
 ```bash
-make test              # every suite
+make test              # every Rust suite; the panel's is make web/test
 make build             # debug build of every crate
 make fmt               # cargo fmt --all
 make lint              # clippy across the workspace
