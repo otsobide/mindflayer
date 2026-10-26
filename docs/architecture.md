@@ -915,11 +915,10 @@ command that reports failure.
 ([D-17](#d-17-the-next-front-end-is-a-local-web-panel)): a library crate that
 binds a port, checks who is asking, carries JSON between the browser and a
 front end, and serves the panel's files. No binary runs it yet. `flayer ui`
-(#68) will, over the CLI's backend (#67), and not before the checks on the
-Host, Origin and Fetch Metadata headers (#66) are in. The token keeps other
-processes out; those checks are what keep out other pages in the same
-browser: one on another port of 127.0.0.1, which the browser counts as the
-same site, or one whose DNS name has been rebound to 127.0.0.1.
+(#68) will, over the CLI's backend (#67). The token keeps other processes
+out, and [the guards](#what-keeps-other-pages-out) keep out other pages in
+the same browser: one on another port of 127.0.0.1, which the browser counts
+as the same site, or one whose DNS name has been rebound to 127.0.0.1.
 
 ### Transport only
 
@@ -1003,17 +1002,111 @@ launch link carries it once, as `/?token=...`; that request is answered with
 a 303 to `/` and the token in a cookie, and the redirect is what takes the
 token out of the address bar and the history. The cookie is `HttpOnly`, so the
 panel's own scripts never hold it, and `SameSite=Strict`, so no other site's
-page sends it, though a page on another port is the same site (#66 again). It
-is not `Secure`, which a browser that does not count
-127.0.0.1 as a secure origin would drop. And it is named for the port,
-`mf_<port>`, because cookies are not isolated by port: under one name, a panel
-launched on a second port would overwrite the first one's token in the browser
-and lock it out.
+page sends it, though a page on another port is the same site, which is what
+[the guards](#what-keeps-other-pages-out) are for. It is not `Secure`, which a
+browser that does not count 127.0.0.1 as a secure origin would drop. And it is
+named for the port, `mf_<port>`, because cookies are not isolated by port:
+under one name, a panel launched on a second port would overwrite the first
+one's token in the browser and lock it out.
 
 Scripts and tests send `Authorization: Bearer <token>` instead, and either is
 compared in constant time. Only `/api` asks for it: the panel's files are the
 same for everybody, and a browser that has not been through the link yet still
 needs the page that will tell it so.
+
+### What keeps other pages out
+
+The token stops every other process on the machine. It does not stop another
+page in the browser that holds the cookie, and the panel is opened in a
+browser full of them. Three kinds of page can reach a loopback port, and a
+different check stops each:
+
+- **A remote page**, any site open in another tab. It can make the browser
+  send 127.0.0.1 a GET, a form or a `text/plain` POST without asking, though
+  not read the answer, and the cookie, being `SameSite=Strict`, does not go
+  with it. Where the browser says which page sent it, its Origin is refused
+  before the token is even looked for; where it does not, as on a GET, there
+  is no cookie to stand in for the token.
+- **A rebound name.** A page on `attacker.example` has its DNS answer changed
+  to 127.0.0.1 once it has loaded. To the browser it is still
+  `attacker.example`, so its requests here count as same-origin and the
+  same-origin policy no longer hides the answers from it. It holds neither the
+  cookie, which belongs to `127.0.0.1`, nor the token, so the API would refuse
+  it anyway; but it names `attacker.example:<port>` in Host, and for that
+  every request it makes, the panel's files and the launch link included, is
+  refused before anything else.
+- **Another port on loopback**: a dev server, a notebook, a tool's sign-in
+  callback, anything else listening on 127.0.0.1. Cookies are not isolated by
+  port ([RFC 6265, section 8.5](https://www.rfc-editor.org/rfc/rfc6265#section-8.5)),
+  and `SameSite` counts sites, not origins, so the browser sends `mf_<port>`
+  with that page's requests here. It cannot read the answers, since nothing
+  here grants it CORS, but a change does its harm whether or not anybody
+  reads the reply. That is cross-site request forgery from the same site, and
+  the checks on a change by cookie are for it.
+
+The checks, in the order a request meets them (`src/guard.rs`, and the gate
+in `src/auth.rs`):
+
+1. **Host**, on every request: exactly one Host header, naming
+   `127.0.0.1:<port>`, `localhost:<port>` or `[::1]:<port>` in any case, or a
+   403. The raw header and never `X-Forwarded-Host`, since no proxy stands in
+   front to have forwarded anything. An allow-list of loopback's own names,
+   because a deny-list would have to guess every name an attacker can buy.
+2. **Origin**, on every request that sends one: `http://` and the name in
+   Host, or a 403. That one origin, not any of the three: a page loaded as
+   `localhost` that asks `127.0.0.1` is another origin to the browser, and
+   `null`, from a sandboxed frame or a file, is no origin of the server's.
+   Its absence proves nothing, since a browser leaves it off a same-origin GET
+   and a script off everything.
+3. **The token**, under `/api` only: a 401 without it.
+4. **A change by cookie** — any method but GET and HEAD, on a request whose
+   token came as the cookie — must carry `Sec-Fetch-Site: same-origin` (or a
+   403), `X-Mindflayer: 1` (or a 403) and `Content-Type: application/json`
+   (or a 415). By method rather than by endpoint, so an endpoint added later
+   is covered without being listed; `POST /api/query` is held to it as well,
+   at no cost, because the panel sends every POST alike.
+
+Fetch Metadata answers the third kind of page directly: the browser writes
+`Sec-Fetch-Site` itself, no page can change it, and it says `same-site` for a
+page on another port. Browsers send it only to a potentially trustworthy URL,
+which each of loopback's three names is, and the Host check admits no other.
+The custom header and the JSON body say the same by other means. A page may
+send another origin a form, `text/plain` or multipart unasked, but any other
+content type, or a header of its own, needs a CORS preflight first, which
+nothing here answers, so the request never leaves the browser. Either alone
+would do in a browser that keeps to the rules; both are there for one that
+gets a rule wrong.
+
+A change with no `Sec-Fetch-Site` is taken only with a Bearer token. Chrome,
+Firefox and Safari have all sent the header since 2023, so its absence means
+a script, and a script that belongs here holds the token: the cookie is
+`HttpOnly`, so not even the panel's own scripts can read it, and no page can
+put an `Authorization` header on a request to another origin without the
+preflight it never passes. Of these checks, a Bearer request meets only Host
+and Origin. A browser too old for Fetch Metadata can read the panel but not
+change anything through it, which is the right way round to fail.
+
+So the panel (#69) fetches its own origin, letting the browser send the
+cookie, and sends every POST with `Content-Type: application/json` and
+`X-Mindflayer: 1`.
+
+Every answer carries `Content-Security-Policy: default-src 'self';
+frame-ancestors 'none'` and `X-Content-Type-Options: nosniff`. The policy
+loads nothing from another origin and runs no inline script, so markup that
+reached the page by some mistake, a gathered skill's say, could not bring a
+script with it; `script-src` is left to `default-src` and never allows
+`'unsafe-inline'`. No page can frame the panel to steer a click onto one of
+its buttons. `nosniff` holds the browser to each answer's Content-Type, so a
+page on another port that loads `/api/transcript` with a `<script>` tag has
+it refused rather than run. And there is no CORS layer at all: no answer
+grants another origin anything, and a preflight is never passed.
+
+What another server on loopback can still do is set cookies for 127.0.0.1,
+since cookies are not isolated by port in that direction either. It can
+overwrite `mf_<port>` and lock the panel out until its link is opened again,
+but it cannot learn the token or set a valid one, so the harm stops there. A
+cookie it adds under another path is no worse: the gate takes the token from
+whichever `mf_<port>` holds it.
 
 ### The log
 
@@ -1827,6 +1920,14 @@ leak into the lifecycle code. Unblocks #33, #45, #62, #93, #94 and #95.
   transcript when it closes; the server keeps the panel's in memory and drops
   it when it stops. Whether `flayer ui` prints it on the way out, as the TUI
   does, is for #68 to choose.
+- **A style nonce for the panel.** The policy allows no inline style, so a
+  `<style>` element that a library writes into the page at run time is
+  blocked, as theming and colour-mode helpers often do; style the panel's
+  scripts set through the CSSOM, as Vue's bindings do, is not governed by
+  it. If #69 finds the panel needs one, the server would issue a nonce with
+  each launch, add it to `style-src`, and write it into `index.html` where
+  Vite's `html.cspNonce` leaves its placeholder. `script-src` never gets
+  `'unsafe-inline'` either way.
 - **A run that panics.** A backend that panics while running a task has no
   outcome to record, so the task is not in the transcript, though it may have
   changed something before it stopped. The CLI's commands collect their
