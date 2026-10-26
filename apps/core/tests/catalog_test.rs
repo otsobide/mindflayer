@@ -337,3 +337,46 @@ fn find_spans_the_projects_a_workspace_manages() {
     assert_eq!(matches[0].project_name(), Some("alpha"));
     assert_eq!(matches[1].project_name(), Some("beta"));
 }
+
+#[test]
+fn the_shelf_is_read_source_by_source_and_found_as_it_is_now() {
+    let dir = TempDir::new().unwrap();
+    let (workspace, _) = mindflayer_core::FlayerWorkspace::init(dir.path()).unwrap();
+    let shelf = workspace.gathered_dir(Kind::Skill);
+    for (source, folder, contents) in [
+        ("acme-skills", "deploy", skill_file("deploy")),
+        ("other-rules", "a--b", skill_file("a--b")),
+        ("other-rules", "broken", String::from("no front matter\n")),
+    ] {
+        let skill = shelf.join(source).join(folder);
+        fs::create_dir_all(&skill).unwrap();
+        fs::write(skill.join("SKILL.md"), contents).unwrap();
+    }
+    // A stray file is not a source.
+    fs::write(shelf.join("notes.txt"), "not a source\n").unwrap();
+
+    let catalog = Catalog::discover_gathered(&workspace, &Kind::ALL);
+
+    let names: Vec<&str> = catalog.artifacts().iter().map(|a| a.name()).collect();
+    assert_eq!(names, ["a--b", "deploy"]);
+    assert_eq!(catalog.failures().len(), 1, "{:?}", catalog.failures());
+    let doubled = &catalog.artifacts()[0];
+    assert_eq!(
+        doubled.validate(),
+        vec![ValidationIssue::NameNotKebabCase {
+            segment: "a--b".into()
+        }]
+    );
+    assert!(Catalog::discover_gathered(&workspace, &[Kind::Rule]).is_empty());
+}
+
+#[test]
+fn a_workspace_that_never_gathered_has_an_empty_shelf_and_no_failure() {
+    let dir = TempDir::new().unwrap();
+    let (workspace, _) = mindflayer_core::FlayerWorkspace::init(dir.path()).unwrap();
+
+    let catalog = Catalog::discover_gathered(&workspace, &Kind::ALL);
+
+    assert!(catalog.is_empty());
+    assert!(catalog.failures().is_empty());
+}

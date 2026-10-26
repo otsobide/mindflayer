@@ -9,7 +9,7 @@ use thiserror::Error;
 use crate::artifact::{Artifact, ArtifactError};
 use crate::kind::{Kind, Layout};
 use crate::paths;
-use crate::workspace::MindProject;
+use crate::workspace::{FlayerWorkspace, MindProject};
 
 /// The artifacts discovered across some mind projects, and what went wrong.
 ///
@@ -55,6 +55,45 @@ impl Catalog {
                         catalog.take_files(&root, extension, project.root());
                     }
                 }
+            }
+        }
+
+        catalog.settle();
+        catalog
+    }
+
+    /// What a workspace has gathered onto its shelf, of some kinds.
+    ///
+    /// Read from the shelf's folders rather than from the ledger, the way a
+    /// project is read from its own: what is checked is what is there, so a
+    /// file edited or broken since it was gathered is found as it is now. Each
+    /// source has a folder of its own under the kind's, holding what it
+    /// yielded the way a project's folder holds its skills.
+    pub fn discover_gathered(workspace: &FlayerWorkspace, kinds: &[Kind]) -> Self {
+        let mut catalog = Catalog::default();
+
+        for kind in kinds {
+            // Matched on the kind, like the refusal in `gather`: a third kind
+            // has to say whether it is ever on the shelf.
+            match kind {
+                Kind::Skill => {}
+                Kind::Rule => continue,
+            }
+            let Layout::Directory { manifest } = kind.layout() else {
+                continue;
+            };
+            let Some(mut sources) = catalog.read_dir(&workspace.gathered_dir(*kind)) else {
+                continue;
+            };
+            sources.sort();
+            for source in sources {
+                // Every folder, a dotted one included: the shelf is written
+                // only by gathering, and a source at `./skills` is filed as
+                // `.-skills`.
+                if !source.is_dir() {
+                    continue;
+                }
+                catalog.take_directories(&source, manifest, workspace.root());
             }
         }
 
