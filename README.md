@@ -300,6 +300,10 @@ variable the agent itself reads, then from its folder in your home:
 As with `--home`, set to empty (`--codex-home ""`) there is none, and that
 agent's folder is left alone.
 
+Where each agent reads skills and rules, at project and user scope, and which
+of those facts were checked on the real binaries, is recorded in
+[docs/agents.md](docs/agents.md).
+
 OpenCode itself reads `$OPENCODE_CONFIG_DIR` on top of `~/.config/opencode`
 rather than in its place, by its own documentation. Mindflayer takes one
 folder for each agent for now, the first the table gives; whether a check has
@@ -1015,6 +1019,11 @@ make dev/link BINDIR=.          # `./mind`, `./flayer` and `./mf`, right here
 The repository root is a fine answer if you would rather not put a
 work-in-progress binary on your PATH at all: `.gitignore` already covers all
 three names.
+
+`scripts/agent-probe/probe.sh` checks on the real agents what
+[docs/agents.md](docs/agents.md) records. It runs them against their APIs with
+your own login, in a temp home under `target/` with your real home hidden, so
+neither CI nor `make test` runs it. It needs Linux, `bwrap`, `jq` and `git`.
 
 ## License
 

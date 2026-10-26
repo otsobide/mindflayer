@@ -19,6 +19,10 @@ first of the apps [D-17](#d-17-the-next-front-end-is-a-local-web-panel) adds;
 the web panel it serves comes next, as `apps/web`. Both sit beside the CLI
 rather than around it.
 
+`scripts/agent-probe/` is not an app, and nothing builds or tests it. It is
+the probe behind [docs/agents.md](agents.md), run by hand against the real
+agents with the operator's own login, which is why CI never runs it.
+
 ## Where the line between core and a front end falls
 
 `mindflayer-core` knows what a mind project is, what a flayer workspace is, and
@@ -1717,6 +1721,12 @@ ledger version 2 wrote.
 
 ## The agents' own folders
 
+Which folders each agent reads, for skills and for rules, at project and user
+scope, is recorded in [docs/agents.md](agents.md), each fact either verified
+on the binary by `scripts/agent-probe` or marked docs-only with a fallback.
+A change to an agent path cites it; this section is about how Mindflayer
+finds the agents' own folders, not what the agents do in them.
+
 Checks to come read what an agent reads for every project, not only what a
 project holds: Claude's user memory, Codex's config, OpenCode's configuration
 folder and the skills in `~/.agents` (#44, #91, #96). Those folders come in
@@ -1731,9 +1741,10 @@ the answer as an `AgentHomes` and never resolves one.
 
 For OpenCode that order is a simplification: its documentation reads
 `$OPENCODE_CONFIG_DIR` as a folder loaded on top of `~/.config/opencode`, not
-one that replaces it. Nothing reads either yet, so the simpler shape stands
-until #17 checks the binary; the [open questions](#open-questions) say what
-changes if it is confirmed.
+one that replaces it. Nothing reads either yet, and #17 ran only Claude Code,
+so that reading is still docs-only and the simpler shape stands until a check
+on the binary confirms it; the [open questions](#open-questions) say what
+changes if one does.
 
 Those folder names are core's all the same (`AgentHomes::defaults_under`),
 the way `.mindflayer` is: the CLI finds the user's home and core says which
@@ -1981,10 +1992,12 @@ That gives quiet projects, keeps the team case one flag away, and changes no
 committed team file behind anyone's back. Rejected: always shared, which leaves
 every install for the team to commit; and always local with marked edits to
 tracked files, which puts Mindflayer's block in a team's diffs. It rests on
-agents reading git-ignored files, which none documents and #17 confirms on real
-binaries. Local copies never reach teammates or cloud runs, and reach another
-worktree only for Claude, and only when that worktree has no `.claude/skills`
-of its own. Unblocks #17, #32, #34, #37, #38, #43, #44, #45 and #94.
+agents reading git-ignored files, which none documents. #17 confirmed it on
+Claude Code 2.1.309 for skills, `AGENTS.md`, `.claude/rules` and
+`CLAUDE.local.md`; for Codex and OpenCode it rests on their source, with
+shared mode as the fallback ([docs/agents.md](agents.md)). Local copies never
+reach teammates or cloud runs, and reach another worktree only for Claude, and
+only when that worktree has no `.claude/skills` of its own. Unblocks #17, #32, #34, #37, #38, #43, #44, #45 and #94.
 
 ### D-03: Rules reach every agent through `AGENTS.md`
 
@@ -2004,7 +2017,12 @@ when there is no `CLAUDE.md`; and OpenCode's `instructions` globs with Codex's
 `developer_instructions`, unverified and honoured only in trusted projects.
 Mindflayer never creates a `CLAUDE.local.md`, which silently disables
 `AGENTS.md`, and warns when an `AGENTS.override.md` hides the file from Codex
-or the chain nears Codex's 32 KiB budget. Unblocks #17, #42, #43, #44 and #45.
+or the chain nears Codex's 32 KiB budget. #17 confirmed on Claude Code 2.1.309
+each Claude behaviour this relies on: a `CLAUDE.md` above the git root or a
+`CLAUDE.local.md` stops `AGENTS.md` being read, the user memory file and
+`.claude/rules` do not, the import loads it once, and a rule with `paths:`
+loads only when a matching file is read ([docs/agents.md](agents.md)).
+Unblocks #17, #42, #43, #44 and #45.
 
 ### D-04: An edited copy is detected, not disowned
 
@@ -2072,7 +2090,9 @@ and the Windows CI, survive the hub moving, and keep gathered content
 contained. OpenCode sees the skill twice, which is harmless only while the
 copies are identical, so an install is refused if either target holds foreign
 content. Rejected for now: a relative symlink in `.claude/skills`, which may
-come later as a Unix opt-in if #17 shows Claude loads a symlinked skill once;
+come later as a Unix opt-in, since #17 showed Claude 2.1.309 loads a symlinked
+skill once (its exclude entry has to drop the trailing `/`, because git never
+follows a symlink and sees a file);
 and symlinks into the hub, which break projects when `~/.mindflayer` moves and
 leak its path into repositories. `.codex/skills` and `~/.codex/skills`,
 deprecated or undocumented, are never targeted. Unblocks #17, #28, #34 and #40.
@@ -2482,23 +2502,35 @@ leak into the lifecycle code. Unblocks #33, #45, #62, #93, #94 and #95.
 - **OpenCode's folder and `$XDG_CONFIG_HOME`.** Without
   `$OPENCODE_CONFIG_DIR`, OpenCode's folder is taken to be
   `~/.config/opencode`. Whether OpenCode moves it with `$XDG_CONFIG_HOME`, as
-  programs that follow the XDG base directories do, is unverified. If #17 finds
-  that it does, that variable becomes the step before the default for
-  `--opencode-config-dir`, and tests that spawn a binary clear it too.
+  programs that follow the XDG base directories do, is unverified: #17 ran
+  only Claude Code, and [docs/agents.md](agents.md) lists it as unknown. If a
+  check on the binary finds that it does, that variable becomes the step
+  before the default for `--opencode-config-dir`, and tests that spawn a
+  binary clear it too.
 - **`$OPENCODE_CONFIG_DIR` beside OpenCode's folder, not instead of it.**
   `--opencode-config-dir` takes the variable in place of `~/.config/opencode`,
   as `--codex-home` takes `$CODEX_HOME` in place of `~/.codex`. OpenCode's
   documentation says otherwise: the folder the variable names is loaded after
   the global one and the project's `.opencode`, so it can override their
-  settings, and the global folder is still read. If #17 confirms that on the
-  real binary, a check that reads only one folder misses what OpenCode reads
-  from the other whenever the variable is set, and `AgentHomes` needs both
-  for OpenCode: `~/.config/opencode`, and the variable's folder on top.
+  settings, and the global folder is still read. #17 did not run OpenCode, so
+  that stays docs-only. If a check on the real binary confirms it, a check
+  that reads only one folder misses what OpenCode reads from the other
+  whenever the variable is set, and `AgentHomes` needs both for OpenCode:
+  `~/.config/opencode`, and the variable's folder on top.
 - **An empty agent variable.** An empty `$CLAUDE_CONFIG_DIR`, `$CODEX_HOME` or
   `$OPENCODE_CONFIG_DIR` means no folder at all here, following
   `$MINDFLAYER_HOME`. An agent that reads an empty one as unset uses its
   default instead, and a check would then leave out a folder that agent does
-  read. How each agent reads it is for #17 to record.
+  read. #17 did not settle it: it ran only Claude Code and did not try an
+  empty `$CLAUDE_CONFIG_DIR`, so how each agent reads one is for an addition
+  to `scripts/agent-probe` to record.
+- **Codex and OpenCode on their binaries.** #17 ran only Claude Code, so
+  every Codex and OpenCode fact in [docs/agents.md](agents.md) is docs-only,
+  each with a fallback. Its checks 2 (OpenCode given the same skill in both
+  folders) and 5 (Codex and project trust), and the Codex and OpenCode halves
+  of 1 and 4, are what a `codex.sh` and an `opencode.sh` beside the probe
+  would run, and the place to run them is before #34 and #42 rely on those
+  facts.
 - **A panel built after the server.** A release build embeds what
   `apps/web/dist` held when `mindflayer-server` last compiled, and a debug
   build reads the folder at run time only if it existed then, because

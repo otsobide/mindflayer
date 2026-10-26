@@ -12,6 +12,9 @@ are about to change before changing it, and keep it true afterwards. Its
 "Decisions" section holds what the owner already chose for the roadmap, and the
 one choice still pending: read it before changing a format, installing, MCP,
 credentials or the server, and carry a decision out rather than reopen it.
+`docs/agents.md` records where Claude Code, Codex and OpenCode read skills and
+rules, each fact verified on the binary or docs-only with a fallback: an agent
+path in code cites it, and a change that disagrees with it starts there.
 
 ## Commands
 
