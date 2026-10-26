@@ -762,11 +762,15 @@ Every unit of the product is an app under `apps/`, so adding a front end means
 adding a directory rather than reshaping the tree:
 
 ```
-apps/core   mindflayer-core — projects, workspaces, artifacts.
-                              No I/O beyond files, and git when gathering.
-apps/cli    mindflayer-cli  — the `mind` and `flayer` binaries, and the TUI.
-                              Parsing and rendering only; all of it goes
-                              through one parser.
+apps/core    mindflayer-core   — projects, workspaces, artifacts.
+                                 No I/O beyond files, and git when gathering.
+apps/cli     mindflayer-cli    — the `mind` and `flayer` binaries, and the TUI.
+                                 Parsing and rendering only; all of it goes
+                                 through one parser.
+apps/server  mindflayer-server — the local server behind the web panel, still
+                                 unused by the binaries. Transport only: it
+                                 moves JSON between the browser and a front
+                                 end, and holds no rules.
 ```
 
 See [docs/architecture.md](docs/architecture.md) for why the split is where it
@@ -795,7 +799,8 @@ surface, with what they share in `tests/common/`, and a module's unit tests in
 `src/<module>_test.rs` beside it. No test touches your home: the CLI suites
 run every command with `--home ""`. Nor do they touch your agents' folders,
 which no command reads yet, and the commands they run themselves give every
-agent-home option empty.
+agent-home option empty. The server's suites never leave 127.0.0.1, and run
+against a fake front end rather than the CLI.
 
 ```bash
 cargo test -p mindflayer-cli --test tui_test          # one area
