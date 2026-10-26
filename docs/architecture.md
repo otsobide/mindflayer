@@ -2191,7 +2191,10 @@ comments and trailing commas and nothing more: jsonc-parser's defaults take
 every JSON5 extension (single quotes, bare keys, hexadecimal numbers), which
 the agents' parsers refuse. The text is parsed once without the CST to hold it
 to that, because in 0.34 the CST's own parse lets a comment through
-`allow_comments: false`.
+`allow_comments: false`. Two things no option of its covers are refused in
+JSON by a scan of the text once it has parsed: a control character written as
+itself in a string, and whitespace other than space, tab, LF and CR between
+tokens, both of which `JSON.parse` refuses.
 
 Where a library keeps less than every byte, the module makes up the
 difference, and the tests pin what is left:
