@@ -498,7 +498,8 @@ pub fn install(
     })?;
 
     // A source to point at only for what was gathered: the workspace's own
-    // came from nowhere but the workspace.
+    // came from nowhere but the workspace. The origin says where every offer
+    // came from, those two included, in the one spelling `--from` takes.
     let source_id = match &candidate.offer {
         Offer::Shelf(gathered) => Some(gathered.source.id),
         Offer::Workspace { .. } | Offer::Loaded { .. } => None,
@@ -509,7 +510,7 @@ pub fn install(
             kind,
             name: name.clone(),
             source_id,
-            origin: None,
+            origin: Some(candidate.origin()),
             content_hash: None,
             // One copy, in the folder the project's marker names, which is no
             // one agent's: a copy in each agent's folder is #34's to write.
@@ -767,8 +768,9 @@ fn kept_by_a_load(workspace: &FlayerWorkspace, kind: Kind, path: &Path) -> Optio
 
 /// Whether `candidate` is the copy `project` holds: the same names and bytes
 /// as the folder there. For telling which of two offers of one name is the
-/// one installed, which the ledger does not record for what came from a
-/// workspace rather than the shelf.
+/// one installed, which a record from before schema 3 does not say for what
+/// came from a workspace rather than the shelf, and which an edit since may
+/// have made neither.
 pub fn is_current(
     workspace: &FlayerWorkspace,
     project: &MindProject,

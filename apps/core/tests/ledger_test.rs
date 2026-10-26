@@ -105,6 +105,47 @@ fn text(value: &str) -> Value {
 }
 
 #[test]
+fn an_install_records_where_it_came_from_as_from_takes_it() {
+    let (_dir, workspace, project, ledger) = three_places();
+    let shelf = ledger.gathered().unwrap()[0].source.url.clone();
+
+    for name in ["deploy", "notes", "lint"] {
+        install(&workspace, &ledger, &project, name);
+    }
+
+    let recorded = |name| {
+        ledger
+            .installation("collapse", Kind::Skill, name)
+            .unwrap()
+            .unwrap()
+    };
+    assert_eq!(recorded("deploy").origin, Some(shelf));
+    assert_eq!(
+        recorded("notes").origin.as_deref(),
+        Some(install::WORKSPACE_ORIGIN)
+    );
+    assert_eq!(recorded("lint").origin.as_deref(), Some("load:../team"));
+    // Only what was gathered has a source to point at as well.
+    assert!(recorded("deploy").source_id.is_some());
+    assert_eq!(recorded("notes").source_id, None);
+    assert_eq!(recorded("lint").source_id, None);
+    // And each names, to `--from`, the offer it was installed from.
+    for name in ["deploy", "notes", "lint"] {
+        let origin = recorded(name).origin.unwrap();
+        let offered = install::offered(
+            &workspace,
+            &ledger,
+            &project,
+            Kind::Skill,
+            name,
+            Some(&origin),
+        )
+        .unwrap();
+        assert_eq!(offered.origin(), origin);
+    }
+}
+
+#[test]
 fn a_version_2_ledger_keeps_every_row_it_had() {
     let dir = TempDir::new().unwrap();
     let path = written_at(dir.path(), VERSION_2);
