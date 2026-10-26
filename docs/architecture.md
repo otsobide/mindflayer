@@ -1064,7 +1064,8 @@ in `src/auth.rs`):
    `localhost` that asks `127.0.0.1` is another origin to the browser, and
    `null`, from a sandboxed frame or a file, is no origin of the server's.
    Its absence proves nothing, since a browser leaves it off a same-origin GET
-   and a script off everything.
+   and a script off everything. `flayer ui --dev` (#68) is to accept exactly
+   one more, the panel's dev server's (an [open question](#open-questions)).
 3. **The token**, under `/api` only: a 401 without it.
 4. **A change by cookie** — any method but GET and HEAD, on a request whose
    token came as the cookie — must carry `Sec-Fetch-Site: same-origin` (or a
@@ -1957,6 +1958,18 @@ leak into the lifecycle code. Unblocks #33, #45, #62, #93, #94 and #95.
   Windows answer the whole block, macOS only 127.0.0.1 until an alias is
   added. Either changes the launch #15 validated (127.0.0.1, and a cookie
   named per port), so it is the owner's to choose, or to accept as it is.
+- **The panel's dev server.** #68 gives `flayer ui` a `--dev` flag that also
+  accepts the Vite origin, and #69 has Vite proxy `/api` to `flayer ui --dev
+  --port 7878`. Through that proxy a change arrives with the browser's Origin,
+  the dev server's (`http://127.0.0.1:5173`, say), which the Origin check
+  refuses like every origin but the server's own. The widening meant for it is
+  one exact origin, handed to the server by the front end and accepted only
+  under `--dev`, never a pattern. Host stays checked as it is, so the proxy
+  sets `changeOrigin` and names the server in Host rather than the dev server.
+  Fetch Metadata needs nothing, since the browser sees a same-origin request
+  to the dev server. Nor does the gate while the dev server is opened as
+  127.0.0.1, where the launch link's cookie reaches it whatever its port;
+  opened as `localhost`, it has no cookie to forward.
 - **A run that panics.** A backend that panics while running a task has no
   outcome to record, so the task is not in the transcript, though it may have
   changed something before it stopped. The CLI's commands collect their
