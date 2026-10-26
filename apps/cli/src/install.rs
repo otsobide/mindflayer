@@ -163,6 +163,13 @@ pub fn apply(
                         continue;
                     }
                 };
+                if let Some(reason) = done.unhashed() {
+                    stderr.push(format!(
+                        "warning: {}: {} was recorded without a hash of what it holds: {reason}",
+                        project.name(),
+                        entry.candidate.name()
+                    ));
+                }
                 match done {
                     Installed::Added { name, .. } | Installed::Updated { name, .. } => {
                         installed += 1;

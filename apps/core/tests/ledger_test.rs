@@ -9,7 +9,7 @@ use std::path::{Path, PathBuf};
 use common::{repository, skill, url};
 use mindflayer_core::gather::{self, Request};
 use mindflayer_core::hash;
-use mindflayer_core::install::{self, Offer};
+use mindflayer_core::install::{self, Installed, Offer};
 use mindflayer_core::ledger::{backup_path, InstallRecord, Target, SCHEMA_VERSION};
 use mindflayer_core::{FlayerWorkspace, Kind, Ledger, MindProject, LEDGER_FILE};
 use rusqlite::types::Value;
@@ -192,6 +192,44 @@ fn installing_again_records_the_hash_of_whatever_is_there_now() {
     let copy = project.directory_for(Kind::Skill).join("notes");
     assert_ne!(hash_of(), first);
     assert_eq!(hash_of(), hash::tree(&copy).unwrap());
+}
+
+#[cfg(unix)]
+#[test]
+fn a_copy_that_cannot_be_hashed_is_recorded_without_a_hash_and_said() {
+    let (dir, workspace, project, ledger) = three_places();
+    install(&workspace, &ledger, &project, "notes");
+    // A file in the copy swapped for a link to the same bytes, which
+    // `copy::same` follows, so installing again leaves the copy as it is.
+    let file = project
+        .directory_for(Kind::Skill)
+        .join("notes")
+        .join("SKILL.md");
+    let elsewhere = dir.path().join("SKILL.md");
+    std::fs::rename(&file, &elsewhere).unwrap();
+    std::os::unix::fs::symlink(&elsewhere, &file).unwrap();
+
+    let candidate =
+        install::offered(&workspace, &ledger, &project, Kind::Skill, "notes", None).unwrap();
+    let done = install::install(&workspace, &ledger, &project, &candidate).unwrap();
+
+    assert!(matches!(done, Installed::Unchanged { .. }), "{done:?}");
+    let reason = done.unhashed().unwrap();
+    assert!(reason.contains("neither a file nor a folder"), "{reason}");
+    let recorded = ledger
+        .installation("collapse", Kind::Skill, "notes")
+        .unwrap()
+        .unwrap();
+    assert_eq!(recorded.content_hash, None);
+    let logged = &ledger.history(1).unwrap()[0];
+    assert_eq!(logged.outcome, "ok");
+    assert!(
+        logged
+            .detail
+            .as_deref()
+            .is_some_and(|detail| detail.contains("recorded without a hash")),
+        "{logged:?}"
+    );
 }
 
 #[test]

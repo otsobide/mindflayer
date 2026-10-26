@@ -462,7 +462,11 @@ pub fn install(
     // Nothing is written, and above all nothing is recorded — a record would
     // let `uninstall` delete the loaded workspace's own files.
     if same_place(&from, &to) {
-        return Ok(Installed::Unchanged { name, path: to });
+        return Ok(Installed::Unchanged {
+            name,
+            path: to,
+            unhashed: None,
+        });
     }
     // One inside the other is worse: replacing `to` starts by deleting it,
     // and with it `from` — or copies `from` into itself.
@@ -502,8 +506,13 @@ pub fn install(
     // source may hold links the copy resolved. A copy that cannot be read
     // back is recorded all the same, with no hash, since without a record it
     // would be Foreign for good, and D-04 reads a record with no hash as it
-    // reads one from before hashes were kept.
-    let content_hash = hash::tree(&to).ok();
+    // reads one from before hashes were kept. That is said, in what this
+    // returns and in the log: a copy left as it was can hold a link somebody
+    // put there, which `copy::same` follows and the hash refuses.
+    let (content_hash, unhashed) = match hash::tree(&to) {
+        Ok(hash) => (Some(hash), None),
+        Err(error) => (None, Some(error.to_string())),
+    };
 
     // A source to point at only for what was gathered: the workspace's own
     // came from nowhere but the workspace. The origin says where every offer
@@ -528,13 +537,28 @@ pub fn install(
             }],
         },
     )?;
-    let detail = format!("{name} into {}", project.name());
+    let mut detail = format!("{name} into {}", project.name());
+    if let Some(reason) = &unhashed {
+        detail.push_str(&format!(", recorded without a hash: {reason}"));
+    }
     ledger.log(Action::Install, Some(&entry), Outcome::Ok, Some(&detail))?;
 
     Ok(match change {
-        copy::Change::Added => Installed::Added { name, path: to },
-        copy::Change::Updated => Installed::Updated { name, path: to },
-        copy::Change::Unchanged => Installed::Unchanged { name, path: to },
+        copy::Change::Added => Installed::Added {
+            name,
+            path: to,
+            unhashed,
+        },
+        copy::Change::Updated => Installed::Updated {
+            name,
+            path: to,
+            unhashed,
+        },
+        copy::Change::Unchanged => Installed::Unchanged {
+            name,
+            path: to,
+            unhashed,
+        },
     })
 }
 
@@ -660,24 +684,43 @@ pub(crate) fn disown(
 }
 
 /// What installing one artifact did.
+///
+/// Each that leaves a copy says whether the copy could be hashed
+/// (`unhashed`): one that could not is recorded all the same, and said
+/// rather than recorded quietly, since a record with no hash is read the
+/// way one from before hashes were kept is.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Installed {
     Added {
         name: String,
         path: PathBuf,
+        unhashed: Option<String>,
     },
     Updated {
         name: String,
         path: PathBuf,
+        unhashed: Option<String>,
     },
     Unchanged {
         name: String,
         path: PathBuf,
+        unhashed: Option<String>,
     },
     /// Something of that name is already there and is not ours to replace.
-    Foreign {
-        name: String,
-    },
+    Foreign { name: String },
+}
+
+impl Installed {
+    /// Why the copy could not be hashed, when it could not, so the ledger
+    /// records it with no hash.
+    pub fn unhashed(&self) -> Option<&str> {
+        match self {
+            Installed::Added { unhashed, .. }
+            | Installed::Updated { unhashed, .. }
+            | Installed::Unchanged { unhashed, .. } => unhashed.as_deref(),
+            Installed::Foreign { .. } => None,
+        }
+    }
 }
 
 /// What uninstalling one artifact did.
