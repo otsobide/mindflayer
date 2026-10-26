@@ -217,6 +217,33 @@ fn a_ledger_opened_to_write_keeps_a_write_ahead_log() {
 }
 
 #[test]
+fn a_ledger_a_newer_build_wrote_is_refused_before_its_journal_is_changed() {
+    let dir = TempDir::new().unwrap();
+    let path = dir.path().join(LEDGER_FILE);
+    {
+        let newer = rusqlite::Connection::open(&path).unwrap();
+        newer
+            .query_row("PRAGMA journal_mode = DELETE", [], |row| {
+                row.get::<_, String>(0)
+            })
+            .unwrap();
+        newer.pragma_update(None, "user_version", 99).unwrap();
+    }
+
+    let error = Ledger::open(&path).unwrap_err();
+
+    assert!(
+        matches!(
+            error,
+            mindflayer_core::LedgerError::Version { found: 99, .. }
+        ),
+        "{error:?}"
+    );
+    // The mode is kept in the file's header: switching it is a write.
+    assert_eq!(journal_mode(&path), "delete");
+}
+
+#[test]
 fn a_ledger_opened_to_read_keeps_the_journal_it_had() {
     let dir = TempDir::new().unwrap();
     let path = dir.path().join(LEDGER_FILE);

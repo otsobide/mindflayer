@@ -170,27 +170,33 @@ impl Ledger {
         // "database is locked": the CLI, the TUI and the server can each have
         // the ledger open. rusqlite waits five seconds of its own accord, but
         // as a library's default; set here, the wait is Mindflayer's.
-        //
-        // And write-ahead logging, so that readers and a writer do not wait
-        // for each other at all: a reader goes on reading the ledger as the
-        // last write left it while the next is made. It needs every process
-        // using the file on one machine, sharing memory through
-        // `mindflayer.db-shm`, so a workspace on a network filesystem used
-        // from two machines at once is beyond it, as it is beyond the
-        // workspace lock. Whatever mode SQLite answers with is kept: a
-        // filesystem that cannot keep the log stays in the journal it had,
-        // where readers and writers take turns instead.
         connection
             .busy_timeout(crate::lock::WAIT)
-            .and_then(|()| {
-                connection.pragma_update_and_check(None, "journal_mode", "wal", |_| Ok(()))
-            })
             .map_err(|source| LedgerError::Open {
                 path: path.clone(),
                 source,
             })?;
         let ledger = Self { connection, path };
         ledger.migrate()?;
+        // And write-ahead logging, so that readers and a writer do not wait
+        // for each other at all: a reader goes on reading the ledger as the
+        // last write left it while the next is made. It needs every process
+        // using the file on one machine, sharing memory through
+        // `mindflayer.db-shm`, so a workspace on a network filesystem used
+        // from two machines at once is beyond it, as it is beyond the
+        // workspace lock.
+        //
+        // Only once `migrate` has accepted the version: the mode is kept in
+        // the file's header, so switching first would change a ledger a newer
+        // build wrote before refusing it. And never a reason to refuse the
+        // ledger, since every mode keeps it whole: a filesystem that cannot
+        // keep the log stays in the journal it had, where readers and writers
+        // take turns instead, and a switch that finds another connection
+        // writing fails at once, without the busy wait, because waiting there
+        // could deadlock with it. That one is left to the next open.
+        let _ = ledger
+            .connection
+            .pragma_update_and_check(None, "journal_mode", "wal", |_| Ok(()));
         Ok(ledger)
     }
 
