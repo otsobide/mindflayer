@@ -395,17 +395,59 @@ command itself rather than a copy of it.
 ### The workspace's own artifacts
 
 They are held the way a project holds its own: in directories the marker
-names (`[directories]` in `flayer.toml`, `skills` and `rules` beside the
-projects by default), found by the same catalog, created, renamed and removed
-by the same functions. `FlayerWorkspace::own` hands the workspace out as a
-`MindProject`-shaped holder for exactly that reason — everything that touches an
-artifact asks its holder where it is, what it is called and where each kind
-lives, and a workspace answers those as a project does — so there is no second
-copy of any rule to drift.
+names (`[directories]` in `flayer.toml`), found by the same catalog, created,
+renamed and removed by the same functions. `FlayerWorkspace::own` hands the
+workspace out as a `MindProject`-shaped holder for exactly that reason —
+everything that touches an artifact asks its holder where it is, what it is
+called and where each kind lives, and a workspace answers those as a project
+does — so there is no second copy of any rule to drift.
 
-Unlike a project's, the folders are not made by `flayer init`. A workspace sits
-among other people's repositories, and puts nothing beside them until there is
-something to put: the first artifact added makes its folder.
+Where a project's default is beside the code, a workspace's is its library,
+inside `.mindflayer`
+([D-05](#d-05-a-workspaces-library-lives-in-mindflayer)):
+
+```toml
+[directories]
+skills = ".mindflayer/library/skills"
+rules = ".mindflayer/library/rules"
+```
+
+A project's folders sit where its agents look, because the agents read them.
+A workspace's are read by nothing but Mindflayer, which installs from them,
+and beside the projects, where they used to be, they put instruction-shaped
+files in the directories above projects: `~/skills` and `~/rules`, for the
+workspace in a home directory. No agent scans `.mindflayer`, and a workspace
+that keeps them there is one folder wherever it is made.
+
+`flayer init` spells both lines out, as `mind init` does. A kind the marker
+does not name is in the library too (`Directories::library_for`), never in a
+folder at the root, which for the default workspace is the home directory;
+that is also what lets a kind added later land in every workspace's library,
+whatever its marker says. `own` names those kinds in the holder it hands out,
+since a `MindProject` asked about a kind nobody named answers with a folder
+beside the code.
+
+A workspace made before the library keeps the folders its marker names,
+`skills` and `rules` beside the projects as `flayer init` used to write them,
+and is read exactly as before: the default changed, the format did not, so no
+version moved. Moving them into the library is for #53's `flayer migrate
+--library`, never for a read.
+
+The folders can be anywhere inside the workspace, `.mindflayer` included, but
+where gathering writes. A directory that is the shelf of either kind or the
+cache, is inside one, or holds one, as `.mindflayer` itself does, is refused by
+`flayer init` before anything is made (`WorkspaceError::OverlapsGathered`).
+Gathering replaces and deletes folders there by names of its own, so an
+artifact somebody wrote among them could go with the next gather; and a rules
+folder holding the cache would read every markdown file in every clone as one
+of the workspace's rules. The comparison ignores ASCII case, since on macOS and
+Windows `.Mindflayer/Skills` is the shelf.
+
+Unlike a project's, the folders are not made by `flayer init`, wherever they
+are. A workspace told to keep them beside its repositories puts nothing among
+other people's work until there is something to put, and the library follows
+the same rule rather than a second one: the first artifact added makes its
+folder.
 
 A project holds what is in its own folders, because that is what its agents
 read; the workspace's artifacts are not inherited out of sight. They reach a
@@ -416,9 +458,10 @@ Mindflayer installed.
 When the workspace's root is itself a project it manages, a folder both keep a
 kind in is the project's (`own_kinds`), and a catalog counts each file once
 however many holders can see it: otherwise every artifact there would be listed
-twice. Reports name a workspace's own artifact's holder `workspace`, told by
-where the file sits rather than by the root it was found from, since those two
-share a root.
+twice. With the library, the two share a folder only when a marker says so, as
+an older workspace's does. Reports name a workspace's own artifact's holder
+`workspace`, told by where the file sits rather than by the root it was found
+from, since those two share a root.
 
 ### Where a project keeps its artifacts
 
@@ -1606,9 +1649,16 @@ the workspace `init` would make there, parsed from the same template rather
 than written. That is `flayer list`, `show`, `validate`, `scan`, `templates`,
 `gather list`, and `load` and `install` on their own.
 
+Made, it puts one thing in the home directory, `.mindflayer`. Its own
+artifacts go in its library ([The workspace's own
+artifacts](#the-workspaces-own-artifacts)), so no `~/skills` or `~/rules` sits
+above every project under home, and Mindflayer never writes an `AGENTS.md` or
+a `CLAUDE.md` there.
+
 A read of the unmade workspace answers as a read of one made a moment before
 would, because it is the same marker: `flayer list` says it manages no
-projects yet, `flayer scan` lists what is under home, all of it unlinked,
+projects yet, `flayer show` looks for its own in the library the made one
+keeps them in, `flayer scan` lists what is under home, all of it unlinked,
 `flayer gather list` says nothing is gathered. Then one `hint:` line on stderr
 says the workspace is not made yet and where the first command that writes
 will make it. A hint, not a `warning:`: nothing is wrong with a workspace
@@ -2388,6 +2438,21 @@ leak into the lifecycle code. Unblocks #33, #45, #62, #93, #94 and #95.
   run included. Each could resolve with `Intent::Read` first and make it only
   when it is about to write; whether each should is a choice per command, and
   they were left as writes when the reads stopped making it.
+- **A workspace marker older than its directories.** A `flayer.toml` written
+  before workspaces kept artifacts of their own names no folders, so it now
+  reads them from the library. One that had artifacts added by a build in
+  between, which put them in `skills` and `rules` at its root, stops listing
+  them: they stay where they are, untouched, until `[directories]` names them
+  or #53's migration moves them. That migration could look for those folders
+  wherever a marker names none.
+- **Directories edited into a marker by hand.** Where a holder's directories
+  may be (inside it and, for a workspace, clear of the shelf and the cache) is
+  checked when `init` writes the marker, not each time it is read, so a marker
+  edited afterwards is read as written. Checking on every open would refuse
+  workspaces configured on purpose: one keeping its own skills at its root
+  (`skills = "."`), from which discovery reads nothing in `.mindflayer`, holds
+  the shelf by the same rule. Whether an open should hold a marker to those
+  rules, and what a refusal then says, is still to choose.
 - **Reads from a screen on the unmade default.** The TUI's reads (`v`, `s`,
   and showing an artifact) run from the default workspace's root, as its
   changes do. Before the default is made, with a workspace above home, they
