@@ -1073,7 +1073,7 @@ fn remove_pointing_at(array: &mut toml_edit::Array, root: &Path, target: &Path) 
 
 /// Whether two spellings name one directory: lexically first, then through
 /// the filesystem, so a symlinked spelling of a root is still that root.
-fn same_directory(a: &Path, b: &Path) -> bool {
+pub(crate) fn same_directory(a: &Path, b: &Path) -> bool {
     let (a, b) = (paths::normalize(a), paths::normalize(b));
     a == b
         || matches!(
@@ -1303,7 +1303,7 @@ pub(crate) fn replace_bytes(path: &Path, contents: &[u8]) -> Result<(), (PathBuf
 /// that `..` in place. Every root would then carry it, and two paths naming
 /// one directory would stop comparing equal — which is what `in_project` and
 /// the link deduplication are built on.
-fn absolute(path: &Path) -> Result<PathBuf, WorkspaceError> {
+pub(crate) fn absolute(path: &Path) -> Result<PathBuf, WorkspaceError> {
     let absolute = std::path::absolute(path).map_err(|source| WorkspaceError::Read {
         path: path.to_path_buf(),
         source,
