@@ -324,3 +324,106 @@ fn a_chosen_workspace_is_never_passed_over() {
     assert_eq!(resolved.workspace.root(), fixture.named);
     assert_eq!(resolved.reason, Reason::Explicit);
 }
+
+// ---------------------------------------------------------------------------
+// A project's workspace
+// ---------------------------------------------------------------------------
+
+/// `fixture`, with `collapse`, a project beside the four workspaces rather
+/// than under any of them, linked by `named` and `activated`.
+fn with_a_project() -> (Fixture, MindProject) {
+    let fixture = fixture();
+    let (project, _) = MindProject::init(fixture.named.parent().unwrap().join("collapse")).unwrap();
+    for root in [&fixture.named, &fixture.activated] {
+        FlayerWorkspace::open(root).unwrap().link(&project).unwrap();
+    }
+    (fixture, project)
+}
+
+#[test]
+fn a_project_is_managed_by_a_workspace_chosen_for_it_that_links_it() {
+    // Neither is above the project: chosen, a workspace manages wherever
+    // the projects it links are.
+    let (fixture, project) = with_a_project();
+
+    for (flag, expected) in [
+        (Some(fixture.named.as_path()), &fixture.named),
+        (None, &fixture.activated),
+    ] {
+        let inputs = Inputs {
+            flag,
+            intent: Intent::Write,
+            ..inputs(&fixture)
+        };
+        let workspace = managing(&inputs, &project).unwrap().unwrap();
+        assert_eq!(workspace.root(), expected);
+    }
+}
+
+#[test]
+fn a_project_is_not_managed_by_a_workspace_that_does_not_link_it() {
+    let (fixture, project) = with_a_project();
+    let inputs = Inputs {
+        flag: Some(&fixture.outer),
+        ..inputs(&fixture)
+    };
+
+    let error = managing(&inputs, &project).unwrap_err();
+
+    assert!(
+        matches!(error, ResolveError::NotManaged { ref workspace, .. } if *workspace == fixture.outer),
+        "{error}"
+    );
+}
+
+#[test]
+fn a_projects_workspace_is_resolved_from_the_project_not_from_where_a_command_starts() {
+    let (fixture, project) = with_a_project();
+    let inputs = Inputs {
+        flag: None,
+        activated: None,
+        // Below `outer`, which does not link the project; the project has
+        // no workspace above it, so the default is the one asked.
+        home: Some(&fixture.named),
+        ..inputs(&fixture)
+    };
+
+    let workspace = managing(&inputs, &project).unwrap().unwrap();
+
+    assert_eq!(workspace.root(), fixture.named);
+}
+
+#[test]
+fn a_change_to_a_project_consults_the_workspace_chosen_for_it() {
+    let (fixture, project) = with_a_project();
+    let inputs = Inputs {
+        flag: None,
+        ..inputs(&fixture)
+    };
+
+    let consulted = consulted(&inputs, &project).unwrap().unwrap();
+
+    assert_eq!(consulted.workspace.root(), fixture.activated);
+    assert_eq!(consulted.reason, Reason::Activated);
+}
+
+#[test]
+fn a_change_to_a_project_consults_the_default_only_once_it_is_made() {
+    let (fixture, project) = with_a_project();
+    let dir = TempDir::new().unwrap();
+    let unmade = dir.path().join("you");
+    let inputs = |home| Inputs {
+        flag: None,
+        activated: None,
+        home: Some(home),
+        intent: Intent::Write,
+        ..inputs(&fixture)
+    };
+
+    assert!(consulted(&inputs(&unmade), &project).unwrap().is_none());
+    assert!(!unmade.exists());
+    let made = consulted(&inputs(&fixture.home), &project)
+        .unwrap()
+        .unwrap();
+    assert_eq!(made.reason, Reason::Home);
+}

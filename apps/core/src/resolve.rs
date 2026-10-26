@@ -25,7 +25,8 @@ use std::path::{Path, PathBuf};
 use thiserror::Error;
 
 use crate::workspace::{
-    absolute, same_directory, FlayerWorkspace, WorkspaceError, FLAYER_CONFIG, FLAYER_DIR,
+    absolute, same_directory, FlayerWorkspace, MindProject, WorkspaceError, FLAYER_CONFIG,
+    FLAYER_DIR,
 };
 
 /// What a command means to do with the workspace it is given, which decides
@@ -115,6 +116,13 @@ pub enum ResolveError {
     /// One found by walking up, or the default, could not be read or made.
     #[error(transparent)]
     Workspace(#[from] WorkspaceError),
+    /// The workspace resolved for a project does not link it, so its ledger
+    /// has no say over what is installed there.
+    #[error("{project}: not managed by the workspace at {workspace}")]
+    NotManaged {
+        project: PathBuf,
+        workspace: PathBuf,
+    },
 }
 
 /// The workspace a command uses, and why that one; `None` only when nothing
@@ -178,6 +186,53 @@ pub fn resolve_except(
         workspace,
         reason: Reason::Home,
     }))
+}
+
+/// The workspace that manages `project`: the one whose ledger records what
+/// is installed there. Refused when the workspace resolved does not link the
+/// project; `None` only when there is no workspace at all.
+///
+/// Resolved from the project's root, whatever `inputs` start from: a
+/// project's workspace is the one above the project, not the one above
+/// whichever of its folders a command was run in.
+pub fn managing(
+    inputs: &Inputs<'_>,
+    project: &MindProject,
+) -> Result<Option<FlayerWorkspace>, ResolveError> {
+    let inputs = Inputs {
+        start: project.root(),
+        ..*inputs
+    };
+    let Some(Resolved { workspace, .. }) = resolve(&inputs)? else {
+        return Ok(None);
+    };
+    if !workspace.is_linked(project.root()) {
+        return Err(ResolveError::NotManaged {
+            project: project.root().to_path_buf(),
+            workspace: workspace.root().to_path_buf(),
+        });
+    }
+    Ok(Some(workspace))
+}
+
+/// The workspace a change to `project` consults, to drop the record of
+/// what it changes and to lend it templates: the one resolved from the
+/// project's root, as [`managing`] resolves it, if it has been made.
+///
+/// Never made for the occasion, whatever `inputs` intend. A change to a
+/// project is no reason to write a marker into somebody's home, and a
+/// workspace made just now would hold no record to drop and no template to
+/// offer.
+pub fn consulted(
+    inputs: &Inputs<'_>,
+    project: &MindProject,
+) -> Result<Option<Resolved>, ResolveError> {
+    let inputs = Inputs {
+        start: project.root(),
+        intent: Intent::Read,
+        ..*inputs
+    };
+    Ok(resolve(&inputs)?.filter(|resolved| resolved.workspace.is_made()))
 }
 
 /// The workspace somebody chose on purpose, and how; `None` when nobody did.
