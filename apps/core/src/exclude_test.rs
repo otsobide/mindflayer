@@ -271,6 +271,33 @@ fn a_pattern_that_is_not_one_line_is_refused() {
 }
 
 #[test]
+fn a_pattern_that_would_read_back_as_a_comment_or_a_blank_is_refused() {
+    // An end marker would close the block early and a header would start
+    // another project's group, so the file would no longer read back as what
+    // was meant to be written.
+    let mut file = ExcludeFile::parse(b"").unwrap();
+    for pattern in [
+        "# mindflayer:end",
+        "# mindflayer:begin",
+        "# project b",
+        "#note",
+        "   ",
+    ] {
+        assert!(
+            matches!(
+                file.add("a", &patterns(&["/a/", pattern])),
+                Err(ExcludeError::Pattern { .. })
+            ),
+            "{pattern:?} was accepted"
+        );
+    }
+    assert_eq!(file.to_bytes(), b"");
+
+    // Escaped, a leading `#` is a pattern like any other.
+    assert!(file.add("a", &patterns(&[r"\#notes"])).unwrap());
+}
+
+#[test]
 fn a_project_at_the_root_anchors_its_entries_there() {
     let entry = Entry::directory(".agents/skills/commit-style");
     assert_eq!(

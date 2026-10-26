@@ -635,16 +635,23 @@ fn key_of(line: &Line) -> Option<&[u8]> {
 /// Refuse a key or a pattern that cannot be written as one line of the
 /// block. A line break in either would put a line of its choosing into the
 /// file, and a key with space around it would not read back as itself.
+///
+/// A pattern git reads as blank or as a comment excludes nothing, and inside
+/// the block a comment is structure: `# mindflayer:end` would close the block
+/// early, leaving a file the next read refuses, and `# project b` would hand
+/// the lines after it to another project. [`Entry::pattern`] never writes
+/// one, since its lines start with `/`; this is for patterns handed in raw.
 fn check(key: &str, patterns: &[String]) -> Result<(), ExcludeError> {
     if key.is_empty() || key.trim() != key || key.chars().any(char::is_control) {
         return Err(ExcludeError::Key {
             key: key.to_owned(),
         });
     }
-    if let Some(pattern) = patterns
-        .iter()
-        .find(|pattern| pattern.is_empty() || pattern.chars().any(char::is_control))
-    {
+    if let Some(pattern) = patterns.iter().find(|pattern| {
+        pattern.trim_ascii().is_empty()
+            || pattern.starts_with('#')
+            || pattern.chars().any(char::is_control)
+    }) {
         return Err(ExcludeError::Pattern {
             pattern: pattern.clone(),
         });
@@ -671,7 +678,7 @@ pub enum Malformed {
 pub enum ExcludeError {
     #[error("{key:?} cannot name a group in the exclude file: a key is one line with no space around it")]
     Key { key: String },
-    #[error("{pattern:?} cannot be written as one line of the exclude file")]
+    #[error("{pattern:?} cannot be written in the exclude file: a pattern is one line, neither blank nor a comment")]
     Pattern { pattern: String },
     #[error("{path}: no line of the exclude file can name it, so it cannot be kept out of git")]
     Path { path: PathBuf },
