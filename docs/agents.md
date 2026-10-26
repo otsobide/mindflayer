@@ -56,14 +56,18 @@ agent about each one. It talks to the agent's API with the operator's own
 login, so it is run by hand, never by CI or `make test`.
 
 - **One temp dir.** Everything lives in `target/agent-probe-run`, deleted when
-  the script exits however it exits, the login copy included. The only file
-  taken from the real home is Claude's `.credentials.json`; settings, skills,
-  rules, `CLAUDE.md` and plugins stay out, because they are exactly what must
-  not take part. A login close to expiry is refused, since a refresh inside
-  the run could rotate the refresh token the real session holds.
+  the script exits, on an error or Ctrl-C too, the login copy included. Only a
+  run killed outright (SIGKILL, a crash) cannot clean up: it leaves the temp
+  dir, login copy and all, until the next run deletes it or `make clean`
+  removes `target/`. The only file taken from the real home is Claude's
+  `.credentials.json`; settings, skills, rules, `CLAUDE.md` and plugins stay
+  out, because they are exactly what must not take part. A login close to
+  expiry is refused, since a refresh inside the run could rotate the refresh
+  token the real session holds.
 - **A mount namespace.** The agent starts under bubblewrap, with the real
   home an empty tmpfs, the temp dir mounted at `/mnt/agent-probe`, `/tmp` a
-  private tmpfs and the environment cleared. `HOME`, the `XDG_*_HOME`
+  private tmpfs, the environment cleared and a PID namespace of its own, so
+  nothing the agent started outlives the script. `HOME`, the `XDG_*_HOME`
   variables, `CLAUDE_CONFIG_DIR`, `CODEX_HOME` and `OPENCODE_CONFIG_DIR` all
   point into the temp dir. Pointing the variables away is not enough on its
   own: Codex and OpenCode read `~/.agents/skills` whatever their own variables

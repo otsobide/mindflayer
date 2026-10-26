@@ -20,8 +20,8 @@
 # variable says: Codex and OpenCode read ~/.agents/skills, which on the owner's
 # machine already holds other tools' skills. So pointing CLAUDE_CONFIG_DIR and
 # the rest elsewhere is not enough on its own. The run lives in one temp dir,
-# target/agent-probe-run, deleted when the script exits however it exits, and
-# every agent starts in a bubblewrap mount namespace where:
+# target/agent-probe-run, deleted when the script exits, on an error or Ctrl-C
+# too, and every agent starts in a bubblewrap mount namespace where:
 #
 # - the real home is an empty tmpfs, so nothing in it can be read or written,
 #   whichever way an agent looks for it (HOME, the passwd entry, a path it
@@ -32,7 +32,15 @@
 # - the environment is cleared, so nothing of the session that launched the
 #   script (a Claude Code session sets a dozen CLAUDE_CODE_* variables) reaches
 #   the agent;
-# - /tmp is a private tmpfs, gone when the agent exits.
+# - /tmp is a private tmpfs, gone when the agent exits;
+# - the PID namespace is its own, so whatever the agent started dies with the
+#   script. Without one, --die-with-parent kills only the shell bwrap runs, and
+#   an interrupted run could leave claude calling its API into a temp dir that
+#   was being deleted.
+#
+# Only a run killed outright (SIGKILL, a crash, a power cut) cannot clean up:
+# it leaves the temp dir, credentials copy included, until the next run
+# deletes it or `make clean` removes target/.
 #
 # Mounting the temp dir at /mnt/agent-probe, rather than running it where it
 # sits, is what makes the checks about parent folders possible at all. Claude
@@ -159,6 +167,7 @@ outside() {
 	local args=(
 		--die-with-parent
 		--new-session
+		--unshare-pid
 		--dev-bind / /
 		--tmpfs /tmp
 		--tmpfs "$real_home"
