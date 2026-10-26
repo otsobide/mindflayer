@@ -1,14 +1,63 @@
-//! Opening a ledger an older Mindflayer wrote: what it keeps, what it gains,
-//! and the copy of it left behind.
+//! The ledger: what an install records in it, and opening one an older
+//! Mindflayer wrote — what it keeps, what it gains, and the copy of it left
+//! behind.
+
+mod common;
 
 use std::path::{Path, PathBuf};
 
-use mindflayer_core::install::Offer;
-use mindflayer_core::ledger::{backup_path, SCHEMA_VERSION};
-use mindflayer_core::{FlayerWorkspace, Kind, Ledger, LEDGER_FILE};
+use common::{repository, skill, url};
+use mindflayer_core::gather::{self, Request};
+use mindflayer_core::install::{self, Offer};
+use mindflayer_core::ledger::{backup_path, InstallRecord, Target, SCHEMA_VERSION};
+use mindflayer_core::{FlayerWorkspace, Kind, Ledger, MindProject, LEDGER_FILE};
 use rusqlite::types::Value;
 use rusqlite::Connection;
 use tempfile::TempDir;
+
+/// Under one directory: `target`, a workspace linking `target/collapse`,
+/// keeping `notes` as its own and with `deploy` on its shelf; and `team`, a
+/// workspace `target` loads, keeping `lint` as its own.
+fn three_places() -> (TempDir, FlayerWorkspace, MindProject, Ledger) {
+    let dir = TempDir::new().unwrap();
+    let (mut target, _) = FlayerWorkspace::init(dir.path().join("target")).unwrap();
+    let (project, _) = MindProject::init(dir.path().join("target/collapse")).unwrap();
+    target.link(&project).unwrap();
+    mindflayer_core::create(&target.own(), Kind::Skill, "notes", "How we take notes").unwrap();
+    let (team, _) = FlayerWorkspace::init(dir.path().join("team")).unwrap();
+    mindflayer_core::create(&team.own(), Kind::Skill, "lint", "How we lint").unwrap();
+    target.load(&team).unwrap();
+
+    let source = repository(&[("skills/deploy/SKILL.md", &skill("deploy", "Ship it"))]);
+    let ledger = target.ledger().unwrap();
+    gather::gather(&target, &ledger, &Request::git(url(&source))).unwrap();
+    (dir, target, project, ledger)
+}
+
+/// Install the one thing called `name` that is offered to `project`.
+fn install(workspace: &FlayerWorkspace, ledger: &Ledger, project: &MindProject, name: &str) {
+    let candidate = install::offered(workspace, ledger, project, Kind::Skill, name, None).unwrap();
+    install::install(workspace, ledger, project, &candidate).unwrap();
+}
+
+#[test]
+fn an_install_records_one_copy_at_the_folder_the_project_names() {
+    let (_dir, workspace, project, ledger) = three_places();
+
+    install(&workspace, &ledger, &project, "deploy");
+
+    let recorded = ledger
+        .installation("collapse", Kind::Skill, "deploy")
+        .unwrap()
+        .unwrap();
+    assert_eq!(
+        recorded.targets,
+        [Target {
+            agent: None,
+            path: String::from("skills/deploy"),
+        }]
+    );
+}
 
 /// What schema 2 wrote, dumped from a ledger it made.
 const VERSION_2: &str = include_str!("fixtures/ledger-v2.sql");
@@ -151,6 +200,31 @@ fn a_version_2_installation_from_a_source_gets_the_origin_its_offer_has() {
             "{recorded:?} is not {origin}"
         );
     }
+}
+
+#[test]
+fn a_version_2_installation_reads_back_through_the_ledger() {
+    let dir = TempDir::new().unwrap();
+    let path = written_at(dir.path(), VERSION_2);
+
+    let ledger = Ledger::open(&path).unwrap();
+
+    assert_eq!(
+        ledger
+            .installation("collapse", Kind::Skill, "deploy")
+            .unwrap(),
+        Some(InstallRecord {
+            kind: Kind::Skill,
+            name: String::from("deploy"),
+            source_id: Some(1),
+            origin: Some(String::from("https://github.com/acme/skills#next")),
+            content_hash: None,
+            targets: vec![Target {
+                agent: None,
+                path: String::from("skills/deploy"),
+            }],
+        })
+    );
 }
 
 #[test]

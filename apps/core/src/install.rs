@@ -20,7 +20,7 @@ use crate::artifact::{self, issue_list, Artifact, ArtifactError, ValidationIssue
 use crate::catalog::{Catalog, DiscoveryFailure};
 use crate::copy;
 use crate::kind::{Kind, Layout};
-use crate::ledger::{Action, Gathered, Ledger, LedgerError, Outcome};
+use crate::ledger::{Action, Gathered, InstallRecord, Ledger, LedgerError, Outcome, Target};
 use crate::paths;
 use crate::workspace::{FlayerWorkspace, MindProject, WorkspaceError};
 
@@ -503,7 +503,22 @@ pub fn install(
         Offer::Shelf(gathered) => Some(gathered.source.id),
         Offer::Workspace { .. } | Offer::Loaded { .. } => None,
     };
-    ledger.installed(&entry, kind, &name, source_id, &route(project.root(), &to))?;
+    ledger.installed(
+        &entry,
+        &InstallRecord {
+            kind,
+            name: name.clone(),
+            source_id,
+            origin: None,
+            content_hash: None,
+            // One copy, in the folder the project's marker names, which is no
+            // one agent's: a copy in each agent's folder is #34's to write.
+            targets: vec![Target {
+                agent: None,
+                path: route(project.root(), &to),
+            }],
+        },
+    )?;
     let detail = format!("{name} into {}", project.name());
     ledger.log(Action::Install, Some(&entry), Outcome::Ok, Some(&detail))?;
 

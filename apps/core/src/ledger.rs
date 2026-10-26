@@ -134,6 +134,38 @@ impl Outcome {
     }
 }
 
+/// What the ledger records of one installation into a project: what went
+/// in, from where, and every copy it wrote.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct InstallRecord {
+    pub kind: Kind,
+    pub name: String,
+    /// The shelf source it was copied from, while the ledger still has it;
+    /// `None` for the workspace's own and a loaded workspace's.
+    pub source_id: Option<i64>,
+    /// Where it came from, spelled as `--from` takes it
+    /// ([`crate::install::Offer::origin`]). `None` only in a record from
+    /// before schema 3 of something that came from no source.
+    pub origin: Option<String>,
+    /// [`crate::hash::tree`] of what was written, which every target holds.
+    /// `None` in a record from before schema 3, which D-04 reads as current
+    /// only while the copy matches its offer byte for byte.
+    pub content_hash: Option<String>,
+    /// Every copy it wrote, by path.
+    pub targets: Vec<Target>,
+}
+
+/// One copy an installation wrote.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Target {
+    /// The one agent the copy is for, or `None` for a copy no one agent owns:
+    /// the folder a v2 project's marker names, or `.agents/skills`, which two
+    /// agents read.
+    pub agent: Option<String>,
+    /// Where the copy is, relative to the project, `/` separated.
+    pub path: String,
+}
+
 /// One line of the action log.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Entry {
@@ -556,26 +588,40 @@ impl Ledger {
         Ok(found)
     }
 
-    /// Record that an artifact was put into a project.
+    /// Record that an artifact was put into a project, replacing whatever was
+    /// recorded of it before.
+    ///
+    /// Its targets are replaced as a whole rather than added to: they are the
+    /// copies this install wrote, and a target an earlier install had and this
+    /// one did not is no longer Mindflayer's to overwrite or delete. All of it
+    /// or none, so a record never names some of an install's copies.
     pub fn installed(
         &self,
         project: &str,
-        kind: Kind,
-        name: &str,
-        source_id: Option<i64>,
-        path: &str,
+        installation: &InstallRecord,
     ) -> Result<(), LedgerError> {
         let failed = |source| self.failed("recording an installation", source);
         let transaction = self.connection.unchecked_transaction().map_err(failed)?;
         let id: i64 = transaction
             .query_row(
-                "INSERT INTO installations (project, kind, name, source_id, installed_at)
-                 VALUES (?1, ?2, ?3, ?4, ?5)
+                "INSERT INTO installations
+                     (project, kind, name, source_id, origin, content_hash, installed_at)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
                  ON CONFLICT (project, kind, name) DO UPDATE SET
                      source_id = excluded.source_id,
+                     origin = excluded.origin,
+                     content_hash = excluded.content_hash,
                      installed_at = excluded.installed_at
                  RETURNING id",
-                rusqlite::params![project, kind.slug(), name, source_id, now()],
+                rusqlite::params![
+                    project,
+                    installation.kind.slug(),
+                    installation.name,
+                    installation.source_id,
+                    installation.origin,
+                    installation.content_hash,
+                    now()
+                ],
                 |row| row.get(0),
             )
             .map_err(failed)?;
@@ -585,14 +631,67 @@ impl Ledger {
                 [id],
             )
             .map_err(failed)?;
-        transaction
-            .execute(
-                "INSERT INTO installation_targets (installation_id, agent, path)
-                 VALUES (?1, NULL, ?2)",
-                rusqlite::params![id, path],
+        for target in &installation.targets {
+            transaction
+                .execute(
+                    "INSERT INTO installation_targets (installation_id, agent, path)
+                     VALUES (?1, ?2, ?3)",
+                    rusqlite::params![id, target.agent, target.path],
+                )
+                .map_err(failed)?;
+        }
+        transaction.commit().map_err(failed)
+    }
+
+    /// What the ledger records of installing `name` into a project, if it
+    /// records anything.
+    pub fn installation(
+        &self,
+        project: &str,
+        kind: Kind,
+        name: &str,
+    ) -> Result<Option<InstallRecord>, LedgerError> {
+        let failed = |source| self.failed("reading an installation", source);
+        let Some((id, source_id, origin, content_hash)) = self
+            .connection
+            .query_row(
+                "SELECT id, source_id, origin, content_hash FROM installations
+                  WHERE project = ?1 AND kind = ?2 AND name = ?3",
+                rusqlite::params![project, kind.slug(), name],
+                |row| Ok((row.get::<_, i64>(0)?, row.get(1)?, row.get(2)?, row.get(3)?)),
+            )
+            .optional()
+            .map_err(failed)?
+        else {
+            return Ok(None);
+        };
+
+        let mut statement = self
+            .connection
+            .prepare(
+                "SELECT agent, path FROM installation_targets
+                  WHERE installation_id = ?1 ORDER BY path",
             )
             .map_err(failed)?;
-        transaction.commit().map_err(failed)
+        let targets = statement
+            .query_map([id], |row| {
+                Ok(Target {
+                    agent: row.get(0)?,
+                    path: row.get(1)?,
+                })
+            })
+            .map_err(failed)?
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(failed)?;
+
+        Ok(Some(InstallRecord {
+            kind,
+            name: name.to_owned(),
+            source_id,
+            origin,
+            content_hash,
+            targets,
+        }))
     }
 
     /// Forget an installation, returning whether there was one.

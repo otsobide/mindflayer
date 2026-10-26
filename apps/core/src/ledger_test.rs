@@ -349,3 +349,136 @@ fn the_copy_is_no_more_readable_than_the_ledger() {
         .mode();
     assert_eq!(mode & 0o777, 0o600);
 }
+
+/// An installation of `name` with a copy at each of `targets`.
+fn installation_of(name: &str, targets: &[(Option<&str>, &str)]) -> InstallRecord {
+    InstallRecord {
+        kind: Kind::Skill,
+        name: name.to_owned(),
+        source_id: None,
+        origin: Some(String::from("workspace")),
+        content_hash: Some(String::from("e3b0c442")),
+        targets: targets
+            .iter()
+            .map(|(agent, path)| Target {
+                agent: agent.map(str::to_owned),
+                path: (*path).to_owned(),
+            })
+            .collect(),
+    }
+}
+
+#[test]
+fn an_installation_reads_back_with_every_copy_it_wrote() {
+    let ledger = Ledger::in_memory().unwrap();
+    let written = installation_of(
+        "deploy",
+        &[
+            (Some("claude"), ".claude/skills/deploy"),
+            (None, ".agents/skills/deploy"),
+        ],
+    );
+
+    ledger.installed("collapse", &written).unwrap();
+
+    let read = ledger
+        .installation("collapse", Kind::Skill, "deploy")
+        .unwrap()
+        .unwrap();
+    // By path, whatever order they were written in.
+    assert_eq!(read.targets[0].path, ".agents/skills/deploy");
+    assert_eq!(read.targets[1].path, ".claude/skills/deploy");
+    let mut expected = written;
+    expected.targets.reverse();
+    assert_eq!(read, expected);
+    assert!(ledger
+        .installation("collapse", Kind::Rule, "deploy")
+        .unwrap()
+        .is_none());
+    assert!(ledger
+        .installation("tanukeys", Kind::Skill, "deploy")
+        .unwrap()
+        .is_none());
+}
+
+#[test]
+fn installing_again_replaces_the_copies_recorded_rather_than_adding_to_them() {
+    let ledger = Ledger::in_memory().unwrap();
+    ledger
+        .installed(
+            "collapse",
+            &installation_of(
+                "deploy",
+                &[(None, ".agents/skills/deploy"), (None, "skills/deploy")],
+            ),
+        )
+        .unwrap();
+    let mut again = installation_of("deploy", &[(None, "skills/deploy")]);
+    again.content_hash = Some(String::from("another"));
+
+    ledger.installed("collapse", &again).unwrap();
+
+    assert_eq!(
+        ledger
+            .installation("collapse", Kind::Skill, "deploy")
+            .unwrap(),
+        Some(again)
+    );
+    assert_eq!(
+        ledger.installations("collapse", Kind::Skill).unwrap(),
+        ["deploy"]
+    );
+}
+
+#[test]
+fn a_record_naming_one_copy_twice_is_refused_and_the_old_one_stands() {
+    let ledger = Ledger::in_memory().unwrap();
+    let first = installation_of("deploy", &[(None, "skills/deploy")]);
+    ledger.installed("collapse", &first).unwrap();
+
+    let twice = installation_of(
+        "deploy",
+        &[(Some("claude"), "skills/deploy"), (None, "skills/deploy")],
+    );
+    assert!(ledger.installed("collapse", &twice).is_err());
+
+    assert_eq!(
+        ledger
+            .installation("collapse", Kind::Skill, "deploy")
+            .unwrap(),
+        Some(first)
+    );
+}
+
+#[test]
+fn forgetting_an_installation_forgets_its_copies() {
+    let ledger = Ledger::in_memory().unwrap();
+    ledger
+        .installed(
+            "collapse",
+            &installation_of(
+                "deploy",
+                &[
+                    (None, ".agents/skills/deploy"),
+                    (None, ".claude/skills/deploy"),
+                ],
+            ),
+        )
+        .unwrap();
+
+    assert!(ledger
+        .uninstalled("collapse", Kind::Skill, "deploy")
+        .unwrap());
+
+    assert!(ledger
+        .installation("collapse", Kind::Skill, "deploy")
+        .unwrap()
+        .is_none());
+    let targets: i64 = ledger
+        .connection
+        .query_row("SELECT count(*) FROM installation_targets", [], |row| {
+            row.get(0)
+        })
+        .unwrap();
+    assert_eq!(targets, 0);
+}
