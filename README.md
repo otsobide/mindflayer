@@ -223,9 +223,11 @@ the only things left to check are that its name is usable and that the file is
 not empty. `flayer validate` checks what is on the
 [shelf](#gathering-skills-from-elsewhere) too.
 
-`validate` exits non-zero when anything is wrong, so it works in CI. An
-artifact that cannot be read at all is a warning on stderr and does not hide
-the ones next to it.
+`validate` exits non-zero when anything is wrong, so it works in CI. What an
+agent reads past — a `metadata` entry that is not a string, a `compatibility`
+over 500 characters — is listed as a warning instead, under an artifact that is
+still `ok`. An artifact that cannot be read at all is a warning on stderr and
+does not hide the ones next to it.
 
 ## Gathering skills from elsewhere
 

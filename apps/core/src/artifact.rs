@@ -439,6 +439,34 @@ impl ValidationIssue {
                 | ValidationIssue::DescriptionTooLong { .. }
         )
     }
+
+    /// Whether this is only worth a warning: something an agent reads past,
+    /// so the artifact still works, and `validate` says so without calling it
+    /// invalid.
+    ///
+    /// `compatibility` and `metadata`, the same ones `is_strict` lets through:
+    /// were they invalid, a skill installed with nested metadata would fail
+    /// its project's `validate` from then on, and the only way to clear it
+    /// would be to edit the copy, which stops Mindflayer from updating it.
+    /// Matched in full rather than with `matches!`, so a new issue has to say
+    /// which it is.
+    pub fn is_warning(&self) -> bool {
+        match self {
+            ValidationIssue::CompatibilityEmpty
+            | ValidationIssue::CompatibilityTooLong { .. }
+            | ValidationIssue::CompatibilityNotAString
+            | ValidationIssue::MetadataNotAMap
+            | ValidationIssue::MetadataNotAString { .. }
+            | ValidationIssue::MetadataRepeated { .. } => true,
+            ValidationIssue::NameEmpty
+            | ValidationIssue::NameNotKebabCase { .. }
+            | ValidationIssue::NameSegmentTooLong { .. }
+            | ValidationIssue::NameDirectoryMismatch { .. }
+            | ValidationIssue::DescriptionEmpty
+            | ValidationIssue::DescriptionTooLong { .. }
+            | ValidationIssue::Empty => false,
+        }
+    }
 }
 
 impl fmt::Display for ValidationIssue {

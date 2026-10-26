@@ -11,7 +11,7 @@ use std::path::PathBuf;
 
 use mindflayer_core::{Artifact, Catalog, Declared, FlayerWorkspace, Kind, MindProject, Reference};
 
-use crate::render::{plural, printable, table};
+use crate::render::{plural, printable, table, verdict};
 use crate::{CliError, Failure, Outcome};
 
 /// Which level a command reports at.
@@ -485,16 +485,9 @@ pub(crate) fn validate(
     let mut text = String::new();
     let mut invalid = 0usize;
     for artifact in &artifacts {
-        let issues = artifact.validate();
         let label = label(artifact, qualify, level);
-        if issues.is_empty() {
-            let _ = writeln!(text, "{label}: ok");
-            continue;
-        }
-        invalid += 1;
-        let _ = writeln!(text, "{label}: {}", plural(issues.len(), "problem"));
-        for issue in issues {
-            let _ = writeln!(text, "  - {issue}");
+        if verdict(&mut text, &label, &artifact.validate()) {
+            invalid += 1;
         }
     }
 

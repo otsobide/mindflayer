@@ -102,6 +102,41 @@ fn validate_fails_and_explains_a_broken_skill() {
 }
 
 #[test]
+fn validate_warns_about_what_an_agent_reads_past_without_failing() {
+    // Nested metadata is what a shipping agent writes; a project holding such
+    // a skill, installed or its own, still passes.
+    let dir = TempDir::new().unwrap();
+    mind(dir.path(), &["init"]).unwrap();
+    write_skill(
+        dir.path(),
+        "nested",
+        "---\nname: nested\ndescription: Nested metadata\ncompatibility: [claude-code]\nmetadata:\n  owner:\n    team: ops\n---\n",
+    );
+    write_skill(
+        dir.path(),
+        "worse",
+        "---\nname: worse\ndescription: ''\nmetadata:\n  pinned: true\n---\n",
+    );
+
+    let outcome = mind(dir.path(), &["validate"]).unwrap();
+
+    assert_eq!(
+        outcome.stdout,
+        "nested: ok, 2 warnings\n  \
+         - warning: `compatibility` is not a string, so it is ignored, and left in the file as written\n  \
+         - warning: `metadata` entry `owner` is not a string, so it is ignored, and left in the file as written\n\
+         worse: 1 problem, 1 warning\n  \
+         - `description` is empty\n  \
+         - warning: `metadata` entry `pinned` is not a string, so it is ignored, and left in the file as written\n\
+         \n\
+         2 skills checked, 1 invalid\n"
+    );
+    assert!(!outcome.ok, "`worse` is invalid");
+    let nested = mind(dir.path(), &["validate", "nested"]).unwrap();
+    assert!(nested.ok, "{}", nested.stdout);
+}
+
+#[test]
 fn validate_can_be_pointed_at_one_skill() {
     let dir = TempDir::new().unwrap();
     mind(dir.path(), &["init"]).unwrap();

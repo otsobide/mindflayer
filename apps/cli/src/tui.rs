@@ -500,9 +500,12 @@ fn held(entry: String, root: PathBuf, own: bool, project: &MindProject, kinds: &
             kind: artifact.kind(),
             name: artifact.name().to_owned(),
             summary: artifact.summary().unwrap_or("").to_owned(),
+            // What `validate` would call invalid: a warning is no reason
+            // for a mark.
             issues: artifact
                 .validate()
                 .iter()
+                .filter(|issue| !issue.is_warning())
                 .map(ToString::to_string)
                 .collect(),
             broken: None,

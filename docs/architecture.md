@@ -209,7 +209,13 @@ been a second rule to keep in step with the first.
   shelf is a record of what a source holds, and leaving a skill off it would
   hide the problem along with the skill.
 - **Reported** by `validate`, in full, and at the workspace level for the shelf
-  too, so what gathering warned about can be found again later.
+  too, so what gathering warned about can be found again later. Only a
+  problem makes an artifact invalid and the exit non-zero; what an agent reads
+  past (`ValidationIssue::is_warning`, the same `compatibility` and `metadata`
+  that are not refused) is listed as a warning and leaves the verdict at `ok`.
+  Counted as invalid, a skill installed with nested metadata would fail its
+  project's `validate` from then on, and the only way to clear it would be to
+  edit the copy, which disowns it. The TUI's `✗` follows the same line.
 
 ### Adding a third kind
 

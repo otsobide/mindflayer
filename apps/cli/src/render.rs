@@ -9,7 +9,7 @@ use std::io;
 use std::path::Path;
 use std::process::ExitCode;
 
-use mindflayer_core::{paths, ArtifactError, WorkspaceError};
+use mindflayer_core::{paths, ArtifactError, ValidationIssue, WorkspaceError};
 
 use crate::CliError;
 
@@ -163,6 +163,32 @@ pub(crate) fn printable(text: &str) -> String {
         .collect::<String>()
         .trim()
         .to_owned()
+}
+
+/// What is wrong with one artifact: `label: ok`, or the count after the
+/// label and a line for each thing under it. Whether the artifact is invalid
+/// is returned, so a report can count it and an exit status follow it.
+///
+/// Only a problem makes it invalid. A warning ([`ValidationIssue::is_warning`])
+/// is listed, marked as one, and leaves the verdict at `ok`.
+pub(crate) fn verdict(text: &mut String, label: &str, issues: &[ValidationIssue]) -> bool {
+    let warnings = issues.iter().filter(|issue| issue.is_warning()).count();
+    let problems = issues.len() - warnings;
+    let mut counts = Vec::new();
+    if problems == 0 {
+        counts.push(String::from("ok"));
+    } else {
+        counts.push(plural(problems, "problem"));
+    }
+    if warnings > 0 {
+        counts.push(plural(warnings, "warning"));
+    }
+    let _ = writeln!(text, "{label}: {}", counts.join(", "));
+    for issue in issues {
+        let marked = if issue.is_warning() { "warning: " } else { "" };
+        let _ = writeln!(text, "  - {marked}{issue}");
+    }
+    problems > 0
 }
 
 /// "1 skill", "2 skills".

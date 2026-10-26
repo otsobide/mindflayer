@@ -253,6 +253,39 @@ fn only_the_name_its_folder_and_the_description_are_strict() {
 }
 
 #[test]
+fn only_what_an_agent_reads_past_is_a_warning() {
+    let warnings = [
+        ValidationIssue::CompatibilityEmpty,
+        ValidationIssue::CompatibilityTooLong { length: 501 },
+        ValidationIssue::CompatibilityNotAString,
+        ValidationIssue::MetadataNotAMap,
+        ValidationIssue::MetadataNotAString { key: "k".into() },
+        ValidationIssue::MetadataRepeated { key: "k".into() },
+    ];
+    let problems = [
+        ValidationIssue::NameEmpty,
+        ValidationIssue::NameNotKebabCase {
+            segment: "a--b".into(),
+        },
+        ValidationIssue::NameSegmentTooLong {
+            segment: "a".into(),
+            length: 65,
+        },
+        ValidationIssue::NameDirectoryMismatch {
+            name: "a".into(),
+            directory: "b".into(),
+        },
+        ValidationIssue::DescriptionEmpty,
+        ValidationIssue::DescriptionTooLong { length: 1025 },
+        ValidationIssue::Empty,
+    ];
+    assert!(warnings.iter().all(ValidationIssue::is_warning));
+    assert!(!problems.iter().any(ValidationIssue::is_warning));
+    // What install refuses is never only a warning.
+    assert!(!warnings.iter().any(ValidationIssue::is_strict));
+}
+
+#[test]
 fn the_strict_rules_are_asked_of_the_folder_a_skill_is_about_to_be_filed_in() {
     let artifact = skill("ship", "Ship it", "/shelf/source/deploy");
     let manifest = artifact.manifest().unwrap();
