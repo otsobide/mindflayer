@@ -250,26 +250,26 @@ fn run_flayer(
             project,
             name,
             from,
-        } => {
-            let workspace = workspace_here(directory, home)?;
-            match (name, project) {
-                (None, None) => {
-                    let ledger = workspace.ledger().map_err(CliError::from)?;
-                    crate::install::run(&workspace, &ledger)
-                }
-                (Some(name), Some(project)) => install_named(
+        } => match (name, project) {
+            // The screen reads until something on it is applied, so it is
+            // opened the way a read is: on the default workspace before it
+            // is made too, which manages nothing to install into.
+            (None, None) => reading_workspace(directory, home, crate::install::run),
+            (Some(name), Some(project)) => {
+                let workspace = workspace_here(directory, home)?;
+                install_named(
                     &workspace,
                     &pick(&workspace, project)?,
                     name,
                     from.as_deref(),
                     directory,
-                ),
-                // Half of one: a skill with no project to put it in, or a
-                // project with nothing named to put there.
-                (Some(_), None) => Err(CliError::InstallWhere.into()),
-                (None, Some(_)) => Err(CliError::InstallWhat.into()),
+                )
             }
-        }
+            // Half of one: a skill with no project to put it in, or a
+            // project with nothing named to put there.
+            (Some(_), None) => Err(CliError::InstallWhere.into()),
+            (None, Some(_)) => Err(CliError::InstallWhat.into()),
+        },
         FlayerCommand::Uninstall { project, name } => {
             let workspace = workspace_here(directory, home)?;
             uninstall_named(&workspace, &pick(&workspace, project)?, name)

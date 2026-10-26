@@ -171,6 +171,24 @@ fn flayer_load_on_its_own_reads_the_default_workspace_without_making_it() {
 }
 
 #[test]
+fn flayer_install_on_its_own_reads_the_default_workspace_without_making_it() {
+    let (home, elsewhere) = unmade_home();
+
+    let outcome = flayer_at_home(elsewhere.path(), home.path(), &["install"]).unwrap();
+
+    assert_eq!(
+        outcome.stdout,
+        format!(
+            "{} manages no projects yet\n  link one with `flayer link <path>`\n",
+            name(home.path())
+        )
+    );
+    assert_eq!(outcome.stderr, vec![hint(home.path())]);
+    assert!(outcome.ok);
+    assert!(!made(home.path()));
+}
+
+#[test]
 fn once_something_writes_the_workspace_is_made_and_the_hint_is_gone() {
     let (home, elsewhere) = unmade_home();
     let alpha = elsewhere.path().join("alpha");
