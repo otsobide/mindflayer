@@ -800,8 +800,8 @@ struct Row {
 /// `version`: beside it, as `mindflayer.db.v2.bak` for version 2.
 ///
 /// Named after the version it holds rather than numbered or dated, so which
-/// build reads a copy is in its name, and the copies of a ledger taken
-/// through several steps sit side by side, one per version it passed.
+/// build reads a copy is in its name, and a ledger brought forward by several
+/// builds in turn keeps one copy for each version it had, side by side.
 pub fn backup_path(path: &Path, version: u32) -> PathBuf {
     let mut name = path.file_name().unwrap_or_default().to_os_string();
     name.push(format!(".v{version}.bak"));
