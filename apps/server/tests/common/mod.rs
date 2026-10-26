@@ -144,6 +144,17 @@ pub fn launch() -> (Listening, Arc<Mutex<Vec<String>>>) {
     (Server::new(fake).bind().unwrap(), runs)
 }
 
+/// A server over a fake that logs, and the lines it has logged so far.
+pub fn launch_logged() -> (Listening, Arc<Mutex<Vec<String>>>) {
+    let lines = Arc::new(Mutex::new(Vec::new()));
+    let sink = Arc::clone(&lines);
+    let server = Server::new(Fake::default())
+        .log(move |line| sink.lock().unwrap().push(line.to_owned()))
+        .bind()
+        .unwrap();
+    (server, lines)
+}
+
 // ---------------------------------------------------------------------------
 // Requests
 // ---------------------------------------------------------------------------

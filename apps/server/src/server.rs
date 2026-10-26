@@ -11,6 +11,7 @@ use axum::Router;
 
 use crate::api::{self, Api};
 use crate::auth::{self, Gate};
+use crate::log::{self, Log, Sink};
 use crate::token::Token;
 use crate::transcript::Transcript;
 use crate::writer::Writer;
@@ -19,11 +20,20 @@ use crate::Backend;
 /// A server not yet listening: a backend, and how to serve it.
 pub struct Server<B: Backend> {
     backend: B,
+    log: Option<Sink>,
 }
 
 impl<B: Backend> Server<B> {
+    /// A server that logs nothing.
     pub fn new(backend: B) -> Self {
-        Self { backend }
+        Self { backend, log: None }
+    }
+
+    /// Hand every request's line to `sink` once it has been answered, with
+    /// the launch token redacted wherever it appears.
+    pub fn log(mut self, sink: impl Fn(&str) + Send + Sync + 'static) -> Self {
+        self.log = Some(Arc::new(sink));
+        self
     }
 
     /// Take a port and issue the launch's token.
@@ -109,6 +119,9 @@ impl Listening {
 /// Every route, behind what guards it.
 fn route<B: Backend>(server: Server<B>, token: &Token, port: u16) -> io::Result<Router> {
     let gate = Arc::new(Gate::new(token.clone(), port));
+    let log = server
+        .log
+        .map(|sink| Arc::new(Log::new(sink, token.clone())));
     let backend = Arc::new(server.backend);
     let transcript = Transcript::default();
     let api = Arc::new(Api {
@@ -134,7 +147,12 @@ fn route<B: Backend>(server: Server<B>, token: &Token, port: u16) -> io::Result<
         .with_state(api)
         // Outside every route, so it sees `/` before anything that serves it.
         .layer(middleware::from_fn_with_state(gate, auth::exchange));
-    Ok(router)
+    // Outermost, so a request the gate or the exchange turns away is logged
+    // too.
+    Ok(match log {
+        Some(log) => router.layer(middleware::from_fn_with_state(log, log::record)),
+        None => router,
+    })
 }
 
 /// An endpoint that answers a method it does not take in JSON, like every
