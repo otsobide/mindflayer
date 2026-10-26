@@ -20,6 +20,8 @@
 //! own header and an edit for one never rewrites another's lines. Everything
 //! outside the block is somebody else's and comes back byte for byte.
 
+use std::path::{Component, Path, PathBuf};
+
 use thiserror::Error;
 
 /// The line that opens Mindflayer's block.
@@ -31,6 +33,106 @@ pub const GROUP: &str = "# project ";
 
 const LF: &[u8] = b"\n";
 const CRLF: &[u8] = b"\r\n";
+
+/// One path to keep out of git, relative to the project it is in.
+///
+/// Which paths those are is the caller's to decide (an installed skill's
+/// folders, an `AGENTS.md` Mindflayer created); this only says how a path is
+/// written down.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Entry {
+    /// One file.
+    File(PathBuf),
+    /// A directory and everything under it.
+    Directory(PathBuf),
+}
+
+impl Entry {
+    pub fn file(path: impl Into<PathBuf>) -> Self {
+        Entry::File(path.into())
+    }
+
+    pub fn directory(path: impl Into<PathBuf>) -> Self {
+        Entry::Directory(path.into())
+    }
+
+    /// The path, relative to the project.
+    pub fn path(&self) -> &Path {
+        match self {
+            Entry::File(path) | Entry::Directory(path) => path,
+        }
+    }
+
+    /// The exclude line for this entry in a project at `route` below the work
+    /// tree root (empty for a project at the root).
+    ///
+    /// Anchored with a leading `/`: entries in the exclude file are relative
+    /// to the work tree, and an unanchored `.agents/skills/review/` would keep
+    /// every folder of that name out of git, a teammate's in another project
+    /// included. A directory ends in `/`, so a file that happens to take its
+    /// name is not caught. Each segment is written literally, its glob
+    /// characters escaped, so a route like `apps/[legacy]` names that folder
+    /// rather than a class of letters.
+    pub fn pattern(&self, route: &Path) -> Result<String, ExcludeError> {
+        let mut line = String::new();
+        for (path, must_name) in [(route, false), (self.path(), true)] {
+            let refused = || ExcludeError::Path {
+                path: path.to_path_buf(),
+            };
+            let mut named = false;
+            for component in path.components() {
+                match component {
+                    Component::CurDir => {}
+                    Component::Normal(segment) => {
+                        let segment = segment.to_str().ok_or_else(refused)?;
+                        if segment.chars().any(char::is_control) {
+                            return Err(refused());
+                        }
+                        line.push('/');
+                        line.push_str(&escape(segment));
+                        named = true;
+                    }
+                    // Climbing out or starting over would aim the line at
+                    // something outside the project, which is not this
+                    // module's to hide.
+                    Component::ParentDir | Component::RootDir | Component::Prefix(_) => {
+                        return Err(refused())
+                    }
+                }
+            }
+            // An empty route is a project at the root. An empty entry would be
+            // the whole project, or the whole work tree.
+            if must_name && !named {
+                return Err(refused());
+            }
+        }
+        match self {
+            Entry::Directory(_) => line.push('/'),
+            // Git drops trailing spaces from a pattern unless each is
+            // escaped, and a file name may end in one.
+            Entry::File(_) => {
+                let kept = line.trim_end_matches(' ').len();
+                let spaces = line.len() - kept;
+                line.truncate(kept);
+                line.push_str(&"\\ ".repeat(spaces));
+            }
+        }
+        Ok(line)
+    }
+}
+
+/// A path segment with git's glob characters escaped, so it matches only
+/// itself.
+fn escape(segment: &str) -> String {
+    let mut escaped = String::with_capacity(segment.len());
+    for character in segment.chars() {
+        if matches!(character, '*' | '?' | '[' | '\\') {
+            escaped.push('\\');
+        }
+        escaped.push(character);
+    }
+    escaped
+}
 
 /// An exclude file's text, split around Mindflayer's block.
 ///
@@ -376,6 +478,8 @@ pub enum ExcludeError {
     Key { key: String },
     #[error("{pattern:?} cannot be written as one line of the exclude file")]
     Pattern { pattern: String },
+    #[error("{path}: no line of the exclude file can name it, so it cannot be kept out of git")]
+    Path { path: PathBuf },
 }
 
 #[cfg(test)]

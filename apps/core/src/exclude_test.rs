@@ -269,3 +269,98 @@ fn a_pattern_that_is_not_one_line_is_refused() {
     assert!(matches!(error, ExcludeError::Pattern { .. }));
     assert_eq!(file.to_bytes(), b"");
 }
+
+#[test]
+fn a_project_at_the_root_anchors_its_entries_there() {
+    let entry = Entry::directory(".agents/skills/commit-style");
+    assert_eq!(
+        entry.pattern(Path::new("")).unwrap(),
+        "/.agents/skills/commit-style/"
+    );
+}
+
+#[test]
+fn a_nested_project_anchors_its_entries_at_the_work_tree_root() {
+    let route = Path::new("packages/app");
+    assert_eq!(
+        Entry::directory(".agents/skills/commit-style")
+            .pattern(route)
+            .unwrap(),
+        "/packages/app/.agents/skills/commit-style/"
+    );
+    assert_eq!(
+        Entry::file("AGENTS.md").pattern(route).unwrap(),
+        "/packages/app/AGENTS.md"
+    );
+}
+
+#[test]
+fn single_dots_say_nothing() {
+    assert_eq!(
+        Entry::directory("./.agents/./skills/x")
+            .pattern(Path::new("./packages/app"))
+            .unwrap(),
+        "/packages/app/.agents/skills/x/"
+    );
+}
+
+#[test]
+fn glob_characters_are_written_literally() {
+    assert_eq!(
+        Entry::directory("a*b?")
+            .pattern(Path::new("apps/[legacy]"))
+            .unwrap(),
+        r"/apps/\[legacy]/a\*b\?/"
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn a_backslash_in_a_name_is_escaped() {
+    assert_eq!(
+        Entry::file(r"a\b").pattern(Path::new("")).unwrap(),
+        r"/a\\b"
+    );
+}
+
+#[test]
+fn trailing_spaces_on_a_file_are_kept() {
+    assert_eq!(
+        Entry::file("notes  ").pattern(Path::new("my app")).unwrap(),
+        r"/my app/notes\ \ "
+    );
+}
+
+#[test]
+fn an_entry_that_leaves_the_project_is_refused() {
+    for path in ["../elsewhere", "skills/../../elsewhere", "", "."] {
+        assert!(
+            matches!(
+                Entry::directory(path).pattern(Path::new("app")),
+                Err(ExcludeError::Path { .. })
+            ),
+            "{path:?} was accepted"
+        );
+    }
+    let absolute = std::env::temp_dir().join("elsewhere");
+    assert!(matches!(
+        Entry::file(absolute).pattern(Path::new("")),
+        Err(ExcludeError::Path { .. })
+    ));
+}
+
+#[test]
+fn a_route_that_climbs_is_refused() {
+    assert!(matches!(
+        Entry::file("AGENTS.md").pattern(Path::new("../app")),
+        Err(ExcludeError::Path { .. })
+    ));
+}
+
+#[test]
+fn a_name_with_a_line_break_is_refused() {
+    assert!(matches!(
+        Entry::directory("a\nb").pattern(Path::new("")),
+        Err(ExcludeError::Path { .. })
+    ));
+}
