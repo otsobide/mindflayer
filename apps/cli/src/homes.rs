@@ -7,6 +7,7 @@
 
 use std::path::{Path, PathBuf};
 
+use mindflayer_core::activate::WORKSPACE_VARIABLE;
 use mindflayer_core::{AgentHomes, Inputs, Intent};
 
 use crate::AgentHomeOptions;
@@ -42,13 +43,14 @@ impl Lookup {
     ///
     /// `-W` given at all, even empty, is the whole answer, and the variable is
     /// not read: the order `--home` and `$MINDFLAYER_HOME` are taken in.
-    /// What an empty value means is core's to say, and it says none.
+    /// What an empty value means is core's to say, and it says none, as the
+    /// variable's name is: it is what `flayer activate` sets.
     fn chosen(workspace: Option<&str>, variable: &dyn Fn(&str) -> Option<String>) -> Self {
         Self {
             flag: workspace.map(PathBuf::from),
             activated: match workspace {
                 Some(_) => None,
-                None => variable("MINDFLAYER_WORKSPACE").map(PathBuf::from),
+                None => variable(WORKSPACE_VARIABLE).map(PathBuf::from),
             },
             home: None,
         }
