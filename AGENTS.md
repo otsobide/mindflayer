@@ -151,6 +151,13 @@ These are easy to break from a single file without noticing.
   workspace (`resolve::managing`, `resolve::consulted`) and which project
   `-p` names (`FlayerWorkspace::pick`, `holder`) are core's too: no front end
   walks up, or picks a holder, itself.
+- **A change is handed its workspace.** The lifecycle changes
+  (`lifecycle::add`, `finish_edit`, `rename`, `remove`) and template lookup
+  (`template::templates`, `find`) take it as a parameter and never resolve
+  one. The command passes what
+  `resolve::consulted` resolves from the project, which walks up only when
+  nothing is named or activated; a walk misses a workspace that links the
+  project from beside it, and `-W` is how that one is reached.
 - **Home and the chosen workspace come from the front end.** `Lookup::given`
   takes `--home`, then `$MINDFLAYER_HOME`, then the user's home, and `-W`,
   then `$MINDFLAYER_WORKSPACE`, which is not read once `-W` is given; empty
@@ -161,10 +168,6 @@ These are easy to break from a single file without noticing.
   making it; a read opens `mindflayer.db` only through `ledger_for_reading`,
   which never creates it either. The TUI hands its own `Lookup` to every line
   it runs (`tui::execute`), so none of them reads the environment again.
-- **So does the workspace a change consults.** The lifecycle changes and
-  template lookup take it as a parameter, the one the command resolved, and
-  core never walks up from the project to find one: a walk misses a workspace
-  that links the project from beside it.
 - **So do the agent homes.** `homes::agent_homes` takes each from its option
   (`--claude-config-dir`, `--codex-home`, `--opencode-config-dir`,
   `--agents-dir`), then `$CLAUDE_CONFIG_DIR`, `$CODEX_HOME` or
