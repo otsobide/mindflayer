@@ -1423,6 +1423,14 @@ reads the licence of every package installed, development tools included,
 and fails on one a GPL-3.0-only program could not take in, or one that
 declares none and is not named with what its source says.
 
+Nuxt UI's plugins declare its components and composables for vue-tsc in
+`src/components.d.ts` and `src/auto-imports.d.ts`, committed so a fresh
+clone type-checks. They name each file by its path in pnpm's store, whose
+folder for `@nuxt/ui` carries a hash of its peers, so a bump of one leaves
+every path naming nothing, and each type `any` without a word from vue-tsc.
+A test fails on such a path, and `make web/build` writes the files again; no
+test run writes them, or it would mend a stale one before the test saw it.
+
 `make web/dev` serves the panel from Vite on 127.0.0.1:5173 and proxies
 `/api`, and the launch link's `/?token=`, to `flayer ui --dev --port 7878`
 (#68). Through the proxy the token is traded for its cookie where the panel
