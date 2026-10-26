@@ -207,3 +207,32 @@ fn an_opening_line_is_the_first_that_carries_text() {
     assert_eq!(opening_line("###\n\n# Real\n").as_deref(), Some("Real"));
     assert_eq!(opening_line("\n   \n"), None);
 }
+
+#[test]
+fn only_the_name_and_the_description_are_strict() {
+    let strict = [
+        ValidationIssue::NameEmpty,
+        ValidationIssue::NameNotKebabCase {
+            segment: "a--b".into(),
+        },
+        ValidationIssue::NameSegmentTooLong {
+            segment: "a".into(),
+            length: 65,
+        },
+        ValidationIssue::DescriptionEmpty,
+        ValidationIssue::DescriptionTooLong { length: 1025 },
+    ];
+    let lenient = [
+        ValidationIssue::NameDirectoryMismatch {
+            name: "a".into(),
+            directory: "b".into(),
+        },
+        ValidationIssue::CompatibilityEmpty,
+        ValidationIssue::CompatibilityTooLong { length: 501 },
+        ValidationIssue::MetadataNotAMap,
+        ValidationIssue::MetadataNotAString { key: "k".into() },
+        ValidationIssue::Empty,
+    ];
+    assert!(strict.iter().all(ValidationIssue::is_strict));
+    assert!(!lenient.iter().any(ValidationIssue::is_strict));
+}

@@ -379,6 +379,29 @@ pub enum ValidationIssue {
     Empty,
 }
 
+impl ValidationIssue {
+    /// Whether this breaks one of the strict rules: the ones Mindflayer will
+    /// not break when it writes a skill into a project — creating, renaming
+    /// or installing one — rather than only report.
+    ///
+    /// The name and the description, because those are what agents refuse:
+    /// Codex skips a skill whose name is over 64 characters or whose
+    /// description is empty, so a copy with either would sit in a project and
+    /// never load. A directory that disagrees with the name is not among them,
+    /// because whoever writes the skill names its folder; neither are
+    /// `compatibility` and `metadata`, which an agent reads past.
+    pub fn is_strict(&self) -> bool {
+        matches!(
+            self,
+            ValidationIssue::NameEmpty
+                | ValidationIssue::NameNotKebabCase { .. }
+                | ValidationIssue::NameSegmentTooLong { .. }
+                | ValidationIssue::DescriptionEmpty
+                | ValidationIssue::DescriptionTooLong { .. }
+        )
+    }
+}
+
 impl fmt::Display for ValidationIssue {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
