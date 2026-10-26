@@ -460,7 +460,10 @@ why `toml_edit` is a dependency: `flayer link` rewrites the one `projects`
 array and leaves every other byte alone. Reading stays serde's job. The two
 halves agree because an edit re-reads the file afterwards rather than trusting
 what it believes it wrote, and the write itself goes through a temporary file
-and a rename, so a crash leaves either the old config or the new one.
+and a rename, so a crash leaves either the old config or the new one. The edit
+holds the workspace's lock from its read to that re-read, so a second writer
+edits what the first one wrote ([Writers at the same
+time](#writers-at-the-same-time)).
 
 ### Formats are versioned
 
@@ -543,7 +546,9 @@ worth removing is one whose directory has moved away, and that cannot be opened
 as a project any more.
 
 Rewrites go through a temporary file and a rename, so a crash leaves either the
-old config or the new one. The original's permissions are copied onto the
+old config or the new one. The temporary is named for the run that writes it,
+never shared with another writer ([Writers at the same
+time](#writers-at-the-same-time)). The original's permissions are copied onto the
 temporary first, and a symlinked config is followed to the file it names —
 otherwise an edit would quietly widen a chmodded config or detach a shared one.
 A hard link is the case this cannot preserve: a rename breaks it, and keeping
@@ -558,6 +563,7 @@ the workspace and belonging to no project yet.
 .mindflayer/
   flayer.toml
   mindflayer.db
+  lock                       held by whoever is writing
   cache/<source>/            the clone
   skills/<source>/<name>/    what was taken out of it
 ```
@@ -1124,9 +1130,12 @@ waiting on the same thread.
   first in, first out, so tasks run in the order they arrived, which a lock
   does not promise whoever waits on it. One thread means two writes never run
   side by side, which is the world the commands underneath were written for:
-  a CLI, where one command at a time is all there is. And a long run holds
-  that thread rather than one of the pool's, so the panel goes on reading
-  while it waits.
+  a CLI, where one command at a time is all there is. It orders the
+  panel's own writes and nobody else's: beside a terminal or a TUI writing
+  to the same workspace, the two take turns through the workspace's lock
+  ([Writers at the same time](#writers-at-the-same-time)). And a long run
+  holds that thread rather than one of the pool's, so the panel goes on
+  reading while it waits.
 
 A run's lines are worked out on the writer thread just before it, against the
 disk the run itself meets after every write before it, and the entry is in the
@@ -1499,6 +1508,100 @@ complete. A folder that cannot be listed is a failure reported beside what was
 found, except a root that is not there at all: that holds nothing, and only
 the default workspace before it is made can have one, in a home nobody has
 created yet.
+
+## Writers at the same time
+
+The commands were written for a person at one terminal, running one at a time.
+The TUI runs them while another terminal runs its own, and the server under the
+panel runs them while both do. Three things keep two writers from undoing each
+other, and none of them makes a reader wait.
+
+- **A temporary of its own.** A file Mindflayer replaces — a marker, the
+  `SKILL.md` a rename rewrites, git's exclude file — is written whole into a
+  temporary beside it and renamed into place (`replace_file`). The temporary
+  was `flayer.toml.tmp`, one name for every writer: two at once wrote into one
+  file, either could rename the other's half into place, and the second rename
+  found nothing to move. It is named for the run now,
+  `flayer.toml.<pid>-<suffix>.tmp` as [a stage](#built-where-no-agent-looks)
+  is, made with `create_new`, and taken away when the write or the rename
+  fails.
+- **A ledger that waits, and keeps a log.** `Ledger::open` gives its
+  connection SQLite's busy timeout, as long as a writer waits for the
+  workspace, so a second writer waits for the first rather than failing with
+  "database is locked". rusqlite sets five seconds of its own accord, but as a
+  library's default; set there, the wait is Mindflayer's. It also turns on
+  write-ahead logging: a reader goes on reading what the last write left while
+  the next is made, and a writer does not wait for readers. The mode is kept in
+  the file, so a ledger switches once, at the first open to write, and SQLite
+  keeps `mindflayer.db-wal` and `mindflayer.db-shm` beside it while it is open.
+  `open_existing` sets the timeout and not the mode, because switching is a
+  write, and a read makes none but a migration.
+- **A lock on the workspace.** Unique names keep each file whole, not each
+  entry in it: two `flayer link`s that both read `flayer.toml` before either
+  writes each put back a marker with only their own entry, and the second
+  rename wins. So a writer holds `.mindflayer/lock` from before it reads what
+  it will change until the change is written: an edit of the marker (`link`,
+  `unlink`, `load`, `unload`), an install or an uninstall, a gather — clone and
+  all, since two gathers of one source clone into one folder — and opening the
+  ledger to write, which is when it is made or migrated. Core takes it inside
+  each of them (`FlayerWorkspace::lock`), so no front end has to remember to.
+
+How the lock behaves, and why:
+
+- **The system's lock, as a stage's is.** `std`'s `File::lock`, which is
+  `flock` on Linux and macOS and `LockFileEx` on Windows. The system drops it
+  when its process dies, however it dies, so a writer that was killed leaves
+  nothing to clear, and nothing has to decide whether a process named in a
+  file is still running. The file itself is never deleted, not even by the
+  writer that made it: a writer waiting on the file it opened would then lock
+  one nobody else can see, beside the one the next writer makes, and the two
+  would write at once.
+- **A bounded wait.** A writer that finds the lock held tries again, every
+  few milliseconds at first and every tenth of a second at most, for
+  `lock::WAIT`: polled, because `std` cannot wait for a lock with a deadline,
+  and a thread blocked in `lock` could not be told to stop. Then it gives up
+  with `LockError::Busy`, which names whoever holds it:
+
+  ```
+  /home/you/Projects/.mindflayer/lock: workspace busy: waited 10s for process 3234405 to finish writing to it; try again once it has
+  ```
+
+  Ten seconds is longer than anything but a gather takes, and short enough
+  that a command kept waiting by a process that has stopped answering says
+  so rather than looks hung. The error is collected like any other: the CLI
+  prints it, and the install screen prints it for the row it was applying
+  and goes on to the next.
+- **Who holds it, in a file of its own.** The writer holding the lock writes
+  its process id to `.mindflayer/lock.pid`, and takes it away while it still
+  holds the lock, so it never names a writer that has let go. Not in `lock`
+  itself, because a lock is mandatory on Windows: while one process holds a
+  file locked, no other can read a byte of it, and the id is wanted by exactly
+  the processes that cannot have the lock. Writing it is best effort, and a
+  waiting writer that finds none says "another process".
+- **Readers never take it.** A marker is replaced by a rename and the ledger
+  keeps its log, so a read finds what was there before a write or what is
+  there after it, never part of one, and has nothing to wait for.
+  `ledger_for_reading` migrates an older ledger as `ledger` does, but without
+  the lock, so a read's migration is kept apart from a writer's by SQLite's
+  locking alone ([open questions](#open-questions)).
+- **Not re-entrant.** Two handles on the file are two writers even in one
+  process, which is what lets threads stand in for processes in the tests,
+  from a link on each of two threads at once to every writer waiting for a
+  lock the test holds. It also means a writer that asks for the lock while it
+  holds it waits for itself, and fails as busy. Core's writers each take it
+  once and call none of the others while they hold it, and a front end does
+  not take it at all.
+- **A filesystem without locks lets writers through unlocked**, as it lets
+  installs through without a sweep: refusing would refuse every change there.
+  Any error taking the lock counts, for the reason a stage gives — NFS
+  without its lock daemon says "no locks available". The unique names still
+  keep every file whole.
+
+Writers on two machines are out of reach, and not attempted. On a network
+filesystem `flock` is emulated with locks that belong to a process rather than
+to a handle, and the write-ahead log needs every process using the ledger to
+share memory on one machine. A workspace on a network share is safe used from
+one machine at a time.
 
 ## Decisions
 
