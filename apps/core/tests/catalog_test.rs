@@ -340,6 +340,41 @@ fn a_project_with_no_folder_for_a_kind_is_not_a_failure() {
     assert!(catalog.failures().is_empty());
 }
 
+#[test]
+fn locating_finds_what_discovery_reads_broken_or_not() {
+    let (_dir, one) = project("alpha");
+    write_skill(&one, "good", &skill_file("good"));
+    write_skill(&one, "no-front-matter", "# Just markdown\n");
+    fs::create_dir_all(one.directory_for(Kind::Skill).join("assets")).unwrap();
+    write_rule(&one, "git/no-force-push.md", "Never.\n");
+    write_rule(&one, ".hidden.md", "Not a rule.\n");
+    write_rule(&one, "notes.txt", "Not a rule either.\n");
+    let skills = one.directory_for(Kind::Skill);
+    let rules = one.directory_for(Kind::Rule);
+
+    let (found_skills, skill_failures) = Catalog::locate(&skills, Kind::Skill);
+    let (found_rules, rule_failures) = Catalog::locate(&rules, Kind::Rule);
+
+    // A skill whose front matter is broken is still where one is: nothing
+    // is read, so nothing fails.
+    assert_eq!(
+        found_skills,
+        [skills.join("good"), skills.join("no-front-matter")]
+    );
+    assert_eq!(found_rules, [rules.join("git/no-force-push.md")]);
+    assert!(skill_failures.is_empty() && rule_failures.is_empty());
+}
+
+#[test]
+fn locating_in_a_folder_that_is_not_there_finds_nothing_and_no_failure() {
+    let dir = TempDir::new().unwrap();
+
+    let (found, failures) = Catalog::locate(&dir.path().join("missing"), Kind::Rule);
+
+    assert!(found.is_empty());
+    assert!(failures.is_empty());
+}
+
 // ---------------------------------------------------------------------------
 // References
 // ---------------------------------------------------------------------------
