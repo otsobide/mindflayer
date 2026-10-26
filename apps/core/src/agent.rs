@@ -99,11 +99,16 @@ impl fmt::Display for UnknownAgent {
 /// A value rather than a function a caller reaches for, because the
 /// standard layout is only the default: a project's settings may put a kind
 /// somewhere else for every agent (#40), and a caller handed the table then
-/// follows that without changing. Where a kind goes for an agent is where
-/// its copy is put for that agent, not proof the agent reads it there: the
-/// standard layout is built from what each one reads, but an override's
-/// folder reaches an agent only once the agent is pointed at it, which is
-/// #40's status check to say.
+/// follows that without changing. The project hands it on, in core: which
+/// table applies is its settings' to say, so an install takes the table from
+/// the project it installs into (#34), and no front end calls
+/// [`standard`](TargetTable::standard) and picks one those settings would
+/// contradict.
+///
+/// Where a kind goes for an agent is where its copy is put for that agent,
+/// not proof the agent reads it there: the standard layout is built from
+/// what each one reads, but an override's folder reaches an agent only once
+/// the agent is pointed at it, which is #40's status check to say.
 ///
 /// One location per kind and agent for now, which is all the standard layout
 /// needs, kept private so it can grow into the list of folders per kind the
