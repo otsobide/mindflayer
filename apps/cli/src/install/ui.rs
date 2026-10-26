@@ -1,7 +1,7 @@
 //! Drawing the install screen.
 //!
-//! Two columns: the projects a workspace manages, and — for whichever project
-//! the cursor is on — every shelf entry, ticked when that project already
+//! Two columns: the projects a workspace manages, and, for whichever project
+//! the cursor is on, every shelf entry, ticked when that project already
 //! holds it. Nothing here decides anything; [`super::state`] does.
 
 use ratatui::layout::{Constraint, Direction, Layout, Rect};

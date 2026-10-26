@@ -16,8 +16,8 @@ use crate::render::{as_stored, plural, printable, table};
 use crate::{CliError, Failure, Lookup, Outcome};
 
 /// `load`, at either level: the paths are typed from `directory`, and the
-/// workspace they go into is resolved from `start` — the directory itself
-/// for `flayer`, the project for `mind`. With no paths it lists what that
+/// workspace they go into is resolved from `start` (the directory itself
+/// for `flayer`, the project for `mind`). With no paths it lists what that
 /// workspace loads, as the other reads do: of the default one before it is
 /// made too, which loads nothing, rather than making it to say so.
 pub(crate) fn load_command(
@@ -76,8 +76,8 @@ pub(crate) fn load_command(
 }
 
 /// `unload`, at either level: all or nothing, in one rewrite of the marker,
-/// and never making the default workspace only to find it loads nothing —
-/// resolved as a read, and only a made workspace has anything to unload.
+/// and never making the default workspace only to find it loads nothing; it
+/// is resolved as a read, and only a made workspace has anything to unload.
 pub(crate) fn unload_command(
     directory: &Path,
     start: &Path,
@@ -116,7 +116,7 @@ pub(crate) fn unload_command(
 }
 
 /// The line naming the workspace a load or an unload changed, because that is
-/// not always the one you are standing in — never when you are standing in
+/// not always the one you are standing in, and never when you are standing in
 /// the one being loaded.
 fn acted_on(preposition: &str, workspace: &FlayerWorkspace, home: Option<&Path>) -> String {
     let default = if workspace.is_default(home) {
@@ -205,7 +205,7 @@ fn loaded(
     }
 }
 
-/// "2 skills to install", or that there is nothing yet — counted from what
+/// "2 skills to install", or that there is nothing yet, counted from what
 /// the install machinery itself offers through that entry, so the number is
 /// what `flayer install` will show.
 fn offering(workspace: &FlayerWorkspace, entry: &str) -> String {

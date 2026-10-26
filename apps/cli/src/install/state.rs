@@ -78,8 +78,8 @@ pub struct Target {
 }
 
 impl Target {
-    /// When several offers of one name are in the project — they share its
-    /// one folder, so standing alone says each of them is — keep the box of
+    /// When several offers of one name are in the project (they share its
+    /// one folder, so standing alone says each of them is), keep the box of
     /// the one whose copy is there, as `current` tells, and clear the rest;
     /// the first, if none matches because the copy was changed since.
     pub fn settle(&mut self, current: impl Fn(&Candidate) -> bool) {
@@ -331,7 +331,7 @@ fn toggle(target: &mut Target) -> Option<String> {
 
     // One name, one artifact. Two places can offer `deploy`, but a project
     // has one directory called `deploy`, so marking one unmarks the other
-    // rather than letting both be applied and the second win silently —
+    // rather than letting both be applied and the second win silently,
     // and the one it displaces is not removed as well, because installing
     // this one replaces it. Unmarking it again puts back what it displaced.
     let mut displaced = None;

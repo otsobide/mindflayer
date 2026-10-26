@@ -411,8 +411,8 @@ fn workspace_here(directory: &Path, lookup: &Lookup) -> Result<FlayerWorkspace, 
 }
 
 /// The flayer workspace a command that only reads looks at: the one `lookup`
-/// resolves from `directory` — the default one in home made, or as it will
-/// be once something makes it.
+/// resolves from `directory` (the default one in home made, or as it will
+/// be once something makes it).
 ///
 /// Never made for the occasion. A read is no reason to write a marker into
 /// somebody's home, and the workspace that would be made there answers every
@@ -498,7 +498,7 @@ fn all_or_nothing(mut refused: Vec<CliError>) -> Option<Failure> {
 ///
 /// Only the registered ones. A workspace manages what it was told to manage,
 /// so a project that happens to sit inside it is not in scope until it is
-/// linked — otherwise `flayer list` would answer a different question
+/// linked; otherwise `flayer list` would answer a different question
 /// depending on which directory it was run from.
 fn managed(workspace: &FlayerWorkspace) -> (Vec<MindProject>, Vec<String>) {
     let (projects, failures) = workspace.projects();
@@ -510,8 +510,8 @@ fn managed(workspace: &FlayerWorkspace) -> (Vec<MindProject>, Vec<String>) {
 }
 
 /// The workspace a project's own commands register it with: the one
-/// `lookup` resolves from the project, whether or not it manages it yet —
-/// where `mind link` adds it, and the default one in home when nothing
+/// `lookup` resolves from the project, whether or not it manages it yet;
+/// it is where `mind link` adds it, and the default one in home when nothing
 /// chooses another and there is none up the tree.
 fn workspace_for(project: &MindProject, lookup: &Lookup) -> Result<FlayerWorkspace, CliError> {
     resolve(&lookup.inputs(project.root(), Intent::Write))?

@@ -1,7 +1,7 @@
 //! The commands that change artifacts: `add`, `edit`, `rename`, `remove` and
 //! `templates`, at either level.
 //!
-//! Each takes the holder it acts on — a project, or the workspace's own — so
+//! Each takes the holder it acts on (a project, or the workspace's own), so
 //! `mind add` and `flayer add -p alpha` are one function given one project,
 //! and `flayer add` is the same function given the workspace. Each also takes
 //! the workspace the command resolved and hands it to core: its templates are
@@ -182,7 +182,7 @@ pub(crate) fn templates_of(
 // ---------------------------------------------------------------------------
 
 /// The editor to use when none was named: `$VISUAL`, then `$EDITOR`, then the
-/// one every system has — the order git looks in.
+/// one every system has: the order git looks in.
 fn default_editor() -> String {
     ["VISUAL", "EDITOR"]
         .into_iter()
@@ -230,7 +230,7 @@ fn open_in_editor(editor: &str, file: &Path) -> Result<(), CliError> {
 }
 
 /// What editing came to: whether anything changed, and whether what is there
-/// now still passes `validate` — the question worth answering the moment the
+/// now still passes `validate`, the question worth answering the moment the
 /// editor closes, not at the next CI run.
 fn edited(project: &MindProject, target: &Target, changed: bool) -> Outcome {
     let what = format!("{} {}", target.kind, target.name);

@@ -9,8 +9,8 @@
 //! than in the binaries so the tests drive the real command surface instead of
 //! shelling out, and so both binaries cannot drift apart.
 //!
-//! Each has a module of its own — `parse`, `commands` with a module per family
-//! of commands, and `render` — so that work on one command does not collide
+//! Each has a module of its own (`parse`, `commands` with a module per family
+//! of commands, and `render`), so that work on one command does not collide
 //! with work on another in one long file. What the binaries and the tests use
 //! is public: the two screens, and what is re-exported here.
 

@@ -101,7 +101,7 @@ pub(crate) fn link_projects(
     let mut workspace = workspace_here(directory, lookup)?;
     // All or nothing: every path is opened before any is registered,
     // so a typo in the third does not leave the first two linked by a
-    // command that reports failure. Opening is the check — a
+    // command that reports failure. Opening is the check: a
     // directory with no `.mind` is not a project, and registering one
     // would only fail later, further from the command that caused it.
     let mut opened: Vec<MindProject> = Vec::new();
@@ -170,7 +170,7 @@ fn unlinked(removed: &[PathBuf]) -> String {
     })
 }
 
-/// `flayer scan`: every repository under the workspace here — the default
+/// `flayer scan`: every repository under the workspace here, the default
 /// one too before it is made, since what is under it does not wait for that.
 pub(crate) fn scan_workspace(workspace: &FlayerWorkspace) -> Outcome {
     scanned(workspace, &scan(workspace))

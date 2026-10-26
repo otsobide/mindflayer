@@ -2,7 +2,7 @@
 //!
 //! The screen only marks boxes. Everything marked is carried out in one batch
 //! when you say so, and what that batch did is printed afterwards as an
-//! ordinary [`Outcome`] — so the report a user reads, and a test asserts on,
+//! ordinary [`Outcome`], so the report a user reads, and a test asserts on,
 //! is the same shape every other command produces.
 
 pub mod state;
@@ -46,8 +46,8 @@ pub fn run(workspace: &FlayerWorkspace) -> Result<Outcome, Failure> {
     }
 
     // `try_init` rather than `init`, which panics: this command is the one
-    // thing here that needs a terminal, and being run without one — in CI,
-    // with the output redirected — deserves a sentence rather than a panic.
+    // thing here that needs a terminal, and being run without one (in CI,
+    // with the output redirected) deserves a sentence rather than a panic.
     let mut terminal = ratatui::try_init().map_err(|source| CliError::NoTerminal {
         command: "flayer install",
         source,
