@@ -1,5 +1,5 @@
 //! `flayer load` and `unload`: another workspace's own skills offered to this
-//! one's projects, read live from where it is — at both levels, and from the
+//! one's projects, read live from where it is, at both levels, and from the
 //! TUI.
 
 mod common;
