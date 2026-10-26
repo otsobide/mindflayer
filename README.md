@@ -53,7 +53,7 @@ every workspace says so instead.
 
 | | Lives in | Shape | Declares |
 |---|---|---|---|
-| **Skill** | `skills/<name>/SKILL.md` | a directory each, so it can carry scripts and references beside its instructions | front matter: `name`, `description`, optional `allowed-tools` and `license` |
+| **Skill** | `skills/<name>/SKILL.md` | a directory each, so it can carry scripts and references beside its instructions | front matter in the [Agent Skills](https://agentskills.io/specification) format: `name`, `description`, and optionally `license`, `compatibility`, `metadata` and `allowed-tools` |
 | **Rule** | `rules/<name>.md` | one markdown file each | nothing — it is context, and its name is its filename |
 
 Folders under `rules/` group and mean nothing else, so
@@ -216,10 +216,12 @@ rule:git/no-force-push: ok
 1 skill and 1 rule checked, 0 invalid
 ```
 
-Each kind is checked against what it actually declares. A skill's name has to
-match its directory and its description has to fit; a rule declares nothing, so
+Each kind is checked against what it actually declares. A skill is held to the
+[Agent Skills rules](#what-a-skill-looks-like) — its name has to match its
+directory, its description has to fit, and so on; a rule declares nothing, so
 the only things left to check are that its name is usable and that the file is
-not empty.
+not empty. `flayer validate` checks what is on the
+[shelf](#gathering-skills-from-elsewhere) too.
 
 `validate` exits non-zero when anything is wrong, so it works in CI. An
 artifact that cannot be read at all is a warning on stderr and does not hide
@@ -272,7 +274,31 @@ ddd-reviewer  https://github.com/acme/skills  Review a change against the DDD la
 ```
 
 A skill that cannot be read is a warning on stderr and does not stop the ones
-beside it from being gathered.
+beside it from being gathered. One that reads but breaks a rule of the [skill
+format](#what-a-skill-looks-like) — a doubled hyphen in its name, metadata
+that is not all strings — is gathered anyway, with a warning saying what is
+wrong: leaving it behind would hide the problem along with the skill.
+`flayer validate` says so again whenever you ask, naming the source folder it
+sits in on the shelf:
+
+```
+$ flayer validate skills
+commit-style (shelf/github.com-acme-skills): ok
+commit-style (collapse): ok
+ddd-reviewer (tanukeys): ok
+pdf--forms (shelf/github.com-acme-skills): 1 problem
+  - `pdf--forms` is not usable as a name: it has to be lowercase letters and digits, joined by single hyphens
+
+4 skills checked, 1 invalid
+```
+
+Installing is where it has to be right, because a project's copy is what its
+agents load:
+
+```
+$ flayer install -p collapse pdf--forms
+error: `pdf--forms` cannot be installed: `pdf--forms` is not usable as a name: it has to be lowercase letters and digits, joined by single hyphens
+```
 
 ### What a workspace keeps
 
@@ -539,16 +565,54 @@ skill goes, without ever assuming.
 ---
 name: commit-style
 description: How this repo writes commit messages and branch names
-allowed-tools: Read, Grep
+license: MIT
+compatibility: Needs git 2.30 or later
+metadata:
+  author: platform-team
+  version: "1.2"
+allowed-tools: Read Grep Bash(git log *)
 ---
 
 Use `<area>: <imperative summary>`, imperative and in English.
 ```
 
-`name` and `description` are required; `name` has to match the directory and
-`description` be at most 1024 characters. `allowed-tools` accepts either a
-comma separated string or a YAML list. Anything else in the front matter is
-carried along untouched.
+The front matter is the [Agent Skills](https://agentskills.io/specification)
+format, which Claude Code, Codex and OpenCode all read:
+
+| Key | | Rule |
+|---|---|---|
+| `name` | required | lowercase letters and digits joined by single hyphens, at most 64 characters, the same as its directory |
+| `description` | required | 1 to 1024 characters |
+| `license` | optional | a license's name, or a file the skill bundles |
+| `compatibility` | optional | what it needs to run, in 1 to 500 characters |
+| `metadata` | optional | strings mapped to strings |
+| `allowed-tools` | optional | separated by spaces; commas still work, and a YAML list does too |
+
+Anything else in the front matter — an agent's own keys, like Claude Code's
+`paths` — is carried along untouched, and so is a `metadata` entry that is not
+a string: `validate` says it is ignored, and it stays in the file.
+
+The name and the description are the rules Mindflayer will not break when it
+writes a skill, because agents skip a skill that does: `mind add` and `install`
+refuse one that breaks either, and `rename` a name that does. Everything else
+is reported by `validate`, and gathering is lenient about all of it.
+
+```
+$ mind show commit-style
+commit-style
+/home/you/Projects/collapse/skills/commit-style/SKILL.md
+
+How this repo writes commit messages and branch names
+
+allowed-tools: Read, Grep, Bash(git log *)
+license: MIT
+compatibility: Needs git 2.30 or later
+metadata:
+  author: platform-team
+  version: 1.2
+
+Use `<area>: <imperative summary>`, imperative and in English.
+```
 
 A rule is simpler, because it declares nothing at all. `rules/git/no-force-push.md`:
 
@@ -561,7 +625,8 @@ Use `--force-with-lease`, which refuses when someone else has pushed.
 Its name is `git/no-force-push`, from where the file sits. Listings show its
 opening line, which is why leading with a heading or a one-line summary is
 worth doing. Every name, declared or derived, is checked segment by segment:
-lowercase letters, digits and inner hyphens, each segment at most 64 characters.
+lowercase letters and digits joined by single hyphens, each segment at most 64
+characters.
 
 ### Creating one
 
