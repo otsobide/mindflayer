@@ -128,8 +128,9 @@ fn put(from: &Path, to: &Path, within: &Path, new: &Path, old: &Path) -> Result<
         }
         return Ok(Change::Added);
     }
-    // Moved aside rather than deleted first, so there is never a moment
-    // with neither the old copy nor the new one in place.
+    // Moved aside rather than deleted first: the moment with neither copy in
+    // place lasts from one rename to the next rather than a whole delete, and
+    // a copy that cannot be put in place can have the old one put back.
     if old.exists() {
         fs::remove_dir_all(old)?;
     }

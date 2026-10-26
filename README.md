@@ -439,9 +439,10 @@ project's one folder of that name is not something to guess.
 An install never writes beside the copy it replaces, where an agent reading the
 skills folder would find it. It builds the copy in `.mind/tmp`, a folder that
 ignores itself, and moves it into place once it is whole, so the skills folder
-holds the old copy or the new one and never part of either. Two installs at
-once each build in a folder of their own there. One that is stopped halfway
-leaves its work there too, and the next install clears it and says so:
+holds the old copy, the new one or, for the instant between two renames of an
+update, neither, and never part of either. Two installs at once each build in a
+folder of their own there. One that is stopped halfway leaves its work there
+too, and the next install clears it and says so:
 
 ```
 $ mind install commit-style
