@@ -152,8 +152,8 @@ These are easy to break from a single file without noticing.
     `core.excludesFile` are never edited; the one `.gitignore` Mindflayer
     writes is `.mind/tmp`'s, inside a folder it owns, made with `create_new`.
 - **Mindflayer only manages what it installed.** The ledger's record of an
-  install — one installation, a target for each copy it wrote, its origin and
-  the `hash::tree` of what it wrote, that hash's one definition — is what
+  install (one installation, a target for each copy it wrote, its origin and
+  the `hash::tree` of what it wrote, that hash's one definition) is what
   allows overwriting and deleting. An unrecorded artifact is
   `Standing::Foreign` and is never touched. Core's lifecycle changes
   (`lifecycle::add`, `finish_edit`, `rename` and `remove`) drop any record
@@ -168,7 +168,7 @@ These are easy to break from a single file without noticing.
   (what `ValidationIssue::is_strict` picks out), so change the rules there and
   nowhere else; gathering
   takes such a skill with a `warning:` per problem, and `validate` reports
-  everything — `flayer validate` without `-p` reads the shelf too — but calls
+  everything (`flayer validate` without `-p` reads the shelf too) but calls
   an artifact invalid only for what is not `ValidationIssue::is_warning`. Keys the format does not define pass through
   untouched. A rule's front matter is optional (`rule::RuleManifest`): read
   only when its fences hold a YAML mapping, and whatever it leaves unread is a
