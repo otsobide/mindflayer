@@ -18,6 +18,7 @@ use std::fmt;
 use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
+use std::time::Duration;
 
 use thiserror::Error;
 
@@ -262,8 +263,27 @@ impl Scrub {
 /// time it finds something is the only time it says so. A read is left alone:
 /// what it shows is redacted on the way out anyway, and reading should not
 /// write.
-pub(crate) fn scrub(workspace: &FlayerWorkspace, ledger: &Ledger) -> Result<Scrub, LedgerError> {
+///
+/// The workspace is held ([`FlayerWorkspace::lock_waiting`], up to `wait`)
+/// while clones are rewritten and the folders of a source made one with
+/// another are removed, since a gather beside it would be cloning into and
+/// filling those same folders. Only then: with no clone to rewrite, which is
+/// every time but the first after an older build stored a credential, the
+/// scrub writes nothing but rows, which SQLite keeps apart, and a change to
+/// an artifact opening the ledger to drop a record does not wait behind a
+/// gather to do it. The sources are looked for again once it is held, since
+/// a scrub kept waiting may find that another has done its work.
+pub(crate) fn scrub(
+    workspace: &FlayerWorkspace,
+    ledger: &Ledger,
+    wait: Duration,
+) -> Result<Scrub, LedgerError> {
     let mut scrub = Scrub::default();
+    let _lock = if ledger.tainted_sources()?.is_empty() {
+        None
+    } else {
+        Some(workspace.lock_waiting(wait)?)
+    };
     for source in ledger.tainted_sources()? {
         // The clone first and the row after it: a row rewritten first would
         // no longer say that its clone still needs the same.

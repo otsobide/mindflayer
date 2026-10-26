@@ -528,7 +528,8 @@ impl FlayerWorkspace {
     /// names that writer's process.
     ///
     /// Core's writers take it themselves — an edit of the marker, an install
-    /// or an uninstall, a gather — so a front end
+    /// or an uninstall, a gather, the scrub that opening the ledger to write
+    /// runs when it has clones to rewrite — so a front end
     /// has no need to, and must not while it asks core to write: the lock is
     /// not re-entrant, and a writer that asks for it twice waits for itself.
     /// Readers never take it.
@@ -585,9 +586,23 @@ impl FlayerWorkspace {
     /// [`resolve`](crate::resolve::resolve), but what opening to write
     /// involves is core's, so no front end can write first and scrub after,
     /// or not at all.
+    ///
+    /// The scrub holds the workspace while it rewrites clones, which is only
+    /// when an older build left a credential in one, and like any writer gives
+    /// up as busy after [`lock::WAIT`].
     pub fn ledger_to_write(&self) -> Result<(Ledger, Scrub), LedgerError> {
+        self.ledger_to_write_waiting(lock::WAIT)
+    }
+
+    /// [`ledger_to_write`](Self::ledger_to_write), with the scrub waiting up to
+    /// `wait` for the workspace rather than [`lock::WAIT`], for a writer that
+    /// must not give up ([`crate::install::disown`]).
+    pub(crate) fn ledger_to_write_waiting(
+        &self,
+        wait: Duration,
+    ) -> Result<(Ledger, Scrub), LedgerError> {
         let ledger = self.ledger()?;
-        let scrub = gather::scrub(self, &ledger)?;
+        let scrub = gather::scrub(self, &ledger, wait)?;
         Ok((ledger, scrub))
     }
 

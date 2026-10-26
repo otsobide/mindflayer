@@ -13,6 +13,7 @@
 use std::fs;
 use std::io;
 use std::path::{Component, Path, PathBuf};
+use std::time::Duration;
 
 use thiserror::Error;
 
@@ -719,7 +720,11 @@ pub(crate) fn disown(
     if !workspace.is_linked(project.root()) || !workspace.ledger_path().is_file() {
         return Ok(Disowned::default());
     }
-    let (ledger, scrub) = workspace.ledger_to_write()?;
+    // However long the scrub waits for the workspace, which it does only
+    // when an older build left a credential in a clone: the change this
+    // follows is made, so giving up would leave its record behind, and
+    // trying the change again would find nothing to change.
+    let (ledger, scrub) = workspace.ledger_to_write_waiting(Duration::MAX)?;
     let entry = project_entry(workspace, project);
     let dropped = ledger.uninstalled(&entry, kind, name)?;
     if dropped {

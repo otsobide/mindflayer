@@ -8,6 +8,7 @@
 mod common;
 
 use std::fs;
+use std::path::PathBuf;
 use std::sync::{mpsc, Arc, Barrier};
 use std::thread;
 use std::time::{Duration, Instant};
@@ -15,7 +16,7 @@ use std::time::{Duration, Instant};
 use common::{repository, skill, url, workspace};
 use mindflayer_core::gather::{self, Request};
 use mindflayer_core::install::{self, Removed};
-use mindflayer_core::ledger::{Action, Outcome};
+use mindflayer_core::ledger::{Action, Outcome, SourceKind};
 use mindflayer_core::lifecycle::{self, Record};
 use mindflayer_core::lock::{HOLDER_FILE, WAIT};
 use mindflayer_core::{
@@ -389,6 +390,53 @@ fn opening_the_ledger_does_not_wait_for_the_workspace() {
 
     assert!(workspace.ledger_path().is_file());
     assert!(started.elapsed() < WAIT, "waited for the workspace");
+}
+
+/// A source an older build stored with a token in its URL, and the clone it
+/// made keeping the token in its config. Returns that config.
+fn tainted(workspace: &FlayerWorkspace) -> PathBuf {
+    let ledger = workspace.ledger().unwrap();
+    let source = ledger
+        .source_for(
+            SourceKind::Git,
+            "https://example.com/acme/skills",
+            None,
+            "skills",
+        )
+        .unwrap();
+    drop(ledger);
+    rusqlite::Connection::open(workspace.ledger_path())
+        .unwrap()
+        .execute(
+            "UPDATE sources SET url = 'https://me:ghp_t0ken@example.com/acme/skills'",
+            [],
+        )
+        .unwrap();
+    let git = workspace.cache_dir().join(source.directory).join(".git");
+    fs::create_dir_all(&git).unwrap();
+    let config = git.join("config");
+    fs::write(
+        &config,
+        "[remote \"origin\"]\n\turl = https://me:ghp_t0ken@example.com/acme/skills\n",
+    )
+    .unwrap();
+    config
+}
+
+#[test]
+fn a_scrub_with_a_clone_to_rewrite_waits_for_the_writer_before_it() {
+    let (_dir, workspace) = workspace();
+    let config = tainted(&workspace);
+    let opening = workspace.clone();
+
+    // The writer before it could be a gather fetching into that clone, or
+    // removing the folders the scrub is about to remove.
+    waits_for_the_writer_before_it(&workspace, move || {
+        let (_, scrub) = opening.ledger_to_write().unwrap();
+        assert_eq!(scrub.sources.len(), 1, "{scrub:?}");
+    });
+
+    assert!(!fs::read_to_string(&config).unwrap().contains("ghp_t0ken"));
 }
 
 #[test]

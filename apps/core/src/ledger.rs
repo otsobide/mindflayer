@@ -1247,8 +1247,8 @@ fn now() -> i64 {
 /// Why the ledger could not be opened, read or written.
 #[derive(Debug, Error)]
 pub enum LedgerError {
-    /// The workspace could not be had to open its ledger to write in
-    /// ([`crate::workspace::FlayerWorkspace::ledger`]).
+    /// The workspace could not be had to scrub clones in, opening its ledger
+    /// to write ([`crate::workspace::FlayerWorkspace::ledger_to_write`]).
     #[error(transparent)]
     Lock(#[from] crate::lock::LockError),
     #[error("{path}: cannot be created: {source}")]
