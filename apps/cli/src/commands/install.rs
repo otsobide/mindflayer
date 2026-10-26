@@ -46,9 +46,9 @@ pub(crate) fn install_named(
     .map_err(|error| with_warnings(error.into()))?;
     let origin = candidate.origin();
     let into = project.name();
-    let mut outcome = match installing::install(workspace, &ledger, project, &candidate)
-        .map_err(|error| with_warnings(error.into()))?
-    {
+    let done = installing::install(workspace, &ledger, project, &candidate)
+        .map_err(|error| with_warnings(error.into()))?;
+    let mut outcome = match done.installed {
             Installed::Added { name, .. } => {
                 Outcome::plain(format!("installed {name} into {into}, from {origin}\n"))
             }
@@ -67,11 +67,34 @@ pub(crate) fn install_named(
                 ok: false,
             },
     };
+    outcome.stdout.push_str(&swept(project, &done.swept));
     if !warnings.is_empty() {
         outcome.stderr.extend(warnings);
         outcome.ok = false;
     }
     Ok(outcome)
+}
+
+/// A line for each stage an interrupted install had left in `project`, which
+/// installing cleared: on stdout, under what the install did, because it is
+/// part of what the install did rather than something wrong with it. Shown
+/// from the project, where somebody would go and look.
+pub(crate) fn swept(project: &MindProject, swept: &[std::path::PathBuf]) -> String {
+    use mindflayer_core::paths;
+    use std::fmt::Write as _;
+
+    let mut lines = String::new();
+    for path in swept {
+        let shown = paths::relative_to(path, project.root())
+            .as_deref()
+            .and_then(paths::to_config_string)
+            .unwrap_or_else(|| path.display().to_string());
+        let _ = writeln!(
+            lines,
+            "  cleared {shown}, left by an install that did not finish"
+        );
+    }
+    lines
 }
 
 /// Take one skill Mindflayer installed back out of one project.

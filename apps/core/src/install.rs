@@ -418,12 +418,15 @@ pub fn offered(
 }
 
 /// Copy one shelf entry into a project.
+///
+/// The copy is built in the project's scratch folder, and what an interrupted
+/// install left there is cleared first and said ([`Installation::swept`]).
 pub fn install(
     workspace: &FlayerWorkspace,
     ledger: &Ledger,
     project: &MindProject,
     candidate: &Candidate,
-) -> Result<Installed, InstallError> {
+) -> Result<Installation, InstallError> {
     let kind = candidate.kind();
     let name = candidate.name().to_owned();
     let entry = project_entry(workspace, project);
@@ -432,7 +435,7 @@ pub fn install(
         return Err(InstallError::UnsafeName { name });
     }
     if candidate.standing == Standing::Foreign {
-        return Ok(Installed::Foreign { name });
+        return Ok(Installed::Foreign { name }.into());
     }
 
     let from = candidate.source(workspace);
@@ -461,7 +464,7 @@ pub fn install(
     // Nothing is written, and above all nothing is recorded — a record would
     // let `uninstall` delete the loaded workspace's own files.
     if same_place(&from, &to) {
-        return Ok(Installed::Unchanged { name, path: to });
+        return Ok(Installed::Unchanged { name, path: to }.into());
     }
     // One inside the other is worse: replacing `to` starts by deleting it,
     // and with it `from` — or copies `from` into itself.
@@ -506,6 +509,7 @@ pub fn install(
             path: to.clone(),
             source,
         })?;
+    let swept = stage.swept().to_vec();
     // Cleared before the ledger is written rather than after, so the scratch
     // folder is held for no longer than the copy takes.
     drop(stage);
@@ -520,11 +524,12 @@ pub fn install(
     let detail = format!("{name} into {}", project.name());
     ledger.log(Action::Install, Some(&entry), Outcome::Ok, Some(&detail))?;
 
-    Ok(match change {
+    let installed = match change {
         copy::Change::Added => Installed::Added { name, path: to },
         copy::Change::Updated => Installed::Updated { name, path: to },
         copy::Change::Unchanged => Installed::Unchanged { name, path: to },
-    })
+    };
+    Ok(Installation { installed, swept })
 }
 
 /// What stops the artifact at `from` from being installed as `name`:
@@ -662,6 +667,28 @@ pub enum Installed {
     Foreign {
         name: String,
     },
+}
+
+/// What [`install`] did: to the artifact, and to the project's scratch folder
+/// on the way.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Installation {
+    pub installed: Installed,
+    /// What installs that were interrupted had left in the project's scratch
+    /// folder, cleared before this one built its copy there. Said rather than
+    /// cleared quietly, because each is an install that did not finish.
+    pub swept: Vec<PathBuf>,
+}
+
+impl From<Installed> for Installation {
+    /// An installation that never reached the scratch folder, and so cleared
+    /// nothing in it.
+    fn from(installed: Installed) -> Self {
+        Installation {
+            installed,
+            swept: Vec::new(),
+        }
+    }
 }
 
 /// What uninstalling one artifact did.

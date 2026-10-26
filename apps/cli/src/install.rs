@@ -152,7 +152,7 @@ pub fn apply(
                         continue;
                     }
                 };
-                match done {
+                match done.installed {
                     Installed::Added { name, .. } | Installed::Updated { name, .. } => {
                         installed += 1;
                         let _ = writeln!(stdout, "{}: installed {name}", project.name());
@@ -166,6 +166,7 @@ pub fn apply(
                         project.name()
                     )),
                 }
+                stdout.push_str(&crate::commands::install::swept(project, &done.swept));
             }
             Pending::Remove => {
                 let name = entry.candidate.name();

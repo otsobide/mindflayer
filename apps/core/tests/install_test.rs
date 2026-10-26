@@ -164,7 +164,9 @@ fn installing_copies_the_skill_into_the_directory_the_project_named() {
     gather::gather(&workspace, &ledger, &Request::git(url(&source))).unwrap();
 
     let candidates = install::survey(&workspace, &ledger, &project, Kind::Skill).unwrap();
-    let outcome = install::install(&workspace, &ledger, &project, &candidates[0]).unwrap();
+    let outcome = install::install(&workspace, &ledger, &project, &candidates[0])
+        .unwrap()
+        .installed;
 
     assert!(matches!(outcome, Installed::Added { .. }), "{outcome:?}");
     assert!(root.join(".claude/skills/deploy/SKILL.md").is_file());
@@ -213,7 +215,9 @@ fn installing_the_same_skill_twice_changes_nothing() {
     install::install(&workspace, &ledger, &project, &candidates[0]).unwrap();
 
     let again = install::survey(&workspace, &ledger, &project, Kind::Skill).unwrap();
-    let outcome = install::install(&workspace, &ledger, &project, &again[0]).unwrap();
+    let outcome = install::install(&workspace, &ledger, &project, &again[0])
+        .unwrap()
+        .installed;
 
     assert!(
         matches!(outcome, Installed::Unchanged { .. }),
@@ -264,7 +268,9 @@ fn installing_does_not_overwrite_a_hand_written_skill() {
     write_by_hand(&project, "deploy", "Written by a person");
 
     let candidates = install::survey(&workspace, &ledger, &project, Kind::Skill).unwrap();
-    let outcome = install::install(&workspace, &ledger, &project, &candidates[0]).unwrap();
+    let outcome = install::install(&workspace, &ledger, &project, &candidates[0])
+        .unwrap()
+        .installed;
 
     assert!(matches!(outcome, Installed::Foreign { .. }), "{outcome:?}");
     let kept = fs::read_to_string(installed_at(&project, "deploy").join("SKILL.md")).unwrap();
@@ -489,7 +495,9 @@ fn what_agents_read_past_does_not_stop_an_install() {
         gathered(&[("skills/deploy/SKILL.md", manifest.as_str())]);
 
     let candidates = install::survey(&workspace, &ledger, &project, Kind::Skill).unwrap();
-    let outcome = install::install(&workspace, &ledger, &project, &candidates[0]).unwrap();
+    let outcome = install::install(&workspace, &ledger, &project, &candidates[0])
+        .unwrap()
+        .installed;
 
     assert!(matches!(outcome, Installed::Added { .. }), "{outcome:?}");
     let copied = fs::read_to_string(installed_at(&project, "deploy").join("SKILL.md")).unwrap();
@@ -536,7 +544,7 @@ fn install_named(
     ledger: &Ledger,
     project: &MindProject,
     name: &str,
-) -> Result<Installed, install::InstallError> {
+) -> Result<install::Installation, install::InstallError> {
     let candidate = install::offered(
         workspace,
         ledger,
@@ -591,7 +599,8 @@ fn while_an_install_runs_and_after_it_the_skills_folder_holds_only_the_skill() {
         });
         for round in 0..10 {
             edit_own(&workspace, "deploy", round);
-            let outcome = install_named(&workspace, &ledger, &project, "deploy");
+            let outcome =
+                install_named(&workspace, &ledger, &project, "deploy").map(|done| done.installed);
             assert!(
                 matches!(
                     outcome,
@@ -640,7 +649,11 @@ fn an_install_never_builds_in_a_stage_another_install_is_using() {
 
     let outcome = install_named(&workspace, &ledger, &project, "deploy").unwrap();
 
-    assert!(matches!(outcome, Installed::Added { .. }), "{outcome:?}");
+    assert!(
+        matches!(outcome.installed, Installed::Added { .. }),
+        "{outcome:?}"
+    );
+    assert!(outcome.swept.is_empty(), "{outcome:?}");
     assert_eq!(
         fs::read_to_string(other.path().join("new").join("SKILL.md")).unwrap(),
         "theirs"
@@ -662,7 +675,8 @@ fn two_installs_at_once_into_one_project_never_share_a_staging_path() {
                 let ledger = workspace.ledger().unwrap();
                 for round in 0..10 {
                     edit_own(workspace, name, round);
-                    let outcome = install_named(workspace, &ledger, project, name);
+                    let outcome =
+                        install_named(workspace, &ledger, project, name).map(|done| done.installed);
                     assert!(
                         matches!(
                             outcome,
@@ -739,10 +753,42 @@ fn a_skills_folder_that_is_not_there_yet_is_made() {
     let ledger = workspace.ledger().unwrap();
     fs::remove_dir(project.directory_for(Kind::Skill)).unwrap();
 
-    let outcome = install_named(&workspace, &ledger, &project, "deploy").unwrap();
+    let outcome = install_named(&workspace, &ledger, &project, "deploy")
+        .unwrap()
+        .installed;
 
     assert!(matches!(outcome, Installed::Added { .. }), "{outcome:?}");
     assert!(installed_at(&project, "deploy").join("SKILL.md").is_file());
+}
+
+#[test]
+fn what_an_interrupted_install_left_is_cleared_and_said_by_the_next() {
+    let (_dir, workspace, project) = own_skills(&["deploy"], 0);
+    let ledger = workspace.ledger().unwrap();
+    // As an install stopped halfway leaves it: a stage named for a process
+    // that has gone, holding half a copy.
+    let left = project.scratch_dir().join("4242-00000000deadbeef");
+    fs::create_dir_all(left.join("new").join("deploy")).unwrap();
+    fs::write(left.join("new").join("deploy").join("SKILL.md"), "half").unwrap();
+
+    let first = install_named(&workspace, &ledger, &project, "deploy").unwrap();
+
+    assert!(
+        matches!(first.installed, Installed::Added { .. }),
+        "{first:?}"
+    );
+    assert!(!left.exists());
+    assert_eq!(first.swept, [left]);
+    assert!(staged(&project).is_empty(), "{:?}", staged(&project));
+
+    // Said once: the next install has nothing left to clear.
+    edit_own(&workspace, "deploy", 1);
+    let second = install_named(&workspace, &ledger, &project, "deploy").unwrap();
+    assert!(
+        matches!(second.installed, Installed::Updated { .. }),
+        "{second:?}"
+    );
+    assert!(second.swept.is_empty(), "{second:?}");
 }
 
 // ---------------------------------------------------------------------------
