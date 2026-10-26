@@ -948,8 +948,12 @@ joins it once CI installs Node
 ([#71](https://github.com/otsobide/mindflayer/issues/71)). Its tests are
 `apps/web/tests/<area>.test.ts`.
 
-`make web/build` writes `apps/web/dist`, which the server embeds; until a
-build has run, the server answers with a page saying to run it.
+`make web/build` writes `apps/web/dist`, which the server embeds as it
+compiles. A server compiled before any build answers every page with one
+saying to run it, and goes on doing so after the build until
+`mindflayer-server` compiles again: which is built first is an [open
+question](docs/architecture.md#open-questions) until
+[#68](https://github.com/otsobide/mindflayer/issues/68) settles it.
 `make web/e2e` has no browser suite to run yet, and says so
 ([#75](https://github.com/otsobide/mindflayer/issues/75)).
 
