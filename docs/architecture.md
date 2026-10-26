@@ -1328,18 +1328,25 @@ Which workspace that is, the command says. Core takes it as a parameter
 (`template::templates`, `template::find`) rather than walking up from the
 project, because a walk misses a workspace that links the project from beside
 it, and `flayer add -p` run there would not find the workspace's own
-templates. `flayer` passes the workspace it runs in. `mind` passes the one above
-the project, or else the default one in your home if it has been made — the
-order `mind link` looks in, without making anything (`commands::consulted`) —
-and the TUI offers in its add form what that finds, since the form runs a
-`mind` line. Core still checks that the workspace manages the project, so one
+templates. `flayer` passes the workspace it runs in. `mind` passes what
+`resolve::consulted` resolves from the project: the one `-W` names, then the
+activated one, then the one above the project, then the default one in your
+home if it has been made, without making anything. `-W` is how a workspace
+beside the project lends it templates from inside it. The TUI's add form
+offers the templates its line will find. On a workspace's screen those are
+the workspace on screen's: a row whose project would consult another runs
+`mind -W . -C <entry>` to reach it (see [the TUI looks where it was
+told](#the-tui-looks-where-it-was-told)). Core still checks that the workspace manages the project, so one
 that does not lends it nothing.
 
 A workspace `mind` cannot read refuses `mind add --template`, since passing it
 over would let a farther template of the same name, a built-in one say, stand
-in for its own. `edit`, `rename`, `remove` and an add from nothing only warn,
-after the change: there the workspace is only told. `mind templates` lists what
-it could read, with the same warning.
+in for its own. For `edit`, `rename`, `remove`, an add from nothing and `mind
+templates`, one found above that cannot be read is a warning after the
+change, since there the workspace is only told, and `mind templates` lists
+what it could read. One named or activated that will not open refuses all of
+them, as it refuses every other command (see [a project's
+workspace](#a-projects-workspace)).
 
 A template's front matter keeps whatever it says except `name` and
 `description`, which `mind add` always sets: the template's lines for those
