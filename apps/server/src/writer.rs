@@ -5,17 +5,10 @@ use std::panic::{self, AssertUnwindSafe};
 use std::sync::{mpsc, Arc};
 use std::thread;
 
-use serde::Serialize;
 use tokio::sync::oneshot;
 
+use crate::transcript::{Entry, Transcript};
 use crate::Backend;
-
-/// What one write did: the lines it was, and what running them produced.
-#[derive(Clone, Serialize)]
-pub(crate) struct Entry {
-    pub(crate) lines: Vec<String>,
-    pub(crate) outcome: serde_json::Value,
-}
 
 /// A task waiting its turn, and where to say how it went.
 struct Write<T> {
@@ -38,9 +31,13 @@ pub(crate) struct Writer<T> {
 }
 
 impl<T: Send + 'static> Writer<T> {
-    /// Start the thread. It lives as long as somebody can still queue a task,
-    /// and ends when the last router holding this writer is dropped.
-    pub(crate) fn start<B: Backend<Task = T>>(backend: Arc<B>) -> io::Result<Self> {
+    /// Start the thread, recording every run in `transcript`. It lives as
+    /// long as somebody can still queue a task, and ends when the last router
+    /// holding this writer is dropped.
+    pub(crate) fn start<B: Backend<Task = T>>(
+        backend: Arc<B>,
+        transcript: Transcript,
+    ) -> io::Result<Self> {
         let (queue, tasks) = mpsc::channel::<Write<T>>();
         thread::Builder::new()
             .name(String::from("mindflayer-writes"))
@@ -52,6 +49,9 @@ impl<T: Send + 'static> Writer<T> {
                         .unwrap_or_else(|_| {
                             Err(String::from("the backend panicked while running the task"))
                         });
+                    if let Ok(entry) = &done {
+                        transcript.record(entry.clone());
+                    }
                     // Nobody may be waiting any more: a client that gives up
                     // does not take its task back, which has already run.
                     let _ = reply.send(done);

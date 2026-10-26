@@ -18,6 +18,7 @@ async fn a_request_without_the_token_is_refused() {
             Some(json!({ "name": "a" })),
         ),
         (Method::POST, "/api/commands", Some(json!({ "name": "a" }))),
+        (Method::GET, "/api/transcript", None),
         (Method::GET, "/api/no-such-endpoint", None),
         (Method::GET, "/api", None),
     ] {

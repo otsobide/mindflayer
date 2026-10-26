@@ -1,5 +1,5 @@
 //! Running tasks: one at a time, in the order they arrived, on the one thread
-//! that does all the writing.
+//! that does all the writing, and the transcript they leave behind.
 
 mod common;
 
@@ -78,5 +78,61 @@ async fn two_concurrent_writes_run_one_at_a_time_in_arrival_order() {
     assert_eq!(
         *runs.lock().unwrap(),
         ["start first", "end first", "start second", "end second"]
+    );
+
+    let transcript = get(
+        &server.router(),
+        "/api/transcript",
+        Auth::Bearer(server.token()),
+    )
+    .await;
+    assert_eq!(
+        transcript.json(),
+        json!([first.json(), second.json()]),
+        "both, in the order they ran"
+    );
+}
+
+#[tokio::test]
+async fn the_transcript_keeps_runs_and_nothing_that_only_read() {
+    let (server, _) = launch();
+    let router = server.router();
+    let token = Auth::Bearer(server.token());
+    let transcript = || get(&router, "/api/transcript", token);
+    assert_eq!(transcript().await.json(), json!([]));
+
+    post(&router, "/api/query", token, json!({ "echo": "x" })).await;
+    post(
+        &router,
+        "/api/commands/preview",
+        token,
+        json!({ "name": "a" }),
+    )
+    .await;
+    post(&router, "/api/commands", token, json!({ "nombre": "nope" })).await;
+    assert_eq!(transcript().await.json(), json!([]));
+
+    post(&router, "/api/commands", token, json!({ "name": "init" })).await;
+    post(
+        &router,
+        "/api/commands",
+        token,
+        json!({ "name": "link beta" }),
+    )
+    .await;
+    let reply = transcript().await;
+    assert_eq!(reply.status, StatusCode::OK);
+    assert_eq!(
+        reply.json(),
+        json!([
+            {
+                "lines": ["fake run init"],
+                "outcome": { "ran": "init", "thread": "mindflayer-writes" },
+            },
+            {
+                "lines": ["fake run link beta"],
+                "outcome": { "ran": "link beta", "thread": "mindflayer-writes" },
+            },
+        ])
     );
 }

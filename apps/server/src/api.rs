@@ -9,6 +9,7 @@ use axum::response::{IntoResponse, Response};
 use axum::Json;
 use serde_json::json;
 
+use crate::transcript::Transcript;
 use crate::writer::Writer;
 use crate::Backend;
 
@@ -16,6 +17,7 @@ use crate::Backend;
 pub(crate) struct Api<B: Backend> {
     pub(crate) backend: Arc<B>,
     pub(crate) writer: Writer<B::Task>,
+    pub(crate) transcript: Transcript,
 }
 
 /// `POST /api/query`: a read, answered by the backend.
@@ -76,6 +78,11 @@ pub(crate) async fn commands<B: Backend>(
         Ok(entry) => Json(entry).into_response(),
         Err(message) => error(StatusCode::INTERNAL_SERVER_ERROR, &message),
     }
+}
+
+/// `GET /api/transcript`: every task the session ran, oldest first.
+pub(crate) async fn transcript<B: Backend>(State(api): State<Arc<Api<B>>>) -> Response {
+    Json(api.transcript.entries()).into_response()
 }
 
 /// Any other path under `/api`: a 404 a script can read, in JSON like every

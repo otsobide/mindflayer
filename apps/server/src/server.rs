@@ -6,12 +6,13 @@ use std::net::{Ipv4Addr, SocketAddr, TcpListener};
 use std::sync::Arc;
 
 use axum::middleware;
-use axum::routing::{any, post, MethodRouter};
+use axum::routing::{any, get, post, MethodRouter};
 use axum::Router;
 
 use crate::api::{self, Api};
 use crate::auth::{self, Gate};
 use crate::token::Token;
+use crate::transcript::Transcript;
 use crate::writer::Writer;
 use crate::Backend;
 
@@ -109,14 +110,17 @@ impl Listening {
 fn route<B: Backend>(server: Server<B>, token: &Token, port: u16) -> io::Result<Router> {
     let gate = Arc::new(Gate::new(token.clone(), port));
     let backend = Arc::new(server.backend);
+    let transcript = Transcript::default();
     let api = Arc::new(Api {
-        writer: Writer::start(Arc::clone(&backend))?,
+        writer: Writer::start(Arc::clone(&backend), transcript.clone())?,
         backend,
+        transcript,
     });
     let router = Router::new()
         .route("/api/query", endpoint(post(api::query::<B>)))
         .route("/api/commands/preview", endpoint(post(api::preview::<B>)))
         .route("/api/commands", endpoint(post(api::commands::<B>)))
+        .route("/api/transcript", endpoint(get(api::transcript::<B>)))
         // The bare prefix and everything under it that names no endpoint,
         // so a typo in a script gets a 404 it can read.
         .route("/api", any(api::missing))

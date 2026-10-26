@@ -12,6 +12,7 @@ mod auth;
 mod backend;
 mod server;
 mod token;
+mod transcript;
 mod writer;
 
 pub use backend::Backend;
