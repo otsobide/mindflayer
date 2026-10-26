@@ -450,8 +450,10 @@ with the prompt and askpass turned off. A credential no helper has is
 provide one, a git credential helper or, for an ssh URL, ssh-agent. Over ssh,
 `gix` runs the system `ssh`, which authenticates with keys of its own and asks
 the helpers only for a user name, so a login ssh refuses is reported the same
-way. What ssh itself asks on the terminal is outside the callback's reach, and
-is an [open question](#open-questions).
+way. Whether a fetch went over ssh is read from the URL `gix` connected to, not
+the one typed: git config's `url.<base>.insteadOf` can turn a typed https URL
+into an ssh one, or the reverse. What ssh itself asks on the terminal is
+outside the callback's reach, and is an [open question](#open-questions).
 
 The callback is set on the connection rather than asked for through git
 config (`gitoxide.credentials.terminalPrompt=false`), which would also stop
