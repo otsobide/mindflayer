@@ -1,6 +1,6 @@
 ---
 name: code-review
-description: Reviews a change for bugs, safety, tests and scope, most severe first
+description: Reviews a change for bugs, safety, tests and scope, most severe first. Use when asked to review a diff, a branch or a pull request.
 ---
 
 # Code review
