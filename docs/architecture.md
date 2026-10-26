@@ -785,10 +785,12 @@ complete.
 ## Decisions
 
 The roadmap in [#15](https://github.com/otsobide/mindflayer/issues/15) rests on
-twenty-three decisions, validated by the owner on 2026-10-26. They are written
-down here so that the PRs carrying them out do not reopen them: a change that
+twenty-three decisions: twenty-two validated by the owner on 2026-10-26, and
+[D-20](#d-20-opencode-subagents-pending), still pending. They are written down
+here so that the PRs carrying them out do not reopen them: a change that
 disagrees with one starts by changing the decision, here, with the owner. Each
-says what was chosen, why, what was turned down, and which issues it unblocks.
+says what was chosen, why, what was turned down, and which issues it unblocks;
+the pending one says instead what holds until the owner chooses.
 
 They describe what is to be built, not what is. Until the issues a decision
 unblocks have landed, the sections above still describe the code as it stands,
