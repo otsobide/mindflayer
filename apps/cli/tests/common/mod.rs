@@ -110,6 +110,15 @@ pub fn flayer_at_home(dir: &Path, home: &Path, args: &[&str]) -> Result<Outcome,
     flayer(dir, &args)
 }
 
+/// Run `mind ...` with `home` as the home directory.
+pub fn mind_at_home(dir: &Path, home: &Path, args: &[&str]) -> Result<Outcome, Failure> {
+    let mut args: Vec<&str> = args.to_vec();
+    let home = home.to_string_lossy().into_owned();
+    args.push("--home");
+    args.push(&home);
+    mind(dir, &args)
+}
+
 /// Write a rule into an already initialized mind project.
 pub fn write_rule(root: &Path, route: &str, contents: &str) {
     let path = directory_for(root, Kind::Rule).join(route);

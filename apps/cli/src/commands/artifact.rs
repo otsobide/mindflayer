@@ -3,20 +3,23 @@
 //!
 //! Each takes the holder it acts on — a project, or the workspace's own — so
 //! `mind add` and `flayer add -p alpha` are one function given one project,
-//! and `flayer add` is the same function given the workspace.
+//! and `flayer add` is the same function given the workspace. Each also takes
+//! the workspace the command resolved, which the change is told about: its
+//! record of what it installed there must not outlive the copy.
 
 use std::fmt::Write as _;
 use std::path::Path;
 
 use mindflayer_core::template::{self, Origin};
 use mindflayer_core::{
-    create, create_from, lifecycle, paths, Kind, MindProject, Reference, Target,
+    create, create_from, lifecycle, paths, FlayerWorkspace, Kind, MindProject, Reference, Target,
 };
 
 use crate::render::{plural, printable, table};
 use crate::{CliError, Failure, Outcome};
 
 pub(crate) fn add_to(
+    workspace: Option<&FlayerWorkspace>,
     holder: &MindProject,
     kind: Kind,
     name: &str,
@@ -39,6 +42,7 @@ pub(crate) fn add_to(
     ));
     disowned(
         &mut outcome,
+        workspace,
         holder,
         kind,
         name,
@@ -48,6 +52,7 @@ pub(crate) fn add_to(
 }
 
 pub(crate) fn edit_in(
+    workspace: Option<&FlayerWorkspace>,
     holder: &MindProject,
     reference: &str,
     editor: Option<&str>,
@@ -63,6 +68,7 @@ pub(crate) fn edit_in(
     if changed {
         disowned(
             &mut outcome,
+            workspace,
             holder,
             target.kind,
             &target.name,
@@ -73,6 +79,7 @@ pub(crate) fn edit_in(
 }
 
 pub(crate) fn rename_in(
+    workspace: Option<&FlayerWorkspace>,
     holder: &MindProject,
     reference: &str,
     to: &str,
@@ -88,6 +95,7 @@ pub(crate) fn rename_in(
     ));
     disowned(
         &mut outcome,
+        workspace,
         holder,
         target.kind,
         &target.name,
@@ -97,6 +105,7 @@ pub(crate) fn rename_in(
     // like something Mindflayer put there.
     disowned(
         &mut outcome,
+        workspace,
         holder,
         target.kind,
         &renamed.name,
@@ -106,6 +115,7 @@ pub(crate) fn rename_in(
 }
 
 pub(crate) fn remove_from(
+    workspace: Option<&FlayerWorkspace>,
     holder: &MindProject,
     reference: &str,
     yes: bool,
@@ -130,6 +140,7 @@ pub(crate) fn remove_from(
     ));
     disowned(
         &mut outcome,
+        workspace,
         holder,
         target.kind,
         &target.name,
@@ -249,12 +260,22 @@ fn edited(project: &MindProject, target: &Target, changed: bool) -> Outcome {
 }
 
 /// Drop a record saying `flayer install` put `name` into `project`, and say so
-/// when there was one.
+/// when there was one. With no workspace there is no record to drop.
 ///
 /// Failing to is a warning rather than an error: the change the record was
 /// about has already been made, and reporting it as not made would be false.
-fn disowned(outcome: &mut Outcome, project: &MindProject, kind: Kind, name: &str, why: &str) {
-    match mindflayer_core::install::disown(project, kind, name) {
+fn disowned(
+    outcome: &mut Outcome,
+    workspace: Option<&FlayerWorkspace>,
+    project: &MindProject,
+    kind: Kind,
+    name: &str,
+    why: &str,
+) {
+    let Some(workspace) = workspace else {
+        return;
+    };
+    match mindflayer_core::install::disown(workspace, project, kind, name) {
         Ok(true) => {
             let _ = writeln!(outcome.stdout, "  {why}");
         }

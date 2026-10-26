@@ -251,3 +251,79 @@ fn an_installed_skill_that_is_edited_is_yours_from_then_on() {
         Standing::Foreign
     );
 }
+
+/// `hub`, a workspace, and `collapse`, a project it links from beside it
+/// rather than from above, with the workspace's own `deploy` installed there.
+fn installed_from_beside() -> (TempDir, PathBuf, PathBuf) {
+    let dir = TempDir::new().unwrap();
+    let hub = dir.path().join("hub");
+    let project = dir.path().join("collapse");
+    for root in [&hub, &project] {
+        fs::create_dir(root).unwrap();
+    }
+    flayer(&hub, &["init"]).unwrap();
+    mind(&project, &["init"]).unwrap();
+    flayer(&hub, &["link", "../collapse"]).unwrap();
+    flayer(&hub, &["add", "skill", "deploy", "Ship it"]).unwrap();
+    flayer(&hub, &["install", "-p", "collapse", "deploy"]).unwrap();
+    (dir, hub, project)
+}
+
+#[cfg(unix)]
+#[test]
+fn a_workspace_beside_a_project_drops_its_record_when_flayer_edits_the_copy() {
+    let (_dir, hub, project) = installed_from_beside();
+
+    let outcome = flayer(
+        &hub,
+        &[
+            "edit",
+            "-p",
+            "collapse",
+            "deploy",
+            "--editor",
+            "printf 'Mine.\\n' >>",
+        ],
+    )
+    .unwrap();
+
+    // Walking up from the project never reaches the workspace; the one the
+    // command runs in is the one asked.
+    assert!(outcome.stdout.contains("it is yours"), "{}", outcome.stdout);
+    let left = flayer(&hub, &["uninstall", "-p", "collapse", "deploy"]).unwrap();
+    assert_eq!(
+        left.stderr,
+        vec!["warning: deploy in collapse was not installed by Mindflayer, so it was left alone"]
+    );
+    assert!(project.join("skills/deploy/SKILL.md").is_file());
+}
+
+#[cfg(unix)]
+#[test]
+fn mind_drops_the_record_of_the_workspace_in_your_home_when_that_manages_the_project() {
+    let home = TempDir::new().unwrap();
+    let elsewhere = TempDir::new().unwrap();
+    let project = elsewhere.path().join("collapse");
+    fs::create_dir(&project).unwrap();
+    mind(&project, &["init"]).unwrap();
+    flayer_at_home(elsewhere.path(), home.path(), &["link", "collapse"]).unwrap();
+    flayer_at_home(
+        elsewhere.path(),
+        home.path(),
+        &["add", "skill", "deploy", "Ship it"],
+    )
+    .unwrap();
+    mind_at_home(&project, home.path(), &["install", "deploy"]).unwrap();
+
+    let outcome = mind_at_home(
+        &project,
+        home.path(),
+        &["edit", "deploy", "--editor", "printf 'Mine.\\n' >>"],
+    )
+    .unwrap();
+
+    assert!(outcome.stdout.contains("it is yours"), "{}", outcome.stdout);
+    let left = mind_at_home(&project, home.path(), &["uninstall", "deploy"]).unwrap();
+    assert!(!left.ok);
+    assert!(project.join("skills/deploy/SKILL.md").is_file());
+}
