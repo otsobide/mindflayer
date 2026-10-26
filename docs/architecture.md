@@ -1357,6 +1357,16 @@ decides, such as whether the sidebar is collapsed. A store holding a copy of
 something the server said would be a second answer that cannot tell when it
 has gone wrong.
 
+What the browser decides and a launch should not forget, the colour mode and
+the sidebar's size and collapse, is kept in cookies (`src/preferences.ts`)
+rather than localStorage. localStorage is kept per origin, and each launch
+takes a port of its own, so every one would open on an empty store; a cookie
+is kept per host, whatever the port. Neither choice can be handed a storage,
+since Nuxt UI reads the colour mode through a bare `useDark()` and the
+sidebar through a bare `useStorage`, so the cookies are vueuse's default
+storage (its `getDefaultStorage` handler). The browser sends them to
+whatever listens on 127.0.0.1, so they hold nothing about anybody's work.
+
 ### Nothing the CSP refuses
 
 The server's CSP is `default-src 'self'` ([What keeps other pages
@@ -2224,8 +2234,9 @@ leak into the lifecycle code. Unblocks #33, #45, #62, #93, #94 and #95.
 - **A light panel starts dark.** `index.html` carries `dark`, so the default
   never flashes light, but a browser that chose light sees one dark frame
   before the script applies the choice. A script in the page that read it
-  first is what the CSP refuses; a cookie the server read would need the
-  server to rewrite the page as it sends it.
+  first is what the CSP refuses. The choice is in a cookie the server
+  receives with the page's request, but acting on it would need the server
+  to rewrite the page as it sends it.
 - **The panel's transcript ends with the server.** The TUI prints its
   transcript when it closes; the server keeps the panel's in memory and drops
   it when it stops. Whether `flayer ui` prints it on the way out, as the TUI

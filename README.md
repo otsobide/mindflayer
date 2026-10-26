@@ -926,10 +926,10 @@ three names.
 
 `apps/web` is the web panel, in Vue 3.5 and Nuxt UI 4 on Vite, written in
 TypeScript. So far it is the frame the views will fill: a sidebar, a header
-and an empty overview, dark unless you switch it to light. It needs Node 24
-(`apps/web/.node-version`) and pnpm, at the version `package.json` pins in
-`packageManager`, which `corepack enable` provides. Without corepack, name
-any other way to run it in `PNPM`:
+and an empty overview, dark unless you switch it to light, which the next
+launch remembers. It needs Node 24 (`apps/web/.node-version`) and pnpm, at
+the version `package.json` pins in `packageManager`, which `corepack enable`
+provides. Without corepack, name any other way to run it in `PNPM`:
 
 ```bash
 make web/test          # vitest
