@@ -295,6 +295,50 @@ fn a_link_aimed_by_a_relative_route_is_refused_by_the_plan() {
     );
 }
 
+#[cfg(unix)]
+#[test]
+fn a_folder_reached_through_a_link_is_refused_and_left_as_it_is() {
+    let (dir, workspace) = beside();
+    let root = dir.path();
+    // The skills folder is a link, as a dotfiles setup makes it; the rules
+    // folder is reached through one, a step above it.
+    fs::create_dir_all(root.join("dotfiles/config")).unwrap();
+    fs::rename(root.join("skills"), root.join("dotfiles/skills")).unwrap();
+    std::os::unix::fs::symlink("dotfiles/skills", root.join("skills")).unwrap();
+    fs::rename(root.join("rules"), root.join("dotfiles/config/rules")).unwrap();
+    std::os::unix::fs::symlink("dotfiles/config", root.join("config")).unwrap();
+    let text = marker(&workspace).replace("rules = \"rules\"", "rules = \"config/rules\"");
+    fs::write(workspace.config_path(), text).unwrap();
+    let mut workspace = FlayerWorkspace::open(root).unwrap();
+
+    let plan = migrate::library_plan(&workspace);
+    let error = migrate::library(&mut workspace).unwrap_err();
+
+    assert!(
+        matches!(
+            plan.refusals.as_slice(),
+            [
+                Refusal::Linked { kind: Kind::Skill, folder: skills, target: to_skills },
+                Refusal::Linked { kind: Kind::Rule, folder: config, target: to_config },
+            ] if *skills == root.join("skills")
+                && to_skills == Path::new("dotfiles/skills")
+                && *config == root.join("config")
+                && to_config == Path::new("dotfiles/config")
+        ),
+        "{:?}",
+        plan.refusals
+    );
+    assert!(plan.moves.is_empty(), "{:?}", plan.moves);
+    assert!(
+        matches!(error, migrate::MigrateError::Refused(_)),
+        "{error}"
+    );
+    assert!(root.join("dotfiles/skills/commit-style/SKILL.md").is_file());
+    assert!(root
+        .join("dotfiles/config/rules/git/no-force-push.md")
+        .is_file());
+}
+
 // ---------------------------------------------------------------------------
 // Migrating
 // ---------------------------------------------------------------------------

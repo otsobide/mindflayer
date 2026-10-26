@@ -96,6 +96,15 @@ pub enum Refusal {
     Backup { path: PathBuf },
     #[error("{path}: a link to {target}, which is relative to where the link is, so moved it would point elsewhere; make it absolute or move it yourself")]
     Link { path: PathBuf, target: PathBuf },
+    /// The folder a kind is kept in, or one above it inside the workspace, is
+    /// a link: what is in it lives wherever that leads, a dotfiles repository
+    /// say, and a rename would take it out of there.
+    #[error("{folder}: a link to {target}, so moving the workspace's {kind}s would take them out of wherever it leads; move them yourself, or point flayer.toml at the library")]
+    Linked {
+        kind: Kind,
+        folder: PathBuf,
+        target: PathBuf,
+    },
     #[error("{folder}: the workspace keeps its {kind}s there, and it overlaps {with}, so which files are the workspace's is not clear; move them yourself")]
     Tangled {
         kind: Kind,
@@ -187,7 +196,8 @@ impl MigrateError {
 /// A folder the marker names outside the workspace, or on the shelf or the
 /// cache, is refused rather than emptied: `flayer init` refuses to name one,
 /// but `open` reads a marker edited by hand to, and what is there is somebody
-/// else's, or gathering's.
+/// else's, or gathering's. So is one reached through a link, which keeps
+/// what is in it somewhere else, on purpose.
 pub fn library_plan(workspace: &FlayerWorkspace) -> Plan {
     let mut plan = Plan {
         backup: backup_path(workspace),
@@ -236,6 +246,14 @@ pub fn library_plan(workspace: &FlayerWorkspace) -> Plan {
                 kind: repoint.kind,
                 folder: repoint.from.clone(),
                 with,
+            });
+            continue;
+        }
+        if let Some((folder, target)) = linked_folder(workspace.root(), &repoint.from) {
+            plan.refusals.push(Refusal::Linked {
+                kind: repoint.kind,
+                folder,
+                target,
             });
             continue;
         }
@@ -467,6 +485,28 @@ fn overlap(a: &Path, b: &Path) -> bool {
 /// Whether anything at all is at `path`, a link that leads nowhere included.
 fn is_there(path: &Path) -> bool {
     fs::symlink_metadata(path).is_ok()
+}
+
+/// The first folder below `root` on the way down to `folder`, `folder`
+/// included, that is a link, and where it points.
+///
+/// Every step rather than `folder` alone, as `config -> dotfiles/config`
+/// keeps `config/skills` elsewhere as surely as `skills -> dotfiles/skills`
+/// does. `root` itself is not asked: a workspace reached through a link is
+/// still one, and the library is inside it with everything else. `folder`
+/// is inside `root` here, the plan having refused one that is not.
+fn linked_folder(root: &Path, folder: &Path) -> Option<(PathBuf, PathBuf)> {
+    let route = folder.strip_prefix(root).ok()?;
+    let mut current = root.to_path_buf();
+    for step in route.components() {
+        current.push(step);
+        let metadata = fs::symlink_metadata(&current).ok()?;
+        if metadata.file_type().is_symlink() {
+            let target = fs::read_link(&current).unwrap_or_default();
+            return Some((current, target));
+        }
+    }
+    None
 }
 
 /// Where `path` points when it is a link whose target is relative: read
