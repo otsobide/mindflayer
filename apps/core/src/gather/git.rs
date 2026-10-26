@@ -110,7 +110,9 @@ pub fn clone(url: &str, reference: Option<&str>, into: &Path) -> Result<Clone, G
 /// what stopped it, and otherwise what `gix` said.
 fn fetch_failed(url: &str, shortfall: Option<Shortfall>, detail: String) -> GitError {
     match shortfall {
-        Some(Shortfall::Missing) => GitError::Credentials { url: redacted(url) },
+        Some(Shortfall::Missing) => GitError::Credentials {
+            url: redacted(url).into_owned(),
+        },
         // Whether a refusal over ssh is a missing key is the callback's to
         // say, not `url`'s: a rewrite in git config may have sent the fetch
         // over another transport than the one `url` names.
@@ -142,7 +144,7 @@ pub enum GitError {
     #[error("{url}: cannot be fetched: {detail}")]
     Fetch { url: String, detail: String },
     /// The server asked who is fetching, and nothing that may answer had a
-    /// credential it would take. `url` is shown without its userinfo.
+    /// credential it would take. `url` is shown without its credentials.
     #[error(
         "{url}: needs credentials, and gathering never prompts for them: \
          configure a git credential helper, or use ssh-agent for an ssh URL"
