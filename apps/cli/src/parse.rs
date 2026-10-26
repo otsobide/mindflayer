@@ -56,7 +56,7 @@ pub struct Cli {
 // Each field is named after its flag rather than after its agent: a global
 // argument shares a namespace with every subcommand's own arguments, and
 // `agents` is what an option naming a project's agents would be called.
-#[derive(Debug, Clone, Default, Args)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Args)]
 #[command(next_help_heading = "Agent homes")]
 pub struct AgentHomeOptions {
     /// Claude Code's configuration folder [default: $CLAUDE_CONFIG_DIR, then

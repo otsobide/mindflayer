@@ -66,3 +66,42 @@ fn an_agent_home_is_taken_wherever_a_global_option_is() {
     let cli = Cli::try_parse_from(["mind", "--agents-dir=", "flayer", "list"]).unwrap();
     assert_eq!(cli.agent_homes.agents_dir.as_deref(), Some(""));
 }
+
+#[test]
+fn the_helpers_pin_the_default_home_and_every_agent_home_to_none() {
+    let dir = TempDir::new().unwrap();
+    let empty = Some(String::new());
+    let pinned = AgentHomeOptions {
+        claude_config_dir: empty.clone(),
+        codex_home: empty.clone(),
+        opencode_config_dir: empty.clone(),
+        agents_dir: empty.clone(),
+    };
+
+    let mind = parsed_mind(dir.path(), &["list"]);
+    let flayer = parsed_flayer(dir.path(), &["list"]);
+
+    // Given empty, not left out: left out, each would fall through to the
+    // environment running the tests and to the developer's own home.
+    for (home, agents) in [
+        (&mind.home, &mind.agent_homes),
+        (&flayer.home, &flayer.agent_homes),
+    ] {
+        assert_eq!(home, &empty);
+        assert_eq!(agents, &pinned);
+        assert_eq!(default_home(home.as_deref()), None);
+        assert_eq!(agent_homes(agents), AgentHomes::default());
+    }
+}
+
+#[test]
+fn a_test_can_still_give_a_home_of_its_own_in_either_spelling() {
+    let dir = TempDir::new().unwrap();
+
+    let cli = parsed_flayer(dir.path(), &["list", "--codex-home=/codex", "--home", "/h"]);
+
+    assert_eq!(cli.agent_homes.codex_home.as_deref(), Some("/codex"));
+    assert_eq!(cli.home.as_deref(), Some("/h"));
+    // The ones it did not give stay pinned.
+    assert_eq!(cli.agent_homes.claude_config_dir.as_deref(), Some(""));
+}
