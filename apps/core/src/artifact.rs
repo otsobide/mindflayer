@@ -239,6 +239,18 @@ impl Artifact {
                         issues.push(ValidationIssue::CompatibilityTooLong { length });
                     }
                 }
+                // Read leniently, so the skill still lists; said here, so the
+                // entries an agent expecting strings would trip on are known.
+                if manifest.metadata.not_a_map {
+                    issues.push(ValidationIssue::MetadataNotAMap);
+                }
+                issues.extend(
+                    manifest
+                        .metadata
+                        .ignored
+                        .iter()
+                        .map(|key| ValidationIssue::MetadataNotAString { key: key.clone() }),
+                );
             }
             Declared::Rule => {
                 // A rule declares nothing, so there is exactly one thing left
@@ -357,6 +369,8 @@ pub enum ValidationIssue {
     DescriptionTooLong { length: usize },
     CompatibilityEmpty,
     CompatibilityTooLong { length: usize },
+    MetadataNotAMap,
+    MetadataNotAString { key: String },
     Empty,
 }
 
@@ -388,6 +402,14 @@ impl fmt::Display for ValidationIssue {
             ValidationIssue::CompatibilityTooLong { length } => write!(
                 f,
                 "`compatibility` is {length} characters, over the {MAX_COMPATIBILITY_LEN} character limit"
+            ),
+            ValidationIssue::MetadataNotAMap => write!(
+                f,
+                "`metadata` is not a map of strings, so it is ignored, and left in the file as written"
+            ),
+            ValidationIssue::MetadataNotAString { key } => write!(
+                f,
+                "`metadata` entry `{key}` is not a string, so it is ignored, and left in the file as written"
             ),
             ValidationIssue::Empty => write!(f, "the file has no content"),
         }

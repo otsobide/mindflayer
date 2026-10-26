@@ -42,12 +42,68 @@ pub struct SkillManifest {
     /// system packages, network access — in prose, when it needs anything.
     #[serde(default)]
     pub compatibility: Option<String>,
+    /// Whatever else its author, or a tool, wanted to record about it.
+    #[serde(default, deserialize_with = "lenient_metadata")]
+    pub metadata: Metadata,
 }
 
 impl SkillManifest {
     /// Parse front matter that has already been separated from its body.
     pub fn parse(front_matter: &str) -> Result<Self, serde_yaml_ng::Error> {
         serde_yaml_ng::from_str(front_matter)
+    }
+}
+
+/// `metadata`, read leniently.
+///
+/// The specification makes it a map from strings to strings, but skills in
+/// the wild nest maps and write booleans in it — a shipping agent does
+/// (agentskills/agentskills#514) — and refusing the whole skill over one
+/// entry would hide it from every listing. So the string entries are kept, the
+/// others are named so `validate` can say so, and nothing is rewritten: what
+/// is ignored here stays in the file for whichever agent wrote it.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct Metadata {
+    /// Every entry mapping a string to a string, in the order written.
+    pub entries: Vec<(String, String)>,
+    /// The key of every other entry, as written.
+    pub ignored: Vec<String>,
+    /// Whether `metadata` was not a map at all, and so was ignored whole.
+    pub not_a_map: bool,
+}
+
+fn lenient_metadata<'de, D>(deserializer: D) -> Result<Metadata, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    use serde_yaml_ng::Value;
+
+    let mut metadata = Metadata::default();
+    match Option::<Value>::deserialize(deserializer)? {
+        None => {}
+        Some(Value::Mapping(entries)) => {
+            for (key, value) in entries {
+                match (key, value) {
+                    (Value::String(key), Value::String(value)) => {
+                        metadata.entries.push((key, value));
+                    }
+                    (key, _) => metadata.ignored.push(written(&key)),
+                }
+            }
+        }
+        Some(_) => metadata.not_a_map = true,
+    }
+    Ok(metadata)
+}
+
+/// A YAML key as somebody would recognise it in the file: a string as itself,
+/// anything else as YAML.
+fn written(key: &serde_yaml_ng::Value) -> String {
+    match key {
+        serde_yaml_ng::Value::String(key) => key.clone(),
+        other => serde_yaml_ng::to_string(other)
+            .map(|text| text.trim_end().to_owned())
+            .unwrap_or_default(),
     }
 }
 

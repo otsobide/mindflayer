@@ -56,6 +56,49 @@ fn reads_compatibility_when_it_is_there() {
 }
 
 #[test]
+fn reads_metadata_as_strings_in_the_order_written() {
+    let manifest = SkillManifest::parse(
+        "name: a\ndescription: d\nmetadata:\n  version: \"1.0\"\n  author: acme\n",
+    )
+    .unwrap();
+    assert_eq!(
+        manifest.metadata.entries,
+        vec![
+            ("version".to_owned(), "1.0".to_owned()),
+            ("author".to_owned(), "acme".to_owned()),
+        ]
+    );
+    assert!(manifest.metadata.ignored.is_empty());
+    assert!(!manifest.metadata.not_a_map);
+
+    let absent = SkillManifest::parse("name: a\ndescription: d\nmetadata:\n").unwrap();
+    assert_eq!(absent.metadata, Metadata::default());
+}
+
+#[test]
+fn metadata_that_is_not_strings_is_named_rather_than_refused() {
+    // Nested maps and booleans are written by agents that ship; the skill
+    // still reads, and what is not a string is named for `validate`.
+    let manifest = SkillManifest::parse(
+        "name: a\ndescription: d\nmetadata:\n  author: acme\n  internal:\n    team: ops\n  pinned: true\n  7: seven\n",
+    )
+    .unwrap();
+    assert_eq!(
+        manifest.metadata.entries,
+        vec![("author".to_owned(), "acme".to_owned())]
+    );
+    assert_eq!(manifest.metadata.ignored, vec!["internal", "pinned", "7"]);
+    assert!(!manifest.metadata.not_a_map);
+}
+
+#[test]
+fn metadata_that_is_not_a_map_is_ignored_whole() {
+    let manifest = SkillManifest::parse("name: a\ndescription: d\nmetadata: [one, two]\n").unwrap();
+    assert!(manifest.metadata.not_a_map);
+    assert!(manifest.metadata.entries.is_empty());
+}
+
+#[test]
 fn rejects_front_matter_missing_a_required_key() {
     assert!(SkillManifest::parse("name: a\n").is_err());
     assert!(SkillManifest::parse("description: d\n").is_err());

@@ -1,6 +1,7 @@
 //! Unit tests for `artifact.rs`, kept beside it rather than inside it.
 
 use super::*;
+use crate::skill::Metadata;
 
 /// A skill built without touching the disk, to check the rules rather
 /// than the loading.
@@ -15,6 +16,7 @@ fn skill(name: &str, description: &str, directory: &str) -> Artifact {
             allowed_tools: None,
             license: None,
             compatibility: None,
+            metadata: Metadata::default(),
         }),
         summary: first_line(description),
     }
@@ -119,6 +121,37 @@ fn a_compatibility_once_written_has_to_say_something_and_fit() {
             length: MAX_COMPATIBILITY_LEN + 1
         }]
     );
+}
+
+#[test]
+fn metadata_that_is_not_strings_is_reported_entry_by_entry() {
+    let mut artifact = skill("a", "d", "/s/a");
+    if let Declared::Skill(manifest) = &mut artifact.declared {
+        manifest.metadata = Metadata {
+            entries: vec![("author".into(), "acme".into())],
+            ignored: vec!["internal".into(), "pinned".into()],
+            not_a_map: false,
+        };
+    }
+    assert_eq!(
+        artifact.validate(),
+        vec![
+            ValidationIssue::MetadataNotAString {
+                key: "internal".into()
+            },
+            ValidationIssue::MetadataNotAString {
+                key: "pinned".into()
+            },
+        ]
+    );
+
+    if let Declared::Skill(manifest) = &mut artifact.declared {
+        manifest.metadata = Metadata {
+            not_a_map: true,
+            ..Metadata::default()
+        };
+    }
+    assert_eq!(artifact.validate(), vec![ValidationIssue::MetadataNotAMap]);
 }
 
 #[test]
