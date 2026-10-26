@@ -17,7 +17,7 @@ use crate::skill::{
 
 /// What an artifact declared about itself.
 ///
-/// This enum, not a field on [`Artifact`], is where the kinds differ — and it
+/// This enum, not a field on [`Artifact`], is where the kinds differ, and it
 /// *is* the kind, so an artifact cannot carry a discriminant that disagrees
 /// with what was parsed, because there is only one. Each kind's payload says
 /// what that kind requires: a skill without a description is not a state this
@@ -45,7 +45,7 @@ impl Declared {
 /// An artifact on disk.
 ///
 /// The body is not held: it is the bulk of the file and a listing never shows
-/// it. What a listing does show — one line saying what the thing is — is
+/// it. What a listing does show (one line saying what the thing is) is
 /// captured at load, because the file had to be read anyway.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Artifact {
@@ -370,7 +370,7 @@ fn first_line(text: &str) -> Option<String> {
 /// The first line of a document that carries any text.
 ///
 /// Leading `#` are stripped, so a document that opens with a heading is
-/// summarised by that heading rather than by a row of hashes — which is what
+/// summarised by that heading rather than by a row of hashes, which is what
 /// most markdown files opening with a title actually want.
 fn opening_line(source: &str) -> Option<String> {
     source
@@ -420,7 +420,7 @@ pub(crate) fn issue_list(issues: &[ValidationIssue]) -> String {
         .join("; ")
 }
 
-/// Lowercase letters and digits, in words joined by single hyphens —
+/// Lowercase letters and digits, in words joined by single hyphens:
 /// `^[a-z0-9]+(-[a-z0-9]+)*$`, the Agent Skills rule for a skill's name: what
 /// an agent can be asked to invoke without quoting or case folding.
 ///
@@ -459,8 +459,8 @@ pub enum ValidationIssue {
 
 impl ValidationIssue {
     /// Whether this breaks one of the strict rules: the ones Mindflayer will
-    /// not break when it writes a skill into a project — creating, renaming
-    /// or installing one — rather than only report.
+    /// not break when it writes a skill into a project (creating, renaming
+    /// or installing one) rather than only report.
     ///
     /// The name, the folder it is filed in, and the description, because
     /// those are what agents refuse or trip on: Codex skips a skill whose name

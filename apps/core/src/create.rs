@@ -3,7 +3,7 @@
 //! The one way into a project that is not a copy from the shelf: a skill or a
 //! rule somebody is about to write, scaffolded so that it passes `validate`
 //! from the moment it exists. Without a template, what is written is the
-//! least that does — a skill's front matter and a heading, a rule's opening
+//! least that does: a skill's front matter and a heading, a rule's opening
 //! line. With one, the template is copied and the name and description filled
 //! in.
 //!
@@ -38,8 +38,8 @@ pub const DESCRIPTION_PLACEHOLDER: &str = "{{description}}";
 /// Create an artifact of `kind` called `name` in `project`, and load it back.
 ///
 /// `description` is the one line saying what the artifact is: a skill's
-/// `description`, a rule's opening line. Both kinds need one — a skill without
-/// it is invalid and a rule without an opening line is an empty file — so it
+/// `description`, a rule's opening line. Both kinds need one (a skill without
+/// it is invalid and a rule without an opening line is an empty file), so it
 /// is asked for rather than left as a placeholder somebody forgets to replace.
 ///
 /// Nothing already there is written over, including a folder that is not an
@@ -57,7 +57,7 @@ pub fn create(
 /// The same, starting from a template.
 ///
 /// A skill template is copied whole, and in its manifest the `name` and
-/// `description` are set — whatever the template had for them is replaced —
+/// `description` are set (whatever the template had for them is replaced)
 /// and [`NAME_PLACEHOLDER`] and [`DESCRIPTION_PLACEHOLDER`] in the body are
 /// filled in. A rule template is filled in throughout, front matter included,
 /// with a `description` its front matter declares set in the same way, and
@@ -350,7 +350,7 @@ fn check_description(kind: Kind, description: &str) -> Result<(), CreateError> {
 }
 
 /// A skill's manifest: `name` and `description` first, then whatever else the
-/// front matter says, then the body — checked by parsing it back.
+/// front matter says, then the body, checked by parsing it back.
 ///
 /// The two keys are serialized rather than formatted: a description is free
 /// text, and one containing `: ` or opening with a quote would otherwise write

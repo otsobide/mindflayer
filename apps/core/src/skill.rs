@@ -41,8 +41,8 @@ pub struct SkillManifest {
     /// The license, by name or as a reference to a file the skill bundles.
     #[serde(default)]
     pub license: Option<String>,
-    /// What the skill needs from where it runs — the product it was made for,
-    /// system packages, network access — in prose, when it needs anything.
+    /// What the skill needs from where it runs (the product it was made for,
+    /// system packages, network access), in prose, when it needs anything.
     #[serde(default, deserialize_with = "lenient_compatibility")]
     pub compatibility: Compatibility,
     /// Whatever else its author, or a tool, wanted to record about it.
@@ -71,7 +71,7 @@ pub enum Compatibility {
     Unstated,
     /// Written as a string, as the specification has it.
     Stated(String),
-    /// Written as something else — a list, a map, a number — and so ignored.
+    /// Written as something else (a list, a map, a number), and so ignored.
     NotAString,
 }
 
@@ -99,7 +99,7 @@ where
 /// A YAML value: its text when it is a string, and nothing otherwise.
 ///
 /// Whatever is not a string is skipped rather than built, because building it
-/// can fail where skipping cannot — a map refuses a repeated key — and one
+/// can fail where skipping cannot (a map refuses a repeated key), and one
 /// stray key inside a value that is about to be ignored anyway is no reason to
 /// fail the manifest.
 struct Text(Option<String>);
@@ -198,8 +198,8 @@ impl<'de> Visitor<'de> for TextVisitor {
 /// `metadata`, read leniently.
 ///
 /// The specification makes it a map from strings to strings, but skills in
-/// the wild nest maps and write booleans in it — a shipping agent does
-/// (agentskills/agentskills#514) — and refusing the whole skill over one
+/// the wild nest maps and write booleans in it, as a shipping agent does
+/// (agentskills/agentskills#514), and refusing the whole skill over one
 /// entry would hide it from every listing. So the string entries are kept, the
 /// others are named so `validate` can say so, and nothing is rewritten: what
 /// is ignored here stays in the file for whichever agent wrote it.

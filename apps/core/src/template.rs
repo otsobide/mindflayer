@@ -6,8 +6,8 @@
 //! `.mindflayer/templates/` for every project a workspace manages. A skill
 //! template is a folder holding a `SKILL.md` and whatever else the skill
 //! should start with; a rule template is one markdown file. Of two templates
-//! of one kind and one name, the closer wins — the project's over the
-//! workspace's over the one built in — the way a saved workflow or a git
+//! of one kind and one name, the closer wins (the project's over the
+//! workspace's over the one built in), the way a saved workflow or a git
 //! setting is looked up.
 
 use std::fs;
