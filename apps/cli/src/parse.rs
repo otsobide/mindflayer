@@ -272,14 +272,18 @@ pub struct FlayerCli {
 pub enum FlayerCommand {
     /// Create a flayer workspace here.
     Init {
-        /// Where the workspace keeps its own skills [default: `skills`].
+        /// Where the workspace keeps its own skills [default:
+        /// `.mindflayer/library/skills`].
         ///
         /// Relative to the workspace. They are the ones it shares with every
-        /// project it manages.
+        /// project it manages, kept by default in its library, where no
+        /// agent looks; anywhere inside the workspace but the shelf and the
+        /// cache will do.
         #[arg(long, value_name = "DIR")]
         skills: Option<PathBuf>,
 
-        /// Where the workspace keeps its own rules [default: `rules`].
+        /// Where the workspace keeps its own rules [default:
+        /// `.mindflayer/library/rules`].
         #[arg(long, value_name = "DIR")]
         rules: Option<PathBuf>,
     },
