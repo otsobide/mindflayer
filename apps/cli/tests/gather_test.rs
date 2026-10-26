@@ -87,6 +87,37 @@ fn a_skill_that_cannot_be_read_is_a_warning_and_a_non_zero_exit() {
 }
 
 #[test]
+fn a_skill_with_nested_metadata_is_still_listed_with_a_warning() {
+    let source = repository(&[(
+        "skills/nested/SKILL.md",
+        "---\nname: nested\ndescription: Nested metadata\nmetadata:\n  owner:\n    team: ops\n---\n",
+    )]);
+    let dir = TempDir::new().unwrap();
+    flayer(dir.path(), &["init"]).unwrap();
+    let url = source.path().to_string_lossy().into_owned();
+
+    let outcome = flayer(dir.path(), &["gather", "git", &url]).unwrap();
+
+    assert!(
+        outcome.stdout.contains("added  nested  Nested metadata"),
+        "{}",
+        outcome.stdout
+    );
+    assert_eq!(outcome.stderr.len(), 1, "{:?}", outcome.stderr);
+    assert!(outcome.stderr[0].starts_with("warning: "));
+    assert!(
+        outcome.stderr[0].ends_with(
+            "SKILL.md: `metadata` entry `owner` is not a string, so it is ignored, and left in the file as written"
+        ),
+        "{}",
+        outcome.stderr[0]
+    );
+    assert!(!outcome.ok);
+    let listed = flayer(dir.path(), &["gather", "list"]).unwrap();
+    assert!(listed.stdout.contains("nested"), "{}", listed.stdout);
+}
+
+#[test]
 fn gather_list_names_where_each_skill_came_from() {
     let source = repository(&[("skills/deploy/SKILL.md", &skill_file("deploy", "Ship it"))]);
     let dir = TempDir::new().unwrap();

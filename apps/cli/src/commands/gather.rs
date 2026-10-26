@@ -109,11 +109,18 @@ fn gathered(url: &str, report: &Report) -> Outcome {
     }
 
     // An artifact that could not be taken is a warning beside what was, not a
-    // reason to be told nothing about the rest.
+    // reason to be told nothing about the rest; so is what is wrong with one
+    // that was taken anyway.
     let stderr: Vec<String> = report
         .failures
         .iter()
         .map(|failure| format!("warning: {failure}"))
+        .chain(
+            report
+                .warnings
+                .iter()
+                .map(|warning| format!("warning: {warning}")),
+        )
         .collect();
     let ok = stderr.is_empty();
     Outcome { stdout, stderr, ok }
