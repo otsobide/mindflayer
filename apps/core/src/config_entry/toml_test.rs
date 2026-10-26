@@ -313,6 +313,46 @@ fn a_key_is_indented_as_the_one_before_it() {
 }
 
 #[test]
+fn an_array_with_a_trailing_comma_stays_through_every_edit_beside_it() {
+    // Three spaces and a tab, and the one place TOML has a trailing comma:
+    // the end of an array laid out on lines.
+    for indent in ["   ", "\t"] {
+        let a = format!(
+            "[mcp_servers.a]\n{indent}command = \"x\"\n{indent}args = [\n{indent}{indent}\"-y\",\n{indent}{indent}\"z\",\n{indent}]\n"
+        );
+        let b = format!("\n[mcp_servers.b]\n{indent}command = \"y\" # k\n");
+        let text = format!("{a}{b}");
+        let gh = Value::object([("command", Value::from("gh"))]);
+        let cases = [
+            (
+                &["mcp_servers", "c"][..],
+                Edit::Insert(gh.clone()),
+                format!("{text}\n[mcp_servers.c]\ncommand = \"gh\"\n"),
+            ),
+            (
+                &["mcp_servers", "b"],
+                Edit::Replace(gh.clone()),
+                format!("{a}\n[mcp_servers.b]\ncommand = \"gh\"\n"),
+            ),
+            (
+                &["mcp_servers", "b", "command"],
+                Edit::Replace(Value::from("w")),
+                format!("{a}\n[mcp_servers.b]\n{indent}command = \"w\" # k\n"),
+            ),
+            (&["mcp_servers", "b"], Edit::Remove, a.clone()),
+            (
+                &["mcp_servers", "a", "cwd"],
+                Edit::Insert(Value::from("/srv")),
+                format!("{a}{indent}cwd = \"/srv\"\n{b}"),
+            ),
+        ];
+        for (key, change, expected) in cases {
+            assert_eq!(edit(Format::Toml, &text, key, &change).unwrap(), expected);
+        }
+    }
+}
+
+#[test]
 fn an_object_is_written_the_way_the_objects_beside_it_are() {
     let gh = Value::object([("command", Value::from("gh"))]);
     let cases = [
