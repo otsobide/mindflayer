@@ -3,7 +3,7 @@
 use std::fs;
 use std::path::Path;
 
-use mindflayer_core::workspace::FORMAT_VERSION;
+use mindflayer_core::workspace::{FLAYER_FORMAT_VERSION, MIND_FORMAT_VERSION};
 use mindflayer_core::{
     Directories, FlayerWorkspace, Initialization, Kind, MindProject, Registration, WorkspaceError,
     FLAYER_CONFIG, FLAYER_DIR, MIND_CONFIG, MIND_DIR,
@@ -20,7 +20,7 @@ fn initializing_a_mind_project_creates_its_marker_and_its_skills_folder() {
     assert!(dir.path().join(MIND_DIR).join(MIND_CONFIG).is_file());
     assert!(project.directory_for(Kind::Skill).is_dir());
     assert_eq!(project.root(), dir.path());
-    assert_eq!(project.config().version, FORMAT_VERSION);
+    assert_eq!(project.config().version, MIND_FORMAT_VERSION);
 }
 
 #[test]
@@ -274,7 +274,7 @@ fn link_keeps_the_comments_that_explain_the_file() {
         );
     }
     // And the keys it was not asked to touch.
-    assert!(after.contains(&format!("version = {FORMAT_VERSION}")));
+    assert!(after.contains(&format!("version = {FLAYER_FORMAT_VERSION}")));
     assert!(after.contains(&format!("name = \"{}\"", workspace.name())));
 }
 
@@ -682,7 +682,7 @@ fn a_marker_from_the_future_is_still_refused() {
     fs::create_dir_all(dir.path().join(MIND_DIR)).unwrap();
     fs::write(
         dir.path().join(MIND_DIR).join(MIND_CONFIG),
-        format!("version = {}\nname = \"x\"\n", FORMAT_VERSION + 1),
+        format!("version = {}\nname = \"x\"\n", MIND_FORMAT_VERSION + 1),
     )
     .unwrap();
 

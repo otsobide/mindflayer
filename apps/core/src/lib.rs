@@ -40,7 +40,7 @@ pub use scan::{scan, Found, Scan, ScanFailure};
 pub use skill::{SkillManifest, MAX_DESCRIPTION_LEN, MAX_NAME_SEGMENT_LEN};
 pub use template::{Template, TemplateError, TEMPLATES_DIR};
 pub use workspace::{
-    Directories, FlayerConfig, FlayerWorkspace, Initialization, Loaded, Member, MindConfig,
+    Directories, FlayerConfig, FlayerWorkspace, Initialization, Loaded, Marker, Member, MindConfig,
     MindProject, Registration, WorkspaceError, CACHE_DIR, DIRECTORIES_VERSION, FLAYER_CONFIG,
     FLAYER_DIR, MIND_CONFIG, MIND_DIR,
 };

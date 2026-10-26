@@ -1,12 +1,14 @@
 //! The two levels Mindflayer works at.
 //!
 //! A **mind project** is a directory carrying a `.mind`, the way a repository
-//! carries a `.git`: it holds skills, in `.mind/skills/<name>/SKILL.md`, and
-//! it travels with the code it belongs to.
+//! carries a `.git`: it holds skills and rules beside the code, in the
+//! directories its marker names (`skills/<name>/SKILL.md` and `rules/` by
+//! default), and it travels with the code it belongs to.
 //!
 //! A **flayer workspace** sits above them, carrying a `.mindflayer` that
-//! references the mind projects it manages, so skills can be listed and moved
-//! across several projects at once.
+//! references the mind projects it manages, so their artifacts can be listed
+//! and moved across several projects at once, and holds artifacts of its own
+//! to share with them.
 //!
 //! Both are found the way git finds a repository: by walking up from a
 //! starting directory until the marker file appears. Both are described by a
@@ -14,6 +16,7 @@
 //! behind by a failed copy is not mistaken for a project.
 
 use std::collections::BTreeMap;
+use std::fmt;
 use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
@@ -25,13 +28,24 @@ use crate::kind::Kind;
 use crate::ledger::{Ledger, LedgerError, LEDGER_FILE};
 use crate::paths;
 
-/// The layout version written into new marker files.
+/// The layout version written into new `mind.toml` markers, and the newest
+/// one this build reads.
 ///
 /// Refusing to read a version from the future is what lets the format change
-/// later without an old binary silently misreading a newer project.
-pub const FORMAT_VERSION: u32 = 2;
+/// later without an old binary silently misreading a newer project. The
+/// project marker has a version of its own rather than one shared with
+/// [`FLAYER_FORMAT_VERSION`]: shared, a change to either format would be a new
+/// version of both, and an older build would refuse a workspace that had not
+/// changed at all.
+pub const MIND_FORMAT_VERSION: u32 = 2;
 
-/// The first version whose markers say where each kind's artifacts live.
+/// The layout version written into new `flayer.toml` markers, and the newest
+/// one this build reads. Its own, for the reason [`MIND_FORMAT_VERSION`] is.
+pub const FLAYER_FORMAT_VERSION: u32 = 2;
+
+/// The first [`MIND_FORMAT_VERSION`] whose markers say where each kind's
+/// artifacts live. Only a project marker's version is held against it: a
+/// workspace marker's number says nothing about where a project keeps things.
 ///
 /// Before it, that was not a question a project could answer: every kind lived
 /// inside `.mind`. Reading such a marker as if it used today's default would
@@ -52,6 +66,40 @@ pub const FLAYER_CONFIG: &str = "flayer.toml";
 /// Kept rather than discarded so a gather can be inspected after the fact, and
 /// so what a source actually contained is still there when its report is not.
 pub const CACHE_DIR: &str = "cache";
+
+/// Which of the two marker files a version was read from.
+///
+/// Each is versioned on its own, so a refusal names the one that is newer: the
+/// path alone leaves the reader to know which file is which level's, and a
+/// front end deciding what to say about it should not have to compare file
+/// names.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Marker {
+    /// A mind project's [`MIND_CONFIG`].
+    Project,
+    /// A flayer workspace's [`FLAYER_CONFIG`].
+    Workspace,
+}
+
+impl Marker {
+    /// The newest version of this marker this build reads, which is also the
+    /// one it writes.
+    pub const fn version(self) -> u32 {
+        match self {
+            Marker::Project => MIND_FORMAT_VERSION,
+            Marker::Workspace => FLAYER_FORMAT_VERSION,
+        }
+    }
+}
+
+impl fmt::Display for Marker {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(match self {
+            Marker::Project => "project marker",
+            Marker::Workspace => "workspace marker",
+        })
+    }
+}
 
 /// What an `init` actually did.
 ///
@@ -218,7 +266,7 @@ impl MindProject {
             return Err(WorkspaceError::NotAProject { path: root });
         }
         let config: MindConfig = read_config(&config_path)?;
-        check_version(&config_path, config.version)?;
+        check_version(&config_path, Marker::Project, config.version)?;
         Ok(Self { root, config })
     }
 
@@ -351,7 +399,7 @@ impl FlayerWorkspace {
             return Err(WorkspaceError::NotAWorkspace { path: root });
         }
         let config: FlayerConfig = read_config(&config_path)?;
-        check_version(&config_path, config.version)?;
+        check_version(&config_path, Marker::Workspace, config.version)?;
         Ok(Self { root, config })
     }
 
@@ -771,7 +819,7 @@ impl FlayerWorkspace {
         // Re-read, so what is in memory is what is on disk rather than what we
         // believe we wrote.
         let config: FlayerConfig = read_config(&path)?;
-        check_version(&path, config.version)?;
+        check_version(&path, Marker::Workspace, config.version)?;
         self.config = config;
         Ok(value)
     }
@@ -830,7 +878,13 @@ impl FlayerWorkspace {
         MindProject {
             root: self.root.clone(),
             config: MindConfig {
-                version: FORMAT_VERSION,
+                // The project marker's version rather than the workspace's:
+                // `directory_for` holds it against `DIRECTORIES_VERSION`, a
+                // line drawn in the project format, and below it sends every
+                // kind its marker does not name into `.mind`, where a
+                // workspace has never kept its artifacts and a v1
+                // `flayer.toml` would send them.
+                version: MIND_FORMAT_VERSION,
                 name: self.config.name.clone(),
                 directories: self.config.directories.clone(),
             },
@@ -954,8 +1008,12 @@ pub enum WorkspaceError {
     NotAProject { path: PathBuf },
     #[error("{path}: not a flayer workspace (no {FLAYER_DIR}/{FLAYER_CONFIG})")]
     NotAWorkspace { path: PathBuf },
-    #[error("{path}: written by a newer Mindflayer (format version {found}, this one reads {FORMAT_VERSION})")]
-    Version { path: PathBuf, found: u32 },
+    #[error("{path}: written by a newer Mindflayer ({marker} version {found}, this one reads {supported})", supported = .marker.version())]
+    Version {
+        path: PathBuf,
+        marker: Marker,
+        found: u32,
+    },
     #[error("{path}: cannot be edited: {detail}")]
     Edit { path: PathBuf, detail: String },
     #[error("{path}: not registered in the workspace at {workspace}")]
@@ -1017,10 +1075,11 @@ fn read_config<T: for<'de> Deserialize<'de>>(path: &Path) -> Result<T, Workspace
 }
 
 /// Refuse a marker written by a version that knows more than this one.
-fn check_version(path: &Path, found: u32) -> Result<(), WorkspaceError> {
-    if found > FORMAT_VERSION {
+fn check_version(path: &Path, marker: Marker, found: u32) -> Result<(), WorkspaceError> {
+    if found > marker.version() {
         return Err(WorkspaceError::Version {
             path: path.to_path_buf(),
+            marker,
             found,
         });
     }
@@ -1174,7 +1233,7 @@ fn mind_template(name: &str, directories: &Directories) -> String {
          # holding this {MIND_DIR}. Point them wherever the agents that read them\n\
          # already look — .claude/skills, docs/rules — and Mindflayer follows.\n\
          # They are meant to be committed: they travel with the project.\n\
-         version = {FORMAT_VERSION}\n\
+         version = {MIND_FORMAT_VERSION}\n\
          name = {}\n\
          \n\
          [directories]\n\
@@ -1197,7 +1256,7 @@ fn flayer_template(name: &str, directories: &Directories) -> String {
          #\n\
          # `loaded` lists other flayer workspaces whose own skills its projects\n\
          # can install too, read from there each time: `flayer load <path>`.\n\
-         version = {FORMAT_VERSION}\n\
+         version = {FLAYER_FORMAT_VERSION}\n\
          name = {}\n\
          projects = []\n\
          loaded = []\n\
