@@ -5,9 +5,9 @@ use std::fmt::Write as _;
 use std::path::Path;
 
 use mindflayer_core::gather::{self, Report, Request};
-use mindflayer_core::Kind;
+use mindflayer_core::{FlayerWorkspace, Kind};
 
-use super::workspace_here;
+use super::{reading_workspace, workspace_here};
 use crate::render::{indent, plural, printable, table};
 use crate::{CliError, Failure, GatherCommand, Outcome};
 
@@ -17,54 +17,59 @@ pub(crate) fn run_gather(
     directory: &Path,
     home: Option<&Path>,
 ) -> Result<Outcome, Failure> {
-    let workspace = workspace_here(directory, home)?;
-    let ledger = workspace.ledger().map_err(CliError::from)?;
-
     match command {
         GatherCommand::Git {
             url,
             path,
             reference,
         } => {
+            let workspace = workspace_here(directory, home)?;
+            let ledger = workspace.ledger().map_err(CliError::from)?;
             let request = Request::git(url.clone())
                 .from_subdirectory(path.clone())
                 .at(reference.clone());
             let report = gather::gather(&workspace, &ledger, &request).map_err(CliError::from)?;
             Ok(gathered(url, &report))
         }
-        GatherCommand::List => {
-            use mindflayer_core::install::{offered_by_loads, Offer};
-            // What the workspaces it loads offer first, as the install screen
-            // orders them; what they cannot offer is a warning beside the
-            // rest, not a reason to show nothing.
-            let loads = offered_by_loads(&workspace);
-            let stderr: Vec<String> = loads
-                .failures
-                .iter()
-                .map(|failure| format!("warning: {failure}"))
-                .collect();
-            let mut offers: Vec<Offer> = loads.offers;
-            let mut stderr = stderr;
-            for gathered in ledger.gathered().map_err(CliError::from)? {
-                // Listed only if it could be installed: a name that is not one
-                // folder name never can be, wherever it came from.
-                if mindflayer_core::install::is_folder_name(&gathered.name) {
-                    offers.push(Offer::Shelf(gathered));
-                } else {
-                    stderr.push(format!(
-                        "warning: {}: declares the name `{}`, which is not one folder name, so it is not offered",
-                        gathered.path, gathered.name
-                    ));
-                }
-            }
-            let ok = stderr.is_empty();
-            Ok(Outcome {
-                stdout: shelf_listing(&offers, workspace.loads().is_empty()),
-                stderr,
-                ok,
-            })
+        GatherCommand::List => reading_workspace(directory, home, shelf),
+    }
+}
+
+/// `flayer gather list`: what can be installed from elsewhere, from a
+/// ledger read without being made — a workspace that has gathered nothing
+/// has no database, and listing that is no reason to create one.
+fn shelf(workspace: &FlayerWorkspace) -> Result<Outcome, Failure> {
+    use mindflayer_core::install::{offered_by_loads, Offer};
+    let ledger = workspace.ledger_for_reading().map_err(CliError::from)?;
+    // What the workspaces it loads offer first, as the install screen
+    // orders them; what they cannot offer is a warning beside the rest, not
+    // a reason to show nothing.
+    let loads = offered_by_loads(workspace);
+    let stderr: Vec<String> = loads
+        .failures
+        .iter()
+        .map(|failure| format!("warning: {failure}"))
+        .collect();
+    let mut offers: Vec<Offer> = loads.offers;
+    let mut stderr = stderr;
+    for gathered in ledger.gathered().map_err(CliError::from)? {
+        // Listed only if it could be installed: a name that is not one folder
+        // name never can be, wherever it came from.
+        if mindflayer_core::install::is_folder_name(&gathered.name) {
+            offers.push(Offer::Shelf(gathered));
+        } else {
+            stderr.push(format!(
+                "warning: {}: declares the name `{}`, which is not one folder name, so it is not offered",
+                gathered.path, gathered.name
+            ));
         }
     }
+    let ok = stderr.is_empty();
+    Ok(Outcome {
+        stdout: shelf_listing(&offers, workspace.loads().is_empty()),
+        stderr,
+        ok,
+    })
 }
 
 /// What one gather did, in the order it is worth reading: the source, then

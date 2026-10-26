@@ -136,6 +136,22 @@ fn flayer_templates_reads_the_default_workspace_without_making_it() {
 }
 
 #[test]
+fn flayer_gather_list_reads_the_default_workspace_without_making_it() {
+    let (home, elsewhere) = unmade_home();
+
+    let outcome = flayer_at_home(elsewhere.path(), home.path(), &["gather", "list"]).unwrap();
+
+    assert!(
+        outcome.stdout.starts_with("nothing gathered yet\n"),
+        "{}",
+        outcome.stdout
+    );
+    assert_eq!(outcome.stderr, vec![hint(home.path())]);
+    assert!(outcome.ok);
+    assert!(!made(home.path()));
+}
+
+#[test]
 fn once_something_writes_the_workspace_is_made_and_the_hint_is_gone() {
     let (home, elsewhere) = unmade_home();
     let alpha = elsewhere.path().join("alpha");
