@@ -357,20 +357,10 @@ impl Ledger {
                 _ => {}
             }
         }
-        {
-            let mut copy = Connection::open(&temporary).map_err(|e| failed(io::Error::other(e)))?;
-            let copying = Backup::new(&self.connection, &mut copy)
-                .map_err(|e| failed(io::Error::other(e)))?;
-            // Every page in one step, so the copy is one moment of the
-            // database rather than pages from either side of a write.
-            match copying.step(-1).map_err(|e| failed(io::Error::other(e)))? {
-                StepResult::Done => {}
-                other => {
-                    return Err(failed(io::Error::other(format!(
-                        "something else was writing to it ({other:?}), so try again"
-                    ))))
-                }
-            }
+        if let Err(error) = copy_database(&self.connection, &temporary) {
+            let _ = fs::remove_file(&temporary);
+            let _ = fs::remove_file(journal_of(&temporary));
+            return Err(failed(error));
         }
         if let Ok(metadata) = fs::metadata(&self.path) {
             let _ = fs::set_permissions(&temporary, metadata.permissions());
@@ -806,6 +796,21 @@ pub fn backup_path(path: &Path, version: u32) -> PathBuf {
     let mut name = path.file_name().unwrap_or_default().to_os_string();
     name.push(format!(".v{version}.bak"));
     path.with_file_name(name)
+}
+
+/// Copy the database `from` is connected to into a new one at `to`, closed
+/// once it is whole.
+fn copy_database(from: &Connection, to: &Path) -> Result<(), io::Error> {
+    let mut copy = Connection::open(to).map_err(io::Error::other)?;
+    let copying = Backup::new(from, &mut copy).map_err(io::Error::other)?;
+    // Every page in one step, so the copy is one moment of the database
+    // rather than pages from either side of a write.
+    match copying.step(-1).map_err(io::Error::other)? {
+        StepResult::Done => Ok(()),
+        other => Err(io::Error::other(format!(
+            "something else was writing to it ({other:?}), so try again"
+        ))),
+    }
 }
 
 /// The rollback journal SQLite keeps beside a database while writing it.
