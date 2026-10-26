@@ -70,7 +70,8 @@ family of commands under `commands/`, and what a command produced, with the
 helpers every report is laid out with, in `render.rs`. `CliError` has
 `error.rs` to itself, `homes.rs` decides where the default workspace's home and
 each agent's own folder are, and gathers what `-W` and `$MINDFLAYER_WORKSPACE`
-say (`Lookup`), and `lib.rs` only says what is public.
+say (`Lookup`), `progress.rs` says what a gather's steps read as and draws
+them on stderr, and `lib.rs` only says what is public.
 
 The split is by family. One file holding the parser, every command and the
 rendering was where every change to a command met every other, so pieces of
@@ -616,6 +617,58 @@ nothing. One that reads but breaks a rule is taken, with a warning for each
 problem ([Strict when writing, lenient when
 reading](#strict-when-writing-lenient-when-reading)).
 
+### Following a gather, and stopping it
+
+A gather is the network, so it can take long enough that somebody wants to
+know how it is going, and to change their mind. A `gather::Request` carries a
+`Watch`: a callback the gather tells each `Progress` to, and a flag that
+cancels it. Both are core's own types. `gix` has a progress tree and an
+interrupt flag of its own, and handing those to the front ends would tie each
+of them, the server that will stream progress (#112) included, to gix's
+version and to the names it gives its steps.
+
+The steps are connecting, receiving objects, resolving deltas, checking out
+files, reading the folders that hold a manifest, `n` of `m`, and placing what
+was read on the shelf, `n` of `m`. The counts during the fetch are gix's: the
+clone hands it a progress tree and reads it from a thread of its own ten times
+a second, because gix counts most of its work on shared atomics, from threads
+of its own, without telling the progress anything. The counts are picked out
+by the identifiers gix gives them, not the names it shows, which it is free to
+reword. That thread is joined before the clone says its next step, so a front
+end never hears a count after the step that follows it. The callback is a
+plain `Fn` that is `Send` and `Sync`, rather than a channel, so each front end
+chooses how the news travels: the CLI writes a line, the TUI sends it to the
+thread that draws, and a server can stream it.
+
+The flag is gix's interrupt, so a cancel stops the fetch or the checkout where
+gix checks, and the clone it had begun is removed. gix does not check it while
+it connects, only once the pack is coming, so a cancel while connecting waits
+for the connection to be made or to fail: as long as a server takes to answer,
+or a prompt to be answered. The harvest checks it once more after every folder
+is read and before anything is placed, which is why it reads them all first
+rather than reading and placing each in turn. That is the last moment a cancel
+is honoured: past it the shelf and the ledger change, and a gather stopped
+halfway through that would leave them neither as they were nor as the source
+has them. A cancel that comes later is too late, and the gather finishes.
+`Progress::cancellable` says which steps are which, so a front end that offers
+a cancel stops offering it when the gather stops honouring it, rather than
+knowing where the check is. Cancelled in time, the shelf and the ledger are as
+they were: the gather is not logged, and a source it registered is forgotten
+again. It is registered before the fetch because the clone needs the folder
+name registering gives it; holding the registration in a transaction until the
+gather ends was the other way, and is rejected, because every other write to
+the ledger would wait as long as the network does. The clone is not part of the
+promise: every gather re-makes it, so a cancelled one can leave a known source
+with the new clone, or with none.
+
+`flayer gather` on a terminal draws each step over the last on one line of
+stderr, and wipes it before the report. Piped or captured it draws nothing,
+so what it prints there is what it always printed. The binaries run every
+line with that line's watch (`run_watched`, `run_flayer_cli_watched`), and
+`run` and `run_flayer_cli`, which the tests call, with one nobody follows. The
+TUI runs a gather on a thread of its own, and `esc` cancels it ([A gather runs
+apart](#a-gather-runs-apart)).
+
 ### Why `gix` rather than running `git`
 
 Nothing depends on a `git` being installed, or on which `git` is first on the
@@ -627,7 +680,7 @@ Half of it is solved: a fetch **never prompts** for a credential. When a server
 asks who is fetching, `gix`'s own answer runs the credential helpers git config
 names and, when none of them has a credential, asks a person: an askpass
 program, then the terminal. The TUI owns the terminal while a gather runs, so
-that prompt is a screen that stops answering, and the server that comes next
+that prompt is drawn over, its keys raced for, and the server that comes next
 has no terminal at all. So every connection `gix` lets a clone configure is
 given a credentials callback (`gather::credentials`) that runs the same helper
 cascade with the prompt and askpass turned off. A credential no helper has is
@@ -1212,9 +1265,12 @@ running, and `l` is `mind link`, after which the screen is the workspace's.
 A key that asks for work produces a `Task`, and `Task::commands` turns it into
 the words a person would type — `flayer link beta`, `mind -C beta add skill
 deploy 'Ship it'`. Those words are parsed by `Cli` and `FlayerCli`, the parsers
-the binaries use, and run through `run` and `run_flayer_cli`, the functions the
-binaries call. The TUI has no code path of its own for linking, adding or
-gathering, and it cannot grow one, because there is nowhere in it to put one.
+the binaries use, and run through `run_with` and `run_flayer_with`, what the
+binaries' `run_watched` and `run_flayer_cli_watched` call once they have read
+where to look for a workspace (`run` and `run_flayer_cli` are the same with a
+watch nobody follows). The TUI has no code path of its own for linking, adding
+or gathering, and it cannot grow one, because there is nowhere in it to put
+one.
 
 That is what turns "every feature has a command and a place in the TUI" from a
 promise into a property. A feature is written once, as a command, and the TUI
@@ -1256,11 +1312,12 @@ not a command, because it changes nothing.
   to; like `state.rs`, it touches nothing.
 - `tui.rs` — the loop, reading the disk into what the screen shows, and running
   tasks. `step` is everything the loop does between a key and the next frame,
-  and it is public so a test can do exactly that without a terminal.
+  and `settle` what it does before each frame while a task runs apart; both
+  are public so a test can do exactly that without a terminal.
 
 The loop draws a box saying what is running before it runs it, because a
-gather is the network and a frozen screen reads as a hung one. Keys pressed
-while it ran are dropped: they were aimed at a screen that has since changed.
+frozen screen reads as a hung one. Keys pressed while it ran are dropped: they
+were aimed at a screen that has since changed.
 
 `mind edit` is the one command that needs the terminal itself, because an
 editor draws a screen of its own. For it the loop steps aside — raw mode off,
@@ -1268,6 +1325,42 @@ back to the normal screen — runs the command as it runs any other, and builds
 its own screen again from scratch when the editor closes. The task says so
 (`takes_terminal`), so the loop does not have to know which commands are
 editors.
+
+### A gather runs apart
+
+A gather is the network, and the one task that runs apart
+(`Task::runs_apart`). `step` starts its lines on a thread of their own and
+returns at once, with a [watch](#following-a-gather-and-stopping-it) whose
+steps come back over a channel. Before each frame the loop calls `settle`,
+which takes in the last step and, once the task is over, shows what came of it
+exactly as `step` does for a task that ran in place. Everything else is the
+local disk, over before anybody could read a count, and stays on the loop's
+thread rather than paying for one of its own.
+
+The box shows the command, the last step and that `esc` cancels. The screen is
+the task's until it is over, so every other key is ignored, as one pressed
+while a task ran in place is dropped. `esc` cancels the watch: the gather stops
+before it places anything, and the form it came from says so, as for any gather
+that did not get as far as a report. Once the step is placing, which is no
+longer `cancellable`, the box says a cancel is too late instead, and the gather
+finishes with its report. Leaving cancels it too, and `wait` holds the screen
+until it has stopped, so what it did reaches the transcript and nothing is half
+done when the process ends. A gather still connecting takes a cancel only once
+it is connected, so `esc` there, or leaving, waits as long as the network does;
+and since the loop goes on reading the terminal, a question ssh asks there is
+raced for its answer, as the [open questions](#open-questions) say under
+Private repositories. The lines are still the task's command lines, as
+`App::lines` gives every task (`flayer init` first on the [default
+workspace](#the-default-workspace) before it is made), parsed and run by
+`execute`: the thread changes where they run, not what they are.
+
+They go through a `Runner` on the way, which is the real parsers and commands
+unless `App::runner` holds a stand-in. A gather from a repository on the local
+disk is over before a frame could show it, so the test of the progress and the
+cancel stands in a gather that goes on only when the test says so, and drives
+it through `step`, `settle` and the keys as the loop would. The stand-in is
+handed the words all the same, so even then there is nothing the screen runs
+that is not a command line.
 
 ### What it asks before it writes
 
@@ -1794,11 +1887,11 @@ refused where loads are.
 
 The TUI resolves through the same function. `tui::load` and `load_project`
 ask `resolve` and `consulted` with the `Lookup` the screen was opened with,
-and `tui::execute` hands that lookup to every line the screen runs, as it
-hands them home, rather than letting each line read the environment again: a
-screen opened with `-W` or an activation runs every line against that
-workspace. A `-W` among a line's own words wins, and is typed from the root
-the lines run from, as a `-C` is.
+and `tui::execute` hands that lookup, home and all, to every line the screen
+runs, rather than letting each line read the environment again: a screen
+opened with `-W` or an activation runs every line against that workspace. A
+`-W` among a line's own words wins, and is typed from the root the lines run
+from, as a `-C` is.
 
 A project's row runs `mind -C <entry>`, the line somebody in the project would
 type, which consults the project's own workspace. Where that is not the
@@ -1880,8 +1973,8 @@ question](#open-questions).
 
 No command reads them yet, so none takes them, and `agent_homes` is first
 called by the first one that does. That one also has to make the TUI pass its
-own to every command it runs, as `tui::execute` passes `--home`. Otherwise a
-command run from the TUI decides them again from the environment, and a test
+own to every command it runs, as `tui::execute` passes its `Lookup`. Otherwise
+a command run from the TUI decides them again from the environment, and a test
 that drives the TUI reaches the real folders.
 
 ## Creating and changing artifacts
@@ -2544,9 +2637,13 @@ leak into the lifecycle code. Unblocks #33, #45, #62, #93, #94 and #95.
   `Excluded::Outside` warns. Asking gix's `excludes` whether each path is
   ignored once it is written, as the tests do, would let the installing side
   or a doctor check say so.
-- **Long work in the TUI.** A gather holds the screen until it finishes, with a
-  box saying what is running, and cannot be cancelled. A background thread
-  would change that; it has not been needed yet.
+- **Ctrl-C during `flayer gather`.** The watch's flag is there to be set, but
+  the CLI installs no signal handler, so Ctrl-C ends the process wherever the
+  gather has got to. Ended before it places anything, it costs the clone and
+  can leave registered a source nothing came from; ended while it places, it
+  can leave the shelf between two revisions, and the ledger behind it. A
+  handler that cancels the watch would make the command line stop where the
+  TUI's `esc` does.
 - **Gathering rules.** Only skills are gatherable. A rule is a loose file at any
   depth, so harvesting one means deciding what its name is relative to — the
   same question `Catalog::take_files` answers inside a project, asked of a
@@ -2578,7 +2675,12 @@ leak into the lifecycle code. Unblocks #33, #45, #62, #93, #94 and #95.
   connection will not have it. An in-memory `gitoxide.credentials.terminalPrompt=false`
   on the clone would keep that prompt off the terminal, though not an askpass
   named by `GIT_ASKPASS` or `SSH_ASKPASS`; a `gix` that configures the retry
-  too would close it.
+  too would close it. In the TUI either prompt is worse than at the command
+  line: a gather runs apart while the loop goes on reading the terminal and
+  drops every key but `esc` and Ctrl-C, so the loop races the prompt for its
+  answer; and neither key stops a gather waiting on one, since `gix` takes a
+  cancel only once it is receiving. `BatchMode=yes` would close the TUI's ssh
+  case too.
 - **When the scrub can stop.** `gather::scrub` runs whenever a command
   opens the ledger to write (`FlayerWorkspace::ledger_to_write`), because an
   older build could write a token into the same file. Schema 3 (#30) changes

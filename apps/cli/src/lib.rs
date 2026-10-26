@@ -19,12 +19,14 @@ pub(crate) mod error;
 pub(crate) mod homes;
 pub mod install;
 pub(crate) mod parse;
+pub(crate) mod progress;
 pub(crate) mod render;
 pub mod tui;
 
 pub use commands::read::WORKSPACE;
-pub use commands::{run, run_flayer_cli};
+pub use commands::{run, run_flayer_cli, run_flayer_cli_watched, run_watched};
 pub use error::CliError;
 pub use homes::{agent_homes, default_home, Lookup};
 pub use parse::{AgentHomeOptions, Cli, Command, FlayerCli, FlayerCommand, GatherCommand};
+pub use progress::ProgressLine;
 pub use render::{Failure, Outcome};

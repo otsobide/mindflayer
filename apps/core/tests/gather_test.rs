@@ -3,9 +3,10 @@
 mod common;
 
 use std::fs;
+use std::sync::{Arc, Mutex};
 
 use common::{commit, repository, skill, url, workspace, write_files};
-use mindflayer_core::gather::{self, GatherError, Request, Warning};
+use mindflayer_core::gather::{self, GatherError, Progress, Request, Warning, Watch};
 use mindflayer_core::ledger::{Action, Ledger, SourceKind};
 use mindflayer_core::{FlayerWorkspace, Kind, MindProject, ValidationIssue};
 use tempfile::TempDir;
@@ -280,6 +281,32 @@ fn a_folder_the_source_does_not_have_is_named_in_the_error() {
 }
 
 #[test]
+fn a_gather_that_finds_no_folder_leaves_the_revision_its_shelf_came_from() {
+    let source = repository(&[("skills/deploy/SKILL.md", &skill("deploy", "Ship it"))]);
+    let (_dir, workspace) = workspace();
+    let ledger = workspace.ledger().unwrap();
+    gather::gather(&workspace, &ledger, &Request::git(url(&source))).unwrap();
+    let before = ledger
+        .source(SourceKind::Git, &url(&source), None, "skills")
+        .unwrap();
+
+    fs::remove_dir_all(source.path().join("skills")).unwrap();
+    write_files(source.path(), &[("README.md", "moved elsewhere\n")]);
+    commit(source.path());
+    let error = gather::gather(&workspace, &ledger, &Request::git(url(&source))).unwrap_err();
+
+    assert!(matches!(error, GatherError::NoSuchFolder { .. }), "{error}");
+    let after = ledger
+        .source(SourceKind::Git, &url(&source), None, "skills")
+        .unwrap();
+    assert_eq!(
+        after.map(|source| source.revision),
+        before.map(|source| source.revision),
+        "the shelf still holds what that revision gave it"
+    );
+}
+
+#[test]
 fn rules_cannot_be_gathered_yet_and_say_so() {
     let source = repository(&[("skills/deploy/SKILL.md", &skill("deploy", "Ship it"))]);
     let (_dir, workspace) = workspace();
@@ -366,6 +393,244 @@ fn the_clone_is_kept_so_a_gather_can_be_looked_at_afterwards() {
         .join("deploy")
         .join("SKILL.md")
         .is_file());
+}
+
+#[test]
+fn a_gather_reports_reading_every_folder_before_placing_any() {
+    let source = repository(&[
+        ("skills/broken/SKILL.md", "no front matter at all\n"),
+        ("skills/deploy/SKILL.md", &skill("deploy", "Ship it")),
+    ]);
+    let (_dir, workspace) = workspace();
+    let ledger = workspace.ledger().unwrap();
+    let (watch, seen) = recording();
+
+    gather::gather(
+        &workspace,
+        &ledger,
+        &Request::git(url(&source)).watched_by(watch),
+    )
+    .unwrap();
+
+    let seen = seen.lock().unwrap();
+    // What `gix` counts while it fetches depends on how fast the clone is,
+    // so only the steps every gather says are compared whole.
+    let said: Vec<Progress> = seen
+        .iter()
+        .copied()
+        .filter(|progress| {
+            matches!(
+                progress,
+                Progress::Connecting
+                    | Progress::CheckingOut { total: None, .. }
+                    | Progress::Harvesting { .. }
+                    | Progress::Placing { .. }
+            )
+        })
+        .collect();
+    assert_eq!(
+        said,
+        [
+            Progress::Connecting,
+            Progress::CheckingOut {
+                done: 0,
+                total: None
+            },
+            Progress::Harvesting { done: 0, total: 2 },
+            Progress::Harvesting { done: 1, total: 2 },
+            Progress::Harvesting { done: 2, total: 2 },
+            // The broken one was read, and is not placed.
+            Progress::Placing { done: 0, total: 1 },
+            Progress::Placing { done: 1, total: 1 },
+        ]
+    );
+    // And what it does count is said while it fetches, never after.
+    let reading = seen
+        .iter()
+        .position(|progress| matches!(progress, Progress::Harvesting { .. }))
+        .unwrap();
+    assert!(seen[reading..].iter().all(|progress| matches!(
+        progress,
+        Progress::Harvesting { .. } | Progress::Placing { .. }
+    )));
+}
+
+#[test]
+fn a_flag_set_before_checkout_leaves_no_shelf_change_and_no_ledger_rows() {
+    let source = repository(&[("skills/deploy/SKILL.md", &skill("deploy", "Ship it"))]);
+    let (_dir, workspace) = workspace();
+    let ledger = workspace.ledger().unwrap();
+    let watch =
+        cancelled_at(|progress| matches!(progress, Progress::CheckingOut { total: None, .. }));
+
+    let error = gather::gather(
+        &workspace,
+        &ledger,
+        &Request::git(url(&source)).watched_by(watch),
+    )
+    .unwrap_err();
+
+    assert!(matches!(error, GatherError::Cancelled), "{error}");
+    assert!(!workspace.gathered_dir(Kind::Skill).exists(), "no shelf");
+    assert!(ledger.gathered().unwrap().is_empty());
+    assert!(ledger.history(10).unwrap().is_empty(), "nothing logged");
+    assert_eq!(
+        ledger
+            .source(SourceKind::Git, &url(&source), None, "skills")
+            .unwrap(),
+        None,
+        "the source it registered is forgotten"
+    );
+    // And the clone it had begun is gone with it.
+    assert_eq!(fs::read_dir(workspace.cache_dir()).unwrap().count(), 0);
+}
+
+#[test]
+fn a_cancelled_gather_of_a_known_source_leaves_its_shelf_and_rows_as_they_were() {
+    let source = repository(&[("skills/deploy/SKILL.md", &skill("deploy", "Ship it"))]);
+    let (_dir, workspace) = workspace();
+    let ledger = workspace.ledger().unwrap();
+    let first = gather::gather(&workspace, &ledger, &Request::git(url(&source))).unwrap();
+    let shelf = workspace.gathered_dir(Kind::Skill).join(&first.directory);
+    let before = fs::read_to_string(shelf.join("deploy/SKILL.md")).unwrap();
+    let recorded = ledger
+        .source(SourceKind::Git, &url(&source), None, "skills")
+        .unwrap();
+
+    write_files(
+        source.path(),
+        &[
+            (
+                "skills/deploy/SKILL.md",
+                &skill("deploy", "Ship it, carefully"),
+            ),
+            ("skills/review/SKILL.md", &skill("review", "Look first")),
+        ],
+    );
+    commit(source.path());
+    // As late as a cancel is honoured: every folder read, nothing placed.
+    let watch = cancelled_at(
+        |progress| matches!(progress, Progress::Harvesting { done, total } if done == total),
+    );
+    let error = gather::gather(
+        &workspace,
+        &ledger,
+        &Request::git(url(&source)).watched_by(watch),
+    )
+    .unwrap_err();
+
+    assert!(matches!(error, GatherError::Cancelled), "{error}");
+    assert_eq!(
+        fs::read_to_string(shelf.join("deploy/SKILL.md")).unwrap(),
+        before
+    );
+    assert!(!shelf.join("review").exists());
+    let gathered = ledger.gathered().unwrap();
+    assert_eq!(gathered.len(), 1);
+    assert_eq!(gathered[0].summary.as_deref(), Some("Ship it"));
+    assert_eq!(
+        ledger
+            .source(SourceKind::Git, &url(&source), None, "skills")
+            .unwrap(),
+        recorded,
+        "the revision it was gathered at is the one it still has"
+    );
+    assert_eq!(ledger.history(10).unwrap().len(), 1, "the first gather");
+}
+
+#[test]
+fn a_gather_cancelled_before_it_starts_fetches_nothing() {
+    let source = repository(&[("skills/deploy/SKILL.md", &skill("deploy", "Ship it"))]);
+    let (_dir, workspace) = workspace();
+    let ledger = workspace.ledger().unwrap();
+    let (watch, seen) = recording();
+    watch.cancel();
+
+    let error = gather::gather(
+        &workspace,
+        &ledger,
+        &Request::git(url(&source)).watched_by(watch),
+    )
+    .unwrap_err();
+
+    assert!(matches!(error, GatherError::Cancelled), "{error}");
+    assert!(seen.lock().unwrap().is_empty(), "not even a connection");
+    assert!(!workspace.cache_dir().exists());
+    assert!(ledger.history(10).unwrap().is_empty());
+}
+
+#[test]
+fn a_cancel_once_placing_has_begun_comes_too_late_to_stop_it() {
+    let source = repository(&[
+        ("skills/deploy/SKILL.md", &skill("deploy", "Ship it")),
+        ("skills/review/SKILL.md", &skill("review", "Look first")),
+    ]);
+    let (_dir, workspace) = workspace();
+    let ledger = workspace.ledger().unwrap();
+    let watch = cancelled_at(|progress| matches!(progress, Progress::Placing { done: 0, .. }));
+
+    let report = gather::gather(
+        &workspace,
+        &ledger,
+        &Request::git(url(&source)).watched_by(watch),
+    )
+    .unwrap();
+
+    // Half a shelf would be worse than a whole one.
+    assert_eq!(report.added.len(), 2);
+    assert_eq!(ledger.gathered().unwrap().len(), 2);
+}
+
+#[test]
+fn a_cancel_stops_a_gather_at_every_step_said_to_be_cancellable_and_no_other() {
+    let source = repository(&[
+        ("skills/deploy/SKILL.md", &skill("deploy", "Ship it")),
+        ("skills/review/SKILL.md", &skill("review", "Look first")),
+    ]);
+    let (watch, seen) = recording();
+    {
+        let (_dir, workspace) = workspace();
+        let ledger = workspace.ledger().unwrap();
+        gather::gather(
+            &workspace,
+            &ledger,
+            &Request::git(url(&source)).watched_by(watch),
+        )
+        .unwrap();
+    }
+    // Only the steps every gather says: `gix`'s counts depend on how fast
+    // the clone is, so a cancel at one of them could not be made to land.
+    let steps: Vec<Progress> = seen
+        .lock()
+        .unwrap()
+        .iter()
+        .copied()
+        .filter(|progress| {
+            !matches!(
+                progress,
+                Progress::Receiving { .. }
+                    | Progress::Resolving { .. }
+                    | Progress::CheckingOut { total: Some(_), .. }
+            )
+        })
+        .collect();
+    assert!(steps.iter().any(|step| !step.cancellable()), "{steps:?}");
+
+    for step in steps {
+        let (_dir, workspace) = workspace();
+        let ledger = workspace.ledger().unwrap();
+        let outcome = gather::gather(
+            &workspace,
+            &ledger,
+            &Request::git(url(&source)).watched_by(cancelled_at(move |progress| progress == step)),
+        );
+
+        assert_eq!(
+            matches!(outcome, Err(GatherError::Cancelled)),
+            step.cancellable(),
+            "cancelled at {step:?}: {outcome:?}"
+        );
+    }
 }
 
 #[test]
@@ -613,4 +878,29 @@ fn one_url_scrubbed_out_of_several_sources_is_told_about_once() {
         .collect();
     assert_eq!(told, ["https://example.com/acme/skills"]);
     assert_eq!(ledger.tainted_sources().unwrap(), []);
+}
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+/// A watch that keeps every step it is told, and where they are kept.
+fn recording() -> (Watch, Arc<Mutex<Vec<Progress>>>) {
+    let seen = Arc::new(Mutex::new(Vec::new()));
+    let watch = Watch::new().reporting_to({
+        let seen = Arc::clone(&seen);
+        move |progress| seen.lock().unwrap().push(progress)
+    });
+    (watch, seen)
+}
+
+/// A watch that cancels itself once it is told a step `at` matches.
+fn cancelled_at(at: impl Fn(Progress) -> bool + Send + Sync + 'static) -> Watch {
+    let watch = Watch::new();
+    let cancel = watch.clone();
+    watch.reporting_to(move |progress| {
+        if at(progress) {
+            cancel.cancel();
+        }
+    })
 }

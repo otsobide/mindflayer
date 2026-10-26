@@ -7,11 +7,14 @@
 use std::process::ExitCode;
 
 use clap::Parser;
-use mindflayer_cli::{run_flayer_cli, FlayerCli};
+use mindflayer_cli::{run_flayer_cli_watched, FlayerCli, ProgressLine};
 
 fn main() -> ExitCode {
     let cli = FlayerCli::parse();
-    match run_flayer_cli(&cli) {
+    let progress = ProgressLine::on_stderr();
+    let result = run_flayer_cli_watched(&cli, &progress.watch());
+    progress.clear();
+    match result {
         Ok(outcome) => outcome.report(),
         Err(failure) => failure.report(),
     }

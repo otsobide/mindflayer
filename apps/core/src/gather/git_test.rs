@@ -121,6 +121,7 @@ fn a_url_gix_cannot_parse_is_named_without_its_credentials_and_so_is_what_gix_sa
         "https://me:hunter2@exa mple.com/acme/private.git",
         None,
         &cache.path().join("clone"),
+        &Watch::new(),
     )
     .unwrap_err();
 
@@ -193,4 +194,59 @@ fn scrubbing_a_clone_again_or_one_without_credentials_changes_nothing() {
     // Nothing there at all is nothing to scrub.
     let gone = tempfile::TempDir::new().unwrap();
     assert!(!scrub(&gone.path().join("never-cloned")).unwrap());
+}
+
+#[test]
+fn the_step_read_off_gix_progress_is_the_latest_under_way() {
+    use gix::odb::pack::index::write::ProgressId as Pack;
+    use gix::progress::Count as _;
+
+    let root = tree::Root::new();
+    let mut fetch = root.add_child("fetch");
+    let mut snapshot = Vec::new();
+    root.sorted_snapshot(&mut snapshot);
+    assert_eq!(reading(&snapshot), None, "nothing counted yet");
+
+    let received = fetch.add_child_with_id("indexing", Pack::IndexObjects.into());
+    received.init(Some(340), None);
+    received.set(120);
+    root.sorted_snapshot(&mut snapshot);
+    assert_eq!(
+        reading(&snapshot),
+        Some(Progress::Receiving {
+            done: 120,
+            total: Some(340)
+        })
+    );
+
+    // Resolving starts while the receiving count is still in the tree.
+    let resolved = fetch.add_child_with_id("Resolving", Pack::ResolveObjects.into());
+    resolved.init(Some(340), None);
+    resolved.set(7);
+    root.sorted_snapshot(&mut snapshot);
+    assert_eq!(
+        reading(&snapshot),
+        Some(Progress::Resolving {
+            done: 7,
+            total: Some(340)
+        })
+    );
+    drop((received, resolved));
+
+    let files = root.add_child_with_id(
+        "checkout",
+        gix::clone::checkout::main_worktree::ProgressId::CheckoutFiles.into(),
+    );
+    files.init(Some(12), None);
+    // Counted the way gix counts files: on the shared counter, without
+    // telling the progress.
+    files.counter().fetch_add(5, Ordering::Relaxed);
+    root.sorted_snapshot(&mut snapshot);
+    assert_eq!(
+        reading(&snapshot),
+        Some(Progress::CheckingOut {
+            done: 5,
+            total: Some(12)
+        })
+    );
 }

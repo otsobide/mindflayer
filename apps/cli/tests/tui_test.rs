@@ -3,7 +3,13 @@
 
 mod common;
 
+use std::sync::mpsc::{self, RecvTimeoutError};
+use std::sync::{Arc, Mutex};
+use std::thread;
+use std::time::{Duration, Instant};
+
 use common::*;
+use tui::state::Step as TuiStep;
 
 // ---------------------------------------------------------------------------
 // The TUI
@@ -439,6 +445,34 @@ fn validate_in_the_tui_reads_as_flayer_validate_does() {
 }
 
 #[test]
+fn a_stand_in_runner_is_handed_the_lines_a_task_is() {
+    let dir = workspace_with_two();
+    let mut app = tui_in(dir.path());
+    let heard = Arc::new(Mutex::new(Vec::new()));
+    app.runner = Some(Runner::new({
+        let heard = Arc::clone(&heard);
+        move |words, _, _, _| {
+            heard.lock().unwrap().push(words.to_vec());
+            Done {
+                command: words.join(" "),
+                stdout: String::from("stood in\n"),
+                stderr: Vec::new(),
+                error: None,
+                ok: true,
+            }
+        }
+    }));
+
+    press_and_run(&mut app, KeyCode::Char('v'));
+
+    assert_eq!(*heard.lock().unwrap(), [["flayer", "validate"]]);
+    let Mode::Reading(reader) = &app.mode else {
+        panic!("{:?}", app.mode);
+    };
+    assert_eq!(reader.lines[0].1, "stood in");
+}
+
+#[test]
 fn gathering_in_the_tui_is_flayer_gather_git() {
     let dir = TempDir::new().unwrap();
     flayer(dir.path(), &["init"]).unwrap();
@@ -464,6 +498,153 @@ fn gathering_in_the_tui_is_flayer_gather_git() {
     assert!(reader.lines.iter().any(|(_, line)| line.contains("added")));
     assert_eq!(app.workspace().unwrap().shelf, 1);
     assert!(app.transcript().contains("$ flayer gather git "));
+}
+
+#[test]
+fn a_gather_runs_apart_with_its_progress_drawn_until_it_is_over() {
+    let dir = TempDir::new().unwrap();
+    flayer(dir.path(), &["init"]).unwrap();
+    let mut app = tui_in(dir.path());
+    let (go, gate) = mpsc::channel();
+    app.runner = Some(slow_gather(gate));
+
+    press_key(&mut app, KeyCode::Char('g'));
+    type_text(&mut app, SLOW);
+    let TuiStep::Run(task) = press_key(&mut app, KeyCode::Enter) else {
+        panic!("{:?}", app.mode);
+    };
+    tui::step(&mut app, task);
+
+    // Back at once, with the gather still going and the screen drawing it.
+    assert!(app.running.is_some());
+    settle_until(&mut app, |app| {
+        reported(app) == Some(Progress::Harvesting { done: 0, total: 3 })
+    });
+    let drawn = tui_drawn(&app);
+    assert!(
+        drawn.contains(&format!("flayer gather git {SLOW}")),
+        "{drawn}"
+    );
+    assert!(drawn.contains("reading folders 0/3"), "{drawn}");
+    // A key for anything else was aimed at a screen about to change.
+    assert_eq!(press_key(&mut app, KeyCode::Char('q')), TuiStep::Stay);
+
+    go.send(()).unwrap();
+    settle_until(&mut app, |app| {
+        reported(app) == Some(Progress::Harvesting { done: 1, total: 3 })
+    });
+    assert!(tui_drawn(&app).contains("reading folders 1/3"));
+
+    for _ in 0..3 {
+        go.send(()).unwrap();
+    }
+    settle_until(&mut app, |app| app.running.is_none());
+
+    let Mode::Reading(reader) = &app.mode else {
+        panic!("{:?}", app.mode);
+    };
+    assert_eq!(reader.lines[0].1, "3 skills: 3 added");
+    assert!(app
+        .transcript()
+        .contains(&format!("$ flayer gather git {SLOW}\n3 skills: 3 added\n")));
+}
+
+#[test]
+fn esc_cancels_a_running_gather_and_the_form_says_so() {
+    let dir = TempDir::new().unwrap();
+    flayer(dir.path(), &["init"]).unwrap();
+    let mut app = tui_in(dir.path());
+    let (_go, gate) = mpsc::channel();
+    app.runner = Some(slow_gather(gate));
+    start_slow_gather(&mut app);
+    assert!(tui_drawn(&app).contains("esc cancels"));
+
+    assert_eq!(press_key(&mut app, KeyCode::Esc), TuiStep::Stay);
+
+    // Asked, and said to be asked, until the gather has heard it.
+    assert!(app.running.as_ref().unwrap().cancelling);
+    assert!(tui_drawn(&app).contains("cancelling, before anything is placed"));
+    settle_until(&mut app, |app| app.running.is_none());
+    // Back in the form it was started from, with why it stopped, as for any
+    // gather that did not get as far as a report.
+    let Mode::Gathering(form) = &app.mode else {
+        panic!("{:?}", app.mode);
+    };
+    assert_eq!(
+        form.error.as_deref(),
+        Some("cancelled, with nothing put on the shelf")
+    );
+    assert!(app.transcript().contains(&format!(
+        "$ flayer gather git {SLOW}\nerror: cancelled, with nothing put on the shelf\n"
+    )));
+}
+
+#[test]
+fn a_gather_already_placing_says_a_cancel_is_too_late_and_finishes() {
+    let dir = TempDir::new().unwrap();
+    flayer(dir.path(), &["init"]).unwrap();
+    let mut app = tui_in(dir.path());
+    let (go, gate) = mpsc::channel();
+    app.runner = Some(placing_gather(gate));
+    start_gather(&mut app, Progress::Placing { done: 0, total: 3 });
+    let drawn = tui_drawn(&app);
+    assert!(drawn.contains("placing on the shelf 0/3"), "{drawn}");
+    // No key offered that would change nothing.
+    assert!(!drawn.contains("esc cancels"), "{drawn}");
+    assert!(drawn.contains("too late to cancel: placing"), "{drawn}");
+
+    assert_eq!(press_key(&mut app, KeyCode::Esc), TuiStep::Stay);
+
+    // Nor a stop claimed that the gather will not make.
+    let drawn = tui_drawn(&app);
+    assert!(!drawn.contains("cancelling"), "{drawn}");
+    assert!(drawn.contains("too late to cancel: placing"), "{drawn}");
+    go.send(()).unwrap();
+    settle_until(&mut app, |app| app.running.is_none());
+    let Mode::Reading(reader) = &app.mode else {
+        panic!("{:?}", app.mode);
+    };
+    assert_eq!(reader.lines[0].1, "3 skills: 3 added");
+}
+
+#[test]
+fn leaving_while_a_gather_runs_cancels_it_and_waits_for_it() {
+    let dir = TempDir::new().unwrap();
+    flayer(dir.path(), &["init"]).unwrap();
+    let mut app = tui_in(dir.path());
+    let (_go, gate) = mpsc::channel();
+    app.runner = Some(slow_gather(gate));
+    start_slow_gather(&mut app);
+
+    let step = app.press(KeyEvent::new(KeyCode::Char('c'), KeyModifiers::CONTROL));
+
+    assert_eq!(step, TuiStep::Quit);
+    // What the loop does before it returns.
+    tui::wait(&mut app);
+    assert!(app.running.is_none());
+    assert!(app
+        .transcript()
+        .contains("error: cancelled, with nothing put on the shelf"));
+}
+
+#[test]
+fn the_working_boxes_are_drawn_on_a_terminal_narrower_than_they_are() {
+    let dir = TempDir::new().unwrap();
+    flayer(dir.path(), &["init"]).unwrap();
+    let mut app = tui_in(dir.path());
+    let (_go, gate) = mpsc::channel();
+    app.runner = Some(slow_gather(gate));
+    start_slow_gather(&mut app);
+    let mut terminal = Terminal::new(TestBackend::new(20, 30)).unwrap();
+
+    // Drawn on every frame while the gather runs, so a pane split narrow
+    // halfway through must not end the process, and the gather with it.
+    terminal.draw(|frame| tui::ui::draw(&app, frame)).unwrap();
+    app.running.as_mut().unwrap().cancel();
+    tui::wait(&mut app);
+    // And the box a task that runs in place is drawn with.
+    app.busy = Some(format!("flayer gather git {SLOW}"));
+    terminal.draw(|frame| tui::ui::draw(&app, frame)).unwrap();
 }
 
 #[test]
@@ -1105,6 +1286,41 @@ fn the_first_change_from_the_tui_lands_in_the_default_workspace_not_in_one_above
 }
 
 #[test]
+fn a_gather_from_the_tui_runs_apart_after_making_the_default_workspace_where_it_is_shown() {
+    let (outer, home) = home_inside_a_workspace();
+    let elsewhere = TempDir::new().unwrap();
+    let source = repository(&[("skills/deploy/SKILL.md", &skill_file("deploy", "Ship it"))]);
+    let url = source.path().to_string_lossy().into_owned();
+    let mut app = tui_at_home(elsewhere.path(), &home);
+
+    press_key(&mut app, KeyCode::Char('g'));
+    type_text(&mut app, &url);
+    let TuiStep::Run(task) = press_key(&mut app, KeyCode::Enter) else {
+        panic!("{:?}", app.mode);
+    };
+    assert!(task.runs_apart());
+    tui::step(&mut app, task);
+    tui::wait(&mut app);
+
+    // Made first, by a line of its own, on the thread the gather ran on: left
+    // to the gather, the walk up from home would have found the workspace
+    // above it.
+    let transcript = app.transcript();
+    assert!(transcript.starts_with("$ flayer init\n"), "{transcript}");
+    assert!(transcript.contains("$ flayer gather git "), "{transcript}");
+    let workspace = app.workspace().unwrap();
+    assert!(workspace.made);
+    assert_eq!(workspace.root, home);
+    assert_eq!(workspace.shelf, 1);
+    let above = flayer(outer.path(), &["gather", "list"]).unwrap();
+    assert!(
+        above.stdout.starts_with("nothing gathered yet"),
+        "{}",
+        above.stdout
+    );
+}
+
+#[test]
 fn a_skill_that_cannot_be_read_is_listed_where_it_can_be_dealt_with() {
     let dir = workspace_with_two();
     write_skill(
@@ -1282,6 +1498,99 @@ fn mind_with_no_project_offers_to_make_one() {
 }
 
 // ---------------------------------------------------------------------------
+// A gather that takes its time
+// ---------------------------------------------------------------------------
+
+/// The URL the slow gather is asked for, which it never fetches.
+const SLOW: &str = "https://example.com/skills.git";
+
+/// A stand-in for `flayer gather git` that takes as long as the test wants:
+/// it reports reading each of three folders, and goes on from one to the
+/// next only when `go` says so. A cancel stops it before it says it is done,
+/// as one stops a real gather before anything is placed.
+fn slow_gather(go: mpsc::Receiver<()>) -> Runner {
+    let go = Mutex::new(go);
+    Runner::new(move |words, _, _, watch| {
+        let go = go.lock().unwrap();
+        let command = tui::state::shell(words);
+        for done in 0..=3 {
+            watch.report(Progress::Harvesting { done, total: 3 });
+            loop {
+                if watch.is_cancelled() {
+                    return Done::failed(command, "cancelled, with nothing put on the shelf");
+                }
+                match go.recv_timeout(Duration::from_millis(5)) {
+                    // A test that has gone is not waited for.
+                    Ok(()) | Err(RecvTimeoutError::Disconnected) => break,
+                    Err(RecvTimeoutError::Timeout) => {}
+                }
+            }
+        }
+        Done {
+            command,
+            stdout: String::from("3 skills: 3 added\n"),
+            stderr: Vec::new(),
+            error: None,
+            ok: true,
+        }
+    })
+}
+
+/// A stand-in for a gather past its last check: it says it is placing
+/// three, and finishes when `go` says so, whatever cancel comes first, as a
+/// real gather does once it has started placing.
+fn placing_gather(go: mpsc::Receiver<()>) -> Runner {
+    let go = Mutex::new(go);
+    Runner::new(move |words, _, _, watch| {
+        let go = go.lock().unwrap();
+        watch.report(Progress::Placing { done: 0, total: 3 });
+        // A test that has gone is not waited for.
+        let _ = go.recv();
+        watch.report(Progress::Placing { done: 3, total: 3 });
+        Done {
+            command: tui::state::shell(words),
+            stdout: String::from("3 skills: 3 added\n"),
+            stderr: Vec::new(),
+            error: None,
+            ok: true,
+        }
+    })
+}
+
+/// Ask for the slow gather from the gather form, and let it get as far as
+/// reading its first folder.
+fn start_slow_gather(app: &mut App) {
+    start_gather(app, Progress::Harvesting { done: 0, total: 3 });
+}
+
+/// Ask for a gather from the gather form, and let it get as far as `step`.
+fn start_gather(app: &mut App, step: Progress) {
+    press_key(app, KeyCode::Char('g'));
+    type_text(app, SLOW);
+    let TuiStep::Run(task) = press_key(app, KeyCode::Enter) else {
+        panic!("{:?}", app.mode);
+    };
+    tui::step(app, task);
+    settle_until(app, |app| reported(app) == Some(step));
+}
+
+/// The step the task running apart last reported, as the screen has it.
+fn reported(app: &App) -> Option<Progress> {
+    app.running.as_ref().and_then(|running| running.progress)
+}
+
+/// Take in what the task running apart says, as the loop does before each
+/// frame, until `until` holds.
+fn settle_until(app: &mut App, until: impl Fn(&App) -> bool) {
+    let deadline = Instant::now() + Duration::from_secs(10);
+    while !until(app) {
+        assert!(Instant::now() < deadline, "never came: {:?}", app.running);
+        tui::settle(app);
+        thread::sleep(Duration::from_millis(1));
+    }
+}
+
+// ---------------------------------------------------------------------------
 // A workspace named for the TUI
 // ---------------------------------------------------------------------------
 
@@ -1353,7 +1662,7 @@ fn a_w_among_a_lines_words_is_typed_from_the_workspace_root() {
         .map(|word| (*word).to_owned())
         .collect();
 
-    let done = tui::execute(&words, &outer, &Lookup::default());
+    let done = tui::execute(&words, &outer, &Lookup::default(), &Watch::new());
 
     assert_eq!(done.error, None);
     assert!(done.stdout.contains("hub-skill"), "{}", done.stdout);

@@ -17,11 +17,14 @@ pub mod ui;
 
 use std::io::{self, IsTerminal as _};
 use std::path::{Path, PathBuf};
+use std::sync::mpsc;
+use std::thread;
 use std::time::Duration;
 
 use std::error::Error as _;
 
 use clap::Parser;
+use mindflayer_core::gather::Watch;
 use mindflayer_core::resolve::{self, resolve, Intent, Reason};
 use mindflayer_core::workspace::Member as Registered;
 use mindflayer_core::{
@@ -37,9 +40,16 @@ use crate::install::state::Screen as InstallScreen;
 use crate::render::as_stored;
 use crate::{install, Cli, CliError, Command, Failure, FlayerCli, FlayerCommand, Lookup, Outcome};
 use state::{
-    App, Choice, Done, Holdings, Item, LoadedSource, Member, Mode, Performed, Scope, Step, Task,
-    Unlinked, View, Workspace,
+    App, Choice, Done, Holdings, Item, LoadedSource, Member, Mode, Performed, Runner, Running,
+    Scope, Step, Task, Unlinked, Update, View, Workspace,
 };
+
+/// How long the loop waits for a key before drawing again, so a resize
+/// repaints without waiting for one.
+const IDLE: Duration = Duration::from_millis(200);
+/// The same while a task runs apart: oftener, so its count moves as the work
+/// does.
+const WATCHING: Duration = Duration::from_millis(50);
 
 /// Open the TUI on the workspace `lookup` resolves from `directory`, and run
 /// it until it is closed.
@@ -108,6 +118,14 @@ fn open(mut app: App, command: &'static str) -> Result<Outcome, Failure> {
     let mut terminal =
         ratatui::try_init().map_err(|source| CliError::NoTerminal { command, source })?;
     let outcome = drive(&mut terminal, &mut app);
+    // However the loop ended, a key that asked to leave or a terminal that
+    // failed it, a task still running is stopped and waited for rather than
+    // left behind, so what it did is in the transcript and nothing is half
+    // done when the process ends.
+    if let Some(running) = app.running.as_mut() {
+        running.cancel();
+    }
+    wait(&mut app);
     ratatui::restore();
     outcome.map_err(|source| CliError::Screen { source })?;
 
@@ -125,11 +143,17 @@ fn open(mut app: App, command: &'static str) -> Result<Outcome, Failure> {
 /// [`step`]'s, and what the screen looks like is [`ui::draw`]'s.
 fn drive(terminal: &mut DefaultTerminal, app: &mut App) -> Result<(), io::Error> {
     loop {
+        settle(app);
         terminal.draw(|frame| ui::draw(app, frame))?;
 
         // A poll rather than a blocking read, so a resize repaints instead of
         // waiting for somebody to press something first.
-        if !event::poll(Duration::from_millis(200))? {
+        let patience = if app.running.is_some() {
+            WATCHING
+        } else {
+            IDLE
+        };
+        if !event::poll(patience)? {
             continue;
         }
         let Event::Key(key) = event::read()? else {
@@ -143,6 +167,8 @@ fn drive(terminal: &mut DefaultTerminal, app: &mut App) -> Result<(), io::Error>
 
         match app.press(key) {
             Step::Stay => {}
+            // A task still running is waited for by `open`, which does that
+            // however the loop ends.
             Step::Quit => return Ok(()),
             // An editor draws a screen of its own, so this one steps aside
             // for it — raw mode off, back to the normal screen — and is drawn
@@ -157,9 +183,11 @@ fn drive(terminal: &mut DefaultTerminal, app: &mut App) -> Result<(), io::Error>
                     let _ = event::read()?;
                 }
             }
+            // Started and left to run: the frames that follow show it.
+            Step::Run(task) if task.runs_apart() => step(app, task),
             Step::Run(task) => {
-                // Said before it starts, because a gather is the network and
-                // a frozen screen reads as a hung one.
+                // Said before it starts, because a frozen screen reads as a
+                // hung one.
                 app.busy = Some(task.describe());
                 terminal.draw(|frame| ui::draw(app, frame))?;
                 step(app, task);
@@ -176,11 +204,64 @@ fn drive(terminal: &mut DefaultTerminal, app: &mut App) -> Result<(), io::Error>
 }
 
 /// Carry out a task and show what came of it: everything the loop does
-/// between the key that asked and the next frame.
+/// between the key that asked and the next frame. A task that runs apart is
+/// started instead, and [`settle`] shows what came of it once it is over.
 ///
 /// Public so a test can do exactly what the loop does, without a terminal.
 pub fn step(app: &mut App, task: Task) {
+    if task.runs_apart() {
+        start(app, task);
+        return;
+    }
     let performed = perform(&task, app);
+    conclude(app, &task, performed);
+}
+
+/// Take in what the task running apart has reported since the last frame,
+/// and show what came of it once it is over: what the loop does before each
+/// frame, and public for a test to do the same between the frames it draws.
+pub fn settle(app: &mut App) {
+    if let Some((task, dones)) = app.heard() {
+        conclude(app, &task, Performed::Ran(dones));
+    }
+}
+
+/// Wait for the task running apart to be over, and show what came of it:
+/// what leaving the TUI does, and how a test runs one to its end.
+pub fn wait(app: &mut App) {
+    if let Some((task, dones)) = app.waited() {
+        conclude(app, &task, Performed::Ran(dones));
+    }
+}
+
+/// Run a task's lines on a thread of their own, reporting each step back.
+///
+/// A thread rather than the loop's own, so the screen goes on drawing while
+/// the network takes its time, and answers the key that stops it. The lines
+/// are the ones [`perform`] would run, through the same runner.
+fn start(app: &mut App, task: Task) {
+    let (send, updates) = mpsc::channel();
+    let watch = Watch::new();
+    let reporting = watch.clone().reporting_to({
+        let send = send.clone();
+        move |progress| {
+            let _ = send.send(Update::Progress(progress));
+        }
+    });
+    let runner = runner(app);
+    let lines = app.lines(&task);
+    let base = app.base().to_path_buf();
+    let lookup = app.lookup.clone();
+    thread::spawn(move || {
+        let dones = run_all(&runner, &lines, &base, &lookup, &reporting);
+        // Nobody to tell is a screen already closed, which needs no answer.
+        let _ = send.send(Update::Finished(dones));
+    });
+    app.running = Some(Running::new(task, watch, updates));
+}
+
+/// Show what came of a task, with the disk read again when it asked for that.
+fn conclude(app: &mut App, task: &Task, performed: Performed) {
     let view = task.reloads().then(|| {
         match app.opened {
             Scope::Workspace => load(&app.directory, &app.lookup),
@@ -188,7 +269,7 @@ pub fn step(app: &mut App, task: Task) {
         }
         .map_err(|error| error.to_string())
     });
-    app.finish(&task, performed, view);
+    app.finish(task, performed, view);
 }
 
 /// Do the work a task names.
@@ -208,8 +289,19 @@ pub fn perform(task: &Task, app: &App) -> Performed {
         Task::Link { path } if needs_init(&base.join(path)) => {
             Performed::NeedsInit { path: path.clone() }
         }
-        _ => Performed::Ran(run_all(&app.lines(task), &base, &app.lookup)),
+        _ => Performed::Ran(run_all(
+            &runner(app),
+            &app.lines(task),
+            &base,
+            &app.lookup,
+            &Watch::new(),
+        )),
     }
+}
+
+/// What runs `app`'s command lines: its stand-in, or the real thing.
+fn runner(app: &App) -> Runner {
+    app.runner.clone().unwrap_or_else(|| Runner::new(execute))
 }
 
 /// A directory that exists and is not a mind project.
@@ -224,10 +316,16 @@ fn needs_init(directory: &Path) -> bool {
 /// Run command lines in order, stopping at the first that fails: each leans
 /// on the one before, and `flayer link` after a failed `mind init` would only
 /// fail again, less clearly.
-fn run_all(lines: &[Vec<String>], base: &Path, lookup: &Lookup) -> Vec<Done> {
+fn run_all(
+    runner: &Runner,
+    lines: &[Vec<String>],
+    base: &Path,
+    lookup: &Lookup,
+    watch: &Watch,
+) -> Vec<Done> {
     let mut dones = Vec::new();
     for words in lines {
-        let done = execute(words, base, lookup);
+        let done = runner.run(words, base, lookup, watch);
         let failed = done.error.is_some();
         dones.push(done);
         if failed {
@@ -247,8 +345,9 @@ fn run_all(lines: &[Vec<String>], base: &Path, lookup: &Lookup) -> Vec<Done> {
 /// every line against it, and a command that falls back to the default
 /// workspace falls back to the one on screen. With neither, each walks up
 /// from `base` first, as from the shell, which is why a change to the default
-/// before it is made makes it first ([`App::lines`]).
-pub fn execute(words: &[String], base: &Path, lookup: &Lookup) -> Done {
+/// before it is made makes it first ([`App::lines`]). A gather among them
+/// reports to `watch`, and stops when it is cancelled.
+pub fn execute(words: &[String], base: &Path, lookup: &Lookup, watch: &Watch) -> Done {
     let command = state::shell(words);
     let from = |directory: Option<PathBuf>| {
         Some(directory.map_or_else(|| base.to_path_buf(), |directory| base.join(directory)))
@@ -277,7 +376,7 @@ pub fn execute(words: &[String], base: &Path, lookup: &Lookup) -> Done {
             Ok(mut cli) => {
                 cli.directory = from(cli.directory.take());
                 let lookup = looking(cli.workspace.take());
-                run_with(&cli, &lookup)
+                run_with(&cli, &lookup, watch)
             }
         },
         Some("flayer") => match FlayerCli::try_parse_from(words) {
@@ -288,7 +387,7 @@ pub fn execute(words: &[String], base: &Path, lookup: &Lookup) -> Done {
             Ok(mut cli) => {
                 cli.directory = from(cli.directory.take());
                 let lookup = looking(cli.workspace.take());
-                run_flayer_with(&cli, &lookup)
+                run_flayer_with(&cli, &lookup, watch)
             }
         },
         _ => return Done::failed(command, "not a `mind` or `flayer` command"),
