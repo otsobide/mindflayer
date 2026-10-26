@@ -13,7 +13,7 @@ pub use mindflayer_cli::tui;
 pub use mindflayer_cli::tui::state::{App, Holder, Mode, Scope, Task, View};
 pub use mindflayer_cli::{
     agent_homes, default_home, run, run_flayer_cli, AgentHomeOptions, Cli, CliError, Failure,
-    FlayerCli, Outcome,
+    FlayerCli, Lookup, Outcome,
 };
 pub use mindflayer_core::install::Standing;
 pub use mindflayer_core::ledger::Ledger;
@@ -292,7 +292,10 @@ pub fn press(screen: &mut Screen, keys: &[KeyCode]) -> Step {
 }
 
 pub fn tui_in(dir: &Path) -> App {
-    App::new(dir.to_path_buf(), tui::load(dir, None).unwrap())
+    App::new(
+        dir.to_path_buf(),
+        tui::load(dir, &Lookup::default()).unwrap(),
+    )
 }
 
 pub fn press_key(app: &mut App, code: KeyCode) -> tui::state::Step {
@@ -373,7 +376,7 @@ pub fn mind_tui_in(dir: &Path) -> App {
     let mut app = App::opened_on(
         Scope::Project,
         dir.to_path_buf(),
-        tui::load_project(dir, None).unwrap(),
+        tui::load_project(dir, &Lookup::default()).unwrap(),
     );
     app.focus_on(dir);
     app

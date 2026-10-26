@@ -15,6 +15,7 @@ use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
 use super::minds::{self, Minds};
 use crate::install::state::{Screen as InstallScreen, Step as InstallStep};
+use crate::Lookup;
 
 /// How far a page key scrolls a page of output.
 const PAGE: usize = 10;
@@ -656,9 +657,9 @@ pub struct App {
     pub done: Vec<Done>,
     /// What is running, drawn over everything until it finishes.
     pub busy: Option<String>,
-    /// Where the default workspace lives, for when there is none above: what
-    /// every command this TUI runs is told, so none of them guesses.
-    pub home: Option<PathBuf>,
+    /// Where to look for a workspace: what every command this TUI runs is
+    /// told, so none of them looks again and finds another.
+    pub lookup: Lookup,
 }
 
 impl App {
@@ -680,7 +681,7 @@ impl App {
             message: None,
             done: Vec::new(),
             busy: None,
-            home: None,
+            lookup: Lookup::default(),
         };
         app.settle_in();
         app
@@ -720,9 +721,10 @@ impl App {
         self.message = message.map(Message::info);
     }
 
-    /// Tell every command this TUI runs where the default workspace lives.
-    pub fn at_home(mut self, home: Option<&Path>) -> Self {
-        self.home = home.map(Path::to_path_buf);
+    /// Tell every command this TUI runs where to look for a workspace: the
+    /// lookup its screen was read with.
+    pub fn with_lookup(mut self, lookup: Lookup) -> Self {
+        self.lookup = lookup;
         self
     }
 

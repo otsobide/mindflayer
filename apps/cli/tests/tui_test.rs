@@ -769,9 +769,9 @@ fn the_add_form_offers_what_the_workspace_in_your_home_has_to_a_project_elsewher
     let mut app = App::opened_on(
         Scope::Project,
         project.clone(),
-        tui::load_project(&project, Some(home.path())).unwrap(),
+        tui::load_project(&project, &Lookup::at_home(Some(home.path()))).unwrap(),
     )
-    .at_home(Some(home.path()));
+    .with_lookup(Lookup::at_home(Some(home.path())));
     app.focus_on(&project);
 
     // The form runs `mind -C <entry> add`, which consults the workspace in
@@ -803,10 +803,13 @@ fn mind_calls_the_workspace_in_your_home_the_default_only_when_it_is_not_above()
     }
     flayer_at_home(elsewhere.path(), home.path(), &["link", "far"]).unwrap();
     flayer_at_home(home.path(), home.path(), &["link", "near"]).unwrap();
-    let default = |project: &Path| match tui::load_project(project, Some(home.path())).unwrap() {
-        View::Workspace(workspace) => workspace.default,
-        View::Nowhere => panic!("no screen for {}", project.display()),
-    };
+    let default =
+        |project: &Path| match tui::load_project(project, &Lookup::at_home(Some(home.path())))
+            .unwrap()
+        {
+            View::Workspace(workspace) => workspace.default,
+            View::Nowhere => panic!("no screen for {}", project.display()),
+        };
 
     // Above `near`, the walk up finds it as it would any other workspace.
     assert!(default(&far));
@@ -816,7 +819,8 @@ fn mind_calls_the_workspace_in_your_home_the_default_only_when_it_is_not_above()
 /// The TUI `flayer` opens in `dir`, with nothing above it, where the default
 /// workspace lives in `home`.
 fn tui_at_home(dir: &Path, home: &Path) -> App {
-    App::new(dir.to_path_buf(), tui::load(dir, Some(home)).unwrap()).at_home(Some(home))
+    let lookup = Lookup::at_home(Some(home));
+    App::new(dir.to_path_buf(), tui::load(dir, &lookup).unwrap()).with_lookup(lookup)
 }
 
 #[test]
@@ -908,7 +912,7 @@ fn flayer_minds_opens_on_the_default_workspace_without_making_it() {
     fs::create_dir(&alpha).unwrap();
     mind(&alpha, &["init"]).unwrap();
 
-    let app = tui::minds(elsewhere.path(), Some(home.path())).unwrap();
+    let app = tui::minds(elsewhere.path(), &Lookup::at_home(Some(home.path()))).unwrap();
 
     assert_eq!(minds_rows(&app), vec!["alpha"]);
     assert!(!home.path().join(FLAYER_DIR).exists());
@@ -918,7 +922,7 @@ fn flayer_minds_opens_on_the_default_workspace_without_making_it() {
 fn flayer_minds_with_no_workspace_and_no_default_says_so() {
     let elsewhere = TempDir::new().unwrap();
 
-    let error = tui::minds(elsewhere.path(), None).unwrap_err();
+    let error = tui::minds(elsewhere.path(), &Lookup::default()).unwrap_err();
 
     assert!(matches!(error, CliError::NotInWorkspace(_)), "{error}");
 }
@@ -928,7 +932,7 @@ fn flayer_minds_opens_on_the_default_workspace_not_on_one_above_its_home() {
     let (_outer, home) = home_inside_a_workspace();
     let elsewhere = TempDir::new().unwrap();
 
-    let app = tui::minds(elsewhere.path(), Some(&home)).unwrap();
+    let app = tui::minds(elsewhere.path(), &Lookup::at_home(Some(&home))).unwrap();
 
     // Not `alpha`, `beta` and `h/gamma`: those are the workspace above.
     assert_eq!(minds_rows(&app), vec!["gamma"]);

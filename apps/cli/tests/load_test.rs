@@ -356,9 +356,9 @@ fn on_a_project_on_its_own_capital_l_is_mind_load() {
     let mut app = App::opened_on(
         Scope::Project,
         project.clone(),
-        tui::load_project(&project, Some(home.path())).unwrap(),
+        tui::load_project(&project, &Lookup::at_home(Some(home.path()))).unwrap(),
     )
-    .at_home(Some(home.path()));
+    .with_lookup(Lookup::at_home(Some(home.path())));
     app.focus_on(&project);
 
     press_key(&mut app, KeyCode::Char('L'));
@@ -487,9 +487,9 @@ fn the_tui_will_not_load_the_workspace_on_screen_into_somewhere_else() {
     let (_dir, target, _team) = target_and_team();
     let mut app = App::new(
         target.clone(),
-        tui::load(&target, Some(home.path())).unwrap(),
+        tui::load(&target, &Lookup::at_home(Some(home.path()))).unwrap(),
     )
-    .at_home(Some(home.path()));
+    .with_lookup(Lookup::at_home(Some(home.path())));
 
     press_key(&mut app, KeyCode::Char('L'));
     type_text(&mut app, ".");
@@ -520,9 +520,9 @@ fn a_project_on_its_own_sees_and_unloads_what_the_workspace_above_loads() {
     let mut app = App::opened_on(
         Scope::Project,
         project.clone(),
-        tui::load_project(&project, Some(home.path())).unwrap(),
+        tui::load_project(&project, &Lookup::at_home(Some(home.path()))).unwrap(),
     )
-    .at_home(Some(home.path()));
+    .with_lookup(Lookup::at_home(Some(home.path())));
     app.focus_on(&project);
 
     press_key(&mut app, KeyCode::Char('L'));

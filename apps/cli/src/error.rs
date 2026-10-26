@@ -10,7 +10,7 @@ use std::path::{Path, PathBuf};
 use mindflayer_core::gather::GatherError;
 use mindflayer_core::ledger::LedgerError;
 use mindflayer_core::{
-    ArtifactError, CreateError, Kind, LifecycleError, TemplateError, WorkspaceError,
+    ArtifactError, CreateError, Kind, LifecycleError, ResolveError, TemplateError, WorkspaceError,
 };
 use thiserror::Error;
 
@@ -103,6 +103,27 @@ pub enum CliError {
         #[source]
         source: io::Error,
     },
+}
+
+/// Core's answer to which workspace, or which of its projects, rendered as
+/// the CLI says it: with the command that would put it right.
+impl From<ResolveError> for CliError {
+    fn from(error: ResolveError) -> Self {
+        match error {
+            ResolveError::Chosen { source, .. } | ResolveError::Workspace(source) => {
+                CliError::Workspace(source)
+            }
+            ResolveError::NotManaged { project, workspace } => {
+                CliError::NotManaged { project, workspace }
+            }
+            ResolveError::UnknownProject { wanted, known } => {
+                CliError::UnknownProject { wanted, known }
+            }
+            ResolveError::AmbiguousProject { wanted, matches } => {
+                CliError::AmbiguousProject { wanted, matches }
+            }
+        }
+    }
 }
 
 /// "; it manages alpha, beta", or what to do when it manages nothing.
