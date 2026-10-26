@@ -82,35 +82,48 @@ fn copy_tree(
 /// leaves `to` exactly as it was, and leaves nothing where there was nothing.
 /// `within` bounds the symlinks followed, as for [`tree`].
 pub fn replace(from: &Path, to: &Path, within: &Path) -> Result<Change, io::Error> {
+    let old = beside(to, "old");
+    let change = put(from, to, within, &beside(to, "new"), &old)?;
+    if change == Change::Updated {
+        fs::remove_dir_all(&old)?;
+    }
+    Ok(change)
+}
+
+/// Build `from` at `new` and put it at `to`, moving what `to` held to `old`
+/// first, which is left for the caller to clear: what a leftover there costs
+/// depends on where `old` is.
+///
+/// Wherever the two are, they have to be on the filesystem `to` is on, so
+/// that putting the copy in place is a rename rather than a second copy that
+/// could fail halfway.
+fn put(from: &Path, to: &Path, within: &Path, new: &Path, old: &Path) -> Result<Change, io::Error> {
     let existed = to.exists();
     if existed && same(from, to)? {
         return Ok(Change::Unchanged);
     }
-    let staging = beside(to, "new");
-    if staging.exists() {
-        fs::remove_dir_all(&staging)?;
+    if new.exists() {
+        fs::remove_dir_all(new)?;
     }
-    if let Err(error) = tree(from, &staging, within) {
-        let _ = fs::remove_dir_all(&staging);
+    if let Err(error) = tree(from, new, within) {
+        let _ = fs::remove_dir_all(new);
         return Err(error);
     }
     if !existed {
-        fs::rename(&staging, to)?;
+        fs::rename(new, to)?;
         return Ok(Change::Added);
     }
     // Moved aside rather than deleted first, so there is never a moment
     // with neither the old copy nor the new one in place.
-    let old = beside(to, "old");
     if old.exists() {
-        fs::remove_dir_all(&old)?;
+        fs::remove_dir_all(old)?;
     }
-    fs::rename(to, &old)?;
-    if let Err(error) = fs::rename(&staging, to) {
-        let _ = fs::rename(&old, to);
-        let _ = fs::remove_dir_all(&staging);
+    fs::rename(to, old)?;
+    if let Err(error) = fs::rename(new, to) {
+        let _ = fs::rename(old, to);
+        let _ = fs::remove_dir_all(new);
         return Err(error);
     }
-    fs::remove_dir_all(&old)?;
     Ok(Change::Updated)
 }
 
