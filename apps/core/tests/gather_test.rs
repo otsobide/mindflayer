@@ -3,11 +3,12 @@
 mod common;
 
 use std::fs;
+use std::sync::{Arc, Mutex};
 
 use common::{commit, repository, skill, url, workspace, write_files};
-use mindflayer_core::gather::{self, GatherError, Request};
+use mindflayer_core::gather::{self, GatherError, Progress, Request, Warning, Watch};
 use mindflayer_core::ledger::{Action, Ledger, SourceKind};
-use mindflayer_core::{FlayerWorkspace, Kind, MindProject};
+use mindflayer_core::{FlayerWorkspace, Kind, MindProject, ValidationIssue};
 use tempfile::TempDir;
 
 // ---------------------------------------------------------------------------
@@ -169,6 +170,78 @@ fn one_unreadable_skill_does_not_cost_the_ones_beside_it() {
 }
 
 #[test]
+fn a_skill_that_breaks_the_rules_is_gathered_with_a_warning() {
+    // Lenient, as the Agent Skills client guide advises for skills written
+    // for other agents: each problem is said, and nothing is left behind.
+    let source = repository(&[
+        ("skills/a--b/SKILL.md", &skill("a--b", "Doubled")),
+        (
+            "skills/nested/SKILL.md",
+            "---\nname: nested\ndescription: Nested metadata\nmetadata:\n  owner:\n    team: ops\n---\n",
+        ),
+        ("skills/fine/SKILL.md", &skill("fine", "Nothing wrong")),
+    ]);
+    let (_dir, workspace) = workspace();
+    let ledger = workspace.ledger().unwrap();
+
+    let report = gather::gather(&workspace, &ledger, &Request::git(url(&source))).unwrap();
+
+    let names: Vec<&str> = report.added.iter().map(|h| h.name.as_str()).collect();
+    assert_eq!(names, ["a--b", "fine", "nested"]);
+    assert!(report.failures.is_empty(), "{:?}", report.failures);
+    let shelf = workspace.gathered_dir(Kind::Skill).join(&report.directory);
+    assert_eq!(
+        report.warnings,
+        vec![
+            Warning {
+                path: shelf.join("a--b").join("SKILL.md"),
+                issue: ValidationIssue::NameNotKebabCase {
+                    segment: "a--b".into()
+                },
+            },
+            Warning {
+                path: shelf.join("nested").join("SKILL.md"),
+                issue: ValidationIssue::MetadataNotAString {
+                    key: "owner".into()
+                },
+            },
+        ]
+    );
+    // What is ignored is not rewritten: the shelf holds the file as written.
+    // Line endings are left out of the comparison because the checkout, not
+    // Mindflayer, decides them: on Windows git's autocrlf turns them into CRLF.
+    let copied = fs::read_to_string(shelf.join("nested").join("SKILL.md")).unwrap();
+    let copied = copied.replace("\r\n", "\n");
+    assert!(copied.contains("  owner:\n    team: ops\n"), "{copied}");
+}
+
+#[test]
+fn a_compatibility_written_as_a_list_is_gathered_with_a_warning() {
+    // A list of agents is what an author writes when the specification's
+    // prose string does not occur to them; the skill is still a skill.
+    let source = repository(&[(
+        "skills/deploy/SKILL.md",
+        "---\nname: deploy\ndescription: Ship it\ncompatibility: [claude-code, codex]\n---\n",
+    )]);
+    let (_dir, workspace) = workspace();
+    let ledger = workspace.ledger().unwrap();
+
+    let report = gather::gather(&workspace, &ledger, &Request::git(url(&source))).unwrap();
+
+    let names: Vec<&str> = report.added.iter().map(|h| h.name.as_str()).collect();
+    assert_eq!(names, ["deploy"]);
+    assert!(report.failures.is_empty(), "{:?}", report.failures);
+    let shelf = workspace.gathered_dir(Kind::Skill).join(&report.directory);
+    assert_eq!(
+        report.warnings,
+        vec![Warning {
+            path: shelf.join("deploy").join("SKILL.md"),
+            issue: ValidationIssue::CompatibilityNotAString,
+        }]
+    );
+}
+
+#[test]
 fn a_directory_without_a_manifest_is_not_a_skill() {
     let source = repository(&[
         ("skills/deploy/SKILL.md", &skill("deploy", "Ship it")),
@@ -205,6 +278,32 @@ fn a_folder_the_source_does_not_have_is_named_in_the_error() {
 
     assert!(matches!(error, GatherError::NoSuchFolder { .. }), "{error}");
     assert!(error.to_string().contains("skills"));
+}
+
+#[test]
+fn a_gather_that_finds_no_folder_leaves_the_revision_its_shelf_came_from() {
+    let source = repository(&[("skills/deploy/SKILL.md", &skill("deploy", "Ship it"))]);
+    let (_dir, workspace) = workspace();
+    let ledger = workspace.ledger().unwrap();
+    gather::gather(&workspace, &ledger, &Request::git(url(&source))).unwrap();
+    let before = ledger
+        .source(SourceKind::Git, &url(&source), None, "skills")
+        .unwrap();
+
+    fs::remove_dir_all(source.path().join("skills")).unwrap();
+    write_files(source.path(), &[("README.md", "moved elsewhere\n")]);
+    commit(source.path());
+    let error = gather::gather(&workspace, &ledger, &Request::git(url(&source))).unwrap_err();
+
+    assert!(matches!(error, GatherError::NoSuchFolder { .. }), "{error}");
+    let after = ledger
+        .source(SourceKind::Git, &url(&source), None, "skills")
+        .unwrap();
+    assert_eq!(
+        after.map(|source| source.revision),
+        before.map(|source| source.revision),
+        "the shelf still holds what that revision gave it"
+    );
 }
 
 #[test]
@@ -297,6 +396,244 @@ fn the_clone_is_kept_so_a_gather_can_be_looked_at_afterwards() {
 }
 
 #[test]
+fn a_gather_reports_reading_every_folder_before_placing_any() {
+    let source = repository(&[
+        ("skills/broken/SKILL.md", "no front matter at all\n"),
+        ("skills/deploy/SKILL.md", &skill("deploy", "Ship it")),
+    ]);
+    let (_dir, workspace) = workspace();
+    let ledger = workspace.ledger().unwrap();
+    let (watch, seen) = recording();
+
+    gather::gather(
+        &workspace,
+        &ledger,
+        &Request::git(url(&source)).watched_by(watch),
+    )
+    .unwrap();
+
+    let seen = seen.lock().unwrap();
+    // What `gix` counts while it fetches depends on how fast the clone is,
+    // so only the steps every gather says are compared whole.
+    let said: Vec<Progress> = seen
+        .iter()
+        .copied()
+        .filter(|progress| {
+            matches!(
+                progress,
+                Progress::Connecting
+                    | Progress::CheckingOut { total: None, .. }
+                    | Progress::Harvesting { .. }
+                    | Progress::Placing { .. }
+            )
+        })
+        .collect();
+    assert_eq!(
+        said,
+        [
+            Progress::Connecting,
+            Progress::CheckingOut {
+                done: 0,
+                total: None
+            },
+            Progress::Harvesting { done: 0, total: 2 },
+            Progress::Harvesting { done: 1, total: 2 },
+            Progress::Harvesting { done: 2, total: 2 },
+            // The broken one was read, and is not placed.
+            Progress::Placing { done: 0, total: 1 },
+            Progress::Placing { done: 1, total: 1 },
+        ]
+    );
+    // And what it does count is said while it fetches, never after.
+    let reading = seen
+        .iter()
+        .position(|progress| matches!(progress, Progress::Harvesting { .. }))
+        .unwrap();
+    assert!(seen[reading..].iter().all(|progress| matches!(
+        progress,
+        Progress::Harvesting { .. } | Progress::Placing { .. }
+    )));
+}
+
+#[test]
+fn a_flag_set_before_checkout_leaves_no_shelf_change_and_no_ledger_rows() {
+    let source = repository(&[("skills/deploy/SKILL.md", &skill("deploy", "Ship it"))]);
+    let (_dir, workspace) = workspace();
+    let ledger = workspace.ledger().unwrap();
+    let watch =
+        cancelled_at(|progress| matches!(progress, Progress::CheckingOut { total: None, .. }));
+
+    let error = gather::gather(
+        &workspace,
+        &ledger,
+        &Request::git(url(&source)).watched_by(watch),
+    )
+    .unwrap_err();
+
+    assert!(matches!(error, GatherError::Cancelled), "{error}");
+    assert!(!workspace.gathered_dir(Kind::Skill).exists(), "no shelf");
+    assert!(ledger.gathered().unwrap().is_empty());
+    assert!(ledger.history(10).unwrap().is_empty(), "nothing logged");
+    assert_eq!(
+        ledger
+            .source(SourceKind::Git, &url(&source), None, "skills")
+            .unwrap(),
+        None,
+        "the source it registered is forgotten"
+    );
+    // And the clone it had begun is gone with it.
+    assert_eq!(fs::read_dir(workspace.cache_dir()).unwrap().count(), 0);
+}
+
+#[test]
+fn a_cancelled_gather_of_a_known_source_leaves_its_shelf_and_rows_as_they_were() {
+    let source = repository(&[("skills/deploy/SKILL.md", &skill("deploy", "Ship it"))]);
+    let (_dir, workspace) = workspace();
+    let ledger = workspace.ledger().unwrap();
+    let first = gather::gather(&workspace, &ledger, &Request::git(url(&source))).unwrap();
+    let shelf = workspace.gathered_dir(Kind::Skill).join(&first.directory);
+    let before = fs::read_to_string(shelf.join("deploy/SKILL.md")).unwrap();
+    let recorded = ledger
+        .source(SourceKind::Git, &url(&source), None, "skills")
+        .unwrap();
+
+    write_files(
+        source.path(),
+        &[
+            (
+                "skills/deploy/SKILL.md",
+                &skill("deploy", "Ship it, carefully"),
+            ),
+            ("skills/review/SKILL.md", &skill("review", "Look first")),
+        ],
+    );
+    commit(source.path());
+    // As late as a cancel is honoured: every folder read, nothing placed.
+    let watch = cancelled_at(
+        |progress| matches!(progress, Progress::Harvesting { done, total } if done == total),
+    );
+    let error = gather::gather(
+        &workspace,
+        &ledger,
+        &Request::git(url(&source)).watched_by(watch),
+    )
+    .unwrap_err();
+
+    assert!(matches!(error, GatherError::Cancelled), "{error}");
+    assert_eq!(
+        fs::read_to_string(shelf.join("deploy/SKILL.md")).unwrap(),
+        before
+    );
+    assert!(!shelf.join("review").exists());
+    let gathered = ledger.gathered().unwrap();
+    assert_eq!(gathered.len(), 1);
+    assert_eq!(gathered[0].summary.as_deref(), Some("Ship it"));
+    assert_eq!(
+        ledger
+            .source(SourceKind::Git, &url(&source), None, "skills")
+            .unwrap(),
+        recorded,
+        "the revision it was gathered at is the one it still has"
+    );
+    assert_eq!(ledger.history(10).unwrap().len(), 1, "the first gather");
+}
+
+#[test]
+fn a_gather_cancelled_before_it_starts_fetches_nothing() {
+    let source = repository(&[("skills/deploy/SKILL.md", &skill("deploy", "Ship it"))]);
+    let (_dir, workspace) = workspace();
+    let ledger = workspace.ledger().unwrap();
+    let (watch, seen) = recording();
+    watch.cancel();
+
+    let error = gather::gather(
+        &workspace,
+        &ledger,
+        &Request::git(url(&source)).watched_by(watch),
+    )
+    .unwrap_err();
+
+    assert!(matches!(error, GatherError::Cancelled), "{error}");
+    assert!(seen.lock().unwrap().is_empty(), "not even a connection");
+    assert!(!workspace.cache_dir().exists());
+    assert!(ledger.history(10).unwrap().is_empty());
+}
+
+#[test]
+fn a_cancel_once_placing_has_begun_comes_too_late_to_stop_it() {
+    let source = repository(&[
+        ("skills/deploy/SKILL.md", &skill("deploy", "Ship it")),
+        ("skills/review/SKILL.md", &skill("review", "Look first")),
+    ]);
+    let (_dir, workspace) = workspace();
+    let ledger = workspace.ledger().unwrap();
+    let watch = cancelled_at(|progress| matches!(progress, Progress::Placing { done: 0, .. }));
+
+    let report = gather::gather(
+        &workspace,
+        &ledger,
+        &Request::git(url(&source)).watched_by(watch),
+    )
+    .unwrap();
+
+    // Half a shelf would be worse than a whole one.
+    assert_eq!(report.added.len(), 2);
+    assert_eq!(ledger.gathered().unwrap().len(), 2);
+}
+
+#[test]
+fn a_cancel_stops_a_gather_at_every_step_said_to_be_cancellable_and_no_other() {
+    let source = repository(&[
+        ("skills/deploy/SKILL.md", &skill("deploy", "Ship it")),
+        ("skills/review/SKILL.md", &skill("review", "Look first")),
+    ]);
+    let (watch, seen) = recording();
+    {
+        let (_dir, workspace) = workspace();
+        let ledger = workspace.ledger().unwrap();
+        gather::gather(
+            &workspace,
+            &ledger,
+            &Request::git(url(&source)).watched_by(watch),
+        )
+        .unwrap();
+    }
+    // Only the steps every gather says: `gix`'s counts depend on how fast
+    // the clone is, so a cancel at one of them could not be made to land.
+    let steps: Vec<Progress> = seen
+        .lock()
+        .unwrap()
+        .iter()
+        .copied()
+        .filter(|progress| {
+            !matches!(
+                progress,
+                Progress::Receiving { .. }
+                    | Progress::Resolving { .. }
+                    | Progress::CheckingOut { total: Some(_), .. }
+            )
+        })
+        .collect();
+    assert!(steps.iter().any(|step| !step.cancellable()), "{steps:?}");
+
+    for step in steps {
+        let (_dir, workspace) = workspace();
+        let ledger = workspace.ledger().unwrap();
+        let outcome = gather::gather(
+            &workspace,
+            &ledger,
+            &Request::git(url(&source)).watched_by(cancelled_at(move |progress| progress == step)),
+        );
+
+        assert_eq!(
+            matches!(outcome, Err(GatherError::Cancelled)),
+            step.cancellable(),
+            "cancelled at {step:?}: {outcome:?}"
+        );
+    }
+}
+
+#[test]
 fn the_ledger_lands_beside_the_marker_file() {
     let (dir, workspace) = workspace();
     let ledger = Ledger::open(workspace.ledger_path()).unwrap();
@@ -307,4 +644,263 @@ fn the_ledger_lands_beside_the_marker_file() {
         .join(".mindflayer")
         .join("mindflayer.db")
         .is_file());
+}
+
+#[test]
+fn a_url_with_a_token_in_it_is_refused_and_the_token_is_kept_nowhere() {
+    let (_dir, workspace) = workspace();
+    let ledger = workspace.ledger().unwrap();
+
+    let error = gather::gather(
+        &workspace,
+        &ledger,
+        &Request::git("https://me:ghp_t0ken@example.com/acme/skills"),
+    )
+    .unwrap_err();
+
+    assert!(
+        matches!(error, GatherError::CredentialsInUrl { .. }),
+        "{error}"
+    );
+    assert_eq!(
+        error.to_string(),
+        "https://example.com/acme/skills: a password, a token or, over http(s), a user name in \
+         the URL is refused, because gathering stores and shows the URL: gather it without one, \
+         and configure a git credential helper that has it"
+    );
+    // Nothing was registered, and nothing was fetched into the cache.
+    assert!(ledger
+        .source(
+            SourceKind::Git,
+            "https://example.com/acme/skills",
+            None,
+            "skills"
+        )
+        .unwrap()
+        .is_none());
+    assert!(!workspace.cache_dir().exists());
+    // The attempt is logged, as every failed gather is, under the URL it was
+    // refused for.
+    let history = ledger.history(10).unwrap();
+    assert_eq!(history.len(), 1);
+    assert_eq!(
+        history[0].target.as_deref(),
+        Some("https://example.com/acme/skills")
+    );
+    // And the token is nowhere in the database file, whatever reads it.
+    let stored = fs::read(workspace.ledger_path()).unwrap();
+    assert!(!stored.windows(9).any(|bytes| bytes == b"ghp_t0ken"));
+}
+
+#[test]
+fn a_password_cut_by_a_slash_is_refused_too_and_kept_nowhere() {
+    let (_dir, workspace) = workspace();
+    let ledger = workspace.ledger().unwrap();
+
+    // No parser reads this as a URL with a password in it, which is why it
+    // has to be caught before anything parses it.
+    let error = gather::gather(
+        &workspace,
+        &ledger,
+        &Request::git("https://me:p/t0ken@example.invalid/acme/skills"),
+    )
+    .unwrap_err();
+
+    assert!(
+        matches!(error, GatherError::CredentialsInUrl { .. }),
+        "{error}"
+    );
+    assert!(!error.to_string().contains("t0ken"), "{error}");
+    let stored = fs::read(workspace.ledger_path()).unwrap();
+    assert!(!stored.windows(5).any(|bytes| bytes == b"t0ken"));
+    assert!(!workspace.cache_dir().exists());
+}
+
+/// Leave in `workspace` what a Mindflayer from before the refusal left after
+/// gathering from `url` with a token in it: the URL in the source the clone
+/// in `directory` belongs to, in the log, and in that clone's config and
+/// reflog.
+fn left_by_an_older_build(workspace: &FlayerWorkspace, directory: &str, url: &str) {
+    let database = rusqlite::Connection::open(workspace.ledger_path()).unwrap();
+    database
+        .execute("UPDATE sources SET url = ?1", [url])
+        .unwrap();
+    database
+        .execute(
+            "INSERT INTO actions (at, action, target, outcome, detail)
+             VALUES (0, 'gather', ?1, 'failed', ?2)",
+            [url, &format!("{url}: cannot be fetched")],
+        )
+        .unwrap();
+
+    let git = workspace.cache_dir().join(directory).join(".git");
+    let config = fs::read_to_string(git.join("config")).unwrap();
+    let config: String = config
+        .lines()
+        .map(|line| {
+            if line.trim_start().starts_with("url = ") {
+                format!("\turl = {url}\n")
+            } else {
+                format!("{line}\n")
+            }
+        })
+        .collect();
+    fs::write(git.join("config"), config).unwrap();
+    let mut reflog = fs::read_to_string(git.join("logs").join("HEAD")).unwrap();
+    reflog.push_str(&format!(
+        "0000 1111 Fixture <fixture@example.com> 0 +0000\tclone: from {url}\n"
+    ));
+    fs::write(git.join("logs").join("HEAD"), reflog).unwrap();
+}
+
+/// Every file under `root` that reads as text, joined, for asserting on.
+fn text_under(root: &std::path::Path) -> String {
+    let mut text = String::new();
+    for entry in fs::read_dir(root).unwrap() {
+        let path = entry.unwrap().path();
+        if path.is_dir() {
+            text.push_str(&text_under(&path));
+        } else if let Ok(contents) = fs::read_to_string(&path) {
+            text.push_str(&contents);
+        }
+    }
+    text
+}
+
+#[test]
+fn what_an_older_build_stored_with_a_token_is_scrubbed_once_from_the_ledger_and_the_clone() {
+    let source = repository(&[("skills/deploy/SKILL.md", &skill("deploy", "Ship it"))]);
+    let (_dir, workspace) = workspace();
+    let ledger = workspace.ledger().unwrap();
+    let report = gather::gather(&workspace, &ledger, &Request::git(url(&source))).unwrap();
+    left_by_an_older_build(
+        &workspace,
+        &report.directory,
+        "https://me:ghp_t0ken@example.com/acme/skills",
+    );
+
+    // Opened the way a command that writes opens it.
+    let (ledger, scrub) = workspace.ledger_to_write().unwrap();
+
+    assert_eq!(scrub.sources.len(), 1, "{:?}", scrub.sources);
+    assert_eq!(scrub.sources[0].url, "https://example.com/acme/skills");
+    assert_eq!(scrub.actions, 1);
+    assert!(scrub.failures.is_empty(), "{:?}", scrub.failures);
+
+    let stored = fs::read(workspace.ledger_path()).unwrap();
+    assert!(!stored.windows(9).any(|bytes| bytes == b"ghp_t0ken"));
+    let clone = text_under(&workspace.cache_dir().join(&report.directory).join(".git"));
+    assert!(!clone.contains("ghp_t0ken"));
+    assert!(clone.contains("url = https://example.com/acme/skills\n"));
+    // What was gathered is still there, under the URL without the token.
+    let gathered = ledger.gathered().unwrap();
+    assert_eq!(gathered.len(), 1);
+    assert_eq!(gathered[0].source.url, "https://example.com/acme/skills");
+
+    // Said once: the second time there is nothing left to say.
+    assert!(workspace.ledger_to_write().unwrap().1.is_empty());
+}
+
+#[test]
+fn a_source_that_becomes_one_with_another_takes_its_folders_with_it() {
+    let source = repository(&[("skills/deploy/SKILL.md", &skill("deploy", "Ship it"))]);
+    let (_dir, workspace) = workspace();
+    let ledger = workspace.ledger().unwrap();
+    let report = gather::gather(&workspace, &ledger, &Request::git(url(&source))).unwrap();
+    // An older build gathered the same place with a token first, into a
+    // folder of its own, and without it later.
+    let older = "example.com-acme-skills";
+    let shelf = workspace.gathered_dir(Kind::Skill).join(older);
+    fs::create_dir_all(shelf.join("deploy")).unwrap();
+    fs::write(
+        shelf.join("deploy").join("SKILL.md"),
+        skill("deploy", "Old"),
+    )
+    .unwrap();
+    let clone = workspace.cache_dir().join(older).join(".git");
+    fs::create_dir_all(&clone).unwrap();
+    fs::write(
+        clone.join("config"),
+        "[remote \"origin\"]\n\turl = https://me:ghp_t0ken@example.com/acme/skills\n",
+    )
+    .unwrap();
+    let database = rusqlite::Connection::open(workspace.ledger_path()).unwrap();
+    database
+        .execute_batch(&format!(
+            "UPDATE sources SET url = 'https://example.com/acme/skills';
+             INSERT INTO sources (kind, url, reference, subdirectory, directory, first_seen, last_seen)
+                 SELECT kind, 'https://me:ghp_t0ken@example.com/acme/skills', reference,
+                        subdirectory, '{older}', 0, 0 FROM sources;
+             INSERT INTO artifacts (kind, name, source_id, path, gathered_at)
+                 VALUES ('skill', 'deploy', (SELECT id FROM sources WHERE directory = '{older}'),
+                         '.mindflayer/skills/{older}/deploy', 0);"
+        ))
+        .unwrap();
+
+    let (ledger, scrub) = workspace.ledger_to_write().unwrap();
+
+    assert!(scrub.leftovers.is_empty(), "{:?}", scrub.leftovers);
+    assert!(!shelf.exists(), "the shelf folder nothing points into went");
+    assert!(!workspace.cache_dir().join(older).exists(), "and its clone");
+    let gathered = ledger.gathered().unwrap();
+    assert_eq!(gathered.len(), 1, "{gathered:?}");
+    assert_eq!(gathered[0].source.directory, report.directory);
+    assert!(workspace
+        .gathered_dir(Kind::Skill)
+        .join(&report.directory)
+        .join("deploy")
+        .is_dir());
+}
+
+#[test]
+fn one_url_scrubbed_out_of_several_sources_is_told_about_once() {
+    let (_dir, workspace) = workspace();
+    let ledger = workspace.ledger().unwrap();
+    drop(ledger);
+    // Two branches and another folder of one repository, all gathered with
+    // the same token: one credential, to be given to a helper once.
+    rusqlite::Connection::open(workspace.ledger_path())
+        .unwrap()
+        .execute_batch(
+            "INSERT INTO sources (kind, url, reference, subdirectory, directory, first_seen, last_seen)
+                 VALUES ('git', 'https://me:ghp_t0ken@example.com/acme/skills', 'main', 'skills', 'a', 0, 0),
+                        ('git', 'https://me:ghp_t0ken@example.com/acme/skills', 'dev', 'skills', 'b', 0, 0),
+                        ('git', 'https://me:ghp_t0ken@example.com/acme/skills', 'main', 'more', 'c', 0, 0);",
+        )
+        .unwrap();
+
+    let (ledger, scrub) = workspace.ledger_to_write().unwrap();
+
+    let told: Vec<&str> = scrub
+        .sources
+        .iter()
+        .map(|source| source.url.as_str())
+        .collect();
+    assert_eq!(told, ["https://example.com/acme/skills"]);
+    assert_eq!(ledger.tainted_sources().unwrap(), []);
+}
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+/// A watch that keeps every step it is told, and where they are kept.
+fn recording() -> (Watch, Arc<Mutex<Vec<Progress>>>) {
+    let seen = Arc::new(Mutex::new(Vec::new()));
+    let watch = Watch::new().reporting_to({
+        let seen = Arc::clone(&seen);
+        move |progress| seen.lock().unwrap().push(progress)
+    });
+    (watch, seen)
+}
+
+/// A watch that cancels itself once it is told a step `at` matches.
+fn cancelled_at(at: impl Fn(Progress) -> bool + Send + Sync + 'static) -> Watch {
+    let watch = Watch::new();
+    let cancel = watch.clone();
+    watch.reporting_to(move |progress| {
+        if at(progress) {
+            cancel.cancel();
+        }
+    })
 }

@@ -10,20 +10,26 @@ use thiserror::Error;
 
 use crate::frontmatter::{self, FrontMatterError};
 use crate::kind::{Kind, Layout};
-use crate::skill::{SkillManifest, MAX_DESCRIPTION_LEN, MAX_NAME_SEGMENT_LEN};
+use crate::rule::{Lenient, RuleManifest};
+use crate::skill::{
+    Compatibility, SkillManifest, MAX_COMPATIBILITY_LEN, MAX_DESCRIPTION_LEN, MAX_NAME_SEGMENT_LEN,
+};
 
 /// What an artifact declared about itself.
 ///
 /// This enum, not a field on [`Artifact`], is where the kinds differ — and it
 /// *is* the kind, so an artifact cannot carry a discriminant that disagrees
-/// with what was parsed, because there is only one. A rule that declares a
-/// description is not a state this type can hold.
+/// with what was parsed, because there is only one. Each kind's payload says
+/// what that kind requires: a skill without a description is not a state this
+/// type can hold, while a rule's description is as optional as the rest of its
+/// front matter.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Declared {
     /// A skill's front matter.
     Skill(SkillManifest),
-    /// A rule declares nothing. It is a markdown file and that is all.
-    Rule,
+    /// A rule's front matter, which is optional: most rules are a markdown
+    /// file and that is all, and declare nothing.
+    Rule(RuleManifest),
 }
 
 impl Declared {
@@ -31,7 +37,7 @@ impl Declared {
     pub fn kind(&self) -> Kind {
         match self {
             Declared::Skill(_) => Kind::Skill,
-            Declared::Rule => Kind::Rule,
+            Declared::Rule(_) => Kind::Rule,
         }
     }
 }
@@ -93,15 +99,18 @@ impl Artifact {
     ) -> Result<Self, ArtifactError> {
         let path = file.into();
         let source = read(&path)?;
-        // No front matter, by definition: a rule is a markdown file that gives
-        // context and declares nothing. Its opening line is the closest thing
-        // to a description it has, so that is what a listing shows.
+        // Reading it never fails, as a skill's can: a rule's front matter is
+        // optional, so whatever cannot be read as front matter is content.
+        let (manifest, body) = RuleManifest::read(&source);
+        // The opening line of the body, not of the file, and not a declared
+        // description: the body is what an agent reads once the front matter
+        // is taken off, so its opening line is what the agent meets first.
         Ok(Self {
             name,
             path,
             project: project.into(),
-            declared: Declared::Rule,
-            summary: opening_line(&source),
+            declared: Declared::Rule(manifest),
+            summary: opening_line(body),
         })
     }
 
@@ -150,16 +159,18 @@ impl Artifact {
     }
 
     /// One line saying what this is: declared by a skill, derived from the
-    /// opening line for a rule, and absent when there is nothing to show.
+    /// opening line of its body for a rule, and absent when there is nothing
+    /// to show.
     pub fn summary(&self) -> Option<&str> {
         self.summary.as_deref()
     }
 
-    /// The description, for the kinds that declare one.
+    /// The description, when this declares one: always for a skill, and for
+    /// a rule only when its front matter says.
     pub fn description(&self) -> Option<&str> {
         match &self.declared {
             Declared::Skill(manifest) => Some(&manifest.description),
-            Declared::Rule => None,
+            Declared::Rule(manifest) => manifest.description.stated().map(String::as_str),
         }
     }
 
@@ -167,12 +178,16 @@ impl Artifact {
     pub fn manifest(&self) -> Option<&SkillManifest> {
         match &self.declared {
             Declared::Skill(manifest) => Some(manifest),
-            Declared::Rule => None,
+            Declared::Rule(_) => None,
         }
     }
 
-    /// The markdown an agent reads: the body after a skill's front matter, or
-    /// the whole of a rule's file.
+    /// The markdown an agent reads: the body after the front matter, or the
+    /// whole file when there is none.
+    ///
+    /// What a renderer puts in front of an agent, so a rule's front matter is
+    /// never pasted into a file that has no use for it, and what `show` prints
+    /// beneath what the front matter declares.
     pub fn contents(&self) -> Result<String, ArtifactError> {
         let path = self.file();
         let source = read(&path)?;
@@ -185,7 +200,9 @@ impl Artifact {
                     })?;
                 Ok(document.body.to_owned())
             }
-            Declared::Rule => Ok(source),
+            // Decided again from the file as it is now, by the same reading
+            // that loaded it.
+            Declared::Rule(_) => Ok(RuleManifest::read(&source).1.to_owned()),
         }
     }
 
@@ -203,42 +220,123 @@ impl Artifact {
     /// checking cannot fail on its own and a caller never has to handle an
     /// error from asking whether something is valid.
     pub fn validate(&self) -> Vec<ValidationIssue> {
-        // Every kind is looked up by name, so every kind is checked for one.
-        let mut issues = name_issues(&self.name);
-
         match &self.declared {
-            Declared::Skill(manifest) => {
-                // The directory name is how an agent locates the skill it was
-                // told to invoke, so a mismatch means one that lists fine and
-                // never loads.
-                if let Some(directory) = self.path.file_name().and_then(|name| name.to_str()) {
-                    if directory != self.name {
-                        issues.push(ValidationIssue::NameDirectoryMismatch {
-                            name: self.name.clone(),
-                            directory: directory.to_owned(),
-                        });
-                    }
-                }
-                let description = manifest.description.trim();
-                let length = description.chars().count();
-                if description.is_empty() {
-                    issues.push(ValidationIssue::DescriptionEmpty);
-                } else if length > MAX_DESCRIPTION_LEN {
-                    issues.push(ValidationIssue::DescriptionTooLong { length });
-                }
-            }
-            Declared::Rule => {
-                // A rule declares nothing, so there is exactly one thing left
-                // that can be wrong with it: having nothing to say. `summary`
-                // is None only when no line held any text.
+            Declared::Skill(manifest) => skill_issues(
+                manifest,
+                self.path.file_name().and_then(|name| name.to_str()),
+            ),
+            Declared::Rule(manifest) => {
+                // Every kind is looked up by name, so every kind is checked
+                // for one.
+                let mut issues = name_issues(&self.name);
+                // A rule's front matter is optional, so the one thing that
+                // makes it unusable is having nothing to say. `summary` is
+                // None only when no line of the body held any text.
                 if self.summary.is_none() {
                     issues.push(ValidationIssue::Empty);
                 }
+                issues.extend(rule_issues(manifest));
+                issues
             }
         }
-
-        issues
     }
+}
+
+/// Everything wrong with a skill that declares `manifest`, filed in a folder
+/// called `folder` when that folder has a name to compare.
+///
+/// Apart from [`Artifact::validate`] so that a skill can be judged where it is
+/// going rather than where it is: [`strict_issues`].
+fn skill_issues(manifest: &SkillManifest, folder: Option<&str>) -> Vec<ValidationIssue> {
+    // Every kind is looked up by name, so every kind is checked for one.
+    let mut issues = name_issues(&manifest.name);
+
+    // The directory name is how an agent locates the skill it was told to
+    // invoke, so a mismatch means one that lists fine and never loads.
+    if let Some(folder) = folder {
+        if folder != manifest.name {
+            issues.push(ValidationIssue::NameDirectoryMismatch {
+                name: manifest.name.clone(),
+                directory: folder.to_owned(),
+            });
+        }
+    }
+    let description = manifest.description.trim();
+    let length = description.chars().count();
+    if description.is_empty() {
+        issues.push(ValidationIssue::DescriptionEmpty);
+    } else if length > MAX_DESCRIPTION_LEN {
+        issues.push(ValidationIssue::DescriptionTooLong { length });
+    }
+    // Optional, but once written it has to say something and fit: an agent
+    // may show it to the model when the skill is loaded.
+    match &manifest.compatibility {
+        Compatibility::Unstated => {}
+        Compatibility::Stated(compatibility) => {
+            let compatibility = compatibility.trim();
+            let length = compatibility.chars().count();
+            if compatibility.is_empty() {
+                issues.push(ValidationIssue::CompatibilityEmpty);
+            } else if length > MAX_COMPATIBILITY_LEN {
+                issues.push(ValidationIssue::CompatibilityTooLong { length });
+            }
+        }
+        Compatibility::NotAString => issues.push(ValidationIssue::CompatibilityNotAString),
+    }
+    // Read leniently, so the skill still lists; said here, so the entries an
+    // agent expecting strings would trip on are known.
+    if manifest.metadata.not_a_map {
+        issues.push(ValidationIssue::MetadataNotAMap);
+    }
+    issues.extend(
+        manifest
+            .metadata
+            .ignored
+            .iter()
+            .map(|key| ValidationIssue::MetadataNotAString { key: key.clone() }),
+    );
+    issues.extend(
+        manifest
+            .metadata
+            .repeated
+            .iter()
+            .map(|key| ValidationIssue::MetadataRepeated { key: key.clone() }),
+    );
+    issues
+}
+
+/// What a rule's front matter left unread, each only worth a warning: what is
+/// not read is still in the file, and the rule still says what it says.
+///
+/// And each refused when Mindflayer writes a rule from a template, which is
+/// the time to find out that its front matter would not be read.
+pub(crate) fn rule_issues(manifest: &RuleManifest) -> Vec<ValidationIssue> {
+    let mut issues = Vec::new();
+    if let Some(reason) = &manifest.unparsed {
+        issues.push(ValidationIssue::FrontMatterUnparsed {
+            reason: reason.clone(),
+        });
+    }
+    if manifest.paths == Lenient::Ignored {
+        issues.push(ValidationIssue::PathsNotStrings);
+    }
+    if manifest.description == Lenient::Ignored {
+        issues.push(ValidationIssue::DescriptionNotAString);
+    }
+    issues
+}
+
+/// Whichever strict rules ([`ValidationIssue::is_strict`]) a skill declaring
+/// `manifest` breaks once it is filed in a folder called `folder`.
+///
+/// Asked of the skill as it is about to be written, rather than as it sits:
+/// the folder it is filed in is the one Mindflayer is about to name, which is
+/// not always the one it was read from.
+pub(crate) fn strict_issues(manifest: &SkillManifest, folder: &str) -> Vec<ValidationIssue> {
+    skill_issues(manifest, Some(folder))
+        .into_iter()
+        .filter(ValidationIssue::is_strict)
+        .collect()
 }
 
 /// Read a file, naming it if that fails.
@@ -322,15 +420,20 @@ pub(crate) fn issue_list(issues: &[ValidationIssue]) -> String {
         .join("; ")
 }
 
-/// Lowercase letters, digits and inner hyphens: what an agent can be asked to
-/// invoke without quoting or case folding.
+/// Lowercase letters and digits, in words joined by single hyphens —
+/// `^[a-z0-9]+(-[a-z0-9]+)*$`, the Agent Skills rule for a skill's name: what
+/// an agent can be asked to invoke without quoting or case folding.
+///
+/// Split on the hyphen rather than checked character by character, because
+/// that is what makes a leading, trailing or doubled hyphen an empty word, and
+/// so wrong, without a rule of its own for each.
 fn is_kebab_case(segment: &str) -> bool {
-    !segment.is_empty()
-        && !segment.starts_with('-')
-        && !segment.ends_with('-')
-        && segment
-            .chars()
-            .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-')
+    segment.split('-').all(|word| {
+        !word.is_empty()
+            && word
+                .chars()
+                .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit())
+    })
 }
 
 /// Something that stops an artifact from being usable, or will.
@@ -342,7 +445,73 @@ pub enum ValidationIssue {
     NameDirectoryMismatch { name: String, directory: String },
     DescriptionEmpty,
     DescriptionTooLong { length: usize },
+    CompatibilityEmpty,
+    CompatibilityTooLong { length: usize },
+    CompatibilityNotAString,
+    MetadataNotAMap,
+    MetadataNotAString { key: String },
+    MetadataRepeated { key: String },
     Empty,
+    FrontMatterUnparsed { reason: String },
+    PathsNotStrings,
+    DescriptionNotAString,
+}
+
+impl ValidationIssue {
+    /// Whether this breaks one of the strict rules: the ones Mindflayer will
+    /// not break when it writes a skill into a project — creating, renaming
+    /// or installing one — rather than only report.
+    ///
+    /// The name, the folder it is filed in, and the description, because
+    /// those are what agents refuse or trip on: Codex skips a skill whose name
+    /// is over 64 characters or whose description is empty, and an agent finds
+    /// a skill by its folder or by its name, so one whose two disagree is
+    /// found by one and not the other. Not `compatibility` and `metadata`,
+    /// which an agent reads past.
+    pub fn is_strict(&self) -> bool {
+        matches!(
+            self,
+            ValidationIssue::NameEmpty
+                | ValidationIssue::NameNotKebabCase { .. }
+                | ValidationIssue::NameSegmentTooLong { .. }
+                | ValidationIssue::NameDirectoryMismatch { .. }
+                | ValidationIssue::DescriptionEmpty
+                | ValidationIssue::DescriptionTooLong { .. }
+        )
+    }
+
+    /// Whether this is only worth a warning: something an agent reads past,
+    /// so the artifact still works, and `validate` says so without calling it
+    /// invalid.
+    ///
+    /// `compatibility` and `metadata`, the same ones `is_strict` lets through:
+    /// were they invalid, a skill installed with nested metadata would fail
+    /// its project's `validate` from then on, and the only way to clear it
+    /// would be to edit the copy, which stops Mindflayer from updating it.
+    /// And whatever a rule's front matter leaves unread, since a rule needs
+    /// none to be read: front matter that does not parse is content, and a key
+    /// written in another shape is ignored. Matched in full rather than with
+    /// `matches!`, so a new issue has to say which it is.
+    pub fn is_warning(&self) -> bool {
+        match self {
+            ValidationIssue::CompatibilityEmpty
+            | ValidationIssue::CompatibilityTooLong { .. }
+            | ValidationIssue::CompatibilityNotAString
+            | ValidationIssue::MetadataNotAMap
+            | ValidationIssue::MetadataNotAString { .. }
+            | ValidationIssue::MetadataRepeated { .. }
+            | ValidationIssue::FrontMatterUnparsed { .. }
+            | ValidationIssue::PathsNotStrings
+            | ValidationIssue::DescriptionNotAString => true,
+            ValidationIssue::NameEmpty
+            | ValidationIssue::NameNotKebabCase { .. }
+            | ValidationIssue::NameSegmentTooLong { .. }
+            | ValidationIssue::NameDirectoryMismatch { .. }
+            | ValidationIssue::DescriptionEmpty
+            | ValidationIssue::DescriptionTooLong { .. }
+            | ValidationIssue::Empty => false,
+        }
+    }
 }
 
 impl fmt::Display for ValidationIssue {
@@ -351,7 +520,7 @@ impl fmt::Display for ValidationIssue {
             ValidationIssue::NameEmpty => write!(f, "the name is empty"),
             ValidationIssue::NameNotKebabCase { segment } => write!(
                 f,
-                "`{segment}` is not usable as a name: only lowercase letters, digits and inner hyphens are"
+                "`{segment}` is not usable as a name: it has to be lowercase letters and digits, joined by single hyphens"
             ),
             ValidationIssue::NameSegmentTooLong { segment, length } => write!(
                 f,
@@ -366,7 +535,43 @@ impl fmt::Display for ValidationIssue {
                 f,
                 "`description` is {length} characters, over the {MAX_DESCRIPTION_LEN} character limit"
             ),
-            ValidationIssue::Empty => write!(f, "the file has no content"),
+            ValidationIssue::CompatibilityEmpty => write!(
+                f,
+                "`compatibility` is empty; leave it out when the skill needs nothing in particular"
+            ),
+            ValidationIssue::CompatibilityTooLong { length } => write!(
+                f,
+                "`compatibility` is {length} characters, over the {MAX_COMPATIBILITY_LEN} character limit"
+            ),
+            ValidationIssue::CompatibilityNotAString => write!(
+                f,
+                "`compatibility` is not a string, so it is ignored, and left in the file as written"
+            ),
+            ValidationIssue::MetadataNotAMap => write!(
+                f,
+                "`metadata` is not a map of strings, so it is ignored, and left in the file as written"
+            ),
+            ValidationIssue::MetadataNotAString { key } => write!(
+                f,
+                "`metadata` entry `{key}` is not a string, so it is ignored, and left in the file as written"
+            ),
+            ValidationIssue::MetadataRepeated { key } => write!(
+                f,
+                "`metadata` entry `{key}` is written more than once, so only the first is read"
+            ),
+            ValidationIssue::Empty => write!(f, "the file has no content beyond any front matter"),
+            ValidationIssue::FrontMatterUnparsed { reason } => write!(
+                f,
+                "the front matter does not parse, so it is read as content, fences and all: {reason}"
+            ),
+            ValidationIssue::PathsNotStrings => write!(
+                f,
+                "`paths` is not a pattern or a list of patterns, so it is ignored, and left in the file as written"
+            ),
+            ValidationIssue::DescriptionNotAString => write!(
+                f,
+                "`description` is not a string, so it is ignored, and left in the file as written"
+            ),
         }
     }
 }

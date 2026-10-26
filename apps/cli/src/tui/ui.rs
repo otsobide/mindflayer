@@ -16,10 +16,11 @@ use ratatui::Frame;
 use super::minds::{self, Minds};
 use super::state::{
     AddField, AddForm, App, Confirm, Focus, GatherForm, Input, Item, LinkForm, LoadForm, Member,
-    Mode, Reader, RenameForm, Scope, Task, Tone, View, Workspace, GATHER_FIELDS,
+    Mode, Reader, RenameForm, Running, Scope, Task, Tone, View, Workspace, GATHER_FIELDS,
 };
 use crate::install::ui::{centred, pane, selected};
-use crate::printable;
+use crate::progress::said;
+use crate::render::printable;
 
 /// How wide a form's labels are, so the values line up.
 const LABEL: u16 = 13;
@@ -46,7 +47,9 @@ pub fn draw(app: &App, frame: &mut Frame) {
             Mode::Browse | Mode::Installing(_) => {}
         }
     }
-    if let Some(busy) = &app.busy {
+    if let Some(running) = &app.running {
+        watching(running, frame, area);
+    } else if let Some(busy) = &app.busy {
         working(busy, frame, area);
     }
 }
@@ -146,11 +149,12 @@ fn header(workspace: &Workspace, frame: &mut Frame, area: Rect) {
         count => format!("{shelf} · {count} loaded"),
     };
     // Said, because it is not where you are: nothing at or above here was a
-    // workspace, so this is the one in your home.
-    let shelf = if workspace.default {
-        format!("default workspace · {shelf}")
-    } else {
-        shelf
+    // workspace, so this is the one in your home — and, until the first
+    // change makes it, one that is not there yet.
+    let shelf = match (workspace.default, workspace.made) {
+        (true, false) => format!("default workspace, not made yet · {shelf}"),
+        (true, true) => format!("default workspace · {shelf}"),
+        (false, _) => shelf,
     };
     let line = Line::from(vec![
         Span::styled(
@@ -968,15 +972,57 @@ fn standing(standing: minds::Standing) -> (&'static str, Style) {
 /// Drawn while a command runs, which for a gather means the network.
 fn working(busy: &str, frame: &mut Frame, area: Rect) {
     let text = printable(busy);
+    // A floor rather than a `clamp` to the screen's width, which panics on a
+    // screen narrower than the floor; `centred` keeps it on the screen.
     let width = u16::try_from(text.chars().count() + 4)
         .unwrap_or(u16::MAX)
-        .clamp(30, area.width.max(1));
+        .max(30);
     let box_ = centred(area, width, 3);
     frame.render_widget(Clear, box_);
     let block = Block::bordered()
         .border_type(BorderType::Thick)
         .border_style(Style::default().fg(Color::Yellow))
         .title(" working ");
+    frame.render_widget(Paragraph::new(text).block(block), box_);
+}
+
+/// Drawn while a task runs apart: the command it is, the last step it
+/// reported, redrawn as it reports more, and how to stop it while it still
+/// can be.
+fn watching(running: &Running, frame: &mut Frame, area: Rect) {
+    let command = printable(&running.task.describe());
+    let step = running
+        .progress
+        .map_or_else(|| String::from("starting"), said);
+    let (stop, style) = match running.progress {
+        // Past the gather's last check, where `esc` changes nothing: said, so
+        // that neither the key nor a cancel already asked for promises a stop
+        // the gather will not make. Loud only for whoever asked for one.
+        Some(progress) if !progress.cancellable() => (
+            "too late to cancel: placing",
+            if running.cancelling { warn() } else { dim() },
+        ),
+        _ if running.cancelling => ("cancelling, before anything is placed", warn()),
+        _ => ("esc cancels", dim()),
+    };
+    let longest = [command.chars().count(), step.chars().count(), stop.len()]
+        .into_iter()
+        .max()
+        .unwrap_or(0);
+    // Floored as `working` floors its box: this one is drawn on every frame
+    // of a gather, and a panic here would end the gather wherever it was.
+    let width = u16::try_from(longest + 4).unwrap_or(u16::MAX).max(30);
+    let box_ = centred(area, width, 5);
+    frame.render_widget(Clear, box_);
+    let block = Block::bordered()
+        .border_type(BorderType::Thick)
+        .border_style(Style::default().fg(Color::Yellow))
+        .title(" working ");
+    let text = vec![
+        Line::from(command),
+        Line::from(step),
+        Line::from(Span::styled(stop, style)),
+    ];
     frame.render_widget(Paragraph::new(text).block(block), box_);
 }
 

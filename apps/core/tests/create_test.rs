@@ -5,8 +5,8 @@ use std::path::Path;
 
 use mindflayer_core::template::{self, Origin};
 use mindflayer_core::{
-    create, create_from, Catalog, CreateError, Directories, FlayerWorkspace, Kind, MindProject,
-    TemplateError,
+    create, create_from, Catalog, CreateError, Declared, Directories, FlayerWorkspace, Kind,
+    MindProject, TemplateError,
 };
 use tempfile::TempDir;
 
@@ -187,7 +187,7 @@ fn the_description_is_one_line_that_says_something() {
 #[test]
 fn the_built_in_full_template_brings_scripts_and_references() {
     let (dir, project) = project();
-    let full = template::find(&project, Kind::Skill, "full").unwrap();
+    let full = template::find(None, &project, Kind::Skill, "full").unwrap();
     assert_eq!(full.origin, Origin::BuiltIn);
 
     let skill = create_from(&project, Kind::Skill, "deploy", "Ship it", &full).unwrap();
@@ -216,7 +216,7 @@ fn a_template_is_copied_whole_with_only_its_manifest_filled_in() {
         ".mind/templates/runbook/scripts/run.sh",
         "echo {{name}}\n",
     );
-    let runbook = template::find(&project, Kind::Skill, "runbook").unwrap();
+    let runbook = template::find(None, &project, Kind::Skill, "runbook").unwrap();
 
     let skill = create_from(
         &project,
@@ -256,7 +256,7 @@ fn a_template_that_does_not_parse_writes_nothing() {
         ".mind/templates/broken/SKILL.md",
         "---\nallowed-tools: [unclosed\n---\n",
     );
-    let broken = template::find(&project, Kind::Skill, "broken").unwrap();
+    let broken = template::find(None, &project, Kind::Skill, "broken").unwrap();
 
     let error = create_from(&project, Kind::Skill, "deploy", "Ship it", &broken).unwrap_err();
 
@@ -278,8 +278,8 @@ fn a_rule_template_opens_with_the_description_unless_it_says_where_it_goes() {
         "# {{description}}\n\nFiled as {{name}}.\n",
     );
 
-    let policy = template::find(&project, Kind::Rule, "policy").unwrap();
-    let placed = template::find(&project, Kind::Rule, "placed").unwrap();
+    let policy = template::find(None, &project, Kind::Rule, "policy").unwrap();
+    let placed = template::find(None, &project, Kind::Rule, "placed").unwrap();
     create_from(
         &project,
         Kind::Rule,
@@ -301,6 +301,143 @@ fn a_rule_template_opens_with_the_description_unless_it_says_where_it_goes() {
 }
 
 #[test]
+fn a_rule_templates_front_matter_stays_above_the_description() {
+    let (dir, project) = project();
+    write(
+        dir.path(),
+        ".mind/templates/scoped.md",
+        "---\npaths:\n  - \"src/api/**\"\n---\n\n## Why\n",
+    );
+    let scoped = template::find(None, &project, Kind::Rule, "scoped").unwrap();
+
+    let rule = create_from(&project, Kind::Rule, "api", "Return errors", &scoped).unwrap();
+
+    // Below the fences, which still open the file, so the rule is scoped as
+    // the template meant it to be.
+    assert_eq!(
+        fs::read_to_string(dir.path().join("rules/api.md")).unwrap(),
+        "---\npaths:\n  - \"src/api/**\"\n---\n\n# Return errors\n\n## Why\n"
+    );
+    assert_eq!(rule.summary(), Some("Return errors"));
+    let Declared::Rule(manifest) = rule.declared() else {
+        panic!("a rule declares a rule's front matter");
+    };
+    assert_eq!(
+        manifest.paths.stated(),
+        Some(&vec![String::from("src/api/**")])
+    );
+}
+
+#[test]
+fn a_rule_templates_front_matter_is_found_once_its_placeholders_are_filled() {
+    let (dir, project) = project();
+    // `{{name}}/**` is a YAML flow mapping followed by more text, which does
+    // not parse; `web/**` does.
+    write(
+        dir.path(),
+        ".mind/templates/scoped.md",
+        "---\npaths:\n  - {{name}}/**\n---\n\n## Why\n",
+    );
+    let scoped = template::find(None, &project, Kind::Rule, "scoped").unwrap();
+
+    let rule = create_from(&project, Kind::Rule, "web", "Web rules", &scoped).unwrap();
+
+    assert_eq!(
+        fs::read_to_string(dir.path().join("rules/web.md")).unwrap(),
+        "---\npaths:\n  - web/**\n---\n\n# Web rules\n\n## Why\n"
+    );
+    let Declared::Rule(manifest) = rule.declared() else {
+        panic!("a rule declares a rule's front matter");
+    };
+    assert_eq!(manifest.paths.stated(), Some(&vec![String::from("web/**")]));
+}
+
+#[test]
+fn a_rule_template_whose_front_matter_would_not_be_read_writes_nothing() {
+    let (dir, project) = project();
+    // An unquoted glob opening with `*` is a YAML alias, so this never
+    // parses; and a `paths` that is a mapping parses but is not read.
+    write(
+        dir.path(),
+        ".mind/templates/broken.md",
+        "---\npaths:\n  - **/*.ts\n---\n\n## Why\n",
+    );
+    write(
+        dir.path(),
+        ".mind/templates/misshapen.md",
+        "---\npaths: {src: yes}\n---\n\n## Why\n",
+    );
+
+    for name in ["broken", "misshapen"] {
+        let template = template::find(None, &project, Kind::Rule, name).unwrap();
+        let error = create_from(&project, Kind::Rule, "ts", "TypeScript", &template).unwrap_err();
+        assert!(matches!(error, CreateError::Manifest { .. }), "{error}");
+        assert!(error.to_string().contains(name), "{error}");
+    }
+    assert!(!dir.path().join("rules/ts.md").exists());
+}
+
+#[test]
+fn a_rule_templates_description_is_the_one_typed_and_survives_as_typed() {
+    let (dir, project) = project();
+    write(
+        dir.path(),
+        ".mind/templates/placed.md",
+        "---\ndescription: {{description}}\npaths:\n  - \"src/api/**\"\n---\n\nBody of {{name}}\n",
+    );
+    write(
+        dir.path(),
+        ".mind/templates/literal.md",
+        "---\ndescription: >\n  What the template\n  is for\npaths: src/**\n---\n\n## Why\n",
+    );
+    let placed = template::find(None, &project, Kind::Rule, "placed").unwrap();
+    let literal = template::find(None, &project, Kind::Rule, "literal").unwrap();
+    // A colon-space, a leading quote, a hash: pasted in as text, each one
+    // breaks the front matter or turns the rest of the line into a comment.
+    let typed = "'Quoted' start: api # not a comment";
+
+    let api = create_from(&project, Kind::Rule, "api", typed, &placed).unwrap();
+    let web = create_from(&project, Kind::Rule, "web", "Web rules", &literal).unwrap();
+
+    assert_eq!(api.description(), Some(typed));
+    let Declared::Rule(manifest) = api.declared() else {
+        panic!("a rule declares a rule's front matter");
+    };
+    assert_eq!(
+        manifest.paths.stated(),
+        Some(&vec![String::from("src/api/**")])
+    );
+    // The template said where the description goes, so no heading.
+    assert_eq!(api.summary(), Some("Body of api"));
+    assert_eq!(api.validate(), vec![]);
+    // What the template had is replaced, as a skill template's is; it did
+    // not say where the description goes, so it gets the heading too.
+    assert_eq!(
+        fs::read_to_string(dir.path().join("rules/web.md")).unwrap(),
+        "---\ndescription: Web rules\npaths: src/**\n---\n\n# Web rules\n\n## Why\n"
+    );
+    assert_eq!(web.description(), Some("Web rules"));
+}
+
+#[test]
+fn a_rule_template_that_opens_with_a_horizontal_rule_is_all_body() {
+    let (dir, project) = project();
+    write(
+        dir.path(),
+        ".mind/templates/ruled.md",
+        "---\nRead this first.\n---\n\n## Why\n",
+    );
+    let ruled = template::find(None, &project, Kind::Rule, "ruled").unwrap();
+
+    create_from(&project, Kind::Rule, "first", "Read first", &ruled).unwrap();
+
+    assert_eq!(
+        fs::read_to_string(dir.path().join("rules/first.md")).unwrap(),
+        "# Read first\n\n---\nRead this first.\n---\n\n## Why\n"
+    );
+}
+
+#[test]
 fn the_closest_template_of_a_name_wins() {
     let dir = TempDir::new().unwrap();
     let (mut workspace, _) = FlayerWorkspace::init(dir.path()).unwrap();
@@ -314,10 +451,11 @@ fn the_closest_template_of_a_name_wins() {
     );
 
     // Not managed, so the workspace's templates are not this project's.
-    assert!(template::find(&project, Kind::Skill, "runbook").is_err());
+    assert!(template::find(Some(&workspace), &project, Kind::Skill, "runbook").is_err());
 
     workspace.link(&project).unwrap();
-    let from_workspace = template::find(&project, Kind::Skill, "runbook").unwrap();
+    let from_workspace =
+        template::find(Some(&workspace), &project, Kind::Skill, "runbook").unwrap();
     assert_eq!(
         from_workspace.origin,
         Origin::Path(dir.path().join(".mindflayer/templates/runbook"))
@@ -329,7 +467,7 @@ fn the_closest_template_of_a_name_wins() {
         "---\n---\nthe project's\n",
     );
     write(&root, ".mind/templates/full/SKILL.md", "---\n---\nmine\n");
-    let listed = template::templates(&project).unwrap();
+    let listed = template::templates(Some(&workspace), &project).unwrap();
     let origins: Vec<(&str, &Origin)> = listed
         .iter()
         .map(|template| (template.name.as_str(), &template.origin))
@@ -348,12 +486,52 @@ fn the_closest_template_of_a_name_wins() {
 }
 
 #[test]
+fn a_template_the_listing_shows_can_be_used_whatever_its_name() {
+    // `mind templates` lists what is on disk, so `--template` has to find it:
+    // the naming rules are for what is created from a template, not for it.
+    let (dir, project) = project();
+    write(
+        dir.path(),
+        ".mind/templates/my--tpl/SKILL.md",
+        "---\nname: x\ndescription: y\n---\n\n# {{name}}\n",
+    );
+
+    let found = template::find(None, &project, Kind::Skill, "my--tpl").unwrap();
+    let skill = create_from(&project, Kind::Skill, "fresh", "Do it", &found).unwrap();
+
+    assert_eq!(skill.validate(), vec![]);
+}
+
+#[test]
+fn a_workspace_that_manages_a_project_from_beside_it_offers_its_templates() {
+    // Walking up from the project never reaches the workspace; the one given
+    // is the one asked.
+    let dir = TempDir::new().unwrap();
+    let hub = dir.path().join("hub");
+    fs::create_dir(&hub).unwrap();
+    let (mut workspace, _) = FlayerWorkspace::init(&hub).unwrap();
+    let root = dir.path().join("collapse");
+    fs::create_dir(&root).unwrap();
+    let (project, _) = MindProject::init(&root).unwrap();
+    write(&hub, ".mindflayer/templates/runbook/SKILL.md", "---\n---\n");
+    workspace.link(&project).unwrap();
+
+    let runbook = template::find(Some(&workspace), &project, Kind::Skill, "runbook").unwrap();
+
+    assert_eq!(
+        runbook.origin,
+        Origin::Path(hub.join(".mindflayer/templates/runbook"))
+    );
+    assert!(template::find(None, &project, Kind::Skill, "runbook").is_err());
+}
+
+#[test]
 fn a_template_is_asked_for_by_its_name_and_its_kind() {
     let (_dir, project) = project();
 
-    let climbing = template::find(&project, Kind::Skill, "../../etc").unwrap_err();
-    let wrong_kind = template::find(&project, Kind::Rule, "full").unwrap_err();
-    let unknown = template::find(&project, Kind::Skill, "nope").unwrap_err();
+    let climbing = template::find(None, &project, Kind::Skill, "../../etc").unwrap_err();
+    let wrong_kind = template::find(None, &project, Kind::Rule, "full").unwrap_err();
+    let unknown = template::find(None, &project, Kind::Skill, "nope").unwrap_err();
 
     assert!(matches!(climbing, TemplateError::BadName { .. }));
     assert!(matches!(wrong_kind, TemplateError::WrongKind { .. }));

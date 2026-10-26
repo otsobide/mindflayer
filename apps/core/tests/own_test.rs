@@ -86,7 +86,7 @@ fn a_workspace_holds_its_own_the_way_a_project_does() {
 
     // And changed the way a project's are.
     let target = lifecycle::find(&own, &Reference::parse("commit-style")).unwrap();
-    lifecycle::rename(&own, &target, "commits").unwrap();
+    lifecycle::rename(None, &own, &target, "commits").unwrap();
     assert!(dir.path().join("skills/commits/SKILL.md").is_file());
 }
 
@@ -97,7 +97,7 @@ fn the_workspace_templates_serve_its_own_artifacts_too() {
     fs::create_dir_all(template.parent().unwrap()).unwrap();
     fs::write(&template, "---\n---\n").unwrap();
 
-    assert!(template::find(&workspace.own(), Kind::Skill, "runbook").is_ok());
+    assert!(template::find(Some(&workspace), &workspace.own(), Kind::Skill, "runbook").is_ok());
 }
 
 /// A workspace whose root is also a project it manages.

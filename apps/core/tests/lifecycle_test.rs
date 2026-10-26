@@ -1,10 +1,13 @@
-//! Finding, renaming and removing what a project already holds.
+//! Adding to what a project holds, and finding, renaming and removing what it
+//! already does — and what each of those does to the ledger's records.
 
 use std::fs;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
-use mindflayer_core::lifecycle::{self, Target};
-use mindflayer_core::{create, Kind, LifecycleError, MindProject, Reference};
+use mindflayer_core::install::{self, InstallError, Standing};
+use mindflayer_core::ledger::{Ledger, SourceKind};
+use mindflayer_core::lifecycle::{self, Record, Target};
+use mindflayer_core::{create, FlayerWorkspace, Kind, LifecycleError, MindProject, Reference};
 use tempfile::TempDir;
 
 fn project() -> (TempDir, MindProject) {
@@ -54,6 +57,35 @@ fn a_skill_that_does_not_read_is_still_found_by_its_folder() {
     // Left out of every listing, but it is the one that most needs opening.
     assert!(target.artifact.is_none());
     assert_eq!(target.file(), dir.path().join("skills/broken/SKILL.md"));
+}
+
+#[test]
+fn a_folder_the_naming_rules_refuse_is_still_found_to_be_fixed() {
+    // `a--b` was a name before the rules took doubled hyphens away, and a
+    // folder of that name has to stay reachable: by its folder when it does
+    // not read, and when what it declares is something else.
+    let (dir, project) = project();
+    write(dir.path(), "skills/a--b/SKILL.md", "no front matter\n");
+    write(
+        dir.path(),
+        "skills/c--d/SKILL.md",
+        "---\nname: cd\ndescription: Declared otherwise\n---\n",
+    );
+
+    let broken = find(&project, "a--b").unwrap();
+    lifecycle::remove(None, &project, &broken).unwrap();
+    assert!(!dir.path().join("skills/a--b").exists());
+
+    let mismatched = find(&project, "c--d").unwrap();
+    let renamed = lifecycle::rename(None, &project, &mismatched, "c-d").unwrap();
+    assert_eq!(renamed.target.artifact.unwrap().validate(), vec![]);
+    assert!(!dir.path().join("skills/c--d").exists());
+
+    // A way out of the project is still not a place.
+    assert!(matches!(
+        find(&project, "../outside"),
+        Err(LifecycleError::NotFound { .. })
+    ));
 }
 
 #[test]
@@ -120,7 +152,7 @@ fn removing_a_skill_takes_its_whole_folder() {
     let target = find(&project, "deploy").unwrap();
     assert_eq!(lifecycle::files(&target), 2);
 
-    lifecycle::remove(&project, &target).unwrap();
+    lifecycle::remove(None, &project, &target).unwrap();
 
     assert!(!dir.path().join("skills/deploy").exists());
     assert!(dir.path().join("skills").is_dir());
@@ -133,8 +165,13 @@ fn removing_a_rule_takes_the_folders_it_leaves_empty_and_no_more() {
     create(&project, Kind::Rule, "ci/green", "Keep it green").unwrap();
     create(&project, Kind::Rule, "ci/fast", "Keep it fast").unwrap();
 
-    lifecycle::remove(&project, &find(&project, "git/no-force-push").unwrap()).unwrap();
-    lifecycle::remove(&project, &find(&project, "ci/green").unwrap()).unwrap();
+    lifecycle::remove(
+        None,
+        &project,
+        &find(&project, "git/no-force-push").unwrap(),
+    )
+    .unwrap();
+    lifecycle::remove(None, &project, &find(&project, "ci/green").unwrap()).unwrap();
 
     assert!(
         !dir.path().join("rules/git").exists(),
@@ -162,7 +199,9 @@ fn renaming_a_skill_moves_its_folder_and_rewrites_nothing_but_its_name() {
     write(dir.path(), "skills/deploy/SKILL.md", WRITTEN_BY_HAND);
     write(dir.path(), "skills/deploy/scripts/run.sh", "echo ship\n");
 
-    let renamed = lifecycle::rename(&project, &find(&project, "deploy").unwrap(), "ship").unwrap();
+    let renamed = lifecycle::rename(None, &project, &find(&project, "deploy").unwrap(), "ship")
+        .unwrap()
+        .target;
 
     assert_eq!(renamed.name, "ship");
     assert!(!dir.path().join("skills/deploy").exists());
@@ -176,11 +215,83 @@ fn renaming_a_skill_moves_its_folder_and_rewrites_nothing_but_its_name() {
 }
 
 #[test]
+fn renaming_keeps_every_key_it_does_not_model_byte_for_byte() {
+    // Claude Code's own keys, and metadata no agent should have written
+    // nested, all pass through: they are somebody's, not Mindflayer's.
+    const AGENT_KEYS: &str = "---\nname: deploy\ndescription: Ship it\ndisable-model-invocation: true\npaths:\n  - 'src/**'\nallowed-tools: Bash(git add *) Read\ncompatibility: Requires git\nmetadata:\n  author: acme\n  owner:\n    team: ops\n---\n\nRun the pipeline.\n";
+    let (dir, project) = project();
+    write(dir.path(), "skills/deploy/SKILL.md", AGENT_KEYS);
+
+    lifecycle::rename(None, &project, &find(&project, "deploy").unwrap(), "ship").unwrap();
+
+    let manifest = fs::read_to_string(dir.path().join("skills/ship/SKILL.md")).unwrap();
+    assert_eq!(
+        manifest,
+        AGENT_KEYS.replace("name: deploy\n", "name: ship\n")
+    );
+}
+
+#[test]
+fn renaming_refuses_a_name_that_breaks_the_rules() {
+    let (dir, project) = project();
+    create(&project, Kind::Skill, "deploy", "Ship it").unwrap();
+
+    let error =
+        lifecycle::rename(None, &project, &find(&project, "deploy").unwrap(), "a--b").unwrap_err();
+
+    assert!(matches!(error, LifecycleError::Name { .. }), "{error}");
+    assert!(dir.path().join("skills/deploy/SKILL.md").is_file());
+    assert!(!dir.path().join("skills/a--b").exists());
+}
+
+#[test]
+fn renaming_refuses_a_skill_whose_description_breaks_the_rules() {
+    // A rename writes only the name, but what it leaves behind is a skill
+    // Mindflayer wrote, and an agent skips one with an empty description.
+    let (dir, project) = project();
+    write(
+        dir.path(),
+        "skills/quiet/SKILL.md",
+        "---\nname: quiet\ndescription: ''\n---\n",
+    );
+
+    let error =
+        lifecycle::rename(None, &project, &find(&project, "quiet").unwrap(), "hush").unwrap_err();
+
+    assert_eq!(
+        error.to_string(),
+        "`quiet` cannot be renamed until it is fixed: `description` is empty"
+    );
+    assert!(dir.path().join("skills/quiet/SKILL.md").is_file());
+    assert!(!dir.path().join("skills/hush").exists());
+}
+
+#[test]
+fn renaming_fixes_a_name_and_folder_that_broke_the_rules() {
+    // What is wrong with the old name is what a rename is for, so it is the
+    // skill as renamed that is judged.
+    let (dir, project) = project();
+    write(
+        dir.path(),
+        "skills/a--b/SKILL.md",
+        "---\nname: a--b\ndescription: Doubled\n---\n",
+    );
+
+    let renamed =
+        lifecycle::rename(None, &project, &find(&project, "a--b").unwrap(), "a-b").unwrap();
+
+    assert_eq!(renamed.target.artifact.unwrap().validate(), vec![]);
+    assert!(!dir.path().join("skills/a--b").exists());
+}
+
+#[test]
 fn a_name_yaml_would_read_as_something_else_is_quoted() {
     let (dir, project) = project();
     create(&project, Kind::Skill, "deploy", "Ship it").unwrap();
 
-    let renamed = lifecycle::rename(&project, &find(&project, "deploy").unwrap(), "true").unwrap();
+    let renamed = lifecycle::rename(None, &project, &find(&project, "deploy").unwrap(), "true")
+        .unwrap()
+        .target;
 
     assert_eq!(renamed.name, "true");
     let manifest = fs::read_to_string(dir.path().join("skills/true/SKILL.md")).unwrap();
@@ -195,10 +306,10 @@ fn renaming_refuses_whatever_would_break_or_clobber_something() {
     let deploy = find(&project, "deploy").unwrap();
 
     let refusals = [
-        lifecycle::rename(&project, &deploy, "Bad Name").unwrap_err(),
-        lifecycle::rename(&project, &deploy, "tools/deploy").unwrap_err(),
-        lifecycle::rename(&project, &deploy, "ship").unwrap_err(),
-        lifecycle::rename(&project, &deploy, "deploy").unwrap_err(),
+        lifecycle::rename(None, &project, &deploy, "Bad Name").unwrap_err(),
+        lifecycle::rename(None, &project, &deploy, "tools/deploy").unwrap_err(),
+        lifecycle::rename(None, &project, &deploy, "ship").unwrap_err(),
+        lifecycle::rename(None, &project, &deploy, "deploy").unwrap_err(),
     ];
 
     assert!(matches!(refusals[0], LifecycleError::Name { .. }));
@@ -218,7 +329,7 @@ fn a_skill_whose_name_is_not_one_line_is_left_for_a_person() {
     write(dir.path(), "skills/deploy/SKILL.md", written);
 
     let error =
-        lifecycle::rename(&project, &find(&project, "deploy").unwrap(), "ship").unwrap_err();
+        lifecycle::rename(None, &project, &find(&project, "deploy").unwrap(), "ship").unwrap_err();
 
     assert!(matches!(error, LifecycleError::Rewrite { .. }), "{error}");
     assert!(!dir.path().join("skills/ship").exists(), "nothing moved");
@@ -234,7 +345,7 @@ fn a_skill_that_does_not_read_is_edited_before_it_is_renamed() {
     write(dir.path(), "skills/broken/SKILL.md", "no front matter\n");
 
     let error =
-        lifecycle::rename(&project, &find(&project, "broken").unwrap(), "fixed").unwrap_err();
+        lifecycle::rename(None, &project, &find(&project, "broken").unwrap(), "fixed").unwrap_err();
 
     assert!(
         matches!(error, LifecycleError::Unreadable { .. }),
@@ -257,7 +368,9 @@ fn renaming_puts_a_folder_back_in_line_with_what_it_declares() {
         "found by folder, named by itself"
     );
 
-    let renamed = lifecycle::rename(&project, &target, "deployment").unwrap();
+    let renamed = lifecycle::rename(None, &project, &target, "deployment")
+        .unwrap()
+        .target;
 
     assert!(dir.path().join("skills/deployment/SKILL.md").is_file());
     assert_eq!(renamed.artifact.unwrap().validate(), vec![]);
@@ -275,11 +388,13 @@ fn renaming_a_rule_refiles_it_by_its_new_route() {
     .unwrap();
 
     let renamed = lifecycle::rename(
+        None,
         &project,
         &find(&project, "git/no-force-push").unwrap(),
         "vcs/no-force-push",
     )
-    .unwrap();
+    .unwrap()
+    .target;
 
     assert_eq!(renamed.name, "vcs/no-force-push");
     assert!(
@@ -290,4 +405,439 @@ fn renaming_a_rule_refiles_it_by_its_new_route() {
         fs::read_to_string(dir.path().join("rules/vcs/no-force-push.md")).unwrap(),
         "# Never force-push\n"
     );
+}
+
+// ---------------------------------------------------------------------------
+// The ledger's records
+// ---------------------------------------------------------------------------
+
+/// A workspace managing one project, `collapse`, from above it, with each of
+/// `names` among the workspace's own skills and installed into the project.
+fn installed(names: &[&str]) -> (TempDir, FlayerWorkspace, MindProject, Ledger) {
+    let dir = TempDir::new().unwrap();
+    let (mut workspace, _) = FlayerWorkspace::init(dir.path()).unwrap();
+    let root = dir.path().join("collapse");
+    fs::create_dir(&root).unwrap();
+    let (project, _) = MindProject::init(&root).unwrap();
+    workspace.link(&project).unwrap();
+    for name in names {
+        create(&workspace.own(), Kind::Skill, name, "From the workspace").unwrap();
+    }
+    let ledger = workspace.ledger().unwrap();
+    for candidate in install::survey(&workspace, &ledger, &project, Kind::Skill).unwrap() {
+        install::install(&workspace, &ledger, &project, &candidate).unwrap();
+    }
+    (dir, workspace, project, ledger)
+}
+
+/// The skills `ledger` says Mindflayer installed into `collapse`.
+fn records(ledger: &Ledger) -> Vec<String> {
+    ledger.installations("collapse", Kind::Skill).unwrap()
+}
+
+/// How the workspace's own `name` stands with the project now.
+fn standing(
+    workspace: &FlayerWorkspace,
+    ledger: &Ledger,
+    project: &MindProject,
+    name: &str,
+) -> Standing {
+    install::survey(workspace, ledger, project, Kind::Skill)
+        .unwrap()
+        .into_iter()
+        .find(|candidate| candidate.name() == name)
+        .unwrap_or_else(|| panic!("the workspace offers no {name}"))
+        .standing
+}
+
+/// What somebody's editor does: add a line to the file.
+fn type_into(file: &Path) {
+    let mut text = fs::read_to_string(file).unwrap();
+    text.push_str("Mine.\n");
+    fs::write(file, text).unwrap();
+}
+
+#[test]
+fn adding_where_an_installed_copy_was_deleted_by_hand_drops_its_record() {
+    let (dir, workspace, project, ledger) = installed(&["deploy"]);
+    fs::remove_dir_all(dir.path().join("collapse/skills/deploy")).unwrap();
+
+    let added = lifecycle::add(
+        Some(&workspace),
+        &project,
+        Kind::Skill,
+        "deploy",
+        "Mine now",
+        None,
+    )
+    .unwrap();
+
+    // Left in place, the record would make what was just written look like
+    // the workspace's to overwrite.
+    assert_eq!(added.stale.unwrap(), Record::Dropped);
+    assert_eq!(records(&ledger), Vec::<String>::new());
+    assert_eq!(
+        standing(&workspace, &ledger, &project, "deploy"),
+        Standing::Foreign
+    );
+}
+
+#[test]
+fn adding_touches_no_record_but_one_under_the_name_it_writes() {
+    let (_dir, workspace, project, ledger) = installed(&["deploy"]);
+
+    let added = lifecycle::add(
+        Some(&workspace),
+        &project,
+        Kind::Skill,
+        "notes",
+        "Mine",
+        None,
+    )
+    .unwrap();
+
+    assert_eq!(added.stale.unwrap(), Record::Untouched);
+    assert_eq!(records(&ledger), ["deploy"]);
+}
+
+#[test]
+fn a_change_asks_only_a_workspace_that_manages_the_project_and_creates_no_ledger() {
+    let dir = TempDir::new().unwrap();
+    let (mut workspace, _) = FlayerWorkspace::init(dir.path()).unwrap();
+    let root = dir.path().join("collapse");
+    fs::create_dir(&root).unwrap();
+    let (project, _) = MindProject::init(&root).unwrap();
+
+    let unmanaged = lifecycle::add(
+        Some(&workspace),
+        &project,
+        Kind::Skill,
+        "deploy",
+        "Ship it",
+        None,
+    )
+    .unwrap();
+    workspace.link(&project).unwrap();
+    let managed = lifecycle::add(
+        Some(&workspace),
+        &project,
+        Kind::Rule,
+        "deploy",
+        "How we ship",
+        None,
+    )
+    .unwrap();
+    let alone = lifecycle::add(None, &project, Kind::Skill, "notes", "Mine", None).unwrap();
+
+    for added in [unmanaged, managed, alone] {
+        assert_eq!(added.stale.unwrap(), Record::Untouched);
+    }
+    // A workspace that never installed anything has no ledger, and looking
+    // must not give it one.
+    assert!(!workspace.ledger_path().exists());
+}
+
+#[test]
+fn a_record_that_cannot_be_dropped_is_reported_and_the_change_stands() {
+    let (dir, workspace, project, _ledger) = installed(&["deploy"]);
+    fs::remove_dir_all(dir.path().join("collapse/skills/deploy")).unwrap();
+    // A ledger a newer Mindflayer wrote is refused, so nothing in it can be
+    // changed from here.
+    rusqlite::Connection::open(workspace.ledger_path())
+        .unwrap()
+        .pragma_update(None, "user_version", 99)
+        .unwrap();
+
+    let added = lifecycle::add(
+        Some(&workspace),
+        &project,
+        Kind::Skill,
+        "deploy",
+        "Mine now",
+        None,
+    )
+    .unwrap();
+
+    assert!(
+        matches!(added.stale, Err(InstallError::Ledger(_))),
+        "{:?}",
+        added.stale
+    );
+    assert!(added.artifact.file().is_file());
+}
+
+#[test]
+fn an_edit_that_changes_an_installed_copy_drops_its_record() {
+    let (dir, workspace, project, ledger) = installed(&["deploy"]);
+    let edit = lifecycle::start_edit(&find(&project, "deploy").unwrap());
+    type_into(edit.file());
+
+    let edited = lifecycle::finish_edit(Some(&workspace), &project, edit);
+
+    assert!(edited.changed);
+    assert_eq!(edited.copy.unwrap(), Record::Dropped);
+    // Still there, and now it is somebody's: shown, never overwritten or
+    // deleted by unticking it.
+    assert_eq!(
+        standing(&workspace, &ledger, &project, "deploy"),
+        Standing::Foreign
+    );
+    assert_eq!(
+        install::uninstall(&workspace, &ledger, &project, Kind::Skill, "deploy").unwrap(),
+        install::Removed::Foreign {
+            name: String::from("deploy")
+        }
+    );
+    assert!(dir.path().join("collapse/skills/deploy/SKILL.md").is_file());
+}
+
+#[test]
+fn an_edit_that_changes_nothing_keeps_the_record() {
+    let (_dir, workspace, project, ledger) = installed(&["deploy"]);
+    let edit = lifecycle::start_edit(&find(&project, "deploy").unwrap());
+
+    let edited = lifecycle::finish_edit(Some(&workspace), &project, edit);
+
+    assert!(!edited.changed);
+    assert_eq!(edited.copy.unwrap(), Record::Untouched);
+    assert_eq!(records(&ledger), ["deploy"]);
+}
+
+#[test]
+fn renaming_an_installed_copy_drops_its_record() {
+    let (_dir, workspace, project, ledger) = installed(&["deploy"]);
+
+    let renamed = lifecycle::rename(
+        Some(&workspace),
+        &project,
+        &find(&project, "deploy").unwrap(),
+        "ship",
+    )
+    .unwrap();
+
+    assert_eq!(renamed.copy.unwrap(), Record::Dropped);
+    assert_eq!(renamed.stale.unwrap(), Record::Untouched);
+    assert_eq!(records(&ledger), Vec::<String>::new());
+}
+
+#[test]
+fn renaming_onto_a_name_an_old_record_claims_drops_that_record_too() {
+    let (dir, workspace, project, ledger) = installed(&["deploy", "ship"]);
+    fs::remove_dir_all(dir.path().join("collapse/skills/ship")).unwrap();
+
+    let renamed = lifecycle::rename(
+        Some(&workspace),
+        &project,
+        &find(&project, "deploy").unwrap(),
+        "ship",
+    )
+    .unwrap();
+
+    assert_eq!(renamed.copy.unwrap(), Record::Dropped);
+    // Left in place, it would make what was just renamed look like the
+    // workspace's own `ship`, to overwrite.
+    assert_eq!(renamed.stale.unwrap(), Record::Dropped);
+    assert_eq!(
+        standing(&workspace, &ledger, &project, "ship"),
+        Standing::Foreign
+    );
+}
+
+#[test]
+fn removing_an_installed_copy_drops_its_record() {
+    let (_dir, workspace, project, ledger) = installed(&["deploy"]);
+
+    let removed = lifecycle::remove(
+        Some(&workspace),
+        &project,
+        &find(&project, "deploy").unwrap(),
+    )
+    .unwrap();
+
+    assert_eq!(removed.copy.unwrap(), Record::Dropped);
+    assert_eq!(records(&ledger), Vec::<String>::new());
+}
+
+/// What an older build could have left in the same ledger: a source whose URL
+/// carries a token. Returns where its clone would be.
+fn tainted(workspace: &FlayerWorkspace, ledger: &Ledger) -> PathBuf {
+    let source = ledger
+        .source_for(
+            SourceKind::Git,
+            "https://example.com/acme/skills",
+            None,
+            "skills",
+        )
+        .unwrap();
+    rusqlite::Connection::open(workspace.ledger_path())
+        .unwrap()
+        .execute(
+            "UPDATE sources SET url = 'https://me:ghp_t0ken@example.com/acme/skills'",
+            [],
+        )
+        .unwrap();
+    workspace.cache_dir().join(source.directory)
+}
+
+#[test]
+fn a_change_that_drops_a_record_hands_back_what_scrubbing_the_ledger_took_out() {
+    let (_dir, workspace, project, ledger) = installed(&["deploy"]);
+    tainted(&workspace, &ledger);
+
+    let removed = lifecycle::remove(
+        Some(&workspace),
+        &project,
+        &find(&project, "deploy").unwrap(),
+    )
+    .unwrap();
+
+    assert_eq!(removed.copy.unwrap(), Record::Dropped);
+    let scrubbed: Vec<&str> = removed
+        .scrub
+        .sources
+        .iter()
+        .map(|source| source.url.as_str())
+        .collect();
+    assert_eq!(scrubbed, ["https://example.com/acme/skills"]);
+    assert_eq!(ledger.tainted_sources().unwrap(), []);
+}
+
+#[test]
+fn an_edit_that_changes_nothing_leaves_the_ledger_unscrubbed() {
+    let (_dir, workspace, project, ledger) = installed(&["deploy"]);
+    tainted(&workspace, &ledger);
+    let edit = lifecycle::start_edit(&find(&project, "deploy").unwrap());
+
+    let edited = lifecycle::finish_edit(Some(&workspace), &project, edit);
+
+    // Nothing changed, so there was no record to drop and no reason to write.
+    assert!(edited.scrub.is_empty(), "{:?}", edited.scrub);
+    assert_eq!(ledger.tainted_sources().unwrap().len(), 1);
+}
+
+// Unix only: what listing a file as a directory fails with is the platform's
+// to say, and only there is it sure not to read as an absence.
+#[cfg(unix)]
+#[test]
+fn a_rename_tells_once_of_a_clone_neither_of_its_scrubs_could_rewrite() {
+    let (_dir, workspace, project, ledger) = installed(&["deploy"]);
+    let clone = tainted(&workspace, &ledger);
+    // A file where the scrub lists the reflogs: the clone keeps its
+    // credential, so its source keeps its URL for every scrub to try again.
+    fs::create_dir_all(clone.join(".git")).unwrap();
+    fs::write(clone.join(".git").join("logs"), "").unwrap();
+
+    let renamed = lifecycle::rename(
+        Some(&workspace),
+        &project,
+        &find(&project, "deploy").unwrap(),
+        "ship",
+    )
+    .unwrap();
+
+    assert_eq!(renamed.copy.unwrap(), Record::Dropped);
+    // The ledger was opened once for each name, and both scrubs failed on the
+    // same clone.
+    let failed: Vec<&str> = renamed
+        .scrub
+        .failures
+        .iter()
+        .map(|failure| failure.url.as_str())
+        .collect();
+    assert_eq!(failed, ["https://example.com/acme/skills"]);
+    assert!(renamed.scrub.sources.is_empty());
+    assert_eq!(ledger.tainted_sources().unwrap().len(), 1);
+}
+
+#[test]
+fn changing_something_mindflayer_did_not_install_touches_no_record() {
+    let (_dir, workspace, project, ledger) = installed(&["deploy"]);
+    create(&workspace.own(), Kind::Skill, "notes", "The workspace's").unwrap();
+    create(&project, Kind::Skill, "notes", "Mine").unwrap();
+    assert_eq!(
+        standing(&workspace, &ledger, &project, "notes"),
+        Standing::Foreign
+    );
+
+    let edit = lifecycle::start_edit(&find(&project, "notes").unwrap());
+    type_into(edit.file());
+    let edited = lifecycle::finish_edit(Some(&workspace), &project, edit);
+    let renamed = lifecycle::rename(
+        Some(&workspace),
+        &project,
+        &find(&project, "notes").unwrap(),
+        "jots",
+    )
+    .unwrap();
+    let removed =
+        lifecycle::remove(Some(&workspace), &project, &find(&project, "jots").unwrap()).unwrap();
+
+    assert!(edited.changed);
+    for record in [edited.copy, renamed.copy, renamed.stale, removed.copy] {
+        assert_eq!(record.unwrap(), Record::Untouched);
+    }
+    // Nor the record of what was installed beside it.
+    assert_eq!(records(&ledger), ["deploy"]);
+}
+
+#[test]
+fn a_change_drops_the_record_of_the_workspace_it_is_given_wherever_that_sits() {
+    // Beside the project rather than above it, the way the one in your home
+    // is for a project anywhere else: walking up from the project never
+    // reaches it.
+    let dir = TempDir::new().unwrap();
+    let hub = dir.path().join("hub");
+    fs::create_dir(&hub).unwrap();
+    let (mut workspace, _) = FlayerWorkspace::init(&hub).unwrap();
+    let root = dir.path().join("collapse");
+    fs::create_dir(&root).unwrap();
+    let (project, _) = MindProject::init(&root).unwrap();
+    workspace.link(&project).unwrap();
+    create(&workspace.own(), Kind::Skill, "deploy", "Ship it").unwrap();
+    let ledger = workspace.ledger().unwrap();
+    for candidate in install::survey(&workspace, &ledger, &project, Kind::Skill).unwrap() {
+        install::install(&workspace, &ledger, &project, &candidate).unwrap();
+    }
+    let edit = lifecycle::start_edit(&find(&project, "deploy").unwrap());
+    type_into(edit.file());
+
+    let edited = lifecycle::finish_edit(Some(&workspace), &project, edit);
+
+    assert_eq!(edited.copy.unwrap(), Record::Dropped);
+    assert_eq!(
+        standing(&workspace, &ledger, &project, "deploy"),
+        Standing::Foreign
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn a_record_is_kept_under_the_workspaces_spelling_of_a_project_whatever_the_symlinks() {
+    // A workspace named with `-W` keeps the spelling it was given, and `mind`
+    // spells its project the way the operating system does, through no
+    // symlink: `/tmp` is one on every Mac. Either way round, the record is
+    // the one `flayer -p` reads, under the entry the workspace stores.
+    let dir = TempDir::new().unwrap();
+    let real = dir.path().join("real");
+    fs::create_dir_all(real.join("collapse")).unwrap();
+    std::os::unix::fs::symlink(&real, dir.path().join("link")).unwrap();
+    let (mut workspace, _) = FlayerWorkspace::init(real.join("hub")).unwrap();
+    let (project, _) = MindProject::init(real.join("collapse")).unwrap();
+    workspace.link(&project).unwrap();
+    create(&workspace.own(), Kind::Skill, "deploy", "Ship it").unwrap();
+    let through_link = FlayerWorkspace::open(dir.path().join("link/hub")).unwrap();
+    let ledger = workspace.ledger().unwrap();
+    let recorded = || ledger.installations("../collapse", Kind::Skill).unwrap();
+
+    for candidate in install::survey(&through_link, &ledger, &project, Kind::Skill).unwrap() {
+        install::install(&through_link, &ledger, &project, &candidate).unwrap();
+    }
+    assert_eq!(recorded(), ["deploy"]);
+
+    let linked = MindProject::open(dir.path().join("link/collapse")).unwrap();
+    let removed =
+        lifecycle::remove(Some(&workspace), &linked, &find(&linked, "deploy").unwrap()).unwrap();
+
+    assert_eq!(removed.copy.unwrap(), Record::Dropped);
+    assert_eq!(recorded(), Vec::<String>::new());
 }

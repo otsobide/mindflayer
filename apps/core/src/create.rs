@@ -10,7 +10,10 @@
 //! Nothing here records anything in the ledger. A created artifact is its
 //! author's work, not something Mindflayer installed, so [`crate::install`]
 //! treats it as foreign: never overwritten by a shelf entry of the same name,
-//! never removed by unticking one.
+//! never removed by unticking one. Nor does anything here drop a record: an
+//! old one under the name written is [`crate::lifecycle::add`]'s to drop, so
+//! a front end adds with that rather than with these. They stay public as the
+//! bare writers, which core's tests build their fixtures with.
 
 use std::fs;
 use std::io::{self, Write as _};
@@ -22,6 +25,7 @@ use thiserror::Error;
 use crate::artifact::{self, issue_list, Artifact, ArtifactError, ValidationIssue};
 use crate::frontmatter::{self, FrontMatterError};
 use crate::kind::{Kind, Layout};
+use crate::rule::RuleManifest;
 use crate::skill::{SkillManifest, MAX_DESCRIPTION_LEN};
 use crate::template::{Template, TemplateError};
 use crate::workspace::MindProject;
@@ -55,10 +59,12 @@ pub fn create(
 /// A skill template is copied whole, and in its manifest the `name` and
 /// `description` are set — whatever the template had for them is replaced —
 /// and [`NAME_PLACEHOLDER`] and [`DESCRIPTION_PLACEHOLDER`] in the body are
-/// filled in. A rule template is filled in the same way, and opens with the
-/// description as a heading when it does not say where the description goes.
-/// Other files are copied as they are: a placeholder in a script is the
-/// script's business.
+/// filled in. A rule template is filled in throughout, front matter included,
+/// with a `description` its front matter declares set in the same way, and
+/// gets the description as a heading on top of its body, below any front
+/// matter, when it does not say where the description goes; front matter that
+/// `validate` would warn about is refused. Other files are copied as they
+/// are: a placeholder in a script is the script's business.
 pub fn create_from(
     project: &MindProject,
     kind: Kind,
@@ -221,17 +227,18 @@ fn create_rule(
         unreachable!("a rule is a file");
     };
 
+    // Worked out before anything is written, as a skill's manifest is, so a
+    // template whose front matter would not be read costs nothing but the
+    // error.
     let text = match template {
         None => format!("# {description}\n"),
         Some(template) => {
             let text = template.rule_text()?;
-            // A rule's opening line is what every listing shows, so a template
-            // that does not say where the description goes gets it on top.
-            if text.contains(DESCRIPTION_PLACEHOLDER) {
-                fill(&text, name, description)
-            } else {
-                format!("# {description}\n\n{}", fill(&text, name, description))
-            }
+            rule_from_template(&text, name, description).map_err(|reason| {
+                CreateError::Manifest {
+                    reason: format!("the template `{}`: {reason}", template.name),
+                }
+            })?
         }
     };
 
@@ -245,6 +252,83 @@ fn create_rule(
     write_new(&file, text.as_bytes())?;
 
     Ok(Artifact::rule(file, name.to_owned(), project.root())?)
+}
+
+/// A rule template filled in, with the description as a heading on top of
+/// its body when the template does not say where the description goes: a
+/// rule's opening line is what every listing shows.
+///
+/// A `description` the front matter declares is set, as a skill's is,
+/// whatever the template had for it: the template's lines for it are
+/// dropped, continuation lines and all, and the one typed is serialized in
+/// their place. Pasted in as text, a description containing `: ` would not
+/// parse, and one opening with `#` would be a comment, declaring nothing.
+///
+/// Front matter is held to everything `validate` would warn about, so that
+/// a template's `paths:` never becomes content without a word: strict when
+/// writing, as a skill's manifest is.
+fn rule_from_template(text: &str, name: &str, description: &str) -> Result<String, String> {
+    #[derive(Serialize)]
+    struct Declared<'a> {
+        description: &'a str,
+    }
+
+    let placed = text.contains(DESCRIPTION_PLACEHOLDER);
+    // Where the fences are is found on the template, and whether they hold
+    // front matter is decided on what they hold once filled in: `{{name}}`
+    // is a YAML flow mapping, so a template scoping its rule to `{{name}}/**`
+    // does not parse until it is.
+    if let Ok(document) = frontmatter::split(text) {
+        // Both fences as the template wrote them, byte order mark and line
+        // endings included.
+        let opening = &text[..text.find('\n').map_or(text.len(), |end| end + 1)];
+        let closing =
+            &text[opening.len() + document.front_matter.len()..text.len() - document.body.len()];
+        let rest = frontmatter::without_keys(document.front_matter, &["description"]);
+        let declared = if rest.len() == document.front_matter.len() {
+            String::new()
+        } else {
+            serde_yaml_ng::to_string(&Declared { description }).map_err(|e| e.to_string())?
+        };
+        let block = format!(
+            "{opening}{declared}{}{closing}",
+            fill(&rest, name, description)
+        );
+        let (manifest, rest) = RuleManifest::read(&block);
+        let issues = artifact::rule_issues(&manifest);
+        if !issues.is_empty() {
+            return Err(issue_list(&issues));
+        }
+        // A key the line-by-line drop cannot see, such as a quoted one.
+        if manifest
+            .description
+            .stated()
+            .is_some_and(|stated| stated != description)
+        {
+            return Err(String::from(
+                "its front matter sets `description` in a way that cannot be replaced",
+            ));
+        }
+        // Read as front matter, so the heading goes below it: above it, the
+        // fences would no longer open the file, and the front matter would
+        // become content. Otherwise the fences are horizontal rules, and the
+        // whole template is body.
+        if rest.is_empty() {
+            let body = fill(document.body, name, description);
+            return Ok(if placed {
+                format!("{block}{body}")
+            } else {
+                let body = body.trim_start_matches(['\n', '\r']);
+                format!("{block}\n# {description}\n\n{body}")
+            });
+        }
+    }
+    let body = fill(text, name, description);
+    Ok(if placed {
+        body
+    } else {
+        format!("# {description}\n\n{body}")
+    })
 }
 
 /// Refuse a description that would not survive as what it is meant to be.
@@ -292,6 +376,15 @@ fn skill_manifest(
         return Err(String::from(
             "its front matter sets `name` or `description` in a way that cannot be replaced",
         ));
+    }
+    // Held to the strict rules `rename` and `install` hold a skill to, so
+    // that a rule added there reaches what `add` writes too. The name and the
+    // description were checked before anything was built, with messages of
+    // their own; this is what keeps those checks from being a second
+    // definition of the same rules.
+    let issues = artifact::strict_issues(&parsed, name);
+    if !issues.is_empty() {
+        return Err(format!("it would break a rule: {}", issue_list(&issues)));
     }
     // A body with nothing in it gets the heading a skill without a template
     // opens with, so a manifest is never front matter alone.

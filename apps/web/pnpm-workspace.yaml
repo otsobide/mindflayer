@@ -1,0 +1,10 @@
+# Nothing published less than a day ago: a release that turns out to be
+# malicious is usually pulled within hours, before it can reach the lockfile.
+minimumReleaseAge: 1440
+
+# No dependency runs a script as it installs. The two that ask have nothing
+# to do here: esbuild's checks a binary its optional dependency already
+# brought, and vue-demi's switches to Vue 2, which this is not.
+allowBuilds:
+  esbuild: false
+  vue-demi: false

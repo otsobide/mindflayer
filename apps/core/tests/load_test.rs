@@ -9,7 +9,8 @@ mod common;
 use mindflayer_core::install::{self, InstallError, Installed, Offer, Standing};
 use mindflayer_core::ledger::Ledger;
 use mindflayer_core::{
-    FlayerWorkspace, Kind, MindProject, Registration, WorkspaceError, FLAYER_CONFIG, FLAYER_DIR,
+    resolve_except, FlayerWorkspace, Inputs, Intent, Kind, MindProject, Registration, ResolveError,
+    WorkspaceError, FLAYER_CONFIG, FLAYER_DIR,
 };
 use tempfile::TempDir;
 
@@ -88,6 +89,21 @@ fn a_workspace_cannot_load_itself() {
 }
 
 #[test]
+fn loading_several_loads_none_when_one_is_the_workspace_itself() {
+    let (_dir, mut target, _, team) = target_and_team(&[]);
+    let same = FlayerWorkspace::open(target.root()).unwrap();
+    let before = marker(&target);
+
+    let error = target.load_all(&[team, same]).unwrap_err();
+
+    assert!(
+        matches!(error, WorkspaceError::LoadsItself { .. }),
+        "{error}"
+    );
+    assert_eq!(marker(&target), before, "half a load happened");
+}
+
+#[test]
 fn a_marker_from_before_loading_existed_gains_the_key_when_it_is_first_used() {
     let (_dir, target, _, team) = target_and_team(&[]);
     let path = target.root().join(FLAYER_DIR).join(FLAYER_CONFIG);
@@ -138,6 +154,24 @@ fn a_loaded_workspace_that_has_gone_is_reported_and_can_still_be_unloaded() {
 // Which workspace a load goes into
 // ---------------------------------------------------------------------------
 
+/// The workspace a load or an unload run in `start` goes into, passing over
+/// `except`, with nothing named or activated and the default in `home`.
+fn into(
+    start: &Path,
+    except: &[PathBuf],
+    home: Option<&Path>,
+    intent: Intent,
+) -> Result<Option<FlayerWorkspace>, ResolveError> {
+    let inputs = Inputs {
+        flag: None,
+        activated: None,
+        start,
+        home,
+        intent,
+    };
+    Ok(resolve_except(&inputs, except)?.map(|resolved| resolved.workspace))
+}
+
 #[test]
 fn from_inside_the_workspace_being_loaded_the_walk_carries_on_above_it() {
     let dir = TempDir::new().unwrap();
@@ -146,10 +180,9 @@ fn from_inside_the_workspace_being_loaded_the_walk_carries_on_above_it() {
     let inside = team.root().join("skills");
     fs::create_dir_all(&inside).unwrap();
 
-    let found =
-        FlayerWorkspace::locate_or_default_except(&inside, &[team.root().to_path_buf()], None)
-            .unwrap()
-            .unwrap();
+    let found = into(&inside, &[team.root().to_path_buf()], None, Intent::Write)
+        .unwrap()
+        .unwrap();
 
     assert_eq!(
         found.root().canonicalize().unwrap(),
@@ -163,10 +196,11 @@ fn with_nothing_else_above_the_load_goes_into_the_default_workspace() {
     let dir = TempDir::new().unwrap();
     let (team, _) = FlayerWorkspace::init(dir.path().join("team")).unwrap();
 
-    let found = FlayerWorkspace::locate_or_default_except(
+    let found = into(
         team.root(),
         &[team.root().to_path_buf()],
         Some(home.path()),
+        Intent::Write,
     )
     .unwrap()
     .unwrap();
@@ -179,15 +213,19 @@ fn the_default_workspace_is_not_offered_as_somewhere_to_load_itself() {
     let home = TempDir::new().unwrap();
     FlayerWorkspace::init(home.path()).unwrap();
 
-    let error = FlayerWorkspace::locate_or_default_except(
+    let error = into(
         home.path(),
         &[home.path().to_path_buf()],
         Some(home.path()),
+        Intent::Write,
     )
     .unwrap_err();
 
     assert!(
-        matches!(error, WorkspaceError::LoadsItself { .. }),
+        matches!(
+            error,
+            ResolveError::Workspace(WorkspaceError::LoadsItself { .. })
+        ),
         "{error}"
     );
 }
@@ -226,7 +264,9 @@ fn installing_a_loaded_skill_copies_it_and_a_later_edit_there_updates_it() {
 
     let candidate =
         install::offered(&target, &ledger, &project, Kind::Skill, "deploy", None).unwrap();
-    let first = install::install(&target, &ledger, &project, &candidate).unwrap();
+    let first = install::install(&target, &ledger, &project, &candidate)
+        .unwrap()
+        .installed;
     assert!(matches!(first, Installed::Added { .. }), "{first:?}");
     assert!(installed_at(&project, "deploy").join("SKILL.md").is_file());
 
@@ -241,7 +281,9 @@ fn installing_a_loaded_skill_copies_it_and_a_later_edit_there_updates_it() {
     let candidate =
         install::offered(&target, &ledger, &project, Kind::Skill, "deploy", None).unwrap();
     assert_eq!(candidate.standing, Standing::Installed);
-    let second = install::install(&target, &ledger, &project, &candidate).unwrap();
+    let second = install::install(&target, &ledger, &project, &candidate)
+        .unwrap()
+        .installed;
 
     assert!(matches!(second, Installed::Updated { .. }), "{second:?}");
     let copied = fs::read_to_string(installed_at(&project, "deploy").join("SKILL.md")).unwrap();
@@ -360,7 +402,9 @@ fn a_loaded_workspace_that_is_the_project_itself_is_never_copied_onto_itself() {
     // the loaded workspace's own files on uninstall.
     candidate.standing = Standing::Installed;
 
-    let outcome = install::install(&target, &ledger, &project, &candidate).unwrap();
+    let outcome = install::install(&target, &ledger, &project, &candidate)
+        .unwrap()
+        .installed;
 
     assert!(
         matches!(outcome, Installed::Unchanged { .. }),
@@ -492,7 +536,9 @@ fn a_folder_started_by_hand_without_a_manifest_is_somebody_elses() {
     let candidate =
         install::offered(&target, &ledger, &project, Kind::Skill, "deploy", None).unwrap();
     assert_eq!(candidate.standing, Standing::Foreign);
-    let outcome = install::install(&target, &ledger, &project, &candidate).unwrap();
+    let outcome = install::install(&target, &ledger, &project, &candidate)
+        .unwrap()
+        .installed;
 
     assert!(matches!(outcome, Installed::Foreign { .. }), "{outcome:?}");
     assert_eq!(fs::read_to_string(&notes).unwrap(), "my draft");
@@ -650,9 +696,13 @@ fn looking_for_somewhere_to_unload_from_never_makes_the_default() {
     let home = TempDir::new().unwrap();
     let dir = TempDir::new().unwrap();
 
-    let found = FlayerWorkspace::locate_except(dir.path(), &[], Some(home.path())).unwrap();
+    // A read, as unloading resolves it: what it finds at home is a stand-in
+    // with nothing loaded, never the workspace made to say so.
+    let found = into(dir.path(), &[], Some(home.path()), Intent::Read)
+        .unwrap()
+        .unwrap();
 
-    assert!(found.is_none());
+    assert!(!found.is_made());
     assert!(!home.path().join(FLAYER_DIR).exists());
 }
 

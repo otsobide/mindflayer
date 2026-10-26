@@ -1,14 +1,23 @@
-//! Changing what a project already holds: finding an artifact by what somebody
-//! typed, renaming it, removing it.
+//! Changing what a project holds: adding to it, finding an artifact by what
+//! somebody typed, renaming it, removing it.
 //!
 //! Finding is more forgiving than listing. A skill whose front matter does not
 //! parse is left out of every listing, but it is exactly the one somebody
 //! needs to open and fix, so an artifact is also found by where its name would
 //! put it on disk, whether or not it reads.
 //!
-//! None of this touches the ledger: whether a change leaves a stale record of
-//! an installation behind is [`crate::install::disown`]'s question, asked by
-//! whoever made the change.
+//! Each change also sees to the ledger's record of what was installed under
+//! the names it touches, and says in its result what it did ([`Record`]). The
+//! rule is one, and it lives here rather than in a front end, so that no
+//! front end can apply it differently. Only one that changes things through
+//! these functions gets it, though: [`create`] and [`create_from`], the
+//! writers [`add`] is built on, see to no record, and a front end that added
+//! with them would leave a stale one in place.
+//!
+//! Seeing to a record opens the ledger to write, which scrubs it first
+//! ([`FlayerWorkspace::ledger_to_write`]), so each result also hands back what
+//! that took out ([`Scrub`]) for the front end to say. Said nowhere, it would
+//! go unsaid for good: a scrub says what it found only the first time.
 
 use std::fs;
 use std::io;
@@ -18,11 +27,15 @@ use thiserror::Error;
 
 use crate::artifact::{self, issue_list, Artifact, ArtifactError, ValidationIssue};
 use crate::catalog::{Catalog, Reference, QUALIFIER};
+use crate::create::{create, create_from, CreateError};
 use crate::frontmatter;
+use crate::gather::Scrub;
+use crate::install::{self, InstallError};
 use crate::kind::{Kind, Layout};
 use crate::paths;
 use crate::skill::SkillManifest;
-use crate::workspace::{replace_file, MindProject, WorkspaceError};
+use crate::template::Template;
+use crate::workspace::{replace_file, FlayerWorkspace, MindProject, WorkspaceError};
 
 /// An artifact found by what somebody typed.
 #[derive(Debug, Clone)]
@@ -49,6 +62,68 @@ impl Target {
     }
 }
 
+/// What a change did to the ledger's record that Mindflayer installed what
+/// is under one name.
+///
+/// That record is what gives the install screen leave to overwrite and
+/// delete, so it must not outlive the copy it was about: whatever somebody
+/// writes there next would inherit it.
+///
+/// A change reports it as `Result<Record, InstallError>` beside what it made
+/// rather than failing with it: by the time the record is seen to, the change
+/// has been made, and reporting it as not made would be false.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Record {
+    /// No record was changed: there was none — no workspace was consulted,
+    /// the one consulted does not manage the project, or it installed nothing
+    /// under that name — or the change gave no reason to touch it.
+    Untouched,
+    /// The record was dropped, and what is there now is its author's.
+    Dropped,
+}
+
+/// What adding an artifact made, and what it did to a record under its name.
+#[derive(Debug)]
+pub struct Added {
+    pub artifact: Artifact,
+    /// A record of an install under the same name. Nothing was there for the
+    /// new artifact to be written over, so the copy it was about had gone,
+    /// and left in place the record would make somebody's new work look like
+    /// something Mindflayer put there.
+    pub stale: Result<Record, InstallError>,
+    /// What opening the ledger to see to that record scrubbed out of it.
+    pub scrub: Scrub,
+}
+
+/// Write a new artifact into `project`, from `template` when one is given
+/// ([`create`], [`create_from`]), and drop any record of an install under its
+/// name.
+///
+/// `workspace` is the one the front end consulted about the project, given
+/// rather than found by walking up from it: a walk misses every workspace
+/// that links the project from somewhere that is not above it. With none,
+/// there is no record to drop.
+pub fn add(
+    workspace: Option<&FlayerWorkspace>,
+    project: &MindProject,
+    kind: Kind,
+    name: &str,
+    description: &str,
+    template: Option<&Template>,
+) -> Result<Added, CreateError> {
+    let artifact = match template {
+        None => create(project, kind, name, description),
+        Some(template) => create_from(project, kind, name, description, template),
+    }?;
+    let mut scrub = Scrub::default();
+    let stale = disowned(workspace, project, kind, name, &mut scrub);
+    Ok(Added {
+        artifact,
+        stale,
+        scrub,
+    })
+}
+
 /// The one artifact in `project` a reference names.
 ///
 /// By what it declares first, then by where the name would put it — so a
@@ -73,10 +148,13 @@ pub fn find(project: &MindProject, reference: &Reference) -> Result<Target, Life
         })
         .collect();
 
-    // Only a usable name is turned into a place: one with `..` in it would
-    // otherwise be a way out of the project.
+    // Only a name made of plain folder names is turned into a place: one with
+    // `..` in it would otherwise be a way out of the project. Not the naming
+    // rules, which are for what Mindflayer writes: a folder from before they
+    // were tightened, or one somebody made by hand, is exactly what has to be
+    // found to be fixed or removed.
     let name = reference.name();
-    if artifact::name_issues(name).is_empty() {
+    if name.split('/').all(install::is_folder_name) {
         for kind in kinds {
             let path = place(project, kind, name);
             if !holds(kind, &path) || found.iter().any(|target| target.path == path) {
@@ -160,6 +238,77 @@ pub fn identify(project: &MindProject, file: &Path) -> Option<(Kind, String)> {
     })
 }
 
+/// An artifact opened to be edited, with what its file held then, so that
+/// finishing the edit can tell whether anything changed.
+///
+/// Running the editor is the front end's, since which one to run comes from
+/// the environment, and core never reads that. What the edit came to, and
+/// what that means for the copy's record, is core's.
+#[derive(Debug, Clone)]
+pub struct Edit {
+    kind: Kind,
+    name: String,
+    file: PathBuf,
+    before: Option<Vec<u8>>,
+}
+
+impl Edit {
+    /// The file to open in the editor.
+    pub fn file(&self) -> &Path {
+        &self.file
+    }
+}
+
+/// What an edit came to.
+#[derive(Debug)]
+pub struct Edited {
+    /// Whether the file is any different from when the edit started.
+    pub changed: bool,
+    /// The record of the copy edited, dropped when it changed: it is no longer
+    /// what was installed, so the install screen must not take it for its
+    /// own to overwrite.
+    pub copy: Result<Record, InstallError>,
+    /// What opening the ledger to drop that record scrubbed out of it;
+    /// nothing when the file did not change, since the ledger was not opened.
+    pub scrub: Scrub,
+}
+
+/// Start editing `target`, noting what its file holds now.
+pub fn start_edit(target: &Target) -> Edit {
+    let file = target.file();
+    Edit {
+        kind: target.kind,
+        name: target.name.clone(),
+        before: fs::read(&file).ok(),
+        file,
+    }
+}
+
+/// Finish an edit of an artifact in `project` once the editor has closed,
+/// dropping the record of an install of it when the file changed.
+/// `workspace` is the one consulted, as for [`add`].
+///
+/// A front end finishes the edit whether or not the editor succeeded: one
+/// that wrote the file before it failed has changed the copy all the same.
+pub fn finish_edit(
+    workspace: Option<&FlayerWorkspace>,
+    project: &MindProject,
+    edit: Edit,
+) -> Edited {
+    let changed = fs::read(&edit.file).ok() != edit.before;
+    let mut scrub = Scrub::default();
+    let copy = if changed {
+        disowned(workspace, project, edit.kind, &edit.name, &mut scrub)
+    } else {
+        Ok(Record::Untouched)
+    };
+    Edited {
+        changed,
+        copy,
+        scrub,
+    }
+}
+
 /// How many files removing it would delete.
 pub fn files(target: &Target) -> usize {
     fn count(path: &Path) -> usize {
@@ -180,16 +329,31 @@ pub fn files(target: &Target) -> usize {
     }
 }
 
+/// What removing an artifact did to the record of an install of it.
+#[derive(Debug)]
+pub struct Removed {
+    /// Dropped when the copy had been installed: it is gone, and the record
+    /// would be inherited by whatever is written under its name next.
+    pub copy: Result<Record, InstallError>,
+    /// What opening the ledger to see to that record scrubbed out of it.
+    pub scrub: Scrub,
+}
+
 /// Delete an artifact: a skill's whole directory, or a rule's file and any
-/// folder it leaves empty.
-pub fn remove(project: &MindProject, target: &Target) -> Result<(), LifecycleError> {
+/// folder it leaves empty. Then drop the record of an install of it.
+/// `workspace` is the one consulted, as for [`add`].
+pub fn remove(
+    workspace: Option<&FlayerWorkspace>,
+    project: &MindProject,
+    target: &Target,
+) -> Result<Removed, LifecycleError> {
     let directory = inside(project, target)?;
     match target.kind.layout() {
         Layout::Directory { .. } => {
             fs::remove_dir_all(&target.path).map_err(|source| LifecycleError::Io {
                 path: target.path.clone(),
                 source,
-            })
+            })?;
         }
         Layout::Files { .. } => {
             fs::remove_file(&target.path).map_err(|source| LifecycleError::Io {
@@ -197,9 +361,30 @@ pub fn remove(project: &MindProject, target: &Target) -> Result<(), LifecycleErr
                 source,
             })?;
             prune(&directory, target.path.parent());
-            Ok(())
         }
     }
+    let mut scrub = Scrub::default();
+    let copy = disowned(workspace, project, target.kind, &target.name, &mut scrub);
+    Ok(Removed { copy, scrub })
+}
+
+/// What renaming an artifact made, and what it did to the records under its
+/// old name and its new one.
+#[derive(Debug)]
+pub struct Renamed {
+    /// The artifact under its new name.
+    pub target: Target,
+    /// The record of the copy under its old name, dropped: renamed, it is no
+    /// longer what was installed.
+    pub copy: Result<Record, InstallError>,
+    /// A record under the new name, from an install that is no longer there:
+    /// stale, and left in place it would make what was just renamed look like
+    /// something Mindflayer put there.
+    pub stale: Result<Record, InstallError>,
+    /// What opening the ledger to see to both records scrubbed out of it,
+    /// once: the second opening finds only what the first could not take out,
+    /// which is the same thing to tell.
+    pub scrub: Scrub,
 }
 
 /// Give an artifact a new name: a skill's folder and the `name` it declares
@@ -210,7 +395,15 @@ pub fn remove(project: &MindProject, target: &Target) -> Result<(), LifecycleErr
 /// is somebody's writing — comments, key order, the description — and is left
 /// byte for byte, and the result is parsed back to make sure the one line
 /// changed what it was meant to and nothing else.
-pub fn rename(project: &MindProject, target: &Target, to: &str) -> Result<Target, LifecycleError> {
+///
+/// Then the records under both names are dropped. `workspace` is the one
+/// consulted, as for [`add`].
+pub fn rename(
+    workspace: Option<&FlayerWorkspace>,
+    project: &MindProject,
+    target: &Target,
+    to: &str,
+) -> Result<Renamed, LifecycleError> {
     let issues = artifact::name_issues(to);
     if !issues.is_empty() {
         return Err(LifecycleError::Name {
@@ -220,10 +413,19 @@ pub fn rename(project: &MindProject, target: &Target, to: &str) -> Result<Target
     }
     let directory = inside(project, target)?;
     // Matched on the kind, so a third one has to say how it is renamed.
-    match target.kind {
+    let renamed = match target.kind {
         Kind::Skill => rename_skill(project, target, &directory, to),
         Kind::Rule => rename_rule(project, target, &directory, to),
-    }
+    }?;
+    let mut scrub = Scrub::default();
+    let copy = disowned(workspace, project, target.kind, &target.name, &mut scrub);
+    let stale = disowned(workspace, project, target.kind, &renamed.name, &mut scrub);
+    Ok(Renamed {
+        target: renamed,
+        copy,
+        stale,
+        scrub,
+    })
 }
 
 fn rename_skill(
@@ -244,6 +446,23 @@ fn rename_skill(
             path: target.file(),
         });
     };
+    // Held to the strict rules as it will be, the rules `add` and `install`
+    // hold a skill to: what is left behind is a skill Mindflayer wrote, if
+    // only its name, and one an agent would skip is not left behind. Judged as
+    // renamed, because its name and folder are what a rename fixes.
+    if let Some(manifest) = artifact.manifest() {
+        let renamed = SkillManifest {
+            name: to.to_owned(),
+            ..manifest.clone()
+        };
+        let issues = artifact::strict_issues(&renamed, to);
+        if !issues.is_empty() {
+            return Err(LifecycleError::Unfit {
+                name: artifact.name().to_owned(),
+                issues,
+            });
+        }
+    }
 
     let folder = directory.join(to);
     let moves = folder != target.path;
@@ -326,8 +545,9 @@ fn rename_rule(
     })?;
     prune(directory, target.path.parent());
 
-    // A rule declares nothing, so there is nothing inside it to rewrite, and
-    // one that did not read before a move does not read after it either.
+    // A rule's front matter holds no name, so there is nothing inside it to
+    // rewrite, and one that did not read before a move does not read after it
+    // either.
     Ok(Target {
         kind: Kind::Rule,
         name: to.to_owned(),
@@ -414,6 +634,27 @@ fn holds(kind: Kind, path: &Path) -> bool {
     file_of(kind, path).is_file()
 }
 
+/// Drop the record `workspace` keeps of an install of `name` into `project`,
+/// adding what opening the ledger to do it scrubbed out of it to `scrub`.
+fn disowned(
+    workspace: Option<&FlayerWorkspace>,
+    project: &MindProject,
+    kind: Kind,
+    name: &str,
+    scrub: &mut Scrub,
+) -> Result<Record, InstallError> {
+    let Some(workspace) = workspace else {
+        return Ok(Record::Untouched);
+    };
+    let disowned = install::disown(workspace, project, kind, name)?;
+    scrub.absorb(disowned.scrub);
+    Ok(if disowned.dropped {
+        Record::Dropped
+    } else {
+        Record::Untouched
+    })
+}
+
 /// Why an artifact could not be found, renamed or removed.
 #[derive(Debug, Error)]
 pub enum LifecycleError {
@@ -428,6 +669,11 @@ pub enum LifecycleError {
     },
     #[error("`{name}`: a skill's name cannot contain `/`; skills are flat, and only rules are filed in folders")]
     Nested { name: String },
+    #[error("`{name}` cannot be renamed until it is fixed: {}", issue_list(.issues))]
+    Unfit {
+        name: String,
+        issues: Vec<ValidationIssue>,
+    },
     #[error("it is already called `{name}`")]
     Unchanged { name: String },
     #[error("{path}: already exists, and is left alone")]

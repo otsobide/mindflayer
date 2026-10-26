@@ -1,12 +1,14 @@
 //! The two levels Mindflayer works at.
 //!
 //! A **mind project** is a directory carrying a `.mind`, the way a repository
-//! carries a `.git`: it holds skills, in `.mind/skills/<name>/SKILL.md`, and
-//! it travels with the code it belongs to.
+//! carries a `.git`: it holds skills and rules beside the code, in the
+//! directories its marker names (`skills/<name>/SKILL.md` and `rules/` by
+//! default), and it travels with the code it belongs to.
 //!
 //! A **flayer workspace** sits above them, carrying a `.mindflayer` that
-//! references the mind projects it manages, so skills can be listed and moved
-//! across several projects at once.
+//! references the mind projects it manages, so their artifacts can be listed
+//! and moved across several projects at once, and holds artifacts of its own
+//! to share with them.
 //!
 //! Both are found the way git finds a repository: by walking up from a
 //! starting directory until the marker file appears. Both are described by a
@@ -14,24 +16,39 @@
 //! behind by a failed copy is not mistaken for a project.
 
 use std::collections::BTreeMap;
+use std::fmt;
 use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
+use std::time::Duration;
 
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
+use crate::gather::{self, Scrub};
 use crate::kind::Kind;
 use crate::ledger::{Ledger, LedgerError, LEDGER_FILE};
+use crate::lock::{self, LockError, WorkspaceLock};
 use crate::paths;
 
-/// The layout version written into new marker files.
+/// The layout version written into new `mind.toml` markers, and the newest
+/// one this build reads.
 ///
 /// Refusing to read a version from the future is what lets the format change
-/// later without an old binary silently misreading a newer project.
-pub const FORMAT_VERSION: u32 = 2;
+/// later without an old binary silently misreading a newer project. The
+/// project marker has a version of its own rather than one shared with
+/// [`FLAYER_FORMAT_VERSION`]: shared, a change to either format would be a new
+/// version of both, and an older build would refuse a workspace that had not
+/// changed at all.
+pub const MIND_FORMAT_VERSION: u32 = 2;
 
-/// The first version whose markers say where each kind's artifacts live.
+/// The layout version written into new `flayer.toml` markers, and the newest
+/// one this build reads. Its own, for the reason [`MIND_FORMAT_VERSION`] is.
+pub const FLAYER_FORMAT_VERSION: u32 = 2;
+
+/// The first [`MIND_FORMAT_VERSION`] whose markers say where each kind's
+/// artifacts live. Only a project marker's version is held against it: a
+/// workspace marker's number says nothing about where a project keeps things.
 ///
 /// Before it, that was not a question a project could answer: every kind lived
 /// inside `.mind`. Reading such a marker as if it used today's default would
@@ -52,6 +69,47 @@ pub const FLAYER_CONFIG: &str = "flayer.toml";
 /// Kept rather than discarded so a gather can be inspected after the fact, and
 /// so what a source actually contained is still there when its report is not.
 pub const CACHE_DIR: &str = "cache";
+/// Where an install builds its copy before moving it into place, inside a
+/// project's [`MIND_DIR`].
+///
+/// Not beside the copy, because that is a folder agents read, and not in the
+/// system's temporary folder, which can be another filesystem: inside the
+/// project, a finished copy is moved into place by a rename.
+pub const SCRATCH_DIR: &str = "tmp";
+
+/// Which of the two marker files a version was read from.
+///
+/// Each is versioned on its own, so a refusal names the one that is newer: the
+/// path alone leaves the reader to know which file is which level's, and a
+/// front end deciding what to say about it should not have to compare file
+/// names.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Marker {
+    /// A mind project's [`MIND_CONFIG`].
+    Project,
+    /// A flayer workspace's [`FLAYER_CONFIG`].
+    Workspace,
+}
+
+impl Marker {
+    /// The newest version of this marker this build reads, which is also the
+    /// one it writes.
+    pub const fn version(self) -> u32 {
+        match self {
+            Marker::Project => MIND_FORMAT_VERSION,
+            Marker::Workspace => FLAYER_FORMAT_VERSION,
+        }
+    }
+}
+
+impl fmt::Display for Marker {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(match self {
+            Marker::Project => "project marker",
+            Marker::Workspace => "workspace marker",
+        })
+    }
+}
 
 /// What an `init` actually did.
 ///
@@ -218,7 +276,7 @@ impl MindProject {
             return Err(WorkspaceError::NotAProject { path: root });
         }
         let config: MindConfig = read_config(&config_path)?;
-        check_version(&config_path, config.version)?;
+        check_version(&config_path, Marker::Project, config.version)?;
         Ok(Self { root, config })
     }
 
@@ -238,6 +296,12 @@ impl MindProject {
     /// The `.mind` directory itself.
     pub fn mind_dir(&self) -> PathBuf {
         self.root.join(MIND_DIR)
+    }
+
+    /// Where an install into this project builds its copy ([`SCRATCH_DIR`]),
+    /// whether or not one has made it yet.
+    pub fn scratch_dir(&self) -> PathBuf {
+        self.mind_dir().join(SCRATCH_DIR)
     }
 
     /// The folder holding one kind, whether or not it exists yet.
@@ -297,6 +361,9 @@ pub struct FlayerConfig {
 pub struct FlayerWorkspace {
     root: PathBuf,
     config: FlayerConfig,
+    /// Whether its marker is on disk: false only for an
+    /// [`unmade`](Self::unmade) one.
+    made: bool,
 }
 
 impl FlayerWorkspace {
@@ -351,8 +418,45 @@ impl FlayerWorkspace {
             return Err(WorkspaceError::NotAWorkspace { path: root });
         }
         let config: FlayerConfig = read_config(&config_path)?;
-        check_version(&config_path, config.version)?;
-        Ok(Self { root, config })
+        check_version(&config_path, Marker::Workspace, config.version)?;
+        Ok(Self {
+            root,
+            config,
+            made: true,
+        })
+    }
+
+    /// The workspace [`init`](Self::init) would make at `root`, held in memory
+    /// rather than made: what a command that only reads is given where the
+    /// default workspace does not exist yet, since reading is no reason to
+    /// make it.
+    ///
+    /// Its marker is the one `init` would write, parsed instead of written, so
+    /// a read answers as it would of a workspace made a moment before — no
+    /// projects, nothing loaded, an empty ledger — and coming first changes
+    /// nothing about what it says. Nothing is written through it: an edit of
+    /// its marker is refused as it is for any directory that is not a
+    /// workspace, and so is its ledger. What writes makes the real one:
+    /// [`resolve`](crate::resolve::resolve) does, for a command that means to
+    /// write.
+    pub fn unmade(root: impl AsRef<Path>) -> Result<Self, WorkspaceError> {
+        let root = absolute(root.as_ref())?;
+        let marker = flayer_template(&directory_name(&root), &Directories::default());
+        let config = toml::from_str(&marker).map_err(|source| WorkspaceError::Parse {
+            path: root.join(FLAYER_DIR).join(FLAYER_CONFIG),
+            source,
+        })?;
+        Ok(Self {
+            root,
+            config,
+            made: false,
+        })
+    }
+
+    /// Whether it is on disk, which every workspace is but an
+    /// [`unmade`](Self::unmade) one.
+    pub fn is_made(&self) -> bool {
+        self.made
     }
 
     /// Walk up from `start` looking for a flayer workspace.
@@ -360,94 +464,6 @@ impl FlayerWorkspace {
         match locate_marker(start.as_ref(), FLAYER_DIR, FLAYER_CONFIG)? {
             Some(root) => Self::open(root).map(Some),
             None => Ok(None),
-        }
-    }
-
-    /// The workspace at or above `start`, or else the default one at `home`,
-    /// made there the first time it is needed.
-    ///
-    /// A workspace somewhere up the tree always wins: one made on purpose with
-    /// `flayer init` says more about where you are than a default does. With
-    /// none, the default means there is always a workspace to link projects
-    /// into, the way there is always a global git config to write to. `home`
-    /// is `None` when there is no default, and then neither is there a
-    /// workspace.
-    pub fn locate_or_default(
-        start: impl AsRef<Path>,
-        home: Option<&Path>,
-    ) -> Result<Option<Self>, WorkspaceError> {
-        if let Some(workspace) = Self::locate(start)? {
-            return Ok(Some(workspace));
-        }
-        match home {
-            Some(home) => Self::init(home).map(|(workspace, _)| Some(workspace)),
-            None => Ok(None),
-        }
-    }
-
-    /// Like [`locate_or_default`](Self::locate_or_default), passing over the
-    /// workspaces rooted at any of `excluded`.
-    ///
-    /// For `flayer load`: run from inside the workspace being loaded, the one
-    /// found first is that workspace, and a workspace cannot load itself, so
-    /// the walk carries on above it — and ends at the default in `home` when
-    /// nothing up there is left. That default is never one of `excluded`
-    /// either: loading your home workspace from inside it is refused rather
-    /// than answered with the workspace itself.
-    pub fn locate_or_default_except(
-        start: impl AsRef<Path>,
-        excluded: &[PathBuf],
-        home: Option<&Path>,
-    ) -> Result<Option<Self>, WorkspaceError> {
-        let start = absolute(start.as_ref())?;
-        let skipped = |root: &Path| excluded.iter().any(|path| same_directory(root, path));
-        let found = start.ancestors().find(|candidate| {
-            candidate.join(FLAYER_DIR).join(FLAYER_CONFIG).is_file() && !skipped(candidate)
-        });
-        if let Some(root) = found {
-            return Self::open(root).map(Some);
-        }
-        match home {
-            Some(home) if skipped(home) => Err(WorkspaceError::LoadsItself {
-                path: absolute(home)?,
-            }),
-            Some(home) => Self::init(home).map(|(workspace, _)| Some(workspace)),
-            None => Ok(None),
-        }
-    }
-
-    /// Like [`locate_or_default_except`](Self::locate_or_default_except),
-    /// but never making the default: for a command that can only read or
-    /// take away, which is no reason to write a marker into somebody's home.
-    pub fn locate_except(
-        start: impl AsRef<Path>,
-        excluded: &[PathBuf],
-        home: Option<&Path>,
-    ) -> Result<Option<Self>, WorkspaceError> {
-        let start = absolute(start.as_ref())?;
-        let skipped = |root: &Path| excluded.iter().any(|path| same_directory(root, path));
-        let found = start.ancestors().find(|candidate| {
-            candidate.join(FLAYER_DIR).join(FLAYER_CONFIG).is_file() && !skipped(candidate)
-        });
-        if let Some(root) = found {
-            return Self::open(root).map(Some);
-        }
-        match home {
-            Some(home) if skipped(home) => Ok(None),
-            _ => Self::default_at(home),
-        }
-    }
-
-    /// The default workspace at `home`, if it has been made.
-    ///
-    /// For a question that must not make it: whether a project is managed by
-    /// it, say, which is no reason to write a marker into somebody's home.
-    pub fn default_at(home: Option<&Path>) -> Result<Option<Self>, WorkspaceError> {
-        match home {
-            Some(home) if home.join(FLAYER_DIR).join(FLAYER_CONFIG).is_file() => {
-                Self::open(home).map(Some)
-            }
-            _ => Ok(None),
         }
     }
 
@@ -501,9 +517,123 @@ impl FlayerWorkspace {
         self.flayer_dir().join(LEDGER_FILE)
     }
 
+    /// The file a writer locks ([`lock::LOCK_FILE`]), whether or not one has
+    /// made it yet.
+    pub fn lock_path(&self) -> PathBuf {
+        self.flayer_dir().join(lock::LOCK_FILE)
+    }
+
+    /// Hold this workspace for a change, waiting up to [`lock::WAIT`] for a
+    /// writer that holds it, then failing with [`LockError::Busy`], which
+    /// names that writer's process.
+    ///
+    /// Core's writers take it themselves — an edit of the marker, an install
+    /// or an uninstall, a gather, the scrub that opening the ledger to write
+    /// runs when it has clones to rewrite — so a front end
+    /// has no need to, and must not while it asks core to write: the lock is
+    /// not re-entrant, and a writer that asks for it twice waits for itself.
+    /// Readers never take it.
+    pub fn lock(&self) -> Result<WorkspaceLock, LockError> {
+        self.lock_waiting(lock::WAIT)
+    }
+
+    /// [`lock`](Self::lock), waiting up to `wait` rather than [`lock::WAIT`]:
+    /// [`Duration::ZERO`] tries once, and a wait too long to count from now,
+    /// [`Duration::MAX`], never gives up.
+    pub fn lock_waiting(&self, wait: Duration) -> Result<WorkspaceLock, LockError> {
+        WorkspaceLock::acquire(&self.flayer_dir(), wait)
+    }
+
     /// Open that database, creating it if this workspace has never had one.
+    ///
+    /// Refused for an [`unmade`](Self::unmade) workspace, which has nowhere to
+    /// keep one: creating it would leave half a workspace behind, a
+    /// `.mindflayer` holding a database and no marker.
+    ///
+    /// What a command opens it through, rather than how: one that writes to it
+    /// opens it with [`FlayerWorkspace::ledger_to_write`], which scrubs it
+    /// first, and one that only reads with
+    /// [`FlayerWorkspace::ledger_for_reading`], which neither makes it nor
+    /// scrubs it.
+    ///
+    /// Opened without the workspace's [`lock`](Self::lock), though opening is
+    /// when a ledger is made or migrated: a migration is one transaction that
+    /// reads the version again once it holds SQLite's write lock
+    /// ([`Ledger::open`]), so two processes opening one an older build left
+    /// take turns there, and the second finds nothing to do. That keeps a
+    /// read's migration apart from a writer's too, which the workspace's lock
+    /// could not, since readers never take it. Taking it here as well would
+    /// only keep every change to an artifact waiting behind a gather to drop
+    /// its record, after the change was made, and failing as busy when the
+    /// gather ran long, with the record left behind.
     pub fn ledger(&self) -> Result<Ledger, LedgerError> {
+        if !self.made {
+            return Err(LedgerError::Unmade {
+                path: self.ledger_path(),
+            });
+        }
         Ledger::open(self.ledger_path())
+    }
+
+    /// Open that database for a command that writes to it: scrubbed first of
+    /// what an older build stored with a credential ([`gather::scrub`]), with
+    /// what the scrub took out handed back for the front end to say.
+    ///
+    /// The one way to open it for writing, rather than a scrub each front end
+    /// remembers to run: which commands write is the front end's to know, as
+    /// whether one may create a workspace is with the
+    /// [`Intent`](crate::resolve::Intent) it hands
+    /// [`resolve`](crate::resolve::resolve), but what opening to write
+    /// involves is core's, so no front end can write first and scrub after,
+    /// or not at all.
+    ///
+    /// The scrub holds the workspace while it rewrites clones, which is only
+    /// when an older build left a credential in one, and like any writer gives
+    /// up as busy after [`lock::WAIT`].
+    pub fn ledger_to_write(&self) -> Result<(Ledger, Scrub), LedgerError> {
+        self.ledger_to_write_waiting(lock::WAIT)
+    }
+
+    /// [`ledger_to_write`](Self::ledger_to_write), with the scrub waiting up to
+    /// `wait` for the workspace rather than [`lock::WAIT`], for a writer that
+    /// must not give up ([`crate::install::disown`]).
+    pub(crate) fn ledger_to_write_waiting(
+        &self,
+        wait: Duration,
+    ) -> Result<(Ledger, Scrub), LedgerError> {
+        let ledger = self.ledger()?;
+        let scrub = gather::scrub(self, &ledger, wait)?;
+        Ok((ledger, scrub))
+    }
+
+    /// The ledger, for a command that only reads it: the one on disk when
+    /// there is one, and otherwise an empty one in memory, which answers every
+    /// question the way a ledger nothing was ever written to would, without
+    /// making a file to say so.
+    ///
+    /// Never for a write. What is recorded in the stand-in is gone when it is
+    /// dropped, and a copy installed without its record is one Mindflayer
+    /// would afterwards refuse to touch; a write opens
+    /// [`ledger_to_write`](Self::ledger_to_write).
+    ///
+    /// Nor is the one on disk scrubbed of what an older build stored with a
+    /// credential: everything the ledger hands back is redacted on the way out
+    /// anyway, and reading is no reason to write. It is left for the next
+    /// command that writes.
+    ///
+    /// Never waits for the workspace's lock either, though an older ledger is
+    /// migrated here as it is there: the migration's own transaction keeps it
+    /// apart from a writer's ([`ledger`](Self::ledger)), so the most a read
+    /// waits for is another process's migration, once after an upgrade.
+    pub fn ledger_for_reading(&self) -> Result<Ledger, LedgerError> {
+        // An unmade workspace has no ledger, whatever a stray file says.
+        if !self.made {
+            return Ledger::in_memory();
+        }
+        match Ledger::open_existing(self.ledger_path())? {
+            Some(ledger) => Ok(ledger),
+            None => Ledger::in_memory(),
+        }
     }
 
     /// The entry this workspace would store for a project directory.
@@ -639,28 +769,50 @@ impl FlayerWorkspace {
         &mut self,
         source: &FlayerWorkspace,
     ) -> Result<(PathBuf, Registration), WorkspaceError> {
-        if same_directory(source.root(), &self.root) {
-            return Err(WorkspaceError::LoadsItself {
-                path: self.root.clone(),
-            });
+        let mut loaded = self.load_all(std::slice::from_ref(source))?;
+        Ok(loaded.remove(0))
+    }
+
+    /// [`load`](Self::load) several at once, in one rewrite of the file: all
+    /// of them or, if one is this workspace, none. A workspace named with
+    /// `-W` is not passed over for being among what it is told to load, so
+    /// the refusal has to come before the first entry is written.
+    pub fn load_all(
+        &mut self,
+        sources: &[FlayerWorkspace],
+    ) -> Result<Vec<(PathBuf, Registration)>, WorkspaceError> {
+        let mut wanted = Vec::new();
+        for source in sources {
+            if same_directory(source.root(), &self.root) {
+                return Err(WorkspaceError::LoadsItself {
+                    path: self.root.clone(),
+                });
+            }
+            let entry = self.entry_for(source.root());
+            let written =
+                paths::to_config_string(&entry).ok_or_else(|| WorkspaceError::NonUtf8Path {
+                    path: entry.clone(),
+                })?;
+            wanted.push((written, paths::normalize(source.root())));
         }
-        let entry = self.entry_for(source.root());
-        let target = paths::normalize(source.root());
-        let written =
-            paths::to_config_string(&entry).ok_or_else(|| WorkspaceError::NonUtf8Path {
-                path: entry.clone(),
-            })?;
         let root = self.root.clone();
 
         self.edit_array(LOADED_KEY, move |array| {
-            if let Some(existing) = entries(array)
-                .into_iter()
-                .find(|entry| points_at(&root, entry, &target))
-            {
-                return Ok((existing, Registration::AlreadyRegistered));
-            }
-            array.push(written.as_str());
-            Ok((PathBuf::from(&written), Registration::Added))
+            Ok(wanted
+                .iter()
+                .map(|(written, target)| {
+                    // Against the array as this edit leaves it, so two
+                    // spellings of one source in one call are one load.
+                    if let Some(existing) = entries(array)
+                        .into_iter()
+                        .find(|entry| points_at(&root, entry, target))
+                    {
+                        return (existing, Registration::AlreadyRegistered);
+                    }
+                    array.push(written.as_str());
+                    (PathBuf::from(written), Registration::Added)
+                })
+                .collect())
         })
     }
 
@@ -731,6 +883,18 @@ impl FlayerWorkspace {
     where
         F: FnOnce(&mut toml_edit::Array) -> Result<T, String>,
     {
+        // Not made, so there is no marker to edit, and writing one here would
+        // make the workspace behind the back of whatever asked only to read it.
+        if !self.made {
+            return Err(WorkspaceError::NotAWorkspace {
+                path: self.root.clone(),
+            });
+        }
+        // Held from before the file is read until what is written has been
+        // read back. Reading from disk is not enough on its own: two writers
+        // at once would both read the file before either wrote, and the
+        // second rename would put back a marker without the first one's entry.
+        let _lock = self.lock()?;
         let path = self.config_path();
         let text = fs::read_to_string(&path).map_err(|source| WorkspaceError::Read {
             path: path.clone(),
@@ -771,7 +935,7 @@ impl FlayerWorkspace {
         // Re-read, so what is in memory is what is on disk rather than what we
         // believe we wrote.
         let config: FlayerConfig = read_config(&path)?;
-        check_version(&path, config.version)?;
+        check_version(&path, Marker::Workspace, config.version)?;
         self.config = config;
         Ok(value)
     }
@@ -830,7 +994,13 @@ impl FlayerWorkspace {
         MindProject {
             root: self.root.clone(),
             config: MindConfig {
-                version: FORMAT_VERSION,
+                // The project marker's version rather than the workspace's:
+                // `directory_for` holds it against `DIRECTORIES_VERSION`, a
+                // line drawn in the project format, and below it sends every
+                // kind its marker does not name into `.mind`, where a
+                // workspace has never kept its artifacts and a v1
+                // `flayer.toml` would send them.
+                version: MIND_FORMAT_VERSION,
                 name: self.config.name.clone(),
                 directories: self.config.directories.clone(),
             },
@@ -870,6 +1040,34 @@ impl FlayerWorkspace {
             .projects
             .iter()
             .any(|entry| points_at(&self.root, entry, &target))
+    }
+
+    /// The directory `root` names, spelled the way this workspace's entry
+    /// for it leads there; `root` itself when no entry points at it.
+    ///
+    /// For the ledger, which names a project by its route from the
+    /// workspace, so one directory spelled two ways would be two projects to
+    /// it. A `mind` command spells its project the way the operating system
+    /// reports the directory it runs in, through no symlink, while a
+    /// workspace named with `-W` keeps the spelling it was given, `/tmp` on
+    /// a Mac say; the route between those two is not the one `flayer -p`
+    /// takes from the entry, and a record written under one would not be
+    /// found under the other. A spelling that already matches as written is
+    /// kept, so nothing that matched before is named differently now.
+    pub(crate) fn spelling_of(&self, root: &Path) -> PathBuf {
+        let target = paths::normalize(root);
+        let led: Vec<PathBuf> = self
+            .config
+            .projects
+            .iter()
+            .map(|entry| paths::normalize(&self.root.join(entry)))
+            .collect();
+        if led.contains(&target) {
+            return target;
+        }
+        led.into_iter()
+            .find(|candidate| same_directory(candidate, &target))
+            .unwrap_or(target)
     }
 }
 
@@ -916,7 +1114,7 @@ fn remove_pointing_at(array: &mut toml_edit::Array, root: &Path, target: &Path) 
 
 /// Whether two spellings name one directory: lexically first, then through
 /// the filesystem, so a symlinked spelling of a root is still that root.
-fn same_directory(a: &Path, b: &Path) -> bool {
+pub(crate) fn same_directory(a: &Path, b: &Path) -> bool {
     let (a, b) = (paths::normalize(a), paths::normalize(b));
     a == b
         || matches!(
@@ -954,8 +1152,12 @@ pub enum WorkspaceError {
     NotAProject { path: PathBuf },
     #[error("{path}: not a flayer workspace (no {FLAYER_DIR}/{FLAYER_CONFIG})")]
     NotAWorkspace { path: PathBuf },
-    #[error("{path}: written by a newer Mindflayer (format version {found}, this one reads {FORMAT_VERSION})")]
-    Version { path: PathBuf, found: u32 },
+    #[error("{path}: written by a newer Mindflayer ({marker} version {found}, this one reads {supported})", supported = .marker.version())]
+    Version {
+        path: PathBuf,
+        marker: Marker,
+        found: u32,
+    },
     #[error("{path}: cannot be edited: {detail}")]
     Edit { path: PathBuf, detail: String },
     #[error("{path}: not registered in the workspace at {workspace}")]
@@ -970,6 +1172,8 @@ pub enum WorkspaceError {
     OutsideProject { path: PathBuf, kind: Kind },
     #[error("{path}: cannot hold the workspace's {kind}s, because it is not inside the workspace")]
     OutsideWorkspace { path: PathBuf, kind: Kind },
+    #[error(transparent)]
+    Lock(#[from] LockError),
 }
 
 impl WorkspaceError {
@@ -989,6 +1193,7 @@ impl WorkspaceError {
             | WorkspaceError::NonUtf8Path { path }
             | WorkspaceError::OutsideProject { path, .. }
             | WorkspaceError::OutsideWorkspace { path, .. } => path,
+            WorkspaceError::Lock(error) => error.path(),
         }
     }
 }
@@ -1017,10 +1222,11 @@ fn read_config<T: for<'de> Deserialize<'de>>(path: &Path) -> Result<T, Workspace
 }
 
 /// Refuse a marker written by a version that knows more than this one.
-fn check_version(path: &Path, found: u32) -> Result<(), WorkspaceError> {
-    if found > FORMAT_VERSION {
+fn check_version(path: &Path, marker: Marker, found: u32) -> Result<(), WorkspaceError> {
+    if found > marker.version() {
         return Err(WorkspaceError::Version {
             path: path.to_path_buf(),
+            marker,
             found,
         });
     }
@@ -1096,20 +1302,34 @@ fn climbs(route: &Path) -> bool {
 /// the new one, never half of each. The temporary sits beside the original so
 /// the rename stays inside one filesystem, which is where it is atomic.
 pub(crate) fn replace_file(path: &Path, contents: &str) -> Result<(), WorkspaceError> {
+    replace_bytes(path, contents.as_bytes())
+        .map_err(|(path, source)| WorkspaceError::Create { path, source })
+}
+
+/// [`replace_file`] for bytes, failing with the path the error is about (the
+/// temporary or the file) rather than a `WorkspaceError`.
+///
+/// Split out for files that are not markers and need not be UTF-8: git's
+/// local exclude file is bytes, and its failures belong to its own module's
+/// error, not to a workspace's.
+pub(crate) fn replace_bytes(path: &Path, contents: &[u8]) -> Result<(), (PathBuf, io::Error)> {
+    use std::io::Write as _;
+
     // Follow a symlinked config to the file it names. Replacing the link
     // itself would silently detach a workspace from a config someone chose to
     // share, and leave the original holding stale contents.
     let resolved = fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf());
     let path = resolved.as_path();
 
-    let mut name = path.file_name().unwrap_or_default().to_os_string();
-    name.push(".tmp");
-    let temporary = path.with_file_name(name);
-
-    fs::write(&temporary, contents).map_err(|source| WorkspaceError::Create {
-        path: temporary.clone(),
-        source,
-    })?;
+    let (temporary, mut file) = temporary_beside(path)?;
+    let written = file.write_all(contents);
+    drop(file);
+    // A temporary left behind by a write or a rename that failed is litter
+    // nothing owns, so every way out after it is made takes it away.
+    if let Err(source) = written {
+        let _ = fs::remove_file(&temporary);
+        return Err((temporary, source));
+    }
 
     // A rename carries the temporary file's permissions with it, so the
     // original's are copied across first: a config chmodded to 600 must not
@@ -1119,13 +1339,37 @@ pub(crate) fn replace_file(path: &Path, contents: &str) -> Result<(), WorkspaceE
         let _ = fs::set_permissions(&temporary, metadata.permissions());
     }
     fs::rename(&temporary, path).map_err(|source| {
-        // A temporary left behind by a failed rename is litter nothing owns.
         let _ = fs::remove_file(&temporary);
-        WorkspaceError::Create {
-            path: path.to_path_buf(),
-            source,
-        }
+        (path.to_path_buf(), source)
     })
+}
+
+/// A new, empty file beside `path` to build its replacement in, named after
+/// it and this run (`flayer.toml.<pid>-<suffix>.tmp`).
+///
+/// Not `flayer.toml.tmp`, the one name every writer used to share: two
+/// writers at once wrote into one temporary, so either could rename the
+/// other's half-written bytes into place, and the second rename found
+/// nothing to move. Made with `create_new`, so a file somebody else has
+/// under that name is never written into.
+fn temporary_beside(path: &Path) -> Result<(PathBuf, fs::File), (PathBuf, io::Error)> {
+    let mut attempts = 0;
+    loop {
+        let mut name = path.file_name().unwrap_or_default().to_os_string();
+        name.push(format!(".{}.tmp", crate::copy::unique_name()));
+        let temporary = path.with_file_name(name);
+        match fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&temporary)
+        {
+            Ok(file) => return Ok((temporary, file)),
+            Err(error) if error.kind() == io::ErrorKind::AlreadyExists && attempts < 8 => {
+                attempts += 1;
+            }
+            Err(error) => return Err((temporary, error)),
+        }
+    }
 }
 
 /// An absolute, `..`-free path, without requiring the path to exist yet.
@@ -1136,7 +1380,7 @@ pub(crate) fn replace_file(path: &Path, contents: &str) -> Result<(), WorkspaceE
 /// that `..` in place. Every root would then carry it, and two paths naming
 /// one directory would stop comparing equal — which is what `in_project` and
 /// the link deduplication are built on.
-fn absolute(path: &Path) -> Result<PathBuf, WorkspaceError> {
+pub(crate) fn absolute(path: &Path) -> Result<PathBuf, WorkspaceError> {
     let absolute = std::path::absolute(path).map_err(|source| WorkspaceError::Read {
         path: path.to_path_buf(),
         source,
@@ -1174,7 +1418,7 @@ fn mind_template(name: &str, directories: &Directories) -> String {
          # holding this {MIND_DIR}. Point them wherever the agents that read them\n\
          # already look — .claude/skills, docs/rules — and Mindflayer follows.\n\
          # They are meant to be committed: they travel with the project.\n\
-         version = {FORMAT_VERSION}\n\
+         version = {MIND_FORMAT_VERSION}\n\
          name = {}\n\
          \n\
          [directories]\n\
@@ -1197,7 +1441,7 @@ fn flayer_template(name: &str, directories: &Directories) -> String {
          #\n\
          # `loaded` lists other flayer workspaces whose own skills its projects\n\
          # can install too, read from there each time: `flayer load <path>`.\n\
-         version = {FORMAT_VERSION}\n\
+         version = {FLAYER_FORMAT_VERSION}\n\
          name = {}\n\
          projects = []\n\
          loaded = []\n\

@@ -18,7 +18,8 @@ use thiserror::Error;
 pub enum Kind {
     /// A directory of instructions an agent can be asked to follow.
     Skill,
-    /// A markdown file that gives an agent context, and declares nothing.
+    /// A markdown file that gives an agent context, with optional front
+    /// matter that most rules go without.
     Rule,
 }
 
@@ -26,7 +27,7 @@ impl Kind {
     /// Every kind, in report order.
     pub const ALL: [Kind; 2] = [Kind::Skill, Kind::Rule];
 
-    /// How a kind is written when it qualifies a name: `skill/commit-style`.
+    /// How a kind is written when it qualifies a name: `skill:commit-style`.
     pub const fn slug(self) -> &'static str {
         match self {
             Kind::Skill => "skill",
@@ -34,7 +35,11 @@ impl Kind {
         }
     }
 
-    /// The folder under `.mind` holding this kind.
+    /// The name of the folder holding this kind: beside the code by default
+    /// ([`Directories::default_for`](crate::workspace::Directories::default_for)),
+    /// and inside `.mindflayer` on a workspace's shelf. A marker's
+    /// `[directories]` is keyed by it, which is how a project puts the folder
+    /// somewhere else.
     ///
     /// It doubles as the plural spelling, which is what lets `mind list rules`
     /// work without a second table to keep in step.
@@ -65,7 +70,7 @@ impl fmt::Display for Kind {
 impl FromStr for Kind {
     type Err = UnknownKind;
 
-    /// Singular or plural. `mind list rules` and `mind show rule/x` are one
+    /// Singular or plural. `mind list rules` and `mind show rule:x` are one
     /// word in two grammatical positions, and refusing either would be a rule
     /// with nothing behind it.
     fn from_str(word: &str) -> Result<Self, Self::Err> {

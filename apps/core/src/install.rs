@@ -13,14 +13,19 @@
 use std::fs;
 use std::io;
 use std::path::{Component, Path, PathBuf};
+use std::time::Duration;
 
 use thiserror::Error;
 
+use crate::artifact::{self, issue_list, Artifact, ArtifactError, ValidationIssue};
 use crate::catalog::{Catalog, DiscoveryFailure};
 use crate::copy;
+use crate::gather::Scrub;
+use crate::hash;
 use crate::kind::{Kind, Layout};
-use crate::ledger::{Action, Gathered, Ledger, LedgerError, Outcome};
+use crate::ledger::{Action, Gathered, InstallRecord, Ledger, LedgerError, Outcome, Target};
 use crate::paths;
+use crate::url::redacted;
 use crate::workspace::{FlayerWorkspace, MindProject, WorkspaceError};
 
 /// How one shelf entry stands with respect to one project.
@@ -110,7 +115,8 @@ impl Offer {
     /// that same directory.
     ///
     /// One string for every front end: what a listing prints is what
-    /// `--from` accepts.
+    /// `--from` accepts. A source's address carries no credential, because
+    /// the ledger hands none back.
     pub fn origin(&self) -> String {
         match self {
             Offer::Shelf(gathered) => match &gathered.source.reference {
@@ -127,8 +133,11 @@ impl Offer {
     /// workspace's name, unless that is the word the workspace's own go by.
     /// A path to a loaded workspace is [`resolve_from`]'s to turn into its
     /// origin — only when nothing matches it as typed, so a path never takes
-    /// a shelf source's address or the workspace's own away.
+    /// a shelf source's address or the workspace's own away. An address typed
+    /// with credentials names the source they were taken out of.
     pub fn comes_from(&self, from: &str) -> bool {
+        let from = redacted(from);
+        let from = from.as_ref();
         self.origin() == from
             || match self {
                 Offer::Shelf(gathered) => gathered.source.url == from,
@@ -370,14 +379,7 @@ pub fn survey(
                 offer,
                 standing: Standing::Absent,
             };
-            let name = candidate.name();
-            candidate.standing = if !holds(&directory, kind, name) {
-                Standing::Absent
-            } else if ours.iter().any(|installed| installed == name) {
-                Standing::Installed
-            } else {
-                Standing::Foreign
-            };
+            candidate.standing = standing(&directory, kind, candidate.name(), &ours);
             candidate
         })
         .collect();
@@ -406,7 +408,7 @@ pub fn offered(
     match matching.len() {
         0 => Err(InstallError::NotOffered {
             name: name.to_owned(),
-            from: from.map(str::to_owned),
+            from: from.map(|from| redacted(from).into_owned()),
         }),
         1 => Ok(matching.remove(0)),
         _ => Err(InstallError::OfferedTwice {
@@ -417,12 +419,16 @@ pub fn offered(
 }
 
 /// Copy one shelf entry into a project.
+///
+/// The copy is built in the project's scratch folder, and what an interrupted
+/// install left there, or beside the copy, is cleared first and said
+/// ([`Installation::swept`]).
 pub fn install(
     workspace: &FlayerWorkspace,
     ledger: &Ledger,
     project: &MindProject,
     candidate: &Candidate,
-) -> Result<Installed, InstallError> {
+) -> Result<Installation, InstallError> {
     let kind = candidate.kind();
     let name = candidate.name().to_owned();
     let entry = project_entry(workspace, project);
@@ -431,8 +437,13 @@ pub fn install(
         return Err(InstallError::UnsafeName { name });
     }
     if candidate.standing == Standing::Foreign {
-        return Ok(Installed::Foreign { name });
+        return Ok(Installed::Foreign { name }.into());
     }
+    // Held until the record is written, so that what the ledger says was
+    // installed is the copy that is there: two installs of one name at once
+    // would otherwise each record theirs, and the copy left would be
+    // whichever moved into place last.
+    let _lock = workspace.lock().map_err(WorkspaceError::from)?;
 
     let from = candidate.source(workspace);
     if !from.is_dir() {
@@ -460,7 +471,12 @@ pub fn install(
     // Nothing is written, and above all nothing is recorded — a record would
     // let `uninstall` delete the loaded workspace's own files.
     if same_place(&from, &to) {
-        return Ok(Installed::Unchanged { name, path: to });
+        return Ok(Installed::Unchanged {
+            name,
+            path: to,
+            unhashed: None,
+        }
+        .into());
     }
     // One inside the other is worse: replacing `to` starts by deleting it,
     // and with it `from` — or copies `from` into itself.
@@ -474,6 +490,28 @@ pub fn install(
         return Err(InstallError::KeptByALoad { path: to, loaded });
     }
 
+    // Strict, where gathering was lenient: the copy is what the project's
+    // agents load, so one they would skip is not put there.
+    let refused = unfit(kind, &from, &name)?;
+    if !refused.is_empty() {
+        return Err(InstallError::Unfit {
+            name,
+            issues: refused,
+        });
+    }
+
+    // Looked at again under the lock, before anything is written. The
+    // candidate's standing is from a survey made before it was held, minutes
+    // before on the install screen, and since then an edit may have made the
+    // copy its author's and dropped its record, or somebody may have written
+    // a folder of that name by hand. Only a turn to Foreign changes what
+    // happens here, and that one must: it is somebody's work, never written
+    // over.
+    let ours = ledger.installations(&entry, kind)?;
+    if standing(&project.directory_for(kind), kind, &name, &ours) == Standing::Foreign {
+        return Ok(Installed::Foreign { name }.into());
+    }
+
     // Links are followed only inside where the artifact comes from: the
     // workspace that keeps it, or the shelf folder it was gathered into.
     let within = match &candidate.offer {
@@ -481,26 +519,116 @@ pub fn install(
         Offer::Workspace { .. } => workspace.root().to_path_buf(),
         Offer::Shelf(_) => from.clone(),
     };
-    let change = copy::replace(&from, &to, &within).map_err(|source| InstallError::Write {
-        path: to.clone(),
+    // Built in the project's scratch folder rather than beside `to`, which is
+    // a folder agents read: neither a copy half made nor one an interrupted
+    // run left behind sits where an agent would load it.
+    let scratch = project.scratch_dir();
+    let mut stage = copy::Stage::open(&scratch).map_err(|source| InstallError::Write {
+        path: scratch,
         source,
+        swept: Vec::new(),
     })?;
+    let change = match stage.replace(&from, &to, &within) {
+        Ok(change) => change,
+        // What was cleared on the way goes out with the error rather than
+        // with the stage: it was cleared whether or not this copy lands.
+        Err(source) => {
+            return Err(InstallError::Write {
+                path: to,
+                source,
+                swept: stage.swept().to_vec(),
+            })
+        }
+    };
+    let swept = stage.swept().to_vec();
+    // Cleared before the ledger is written rather than after, so the scratch
+    // folder is held for no longer than the copy takes.
+    drop(stage);
+    // Of the copy as it now stands, not of where it came from: what was
+    // written is what a later look at the copy is compared with, and the
+    // source may hold links the copy resolved. A copy that cannot be read
+    // back is recorded all the same, with no hash, since without a record it
+    // would be Foreign for good, and D-04 reads a record with no hash as it
+    // reads one from before hashes were kept. That is said, in what this
+    // returns and in the log: a copy left as it was can hold a link somebody
+    // put there, which `copy::same` follows and the hash refuses.
+    let (content_hash, unhashed) = match hash::tree(&to) {
+        Ok(hash) => (Some(hash), None),
+        Err(error) => (None, Some(error.to_string())),
+    };
 
     // A source to point at only for what was gathered: the workspace's own
-    // came from nowhere but the workspace.
+    // came from nowhere but the workspace. The origin says where every offer
+    // came from, those two included, in the one spelling `--from` takes.
     let source_id = match &candidate.offer {
         Offer::Shelf(gathered) => Some(gathered.source.id),
         Offer::Workspace { .. } | Offer::Loaded { .. } => None,
     };
-    ledger.installed(&entry, kind, &name, source_id, &route(project.root(), &to))?;
-    let detail = format!("{name} into {}", project.name());
+    ledger.installed(
+        &entry,
+        &InstallRecord {
+            kind,
+            name: name.clone(),
+            source_id,
+            origin: Some(candidate.origin()),
+            content_hash,
+            // One copy, in the folder the project's marker names, which is no
+            // one agent's: a copy in each agent's folder is #34's to write.
+            targets: vec![Target {
+                agent: None,
+                path: route(project.root(), &to),
+            }],
+        },
+    )?;
+    let mut detail = format!("{name} into {}", project.name());
+    if let Some(reason) = &unhashed {
+        detail.push_str(&format!(", recorded without a hash: {reason}"));
+    }
     ledger.log(Action::Install, Some(&entry), Outcome::Ok, Some(&detail))?;
 
-    Ok(match change {
-        copy::Change::Added => Installed::Added { name, path: to },
-        copy::Change::Updated => Installed::Updated { name, path: to },
-        copy::Change::Unchanged => Installed::Unchanged { name, path: to },
-    })
+    let installed = match change {
+        copy::Change::Added => Installed::Added {
+            name,
+            path: to,
+            unhashed,
+        },
+        copy::Change::Updated => Installed::Updated {
+            name,
+            path: to,
+            unhashed,
+        },
+        copy::Change::Unchanged => Installed::Unchanged {
+            name,
+            path: to,
+            unhashed,
+        },
+    };
+    Ok(Installation { installed, swept })
+}
+
+/// What stops the artifact at `from` from being installed as `name`:
+/// whichever strict rules it breaks once filed under that name
+/// ([`artifact::strict_issues`]).
+///
+/// Read from the files about to be copied rather than from what the ledger
+/// noted when it was gathered, because the shelf is a folder anybody can
+/// edit, and the workspace's own are edited as a matter of course. And held
+/// to `name` rather than to the folder they sit in, because `name` is the
+/// folder the copy will be: a shelf folder keeps the source's spelling, and
+/// `name` is what the ledger recorded, which the files stop declaring once
+/// they are edited, or once the source renames the skill and the record of
+/// the old name stays behind.
+fn unfit(kind: Kind, from: &Path, name: &str) -> Result<Vec<ValidationIssue>, InstallError> {
+    // Matched on the kind, so a third one has to say what it is held to.
+    let artifact = match kind {
+        Kind::Skill => Artifact::skill(from, from)?,
+        // A rule is one file, and installing copies a directory, so none is
+        // ever offered.
+        Kind::Rule => return Ok(Vec::new()),
+    };
+    Ok(artifact
+        .manifest()
+        .map_or_else(Vec::new, |manifest| artifact::strict_issues(manifest, name)))
 }
 
 /// Take one artifact back out of a project.
@@ -519,6 +647,12 @@ pub fn uninstall(
             name: name.to_owned(),
         });
     }
+    // Held from before the record is read until it is dropped, for the
+    // reason `install` holds it: an install of the same name at the same
+    // moment comes wholly before this or wholly after it. Between the copy
+    // going and its record going, it would leave a copy with no record, which
+    // Mindflayer would never touch again.
+    let _lock = workspace.lock().map_err(WorkspaceError::from)?;
     let entry = project_entry(workspace, project);
     let ours = ledger.installations(&entry, kind)?;
     if !ours.iter().any(|installed| installed == name) {
@@ -542,6 +676,7 @@ pub fn uninstall(
         std::fs::remove_dir_all(&path).map_err(|source| InstallError::Write {
             path: path.clone(),
             source,
+            swept: Vec::new(),
         })?;
     }
     ledger.uninstalled(&entry, kind, name)?;
@@ -554,7 +689,7 @@ pub fn uninstall(
     })
 }
 
-/// Drop the record that Mindflayer installed `name` into `project`, returning
+/// Drop the record that Mindflayer installed `name` into `project`, saying
 /// whether there was one.
 ///
 /// For when what is in the project stops being what was installed: it was
@@ -563,20 +698,39 @@ pub fn uninstall(
 /// screen leave to overwrite and delete, so it must not outlive the copy it
 /// was about — whatever somebody writes there next would inherit it.
 ///
-/// The workspace is found by walking up from the project, so one that links
-/// the project from somewhere that is not above it is not consulted.
-pub fn disown(project: &MindProject, kind: Kind, name: &str) -> Result<bool, InstallError> {
-    let Some(workspace) = FlayerWorkspace::locate(project.root())? else {
-        return Ok(false);
-    };
+/// Only the changes in [`crate::lifecycle`] call it, each when its change
+/// calls for it. Public, it would let a front end drop a record on a rule of
+/// its own. Keeping it here cannot make a front end drop one; changing things
+/// through [`crate::lifecycle`] does.
+///
+/// `workspace` is the one the front end resolved for the command, given
+/// rather than found by walking up from the project: a walk misses every
+/// workspace that links the project from somewhere that is not above it, and
+/// each of those would keep its stale record. Another workspace that links
+/// the same project still keeps its own, since nothing in the project says
+/// which workspaces link it.
+///
+/// The ledger is opened to write, as by every command that writes to it, so
+/// what that scrubbed comes back too, for the change to hand on: the changes
+/// in [`crate::lifecycle`] reach the ledger only through here.
+pub(crate) fn disown(
+    workspace: &FlayerWorkspace,
+    project: &MindProject,
+    kind: Kind,
+    name: &str,
+) -> Result<Disowned, InstallError> {
     // Only a workspace that manages the project keeps records about it, and
     // one that has never installed anything has no ledger: this must not
     // create one just to look.
     if !workspace.is_linked(project.root()) || !workspace.ledger_path().is_file() {
-        return Ok(false);
+        return Ok(Disowned::default());
     }
-    let ledger = workspace.ledger()?;
-    let entry = project_entry(&workspace, project);
+    // However long the scrub waits for the workspace, which it does only
+    // when an older build left a credential in a clone: the change this
+    // follows is made, so giving up would leave its record behind, and
+    // trying the change again would find nothing to change.
+    let (ledger, scrub) = workspace.ledger_to_write_waiting(Duration::MAX)?;
+    let entry = project_entry(workspace, project);
     let dropped = ledger.uninstalled(&entry, kind, name)?;
     if dropped {
         let detail = format!(
@@ -585,28 +739,80 @@ pub fn disown(project: &MindProject, kind: Kind, name: &str) -> Result<bool, Ins
         );
         ledger.log(Action::Uninstall, Some(&entry), Outcome::Ok, Some(&detail))?;
     }
-    Ok(dropped)
+    Ok(Disowned { dropped, scrub })
+}
+
+/// What [`disown`] did.
+#[derive(Debug, Default)]
+pub(crate) struct Disowned {
+    /// Whether there was a record, which is now gone.
+    pub dropped: bool,
+    /// What opening the ledger to write took out of it, for the front end to
+    /// say; nothing when there was no ledger to open.
+    pub scrub: Scrub,
 }
 
 /// What installing one artifact did.
+///
+/// Each that leaves a copy says whether the copy could be hashed
+/// (`unhashed`): one that could not is recorded all the same, and said
+/// rather than recorded quietly, since a record with no hash is read the
+/// way one from before hashes were kept is.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Installed {
     Added {
         name: String,
         path: PathBuf,
+        unhashed: Option<String>,
     },
     Updated {
         name: String,
         path: PathBuf,
+        unhashed: Option<String>,
     },
     Unchanged {
         name: String,
         path: PathBuf,
+        unhashed: Option<String>,
     },
     /// Something of that name is already there and is not ours to replace.
-    Foreign {
-        name: String,
-    },
+    Foreign { name: String },
+}
+
+impl Installed {
+    /// Why the copy could not be hashed, when it could not, so the ledger
+    /// records it with no hash.
+    pub fn unhashed(&self) -> Option<&str> {
+        match self {
+            Installed::Added { unhashed, .. }
+            | Installed::Updated { unhashed, .. }
+            | Installed::Unchanged { unhashed, .. } => unhashed.as_deref(),
+            Installed::Foreign { .. } => None,
+        }
+    }
+}
+
+/// What [`install`] did: to the artifact, and to the project's scratch folder
+/// on the way.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Installation {
+    pub installed: Installed,
+    /// What installs that were interrupted had left, cleared before this one
+    /// built its copy: in the project's scratch folder, and beside the copy,
+    /// where earlier versions staged. Said rather than cleared quietly,
+    /// because each is an install that did not finish.
+    pub swept: Vec<PathBuf>,
+}
+
+impl From<Installed> for Installation {
+    /// An installation that never reached the scratch folder, and so cleared
+    /// nothing in it.
+    fn from(installed: Installed) -> Self {
+        Installation {
+            installed,
+            swept: Vec::new(),
+        }
+    }
 }
 
 /// What uninstalling one artifact did.
@@ -626,6 +832,18 @@ pub enum Removed {
     },
 }
 
+/// How `name` stands in a project's `directory`, given the names the ledger
+/// says Mindflayer installed there (`ours`).
+fn standing(directory: &Path, kind: Kind, name: &str, ours: &[String]) -> Standing {
+    if !holds(directory, kind, name) {
+        Standing::Absent
+    } else if ours.iter().any(|installed| installed == name) {
+        Standing::Installed
+    } else {
+        Standing::Foreign
+    }
+}
+
 /// Whether a project's directory already holds an artifact of that name.
 fn holds(directory: &Path, kind: Kind, name: &str) -> bool {
     match kind.layout() {
@@ -641,8 +859,13 @@ fn holds(directory: &Path, kind: Kind, name: &str) -> bool {
 
 /// How the ledger names a project: relative to the workspace, the way a
 /// registered project is stored, so moving the two together keeps it true.
+///
+/// The route to where the workspace's own entry leads
+/// ([`FlayerWorkspace::spelling_of`]), not to however the caller spelled the
+/// project: `mind` run inside it and `flayer -p` must read and write one
+/// record, whichever symlinks either went through.
 fn project_entry(workspace: &FlayerWorkspace, project: &MindProject) -> String {
-    route(workspace.root(), project.root())
+    route(workspace.root(), &workspace.spelling_of(project.root()))
 }
 
 /// A path below another, `/` separated, or the path itself when there is no
@@ -705,8 +928,9 @@ fn kept_by_a_load(workspace: &FlayerWorkspace, kind: Kind, path: &Path) -> Optio
 
 /// Whether `candidate` is the copy `project` holds: the same names and bytes
 /// as the folder there. For telling which of two offers of one name is the
-/// one installed, which the ledger does not record for what came from a
-/// workspace rather than the shelf.
+/// one installed, which a record from before schema 3 does not say for what
+/// came from a workspace rather than the shelf, and which an edit since may
+/// have made neither.
 pub fn is_current(
     workspace: &FlayerWorkspace,
     project: &MindProject,
@@ -741,6 +965,13 @@ pub enum InstallError {
     },
     #[error("`{name}` is not one folder name, so it cannot be installed or removed")]
     UnsafeName { name: String },
+    #[error("`{name}` cannot be installed: {}", issue_list(.issues))]
+    Unfit {
+        name: String,
+        issues: Vec<ValidationIssue>,
+    },
+    #[error(transparent)]
+    Artifact(#[from] ArtifactError),
     #[error("{from} and {to} are one inside the other, so installing one onto the other would delete it")]
     Overlaps { from: PathBuf, to: PathBuf },
     #[error("{path} is where the workspace loaded from {loaded} keeps its own, so Mindflayer neither installs nor removes there — `flayer unload {loaded}` first to manage it as a project")]
@@ -750,9 +981,29 @@ pub enum InstallError {
         path: PathBuf,
         #[source]
         source: io::Error,
+        /// What interrupted installs had left that this one cleared before
+        /// the write failed ([`InstallError::swept`]).
+        swept: Vec<PathBuf>,
     },
     #[error("nothing called `{name}` can be installed{}: gather it, load a workspace that has it with `flayer load`, or add it to the workspace with `flayer add`", from.as_deref().map(|from| format!(" from {from}")).unwrap_or_default())]
     NotOffered { name: String, from: Option<String> },
     #[error("`{name}` is offered by more than one place — {} — so say which with --from", .origins.join(", "))]
     OfferedTwice { name: String, origins: Vec<String> },
+}
+
+impl InstallError {
+    /// What an install that failed had cleared first, as
+    /// [`Installation::swept`] says for one that did not: for a front end to
+    /// say with the error, because each is an install that did not finish,
+    /// whether or not this one did.
+    ///
+    /// Only a copy that fails carries any. A ledger that fails after the copy
+    /// stops everything, as it does wherever it fails, and what was swept
+    /// goes unsaid with the rest.
+    pub fn swept(&self) -> &[PathBuf] {
+        match self {
+            InstallError::Write { swept, .. } => swept,
+            _ => &[],
+        }
+    }
 }

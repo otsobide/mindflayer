@@ -10,21 +10,31 @@
 //!
 //! Nothing here decides *what* is worth gathering. It records what
 //! [`crate::gather`] did.
+//!
+//! Nor does it write a credential. Every URL is [`redacted`] on the way in,
+//! whichever caller is writing, and again on the way out, for a row a
+//! Mindflayer from before the redaction wrote, which stays in the file until
+//! a command that writes scrubs it: the ledger is the one place everything
+//! stored passes through, so it is where the guarantee is cheapest to keep.
 
+use std::fs;
+use std::io;
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use rusqlite::{Connection, OptionalExtension};
+use rusqlite::backup::{Backup, StepResult};
+use rusqlite::{Connection, OpenFlags, OptionalExtension, Transaction, TransactionBehavior};
 use thiserror::Error;
 
 use crate::kind::Kind;
+use crate::url::{carries_credentials, redacted};
 
 /// The schema version this build writes.
 ///
 /// Refused if the file on disk is newer, for the same reason a marker file is:
 /// an old binary silently misreading a newer database is the failure that has
 /// no error message.
-pub const SCHEMA_VERSION: u32 = 2;
+pub const SCHEMA_VERSION: u32 = 3;
 
 /// The file name, under `.mindflayer/`.
 pub const LEDGER_FILE: &str = "mindflayer.db";
@@ -61,7 +71,8 @@ pub struct Source {
     /// Its row id, which is what gathered artifacts point at.
     pub id: i64,
     pub kind: SourceKind,
-    /// The URL as the user typed it.
+    /// The URL as the user typed it, without the credentials [`redacted`]
+    /// takes out.
     pub url: String,
     /// The branch or tag asked for, or `None` for whatever the remote's HEAD
     /// points at.
@@ -131,16 +142,49 @@ impl Outcome {
     }
 }
 
+/// What the ledger records of one installation into a project: what went
+/// in, from where, and every copy it wrote.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct InstallRecord {
+    pub kind: Kind,
+    pub name: String,
+    /// The shelf source it was copied from, while the ledger still has it;
+    /// `None` for the workspace's own and a loaded workspace's.
+    pub source_id: Option<i64>,
+    /// Where it came from, spelled as `--from` takes it
+    /// ([`crate::install::Offer::origin`]), without the credentials
+    /// [`redacted`] takes out. `None` only in a record from before schema 3
+    /// of something that came from no source.
+    pub origin: Option<String>,
+    /// [`crate::hash::tree`] of what was written, which every target holds.
+    /// `None` in a record from before schema 3, which D-04 reads as current
+    /// only while the copy matches its offer byte for byte.
+    pub content_hash: Option<String>,
+    /// Every copy it wrote, by path.
+    pub targets: Vec<Target>,
+}
+
+/// One copy an installation wrote.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Target {
+    /// The one agent the copy is for, or `None` for a copy no one agent owns:
+    /// the folder a v2 project's marker names, or `.agents/skills`, which two
+    /// agents read.
+    pub agent: Option<String>,
+    /// Where the copy is, relative to the project, `/` separated.
+    pub path: String,
+}
+
 /// One line of the action log.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Entry {
     /// When it happened, in seconds since the Unix epoch.
     pub at: i64,
     pub action: String,
-    /// What the action was about: a URL, a name.
+    /// What the action was about: a URL, a name. A URL is [`redacted`].
     pub target: Option<String>,
     pub outcome: String,
-    /// What it said, successful or not.
+    /// What it said, successful or not, with every URL in it [`redacted`].
     pub detail: Option<String>,
 }
 
@@ -156,7 +200,7 @@ impl Ledger {
     pub fn open(path: impl Into<PathBuf>) -> Result<Self, LedgerError> {
         let path = path.into();
         if let Some(parent) = path.parent() {
-            std::fs::create_dir_all(parent).map_err(|source| LedgerError::Create {
+            fs::create_dir_all(parent).map_err(|source| LedgerError::Create {
                 path: parent.to_path_buf(),
                 source,
             })?;
@@ -165,9 +209,113 @@ impl Ledger {
             path: path.clone(),
             source,
         })?;
+        // A connection that finds another one writing waits for it, as long
+        // as a writer waits for the workspace, rather than failing with
+        // "database is locked": the CLI, the TUI and the server can each have
+        // the ledger open. rusqlite waits five seconds of its own accord, but
+        // as a library's default; set here, the wait is Mindflayer's.
+        connection
+            .busy_timeout(crate::lock::WAIT)
+            .map_err(|source| LedgerError::Open {
+                path: path.clone(),
+                source,
+            })?;
         let ledger = Self { connection, path };
         ledger.migrate()?;
+        // And write-ahead logging, so that readers and a writer do not wait
+        // for each other at all: a reader goes on reading the ledger as the
+        // last write left it while the next is made. It needs every process
+        // using the file on one machine, sharing memory through
+        // `mindflayer.db-shm`, so a workspace on a network filesystem used
+        // from two machines at once is beyond it, as it is beyond the
+        // workspace lock.
+        //
+        // Only once `migrate` has accepted the version: the mode is kept in
+        // the file's header, so switching first would change a ledger a newer
+        // build wrote before refusing it. And never a reason to refuse the
+        // ledger, since every mode keeps it whole: a filesystem that cannot
+        // keep the log stays in the journal it had, where readers and writers
+        // take turns instead, and a switch that finds another connection
+        // writing fails at once, without the busy wait, because waiting there
+        // could deadlock with it. That one is left to the next open.
+        let _ = ledger
+            .connection
+            .pragma_update_and_check(None, "journal_mode", "wal", |_| Ok(()));
         Ok(ledger)
+    }
+
+    /// Open the ledger at `path` only if it is there: for a command that only
+    /// reads it, which is no reason to create a database, or the folder it
+    /// would sit in.
+    ///
+    /// One that is there is still brought up to [`SCHEMA_VERSION`], as
+    /// [`open`](Self::open) brings it. A build reads its own schema and no
+    /// other, so declining to migrate would leave an older ledger unreadable
+    /// rather than untouched: the step is upkeep of Mindflayer's own file, not
+    /// a change anybody asked for, and the one write a read may make.
+    pub fn open_existing(path: impl Into<PathBuf>) -> Result<Option<Self>, LedgerError> {
+        let path = path.into();
+        if !path.is_file() {
+            return Ok(None);
+        }
+        // Without `SQLITE_OPEN_CREATE`, so a file removed since the check is
+        // an error to report rather than an empty database left in its place.
+        let flags = OpenFlags::SQLITE_OPEN_READ_WRITE
+            | OpenFlags::SQLITE_OPEN_URI
+            | OpenFlags::SQLITE_OPEN_NO_MUTEX;
+        let connection =
+            Connection::open_with_flags(&path, flags).map_err(|source| LedgerError::Open {
+                path: path.clone(),
+                source,
+            })?;
+        // Waiting for a writer as `open` does, but in whatever journal the
+        // file keeps: changing it is a write, and a read makes none but a
+        // migration.
+        connection
+            .busy_timeout(crate::lock::WAIT)
+            .map_err(|source| LedgerError::Open {
+                path: path.clone(),
+                source,
+            })?;
+        let ledger = Self { connection, path };
+        match ledger.migrate() {
+            Ok(()) => Ok(Some(ledger)),
+            Err(error) if cannot_make_the_log(&ledger.path, &error) => {
+                Self::open_immutable(&ledger.path).map(Some).ok_or(error)
+            }
+            Err(error) => Err(error),
+        }
+    }
+
+    /// A ledger that keeps a write-ahead log, read where the log's files
+    /// cannot be made, as a file nobody is changing.
+    ///
+    /// SQLite makes `mindflayer.db-wal` and `mindflayer.db-shm` to read a
+    /// ledger that keeps its log, and takes them away when the last
+    /// connection closes. So in a folder this process may read and not write
+    /// — a sandboxed agent's view of the workspace, a read-only mount,
+    /// somebody else's workspace — reading fails though nothing is to be
+    /// written, where the journal the ledger had before let it be read.
+    /// Called only when there is no log, which is when everything is in the
+    /// file itself, and SQLite's `immutable` then reads it without the log or
+    /// any lock. What somebody who can write there writes goes into a log
+    /// this does not see, so this reads the ledger as their last checkpoint
+    /// left it; a checkpoint made between two of its reads is the one thing
+    /// that could change the file under it.
+    ///
+    /// `None` when it cannot be opened that way either, or migrating it would
+    /// need a write, and the error that sent it here is the one to tell.
+    fn open_immutable(path: &Path) -> Option<Self> {
+        let flags = OpenFlags::SQLITE_OPEN_READ_ONLY
+            | OpenFlags::SQLITE_OPEN_URI
+            | OpenFlags::SQLITE_OPEN_NO_MUTEX;
+        let connection = Connection::open_with_flags(immutable_uri(path)?, flags).ok()?;
+        let ledger = Self {
+            connection,
+            path: path.to_path_buf(),
+        };
+        ledger.migrate().ok()?;
+        Some(ledger)
     }
 
     /// An in-memory ledger, for tests and for anything that must not persist.
@@ -194,42 +342,154 @@ impl Ledger {
     /// `user_version` rather than a table of our own: SQLite carries the
     /// integer in the file header, so reading it costs nothing and it cannot
     /// itself be missing from a database that was half created.
+    ///
+    /// A database that already holds something is [backed up](Self::back_up)
+    /// first, whichever step it is about to take. A step to come is one more
+    /// block below, and the copy is taken for it without its asking.
     fn migrate(&self) -> Result<(), LedgerError> {
         self.connection
             .execute_batch("PRAGMA foreign_keys = ON;")
             .map_err(|source| self.failed("enabling foreign keys", source))?;
+        // Zeroes what a row leaves behind when it is rewritten or deleted.
+        // Without it a URL the scrub rewrites would keep its credentials in
+        // the file's free space, readable by anything that reads the bytes
+        // rather than the rows, until SQLite happened to reuse the page.
+        self.connection
+            .pragma_update(None, "secure_delete", true)
+            .map_err(|source| self.failed("turning on secure delete", source))?;
 
+        // Read before taking the write lock, so that opening a database that
+        // is already current — every open but the first after an upgrade —
+        // writes nothing, and still works on a file it may only read.
+        let found = self.schema_version()?;
+        if found == SCHEMA_VERSION {
+            return Ok(());
+        }
+
+        // Every step and the stamp in one transaction. Run one statement at a
+        // time, a step that fails, or a process that dies halfway, would leave
+        // a database half migrated under its old number, which the next open
+        // would try to migrate again and fail on; this way it is left as it
+        // was.
+        let transaction =
+            Transaction::new_unchecked(&self.connection, TransactionBehavior::Immediate)
+                .map_err(|source| self.failed("starting the migration", source))?;
+        // Read again under the lock, because another process may have
+        // migrated it in the meantime.
+        let found = self.schema_version()?;
+        if found == SCHEMA_VERSION {
+            return Ok(());
+        }
+        // Copied under the lock too, not before it: a copy taken after the
+        // first read could be of what another process has since migrated,
+        // and would replace that process's copy of the old version with one of
+        // the new. Holding the lock, this is the one process migrating, and
+        // the file is at the version just read. Version 0 is a database just
+        // created, with nothing in it to keep.
+        if found > 0 {
+            self.back_up(found)?;
+        }
+
+        // One block per version, applied in order, so a database created two
+        // versions ago arrives at the same schema as one created today.
+        if found < 1 {
+            transaction
+                .execute_batch(SCHEMA_V1)
+                .map_err(|source| self.failed("creating the schema", source))?;
+        }
+        if found < 2 {
+            transaction
+                .execute_batch(SCHEMA_V2)
+                .map_err(|source| self.failed("adding the installations table", source))?;
+        }
+        if found < 3 {
+            transaction
+                .execute_batch(SCHEMA_V3)
+                .map_err(|source| self.failed("giving installations their targets", source))?;
+        }
+
+        transaction
+            .pragma_update(None, "user_version", SCHEMA_VERSION)
+            .map_err(|source| self.failed("stamping the schema version", source))?;
+        transaction
+            .commit()
+            .map_err(|source| self.failed("finishing the migration", source))
+    }
+
+    /// Copy the database, at schema `version`, to [`backup_path`] before a
+    /// step changes it.
+    ///
+    /// So that a step that turns out wrong, or a build that misreads what it
+    /// wrote, leaves the file it started from to go back to: the copy opens at
+    /// the old version, and an older Mindflayer reads it as it always did. One
+    /// copy per version, replaced if an earlier attempt at the same step left
+    /// one, since both are of the same file at the same version and the newer
+    /// is the one the step is about to change. Nothing is migrated unless the
+    /// copy is whole.
+    ///
+    /// Taken by SQLite's online backup rather than by copying the file:
+    /// opening and closing the file outside SQLite while this connection
+    /// holds it would drop the connection's locks on Unix, where they belong
+    /// to the process. Read through a connection of its own, because this
+    /// one holds the migration's write lock and SQLite will not copy from a
+    /// connection in the middle of writing; reading beside that lock is
+    /// allowed. Written to a temporary beside it and renamed, so an
+    /// interrupted copy is never mistaken for a whole one, and made with the
+    /// database's permissions before anything is written to it, so a ledger
+    /// kept private is never readable through its copy, not even while the
+    /// copy is being written.
+    ///
+    /// Called with the write lock held, which is what makes the temporary's
+    /// one fixed name safe: no other process is copying, so whatever is
+    /// there is what an interrupted attempt left.
+    fn back_up(&self, version: u32) -> Result<(), LedgerError> {
+        let backup = backup_path(&self.path, version);
+        let failed = |source: io::Error| LedgerError::Backup {
+            path: self.path.clone(),
+            backup: backup.clone(),
+            source,
+        };
+        let mut name = backup.file_name().unwrap_or_default().to_os_string();
+        name.push(".tmp");
+        let temporary = backup.with_file_name(name);
+
+        // What an interrupted attempt left, its journal included, which
+        // SQLite would otherwise replay into the fresh copy.
+        for leftover in [temporary.clone(), journal_of(&temporary)] {
+            match fs::remove_file(&leftover) {
+                Err(error) if error.kind() != io::ErrorKind::NotFound => return Err(failed(error)),
+                _ => {}
+            }
+        }
+        if let Err(error) = copy_database(&self.path, &temporary, version) {
+            let _ = fs::remove_file(&temporary);
+            let _ = fs::remove_file(journal_of(&temporary));
+            return Err(failed(error));
+        }
+        // Exactly the database's once it is whole: it was made with the
+        // owner's read and write added, and less whatever the umask took.
+        if let Ok(metadata) = fs::metadata(&self.path) {
+            let _ = fs::set_permissions(&temporary, metadata.permissions());
+        }
+        fs::rename(&temporary, &backup).map_err(|error| {
+            let _ = fs::remove_file(&temporary);
+            failed(error)
+        })
+    }
+
+    /// The schema version on disk, refused when it is newer than this build's.
+    fn schema_version(&self) -> Result<u32, LedgerError> {
         let found: u32 = self
             .connection
             .pragma_query_value(None, "user_version", |row| row.get(0))
             .map_err(|source| self.failed("reading the schema version", source))?;
-
         if found > SCHEMA_VERSION {
             return Err(LedgerError::Version {
                 path: self.path.clone(),
                 found,
             });
         }
-        if found == SCHEMA_VERSION {
-            return Ok(());
-        }
-
-        // One block per version, applied in order, so a database created two
-        // versions ago arrives at the same schema as one created today.
-        if found < 1 {
-            self.connection
-                .execute_batch(SCHEMA_V1)
-                .map_err(|source| self.failed("creating the schema", source))?;
-        }
-        if found < 2 {
-            self.connection
-                .execute_batch(SCHEMA_V2)
-                .map_err(|source| self.failed("adding the installations table", source))?;
-        }
-
-        self.connection
-            .pragma_update(None, "user_version", SCHEMA_VERSION)
-            .map_err(|source| self.failed("stamping the schema version", source))
+        Ok(found)
     }
 
     /// The source matching this coordinate, if it has been gathered before.
@@ -240,13 +500,14 @@ impl Ledger {
         reference: Option<&str>,
         subdirectory: &str,
     ) -> Result<Option<Source>, LedgerError> {
+        let url = redacted(url);
         self.connection
             .query_row(
                 "SELECT id, kind, url, reference, subdirectory, revision, directory
                    FROM sources
                   WHERE kind = ?1 AND url = ?2 AND subdirectory = ?3
                     AND reference IS ?4",
-                rusqlite::params![kind.slug(), url, subdirectory, reference],
+                rusqlite::params![kind.slug(), url.as_ref(), subdirectory, reference],
                 read_source,
             )
             .optional()
@@ -264,25 +525,33 @@ impl Ledger {
         reference: Option<&str>,
         subdirectory: &str,
     ) -> Result<Source, LedgerError> {
-        if let Some(existing) = self.source(kind, url, reference, subdirectory)? {
+        let url = redacted(url);
+        if let Some(existing) = self.source(kind, &url, reference, subdirectory)? {
             return Ok(existing);
         }
 
-        let directory = self.free_directory(&slug(url))?;
+        let directory = self.free_directory(&slug(&url))?;
         let at = now();
         self.connection
             .execute(
                 "INSERT INTO sources
                      (kind, url, reference, subdirectory, revision, directory, first_seen, last_seen)
                  VALUES (?1, ?2, ?3, ?4, NULL, ?5, ?6, ?6)",
-                rusqlite::params![kind.slug(), url, reference, subdirectory, directory, at],
+                rusqlite::params![
+                    kind.slug(),
+                    url.as_ref(),
+                    reference,
+                    subdirectory,
+                    directory,
+                    at
+                ],
             )
             .map_err(|source| self.failed("registering a source", source))?;
 
         Ok(Source {
             id: self.connection.last_insert_rowid(),
             kind,
-            url: url.to_owned(),
+            url: url.into_owned(),
             reference: reference.map(str::to_owned),
             subdirectory: subdirectory.to_owned(),
             revision: None,
@@ -324,6 +593,21 @@ impl Ledger {
             )
             .map(|_| ())
             .map_err(|source| self.failed("updating a source", source))
+    }
+
+    /// Forget a source, and with it what it brought; an installation from it
+    /// keeps its `origin` but no longer points at it (see the schema's notes
+    /// on what a forgotten source takes with it). Whether there was one to
+    /// forget.
+    ///
+    /// For a gather that registered a source and then was cancelled, which
+    /// leaves the ledger as it found it: a source nothing came from would
+    /// otherwise hold on to its folder name. Its files are the caller's.
+    pub(crate) fn forget_source(&self, id: i64) -> Result<bool, LedgerError> {
+        self.connection
+            .execute("DELETE FROM sources WHERE id = ?1", [id])
+            .map(|deleted| deleted > 0)
+            .map_err(|source| self.failed("forgetting a source", source))
     }
 
     /// Record one gathered artifact, replacing what that source held under the
@@ -413,7 +697,7 @@ impl Ledger {
                 source: Source {
                     id: row.source_id,
                     kind: source_kind,
-                    url: row.url,
+                    url: redacted(&row.url).into_owned(),
                     reference: row.reference,
                     subdirectory: row.subdirectory,
                     revision: row.source_revision,
@@ -424,27 +708,122 @@ impl Ledger {
         Ok(found)
     }
 
-    /// Record that an artifact was put into a project.
+    /// Record that an artifact was put into a project, replacing whatever was
+    /// recorded of it before.
+    ///
+    /// Its targets are replaced as a whole rather than added to: they are the
+    /// copies this install wrote, and a target an earlier install had and this
+    /// one did not is no longer Mindflayer's to overwrite or delete. All of it
+    /// or none, so a record never names some of an install's copies.
     pub fn installed(
+        &self,
+        project: &str,
+        installation: &InstallRecord,
+    ) -> Result<(), LedgerError> {
+        let failed = |source| self.failed("recording an installation", source);
+        // An origin spells a source's URL, so it goes in as every URL does.
+        let origin = installation.origin.as_deref().map(redacted);
+        let transaction = self.connection.unchecked_transaction().map_err(failed)?;
+        let id: i64 = transaction
+            .query_row(
+                "INSERT INTO installations
+                     (project, kind, name, source_id, origin, content_hash, installed_at)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
+                 ON CONFLICT (project, kind, name) DO UPDATE SET
+                     source_id = excluded.source_id,
+                     origin = excluded.origin,
+                     content_hash = excluded.content_hash,
+                     installed_at = excluded.installed_at
+                 RETURNING id",
+                rusqlite::params![
+                    project,
+                    installation.kind.slug(),
+                    installation.name,
+                    installation.source_id,
+                    origin.as_deref(),
+                    installation.content_hash,
+                    now()
+                ],
+                |row| row.get(0),
+            )
+            .map_err(failed)?;
+        transaction
+            .execute(
+                "DELETE FROM installation_targets WHERE installation_id = ?1",
+                [id],
+            )
+            .map_err(failed)?;
+        for target in &installation.targets {
+            transaction
+                .execute(
+                    "INSERT INTO installation_targets (installation_id, agent, path)
+                     VALUES (?1, ?2, ?3)",
+                    rusqlite::params![id, target.agent, target.path],
+                )
+                .map_err(failed)?;
+        }
+        transaction.commit().map_err(failed)
+    }
+
+    /// What the ledger records of installing `name` into a project, if it
+    /// records anything.
+    pub fn installation(
         &self,
         project: &str,
         kind: Kind,
         name: &str,
-        source_id: Option<i64>,
-        path: &str,
-    ) -> Result<(), LedgerError> {
-        self.connection
-            .execute(
-                "INSERT INTO installations (project, kind, name, source_id, path, installed_at)
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6)
-                 ON CONFLICT (project, kind, name) DO UPDATE SET
-                     source_id = excluded.source_id,
-                     path = excluded.path,
-                     installed_at = excluded.installed_at",
-                rusqlite::params![project, kind.slug(), name, source_id, path, now()],
+    ) -> Result<Option<InstallRecord>, LedgerError> {
+        let failed = |source| self.failed("reading an installation", source);
+        let Some((id, source_id, origin, content_hash)) = self
+            .connection
+            .query_row(
+                "SELECT id, source_id, origin, content_hash FROM installations
+                  WHERE project = ?1 AND kind = ?2 AND name = ?3",
+                rusqlite::params![project, kind.slug(), name],
+                |row| {
+                    Ok((
+                        row.get::<_, i64>(0)?,
+                        row.get(1)?,
+                        row.get::<_, Option<String>>(2)?,
+                        row.get(3)?,
+                    ))
+                },
             )
-            .map(|_| ())
-            .map_err(|source| self.failed("recording an installation", source))
+            .optional()
+            .map_err(failed)?
+        else {
+            return Ok(None);
+        };
+        // And comes out as every URL does, for one schema 3 filled in from a
+        // source's URL as an older build stored it, until the scrub rewrites it.
+        let origin = origin.map(|text| redacted(&text).into_owned());
+
+        let mut statement = self
+            .connection
+            .prepare(
+                "SELECT agent, path FROM installation_targets
+                  WHERE installation_id = ?1 ORDER BY path",
+            )
+            .map_err(failed)?;
+        let targets = statement
+            .query_map([id], |row| {
+                Ok(Target {
+                    agent: row.get(0)?,
+                    path: row.get(1)?,
+                })
+            })
+            .map_err(failed)?
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(failed)?;
+
+        Ok(Some(InstallRecord {
+            kind,
+            name: name.to_owned(),
+            source_id,
+            origin,
+            content_hash,
+            targets,
+        }))
     }
 
     /// Forget an installation, returning whether there was one.
@@ -477,6 +856,217 @@ impl Ledger {
             .map_err(|source| self.failed("reading installations", source))
     }
 
+    /// The sources whose stored URL still carries credentials, which only a
+    /// Mindflayer from before they were refused could have stored.
+    ///
+    /// Each is handed back with the URL [`Ledger::scrub_source`] will give it,
+    /// never the one it has: nothing the ledger returns carries a credential.
+    pub fn tainted_sources(&self) -> Result<Vec<Source>, LedgerError> {
+        let mut statement = self
+            .connection
+            .prepare(
+                "SELECT id, kind, url, reference, subdirectory, revision, directory
+                   FROM sources WHERE instr(url, '@') > 0 ORDER BY id",
+            )
+            .map_err(|source| self.failed("looking for credentials in sources", source))?;
+        let rows = statement
+            .query_map([], |row| {
+                let stored: String = row.get(2)?;
+                Ok((carries_credentials(&stored), read_source(row)?))
+            })
+            .map_err(|source| self.failed("looking for credentials in sources", source))?;
+
+        let mut tainted = Vec::new();
+        for row in rows {
+            let (carries, source) =
+                row.map_err(|source| self.failed("looking for credentials in sources", source))?;
+            if carries {
+                tainted.push(source);
+            }
+        }
+        Ok(tainted)
+    }
+
+    /// Store a source's URL without the credentials in it, handing back the
+    /// row that went if that made two rows one.
+    ///
+    /// When another source already holds that URL, with the same branch and
+    /// folder, the two are one place gathered twice, so they become one row
+    /// rather than two with the same address: two rows would make the shelf
+    /// offer each skill twice under one origin, and `--from` could not tell
+    /// them apart. The one whose shelf was filled most recently is kept, since
+    /// its folder holds the newer files; a row whose gather failed before it
+    /// filled anything loses to one that did, however recently it was tried.
+    /// What the other one gathered goes with it, rather than moving to the
+    /// kept row: its files are in the other's folder, and a record pointing
+    /// there would outlive the folder's owner, so the next source given that
+    /// folder would gather over files the kept row still claims. An
+    /// installation that pointed at the other points at the kept one, which
+    /// is the same place. The row that went is handed back for its folders to
+    /// go too, which nothing points into any more.
+    ///
+    /// An installation's origin is rewritten with the URL it spells: schema 3
+    /// filled it in from the URL as it was stored, credentials and all, and
+    /// nothing else would take them out of it.
+    pub fn scrub_source(&self, id: i64) -> Result<Option<Source>, LedgerError> {
+        let failed = |source| self.failed("rewriting a source without credentials", source);
+        let transaction = self.connection.unchecked_transaction().map_err(failed)?;
+
+        let Some((kind, stored, reference, subdirectory)) = transaction
+            .query_row(
+                "SELECT kind, url, reference, subdirectory FROM sources WHERE id = ?1",
+                [id],
+                |row| {
+                    Ok((
+                        row.get::<_, String>(0)?,
+                        row.get::<_, String>(1)?,
+                        row.get::<_, Option<String>>(2)?,
+                        row.get::<_, String>(3)?,
+                    ))
+                },
+            )
+            .optional()
+            .map_err(failed)?
+        else {
+            return Ok(None);
+        };
+        let clean = redacted(&stored);
+        if clean == stored {
+            return Ok(None);
+        }
+
+        let other: Option<i64> = transaction
+            .query_row(
+                "SELECT id FROM sources
+                  WHERE kind = ?1 AND url = ?2 AND subdirectory = ?3 AND reference IS ?4
+                    AND id != ?5
+                  ORDER BY last_seen DESC, id DESC LIMIT 1",
+                rusqlite::params![kind, clean.as_ref(), subdirectory, reference, id],
+                |row| row.get(0),
+            )
+            .optional()
+            .map_err(failed)?;
+
+        let (kept, dropped) = match other {
+            None => (id, None),
+            Some(other) => {
+                // Newest harvest first, `None` for a shelf never filled, then
+                // the last attempt, then the later row.
+                let freshness = |source: i64| {
+                    transaction.query_row(
+                        "SELECT (SELECT MAX(gathered_at) FROM artifacts WHERE source_id = ?1),
+                                last_seen, id
+                           FROM sources WHERE id = ?1",
+                        [source],
+                        |row| {
+                            Ok((
+                                row.get::<_, Option<i64>>(0)?,
+                                row.get::<_, i64>(1)?,
+                                row.get::<_, i64>(2)?,
+                            ))
+                        },
+                    )
+                };
+                let (kept, dropped) =
+                    if freshness(id).map_err(failed)? >= freshness(other).map_err(failed)? {
+                        (id, other)
+                    } else {
+                        (other, id)
+                    };
+                let gone = transaction
+                    .query_row(
+                        "SELECT id, kind, url, reference, subdirectory, revision, directory
+                           FROM sources WHERE id = ?1",
+                        [dropped],
+                        read_source,
+                    )
+                    .map_err(failed)?;
+                transaction
+                    .execute(
+                        "UPDATE installations SET source_id = ?1 WHERE source_id = ?2",
+                        [kept, dropped],
+                    )
+                    .map_err(failed)?;
+                // What it gathered goes with it, by the cascade.
+                transaction
+                    .execute("DELETE FROM sources WHERE id = ?1", [dropped])
+                    .map_err(failed)?;
+                (kept, Some(gone))
+            }
+        };
+        let origins: Vec<(i64, String)> = {
+            let mut statement = transaction
+                .prepare(
+                    "SELECT id, origin FROM installations
+                      WHERE source_id = ?1 AND instr(origin, '@') > 0",
+                )
+                .map_err(failed)?;
+            let rows = statement
+                .query_map([kept], |row| Ok((row.get(0)?, row.get(1)?)))
+                .map_err(failed)?;
+            rows.collect::<Result<_, _>>().map_err(failed)?
+        };
+        for (installation, origin) in origins {
+            let clean = redacted(&origin);
+            if clean != origin {
+                transaction
+                    .execute(
+                        "UPDATE installations SET origin = ?2 WHERE id = ?1",
+                        rusqlite::params![installation, clean.as_ref()],
+                    )
+                    .map_err(failed)?;
+            }
+        }
+        transaction
+            .execute(
+                "UPDATE sources SET url = ?2 WHERE id = ?1",
+                rusqlite::params![kept, clean.as_ref()],
+            )
+            .map_err(failed)?;
+        transaction.commit().map_err(failed)?;
+        Ok(dropped)
+    }
+
+    /// Rewrite every action log entry without the credentials of any URL in
+    /// it, returning how many there were.
+    pub fn scrub_log(&self) -> Result<usize, LedgerError> {
+        let failed = |source| self.failed("rewriting the action log without credentials", source);
+        let transaction = self.connection.unchecked_transaction().map_err(failed)?;
+
+        let rows: Vec<(i64, Option<String>, Option<String>)> = {
+            let mut statement = transaction
+                .prepare(
+                    "SELECT id, target, detail FROM actions
+                      WHERE instr(target, '@') > 0 OR instr(detail, '@') > 0",
+                )
+                .map_err(failed)?;
+            let rows = statement
+                .query_map([], |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)))
+                .map_err(failed)?;
+            rows.collect::<Result<_, _>>().map_err(failed)?
+        };
+
+        let mut scrubbed = 0;
+        for (id, target, detail) in rows {
+            let clean_target = target.as_deref().map(redacted);
+            let clean_detail = detail.as_deref().map(redacted);
+            if clean_target.as_deref() == target.as_deref()
+                && clean_detail.as_deref() == detail.as_deref()
+            {
+                continue;
+            }
+            transaction
+                .execute(
+                    "UPDATE actions SET target = ?2, detail = ?3 WHERE id = ?1",
+                    rusqlite::params![id, clean_target.as_deref(), clean_detail.as_deref()],
+                )
+                .map_err(failed)?;
+            scrubbed += 1;
+        }
+        transaction.commit().map_err(failed)?;
+        Ok(scrubbed)
+    }
+
     /// Append to the action log.
     ///
     /// Failures are logged too. A log that only records what worked cannot
@@ -488,11 +1078,19 @@ impl Ledger {
         outcome: Outcome,
         detail: Option<&str>,
     ) -> Result<(), LedgerError> {
+        let target = target.map(redacted);
+        let detail = detail.map(redacted);
         self.connection
             .execute(
                 "INSERT INTO actions (at, action, target, outcome, detail)
                  VALUES (?1, ?2, ?3, ?4, ?5)",
-                rusqlite::params![now(), action.slug(), target, outcome.slug(), detail],
+                rusqlite::params![
+                    now(),
+                    action.slug(),
+                    target.as_deref(),
+                    outcome.slug(),
+                    detail.as_deref()
+                ],
             )
             .map(|_| ())
             .map_err(|source| self.failed("writing to the action log", source))
@@ -509,12 +1107,14 @@ impl Ledger {
             .map_err(|source| self.failed("reading the action log", source))?;
         let rows = statement
             .query_map([limit as i64], |row| {
+                let target: Option<String> = row.get(2)?;
+                let detail: Option<String> = row.get(4)?;
                 Ok(Entry {
                     at: row.get(0)?,
                     action: row.get(1)?,
-                    target: row.get(2)?,
+                    target: target.map(|text| redacted(&text).into_owned()),
                     outcome: row.get(3)?,
-                    detail: row.get(4)?,
+                    detail: detail.map(|text| redacted(&text).into_owned()),
                 })
             })
             .map_err(|source| self.failed("reading the action log", source))?;
@@ -549,6 +1149,133 @@ struct Row {
     directory: String,
 }
 
+/// Where a ledger at `path` is copied before a schema step takes it on from
+/// `version`: beside it, as `mindflayer.db.v2.bak` for version 2.
+///
+/// Named after the version it holds rather than numbered or dated, so which
+/// build reads a copy is in its name, and a ledger brought forward by several
+/// builds in turn keeps one copy for each version it had, side by side.
+pub fn backup_path(path: &Path, version: u32) -> PathBuf {
+    let mut name = path.file_name().unwrap_or_default().to_os_string();
+    name.push(format!(".v{version}.bak"));
+    path.with_file_name(name)
+}
+
+/// Copy the database at `from`, at schema `version`, into a new one at `to`,
+/// closed once it is whole.
+fn copy_database(from: &Path, to: &Path, version: u32) -> Result<(), io::Error> {
+    // Read-only and never created: a file gone since it was opened is an
+    // error, not an empty database to copy.
+    let flags = OpenFlags::SQLITE_OPEN_READ_ONLY
+        | OpenFlags::SQLITE_OPEN_URI
+        | OpenFlags::SQLITE_OPEN_NO_MUTEX;
+    let source = Connection::open_with_flags(from, flags).map_err(io::Error::other)?;
+    create_like(to, from)?;
+    let mut copy = Connection::open(to).map_err(io::Error::other)?;
+    {
+        let copying = Backup::new(&source, &mut copy).map_err(io::Error::other)?;
+        // Every page in one step, so the copy is one moment of the database
+        // rather than pages from either side of a write.
+        match copying.step(-1).map_err(io::Error::other)? {
+            StepResult::Done => {}
+            other => {
+                return Err(io::Error::other(format!(
+                    "something else was writing to it ({other:?}), so try again"
+                )))
+            }
+        }
+    }
+    // What the copy is for is opening at the old version, so that is checked
+    // rather than assumed: a file that is not the one being migrated is no
+    // way back from migrating it.
+    let copied: u32 = copy
+        .pragma_query_value(None, "user_version", |row| row.get(0))
+        .map_err(io::Error::other)?;
+    if copied != version {
+        return Err(io::Error::other(format!(
+            "the copy is at schema version {copied}, not {version}, so it is not of the file being migrated"
+        )));
+    }
+    Ok(())
+}
+
+/// Create `path` empty, no more readable than the file at `like`, for SQLite
+/// to copy that file into.
+///
+/// Made with that mode rather than given it once the copy is written: SQLite
+/// creates a file anyone the umask allows may read, and whoever opened it
+/// before its mode changed could read the whole ledger through that handle
+/// afterwards. The owner may always read and write it, which SQLite needs
+/// and nobody else gains by. SQLite opens an empty file as an empty
+/// database, and gives the journal it keeps beside it the same mode.
+fn create_like(path: &Path, like: &Path) -> Result<(), io::Error> {
+    let mut options = fs::OpenOptions::new();
+    options.write(true).create_new(true);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::{OpenOptionsExt, PermissionsExt};
+        options.mode((fs::metadata(like)?.permissions().mode() & 0o777) | 0o600);
+    }
+    // Elsewhere a new file takes its folder's access rules, and the one
+    // flag left, read-only, is given to the copy once it is whole.
+    #[cfg(not(unix))]
+    let _ = like;
+    options.open(path).map(drop)
+}
+
+/// The rollback journal SQLite keeps beside a database while writing it.
+/// Whether `error` is SQLite failing to make the files a write-ahead log
+/// needs beside the ledger at `path`, with no log there to read.
+fn cannot_make_the_log(path: &Path, error: &LedgerError) -> bool {
+    let LedgerError::Query {
+        source: rusqlite::Error::SqliteFailure(failure, _),
+        ..
+    } = error
+    else {
+        return false;
+    };
+    let mut log = path.file_name().unwrap_or_default().to_os_string();
+    log.push("-wal");
+    matches!(
+        failure.code,
+        rusqlite::ErrorCode::ReadOnly | rusqlite::ErrorCode::CannotOpen
+    ) && !path.with_file_name(log).exists()
+}
+
+/// `path` as the URI SQLite opens as [`immutable`](Ledger::open_immutable):
+/// `None` for one that is not UTF-8, which a URI cannot spell.
+///
+/// Only what SQLite reads as part of the URI's syntax is escaped — `%`, and
+/// `?` and `#`, which would end the path — since it takes everything else
+/// as it is. An absolute path goes after an empty authority, `file:///`, so
+/// one that starts with two slashes is not read as naming a host; on Windows
+/// a slash goes before it too (`file:///C:/...`), which SQLite drops again.
+fn immutable_uri(path: &Path) -> Option<String> {
+    let mut uri = String::from("file:");
+    if path.is_absolute() {
+        uri.push_str("//");
+        if cfg!(windows) {
+            uri.push('/');
+        }
+    }
+    for character in path.to_str()?.chars() {
+        match character {
+            '%' => uri.push_str("%25"),
+            '?' => uri.push_str("%3F"),
+            '#' => uri.push_str("%23"),
+            other => uri.push(other),
+        }
+    }
+    uri.push_str("?immutable=1");
+    Some(uri)
+}
+
+fn journal_of(path: &Path) -> PathBuf {
+    let mut name = path.file_name().unwrap_or_default().to_os_string();
+    name.push("-journal");
+    path.with_file_name(name)
+}
+
 /// What a `SELECT` over `sources` maps to.
 fn read_source(row: &rusqlite::Row<'_>) -> rusqlite::Result<Source> {
     let slug: String = row.get(1)?;
@@ -562,10 +1289,11 @@ fn read_source(row: &rusqlite::Row<'_>) -> rusqlite::Result<Source> {
             format!("unknown source kind `{slug}`").into(),
         )
     })?;
+    let url: String = row.get(2)?;
     Ok(Source {
         id: row.get(0)?,
         kind,
-        url: row.get(2)?,
+        url: redacted(&url).into_owned(),
         reference: row.get(3)?,
         subdirectory: row.get(4)?,
         revision: row.get(5)?,
@@ -616,11 +1344,15 @@ fn now() -> i64 {
 /// Why the ledger could not be opened, read or written.
 #[derive(Debug, Error)]
 pub enum LedgerError {
+    /// The workspace could not be had to scrub clones in, opening its ledger
+    /// to write ([`crate::workspace::FlayerWorkspace::ledger_to_write`]).
+    #[error(transparent)]
+    Lock(#[from] crate::lock::LockError),
     #[error("{path}: cannot be created: {source}")]
     Create {
         path: PathBuf,
         #[source]
-        source: std::io::Error,
+        source: io::Error,
     },
     #[error("{path}: cannot be opened: {source}")]
     Open {
@@ -630,6 +1362,15 @@ pub enum LedgerError {
     },
     #[error("{path}: written by a newer Mindflayer (schema version {found}, this one reads {SCHEMA_VERSION})")]
     Version { path: PathBuf, found: u32 },
+    #[error("{path}: cannot be copied to {backup} before its schema changes, so it is left as it is: {source}")]
+    Backup {
+        path: PathBuf,
+        backup: PathBuf,
+        #[source]
+        source: io::Error,
+    },
+    #[error("{path}: no workspace has been made here yet, so there is no ledger to write to")]
+    Unmade { path: PathBuf },
     #[error("{path}: {doing} failed: {source}")]
     Query {
         path: PathBuf,
@@ -643,9 +1384,12 @@ impl LedgerError {
     /// The file the failure is about.
     pub fn path(&self) -> &Path {
         match self {
+            LedgerError::Lock(error) => error.path(),
             LedgerError::Create { path, .. }
             | LedgerError::Open { path, .. }
             | LedgerError::Version { path, .. }
+            | LedgerError::Backup { path, .. }
+            | LedgerError::Unmade { path }
             | LedgerError::Query { path, .. } => path,
         }
     }
@@ -715,6 +1459,56 @@ CREATE TABLE installations (
 );
 
 CREATE INDEX installations_by_project ON installations (project);
+";
+
+/// The third schema: one installation, a copy in each place its agents read
+/// (D-07), and enough about what it wrote to tell it apart later (D-04).
+///
+/// An installation keeps one row, and every copy it wrote is a target of it:
+/// installed, updated and removed together, since an agent that reads two of
+/// the copies (OpenCode reads `.agents/skills` and `.claude/skills`) must
+/// never see two versions. A target's `path` is relative to the project and
+/// `/` separated, as the installation's own was, which goes: kept in both
+/// places, the two could disagree. `agent` names the one agent a copy is for,
+/// and is empty for a copy no one agent owns: the folder a v2 project's
+/// marker names, or `.agents/skills`, which two agents read. One row per path,
+/// so such a copy is never recorded twice.
+///
+/// `origin` is where the installation came from, spelled as `--from` takes
+/// it, which the workspace's own and a loaded workspace's had no other way to
+/// say: their `source_id` is empty. `content_hash` is [`crate::hash::tree`]
+/// of what was written, once for the installation rather than once a target,
+/// because every target is written from one copy and is compared with it.
+///
+/// What version 2 recorded becomes one target at the path it had. Its origin
+/// is filled in where it points at a source, spelled as `--from` takes a
+/// source's offer at this version — the address, with `#` and the branch when
+/// one was asked for — and here rather than through the code that spells it
+/// now, so a later change to that spelling cannot change what this step
+/// writes. An install from the workspace or a load gets none, since version 2
+/// kept nothing that says which. No hash is made up for a copy nobody hashed
+/// when it was written: D-04 reads an empty one as current only while the
+/// copy matches its offer byte for byte.
+const SCHEMA_V3: &str = "
+CREATE TABLE installation_targets (
+    installation_id INTEGER NOT NULL REFERENCES installations(id) ON DELETE CASCADE,
+    agent           TEXT,
+    path            TEXT    NOT NULL,
+    UNIQUE (installation_id, path)
+);
+
+INSERT INTO installation_targets (installation_id, agent, path)
+    SELECT id, NULL, path FROM installations;
+
+ALTER TABLE installations DROP COLUMN path;
+ALTER TABLE installations ADD COLUMN origin TEXT;
+ALTER TABLE installations ADD COLUMN content_hash TEXT;
+
+UPDATE installations
+   SET origin = (SELECT s.url || coalesce('#' || s.reference, '')
+                   FROM sources s
+                  WHERE s.id = installations.source_id)
+ WHERE source_id IS NOT NULL;
 ";
 
 #[cfg(test)]

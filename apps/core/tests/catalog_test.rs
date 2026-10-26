@@ -2,7 +2,10 @@
 
 use std::fs;
 
-use mindflayer_core::{Catalog, DiscoveryFailure, Kind, MindProject, Reference, ValidationIssue};
+use mindflayer_core::{
+    Catalog, Declared, DiscoveryFailure, Kind, MindProject, Reference, RuleManifest,
+    ValidationIssue,
+};
 use tempfile::TempDir;
 
 /// One mind project per name, all under a single temporary parent so their
@@ -138,18 +141,86 @@ fn a_rules_summary_is_its_opening_line() {
 }
 
 #[test]
-fn a_rule_declares_nothing() {
+fn a_rule_without_front_matter_declares_nothing() {
     let (_dir, one) = project("alpha");
-    write_rule(&one, "context.md", "---\nname: not-front-matter\n---\n");
+    let text = "# Never force-push\n\nUse --force-with-lease.\n";
+    write_rule(&one, "context.md", text);
 
     let catalog = Catalog::discover(std::slice::from_ref(&one));
     let rule = &catalog.artifacts()[0];
 
+    assert_eq!(rule.declared(), &Declared::Rule(RuleManifest::default()));
     assert_eq!(rule.description(), None);
     assert_eq!(rule.manifest(), None);
-    // A rule has no front matter, so a leading fence is content like any
-    // other line, not a manifest to be parsed.
-    assert!(rule.contents().unwrap().starts_with("---"));
+    assert_eq!(rule.contents().unwrap(), text);
+}
+
+#[test]
+fn a_rule_declares_what_its_front_matter_says_and_is_summarised_by_its_body() {
+    let (_dir, one) = project("alpha");
+    write_rule(
+        &one,
+        "api.md",
+        "---\nname: not-its-name\ndescription: How the API is written\npaths:\n  - \"src/api/**\"\n---\n\n# API rules\n\nReturn errors as values.\n",
+    );
+
+    let catalog = Catalog::discover(std::slice::from_ref(&one));
+    let rule = &catalog.artifacts()[0];
+
+    // A rule is named by its route whatever its front matter says.
+    assert_eq!(rule.name(), "api");
+    assert_eq!(rule.summary(), Some("API rules"));
+    assert_eq!(rule.description(), Some("How the API is written"));
+    let Declared::Rule(manifest) = rule.declared() else {
+        panic!("a rule declares a rule's front matter");
+    };
+    assert_eq!(
+        manifest.paths.stated(),
+        Some(&vec![String::from("src/api/**")])
+    );
+    // What an agent is given is the body, never the front matter.
+    assert_eq!(
+        rule.contents().unwrap(),
+        "\n# API rules\n\nReturn errors as values.\n"
+    );
+    assert!(rule.validate().is_empty());
+}
+
+#[test]
+fn a_horizontal_rule_at_the_top_of_a_rule_is_content() {
+    let (_dir, one) = project("alpha");
+    let text = "---\n\nNever force-push.\n\n---\n\nUse the lease.\n";
+    write_rule(&one, "fenced.md", text);
+
+    let catalog = Catalog::discover(std::slice::from_ref(&one));
+    let rule = &catalog.artifacts()[0];
+
+    // As it was before a rule could declare anything.
+    assert_eq!(rule.summary(), Some("---"));
+    assert_eq!(rule.contents().unwrap(), text);
+    assert!(rule.validate().is_empty());
+}
+
+#[test]
+fn front_matter_that_does_not_parse_is_content_with_a_warning() {
+    let (_dir, one) = project("alpha");
+    let text = "---\npaths:\n  - **/*.ts\n---\n\n# TypeScript\n";
+    write_rule(&one, "typescript.md", text);
+
+    let catalog = Catalog::discover(std::slice::from_ref(&one));
+    let rule = &catalog.artifacts()[0];
+
+    assert!(catalog.failures().is_empty());
+    assert_eq!(rule.contents().unwrap(), text);
+    let issues = rule.validate();
+    assert!(
+        matches!(
+            issues.as_slice(),
+            [ValidationIssue::FrontMatterUnparsed { .. }]
+        ),
+        "{issues:?}"
+    );
+    assert!(issues[0].is_warning());
 }
 
 #[test]
@@ -336,4 +407,47 @@ fn find_spans_the_projects_a_workspace_manages() {
     assert_eq!(matches.len(), 2);
     assert_eq!(matches[0].project_name(), Some("alpha"));
     assert_eq!(matches[1].project_name(), Some("beta"));
+}
+
+#[test]
+fn the_shelf_is_read_source_by_source_and_found_as_it_is_now() {
+    let dir = TempDir::new().unwrap();
+    let (workspace, _) = mindflayer_core::FlayerWorkspace::init(dir.path()).unwrap();
+    let shelf = workspace.gathered_dir(Kind::Skill);
+    for (source, folder, contents) in [
+        ("acme-skills", "deploy", skill_file("deploy")),
+        ("other-rules", "a--b", skill_file("a--b")),
+        ("other-rules", "broken", String::from("no front matter\n")),
+    ] {
+        let skill = shelf.join(source).join(folder);
+        fs::create_dir_all(&skill).unwrap();
+        fs::write(skill.join("SKILL.md"), contents).unwrap();
+    }
+    // A stray file is not a source.
+    fs::write(shelf.join("notes.txt"), "not a source\n").unwrap();
+
+    let catalog = Catalog::discover_gathered(&workspace, &Kind::ALL);
+
+    let names: Vec<&str> = catalog.artifacts().iter().map(|a| a.name()).collect();
+    assert_eq!(names, ["a--b", "deploy"]);
+    assert_eq!(catalog.failures().len(), 1, "{:?}", catalog.failures());
+    let doubled = &catalog.artifacts()[0];
+    assert_eq!(
+        doubled.validate(),
+        vec![ValidationIssue::NameNotKebabCase {
+            segment: "a--b".into()
+        }]
+    );
+    assert!(Catalog::discover_gathered(&workspace, &[Kind::Rule]).is_empty());
+}
+
+#[test]
+fn a_workspace_that_never_gathered_has_an_empty_shelf_and_no_failure() {
+    let dir = TempDir::new().unwrap();
+    let (workspace, _) = mindflayer_core::FlayerWorkspace::init(dir.path()).unwrap();
+
+    let catalog = Catalog::discover_gathered(&workspace, &Kind::ALL);
+
+    assert!(catalog.is_empty());
+    assert!(catalog.failures().is_empty());
 }

@@ -3,7 +3,13 @@
 
 mod common;
 
+use std::sync::mpsc::{self, RecvTimeoutError};
+use std::sync::{Arc, Mutex};
+use std::thread;
+use std::time::{Duration, Instant};
+
 use common::*;
+use tui::state::Step as TuiStep;
 
 // ---------------------------------------------------------------------------
 // The TUI
@@ -439,6 +445,34 @@ fn validate_in_the_tui_reads_as_flayer_validate_does() {
 }
 
 #[test]
+fn a_stand_in_runner_is_handed_the_lines_a_task_is() {
+    let dir = workspace_with_two();
+    let mut app = tui_in(dir.path());
+    let heard = Arc::new(Mutex::new(Vec::new()));
+    app.runner = Some(Runner::new({
+        let heard = Arc::clone(&heard);
+        move |words, _, _, _| {
+            heard.lock().unwrap().push(words.to_vec());
+            Done {
+                command: words.join(" "),
+                stdout: String::from("stood in\n"),
+                stderr: Vec::new(),
+                error: None,
+                ok: true,
+            }
+        }
+    }));
+
+    press_and_run(&mut app, KeyCode::Char('v'));
+
+    assert_eq!(*heard.lock().unwrap(), [["flayer", "validate"]]);
+    let Mode::Reading(reader) = &app.mode else {
+        panic!("{:?}", app.mode);
+    };
+    assert_eq!(reader.lines[0].1, "stood in");
+}
+
+#[test]
 fn gathering_in_the_tui_is_flayer_gather_git() {
     let dir = TempDir::new().unwrap();
     flayer(dir.path(), &["init"]).unwrap();
@@ -467,6 +501,177 @@ fn gathering_in_the_tui_is_flayer_gather_git() {
 }
 
 #[test]
+fn a_gather_runs_apart_with_its_progress_drawn_until_it_is_over() {
+    let dir = TempDir::new().unwrap();
+    flayer(dir.path(), &["init"]).unwrap();
+    let mut app = tui_in(dir.path());
+    let (go, gate) = mpsc::channel();
+    app.runner = Some(slow_gather(gate));
+
+    press_key(&mut app, KeyCode::Char('g'));
+    type_text(&mut app, SLOW);
+    let TuiStep::Run(task) = press_key(&mut app, KeyCode::Enter) else {
+        panic!("{:?}", app.mode);
+    };
+    tui::step(&mut app, task);
+
+    // Back at once, with the gather still going and the screen drawing it.
+    assert!(app.running.is_some());
+    settle_until(&mut app, |app| {
+        reported(app) == Some(Progress::Harvesting { done: 0, total: 3 })
+    });
+    let drawn = tui_drawn(&app);
+    assert!(
+        drawn.contains(&format!("flayer gather git {SLOW}")),
+        "{drawn}"
+    );
+    assert!(drawn.contains("reading folders 0/3"), "{drawn}");
+    // A key for anything else was aimed at a screen about to change.
+    assert_eq!(press_key(&mut app, KeyCode::Char('q')), TuiStep::Stay);
+
+    go.send(()).unwrap();
+    settle_until(&mut app, |app| {
+        reported(app) == Some(Progress::Harvesting { done: 1, total: 3 })
+    });
+    assert!(tui_drawn(&app).contains("reading folders 1/3"));
+
+    for _ in 0..3 {
+        go.send(()).unwrap();
+    }
+    settle_until(&mut app, |app| app.running.is_none());
+
+    let Mode::Reading(reader) = &app.mode else {
+        panic!("{:?}", app.mode);
+    };
+    assert_eq!(reader.lines[0].1, "3 skills: 3 added");
+    assert!(app
+        .transcript()
+        .contains(&format!("$ flayer gather git {SLOW}\n3 skills: 3 added\n")));
+}
+
+#[test]
+fn esc_cancels_a_running_gather_and_the_form_says_so() {
+    let dir = TempDir::new().unwrap();
+    flayer(dir.path(), &["init"]).unwrap();
+    let mut app = tui_in(dir.path());
+    let (_go, gate) = mpsc::channel();
+    app.runner = Some(slow_gather(gate));
+    start_slow_gather(&mut app);
+    assert!(tui_drawn(&app).contains("esc cancels"));
+
+    assert_eq!(press_key(&mut app, KeyCode::Esc), TuiStep::Stay);
+
+    // Asked, and said to be asked, until the gather has heard it.
+    assert!(app.running.as_ref().unwrap().cancelling);
+    assert!(tui_drawn(&app).contains("cancelling, before anything is placed"));
+    settle_until(&mut app, |app| app.running.is_none());
+    // Back in the form it was started from, with why it stopped, as for any
+    // gather that did not get as far as a report.
+    let Mode::Gathering(form) = &app.mode else {
+        panic!("{:?}", app.mode);
+    };
+    assert_eq!(
+        form.error.as_deref(),
+        Some("cancelled, with nothing put on the shelf")
+    );
+    assert!(app.transcript().contains(&format!(
+        "$ flayer gather git {SLOW}\nerror: cancelled, with nothing put on the shelf\n"
+    )));
+}
+
+#[test]
+fn a_gather_already_placing_says_a_cancel_is_too_late_and_finishes() {
+    let dir = TempDir::new().unwrap();
+    flayer(dir.path(), &["init"]).unwrap();
+    let mut app = tui_in(dir.path());
+    let (go, gate) = mpsc::channel();
+    app.runner = Some(placing_gather(gate));
+    start_gather(&mut app, Progress::Placing { done: 0, total: 3 });
+    let drawn = tui_drawn(&app);
+    assert!(drawn.contains("placing on the shelf 0/3"), "{drawn}");
+    // No key offered that would change nothing.
+    assert!(!drawn.contains("esc cancels"), "{drawn}");
+    assert!(drawn.contains("too late to cancel: placing"), "{drawn}");
+
+    assert_eq!(press_key(&mut app, KeyCode::Esc), TuiStep::Stay);
+
+    // Nor a stop claimed that the gather will not make.
+    let drawn = tui_drawn(&app);
+    assert!(!drawn.contains("cancelling"), "{drawn}");
+    assert!(drawn.contains("too late to cancel: placing"), "{drawn}");
+    go.send(()).unwrap();
+    settle_until(&mut app, |app| app.running.is_none());
+    let Mode::Reading(reader) = &app.mode else {
+        panic!("{:?}", app.mode);
+    };
+    assert_eq!(reader.lines[0].1, "3 skills: 3 added");
+}
+
+#[test]
+fn leaving_while_a_gather_runs_cancels_it_and_waits_for_it() {
+    let dir = TempDir::new().unwrap();
+    flayer(dir.path(), &["init"]).unwrap();
+    let mut app = tui_in(dir.path());
+    let (_go, gate) = mpsc::channel();
+    app.runner = Some(slow_gather(gate));
+    start_slow_gather(&mut app);
+
+    let step = app.press(KeyEvent::new(KeyCode::Char('c'), KeyModifiers::CONTROL));
+
+    assert_eq!(step, TuiStep::Quit);
+    // What the loop does before it returns.
+    tui::wait(&mut app);
+    assert!(app.running.is_none());
+    assert!(app
+        .transcript()
+        .contains("error: cancelled, with nothing put on the shelf"));
+}
+
+#[test]
+fn the_working_boxes_are_drawn_on_a_terminal_narrower_than_they_are() {
+    let dir = TempDir::new().unwrap();
+    flayer(dir.path(), &["init"]).unwrap();
+    let mut app = tui_in(dir.path());
+    let (_go, gate) = mpsc::channel();
+    app.runner = Some(slow_gather(gate));
+    start_slow_gather(&mut app);
+    let mut terminal = Terminal::new(TestBackend::new(20, 30)).unwrap();
+
+    // Drawn on every frame while the gather runs, so a pane split narrow
+    // halfway through must not end the process, and the gather with it.
+    terminal.draw(|frame| tui::ui::draw(&app, frame)).unwrap();
+    app.running.as_mut().unwrap().cancel();
+    tui::wait(&mut app);
+    // And the box a task that runs in place is drawn with.
+    app.busy = Some(format!("flayer gather git {SLOW}"));
+    terminal.draw(|frame| tui::ui::draw(&app, frame)).unwrap();
+}
+
+#[test]
+fn a_gather_refused_for_a_token_in_its_url_shows_the_token_neither_while_it_runs_nor_after() {
+    let dir = TempDir::new().unwrap();
+    flayer(dir.path(), &["init"]).unwrap();
+    let mut app = tui_in(dir.path());
+
+    press_key(&mut app, KeyCode::Char('g'));
+    type_text(&mut app, "https://me:ghp_t0ken@example.com/acme/skills");
+    let task = press_and_run(&mut app, KeyCode::Enter).unwrap();
+
+    // What the box drawn over the screen says while it runs.
+    assert_eq!(
+        task.describe(),
+        "flayer gather git https://example.com/acme/skills"
+    );
+    let transcript = app.transcript();
+    assert!(
+        transcript.starts_with("$ flayer gather git https://example.com/acme/skills\n"),
+        "{transcript}"
+    );
+    assert!(transcript.contains("is refused"), "{transcript}");
+    assert!(!transcript.contains("ghp_t0ken"), "{transcript}");
+}
+
+#[test]
 fn the_install_screen_opens_inside_the_tui_and_applies_from_there() {
     let (dir, _workspace, _ledger) = shelved(&["collapse"], &["deploy"]);
     let mut app = tui_in(dir.path());
@@ -492,6 +697,52 @@ fn the_install_screen_opens_inside_the_tui_and_applies_from_there() {
     assert!(app
         .transcript()
         .contains("$ flayer install\ncollapse: installed deploy"));
+}
+
+#[test]
+fn the_install_screen_scrubs_the_ledger_when_it_applies_and_not_when_it_opens() {
+    let (dir, workspace, _ledger) = shelved(&["collapse"], &["deploy"]);
+    let database = rusqlite::Connection::open(workspace.ledger_path()).unwrap();
+    database
+        .execute(
+            "UPDATE sources SET url = 'https://me:ghp_t0ken@example.com/acme/skills'",
+            [],
+        )
+        .unwrap();
+    let stored = || -> String {
+        database
+            .query_row("SELECT url FROM sources", [], |row| row.get(0))
+            .unwrap()
+    };
+    let mut app = tui_in(dir.path());
+
+    // Opened and left: a read, which writes nothing and so has nothing to say.
+    press_and_run(&mut app, KeyCode::Char('i'));
+    assert!(matches!(app.mode, Mode::Installing(_)), "{:?}", app.mode);
+    press_key(&mut app, KeyCode::Char('q'));
+    assert_eq!(app.transcript(), "");
+    assert!(stored().contains("ghp_t0ken"));
+
+    press_and_run(&mut app, KeyCode::Char('i'));
+    press_key(&mut app, KeyCode::Right);
+    press_key(&mut app, KeyCode::Char(' '));
+    press_key(&mut app, KeyCode::Char('a'));
+    press_and_run(&mut app, KeyCode::Char('y'));
+
+    let transcript = app.transcript();
+    assert!(
+        transcript.starts_with("$ flayer install\ncollapse: installed deploy\n"),
+        "{transcript}"
+    );
+    assert!(
+        transcript.contains(
+            "note: https://example.com/acme/skills: the user name, password or token an older \
+             Mindflayer stored in this URL is taken out"
+        ),
+        "{transcript}"
+    );
+    assert!(!transcript.contains("ghp_t0ken"), "{transcript}");
+    assert_eq!(stored(), "https://example.com/acme/skills");
 }
 
 #[test]
@@ -614,6 +865,18 @@ fn every_task_the_tui_runs_is_a_line_the_binaries_accept() {
         },
         Task::UnloadHere {
             path: String::from("/somewhere/team"),
+        },
+        Task::Remove {
+            holder: Holder::Elsewhere(String::from("../collapse")),
+            kind: Kind::Skill,
+            name: String::from("deploy"),
+        },
+        Task::Add {
+            holder: Holder::Elsewhere(String::from("-odd")),
+            kind: Kind::Skill,
+            name: String::from("deploy"),
+            description: awkward.clone(),
+            template: Some(String::from("-weird")),
         },
     ];
 
@@ -753,6 +1016,308 @@ fn the_add_form_offers_the_templates_the_project_can_use() {
 
     let manifest = fs::read_to_string(dir.path().join("alpha/skills/deploy/SKILL.md")).unwrap();
     assert!(manifest.contains("From the runbook."), "{manifest}");
+}
+
+#[test]
+fn the_add_form_offers_what_the_workspace_in_your_home_has_to_a_project_elsewhere() {
+    let home = TempDir::new().unwrap();
+    let elsewhere = TempDir::new().unwrap();
+    let project = elsewhere.path().join("collapse");
+    fs::create_dir(&project).unwrap();
+    mind(&project, &["init"]).unwrap();
+    flayer_at_home(elsewhere.path(), home.path(), &["link", "collapse"]).unwrap();
+    let template = home.path().join(".mindflayer/templates/runbook/SKILL.md");
+    fs::create_dir_all(template.parent().unwrap()).unwrap();
+    fs::write(&template, "---\n---\n\n# {{name}}\n\nFrom home.\n").unwrap();
+    let mut app = App::opened_on(
+        Scope::Project,
+        project.clone(),
+        tui::load_project(&project, &Lookup::at_home(Some(home.path()))).unwrap(),
+    )
+    .with_lookup(Lookup::at_home(Some(home.path())));
+    app.focus_on(&project);
+
+    // The form runs `mind -C <entry> add`, which consults the workspace in
+    // your home about a project nothing above manages; it offers the same.
+    press_key(&mut app, KeyCode::Char('a'));
+    press_key(&mut app, KeyCode::Up);
+    press_key(&mut app, KeyCode::Right);
+    press_key(&mut app, KeyCode::Right);
+    press_key(&mut app, KeyCode::Down);
+    type_text(&mut app, "deploy");
+    press_key(&mut app, KeyCode::Down);
+    type_text(&mut app, "Ship it");
+    assert!(tui_drawn(&app).contains("--template runbook"));
+    press_and_run(&mut app, KeyCode::Enter);
+
+    let manifest = fs::read_to_string(project.join("skills/deploy/SKILL.md")).unwrap();
+    assert!(manifest.contains("From home."), "{manifest}");
+}
+
+#[test]
+fn mind_calls_the_workspace_in_your_home_the_default_only_when_it_is_not_above() {
+    let home = TempDir::new().unwrap();
+    let elsewhere = TempDir::new().unwrap();
+    let far = elsewhere.path().join("far");
+    let near = home.path().join("near");
+    for project in [&far, &near] {
+        fs::create_dir(project).unwrap();
+        mind(project, &["init"]).unwrap();
+    }
+    flayer_at_home(elsewhere.path(), home.path(), &["link", "far"]).unwrap();
+    flayer_at_home(home.path(), home.path(), &["link", "near"]).unwrap();
+    let default =
+        |project: &Path| match tui::load_project(project, &Lookup::at_home(Some(home.path())))
+            .unwrap()
+        {
+            View::Workspace(workspace) => workspace.default,
+            View::Nowhere => panic!("no screen for {}", project.display()),
+        };
+
+    // Above `near`, the walk up finds it as it would any other workspace.
+    assert!(default(&far));
+    assert!(!default(&near));
+}
+
+/// The TUI `flayer` opens in `dir`, with nothing above it, where the default
+/// workspace lives in `home`.
+fn tui_at_home(dir: &Path, home: &Path) -> App {
+    let lookup = Lookup::at_home(Some(home));
+    App::new(dir.to_path_buf(), tui::load(dir, &lookup).unwrap()).with_lookup(lookup)
+}
+
+#[test]
+fn with_the_default_workspace_not_made_the_tui_opens_on_it_empty() {
+    let home = TempDir::new().unwrap();
+    let elsewhere = TempDir::new().unwrap();
+
+    let app = tui_at_home(elsewhere.path(), home.path());
+
+    let drawn = tui_drawn(&app);
+    assert!(drawn.contains("default workspace, not made yet"), "{drawn}");
+    assert!(drawn.contains("nothing on the shelf"), "{drawn}");
+    assert!(drawn.contains("Projects (0)"), "{drawn}");
+    assert!(drawn.contains("nothing here yet"), "{drawn}");
+    assert!(app
+        .message
+        .as_ref()
+        .is_some_and(|message| message.text.contains("is made by the first change")));
+    assert!(!home.path().join(FLAYER_DIR).exists());
+}
+
+#[test]
+fn reading_from_the_tui_leaves_the_default_workspace_unmade() {
+    let home = TempDir::new().unwrap();
+    let elsewhere = TempDir::new().unwrap();
+    let mut app = tui_at_home(elsewhere.path(), home.path());
+
+    assert_eq!(
+        press_and_run(&mut app, KeyCode::Char('s')),
+        Some(Task::Shelf)
+    );
+    press_key(&mut app, KeyCode::Esc);
+    press_and_run(&mut app, KeyCode::Char('v'));
+    press_key(&mut app, KeyCode::Esc);
+    assert_eq!(
+        press_and_run(&mut app, KeyCode::Char('i')),
+        Some(Task::OpenInstall)
+    );
+
+    assert_eq!(
+        app.message.as_ref().map(|message| message.text.as_str()),
+        Some("no projects to install into yet — l links one")
+    );
+    assert!(!home.path().join(FLAYER_DIR).exists());
+    assert_eq!(app.transcript(), "");
+}
+
+#[test]
+fn the_minds_screen_lists_what_is_under_the_default_workspace_before_it_is_made() {
+    let home = TempDir::new().unwrap();
+    let elsewhere = TempDir::new().unwrap();
+    let alpha = home.path().join("alpha");
+    fs::create_dir(&alpha).unwrap();
+    mind(&alpha, &["init"]).unwrap();
+    let mut app = tui_at_home(elsewhere.path(), home.path());
+
+    press_key(&mut app, KeyCode::Char('m'));
+
+    assert!(matches!(app.mode, Mode::Minds(_)), "{:?}", app.mode);
+    assert!(tui_drawn(&app).contains("alpha"));
+    assert!(!home.path().join(FLAYER_DIR).exists());
+}
+
+/// The paths the minds screen lists, in its order.
+fn minds_rows(app: &App) -> Vec<&str> {
+    let Mode::Minds(screen) = &app.mode else {
+        panic!("{:?}", app.mode)
+    };
+    screen.rows.iter().map(|row| row.path.as_str()).collect()
+}
+
+/// A home whose default workspace is not made yet, sitting inside a
+/// workspace that is: `workspace_with_two`, with `h/gamma`, a mind project,
+/// under it, and `h` the home.
+fn home_inside_a_workspace() -> (TempDir, PathBuf) {
+    let outer = workspace_with_two();
+    let home = outer.path().join("h");
+    let gamma = home.join("gamma");
+    fs::create_dir_all(&gamma).unwrap();
+    mind(&gamma, &["init"]).unwrap();
+    (outer, home)
+}
+
+#[test]
+fn flayer_minds_opens_on_the_default_workspace_without_making_it() {
+    let home = TempDir::new().unwrap();
+    let elsewhere = TempDir::new().unwrap();
+    let alpha = home.path().join("alpha");
+    fs::create_dir(&alpha).unwrap();
+    mind(&alpha, &["init"]).unwrap();
+
+    let app = tui::minds(elsewhere.path(), &Lookup::at_home(Some(home.path()))).unwrap();
+
+    assert_eq!(minds_rows(&app), vec!["alpha"]);
+    assert!(!home.path().join(FLAYER_DIR).exists());
+}
+
+#[test]
+fn flayer_minds_with_no_workspace_and_no_default_says_so() {
+    let elsewhere = TempDir::new().unwrap();
+
+    let error = tui::minds(elsewhere.path(), &Lookup::default()).unwrap_err();
+
+    assert!(matches!(error, CliError::NotInWorkspace(_)), "{error}");
+}
+
+#[test]
+fn flayer_minds_opens_on_the_default_workspace_not_on_one_above_its_home() {
+    let (_outer, home) = home_inside_a_workspace();
+    let elsewhere = TempDir::new().unwrap();
+
+    let app = tui::minds(elsewhere.path(), &Lookup::at_home(Some(&home))).unwrap();
+
+    // Not `alpha`, `beta` and `h/gamma`: those are the workspace above.
+    assert_eq!(minds_rows(&app), vec!["gamma"]);
+    assert_eq!(app.base(), home);
+    assert!(!home.join(FLAYER_DIR).exists());
+}
+
+#[test]
+fn the_install_screen_opens_on_the_default_workspace_not_on_one_above_its_home() {
+    let (_outer, home) = home_inside_a_workspace();
+    let elsewhere = TempDir::new().unwrap();
+    let mut app = tui_at_home(elsewhere.path(), &home);
+
+    press_and_run(&mut app, KeyCode::Char('i'));
+
+    // The workspace above has `alpha` and `beta` to install into; the one on
+    // screen has nothing yet.
+    assert!(!matches!(app.mode, Mode::Installing(_)), "{:?}", app.mode);
+    assert_eq!(
+        app.message.as_ref().map(|message| message.text.as_str()),
+        Some("no projects to install into yet — l links one")
+    );
+    assert!(!home.join(FLAYER_DIR).exists());
+}
+
+#[test]
+fn the_first_change_from_the_tui_makes_the_default_workspace() {
+    let home = TempDir::new().unwrap();
+    let elsewhere = TempDir::new().unwrap();
+    let alpha = home.path().join("alpha");
+    fs::create_dir(&alpha).unwrap();
+    mind(&alpha, &["init"]).unwrap();
+    let mut app = tui_at_home(elsewhere.path(), home.path());
+
+    press_key(&mut app, KeyCode::Char('l'));
+    let task = press_and_run(&mut app, KeyCode::Enter);
+
+    assert_eq!(
+        task,
+        Some(Task::Link {
+            path: String::from("alpha")
+        })
+    );
+    assert!(registry(home.path()).contains("\"alpha\""));
+    let View::Workspace(workspace) = &app.view else {
+        panic!("{:?}", app.view)
+    };
+    assert!(workspace.made);
+    assert!(workspace.default);
+    let drawn = tui_drawn(&app);
+    assert!(drawn.contains("default workspace · "), "{drawn}");
+    // Made by a line of its own, where the screen showed it.
+    assert_eq!(
+        app.transcript(),
+        format!(
+            "$ flayer init\ninitialized flayer workspace `{}` in {}\n\
+             $ flayer link alpha\nlinked alpha as alpha\n",
+            home.path().file_name().unwrap().to_string_lossy(),
+            home.path().join(FLAYER_DIR).display()
+        )
+    );
+}
+
+#[test]
+fn the_first_change_from_the_tui_lands_in_the_default_workspace_not_in_one_above_its_home() {
+    let (outer, home) = home_inside_a_workspace();
+    let before = registry(outer.path());
+    let elsewhere = TempDir::new().unwrap();
+    let mut app = tui_at_home(elsewhere.path(), &home);
+
+    press_key(&mut app, KeyCode::Char('l'));
+    let task = press_and_run(&mut app, KeyCode::Enter);
+
+    assert_eq!(
+        task,
+        Some(Task::Link {
+            path: String::from("gamma")
+        })
+    );
+    assert!(registry(&home).contains("\"gamma\""));
+    assert_eq!(registry(outer.path()), before);
+    let View::Workspace(workspace) = &app.view else {
+        panic!("{:?}", app.view)
+    };
+    assert!(workspace.made);
+    assert!(workspace.default);
+    assert_eq!(workspace.root, home);
+}
+
+#[test]
+fn a_gather_from_the_tui_runs_apart_after_making_the_default_workspace_where_it_is_shown() {
+    let (outer, home) = home_inside_a_workspace();
+    let elsewhere = TempDir::new().unwrap();
+    let source = repository(&[("skills/deploy/SKILL.md", &skill_file("deploy", "Ship it"))]);
+    let url = source.path().to_string_lossy().into_owned();
+    let mut app = tui_at_home(elsewhere.path(), &home);
+
+    press_key(&mut app, KeyCode::Char('g'));
+    type_text(&mut app, &url);
+    let TuiStep::Run(task) = press_key(&mut app, KeyCode::Enter) else {
+        panic!("{:?}", app.mode);
+    };
+    assert!(task.runs_apart());
+    tui::step(&mut app, task);
+    tui::wait(&mut app);
+
+    // Made first, by a line of its own, on the thread the gather ran on: left
+    // to the gather, the walk up from home would have found the workspace
+    // above it.
+    let transcript = app.transcript();
+    assert!(transcript.starts_with("$ flayer init\n"), "{transcript}");
+    assert!(transcript.contains("$ flayer gather git "), "{transcript}");
+    let workspace = app.workspace().unwrap();
+    assert!(workspace.made);
+    assert_eq!(workspace.root, home);
+    assert_eq!(workspace.shelf, 1);
+    let above = flayer(outer.path(), &["gather", "list"]).unwrap();
+    assert!(
+        above.stdout.starts_with("nothing gathered yet"),
+        "{}",
+        above.stdout
+    );
 }
 
 #[test]
@@ -930,4 +1495,259 @@ fn mind_with_no_project_offers_to_make_one() {
     assert_eq!(task, Some(Task::InitProject));
     assert!(dir.path().join(MIND_DIR).join(MIND_CONFIG).is_file());
     assert_eq!(app.scope(), Scope::Project);
+}
+
+// ---------------------------------------------------------------------------
+// A gather that takes its time
+// ---------------------------------------------------------------------------
+
+/// The URL the slow gather is asked for, which it never fetches.
+const SLOW: &str = "https://example.com/skills.git";
+
+/// A stand-in for `flayer gather git` that takes as long as the test wants:
+/// it reports reading each of three folders, and goes on from one to the
+/// next only when `go` says so. A cancel stops it before it says it is done,
+/// as one stops a real gather before anything is placed.
+fn slow_gather(go: mpsc::Receiver<()>) -> Runner {
+    let go = Mutex::new(go);
+    Runner::new(move |words, _, _, watch| {
+        let go = go.lock().unwrap();
+        let command = tui::state::shell(words);
+        for done in 0..=3 {
+            watch.report(Progress::Harvesting { done, total: 3 });
+            loop {
+                if watch.is_cancelled() {
+                    return Done::failed(command, "cancelled, with nothing put on the shelf");
+                }
+                match go.recv_timeout(Duration::from_millis(5)) {
+                    // A test that has gone is not waited for.
+                    Ok(()) | Err(RecvTimeoutError::Disconnected) => break,
+                    Err(RecvTimeoutError::Timeout) => {}
+                }
+            }
+        }
+        Done {
+            command,
+            stdout: String::from("3 skills: 3 added\n"),
+            stderr: Vec::new(),
+            error: None,
+            ok: true,
+        }
+    })
+}
+
+/// A stand-in for a gather past its last check: it says it is placing
+/// three, and finishes when `go` says so, whatever cancel comes first, as a
+/// real gather does once it has started placing.
+fn placing_gather(go: mpsc::Receiver<()>) -> Runner {
+    let go = Mutex::new(go);
+    Runner::new(move |words, _, _, watch| {
+        let go = go.lock().unwrap();
+        watch.report(Progress::Placing { done: 0, total: 3 });
+        // A test that has gone is not waited for.
+        let _ = go.recv();
+        watch.report(Progress::Placing { done: 3, total: 3 });
+        Done {
+            command: tui::state::shell(words),
+            stdout: String::from("3 skills: 3 added\n"),
+            stderr: Vec::new(),
+            error: None,
+            ok: true,
+        }
+    })
+}
+
+/// Ask for the slow gather from the gather form, and let it get as far as
+/// reading its first folder.
+fn start_slow_gather(app: &mut App) {
+    start_gather(app, Progress::Harvesting { done: 0, total: 3 });
+}
+
+/// Ask for a gather from the gather form, and let it get as far as `step`.
+fn start_gather(app: &mut App, step: Progress) {
+    press_key(app, KeyCode::Char('g'));
+    type_text(app, SLOW);
+    let TuiStep::Run(task) = press_key(app, KeyCode::Enter) else {
+        panic!("{:?}", app.mode);
+    };
+    tui::step(app, task);
+    settle_until(app, |app| reported(app) == Some(step));
+}
+
+/// The step the task running apart last reported, as the screen has it.
+fn reported(app: &App) -> Option<Progress> {
+    app.running.as_ref().and_then(|running| running.progress)
+}
+
+/// Take in what the task running apart says, as the loop does before each
+/// frame, until `until` holds.
+fn settle_until(app: &mut App, until: impl Fn(&App) -> bool) {
+    let deadline = Instant::now() + Duration::from_secs(10);
+    while !until(app) {
+        assert!(Instant::now() < deadline, "never came: {:?}", app.running);
+        tui::settle(app);
+        thread::sleep(Duration::from_millis(1));
+    }
+}
+
+// ---------------------------------------------------------------------------
+// A workspace named for the TUI
+// ---------------------------------------------------------------------------
+
+/// Under one directory: `outer`, a workspace, and `hub` beside it, which
+/// links `collapse`, a project under neither, and has installed its own
+/// `hub-skill` there.
+fn hub_beside_outer() -> (TempDir, PathBuf, PathBuf, PathBuf) {
+    let dir = TempDir::new().unwrap();
+    let (outer, hub, collapse) = (
+        dir.path().join("outer"),
+        dir.path().join("hub"),
+        dir.path().join("collapse"),
+    );
+    for root in [&outer, &hub, &collapse] {
+        fs::create_dir(root).unwrap();
+    }
+    flayer(&outer, &["init"]).unwrap();
+    flayer(&hub, &["init"]).unwrap();
+    mind(&collapse, &["init"]).unwrap();
+    flayer(&hub, &["link", "../collapse"]).unwrap();
+    flayer(&hub, &["add", "skill", "hub-skill", "The hub's"]).unwrap();
+    flayer(&hub, &["install", "-p", "collapse", "hub-skill"]).unwrap();
+    (dir, outer, hub, collapse)
+}
+
+/// What `hub`'s ledger says it installed into `collapse`.
+fn recorded_in_hub(hub: &Path) -> Vec<String> {
+    FlayerWorkspace::open(hub)
+        .unwrap()
+        .ledger()
+        .unwrap()
+        .installations("../collapse", Kind::Skill)
+        .unwrap()
+}
+
+#[test]
+fn opened_on_a_named_workspace_the_tui_runs_every_line_against_it() {
+    let (_dir, outer, hub, collapse) = hub_beside_outer();
+    let lookup = Lookup {
+        flag: Some(hub.clone()),
+        ..Lookup::default()
+    };
+    // Opened inside `outer`, which walking up would find instead.
+    let mut app = App::new(outer.clone(), tui::load(&outer, &lookup).unwrap()).with_lookup(lookup);
+    assert_eq!(app.base(), hub);
+
+    // `collapse`, then its one skill.
+    press_key(&mut app, KeyCode::Right);
+    press_key(&mut app, KeyCode::Char('d'));
+    press_and_run(&mut app, KeyCode::Char('y'));
+
+    // The line consulted the workspace on screen, not whatever is above the
+    // project or in a home, so that workspace's record went with the copy.
+    assert!(
+        app.transcript()
+            .starts_with("$ mind -C ../collapse remove --yes skill:hub-skill\n"),
+        "{}",
+        app.transcript()
+    );
+    assert!(!collapse.join("skills/hub-skill").exists());
+    assert!(recorded_in_hub(&hub).is_empty());
+}
+
+#[test]
+fn a_w_among_a_lines_words_is_typed_from_the_workspace_root() {
+    let (_dir, outer, _hub, _collapse) = hub_beside_outer();
+    let words: Vec<String> = ["flayer", "-W", "../hub", "list"]
+        .iter()
+        .map(|word| (*word).to_owned())
+        .collect();
+
+    let done = tui::execute(&words, &outer, &Lookup::default(), &Watch::new());
+
+    assert_eq!(done.error, None);
+    assert!(done.stdout.contains("hub-skill"), "{}", done.stdout);
+}
+
+// ---------------------------------------------------------------------------
+// A project the workspace on screen manages from elsewhere
+// ---------------------------------------------------------------------------
+
+#[test]
+fn a_project_linked_from_beside_runs_its_lines_against_the_workspace_on_screen() {
+    let (_dir, _outer, hub, collapse) = hub_beside_outer();
+    // Nothing named: the screen is the workspace found where it was opened.
+    let mut app = tui_in(&hub);
+
+    press_key(&mut app, KeyCode::Right);
+    press_key(&mut app, KeyCode::Char('d'));
+    let drawn = tui_drawn(&app);
+    assert!(
+        drawn.contains("mind -W . -C ../collapse remove --yes skill:hub-skill"),
+        "{drawn}"
+    );
+    press_and_run(&mut app, KeyCode::Char('y'));
+
+    // Without `-W .`, walking up from `collapse` finds no workspace at all,
+    // and the hub would keep a record of a copy that is gone.
+    assert!(!collapse.join("skills/hub-skill").exists());
+    assert!(recorded_in_hub(&hub).is_empty());
+}
+
+#[test]
+fn a_project_linked_from_beside_is_offered_the_screens_templates() {
+    let (_dir, _outer, hub, collapse) = hub_beside_outer();
+    let template = hub.join(".mindflayer/templates/runbook/SKILL.md");
+    fs::create_dir_all(template.parent().unwrap()).unwrap();
+    fs::write(&template, "---\n---\n\n# {{name}}\n\nThe hub's runbook.\n").unwrap();
+    let mut app = tui_in(&hub);
+
+    press_key(&mut app, KeyCode::Char('a'));
+    press_key(&mut app, KeyCode::Up);
+    // none, then full (built in), then runbook.
+    press_key(&mut app, KeyCode::Right);
+    press_key(&mut app, KeyCode::Right);
+    press_key(&mut app, KeyCode::Down);
+    type_text(&mut app, "deploy");
+    press_key(&mut app, KeyCode::Down);
+    type_text(&mut app, "Ship it");
+    assert!(
+        tui_drawn(&app).contains("mind -W . -C ../collapse add --template runbook"),
+        "{}",
+        tui_drawn(&app)
+    );
+    press_and_run(&mut app, KeyCode::Enter);
+
+    let manifest = fs::read_to_string(collapse.join("skills/deploy/SKILL.md")).unwrap();
+    assert!(manifest.contains("The hub's runbook."), "{manifest}");
+}
+
+#[test]
+fn the_keys_help_says_which_rows_run_their_lines_with_w() {
+    let (_dir, _outer, hub, _collapse) = hub_beside_outer();
+    let mut app = tui_in(&hub);
+
+    press_key(&mut app, KeyCode::Char('?'));
+
+    let Mode::Reading(reader) = &app.mode else {
+        panic!("{:?}", app.mode);
+    };
+    assert!(
+        reader
+            .lines
+            .iter()
+            .any(|(_, line)| line.contains("`mind -W . -C <project> <cmd>`")),
+        "{:?}",
+        reader.lines
+    );
+}
+
+#[test]
+fn a_project_under_the_workspace_on_screen_keeps_the_plain_line() {
+    let dir = workspace_with_two();
+    let app = tui_in(dir.path());
+
+    assert_eq!(
+        app.member().map(|member| member.holder()),
+        Some(Holder::Project(String::from("alpha")))
+    );
 }

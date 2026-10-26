@@ -11,20 +11,28 @@
 //! lets two repositories both offer `commit-style`; [`crate::ledger`] is what
 //! remembers which is which.
 
+mod credentials;
 pub mod git;
+mod watch;
 
+use std::fmt;
 use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
+use std::time::Duration;
 
 use thiserror::Error;
 
-use crate::artifact::{Artifact, ArtifactError};
+use crate::artifact::{Artifact, ArtifactError, ValidationIssue};
 use crate::copy::{self, Change};
 use crate::kind::{Kind, Layout};
 use crate::ledger::{self, Action, Ledger, LedgerError, Outcome, SourceKind};
+use crate::lock::LockError;
 use crate::paths;
+use crate::url::{carries_credentials, redacted};
 use crate::workspace::FlayerWorkspace;
+
+pub use watch::{Progress, Watch};
 
 /// The folder inside a source that is harvested unless another is named.
 pub const DEFAULT_SUBDIRECTORY: &str = "skills";
@@ -47,7 +55,8 @@ impl Source {
         }
     }
 
-    /// The address, as the user typed it.
+    /// The address, as the user typed it: credentials included, which is why
+    /// [`gather`] refuses one that carries any before it is stored or shown.
     pub fn url(&self) -> &str {
         match self {
             Source::Git { url, .. } => url,
@@ -62,14 +71,20 @@ impl Source {
     }
 }
 
-/// One gather: what to take, from where, and out of which folder.
-#[derive(Debug, Clone, PartialEq, Eq)]
+/// One gather: what to take, from where, and out of which folder, and who is
+/// following it.
+#[derive(Debug, Clone)]
 pub struct Request {
     pub source: Source,
     /// The folder inside the source to harvest.
     pub subdirectory: String,
     /// What to look for there.
     pub kind: Kind,
+    /// Told how the gather is going, and able to stop it. A request carries
+    /// it, rather than [`gather`] taking it beside one, so a front end that
+    /// builds requests in one place and runs them in another hands over both
+    /// together.
+    pub watch: Watch,
 }
 
 impl Request {
@@ -82,6 +97,7 @@ impl Request {
             },
             subdirectory: DEFAULT_SUBDIRECTORY.to_owned(),
             kind: Kind::Skill,
+            watch: Watch::new(),
         }
     }
 
@@ -97,6 +113,12 @@ impl Request {
         match &mut self.source {
             Source::Git { reference: at, .. } => *at = reference,
         }
+        self
+    }
+
+    /// Report to `watch`, and stop when it is cancelled.
+    pub fn watched_by(mut self, watch: Watch) -> Self {
+        self.watch = watch;
         self
     }
 }
@@ -130,6 +152,8 @@ pub struct Report {
     /// Artifacts in the source that could not be taken. One broken skill must
     /// not cost the forty next to it.
     pub failures: Vec<Failure>,
+    /// What is wrong with artifacts that were taken anyway.
+    pub warnings: Vec<Warning>,
 }
 
 impl Report {
@@ -154,6 +178,11 @@ pub fn gather(
     ledger: &Ledger,
     request: &Request,
 ) -> Result<Report, GatherError> {
+    // Held for the whole gather, the clone included, until its line is in
+    // the log: two gathers of one source at once would clone into one folder
+    // and each replace the shelf copies the other was making. One that cannot
+    // have it is not logged, because no gather was attempted.
+    let _lock = workspace.lock()?;
     let outcome = harvest(workspace, ledger, request);
 
     // The log records what was attempted, not only what worked: a gather that
@@ -176,6 +205,9 @@ pub fn gather(
                 Some(&detail),
             )?;
         }
+        // Not logged: a cancel leaves the ledger as it found it, and the
+        // person who cancelled knows already.
+        Err(GatherError::Cancelled) => {}
         Err(error) => {
             let _ = ledger.log(
                 Action::Gather,
@@ -188,12 +220,181 @@ pub fn gather(
     outcome
 }
 
+/// What the scrub [`FlayerWorkspace::ledger_to_write`] runs took out.
+#[derive(Debug, Default)]
+pub struct Scrub {
+    /// The sources whose URL carried credentials, as they are stored now.
+    /// Gathering one again needs the credential from somewhere else.
+    pub sources: Vec<ledger::Source>,
+    /// How many action log entries named a URL with credentials.
+    pub actions: usize,
+    /// Clones that still hold them, because they could not be rewritten.
+    /// Their source keeps its URL until they can, so the next scrub tries
+    /// again rather than forgetting the clone needs it.
+    pub failures: Vec<ScrubFailure>,
+    /// Folders of a source that became one with another, which nothing
+    /// points into any more and which could not be removed.
+    pub leftovers: Vec<Leftover>,
+}
+
+impl Scrub {
+    /// Whether there was nothing to take out, which is every time but the
+    /// first after an older build stored a credential.
+    pub fn is_empty(&self) -> bool {
+        self.sources.is_empty()
+            && self.actions == 0
+            && self.failures.is_empty()
+            && self.leftovers.is_empty()
+    }
+
+    /// Add what a later scrub took out, for a change that opened the ledger
+    /// to write more than once ([`crate::lifecycle::rename`]).
+    ///
+    /// A clone that could not be rewritten keeps its source's URL, so every
+    /// scrub tries it again and fails again: one thing to tell, as two
+    /// branches of one URL are one credential.
+    pub(crate) fn absorb(&mut self, later: Scrub) {
+        for source in later.sources {
+            if !self.sources.iter().any(|seen| seen.url == source.url) {
+                self.sources.push(source);
+            }
+        }
+        self.actions += later.actions;
+        for failure in later.failures {
+            if !self.failures.iter().any(|seen| seen.url == failure.url) {
+                self.failures.push(failure);
+            }
+        }
+        self.leftovers.extend(later.leftovers);
+    }
+}
+
+/// Take out the credentials a Mindflayer from before they were refused
+/// stored: in the URLs of sources, in the action log, and in the clones it
+/// made from those URLs.
+///
+/// Run by [`FlayerWorkspace::ledger_to_write`], which is how a command that
+/// writes opens the ledger, so it comes before anything is written. Every
+/// time rather than once, as a schema migration would, because an older build
+/// can keep writing to the same file after this one has scrubbed it, and the
+/// schema steps are spoken for by the changes that need a new version. With
+/// nothing to do it still scans the sources and the action log, and the first
+/// time it finds something is the only time it says so. A read is left alone:
+/// what it shows is redacted on the way out anyway, and reading should not
+/// write.
+///
+/// The workspace is held ([`FlayerWorkspace::lock_waiting`], up to `wait`)
+/// while clones are rewritten and the folders of a source made one with
+/// another are removed, since a gather beside it would be cloning into and
+/// filling those same folders. Only then: with no clone to rewrite, which is
+/// every time but the first after an older build stored a credential, the
+/// scrub writes nothing but rows, which SQLite keeps apart, and a change to
+/// an artifact opening the ledger to drop a record does not wait behind a
+/// gather to do it. The sources are looked for again once it is held, since
+/// a scrub kept waiting may find that another has done its work.
+pub(crate) fn scrub(
+    workspace: &FlayerWorkspace,
+    ledger: &Ledger,
+    wait: Duration,
+) -> Result<Scrub, LedgerError> {
+    let mut scrub = Scrub::default();
+    let _lock = if ledger.tainted_sources()?.is_empty() {
+        None
+    } else {
+        Some(workspace.lock_waiting(wait)?)
+    };
+    for source in ledger.tainted_sources()? {
+        // The clone first and the row after it: a row rewritten first would
+        // no longer say that its clone still needs the same.
+        if let Err(error) = git::scrub(&workspace.cache_dir().join(&source.directory)) {
+            scrub.failures.push(ScrubFailure {
+                url: source.url.clone(),
+                source: error,
+            });
+            continue;
+        }
+        if let Some(gone) = ledger.scrub_source(source.id)? {
+            remove_folders_of(workspace, &gone, &mut scrub.leftovers);
+        }
+        // Two branches or folders of one URL are one credential to tell
+        // somebody about.
+        if !scrub.sources.iter().any(|seen| seen.url == source.url) {
+            scrub.sources.push(source);
+        }
+    }
+    scrub.actions = ledger.scrub_log()?;
+    Ok(scrub)
+}
+
+/// Remove the clone and the shelf folders of a source the ledger no longer
+/// has, noting each that will not go.
+///
+/// Removed rather than left, because the shelf is read from its folders
+/// ([`crate::Catalog::discover_gathered`]): one left behind would be listed
+/// as skills no source owns. A directory that is not one folder name was not
+/// named by this ledger, and is left alone rather than followed out of the
+/// workspace.
+fn remove_folders_of(
+    workspace: &FlayerWorkspace,
+    gone: &ledger::Source,
+    leftovers: &mut Vec<Leftover>,
+) {
+    if !crate::install::is_folder_name(&gone.directory) {
+        return;
+    }
+    let shelves = Kind::ALL
+        .iter()
+        .map(|kind| workspace.gathered_dir(*kind).join(&gone.directory));
+    for path in std::iter::once(workspace.cache_dir().join(&gone.directory)).chain(shelves) {
+        match fs::remove_dir_all(&path) {
+            Ok(()) => {}
+            Err(error) if error.kind() == io::ErrorKind::NotFound => {}
+            Err(source) => leftovers.push(Leftover { path, source }),
+        }
+    }
+}
+
+/// A folder of a source that became one with another, which could not be
+/// removed.
+#[derive(Debug, Error)]
+#[error(
+    "{path}: left by a source that is now one with another at the same URL, and cannot be \
+     removed: {source}"
+)]
+pub struct Leftover {
+    pub path: PathBuf,
+    #[source]
+    pub source: io::Error,
+}
+
+/// A clone made from a URL with credentials that could not be rewritten
+/// without them.
+#[derive(Debug, Error)]
+#[error("{url}: its clone still holds the credentials it was gathered with: {source}")]
+pub struct ScrubFailure {
+    /// The source's URL, without them.
+    pub url: String,
+    #[source]
+    pub source: git::GitError,
+}
+
 /// The work itself, with the logging left to [`gather`].
 fn harvest(
     workspace: &FlayerWorkspace,
     ledger: &Ledger,
     request: &Request,
 ) -> Result<Report, GatherError> {
+    // Refused before anything is registered or fetched, rather than used for
+    // this one fetch and dropped from what is stored: a token on the command
+    // line is already where `ps` and the shell history show it, and every
+    // report names the URL. A git credential helper, or the front end once
+    // #110 lands, keeps it off the command line altogether.
+    if carries_credentials(request.source.url()) {
+        return Err(GatherError::CredentialsInUrl {
+            url: redacted(request.source.url()).into_owned(),
+        });
+    }
+
     // Only directory-shaped kinds are gatherable today. Matching on the kind
     // rather than on its layout keeps the compiler asking: a third kind has to
     // answer this question before it can be added.
@@ -201,7 +402,24 @@ fn harvest(
         Kind::Skill => {}
         Kind::Rule => return Err(GatherError::NotGatherable { kind: request.kind }),
     }
+    let Layout::Directory { manifest } = request.kind.layout() else {
+        return Err(GatherError::NotGatherable { kind: request.kind });
+    };
 
+    // Before the source is registered, so a gather cancelled before it began
+    // has nothing to undo.
+    if request.watch.is_cancelled() {
+        return Err(GatherError::Cancelled);
+    }
+
+    let new = ledger
+        .source(
+            request.source.kind(),
+            request.source.url(),
+            request.source.reference(),
+            &request.subdirectory,
+        )?
+        .is_none();
     let source = ledger.source_for(
         request.source.kind(),
         request.source.url(),
@@ -209,11 +427,41 @@ fn harvest(
         &request.subdirectory,
     )?;
 
+    let outcome = take(workspace, ledger, request, &source, manifest);
+    if new && matches!(outcome, Err(GatherError::Cancelled)) {
+        // Undone rather than never done: the clone needs the folder name that
+        // registering gives it before anything is fetched. Holding the
+        // registration in a transaction until the gather ends was the other
+        // way, and is rejected: every other write to the ledger would wait
+        // for as long as the network takes.
+        ledger.forget_source(source.id)?;
+        // Nothing points at its clone any more. One that will not go is left
+        // for the next source given its folder name, whose clone replaces
+        // whatever is there, as every clone does.
+        let _ = fs::remove_dir_all(workspace.cache_dir().join(&source.directory));
+    }
+    outcome
+}
+
+/// Fetch `source`, read what it offers, and put that on the shelf: the
+/// gather, once its source is registered.
+fn take(
+    workspace: &FlayerWorkspace,
+    ledger: &Ledger,
+    request: &Request,
+    source: &ledger::Source,
+    manifest: &str,
+) -> Result<Report, GatherError> {
+    let watch = &request.watch;
     let cache = workspace.cache_dir().join(&source.directory);
+    watch.report(Progress::Connecting);
     let clone = match &request.source {
-        Source::Git { url, reference } => git::clone(url, reference.as_deref(), &cache)?,
+        Source::Git { url, reference } => git::clone(url, reference.as_deref(), &cache, watch)
+            .map_err(|error| match error {
+                git::GitError::Cancelled => GatherError::Cancelled,
+                error => error.into(),
+            })?,
     };
-    ledger.saw_source(source.id, clone.revision.as_deref())?;
 
     let harvested_from = clone.root.join(&request.subdirectory);
     if !harvested_from.is_dir() {
@@ -230,31 +478,48 @@ fn harvest(
         ..Report::default()
     };
 
-    for directory in candidates(&harvested_from, request.kind)? {
-        // The artifact is loaded to learn its name and its summary, then
-        // dropped: `project` is the clone it was found in, which is where it
-        // was found and not a claim that a clone is a mind project.
-        let artifact = match Artifact::skill(&directory, &clone.root) {
-            Ok(artifact) => artifact,
-            Err(error) => {
-                report.failures.push(Failure::Artifact(error));
-                continue;
-            }
-        };
+    // Everything is read before anything is placed, rather than each
+    // artifact read and placed in turn, so that the shelf only starts to
+    // change once all of it is known.
+    let found = candidates(&harvested_from, manifest)?;
+    let mut taken = Vec::with_capacity(found.len());
+    watch.report(Progress::Harvesting {
+        done: 0,
+        total: found.len(),
+    });
+    for (done, directory) in found.iter().enumerate() {
+        if let Some(read) = read(directory, &clone.root, &mut report.failures) {
+            taken.push(read);
+        }
+        watch.report(Progress::Harvesting {
+            done: done + 1,
+            total: found.len(),
+        });
+    }
 
-        // The folder keeps the name the source gave it rather than the one the
-        // skill declares. A disagreement between the two is something
-        // `validate` reports; silently renaming the folder would repair the
-        // symptom and hide it.
-        let Some(folder) = directory.file_name().and_then(|name| name.to_str()) else {
-            report
-                .failures
-                .push(Failure::UnusableName { path: directory });
-            continue;
-        };
+    // The last moment a cancel is honoured, and the reason everything is read
+    // first: past here the shelf and the ledger change, and a gather stopped
+    // halfway through that would leave them neither as they were nor as the
+    // source has them. `Progress::cancellable` says so of every step after.
+    if watch.is_cancelled() {
+        return Err(GatherError::Cancelled);
+    }
+    // Noted only now, and not by a gather that fails before it gets here,
+    // since the revision a source names is the one its shelf holds.
+    ledger.saw_source(source.id, clone.revision.as_deref())?;
+
+    watch.report(Progress::Placing {
+        done: 0,
+        total: taken.len(),
+    });
+    for (done, (directory, folder, artifact)) in taken.iter().enumerate() {
         let destination = shelf.join(folder);
-
-        let change = match copy::replace(&directory, &destination, &clone.root) {
+        let placed = copy::replace(directory, &destination, &clone.root);
+        watch.report(Progress::Placing {
+            done: done + 1,
+            total: taken.len(),
+        });
+        let change = match placed {
             Ok(change) => change,
             Err(source) => {
                 report.failures.push(Failure::Copy {
@@ -265,9 +530,19 @@ fn harvest(
             }
         };
 
+        // Lenient, as the Agent Skills client guide advises for skills
+        // written for other agents: what is wrong with one is said, and it is
+        // taken anyway. Installing it is where it is held to the rules.
+        report
+            .warnings
+            .extend(artifact.validate().into_iter().map(|issue| Warning {
+                path: destination.join(manifest),
+                issue,
+            }));
+
         let recorded = relative(workspace, &destination);
         ledger.record(
-            &source,
+            source,
             request.kind,
             artifact.name(),
             &recorded,
@@ -277,7 +552,7 @@ fn harvest(
 
         let harvested = Harvested {
             name: artifact.name().to_owned(),
-            directory: folder.to_owned(),
+            directory: folder.clone(),
             summary: artifact.summary().map(str::to_owned),
             path: destination,
         };
@@ -289,18 +564,48 @@ fn harvest(
     }
 
     report.failures.sort_by(|a, b| a.path().cmp(b.path()));
+    // Stable, so one file's warnings stay in the order `validate` gives them.
+    report.warnings.sort_by(|a, b| a.path.cmp(&b.path));
     Ok(report)
 }
 
-/// The directories under `root` that hold an artifact of this kind.
+/// One candidate folder, loaded to learn its name and its summary: the
+/// folder, the name it is filed under, and the artifact. `None`, with the
+/// reason among `failures`, when it cannot be taken.
+///
+/// `project` is the clone it was found in, which is where it was found and
+/// not a claim that a clone is a mind project.
+fn read(
+    directory: &Path,
+    clone: &Path,
+    failures: &mut Vec<Failure>,
+) -> Option<(PathBuf, String, Artifact)> {
+    let artifact = match Artifact::skill(directory, clone) {
+        Ok(artifact) => artifact,
+        Err(error) => {
+            failures.push(Failure::Artifact(error));
+            return None;
+        }
+    };
+
+    // The folder keeps the name the source gave it rather than the one the
+    // skill declares. A disagreement between the two is something `validate`
+    // reports; silently renaming the folder would repair the symptom and hide
+    // it.
+    let Some(folder) = directory.file_name().and_then(|name| name.to_str()) else {
+        failures.push(Failure::UnusableName {
+            path: directory.to_path_buf(),
+        });
+        return None;
+    };
+    Some((directory.to_path_buf(), folder.to_owned(), artifact))
+}
+
+/// The directories under `root` that hold a `manifest`.
 ///
 /// Only the immediate ones, for the reason discovery has: the directory
 /// belongs to the artifact, assets and all.
-fn candidates(root: &Path, kind: Kind) -> Result<Vec<PathBuf>, GatherError> {
-    let Layout::Directory { manifest } = kind.layout() else {
-        return Err(GatherError::NotGatherable { kind });
-    };
-
+fn candidates(root: &Path, manifest: &str) -> Result<Vec<PathBuf>, GatherError> {
     let entries = fs::read_dir(root).map_err(|source| GatherError::Read {
         path: root.to_path_buf(),
         source,
@@ -355,6 +660,20 @@ impl Failure {
     }
 }
 
+/// Something wrong with an artifact that was gathered anyway.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Warning {
+    /// Its manifest, where it now sits on the shelf.
+    pub path: PathBuf,
+    pub issue: ValidationIssue,
+}
+
+impl fmt::Display for Warning {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}: {}", self.path.display(), self.issue)
+    }
+}
+
 /// Why a gather could not happen at all, as opposed to happening and finding
 /// some artifacts it could not take: those are in the [`Report`].
 #[derive(Debug, Error)]
@@ -363,6 +682,23 @@ pub enum GatherError {
     Git(#[from] git::GitError),
     #[error(transparent)]
     Ledger(#[from] LedgerError),
+    #[error(transparent)]
+    Lock(#[from] LockError),
+    /// Its [`Watch`] was cancelled before anything was put on the shelf,
+    /// which is as it was, and so is the ledger.
+    #[error("cancelled, with nothing put on the shelf")]
+    Cancelled,
+    /// The URL carries a password or token, or a user name where a token can
+    /// stand in for one, which the message names as a user name: calling it a
+    /// password would send somebody looking for one that is not there. `url` is shown without it, which is the URL to
+    /// gather instead. A provider the front end supplies (#110) will be a
+    /// second way to give the credential.
+    #[error(
+        "{url}: a password, a token or, over http(s), a user name in the URL is refused, because \
+         gathering stores and shows the URL: gather it without one, and configure a git \
+         credential helper that has it"
+    )]
+    CredentialsInUrl { url: String },
     #[error("{url}: has no `{subdirectory}` folder to gather from")]
     NoSuchFolder { subdirectory: String, url: String },
     #[error("{kind}s cannot be gathered yet")]

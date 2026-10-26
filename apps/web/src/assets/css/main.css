@@ -1,0 +1,189 @@
+@import "tailwindcss";
+@import "@nuxt/ui";
+/* Geist and Geist Mono as files of the build, never fetched from a font
+   service: the server's CSP lets nothing in from another host. */
+@import "@fontsource-variable/geist";
+@import "@fontsource-variable/geist-mono";
+
+@theme {
+  --font-sans: "Geist Variable", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "Geist Mono Variable", ui-monospace, monospace;
+}
+
+/*
+ * The palette src/theme.ts names, as the variables Nuxt UI's colours plugin
+ * would have written at run time into a <style> element, which the server's
+ * CSP refuses. Here they arrive in the stylesheet like every other rule. The
+ * build test checks that each name in src/theme.ts has its eleven shades.
+ */
+@layer theme {
+  :root,
+  :host {
+    --ui-color-primary-50: var(--color-violet-50);
+    --ui-color-primary-100: var(--color-violet-100);
+    --ui-color-primary-200: var(--color-violet-200);
+    --ui-color-primary-300: var(--color-violet-300);
+    --ui-color-primary-400: var(--color-violet-400);
+    --ui-color-primary-500: var(--color-violet-500);
+    --ui-color-primary-600: var(--color-violet-600);
+    --ui-color-primary-700: var(--color-violet-700);
+    --ui-color-primary-800: var(--color-violet-800);
+    --ui-color-primary-900: var(--color-violet-900);
+    --ui-color-primary-950: var(--color-violet-950);
+
+    --ui-color-info-50: var(--color-sky-50);
+    --ui-color-info-100: var(--color-sky-100);
+    --ui-color-info-200: var(--color-sky-200);
+    --ui-color-info-300: var(--color-sky-300);
+    --ui-color-info-400: var(--color-sky-400);
+    --ui-color-info-500: var(--color-sky-500);
+    --ui-color-info-600: var(--color-sky-600);
+    --ui-color-info-700: var(--color-sky-700);
+    --ui-color-info-800: var(--color-sky-800);
+    --ui-color-info-900: var(--color-sky-900);
+    --ui-color-info-950: var(--color-sky-950);
+
+    --ui-color-success-50: var(--color-emerald-50);
+    --ui-color-success-100: var(--color-emerald-100);
+    --ui-color-success-200: var(--color-emerald-200);
+    --ui-color-success-300: var(--color-emerald-300);
+    --ui-color-success-400: var(--color-emerald-400);
+    --ui-color-success-500: var(--color-emerald-500);
+    --ui-color-success-600: var(--color-emerald-600);
+    --ui-color-success-700: var(--color-emerald-700);
+    --ui-color-success-800: var(--color-emerald-800);
+    --ui-color-success-900: var(--color-emerald-900);
+    --ui-color-success-950: var(--color-emerald-950);
+
+    --ui-color-warning-50: var(--color-amber-50);
+    --ui-color-warning-100: var(--color-amber-100);
+    --ui-color-warning-200: var(--color-amber-200);
+    --ui-color-warning-300: var(--color-amber-300);
+    --ui-color-warning-400: var(--color-amber-400);
+    --ui-color-warning-500: var(--color-amber-500);
+    --ui-color-warning-600: var(--color-amber-600);
+    --ui-color-warning-700: var(--color-amber-700);
+    --ui-color-warning-800: var(--color-amber-800);
+    --ui-color-warning-900: var(--color-amber-900);
+    --ui-color-warning-950: var(--color-amber-950);
+
+    --ui-color-error-50: var(--color-red-50);
+    --ui-color-error-100: var(--color-red-100);
+    --ui-color-error-200: var(--color-red-200);
+    --ui-color-error-300: var(--color-red-300);
+    --ui-color-error-400: var(--color-red-400);
+    --ui-color-error-500: var(--color-red-500);
+    --ui-color-error-600: var(--color-red-600);
+    --ui-color-error-700: var(--color-red-700);
+    --ui-color-error-800: var(--color-red-800);
+    --ui-color-error-900: var(--color-red-900);
+    --ui-color-error-950: var(--color-red-950);
+
+    --ui-color-neutral-50: var(--color-zinc-50);
+    --ui-color-neutral-100: var(--color-zinc-100);
+    --ui-color-neutral-200: var(--color-zinc-200);
+    --ui-color-neutral-300: var(--color-zinc-300);
+    --ui-color-neutral-400: var(--color-zinc-400);
+    --ui-color-neutral-500: var(--color-zinc-500);
+    --ui-color-neutral-600: var(--color-zinc-600);
+    --ui-color-neutral-700: var(--color-zinc-700);
+    --ui-color-neutral-800: var(--color-zinc-800);
+    --ui-color-neutral-900: var(--color-zinc-900);
+    --ui-color-neutral-950: var(--color-zinc-950);
+  }
+
+  :root,
+  :host,
+  .light {
+    --ui-primary: var(--ui-color-primary-500);
+    --ui-info: var(--ui-color-info-500);
+    --ui-success: var(--ui-color-success-500);
+    --ui-warning: var(--ui-color-warning-500);
+    --ui-error: var(--ui-color-error-500);
+  }
+
+  .dark {
+    --ui-primary: var(--ui-color-primary-400);
+    --ui-info: var(--ui-color-info-400);
+    --ui-success: var(--ui-color-success-400);
+    --ui-warning: var(--ui-color-warning-400);
+    --ui-error: var(--ui-color-error-400);
+  }
+}
+
+/*
+ * Denser and darker than Nuxt UI's defaults: a 3rem header, and in the dark
+ * a near-black page with panels one step up, so borders and raised surfaces
+ * carry the structure rather than shadows.
+ */
+@layer theme {
+  :root,
+  :host {
+    --ui-header-height: 3rem;
+    --ui-radius: 0.3125rem;
+  }
+
+  .dark {
+    --ui-bg: var(--ui-color-neutral-950);
+    --ui-bg-muted: var(--ui-color-neutral-900);
+    --ui-bg-elevated: var(--ui-color-neutral-900);
+    --ui-bg-accented: var(--ui-color-neutral-800);
+    --ui-border: var(--ui-color-neutral-800);
+    --ui-border-muted: var(--ui-color-neutral-900);
+    --ui-border-accented: var(--ui-color-neutral-700);
+  }
+}
+
+@layer base {
+  html {
+    color-scheme: light;
+  }
+
+  html.dark {
+    color-scheme: dark;
+  }
+
+  body {
+    @apply bg-default text-default font-sans text-sm antialiased;
+  }
+
+  /* Set for the instant the colour mode switches (src/color-mode.ts), so
+     the whole page changes at once rather than fading piece by piece. */
+  .switching-color-mode,
+  .switching-color-mode *,
+  .switching-color-mode *::before,
+  .switching-color-mode *::after {
+    transition: none !important;
+  }
+
+  ::selection {
+    background-color: color-mix(in oklab, var(--ui-primary) 35%, transparent);
+  }
+
+  code,
+  kbd,
+  samp,
+  pre {
+    font-variant-numeric: tabular-nums slashed-zero;
+  }
+}
+
+/*
+ * A faint dot grid fading out from the middle: texture for a page that has
+ * little on it yet. A gradient, not an image, so it is nothing to fetch.
+ */
+@utility bg-dots {
+  position: relative;
+  isolation: isolate;
+
+  &::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    background-image: radial-gradient(var(--ui-border-accented) 1px, transparent 1px);
+    background-size: 1.125rem 1.125rem;
+    mask-image: radial-gradient(ellipse at center, #000 0%, transparent 70%);
+    pointer-events: none;
+  }
+}

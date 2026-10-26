@@ -265,6 +265,37 @@ fn a_skill_of_the_workspaces_installs_at_either_level() {
     assert!(matches!(*again.error, CliError::NotInstalled { .. }));
 }
 
+#[cfg(unix)]
+#[test]
+fn a_copy_that_cannot_be_hashed_is_installed_and_said() {
+    let dir = workspace_with_own();
+    let alpha = dir.path().join("alpha");
+    mind(&alpha, &["install", "commit-style"]).unwrap();
+    // A file in the copy swapped for a link to the same bytes, which
+    // installing again leaves where it is and the hash refuses.
+    let file = alpha.join("skills/commit-style/SKILL.md");
+    let elsewhere = dir.path().join("SKILL.md");
+    fs::rename(&file, &elsewhere).unwrap();
+    std::os::unix::fs::symlink(&elsewhere, &file).unwrap();
+
+    let again = mind(&alpha, &["install", "commit-style"]).unwrap();
+
+    assert_eq!(again.stdout, "commit-style in alpha was already current\n");
+    assert_eq!(again.stderr.len(), 1, "{:?}", again.stderr);
+    let said = &again.stderr[0];
+    assert!(
+        said.starts_with(
+            "warning: commit-style in alpha was recorded without a hash of what it holds: "
+        ),
+        "{said}"
+    );
+    assert!(
+        said.ends_with("SKILL.md is neither a file nor a folder, so it is not hashed"),
+        "{said}"
+    );
+    assert!(!again.ok);
+}
+
 #[test]
 fn installing_without_a_screen_needs_a_project_and_a_skill() {
     let dir = workspace_with_own();

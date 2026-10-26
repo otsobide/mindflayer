@@ -7,14 +7,19 @@
 //! the parsers `mind` and `flayer` use, and runs. There is nothing this screen
 //! can do that a command cannot.
 
-use std::fmt::Write as _;
+use std::fmt::{self, Write as _};
 use std::path::{Path, PathBuf};
+use std::sync::mpsc::{Receiver, TryRecvError};
+use std::sync::Arc;
 
+use mindflayer_core::gather::{Progress, Watch};
+use mindflayer_core::url::redacted;
 use mindflayer_core::{paths, Kind, Layout, DEFAULT_SUBDIRECTORY, QUALIFIER};
 use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
 use super::minds::{self, Minds};
 use crate::install::state::{Screen as InstallScreen, Step as InstallStep};
+use crate::Lookup;
 
 /// How far a page key scrolls a page of output.
 const PAGE: usize = 10;
@@ -66,6 +71,10 @@ pub struct Workspace {
     /// The default workspace in the home directory, opened because there was
     /// none at or above where the TUI was opened.
     pub default: bool,
+    /// Whether it is on disk. Only the default workspace is ever shown
+    /// otherwise: before anything has made it, as it will be once the first
+    /// change made from here does.
+    pub made: bool,
 }
 
 impl Workspace {
@@ -86,6 +95,10 @@ pub struct Member {
     pub name: String,
     /// The workspace's own artifacts rather than a project's.
     pub own: bool,
+    /// A project whose own lines would consult some other workspace than
+    /// the one on screen: one linked from outside its tree, or from above a
+    /// nearer workspace. Its lines name the one on screen instead.
+    pub elsewhere: bool,
     /// What it holds, or why it could not be opened.
     pub holdings: Result<Holdings, String>,
 }
@@ -93,10 +106,10 @@ pub struct Member {
 impl Member {
     /// The level its commands run at.
     pub fn holder(&self) -> Holder {
-        if self.own {
-            Holder::Workspace
-        } else {
-            Holder::Project(self.entry.clone())
+        match (self.own, self.elsewhere) {
+            (true, _) => Holder::Workspace,
+            (false, true) => Holder::Elsewhere(self.entry.clone()),
+            (false, false) => Holder::Project(self.entry.clone()),
         }
     }
 
@@ -200,6 +213,15 @@ pub enum Holder {
     /// A project, by its entry: `mind -C <entry> <cmd>`, or `mind <cmd>` for
     /// the one at the root the commands run from.
     Project(String),
+    /// A project whose own workspace is not the one on screen, by its entry:
+    /// `mind -W . -C <entry> <cmd>`, which names the one on screen, so a
+    /// change drops that workspace's record and an add takes its templates.
+    ///
+    /// Still the project's command rather than `flayer <cmd> -p <entry>`,
+    /// which would consult the same workspace: a project's row teaches the
+    /// project's command, at every row alike, and `-W` only where leaving
+    /// it out would consult another.
+    Elsewhere(String),
 }
 
 /// Work a key asked for, as the command it is.
@@ -413,6 +435,14 @@ impl Task {
         matches!(self, Task::Edit { .. })
     }
 
+    /// Whether it runs on a thread of its own while the screen goes on
+    /// drawing what it reports: a gather, which is the network, and can take
+    /// long enough to want watching. Everything else is the local disk, over
+    /// before anybody could read a count.
+    pub fn runs_apart(&self) -> bool {
+        matches!(self, Task::Gather { .. })
+    }
+
     /// What to say while it runs.
     pub fn describe(&self) -> String {
         match self {
@@ -432,11 +462,19 @@ impl Task {
 /// One command line, at the level a holder is at: `flayer <command>` for the
 /// workspace's own, `mind -C <entry> <command>` for a project — and plain
 /// `mind <command>` for the one at the root, where `-C .` says nothing.
+///
+/// A `-W .` is typed from the root, as the `-C` is, so it names the
+/// workspace on screen.
 fn at(holder: &Holder, command: &[&str], positionals: &[&str]) -> Vec<String> {
     let start: Vec<String> = match holder {
         Holder::Workspace => vec![String::from("flayer")],
         Holder::Project(entry) if entry == "." => vec![String::from("mind")],
         Holder::Project(entry) => vec![String::from("mind"), String::from("-C"), directory(entry)],
+        Holder::Elsewhere(entry) => ["mind", "-W", ".", "-C"]
+            .into_iter()
+            .map(String::from)
+            .chain([directory(entry)])
+            .collect(),
     };
     let mut head: Vec<&str> = start.iter().map(String::as_str).collect();
     head.extend_from_slice(command);
@@ -478,13 +516,20 @@ fn directory(path: &str) -> String {
     }
 }
 
-/// A command line as it would be typed into a shell.
+/// A command line as it would be typed into a shell, for showing.
+///
+/// Without the credentials of any URL in it, here rather than where it is
+/// shown, because it is shown in more than one place: the box that says what
+/// is running, and the transcript printed when the TUI closes. The words run
+/// as typed, so a URL with a token in it is refused rather than fetched
+/// without one; only the line that names them leaves it out.
 pub fn shell(words: &[String]) -> String {
-    words
+    let line = words
         .iter()
         .map(|word| quote(word))
         .collect::<Vec<_>>()
-        .join(" ")
+        .join(" ");
+    redacted(&line).into_owned()
 }
 
 /// A word, quoted only when a shell would otherwise split or expand it.
@@ -538,6 +583,109 @@ impl Done {
             stderr: Vec::new(),
             error: Some(error.into()),
             ok: false,
+        }
+    }
+}
+
+/// What runs one command line from where the commands run, and says what came
+/// of it: the real parsers and commands ([`super::execute`]) unless something
+/// is stood in for them.
+///
+/// A stand-in is for a test of what the screen does while a command takes its
+/// time, which a real one on a local disk never does. It is handed the words
+/// all the same, so there is still nothing the screen runs that is not a
+/// command line.
+#[derive(Clone)]
+pub struct Runner(Arc<RunLine>);
+
+/// The function a [`Runner`] is: the words, where they run from, where to
+/// look for a workspace, and the watch a gather among them reports to.
+type RunLine = dyn Fn(&[String], &Path, &Lookup, &Watch) -> Done + Send + Sync;
+
+impl Runner {
+    pub fn new(
+        run: impl Fn(&[String], &Path, &Lookup, &Watch) -> Done + Send + Sync + 'static,
+    ) -> Self {
+        Self(Arc::new(run))
+    }
+
+    /// Run `words` from `base`.
+    pub fn run(&self, words: &[String], base: &Path, lookup: &Lookup, watch: &Watch) -> Done {
+        (self.0)(words, base, lookup, watch)
+    }
+}
+
+impl fmt::Debug for Runner {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str("Runner")
+    }
+}
+
+/// What a task running apart sends back to the screen.
+#[derive(Debug)]
+pub enum Update {
+    /// It reached this step.
+    Progress(Progress),
+    /// It is over, and this is what each of its command lines said.
+    Finished(Vec<Done>),
+}
+
+/// A task running on a thread of its own while the screen goes on drawing.
+#[derive(Debug)]
+pub struct Running {
+    pub task: Task,
+    /// The last step it reported, once it has reported one.
+    pub progress: Option<Progress>,
+    /// Whether it has been asked to stop.
+    pub cancelling: bool,
+    /// Shares its flag with the watch the task reports to, without its
+    /// sink: holding a sender here would keep the channel open after the
+    /// thread is gone, and a thread that died would never be heard of.
+    pub watch: Watch,
+    updates: Receiver<Update>,
+}
+
+impl Running {
+    pub fn new(task: Task, watch: Watch, updates: Receiver<Update>) -> Self {
+        Self {
+            task,
+            progress: None,
+            cancelling: false,
+            watch,
+            updates,
+        }
+    }
+
+    /// Ask it to stop. A gather stops before it places anything, and one
+    /// already placing finishes, as it would from the command line.
+    pub fn cancel(&mut self) {
+        self.watch.cancel();
+        self.cancelling = true;
+    }
+
+    /// Take in what it has sent: each step, and what came of it once it is
+    /// over. Without `wait`, only what has arrived; with it, everything until
+    /// it is over.
+    fn hear(&mut self, wait: bool) -> Option<Vec<Done>> {
+        loop {
+            let update = if wait {
+                self.updates.recv().map_err(|_| TryRecvError::Disconnected)
+            } else {
+                self.updates.try_recv()
+            };
+            match update {
+                Ok(Update::Progress(progress)) => self.progress = Some(progress),
+                Ok(Update::Finished(dones)) => return Some(dones),
+                Err(TryRecvError::Empty) => return None,
+                // Gone without a word, which is a thread that panicked: said,
+                // rather than waited for forever.
+                Err(TryRecvError::Disconnected) => {
+                    return Some(vec![Done::failed(
+                        self.task.describe(),
+                        "stopped before it could say how it went",
+                    )])
+                }
+            }
         }
     }
 }
@@ -652,9 +800,15 @@ pub struct App {
     pub done: Vec<Done>,
     /// What is running, drawn over everything until it finishes.
     pub busy: Option<String>,
-    /// Where the default workspace lives, for when there is none above: what
-    /// every command this TUI runs is told, so none of them guesses.
-    pub home: Option<PathBuf>,
+    /// What is running on a thread of its own, drawn over everything with
+    /// the last step it reported until it is over.
+    pub running: Option<Running>,
+    /// Where to look for a workspace: what every command this TUI runs is
+    /// told, so none of them looks again and finds another.
+    pub lookup: Lookup,
+    /// What runs its command lines, when it is not the real thing: a test's
+    /// stand-in.
+    pub runner: Option<Runner>,
 }
 
 impl App {
@@ -676,7 +830,9 @@ impl App {
             message: None,
             done: Vec::new(),
             busy: None,
-            home: None,
+            running: None,
+            lookup: Lookup::default(),
+            runner: None,
         };
         app.settle_in();
         app
@@ -694,6 +850,10 @@ impl App {
         let first = workspace.members.iter().position(|member| !member.own);
         let lonely = workspace.scope == Scope::Workspace && workspace.projects() == 0;
         let message = match (&workspace.above, workspace.scope) {
+            _ if workspace.default && !workspace.made => Some(format!(
+                "no workspace here or above — your default one, in {}, is made by the first change; `flayer init` makes one here",
+                workspace.root.display()
+            )),
             _ if workspace.default => Some(format!(
                 "no workspace here or above — this is your default one, in {}; `flayer init` makes one here",
                 workspace.root.display()
@@ -712,9 +872,10 @@ impl App {
         self.message = message.map(Message::info);
     }
 
-    /// Tell every command this TUI runs where the default workspace lives.
-    pub fn at_home(mut self, home: Option<&Path>) -> Self {
-        self.home = home.map(Path::to_path_buf);
+    /// Tell every command this TUI runs where to look for a workspace: the
+    /// lookup its screen was read with.
+    pub fn with_lookup(mut self, lookup: Lookup) -> Self {
+        self.lookup = lookup;
         self
     }
 
@@ -774,6 +935,25 @@ impl App {
             .map_or(self.directory.as_path(), |workspace| &workspace.root)
     }
 
+    /// The command lines a task runs from [`base`](Self::base): its
+    /// [`commands`](Task::commands), after a `flayer init` when it changes
+    /// the default workspace before anything has made it.
+    ///
+    /// Made by a line of its own rather than left to the change, which would
+    /// make it as well from the shell. The lines run from the workspace root
+    /// and walk up from there like any command, and before it is made there
+    /// is no marker at the root to stop them: with a workspace above home,
+    /// the change would land in that one. `flayer init` makes the workspace
+    /// where it is run, and the transcript says so.
+    pub fn lines(&self, task: &Task) -> Vec<Vec<String>> {
+        let mut lines = task.commands();
+        let unmade = self.workspace().is_some_and(|workspace| !workspace.made);
+        if unmade && task.writes() && !lines.is_empty() {
+            lines.insert(0, words(&["flayer", "init"], &[]));
+        }
+        lines
+    }
+
     /// Every command that changed something, as a shell session would show
     /// it. Printed when the TUI closes, so what it did outlives the screen and
     /// can be done again without it.
@@ -800,7 +980,17 @@ impl App {
     pub fn press(&mut self, key: KeyEvent) -> Step {
         // From anywhere, typing included: raw mode swallows the signal, and a
         // screen that cannot be left that way feels broken.
-        if key.modifiers.contains(KeyModifiers::CONTROL) && key.code == KeyCode::Char('c') {
+        let quit = key.modifiers.contains(KeyModifiers::CONTROL) && key.code == KeyCode::Char('c');
+        // The screen is the running task's until it is over. Esc stops it,
+        // and so does leaving, which waits for it to stop; a key for anything
+        // else was aimed at a screen that is about to change.
+        if let Some(running) = &mut self.running {
+            if quit || key.code == KeyCode::Esc {
+                running.cancel();
+            }
+            return if quit { Step::Quit } else { Step::Stay };
+        }
+        if quit {
             return Step::Quit;
         }
         // A message explains the key before this one, so it goes as soon as
@@ -1354,6 +1544,24 @@ impl App {
     // -----------------------------------------------------------------------
     // What came back
     // -----------------------------------------------------------------------
+
+    /// Take in what the task running apart has said since this was last
+    /// asked; once it is over, it is no longer running, and here is what came
+    /// of it.
+    pub fn heard(&mut self) -> Option<(Task, Vec<Done>)> {
+        self.hear(false)
+    }
+
+    /// The same, waiting until it is over.
+    pub fn waited(&mut self) -> Option<(Task, Vec<Done>)> {
+        self.hear(true)
+    }
+
+    fn hear(&mut self, wait: bool) -> Option<(Task, Vec<Done>)> {
+        let dones = self.running.as_mut()?.hear(wait)?;
+        let running = self.running.take()?;
+        Some((running.task, dones))
+    }
 
     /// Show what came of a task, with the disk read again when it asked for
     /// that.
@@ -1947,7 +2155,7 @@ impl Reader {
 
     /// Every key, and the command it runs.
     pub fn help() -> Self {
-        let rows: [(&str, &str, &[&str]); 15] = [
+        let rows: [(&str, &str, &[&str]); 16] = [
             (
                 "a",
                 "add a skill or a rule",
@@ -1997,6 +2205,11 @@ impl Reader {
                 "gather from a git repository",
                 &["flayer gather git <url>"],
             ),
+            (
+                "esc",
+                "while a gather runs: stop it, until it starts placing",
+                &[],
+            ),
             ("s", "what is on the shelf", &["flayer gather list"]),
             ("i", "install from the shelf", &["flayer install"]),
             (
@@ -2028,6 +2241,12 @@ impl Reader {
             Tone::Info,
             String::from(
                 "On the workspace's own row the same keys run `flayer <cmd>` instead of `mind -C <project> <cmd>`.",
+            ),
+        ));
+        lines.push((
+            Tone::Info,
+            String::from(
+                "A project whose own commands would reach another workspace runs `mind -W . -C <project> <cmd>`, so the line acts on this one.",
             ),
         ));
         lines.push((

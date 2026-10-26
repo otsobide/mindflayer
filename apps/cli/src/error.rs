@@ -1,0 +1,164 @@
+//! Why a command could not run at all.
+//!
+//! One enum for every command rather than one per family: a
+//! [`Failure`](crate::Failure) carries whichever it is to the binary, and the
+//! binary reports them all the same way.
+
+use std::io;
+use std::path::{Path, PathBuf};
+
+use mindflayer_core::gather::GatherError;
+use mindflayer_core::ledger::LedgerError;
+use mindflayer_core::{
+    ArtifactError, CreateError, Kind, LifecycleError, Reason, ResolveError, TemplateError,
+    WorkspaceError,
+};
+use thiserror::Error;
+
+use crate::render::plural;
+
+/// Why a command could not run at all, as opposed to running and finding
+/// problems: those are in the [`Outcome`](crate::Outcome).
+#[derive(Debug, Error)]
+pub enum CliError {
+    #[error("cannot determine the current directory: {0}")]
+    CurrentDirectory(#[source] io::Error),
+    #[error("{path}: cannot be resolved: {source}")]
+    Resolve {
+        path: PathBuf,
+        #[source]
+        source: io::Error,
+    },
+    #[error(transparent)]
+    Workspace(#[from] WorkspaceError),
+    #[error("{} names a workspace that cannot be used: {source}", named_by(.reason))]
+    Chosen {
+        reason: Reason,
+        source: WorkspaceError,
+    },
+    #[error("{0} is not inside a mind project (run `mind init` to create one here)")]
+    NotInProject(PathBuf),
+    #[error("{0} is not inside a flayer workspace (run `flayer init` to create one here)")]
+    NotInWorkspace(PathBuf),
+    #[error("no flayer workspace{} at or above {from} to {verb}, and no default one", if *named { " but the ones named" } else { "" })]
+    NowhereToLoad {
+        from: PathBuf,
+        verb: &'static str,
+        named: bool,
+    },
+    #[error("nothing named `{0}` here")]
+    UnknownArtifact(String),
+    #[error(transparent)]
+    Artifact(#[from] ArtifactError),
+    #[error(transparent)]
+    Gather(#[from] GatherError),
+    #[error(transparent)]
+    Ledger(#[from] LedgerError),
+    #[error(transparent)]
+    Install(#[from] mindflayer_core::install::InstallError),
+    #[error(transparent)]
+    Create(#[from] CreateError),
+    #[error(transparent)]
+    Lifecycle(#[from] LifecycleError),
+    #[error(transparent)]
+    Template(#[from] TemplateError),
+    #[error("nothing removed: this deletes {}; add --yes to go ahead", deleting(.path, .kind, .files))]
+    Unconfirmed {
+        kind: Kind,
+        path: PathBuf,
+        files: usize,
+    },
+    #[error("`{editor}` could not be started: {source}")]
+    Editor {
+        editor: String,
+        #[source]
+        source: io::Error,
+    },
+    #[error("`{editor}` failed ({status}), so the file is reported on no further")]
+    EditorFailed { editor: String, status: String },
+    #[error("no flayer workspace above {0}; make one with `flayer init` in the directory that holds your projects")]
+    NoWorkspaceAbove(PathBuf),
+    #[error("{project}: not managed by the workspace at {workspace}; `mind link` adds it")]
+    NotManaged {
+        project: PathBuf,
+        workspace: PathBuf,
+    },
+    #[error("no project called `{wanted}` in this workspace{}", known_projects(.known))]
+    UnknownProject { wanted: String, known: Vec<String> },
+    #[error("`{wanted}` names more than one project — {} — so name it by its path", .matches.join(", "))]
+    AmbiguousProject {
+        wanted: String,
+        matches: Vec<String>,
+    },
+    #[error("say which project to install into — `flayer install -p <project> <skill>` — or run `flayer install` alone for the screen")]
+    InstallWhere,
+    #[error("say which skill to install — `flayer install -p <project> <skill>` — or run `flayer install` alone for the screen")]
+    InstallWhat,
+    #[error("{project} has no {name} installed, so there is nothing to take out")]
+    NotInstalled { name: String, project: String },
+    #[error("`{command}` needs a terminal to draw on, and this is not one: {source}")]
+    NoTerminal {
+        command: &'static str,
+        #[source]
+        source: io::Error,
+    },
+    #[error("`flayer` on its own opens a screen, and this is not a terminal; `flayer --help` lists the commands")]
+    NotATerminal,
+    #[error("the screen could not be drawn: {source}")]
+    Screen {
+        #[source]
+        source: io::Error,
+    },
+}
+
+/// Core's answer to which workspace, or which of its projects, rendered as
+/// the CLI says it: with the command that would put it right.
+impl From<ResolveError> for CliError {
+    fn from(error: ResolveError) -> Self {
+        match error {
+            ResolveError::Chosen { reason, source } => CliError::Chosen { reason, source },
+            ResolveError::Workspace(source) => CliError::Workspace(source),
+            ResolveError::NotManaged { project, workspace } => {
+                CliError::NotManaged { project, workspace }
+            }
+            ResolveError::UnknownProject { wanted, known } => {
+                CliError::UnknownProject { wanted, known }
+            }
+            ResolveError::AmbiguousProject { wanted, matches } => {
+                CliError::AmbiguousProject { wanted, matches }
+            }
+        }
+    }
+}
+
+/// What chose a workspace that cannot be used, as it was spelled.
+fn named_by(reason: &Reason) -> &'static str {
+    match reason {
+        Reason::Activated => "$MINDFLAYER_WORKSPACE",
+        // Core refuses only what was chosen, so the other two never get here.
+        Reason::Explicit | Reason::Above | Reason::Home => "-W",
+    }
+}
+
+/// "; it manages alpha, beta", or what to do when it manages nothing.
+fn known_projects(known: &[String]) -> String {
+    if known.is_empty() {
+        String::from("; it manages none yet — `flayer link <path>` adds one")
+    } else {
+        format!("; it manages {}", known.join(", "))
+    }
+}
+
+/// What `mind remove` would delete, as a sentence.
+fn deleting(path: &Path, kind: &Kind, files: &usize) -> String {
+    match kind.layout() {
+        mindflayer_core::Layout::Directory { .. } => {
+            format!(
+                "{} and the {} in it",
+                path.display(),
+                plural(*files, "file")
+            )
+        }
+        mindflayer_core::Layout::Files { .. } => path.display().to_string(),
+    }
+}

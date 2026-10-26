@@ -40,21 +40,68 @@ from inside a project.
 
 A workspace is found the way `.git` is, by walking up from where you are. When
 nothing up there has a `.mindflayer`, `flayer` uses **the one in your home**,
-`~/.mindflayer`, making it the first time it is needed — so projects scattered
-anywhere can still be managed together without choosing a directory first.
-`flayer init` somewhere else makes a workspace there, and from inside it that
-one wins. The TUI says when it is showing the default one.
+`~/.mindflayer` — so projects scattered anywhere can still be managed together
+without choosing a directory first. `flayer init` somewhere else makes a
+workspace there, and from inside it that one wins. The TUI says when it is
+showing the default one.
+
+The first command that writes to it makes it: `flayer link`, `add`, `gather
+git`, `load <path>`, `install -p PROJECT <SKILL>`. One that only reads — `load`
+and `install` on their own among them — leaves your home alone, answers as an
+empty workspace would, and says where the workspace will be:
+
+```
+$ flayer list
+you manages no projects yet
+  link one with `flayer link <path>`
+hint: no workspace here or above, and the default one is not made yet; the first command that writes to it, such as `flayer link <path>`, makes it in /home/you/.mindflayer
+```
 
 `--home DIR`, or `$MINDFLAYER_HOME`, puts the default somewhere other than your
 home; set to empty (`--home ""`) there is no default, and a command outside
 every workspace says so instead.
 
+### Choosing a workspace
+
+Walking up is what happens when nothing says otherwise. `-W DIR`
+(`--workspace`) names the workspace a command uses, by its directory or its
+`.mindflayer`, from wherever you are; `$MINDFLAYER_WORKSPACE` does the same
+for every command run in a shell, the way an activated Python virtualenv does.
+Either one wins over a workspace above you, so you can keep several flayers
+for different purposes and pick one:
+
+```
+$ cd ~/Projects/collapse                   # under the ~/Projects workspace
+$ flayer -W ~/flayers/writing list         # a workspace beside it instead
+prose-style  How every essay here is written
+
+$ export MINDFLAYER_WORKSPACE=~/flayers/writing
+$ flayer list                              # the same, for every command
+prose-style  How every essay here is written
+$ mind link                                # this project, into that one
+linked collapse as ../../Projects/collapse
+```
+
+`mind` commands use it too: `mind install` installs from it, and a change to
+an installed skill drops its record there, which is how a project managed by a
+workspace somewhere else is worked on from inside it. What `-W` or the
+variable names has to be a workspace already. Anything else is refused,
+never passed over for the one above and never made into one:
+
+```
+$ flayer -W ~/notes list
+error: -W names a workspace that cannot be used: /home/you/notes: not a flayer workspace (no .mindflayer/flayer.toml)
+```
+
+`-W ""` names none and leaves `$MINDFLAYER_WORKSPACE` out too, and an empty
+variable counts as unset. `--home` still says only where the default lives.
+
 ## The two kinds
 
 | | Lives in | Shape | Declares |
 |---|---|---|---|
-| **Skill** | `skills/<name>/SKILL.md` | a directory each, so it can carry scripts and references beside its instructions | front matter: `name`, `description`, optional `allowed-tools` and `license` |
-| **Rule** | `rules/<name>.md` | one markdown file each | nothing — it is context, and its name is its filename |
+| **Skill** | `skills/<name>/SKILL.md` | a directory each, so it can carry scripts and references beside its instructions | front matter in the [Agent Skills](https://agentskills.io/specification) format: `name`, `description`, and optionally `license`, `compatibility`, `metadata` and `allowed-tools` |
+| **Rule** | `rules/<name>.md` | one markdown file each | usually nothing — it is context, and its name is its filename — though it may open with front matter: `paths` and `description`, both optional |
 
 Folders under `rules/` group and mean nothing else, so
 `rules/git/no-force-push.md` is the rule `git/no-force-push`. Skills are flat,
@@ -108,6 +155,40 @@ run `flayer init` there first.
 `init` never overwrites an existing marker. Run it twice and it says so and
 changes nothing, so it is safe in a script.
 
+## Try it with the examples
+
+`examples/` in this repository is a workspace of its own, holding two skills
+and two rules written to be used as they are, so there is something to
+install before you have gathered anything. With the repository cloned in
+`~/src/mindflayer`, [name it](#choosing-a-workspace) to see what it holds:
+
+```
+$ flayer -W ~/src/mindflayer/examples list
+skill  code-review     Reviews a change for bugs, safety, tests and scope, most severe first.…
+skill  commit-style    Writes commit messages as "area: imperative summary". Use when writing,…
+rule   git/commits     Commit one coherent step at a time
+rule   style/comments  Comments say why, not what
+```
+
+[Load it](#loading-another-workspace) into the workspace that manages your
+projects, and install from it:
+
+```
+$ cd ~/Projects
+$ flayer load ~/src/mindflayer/examples
+loaded examples as ../src/mindflayer/examples: 2 skills to install
+  into the workspace at /home/you/Projects
+
+$ flayer install -p collapse commit-style
+installed commit-style into collapse, from load:../src/mindflayer/examples
+```
+
+`collapse/skills/commit-style` now holds the skill and the
+`references/examples.md` it carries. Only the skills are offered, because a
+rule cannot be installed yet: the two rules are there to read, and to copy
+into a project by hand. `flayer -W ~/src/mindflayer/examples validate` says
+all four are ok.
+
 ## Commands
 
 The surface is split the way the model is. `mind` acts on the project you are
@@ -141,7 +222,8 @@ flayer add|edit|rename|remove|templates [-p PROJECT] ...
                            # the same as mind's: the workspace's own by
                            # default, one of its projects with -p
 flayer list|show|validate [-p PROJECT] ...
-                           # the workspace's own and every project's, or one
+                           # the workspace's own and every project's, or one;
+                           # validate checks the shelf too
 flayer scan                # the repositories under it, and which are linked
 flayer link <path>...      # register mind projects with it
 flayer unlink <path>...    # drop them
@@ -159,12 +241,17 @@ flayer uninstall -p PROJECT <SKILL>
 mind flayer <cmd>          # the long way round; `flayer <cmd>` is the shortcut
 mind ls / flayer ls        # alias for list; `flayer gather ls` for gather list
 mind -C <dir> ...          # work in <dir> instead of the current directory
+mind -W <dir> ...          # the workspace to use, from anywhere; "" for none
+                           # named; $MINDFLAYER_WORKSPACE otherwise
 mind --home <dir> ...      # where the default workspace lives; "" for none
+mind --claude-config-dir|--codex-home|--opencode-config-dir|--agents-dir <dir> ...
+                           # where each agent's own folder is; "" for none
 mind tui / flayer tui      # the TUIs, spelled out
 ```
 
 Both find what they act on the way git does, by walking up from wherever you
-are. Both levels answer a different question, and that is the point:
+are, unless [a workspace is named](#choosing-a-workspace). Both levels answer
+a different question, and that is the point:
 
 ```
 $ cd ~/Projects/collapse && mind list      # just this project
@@ -216,14 +303,41 @@ rule:git/no-force-push: ok
 1 skill and 1 rule checked, 0 invalid
 ```
 
-Each kind is checked against what it actually declares. A skill's name has to
-match its directory and its description has to fit; a rule declares nothing, so
-the only things left to check are that its name is usable and that the file is
-not empty.
+Each kind is checked against what it actually declares. A skill is held to the
+[Agent Skills rules](#what-a-skill-looks-like) — its name has to match its
+directory, its description has to fit, and so on; a rule's front matter is
+optional, so the only things left to check are that its name is usable and that
+the file says something beyond its front matter. `flayer validate` checks what
+is on the [shelf](#gathering-skills-from-elsewhere) too.
 
-`validate` exits non-zero when anything is wrong, so it works in CI. An
-artifact that cannot be read at all is a warning on stderr and does not hide
-the ones next to it.
+`validate` exits non-zero when anything is wrong, so it works in CI. What an
+agent reads past — a `metadata` entry that is not a string, a `compatibility`
+over 500 characters, a rule's front matter that does not parse — is listed as a
+warning instead, under an artifact that is still `ok`. An artifact that cannot
+be read at all is a warning on stderr and does not hide the ones next to it.
+
+### The agents' own folders
+
+Each agent also reads a folder that belongs to no project: Claude Code its
+configuration folder, Codex its home, OpenCode its configuration folder, and
+more than one of them the skills in `~/.agents`. Checks to come will look
+there; no command reads them yet. Each is taken from its option, then from the
+variable the agent itself reads, then from its folder in your home:
+
+| Option | Then | Then |
+|---|---|---|
+| `--claude-config-dir` | `$CLAUDE_CONFIG_DIR` | `~/.claude` |
+| `--codex-home` | `$CODEX_HOME` | `~/.codex` |
+| `--opencode-config-dir` | `$OPENCODE_CONFIG_DIR` | `~/.config/opencode` |
+| `--agents-dir` | | `~/.agents` |
+
+As with `--home`, set to empty (`--codex-home ""`) there is none, and that
+agent's folder is left alone.
+
+OpenCode itself reads `$OPENCODE_CONFIG_DIR` on top of `~/.config/opencode`
+rather than in its place, by its own documentation. Mindflayer takes one
+folder for each agent for now, the first the table gives; whether a check has
+to read both of OpenCode's is still open.
 
 ## Gathering skills from elsewhere
 
@@ -241,6 +355,11 @@ https://github.com/acme/skills at a1b2c3d
 
 The repository's `skills` folder is what gets harvested; `--path agents` takes
 another one, and `--ref v2` takes a branch or a tag instead of the default.
+
+With stderr on a terminal it says what it is doing while it does it
+(`connecting`, `receiving objects 120/340`, `reading folders 3/40`) on one line
+there, which it wipes before the report, so the report reads as above. With
+stderr piped or redirected, it says nothing until the report.
 
 Gathering fills the shelf and stops there. **Nothing is written into a mind
 project**: which of these a project should carry is a separate decision, and a
@@ -265,14 +384,100 @@ gets its own folder under `.mindflayer/skills/`, and the workspace's database
 records which came from where.
 
 ```
+$ flayer gather git https://github.com/other/rules
+https://github.com/other/rules at 4d5e6f7
+  added  commit-style  Conventional commits, strictly
+  added  pdf--forms    Fill in PDF forms
+
+2 skills: 2 added, 0 updated, 0 unchanged
+warning: /home/you/Projects/.mindflayer/skills/github.com-other-rules/pdf--forms/SKILL.md: `pdf--forms` is not usable as a name: it has to be lowercase letters and digits, joined by single hyphens
+
 $ flayer gather list
 commit-style  https://github.com/acme/skills  How this repo writes commit messages
 commit-style  https://github.com/other/rules  Conventional commits, strictly
 ddd-reviewer  https://github.com/acme/skills  Review a change against the DDD layering rules
+pdf--forms    https://github.com/other/rules  Fill in PDF forms
 ```
 
 A skill that cannot be read is a warning on stderr and does not stop the ones
-beside it from being gathered.
+beside it from being gathered. One that reads but breaks a rule of the [skill
+format](#what-a-skill-looks-like) — a doubled hyphen in its name, like
+`pdf--forms` above, or metadata that is not all strings — is gathered anyway,
+with a warning saying what is wrong: leaving it behind would hide the problem
+along with the skill. `flayer validate` says so again whenever you ask, naming
+the source folder each skill on the shelf sits in:
+
+```
+$ flayer validate skills
+commit-style (shelf/github.com-acme-skills): ok
+commit-style (shelf/github.com-other-rules): ok
+commit-style (collapse): ok
+ddd-reviewer (shelf/github.com-acme-skills): ok
+ddd-reviewer (tanukeys): ok
+pdf--forms (shelf/github.com-other-rules): 1 problem
+  - `pdf--forms` is not usable as a name: it has to be lowercase letters and digits, joined by single hyphens
+
+6 skills checked, 1 invalid
+```
+
+Installing is where it has to be right, because a project's copy is what its
+agents load:
+
+```
+$ flayer install -p collapse pdf--forms
+error: `pdf--forms` cannot be installed: `pdf--forms` is not usable as a name: it has to be lowercase letters and digits, joined by single hyphens
+```
+
+A private repository is fetched with whatever your git credential helpers
+already know, or, over ssh, with the keys ssh already uses (your ssh-agent's,
+or one in `~/.ssh`). Mindflayer itself never stops to ask for a username or a
+password, so a source that needs one nobody has fails, and says what to set
+up:
+
+```
+$ flayer gather git https://github.com/acme/private-skills
+error: https://github.com/acme/private-skills: needs credentials, and gathering never prompts for them: configure a git credential helper, or use ssh-agent for an ssh URL
+```
+
+ssh is a program of its own and can still ask on the terminal: for the
+passphrase of a key your ssh-agent does not hold, for a password when the
+server accepts one, or whether to trust a host it has not seen before.
+
+A URL with a password or a token in it is refused before anything is fetched.
+What is gathered is stored, listed and reported by its URL, and a token typed
+into a command line is already where `ps` and your shell history show it. Give
+the token to a git credential helper, and gather the URL without it:
+
+```
+$ flayer gather git https://me:ghp_t0ken@github.com/acme/private-skills
+error: https://github.com/acme/private-skills: a password, a token or, over http(s), a user name in the URL is refused, because gathering stores and shows the URL: gather it without one, and configure a git credential helper that has it
+```
+
+The user ssh logs in as is not a credential, and is kept
+(`git@github.com:acme/skills`, `ssh://git@github.com/acme/skills`). Over https
+a user name on its own is refused too, because a token can stand in for one:
+GitHub takes `https://<token>@github.com/...`, and nothing in the URL tells the
+two apart. That includes the https URLs Bitbucket and Azure DevOps hand out
+(`https://<user>@bitbucket.org/...`); gather those without the user name, and
+let the credential helper supply it.
+
+A workspace an older Mindflayer gathered into with a token in a URL is cleaned
+up by the next command that writes to it — a gather, an install or an
+uninstall, or an `add`, `edit`, `rename` or `remove` in a project it manages.
+The token is taken out of `mindflayer.db` and out of the clone in
+`cache/`, and the command says so once, on stderr, without failing because of
+it:
+
+```
+$ flayer install -p collapse deploy
+installed deploy into collapse, from https://github.com/acme/private-skills
+note: https://github.com/acme/private-skills: the user name, password or token an older Mindflayer stored in this URL is taken out; gathering it again needs a git credential helper that has it
+note: 2 action log entries: the user names, passwords or tokens an older Mindflayer stored in URLs in them are taken out
+```
+
+The install screen does it when you apply what you marked, not when it opens.
+A command that only reads, such as `flayer gather list`, shows the URL without
+the token and leaves the file as it is.
 
 ### What a workspace keeps
 
@@ -280,7 +485,13 @@ beside it from being gathered.
 .mindflayer/
   flayer.toml     the projects it manages, and the workspaces it loads
   mindflayer.db   what was gathered and from where, what was installed where,
-                  and every action taken
+                  and every action taken; a URL goes in without credentials,
+                  and one an older Mindflayer stored is taken out by the next
+                  command that writes
+  mindflayer.db.v2.bak
+                  the database as it was before this version of Mindflayer
+                  updated it, if it did
+  lock            held by a command while it changes the workspace
   cache/<source>/ the clone, kept so a gather can be looked at afterwards
   skills/<source>/<name>/SKILL.md
   templates/      templates for every project it manages, if you add any
@@ -289,11 +500,40 @@ beside it from being gathered.
 `mindflayer.db` is SQLite, and it is the one thing Mindflayer writes that is
 not meant to be read by hand — it answers questions a file cannot, like which
 of two identically named skills came from which repository, at which revision.
+The first gather, install or uninstall makes it; a command that only reads
+never does.
+When a new version of Mindflayer changes how the database is laid out, the
+first command to open it updates it, after copying it aside as
+`mindflayer.db.v<old version>.bak`. The copy is never removed for you, and it
+is the way back: an older Mindflayer refuses the updated database, and reads
+the copy put back in its place. It is the database as it was, so a token an
+older Mindflayer stored in a URL stays in the copy after the next command that
+writes takes it out of `mindflayer.db`.
 Timestamps are Unix seconds, so `datetime(at, 'unixepoch')` renders them:
 
 ```sql
 SELECT datetime(at, 'unixepoch'), action, outcome, detail FROM actions;
 ```
+
+The TUI and any number of terminals can be open on one workspace, and the
+commands that change it take turns. Linking, loading, gathering, installing and
+uninstalling each hold `lock` while they write, with the process's id in
+`lock.pid` beside it. One that finds the workspace held waits up to ten seconds
+for the other to finish, then gives up and says who it waited for:
+
+```
+$ flayer link tanukeys
+error: /home/you/Projects/.mindflayer/lock: workspace busy: waited 10s for process 3234405 to finish writing to it; try again once it has
+```
+
+Reading never waits for `lock`. Listing, showing and the TUI's screens read
+each file whole, as the last write to it left it, though a read made while a
+gather or an install is under way can find some of what it changes changed
+and the rest not yet. The database keeps a write-ahead log, so a read does not
+wait for a write to it either, except on a filesystem that cannot keep one,
+where it waits for the write to finish. A workspace on a network share is safe
+used from one machine at a time: the lock and the database keep apart programs
+on one machine, not programs on two.
 
 ## Installing into a project
 
@@ -353,6 +593,23 @@ and says so. `--from` takes `workspace`, a shelf source's URL, or a loaded works
 or name, and is only
 needed when two places offer the same name — which of the two lands in the
 project's one folder of that name is not something to guess.
+
+### Built out of sight
+
+An install never writes beside the copy it replaces, where an agent reading the
+skills folder would find it. It builds the copy in `.mind/tmp`, a folder that
+ignores itself, and moves it into place once it is whole, so the skills folder
+holds the old copy, the new one or, for the instant between two renames of an
+update, neither, and never part of either. Two installs at once each build in a
+folder of their own there. One that is stopped halfway leaves its work there
+too, and the next install clears it and says so, as it does the hidden
+`.<name>.mindflayer-new` an older version left beside a skill:
+
+```
+$ mind install commit-style
+installed commit-style into alpha, from workspace
+  cleared .mind/tmp/1901387-eb475fb4b6b73a14, left by an install that did not finish
+```
 
 ## Loading another workspace
 
@@ -465,11 +722,17 @@ Every key runs a command you could have typed, through the same parser:
 | `l` | link a project | `flayer link <path>` |
 | `u` | unlink the project | `flayer unlink <path>` |
 | `v` | validate everything | `flayer validate` |
-| `g` | gather from a git repository | `flayer gather git <url>` |
+| `g` | gather from a git repository, showing how far it has got; `esc` stops it, until it starts placing | `flayer gather git <url>` |
 | `L` | load another workspace's own skills; enter on a loaded one unloads it | `flayer load <path>`, `flayer unload <path>` |
 | `s` | what is on the shelf | `flayer gather list` |
 | `i` | install from the workspace's own, a loaded workspace, or the shelf | `flayer install` |
 | `R` | read the disk again | nothing: it changes nothing |
+
+A project whose own commands would reach another workspace — linked from
+outside the workspace's tree, or with a nearer workspace above it — runs `mind
+-W . -C <project> …` instead, so the line acts on the workspace on screen
+rather than on the one the project would find by itself. `flayer -W <dir>` opens the screen on the
+workspace it names, and every line it runs uses that one.
 
 `m`, or `flayer minds` straight from the shell, opens a list of every
 project the workspace links and every repository under it that it does not,
@@ -491,12 +754,13 @@ created skill deploy at /home/you/Projects/tanukeys/skills/deploy/SKILL.md
 
 Opened where there is no workspace and no default one either (`--home ""`), it
 offers to create one there, then goes straight to linking; with a default, it
-opens that one and says so. The link form lists what `flayer scan` finds under the
-workspace — mind projects, and git repositories that are not one yet — and
-picking a repository asks before running `mind init` in it, because that
-writes into it. A project whose directory has gone is listed with a `!`, where
-`u` drops it; an artifact `validate` would reject is marked `✗`, with the
-reason underneath.
+opens that one and says so — empty, and marked not made yet, until the first
+change you make from it, which runs `flayer init` there first. The link form
+lists what `flayer scan` finds under the workspace — mind projects, and git
+repositories that are not one yet — and picking a repository asks before
+running `mind init` in it, because that writes into it. A project whose
+directory has gone is listed with a `!`, where `u` drops it; an artifact
+`validate` would reject is marked `✗`, with the reason underneath.
 
 ## Where a project keeps its artifacts
 
@@ -539,18 +803,57 @@ skill goes, without ever assuming.
 ---
 name: commit-style
 description: How this repo writes commit messages and branch names
-allowed-tools: Read, Grep
+license: MIT
+compatibility: Needs git 2.30 or later
+metadata:
+  author: platform-team
+  version: "1.2"
+allowed-tools: Read Grep Bash(git log *)
 ---
 
 Use `<area>: <imperative summary>`, imperative and in English.
 ```
 
-`name` and `description` are required; `name` has to match the directory and
-`description` be at most 1024 characters. `allowed-tools` accepts either a
-comma separated string or a YAML list. Anything else in the front matter is
-carried along untouched.
+The front matter is the [Agent Skills](https://agentskills.io/specification)
+format, which Claude Code, Codex and OpenCode all read:
 
-A rule is simpler, because it declares nothing at all. `rules/git/no-force-push.md`:
+| Key | | Rule |
+|---|---|---|
+| `name` | required | lowercase letters and digits joined by single hyphens, at most 64 characters, the same as its directory |
+| `description` | required | 1 to 1024 characters |
+| `license` | optional | a license's name, or a file the skill bundles |
+| `compatibility` | optional | what it needs to run, in 1 to 500 characters |
+| `metadata` | optional | strings mapped to strings |
+| `allowed-tools` | optional | separated by spaces; commas still work, and a YAML list does too |
+
+Anything else in the front matter — an agent's own keys, like Claude Code's
+`paths` — is carried along untouched, and so is a `metadata` entry or a
+`compatibility` that is not a string: `validate` says it is ignored, and it
+stays in the file.
+
+The name and the description are the rules Mindflayer will not break when it
+writes a skill, because agents skip a skill that does: `mind add`, `rename` and
+`install` refuse one that breaks either. Everything else is reported by
+`validate`, and gathering is lenient about all of it.
+
+```
+$ mind show commit-style
+commit-style
+/home/you/Projects/collapse/skills/commit-style/SKILL.md
+
+How this repo writes commit messages and branch names
+
+allowed-tools: Read, Grep, Bash(git log *)
+license: MIT
+compatibility: Needs git 2.30 or later
+metadata:
+  author: platform-team
+  version: 1.2
+
+Use `<area>: <imperative summary>`, imperative and in English.
+```
+
+A rule is simpler, because it usually declares nothing at all. `rules/git/no-force-push.md`:
 
 ```markdown
 # Never force-push a shared branch
@@ -561,7 +864,58 @@ Use `--force-with-lease`, which refuses when someone else has pushed.
 Its name is `git/no-force-push`, from where the file sits. Listings show its
 opening line, which is why leading with a heading or a one-line summary is
 worth doing. Every name, declared or derived, is checked segment by segment:
-lowercase letters, digits and inner hyphens, each segment at most 64 characters.
+lowercase letters and digits joined by single hyphens, each segment at most 64
+characters.
+
+A rule may open with front matter, as Claude Code's rules do to say which files
+they are about. `rules/api/errors.md`:
+
+```markdown
+---
+description: How errors leave the API layer
+paths:
+  - "src/api/**/*.{ts,tsx}"
+---
+
+# Return errors as values
+
+Never throw across a handler boundary; return a `Result`.
+```
+
+| Key | | Rule |
+|---|---|---|
+| `paths` | optional | glob patterns, as a list or one on its own; quote a pattern that opens with `*`, which YAML reads as an alias |
+| `description` | optional | a string |
+
+The fences only open front matter when what they hold is a YAML mapping, so a
+rule that opens with a `---` horizontal rule and a plain sentence reads as it
+always did. A line shaped like `key: value` is a mapping, though, even when it
+is prose such as `Note: ...`, so it is front matter and left out of what an
+agent is given. Front matter that does not parse — prose opening with `**`
+does not either — is read as content, fences and all, and `validate` warns
+about it. It warns too about a `paths` or a `description` it cannot read,
+which is ignored and left in the file; any other key passes through untouched.
+Listings show the opening line below the front matter, and `show` prints what
+it declares above that:
+
+```
+$ mind list rules
+api/errors         Return errors as values
+git/no-force-push  Never force-push a shared branch
+
+$ mind show api/errors
+api/errors
+/home/you/Projects/collapse/rules/api/errors.md
+
+How errors leave the API layer
+
+paths:
+  - src/api/**/*.{ts,tsx}
+
+# Return errors as values
+
+Never throw across a handler boundary; return a `Result`.
+```
 
 ### Creating one
 
@@ -593,10 +947,19 @@ mind add skill deploy "Ship the service" --template full
 `.mindflayer/templates/` for every project it manages — a folder holding a
 `SKILL.md` for a skill, a markdown file for a rule. `mind templates` lists what
 is available and where each comes from; of two with one name, the closer wins.
+`flayer add -p` finds the workspace's wherever the project sits; `mind add`
+finds those of [the workspace named or
+activated](#choosing-a-workspace), or else the one above the project, or else
+the one in your home.
 
-A template is copied whole. In its manifest, `name` and `description` are set by
-`mind add`, whatever the template had for them, and `{{name}}` and
+A template is copied whole. In a skill's manifest, `name` and `description` are
+set by `mind add`, whatever the template had for them, and `{{name}}` and
 `{{description}}` in the body are filled in. Other files are copied as they are.
+A rule template is filled in throughout, front matter included, and a
+`description` its front matter declares is set by `mind add` in the same way.
+One without `{{description}}` gets the description as a heading on top of its
+body, below any front matter, which stays front matter. Front matter that
+`validate` would warn about is refused, and nothing is written.
 
 ### Changing one
 
@@ -620,8 +983,20 @@ renaming it or editing it drops the workspace's record that Mindflayer
 installed it, so the install screen shows it as somebody's and never
 overwrites or deletes it — and a skill you write later under the same name does
 not inherit a record that was about something else. The record dropped is the
-one held by the workspace at or above the project; one that links it from
-elsewhere keeps its own (an [open question](docs/architecture.md#open-questions)).
+one held by the workspace the command works in: `flayer`'s, wherever the
+project sits, or for `mind` the one named or activated, or else the workspace
+above the project, or else the one in your home. Another workspace that links
+the same project keeps its own (an
+[open question](docs/architecture.md#open-questions)).
+
+## Roadmap
+
+What comes next is planned as
+[milestones](https://github.com/otsobide/mindflayer/milestones), each ending
+with something usable on real repositories, and each issue in them is one pull
+request. [#15](https://github.com/otsobide/mindflayer/issues/15) tracks the
+whole plan, and the decisions it rests on are recorded in
+[docs/architecture.md](docs/architecture.md#decisions).
 
 ## Repository layout
 
@@ -629,15 +1004,23 @@ Every unit of the product is an app under `apps/`, so adding a front end means
 adding a directory rather than reshaping the tree:
 
 ```
-apps/core   mindflayer-core — projects, workspaces, artifacts.
-                              No I/O beyond files, and git when gathering.
-apps/cli    mindflayer-cli  — the `mind` and `flayer` binaries, and the TUI.
-                              Parsing and rendering only; all of it goes
-                              through one parser.
+apps/core    mindflayer-core   — projects, workspaces, artifacts.
+                                 No I/O beyond files, and git when gathering.
+apps/cli     mindflayer-cli    — the `mind` and `flayer` binaries, and the TUI.
+                                 Parsing and rendering only; all of it goes
+                                 through one parser.
+apps/server  mindflayer-server — the local server behind the web panel, still
+                                 unused by the binaries. Transport only: it
+                                 moves JSON between the browser and a front
+                                 end, and holds no rules.
+apps/web     mindflayer-web    — the web panel the server embeds: Vue and
+                                 Nuxt UI, built with Vite. It asks through
+                                 the server and draws; no rules here either.
 ```
 
 See [docs/architecture.md](docs/architecture.md) for why the split is where it
-is.
+is. `examples/` sits beside `apps/` and is not an app: it is the workspace
+[to try Mindflayer with](#try-it-with-the-examples).
 
 ## Development
 
@@ -646,7 +1029,7 @@ A root `Makefile` delegates to each app, and CI invokes the same targets.
 `apps/<app>/Makefile`:
 
 ```bash
-make test              # every suite
+make test              # every Rust suite; the panel's is make web/test
 make build             # debug build of every crate
 make fmt               # cargo fmt --all
 make lint              # clippy across the workspace
@@ -659,8 +1042,13 @@ make cli/run ARGS="flayer list"
 Tests live in their own files, named for what they test and ending in
 `_test.rs`: `apps/<app>/tests/<area>_test.rs` for each area of the command
 surface, with what they share in `tests/common/`, and a module's unit tests in
-`src/<module>_test.rs` beside it. No test touches your home: the CLI suites run
-every command with `--home ""`.
+`src/<module>_test.rs` beside it. No test touches your home, or a workspace
+your shell has activated: the CLI suites run every command with `--home ""`
+and `--workspace ""`, and the few that run the binaries clear
+`$MINDFLAYER_HOME` and `$MINDFLAYER_WORKSPACE` and give them a home of their
+own. Nor do they touch your agents' folders, which no command reads yet, and
+the commands they run themselves give every agent-home option empty. The server's suites never leave 127.0.0.1, and run
+against a fake front end rather than the CLI.
 
 ```bash
 cargo test -p mindflayer-cli --test tui_test          # one area
@@ -691,6 +1079,64 @@ make dev/link BINDIR=.          # `./mind`, `./flayer` and `./mf`, right here
 The repository root is a fine answer if you would rather not put a
 work-in-progress binary on your PATH at all: `.gitignore` already covers all
 three names.
+
+## Developing the panel
+
+`apps/web` is the web panel, in Vue 3.5 and Nuxt UI 4 on Vite, written in
+TypeScript. So far it is the frame the views will fill: a sidebar, a header
+and an empty overview, dark unless you switch it to light, which the next
+launch remembers. It needs Node 24 (`apps/web/.node-version`) and pnpm, at
+the version `package.json` pins in `packageManager`, which `corepack enable`
+provides. Without corepack, name any other way to run it in `PNPM`:
+
+```bash
+make web/test          # vitest
+make web/lint          # ESLint, its style included; make web/fmt fixes that
+make web/build         # check the types, then build apps/web/dist
+make web/types         # check the types alone (vue-tsc)
+make web/clean         # remove dist/ and the tools' caches
+
+make web/test PNPM='npx --yes pnpm@12.15.0'
+```
+
+Every target that runs a tool first installs what `pnpm-lock.yaml` pins,
+when `node_modules` is missing or older than `package.json`, the lockfile or
+`pnpm-workspace.yaml`. `make test` leaves the panel out for now, so the Rust
+suites still need no Node; the panel joins it once CI installs Node
+([#71](https://github.com/otsobide/mindflayer/issues/71)). Its tests are
+`apps/web/tests/<area>.test.ts`.
+
+`make web/build` writes `apps/web/dist`, which the server embeds as it
+compiles. A server compiled before any build answers every page with one
+saying to run it, and goes on doing so after the build until
+`mindflayer-server` compiles again: which is built first is an [open
+question](docs/architecture.md#open-questions) until
+[#68](https://github.com/otsobide/mindflayer/issues/68) settles it.
+`make web/e2e` has no browser suite to run yet, and says so
+([#75](https://github.com/otsobide/mindflayer/issues/75)).
+
+`make web/dev` serves the panel on `http://127.0.0.1:5173` and reloads it as
+you edit. It passes `/api` on to `flayer ui --dev --port 7878`, the command
+[#68](https://github.com/otsobide/mindflayer/issues/68) adds, and the launch
+link too: open the link that command prints with its port changed to 5173,
+and the token is traded for its cookie where the panel runs.
+
+Three rules keep the panel working under the server's content security
+policy, which lets nothing in from another host and nothing inline:
+
+- **The transport is the only way out.** Views ask `useTransport()` and
+  never `fetch`: ESLint refuses `fetch`, `EventSource`, `WebSocket` and
+  `XMLHttpRequest` everywhere but `src/api/http.ts`.
+- **Nothing comes from another host.** The fonts are Geist and Geist Mono
+  from Fontsource, the icons Lucide's, bundled when a component names them
+  as `i-lucide-<name>`. A test builds the panel and fails on any URL that
+  names another host.
+- **Nothing inline.** No `<script>` or `<style>` written into the page, which
+  is why the palette is declared in `src/assets/css/main.css` (from the
+  mapping in `src/theme.ts`) rather than injected, as Nuxt UI would.
+
+A test also checks that every package installed carries a licence
+GPL-3.0-only can take in.
 
 ## License
 
