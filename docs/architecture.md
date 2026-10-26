@@ -579,6 +579,77 @@ install screen reports a row it could not apply and carries on with the rest.
 Two spellings of one loaded directory are one source; `unload_all` and
 `unlink_all` rewrite the marker once, for all of the paths or none.
 
+### What keeps an install out of git
+
+A project in local mode
+([D-02](#d-02-installs-stay-local-unless-a-project-shares-them)) keeps what is
+installed into it out of git, through a block of anchored entries in
+`$GIT_COMMON_DIR/info/exclude` that `exclude` keeps. Nothing calls it yet:
+which paths to exclude is the installing side's to choose (#34 for skills, #43
+and #45 for rules, #94 for MCP config), and this module only writes them down.
+
+```
+# mindflayer:begin
+# project packages/app
+/packages/app/.agents/skills/commit-style/
+/packages/app/.claude/skills/commit-style/
+# project packages/web
+/packages/web/AGENTS.md
+# mindflayer:end
+```
+
+Why that file, and why written that way:
+
+- **Not `.gitignore`.** It is the team's file and it is committed, so a line
+  in it puts copies only one machine has into every teammate's diff, which is
+  the noise local mode exists to avoid. `core.excludesFile` is no better: it is
+  the user's, read by every repository they have. Mindflayer edits neither,
+  ever. `info/exclude` is read like a `.gitignore` and is never committed or
+  pushed.
+- **The common dir, not the git dir.** A linked worktree has a git dir of its
+  own under the main repository's `.git/worktrees/`, but git reads
+  `info/exclude` only from the common dir, so every worktree of a repository
+  shares one file.
+- **Anchored at the work tree root.** Entries are relative to the work tree,
+  not to the project, so a project at `packages/app` gets
+  `/packages/app/.agents/skills/<name>/`. Without the leading `/` the line
+  would catch a folder of that name anywhere in the tree, a teammate's
+  committed one in another project included. A directory ends in `/`, and a
+  route's glob characters are escaped, so `apps/[legacy]` is that folder
+  rather than a class of letters.
+- **One group per project.** Several projects can share a repository, so each
+  owns the lines under its `# project <key>` header and an edit rewrites only
+  those. The key is whatever the caller names the project by, its id once
+  settings carry one (#29) and its route until then, and it is compared, never
+  parsed. The same path in two groups is two claims on it: dropping one leaves
+  the other excluding it. A group goes with its last entry, and the block with
+  its last group.
+
+And how it edits:
+
+- **Only between the markers.** Every line outside comes back byte for byte,
+  its line ending included. New lines take the ending the file already uses,
+  and a last line without a newline gets one only when a block has to follow
+  it. The file is replaced through a temporary and a rename, as a marker edit
+  is.
+- **A block it cannot read is left alone.** A begin with no end, an end with no
+  begin, a second block or a project with two groups is a failure for the
+  caller to collect, and nothing is written. Guessing where a missing end
+  belongs could pull somebody's lines into the block, and the next edit would
+  rewrite them as Mindflayer's.
+- **Outside a git work tree it writes nothing, and says so.**
+  `Excluded::Outside` is not a failure, since a project need not be in git,
+  but it carries a warning: whatever local mode installs there is kept out of
+  nothing, and a repository made there later would offer all of it to be
+  committed.
+- **Found with `gix`, opened isolated.** No `git` binary, and neither the
+  environment nor the user's git config takes part, so a `GIT_DIR` set in the
+  shell cannot send one project's entries into another repository's file.
+- **No version.** Unlike a marker, the block holds nothing but git's own
+  pattern syntax and two kinds of comment, and an edit rewrites only its own
+  group and keeps every other line where it is, so a block a newer Mindflayer
+  wrote survives an older one's edit.
+
 ### The screen, and why it is three files
 
 `flayer install` is a two-column screen: projects on the left, the shelf as
@@ -1208,6 +1279,17 @@ leak into the lifecycle code. Unblocks #33, #45, #62, #93, #94 and #95.
   already opens without creating; moving the reads onto it, and leaving
   `locate_or_default` to the commands that write, would mean a first `flayer
   list` outside every workspace no longer puts a marker in somebody's home.
+- **Worktrees share one exclude file.** Every linked worktree of a repository
+  reads the same `info/exclude`, and an entry is anchored at whichever work
+  tree reads it. A project checked out in two worktrees under one key has one
+  group for both, so uninstalling in one stops excluding the copy the other
+  still has. A key that names the checkout rather than the project would keep
+  them apart; nothing has to choose until #34 installs through it.
+- **A project that moves.** Exclude entries are anchored at the route the
+  project had when they were written. Moved within its repository, a project
+  keeps a group of lines pointing where it was, which removing its entries by
+  their new route never matches. Rewriting a project's whole group from what
+  the ledger says it has installed would heal it.
 - **Long work in the TUI.** A gather holds the screen until it finishes, with a
   box saying what is running, and cannot be cancelled. A background thread
   would change that; it has not been needed yet.
