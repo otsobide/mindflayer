@@ -102,7 +102,9 @@ These are easy to break from a single file without noticing.
     `core.excludesFile` are never edited; the one `.gitignore` Mindflayer
     writes is `.mind/tmp`'s, inside a folder it owns, made with `create_new`.
 - **Mindflayer only manages what it installed.** The ledger's record of an
-  install is what allows overwriting and deleting. An unrecorded artifact is
+  install — one installation, a target for each copy it wrote, its origin and
+  the `hash::tree` of what it wrote, that hash's one definition — is what
+  allows overwriting and deleting. An unrecorded artifact is
   `Standing::Foreign` and is never touched. Core's lifecycle changes
   (`lifecycle::add`, `finish_edit`, `rename` and `remove`) drop any record
   they would leave behind and return what they did (`lifecycle::Record`, and
@@ -152,6 +154,12 @@ These are easy to break from a single file without noticing.
   `DIRECTORIES_VERSION` for how a v1 `mind.toml` is still read) and the ledger
   uses SQLite's `user_version`. Anything from a newer version is refused. A
   format change must keep reading old files the way they were written.
+  - A ledger schema step is one more block in `Ledger::migrate`, which takes
+    the write lock, copies the file to `mindflayer.db.v<old>.bak`
+    (`Ledger::back_up`) and runs every step in one transaction. A step fills
+    in old rows in its own SQL, not through today's code, and adds a fixture
+    of what the version before it wrote
+    (`apps/core/tests/fixtures/ledger-v<N>.sql`) for a test to migrate.
 - **Nothing is staged where agents look.** An install builds its copy in a
   `copy::Stage` under the project's `.mind/tmp` and renames it into place.
   A temporary beside an installed copy is a skill an agent may load, so never

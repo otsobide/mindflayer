@@ -19,6 +19,7 @@ pub mod create;
 pub mod exclude;
 pub mod frontmatter;
 pub mod gather;
+pub mod hash;
 pub mod install;
 pub mod kind;
 pub mod ledger;
