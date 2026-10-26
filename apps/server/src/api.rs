@@ -85,8 +85,8 @@ pub(crate) async fn transcript<B: Backend>(State(api): State<Arc<Api<B>>>) -> Re
     Json(api.transcript.entries()).into_response()
 }
 
-/// Any other path under `/api`: a 404 a script can read, in JSON like every
-/// other answer here, rather than axum's empty one.
+/// Any other path under `/api`: a 404 a script can read, rather than the
+/// panel's page, which is what a path outside `/api` that names no file gets.
 pub(crate) async fn missing(method: Method, uri: Uri) -> Response {
     error(
         StatusCode::NOT_FOUND,

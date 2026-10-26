@@ -19,6 +19,11 @@ serde_json = "1"
 rand = "0.10"
 # The launch link's query string, decoded the way a browser encodes it.
 form_urlencoded = "1"
+# The panel's files, in the binary rather than beside it, so there is one
+# thing to install. Since 8.12 it hashes with sha2 0.11, so digest 0.11 is
+# built beside the 0.10 that gix's sha1 uses; pinning 8.11 would share one,
+# at the price of staying behind.
+rust-embed = { version = "8", features = ["interpolate-folder-path", "mime-guess"] }
 
 [dev-dependencies]
 tokio = { version = "1", features = ["macros", "rt-multi-thread", "time"] }

@@ -12,6 +12,7 @@ use axum::Router;
 use crate::api::{self, Api};
 use crate::auth::{self, Gate};
 use crate::log::{self, Log, Sink};
+use crate::panel::{self, Panel};
 use crate::token::Token;
 use crate::transcript::Transcript;
 use crate::writer::Writer;
@@ -20,13 +21,24 @@ use crate::Backend;
 /// A server not yet listening: a backend, and how to serve it.
 pub struct Server<B: Backend> {
     backend: B,
+    panel: Panel,
     log: Option<Sink>,
 }
 
 impl<B: Backend> Server<B> {
-    /// A server that logs nothing.
+    /// A server for the panel built into this binary, that logs nothing.
     pub fn new(backend: B) -> Self {
-        Self { backend, log: None }
+        Self {
+            backend,
+            panel: Panel::default(),
+            log: None,
+        }
+    }
+
+    /// Serve these files as the panel instead.
+    pub fn panel(mut self, panel: Panel) -> Self {
+        self.panel = panel;
+        self
     }
 
     /// Hand every request's line to `sink` once it has been answered, with
@@ -135,16 +147,19 @@ fn route<B: Backend>(server: Server<B>, token: &Token, port: u16) -> io::Result<
         .route("/api/commands", endpoint(post(api::commands::<B>)))
         .route("/api/transcript", endpoint(get(api::transcript::<B>)))
         // The bare prefix and everything under it that names no endpoint,
-        // so a typo in a script gets a 404 it can read.
+        // so a typo in a script gets a JSON 404 rather than the panel.
         .route("/api", any(api::missing))
         .route("/api/{*rest}", any(api::missing))
         // `route_layer`, so the gate guards the routes above and nothing
-        // added after them.
+        // added after them: not the panel, whose files are the same for
+        // everybody.
         .route_layer(middleware::from_fn_with_state(
             Arc::clone(&gate),
             auth::require,
         ))
         .with_state(api)
+        .fallback(panel::serve)
+        .with_state(server.panel)
         // Outside every route, so it sees `/` before anything that serves it.
         .layer(middleware::from_fn_with_state(gate, auth::exchange));
     // Outermost, so a request the gate or the exchange turns away is logged

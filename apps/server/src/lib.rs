@@ -11,10 +11,12 @@ mod api;
 mod auth;
 mod backend;
 mod log;
+mod panel;
 mod server;
 mod token;
 mod transcript;
 mod writer;
 
 pub use backend::Backend;
+pub use panel::Panel;
 pub use server::{Listening, Server};
