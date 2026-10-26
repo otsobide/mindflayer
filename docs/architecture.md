@@ -27,7 +27,8 @@ no idea a terminal exists.
 
 `mindflayer-cli` parses a command line, asks core for values, and renders them.
 It holds no rules about artifacts: not the name limits, not the front matter
-format, not which folder a kind lives in.
+format, not which folder a kind lives in, not when a change drops the record
+of an install.
 
 It ships **two binaries**, `mind` and `flayer`, and they are two entry points
 into one parser rather than one wrapping the other. `flayer <cmd>` and `mind
@@ -835,15 +836,37 @@ The ledger's record of an installation is what gives the install screen leave
 to overwrite and delete. Remove, rename or edit an installed skill and the copy
 it was about is gone, or is no longer what was installed; a record left behind
 would be inherited by whatever is written there next, and the install screen
-would then delete somebody's work because a box looked untidy. So each of them
-drops the record (`install::disown`), and `mind add` drops any stale one under
-the name it writes. An installed skill that is edited becomes its author's.
+would then delete somebody's work because a box looked untidy. So
+`lifecycle::remove`, `lifecycle::rename` and `lifecycle::finish_edit` drop the
+record, and `lifecycle::add` drops any stale one under the name it writes, as
+`lifecycle::rename` does under the new name. An installed skill that is edited
+becomes its author's.
+
+Core applies that rule inside each change. Dropping the record in the CLI
+after the change, as it once did, put a rule outside core: the web panel, and
+installed rules and MCP entries when they come, would each have had to repeat
+it and could each have got it wrong. Each change returns what it did to the
+record (`lifecycle::Record`), and the CLI only says so; `install::disown`, which
+does the dropping, is private to core so that nothing else can. A record that
+cannot be dropped is reported beside the change rather than instead of it, and
+the CLI prints it as a warning: the change has been made, and saying it was
+not would be false.
+
+Editing is split in two, because the editor is not core's to run: which one
+comes from `$VISUAL` or `$EDITOR`, and core never reads the environment.
+`lifecycle::start_edit` notes what the file holds, the CLI runs the editor,
+and `lifecycle::finish_edit` decides whether anything changed and what that
+means for the record.
 
 The record dropped is the one held by the workspace the command resolved, the
-one its templates come from, and it is given to `install::disown` for the same
-reason: a workspace beside the project, which a walk up from the project never
-reaches, would keep a record of a copy that has changed. Another workspace that
-links the same project keeps its own, an [open question](#open-questions).
+one its templates come from, and each change is given it for the same reason:
+a workspace beside the project, which a walk up from the project never
+reaches, would keep a record of a copy that has changed. A change takes that
+workspace rather than its ledger, because opening a ledger creates one, and a
+workspace that never installed anything must not get a database because
+something in a project changed; core opens it only when it is there. Another
+workspace that links the same project keeps its own, an [open
+question](#open-questions).
 
 ## Scanning
 
@@ -1242,7 +1265,8 @@ leak into the lifecycle code. Unblocks #33, #45, #62, #93, #94 and #95.
   the install screen tell an untouched copy from an edited one, and offer to
   update the first while leaving the second alone.
   [D-04](#d-04-an-edited-copy-is-detected-not-disowned) chose that hash, one
-  per target, and #47 carries it out.
+  per target, and #47 carries it out, in the lifecycle changes that now hold
+  the rule (`lifecycle::finish_edit`, `rename` and `remove`).
 - **Disowning from elsewhere.** A change drops the record of the workspace
   its command resolved, wherever that sits, but not of any other workspace
   that links the same project: nothing in the project says which workspaces
