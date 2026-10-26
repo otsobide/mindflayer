@@ -11,6 +11,7 @@ use axum::middleware::Next;
 use axum::response::{IntoResponse, Response};
 
 use crate::api;
+use crate::guard;
 use crate::token::Token;
 
 /// The check every `/api` request passes before a handler sees it.
@@ -100,21 +101,35 @@ pub(crate) fn cookie_name(port: u16) -> String {
     format!("mf_{port}")
 }
 
-/// Turn away a request without the token, before it reaches a handler.
+/// Turn away a request without the token, and a change that brings it as
+/// the cookie from anywhere but the panel's own page, before either reaches
+/// a handler.
 pub(crate) async fn require(
     State(gate): State<Arc<Gate>>,
     request: Request,
     next: Next,
 ) -> Response {
-    if gate.credential(request.headers()).is_none() {
-        let mut response = api::error(
-            StatusCode::UNAUTHORIZED,
-            "this needs the launch token, as the cookie its link sets or as a Bearer token",
-        );
-        response
-            .headers_mut()
-            .insert(WWW_AUTHENTICATE, HeaderValue::from_static("Bearer"));
-        return response;
+    match gate.credential(request.headers()) {
+        None => {
+            let mut response = api::error(
+                StatusCode::UNAUTHORIZED,
+                "this needs the launch token, as the cookie its link sets or as a Bearer token",
+            );
+            response
+                .headers_mut()
+                .insert(WWW_AUTHENTICATE, HeaderValue::from_static("Bearer"));
+            return response;
+        }
+        // The browser sends the cookie for any page on the same site; only
+        // the token's holder can write the header.
+        Some(Credential::Cookie) => {
+            if let Err((status, message)) =
+                guard::from_the_panel(request.method(), request.headers())
+            {
+                return api::error(status, message);
+            }
+        }
+        Some(Credential::Bearer) => {}
     }
     next.run(request).await
 }

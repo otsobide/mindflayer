@@ -8,8 +8,8 @@
 use std::sync::Arc;
 
 use axum::extract::{Request, State};
-use axum::http::header::{CONTENT_TYPE, HOST, ORIGIN};
-use axum::http::{HeaderMap, StatusCode};
+use axum::http::header::{AsHeaderName, CONTENT_TYPE, HOST, ORIGIN};
+use axum::http::{HeaderMap, Method, StatusCode};
 use axum::middleware::Next;
 use axum::response::{IntoResponse, Response};
 
@@ -44,16 +44,11 @@ impl Hosts {
     /// The raw Host header, never `X-Forwarded-Host`: nothing stands between
     /// the browser and this server to forward anything, so that header is
     /// only ever what the sender chose to write. And exactly one Host, as
-    /// HTTP/1.1 requires; with two, which one a check believed would decide
-    /// whether it passed. Over HTTP/2 the name would come as `:authority`
+    /// HTTP/1.1 requires. Over HTTP/2 the name would come as `:authority`
     /// instead, which this would refuse for want of a Host; the server speaks
     /// only HTTP/1.1, and a server that grew HTTP/2 would fail closed.
     pub(crate) fn named(&self, headers: &HeaderMap) -> Option<&str> {
-        let mut hosts = headers.get_all(HOST).iter();
-        let (Some(host), None) = (hosts.next(), hosts.next()) else {
-            return None;
-        };
-        let host = host.to_str().ok()?;
+        let host = single(headers, HOST)?;
         // A DNS name is the same name in any case.
         self.names
             .iter()
@@ -117,6 +112,54 @@ pub(crate) async fn same_origin(
         );
     }
     next.run(request).await
+}
+
+/// Hold a request that carries the cookie to what only the panel's own page
+/// sends, if it would change something.
+///
+/// The cookie is `SameSite=Strict`, but every port of 127.0.0.1 is one site,
+/// so a page served by anything else on loopback (a dev server, a notebook,
+/// a tool's sign-in callback) has its requests here sent with the cookie. It
+/// cannot read the answers, since nothing here grants it CORS, but a change
+/// does its harm whether or not anybody reads the reply.
+///
+/// A change is any method but GET and HEAD. By method rather than by
+/// endpoint, so an endpoint added later is covered without being listed; a
+/// query is a POST, since it has a body, and is held to the same, which costs
+/// the panel nothing, as it sends every POST alike.
+///
+/// A refusal is its status and what to say, for the caller to answer in the
+/// API's JSON.
+pub(crate) fn from_the_panel(
+    method: &Method,
+    headers: &HeaderMap,
+) -> Result<(), (StatusCode, &'static str)> {
+    if matches!(*method, Method::GET | Method::HEAD) {
+        return Ok(());
+    }
+    // Fetch Metadata: a browser says on every request to loopback which page
+    // sent it, relative to where it is going, and no page can say otherwise.
+    // Without the header the sender is no browser of today's, so it is a
+    // script, and a script that should be here holds the token to send.
+    if single(headers, "sec-fetch-site") != Some("same-origin") {
+        return Err((
+            StatusCode::FORBIDDEN,
+            "a change sent with the cookie must come from the panel's own page \
+             (Sec-Fetch-Site: same-origin); a script sends the token as Bearer instead",
+        ));
+    }
+    Ok(())
+}
+
+/// A header's value when a request sends it exactly once. Twice is as good
+/// as never: which of the two a check believed would decide whether it
+/// passed.
+fn single<K: AsHeaderName>(headers: &HeaderMap, name: K) -> Option<&str> {
+    let mut values = headers.get_all(name).iter();
+    match (values.next(), values.next()) {
+        (Some(value), None) => value.to_str().ok(),
+        _ => None,
+    }
 }
 
 /// A 403, in JSON under `/api` like every other refusal there, and as text

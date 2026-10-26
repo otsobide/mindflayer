@@ -119,3 +119,45 @@ fn a_request_with_two_origins_is_from_neither() {
 
     assert!(!from_itself("127.0.0.1:4000", &both));
 }
+
+/// Headers holding one Sec-Fetch-Site, or none for `None`.
+fn fetched_from(site: Option<&str>) -> HeaderMap {
+    let mut headers = HeaderMap::new();
+    if let Some(site) = site {
+        headers.insert("sec-fetch-site", HeaderValue::from_str(site).unwrap());
+    }
+    headers
+}
+
+#[test]
+fn a_change_from_the_panels_own_page_is_taken() {
+    assert!(from_the_panel(&Method::POST, &fetched_from(Some("same-origin"))).is_ok());
+}
+
+#[test]
+fn a_change_from_any_other_page_or_from_no_browser_is_not() {
+    for site in [
+        Some("same-site"),
+        Some("cross-site"),
+        Some("none"),
+        Some(""),
+        None,
+    ] {
+        for method in [Method::POST, Method::PUT, Method::DELETE, Method::PATCH] {
+            let (status, _) = from_the_panel(&method, &fetched_from(site)).unwrap_err();
+            assert_eq!(status, StatusCode::FORBIDDEN, "{method} {site:?}");
+        }
+    }
+
+    let mut twice = fetched_from(Some("same-origin"));
+    twice.append("sec-fetch-site", HeaderValue::from_static("same-origin"));
+    assert!(from_the_panel(&Method::POST, &twice).is_err());
+}
+
+#[test]
+fn a_read_is_not_held_to_where_it_came_from() {
+    for method in [Method::GET, Method::HEAD] {
+        assert!(from_the_panel(&method, &fetched_from(Some("same-site"))).is_ok());
+        assert!(from_the_panel(&method, &fetched_from(None)).is_ok());
+    }
+}

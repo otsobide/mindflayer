@@ -90,6 +90,17 @@ async fn a_request_the_panel_would_not_send_is_refused() {
             vec![set("origin", "null")],
             StatusCode::FORBIDDEN,
         ),
+        (
+            "the same site from another port, as Fetch Metadata tells it",
+            vec![unset("origin"), set("sec-fetch-site", "same-site")],
+            StatusCode::FORBIDDEN,
+        ),
+        (
+            "another site, as Fetch Metadata tells it",
+            vec![unset("origin"), set("sec-fetch-site", "cross-site")],
+            StatusCode::FORBIDDEN,
+        ),
+        ("no token", vec![unset("cookie")], StatusCode::UNAUTHORIZED),
     ];
     for (case, changes, status) in cases {
         let reply = deliver(&server, from_the_panel(&server, &changes)).await;
@@ -118,7 +129,13 @@ async fn a_request_the_panel_would_send_gets_through() {
                 set("origin", format!("http://localhost:{port}")),
             ],
         ),
-        ("as [::1]", vec![set("host", format!("[::1]:{port}"))]),
+        (
+            "as [::1], from a page loaded as [::1]",
+            vec![
+                set("host", format!("[::1]:{port}")),
+                set("origin", format!("http://[::1]:{port}")),
+            ],
+        ),
         (
             "forwarded from anywhere, which is not looked at",
             vec![set("x-forwarded-host", "attacker.example")],
@@ -150,4 +167,44 @@ async fn a_page_on_a_rebound_name_gets_neither_the_panel_nor_a_cookie() {
         assert_eq!(reply.header("set-cookie"), None);
         assert!(reply.text().contains("answers only as 127.0.0.1:"));
     }
+}
+
+#[tokio::test]
+async fn a_change_by_cookie_without_fetch_metadata_is_refused_and_taken_by_bearer() {
+    let (server, runs) = launch();
+
+    let reply = deliver(&server, from_the_panel(&server, &[unset("sec-fetch-site")])).await;
+    assert_eq!(reply.status, StatusCode::FORBIDDEN);
+    assert!(reply.json()["error"]
+        .as_str()
+        .unwrap()
+        .contains("Sec-Fetch-Site"));
+    assert!(runs.lock().unwrap().is_empty());
+
+    let bearer = set("authorization", format!("Bearer {}", server.token()));
+    let reply = deliver(
+        &server,
+        from_the_panel(&server, &[unset("sec-fetch-site"), bearer]),
+    )
+    .await;
+    assert_eq!(reply.status, StatusCode::OK, "{}", reply.text());
+    assert_eq!(*runs.lock().unwrap(), ["start change", "end change"]);
+}
+
+#[tokio::test]
+async fn a_read_by_cookie_needs_no_fetch_metadata() {
+    let (server, _) = launch();
+    let cookie = format!("{}={}", server.cookie(), server.token());
+    let mut request = request(
+        &server,
+        Method::GET,
+        "/api/transcript",
+        Auth::Cookie(&cookie),
+        None,
+    );
+    request.headers_mut().remove("sec-fetch-site");
+
+    let reply = deliver(&server, request).await;
+
+    assert_eq!(reply.status, StatusCode::OK);
 }

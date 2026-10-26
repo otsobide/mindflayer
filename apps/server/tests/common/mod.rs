@@ -178,7 +178,8 @@ pub fn launch_logged() -> (Listening, Arc<Mutex<Vec<String>>>) {
 pub enum Auth<'a> {
     Nothing,
     Bearer(&'a str),
-    /// A whole `name=value` pair, as a browser sends it.
+    /// A whole `name=value` pair, sent as the panel's page sends it: with the
+    /// headers the browser adds to every request the page makes.
     Cookie(&'a str),
 }
 
@@ -224,7 +225,12 @@ pub fn request(
         Auth::Bearer(token) => {
             request = request.header(header::AUTHORIZATION, format!("Bearer {token}"))
         }
-        Auth::Cookie(pair) => request = request.header(header::COOKIE, pair),
+        Auth::Cookie(pair) => {
+            request = request
+                .header(header::COOKIE, pair)
+                .header(header::ORIGIN, format!("http://{}", server.address()))
+                .header("sec-fetch-site", "same-origin")
+        }
     }
     match body {
         Some(body) => request
