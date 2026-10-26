@@ -1929,9 +1929,11 @@ prefix and loses it the same way, so the virtualenv's `deactivate` neither
 drops the prefix while a workspace is active nor brings it back once none
 is. Between them, either deactivate undoes only its own activate, in either
 order, which `tests/shells_test.rs` checks beside a real virtualenv, in bash
-and in zsh where it is installed. Each of those runs its shell with no
-startup file and an environment holding only a `PATH`, a temporary `HOME` and
-what the test sets, so no developer's shell or activation gets in. The
+and in zsh. Each of those runs its shell with no startup file and an
+environment holding only a `PATH`, a temporary `HOME` and what the test sets,
+so no developer's shell or activation gets in. A shell that is not installed
+is skipped, which a passing test does not show; under `$CI` that fails
+instead, and the `test (cli)` job installs the zsh its runner lacks. The
 function is never called `deactivate`: defining that would take the
 virtualenv's away. Activating again runs an existing `flayer-deactivate`
 first, so one workspace is swapped for the other, and what the variable held
