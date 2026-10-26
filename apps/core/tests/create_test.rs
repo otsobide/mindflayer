@@ -378,6 +378,48 @@ fn a_rule_template_whose_front_matter_would_not_be_read_writes_nothing() {
 }
 
 #[test]
+fn a_rule_templates_description_is_the_one_typed_and_survives_as_typed() {
+    let (dir, project) = project();
+    write(
+        dir.path(),
+        ".mind/templates/placed.md",
+        "---\ndescription: {{description}}\npaths:\n  - \"src/api/**\"\n---\n\nBody of {{name}}\n",
+    );
+    write(
+        dir.path(),
+        ".mind/templates/literal.md",
+        "---\ndescription: >\n  What the template\n  is for\npaths: src/**\n---\n\n## Why\n",
+    );
+    let placed = template::find(None, &project, Kind::Rule, "placed").unwrap();
+    let literal = template::find(None, &project, Kind::Rule, "literal").unwrap();
+    // A colon-space, a leading quote, a hash: pasted in as text, each one
+    // breaks the front matter or turns the rest of the line into a comment.
+    let typed = "'Quoted' start: api # not a comment";
+
+    let api = create_from(&project, Kind::Rule, "api", typed, &placed).unwrap();
+    let web = create_from(&project, Kind::Rule, "web", "Web rules", &literal).unwrap();
+
+    assert_eq!(api.description(), Some(typed));
+    let Declared::Rule(manifest) = api.declared() else {
+        panic!("a rule declares a rule's front matter");
+    };
+    assert_eq!(
+        manifest.paths.stated(),
+        Some(&vec![String::from("src/api/**")])
+    );
+    // The template said where the description goes, so no heading.
+    assert_eq!(api.summary(), Some("Body of api"));
+    assert_eq!(api.validate(), vec![]);
+    // What the template had is replaced, as a skill template's is; it did
+    // not say where the description goes, so it gets the heading too.
+    assert_eq!(
+        fs::read_to_string(dir.path().join("rules/web.md")).unwrap(),
+        "---\ndescription: Web rules\npaths: src/**\n---\n\n# Web rules\n\n## Why\n"
+    );
+    assert_eq!(web.description(), Some("Web rules"));
+}
+
+#[test]
 fn a_rule_template_that_opens_with_a_horizontal_rule_is_all_body() {
     let (dir, project) = project();
     write(

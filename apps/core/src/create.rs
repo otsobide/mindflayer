@@ -57,7 +57,8 @@ pub fn create(
 /// `description` are set — whatever the template had for them is replaced —
 /// and [`NAME_PLACEHOLDER`] and [`DESCRIPTION_PLACEHOLDER`] in the body are
 /// filled in. A rule template is filled in throughout, front matter included,
-/// and gets the description as a heading on top of its body, below any front
+/// with a `description` its front matter declares set in the same way, and
+/// gets the description as a heading on top of its body, below any front
 /// matter, when it does not say where the description goes; front matter that
 /// `validate` would warn about is refused. Other files are copied as they
 /// are: a placeholder in a script is the script's business.
@@ -254,21 +255,56 @@ fn create_rule(
 /// its body when the template does not say where the description goes: a
 /// rule's opening line is what every listing shows.
 ///
+/// A `description` the front matter declares is set, as a skill's is,
+/// whatever the template had for it: the template's lines for it are
+/// dropped, continuation lines and all, and the one typed is serialized in
+/// their place. Pasted in as text, a description containing `: ` would not
+/// parse, and one opening with `#` would be a comment, declaring nothing.
+///
 /// Front matter is held to everything `validate` would warn about, so that
 /// a template's `paths:` never becomes content without a word: strict when
 /// writing, as a skill's manifest is.
 fn rule_from_template(text: &str, name: &str, description: &str) -> Result<String, String> {
+    #[derive(Serialize)]
+    struct Declared<'a> {
+        description: &'a str,
+    }
+
     let placed = text.contains(DESCRIPTION_PLACEHOLDER);
     // Where the fences are is found on the template, and whether they hold
     // front matter is decided on what they hold once filled in: `{{name}}`
     // is a YAML flow mapping, so a template scoping its rule to `{{name}}/**`
     // does not parse until it is.
     if let Ok(document) = frontmatter::split(text) {
-        let block = fill(&text[..text.len() - document.body.len()], name, description);
+        // Both fences as the template wrote them, byte order mark and line
+        // endings included.
+        let opening = &text[..text.find('\n').map_or(text.len(), |end| end + 1)];
+        let closing =
+            &text[opening.len() + document.front_matter.len()..text.len() - document.body.len()];
+        let rest = frontmatter::without_keys(document.front_matter, &["description"]);
+        let declared = if rest.len() == document.front_matter.len() {
+            String::new()
+        } else {
+            serde_yaml_ng::to_string(&Declared { description }).map_err(|e| e.to_string())?
+        };
+        let block = format!(
+            "{opening}{declared}{}{closing}",
+            fill(&rest, name, description)
+        );
         let (manifest, rest) = RuleManifest::read(&block);
         let issues = artifact::rule_issues(&manifest);
         if !issues.is_empty() {
             return Err(issue_list(&issues));
+        }
+        // A key the line-by-line drop cannot see, such as a quoted one.
+        if manifest
+            .description
+            .stated()
+            .is_some_and(|stated| stated != description)
+        {
+            return Err(String::from(
+                "its front matter sets `description` in a way that cannot be replaced",
+            ));
         }
         // Read as front matter, so the heading goes below it: above it, the
         // fences would no longer open the file, and the front matter would
