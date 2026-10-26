@@ -238,6 +238,42 @@ fn strict_json_refuses_what_jsonc_allows() {
 }
 
 #[test]
+fn strict_json_refuses_raw_control_characters_and_other_whitespace() {
+    for (text, detail) in [
+        (
+            "{\"a\": \"tab\there\"}",
+            "U+0009 in a string, not escaped, on line 1 column 11",
+        ),
+        (
+            "{\n  \"a\": \"line\nbreak\"\n}",
+            "U+000A in a string, not escaped, on line 2 column 13",
+        ),
+        (
+            "{\"a\":\u{2028}1}",
+            "U+2028 between tokens, where JSON allows only space, tab, LF and CR, on line 1 column 6",
+        ),
+        (
+            "\u{a0}{\"a\": 1}",
+            "U+00A0 between tokens, where JSON allows only space, tab, LF and CR, on line 1 column 1",
+        ),
+        (
+            "{\"a\":\u{b}1}",
+            "U+000B between tokens, where JSON allows only space, tab, LF and CR, on line 1 column 6",
+        ),
+    ] {
+        let error = get(Format::Json, text, &["a"]).unwrap_err();
+        assert_eq!(error.to_string(), format!("not valid JSON: {detail}"), "{text:?}");
+    }
+    // What a string holds escaped, or as itself past the control
+    // characters, is JSON's to allow.
+    let text = "{\"a\": \"\\\"tab\\there\\\\\u{a0}\u{2028}\"}";
+    assert_eq!(
+        get(Format::Json, text, &["a"]).unwrap(),
+        Some(Value::from("\"tab\there\\\u{a0}\u{2028}"))
+    );
+}
+
+#[test]
 fn jsonc_refuses_what_only_json5_allows() {
     for text in [
         "{ 'mcp': {} }",

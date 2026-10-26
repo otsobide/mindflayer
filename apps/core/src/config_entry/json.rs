@@ -61,7 +61,74 @@ fn parse(format: Format, text: &str) -> Result<CstRootNode, EntryError> {
     // a comment in it would be read, and written back with the comment.
     jsonc_parser::parse_to_ast(text, &CollectOptions::default(), &options(format))
         .map_err(malformed)?;
+    if format == Format::Json {
+        strict(text)?;
+    }
     CstRootNode::parse(text, &options(format)).map_err(malformed)
+}
+
+/// Refuse two things RFC 8259 does not allow, which jsonc-parser 0.34 takes
+/// whatever its options say: a control character written as itself in a
+/// string, and whitespace between tokens other than space, tab, LF and CR,
+/// such as a no-break space or U+2028, which it takes as Rust's
+/// `is_whitespace` does. `JSON.parse` refuses both, so Claude would refuse
+/// the file.
+///
+/// A scan of the text rather than a walk of the CST: the text has parsed by
+/// now, so outside its strings it holds nothing but tokens, every one of
+/// them printable ASCII, and whitespace.
+fn strict(text: &str) -> Result<(), EntryError> {
+    let mut string = false;
+    let mut escape = false;
+    for (at, character) in text.char_indices() {
+        let refused = if string {
+            match character {
+                _ if escape => {
+                    escape = false;
+                    None
+                }
+                '\\' => {
+                    escape = true;
+                    None
+                }
+                '"' => {
+                    string = false;
+                    None
+                }
+                control if u32::from(control) < 0x20 => Some("in a string, not escaped,"),
+                _ => None,
+            }
+        } else {
+            match character {
+                '"' => {
+                    string = true;
+                    None
+                }
+                ' ' | '\t' | '\n' | '\r' => None,
+                token if token.is_ascii_graphic() => None,
+                _ => Some("between tokens, where JSON allows only space, tab, LF and CR,"),
+            }
+        };
+        if let Some(refused) = refused {
+            let before = &text[..at];
+            let line = before.matches('\n').count() + 1;
+            let column = before
+                .rsplit('\n')
+                .next()
+                .unwrap_or_default()
+                .chars()
+                .count()
+                + 1;
+            return Err(EntryError::Malformed {
+                format: Format::Json,
+                detail: format!(
+                    "U+{:04X} {refused} on line {line} column {column}",
+                    u32::from(character)
+                ),
+            });
+        }
+    }
+    Ok(())
 }
 
 /// The whole of `text` as a value.
