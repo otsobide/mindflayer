@@ -32,14 +32,14 @@ fn project(name: &str) -> (TempDir, MindProject) {
 
 /// Write a skill: a directory holding SKILL.md.
 fn write_skill(project: &MindProject, directory: &str, contents: &str) {
-    let dir = project.directory_for(Kind::Skill).join(directory);
+    let dir = project.directory_for(Kind::Skill).unwrap().join(directory);
     fs::create_dir_all(&dir).expect("create the skill directory");
     fs::write(dir.join("SKILL.md"), contents).expect("write SKILL.md");
 }
 
 /// Write a rule: one markdown file, at whatever depth `route` names.
 fn write_rule(project: &MindProject, route: &str, contents: &str) {
-    let path = project.directory_for(Kind::Rule).join(route);
+    let path = project.directory_for(Kind::Rule).unwrap().join(route);
     fs::create_dir_all(path.parent().unwrap()).expect("create the rule folder");
     fs::write(path, contents).expect("write the rule");
 }
@@ -298,7 +298,10 @@ fn a_skill_keeps_its_declared_name_and_its_directory_is_checked_against_it() {
 fn a_skills_own_directory_is_never_walked_into() {
     let (_dir, one) = project("alpha");
     write_skill(&one, "deploy", &skill_file("deploy"));
-    let assets = one.directory_for(Kind::Skill).join("deploy/references");
+    let assets = one
+        .directory_for(Kind::Skill)
+        .unwrap()
+        .join("deploy/references");
     fs::create_dir_all(&assets).unwrap();
     fs::write(assets.join("SKILL.md"), skill_file("nested")).unwrap();
 
@@ -332,12 +335,47 @@ fn one_broken_artifact_does_not_hide_the_others() {
 #[test]
 fn a_project_with_no_folder_for_a_kind_is_not_a_failure() {
     let (_dir, one) = project("alpha");
-    fs::remove_dir(one.directory_for(Kind::Rule)).unwrap();
+    fs::remove_dir(one.directory_for(Kind::Rule).unwrap()).unwrap();
 
     let catalog = Catalog::discover(std::slice::from_ref(&one));
 
     assert!(catalog.is_empty());
     assert!(catalog.failures().is_empty());
+}
+
+#[test]
+fn locating_finds_what_discovery_reads_broken_or_not() {
+    let (_dir, one) = project("alpha");
+    write_skill(&one, "good", &skill_file("good"));
+    write_skill(&one, "no-front-matter", "# Just markdown\n");
+    fs::create_dir_all(one.directory_for(Kind::Skill).unwrap().join("assets")).unwrap();
+    write_rule(&one, "git/no-force-push.md", "Never.\n");
+    write_rule(&one, ".hidden.md", "Not a rule.\n");
+    write_rule(&one, "notes.txt", "Not a rule either.\n");
+    let skills = one.directory_for(Kind::Skill).unwrap();
+    let rules = one.directory_for(Kind::Rule).unwrap();
+
+    let (found_skills, skill_failures) = Catalog::locate(&skills, Kind::Skill);
+    let (found_rules, rule_failures) = Catalog::locate(&rules, Kind::Rule);
+
+    // A skill whose front matter is broken is still where one is: nothing
+    // is read, so nothing fails.
+    assert_eq!(
+        found_skills,
+        [skills.join("good"), skills.join("no-front-matter")]
+    );
+    assert_eq!(found_rules, [rules.join("git/no-force-push.md")]);
+    assert!(skill_failures.is_empty() && rule_failures.is_empty());
+}
+
+#[test]
+fn locating_in_a_folder_that_is_not_there_finds_nothing_and_no_failure() {
+    let dir = TempDir::new().unwrap();
+
+    let (found, failures) = Catalog::locate(&dir.path().join("missing"), Kind::Rule);
+
+    assert!(found.is_empty());
+    assert!(failures.is_empty());
 }
 
 // ---------------------------------------------------------------------------
@@ -363,7 +401,7 @@ fn a_bare_name_finds_it_in_any_kind() {
 #[test]
 fn a_qualifier_is_separated_by_a_colon_so_a_route_is_never_one() {
     // A rule's name IS a route, so `/` cannot also mean "kind". With `:`,
-    // `skills/naming` is a rule filed under `skills/` and nothing else — and
+    // `skills/naming` is a rule filed under `skills/` and nothing else, and
     // a rules folder holding rules about writing skills is not exotic.
     for typed in ["git/no-force-push", "skills/naming", "rule/x"] {
         let bare = Reference::parse(typed);

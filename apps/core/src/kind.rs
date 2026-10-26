@@ -37,9 +37,11 @@ impl Kind {
 
     /// The name of the folder holding this kind: beside the code by default
     /// ([`Directories::default_for`](crate::workspace::Directories::default_for)),
+    /// in a workspace's library for its own
+    /// ([`Directories::library_for`](crate::workspace::Directories::library_for)),
     /// and inside `.mindflayer` on a workspace's shelf. A marker's
-    /// `[directories]` is keyed by it, which is how a project puts the folder
-    /// somewhere else.
+    /// `[directories]` is keyed by it, which is how a project or a workspace
+    /// puts the folder somewhere else.
     ///
     /// It doubles as the plural spelling, which is what lets `mind list rules`
     /// work without a second table to keep in step.
@@ -101,8 +103,8 @@ impl fmt::Display for UnknownKind {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Layout {
     /// One directory per artifact, holding a manifest with a fixed name. The
-    /// whole directory belongs to the artifact — its scripts, references and
-    /// assets included — which is why it is never walked recursively.
+    /// whole directory belongs to the artifact (its scripts, references and
+    /// assets included), which is why it is never walked recursively.
     Directory { manifest: &'static str },
     /// One file per artifact, at any depth. Folders under the kind's own
     /// folder group and mean nothing else.

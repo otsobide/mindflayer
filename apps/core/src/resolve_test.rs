@@ -168,6 +168,22 @@ fn a_workspace_is_named_by_its_root_or_by_its_mindflayer_folder() {
 }
 
 #[test]
+fn a_workspace_named_as_an_argument_takes_the_spellings_w_takes() {
+    let fixture = fixture();
+    let plain = fixture.outer.join("plain");
+    fs::create_dir(&plain).unwrap();
+
+    for spelled in [fixture.named.clone(), fixture.named.join(FLAYER_DIR)] {
+        assert_eq!(named(&spelled).unwrap().root(), fixture.named);
+    }
+    assert!(matches!(
+        named(&plain),
+        Err(WorkspaceError::NotAWorkspace { .. })
+    ));
+    assert!(!plain.join(FLAYER_DIR).exists());
+}
+
+#[test]
 fn a_named_directory_that_is_no_workspace_is_refused_and_never_made() {
     let fixture = fixture();
     let plain = fixture.outer.join("plain");

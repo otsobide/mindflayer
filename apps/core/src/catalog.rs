@@ -37,7 +37,11 @@ impl Catalog {
 
         for project in projects {
             for kind in kinds {
-                let root = project.directory_for(*kind);
+                // A kind the project keeps no folder for holds nothing: an
+                // absence, like a folder nobody has made yet.
+                let Some(root) = project.directory_for(*kind) else {
+                    continue;
+                };
                 match kind.layout() {
                     Layout::Directory { manifest } => {
                         // Skill is the only directory-shaped kind, so this
@@ -103,8 +107,8 @@ impl Catalog {
 
     /// Two catalogs as one, in the same order and with each file once.
     ///
-    /// For a report over holders that are found differently — a workspace's
-    /// own artifacts beside its projects' — which still has to read as one
+    /// For a report over holders that are found differently (a workspace's
+    /// own artifacts beside its projects'), which still has to read as one
     /// listing.
     pub fn merge(mut self, other: Catalog) -> Catalog {
         self.artifacts.extend(other.artifacts);
@@ -133,22 +137,26 @@ impl Catalog {
         self.failures.dedup_by(|a, b| a.path() == b.path());
     }
 
-    /// One artifact per immediate subdirectory holding `manifest`.
+    /// Where every artifact of `kind` in the folder `root` is, without reading
+    /// any of them, and why a folder in it could not be listed.
     ///
-    /// Only the immediate ones: the directory belongs to the artifact, assets
-    /// and all, so walking into it would turn its own files into artifacts.
-    fn take_directories(&mut self, root: &Path, manifest: &str, project: &Path) {
-        let mut directories = match self.read_dir(root) {
-            Some(entries) => entries,
-            None => return,
+    /// What discovery reads, found by the walk discovery uses, for a caller
+    /// that acts on the files rather than on what they declare: one moving
+    /// them has to move a skill whose front matter is broken too, since it is
+    /// no less the holder's for that. A folder that is not there holds none,
+    /// and is no failure.
+    pub fn locate(root: &Path, kind: Kind) -> (Vec<PathBuf>, Vec<DiscoveryFailure>) {
+        let mut catalog = Catalog::default();
+        let found = match kind.layout() {
+            Layout::Directory { manifest } => catalog.directories_in(root, manifest),
+            Layout::Files { extension } => catalog.files_in(root, extension),
         };
-        directories.sort();
-        for path in directories {
-            if !path.join(manifest).is_file() {
-                // Not a broken artifact: not one. Shared assets and stray
-                // dotfolders both land here.
-                continue;
-            }
+        (found, catalog.failures)
+    }
+
+    /// One artifact per immediate subdirectory holding `manifest`.
+    fn take_directories(&mut self, root: &Path, manifest: &str, project: &Path) {
+        for path in self.directories_in(root, manifest) {
             match Artifact::skill(path, project) {
                 Ok(artifact) => self.artifacts.push(artifact),
                 Err(error) => self.failures.push(error.into()),
@@ -156,11 +164,41 @@ impl Catalog {
         }
     }
 
+    /// Every immediate subdirectory of `root` holding `manifest`, in order.
+    ///
+    /// Only the immediate ones: the directory belongs to the artifact, assets
+    /// and all, so walking into it would turn its own files into artifacts.
+    fn directories_in(&mut self, root: &Path, manifest: &str) -> Vec<PathBuf> {
+        let Some(mut directories) = self.read_dir(root) else {
+            return Vec::new();
+        };
+        directories.sort();
+        // One without the manifest is not a broken artifact: it is not one.
+        // Shared assets and stray dotfolders both land there.
+        directories.retain(|path| path.join(manifest).is_file());
+        directories
+    }
+
     /// One artifact per file with `extension`, at any depth under `root`.
     ///
     /// The name is the route below `root` without the extension, so folders
     /// group and mean nothing else.
     fn take_files(&mut self, root: &Path, extension: &str, project: &Path) {
+        for path in self.files_in(root, extension) {
+            let Some(name) = route(root, &path) else {
+                self.failures.push(DiscoveryFailure::UnusableName { path });
+                continue;
+            };
+            match Artifact::rule(&path, name, project) {
+                Ok(artifact) => self.artifacts.push(artifact),
+                Err(error) => self.failures.push(error.into()),
+            }
+        }
+    }
+
+    /// Every file with `extension` at any depth under `root`, in order,
+    /// leaving out what is hidden.
+    fn files_in(&mut self, root: &Path, extension: &str) -> Vec<PathBuf> {
         let mut pending = vec![root.to_path_buf()];
         let mut files = Vec::new();
 
@@ -172,7 +210,7 @@ impl Catalog {
                 if is_hidden(&path) {
                     continue;
                 }
-                // Followed, so a rule shared by symlink is still a rule — but
+                // Followed, so a rule shared by symlink is still a rule, but
                 // only to decide file-or-directory. A symlinked directory is
                 // not descended into, because a loop would hang discovery and
                 // nothing about a rule needs one.
@@ -194,16 +232,7 @@ impl Catalog {
         }
 
         files.sort();
-        for path in files {
-            let Some(name) = route(root, &path) else {
-                self.failures.push(DiscoveryFailure::UnusableName { path });
-                continue;
-            };
-            match Artifact::rule(&path, name, project) {
-                Ok(artifact) => self.artifacts.push(artifact),
-                Err(error) => self.failures.push(error.into()),
-            }
-        }
+        files
     }
 
     /// The entries of a directory, or nothing when it is absent.
@@ -285,11 +314,12 @@ impl Catalog {
 /// What a user typed to name one artifact.
 ///
 /// A qualifier is separated by `:`, not `/`, and that is the whole reason the
-/// two namespaces do not collide. A rule's name IS a route — `git/no-force-push`
-/// — so a `/` qualifier would make `skills/naming` mean "the skill `naming`"
-/// rather than "the rule filed under `skills/`", and a rules folder grouping
-/// rules *about skills* is not an exotic thing to have. With `:` a name is
-/// always a name: `rule:skills/naming` qualifies, `skills/naming` does not.
+/// two namespaces do not collide. A rule's name IS a route, as in
+/// `git/no-force-push`, so a `/` qualifier would make `skills/naming` mean
+/// "the skill `naming`" rather than "the rule filed under `skills/`", and a
+/// rules folder grouping rules *about skills* is not an exotic thing to have.
+/// With `:` a name is always a name: `rule:skills/naming` qualifies,
+/// `skills/naming` does not.
 ///
 /// It also removes the shape from Windows entirely, where a filename cannot
 /// contain `:` at all.

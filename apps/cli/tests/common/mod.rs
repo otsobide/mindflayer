@@ -18,7 +18,7 @@ pub use mindflayer_cli::{
 pub use mindflayer_core::gather::{Progress, Watch};
 pub use mindflayer_core::install::Standing;
 pub use mindflayer_core::ledger::Ledger;
-pub use mindflayer_core::{AgentHomes, FlayerWorkspace};
+pub use mindflayer_core::{AgentHomes, FlayerWorkspace, Reason};
 pub use mindflayer_core::{Kind, MindProject, FLAYER_CONFIG, FLAYER_DIR, MIND_CONFIG, MIND_DIR};
 pub use ratatui::backend::TestBackend;
 pub use ratatui::crossterm::event::KeyCode;
@@ -161,6 +161,17 @@ pub fn directory_for(root: &Path, kind: Kind) -> PathBuf {
     MindProject::open(root)
         .expect("an initialized mind project")
         .directory_for(kind)
+        .unwrap()
+}
+
+/// Where the workspace at `root` keeps its own of a kind, asked of the
+/// workspace as [`directory_for`] asks a project.
+pub fn own_directory_for(root: &Path, kind: Kind) -> PathBuf {
+    FlayerWorkspace::open(root)
+        .expect("an initialized flayer workspace")
+        .own()
+        .directory_for(kind)
+        .unwrap()
 }
 
 pub fn write_skill(root: &Path, directory: &str, contents: &str) {
@@ -215,6 +226,18 @@ pub fn mind_at_home(dir: &Path, home: &Path, args: &[&str]) -> Result<Outcome, F
     args.push("--home");
     args.push(&home);
     mind(dir, &args)
+}
+
+/// The path `add` said it created `what` (`skill deploy`) at, as a path: one
+/// joined from a marker's `/` and the platform's own separator compares
+/// equal to its other spellings, where the text would not on Windows.
+pub fn created(outcome: &Outcome, what: &str) -> PathBuf {
+    let path = outcome
+        .stdout
+        .strip_prefix(&format!("created {what} at "))
+        .and_then(|rest| rest.strip_suffix('\n'))
+        .unwrap_or_else(|| panic!("not one creation of {what}: {:?}", outcome.stdout));
+    PathBuf::from(path)
 }
 
 /// Write a rule into an already initialized mind project.

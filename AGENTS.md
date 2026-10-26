@@ -12,6 +12,9 @@ are about to change before changing it, and keep it true afterwards. Its
 "Decisions" section holds what the owner already chose for the roadmap, and the
 one choice still pending: read it before changing a format, installing, MCP,
 credentials or the server, and carry a decision out rather than reopen it.
+`docs/agents.md` records where Claude Code, Codex and OpenCode read skills and
+rules, each fact verified on the binary or docs-only with a fallback: an agent
+path in code cites it, and a change that disagrees with it starts there.
 
 ## Commands
 
@@ -21,7 +24,7 @@ lists everything.
 ```bash
 make test                 # every Rust suite; the panel's is make web/test
 make fmt/check            # CI runs this first
-make lint                 # clippy --workspace --all-targets
+make lint                 # no em dash in a tracked file, then clippy --workspace --all-targets
 make run ARGS="flayer list"
 make core/test            # one app: make <app>/<target>
 ```
@@ -51,28 +54,39 @@ pnpm --dir apps/web exec vitest run tests/shell.test.ts      # one suite
 
 `make test`, `make build`, `make fmt` and `make lint` are Rust only: `web` is
 in the root Makefile's `NODE_APPS`, outside the aggregates, until CI installs
-Node (#71). A change to the panel runs its own targets.
+Node (#71). A change to the panel runs its own targets. The one exception is
+`make lint`'s em dash check (`make lint/em-dash`), which reads every tracked
+file, the panel's included.
 
 `make dev/link`, `make dev/unlink` and `make install` write into `~/.cargo/bin`
 (or `BINDIR`), outside the repository. Don't run them unless asked.
+
+`scripts/agent-probe/probe.sh` runs the real coding agents against their APIs
+with your own login, in a temp home under `target/`, to check where they read
+skills and rules. It is never run by CI or `make test`; don't run it unless
+asked.
 
 ## Layout
 
 Three crates in one Cargo workspace, and the panel they serve, each an app
 under `apps/` with its own `Makefile`:
 
-- `apps/core` (`mindflayer-core`): the engine. Projects, workspaces, which
-  workspace a command uses (`resolve`), kinds, the catalog, gathering
-  (`gix`), the SQLite ledger, installing, keeping installs out of git
-  (`exclude`), creating and changing artifacts. Its only I/O is files, and it
-  never reads the environment.
+- `apps/core` (`mindflayer-core`): the engine. Projects, a project's
+  settings (`settings`, the v3 marker), workspaces, which
+  workspace a command uses (`resolve`), the shell code that activates one
+  (`activate`), kinds, the agents and where each kind goes for them
+  (`agent`), the catalog, gathering (`gix`), the SQLite ledger,
+  installing, keeping installs out of git (`exclude`), creating and changing
+  artifacts, and moving a workspace's own into its library (`migrate`). Its
+  only I/O is files, and it never reads the environment.
 - `apps/cli` (`mindflayer-cli`): the binaries `mind` (`src/main.rs`) and
   `flayer` (`src/bin/flayer.rs`), and the TUI. `src/lib.rs` only re-exports
   the public API. The parsers are in `src/parse.rs`. `src/commands.rs`
   dispatches them and asks core what a command acts on, and each family of
   commands has a file under `src/commands/`: `project` (init, link, unlink,
-  scan), `workspace` (load, unload), `artifact` (add, edit, rename, remove,
-  templates), `read` (list, show, validate), `gather` and `install`.
+  scan), `workspace` (load, unload), `activate` (activate, which),
+  `artifact` (add, edit, rename, remove, templates), `read` (list, show,
+  validate), `gather`, `install` and `migrate` (migrate --library).
   `src/render.rs` holds `Outcome`, `Failure` and the table helpers,
   `src/error.rs` holds `CliError`, and `src/homes.rs` decides the default
   home and the agent homes, and gathers `-W` and `$MINDFLAYER_WORKSPACE`
@@ -104,13 +118,21 @@ without gathering. `apps/cli/tests/examples_test.rs` holds every example to
 output in what the commands print, so changing an example's summary line
 means changing the README too.
 
+Outside `apps/`, `scripts/agent-probe/` holds the agent probe: `probe.sh`
+isolates a run and checks the real home is left alone, and `<agent>.sh` holds
+one agent's checks (only `claude.sh` so far).
+
 ## Invariants that hold the design together
 
 These are easy to break from a single file without noticing.
 
 - **Rules live in core.** The CLI parses, asks core and renders. Name limits,
-  front matter, where a kind lives and sort order are all core's, so a future
-  front end cannot disagree with this one.
+  front matter, where a kind lives, where it goes for each agent and sort order
+  are all core's, so a future front end cannot disagree with this one. No front
+  end spells an agent's folder or calls `TargetTable::standard`: which table
+  applies is the project's, in core, the standard one until #40 reads an
+  override from its settings, so code that needs one takes the `TargetTable`
+  the project hands it, as an install will (#34).
 - **Two binaries, one parser.** `flayer <cmd>` is `mind flayer <cmd>`, and
   both reach the same function. `mind add` and `flayer add` (with or without
   `-p`) are one implementation given a different holder
@@ -139,21 +161,50 @@ These are easy to break from a single file without noticing.
   to hide the rest. An absence (no `skills/` folder yet) is not a failure.
 - **Never overwrite what somebody wrote.**
   - New markers are written from string templates so their comments survive.
-    Edits go through `toml_edit` (`edit_array`) and a temp file of their own
+    Edits go through `toml_edit` (`edit_array`, or `edit_marker_held` for a
+    writer that holds the lock already) and a temp file of their own
     (`replace_file`, named for the run) plus a rename.
+  - A project's `.mind/settings.json`, which has no comments to keep, is
+    serialized (`Settings::text`) and made with `create_new`. It is changed
+    only through `MindProject::change_settings`, which reads the file again
+    and edits each key whose value changed, `directories` an entry at a time,
+    through `config_entry`, as an agent's config file is (below), then
+    `replace_file`: a key this build does not know, the key order and a
+    hand-made layout survive, and nothing is written when nothing changed.
   - Creation uses `create_new` or `create_dir`.
   - `rename` rewrites only the `name:` line (`frontmatter::with_key`).
-  - `remove` is a dry run without `--yes`.
+  - `remove` and `flayer migrate --library` are dry runs without `--yes`.
+    A migration moves nothing a project holds, refuses as a whole, and keeps
+    the marker it rewrites as `flayer.toml.v<version>` (`create_new`).
   - A file somebody else owns is edited only inside Mindflayer's marked
-    blocks, every byte outside them kept, and a malformed block is refused,
-    not repaired. The blocks: `# mindflayer:begin`/`# mindflayer:end` in
+    blocks or, in an agent's config file, which can carry no marks, one entry
+    at a time (next bullet). Every byte outside them is kept, and a malformed
+    block is refused, not repaired. The blocks:
+    `# mindflayer:begin`/`# mindflayer:end` in
     `$GIT_COMMON_DIR/info/exclude` (`exclude`), where an edit rewrites only its
     own project's `# project <key>` group. A team's `.gitignore` and
-    `core.excludesFile` are never edited; the one `.gitignore` Mindflayer
-    writes is `.mind/tmp`'s, inside a folder it owns, made with `create_new`.
+    `core.excludesFile` are never edited; the `.gitignore`s Mindflayer writes
+    are `.mind/tmp`'s and a local project's `.mind`'s own (`MIND_IGNORE`),
+    each inside a folder it owns, made with `create_new`.
+  - An entry in a config file somebody else owns (`.mcp.json`,
+    `opencode.json`, `.codex/config.toml`) is changed one at a time through
+    `config_entry`: JSON and JSONC entries are edited through jsonc-parser's
+    CST (an insert spliced into the text where it says) and TOML through
+    `toml_edit`, never parsed and serialized again, so every byte outside the
+    entry is kept. What an edit wrote is read back and refused unless only
+    the entry changed, and a file that does not parse is refused, never
+    rewritten. A changed file goes through `replace_bytes_unresolved`,
+    keeping its permissions; a new one is made with `create_new`. The module
+    knows no agent: the file, the key path and the entry are the caller's.
+  - `flayer init` refuses a directory for the workspace's own that overlaps
+    the shelf or the cache, which are reserved for gathering
+    (`gathered_overlap`). `flayer init` and the workspace's own artifacts
+    never put an `AGENTS.md`, a `CLAUDE.md` or a kind's folder in the
+    workspace's directory; they live in `.mindflayer`. An install into a
+    project at the workspace's root is that project's (D-03).
 - **Mindflayer only manages what it installed.** The ledger's record of an
-  install — one installation, a target for each copy it wrote, its origin and
-  the `hash::tree` of what it wrote, that hash's one definition — is what
+  install (one installation, a target for each copy it wrote, its origin and
+  the `hash::tree` of what it wrote, that hash's one definition) is what
   allows overwriting and deleting. An unrecorded artifact is
   `Standing::Foreign` and is never touched. Core's lifecycle changes
   (`lifecycle::add`, `finish_edit`, `rename` and `remove`) drop any record
@@ -168,7 +219,7 @@ These are easy to break from a single file without noticing.
   (what `ValidationIssue::is_strict` picks out), so change the rules there and
   nowhere else; gathering
   takes such a skill with a `warning:` per problem, and `validate` reports
-  everything — `flayer validate` without `-p` reads the shelf too — but calls
+  everything (`flayer validate` without `-p` reads the shelf too) but calls
   an artifact invalid only for what is not `ValidationIssue::is_warning`. Keys the format does not define pass through
   untouched. A rule's front matter is optional (`rule::RuleManifest`): read
   only when its fences hold a YAML mapping, and whatever it leaves unread is a
@@ -178,6 +229,12 @@ These are easy to break from a single file without noticing.
   - An installed name must be one folder name (`install::is_folder_name`).
   - Symlinks are followed only inside the source (`copy::tree`'s `within`).
   - A project's artifact directories must stay inside the project.
+  - A config file is named by a route of folder names from the project, and
+    a symlink anywhere on it, the file included, is refused, never followed
+    (`config_entry::ConfigFile`): the route is looked at when the file is
+    read and again just before it is written, and the write is never
+    resolved. A folder made a link between that last look and the rename is
+    the one window left (architecture.md, open questions).
   - URLs are stored, logged and shown without credentials. `url::redacted`
     is the one function that takes them out: the ledger applies it to every
     URL it writes and reads, `GitError` to what it says, `git::scrub` to a
@@ -191,15 +248,21 @@ These are easy to break from a single file without noticing.
     `url::redacted` too.
 - **Writers take turns; readers never wait.** Core's writers hold the
   workspace's `.mindflayer/lock` (`FlayerWorkspace::lock`) while they change
-  it: `edit_array`, `install::install` and `uninstall`, `gather::gather`, and
+  it: `edit_array`, `install::install` and `uninstall`, `gather::gather`,
   `gather::scrub`, which `FlayerWorkspace::ledger_to_write` runs, when it has
-  clones to rewrite. A new writer takes it the same way, inside core. Opening
-  the ledger takes no lock: a migration keeps itself apart in its own
-  transaction. The lock is not re-entrant: a writer never calls another while
-  it holds it, and a front end never takes it. Reads (`FlayerWorkspace::open`,
-  `ledger_for_reading`) never take it. A wait is bounded (`lock::WAIT`),
-  ending in a `LockError::Busy` that names the holder's pid, except a record
-  drop's (`install::disown`), which follows a change already made.
+  clones to rewrite, and `migrate::library`, from its plan to its rewrite of
+  the marker. A new writer takes it the same way, inside core;
+  `config_entry::ConfigFile` takes none, since the writers that call it hold
+  it. `MindProject::change_settings` takes none yet: a project's settings are
+  not the workspace's, and which lock keeps their writers apart is an open
+  question in `docs/architecture.md` for its first caller (#37) to settle.
+  Opening the ledger takes no lock: a schema migration keeps itself apart
+  in its own transaction. The lock is not re-entrant: a writer never calls
+  another while it holds it, and a front end never takes it. Reads
+  (`FlayerWorkspace::open`, `ledger_for_reading`) never take it. A wait is
+  bounded (`lock::WAIT`), ending in a `LockError::Busy` that names the
+  holder's pid, except a record drop's (`install::disown`), which follows a
+  change already made.
 - **A gather never prompts for a credential itself.** Every connection `gix`
   lets a clone configure gets the callback in `gather/credentials.rs`, which
   runs the git-config credential helpers with `gix`'s prompt and askpass
@@ -210,11 +273,17 @@ These are easy to break from a single file without noticing.
   retry after a remote branch named `HEAD`, a connection the callback cannot
   reach.
 - **Formats are versioned.** Each marker carries its own `version`
-  (`MIND_FORMAT_VERSION` for `mind.toml`, `FLAYER_FORMAT_VERSION` for
-  `flayer.toml`, so bumping one never makes older builds refuse the other; see
-  `DIRECTORIES_VERSION` for how a v1 `mind.toml` is still read) and the ledger
-  uses SQLite's `user_version`. Anything from a newer version is refused. A
-  format change must keep reading old files the way they were written.
+  (`MIND_FORMAT_VERSION` for a project's, `FLAYER_FORMAT_VERSION` for
+  `flayer.toml`, so bumping one never makes older builds refuse the other)
+  and the ledger uses SQLite's `user_version`. A project's marker is
+  `mind.toml` up to `MIND_TOML_VERSION`, which `mind init` still writes, and
+  `settings.json` from `SETTINGS_VERSION`; either makes a directory a
+  project (`MindProject::is_marked`), and the settings win when both are
+  there. See `DIRECTORIES_VERSION` for how a v1 `mind.toml` is still read,
+  and `SETTINGS_VERSION` for why a kind a settings file does not name has no
+  folder (`directory_for` is `None`). Anything from a newer version is
+  refused. A format change must keep reading old files the way they were
+  written.
   - A ledger schema step is one more block in `Ledger::migrate`, which takes
     the write lock, copies the file to `mindflayer.db.v<old>.bak`
     (`Ledger::back_up`) and runs every step in one transaction. A step fills
@@ -300,8 +369,19 @@ These are easy to break from a single file without noticing.
   (`src/overrides/colors.ts`), and the colour mode switches by class
   (`src/color-mode.ts`). `tests/dist.test.ts` builds the panel and checks
   it; `tests/shell.test.ts` fails on any `<style>` element added at run time.
-- **`Kind` is a closed enum.** To add a kind, follow "Adding a third kind" in
-  the architecture doc; the compiler's exhaustive matches are the checklist.
+- **Activating prints, and writes nothing.** `flayer activate` prints core's
+  code (`activate::script`), and nothing on stdout when it fails, so `eval`
+  runs nothing. Its shell comes from `--shell`, then `$SHELL`, read by the
+  front end. The code undoes only what it did, through `flayer-deactivate`
+  and never `deactivate`, and a workspace's name reaches a prompt only
+  through `activate::prompt`.
+- **`Kind` and `Agent` are closed enums.** To add a kind, follow "Adding a
+  third kind" in the architecture doc, and to add an agent, "Adding an agent",
+  which starts in `docs/agents.md`. Either way the compiler's exhaustive
+  matches are the checklist: the target table's `standard` matches every kind
+  and agent with no wildcard, so neither compiles until it says where it goes.
+  "Adding an agent" also lists what no match covers: `Agent::ALL`, and an
+  agent home's field, option and place in `common::PINNED` and `CLEARED`.
 
 ## Tests
 
@@ -325,6 +405,13 @@ These are easy to break from a single file without noticing.
   library then falls back to the account's real home. Keep it that way.
 - Git sources are built in-process with `gix` (`common::repository`): no
   network and no `git` binary.
+- Tests that run a shell (`apps/cli/tests/shells_test.rs`, Linux only) start
+  it with no startup file and an environment holding only a `PATH`, a
+  temporary `HOME` and what the test sets, so no `MINDFLAYER_*` variable or
+  real shell configuration gets in. A shell, or a python3 to make a
+  virtualenv with, that is not installed is skipped and said on stderr,
+  except under `$CI`, where it fails the test: the `test (cli)` job
+  installs zsh so that both shells run there.
 - The server's suites run against a fake backend with types of its own
   (`common::Fake`), never the CLI's. They bind 127.0.0.1 on port 0 and send
   requests through the router in process (`common::send`), or over loopback,
@@ -368,3 +455,9 @@ These are easy to break from a single file without noticing.
 Comments and doc comments explain *why* a choice was made, often naming the
 alternative that was rejected. They rarely narrate what the code does. Match
 that density and voice in code and docs alike.
+
+No em dash (U+2014), in docs, comments, messages or commit messages: the owner
+finds it reads as machine-written. Write a comma, a colon, parentheses or a
+new sentence instead, never a hyphen or a spaced en dash in its place.
+`make lint` fails on one in any tracked file; a commit message is yours to
+check.

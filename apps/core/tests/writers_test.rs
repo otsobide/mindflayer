@@ -19,6 +19,7 @@ use mindflayer_core::install::{self, Installed, Removed, Standing};
 use mindflayer_core::ledger::{Action, Outcome, SourceKind};
 use mindflayer_core::lifecycle::{self, Record};
 use mindflayer_core::lock::{HOLDER_FILE, WAIT};
+use mindflayer_core::migrate;
 use mindflayer_core::{
     FlayerWorkspace, Kind, Ledger, LockError, MindProject, Reference, WorkspaceError, LEDGER_FILE,
 };
@@ -398,7 +399,11 @@ fn a_link_waits_for_the_writer_before_it() {
 /// to install it into.
 fn offering_deploy() -> (TempDir, FlayerWorkspace, MindProject) {
     let (dir, workspace) = workspace();
-    let folder = dir.path().join("skills").join("deploy");
+    let folder = workspace
+        .own()
+        .directory_for(Kind::Skill)
+        .unwrap()
+        .join("deploy");
     fs::create_dir_all(&folder).unwrap();
     fs::write(folder.join("SKILL.md"), skill("deploy", "Ship it")).unwrap();
     let project = projects(dir.path(), "alpha", 1).remove(0);
@@ -417,7 +422,7 @@ fn an_install_waits_for_the_writer_before_it() {
         install::install(&installing, &ledger, &into, &candidate).unwrap();
     });
 
-    let copy = project.directory_for(Kind::Skill).join("deploy");
+    let copy = project.directory_for(Kind::Skill).unwrap().join("deploy");
     assert!(copy.join("SKILL.md").is_file());
 }
 
@@ -470,7 +475,11 @@ fn an_uninstall_waits_for_the_writer_before_it() {
         assert!(matches!(removed, Removed::Removed { .. }), "{removed:?}");
     });
 
-    assert!(!project.directory_for(Kind::Skill).join("deploy").exists());
+    assert!(!project
+        .directory_for(Kind::Skill)
+        .unwrap()
+        .join("deploy")
+        .exists());
 }
 
 #[test]
@@ -485,6 +494,50 @@ fn a_gather_waits_for_the_writer_before_it() {
         let report = gather::gather(&gathering, &ledger, &request).unwrap();
         assert_eq!(report.added.len(), 1);
     });
+}
+
+/// A workspace keeping its own beside its projects, as one made before the
+/// library does, with a skill in its folder.
+fn kept_beside() -> (TempDir, FlayerWorkspace) {
+    let dir = TempDir::new().unwrap();
+    let (workspace, _) = FlayerWorkspace::init_with(dir.path(), &common::beside()).unwrap();
+    mindflayer_core::create(&workspace.own(), Kind::Skill, "deploy", "Ship it").unwrap();
+    (dir, workspace)
+}
+
+#[test]
+fn a_migration_waits_for_the_writer_before_it() {
+    let (dir, workspace) = kept_beside();
+    let mut migrating = workspace.clone();
+
+    waits_for_the_writer_before_it(&workspace, move || {
+        let migrated = migrate::library(&mut migrating).unwrap();
+        assert_eq!(migrated.plan.moves.len(), 1);
+    });
+
+    assert!(dir
+        .path()
+        .join(".mindflayer/library/skills/deploy/SKILL.md")
+        .is_file());
+}
+
+#[test]
+fn a_migration_plans_again_once_it_holds_the_workspace() {
+    let (dir, workspace) = kept_beside();
+    let mut migrating = workspace.clone();
+    let held = workspace.lock().unwrap();
+    let writer = thread::spawn(move || migrate::library(&mut migrating).unwrap());
+    thread::sleep(Duration::from_millis(100));
+    // Added while the migration waits, after any plan made before it.
+    mindflayer_core::create(&workspace.own(), Kind::Skill, "review", "Look").unwrap();
+    drop(held);
+
+    let migrated = writer.join().unwrap();
+
+    assert_eq!(migrated.plan.moves.len(), 2);
+    let library = dir.path().join(".mindflayer/library/skills");
+    assert!(library.join("deploy/SKILL.md").is_file());
+    assert!(library.join("review/SKILL.md").is_file());
 }
 
 #[test]

@@ -18,8 +18,8 @@ use std::sync::atomic::{AtomicU64, Ordering};
 
 /// Copy a directory and everything under it.
 ///
-/// A symlink inside is copied as what it points at — what leaves a clone has
-/// to keep working once that clone is replaced — but only when it points
+/// A symlink inside is copied as what it points at (what leaves a clone has
+/// to keep working once that clone is replaced), but only when it points
 /// somewhere inside `within` (the clone a skill was gathered from, the
 /// workspace an installed one comes from) or inside `from` itself. One that
 /// points out of both is refused, not followed, because following it is how a
@@ -84,7 +84,7 @@ fn copy_tree(
 /// run report what moved rather than reporting everything.
 ///
 /// All or nothing: the copy is made beside `to` and only put in its place
-/// once it is whole, so a copy that fails — a refused link, a full disk —
+/// once it is whole, so a copy that fails (a refused link, a full disk)
 /// leaves `to` exactly as it was, and leaves nothing where there was nothing.
 /// `within` bounds the symlinks followed, as for [`tree`].
 pub fn replace(from: &Path, to: &Path, within: &Path) -> Result<Change, io::Error> {
@@ -412,7 +412,7 @@ fn claim(scratch: &Path) -> Result<PathBuf, io::Error> {
 /// A number nobody can guess, without a dependency for it: `std` draws its
 /// hashers' keys from the operating system. The count keeps two calls in one
 /// process apart even if those keys were not random.
-fn random() -> u64 {
+pub(crate) fn random() -> u64 {
     static CALLS: AtomicU64 = AtomicU64::new(0);
     let mut hasher = RandomState::new().build_hasher();
     hasher.write_u64(CALLS.fetch_add(1, Ordering::Relaxed));

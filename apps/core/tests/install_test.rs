@@ -11,7 +11,10 @@ use mindflayer_core::copy;
 use mindflayer_core::gather::{self, Request};
 use mindflayer_core::install::{self, Installed, Removed, Standing};
 use mindflayer_core::ledger::Ledger;
-use mindflayer_core::{Directories, FlayerWorkspace, Kind, MindProject};
+use mindflayer_core::{
+    Agent, Directories, FlayerWorkspace, Kind, MindProject, Settings, Share, WorkspaceError,
+    MIND_DIR, SETTINGS_FILE,
+};
 use tempfile::TempDir;
 
 /// A workspace with one project in it, and a shelf holding `names`.
@@ -52,7 +55,7 @@ fn candidate<'a>(candidates: &'a [install::Candidate], name: &str) -> &'a instal
 }
 
 fn installed_at(project: &MindProject, name: &str) -> std::path::PathBuf {
-    project.directory_for(Kind::Skill).join(name)
+    project.directory_for(Kind::Skill).unwrap().join(name)
 }
 
 #[test]
@@ -157,6 +160,42 @@ fn uninstalling_takes_it_back_out() {
     assert!(!installed_at(&project, "deploy").exists());
     let after = install::survey(&workspace, &ledger, &project, Kind::Skill).unwrap();
     assert_eq!(after[0].standing, Standing::Absent);
+}
+
+#[test]
+fn a_project_whose_settings_name_no_skills_folder_is_offered_nothing_and_refused_one_by_name() {
+    let (dir, workspace, _, ledger) = ready(&["deploy"]);
+    let root = dir.path().join("alpha");
+    fs::create_dir_all(root.join(MIND_DIR)).unwrap();
+    let settings = Settings::new(
+        "alpha",
+        Agent::ALL.to_vec(),
+        Share::Local,
+        Directories::default().with(Kind::Rule, "rules"),
+    );
+    fs::write(
+        root.join(MIND_DIR).join(SETTINGS_FILE),
+        settings.text().unwrap(),
+    )
+    .unwrap();
+    let project = MindProject::open(&root).unwrap();
+
+    let candidates = install::survey(&workspace, &ledger, &project, Kind::Skill).unwrap();
+    let refused =
+        install::offered(&workspace, &ledger, &project, Kind::Skill, "deploy", None).unwrap_err();
+
+    assert!(candidates.is_empty(), "{candidates:?}");
+    assert!(
+        matches!(
+            refused,
+            install::InstallError::Workspace(WorkspaceError::NoDirectory {
+                kind: Kind::Skill,
+                ..
+            })
+        ),
+        "{refused}"
+    );
+    assert!(!root.join("skills").exists());
 }
 
 // ---------------------------------------------------------------------------
@@ -457,7 +496,11 @@ fn own_skills(names: &[&str], files: usize) -> (TempDir, FlayerWorkspace, MindPr
 
 /// Change one of the workspace's own skills, so installing it again updates.
 fn edit_own(workspace: &FlayerWorkspace, name: &str, round: usize) {
-    let skill = workspace.own().directory_for(Kind::Skill).join(name);
+    let skill = workspace
+        .own()
+        .directory_for(Kind::Skill)
+        .unwrap()
+        .join(name);
     fs::write(skill.join("reference-0.md"), format!("Round {round}.\n")).unwrap();
 }
 
@@ -500,7 +543,7 @@ fn staged(project: &MindProject) -> Vec<String> {
 fn while_an_install_runs_and_after_it_the_skills_folder_holds_only_the_skill() {
     let (_dir, workspace, project) = own_skills(&["deploy"], 200);
     let ledger = workspace.ledger().unwrap();
-    let skills = project.directory_for(Kind::Skill);
+    let skills = project.directory_for(Kind::Skill).unwrap();
     let done = AtomicBool::new(false);
 
     // Somebody listing the folder the whole time, as an agent globbing it
@@ -645,11 +688,15 @@ fn two_installs_of_different_skills_at_once_each_land_whole() {
     });
 
     assert_eq!(
-        listing(&project.directory_for(Kind::Skill)),
+        listing(&project.directory_for(Kind::Skill).unwrap()),
         ["deploy", "review"]
     );
     for name in ["deploy", "review"] {
-        let own = workspace.own().directory_for(Kind::Skill).join(name);
+        let own = workspace
+            .own()
+            .directory_for(Kind::Skill)
+            .unwrap()
+            .join(name);
         assert!(
             copy::same(&own, &installed_at(&project, name)).unwrap(),
             "{name}"
@@ -668,7 +715,11 @@ fn two_installs_of_different_skills_at_once_each_land_whole() {
 fn two_installs_of_one_skill_at_once_leave_one_whole_copy_and_nothing_beside_it() {
     let (_dir, workspace, project) = own_skills(&["deploy"], 100);
     workspace.ledger().unwrap();
-    let own = workspace.own().directory_for(Kind::Skill).join("deploy");
+    let own = workspace
+        .own()
+        .directory_for(Kind::Skill)
+        .unwrap()
+        .join("deploy");
     let rounds = 10;
     let start = std::sync::Barrier::new(2);
     let edited = std::sync::Barrier::new(2);
@@ -696,7 +747,10 @@ fn two_installs_of_one_skill_at_once_leave_one_whole_copy_and_nothing_beside_it(
     });
 
     assert!(copy::same(&own, &installed_at(&project, "deploy")).unwrap());
-    assert_eq!(listing(&project.directory_for(Kind::Skill)), ["deploy"]);
+    assert_eq!(
+        listing(&project.directory_for(Kind::Skill).unwrap()),
+        ["deploy"]
+    );
     assert!(staged(&project).is_empty(), "{:?}", staged(&project));
 }
 
@@ -706,7 +760,7 @@ fn a_skills_folder_that_is_not_there_yet_is_made() {
     // missing although its marker names it.
     let (_dir, workspace, project) = own_skills(&["deploy"], 0);
     let ledger = workspace.ledger().unwrap();
-    fs::remove_dir(project.directory_for(Kind::Skill)).unwrap();
+    fs::remove_dir(project.directory_for(Kind::Skill).unwrap()).unwrap();
 
     let outcome = install_named(&workspace, &ledger, &project, "deploy")
         .unwrap()
@@ -754,7 +808,7 @@ fn an_install_that_fails_still_says_what_an_interrupted_one_left_and_it_cleared(
     fs::create_dir_all(left.join("new").join("deploy")).unwrap();
     // A file where the skills folder goes, so the copy is built and swept
     // for, but cannot be put in place.
-    let skills = project.directory_for(Kind::Skill);
+    let skills = project.directory_for(Kind::Skill).unwrap();
     fs::remove_dir(&skills).unwrap();
     fs::write(&skills, "not a folder").unwrap();
 
@@ -776,7 +830,7 @@ fn what_an_earlier_version_left_beside_the_copy_is_cleared_and_said_by_the_next_
     install_named(&workspace, &ledger, &project, "deploy").unwrap();
     // As an install of a version that staged beside leaves it when stopped:
     // a half-made copy next to the skill, and the one it was replacing.
-    let skills = project.directory_for(Kind::Skill);
+    let skills = project.directory_for(Kind::Skill).unwrap();
     let left = [
         skills.join(".deploy.mindflayer-new"),
         skills.join(".deploy.mindflayer-old"),

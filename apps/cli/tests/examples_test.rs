@@ -1,6 +1,6 @@
 //! The examples in `examples/`: a workspace of their own, holding two skills
 //! and two rules, that any workspace can load and install from without
-//! gathering anything first — and the README's walk-through of them, held to
+//! gathering anything first, and the README's walk-through of them, held to
 //! what the commands print.
 
 mod common;

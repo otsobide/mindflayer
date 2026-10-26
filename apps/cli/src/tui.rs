@@ -1,7 +1,7 @@
 //! The TUI: every project a workspace manages, and a key for each command.
 //!
 //! `flayer` on its own opens it. What it changes, it changes by running a
-//! command line — `flayer link beta`, `mind -C beta add skill deploy '…'` —
+//! command line (`flayer link beta`, `mind -C beta add skill deploy '…'`),
 //! parsed by the parsers the binaries use and run through the same functions,
 //! and those lines are printed when it closes. There is nothing the screen can
 //! do that a command cannot, and nothing a command says that the screen says
@@ -9,7 +9,7 @@
 //!
 //! Split the way the install screen it embeds is: [`state`] is what a key
 //! does, [`ui`] is what the screen looks like, and this file is the loop and
-//! the work — the only parts that touch a terminal or a disk.
+//! the work: the only parts that touch a terminal or a disk.
 
 pub mod minds;
 pub mod state;
@@ -25,7 +25,7 @@ use std::error::Error as _;
 
 use clap::Parser;
 use mindflayer_core::gather::Watch;
-use mindflayer_core::resolve::{self, resolve, Intent, Reason};
+use mindflayer_core::resolve::{self, resolve, Intent, Reason, Resolved};
 use mindflayer_core::workspace::Member as Registered;
 use mindflayer_core::{
     lifecycle, paths, scan, template, Catalog, FlayerWorkspace, Kind, MindProject, WorkspaceError,
@@ -96,7 +96,7 @@ pub fn minds(directory: &Path, lookup: &Lookup) -> Result<App, CliError> {
 /// Open the TUI on the project at or above `directory`: what `mind` does on
 /// its own.
 ///
-/// A project a workspace manages opens in that workspace, on the project —
+/// A project a workspace manages opens in that workspace, on the project:
 /// the same screen `flayer` opens, since that is where the project's
 /// neighbours and its installs are. One no workspace manages opens on its own.
 pub fn run_project(directory: &Path, lookup: &Lookup) -> Result<Outcome, Failure> {
@@ -171,7 +171,7 @@ fn drive(terminal: &mut DefaultTerminal, app: &mut App) -> Result<(), io::Error>
             // however the loop ends.
             Step::Quit => return Ok(()),
             // An editor draws a screen of its own, so this one steps aside
-            // for it — raw mode off, back to the normal screen — and is drawn
+            // for it (raw mode off, back to the normal screen) and is drawn
             // again from scratch once the editor is closed.
             Step::Run(task) if task.takes_terminal() => {
                 ratatui::restore();
@@ -415,7 +415,7 @@ pub fn execute(words: &[String], base: &Path, lookup: &Lookup, watch: &Watch) ->
 const SCREEN_IN_A_SCREEN: &str = "opens a screen of its own, so it is not run from inside this one";
 
 /// Whether a workspace command opens a screen of its own: the TUI, or the
-/// install screen — `flayer install` with nothing named to install.
+/// install screen (`flayer install` with nothing named to install).
 fn draws(command: Option<&FlayerCommand>) -> bool {
     matches!(
         command,
@@ -498,19 +498,17 @@ fn apply_install(base: &Path, screen: &InstallScreen) -> Done {
 // ---------------------------------------------------------------------------
 
 /// Read everything the screen shows from the disk: the workspace `lookup`
-/// resolves from `directory`, as a read resolves it — the default one in
-/// home as it will be, when nothing has made it yet.
+/// resolves from `directory`, as a read resolves it (the default one in
+/// home as it will be, when nothing has made it yet).
 ///
 /// Opening a screen is no reason to make it. The first change made from the
 /// screen is, and that runs a command that writes, which makes it the way it
 /// would from the shell.
 pub fn load(directory: &Path, lookup: &Lookup) -> Result<View, CliError> {
     Ok(match resolve(&lookup.inputs(directory, Intent::Read))? {
-        Some(resolved) => View::Workspace(workspace_view(
-            &resolved.workspace,
-            resolved.reason == Reason::Home,
-            lookup,
-        )),
+        Some(resolved) => {
+            View::Workspace(workspace_view(&resolved.workspace, resolved.reason, lookup))
+        }
         None => View::Nowhere,
     })
 }
@@ -529,15 +527,12 @@ pub fn load_project(directory: &Path, lookup: &Lookup) -> Result<View, CliError>
     // that decides it for the `mind` lines this screen runs, so the two
     // cannot come to disagree.
     let consulted = resolve::consulted(&lookup.inputs(project.root(), Intent::Read), &project)?;
-    let default = consulted
-        .as_ref()
-        .is_some_and(|resolved| resolved.reason == Reason::Home);
-    let above = consulted.map(|resolved| resolved.workspace);
-    if let Some(workspace) = &above {
+    if let Some(Resolved { workspace, reason }) = &consulted {
         if workspace.is_linked(project.root()) {
-            return Ok(View::Workspace(workspace_view(workspace, default, lookup)));
+            return Ok(View::Workspace(workspace_view(workspace, *reason, lookup)));
         }
     }
+    let above = consulted.map(|resolved| resolved.workspace);
     // `.`, because the commands run from the project itself.
     let entry = String::from(".");
     let root = project.root().to_path_buf();
@@ -562,14 +557,14 @@ pub fn load_project(directory: &Path, lookup: &Lookup) -> Result<View, CliError>
         above: above
             .map(|workspace| workspace.root().to_path_buf())
             .or_else(|| lookup.home.clone()),
-        default: false,
+        reason: None,
         made: true,
     }))
 }
 
 /// A workspace as the screen shows it: its own artifacts first, then every
 /// project it manages.
-fn workspace_view(workspace: &FlayerWorkspace, default: bool, lookup: &Lookup) -> Workspace {
+fn workspace_view(workspace: &FlayerWorkspace, reason: Reason, lookup: &Lookup) -> Workspace {
     let own = workspace.own();
     let mut members = vec![held(
         String::new(),
@@ -603,12 +598,12 @@ fn workspace_view(workspace: &FlayerWorkspace, default: bool, lookup: &Lookup) -
         loaded: loaded(workspace),
         scope: Scope::Workspace,
         above: None,
-        default,
+        reason: Some(reason),
         made: workspace.is_made(),
     }
 }
 
-/// Every workspace this one loads, with how many of its own each offers —
+/// Every workspace this one loads, with how many of its own each offers,
 /// counted from the install machinery's own offers, so the number is what
 /// the install screen shows.
 fn loaded(workspace: &FlayerWorkspace) -> Vec<LoadedSource> {
@@ -717,7 +712,7 @@ fn held(
 
     // A file that does not read is listed where it would have been, by the
     // name its place gives it, so it can be opened and fixed from here. Only
-    // what cannot be pinned to an artifact — a folder that cannot be listed —
+    // what cannot be pinned to an artifact (a folder that cannot be listed)
     // is left as a warning on its own.
     let mut warnings = Vec::new();
     for failure in catalog.failures() {
@@ -741,7 +736,7 @@ fn held(
 
     let directories = Kind::ALL
         .into_iter()
-        .map(|kind| (kind, within(project, kind)))
+        .filter_map(|kind| Some((kind, within(project, kind)?)))
         .collect();
     let templates = match template::templates(workspace, project) {
         Ok(templates) => templates
@@ -772,13 +767,16 @@ fn held(
     }
 }
 
-/// Where a project keeps a kind, relative to the project.
-fn within(project: &MindProject, kind: Kind) -> String {
-    let directory = project.directory_for(kind);
-    paths::relative_to(&directory, project.root())
-        .as_deref()
-        .and_then(paths::to_config_string)
-        .unwrap_or_else(|| directory.display().to_string())
+/// Where a project keeps a kind, relative to the project; `None` when it
+/// keeps no folder for it, which an empty project then does not mention.
+fn within(project: &MindProject, kind: Kind) -> Option<String> {
+    let directory = project.directory_for(kind)?;
+    Some(
+        paths::relative_to(&directory, project.root())
+            .as_deref()
+            .and_then(paths::to_config_string)
+            .unwrap_or_else(|| directory.display().to_string()),
+    )
 }
 
 /// How much is on the shelf, without creating a ledger just to look.

@@ -7,6 +7,7 @@
 use std::io;
 use std::path::{Path, PathBuf};
 
+use mindflayer_core::activate::{self, ActivateError, WORKSPACE_VARIABLE};
 use mindflayer_core::gather::GatherError;
 use mindflayer_core::ledger::LedgerError;
 use mindflayer_core::{
@@ -62,12 +63,28 @@ pub enum CliError {
     Lifecycle(#[from] LifecycleError),
     #[error(transparent)]
     Template(#[from] TemplateError),
+    #[error(transparent)]
+    Activate(#[from] ActivateError),
+    #[error(
+        "$SHELL is not set; say which shell to write for with --shell ({})",
+        activate::expected()
+    )]
+    NoShell,
+    #[error(
+        "cannot tell which shell `{program}` is; say which to write for with --shell ({})",
+        activate::expected()
+    )]
+    UnknownShell { program: String },
     #[error("nothing removed: this deletes {}; add --yes to go ahead", deleting(.path, .kind, .files))]
     Unconfirmed {
         kind: Kind,
         path: PathBuf,
         files: usize,
     },
+    #[error("nothing moved: {0}")]
+    Refused(mindflayer_core::migrate::Refusal),
+    #[error(transparent)]
+    Migrate(#[from] mindflayer_core::migrate::MigrateError),
     #[error("`{editor}` could not be started: {source}")]
     Editor {
         editor: String,
@@ -85,14 +102,14 @@ pub enum CliError {
     },
     #[error("no project called `{wanted}` in this workspace{}", known_projects(.known))]
     UnknownProject { wanted: String, known: Vec<String> },
-    #[error("`{wanted}` names more than one project — {} — so name it by its path", .matches.join(", "))]
+    #[error("`{wanted}` names more than one project ({}), so name it by its path", .matches.join(", "))]
     AmbiguousProject {
         wanted: String,
         matches: Vec<String>,
     },
-    #[error("say which project to install into — `flayer install -p <project> <skill>` — or run `flayer install` alone for the screen")]
+    #[error("say which project to install into (`flayer install -p <project> <skill>`), or run `flayer install` alone for the screen")]
     InstallWhere,
-    #[error("say which skill to install — `flayer install -p <project> <skill>` — or run `flayer install` alone for the screen")]
+    #[error("say which skill to install (`flayer install -p <project> <skill>`), or run `flayer install` alone for the screen")]
     InstallWhat,
     #[error("{project} has no {name} installed, so there is nothing to take out")]
     NotInstalled { name: String, project: String },
@@ -132,18 +149,18 @@ impl From<ResolveError> for CliError {
 }
 
 /// What chose a workspace that cannot be used, as it was spelled.
-fn named_by(reason: &Reason) -> &'static str {
+fn named_by(reason: &Reason) -> String {
     match reason {
-        Reason::Activated => "$MINDFLAYER_WORKSPACE",
+        Reason::Activated => format!("${WORKSPACE_VARIABLE}"),
         // Core refuses only what was chosen, so the other two never get here.
-        Reason::Explicit | Reason::Above | Reason::Home => "-W",
+        Reason::Explicit | Reason::Above | Reason::Home => String::from("-W"),
     }
 }
 
 /// "; it manages alpha, beta", or what to do when it manages nothing.
 fn known_projects(known: &[String]) -> String {
     if known.is_empty() {
-        String::from("; it manages none yet — `flayer link <path>` adds one")
+        String::from("; it manages none yet: `flayer link <path>` adds one")
     } else {
         format!("; it manages {}", known.join(", "))
     }

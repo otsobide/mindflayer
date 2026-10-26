@@ -11,9 +11,11 @@
 //! and whatever front end comes after it, decides how to render what these
 //! types return, so the two can never disagree about what a skill is.
 
+pub mod activate;
 pub mod agent;
 pub mod artifact;
 pub mod catalog;
+pub mod config_entry;
 pub mod copy;
 pub mod create;
 pub mod exclude;
@@ -25,16 +27,19 @@ pub mod kind;
 pub mod ledger;
 pub mod lifecycle;
 pub mod lock;
+pub mod migrate;
 pub mod paths;
 pub mod resolve;
 pub mod rule;
 pub mod scan;
+pub mod settings;
 pub mod skill;
 pub mod template;
 pub mod url;
 pub mod workspace;
 
-pub use agent::AgentHomes;
+pub use activate::{ActivateError, Shell, UnknownShell};
+pub use agent::{Agent, AgentHomes, AgentTarget, TargetTable, UnknownAgent};
 pub use artifact::{Artifact, ArtifactError, Declared, ValidationIssue};
 pub use catalog::{Catalog, DiscoveryFailure, Reference, QUALIFIER};
 pub use create::{create, create_from, CreateError};
@@ -49,6 +54,7 @@ pub use lock::{LockError, WorkspaceLock};
 pub use resolve::{resolve, resolve_except, Inputs, Intent, Reason, ResolveError, Resolved};
 pub use rule::{Lenient, RuleManifest};
 pub use scan::{scan, Found, Scan, ScanFailure};
+pub use settings::{ProjectId, Settings, Share, SETTINGS_FILE};
 pub use skill::{
     Compatibility, Metadata, SkillManifest, MAX_COMPATIBILITY_LEN, MAX_DESCRIPTION_LEN,
     MAX_NAME_SEGMENT_LEN,
@@ -56,6 +62,7 @@ pub use skill::{
 pub use template::{Template, TemplateError, TEMPLATES_DIR};
 pub use workspace::{
     Directories, FlayerConfig, FlayerWorkspace, Initialization, Loaded, Marker, Member, MindConfig,
-    MindProject, Registration, WorkspaceError, CACHE_DIR, DIRECTORIES_VERSION, FLAYER_CONFIG,
-    FLAYER_DIR, MIND_CONFIG, MIND_DIR,
+    MindProject, ProjectConfig, ProjectWarning, Registration, WorkspaceError, CACHE_DIR,
+    DIRECTORIES_VERSION, FLAYER_CONFIG, FLAYER_DIR, LIBRARY_DIR, MIND_CONFIG, MIND_DIR,
+    MIND_IGNORE, SETTINGS_VERSION,
 };

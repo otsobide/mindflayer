@@ -1,0 +1,13 @@
+# Mindflayer mind project.
+#
+# Skills live in .mind/skills/<name>/SKILL.md: a directory each, so a
+# skill can carry scripts and references beside its instructions.
+# Rules live in .mind/rules/<name>.md: one markdown file each, giving
+# context and declaring nothing. Folders under rules group and mean
+# nothing else, so rules/git/no-force-push.md is the rule
+# `git/no-force-push`.
+#
+# Everything under .mind is meant to be committed: it travels with the
+# project it describes.
+version = 1
+name = "collapse"

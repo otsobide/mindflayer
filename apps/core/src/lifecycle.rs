@@ -74,9 +74,9 @@ impl Target {
 /// has been made, and reporting it as not made would be false.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Record {
-    /// No record was changed: there was none — no workspace was consulted,
+    /// No record was changed: there was none (no workspace was consulted,
     /// the one consulted does not manage the project, or it installed nothing
-    /// under that name — or the change gave no reason to touch it.
+    /// under that name) or the change gave no reason to touch it.
     Untouched,
     /// The record was dropped, and what is there now is its author's.
     Dropped,
@@ -126,7 +126,7 @@ pub fn add(
 
 /// The one artifact in `project` a reference names.
 ///
-/// By what it declares first, then by where the name would put it — so a
+/// By what it declares first, then by where the name would put it, so a
 /// skill that does not read is still found by its folder, and so is one whose
 /// folder disagrees with what it declares. More than one match is an error
 /// rather than a choice made quietly: changing the wrong artifact is not
@@ -156,7 +156,9 @@ pub fn find(project: &MindProject, reference: &Reference) -> Result<Target, Life
     let name = reference.name();
     if name.split('/').all(install::is_folder_name) {
         for kind in kinds {
-            let path = place(project, kind, name);
+            let Some(path) = place(project, kind, name) else {
+                continue;
+            };
             if !holds(kind, &path) || found.iter().any(|target| target.path == path) {
                 continue;
             }
@@ -190,9 +192,14 @@ pub fn find(project: &MindProject, reference: &Reference) -> Result<Target, Life
 }
 
 /// Where an artifact of `kind` called `name` lives in `project`, whether or
-/// not it is there.
-pub fn place(project: &MindProject, kind: Kind, name: &str) -> PathBuf {
-    let directory = project.directory_for(kind);
+/// not it is there; `None` when the project keeps no folder for `kind`.
+pub fn place(project: &MindProject, kind: Kind, name: &str) -> Option<PathBuf> {
+    Some(place_in(&project.directory_for(kind)?, kind, name))
+}
+
+/// Where an artifact of `kind` called `name` lives in `directory`, the
+/// folder that kind is kept in.
+fn place_in(directory: &Path, kind: Kind, name: &str) -> PathBuf {
     match kind.layout() {
         Layout::Directory { .. } => directory.join(name),
         Layout::Files { extension } => directory.join(format!("{name}.{extension}")),
@@ -215,11 +222,11 @@ pub fn load(
 
 /// Which artifact a file belongs to, when it sits where one would.
 ///
-/// What lets a file that cannot be read still be named — and so opened,
-/// renamed or removed — when all a listing has for it is the error.
+/// What lets a file that cannot be read still be named (and so opened,
+/// renamed or removed) when all a listing has for it is the error.
 pub fn identify(project: &MindProject, file: &Path) -> Option<(Kind, String)> {
     Kind::ALL.into_iter().find_map(|kind| {
-        let below = file.strip_prefix(project.directory_for(kind)).ok()?;
+        let below = file.strip_prefix(project.directory_for(kind)?).ok()?;
         match kind.layout() {
             Layout::Directory { manifest } => {
                 let mut parts = below.components();
@@ -392,7 +399,7 @@ pub struct Renamed {
 /// route.
 ///
 /// In a skill's manifest the `name` line is the only thing rewritten. The rest
-/// is somebody's writing — comments, key order, the description — and is left
+/// is somebody's writing (comments, key order, the description) and is left
 /// byte for byte, and the result is parsed back to make sure the one line
 /// changed what it was meant to and nothing else.
 ///
@@ -524,7 +531,7 @@ fn rename_rule(
     directory: &Path,
     to: &str,
 ) -> Result<Target, LifecycleError> {
-    let file = place(project, Kind::Rule, to);
+    let file = place_in(directory, Kind::Rule, to);
     if file == target.path {
         return Err(LifecycleError::Unchanged {
             name: to.to_owned(),
@@ -562,8 +569,8 @@ fn rewrite_name(source: &str, to: &str) -> Result<String, String> {
     let front_matter = document.front_matter;
     let before = SkillManifest::parse(front_matter).map_err(|error| error.to_string())?;
 
-    // Serialized, so a name YAML would read as something else — `true`,
-    // `123` — is quoted.
+    // Serialized, so a name YAML would read as something else (`true`,
+    // `123`) is quoted.
     let value = serde_yaml_ng::to_string(to).map_err(|error| error.to_string())?;
     let rewritten = frontmatter::with_key(front_matter, "name", value.trim_end())
         .ok_or_else(|| String::from("its `name` is not on a line of its own"))?;
@@ -593,7 +600,7 @@ fn rewrite_name(source: &str, to: &str) -> Result<String, String> {
 /// The folder a target's kind lives in, having checked the target is inside
 /// it: nothing here deletes or moves anything anywhere else.
 fn inside(project: &MindProject, target: &Target) -> Result<PathBuf, LifecycleError> {
-    let directory = project.directory_for(target.kind);
+    let directory = project.required_directory(target.kind)?;
     if target.path == directory || !target.path.starts_with(&directory) {
         return Err(LifecycleError::Outside {
             path: target.path.clone(),
@@ -660,7 +667,7 @@ fn disowned(
 pub enum LifecycleError {
     #[error("nothing named `{typed}` here")]
     NotFound { typed: String },
-    #[error("`{typed}` names more than one thing — {} — so say which: by kind, as in `skill:name`, or by folder", .matches.join(", "))]
+    #[error("`{typed}` names more than one thing ({}), so say which: by kind, as in `skill:name`, or by folder", .matches.join(", "))]
     Ambiguous { typed: String, matches: Vec<String> },
     #[error("{}", issue_list(.issues))]
     Name {
@@ -680,7 +687,7 @@ pub enum LifecycleError {
     Exists { path: PathBuf },
     #[error("{path}: its front matter cannot be read, so its name cannot be rewritten; fix it with `mind edit` first")]
     Unreadable { path: PathBuf },
-    #[error("{path}: the name cannot be rewritten on its own — {reason}; change it by hand")]
+    #[error("{path}: the name cannot be rewritten on its own ({reason}); change it by hand")]
     Rewrite { path: PathBuf, reason: String },
     #[error("{path}: not inside {directory}, so it is not changed from here")]
     Outside { path: PathBuf, directory: PathBuf },

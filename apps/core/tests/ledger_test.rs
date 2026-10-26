@@ -1,5 +1,5 @@
 //! The ledger: what an install records in it, and opening one an older
-//! Mindflayer wrote — what it keeps, what it gains, and the copy of it left
+//! Mindflayer wrote: what it keeps, what it gains, and the copy of it left
 //! behind.
 
 mod common;
@@ -152,7 +152,7 @@ fn an_install_records_the_hash_of_the_copy_it_wrote() {
 
     install(&workspace, &ledger, &project, "deploy");
 
-    let copy = project.directory_for(Kind::Skill).join("deploy");
+    let copy = project.directory_for(Kind::Skill).unwrap().join("deploy");
     let shelf = workspace.root().join(&ledger.gathered().unwrap()[0].path);
     let recorded = ledger
         .installation("collapse", Kind::Skill, "deploy")
@@ -183,13 +183,14 @@ fn installing_again_records_the_hash_of_whatever_is_there_now() {
     let own = workspace
         .own()
         .directory_for(Kind::Skill)
+        .unwrap()
         .join("notes")
         .join("SKILL.md");
     let edited = std::fs::read_to_string(&own).unwrap() + "\nAnd one more thing.\n";
     std::fs::write(&own, edited).unwrap();
     install(&workspace, &ledger, &project, "notes");
 
-    let copy = project.directory_for(Kind::Skill).join("notes");
+    let copy = project.directory_for(Kind::Skill).unwrap().join("notes");
     assert_ne!(hash_of(), first);
     assert_eq!(hash_of(), hash::tree(&copy).unwrap());
 }
@@ -203,6 +204,7 @@ fn a_copy_that_cannot_be_hashed_is_recorded_without_a_hash_and_said() {
     // `copy::same` follows, so installing again leaves the copy as it is.
     let file = project
         .directory_for(Kind::Skill)
+        .unwrap()
         .join("notes")
         .join("SKILL.md");
     let elsewhere = dir.path().join("SKILL.md");

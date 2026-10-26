@@ -6,7 +6,7 @@
 //! batch when the screen is done with.
 
 use mindflayer_core::install::{Candidate, Standing};
-use mindflayer_core::MindProject;
+use mindflayer_core::{Kind, MindProject};
 use ratatui::crossterm::event::KeyCode;
 
 /// Which column the keyboard is in.
@@ -78,8 +78,8 @@ pub struct Target {
 }
 
 impl Target {
-    /// When several offers of one name are in the project — they share its
-    /// one folder, so standing alone says each of them is — keep the box of
+    /// When several offers of one name are in the project (they share its
+    /// one folder, so standing alone says each of them is), keep the box of
     /// the one whose copy is there, as `current` tells, and clear the rest;
     /// the first, if none matches because the copy was changed since.
     pub fn settle(&mut self, current: impl Fn(&Candidate) -> bool) {
@@ -120,6 +120,20 @@ impl Target {
 
     pub fn name(&self) -> &str {
         self.project.name()
+    }
+
+    /// What to say in place of the skills when the project's marker names no
+    /// folder for them, which only its settings can: nothing can be installed
+    /// into it, and pointing at the shelf would send somebody to gather for a
+    /// project that cannot take what they gather. `None` when it keeps one.
+    pub fn no_folder(&self) -> Option<String> {
+        self.project.directory_for(Kind::Skill).is_none().then(|| {
+            format!(
+                "{} keeps no skills of its own, since its marker names no folder for them, \
+                 so nothing can be installed into it",
+                self.name()
+            )
+        })
     }
 
     /// Make the box at `index` say `checked` as a space on it would, other
@@ -279,9 +293,12 @@ impl Screen {
                 if self.current().is_some_and(|target| !target.rows.is_empty()) {
                     self.focus = Focus::Skills;
                 } else {
-                    self.message = Some(String::from(
-                        "nothing on the shelf to install, and nothing loaded or of the workspace's own",
-                    ));
+                    let said = self.current().and_then(Target::no_folder);
+                    self.message = Some(said.unwrap_or_else(|| {
+                        String::from(
+                            "nothing on the shelf to install, and nothing loaded or of the workspace's own",
+                        )
+                    }));
                 }
             }
             KeyCode::Esc => return Step::Quit,
@@ -331,7 +348,7 @@ fn toggle(target: &mut Target) -> Option<String> {
 
     // One name, one artifact. Two places can offer `deploy`, but a project
     // has one directory called `deploy`, so marking one unmarks the other
-    // rather than letting both be applied and the second win silently —
+    // rather than letting both be applied and the second win silently,
     // and the one it displaces is not removed as well, because installing
     // this one replaces it. Unmarking it again puts back what it displaced.
     let mut displaced = None;

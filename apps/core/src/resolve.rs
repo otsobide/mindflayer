@@ -163,7 +163,7 @@ pub fn resolve_except(
     except: &[PathBuf],
 ) -> Result<Option<Resolved>, ResolveError> {
     if let Some((reason, path)) = chosen(inputs) {
-        return open_chosen(path)
+        return named(path)
             .map(|workspace| Some(Resolved { workspace, reason }))
             .map_err(|source| ResolveError::Chosen { reason, source });
     }
@@ -330,13 +330,17 @@ fn chosen<'a>(inputs: &Inputs<'a>) -> Option<(Reason, &'a Path)> {
     }
 }
 
-/// Open a chosen workspace, named by its root or by its `.mindflayer`.
+/// Open a workspace somebody named, by its root or by its `.mindflayer`:
+/// what `-W` and the activation name, and what a command taking a workspace
+/// as its own argument names, as `flayer activate DIR` does, so that every
+/// way of naming one takes the same spellings.
 ///
 /// The folder is taken as well as the root because it is what a person
 /// pointing at a workspace is often looking at, and it is the folder that
 /// makes the directory a workspace. A root that holds a marker of its own is
-/// a root, even when it happens to be called `.mindflayer` itself.
-fn open_chosen(path: &Path) -> Result<FlayerWorkspace, WorkspaceError> {
+/// a root, even when it happens to be called `.mindflayer` itself. Never
+/// made for the occasion, for the reason a chosen workspace never is.
+pub fn named(path: &Path) -> Result<FlayerWorkspace, WorkspaceError> {
     let path = absolute(path)?;
     let holds_marker = path.join(FLAYER_DIR).join(FLAYER_CONFIG).is_file();
     let root = match path.parent() {

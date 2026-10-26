@@ -6,8 +6,9 @@
 
 use std::path::PathBuf;
 
+use clap::builder::{PossibleValuesParser, TypedValueParser};
 use clap::{Args, Parser, Subcommand};
-use mindflayer_core::{Kind, DEFAULT_SUBDIRECTORY};
+use mindflayer_core::{Kind, Shell, DEFAULT_SUBDIRECTORY};
 
 /// Manage the agent skills in a mind project.
 //
@@ -270,19 +271,53 @@ pub struct FlayerCli {
 
 #[derive(Debug, Subcommand)]
 pub enum FlayerCommand {
-    /// Create a flayer workspace here.
+    /// Create a flayer workspace here, or in the directory given.
     Init {
-        /// Where the workspace keeps its own skills [default: `skills`].
+        /// The directory to make it in, made as well when it is not there
+        /// [default: the directory the command works in].
+        ///
+        /// So a workspace kept for one purpose can be made from anywhere, the
+        /// way `python -m venv DIR` makes a virtualenv, and then activated.
+        #[arg(value_name = "PATH")]
+        path: Option<PathBuf>,
+
+        /// Where the workspace keeps its own skills [default:
+        /// `.mindflayer/library/skills`].
         ///
         /// Relative to the workspace. They are the ones it shares with every
-        /// project it manages.
+        /// project it manages, kept by default in its library, where no
+        /// agent looks. Any folder inside the workspace will do except the
+        /// shelf and the cache, a folder inside them, or one holding them,
+        /// such as `.mindflayer` itself.
         #[arg(long, value_name = "DIR")]
         skills: Option<PathBuf>,
 
-        /// Where the workspace keeps its own rules [default: `rules`].
+        /// Where the workspace keeps its own rules [default:
+        /// `.mindflayer/library/rules`].
         #[arg(long, value_name = "DIR")]
         rules: Option<PathBuf>,
     },
+
+    /// Print the shell code that activates a workspace for every command the
+    /// shell runs, as a Python virtualenv's `activate` does:
+    /// `eval "$(flayer activate DIR)"`. `flayer-deactivate` undoes it.
+    ///
+    /// It writes nothing, and prints no code when there is nothing to
+    /// activate, so a failed `eval` changes nothing either.
+    Activate {
+        /// The workspace, by its directory or its `.mindflayer` [default: the
+        /// one a command run here would use].
+        #[arg(value_name = "DIR")]
+        path: Option<PathBuf>,
+
+        /// The shell to write it for [default: the one $SHELL names].
+        #[arg(long, value_name = "SHELL", value_parser = shells())]
+        shell: Option<Shell>,
+    },
+
+    /// Say which workspace a command run here would use, and why: named with
+    /// -W, activated, found walking up, or the default one.
+    Which,
 
     /// Create a skill or a rule: the workspace's own, or a project's.
     Add {
@@ -466,6 +501,27 @@ pub enum FlayerCommand {
         name: String,
     },
 
+    /// Bring a workspace made by an older Mindflayer into the layout a new
+    /// one has.
+    ///
+    /// Without --yes nothing changes, and the command says what would.
+    Migrate {
+        /// Move the workspace's own skills and rules from the folders its
+        /// flayer.toml names into its library, `.mindflayer/library`, and
+        /// point flayer.toml there, keeping it as it was beside it.
+        //
+        // Required, and the only one so far: a flag per migration rather than
+        // a bare `migrate` that does all of them, so the next one is asked for
+        // by name and never run by a line typed for this one.
+        #[arg(long, required = true)]
+        library: bool,
+
+        /// Make the change. Without this nothing changes, and the command
+        /// says what would.
+        #[arg(short, long)]
+        yes: bool,
+    },
+
     /// Open the TUI: every managed project, and a key for each command.
     ///
     /// What `flayer` does on its own. Everything it changes, it changes by
@@ -498,4 +554,11 @@ pub enum GatherCommand {
     /// and where each artifact comes from.
     #[command(alias = "ls")]
     List,
+}
+
+/// What `--shell` takes, from core's list rather than spelled again here, as
+/// possible values so `--help` lists them and a typo is refused with them.
+fn shells() -> impl TypedValueParser<Value = Shell> {
+    PossibleValuesParser::new(Shell::ALL.map(Shell::name))
+        .map(|name| name.parse::<Shell>().expect("every listed shell parses"))
 }

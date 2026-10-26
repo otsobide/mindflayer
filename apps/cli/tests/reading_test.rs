@@ -1,4 +1,4 @@
-//! The reading commands — `list`, `show`, `validate` — over every kind, from
+//! The reading commands (`list`, `show`, `validate`) over every kind, from
 //! wherever a project keeps them.
 
 mod common;
@@ -512,7 +512,7 @@ fn a_workspace_lists_every_kind_of_every_project() {
 
     let outcome = flayer(dir.path(), &["list"]).unwrap();
 
-    // Three columns now: project, kind, name — each earning its place.
+    // Three columns now: project, kind, name, each earning its place.
     assert_eq!(
         outcome.stdout,
         "alpha  skill  alpha       A skill\n\

@@ -1,10 +1,213 @@
 //! What core knows about the agents that read what Mindflayer manages.
 //!
-//! So far, only where each keeps what it reads for every project. The checks
-//! that will need those folders (Claude's user memory, Codex's config, the
-//! skills in `~/.agents`) are handed them rather than looking them up.
+//! Which agents there are ([`Agent`]), where each kind goes in a project for
+//! each of them to read it ([`TargetTable`]), and where each keeps what it
+//! reads for every project ([`AgentHomes`]). The checks that will need those
+//! last folders (Claude's user memory, Codex's config, the skills in
+//! `~/.agents`) are handed them rather than looking them up.
+//!
+//! What each agent does with the files it reads is recorded in
+//! `docs/agents.md`, each fact verified on the binary or marked docs-only
+//! with a fallback; a change here that disagrees with it starts there.
 
+use std::collections::{BTreeMap, BTreeSet};
+use std::fmt;
 use std::path::{Path, PathBuf};
+use std::str::FromStr;
+
+use thiserror::Error;
+
+use crate::kind::Kind;
+
+/// A coding agent Mindflayer puts skills and rules where it reads them.
+///
+/// A closed enum, as [`Kind`] is: what an agent reads, and where, is a fact
+/// about that agent, so a new one is a new arm in every `match` and the
+/// compiler lists each place that has to learn it. A name taken at runtime
+/// would reach a table with no entry for it and quietly reach nothing.
+///
+/// Declaration order is report order.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum Agent {
+    /// Claude Code.
+    Claude,
+    /// OpenAI's Codex.
+    Codex,
+    /// OpenCode, both of its maintained lines (V1 and V2), which read the
+    /// same project folders for skills.
+    OpenCode,
+}
+
+impl Agent {
+    /// Every agent, in report order.
+    ///
+    /// An array, which the compiler does not hold to the enum: a new agent
+    /// is added here by hand, or it parses as no agent and the standard
+    /// table, built from this list, gives it no entry, whatever its arm in
+    /// `standard` says.
+    pub const ALL: [Agent; 3] = [Agent::Claude, Agent::Codex, Agent::OpenCode];
+
+    /// How it is named on a command line and in a project's settings: one
+    /// lowercase word, the name of the agent's own binary.
+    pub const fn name(self) -> &'static str {
+        match self {
+            Agent::Claude => "claude",
+            Agent::Codex => "codex",
+            Agent::OpenCode => "opencode",
+        }
+    }
+}
+
+impl fmt::Display for Agent {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(self.name())
+    }
+}
+
+impl FromStr for Agent {
+    type Err = UnknownAgent;
+
+    /// The name exactly, as a [`Shell`](crate::Shell) is taken: `Claude` or
+    /// `open-code` would be one more spelling for a settings file to hold and
+    /// a second front end to agree with.
+    fn from_str(word: &str) -> Result<Self, Self::Err> {
+        Agent::ALL
+            .into_iter()
+            .find(|agent| agent.name() == word)
+            .ok_or_else(|| UnknownAgent(word.to_owned()))
+    }
+}
+
+/// A word that names no agent.
+#[derive(Debug, Clone, PartialEq, Eq, Error)]
+pub struct UnknownAgent(pub String);
+
+impl fmt::Display for UnknownAgent {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let names: Vec<&str> = Agent::ALL.iter().map(|agent| agent.name()).collect();
+        let (last, rest) = names.split_last().expect("there is an agent");
+        write!(
+            f,
+            "unknown agent `{}`; expected {} or {last}",
+            self.0,
+            rest.join(", ")
+        )
+    }
+}
+
+/// Where each kind goes in a project for each agent.
+///
+/// One table in core, so no front end ever spells an agent's folder: an
+/// install (#34) asks it where to put a copy for each agent a project names,
+/// and a check asks it where to look.
+///
+/// A value rather than a function a caller reaches for, because the
+/// standard layout is only the default: a project's settings may put a kind
+/// somewhere else for every agent (#40), and a caller handed the table then
+/// follows that without changing. The project hands it on, in core: which
+/// table applies is its settings' to say, so an install takes the table from
+/// the project it installs into (#34), and no front end calls
+/// [`standard`](TargetTable::standard) and picks one those settings would
+/// contradict.
+///
+/// Where a kind goes for an agent is where its copy is put for that agent,
+/// not proof the agent reads it there: the standard layout is built from
+/// what each one reads, but an override's folder reaches an agent only once
+/// the agent is pointed at it, which is #40's status check to say.
+///
+/// One location per kind and agent for now, which is all the standard layout
+/// needs, kept private so it can grow into the list of folders per kind the
+/// override names when #40 lands, without a caller noticing. A pair with
+/// none is a kind that reaches that agent some other way, or not at all,
+/// which is every rule for now: D-03 puts rules in a block of `AGENTS.md`,
+/// which M2 adds here, as M6 adds MCP servers.
+///
+/// Pure: no entry is looked for on disk, and every location is relative to
+/// a project's root.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TargetTable {
+    locations: BTreeMap<(Kind, Agent), PathBuf>,
+}
+
+impl TargetTable {
+    /// D-07's layout: a skill goes in `.claude/skills` for Claude, and in
+    /// `.agents/skills` for Codex and OpenCode, a copy in each.
+    ///
+    /// Every fact it rests on is in `docs/agents.md` ("Facts the roadmap
+    /// cites", #28). Claude reads `.claude/skills` and not `.agents/skills`
+    /// (verified on Claude Code 2.1.309), so Claude needs a copy of its own.
+    /// Codex reads `.agents/skills`, and both OpenCode lines read it and
+    /// `.claude/skills` too (docs-only). OpenCode is given `.agents/skills`
+    /// rather than leaning on Claude's copy: `OPENCODE_DISABLE_CLAUDE_CODE`
+    /// switches V1's `.claude/skills` off, and a project targeting OpenCode
+    /// alone would otherwise need a Claude folder. `.codex/skills`, read only
+    /// in trusted projects, and `$CODEX_HOME/skills`, deprecated, are never
+    /// targeted; nor is any folder at user scope (D-22).
+    pub fn standard() -> TargetTable {
+        let locations = Kind::ALL
+            .into_iter()
+            .flat_map(|kind| Agent::ALL.into_iter().map(move |agent| (kind, agent)))
+            .filter_map(|(kind, agent)| Some(((kind, agent), standard(kind, agent)?)))
+            .collect();
+        TargetTable { locations }
+    }
+
+    /// Where `kind` goes for `agents`: one target per location, each with
+    /// the agents it is for, so two agents sent to one folder get one copy.
+    ///
+    /// Sorted here, by location and then by agent in report order, so every
+    /// front end lists them alike; an agent named twice is served once, and
+    /// one the kind does not reach adds nothing.
+    ///
+    /// Pure, as the table is: nothing is read on disk, and every location
+    /// comes from the table it is called on, which for
+    /// [`standard`](TargetTable::standard) rests on the facts in
+    /// `docs/agents.md`.
+    pub fn targets(&self, kind: Kind, agents: &[Agent]) -> Vec<AgentTarget> {
+        let mut served: BTreeMap<&Path, BTreeSet<Agent>> = BTreeMap::new();
+        for &agent in agents {
+            if let Some(location) = self.locations.get(&(kind, agent)) {
+                served.entry(location).or_default().insert(agent);
+            }
+        }
+        served
+            .into_iter()
+            .map(|(location, agents)| AgentTarget {
+                path: location.to_path_buf(),
+                agents: agents.into_iter().collect(),
+            })
+            .collect()
+    }
+}
+
+/// Where the standard layout puts `kind` for `agent`, if anywhere.
+///
+/// One arm per pair, with no wildcard, so a new kind or a new agent does not
+/// compile until somebody has said where it goes, with the fact behind it in
+/// `docs/agents.md`.
+fn standard(kind: Kind, agent: Agent) -> Option<PathBuf> {
+    // Joined a folder at a time, as `AgentHomes::defaults_under` is, so the
+    // path has one kind of separator on Windows too.
+    match (kind, agent) {
+        (Kind::Skill, Agent::Claude) => Some(Path::new(".claude").join("skills")),
+        (Kind::Skill, Agent::Codex | Agent::OpenCode) => Some(Path::new(".agents").join("skills")),
+        (Kind::Rule, Agent::Claude | Agent::Codex | Agent::OpenCode) => None,
+    }
+}
+
+/// One place in a project where a kind's copies go, and the agents they go
+/// there for.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AgentTarget {
+    /// Relative to the project's root. For a skill, the folder its copy goes
+    /// in, under the skill's own name.
+    pub path: PathBuf,
+    /// The agents asked about that the table sends here, each once, in report
+    /// order. Never empty: a location none of them is sent to is not one of
+    /// their targets. Under the standard table these are agents that read the
+    /// location; under an override (#40) they need not be.
+    pub agents: Vec<Agent>,
+}
 
 /// Where each agent keeps what it reads for every project, beside whatever a
 /// project holds.

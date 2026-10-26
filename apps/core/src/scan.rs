@@ -13,7 +13,7 @@ use std::path::{Path, PathBuf};
 use thiserror::Error;
 
 use crate::paths;
-use crate::workspace::{FlayerWorkspace, MIND_CONFIG, MIND_DIR};
+use crate::workspace::{FlayerWorkspace, MindProject};
 
 /// How far below the workspace root a scan looks.
 ///
@@ -62,7 +62,7 @@ pub struct Scan {
 ///
 /// A repository is a leaf: the scan does not look inside one, because its
 /// folders are its own and a repository nested in another is its submodule,
-/// managed with it. Hidden folders and symlinked ones are not entered either —
+/// managed with it. Hidden folders and symlinked ones are not entered either:
 /// the first are tooling, and the second can loop.
 pub fn scan(workspace: &FlayerWorkspace) -> Scan {
     let root = workspace.root();
@@ -125,7 +125,7 @@ pub fn scan(workspace: &FlayerWorkspace) -> Scan {
 
 /// What a directory is to the workspace, if it is anything.
 fn judge(workspace: &FlayerWorkspace, directory: &Path) -> Option<Found> {
-    let mind = directory.join(MIND_DIR).join(MIND_CONFIG).is_file();
+    let mind = MindProject::is_marked(directory);
     // `exists`, not `is_dir`: a worktree or a submodule has a `.git` file.
     let git = directory.join(".git").exists();
     if !mind && !git {

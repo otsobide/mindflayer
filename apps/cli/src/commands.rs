@@ -4,9 +4,11 @@
 //! Split by family so that a change to one command touches one file, and two
 //! pieces of work on different commands do not collide in the same one.
 
+pub(crate) mod activate;
 pub(crate) mod artifact;
 pub(crate) mod gather;
 pub(crate) mod install;
+pub(crate) mod migrate;
 pub(crate) mod project;
 pub(crate) mod read;
 pub(crate) mod workspace;
@@ -19,9 +21,11 @@ use mindflayer_core::{paths, Catalog, FlayerWorkspace, MindProject, Reference};
 
 use crate::homes::Lookup;
 use crate::{tui, Cli, CliError, Command, Failure, FlayerCli, FlayerCommand, Outcome};
+use activate::{activate_command, which_command};
 use artifact::{add_to, edit_in, remove_from, rename_in, templates_of};
 use gather::run_gather;
 use install::{install_named, uninstall_named};
+use migrate::migrate_library;
 use project::{
     init_project, init_workspace, link_here, link_projects, scan_workspace, unlink_here,
     unlink_projects,
@@ -205,9 +209,23 @@ fn run_flayer(
     watch: &Watch,
 ) -> Result<Outcome, Failure> {
     match command {
-        FlayerCommand::Init { skills, rules } => {
-            init_workspace(directory, skills.as_deref(), rules.as_deref())
+        // Typed from the directory the command works in, as `link`'s paths
+        // are, rather than from where it was run.
+        FlayerCommand::Init {
+            path,
+            skills,
+            rules,
+        } => {
+            let root = match path {
+                Some(path) => typed(directory, path)?,
+                None => directory.to_path_buf(),
+            };
+            init_workspace(&root, skills.as_deref(), rules.as_deref())
         }
+        FlayerCommand::Activate { path, shell } => {
+            activate_command(directory, path.as_deref(), *shell, lookup)
+        }
+        FlayerCommand::Which => which_command(directory, lookup),
 
         FlayerCommand::Add {
             project,
@@ -318,6 +336,15 @@ fn run_flayer(
             uninstall_named(&workspace, &workspace.pick(project)?, name)
         }
 
+        // Resolved as a read, on the default workspace before it is made
+        // too: a workspace made for the occasion keeps its own in its
+        // library from the start, and has nothing to move.
+        FlayerCommand::Migrate { library: _, yes } => {
+            reading_workspace(directory, lookup, |workspace| {
+                migrate_library(workspace, *yes)
+            })
+        }
+
         FlayerCommand::Tui => tui::run(directory, lookup),
 
         FlayerCommand::List { kind, project } => {
@@ -411,8 +438,8 @@ fn workspace_here(directory: &Path, lookup: &Lookup) -> Result<FlayerWorkspace, 
 }
 
 /// The flayer workspace a command that only reads looks at: the one `lookup`
-/// resolves from `directory` — the default one in home made, or as it will
-/// be once something makes it.
+/// resolves from `directory` (the default one in home made, or as it will
+/// be once something makes it).
 ///
 /// Never made for the occasion. A read is no reason to write a marker into
 /// somebody's home, and the workspace that would be made there answers every
@@ -498,7 +525,7 @@ fn all_or_nothing(mut refused: Vec<CliError>) -> Option<Failure> {
 ///
 /// Only the registered ones. A workspace manages what it was told to manage,
 /// so a project that happens to sit inside it is not in scope until it is
-/// linked — otherwise `flayer list` would answer a different question
+/// linked; otherwise `flayer list` would answer a different question
 /// depending on which directory it was run from.
 fn managed(workspace: &FlayerWorkspace) -> (Vec<MindProject>, Vec<String>) {
     let (projects, failures) = workspace.projects();
@@ -510,8 +537,8 @@ fn managed(workspace: &FlayerWorkspace) -> (Vec<MindProject>, Vec<String>) {
 }
 
 /// The workspace a project's own commands register it with: the one
-/// `lookup` resolves from the project, whether or not it manages it yet —
-/// where `mind link` adds it, and the default one in home when nothing
+/// `lookup` resolves from the project, whether or not it manages it yet;
+/// it is where `mind link` adds it, and the default one in home when nothing
 /// chooses another and there is none up the tree.
 fn workspace_for(project: &MindProject, lookup: &Lookup) -> Result<FlayerWorkspace, CliError> {
     resolve(&lookup.inputs(project.root(), Intent::Write))?

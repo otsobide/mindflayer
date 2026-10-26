@@ -54,7 +54,12 @@ fn flayer_show_reads_the_default_workspace_without_making_it() {
     let (home, elsewhere) = unmade_home();
     // Where the workspace will keep its own: read before it is made, as it
     // would be after.
-    let skill = home.path().join("skills/deploy");
+    let skill = FlayerWorkspace::unmade(home.path())
+        .unwrap()
+        .own()
+        .directory_for(Kind::Skill)
+        .unwrap()
+        .join("deploy");
     fs::create_dir_all(&skill).unwrap();
     fs::write(skill.join("SKILL.md"), skill_file("deploy", "Ship it")).unwrap();
 
@@ -64,7 +69,13 @@ fn flayer_show_reads_the_default_workspace_without_making_it() {
     assert!(outcome.stdout.contains("Ship it"), "{}", outcome.stdout);
     assert_eq!(outcome.stderr, vec![hint(home.path())]);
     assert!(outcome.ok);
-    assert!(!made(home.path()));
+    // `.mindflayer` is there already, holding the library the skill is in,
+    // and the read adds nothing beside it: no marker, no ledger, no cache.
+    let inside: Vec<_> = fs::read_dir(home.path().join(FLAYER_DIR))
+        .unwrap()
+        .map(|entry| entry.unwrap().file_name())
+        .collect();
+    assert_eq!(inside, ["library"]);
 }
 
 #[test]
@@ -205,6 +216,42 @@ fn flayer_install_on_its_own_reads_the_default_workspace_without_making_it() {
     assert_eq!(outcome.stderr, vec![hint(home.path())]);
     assert!(outcome.ok);
     assert!(!made(home.path()));
+}
+
+#[test]
+fn the_workspace_in_home_keeps_its_own_inside_its_mindflayer() {
+    let (home, elsewhere) = unmade_home();
+
+    let skill = flayer_at_home(
+        elsewhere.path(),
+        home.path(),
+        &["add", "skill", "x", "Mine"],
+    )
+    .unwrap();
+    let rule = flayer_at_home(
+        elsewhere.path(),
+        home.path(),
+        &["add", "rule", "git/no-force-push", "Never force-push"],
+    )
+    .unwrap();
+
+    let library = home.path().join(FLAYER_DIR).join("library");
+    assert_eq!(
+        created(&skill, "skill x"),
+        library.join("skills/x/SKILL.md")
+    );
+    assert_eq!(
+        created(&rule, "rule git/no-force-push"),
+        library.join("rules/git/no-force-push.md")
+    );
+    // Nothing directly in the home directory, above every project in it: no
+    // skills/ or rules/, and no AGENTS.md or CLAUDE.md for an agent to read.
+    let top: Vec<_> = fs::read_dir(home.path())
+        .unwrap()
+        .map(|entry| entry.unwrap().file_name())
+        .collect();
+    assert_eq!(top, [FLAYER_DIR]);
+    assert_eq!(fs::read_dir(elsewhere.path()).unwrap().count(), 0);
 }
 
 #[test]

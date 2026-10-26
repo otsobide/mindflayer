@@ -1,5 +1,5 @@
 //! `flayer load` and `unload`: another workspace's own skills offered to this
-//! one's projects, read live from where it is — at both levels, and from the
+//! one's projects, read live from where it is, at both levels, and from the
 //! TUI.
 
 mod common;
@@ -208,7 +208,7 @@ fn a_loaded_skill_is_on_the_shelf_listing_and_installs_like_any_other() {
     assert!(target.join("collapse/skills/deploy/SKILL.md").is_file());
 
     // Read live: changed there, updated here by installing again.
-    let source = team.join("skills/deploy/SKILL.md");
+    let source = own_directory_for(&team, Kind::Skill).join("deploy/SKILL.md");
     let edited = fs::read_to_string(&source).unwrap() + "\nOne more step.\n";
     fs::write(&source, edited).unwrap();
     let again = flayer(
@@ -493,8 +493,9 @@ fn install_says_a_loaded_workspace_has_gone_rather_than_only_that_nothing_is_off
 #[test]
 fn a_broken_skill_in_a_loaded_workspace_is_a_warning() {
     let (_dir, target, team) = target_and_team();
-    fs::create_dir_all(team.join("skills/broken")).unwrap();
-    fs::write(team.join("skills/broken/SKILL.md"), "no front matter").unwrap();
+    let broken = own_directory_for(&team, Kind::Skill).join("broken");
+    fs::create_dir_all(&broken).unwrap();
+    fs::write(broken.join("SKILL.md"), "no front matter").unwrap();
 
     let loaded = flayer(&target, &["load", "../team"]).unwrap();
     let shelf = flayer(&target, &["gather", "list"]).unwrap();
@@ -639,7 +640,7 @@ fn a_loaded_skill_that_vanished_does_not_stop_the_rest_of_the_install_screen() {
             KeyCode::Char(' '),
         ],
     );
-    fs::remove_dir_all(team.join("skills/deploy")).unwrap();
+    fs::remove_dir_all(own_directory_for(&team, Kind::Skill).join("deploy")).unwrap();
 
     let outcome = install_screen::apply(&workspace, &ledger, &screen).unwrap();
 
@@ -697,7 +698,8 @@ fn ticking_the_installed_copy_off_and_on_again_changes_nothing() {
 #[test]
 fn a_shelf_source_and_a_loaded_workspace_at_one_path_are_each_picked_by_their_own_origin() {
     let repo = repository(&[("skills/deploy/SKILL.md", &skill_file("deploy", "Gathered"))]);
-    flayer(repo.path(), &["init"]).unwrap();
+    // Keeping its own where a gather looks, so one folder is both.
+    flayer(repo.path(), &["init", "--skills", "skills"]).unwrap();
     fs::write(
         repo.path().join("skills/deploy/SKILL.md"),
         skill_file("deploy", "Loaded"),
