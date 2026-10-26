@@ -903,6 +903,31 @@ and symlinks into the hub, which break projects when `~/.mindflayer` moves and
 leak its path into repositories. `.codex/skills` and `~/.codex/skills`,
 deprecated or undocumented, are never targeted. Unblocks #17, #28, #34 and #40.
 
+### D-08: An explicit or activated workspace wins
+
+The workspace is `-W/--workspace DIR`, then `$MINDFLAYER_WORKSPACE` (set by
+`flayer activate`), then the first one walking up, then the home default. An
+explicit `-W` wins even when empty, and empty means none, following the
+`--home=` pattern so test helpers can pin it; `--home` and `$MINDFLAYER_HOME`
+keep meaning where the default lives. One core function decides, fed by the
+front ends, and an explicit or activated path that is not a workspace is an
+error, never a silent fallback. Activation exists to override location, as a
+virtualenv does. Rejected: walking up first, under which an activated flayer
+silently loses to any workspace above the current directory; reusing `--home`,
+which confuses where the default lives with which workspace to use; and a
+direnv-style activation file, hidden state in repositories meant to stay
+minimal. Unblocks #54, #55 and #56.
+
+### D-09: Project settings live in the project
+
+A project's agents, share mode and `edit_tracked` live in its own v3 marker,
+`.mind/settings.json` (D-06), ignored by default (D-01). They describe the
+files physically in the project, and several workspaces may link one project,
+so keeping them beside it means every workspace sees the same targets.
+Rejected: `[[project]]` tables in `flayer.toml`, which let two workspaces
+disagree about one project's files; and the ledger, which hides editable
+configuration in a database. Unblocks #29 and #37.
+
 ## Open questions
 
 - **Precedence between projects.** Two projects in one workspace can declare
