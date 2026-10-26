@@ -29,7 +29,7 @@ $(foreach app,$(APPS) $(NODE_APPS),$(eval $(call APP_DELEGATE,$(app))))
 # app CI silently never runs.
 # ---------------------------------------------------------------------------
 .PHONY: test
-test: $(addsuffix /test,$(APPS)) ## Run every test suite
+test: $(addsuffix /test,$(APPS)) ## Run every Rust test suite; the panel's is web/test
 
 .PHONY: build
 build: $(addsuffix /build,$(APPS)) ## Build every crate (debug)
