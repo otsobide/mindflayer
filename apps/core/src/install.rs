@@ -13,6 +13,7 @@
 use std::fs;
 use std::io;
 use std::path::{Component, Path, PathBuf};
+use std::time::Duration;
 
 use thiserror::Error;
 
@@ -378,14 +379,7 @@ pub fn survey(
                 offer,
                 standing: Standing::Absent,
             };
-            let name = candidate.name();
-            candidate.standing = if !holds(&directory, kind, name) {
-                Standing::Absent
-            } else if ours.iter().any(|installed| installed == name) {
-                Standing::Installed
-            } else {
-                Standing::Foreign
-            };
+            candidate.standing = standing(&directory, kind, candidate.name(), &ours);
             candidate
         })
         .collect();
@@ -445,6 +439,11 @@ pub fn install(
     if candidate.standing == Standing::Foreign {
         return Ok(Installed::Foreign { name }.into());
     }
+    // Held until the record is written, so that what the ledger says was
+    // installed is the copy that is there: two installs of one name at once
+    // would otherwise each record theirs, and the copy left would be
+    // whichever moved into place last.
+    let _lock = workspace.lock().map_err(WorkspaceError::from)?;
 
     let from = candidate.source(workspace);
     if !from.is_dir() {
@@ -499,6 +498,18 @@ pub fn install(
             name,
             issues: refused,
         });
+    }
+
+    // Looked at again under the lock, before anything is written. The
+    // candidate's standing is from a survey made before it was held, minutes
+    // before on the install screen, and since then an edit may have made the
+    // copy its author's and dropped its record, or somebody may have written
+    // a folder of that name by hand. Only a turn to Foreign changes what
+    // happens here, and that one must: it is somebody's work, never written
+    // over.
+    let ours = ledger.installations(&entry, kind)?;
+    if standing(&project.directory_for(kind), kind, &name, &ours) == Standing::Foreign {
+        return Ok(Installed::Foreign { name }.into());
     }
 
     // Links are followed only inside where the artifact comes from: the
@@ -636,6 +647,12 @@ pub fn uninstall(
             name: name.to_owned(),
         });
     }
+    // Held from before the record is read until it is dropped, for the
+    // reason `install` holds it: an install of the same name at the same
+    // moment comes wholly before this or wholly after it. Between the copy
+    // going and its record going, it would leave a copy with no record, which
+    // Mindflayer would never touch again.
+    let _lock = workspace.lock().map_err(WorkspaceError::from)?;
     let entry = project_entry(workspace, project);
     let ours = ledger.installations(&entry, kind)?;
     if !ours.iter().any(|installed| installed == name) {
@@ -708,7 +725,11 @@ pub(crate) fn disown(
     if !workspace.is_linked(project.root()) || !workspace.ledger_path().is_file() {
         return Ok(Disowned::default());
     }
-    let (ledger, scrub) = workspace.ledger_to_write()?;
+    // However long the scrub waits for the workspace, which it does only
+    // when an older build left a credential in a clone: the change this
+    // follows is made, so giving up would leave its record behind, and
+    // trying the change again would find nothing to change.
+    let (ledger, scrub) = workspace.ledger_to_write_waiting(Duration::MAX)?;
     let entry = project_entry(workspace, project);
     let dropped = ledger.uninstalled(&entry, kind, name)?;
     if dropped {
@@ -809,6 +830,18 @@ pub enum Removed {
     Absent {
         name: String,
     },
+}
+
+/// How `name` stands in a project's `directory`, given the names the ledger
+/// says Mindflayer installed there (`ours`).
+fn standing(directory: &Path, kind: Kind, name: &str, ours: &[String]) -> Standing {
+    if !holds(directory, kind, name) {
+        Standing::Absent
+    } else if ours.iter().any(|installed| installed == name) {
+        Standing::Installed
+    } else {
+        Standing::Foreign
+    }
 }
 
 /// Whether a project's directory already holds an artifact of that name.

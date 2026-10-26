@@ -457,6 +457,7 @@ the token and leaves the file as it is.
   mindflayer.db.v2.bak
                   the database as it was before this version of Mindflayer
                   updated it, if it did
+  lock            held by a command while it changes the workspace
   cache/<source>/ the clone, kept so a gather can be looked at afterwards
   skills/<source>/<name>/SKILL.md
   templates/      templates for every project it manages, if you add any
@@ -479,6 +480,26 @@ Timestamps are Unix seconds, so `datetime(at, 'unixepoch')` renders them:
 ```sql
 SELECT datetime(at, 'unixepoch'), action, outcome, detail FROM actions;
 ```
+
+The TUI and any number of terminals can be open on one workspace, and the
+commands that change it take turns. Linking, loading, gathering, installing and
+uninstalling each hold `lock` while they write, with the process's id in
+`lock.pid` beside it. One that finds the workspace held waits up to ten seconds
+for the other to finish, then gives up and says who it waited for:
+
+```
+$ flayer link tanukeys
+error: /home/you/Projects/.mindflayer/lock: workspace busy: waited 10s for process 3234405 to finish writing to it; try again once it has
+```
+
+Reading never waits for `lock`. Listing, showing and the TUI's screens read
+each file whole, as the last write to it left it, though a read made while a
+gather or an install is under way can find some of what it changes changed
+and the rest not yet. The database keeps a write-ahead log, so a read does not
+wait for a write to it either, except on a filesystem that cannot keep one,
+where it waits for the write to finish. A workspace on a network share is safe
+used from one machine at a time: the lock and the database keep apart programs
+on one machine, not programs on two.
 
 ## Installing into a project
 

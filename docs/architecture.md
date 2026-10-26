@@ -472,7 +472,10 @@ why `toml_edit` is a dependency: `flayer link` rewrites the one `projects`
 array and leaves every other byte alone. Reading stays serde's job. The two
 halves agree because an edit re-reads the file afterwards rather than trusting
 what it believes it wrote, and the write itself goes through a temporary file
-and a rename, so a crash leaves either the old config or the new one.
+and a rename, so a crash leaves either the old config or the new one. The edit
+holds the workspace's lock from its read to that re-read, so a second writer
+edits what the first one wrote ([Writers at the same
+time](#writers-at-the-same-time)).
 
 ### Formats are versioned
 
@@ -555,7 +558,9 @@ worth removing is one whose directory has moved away, and that cannot be opened
 as a project any more.
 
 Rewrites go through a temporary file and a rename, so a crash leaves either the
-old config or the new one. The original's permissions are copied onto the
+old config or the new one. The temporary is named for the run that writes it,
+never shared with another writer ([Writers at the same
+time](#writers-at-the-same-time)). The original's permissions are copied onto the
 temporary first, and a symlinked config is followed to the file it names —
 otherwise an edit would quietly widen a chmodded config or detach a shared one.
 A hard link is the case this cannot preserve: a rename breaks it, and keeping
@@ -570,6 +575,7 @@ the workspace and belonging to no project yet.
 .mindflayer/
   flayer.toml
   mindflayer.db
+  lock                       held by whoever is writing
   cache/<source>/            the clone
   skills/<source>/<name>/    what was taken out of it
 ```
@@ -644,7 +650,11 @@ The flag is gix's interrupt, so a cancel stops the fetch or the checkout where
 gix checks, and the clone it had begun is removed. gix does not check it while
 it connects, only once the pack is coming, so a cancel while connecting waits
 for the connection to be made or to fail: as long as a server takes to answer,
-or a prompt to be answered. The harvest checks it once more after every folder
+or a prompt to be answered. One made while the gather waits for [the
+workspace's lock](#writers-at-the-same-time) waits too, since nothing checks
+the flag until the lock is held: as long as the writer holding it takes, and a
+wait that runs out ends the gather as busy rather than cancelled, unlogged all
+the same. The harvest checks it once more after every folder
 is read and before anything is placed, which is why it reads them all first
 rather than reading and placing each in turn. That is the last moment a cancel
 is honoured: past it the shelf and the ledger change, and a gather stopped
@@ -1450,9 +1460,12 @@ waiting on the same thread.
   first in, first out, so tasks run in the order they arrived, which a lock
   does not promise whoever waits on it. One thread means two writes never run
   side by side, which is the world the commands underneath were written for:
-  a CLI, where one command at a time is all there is. And a long run holds
-  that thread rather than one of the pool's, so the panel goes on reading
-  while it waits.
+  a CLI, where one command at a time is all there is. It orders the
+  panel's own writes and nobody else's: beside a terminal or a TUI writing
+  to the same workspace, the two take turns through the workspace's lock
+  ([Writers at the same time](#writers-at-the-same-time)). And a long run
+  holds that thread rather than one of the pool's, so the panel goes on
+  reading while it waits.
 
 A run's lines are worked out on the writer thread just before it, against the
 disk the run itself meets after every write before it, and the entry is in the
@@ -2156,6 +2169,141 @@ found, except a root that is not there at all: that holds nothing, and only
 the default workspace before it is made can have one, in a home nobody has
 created yet.
 
+## Writers at the same time
+
+The commands were written for a person at one terminal, running one at a time.
+The TUI runs them while another terminal runs its own, and the server under the
+panel runs them while both do. Three things keep two writers from undoing each
+other, and none of them makes a reader wait for the workspace.
+
+- **A temporary of its own.** A file Mindflayer replaces — a marker, the
+  `SKILL.md` a rename rewrites, git's exclude file — is written whole into a
+  temporary beside it and renamed into place (`replace_file`). The temporary
+  was `flayer.toml.tmp`, one name for every writer: two at once wrote into one
+  file, either could rename the other's half into place, and the second rename
+  found nothing to move. It is named for the run now,
+  `flayer.toml.<pid>-<suffix>.tmp` as [a stage](#built-where-no-agent-looks)
+  is, made with `create_new`, and taken away when the write or the rename
+  fails.
+- **A ledger that waits, and keeps a log.** `Ledger::open` gives its
+  connection SQLite's busy timeout, as long as a writer waits for the
+  workspace, so a second writer waits for the first rather than failing with
+  "database is locked". rusqlite sets five seconds of its own accord, but as a
+  library's default; set there, the wait is Mindflayer's. It also turns on
+  write-ahead logging: a reader goes on reading what the last write left while
+  the next is made, and a writer does not wait for readers. The mode is kept in
+  the file's header, so a ledger switches once, at the first open to write,
+  and SQLite keeps `mindflayer.db-wal` and `mindflayer.db-shm` beside it while
+  it is open. It switches only once `migrate` has accepted the version, since
+  switching first would change a ledger a newer build wrote before refusing
+  it, and a switch that fails is never a reason to refuse the ledger: one that
+  finds another connection writing fails at once, because SQLite will not wait
+  where waiting could deadlock, and is left to the next open. `open_existing`
+  sets the timeout and not the mode, because switching is a write, and a read
+  makes none but a migration.
+
+  A ledger that keeps its log needs those two files made beside it even to be
+  read, and SQLite takes them away when the last connection closes, so in a
+  folder the reader may read and not write — a sandboxed agent's view of the
+  workspace, a read-only mount, another user's workspace — the first read
+  fails, where the journal the ledger had before let it be read.
+  `open_existing` then opens it as SQLite's `immutable`, which needs neither
+  file and takes no lock, but only when there is no log: then everything is
+  in the file itself. Somebody who can write there writes into a log the read
+  does not see, so what it reads is the ledger as their last checkpoint left
+  it, and a checkpoint made between two of its reads is the one thing that
+  could change the file under it.
+- **A lock on the workspace.** Unique names keep each file whole, not each
+  entry in it: two `flayer link`s that both read `flayer.toml` before either
+  writes each put back a marker with only their own entry, and the second
+  rename wins. So a writer holds `.mindflayer/lock` from before it reads what
+  it will change until the change is written: an edit of the marker (`link`,
+  `unlink`, `load`, `unload`), an install or an uninstall, a gather — clone and
+  all, since two gathers of one source clone into one folder — and the scrub
+  that opening the ledger to write runs (`ledger_to_write`), while it rewrites
+  clones an older build left a credential in and removes the folders of a
+  source made one with another, which a gather beside it would be filling.
+  Core takes it inside each of them (`FlayerWorkspace::lock`), so no front end
+  has to remember to. An install looks again at what the project holds once
+  it has the lock: the standing it is handed comes from a survey made before,
+  minutes before on the install screen, and a copy an edit has made its
+  author's since is left alone rather than written over and recorded again.
+- **Opening the ledger takes no lock**, though it is when a ledger is made or
+  migrated. A migration is one transaction that reads the version again once
+  it holds SQLite's write lock (`Ledger::migrate`), so two processes opening
+  one an older build left take turns there and the second finds nothing to
+  do — a read's migration included, which the workspace's lock could not keep
+  apart, since readers never take it. Taking that lock as well made every
+  change to an artifact wait behind a gather to drop its record, once the
+  change was made, and fail as busy when the gather ran long, leaving the
+  record behind. The scrub takes it only when it has clones to rewrite, the
+  first write after an upgrade from a build that stored a credential, and a
+  record drop then waits for it without a deadline: the change it follows is
+  made, and trying it again would find nothing to change.
+
+How the lock behaves, and why:
+
+- **The system's lock, as a stage's is.** `std`'s `File::lock`, which is
+  `flock` on Linux and macOS and `LockFileEx` on Windows. The system drops it
+  when its process dies, however it dies, so a writer that was killed leaves
+  nothing to clear, and nothing has to decide whether a process named in a
+  file is still running. The file itself is never deleted, not even by the
+  writer that made it: a writer waiting on the file it opened would then lock
+  one nobody else can see, beside the one the next writer makes, and the two
+  would write at once.
+- **A bounded wait.** A writer that finds the lock held tries again, every
+  few milliseconds at first and every tenth of a second at most, for
+  `lock::WAIT`: polled, because `std` cannot wait for a lock with a deadline,
+  and a thread blocked in `lock` could not be told to stop. Then it gives up
+  with `LockError::Busy`, which names whoever holds it:
+
+  ```
+  /home/you/Projects/.mindflayer/lock: workspace busy: waited 10s for process 3234405 to finish writing to it; try again once it has
+  ```
+
+  Ten seconds is longer than anything but a gather takes, and short enough
+  that a command kept waiting by a process that has stopped answering says
+  so rather than looks hung. The error is collected like any other: the CLI
+  prints it, and the install screen prints it for the row it was applying
+  and goes on to the next.
+- **Who holds it, in a file of its own.** The writer holding the lock writes
+  its process id to `.mindflayer/lock.pid`, and takes it away while it still
+  holds the lock, so it never names a writer that has let go. Not in `lock`
+  itself, because a lock is mandatory on Windows: while one process holds a
+  file locked, no other can read a byte of it, and the id is wanted by exactly
+  the processes that cannot have the lock. Writing it is best effort, and a
+  waiting writer that finds none says "another process".
+- **Readers never take it.** A marker is replaced by a rename, and a read of
+  the ledger sees only what was committed, so each file a read opens is
+  whole, as it was before a write or after it. A change made in several steps
+  is not seen whole: a read between an install's copy and its record finds the
+  copy without the record, and calls it somebody's, and a read during a gather
+  finds some shelf copies replaced and others not yet. With its log the ledger
+  never keeps a read waiting for a write; in the journal a filesystem without
+  one leaves it in, a read waits for a write to be committed, as readers and
+  writers take turns there.
+  `ledger_for_reading` migrates an older ledger as `ledger` does, in the same
+  transaction, so the most a read waits for is another process's migration,
+  once after an upgrade.
+- **Not re-entrant.** Two handles on the file are two writers even in one
+  process, which is what lets threads stand in for processes in the tests,
+  from a link on each of two threads at once to every writer waiting for a
+  lock the test holds. It also means a writer that asks for the lock while it
+  holds it waits for itself, and fails as busy. Core's writers each take it
+  once and call none of the others while they hold it, and a front end does
+  not take it at all.
+- **A filesystem without locks lets writers through unlocked**, as it lets
+  installs through without a sweep: refusing would refuse every change there.
+  Any error taking the lock counts, for the reason a stage gives — NFS
+  without its lock daemon says "no locks available". The unique names still
+  keep every file whole.
+
+Writers on two machines are out of reach, and not attempted. On a network
+filesystem `flock` is emulated with locks that belong to a process rather than
+to a handle, and the write-ahead log needs every process using the ledger to
+share memory on one machine. A workspace on a network share is safe used from
+one machine at a time.
+
 ## Decisions
 
 The roadmap in [#15](https://github.com/otsobide/mindflayer/issues/15) rests on
@@ -2537,15 +2685,38 @@ leak into the lifecycle code. Unblocks #33, #45, #62, #93, #94 and #95.
   to. Printing the batch as those lines would make a session with the screen in
   it as repeatable as one without.
 - **Gathering still stages beside.** `copy::replace` builds a shelf copy as a
-  hidden sibling, `.<name>.mindflayer-new`, under names taken from the skill:
-  two gathers of one source at once collide as two installs did, and a gather
-  stopped halfway leaves its staging on the shelf. No agent reads the shelf,
-  which is why installs moved first. A `copy::Stage` in a scratch folder of the
+  hidden sibling, `.<name>.mindflayer-new`, under names taken from the skill,
+  so a gather stopped halfway leaves its staging on the shelf. Two gathers no
+  longer meet there, since each holds the workspace's lock ([Writers at the
+  same time](#writers-at-the-same-time)). No agent reads the shelf, which is
+  why installs moved first. A `copy::Stage` in a scratch folder of the
   workspace's own would do for gathering what `.mind/tmp` does for installs.
 - **Removing is not staged.** `uninstall` deletes a copy where it is, so one
   stopped halfway leaves part of a skill in a folder agents read. Renaming the
   copy into a stage first, and deleting it there, would make a removal as all
   or nothing as an install.
+- **A batch takes turns row by row.** The install screen's batch calls core
+  once for each row, and each call takes the workspace's lock for itself:
+  another writer can come between two rows, and with the workspace busy every
+  row waits the whole ten seconds before it is passed over. Holding the lock
+  across the batch needs core to apply the batch, which is where #78 plans it.
+- **Changes to an artifact take no lock.** `add`, `edit`, `rename` and
+  `remove` write into a project or the workspace's own folders and then drop a
+  record ([A record must not outlive the copy it is
+  about](#a-record-must-not-outlive-the-copy-it-is-about)), and neither step
+  holds the workspace: an edit is made in an editor, for as long as somebody
+  keeps it open, and holding the lock that long would keep every other writer
+  waiting. An install that takes the lock after the change finds the copy its
+  author's and leaves it. One already past that look when the change lands
+  writes over it, and the record dropped is then that install's, which leaves
+  its copy unrecorded. Taking the lock for the change itself, where there is
+  no editor to wait for, would close it for `add`, `rename` and `remove`.
+- **Two first writers making one workspace.** `init` makes a marker with
+  `create_new` and then fills it, so a second writer making the same
+  workspace at that moment — two first commands in a home with no
+  `.mindflayer` yet — finds a marker it cannot read, or fails to create one.
+  Writing the marker whole under a name of its own and linking it into place
+  would let the second find it whole.
 - **Installing rules.** Installing copies a directory, so only skills can be
   installed — from the shelf, and now from the workspace's own. The workspace's
   own rules have no way into a project yet; a rule is one file, filed by its
