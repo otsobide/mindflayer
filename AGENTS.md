@@ -300,6 +300,12 @@ These are easy to break from a single file without noticing.
   (`src/overrides/colors.ts`), and the colour mode switches by class
   (`src/color-mode.ts`). `tests/dist.test.ts` builds the panel and checks
   it; `tests/shell.test.ts` fails on any `<style>` element added at run time.
+- **Activating prints, and writes nothing.** `flayer activate` prints core's
+  code (`activate::script`), and nothing on stdout when it fails, so `eval`
+  runs nothing. Its shell comes from `--shell`, then `$SHELL`, read by the
+  front end. The code undoes only what it did, through `flayer-deactivate`
+  and never `deactivate`, and a workspace's name reaches a prompt only
+  through `activate::prompt`.
 - **`Kind` is a closed enum.** To add a kind, follow "Adding a third kind" in
   the architecture doc; the compiler's exhaustive matches are the checklist.
 
@@ -325,6 +331,11 @@ These are easy to break from a single file without noticing.
   library then falls back to the account's real home. Keep it that way.
 - Git sources are built in-process with `gix` (`common::repository`): no
   network and no `git` binary.
+- Tests that run a shell (`apps/cli/tests/shells_test.rs`, Linux only) start
+  it with no startup file and an environment holding only a `PATH`, a
+  temporary `HOME` and what the test sets, so no `MINDFLAYER_*` variable or
+  real shell configuration gets in. A shell, or a python3 to make a
+  virtualenv with, that is not installed is skipped and said on stderr.
 - The server's suites run against a fake backend with types of its own
   (`common::Fake`), never the CLI's. They bind 127.0.0.1 on port 0 and send
   requests through the router in process (`common::send`), or over loopback,
