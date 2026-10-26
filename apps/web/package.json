@@ -13,6 +13,8 @@
     "dev": "vite",
     "build": "vue-tsc --build && vite build",
     "preview": "vite preview",
+    "lint": "eslint .",
+    "fmt": "eslint . --fix",
     "typecheck": "vue-tsc --build"
   },
   "dependencies": {
@@ -22,9 +24,13 @@
     "vue-router": "^5.4.0"
   },
   "devDependencies": {
+    "@stylistic/eslint-plugin": "^5.10.0",
     "@types/node": "^24.19.2",
     "@vitejs/plugin-vue": "^6.0.10",
+    "@vue/eslint-config-typescript": "^14.9.0",
     "@vue/tsconfig": "^0.9.1",
+    "eslint": "^10.13.0",
+    "eslint-plugin-vue": "^10.11.1",
     "typescript": "~6.0.3",
     "vite": "^8.3.5",
     "vue-tsc": "^3.3.13"
