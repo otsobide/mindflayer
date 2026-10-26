@@ -265,6 +265,9 @@ pub fn start_edit(target: &Target) -> Edit {
 /// Finish an edit of an artifact in `project` once the editor has closed,
 /// dropping the record of an install of it when the file changed.
 /// `workspace` is the one consulted, as for [`add`].
+///
+/// A front end finishes the edit whether or not the editor succeeded: one
+/// that wrote the file before it failed has changed the copy all the same.
 pub fn finish_edit(
     workspace: Option<&FlayerWorkspace>,
     project: &MindProject,

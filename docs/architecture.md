@@ -856,7 +856,10 @@ Editing is split in two, because the editor is not core's to run: which one
 comes from `$VISUAL` or `$EDITOR`, and core never reads the environment.
 `lifecycle::start_edit` notes what the file holds, the CLI runs the editor,
 and `lifecycle::finish_edit` decides whether anything changed and what that
-means for the record.
+means for the record. The CLI finishes the edit even when the editor fails:
+one that writes the file and then exits non-zero, as vim does on `:cq`, has
+changed the copy all the same, and a record left behind would let `flayer
+uninstall` delete the change.
 
 The record dropped is the one held by the workspace the command resolved, the
 one its templates come from, and each change is given it for the same reason:

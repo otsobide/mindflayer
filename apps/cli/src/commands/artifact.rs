@@ -64,8 +64,18 @@ pub(crate) fn edit_in(
     let target = lifecycle::find(holder, &Reference::parse(reference)).map_err(CliError::from)?;
     let edit = lifecycle::start_edit(&target);
     let editor = editor.map_or_else(default_editor, str::to_owned);
-    open_in_editor(&editor, edit.file())?;
+    let opened = open_in_editor(&editor, edit.file());
+    // Finished whatever the editor came to. One that writes the file and then
+    // exits non-zero, as vim does on `:cq`, has changed the copy all the same,
+    // and a record left behind would let `flayer uninstall` delete the change.
     let finished = lifecycle::finish_edit(workspace, holder, edit);
+    if let Err(error) = opened {
+        let mut failure = Failure::from(error);
+        if let Err(error) = finished.copy {
+            failure.warnings.push(format!("warning: {error}"));
+        }
+        return Err(failure);
+    }
 
     let mut outcome = edited(holder, &target, finished.changed);
     recorded(
