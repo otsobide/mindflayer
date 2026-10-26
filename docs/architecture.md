@@ -195,9 +195,11 @@ been a second rule to keep in step with the first.
   and `install` check both, and `rename` the name, the one thing it writes.
   Those are what agents refuse: Codex skips a skill whose name is over 64
   characters or whose description is empty, so writing one would put a skill
-  in the project that never loads. The folder is not asked about, because
-  whoever writes the skill names its folder after it; `compatibility` and
-  `metadata` are not either, because an agent reads past them.
+  in the project that never loads. So is a name that is not the folder the
+  skill is filed in, since an agent finds a skill by one or the other — asked
+  of the folder Mindflayer is about to write, not the one the files were read
+  from. `compatibility` and `metadata` are not refused, because an agent reads
+  past them.
 - **Warned about** when gathering, which takes the skill anyway, as the
   agentskills.io client guide advises for skills written for other agents. The
   shelf is a record of what a source holds, and leaving a skill off it would
@@ -565,8 +567,12 @@ or description breaks the rules is offered, so nothing gathered is hidden, and
 refused, so nothing an agent would skip lands in a project. The check reads the
 files about to be copied rather than what the ledger noted when they were
 gathered, because the shelf is a folder anybody can edit and the workspace's own
-are edited as a matter of course. A refused skill is fixed upstream and
-gathered again, or, if it is the workspace's own, fixed where it is.
+are edited as a matter of course. For the same reason it compares what they
+declare with the folder the copy is about to be filed in, the name the ledger
+recorded: a shelf copy edited to declare another name, or a skill its source
+renamed while the record of its old name stayed, would otherwise land under one
+name declaring another. A refused skill is fixed upstream and gathered again,
+or, if it is the workspace's own, fixed where it is.
 
 ### It only manages what it installed
 

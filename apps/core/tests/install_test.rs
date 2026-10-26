@@ -420,6 +420,31 @@ fn a_skill_with_an_empty_description_is_not_installed() {
 }
 
 #[test]
+fn a_shelf_copy_that_now_declares_another_name_is_not_installed() {
+    let (_dir, workspace, project, ledger) = ready(&["deploy"]);
+    // The shelf is a folder anybody can edit, and a source can rename a skill
+    // while the record of its old name stays: either way the record says
+    // `deploy`, the copy would be filed under `deploy`, and it declares `ship`.
+    let shelved = workspace.root().join(&ledger.gathered().unwrap()[0].path);
+    fs::write(shelved.join("SKILL.md"), skill("ship", "Ship it")).unwrap();
+
+    let candidates = install::survey(&workspace, &ledger, &project, Kind::Skill).unwrap();
+    let error = install::install(
+        &workspace,
+        &ledger,
+        &project,
+        candidate(&candidates, "deploy"),
+    )
+    .unwrap_err();
+
+    assert_eq!(
+        error.to_string(),
+        "`deploy` cannot be installed: `name` is `ship` but the directory is `deploy`; they have to match"
+    );
+    assert!(!installed_at(&project, "deploy").exists());
+}
+
+#[test]
 fn what_agents_read_past_does_not_stop_an_install() {
     // Nested metadata and an over-long compatibility are reported by
     // `validate`, and are no reason for an agent to skip the skill.

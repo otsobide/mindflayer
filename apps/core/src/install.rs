@@ -16,7 +16,7 @@ use std::path::{Component, Path, PathBuf};
 
 use thiserror::Error;
 
-use crate::artifact::{issue_list, Artifact, ArtifactError, ValidationIssue};
+use crate::artifact::{self, issue_list, Artifact, ArtifactError, ValidationIssue};
 use crate::catalog::{Catalog, DiscoveryFailure};
 use crate::copy;
 use crate::kind::{Kind, Layout};
@@ -477,7 +477,7 @@ pub fn install(
 
     // Strict, where gathering was lenient: the copy is what the project's
     // agents load, so one they would skip is not put there.
-    let refused = unfit(kind, &from)?;
+    let refused = unfit(kind, &from, &name)?;
     if !refused.is_empty() {
         return Err(InstallError::Unfit {
             name,
@@ -514,13 +514,19 @@ pub fn install(
     })
 }
 
-/// What stops the artifact at `from` from being installed: whichever of the
-/// strict rules it breaks ([`ValidationIssue::is_strict`]).
+/// What stops the artifact at `from` from being installed as `name`:
+/// whichever strict rules it breaks once filed under that name
+/// ([`artifact::strict_issues`]).
 ///
 /// Read from the files about to be copied rather than from what the ledger
 /// noted when it was gathered, because the shelf is a folder anybody can
-/// edit, and the workspace's own are edited as a matter of course.
-fn unfit(kind: Kind, from: &Path) -> Result<Vec<ValidationIssue>, InstallError> {
+/// edit, and the workspace's own are edited as a matter of course. And held
+/// to `name` rather than to the folder they sit in, because `name` is the
+/// folder the copy will be: a shelf folder keeps the source's spelling, and
+/// `name` is what the ledger recorded, which the files stop declaring once
+/// they are edited, or once the source renames the skill and the record of
+/// the old name stays behind.
+fn unfit(kind: Kind, from: &Path, name: &str) -> Result<Vec<ValidationIssue>, InstallError> {
     // Matched on the kind, so a third one has to say what it is held to.
     let artifact = match kind {
         Kind::Skill => Artifact::skill(from, from)?,
@@ -529,10 +535,8 @@ fn unfit(kind: Kind, from: &Path) -> Result<Vec<ValidationIssue>, InstallError> 
         Kind::Rule => return Ok(Vec::new()),
     };
     Ok(artifact
-        .validate()
-        .into_iter()
-        .filter(ValidationIssue::is_strict)
-        .collect())
+        .manifest()
+        .map_or_else(Vec::new, |manifest| artifact::strict_issues(manifest, name)))
 }
 
 /// Take one artifact back out of a project.

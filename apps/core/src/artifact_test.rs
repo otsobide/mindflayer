@@ -222,7 +222,7 @@ fn an_opening_line_is_the_first_that_carries_text() {
 }
 
 #[test]
-fn only_the_name_and_the_description_are_strict() {
+fn only_the_name_its_folder_and_the_description_are_strict() {
     let strict = [
         ValidationIssue::NameEmpty,
         ValidationIssue::NameNotKebabCase {
@@ -232,14 +232,14 @@ fn only_the_name_and_the_description_are_strict() {
             segment: "a".into(),
             length: 65,
         },
-        ValidationIssue::DescriptionEmpty,
-        ValidationIssue::DescriptionTooLong { length: 1025 },
-    ];
-    let lenient = [
         ValidationIssue::NameDirectoryMismatch {
             name: "a".into(),
             directory: "b".into(),
         },
+        ValidationIssue::DescriptionEmpty,
+        ValidationIssue::DescriptionTooLong { length: 1025 },
+    ];
+    let lenient = [
         ValidationIssue::CompatibilityEmpty,
         ValidationIssue::CompatibilityTooLong { length: 501 },
         ValidationIssue::CompatibilityNotAString,
@@ -250,4 +250,19 @@ fn only_the_name_and_the_description_are_strict() {
     ];
     assert!(strict.iter().all(ValidationIssue::is_strict));
     assert!(!lenient.iter().any(ValidationIssue::is_strict));
+}
+
+#[test]
+fn the_strict_rules_are_asked_of_the_folder_a_skill_is_about_to_be_filed_in() {
+    let artifact = skill("ship", "Ship it", "/shelf/source/deploy");
+    let manifest = artifact.manifest().unwrap();
+    // Wherever it was read from, filed under its own name it is fine.
+    assert_eq!(strict_issues(manifest, "ship"), vec![]);
+    assert_eq!(
+        strict_issues(manifest, "deploy"),
+        vec![ValidationIssue::NameDirectoryMismatch {
+            name: "ship".into(),
+            directory: "deploy".into(),
+        }]
+    );
 }

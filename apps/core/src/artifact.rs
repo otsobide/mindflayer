@@ -205,78 +205,101 @@ impl Artifact {
     /// checking cannot fail on its own and a caller never has to handle an
     /// error from asking whether something is valid.
     pub fn validate(&self) -> Vec<ValidationIssue> {
-        // Every kind is looked up by name, so every kind is checked for one.
-        let mut issues = name_issues(&self.name);
-
         match &self.declared {
-            Declared::Skill(manifest) => {
-                // The directory name is how an agent locates the skill it was
-                // told to invoke, so a mismatch means one that lists fine and
-                // never loads.
-                if let Some(directory) = self.path.file_name().and_then(|name| name.to_str()) {
-                    if directory != self.name {
-                        issues.push(ValidationIssue::NameDirectoryMismatch {
-                            name: self.name.clone(),
-                            directory: directory.to_owned(),
-                        });
-                    }
-                }
-                let description = manifest.description.trim();
-                let length = description.chars().count();
-                if description.is_empty() {
-                    issues.push(ValidationIssue::DescriptionEmpty);
-                } else if length > MAX_DESCRIPTION_LEN {
-                    issues.push(ValidationIssue::DescriptionTooLong { length });
-                }
-                // Optional, but once written it has to say something and fit:
-                // an agent may show it to the model when the skill is loaded.
-                match &manifest.compatibility {
-                    Compatibility::Unstated => {}
-                    Compatibility::Stated(compatibility) => {
-                        let compatibility = compatibility.trim();
-                        let length = compatibility.chars().count();
-                        if compatibility.is_empty() {
-                            issues.push(ValidationIssue::CompatibilityEmpty);
-                        } else if length > MAX_COMPATIBILITY_LEN {
-                            issues.push(ValidationIssue::CompatibilityTooLong { length });
-                        }
-                    }
-                    Compatibility::NotAString => {
-                        issues.push(ValidationIssue::CompatibilityNotAString);
-                    }
-                }
-                // Read leniently, so the skill still lists; said here, so the
-                // entries an agent expecting strings would trip on are known.
-                if manifest.metadata.not_a_map {
-                    issues.push(ValidationIssue::MetadataNotAMap);
-                }
-                issues.extend(
-                    manifest
-                        .metadata
-                        .ignored
-                        .iter()
-                        .map(|key| ValidationIssue::MetadataNotAString { key: key.clone() }),
-                );
-                issues.extend(
-                    manifest
-                        .metadata
-                        .repeated
-                        .iter()
-                        .map(|key| ValidationIssue::MetadataRepeated { key: key.clone() }),
-                );
-            }
+            Declared::Skill(manifest) => skill_issues(
+                manifest,
+                self.path.file_name().and_then(|name| name.to_str()),
+            ),
             Declared::Rule => {
+                // Every kind is looked up by name, so every kind is checked
+                // for one.
+                let mut issues = name_issues(&self.name);
                 // A rule declares nothing, so there is exactly one thing left
                 // that can be wrong with it: having nothing to say. `summary`
                 // is None only when no line held any text.
                 if self.summary.is_none() {
                     issues.push(ValidationIssue::Empty);
                 }
+                issues
             }
         }
-
-        issues
     }
+}
+
+/// Everything wrong with a skill that declares `manifest`, filed in a folder
+/// called `folder` when that folder has a name to compare.
+///
+/// Apart from [`Artifact::validate`] so that a skill can be judged where it is
+/// going rather than where it is: [`strict_issues`].
+fn skill_issues(manifest: &SkillManifest, folder: Option<&str>) -> Vec<ValidationIssue> {
+    // Every kind is looked up by name, so every kind is checked for one.
+    let mut issues = name_issues(&manifest.name);
+
+    // The directory name is how an agent locates the skill it was told to
+    // invoke, so a mismatch means one that lists fine and never loads.
+    if let Some(folder) = folder {
+        if folder != manifest.name {
+            issues.push(ValidationIssue::NameDirectoryMismatch {
+                name: manifest.name.clone(),
+                directory: folder.to_owned(),
+            });
+        }
+    }
+    let description = manifest.description.trim();
+    let length = description.chars().count();
+    if description.is_empty() {
+        issues.push(ValidationIssue::DescriptionEmpty);
+    } else if length > MAX_DESCRIPTION_LEN {
+        issues.push(ValidationIssue::DescriptionTooLong { length });
+    }
+    // Optional, but once written it has to say something and fit: an agent
+    // may show it to the model when the skill is loaded.
+    match &manifest.compatibility {
+        Compatibility::Unstated => {}
+        Compatibility::Stated(compatibility) => {
+            let compatibility = compatibility.trim();
+            let length = compatibility.chars().count();
+            if compatibility.is_empty() {
+                issues.push(ValidationIssue::CompatibilityEmpty);
+            } else if length > MAX_COMPATIBILITY_LEN {
+                issues.push(ValidationIssue::CompatibilityTooLong { length });
+            }
+        }
+        Compatibility::NotAString => issues.push(ValidationIssue::CompatibilityNotAString),
+    }
+    // Read leniently, so the skill still lists; said here, so the entries an
+    // agent expecting strings would trip on are known.
+    if manifest.metadata.not_a_map {
+        issues.push(ValidationIssue::MetadataNotAMap);
+    }
+    issues.extend(
+        manifest
+            .metadata
+            .ignored
+            .iter()
+            .map(|key| ValidationIssue::MetadataNotAString { key: key.clone() }),
+    );
+    issues.extend(
+        manifest
+            .metadata
+            .repeated
+            .iter()
+            .map(|key| ValidationIssue::MetadataRepeated { key: key.clone() }),
+    );
+    issues
+}
+
+/// Whichever strict rules ([`ValidationIssue::is_strict`]) a skill declaring
+/// `manifest` breaks once it is filed in a folder called `folder`.
+///
+/// Asked of the skill as it is about to be written, rather than as it sits:
+/// the folder it is filed in is the one Mindflayer is about to name, which is
+/// not always the one it was read from.
+pub(crate) fn strict_issues(manifest: &SkillManifest, folder: &str) -> Vec<ValidationIssue> {
+    skill_issues(manifest, Some(folder))
+        .into_iter()
+        .filter(ValidationIssue::is_strict)
+        .collect()
 }
 
 /// Read a file, naming it if that fails.
@@ -399,18 +422,19 @@ impl ValidationIssue {
     /// not break when it writes a skill into a project — creating, renaming
     /// or installing one — rather than only report.
     ///
-    /// The name and the description, because those are what agents refuse:
-    /// Codex skips a skill whose name is over 64 characters or whose
-    /// description is empty, so a copy with either would sit in a project and
-    /// never load. A directory that disagrees with the name is not among them,
-    /// because whoever writes the skill names its folder; neither are
-    /// `compatibility` and `metadata`, which an agent reads past.
+    /// The name, the folder it is filed in, and the description, because
+    /// those are what agents refuse or trip on: Codex skips a skill whose name
+    /// is over 64 characters or whose description is empty, and an agent finds
+    /// a skill by its folder or by its name, so one whose two disagree is
+    /// found by one and not the other. Not `compatibility` and `metadata`,
+    /// which an agent reads past.
     pub fn is_strict(&self) -> bool {
         matches!(
             self,
             ValidationIssue::NameEmpty
                 | ValidationIssue::NameNotKebabCase { .. }
                 | ValidationIssue::NameSegmentTooLong { .. }
+                | ValidationIssue::NameDirectoryMismatch { .. }
                 | ValidationIssue::DescriptionEmpty
                 | ValidationIssue::DescriptionTooLong { .. }
         )
