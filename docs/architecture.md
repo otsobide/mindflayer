@@ -946,9 +946,9 @@ since OpenCode rejects unknown keys, `codex --strict-config` fails on them and
 `.mcp.json` allows no comments, so the fingerprint is the only ownership
 signal. Rejected: storing `server.json` verbatim; copying whole config files,
 which overwrites the user's other servers; and delegating to the agents' CLIs,
-which reach only Codex's user scope, where `codex mcp add` re-serializes every
-entry, though they may return for user scope (D-22). Unblocks #18, #86, #89,
-#93 and #94.
+since `codex mcp add` writes only Codex's user config, never a project's, and
+re-serializes every entry there, though they may return for user scope (D-22).
+Unblocks #18, #86, #89, #93 and #94.
 
 ### D-11: MCP secrets are environment references
 
