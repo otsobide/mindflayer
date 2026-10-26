@@ -1,6 +1,7 @@
 import type { App } from 'vue'
 import { createRouter, createWebHistory, type Router, type RouterHistory } from 'vue-router'
 import { routes } from 'vue-router/auto-routes'
+import { createPinia } from 'pinia'
 import ui from '@nuxt/ui/vue-plugin'
 
 export interface PanelOptions {
@@ -24,6 +25,7 @@ export function createPanel({ history = createWebHistory() }: PanelOptions = {})
     router,
     install(app) {
       app.use(router)
+      app.use(createPinia())
       app.use(ui)
     }
   }

@@ -111,9 +111,36 @@
   }
 }
 
+/*
+ * Denser and darker than Nuxt UI's defaults: a 3rem header, and in the dark
+ * a near-black page with panels one step up, so borders and raised surfaces
+ * carry the structure rather than shadows.
+ */
+@layer theme {
+  :root,
+  :host {
+    --ui-header-height: 3rem;
+    --ui-radius: 0.3125rem;
+  }
+
+  .dark {
+    --ui-bg: var(--ui-color-neutral-950);
+    --ui-bg-muted: var(--ui-color-neutral-900);
+    --ui-bg-elevated: var(--ui-color-neutral-900);
+    --ui-bg-accented: var(--ui-color-neutral-800);
+    --ui-border: var(--ui-color-neutral-800);
+    --ui-border-muted: var(--ui-color-neutral-900);
+    --ui-border-accented: var(--ui-color-neutral-700);
+  }
+}
+
 @layer base {
   body {
     @apply bg-default text-default font-sans text-sm antialiased;
+  }
+
+  ::selection {
+    background-color: color-mix(in oklab, var(--ui-primary) 35%, transparent);
   }
 
   code,
@@ -121,5 +148,25 @@
   samp,
   pre {
     font-variant-numeric: tabular-nums slashed-zero;
+  }
+}
+
+/*
+ * A faint dot grid fading out from the middle: texture for a page that has
+ * little on it yet. A gradient, not an image, so it is nothing to fetch.
+ */
+@utility bg-dots {
+  position: relative;
+  isolation: isolate;
+
+  &::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    background-image: radial-gradient(var(--ui-border-accented) 1px, transparent 1px);
+    background-size: 1.125rem 1.125rem;
+    mask-image: radial-gradient(ellipse at center, #000 0%, transparent 70%);
+    pointer-events: none;
   }
 }

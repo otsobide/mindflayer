@@ -11,9 +11,21 @@ export {}
 /* prettier-ignore */
 declare module 'vue' {
   export interface GlobalComponents {
+    AppHeader: typeof import('./components/AppHeader.vue')['default']
+    AppLogo: typeof import('./components/AppLogo.vue')['default']
+    AppSidebar: typeof import('./components/AppSidebar.vue')['default']
     RouterLink: typeof import('vue-router')['RouterLink']
     RouterView: typeof import('vue-router')['RouterView']
     UApp: typeof import('./../node_modules/.pnpm/@nuxt+ui@4.12.0_e85c15649f14e1fe82b3b91186e361aa/node_modules/@nuxt/ui/dist/runtime/components/App.vue')['default']
+    UColorModeButton: typeof import('./../node_modules/.pnpm/@nuxt+ui@4.12.0_e85c15649f14e1fe82b3b91186e361aa/node_modules/@nuxt/ui/dist/runtime/components/color-mode/ColorModeButton.vue')['default']
+    UDashboardGroup: typeof import('./../node_modules/.pnpm/@nuxt+ui@4.12.0_e85c15649f14e1fe82b3b91186e361aa/node_modules/@nuxt/ui/dist/runtime/components/DashboardGroup.vue')['default']
+    UDashboardNavbar: typeof import('./../node_modules/.pnpm/@nuxt+ui@4.12.0_e85c15649f14e1fe82b3b91186e361aa/node_modules/@nuxt/ui/dist/runtime/components/DashboardNavbar.vue')['default']
+    UDashboardPanel: typeof import('./../node_modules/.pnpm/@nuxt+ui@4.12.0_e85c15649f14e1fe82b3b91186e361aa/node_modules/@nuxt/ui/dist/runtime/components/DashboardPanel.vue')['default']
+    UDashboardSidebar: typeof import('./../node_modules/.pnpm/@nuxt+ui@4.12.0_e85c15649f14e1fe82b3b91186e361aa/node_modules/@nuxt/ui/dist/runtime/components/DashboardSidebar.vue')['default']
+    UDashboardSidebarCollapse: typeof import('./../node_modules/.pnpm/@nuxt+ui@4.12.0_e85c15649f14e1fe82b3b91186e361aa/node_modules/@nuxt/ui/dist/runtime/components/DashboardSidebarCollapse.vue')['default']
     UEmpty: typeof import('./../node_modules/.pnpm/@nuxt+ui@4.12.0_e85c15649f14e1fe82b3b91186e361aa/node_modules/@nuxt/ui/dist/runtime/components/Empty.vue')['default']
+    UIcon: typeof import('./../node_modules/.pnpm/@nuxt+ui@4.12.0_e85c15649f14e1fe82b3b91186e361aa/node_modules/@nuxt/ui/dist/runtime/vue/components/Icon.vue')['default']
+    UNavigationMenu: typeof import('./../node_modules/.pnpm/@nuxt+ui@4.12.0_e85c15649f14e1fe82b3b91186e361aa/node_modules/@nuxt/ui/dist/runtime/components/NavigationMenu.vue')['default']
+    UTooltip: typeof import('./../node_modules/.pnpm/@nuxt+ui@4.12.0_e85c15649f14e1fe82b3b91186e361aa/node_modules/@nuxt/ui/dist/runtime/components/Tooltip.vue')['default']
   }
 }

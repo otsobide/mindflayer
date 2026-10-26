@@ -3,6 +3,7 @@ import { flushPromises, mount, type VueWrapper } from '@vue/test-utils'
 import { createMemoryHistory } from 'vue-router'
 import App from '@/App.vue'
 import { createPanel } from '@/panel'
+import { useShell } from '@/stores/shell'
 
 let wrapper: VueWrapper | undefined
 let styles: Element[]
@@ -17,6 +18,8 @@ async function render(path: string) {
 }
 
 beforeEach(() => {
+  // The sidebar remembers whether it was collapsed.
+  localStorage.clear()
   // Every <style> element anything adds, for as long as the test runs.
   styles = []
   watching = new MutationObserver((records) => {
@@ -39,10 +42,36 @@ afterEach(() => {
 })
 
 describe('the shell', () => {
-  it('draws the overview at the root', async () => {
+  it('draws the sidebar and the header around an empty overview', async () => {
     const page = await render('/')
 
-    expect(page.get('h2').text()).toBe('Mindflayer')
+    const sidebar = page.get('[data-testid="sidebar"]')
+    expect(sidebar.text()).toContain('Mindflayer')
+    expect(sidebar.get('nav a[aria-current="page"]').text()).toBe('Overview')
+    expect(sidebar.get('[data-testid="address"]').text()).toBe(window.location.host)
+
+    expect(page.get('[data-testid="overview"] h1').text()).toBe('Overview')
+    expect(page.text()).toContain('Nothing to show yet')
+    expect(page.text()).toContain('$ flayer list')
+  })
+
+  it('answers a path it has no page for with one that says so', async () => {
+    const page = await render('/projects/nowhere')
+
+    expect(page.get('[data-testid="not-found"] h1').text()).toBe('Not found')
+    expect(page.text()).toContain('The panel has nothing at /projects/nowhere.')
+    expect(page.get('[data-testid="not-found"] a[href="/"]').text()).toContain('Back to the overview')
+  })
+
+  it('collapses the sidebar to its icons from the header', async () => {
+    const page = await render('/')
+
+    await page.get('[data-testid="overview"] button[aria-label="Collapse sidebar"]').trigger('click')
+    await flushPromises()
+
+    expect(useShell().sidebarCollapsed).toBe(true)
+    expect(page.get('[data-testid="sidebar"]').text()).not.toContain('Mindflayer')
+    expect(page.get('[data-testid="address"]').text()).toBe('')
   })
 
   it('writes its palette into no style element, which the CSP would refuse', async () => {
