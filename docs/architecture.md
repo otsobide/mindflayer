@@ -779,6 +779,49 @@ folders are its own — except the workspace root, which is also where the other
 are kept. A scan that runs out of budget says so rather than passing for
 complete.
 
+## Decisions
+
+The roadmap in [#15](https://github.com/otsobide/mindflayer/issues/15) rests on
+twenty-three decisions, validated by the owner on 2026-10-26. They are written
+down here so that the PRs carrying them out do not reopen them: a change that
+disagrees with one starts by changing the decision, here, with the owner. Each
+says what was chosen, why, what was turned down, and which issues it unblocks.
+
+They describe what is to be built, not what is. Until the issues a decision
+unblocks have landed, the sections above still describe the code as it stands,
+and each of those issues rewrites the sections it changes.
+
+### D-01: A project's `.mind` ignores itself
+
+`mind init` writes a `.mind/.gitignore` holding `*`, as Python's venv does, and
+`mind init --shared` leaves it out for a team that wants its marker committed.
+The rule lives inside the folder Mindflayer owns, so it needs no git repository
+at init time, survives a copy and goes when `.mind` does. Rejected: keeping
+`.mind` committed, as today, against the owner's ask for an ignored one; an
+anchored `/.mind/` line in `$GIT_COMMON_DIR/info/exclude`, which stays the
+mechanism for installed copies (D-02) because they have no Mindflayer folder to
+hold a `.gitignore`; and a line in the repository's `.gitignore`, which edits a
+team file. A fresh clone has no `.mind`, and `scan` already offers plain
+repositories. Unblocks #29, #35 and #38.
+
+### D-02: Installs stay local unless a project shares them
+
+A project's settings name a share mode, `local` or `shared`. New projects are
+local; projects upgraded from v2 are shared, because they were committed by
+design. Local mode keeps installed copies and entries out of git through
+anchored entries in a Mindflayer block of `info/exclude`, and edits a tracked
+`AGENTS.md`, `CLAUDE.md` or MCP config only when the project sets
+`edit_tracked`; otherwise Claude gets its rules through ignored
+`.claude/rules/mindflayer` files, and the agents left unreached are reported.
+That gives quiet projects, keeps the team case one flag away, and changes no
+committed team file behind anyone's back. Rejected: always shared, which leaves
+every install for the team to commit; and always local with marked edits to
+tracked files, which puts Mindflayer's block in a team's diffs. It rests on
+agents reading git-ignored files, which none documents and #17 confirms on real
+binaries. Local copies never reach teammates or cloud runs, and reach another
+worktree only for Claude, and only when that worktree has no `.claude/skills`
+of its own. Unblocks #17, #32, #34, #37, #38, #43, #44, #45 and #94.
+
 ## Open questions
 
 - **Precedence between projects.** Two projects in one workspace can declare
