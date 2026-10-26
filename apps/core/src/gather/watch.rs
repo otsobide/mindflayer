@@ -83,7 +83,11 @@ impl Watch {
     }
 
     /// Tell the sink, if there is one.
-    pub(crate) fn report(&self, progress: Progress) {
+    ///
+    /// Public so that whatever stands in for a gather reports the way a
+    /// gather does: a front end's test of how it draws a slow one, or a
+    /// source a front end fetches itself.
+    pub fn report(&self, progress: Progress) {
         if let Some(sink) = &self.sink {
             sink(progress);
         }
