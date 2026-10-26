@@ -662,9 +662,12 @@ impl MindProject {
     /// from the file.
     ///
     /// Refused for a project a `mind.toml` marks, which has no settings until
-    /// it is moved to them, and when the change touches the version or the
-    /// id. A settings file this build refuses to read is refused here too,
-    /// and left as it is.
+    /// it is moved to them, when the change touches the version or the id,
+    /// and when it moves a kind's folder out of the project, as `init`
+    /// refuses one: strict when writing, while a folder somebody wrote there
+    /// by hand is still read, and left alone by a change to something else.
+    /// A settings file this build refuses to read is refused here too, and
+    /// left as it is.
     ///
     /// Takes no lock. The settings are the project's, which has none of its
     /// own, and a workspace's would keep out only that workspace's writers,
@@ -687,6 +690,20 @@ impl MindProject {
         let before = crate::settings::parse(&path, &text)?;
         let mut wanted = before.clone();
         let value = change(&mut wanted);
+        for kind in Kind::ALL {
+            match wanted.directories.get(kind) {
+                Some(directory)
+                    if before.directories.get(kind) != Some(directory)
+                        && !stays_inside(directory) =>
+                {
+                    return Err(WorkspaceError::OutsideProject {
+                        path: directory.to_path_buf(),
+                        kind,
+                    });
+                }
+                _ => {}
+            }
+        }
 
         let edited = crate::settings::edited(&path, &text, &before, &wanted)?;
         if edited != text {

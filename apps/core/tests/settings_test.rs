@@ -585,3 +585,47 @@ fn an_edit_leaves_nothing_else_beside_the_settings() {
     assert_eq!(names_in(&dir.path().join(MIND_DIR)), ["settings.json"]);
     assert_eq!(project.settings().unwrap().share, Share::Shared);
 }
+
+#[test]
+fn an_edit_that_moves_a_folder_out_of_the_project_is_refused() {
+    let dir = TempDir::new().unwrap();
+    let (mut project, path) = by_hand(dir.path());
+
+    for outside in ["/etc/skills", "../elsewhere", "."] {
+        let error = project
+            .change_settings(|settings| {
+                settings.directories = settings.directories.clone().with(Kind::Skill, outside);
+            })
+            .unwrap_err();
+
+        assert!(
+            matches!(
+                error,
+                WorkspaceError::OutsideProject {
+                    kind: Kind::Skill,
+                    ..
+                }
+            ),
+            "{outside}: {error}"
+        );
+    }
+    assert_eq!(fs::read_to_string(&path).unwrap(), BY_HAND);
+}
+
+#[test]
+fn a_folder_written_outside_by_hand_does_not_stop_a_change_to_something_else() {
+    let dir = TempDir::new().unwrap();
+    let (_, path) = by_hand(dir.path());
+    let outside = BY_HAND.replace("\"skills\": \"skills\"", "\"skills\": \"../shared\"");
+    fs::write(&path, &outside).unwrap();
+    let mut project = MindProject::open(dir.path()).unwrap();
+
+    project
+        .change_settings(|settings| settings.share = Share::Shared)
+        .unwrap();
+
+    assert_eq!(
+        fs::read_to_string(&path).unwrap(),
+        outside.replace("\"share\": \"local\"", "\"share\": \"shared\"")
+    );
+}
