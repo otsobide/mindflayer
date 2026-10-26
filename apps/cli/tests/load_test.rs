@@ -82,6 +82,29 @@ fn with_nothing_above_the_source_load_goes_into_the_default_workspace() {
 }
 
 #[test]
+fn the_workspace_in_home_is_the_default_one_however_it_was_reached() {
+    // Named with `-W` as much as fallen back to: the line says which
+    // workspace changed, and the one in home is the default whatever chose
+    // it, as it is on every run from below home after the one that makes
+    // it, which finds it walking up.
+    let home = TempDir::new().unwrap();
+    flayer(home.path(), &["init"]).unwrap();
+    let (dir, _target, _team) = target_and_team();
+    let named = home.path().to_string_lossy().into_owned();
+
+    let outcome = flayer_at_home(dir.path(), home.path(), &["-W", &named, "load", "team"]).unwrap();
+
+    assert!(
+        outcome.stdout.ends_with(&format!(
+            "  into the workspace at {}, the default one\n",
+            home.path().display()
+        )),
+        "{}",
+        outcome.stdout
+    );
+}
+
+#[test]
 fn with_no_default_either_there_is_nowhere_to_load_into() {
     let (_dir, _target, team) = target_and_team();
 
