@@ -664,7 +664,14 @@ installing that skill at once, each deleting what the other was building.
   because whether a process still runs is a question each platform answers
   differently, and a lock the system drops when its process dies answers it on
   all of them. Only folders named the way a stage is are swept; anything else
-  in there, somebody else put there.
+  in there, somebody else put there. A stage that will not be removed is left
+  for a later run, unsaid, rather than failing this one: it is litter in a
+  folder nothing reads. On a filesystem without locks nothing is swept at all,
+  since no run there can tell a live stage from a leftover, and what is left
+  stays until somebody deletes it; the names still keep runs apart. Any error
+  taking the lock counts as such a filesystem, not only an unsupported one: NFS
+  without its lock daemon says "no locks available", and refusing that would
+  make every install there fail.
 - **What earlier versions left beside is cleared too.** A project that
   upgraded can still hold the `.deploy.mindflayer-new` or `-old` of an install
   an earlier version did not finish, and no sweep of `.mind/tmp` would find

@@ -333,6 +333,9 @@ fn hold(scratch: &Path) -> Result<(Option<File>, Vec<PathBuf>), io::Error> {
         }
         // A filesystem without locks. No run there can tell a live stage from
         // a leftover, so none sweeps, and the names still keep runs apart.
+        // Any error, not only `Unsupported`: NFS without its lock daemon says
+        // "no locks available", which `std` leaves uncategorized, and failing
+        // on it would fail every install there.
         Err(TryLockError::Error(_)) => Ok((None, Vec::new())),
     }
 }
