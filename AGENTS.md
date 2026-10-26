@@ -43,9 +43,9 @@ Two crates in one Cargo workspace, each an app under `apps/` with its own
 `Makefile`:
 
 - `apps/core` (`mindflayer-core`): the engine. Projects, workspaces, kinds,
-  the catalog, gathering (`gix`), the SQLite ledger, installing, creating and
-  changing artifacts. Its only I/O is files, and it never reads the
-  environment.
+  the catalog, gathering (`gix`), the SQLite ledger, installing, keeping
+  installs out of git (`exclude`), creating and changing artifacts. Its only
+  I/O is files, and it never reads the environment.
 - `apps/cli` (`mindflayer-cli`): the binaries `mind` (`src/main.rs`) and
   `flayer` (`src/bin/flayer.rs`), and the TUI. `src/lib.rs` only re-exports
   the public API. The parsers are in `src/parse.rs`. `src/commands.rs`
@@ -84,6 +84,12 @@ These are easy to break from a single file without noticing.
   - Creation uses `create_new` or `create_dir`.
   - `rename` rewrites only the `name:` line (`frontmatter::with_key`).
   - `remove` is a dry run without `--yes`.
+  - A file somebody else owns is edited only inside Mindflayer's marked
+    blocks, every byte outside them kept, and a malformed block is refused,
+    not repaired. The blocks: `# mindflayer:begin`/`# mindflayer:end` in
+    `$GIT_COMMON_DIR/info/exclude` (`exclude`), where an edit rewrites only its
+    own project's `# project <key>` group. `.gitignore` and
+    `core.excludesFile` are never edited.
 - **Mindflayer only manages what it installed.** The ledger's record of an
   install is what allows overwriting and deleting. An unrecorded artifact is
   `Standing::Foreign` and is never touched. `edit`, `rename` and `remove`
