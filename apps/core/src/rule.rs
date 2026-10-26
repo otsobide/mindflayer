@@ -57,14 +57,11 @@ impl RuleManifest {
                 };
                 (manifest, document.body)
             }
-            // Nothing at all between the fences: front matter that declares
-            // nothing, and no line of content lost by reading it so. Not
-            // when there are comments, though, which YAML reads past: to
-            // markdown they are headings between two horizontal rules.
-            Ok(Value::Null) if document.front_matter.trim().is_empty() => {
-                (Self::default(), document.body)
-            }
-            // A scalar or a list is prose between two horizontal rules.
+            // A scalar or a list is prose between two horizontal rules, and
+            // nothing at all is two horizontal rules: YAML reads an empty
+            // block, or one of only comments, as null, and to markdown those
+            // comments are headings. Taking the fences off either would drop
+            // lines that read today, and declare nothing in return.
             Ok(_) => (Self::default(), source),
             Err(error) => {
                 let manifest = Self {

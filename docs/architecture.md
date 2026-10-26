@@ -212,14 +212,16 @@ that does to `.claude/rules/mindflayer` only, so a rule may carry some.
 
 Rules were written long before any of them was read this way, and markdown is
 free to open with a `---` horizontal rule. So a fenced block at the top is
-front matter only when it holds a YAML mapping, or nothing at all, which is
-front matter that declares nothing. Anything else is content, as it always
-was: an opening fence that never closes, prose between two horizontal rules, a
-list, and a block of nothing but comments too, since what YAML reads past as a
-comment is a heading to markdown. The block is parsed as a YAML value before
-anything is read from it, so that what it *is* decides whether it is front
-matter; deserializing straight into a struct would have to tell a sentence from
-a broken mapping by the wording of its error.
+front matter only when it holds a YAML mapping. Anything else is content, as
+it always was: an opening fence that never closes, prose between two
+horizontal rules, a list, two horizontal rules with nothing between them, and a
+block of nothing but comments too, since what YAML reads past as a comment is a
+heading to markdown. An empty block could have been front matter that declares
+nothing, but taking its fences off would drop two lines that read today and
+gain nothing. The block is parsed as a YAML value before anything is read from
+it, so that what it *is* decides whether it is front matter; deserializing
+straight into a struct would have to tell a sentence from a broken mapping by
+the wording of its error.
 
 A block that does not parse at all is content too, and `validate` warns about
 it, since it is most likely front matter written wrong: a glob opening with `*`

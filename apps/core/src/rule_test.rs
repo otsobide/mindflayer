@@ -75,11 +75,13 @@ fn a_key_written_twice_is_not_read_as_either() {
 }
 
 #[test]
-fn empty_front_matter_declares_nothing() {
+fn two_horizontal_rules_with_nothing_between_them_stay_content() {
+    // Not a mapping, so not front matter: the fences stay in the body, and
+    // the rule is listed by its first one, as it was before rules were read.
     for source in ["---\n---\nBody\n", "---\n  \n\n---\nBody\n"] {
         assert_eq!(
             RuleManifest::read(source),
-            (RuleManifest::default(), "Body\n"),
+            (RuleManifest::default(), source),
             "{source:?}"
         );
     }
