@@ -144,7 +144,9 @@ These are easy to break from a single file without noticing.
 - **Home comes from the front end.** The order is `--home`, then
   `$MINDFLAYER_HOME`, then the user's home; empty means none. Only commands
   that write may create `~/.mindflayer` (`locate_or_default`). Reads use
-  `default_at`, which never creates it.
+  `locate_or_unmade`, which falls back to the workspace `init` would make
+  without making it, or `default_at`; a read opens `mindflayer.db` only
+  through `ledger_for_reading`, which never creates it either.
 - **So does the workspace a change consults.** The lifecycle changes and
   template lookup take it as a parameter, the one the command resolved, and
   core never walks up from the project to find one: a walk misses a workspace

@@ -569,7 +569,10 @@ engine badly.
 It sits in `.mindflayer/`, beside the marker it belongs to, so it travels with
 the workspace and two workspaces never share a history. It carries its schema
 version in SQLite's own `user_version` header field, and a database from the
-future is refused exactly as a marker file from the future is.
+future is refused exactly as a marker file from the future is. The first
+command that writes to it makes it; a read never does, and changes an existing
+one only to migrate it ([A read leaves the ledger as it finds
+it](#a-read-leaves-the-ledger-as-it-finds-it)).
 
 Four things are recorded: the **sources** gathered from, the **artifacts** on
 the shelf and which source each came from, the **installations** — which skill
@@ -1055,26 +1058,79 @@ two answering alike.
 ## The default workspace
 
 A workspace is found by walking up, and when nothing up there has one, the
-workspace-level commands fall back to the one at the default home:
-`FlayerWorkspace::locate_or_default` makes `~/.mindflayer` the first time it
-is needed. Home sits above most of what a person works on, so it is the one
-directory where a workspace can manage projects anywhere, and making it on
-demand means `flayer link ~/code/x` works before anyone has chosen a directory.
+workspace-level commands fall back to the one at the default home. Home sits
+above most of what a person works on, so it is the one directory where a
+workspace can manage projects anywhere, and making it on demand means `flayer
+link ~/code/x` works before anyone has chosen a directory.
 
-It is made by any workspace command that finds none up the tree, reading ones
-included: `flayer list`, `flayer scan`, `mind install` and opening `flayer`'s
-TUI all go through `locate_or_default`, so the first of them run outside every
-workspace leaves a `~/.mindflayer` behind. The exceptions are the commands
-that only list or take away a load — `flayer load` on its own, `unload` — which
-use `locate_except`, and the `mind` commands that only consult a workspace —
-opening its TUI, `add`, `edit`, `rename`, `remove`, `templates` — which use
-`default_at`: both open the home workspace if it exists and never create it.
-Whether reading should create it at all is an [open question](#open-questions).
+It is made by the first command that **writes** to it, and by nothing that
+only reads. `flayer link`, `add`, `gather git`, `load`, `install` and
+`uninstall` go through `FlayerWorkspace::locate_or_default`, which makes
+`~/.mindflayer` when nothing up the tree has one. A read goes through
+`locate_or_unmade`, which falls back instead to `FlayerWorkspace::unmade`: the
+workspace `init` would make there, parsed from the same template rather than
+written. That is `flayer list`, `show`, `validate`, `scan`, `templates`,
+`gather list`, and `load` and `install` on their own.
+
+A read of the unmade workspace answers as a read of one made a moment before
+would, because it is the same marker: `flayer list` says it manages no
+projects yet, `flayer scan` lists what is under home, all of it unlinked,
+`flayer gather list` says nothing is gathered. Then one `hint:` line on stderr
+says the workspace is not made yet and where the first command that writes
+will make it. A hint, not a `warning:`: nothing is wrong with a workspace
+nobody has needed yet, so the exit is whatever the read alone makes it. The
+alternative was an empty answer written for each command, which is one more
+thing to keep in step with what the made workspace says, and every front end
+would have to write its own.
+
+The TUI and the minds screen open on it the same way: empty, under a header
+saying it is not made yet. The first change made from either runs `flayer
+init` before its own lines (`App::lines`), so the workspace is made where the
+screen shows it and the transcript says so. Left to the change, the command
+that writes would make it, as it does from the shell; but the screen's lines
+run from the workspace root and walk up from there, and before it is made no
+marker at the root stops them, so with a workspace above home the change would
+land in that one. For the same reason the minds screen is built from where
+`flayer minds` was run, as the TUI is, and the TUI opens its install screen on
+the root it shows rather than walking up from it. The install screen itself
+does not open on an unmade workspace: like any workspace with no projects, it
+says there are none to install into.
+
+Nothing is written through an unmade workspace. An edit of its marker is
+refused as it is for any directory that is not a workspace, and so is opening
+its ledger to write to, which would otherwise leave a `.mindflayer` holding a
+database and no marker. A command that writes asks for the real one.
+
+Two older routes also never make it: the `mind` commands that only consult a
+workspace (opening its TUI, `add`, `edit`, `rename`, `remove`, `templates`)
+use `default_at`, and `unload`, which only takes away, uses `locate_except`.
+Both open the home workspace if it exists.
 
 Where home is comes from the front end, not from core: `--home`, then
 `$MINDFLAYER_HOME`, then the user's home directory, and empty means there is
 none. Core takes it as a parameter, which keeps it free of the environment and
 is what lets the tests run every command with the fallback switched off.
+
+### A read leaves the ledger as it finds it
+
+`mindflayer.db` belongs to the workspace like its marker, and a read does not
+make it either. `FlayerWorkspace::ledger_for_reading` opens it only when it
+exists (`Ledger::open_existing`, without SQLite's create flag) and otherwise
+answers from an empty ledger in memory, which says what a ledger nothing was
+ever written to would. So `flayer gather list`, the TUI's shelf count and the
+install screen leave a workspace that has never gathered or installed anything
+without one. The install screen is a read until something on it is applied;
+applying opens the ledger with `ledger()`, which makes it, and never the
+stand-in, whose records would be gone when it was dropped.
+
+A read does write to one thing: an existing ledger from an older schema is
+migrated to this build's, as every open migrates it. A build reads its own
+schema and no other, so declining would leave the file unreadable rather than
+untouched; that step is upkeep of Mindflayer's own file, not a change anybody
+asked for. Each schema step is to copy the database aside before it migrates
+(#30), and a read migrates through the same step, so it takes that copy too.
+Until the first such step lands there is no copy to take, and a read migrates
+the way every open does today.
 
 ## The agents' own folders
 
@@ -1268,7 +1324,10 @@ on the deepest rather than on a whole neighbouring tree, and never into hidden
 folders, symlinks, `node_modules` or `target`. A repository is a leaf, since its
 folders are its own — except the workspace root, which is also where the others
 are kept. A scan that runs out of budget says so rather than passing for
-complete.
+complete. A folder that cannot be listed is a failure reported beside what was
+found, except a root that is not there at all: that holds nothing, and only
+the default workspace before it is made can have one, in a home nobody has
+created yet.
 
 ## Decisions
 
@@ -1670,13 +1729,23 @@ leak into the lifecycle code. Unblocks #33, #45, #62, #93, #94 and #95.
   `-W` ([D-08](#d-08-an-explicit-or-activated-workspace-wins)) would let that
   line name the screen's workspace as well, so which of the two a project's
   row runs is still to choose.
-- **Reading commands create the home workspace.** `flayer list`, `show`,
-  `validate`, `scan`, `templates`, `gather list`, `minds`, the `flayer` TUI and
-  `mind install`/`uninstall` all make `~/.mindflayer` when nothing up the tree
-  has one, though only something that writes needs it to exist. `default_at`
-  already opens without creating; moving the reads onto it, and leaving
-  `locate_or_default` to the commands that write, would mean a first `flayer
-  list` outside every workspace no longer puts a marker in somebody's home.
+- **Writes that refuse after making the home workspace.** A command that
+  writes makes the default workspace before it finds out whether there is
+  anything to do in it. Outside every workspace, `mind install` and `mind
+  uninstall` in a project nothing manages, `flayer install -p` and `flayer
+  uninstall -p`, and `unlink` at either level leave a `~/.mindflayer` behind
+  and then refuse, since a workspace just made manages nothing. `flayer edit`,
+  `rename` and `remove` make it to change its own artifacts, `remove`'s dry
+  run included. Each could look with `locate_or_unmade` first and make it only
+  when it is about to write; whether each should is a choice per command, and
+  they were left as writes when the reads stopped making it.
+- **Reads from a screen on the unmade default.** The TUI's reads (`v`, `s`,
+  and showing an artifact) run from the default workspace's root, as its
+  changes do. Before the default is made, with a workspace above home, they
+  walk up to that one and read it instead. A change makes the default first;
+  a read cannot without making the home workspace to read it. `-W`
+  ([D-08](#d-08-an-explicit-or-activated-workspace-wins)) would let those
+  lines name the screen's workspace.
 - **Worktrees share one exclude file.** Every linked worktree of a repository
   reads the same `info/exclude`, and an entry is anchored at whichever work
   tree reads it. A project checked out in two worktrees under one key has one

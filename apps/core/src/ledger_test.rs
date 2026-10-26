@@ -136,3 +136,38 @@ fn a_database_from_the_future_is_refused() {
     let error = Ledger::open(&path).unwrap_err();
     assert!(matches!(error, LedgerError::Version { .. }), "{error}");
 }
+
+#[test]
+fn opening_only_an_existing_ledger_makes_nothing_when_there_is_none() {
+    let dir = tempfile::TempDir::new().unwrap();
+    let folder = dir.path().join(".mindflayer");
+    let path = folder.join(LEDGER_FILE);
+
+    assert!(Ledger::open_existing(&path).unwrap().is_none());
+
+    // Not the database, and not the folder it would have gone in either.
+    assert!(!folder.exists());
+}
+
+#[test]
+fn opening_only_an_existing_ledger_still_brings_an_older_one_up_to_date() {
+    let dir = tempfile::TempDir::new().unwrap();
+    let path = dir.path().join(LEDGER_FILE);
+    {
+        let connection = Connection::open(&path).unwrap();
+        connection.execute_batch(SCHEMA_V1).unwrap();
+        connection.pragma_update(None, "user_version", 1).unwrap();
+    }
+
+    let ledger = Ledger::open_existing(&path).unwrap().unwrap();
+
+    let version: u32 = ledger
+        .connection
+        .pragma_query_value(None, "user_version", |row| row.get(0))
+        .unwrap();
+    assert_eq!(version, SCHEMA_VERSION);
+    assert!(ledger
+        .installations("collapse", Kind::Skill)
+        .unwrap()
+        .is_empty());
+}

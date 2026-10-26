@@ -91,6 +91,10 @@ pub fn scan(workspace: &FlayerWorkspace) -> Scan {
 
         let children = match subdirectories(&directory) {
             Ok(children) => children,
+            // A root that is not there holds nothing, which is an absence
+            // and not a failure: the default workspace before it is made can
+            // be read in a home nobody has created yet.
+            Err(source) if depth == 0 && source.kind() == io::ErrorKind::NotFound => continue,
             Err(source) => {
                 scan.failures.push(ScanFailure {
                     path: directory,
