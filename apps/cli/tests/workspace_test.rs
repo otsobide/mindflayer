@@ -253,3 +253,29 @@ fn installing_from_an_activated_workspace_not_above_records_and_disowns() {
     assert!(recorded().is_empty());
     assert!(!fixture.collapse.join("skills/hub-skill").exists());
 }
+
+#[test]
+fn a_change_to_a_project_is_refused_when_the_named_workspace_will_not_open() {
+    // Told to a workspace that is not there, the change would leave the
+    // record of the one meant behind once the name was put right.
+    let fixture = fixture();
+    write_skill(
+        &fixture.collapse,
+        "deploy",
+        &skill_file("deploy", "Ship it"),
+    );
+    let plain = fixture.outer.join("plain");
+
+    let failure = mind(
+        &fixture.collapse,
+        &["remove", "deploy", "--yes", "-W", &spelled(&plain)],
+    )
+    .unwrap_err();
+
+    assert!(
+        matches!(*failure.error, CliError::Chosen { .. }),
+        "{}",
+        failure.error
+    );
+    assert!(fixture.collapse.join("skills/deploy").is_dir());
+}

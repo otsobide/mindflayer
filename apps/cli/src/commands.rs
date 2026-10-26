@@ -519,10 +519,14 @@ pub(crate) fn consulted(
 
 /// Make a change to `project` with the workspace [`consulted`] about it.
 ///
-/// One that cannot be read is a warning after the change rather than a
+/// One found that cannot be read is a warning after the change rather than a
 /// refusal of it: the change is the project's, and the workspace was only to
 /// be told. Not so for `mind add --template`, where the workspace lends what
-/// the change is made from, which is why that asks [`consulted`] itself.
+/// the change is made from, which is why that asks [`consulted`] itself. Nor
+/// for one `-W` or the activation names that is no workspace, which refuses
+/// the change as it refuses every other command: whoever chose it meant that
+/// one to be told, and a change made without it would leave its record
+/// behind once the name is put right.
 fn consulting(
     project: &MindProject,
     lookup: &Lookup,
@@ -530,6 +534,7 @@ fn consulting(
 ) -> Result<Outcome, Failure> {
     let (workspace, unread) = match consulted(project, lookup) {
         Ok(workspace) => (workspace, None),
+        Err(error @ CliError::Chosen { .. }) => return Err(error.into()),
         Err(error) => (None, Some(format!("warning: {error}"))),
     };
     let mut result = change(workspace.as_ref());
