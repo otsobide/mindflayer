@@ -137,7 +137,9 @@ fn ls_is_an_alias_at_both_levels() {
 fn flayer_add_writes_into_the_workspace_and_listings_name_it_so() {
     let dir = workspace_with_own();
 
-    assert!(dir.path().join("skills/commit-style/SKILL.md").is_file());
+    assert!(own_directory_for(dir.path(), Kind::Skill)
+        .join("commit-style/SKILL.md")
+        .is_file());
     let listed = flayer(dir.path(), &["list"]).unwrap().stdout;
     assert!(
         listed.contains("workspace  commit-style  How every repo here writes commits"),
@@ -195,7 +197,9 @@ fn every_change_at_the_workspace_level_acts_on_its_own_unless_p_names_a_project(
     .unwrap();
     flayer(dir.path(), &["remove", "alpha", "-p", "alpha", "--yes"]).unwrap();
 
-    assert!(dir.path().join("skills/commits/SKILL.md").is_file());
+    assert!(own_directory_for(dir.path(), Kind::Skill)
+        .join("commits/SKILL.md")
+        .is_file());
     assert!(dir.path().join("alpha/rules/style.md").is_file());
     assert!(!dir.path().join("alpha/skills/alpha").exists());
     // `-p` at the workspace level is `mind` in that project: the same

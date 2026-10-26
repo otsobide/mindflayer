@@ -112,7 +112,9 @@ fn naming_a_directory_that_is_no_workspace_is_refused_and_makes_nothing() {
     );
     assert!(!plain.join(FLAYER_DIR).exists());
     assert_eq!(registry(&fixture.outer), before);
-    assert!(!fixture.outer.join("skills/x").exists());
+    assert!(!own_directory_for(&fixture.outer, Kind::Skill)
+        .join("x")
+        .exists());
 }
 
 // ---------------------------------------------------------------------------

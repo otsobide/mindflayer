@@ -162,6 +162,15 @@ pub fn directory_for(root: &Path, kind: Kind) -> PathBuf {
         .directory_for(kind)
 }
 
+/// Where the workspace at `root` keeps its own of a kind, asked of the
+/// workspace as [`directory_for`] asks a project.
+pub fn own_directory_for(root: &Path, kind: Kind) -> PathBuf {
+    FlayerWorkspace::open(root)
+        .expect("an initialized flayer workspace")
+        .own()
+        .directory_for(kind)
+}
+
 pub fn write_skill(root: &Path, directory: &str, contents: &str) {
     let dir = directory_for(root, Kind::Skill).join(directory);
     fs::create_dir_all(&dir).expect("create the skill directory");

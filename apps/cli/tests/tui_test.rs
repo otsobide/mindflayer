@@ -1171,7 +1171,9 @@ fn adding_on_the_workspaces_row_is_flayer_add() {
     type_text(&mut app, "Shared");
     press_and_run(&mut app, KeyCode::Enter);
 
-    assert!(dir.path().join("skills/commit-style/SKILL.md").is_file());
+    assert!(own_directory_for(dir.path(), Kind::Skill)
+        .join("commit-style/SKILL.md")
+        .is_file());
     assert!(app
         .transcript()
         .contains("$ flayer add skill commit-style Shared\n"));

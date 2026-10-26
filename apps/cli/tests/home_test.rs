@@ -54,7 +54,11 @@ fn flayer_show_reads_the_default_workspace_without_making_it() {
     let (home, elsewhere) = unmade_home();
     // Where the workspace will keep its own: read before it is made, as it
     // would be after.
-    let skill = home.path().join("skills/deploy");
+    let skill = FlayerWorkspace::unmade(home.path())
+        .unwrap()
+        .own()
+        .directory_for(Kind::Skill)
+        .join("deploy");
     fs::create_dir_all(&skill).unwrap();
     fs::write(skill.join("SKILL.md"), skill_file("deploy", "Ship it")).unwrap();
 
@@ -64,7 +68,9 @@ fn flayer_show_reads_the_default_workspace_without_making_it() {
     assert!(outcome.stdout.contains("Ship it"), "{}", outcome.stdout);
     assert_eq!(outcome.stderr, vec![hint(home.path())]);
     assert!(outcome.ok);
-    assert!(!made(home.path()));
+    // No marker written. The folder itself may be there already, holding the
+    // skill, when that is where the workspace keeps its own.
+    assert!(!home.path().join(FLAYER_DIR).join(FLAYER_CONFIG).exists());
 }
 
 #[test]
