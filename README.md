@@ -270,29 +270,40 @@ gets its own folder under `.mindflayer/skills/`, and the workspace's database
 records which came from where.
 
 ```
+$ flayer gather git https://github.com/other/rules
+https://github.com/other/rules at 4d5e6f7
+  added  commit-style  Conventional commits, strictly
+  added  pdf--forms    Fill in PDF forms
+
+2 skills: 2 added, 0 updated, 0 unchanged
+warning: /home/you/Projects/.mindflayer/skills/github.com-other-rules/pdf--forms/SKILL.md: `pdf--forms` is not usable as a name: it has to be lowercase letters and digits, joined by single hyphens
+
 $ flayer gather list
 commit-style  https://github.com/acme/skills  How this repo writes commit messages
 commit-style  https://github.com/other/rules  Conventional commits, strictly
 ddd-reviewer  https://github.com/acme/skills  Review a change against the DDD layering rules
+pdf--forms    https://github.com/other/rules  Fill in PDF forms
 ```
 
 A skill that cannot be read is a warning on stderr and does not stop the ones
 beside it from being gathered. One that reads but breaks a rule of the [skill
-format](#what-a-skill-looks-like) — a doubled hyphen in its name, metadata
-that is not all strings — is gathered anyway, with a warning saying what is
-wrong: leaving it behind would hide the problem along with the skill.
-`flayer validate` says so again whenever you ask, naming the source folder it
-sits in on the shelf:
+format](#what-a-skill-looks-like) — a doubled hyphen in its name, like
+`pdf--forms` above, or metadata that is not all strings — is gathered anyway,
+with a warning saying what is wrong: leaving it behind would hide the problem
+along with the skill. `flayer validate` says so again whenever you ask, naming
+the source folder each skill on the shelf sits in:
 
 ```
 $ flayer validate skills
 commit-style (shelf/github.com-acme-skills): ok
+commit-style (shelf/github.com-other-rules): ok
 commit-style (collapse): ok
+ddd-reviewer (shelf/github.com-acme-skills): ok
 ddd-reviewer (tanukeys): ok
-pdf--forms (shelf/github.com-acme-skills): 1 problem
+pdf--forms (shelf/github.com-other-rules): 1 problem
   - `pdf--forms` is not usable as a name: it has to be lowercase letters and digits, joined by single hyphens
 
-4 skills checked, 1 invalid
+6 skills checked, 1 invalid
 ```
 
 Installing is where it has to be right, because a project's copy is what its
