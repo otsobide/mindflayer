@@ -61,6 +61,11 @@ pub const MIND_CONFIG: &str = "mind.toml";
 pub const FLAYER_DIR: &str = ".mindflayer";
 /// The marker file inside [`FLAYER_DIR`].
 pub const FLAYER_CONFIG: &str = "flayer.toml";
+/// Where a workspace keeps the clones it gathered from, inside [`FLAYER_DIR`].
+///
+/// Kept rather than discarded so a gather can be inspected after the fact, and
+/// so what a source actually contained is still there when its report is not.
+pub const CACHE_DIR: &str = "cache";
 
 /// Which of the two marker files a version was read from.
 ///
@@ -95,11 +100,6 @@ impl fmt::Display for Marker {
         })
     }
 }
-/// Where a workspace keeps the clones it gathered from, inside [`FLAYER_DIR`].
-///
-/// Kept rather than discarded so a gather can be inspected after the fact, and
-/// so what a source actually contained is still there when its report is not.
-pub const CACHE_DIR: &str = "cache";
 
 /// What an `init` actually did.
 ///
