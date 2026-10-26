@@ -4,8 +4,8 @@
 //!
 //! Defined here and nowhere else. Every target of an installation is compared
 //! with the one hash recorded for it, on whichever machine the comparison
-//! runs, so two spellings of the recipe — or one that depended on the
-//! platform — would call an untouched copy edited.
+//! runs, so two spellings of the recipe (or one that depended on the
+//! platform) would call an untouched copy edited.
 
 use std::fmt::Write as _;
 use std::fs;
@@ -17,7 +17,7 @@ use sha2::{Digest, Sha256};
 /// The SHA-256 of everything under `root`, as 64 lowercase hex digits.
 ///
 /// What is hashed is each folder and file under `root`, in the order of
-/// their paths relative to it — names joined by `/`, compared as bytes — each
+/// their paths relative to it (names joined by `/`, compared as bytes), each
 /// written as:
 ///
 /// - a folder: `d`, its path, a NUL byte;
@@ -40,8 +40,8 @@ use sha2::{Digest, Sha256};
 /// changes when nothing in the file has.
 ///
 /// A link, or anything else that is neither a file nor a folder, is refused
-/// rather than followed. Following it could read anything — a link to
-/// `/dev/zero` never ends — and the text of a link is spelled differently on
+/// rather than followed. Following it could read anything (a link to
+/// `/dev/zero` never ends), and the text of a link is spelled differently on
 /// Windows. Mindflayer never writes one into a copy, since [`crate::copy::tree`]
 /// copies what a link points at, so one found there was put there afterwards.
 pub fn tree(root: &Path) -> Result<String, io::Error> {
