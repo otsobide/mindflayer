@@ -8,6 +8,7 @@ use std::path::{Path, PathBuf};
 
 use common::{repository, skill, url};
 use mindflayer_core::gather::{self, Request};
+use mindflayer_core::hash;
 use mindflayer_core::install::{self, Offer};
 use mindflayer_core::ledger::{backup_path, InstallRecord, Target, SCHEMA_VERSION};
 use mindflayer_core::{FlayerWorkspace, Kind, Ledger, MindProject, LEDGER_FILE};
@@ -143,6 +144,54 @@ fn an_install_records_where_it_came_from_as_from_takes_it() {
         .unwrap();
         assert_eq!(offered.origin(), origin);
     }
+}
+
+#[test]
+fn an_install_records_the_hash_of_the_copy_it_wrote() {
+    let (_dir, workspace, project, ledger) = three_places();
+
+    install(&workspace, &ledger, &project, "deploy");
+
+    let copy = project.directory_for(Kind::Skill).join("deploy");
+    let shelf = workspace.root().join(&ledger.gathered().unwrap()[0].path);
+    let recorded = ledger
+        .installation("collapse", Kind::Skill, "deploy")
+        .unwrap()
+        .unwrap();
+    assert_eq!(recorded.content_hash, Some(hash::tree(&copy).unwrap()));
+    // Which is the offer's too, the folder it sits in aside.
+    assert_eq!(recorded.content_hash, Some(hash::tree(&shelf).unwrap()));
+}
+
+#[test]
+fn installing_again_records_the_hash_of_whatever_is_there_now() {
+    let (_dir, workspace, project, ledger) = three_places();
+    install(&workspace, &ledger, &project, "notes");
+    let hash_of = || {
+        ledger
+            .installation("collapse", Kind::Skill, "notes")
+            .unwrap()
+            .unwrap()
+            .content_hash
+            .unwrap()
+    };
+    let first = hash_of();
+
+    install(&workspace, &ledger, &project, "notes");
+    assert_eq!(hash_of(), first, "an install that changed nothing");
+
+    let own = workspace
+        .own()
+        .directory_for(Kind::Skill)
+        .join("notes")
+        .join("SKILL.md");
+    let edited = std::fs::read_to_string(&own).unwrap() + "\nAnd one more thing.\n";
+    std::fs::write(&own, edited).unwrap();
+    install(&workspace, &ledger, &project, "notes");
+
+    let copy = project.directory_for(Kind::Skill).join("notes");
+    assert_ne!(hash_of(), first);
+    assert_eq!(hash_of(), hash::tree(&copy).unwrap());
 }
 
 #[test]

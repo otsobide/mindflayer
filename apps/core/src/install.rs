@@ -19,6 +19,7 @@ use thiserror::Error;
 use crate::artifact::{self, issue_list, Artifact, ArtifactError, ValidationIssue};
 use crate::catalog::{Catalog, DiscoveryFailure};
 use crate::copy;
+use crate::hash;
 use crate::kind::{Kind, Layout};
 use crate::ledger::{Action, Gathered, InstallRecord, Ledger, LedgerError, Outcome, Target};
 use crate::paths;
@@ -496,6 +497,13 @@ pub fn install(
         path: to.clone(),
         source,
     })?;
+    // Of the copy as it now stands, not of where it came from: what was
+    // written is what a later look at the copy is compared with, and the
+    // source may hold links the copy resolved. A copy that cannot be read
+    // back is recorded all the same, with no hash, since without a record it
+    // would be Foreign for good, and D-04 reads a record with no hash as it
+    // reads one from before hashes were kept.
+    let content_hash = hash::tree(&to).ok();
 
     // A source to point at only for what was gathered: the workspace's own
     // came from nowhere but the workspace. The origin says where every offer
@@ -511,7 +519,7 @@ pub fn install(
             name: name.clone(),
             source_id,
             origin: Some(candidate.origin()),
-            content_hash: None,
+            content_hash,
             // One copy, in the folder the project's marker names, which is no
             // one agent's: a copy in each agent's folder is #34's to write.
             targets: vec![Target {
