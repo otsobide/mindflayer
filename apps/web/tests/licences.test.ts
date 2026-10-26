@@ -91,13 +91,85 @@ function installed(): Installed[] {
   return packages
 }
 
-/** Whether an SPDX expression lets the package in on at least one of its terms. */
+/**
+ * Whether an SPDX expression lets the package in on at least one of its
+ * choices. Read with its grouping, OR the loosest, then AND, then
+ * parentheses: with them stripped, `(MIT OR Apache-2.0) AND SSPL-1.0` would
+ * read as a choice of MIT alone. `X WITH Y` is one term, let in only if it is
+ * listed whole, and an expression that does not parse is refused.
+ */
 function compatible(expression: string): boolean {
-  return expression
-    .replace(/[()]/g, '')
-    .split(/\s+OR\s+/)
-    .some(choice => choice.split(/\s+AND\s+/).every(term => COMPATIBLE.has(term.trim())))
+  const tokens = expression.match(/[()]|[^\s()]+/g) ?? []
+  let at = 0
+  const malformed = () => new Error(`not an SPDX expression: ${expression}`)
+
+  // Each side is read before the two are combined, so that a choice already
+  // let in still consumes the rest of the expression.
+  function anyOf(): boolean {
+    let allowed = allOf()
+    while (tokens[at] === 'OR') {
+      at += 1
+      allowed = allOf() || allowed
+    }
+    return allowed
+  }
+  function allOf(): boolean {
+    let allowed = term()
+    while (tokens[at] === 'AND') {
+      at += 1
+      allowed = term() && allowed
+    }
+    return allowed
+  }
+  function term(): boolean {
+    const token = tokens[at++]
+    if (token === '(') {
+      const allowed = anyOf()
+      if (tokens[at++] !== ')') {
+        throw malformed()
+      }
+      return allowed
+    }
+    if (token === undefined || [')', 'AND', 'OR', 'WITH'].includes(token)) {
+      throw malformed()
+    }
+    if (tokens[at] === 'WITH') {
+      const exception = tokens[at + 1]
+      at += 2
+      if (exception === undefined || [')', '(', 'AND', 'OR', 'WITH'].includes(exception)) {
+        throw malformed()
+      }
+      return COMPATIBLE.has(`${token} WITH ${exception}`)
+    }
+    return COMPATIBLE.has(token)
+  }
+
+  try {
+    const allowed = anyOf()
+    return at === tokens.length && allowed
+  } catch {
+    return false
+  }
 }
+
+describe('reading a licence expression', () => {
+  it.each([
+    ['MIT', true],
+    ['MIT OR GPL-2.0-only', true],
+    ['(MIT OR Apache-2.0) AND BSD-3-Clause', true],
+    ['MIT OR Apache-2.0 AND SSPL-1.0', true],
+    ['MIT AND SSPL-1.0', false],
+    ['(MIT OR Apache-2.0) AND SSPL-1.0', false],
+    ['GPL-2.0-only AND (MIT OR ISC)', false],
+    ['CC-BY-NC-4.0 AND (MIT OR Apache-2.0)', false],
+    ['Apache-2.0 WITH LLVM-exception', false],
+    ['(MIT OR ISC', false],
+    ['MIT ISC', false],
+    ['', false]
+  ])('reads %j as %s', (expression, allowed) => {
+    expect(compatible(expression)).toBe(allowed)
+  })
+})
 
 describe('the licences of what the panel installs', () => {
   const packages = installed()
