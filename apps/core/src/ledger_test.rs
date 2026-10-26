@@ -147,11 +147,17 @@ fn stored(ledger: &Ledger, table: &str) -> String {
     let columns = statement.column_count();
     let rows = statement
         .query_map([], |row| {
-            Ok((0..columns)
-                .map(|column| row.get::<_, Option<String>>(column).ok().flatten())
-                .map(Option::unwrap_or_default)
-                .collect::<Vec<_>>()
-                .join("|"))
+            let mut values = Vec::new();
+            for column in 0..columns {
+                values.push(match row.get_ref(column)? {
+                    rusqlite::types::ValueRef::Text(text) => {
+                        String::from_utf8_lossy(text).into_owned()
+                    }
+                    rusqlite::types::ValueRef::Integer(number) => number.to_string(),
+                    _ => String::new(),
+                });
+            }
+            Ok(values.join("|"))
         })
         .unwrap();
     rows.map(Result::unwrap).collect::<Vec<_>>().join("\n")
@@ -213,4 +219,147 @@ fn a_row_an_older_build_wrote_with_credentials_is_read_back_without_them() {
     let history = ledger.history(1).unwrap();
     assert_eq!(history[0].target.as_deref(), Some("https://h/a"));
     assert_eq!(history[0].detail.as_deref(), Some("from https://h/a"));
+}
+
+/// A ledger on disk, as a Mindflayer from before the redaction left it: one
+/// source gathered with a token in its URL, and the log of that gather.
+fn ledger_with_a_token_in_it() -> (tempfile::TempDir, Ledger) {
+    let dir = tempfile::TempDir::new().unwrap();
+    let ledger = Ledger::open(dir.path().join(LEDGER_FILE)).unwrap();
+    ledger
+        .connection
+        .execute_batch(
+            "INSERT INTO sources (id, kind, url, reference, subdirectory, directory, first_seen, last_seen)
+                 VALUES (1, 'git', 'https://me:hunter2@h/a', NULL, 'skills', 'h-a', 0, 0);
+             INSERT INTO artifacts (kind, name, source_id, path, gathered_at)
+                 VALUES ('skill', 'deploy', 1, '.mindflayer/skills/h-a/deploy', 0);
+             INSERT INTO actions (at, action, target, outcome, detail)
+                 VALUES (0, 'gather', 'https://me:hunter2@h/a', 'ok', '1 added');",
+        )
+        .unwrap();
+    (dir, ledger)
+}
+
+#[test]
+fn only_a_url_with_credentials_is_tainted_and_it_is_handed_back_without_them() {
+    let (_dir, ledger) = ledger_with_a_token_in_it();
+    ledger
+        .connection
+        .execute_batch(
+            "INSERT INTO sources (kind, url, reference, subdirectory, directory, first_seen, last_seen)
+                 VALUES ('git', 'ssh://git@h/b', NULL, 'skills', 'h-b', 0, 0),
+                        ('git', 'https://h/c', NULL, 'skills', 'h-c', 0, 0);",
+        )
+        .unwrap();
+
+    let tainted = ledger.tainted_sources().unwrap();
+
+    assert_eq!(tainted.len(), 1, "{tainted:?}");
+    assert_eq!(tainted[0].id, 1);
+    assert_eq!(tainted[0].url, "https://h/a");
+}
+
+#[test]
+fn a_scrubbed_source_leaves_no_copy_of_its_credentials_in_the_file() {
+    let (dir, ledger) = ledger_with_a_token_in_it();
+
+    ledger.scrub_source(1).unwrap();
+
+    assert!(ledger.tainted_sources().unwrap().is_empty());
+    assert_eq!(ledger.gathered().unwrap()[0].source.url, "https://h/a");
+    // Found by its URL now, which is what the next gather looks it up by.
+    assert!(ledger
+        .source(SourceKind::Git, "https://h/a", None, "skills")
+        .unwrap()
+        .is_some());
+    ledger.scrub_log().unwrap();
+    let file = std::fs::read(dir.path().join(LEDGER_FILE)).unwrap();
+    assert!(!file.windows(7).any(|bytes| bytes == b"hunter2"));
+    // Again is nothing.
+    ledger.scrub_source(1).unwrap();
+    assert_eq!(ledger.gathered().unwrap().len(), 1);
+}
+
+#[test]
+fn a_source_scrubbed_onto_one_already_at_its_url_becomes_one_row() {
+    let (_dir, ledger) = ledger_with_a_token_in_it();
+    // Gathered first without the token, which failed and left an empty row,
+    // then with it, which worked: the kept row is the later one.
+    ledger
+        .connection
+        .execute_batch(
+            "UPDATE sources SET last_seen = 20 WHERE id = 1;
+             INSERT INTO sources (id, kind, url, reference, subdirectory, directory, first_seen, last_seen)
+                 VALUES (2, 'git', 'https://h/a', NULL, 'skills', 'h-a-2', 10, 10);
+             INSERT INTO installations (project, kind, name, source_id, path, installed_at)
+                 VALUES ('../p', 'skill', 'deploy', 1, 'skills/deploy', 0);",
+        )
+        .unwrap();
+
+    ledger.scrub_source(1).unwrap();
+
+    let gathered = ledger.gathered().unwrap();
+    assert_eq!(gathered.len(), 1, "{gathered:?}");
+    assert_eq!(gathered[0].source.id, 1);
+    assert_eq!(gathered[0].source.url, "https://h/a");
+    assert_eq!(gathered[0].source.directory, "h-a");
+    assert_eq!(stored(&ledger, "sources").lines().count(), 1);
+}
+
+#[test]
+fn merging_keeps_the_newer_rows_artifacts_and_moves_what_only_the_other_had() {
+    let (_dir, ledger) = ledger_with_a_token_in_it();
+    // A branch is part of the coordinate, so this is the case SQLite's UNIQUE
+    // would refuse if the URL were rewritten before the other row went.
+    ledger
+        .connection
+        .execute_batch(
+            "UPDATE sources SET reference = 'main' WHERE id = 1;
+             INSERT INTO artifacts (kind, name, source_id, path, gathered_at)
+                 VALUES ('skill', 'only-here', 1, '.mindflayer/skills/h-a/only-here', 0);
+             INSERT INTO sources (id, kind, url, reference, subdirectory, directory, first_seen, last_seen)
+                 VALUES (2, 'git', 'https://h/a', 'main', 'skills', 'h-a-2', 10, 10);
+             INSERT INTO artifacts (kind, name, source_id, path, gathered_at)
+                 VALUES ('skill', 'deploy', 2, '.mindflayer/skills/h-a-2/deploy', 10);
+             INSERT INTO installations (project, kind, name, source_id, path, installed_at)
+                 VALUES ('../p', 'skill', 'only-here', 1, 'skills/only-here', 0);",
+        )
+        .unwrap();
+
+    ledger.scrub_source(1).unwrap();
+
+    let gathered = ledger.gathered().unwrap();
+    let names: Vec<(&str, i64, &str)> = gathered
+        .iter()
+        .map(|g| (g.name.as_str(), g.source.id, g.path.as_str()))
+        .collect();
+    assert_eq!(
+        names,
+        [
+            ("deploy", 2, ".mindflayer/skills/h-a-2/deploy"),
+            ("only-here", 2, ".mindflayer/skills/h-a/only-here"),
+        ]
+    );
+    assert!(stored(&ledger, "installations").contains("|only-here|2|"));
+}
+
+#[test]
+fn scrubbing_the_log_rewrites_only_the_entries_with_credentials_and_counts_them() {
+    let (_dir, ledger) = ledger_with_a_token_in_it();
+    ledger
+        .log(Action::Gather, Some("ssh://git@h/b"), Outcome::Ok, None)
+        .unwrap();
+    ledger
+        .connection
+        .execute_batch(
+            "INSERT INTO actions (at, action, target, outcome, detail)
+                 VALUES (1, 'gather', 'https://h/c', 'failed', 'https://me:hunter2@h/c: refused');",
+        )
+        .unwrap();
+
+    assert_eq!(ledger.scrub_log().unwrap(), 2);
+
+    assert!(!stored(&ledger, "actions").contains("hunter2"));
+    assert!(stored(&ledger, "actions").contains("ssh://git@h/b"));
+    assert_eq!(ledger.scrub_log().unwrap(), 0);
 }

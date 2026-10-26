@@ -23,7 +23,7 @@ use rusqlite::{Connection, OptionalExtension};
 use thiserror::Error;
 
 use crate::kind::Kind;
-use crate::url::redacted;
+use crate::url::{carries_credentials, redacted};
 
 /// The schema version this build writes.
 ///
@@ -205,6 +205,13 @@ impl Ledger {
         self.connection
             .execute_batch("PRAGMA foreign_keys = ON;")
             .map_err(|source| self.failed("enabling foreign keys", source))?;
+        // Zeroes what a row leaves behind when it is rewritten or deleted.
+        // Without it a URL the scrub rewrites would keep its credentials in
+        // the file's free space, readable by anything that reads the bytes
+        // rather than the rows, until SQLite happened to reuse the page.
+        self.connection
+            .pragma_update(None, "secure_delete", true)
+            .map_err(|source| self.failed("turning on secure delete", source))?;
 
         let found: u32 = self
             .connection
@@ -491,6 +498,168 @@ impl Ledger {
             .map_err(|source| self.failed("reading installations", source))?;
         rows.collect::<Result<Vec<String>, _>>()
             .map_err(|source| self.failed("reading installations", source))
+    }
+
+    /// The sources whose stored URL still carries credentials, which only a
+    /// Mindflayer from before they were refused could have stored.
+    ///
+    /// Each is handed back with the URL [`Ledger::scrub_source`] will give it,
+    /// never the one it has: nothing the ledger returns carries a credential.
+    pub fn tainted_sources(&self) -> Result<Vec<Source>, LedgerError> {
+        let mut statement = self
+            .connection
+            .prepare(
+                "SELECT id, kind, url, reference, subdirectory, revision, directory
+                   FROM sources WHERE instr(url, '@') > 0 ORDER BY id",
+            )
+            .map_err(|source| self.failed("looking for credentials in sources", source))?;
+        let rows = statement
+            .query_map([], |row| {
+                let stored: String = row.get(2)?;
+                Ok((carries_credentials(&stored), read_source(row)?))
+            })
+            .map_err(|source| self.failed("looking for credentials in sources", source))?;
+
+        let mut tainted = Vec::new();
+        for row in rows {
+            let (carries, source) =
+                row.map_err(|source| self.failed("looking for credentials in sources", source))?;
+            if carries {
+                tainted.push(source);
+            }
+        }
+        Ok(tainted)
+    }
+
+    /// Store a source's URL without the credentials in it.
+    ///
+    /// When another source already holds that URL, with the same branch and
+    /// folder, the two are one place gathered twice, so they become one row
+    /// rather than two with the same address: two rows would make the shelf
+    /// offer each skill twice under one origin, and `--from` could not tell
+    /// them apart. The one gathered from most recently is kept, since its
+    /// folder holds the newer files. What only the other one had moves to it,
+    /// where its files still are; what both had is the kept one's; and an
+    /// installation that pointed at the other points at the kept one.
+    pub fn scrub_source(&self, id: i64) -> Result<(), LedgerError> {
+        let failed = |source| self.failed("rewriting a source without credentials", source);
+        let transaction = self.connection.unchecked_transaction().map_err(failed)?;
+
+        let Some((kind, stored, reference, subdirectory, seen)) = transaction
+            .query_row(
+                "SELECT kind, url, reference, subdirectory, last_seen FROM sources WHERE id = ?1",
+                [id],
+                |row| {
+                    Ok((
+                        row.get::<_, String>(0)?,
+                        row.get::<_, String>(1)?,
+                        row.get::<_, Option<String>>(2)?,
+                        row.get::<_, String>(3)?,
+                        row.get::<_, i64>(4)?,
+                    ))
+                },
+            )
+            .optional()
+            .map_err(failed)?
+        else {
+            return Ok(());
+        };
+        let clean = redacted(&stored);
+        if clean == stored {
+            return Ok(());
+        }
+
+        let other: Option<(i64, i64)> = transaction
+            .query_row(
+                "SELECT id, last_seen FROM sources
+                  WHERE kind = ?1 AND url = ?2 AND subdirectory = ?3 AND reference IS ?4
+                    AND id != ?5
+                  ORDER BY last_seen DESC, id DESC LIMIT 1",
+                rusqlite::params![kind, clean.as_ref(), subdirectory, reference, id],
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            )
+            .optional()
+            .map_err(failed)?;
+
+        let kept = match other {
+            None => id,
+            Some((other, other_seen)) => {
+                let (kept, dropped) = if seen >= other_seen {
+                    (id, other)
+                } else {
+                    (other, id)
+                };
+                transaction
+                    .execute(
+                        "UPDATE artifacts SET source_id = ?1
+                          WHERE source_id = ?2
+                            AND NOT EXISTS (SELECT 1 FROM artifacts AS held
+                                             WHERE held.source_id = ?1
+                                               AND held.kind = artifacts.kind
+                                               AND held.name = artifacts.name)",
+                        [kept, dropped],
+                    )
+                    .map_err(failed)?;
+                transaction
+                    .execute(
+                        "UPDATE installations SET source_id = ?1 WHERE source_id = ?2",
+                        [kept, dropped],
+                    )
+                    .map_err(failed)?;
+                // What both had goes with the row, by the cascade.
+                transaction
+                    .execute("DELETE FROM sources WHERE id = ?1", [dropped])
+                    .map_err(failed)?;
+                kept
+            }
+        };
+        transaction
+            .execute(
+                "UPDATE sources SET url = ?2 WHERE id = ?1",
+                rusqlite::params![kept, clean.as_ref()],
+            )
+            .map_err(failed)?;
+        transaction.commit().map_err(failed)
+    }
+
+    /// Rewrite every action log entry without the credentials of any URL in
+    /// it, returning how many there were.
+    pub fn scrub_log(&self) -> Result<usize, LedgerError> {
+        let failed = |source| self.failed("rewriting the action log without credentials", source);
+        let transaction = self.connection.unchecked_transaction().map_err(failed)?;
+
+        let rows: Vec<(i64, Option<String>, Option<String>)> = {
+            let mut statement = transaction
+                .prepare(
+                    "SELECT id, target, detail FROM actions
+                      WHERE instr(target, '@') > 0 OR instr(detail, '@') > 0",
+                )
+                .map_err(failed)?;
+            let rows = statement
+                .query_map([], |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)))
+                .map_err(failed)?;
+            rows.collect::<Result<_, _>>().map_err(failed)?
+        };
+
+        let mut scrubbed = 0;
+        for (id, target, detail) in rows {
+            let clean_target = target.as_deref().map(redacted);
+            let clean_detail = detail.as_deref().map(redacted);
+            if clean_target.as_deref() == target.as_deref()
+                && clean_detail.as_deref() == detail.as_deref()
+            {
+                continue;
+            }
+            transaction
+                .execute(
+                    "UPDATE actions SET target = ?2, detail = ?3 WHERE id = ?1",
+                    rusqlite::params![id, clean_target.as_deref(), clean_detail.as_deref()],
+                )
+                .map_err(failed)?;
+            scrubbed += 1;
+        }
+        transaction.commit().map_err(failed)?;
+        Ok(scrubbed)
     }
 
     /// Append to the action log.
