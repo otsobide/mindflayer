@@ -11,8 +11,8 @@
 //!
 //! Each has a module of its own — `parse`, `commands` with a module per family
 //! of commands, and `render` — so that work on one command does not collide
-//! with work on another in one long file. What the binaries, the screens and
-//! the tests use is re-exported here.
+//! with work on another in one long file. What the binaries and the tests use
+//! is public: the two screens, and what is re-exported here.
 
 pub(crate) mod commands;
 pub(crate) mod error;
