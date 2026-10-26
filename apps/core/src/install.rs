@@ -949,15 +949,13 @@ pub enum InstallError {
     Ledger(#[from] LedgerError),
     #[error(transparent)]
     Workspace(#[from] WorkspaceError),
-    #[error(
-        "{name}: the ledger has it at {path}, but nothing is there — gather {workspace} again"
-    )]
+    #[error("{name}: the ledger has it at {path}, but nothing is there; gather {workspace} again")]
     Missing {
         name: String,
         path: PathBuf,
         workspace: PathBuf,
     },
-    #[error("{name}: {path} is not there any more — the workspace loaded from {workspace} has changed; `flayer unload {workspace}` if it has gone")]
+    #[error("{name}: {path} is not there any more, because the workspace loaded from {workspace} has changed; `flayer unload {workspace}` if it has gone")]
     Gone {
         name: String,
         path: PathBuf,
@@ -974,7 +972,7 @@ pub enum InstallError {
     Artifact(#[from] ArtifactError),
     #[error("{from} and {to} are one inside the other, so installing one onto the other would delete it")]
     Overlaps { from: PathBuf, to: PathBuf },
-    #[error("{path} is where the workspace loaded from {loaded} keeps its own, so Mindflayer neither installs nor removes there — `flayer unload {loaded}` first to manage it as a project")]
+    #[error("{path} is where the workspace loaded from {loaded} keeps its own, so Mindflayer neither installs nor removes there; `flayer unload {loaded}` first to manage it as a project")]
     KeptByALoad { path: PathBuf, loaded: PathBuf },
     #[error("{path}: cannot be written: {source}")]
     Write {
@@ -987,7 +985,7 @@ pub enum InstallError {
     },
     #[error("nothing called `{name}` can be installed{}: gather it, load a workspace that has it with `flayer load`, or add it to the workspace with `flayer add`", from.as_deref().map(|from| format!(" from {from}")).unwrap_or_default())]
     NotOffered { name: String, from: Option<String> },
-    #[error("`{name}` is offered by more than one place — {} — so say which with --from", .origins.join(", "))]
+    #[error("`{name}` is offered by more than one place ({}), so say which with --from", .origins.join(", "))]
     OfferedTwice { name: String, origins: Vec<String> },
 }
 

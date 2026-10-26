@@ -660,7 +660,7 @@ fn disowned(
 pub enum LifecycleError {
     #[error("nothing named `{typed}` here")]
     NotFound { typed: String },
-    #[error("`{typed}` names more than one thing — {} — so say which: by kind, as in `skill:name`, or by folder", .matches.join(", "))]
+    #[error("`{typed}` names more than one thing ({}), so say which: by kind, as in `skill:name`, or by folder", .matches.join(", "))]
     Ambiguous { typed: String, matches: Vec<String> },
     #[error("{}", issue_list(.issues))]
     Name {
@@ -680,7 +680,7 @@ pub enum LifecycleError {
     Exists { path: PathBuf },
     #[error("{path}: its front matter cannot be read, so its name cannot be rewritten; fix it with `mind edit` first")]
     Unreadable { path: PathBuf },
-    #[error("{path}: the name cannot be rewritten on its own — {reason}; change it by hand")]
+    #[error("{path}: the name cannot be rewritten on its own ({reason}); change it by hand")]
     Rewrite { path: PathBuf, reason: String },
     #[error("{path}: not inside {directory}, so it is not changed from here")]
     Outside { path: PathBuf, directory: PathBuf },

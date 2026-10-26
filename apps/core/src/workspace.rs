@@ -1416,7 +1416,7 @@ fn mind_template(name: &str, directories: &Directories) -> String {
          #\n\
          # `directories` says where each kind lives, relative to the directory\n\
          # holding this {MIND_DIR}. Point them wherever the agents that read them\n\
-         # already look — .claude/skills, docs/rules — and Mindflayer follows.\n\
+         # already look (.claude/skills, docs/rules) and Mindflayer follows.\n\
          # They are meant to be committed: they travel with the project.\n\
          version = {MIND_FORMAT_VERSION}\n\
          name = {}\n\
