@@ -13,9 +13,10 @@ apps/core   mindflayer-core — the engine
 apps/cli    mindflayer-cli  — the `mind` and `flayer` binaries
 ```
 
-Only two today. The layout exists because there will be more: a desktop app is
-the expected next front end, and it has to sit beside the CLI rather than
-around it.
+Only two today. The layout exists because there will be more: the next is a
+local server and the web panel it serves
+([D-17](#d-17-the-next-front-end-is-a-local-web-panel)), and they have to sit
+beside the CLI rather than around it.
 
 ## Where the line between core and a front end falls
 
