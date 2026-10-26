@@ -16,13 +16,15 @@
 
 pub(crate) mod commands;
 pub(crate) mod error;
+pub(crate) mod homes;
 pub mod install;
 pub(crate) mod parse;
 pub(crate) mod render;
 pub mod tui;
 
 pub use commands::read::WORKSPACE;
-pub use commands::{default_home, run, run_flayer_cli};
+pub use commands::{run, run_flayer_cli};
 pub use error::CliError;
+pub use homes::default_home;
 pub use parse::{Cli, Command, FlayerCli, FlayerCommand, GatherCommand};
 pub use render::{Failure, Outcome};

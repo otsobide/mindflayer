@@ -58,7 +58,8 @@ Two consequences worth stating, because they are what the split buys:
 The grammar is in `parse.rs`, the work in `commands.rs` and a module per
 family of commands under `commands/`, and what a command produced, with the
 helpers every report is laid out with, in `render.rs`. `CliError` has
-`error.rs` to itself, and `lib.rs` only says what is public.
+`error.rs` to itself, `homes.rs` decides where the default workspace's home is,
+and `lib.rs` only says what is public.
 
 The split is by family. One file holding the parser, every command and the
 rendering was where every change to a command met every other, so pieces of
