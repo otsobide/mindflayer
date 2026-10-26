@@ -25,6 +25,7 @@ use crate::artifact::{Artifact, ArtifactError, ValidationIssue};
 use crate::copy::{self, Change};
 use crate::kind::{Kind, Layout};
 use crate::ledger::{self, Action, Ledger, LedgerError, Outcome, SourceKind};
+use crate::lock::LockError;
 use crate::paths;
 use crate::workspace::FlayerWorkspace;
 
@@ -158,6 +159,11 @@ pub fn gather(
     ledger: &Ledger,
     request: &Request,
 ) -> Result<Report, GatherError> {
+    // Held for the whole gather, the clone included, until its line is in
+    // the log: two gathers of one source at once would clone into one folder
+    // and each replace the shelf copies the other was making. One that cannot
+    // have it is not logged, because no gather was attempted.
+    let _lock = workspace.lock()?;
     let outcome = harvest(workspace, ledger, request);
 
     // The log records what was attempted, not only what worked: a gather that
@@ -392,6 +398,8 @@ pub enum GatherError {
     Git(#[from] git::GitError),
     #[error(transparent)]
     Ledger(#[from] LedgerError),
+    #[error(transparent)]
+    Lock(#[from] LockError),
     #[error("{url}: has no `{subdirectory}` folder to gather from")]
     NoSuchFolder { subdirectory: String, url: String },
     #[error("{kind}s cannot be gathered yet")]

@@ -5,22 +5,20 @@
 //! by each writer, and the system keeps apart two of those in one process as
 //! it keeps apart two processes, on every platform this runs on.
 
+mod common;
+
 use std::fs;
 use std::sync::{mpsc, Arc, Barrier};
 use std::thread;
 use std::time::{Duration, Instant};
 
+use common::{repository, skill, url, workspace};
+use mindflayer_core::gather::{self, Request};
 use mindflayer_core::install::{self, Removed};
 use mindflayer_core::ledger::{Action, Outcome};
 use mindflayer_core::lock::{HOLDER_FILE, WAIT};
 use mindflayer_core::{FlayerWorkspace, Kind, Ledger, LockError, MindProject, LEDGER_FILE};
 use tempfile::TempDir;
-
-fn workspace() -> (TempDir, FlayerWorkspace) {
-    let dir = TempDir::new().unwrap();
-    let (workspace, _) = FlayerWorkspace::init(dir.path()).unwrap();
-    (dir, workspace)
-}
 
 /// Run `write` while `workspace` is held, let go after a moment, and fail
 /// unless `write` finished only after that: it waited for the writer before
@@ -292,13 +290,9 @@ fn a_link_waits_for_the_writer_before_it() {
 /// to install it into.
 fn offering_deploy() -> (TempDir, FlayerWorkspace, MindProject) {
     let (dir, workspace) = workspace();
-    let skill = dir.path().join("skills").join("deploy");
-    fs::create_dir_all(&skill).unwrap();
-    fs::write(
-        skill.join("SKILL.md"),
-        "---\nname: deploy\ndescription: Ship it\n---\n# deploy\n",
-    )
-    .unwrap();
+    let folder = dir.path().join("skills").join("deploy");
+    fs::create_dir_all(&folder).unwrap();
+    fs::write(folder.join("SKILL.md"), skill("deploy", "Ship it")).unwrap();
     let project = projects(dir.path(), "alpha", 1).remove(0);
     (dir, workspace, project)
 }
@@ -335,4 +329,18 @@ fn an_uninstall_waits_for_the_writer_before_it() {
     });
 
     assert!(!project.directory_for(Kind::Skill).join("deploy").exists());
+}
+
+#[test]
+fn a_gather_waits_for_the_writer_before_it() {
+    let (_dir, workspace) = workspace();
+    let source = repository(&[("skills/deploy/SKILL.md", &skill("deploy", "Ship it"))]);
+    let request = Request::git(url(&source));
+    let gathering = workspace.clone();
+
+    waits_for_the_writer_before_it(&workspace, move || {
+        let ledger = Ledger::in_memory().unwrap();
+        let report = gather::gather(&gathering, &ledger, &request).unwrap();
+        assert_eq!(report.added.len(), 1);
+    });
 }
