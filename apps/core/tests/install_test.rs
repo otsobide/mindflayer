@@ -663,8 +663,41 @@ fn an_install_never_builds_in_a_stage_another_install_is_using() {
     assert!(staged(&project).is_empty(), "{:?}", staged(&project));
 }
 
+/// What every install opens first, and builds in: so where installs running
+/// at once in one project make their staging paths. From threads of one
+/// process, which share a process id, so only the random part of each name
+/// keeps them apart; and all held at once, as installs overlapping would.
 #[test]
-fn two_installs_at_once_into_one_project_never_share_a_staging_path() {
+fn stages_opened_at_once_in_one_project_never_share_a_path() {
+    let (_dir, _workspace, project) = own_skills(&[], 0);
+    let scratch = project.scratch_dir();
+    let runs = 8;
+    let all_open = std::sync::Barrier::new(runs);
+
+    let paths: Vec<std::path::PathBuf> = std::thread::scope(|scope| {
+        let opening: Vec<_> = (0..runs)
+            .map(|_| {
+                scope.spawn(|| {
+                    // Unwrapped only once all have tried, so one that cannot
+                    // open fails the test rather than leaving the rest waiting.
+                    let stage = copy::Stage::open(&scratch);
+                    all_open.wait();
+                    let stage = stage.unwrap();
+                    assert!(stage.swept().is_empty(), "{:?}", stage.swept());
+                    stage.path().to_path_buf()
+                })
+            })
+            .collect();
+        opening.into_iter().map(|run| run.join().unwrap()).collect()
+    });
+
+    let distinct: BTreeSet<_> = paths.iter().collect();
+    assert_eq!(distinct.len(), runs, "{paths:?}");
+    assert!(staged(&project).is_empty(), "{:?}", staged(&project));
+}
+
+#[test]
+fn two_installs_of_different_skills_at_once_each_land_whole() {
     let (_dir, workspace, project) = own_skills(&["deploy", "review"], 100);
     workspace.ledger().unwrap();
 
