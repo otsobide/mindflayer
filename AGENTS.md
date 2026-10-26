@@ -9,9 +9,9 @@ artifacts of its own, gathers skills from git onto a shelf and installs them
 into projects. `README.md` is the user-facing surface. `docs/architecture.md`
 records why each mechanism is the way it is: read the section for whatever you
 are about to change before changing it, and keep it true afterwards. Its
-"Decisions" section holds what the owner already chose for the roadmap: read it
-before changing a format, installing, MCP, credentials or the server, and carry
-a decision out rather than reopen it.
+"Decisions" section holds what the owner already chose for the roadmap, and the
+one choice still pending: read it before changing a format, installing, MCP,
+credentials or the server, and carry a decision out rather than reopen it.
 
 ## Commands
 
