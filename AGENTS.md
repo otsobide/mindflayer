@@ -138,9 +138,9 @@ These are easy to break from a single file without noticing.
   `DIRECTORIES_VERSION` for how a v1 `mind.toml` is still read) and the ledger
   uses SQLite's `user_version`. Anything from a newer version is refused. A
   format change must keep reading old files the way they were written.
-  - A ledger schema step is one more block in `Ledger::migrate`, which copies
-    the file to `mindflayer.db.v<old>.bak` first (`Ledger::back_up`) and runs
-    every step in one transaction. A step fills in old rows in its own SQL,
+  - A ledger schema step is one more block in `Ledger::migrate`, which takes
+    the write lock, copies the file to `mindflayer.db.v<old>.bak`
+    (`Ledger::back_up`) and runs every step in one transaction. A step fills in old rows in its own SQL,
     not through today's code, and adds a fixture of what the version before
     it wrote (`apps/core/tests/fixtures/ledger-v<N>.sql`) for a test to
     migrate.

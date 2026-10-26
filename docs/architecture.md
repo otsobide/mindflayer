@@ -607,18 +607,24 @@ where one made today begins, and two rules hold for every step:
 
 - **The file is copied aside first.** Before the first step, the ledger is
   copied beside itself as `mindflayer.db.v<old>.bak` (`Ledger::back_up`), and
-  nothing is migrated unless the copy is whole. A step that turns out wrong
-  then leaves the file it started from: the copy opens at the old version,
-  and the build that wrote it reads it as it always did. It is named after
-  the version it holds, so which build reads it is in its name, and a ledger
-  brought forward by several builds in turn leaves one for each version it
-  had. It is
+  nothing is migrated unless the copy is whole and opens at the old version.
+  A step that turns out wrong then leaves the file it started from: the copy
+  opens at the old version, and the build that wrote it reads it as it
+  always did. It is named after the version it holds, so which build reads
+  it is in its name, and a ledger brought forward by several builds in turn
+  leaves one for each version it had. It is taken once the migration holds
+  the write lock, not before: a copy taken after an unlocked read of the
+  version could be of a ledger another process has since migrated, and would
+  replace that process's copy of the old version with one of the new. It is
   SQLite's online backup rather than a copy of the file, because opening the
   file outside SQLite while a connection holds it would drop that
-  connection's locks on Unix; it goes through a temporary and a rename, so a
-  copy cut short is never mistaken for a whole one, and keeps the ledger's
-  permissions. A step to come is one more block in `migrate`, and the copy is
-  taken for it without its asking.
+  connection's locks on Unix, and it reads through a second connection,
+  because SQLite will not copy from one in the middle of writing. It goes
+  through a temporary and a rename, so a copy cut short is never mistaken
+  for a whole one, and the temporary is made with the ledger's permissions
+  before anything is written to it, so a ledger kept private is not readable
+  through its copy even while the copy is written. A step to come is one
+  more block in `migrate`, and the copy is taken for it without its asking.
 - **The steps run in one transaction**, with the stamp of the new version.
   Run a statement at a time, a step that failed, or a process that died
   halfway, left a database half migrated under its old version, which the
