@@ -9,8 +9,9 @@ use std::path::{Path, PathBuf};
 
 use mindflayer_core::{paths, FlayerWorkspace, Kind, Registration, WorkspaceError};
 
+use super::{all_or_nothing, targets};
 use crate::render::{as_stored, plural, printable, table};
-use crate::{all_or_nothing, targets, CliError, Failure, Outcome};
+use crate::{CliError, Failure, Outcome};
 
 /// `load`, at either level: the paths are typed from `directory`, and the
 /// workspace they go into is found from `start` — the directory itself for

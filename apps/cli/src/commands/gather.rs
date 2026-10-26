@@ -7,8 +7,9 @@ use std::path::Path;
 use mindflayer_core::gather::{self, Report, Request};
 use mindflayer_core::Kind;
 
+use super::workspace_here;
 use crate::render::{indent, plural, printable, table};
-use crate::{workspace_here, CliError, Failure, GatherCommand, Outcome};
+use crate::{CliError, Failure, GatherCommand, Outcome};
 
 /// Collect artifacts onto the workspace shelf, or say what is already on it.
 pub(crate) fn run_gather(

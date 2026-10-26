@@ -11,8 +11,9 @@ use mindflayer_core::{
     WorkspaceError,
 };
 
+use super::{all_or_nothing, targets, workspace_here};
 use crate::render::{as_stored, printable, table};
-use crate::{all_or_nothing, targets, workspace_here, CliError, Failure, Outcome};
+use crate::{CliError, Failure, Outcome};
 
 /// What `init` was asked to put where, at either level.
 ///
