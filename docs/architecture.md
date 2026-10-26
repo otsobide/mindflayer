@@ -2204,7 +2204,9 @@ difference, and the tests pin what is left:
   line, which a replace carries over to the new first line.
 - toml_edit writes every line ending as LF. A file whose lines all end in CRLF
   has them put back, and one that mixes the two is refused, since which line
-  had which would be lost. jsonc-parser keeps the file's own.
+  had which would be lost. jsonc-parser keeps the file's own. toml_edit also
+  ends the last line and drops a byte-order mark: a file whose last line had
+  no ending is left without one, and a mark is put back.
 - A string with a line break is written on one line, the break escaped, where
   toml_edit would open a multi-line string: in a CRLF file its breaks would
   then be the file's line endings to the file and part of the value to its
