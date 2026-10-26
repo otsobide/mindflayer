@@ -1225,12 +1225,18 @@ leak into the lifecycle code. Unblocks #33, #45, #62, #93, #94 and #95.
   that links the same project: nothing in the project says which workspaces
   link it, so each of them keeps its stale record. Every workspace linking a
   project would have to be findable from the project for that to change. The
-  TUI runs into it from inside: it runs a project's changes as `mind -C
-  <entry>`, which consults the project's workspace (the one above it, or the
-  default) rather than the one on screen, so a screen on a workspace beside
-  the project leaves that workspace's record behind. Once a line can name its
-  workspace (`-W`, [D-08](#d-08-an-explicit-or-activated-workspace-wins)), the
-  TUI can say which.
+  TUI runs into it from inside: a project's row runs `mind -C <entry>`, the
+  line somebody in the project would type, and that consults the project's
+  workspace (the one above it, or the default) rather than the one on
+  screen. A screen on a workspace beside the project therefore leaves that
+  workspace's record behind, and its add form offers the other one's
+  templates. Nothing has to wait for that to change: `flayer <cmd> -p
+  <entry>`, run where the screen's lines run, already consults the workspace
+  on screen. The rows keep the `mind` line because the screen is at both
+  levels, as the CLI is, and a project's row teaches the project's command.
+  `-W` ([D-08](#d-08-an-explicit-or-activated-workspace-wins)) would let that
+  line name the screen's workspace as well, so which of the two a project's
+  row runs is still to choose.
 - **Reading commands create the home workspace.** `flayer list`, `show`,
   `validate`, `scan`, `templates`, `gather list`, `minds`, the `flayer` TUI and
   `mind install`/`uninstall` all make `~/.mindflayer` when nothing up the tree
