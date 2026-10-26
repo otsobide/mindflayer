@@ -6,14 +6,14 @@ Every unit of the product is an app under `apps/`, with its own manifest
 (`Cargo.toml`, or `package.json` for the panel) and its own `Makefile`. The
 root `Makefile` delegates (`make <app>/<target>`) and CI invokes those
 targets, so adding a front end is adding a directory, a line in `APPS` and the
-workspace `members`, and its test and build jobs in CI — never reshaping the
+workspace `members`, and its test and build jobs in CI, never reshaping the
 tree.
 
 ```
-apps/core    mindflayer-core   — the engine
-apps/cli     mindflayer-cli    — the `mind` and `flayer` binaries
-apps/server  mindflayer-server — the local server behind the web panel
-apps/web     mindflayer-web    — the web panel, in Vue
+apps/core    mindflayer-core     the engine
+apps/cli     mindflayer-cli      the `mind` and `flayer` binaries
+apps/server  mindflayer-server   the local server behind the web panel
+apps/web     mindflayer-web      the web panel, in Vue
 ```
 
 The layout exists because there would be more than two, and the server and
@@ -122,7 +122,7 @@ pub enum Declared {
 ```
 
 `Declared` *is* the kind, so an artifact cannot carry a discriminant that
-disagrees with what was parsed — there is only one. Each payload says what its
+disagrees with what was parsed: there is only one. Each payload says what its
 kind requires: a skill without a description is not a state the type can hold,
 a rule's front matter is optional all through, and no `Option` field on
 `Artifact` sits permanently `None` for one kind because only the other has it.
@@ -141,7 +141,7 @@ pub enum Layout {
 Discovery matches on `Layout` and nothing else has to know the difference. The
 two shapes decide the nesting rule between them: a skill's directory belongs to
 the skill, assets and all, so walking into it would turn its own files into
-artifacts — skills are therefore flat. A rule is a loose file, so folders under
+artifacts; skills are therefore flat. A rule is a loose file, so folders under
 `rules/` are free to group, and a rule's name is its **route** without the
 extension. `git/no-force-push` and `ci/no-force-push` are two rules; the stem
 alone would make them one name for two files.
@@ -156,7 +156,7 @@ nobody has asked for.
 `skill:commit-style`, not `skill/commit-style`. A rule's name *is* a route, so
 the two namespaces would otherwise share a delimiter: `rules/skills/naming.md`
 is the rule `skills/naming`, and with a slash qualifier that string would parse
-as "the skill `naming`" — a listing printing a name its own `show` rejects, or
+as "the skill `naming`": a listing printing a name its own `show` rejects, or
 worse, resolves to a different artifact. A rules folder grouping rules *about
 writing skills* is not an exotic thing to have.
 
@@ -167,15 +167,15 @@ contain one at all, so the collision is gone rather than narrowed.
 
 From wherever it is declared. A skill declares one in its front matter, so that
 is its name and disagreeing with its directory is a problem `validate` reports.
-A rule's front matter has no name in it — a `name:` there passes through like
-any key Mindflayer does not read — so its name is its route. This is why the
+A rule's front matter has no name in it (a `name:` there passes through like
+any key Mindflayer does not read), so its name is its route. This is why the
 two are not symmetric, and the asymmetry is the honest one.
 
 ### What a listing shows for a rule
 
 A skill has a `description`. A rule has its body: the file, less any front
-matter. The body's **opening line** — the first line carrying any text, with
-leading `#` stripped — is what a listing shows, and it is captured when the file
+matter. The body's **opening line** (the first line carrying any text, with
+leading `#` stripped) is what a listing shows, and it is captured when the file
 is loaded, because the file was read anyway. A rule without front matter is
 summarised exactly as it always was.
 
@@ -189,7 +189,7 @@ else would describe the rule by a line no agent reads.
 That one value does double duty: it is the summary a listing prints, and its
 absence is the one thing that makes a rule invalid, since a body with no line of
 text has nothing to offer an agent. Storing the fact rather than the verdict is
-what keeps `validate` pure — every check it makes was decided when the file was
+what keeps `validate` pure: every check it makes was decided when the file was
 read, so asking whether something is valid cannot itself fail.
 
 ### What a skill declares
@@ -208,7 +208,7 @@ fields it defines and no others:
 | `metadata` | optional | a map from strings to strings |
 | `allowed-tools` | optional | tools separated by spaces |
 
-Every other key — Claude Code's `paths` and `disable-model-invocation`, say —
+Every other key (Claude Code's `paths` and `disable-model-invocation`, say)
 belongs to an agent, and passes through: not modelled, not rejected, and kept
 byte for byte by everything that writes a manifest, since `rename` rewrites one
 line and gathering and installing copy files. Modelling them would make this
@@ -216,9 +216,9 @@ crate the place where three agents' formats are reconciled, which is not a job
 anybody asked it to take on.
 
 `allowed-tools` is split on spaces, as the specification writes it, and on
-commas, as Claude Code first wrote it and older skills still do — never inside
-parentheses, so a permission pattern such as `Bash(git add *)` stays one tool.
-A YAML list is read too.
+commas, as Claude Code first wrote it and older skills still do, but never
+inside parentheses, so a permission pattern such as `Bash(git add *)` stays one
+tool. A YAML list is read too.
 
 `metadata` is read leniently. The specification makes it a map of strings, but
 a shipping agent writes nested maps and booleans in it
@@ -289,7 +289,7 @@ a string, is ignored, reported as a warning and left in the file. A list
 holding anything but strings is ignored whole, since keeping its strings would
 scope the rule to fewer files than its author wrote. One pattern is never split
 on commas, because a brace expansion such as `src/**/*.{ts,tsx}` has one inside
-it. Every other key — Cursor's `globs`, a `name` — passes through, as it does on
+it. Every other key (Cursor's `globs`, a `name`) passes through, as it does on
 a skill.
 
 A key with nothing in it is unstated, as `paths:` with no value is: a blank
@@ -315,16 +315,16 @@ pasted into `AGENTS.md`, and what `show` prints below the description and the
 - **Refused** when Mindflayer writes a skill into a project, if the name or
   the description breaks the rules. `mind add`, `rename` and `install` all
   ask `artifact::strict_issues`, which keeps what `ValidationIssue::is_strict`
-  picks out of that list, for the skill as it is about to be written — so one
+  picks out of that list, for the skill as it is about to be written, so one
   change to the set reaches all three. `rename` asks too, although the name is
   all it writes, because what it leaves behind is a skill Mindflayer wrote;
   `mind add` checks the name and the description before building anything as
   well, only for messages of its own. Those are what agents refuse: Codex skips a skill whose name is over 64
   characters or whose description is empty, so writing one would put a skill
   in the project that never loads. So is a name that is not the folder the
-  skill is filed in, since an agent finds a skill by one or the other — asked
+  skill is filed in, since an agent finds a skill by one or the other (asked
   of the folder Mindflayer is about to write, not the one the files were read
-  from. `compatibility` and `metadata` are not refused, because an agent reads
+  from). `compatibility` and `metadata` are not refused, because an agent reads
   past them. A rule `mind add` writes from a template is refused for whatever
   its front matter would leave unread (`artifact::rule_issues`), which reading
   only warns about ([Templates live inside the
@@ -346,9 +346,9 @@ pasted into `AGENTS.md`, and what `show` prints below the description and the
 ### Adding a third kind
 
 A variant on `Kind`, its folder and layout, a variant on `Declared`, a
-constructor on `Artifact`, and an arm in every match on the kind — discovery
+constructor on `Artifact`, and an arm in every match on the kind (discovery
 and discovering the shelf, `create`, `lifecycle::load` and `lifecycle::rename`,
-the refusal in `gather`, and what `install` holds a copy to — which the
+the refusal in `gather`, and what `install` holds a copy to), which the
 compiler lists, since the matches are exhaustive. Reports need nothing:
 columns, labels and counts are all driven from `Kind::ALL` and from what the
 catalog actually found.
@@ -361,7 +361,7 @@ meant to be committed: the skills travel with the code they describe.
 
 A **flayer workspace** carries `.mindflayer` and references the mind projects
 it manages, so their skills can be handled together. It is the level above, and
-it does not have to be a repository at all — the directory your repos happen to
+it does not have to be a repository at all: the directory your repos happen to
 sit in is the usual case. It also holds skills and rules of its own: the ones
 that belong to all of its projects, written once.
 
@@ -389,8 +389,8 @@ guesses:
   command tried to be both and its answer changed depending on which directory
   it was run from.
 - **How an artifact is labelled.** Only the workspace level qualifies one by
-  what holds it — a project, `workspace` for its own, or `shelf/<source
-  folder>` for what `flayer validate` finds on the shelf — because inside a
+  what holds it (a project, `workspace` for its own, or `shelf/<source
+  folder>` for what `flayer validate` finds on the shelf), because inside a
   single project that says nothing.
   The same rule governs the kind: `mind list` grows a kind column, and
   `validate` starts printing `rule:x` instead of `x`, only once more than one
@@ -410,7 +410,7 @@ way round where it means anything. `flayer add`, `edit`, `rename`, `remove` and
 with `-p`; `mind link`, `unlink`, `install` and `uninstall` act on the project
 you are in, against its workspace: the one named or activated, or else the one
 above it. `flayer list`, `show` and
-`validate` read everything — the workspace's own and every project's — or one
+`validate` read everything (the workspace's own and every project's) or one
 project with `-p`; `flayer validate` reads the shelf as well, labelling what it
 finds there `shelf/<source folder>`. Reads look everywhere; a change needs one
 place, and without `-p` that place is the workspace.
@@ -418,8 +418,8 @@ place, and without `-p` that place is the workspace.
 There is one implementation of each. `mind add` and `flayer add -p alpha` are
 the same function given the same project, and `flayer add` is that function
 given the workspace's own holder, so the levels differ in what they hold and
-never in the rules. What only has meaning at one level — the shelf, `gather`,
-`scan` — is reachable from the other as `mind flayer <cmd>`, which is the
+never in the rules. What only has meaning at one level (the shelf, `gather`,
+`scan`) is reachable from the other as `mind flayer <cmd>`, which is the
 command itself rather than a copy of it.
 
 ### The workspace's own artifacts
@@ -428,9 +428,9 @@ They are held the way a project holds its own: in directories the marker
 names (`[directories]` in `flayer.toml`, `skills` and `rules` beside the
 projects by default), found by the same catalog, created, renamed and removed
 by the same functions. `FlayerWorkspace::own` hands the workspace out as a
-`MindProject`-shaped holder for exactly that reason — everything that touches an
+`MindProject`-shaped holder for exactly that reason: everything that touches an
 artifact asks its holder where it is, what it is called and where each kind
-lives, and a workspace answers those as a project does — so there is no second
+lives, and a workspace answers those as a project does, so there is no second
 copy of any rule to drift.
 
 Unlike a project's, the folders are not made by `flayer init`. A workspace sits
@@ -439,8 +439,8 @@ something to put: the first artifact added makes its folder.
 
 A project holds what is in its own folders, because that is what its agents
 read; the workspace's artifacts are not inherited out of sight. They reach a
-project by being installed into it — the install screen and `mind install` offer
-them beside the shelf — and are then managed there like anything else
+project by being installed into it (the install screen and `mind install` offer
+them beside the shelf) and are then managed there like anything else
 Mindflayer installed.
 
 When the workspace's root is itself a project it manages, a folder both keep a
@@ -463,8 +463,8 @@ rules = "rules"
 
 Beside the code rather than inside `.mind`, because these are files the
 **agents** read, and an agent looking for skills does not know what a `.mind`
-is. Every project already has a place its agents look — `.claude/skills`,
-`docs/rules` — and the marker is how a project says which, so Mindflayer
+is. Every project already has a place its agents look (`.claude/skills`,
+`docs/rules`), and the marker is how a project says which, so Mindflayer
 follows the repository rather than the repository following Mindflayer.
 
 The table is keyed by the kind's folder name, which is the plural spelling the
@@ -555,7 +555,7 @@ lets a route be computed for a directory that need not exist.
 But arithmetic on paths is only true when no component is a symlink. If the
 workspace root is spelled through one, a `..` climbs out of the link's target
 rather than out of the directory the name suggests, and the route points
-somewhere that does not exist — `/tmp` is a symlink to `/private/tmp` on every
+somewhere that does not exist; `/tmp` is a symlink to `/private/tmp` on every
 Mac, so this is not exotic. So `link` **checks its route against the
 filesystem** before storing it, and falls back to an absolute path when it does
 not land where it should. The check happens there and only there: its answer
@@ -587,7 +587,7 @@ Rewrites go through a temporary file and a rename, so a crash leaves either the
 old config or the new one. The temporary is named for the run that writes it,
 never shared with another writer ([Writers at the same
 time](#writers-at-the-same-time)). The original's permissions are copied onto the
-temporary first, and a symlinked config is followed to the file it names —
+temporary first, and a symlinked config is followed to the file it names;
 otherwise an edit would quietly widen a chmodded config or detach a shared one.
 A hard link is the case this cannot preserve: a rename breaks it, and keeping
 it would mean giving up the atomic write.
