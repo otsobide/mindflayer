@@ -546,7 +546,10 @@ it reads them all first rather than reading and placing each in turn. That is
 the last moment a cancel is honoured: past it the shelf and the ledger change,
 and a gather stopped halfway through that would leave them neither as they
 were nor as the source has them. A cancel that comes later is too late, and
-the gather finishes. Cancelled in time, the shelf and the ledger are as they
+the gather finishes. `Progress::cancellable` says which steps are which, so a
+front end that offers a cancel stops offering it when the gather stops
+honouring it, rather than knowing where the check is. Cancelled in time, the
+shelf and the ledger are as they
 were: the gather is not logged, and a source it registered is forgotten again.
 It is registered before the fetch because the clone needs the folder name
 registering gives it; holding the registration in a transaction until the
@@ -941,7 +944,9 @@ The box shows the command, the last step and that `esc` cancels. The screen is
 the task's until it is over, so every other key is ignored, as one pressed
 while a task ran in place is dropped. `esc` cancels the watch: the gather
 stops before it places anything, and the form it came from says so, as for
-any gather that did not get as far as a report. Leaving cancels it too, and
+any gather that did not get as far as a report. Once the step is placing,
+which is no longer `cancellable`, the box says a cancel is too late instead,
+and the gather finishes with its report. Leaving cancels it too, and
 `wait` holds the screen until it has stopped, so what it did reaches the
 transcript and nothing is half done when the process ends. The lines are still
 the task's command lines, parsed and run by `execute`: the thread changes where

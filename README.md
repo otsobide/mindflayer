@@ -550,7 +550,7 @@ Every key runs a command you could have typed, through the same parser:
 | `l` | link a project | `flayer link <path>` |
 | `u` | unlink the project | `flayer unlink <path>` |
 | `v` | validate everything | `flayer validate` |
-| `g` | gather from a git repository, showing how far it has got; `esc` stops it before anything is placed | `flayer gather git <url>` |
+| `g` | gather from a git repository, showing how far it has got; `esc` stops it, until it starts placing | `flayer gather git <url>` |
 | `L` | load another workspace's own skills; enter on a loaded one unloads it | `flayer load <path>`, `flayer unload <path>` |
 | `s` | what is on the shelf | `flayer gather list` |
 | `i` | install from the workspace's own, a loaded workspace, or the shelf | `flayer install` |
