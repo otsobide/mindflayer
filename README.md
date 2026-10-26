@@ -366,13 +366,51 @@ ssh is a program of its own and can still ask on the terminal: for the
 passphrase of a key your ssh-agent does not hold, for a password when the
 server accepts one, or whether to trust a host it has not seen before.
 
+A URL with a password or a token in it is refused before anything is fetched.
+What is gathered is stored, listed and reported by its URL, and a token typed
+into a command line is already where `ps` and your shell history show it. Give
+the token to a git credential helper, and gather the URL without it:
+
+```
+$ flayer gather git https://me:ghp_t0ken@github.com/acme/private-skills
+error: https://github.com/acme/private-skills: a password, a token or, over http(s), a user name in the URL is refused, because gathering stores and shows the URL: gather it without one, and configure a git credential helper that has it
+```
+
+The user ssh logs in as is not a credential, and is kept
+(`git@github.com:acme/skills`, `ssh://git@github.com/acme/skills`). Over https
+a user name on its own is refused too, because a token can stand in for one:
+GitHub takes `https://<token>@github.com/...`, and nothing in the URL tells the
+two apart. That includes the https URLs Bitbucket and Azure DevOps hand out
+(`https://<user>@bitbucket.org/...`); gather those without the user name, and
+let the credential helper supply it.
+
+A workspace an older Mindflayer gathered into with a token in a URL is cleaned
+up by the next command that writes to it — a gather, an install or an
+uninstall, or an `add`, `edit`, `rename` or `remove` in a project it manages.
+The token is taken out of `mindflayer.db` and out of the clone in
+`cache/`, and the command says so once, on stderr, without failing because of
+it:
+
+```
+$ flayer install -p collapse deploy
+installed deploy into collapse, from https://github.com/acme/private-skills
+note: https://github.com/acme/private-skills: the user name, password or token an older Mindflayer stored in this URL is taken out; gathering it again needs a git credential helper that has it
+note: 2 action log entries: the user names, passwords or tokens an older Mindflayer stored in URLs in them are taken out
+```
+
+The install screen does it when you apply what you marked, not when it opens.
+A command that only reads, such as `flayer gather list`, shows the URL without
+the token and leaves the file as it is.
+
 ### What a workspace keeps
 
 ```
 .mindflayer/
   flayer.toml     the projects it manages, and the workspaces it loads
   mindflayer.db   what was gathered and from where, what was installed where,
-                  and every action taken
+                  and every action taken; a URL goes in without credentials,
+                  and one an older Mindflayer stored is taken out by the next
+                  command that writes
   cache/<source>/ the clone, kept so a gather can be looked at afterwards
   skills/<source>/<name>/SKILL.md
   templates/      templates for every project it manages, if you add any

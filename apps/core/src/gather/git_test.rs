@@ -37,7 +37,7 @@ fn a_missing_credential_names_the_url_without_its_userinfo_and_the_ways_to_provi
     let error = fetch_failed(
         "https://me:hunter2@example.com/acme/private.git",
         Some(Shortfall::Missing),
-        "Failed to obtain credentials".to_owned(),
+        &"Failed to obtain credentials",
     );
 
     assert_eq!(
@@ -54,7 +54,7 @@ fn a_refused_login_is_judged_by_the_url_gix_connected_to_not_the_one_typed() {
     let error = fetch_failed(
         "https://example.com/acme/private.git",
         refused_at("git@example.com:acme/private.git"),
-        "not accepted by the remote".to_owned(),
+        &"not accepted by the remote",
     );
     assert!(matches!(error, GitError::Credentials { .. }), "{error}");
 
@@ -63,7 +63,7 @@ fn a_refused_login_is_judged_by_the_url_gix_connected_to_not_the_one_typed() {
     let error = fetch_failed(
         "git@example.com:acme/private.git",
         refused_at("https://example.com/acme/private.git"),
-        "not accepted by the remote".to_owned(),
+        &"not accepted by the remote",
     );
     assert_eq!(
         error.to_string(),
@@ -76,7 +76,7 @@ fn a_refused_https_credential_keeps_what_gix_said() {
     let error = fetch_failed(
         "https://example.com/acme/private.git",
         Some(Shortfall::Refused),
-        "not accepted by the remote".to_owned(),
+        &"not accepted by the remote",
     );
 
     assert_eq!(
@@ -90,42 +90,107 @@ fn a_fetch_that_needed_no_credential_keeps_what_gix_said() {
     let error = fetch_failed(
         "https://example.com/acme/skills",
         None,
-        "connection refused".to_owned(),
+        &"connection refused",
     );
 
     assert!(matches!(error, GitError::Fetch { .. }), "{error}");
 }
 
 #[test]
-fn redacting_drops_the_userinfo_before_the_host() {
-    assert_eq!(
-        redacted("https://x-access-token:ghp_secret@github.com/acme/private"),
-        "https://github.com/acme/private"
+fn a_failed_fetch_names_no_credential_even_where_gix_repeats_one() {
+    // `url."https://me:hunter2@example.com/".insteadOf = https://example.com/`
+    // gave the URL gix connected to a token the typed one never had.
+    let error = fetch_failed(
+        "https://example.com/acme/private.git",
+        None,
+        &"error sending request for url \
+          (https://me:hunter2@example.com/acme/private.git/info/refs?service=git-upload-pack)",
     );
+
     assert_eq!(
-        redacted("ssh://git@example.com:2222/acme/private.git"),
-        "ssh://example.com:2222/acme/private.git"
-    );
-    // A password that kept a raw `@` still ends at the last one before the
-    // host.
-    assert_eq!(
-        redacted("https://me:p@ss@example.com/x"),
-        "https://example.com/x"
+        error.to_string(),
+        "https://example.com/acme/private.git: cannot be fetched: error sending request for url \
+         (https://example.com/acme/private.git/info/refs?service=git-upload-pack)"
     );
 }
 
 #[test]
-fn redacting_leaves_a_url_without_userinfo_as_typed() {
-    for url in [
-        "https://github.com/acme/skills",
-        "HTTPS://github.com:443/acme/skills",
-        // An `@` after the host is part of the path, not a user.
-        "file:///srv/git/team@work/skills",
-        "https://example.com/acme/skills?ref=a@b",
-        // The scp-like form has no room for a password.
-        "git@github.com:acme/skills.git",
-        "/srv/git/skills",
-    ] {
-        assert_eq!(redacted(url), url);
-    }
+fn a_url_gix_cannot_parse_is_named_without_its_credentials_and_so_is_what_gix_said() {
+    let cache = tempfile::TempDir::new().unwrap();
+    let error = clone(
+        "https://me:hunter2@exa mple.com/acme/private.git",
+        None,
+        &cache.path().join("clone"),
+    )
+    .unwrap_err();
+
+    assert!(matches!(error, GitError::Url { .. }), "{error}");
+    assert!(!error.to_string().contains("hunter2"), "{error}");
+}
+
+/// A clone's `.git` as `gix` leaves it after cloning `url`, without the
+/// objects, which no scrub reads.
+fn clone_made_from(url: &str) -> tempfile::TempDir {
+    let clone = tempfile::TempDir::new().unwrap();
+    let git = clone.path().join(".git");
+    let logs = git.join("logs").join("refs").join("remotes").join("origin");
+    fs::create_dir_all(&logs).unwrap();
+    fs::write(
+        git.join("config"),
+        format!(
+            "[core]\n\tbare = false\n[remote \"origin\"]\n\turl = {url}\n\
+             \tfetch = +refs/heads/main:refs/remotes/origin/main\n"
+        ),
+    )
+    .unwrap();
+    let entry = format!("0000 1111 Fixture <fixture@example.com> 0 +0000\tclone: from {url}\n");
+    fs::write(git.join("logs").join("HEAD"), &entry).unwrap();
+    fs::write(logs.join("HEAD"), &entry).unwrap();
+    clone
+}
+
+/// Every file under `root`, read as text, for asserting on what is left.
+fn everything_in(root: &Path) -> String {
+    let mut files = Vec::new();
+    files_under(root, &mut files).unwrap();
+    files
+        .iter()
+        .map(|file| fs::read_to_string(file).unwrap())
+        .collect()
+}
+
+#[test]
+fn scrubbing_a_clone_takes_the_credentials_out_of_its_config_and_its_reflogs() {
+    let clone = clone_made_from("https://me:hunter2@example.com/acme/private.git");
+
+    assert!(scrub(clone.path()).unwrap());
+
+    let left = everything_in(clone.path());
+    assert!(!left.contains("hunter2"), "{left}");
+    assert!(
+        left.contains("\turl = https://example.com/acme/private.git\n"),
+        "{left}"
+    );
+    assert!(
+        left.contains("\tclone: from https://example.com/acme/private.git\n"),
+        "{left}"
+    );
+    // The rest of the config is left as it was.
+    assert!(left.contains("fetch = +refs/heads/main:refs/remotes/origin/main"));
+}
+
+#[test]
+fn scrubbing_a_clone_again_or_one_without_credentials_changes_nothing() {
+    let clone = clone_made_from("https://me:hunter2@example.com/acme/private.git");
+    scrub(clone.path()).unwrap();
+    assert!(!scrub(clone.path()).unwrap());
+
+    let clean = clone_made_from("git@example.com:acme/private.git");
+    let before = everything_in(clean.path());
+    assert!(!scrub(clean.path()).unwrap());
+    assert_eq!(everything_in(clean.path()), before);
+
+    // Nothing there at all is nothing to scrub.
+    let gone = tempfile::TempDir::new().unwrap();
+    assert!(!scrub(&gone.path().join("never-cloned")).unwrap());
 }

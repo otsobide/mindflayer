@@ -620,7 +620,7 @@ that prompt is a screen that stops answering, and the server that comes next
 has no terminal at all. So every connection `gix` lets a clone configure is
 given a credentials callback (`gather::credentials`) that runs the same helper
 cascade with the prompt and askpass turned off. A credential no helper has is
-`GitError::Credentials`: the URL without its userinfo, and the two ways to
+`GitError::Credentials`: the URL without its credentials, and the two ways to
 provide one, a git credential helper or, for an ssh URL, ssh-agent. Over ssh,
 `gix` runs the system `ssh`, which authenticates with keys of its own and asks
 the helpers only for a user name, so a login ssh refuses is reported the same
@@ -640,6 +640,114 @@ the callback to arrive through anyway. That other half is
 `gix`'s error types are large and would become part of this crate's public API
 if they were carried, tying its version to gix's, so `GitError` keeps what they
 said and not what they were.
+
+### A URL is kept without its credentials
+
+A source is stored, logged, listed and named in errors by its URL, so a token
+typed into one would be repeated everywhere: in `mindflayer.db`, in the
+clone's `.git/config`, in every report, and soon in a snapshot, `--json`
+output and the panel. One function takes it out, `url::redacted`, and
+everything that keeps or shows a URL goes through it.
+
+What it takes out is everything before the `@` of a `scheme://` URL, except
+the user name of an ssh URL: that is who ssh logs in as, part of where the
+repository is rather than a secret, and a later gather from the stored URL
+needs it. Over http(s) a user name goes as well, because GitHub takes a token
+in that place and a credential helper is what names the user. The scp-like
+form (`git@host:path`) is left alone, since `gix` reads everything before its
+first `:` as user and host, which leaves no room for a password. A password
+with a `/` in it is looked for past the first `/`, whenever what comes before
+that `/` has a `:` and no port: every parser reads `https://me:p/ss@host` as
+host `me` and port `p`, so nothing else would find the password, and the
+refusal for an unparseable URL would store and print it whole. It works on
+text rather than on one URL, because the other place a credential turns up is
+`gix`'s own error messages, which quote the URL they failed on, and the URL a
+fetch connected to may carry a token the typed one did not when git config
+rewrites it with `url.<base>.insteadOf`. Parsing with `gix::url` and dropping
+the user was rejected: the parser also rewrites what it keeps, a default port
+dropped or a scheme lowercased, and cannot find a URL inside a sentence.
+
+A gather URL that carries a credential is **refused** before anything is
+registered or fetched, rather than used for that one fetch and stored without
+it: a token on the command line is already where `ps` and the shell history
+show it, and refusing is what points at a git credential helper, which keeps
+it off the command line altogether, as the front-end provider of
+[D-16](#d-16-credentials-come-from-the-front-end-never-from-a-prompt) will.
+Behind that refusal the rest holds whichever caller is writing. The ledger
+redacts every URL on the way in and again on the way out, so nothing it hands
+back carries a credential, scrubbed yet or not. Every `GitError` redacts the
+URL and what `gix` said. A clone is scrubbed as soon as it is made
+(`git::scrub`): `gix` writes the URL into the remote's entry in `.git/config`
+and into every reflog as `clone: from <url>`, and those files are rewritten
+through the same function. A clone a gather makes now has nothing to take out,
+and finding that costs a few small reads. A `--from` typed with credentials
+names the source they were taken out of. The CLI's report prints URLs
+redacted, and the TUI redacts a command line where it is built for showing
+(`state::shell`), so the box that says what is running and the transcript
+printed on the way out both leave the token out.
+
+What a Mindflayer from before the refusal stored is **scrubbed** when a
+command that writes opens the ledger. `FlayerWorkspace::ledger_to_write` is
+the one way to open it for writing: it runs `gather::scrub`, which only core
+can call, and hands back what that took out for the front end to say, the way
+`locate_or_default` is the one way to find a workspace that may be created.
+Which commands write is the front end's to know, but what opening to write
+involves is core's, so no front end can write first and scrub after. `gather
+git`, `install` and `uninstall` open it that way, as does `install::disown`,
+through which core's lifecycle changes (`lifecycle::add`, `finish_edit`,
+`rename` and `remove`) drop a record. Each hands back what the scrub took out
+(its result's `scrub`) beside what it did to the record, since a scrub says
+what it found only the first time and a change that dropped it would leave it
+unsaid for good. `rename` opens the ledger once for each name and tells what
+both scrubs found once (`Scrub::absorb`): the second finds only the clones
+the first could not rewrite. So does the install screen, in both screens,
+when what it marked is applied (`install::commit`) rather than as it opens,
+which is a read ([A read leaves the ledger as it finds
+it](#a-read-leaves-the-ledger-as-it-finds-it)). A scrub can make two sources
+one row, and a mark on the row that went would install from folders the scrub
+removed, or copy the files and then fail to record them. So once a scrub has
+taken out a source, the screen is built again from the scrubbed ledger and
+each mark is made again on the row offering the same name from the same
+place, as the row it became one with does; a mark on what only the row that
+went had gathered is a warning and is not carried out. Scrubbing as the screen
+opened would have spared that, and is rejected: opening it is a read.
+
+The scrub rewrites the sources whose URL carries a credential, each clone made
+from one, and the action log. A clone is rewritten before its row, so a clone
+that cannot be rewritten keeps its row tainted and is tried again next time,
+as a warning; what was taken out is a note, said once, since the command did
+what it was asked and an exit code that failed because of a fix would break a
+script for nothing it did. When the URL without credentials is already
+another source's, with the same branch and folder, the two are one
+place gathered twice and become one row: two rows would offer each skill twice
+under one origin, and SQLite's UNIQUE would refuse the rewrite outright when a
+branch is set. The row kept is the one whose shelf was filled most recently,
+since its folder holds the newer files, and a row whose gather failed before
+it took anything loses however recently it was tried. What the other row
+gathered goes with it, and its clone and shelf folder are removed (a folder
+that will not go is a warning), rather than its records moving to the kept
+row: they would point into a folder the ledger no longer reserves, which the
+next source with the same readable name would be given and gather over. The
+ledger turns on SQLite's `secure_delete`, so a rewritten row leaves no copy of
+its old text in the file's free space.
+
+It runs every time rather than once, as a schema step would, because an older
+build can keep writing to the same file after a newer one has scrubbed it, and
+the schema steps are spoken for by the changes that need a new version. With
+nothing to do it still reads, every time a command writes: a scan of the
+sources and one of the action log, in a transaction. Neither can use an index,
+so the log's grows with the log, and every entry naming an ssh URL, which
+keeps its `@`, is read and found clean again each time. Recording that the log
+had been scrubbed would skip that, and is rejected for the reason the scrub
+runs every time: an older build writing a token again would go unnoticed. The
+cost ends when the scrub can stop (see the open questions). A read is left
+alone: what it shows is redacted on the way out anyway, and a read should not
+write. Until a command that writes scrubs it, a place an older build gathered
+both with a token and without one is read as the file has it, two sources
+offering each skill under one origin. Deleting the old
+clones instead of rewriting them would have been simpler and was rejected:
+the clone is kept so a gather can be looked at afterwards, and a scrub has no
+reason to take that away.
 
 ### Why the ledger is SQLite
 
@@ -664,6 +772,11 @@ Mindflayer put into which project — and an **action log**. The log keeps
 failures too — a log of only what worked cannot answer the question anybody
 opens it with. Timestamps are Unix seconds, which needs no date library and
 which SQLite renders with `datetime(at, 'unixepoch')`.
+
+No URL this build writes into it, or reads back out of it, carries a
+credential. One an older build stored stays in the file until the next command
+that writes scrubs it, and an older build can store one again after that
+([A URL is kept without its credentials](#a-url-is-kept-without-its-credentials)).
 
 A source's shelf folder is stored rather than derived: two URLs can reduce to
 the same readable name, and where a source's files went is a fact about the
@@ -1380,8 +1493,12 @@ answers from an empty ledger in memory, which says what a ledger nothing was
 ever written to would. So `flayer gather list`, the TUI's shelf count and the
 install screen leave a workspace that has never gathered or installed anything
 without one. The install screen is a read until something on it is applied;
-applying opens the ledger with `ledger()`, which makes it, and never the
-stand-in, whose records would be gone when it was dropped.
+applying opens the ledger to write (`ledger_to_write`, through
+`install::commit`), which makes it, and never the stand-in, whose records
+would be gone when it was dropped. Nor does a read scrub an existing ledger of
+what an older build stored with a credential, which waits for the next
+command that writes ([A URL is kept without its
+credentials](#a-url-is-kept-without-its-credentials)).
 
 A read does write to one thing: an existing ledger from an older schema is
 migrated to this build's, as every open migrates it. A build reads its own
@@ -1561,9 +1678,11 @@ after the change, as it once did, put a rule outside core, and
 left in the CLI to move into core before the panel runs its writes through
 the CLI. Installed rules and MCP entries, when they come, would each have
 needed calls of their own there, and each could have got them wrong. Each
-change returns what it did to the record (`lifecycle::Record`), and the CLI
-only says so; `install::disown`, which does the dropping, is private to core
-so that nothing else can. That keeps a front end from applying the rule
+change returns what it did to the record (`lifecycle::Record`), with what
+opening the ledger to do it scrubbed out ([A URL is kept without its
+credentials](#a-url-is-kept-without-its-credentials)), and the CLI only says
+so; `install::disown`, which does the dropping, is private to core so that
+nothing else can. That keeps a front end from applying the rule
 differently, not from skipping it: `create` and `create_from`, the writers
 `lifecycle::add` is built on, see to no record and stay public for core's
 tests, so a front end adds through `add`. A record that cannot be dropped is
@@ -1577,7 +1696,8 @@ and `lifecycle::finish_edit` decides whether anything changed and what that
 means for the record. The CLI finishes the edit even when the editor fails:
 one that writes the file and then exits non-zero, as vim does on `:cq`, has
 changed the copy all the same, and a record left behind would let `flayer
-uninstall` delete the change.
+uninstall` delete the change. What dropping it scrubbed out of the ledger goes
+with the editor's error, said there or never.
 
 The record dropped is the one held by the workspace the command resolved, the
 one its templates come from, and each change is given it for the same reason:
@@ -2064,8 +2184,12 @@ leak into the lifecycle code. Unblocks #33, #45, #62, #93, #94 and #95.
   so a private source gets through only when a git-config helper (or, for an
   ssh URL, ssh itself) has them, and otherwise the gather fails and says how to
   provide one, never at a prompt (see
-  [Why `gix`](#why-gix-rather-than-running-git)). What else it should be given
-  is decided in
+  [Why `gix`](#why-gix-rather-than-running-git)). A URL is stored, logged and
+  shown without credentials, and a gather URL that carries one is refused, so
+  a helper is also the only place a token typed into a URL can go (see
+  [A URL is kept without its
+  credentials](#a-url-is-kept-without-its-credentials)). What else it should
+  be given is decided in
   [D-16](#d-16-credentials-come-from-the-front-end-never-from-a-prompt): a
   provider the front end supplies, through that same callback. #110 carries it
   out, and #109 checks the helpers and ssh-agent against a real private
@@ -2084,6 +2208,28 @@ leak into the lifecycle code. Unblocks #33, #45, #62, #93, #94 and #95.
   on the clone would keep that prompt off the terminal, though not an askpass
   named by `GIT_ASKPASS` or `SSH_ASKPASS`; a `gix` that configures the retry
   too would close it.
+- **When the scrub can stop.** `gather::scrub` runs whenever a command
+  opens the ledger to write (`FlayerWorkspace::ledger_to_write`), because an
+  older build can still write a token into the same file. The next ledger
+  schema step (the first planned is #30's) changes that, since a build older
+  than it refuses the file: the scrub can then run once, as part of that
+  migration, and stop. A read migrates too ([A read leaves the ledger as it
+  finds it](#a-read-leaves-the-ledger-as-it-finds-it)), so a scrub folded into
+  that step would run on a read as well, rewriting clones as well as the file,
+  and a read would then have to say what it took out, as only a command that
+  writes does now.
+- **A user name on its own in an https URL.** #25 allows a bare user name,
+  and its examples are ssh's (`git@host:...`, `ssh://git@host/...`). Only ssh
+  keeps one here: over http(s) a user name is refused at gather and taken out
+  by the scrub, because GitHub takes a token in that place and nothing in the
+  text tells a token from a user name. That refuses the https URLs Bitbucket
+  Cloud and Azure DevOps hand out (`https://<user>@bitbucket.org/...`), which
+  then have to be gathered without the user name, with a credential helper
+  naming it. The other reading would let them through and store and show
+  them without the user name, which also lets a token typed there through,
+  for that one fetch, from the command line. The error and the scrub's note
+  say a user name was refused or taken out rather than calling it a password.
+  Which reading holds is the owner's to confirm.
 - **OpenCode's folder and `$XDG_CONFIG_HOME`.** Without
   `$OPENCODE_CONFIG_DIR`, OpenCode's folder is taken to be
   `~/.config/opencode`. Whether OpenCode moves it with `$XDG_CONFIG_HOME`, as
