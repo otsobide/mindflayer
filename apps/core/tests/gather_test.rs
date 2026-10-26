@@ -207,7 +207,10 @@ fn a_skill_that_breaks_the_rules_is_gathered_with_a_warning() {
         ]
     );
     // What is ignored is not rewritten: the shelf holds the file as written.
+    // Line endings are left out of the comparison because the checkout, not
+    // Mindflayer, decides them: on Windows git's autocrlf turns them into CRLF.
     let copied = fs::read_to_string(shelf.join("nested").join("SKILL.md")).unwrap();
+    let copied = copied.replace("\r\n", "\n");
     assert!(copied.contains("  owner:\n    team: ops\n"), "{copied}");
 }
 
