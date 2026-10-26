@@ -2,6 +2,8 @@
 
 use super::*;
 
+use std::path::Component;
+
 #[test]
 fn each_agents_default_folder_is_its_own_in_the_users_home() {
     let user = Path::new("/home/user");
@@ -154,4 +156,34 @@ fn agents_sharing_a_location_another_table_names_get_one_target() {
             agents: Agent::ALL.to_vec(),
         }]
     );
+}
+
+#[test]
+fn the_standard_table_never_targets_codexs_old_folders_or_a_users_own() {
+    let table = TargetTable::standard();
+    let codex_skills = Path::new(".codex").join("skills");
+    for kind in Kind::ALL {
+        for target in table.targets(kind, &Agent::ALL) {
+            let path = &target.path;
+            // Inside the project, never in a home: `~/.claude/skills`, with
+            // whatever Claude keeps under it, `~/.codex/skills` and
+            // `~/.agents/skills` are user scope, which D-22 leaves for later,
+            // behind an explicit `--user`. A `~` is checked for by name, since
+            // to a path it is a folder like any other.
+            assert!(
+                path.components()
+                    .all(|part| matches!(part, Component::Normal(name) if name != "~")),
+                "{kind} reaches {} outside the project",
+                path.display()
+            );
+            // Codex reads a project's `.codex/skills` only when the project is
+            // trusted, and `$CODEX_HOME/skills` is deprecated (D-07,
+            // docs/agents.md).
+            assert!(
+                !path.starts_with(&codex_skills),
+                "{kind} reaches {}, which D-07 never targets",
+                path.display()
+            );
+        }
+    }
 }
