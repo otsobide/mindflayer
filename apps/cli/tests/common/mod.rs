@@ -163,6 +163,15 @@ pub fn directory_for(root: &Path, kind: Kind) -> PathBuf {
         .directory_for(kind)
 }
 
+/// Where the workspace at `root` keeps its own of a kind, asked of the
+/// workspace as [`directory_for`] asks a project.
+pub fn own_directory_for(root: &Path, kind: Kind) -> PathBuf {
+    FlayerWorkspace::open(root)
+        .expect("an initialized flayer workspace")
+        .own()
+        .directory_for(kind)
+}
+
 pub fn write_skill(root: &Path, directory: &str, contents: &str) {
     let dir = directory_for(root, Kind::Skill).join(directory);
     fs::create_dir_all(&dir).expect("create the skill directory");
@@ -215,6 +224,18 @@ pub fn mind_at_home(dir: &Path, home: &Path, args: &[&str]) -> Result<Outcome, F
     args.push("--home");
     args.push(&home);
     mind(dir, &args)
+}
+
+/// The path `add` said it created `what` (`skill deploy`) at, as a path: one
+/// joined from a marker's `/` and the platform's own separator compares
+/// equal to its other spellings, where the text would not on Windows.
+pub fn created(outcome: &Outcome, what: &str) -> PathBuf {
+    let path = outcome
+        .stdout
+        .strip_prefix(&format!("created {what} at "))
+        .and_then(|rest| rest.strip_suffix('\n'))
+        .unwrap_or_else(|| panic!("not one creation of {what}: {:?}", outcome.stdout));
+    PathBuf::from(path)
 }
 
 /// Write a rule into an already initialized mind project.

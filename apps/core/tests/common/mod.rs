@@ -11,7 +11,7 @@ use std::fs;
 use std::path::Path;
 
 use gix::objs::tree::{Entry, EntryKind};
-use mindflayer_core::FlayerWorkspace;
+use mindflayer_core::{Directories, FlayerWorkspace, Kind};
 use tempfile::TempDir;
 
 /// A git repository holding exactly these files, with one commit.
@@ -116,6 +116,15 @@ pub fn workspace() -> (TempDir, FlayerWorkspace) {
     let dir = TempDir::new().unwrap();
     let (workspace, _) = FlayerWorkspace::init(dir.path()).unwrap();
     (dir, workspace)
+}
+
+/// Where a workspace keeps its own when told to keep them beside its
+/// projects: for a test about a workspace sharing a folder with a project,
+/// rather than about where a new one keeps them.
+pub fn beside() -> Directories {
+    Directories::default()
+        .with(Kind::Skill, "skills")
+        .with(Kind::Rule, "rules")
 }
 
 /// The URL of a repository on disk. A path is one, for the local transport.

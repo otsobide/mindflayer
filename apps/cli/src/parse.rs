@@ -281,14 +281,19 @@ pub enum FlayerCommand {
         #[arg(value_name = "PATH")]
         path: Option<PathBuf>,
 
-        /// Where the workspace keeps its own skills [default: `skills`].
+        /// Where the workspace keeps its own skills [default:
+        /// `.mindflayer/library/skills`].
         ///
         /// Relative to the workspace. They are the ones it shares with every
-        /// project it manages.
+        /// project it manages, kept by default in its library, where no
+        /// agent looks. Any folder inside the workspace will do except the
+        /// shelf and the cache, a folder inside them, or one holding them,
+        /// such as `.mindflayer` itself.
         #[arg(long, value_name = "DIR")]
         skills: Option<PathBuf>,
 
-        /// Where the workspace keeps its own rules [default: `rules`].
+        /// Where the workspace keeps its own rules [default:
+        /// `.mindflayer/library/rules`].
         #[arg(long, value_name = "DIR")]
         rules: Option<PathBuf>,
     },

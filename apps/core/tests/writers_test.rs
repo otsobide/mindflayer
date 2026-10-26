@@ -398,7 +398,7 @@ fn a_link_waits_for_the_writer_before_it() {
 /// to install it into.
 fn offering_deploy() -> (TempDir, FlayerWorkspace, MindProject) {
     let (dir, workspace) = workspace();
-    let folder = dir.path().join("skills").join("deploy");
+    let folder = workspace.own().directory_for(Kind::Skill).join("deploy");
     fs::create_dir_all(&folder).unwrap();
     fs::write(folder.join("SKILL.md"), skill("deploy", "Ship it")).unwrap();
     let project = projects(dir.path(), "alpha", 1).remove(0);
