@@ -1270,6 +1270,41 @@ fn the_first_change_from_the_tui_lands_in_the_default_workspace_not_in_one_above
 }
 
 #[test]
+fn a_gather_from_the_tui_runs_apart_after_making_the_default_workspace_where_it_is_shown() {
+    let (outer, home) = home_inside_a_workspace();
+    let elsewhere = TempDir::new().unwrap();
+    let source = repository(&[("skills/deploy/SKILL.md", &skill_file("deploy", "Ship it"))]);
+    let url = source.path().to_string_lossy().into_owned();
+    let mut app = tui_at_home(elsewhere.path(), &home);
+
+    press_key(&mut app, KeyCode::Char('g'));
+    type_text(&mut app, &url);
+    let TuiStep::Run(task) = press_key(&mut app, KeyCode::Enter) else {
+        panic!("{:?}", app.mode);
+    };
+    assert!(task.runs_apart());
+    tui::step(&mut app, task);
+    tui::wait(&mut app);
+
+    // Made first, by a line of its own, on the thread the gather ran on: left
+    // to the gather, the walk up from home would have found the workspace
+    // above it.
+    let transcript = app.transcript();
+    assert!(transcript.starts_with("$ flayer init\n"), "{transcript}");
+    assert!(transcript.contains("$ flayer gather git "), "{transcript}");
+    let workspace = app.workspace().unwrap();
+    assert!(workspace.made);
+    assert_eq!(workspace.root, home);
+    assert_eq!(workspace.shelf, 1);
+    let above = flayer(outer.path(), &["gather", "list"]).unwrap();
+    assert!(
+        above.stdout.starts_with("nothing gathered yet"),
+        "{}",
+        above.stdout
+    );
+}
+
+#[test]
 fn a_skill_that_cannot_be_read_is_listed_where_it_can_be_dealt_with() {
     let dir = workspace_with_two();
     write_skill(
