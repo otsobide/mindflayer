@@ -131,11 +131,19 @@ pub fn add(
 /// folder disagrees with what it declares. More than one match is an error
 /// rather than a choice made quietly: changing the wrong artifact is not
 /// something to guess about.
+///
+/// Only in the folders the project authors in
+/// ([`Catalog::discover_authored`]): a listing also shows what sits in its
+/// agents' folders, an install's copies or somebody's own, and none of those
+/// is the project's to edit, rename or remove. One named that is there and
+/// nowhere the project authors is refused as such
+/// ([`LifecycleError::NotAuthored`]), rather than as nothing at all, since a
+/// listing has just shown it.
 pub fn find(project: &MindProject, reference: &Reference) -> Result<Target, LifecycleError> {
     let kinds = reference
         .kind()
         .map_or_else(|| Kind::ALL.to_vec(), |kind| vec![kind]);
-    let catalog = Catalog::discover_kinds(std::slice::from_ref(project), &kinds);
+    let catalog = Catalog::discover_authored(std::slice::from_ref(project), &kinds);
 
     let mut found: Vec<Target> = catalog
         .find(reference)
@@ -155,7 +163,7 @@ pub fn find(project: &MindProject, reference: &Reference) -> Result<Target, Life
     // found to be fixed or removed.
     let name = reference.name();
     if name.split('/').all(install::is_folder_name) {
-        for kind in kinds {
+        for &kind in &kinds {
             let Some(path) = place(project, kind, name) else {
                 continue;
             };
@@ -173,9 +181,18 @@ pub fn find(project: &MindProject, reference: &Reference) -> Result<Target, Life
     }
 
     match found.len() {
-        0 => Err(LifecycleError::NotFound {
-            typed: reference.typed().to_owned(),
-        }),
+        0 => {
+            let listed = Catalog::discover_kinds(std::slice::from_ref(project), &kinds);
+            Err(match listed.find(reference).first() {
+                Some(artifact) => LifecycleError::NotAuthored {
+                    typed: reference.typed().to_owned(),
+                    path: artifact.path().to_path_buf(),
+                },
+                None => LifecycleError::NotFound {
+                    typed: reference.typed().to_owned(),
+                },
+            })
+        }
         1 => Ok(found.remove(0)),
         _ => Err(LifecycleError::Ambiguous {
             typed: reference.typed().to_owned(),
@@ -667,6 +684,10 @@ fn disowned(
 pub enum LifecycleError {
     #[error("nothing named `{typed}` here")]
     NotFound { typed: String },
+    /// Listed, from a folder the project's agents read, but in none the
+    /// project authors in: installed there, or somebody's own.
+    #[error("`{typed}` is at {path}, in a folder this project's agents read and it does not author in, so it is not changed from here")]
+    NotAuthored { typed: String, path: PathBuf },
     #[error("`{typed}` names more than one thing ({}), so say which: by kind, as in `skill:name`, or by folder", .matches.join(", "))]
     Ambiguous { typed: String, matches: Vec<String> },
     #[error("{}", issue_list(.issues))]

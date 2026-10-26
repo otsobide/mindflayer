@@ -57,10 +57,11 @@ impl Catalog {
 
     /// The same, only in the folders the projects author in.
     ///
-    /// What a change to a project's own artifacts has to look in: never a
-    /// copy in an agent's folder the project does not author in, which is
-    /// foreign or an install's, and no edit, rename or removal of the
-    /// project's own is Mindflayer's to make there. Each copy is its own artifact, as in every project before
+    /// What a change to a project's own artifacts looks in
+    /// ([`crate::lifecycle::find`]): never a copy in an agent's folder the
+    /// project does not author in, which is foreign or an install's, and no
+    /// edit, rename or removal of the project's own is Mindflayer's to make
+    /// there. Each copy is its own artifact, as in every project before
     /// settings, so two of one name are two things to choose between. The
     /// same as [`discover_kinds`](Self::discover_kinds) for a project a
     /// `mind.toml` marks.
