@@ -839,3 +839,25 @@ fn forgetting_an_installation_forgets_its_copies() {
         .unwrap();
     assert_eq!(targets, 0);
 }
+
+#[test]
+fn a_ledger_waits_for_another_writer_as_long_as_a_writer_waits_for_the_workspace() {
+    let dir = tempfile::TempDir::new().unwrap();
+    let path = dir.path().join(LEDGER_FILE);
+    let opened = Ledger::open(&path).unwrap();
+    let existing = Ledger::open_existing(&path).unwrap().unwrap();
+
+    // Read off each connection rather than shown by two writers racing:
+    // rusqlite waits five seconds of its own accord, which is long enough
+    // for any race a test can stage.
+    for ledger in [&opened, &existing] {
+        let waits: i64 = ledger
+            .connection
+            .pragma_query_value(None, "busy_timeout", |row| row.get(0))
+            .unwrap();
+        assert_eq!(
+            u128::try_from(waits).unwrap(),
+            crate::lock::WAIT.as_millis()
+        );
+    }
+}
