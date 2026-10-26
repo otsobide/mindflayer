@@ -603,10 +603,10 @@ Every key runs a command you could have typed, through the same parser:
 | `i` | install from the workspace's own, a loaded workspace, or the shelf | `flayer install` |
 | `R` | read the disk again | nothing: it changes nothing |
 
-A project the workspace manages from outside its own directory — linked from
-beside it, or sitting under another workspace — runs `mind -W . -C <project>
-…` instead, so the line acts on the workspace on screen rather than on the one
-the project would find by itself. `flayer -W <dir>` opens the screen on the
+A project whose own commands would reach another workspace — linked from
+outside the workspace's tree, or with a nearer workspace above it — runs `mind
+-W . -C <project> …` instead, so the line acts on the workspace on screen
+rather than on the one the project would find by itself. `flayer -W <dir>` opens the screen on the
 workspace it names, and every line it runs uses that one.
 
 `m`, or `flayer minds` straight from the shell, opens a list of every
