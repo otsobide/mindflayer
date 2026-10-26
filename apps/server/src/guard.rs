@@ -19,7 +19,7 @@ use axum::response::{IntoResponse, Response};
 
 use crate::api;
 
-/// The names a browser may reach the server by, each with the server's port.
+/// The names the server answers to, each with the server's port.
 ///
 /// Loopback's three spellings and nothing else. A page whose name an attacker
 /// rebinds to 127.0.0.1 reaches this port with its own name in the Host
@@ -27,6 +27,11 @@ use crate::api;
 /// server; refusing every other name is what stops it. A list of names the
 /// server is never reached by rather than one it is would have to guess every
 /// name an attacker could buy.
+///
+/// No browser sends `[::1]` yet: the listener binds only 127.0.0.1, so a
+/// connection to ::1 is refused before any Host is sent. It is accepted
+/// because that costs nothing, and a server that also bound ::1 would then
+/// need no change here.
 pub(crate) struct Hosts {
     names: [String; 3],
 }

@@ -1055,6 +1055,10 @@ in `src/auth.rs`):
    403. The raw header and never `X-Forwarded-Host`, since no proxy stands in
    front to have forwarded anything. An allow-list of loopback's own names,
    because a deny-list would have to guess every name an attacker can buy.
+   No browser sends `[::1]` yet: the listener binds only 127.0.0.1, so a
+   connection to ::1 is refused before any Host is sent. It is on the list
+   because accepting it costs nothing, and a server that also bound ::1
+   would then need no change here.
 2. **Origin**, on every request that sends one: `http://` and the name in
    Host, or a 403. That one origin, not any of the three: a page loaded as
    `localhost` that asks `127.0.0.1` is another origin to the browser, and
