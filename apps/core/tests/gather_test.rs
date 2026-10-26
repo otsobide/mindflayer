@@ -377,3 +377,49 @@ fn the_ledger_lands_beside_the_marker_file() {
         .join("mindflayer.db")
         .is_file());
 }
+
+#[test]
+fn a_url_with_a_token_in_it_is_refused_and_the_token_is_kept_nowhere() {
+    let (_dir, workspace) = workspace();
+    let ledger = workspace.ledger().unwrap();
+
+    let error = gather::gather(
+        &workspace,
+        &ledger,
+        &Request::git("https://me:ghp_t0ken@example.com/acme/skills"),
+    )
+    .unwrap_err();
+
+    assert!(
+        matches!(error, GatherError::CredentialsInUrl { .. }),
+        "{error}"
+    );
+    assert_eq!(
+        error.to_string(),
+        "https://example.com/acme/skills: a password or token in the URL is refused, because \
+         gathering stores and shows the URL: gather it without one, and configure a git \
+         credential helper that has it"
+    );
+    // Nothing was registered, and nothing was fetched into the cache.
+    assert!(ledger
+        .source(
+            SourceKind::Git,
+            "https://example.com/acme/skills",
+            None,
+            "skills"
+        )
+        .unwrap()
+        .is_none());
+    assert!(!workspace.cache_dir().exists());
+    // The attempt is logged, as every failed gather is, under the URL it was
+    // refused for.
+    let history = ledger.history(10).unwrap();
+    assert_eq!(history.len(), 1);
+    assert_eq!(
+        history[0].target.as_deref(),
+        Some("https://example.com/acme/skills")
+    );
+    // And the token is nowhere in the database file, whatever reads it.
+    let stored = fs::read(workspace.ledger_path()).unwrap();
+    assert!(!stored.windows(9).any(|bytes| bytes == b"ghp_t0ken"));
+}

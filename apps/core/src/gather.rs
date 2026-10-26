@@ -26,6 +26,7 @@ use crate::copy::{self, Change};
 use crate::kind::{Kind, Layout};
 use crate::ledger::{self, Action, Ledger, LedgerError, Outcome, SourceKind};
 use crate::paths;
+use crate::url::{carries_credentials, redacted};
 use crate::workspace::FlayerWorkspace;
 
 /// The folder inside a source that is harvested unless another is named.
@@ -49,7 +50,8 @@ impl Source {
         }
     }
 
-    /// The address, as the user typed it.
+    /// The address, as the user typed it: credentials included, which is why
+    /// [`gather`] refuses one that carries any before it is stored or shown.
     pub fn url(&self) -> &str {
         match self {
             Source::Git { url, .. } => url,
@@ -198,6 +200,17 @@ fn harvest(
     ledger: &Ledger,
     request: &Request,
 ) -> Result<Report, GatherError> {
+    // Refused before anything is registered or fetched, rather than used for
+    // this one fetch and dropped from what is stored: a token on the command
+    // line is already where `ps` and the shell history show it, and every
+    // report names the URL. A git credential helper, or the front end once
+    // #110 lands, keeps it off the command line altogether.
+    if carries_credentials(request.source.url()) {
+        return Err(GatherError::CredentialsInUrl {
+            url: redacted(request.source.url()).into_owned(),
+        });
+    }
+
     // Only directory-shaped kinds are gatherable today. Matching on the kind
     // rather than on its layout keeps the compiler asking: a third kind has to
     // answer this question before it can be added.
@@ -392,6 +405,15 @@ pub enum GatherError {
     Git(#[from] git::GitError),
     #[error(transparent)]
     Ledger(#[from] LedgerError),
+    /// The URL carries a password or token, or a user name where a token can
+    /// stand in for one. `url` is shown without it, which is the URL to
+    /// gather instead. A provider the front end supplies (#110) will be a
+    /// second way to give the credential.
+    #[error(
+        "{url}: a password or token in the URL is refused, because gathering stores and shows \
+         the URL: gather it without one, and configure a git credential helper that has it"
+    )]
+    CredentialsInUrl { url: String },
     #[error("{url}: has no `{subdirectory}` folder to gather from")]
     NoSuchFolder { subdirectory: String, url: String },
     #[error("{kind}s cannot be gathered yet")]
