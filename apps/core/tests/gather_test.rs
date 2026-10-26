@@ -3,9 +3,10 @@
 mod common;
 
 use std::fs;
+use std::sync::{Arc, Mutex};
 
 use common::{commit, repository, skill, url, workspace, write_files};
-use mindflayer_core::gather::{self, GatherError, Request, Warning};
+use mindflayer_core::gather::{self, GatherError, Progress, Request, Warning, Watch};
 use mindflayer_core::ledger::{Action, Ledger, SourceKind};
 use mindflayer_core::{FlayerWorkspace, Kind, MindProject, ValidationIssue};
 use tempfile::TempDir;
@@ -369,6 +370,50 @@ fn the_clone_is_kept_so_a_gather_can_be_looked_at_afterwards() {
 }
 
 #[test]
+fn a_gather_reports_reading_every_folder_before_placing_any() {
+    let source = repository(&[
+        ("skills/broken/SKILL.md", "no front matter at all\n"),
+        ("skills/deploy/SKILL.md", &skill("deploy", "Ship it")),
+    ]);
+    let (_dir, workspace) = workspace();
+    let ledger = workspace.ledger().unwrap();
+    let (watch, seen) = recording();
+
+    gather::gather(
+        &workspace,
+        &ledger,
+        &Request::git(url(&source)).watched_by(watch),
+    )
+    .unwrap();
+
+    let seen = seen.lock().unwrap();
+    assert_eq!(seen.first(), Some(&Progress::Connecting), "{seen:?}");
+    // What `gix` counts depends on how fast the clone is; what the harvest
+    // counts does not.
+    let harvest: Vec<Progress> = seen
+        .iter()
+        .copied()
+        .filter(|progress| {
+            matches!(
+                progress,
+                Progress::Harvesting { .. } | Progress::Placing { .. }
+            )
+        })
+        .collect();
+    assert_eq!(
+        harvest,
+        [
+            Progress::Harvesting { done: 0, total: 2 },
+            Progress::Harvesting { done: 1, total: 2 },
+            Progress::Harvesting { done: 2, total: 2 },
+            // The broken one was read, and is not placed.
+            Progress::Placing { done: 0, total: 1 },
+            Progress::Placing { done: 1, total: 1 },
+        ]
+    );
+}
+
+#[test]
 fn the_ledger_lands_beside_the_marker_file() {
     let (dir, workspace) = workspace();
     let ledger = Ledger::open(workspace.ledger_path()).unwrap();
@@ -379,4 +424,18 @@ fn the_ledger_lands_beside_the_marker_file() {
         .join(".mindflayer")
         .join("mindflayer.db")
         .is_file());
+}
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+/// A watch that keeps every step it is told, and where they are kept.
+fn recording() -> (Watch, Arc<Mutex<Vec<Progress>>>) {
+    let seen = Arc::new(Mutex::new(Vec::new()));
+    let watch = Watch::new().reporting_to({
+        let seen = Arc::clone(&seen);
+        move |progress| seen.lock().unwrap().push(progress)
+    });
+    (watch, seen)
 }

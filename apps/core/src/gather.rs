@@ -13,6 +13,7 @@
 
 mod credentials;
 pub mod git;
+mod watch;
 
 use std::fmt;
 use std::fs;
@@ -27,6 +28,8 @@ use crate::kind::{Kind, Layout};
 use crate::ledger::{self, Action, Ledger, LedgerError, Outcome, SourceKind};
 use crate::paths;
 use crate::workspace::FlayerWorkspace;
+
+pub use watch::{Progress, Watch};
 
 /// The folder inside a source that is harvested unless another is named.
 pub const DEFAULT_SUBDIRECTORY: &str = "skills";
@@ -64,14 +67,20 @@ impl Source {
     }
 }
 
-/// One gather: what to take, from where, and out of which folder.
-#[derive(Debug, Clone, PartialEq, Eq)]
+/// One gather: what to take, from where, and out of which folder, and who is
+/// following it.
+#[derive(Debug, Clone)]
 pub struct Request {
     pub source: Source,
     /// The folder inside the source to harvest.
     pub subdirectory: String,
     /// What to look for there.
     pub kind: Kind,
+    /// Told how the gather is going, and able to stop it. A request carries
+    /// it, rather than [`gather`] taking it beside one, so a front end that
+    /// builds requests in one place and runs them in another hands over both
+    /// together.
+    pub watch: Watch,
 }
 
 impl Request {
@@ -84,6 +93,7 @@ impl Request {
             },
             subdirectory: DEFAULT_SUBDIRECTORY.to_owned(),
             kind: Kind::Skill,
+            watch: Watch::new(),
         }
     }
 
@@ -99,6 +109,12 @@ impl Request {
         match &mut self.source {
             Source::Git { reference: at, .. } => *at = reference,
         }
+        self
+    }
+
+    /// Report to `watch`, and stop when it is cancelled.
+    pub fn watched_by(mut self, watch: Watch) -> Self {
+        self.watch = watch;
         self
     }
 }
@@ -216,7 +232,9 @@ fn harvest(
         &request.subdirectory,
     )?;
 
+    let watch = &request.watch;
     let cache = workspace.cache_dir().join(&source.directory);
+    watch.report(Progress::Connecting);
     let clone = match &request.source {
         Source::Git { url, reference } => git::clone(url, reference.as_deref(), &cache)?,
     };
@@ -237,31 +255,38 @@ fn harvest(
         ..Report::default()
     };
 
-    for directory in candidates(&harvested_from, manifest)? {
-        // The artifact is loaded to learn its name and its summary, then
-        // dropped: `project` is the clone it was found in, which is where it
-        // was found and not a claim that a clone is a mind project.
-        let artifact = match Artifact::skill(&directory, &clone.root) {
-            Ok(artifact) => artifact,
-            Err(error) => {
-                report.failures.push(Failure::Artifact(error));
-                continue;
-            }
-        };
+    // Everything is read before anything is placed, rather than each
+    // artifact read and placed in turn, so that what is on the shelf only
+    // starts to change once all of it is known: that is the point up to
+    // which a gather can still be stopped without leaving half of one.
+    let found = candidates(&harvested_from, manifest)?;
+    let mut taken = Vec::with_capacity(found.len());
+    watch.report(Progress::Harvesting {
+        done: 0,
+        total: found.len(),
+    });
+    for (done, directory) in found.iter().enumerate() {
+        if let Some(read) = read(directory, &clone.root, &mut report.failures) {
+            taken.push(read);
+        }
+        watch.report(Progress::Harvesting {
+            done: done + 1,
+            total: found.len(),
+        });
+    }
 
-        // The folder keeps the name the source gave it rather than the one the
-        // skill declares. A disagreement between the two is something
-        // `validate` reports; silently renaming the folder would repair the
-        // symptom and hide it.
-        let Some(folder) = directory.file_name().and_then(|name| name.to_str()) else {
-            report
-                .failures
-                .push(Failure::UnusableName { path: directory });
-            continue;
-        };
+    watch.report(Progress::Placing {
+        done: 0,
+        total: taken.len(),
+    });
+    for (done, (directory, folder, artifact)) in taken.iter().enumerate() {
         let destination = shelf.join(folder);
-
-        let change = match copy::replace(&directory, &destination, &clone.root) {
+        let placed = copy::replace(directory, &destination, &clone.root);
+        watch.report(Progress::Placing {
+            done: done + 1,
+            total: taken.len(),
+        });
+        let change = match placed {
             Ok(change) => change,
             Err(source) => {
                 report.failures.push(Failure::Copy {
@@ -294,7 +319,7 @@ fn harvest(
 
         let harvested = Harvested {
             name: artifact.name().to_owned(),
-            directory: folder.to_owned(),
+            directory: folder.clone(),
             summary: artifact.summary().map(str::to_owned),
             path: destination,
         };
@@ -309,6 +334,38 @@ fn harvest(
     // Stable, so one file's warnings stay in the order `validate` gives them.
     report.warnings.sort_by(|a, b| a.path.cmp(&b.path));
     Ok(report)
+}
+
+/// One candidate folder, loaded to learn its name and its summary: the
+/// folder, the name it is filed under, and the artifact. `None`, with the
+/// reason among `failures`, when it cannot be taken.
+///
+/// `project` is the clone it was found in, which is where it was found and
+/// not a claim that a clone is a mind project.
+fn read(
+    directory: &Path,
+    clone: &Path,
+    failures: &mut Vec<Failure>,
+) -> Option<(PathBuf, String, Artifact)> {
+    let artifact = match Artifact::skill(directory, clone) {
+        Ok(artifact) => artifact,
+        Err(error) => {
+            failures.push(Failure::Artifact(error));
+            return None;
+        }
+    };
+
+    // The folder keeps the name the source gave it rather than the one the
+    // skill declares. A disagreement between the two is something `validate`
+    // reports; silently renaming the folder would repair the symptom and hide
+    // it.
+    let Some(folder) = directory.file_name().and_then(|name| name.to_str()) else {
+        failures.push(Failure::UnusableName {
+            path: directory.to_path_buf(),
+        });
+        return None;
+    };
+    Some((directory.to_path_buf(), folder.to_owned(), artifact))
 }
 
 /// The directories under `root` that hold a `manifest`.
