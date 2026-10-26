@@ -1297,6 +1297,13 @@ leak into the lifecycle code. Unblocks #33, #45, #62, #93, #94 and #95.
   keeps a group of lines pointing where it was, which removing its entries by
   their new route never matches. Rewriting a project's whole group from what
   the ledger says it has installed would heal it.
+- **A team's `.gitignore` outranks the block.** Git ranks every `.gitignore`
+  in the tree above `info/exclude`, so a negation there (`!.claude/skills/**`)
+  takes back what the block excludes, and a local install shows up in `git
+  status` with nothing said: the entry is written all the same, and only
+  `Excluded::Outside` warns. Asking gix's `excludes` whether each path is
+  ignored once it is written, as the tests do, would let the installing side
+  or a doctor check say so.
 - **Long work in the TUI.** A gather holds the screen until it finishes, with a
   box saying what is running, and cannot be cancelled. A background thread
   would change that; it has not been needed yet.
