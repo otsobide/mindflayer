@@ -85,10 +85,12 @@ These are easy to break from a single file without noticing.
   - An installed name must be one folder name (`install::is_folder_name`).
   - Symlinks are followed only inside the source (`copy::tree`'s `within`).
   - A project's artifact directories must stay inside the project.
-- **Formats are versioned.** Markers carry `version` (`FORMAT_VERSION`; see
-  `DIRECTORIES_VERSION` for how v1 is still read) and the ledger uses SQLite's
-  `user_version`. Anything from a newer version is refused. A format change
-  must keep reading old files the way they were written.
+- **Formats are versioned.** Each marker carries its own `version`
+  (`MIND_FORMAT_VERSION` for `mind.toml`, `FLAYER_FORMAT_VERSION` for
+  `flayer.toml`, so bumping one never makes older builds refuse the other; see
+  `DIRECTORIES_VERSION` for how a v1 `mind.toml` is still read) and the ledger
+  uses SQLite's `user_version`. Anything from a newer version is refused. A
+  format change must keep reading old files the way they were written.
 - **Paths are lexical and portable.** Route arithmetic lives in
   `apps/core/src/paths.rs`. Registry entries are stored relative to the
   workspace with forward slashes, and `link` verifies a route before storing

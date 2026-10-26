@@ -258,11 +258,11 @@ out with `..`, describes a project whose artifacts are not the project's, and
 that contradicts the one thing a mind project is for. `mind init --skills
 /etc/skills` is refused rather than made, before anything is written.
 
-Because this changed where a project's artifacts are, `FORMAT_VERSION` is 2 and
-a marker written before it is read the way it was written: version 1 had no
-such question, so every kind lived inside `.mind`, and reading one with today's
-default would point it at directories it never had and list nothing without
-saying why. `DIRECTORIES_VERSION` is what draws that line.
+Because this changed where a project's artifacts are, `MIND_FORMAT_VERSION` is
+2 and a `mind.toml` written before it is read the way it was written: version 1
+had no such question, so every kind lived inside `.mind`, and reading one with
+today's default would point it at directories it never had and list nothing
+without saying why. `DIRECTORIES_VERSION` is what draws that line.
 
 ### Why the markers are TOML written from a template
 
@@ -277,9 +277,25 @@ halves agree because an edit re-reads the file afterwards rather than trusting
 what it believes it wrote, and the write itself goes through a temporary file
 and a rename, so a crash leaves either the old config or the new one.
 
-Both carry a `version`. A marker written by a newer Mindflayer is refused with
-a message that says so, which is what lets the format change later without an
-old binary silently misreading a newer project.
+### Formats are versioned
+
+Each marker carries a `version`, and each has its own: `MIND_FORMAT_VERSION`
+for `mind.toml`, `FLAYER_FORMAT_VERSION` for `flayer.toml`. A marker written by
+a newer Mindflayer is refused with a message naming which of the two it is and
+which version this build reads, which is what lets a format change later
+without an old binary silently misreading a newer project or workspace.
+
+Two constants rather than one, because the files change for different reasons.
+Shared, a change to either format would be a new version of both: the project
+marker going to 3 would write every new `flayer.toml` as a 3 too, and an older
+build would refuse a workspace that had not changed at all. Both are 2 today,
+and neither moves when the other does.
+
+An older marker is read the way it was written, never refused.
+`DIRECTORIES_VERSION` is the one line drawn so far, and it is a project-marker
+version: a workspace's number says nothing about where a project keeps its
+artifacts. The ledger is versioned the same way, in SQLite's `user_version`
+([Why the ledger is SQLite](#why-the-ledger-is-sqlite)).
 
 ## Failures are collected, not raised
 
