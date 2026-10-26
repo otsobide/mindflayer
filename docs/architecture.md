@@ -1098,10 +1098,16 @@ feeds it: each command, and the TUI's screens. In order:
 4. the default one, in home.
 
 It hands back the workspace with the `Reason` that chose it (`Explicit`,
-`Activated`, `Above`, `Home`), so a front end that says which workspace it
-showed, as the TUI's header does when it is the default one, asks the answer
-rather than comparing paths, which stopped answering once `-W` could name the
-directory home is.
+`Activated`, `Above`, `Home`), so a front end that says why it is showing a
+workspace asks the answer rather than working it out from paths. The TUI's
+header says there is no workspace here or above only for `Home`: the
+directory home is can also be named with `-W`, activated, or reached walking
+up from below it. Which workspace a command changed is another question,
+about the workspace rather than the rule, and `load` and `unload` answer it
+from the path (`FlayerWorkspace::is_default`). They call the one in home the
+default one however it was reached, so their line reads the same on the run
+that makes it, from anywhere, as on every run after, which from below home
+finds it walking up.
 
 The first two are choices somebody made on purpose, so they win over where
 somebody happens to stand. Activating a workspace is meant to override
