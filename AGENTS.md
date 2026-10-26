@@ -38,6 +38,11 @@ cargo test -p mindflayer-server --test commands_test         # apps/server/tests
 `make dev/link`, `make dev/unlink` and `make install` write into `~/.cargo/bin`
 (or `BINDIR`), outside the repository. Don't run them unless asked.
 
+`scripts/agent-probe/probe.sh` runs the real coding agents against their APIs
+with your own login, in a temp home under `target/`, to check where they read
+skills and rules. It is never run by CI or `make test`; don't run it unless
+asked.
+
 ## Layout
 
 Three crates in one Cargo workspace, each an app under `apps/` with its own
@@ -67,6 +72,10 @@ Three crates in one Cargo workspace, each an app under `apps/` with its own
   `src/writer.rs` the thread every run goes through, `src/transcript.rs` what
   the session ran, `src/log.rs` the redacting request log and `src/panel.rs`
   the embedded panel (`apps/web/dist`).
+
+Outside the crates, `scripts/agent-probe/` holds the agent probe: `probe.sh`
+isolates a run and checks the real home is left alone, and `<agent>.sh` holds
+one agent's checks (only `claude.sh` so far).
 
 ## Invariants that hold the design together
 
