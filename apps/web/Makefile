@@ -7,9 +7,10 @@
 PNPM ?= pnpm
 
 # pnpm writes this as it installs, and every install here touches it after,
-# so it is newer than the manifest and the lockfile only when node_modules
-# holds what they say. Every target waits on it, which installs on a fresh
-# clone and after a change to either, and costs nothing otherwise.
+# so it is newer than the manifest, the lockfile and pnpm's settings only
+# when node_modules holds what they say. Every target that runs a tool waits
+# on it, which installs on a fresh clone and after a change to any of them,
+# and costs nothing otherwise.
 INSTALLED := node_modules/.modules.yaml
 
 $(INSTALLED): package.json pnpm-lock.yaml pnpm-workspace.yaml
