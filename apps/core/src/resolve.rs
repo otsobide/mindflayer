@@ -24,6 +24,7 @@ use std::path::{Path, PathBuf};
 
 use thiserror::Error;
 
+use crate::paths;
 use crate::workspace::{
     absolute, same_directory, FlayerWorkspace, MindProject, WorkspaceError, FLAYER_CONFIG,
     FLAYER_DIR,
@@ -122,6 +123,16 @@ pub enum ResolveError {
     NotManaged {
         project: PathBuf,
         workspace: PathBuf,
+    },
+    /// No project the workspace manages goes by that name, entry or path.
+    /// `known` is what does, by name.
+    #[error("no project called `{wanted}` in the workspace")]
+    UnknownProject { wanted: String, known: Vec<String> },
+    /// More than one does, each by its entry as the marker spells it.
+    #[error("`{wanted}` names more than one project: {}", .matches.join(", "))]
+    AmbiguousProject {
+        wanted: String,
+        matches: Vec<String>,
     },
 }
 
@@ -233,6 +244,69 @@ pub fn consulted(
         ..*inputs
     };
     Ok(resolve(&inputs)?.filter(|resolved| resolved.workspace.is_made()))
+}
+
+impl FlayerWorkspace {
+    /// What a command at the workspace's level changes: its own artifacts,
+    /// or the one project it names ([`pick`](Self::pick)).
+    pub fn holder(&self, project: Option<&str>) -> Result<MindProject, ResolveError> {
+        match project {
+            None => Ok(self.own()),
+            Some(wanted) => self.pick(wanted),
+        }
+    }
+
+    /// The one project this workspace manages that `wanted` names: by its
+    /// name, by its entry as the marker spells it, or by its path from the
+    /// workspace's root.
+    ///
+    /// Two spellings of one directory are one project rather than a choice
+    /// between two. A project named exactly that will not open is refused
+    /// with why, which is more use than being told there is no such project.
+    pub fn pick(&self, wanted: &str) -> Result<MindProject, ResolveError> {
+        let target = paths::normalize(&self.root().join(wanted));
+        let mut found: Vec<MindProject> = Vec::new();
+        let mut broken = None;
+        for member in self.members() {
+            let spelled = stored(&member.entry) == wanted || member.root == target;
+            match member.project {
+                Ok(project) if spelled || project.name() == wanted => {
+                    if !found.iter().any(|other| other.root() == project.root()) {
+                        found.push(project);
+                    }
+                }
+                Err(error) if spelled => broken = Some(error),
+                _ => {}
+            }
+        }
+        match found.len() {
+            1 => Ok(found.remove(0)),
+            0 => Err(match broken {
+                Some(error) => ResolveError::Workspace(error),
+                None => ResolveError::UnknownProject {
+                    wanted: wanted.to_owned(),
+                    known: self
+                        .members()
+                        .into_iter()
+                        .filter_map(|member| member.project.ok())
+                        .map(|project| project.name().to_owned())
+                        .collect(),
+                },
+            }),
+            _ => Err(ResolveError::AmbiguousProject {
+                wanted: wanted.to_owned(),
+                matches: found
+                    .iter()
+                    .map(|project| stored(&self.entry_for(project.root())))
+                    .collect(),
+            }),
+        }
+    }
+}
+
+/// An entry as the marker spells it, `/`-separated on every platform.
+fn stored(entry: &Path) -> String {
+    paths::to_config_string(entry).unwrap_or_else(|| entry.display().to_string())
 }
 
 /// The workspace somebody chose on purpose, and how; `None` when nobody did.

@@ -427,3 +427,92 @@ fn a_change_to_a_project_consults_the_default_only_once_it_is_made() {
         .unwrap();
     assert_eq!(made.reason, Reason::Home);
 }
+
+// ---------------------------------------------------------------------------
+// Which of a workspace's projects a command names
+// ---------------------------------------------------------------------------
+
+/// `workspace`, managing `alpha` and `beta` under it, and `gone`, an entry
+/// whose directory has been removed.
+fn picking() -> (TempDir, FlayerWorkspace) {
+    let dir = TempDir::new().unwrap();
+    let (mut workspace, _) = FlayerWorkspace::init(dir.path()).unwrap();
+    for name in ["alpha", "beta", "gone"] {
+        let (project, _) = MindProject::init(dir.path().join(name)).unwrap();
+        workspace.link(&project).unwrap();
+    }
+    fs::remove_dir_all(dir.path().join("gone")).unwrap();
+    (dir, workspace)
+}
+
+#[test]
+fn a_project_is_picked_by_its_name_its_entry_or_its_path() {
+    let (dir, workspace) = picking();
+
+    for wanted in [
+        "alpha",
+        "./alpha",
+        &dir.path().join("alpha").to_string_lossy(),
+    ] {
+        let project = workspace.pick(wanted).unwrap();
+        assert_eq!(project.root(), dir.path().join("alpha"), "{wanted}");
+    }
+}
+
+#[test]
+fn a_project_nobody_manages_is_named_with_the_ones_that_are() {
+    let (_dir, workspace) = picking();
+
+    let error = workspace.pick("gamma").unwrap_err();
+
+    assert!(
+        matches!(error, ResolveError::UnknownProject { ref known, .. } if *known == ["alpha", "beta"]),
+        "{error}"
+    );
+}
+
+#[test]
+fn a_project_named_exactly_that_will_not_open_says_why() {
+    let (_dir, workspace) = picking();
+
+    let error = workspace.pick("gone").unwrap_err();
+
+    assert!(
+        matches!(
+            error,
+            ResolveError::Workspace(WorkspaceError::NotAProject { .. })
+        ),
+        "{error}"
+    );
+}
+
+#[test]
+fn a_name_two_projects_answer_to_is_refused_with_each_entry() {
+    let (dir, mut workspace) = picking();
+    // `beta`'s directory, but declaring the name `alpha`.
+    let (twin, _) = MindProject::init(dir.path().join("twin")).unwrap();
+    let marker = twin.mind_dir().join(crate::workspace::MIND_CONFIG);
+    let text = fs::read_to_string(&marker)
+        .unwrap()
+        .replace("name = \"twin\"", "name = \"alpha\"");
+    fs::write(&marker, text).unwrap();
+    workspace.link(&twin).unwrap();
+
+    let error = workspace.pick("alpha").unwrap_err();
+
+    assert!(
+        matches!(error, ResolveError::AmbiguousProject { ref matches, .. } if *matches == ["alpha", "twin"]),
+        "{error}"
+    );
+}
+
+#[test]
+fn with_no_project_named_the_holder_is_the_workspaces_own() {
+    let (dir, workspace) = picking();
+
+    assert_eq!(workspace.holder(None).unwrap(), workspace.own());
+    assert_eq!(
+        workspace.holder(Some("beta")).unwrap().root(),
+        dir.path().join("beta")
+    );
+}
