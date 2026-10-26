@@ -117,6 +117,11 @@ These are easy to break from a single file without noticing.
   `DIRECTORIES_VERSION` for how a v1 `mind.toml` is still read) and the ledger
   uses SQLite's `user_version`. Anything from a newer version is refused. A
   format change must keep reading old files the way they were written.
+- **Nothing is staged where agents look.** An install builds its copy in a
+  `copy::Stage` under the project's `.mind/tmp` and renames it into place.
+  A temporary beside an installed copy is a skill an agent may load, so never
+  write one there. The next install sweeps what an interrupted one left, only
+  when the stage lock says no other run is going, and reports it.
 - **Paths are lexical and portable.** Route arithmetic lives in
   `apps/core/src/paths.rs`. Registry entries are stored relative to the
   workspace with forward slashes, and `link` verifies a route before storing
