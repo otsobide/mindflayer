@@ -489,8 +489,10 @@ fn what_agents_read_past_does_not_stop_an_install() {
     let outcome = install::install(&workspace, &ledger, &project, &candidates[0]).unwrap();
 
     assert!(matches!(outcome, Installed::Added { .. }), "{outcome:?}");
+    // Line endings are the gathering checkout's (CRLF under autocrlf on
+    // Windows), not Mindflayer's, so they are left out of the comparison.
     let copied = fs::read_to_string(installed_at(&project, "deploy").join("SKILL.md")).unwrap();
-    assert_eq!(copied, manifest, "copied as written");
+    assert_eq!(copied.replace("\r\n", "\n"), manifest, "copied as written");
 }
 
 // ---------------------------------------------------------------------------
