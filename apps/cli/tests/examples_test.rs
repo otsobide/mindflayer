@@ -1,10 +1,15 @@
 //! The examples in `examples/`: a workspace of their own, holding two skills
 //! and two rules, that any workspace can load and install from without
-//! gathering anything first.
+//! gathering anything first — and the README's walk-through of them, held to
+//! what the commands print.
 
 mod common;
 
 use common::*;
+
+/// The README, read when this suite compiles, so that changing it rebuilds
+/// the suite holding its walk-through to the commands.
+const README: &str = include_str!("../../../README.md");
 
 /// `examples/` in this repository, used where it is rather than copied: what a
 /// person loads is the folder in their clone, so that is the folder held to
@@ -165,4 +170,53 @@ fn a_workspace_loads_the_examples_and_installs_commit_style_with_its_reference()
         snapshot(&examples) == before,
         "loading the examples and installing from them wrote into examples/"
     );
+}
+
+#[test]
+fn the_readme_walks_through_the_examples_as_the_commands_print_them() {
+    let (_dir, projects) = projects();
+    let examples = text(&examples());
+
+    let listed = flayer(&projects, &["-W", &examples, "list"]).unwrap();
+    let loaded = flayer(&projects, &["load", &examples]).unwrap();
+    let installed = flayer(&projects, &["install", "-p", "collapse", "commit-style"]).unwrap();
+    // The README shows stdout alone, which is all there is to show only when
+    // nothing was said on stderr.
+    for outcome in [&listed, &loaded, &installed] {
+        assert!(outcome.ok && outcome.stderr.is_empty(), "{outcome:?}");
+    }
+
+    // This machine's paths, written the README's way: the clone in
+    // ~/src/mindflayer and the workspace in ~/Projects, in the home of `you`.
+    // The entry is read back rather than worked out, since where no route
+    // from the workspace reaches the clone, another drive say, it is absolute.
+    let workspace = FlayerWorkspace::open(&projects).unwrap();
+    let entry = mindflayer_core::paths::to_config_string(&workspace.config().loaded[0]).unwrap();
+    let root = projects.display().to_string();
+    let as_written = |stdout: &str| {
+        stdout
+            .replace(&entry, "../src/mindflayer/examples")
+            .replace(&root, "/home/you/Projects")
+    };
+    let blocks = [
+        format!(
+            "$ flayer -W ~/src/mindflayer/examples list\n{}",
+            as_written(&listed.stdout)
+        ),
+        format!(
+            "$ cd ~/Projects\n$ flayer load ~/src/mindflayer/examples\n{}\n\
+             $ flayer install -p collapse commit-style\n{}",
+            as_written(&loaded.stdout),
+            as_written(&installed.stdout)
+        ),
+    ];
+
+    // A checkout on Windows may have given the README CRLF line endings.
+    let readme = README.replace("\r\n", "\n");
+    for block in blocks {
+        assert!(
+            readme.contains(&format!("\n```\n{block}```\n")),
+            "the README should show, in a block of its own:\n{block}"
+        );
+    }
 }
