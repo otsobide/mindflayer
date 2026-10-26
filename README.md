@@ -771,6 +771,9 @@ apps/server  mindflayer-server — the local server behind the web panel, still
                                  unused by the binaries. Transport only: it
                                  moves JSON between the browser and a front
                                  end, and holds no rules.
+apps/web     mindflayer-web    — the web panel the server embeds: Vue and
+                                 Nuxt UI, built with Vite. It asks through
+                                 the server and draws; no rules here either.
 ```
 
 See [docs/architecture.md](docs/architecture.md) for why the split is where it
@@ -831,6 +834,60 @@ make dev/link BINDIR=.          # `./mind`, `./flayer` and `./mf`, right here
 The repository root is a fine answer if you would rather not put a
 work-in-progress binary on your PATH at all: `.gitignore` already covers all
 three names.
+
+## Developing the panel
+
+`apps/web` is the web panel, in Vue 3.5 and Nuxt UI 4 on Vite, written in
+TypeScript. So far it is the frame the views will fill: a sidebar, a header
+and an empty overview, dark unless you switch it to light. It needs Node 24
+(`apps/web/.node-version`) and pnpm, at the version `package.json` pins in
+`packageManager`, which `corepack enable` provides. Without corepack, name
+any other way to run it in `PNPM`:
+
+```bash
+make web/test          # vitest
+make web/lint          # ESLint, its style included; make web/fmt fixes that
+make web/build         # check the types, then build apps/web/dist
+make web/types         # check the types alone (vue-tsc)
+make web/clean         # remove dist/ and the tools' caches
+
+make web/test PNPM='npx --yes pnpm@12.15.0'
+```
+
+Every target first installs what `pnpm-lock.yaml` pins, when `node_modules`
+is missing or older than `package.json` or the lockfile. `make test` leaves
+the panel out for now, so the Rust suites still need no Node; the panel
+joins it once CI installs Node
+([#71](https://github.com/otsobide/mindflayer/issues/71)). Its tests are
+`apps/web/tests/<area>.test.ts`.
+
+`make web/build` writes `apps/web/dist`, which the server embeds; until a
+build has run, the server answers with a page saying to run it.
+`make web/e2e` has no browser suite to run yet, and says so
+([#75](https://github.com/otsobide/mindflayer/issues/75)).
+
+`make web/dev` serves the panel on `http://127.0.0.1:5173` and reloads it as
+you edit. It passes `/api` on to `flayer ui --dev --port 7878`, the command
+[#68](https://github.com/otsobide/mindflayer/issues/68) adds, and the launch
+link too: open the link that command prints with its port changed to 5173,
+and the token is traded for its cookie where the panel runs.
+
+Three rules keep the panel working under the server's content security
+policy, which lets nothing in from another host and nothing inline:
+
+- **The transport is the only way out.** Views ask `useTransport()` and
+  never `fetch`: ESLint refuses `fetch`, `EventSource`, `WebSocket` and
+  `XMLHttpRequest` everywhere but `src/api/http.ts`.
+- **Nothing comes from another host.** The fonts are Geist and Geist Mono
+  from Fontsource, the icons Lucide's, bundled when a component names them
+  as `i-lucide-<name>`. A test builds the panel and fails on any URL that
+  names another host.
+- **Nothing inline.** No `<script>` or `<style>` written into the page, which
+  is why the palette is declared in `src/assets/css/main.css` (from the
+  mapping in `src/theme.ts`) rather than injected, as Nuxt UI would.
+
+A test also checks that every package installed carries a licence
+GPL-3.0-only can take in.
 
 ## License
 
