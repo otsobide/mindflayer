@@ -1489,6 +1489,16 @@ stops updates at the first edit; overwriting on update, which loses the edit;
 and a three-way merge, too complex for skills that ship scripts. Unblocks #23,
 #30, #47, #48, #50 and #93.
 
+Carrying it out, #30 keeps the hash once per installation, on
+`installations`, rather than once per target: every copy D-07 writes is
+staged from one tree, so each is compared with the same hash, and an edited
+copy is the one whose own hash no longer matches it. A target whose content
+differs from its installation's in form — a rule's section of the managed
+block in `AGENTS.md` beside its `.claude/rules/mindflayer/<route>.md` file
+(D-03) — shares no one tree with the others, and would need a hash of its
+own on `installation_targets`, added by the schema step that first records
+one.
+
 ### D-05: A workspace's library lives in `.mindflayer`
 
 New workspaces keep their own artifacts in `.mindflayer/library/<kind>`.
