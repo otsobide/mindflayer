@@ -277,8 +277,9 @@ pub enum FlayerCommand {
         ///
         /// Relative to the workspace. They are the ones it shares with every
         /// project it manages, kept by default in its library, where no
-        /// agent looks; anywhere inside the workspace but the shelf and the
-        /// cache will do.
+        /// agent looks. Any folder inside the workspace will do except the
+        /// shelf and the cache, a folder inside them, or one holding them,
+        /// such as `.mindflayer` itself.
         #[arg(long, value_name = "DIR")]
         skills: Option<PathBuf>,
 
