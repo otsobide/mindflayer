@@ -1099,6 +1099,40 @@ connectors, which leaves the owner's top wish to the end. Unblocks #65, #66 and
 #69, which need nothing from M1 to M3, and #61, which needs only #36; the views
 wait for the snapshot (#62).
 
+### D-22: User-scope installs come later
+
+Installing into user scope (`~/.agents/skills`, `~/.claude/skills`, user MCP
+config) comes after M7, as a follow-up milestone, behind an explicit `--user`.
+It writes `~/.agents/skills/<name>` and `~/.claude/skills/<name>`, never a
+`manifest.json` in `~/.claude/skills`, and never anything under
+`~/.claude/skills/synced` or `.trash`. Meanwhile `flayer doctor` (#96) reports
+project skills that shadow user-scope skills, or are shadowed by them, with
+different contents. One name at both scopes resolves differently in each agent
+(Claude prefers the personal one, OpenCode V2 lets `~/.agents` beat a project's
+`.claude`, Codex shows both), `~/.agents/skills` already holds other tools'
+skills, and Claude before 2.1.280 moved skills listed in
+`~/.claude/skills/manifest.json` to `.trash`. Project scope keeps ownership per
+project, where the ledger can track it. Rejected: project scope forever, which
+gives up the hub's promise of skills for every project; and user scope now, as
+the home workspace's default. Unblocks #17, #28, #94 and #96.
+
+### D-23: What a project received is an installed view
+
+The catalog stays about authored payloads: the library's and a project's own
+files and folders, MCP definition files included. What a project has received
+through an `AGENTS.md` block or an agent config entry is an installed view,
+built from the ledger plus the target files, which status and the snapshot
+show. `edit`, `rename` and `remove` aimed at an installed section or entry are
+refused, with a hint to uninstall, or to change the library copy and update,
+and foreign entries found in agent configs are listed as foreign. "Discovery
+matches on `Layout` and nothing else has to know" then stays true for authored
+files: a section or an entry is never authored in place but rendered from a
+library artifact, and editing one in place is exactly what the Edited state
+(D-04) detects. Rejected: new `Layout` variants, which would make discovery
+parse `AGENTS.md` blocks and agent configs; and treating installed sections and
+entries as artifacts editable in place, which lets three agents' config formats
+leak into the lifecycle code. Unblocks #33, #45, #62, #93, #94 and #95.
+
 ## Open questions
 
 - **Precedence between projects.** Two projects in one workspace can declare
