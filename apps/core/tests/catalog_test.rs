@@ -1,10 +1,11 @@
 //! Discovery of every kind, against real mind projects on disk.
 
 use std::fs;
+use std::path::{Path, PathBuf};
 
 use mindflayer_core::{
-    Catalog, Declared, DiscoveryFailure, Kind, MindProject, Reference, RuleManifest,
-    ValidationIssue,
+    Agent, Catalog, Declared, Directories, DiscoveryFailure, Kind, MindProject, Provenance,
+    Reference, RuleManifest, Share, ValidationIssue,
 };
 use tempfile::TempDir;
 
@@ -488,4 +489,284 @@ fn a_workspace_that_never_gathered_has_an_empty_shelf_and_no_failure() {
 
     assert!(catalog.is_empty());
     assert!(catalog.failures().is_empty());
+}
+
+// ---------------------------------------------------------------------------
+// A project marked by its settings
+// ---------------------------------------------------------------------------
+
+/// A project called `name` under `parent`, marked by its settings, naming
+/// `agents` and authoring skills in `skills`, if anywhere.
+fn marked(parent: &TempDir, name: &str, agents: &[Agent], skills: Option<&str>) -> MindProject {
+    let root = parent.path().join(name);
+    fs::create_dir_all(&root).unwrap();
+    let directories = skills.map_or_else(Directories::default, |skills| {
+        Directories::default().with(Kind::Skill, skills)
+    });
+    MindProject::init_settings(&root, agents, Share::Shared, &directories)
+        .unwrap()
+        .0
+}
+
+/// Write `contents` as the SKILL.md of `folder`, a path below the project.
+fn put(project: &MindProject, folder: &str, contents: &str) -> PathBuf {
+    let dir = project.root().join(folder);
+    fs::create_dir_all(&dir).unwrap();
+    fs::write(dir.join("SKILL.md"), contents).unwrap();
+    dir
+}
+
+#[test]
+fn a_skill_in_both_agents_folders_is_listed_once_for_all_three_agents() {
+    let parent = TempDir::new().unwrap();
+    let one = marked(&parent, "alpha", &Agent::ALL, Some("skills"));
+    let shared = put(&one, ".agents/skills/deploy", &skill_file("deploy"));
+    let claudes = put(&one, ".claude/skills/deploy", &skill_file("deploy"));
+
+    let catalog = Catalog::discover(std::slice::from_ref(&one));
+
+    assert!(catalog.failures().is_empty(), "{:?}", catalog.failures());
+    assert_eq!(catalog.artifacts().len(), 1);
+    let deploy = &catalog.artifacts()[0];
+    assert_eq!(deploy.name(), "deploy");
+    assert_eq!(deploy.agents(), Agent::ALL);
+    assert!(!deploy.copies_differ());
+    let copies = deploy.copies();
+    let paths: Vec<&Path> = copies.iter().map(|copy| copy.path()).collect();
+    assert_eq!(paths, [shared.as_path(), claudes.as_path()]);
+    assert_eq!(copies[0].agents(), [Agent::Codex, Agent::OpenCode]);
+    assert_eq!(copies[1].agents(), [Agent::Claude, Agent::OpenCode]);
+    // Nothing records it, and it is not where the project authors: somebody
+    // keeps it there by hand.
+    assert_eq!(deploy.provenance(), Provenance::Foreign);
+}
+
+#[test]
+fn a_skill_only_in_claudes_folder_is_seen_by_claude_and_opencode() {
+    let parent = TempDir::new().unwrap();
+    let one = marked(&parent, "alpha", &Agent::ALL, Some("skills"));
+    put(&one, ".claude/skills/review", &skill_file("review"));
+
+    let catalog = Catalog::discover(std::slice::from_ref(&one));
+
+    let review = &catalog.artifacts()[0];
+    assert_eq!(catalog.artifacts().len(), 1);
+    // OpenCode reads Claude's folder as well as its own, though it is sent
+    // its copies only in `.agents/skills`.
+    assert_eq!(review.agents(), [Agent::Claude, Agent::OpenCode]);
+    assert_eq!(review.copies().len(), 1);
+}
+
+#[test]
+fn copies_that_differ_are_listed_once_and_said() {
+    let parent = TempDir::new().unwrap();
+    let one = marked(&parent, "alpha", &Agent::ALL, None);
+    let shared = put(&one, ".agents/skills/deploy", &skill_file("deploy"));
+    let claudes = put(
+        &one,
+        ".claude/skills/deploy",
+        "---\nname: deploy\ndescription: Does it another way\n---\n",
+    );
+
+    let catalog = Catalog::discover(std::slice::from_ref(&one));
+
+    assert_eq!(catalog.artifacts().len(), 1);
+    let deploy = &catalog.artifacts()[0];
+    assert!(deploy.copies_differ());
+    // Described by its first copy.
+    assert_eq!(deploy.summary(), Some("Does deploy things"));
+    assert_eq!(catalog.failures().len(), 1);
+    let failure = &catalog.failures()[0];
+    assert!(matches!(failure, DiscoveryFailure::Diverged { .. }));
+    assert!(!failure.is_unreadable());
+    assert_eq!(failure.path(), shared);
+    assert_eq!(
+        failure.to_string(),
+        format!(
+            "the copies of `deploy` at {} and {} differ, so the agents reading them do not all \
+             load the same skill",
+            shared.display(),
+            claudes.display()
+        )
+    );
+}
+
+#[test]
+fn each_copy_is_validated_in_its_own_folder() {
+    let parent = TempDir::new().unwrap();
+    let one = marked(&parent, "alpha", &Agent::ALL, None);
+    put(&one, ".agents/skills/deploy", &skill_file("deploy"));
+    put(
+        &one,
+        ".claude/skills/ship",
+        "---\nname: deploy\ndescription: \"\"\n---\n",
+    );
+
+    let catalog = Catalog::discover(std::slice::from_ref(&one));
+
+    let deploy = &catalog.artifacts()[0];
+    let copies = deploy.copies();
+    assert_eq!(copies[0].issues(), []);
+    assert_eq!(
+        copies[1].issues(),
+        [
+            ValidationIssue::NameDirectoryMismatch {
+                name: "deploy".into(),
+                directory: "ship".into()
+            },
+            ValidationIssue::DescriptionEmpty
+        ]
+    );
+    // The artifact is judged on both, though it reads as its first.
+    assert_eq!(deploy.validate(), copies[1].issues());
+}
+
+#[test]
+fn an_authored_folder_that_is_an_agents_folder_is_read_once() {
+    let parent = TempDir::new().unwrap();
+    let one = marked(&parent, "alpha", &Agent::ALL, Some(".claude/skills"));
+    put(&one, ".claude/skills/deploy", &skill_file("deploy"));
+
+    let catalog = Catalog::discover(std::slice::from_ref(&one));
+
+    assert!(catalog.failures().is_empty(), "{:?}", catalog.failures());
+    assert_eq!(catalog.artifacts().len(), 1);
+    let deploy = &catalog.artifacts()[0];
+    assert_eq!(deploy.copies().len(), 1);
+    assert_eq!(deploy.provenance(), Provenance::Authored);
+    assert_eq!(deploy.agents(), [Agent::Claude, Agent::OpenCode]);
+    assert_eq!(
+        Catalog::folders(&one, Kind::Skill),
+        [
+            one.root().join(".agents").join("skills"),
+            one.root().join(".claude").join("skills")
+        ]
+    );
+}
+
+#[test]
+fn a_skill_authored_where_no_agent_reads_is_an_artifact_of_its_own() {
+    let parent = TempDir::new().unwrap();
+    let one = marked(&parent, "alpha", &Agent::ALL, Some("skills"));
+    let authored = put(&one, "skills/deploy", &skill_file("deploy"));
+    let claudes = put(&one, ".claude/skills/deploy", &skill_file("deploy"));
+
+    let catalog = Catalog::discover(std::slice::from_ref(&one));
+
+    // The project's own, which reaches no agent until it is installed, is
+    // not an agent's copy of it, however alike the two are.
+    let found: Vec<(&Path, Vec<Agent>, Provenance)> = catalog
+        .artifacts()
+        .iter()
+        .map(|artifact| (artifact.path(), artifact.agents(), artifact.provenance()))
+        .collect();
+    assert_eq!(
+        found,
+        [
+            (
+                claudes.as_path(),
+                vec![Agent::Claude, Agent::OpenCode],
+                Provenance::Foreign
+            ),
+            (authored.as_path(), vec![], Provenance::Authored),
+        ]
+    );
+    assert_eq!(
+        Catalog::folders(&one, Kind::Skill),
+        [
+            one.root().join(".agents").join("skills"),
+            one.root().join(".claude").join("skills"),
+            one.root().join("skills")
+        ]
+    );
+}
+
+#[test]
+fn a_project_is_read_only_in_the_folders_of_the_agents_it_names() {
+    let parent = TempDir::new().unwrap();
+    let one = marked(&parent, "alpha", &[Agent::Codex], None);
+    put(&one, ".claude/skills/review", &skill_file("review"));
+    put(&one, ".agents/skills/deploy", &skill_file("deploy"));
+
+    let catalog = Catalog::discover(std::slice::from_ref(&one));
+
+    let found: Vec<(&str, Vec<Agent>)> = catalog
+        .artifacts()
+        .iter()
+        .map(|artifact| (artifact.name(), artifact.agents()))
+        .collect();
+    assert_eq!(found, [("deploy", vec![Agent::Codex])]);
+}
+
+#[test]
+fn a_project_a_mind_toml_marks_is_read_only_where_its_marker_says() {
+    let (_dir, one) = project("alpha");
+    put(&one, ".claude/skills/review", &skill_file("review"));
+    write_skill(&one, "deploy", &skill_file("deploy"));
+
+    let catalog = Catalog::discover(std::slice::from_ref(&one));
+
+    let names: Vec<&str> = catalog.artifacts().iter().map(|a| a.name()).collect();
+    assert_eq!(names, ["deploy"]);
+    assert_eq!(catalog.artifacts()[0].agents(), []);
+    assert_eq!(
+        Catalog::folders(&one, Kind::Skill),
+        [one.directory_for(Kind::Skill).unwrap()]
+    );
+}
+
+#[test]
+fn what_a_project_authors_is_found_apart_from_its_agents_folders() {
+    let parent = TempDir::new().unwrap();
+    let one = marked(&parent, "alpha", &Agent::ALL, Some("skills"));
+    let authored = put(&one, "skills/deploy", &skill_file("deploy"));
+    put(&one, ".claude/skills/deploy", &skill_file("deploy"));
+    put(&one, ".agents/skills/review", &skill_file("review"));
+
+    let catalog = Catalog::discover_authored(std::slice::from_ref(&one), &Kind::ALL);
+
+    let paths: Vec<&Path> = catalog.artifacts().iter().map(|a| a.path()).collect();
+    assert_eq!(paths, [authored.as_path()]);
+}
+
+#[cfg(unix)]
+#[test]
+fn one_folder_reached_through_a_link_is_one_copy() {
+    let parent = TempDir::new().unwrap();
+    let one = marked(&parent, "alpha", &Agent::ALL, None);
+    put(&one, ".agents/skills/deploy", &skill_file("deploy"));
+    fs::create_dir_all(one.root().join(".claude/skills")).unwrap();
+    std::os::unix::fs::symlink(
+        "../../.agents/skills/deploy",
+        one.root().join(".claude/skills/deploy"),
+    )
+    .unwrap();
+
+    let catalog = Catalog::discover(std::slice::from_ref(&one));
+
+    assert!(catalog.failures().is_empty(), "{:?}", catalog.failures());
+    let deploy = &catalog.artifacts()[0];
+    assert_eq!(deploy.copies().len(), 2);
+    assert!(!deploy.copies_differ());
+    assert_eq!(deploy.agents(), Agent::ALL);
+}
+
+#[cfg(unix)]
+#[test]
+fn a_copy_holding_a_link_is_said_rather_than_followed_to_compare_it() {
+    let parent = TempDir::new().unwrap();
+    let one = marked(&parent, "alpha", &Agent::ALL, None);
+    put(&one, ".agents/skills/deploy", &skill_file("deploy"));
+    let claudes = put(&one, ".claude/skills/deploy", &skill_file("deploy"));
+    std::os::unix::fs::symlink("/dev/zero", claudes.join("endless")).unwrap();
+
+    let catalog = Catalog::discover(std::slice::from_ref(&one));
+
+    assert_eq!(catalog.artifacts().len(), 1);
+    assert!(!catalog.artifacts()[0].copies_differ());
+    assert_eq!(catalog.failures().len(), 1, "{:?}", catalog.failures());
+    let failure = &catalog.failures()[0];
+    assert!(matches!(failure, DiscoveryFailure::Uncompared { .. }));
+    assert!(failure.is_unreadable());
+    assert_eq!(failure.path(), claudes);
 }

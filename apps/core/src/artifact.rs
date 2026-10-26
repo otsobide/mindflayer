@@ -65,6 +65,8 @@ pub struct Artifact {
     placement: Placement,
     /// Every other copy, in the order discovery found them.
     others: Vec<ArtifactCopy>,
+    /// Whether its copies do not all hold the same names and bytes.
+    differ: bool,
 }
 
 /// Who reads a copy where it sits, and who put it there.
@@ -193,6 +195,7 @@ impl Artifact {
             summary,
             placement: Placement::authored(),
             others: Vec::new(),
+            differ: false,
         })
     }
 
@@ -221,6 +224,7 @@ impl Artifact {
             summary: opening_line(body),
             placement: Placement::authored(),
             others: Vec::new(),
+            differ: false,
         })
     }
 
@@ -297,9 +301,39 @@ impl Artifact {
         }
     }
 
+    /// Whether its copies do not all hold the same names and bytes: then the
+    /// agents reading them do not all load the same thing. Claude and Codex
+    /// each read one of the standard folders, and OpenCode, reading both,
+    /// loads whichever it takes. Discovery says so as a failure too.
+    pub fn copies_differ(&self) -> bool {
+        self.differ
+    }
+
     /// How each copy stands, the first first.
     fn placements(&self) -> impl Iterator<Item = &Placement> {
         std::iter::once(&self.placement).chain(self.others.iter().map(|copy| &copy.placement))
+    }
+
+    /// Say who reads the copy at `path` and whether it sits in a folder its
+    /// holder authors in: discovery's to say, once it has loaded the copy
+    /// from a folder it knows that of.
+    pub(crate) fn placed(&mut self, agents: Vec<Agent>, authored: bool) {
+        self.placement.agents = agents;
+        self.placement.authored = authored;
+    }
+
+    /// Take `other`, loaded under the same name from another place, as one
+    /// more copy of this one, judged as it is there; `differs` when it does
+    /// not hold what the first copy holds.
+    pub(crate) fn take_copy(&mut self, other: Artifact, differs: bool) {
+        let issues = other.issues();
+        self.others.push(ArtifactCopy {
+            path: other.path,
+            placement: other.placement,
+            issues,
+        });
+        self.others.extend(other.others);
+        self.differ |= differs || other.differ;
     }
 
     /// The root of the mind project this was found in.

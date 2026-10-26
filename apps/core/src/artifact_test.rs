@@ -22,6 +22,7 @@ fn skill(name: &str, description: &str, directory: &str) -> Artifact {
         summary: first_line(description),
         placement: Placement::authored(),
         others: Vec::new(),
+        differ: false,
     }
 }
 
@@ -48,6 +49,7 @@ fn declaring(name: &str, summary: Option<&str>, manifest: RuleManifest) -> Artif
         summary: summary.map(str::to_owned),
         placement: Placement::authored(),
         others: Vec::new(),
+        differ: false,
     }
 }
 
