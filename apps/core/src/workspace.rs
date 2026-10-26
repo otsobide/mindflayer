@@ -879,9 +879,11 @@ impl FlayerWorkspace {
             root: self.root.clone(),
             config: MindConfig {
                 // The project marker's version rather than the workspace's:
-                // `directory_for` reads it against `DIRECTORIES_VERSION`, a
-                // line drawn in the project format, and a workspace's own
-                // artifacts have never lived inside its marker's directory.
+                // `directory_for` holds it against `DIRECTORIES_VERSION`, a
+                // line drawn in the project format, and below it sends every
+                // kind its marker does not name into `.mind`, where a
+                // workspace has never kept its artifacts and a v1
+                // `flayer.toml` would send them.
                 version: MIND_FORMAT_VERSION,
                 name: self.config.name.clone(),
                 directories: self.config.directories.clone(),
