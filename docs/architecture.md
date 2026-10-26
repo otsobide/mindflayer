@@ -628,10 +628,11 @@ Why that file, and why written that way:
 And how it edits:
 
 - **Only between the markers.** Every line outside comes back byte for byte,
-  its line ending included. New lines take the ending the file already uses,
-  and a last line without a newline gets one only when a block has to follow
-  it. The file is replaced through a temporary and a rename, as a marker edit
-  is.
+  its line ending included. New lines take the ending the file already uses.
+  A last line without a newline gets one when a block has to follow it, and
+  the block's end marker goes without one instead, so the file still ends the
+  way it did and dropping the block gives that line back as it was. The file
+  is replaced through a temporary and a rename, as a marker edit is.
 - **A block it cannot read is left alone.** A begin with no end, an end with no
   begin, a second block or a project with two groups is a failure for the
   caller to collect, and nothing is written. Guessing where a missing end

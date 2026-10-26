@@ -88,8 +88,20 @@ fn lines_on_both_sides_of_the_block_stay_byte_identical() {
     // CRLF, no final newline: what somebody wrote, exactly as they wrote it.
     fs::write(&file, b"*.log\r\n/scratch/").unwrap();
     exclude::add(repo.path(), ".", &[skill("one")]).unwrap();
+    assert_eq!(
+        String::from_utf8(fs::read(&file).unwrap()).unwrap(),
+        "*.log\r\n/scratch/\r\n# mindflayer:begin\r\n# project .\r\n/.agents/skills/one/\r\n\
+         # mindflayer:end"
+    );
+    assert!(ignored(repo.path(), "scratch/"));
+    assert!(ignored(repo.path(), ".agents/skills/one/"));
+    exclude::remove(repo.path(), ".", &[skill("one")]).unwrap();
+    assert_eq!(fs::read(&file).unwrap(), b"*.log\r\n/scratch/");
+
+    // And with a line of theirs after the block.
+    exclude::add(repo.path(), ".", &[skill("one")]).unwrap();
     let mut text = fs::read(&file).unwrap();
-    text.extend_from_slice(b"target/\r\n");
+    text.extend_from_slice(b"\r\ntarget/\r\n");
     fs::write(&file, &text).unwrap();
 
     exclude::add(repo.path(), ".", &[skill("two")]).unwrap();

@@ -480,18 +480,21 @@ impl ExcludeFile {
 
         if self.block.is_none() {
             // The new block goes on lines of its own, so a last line without
-            // a newline gets one. Its text is untouched; only the ending it
-            // lacked is added, and it stays when the block goes.
+            // a newline gets one, and the end marker goes without one
+            // instead: the file still ends the way it did, and dropping the
+            // block takes the newline back.
+            let mut close = ending;
             if let Some(last) = self.before.last_mut() {
                 if last.end.is_empty() {
                     last.end = ending;
+                    close = b"";
                 }
             }
             self.block = Some(Block {
                 begin: Line::new(BEGIN, ending),
                 loose: Vec::new(),
                 groups: Vec::new(),
-                end: Line::new(END, ending),
+                end: Line::new(END, close),
             });
         }
         let block = self.block.as_mut().expect("there is a block now");
@@ -546,9 +549,15 @@ impl ExcludeFile {
             block.groups.remove(index);
         }
         if block.groups.is_empty() && block.loose.iter().all(Line::is_blank) {
+            // An end marker without a newline is the file's last line, so the
+            // file ended without one and still does once the block is gone.
+            let unended = block.end.end.is_empty();
             self.block = None;
             let after = std::mem::take(&mut self.after);
             self.before.extend(after);
+            if let Some(last) = self.before.last_mut().filter(|_| unended) {
+                last.end = b"";
+            }
         }
         Ok(true)
     }

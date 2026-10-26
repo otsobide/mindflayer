@@ -63,13 +63,32 @@ fn lines_after_the_block_stay_where_they_are() {
 }
 
 #[test]
-fn a_last_line_without_a_newline_gets_one_before_the_block() {
+fn a_file_without_a_final_newline_keeps_ending_without_one() {
     let mut file = ExcludeFile::parse(b"*.log").unwrap();
     file.add("a", &patterns(&["/a/"])).unwrap();
+    let written = text(&file);
+    assert_eq!(
+        written,
+        "*.log\n# mindflayer:begin\n# project a\n/a/\n# mindflayer:end"
+    );
+
+    let mut file = ExcludeFile::parse(written.as_bytes()).unwrap();
+    file.add("a", &patterns(&["/b/"])).unwrap();
     assert_eq!(
         text(&file),
-        "*.log\n# mindflayer:begin\n# project a\n/a/\n# mindflayer:end\n"
+        "*.log\n# mindflayer:begin\n# project a\n/a/\n/b/\n# mindflayer:end"
     );
+    file.remove("a", &patterns(&["/a/", "/b/"])).unwrap();
+    assert_eq!(file.to_bytes(), b"*.log");
+}
+
+#[test]
+fn an_empty_file_gets_a_block_ending_in_a_newline_and_is_empty_again() {
+    let mut file = ExcludeFile::parse(b"").unwrap();
+    file.add("a", &patterns(&["/a/"])).unwrap();
+    assert!(text(&file).ends_with("# mindflayer:end\n"));
+    file.remove("a", &patterns(&["/a/"])).unwrap();
+    assert_eq!(file.to_bytes(), b"");
 }
 
 #[test]
