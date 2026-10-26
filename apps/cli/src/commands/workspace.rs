@@ -60,9 +60,10 @@ pub(crate) fn load_command(
             verb: "load into",
             named: true,
         })?;
+    // In one rewrite, refused whole when one source is the workspace itself:
+    // one named with `-W` is not passed over for being among them.
     let mut text = String::new();
-    for source in &opened {
-        let (entry, registration) = workspace.load(source)?;
+    for (source, (entry, registration)) in opened.iter().zip(workspace.load_all(&opened)?) {
         text.push_str(&loaded(&workspace, source.name(), &entry, registration));
     }
     text.push_str(&acted_on("into", &workspace, home));

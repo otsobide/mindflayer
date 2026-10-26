@@ -89,6 +89,21 @@ fn a_workspace_cannot_load_itself() {
 }
 
 #[test]
+fn loading_several_loads_none_when_one_is_the_workspace_itself() {
+    let (_dir, mut target, _, team) = target_and_team(&[]);
+    let same = FlayerWorkspace::open(target.root()).unwrap();
+    let before = marker(&target);
+
+    let error = target.load_all(&[team, same]).unwrap_err();
+
+    assert!(
+        matches!(error, WorkspaceError::LoadsItself { .. }),
+        "{error}"
+    );
+    assert_eq!(marker(&target), before, "half a load happened");
+}
+
+#[test]
 fn a_marker_from_before_loading_existed_gains_the_key_when_it_is_first_used() {
     let (_dir, target, _, team) = target_and_team(&[]);
     let path = target.root().join(FLAYER_DIR).join(FLAYER_CONFIG);

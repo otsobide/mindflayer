@@ -113,6 +113,26 @@ fn load_loads_none_when_one_path_is_not_a_workspace() {
 }
 
 #[test]
+fn load_loads_none_when_the_named_workspace_is_among_them() {
+    // Named, it is not passed over for being one of the sources, so the
+    // refusal has to come before the source listed ahead of it is written.
+    let (dir, target, _team) = target_and_team();
+    let named = target.to_string_lossy().into_owned();
+
+    let error = flayer(dir.path(), &["-W", &named, "load", "team", "target"]).unwrap_err();
+
+    assert!(
+        error.error.to_string().contains("cannot load itself"),
+        "{}",
+        error.error
+    );
+    assert!(
+        registry(&target).contains("loaded = []"),
+        "half a load happened"
+    );
+}
+
+#[test]
 fn loading_twice_says_so() {
     let (_dir, target, _team) = target_and_team();
     flayer(&target, &["load", "../team"]).unwrap();

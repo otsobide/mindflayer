@@ -667,28 +667,50 @@ impl FlayerWorkspace {
         &mut self,
         source: &FlayerWorkspace,
     ) -> Result<(PathBuf, Registration), WorkspaceError> {
-        if same_directory(source.root(), &self.root) {
-            return Err(WorkspaceError::LoadsItself {
-                path: self.root.clone(),
-            });
+        let mut loaded = self.load_all(std::slice::from_ref(source))?;
+        Ok(loaded.remove(0))
+    }
+
+    /// [`load`](Self::load) several at once, in one rewrite of the file: all
+    /// of them or, if one is this workspace, none. A workspace named with
+    /// `-W` is not passed over for being among what it is told to load, so
+    /// the refusal has to come before the first entry is written.
+    pub fn load_all(
+        &mut self,
+        sources: &[FlayerWorkspace],
+    ) -> Result<Vec<(PathBuf, Registration)>, WorkspaceError> {
+        let mut wanted = Vec::new();
+        for source in sources {
+            if same_directory(source.root(), &self.root) {
+                return Err(WorkspaceError::LoadsItself {
+                    path: self.root.clone(),
+                });
+            }
+            let entry = self.entry_for(source.root());
+            let written =
+                paths::to_config_string(&entry).ok_or_else(|| WorkspaceError::NonUtf8Path {
+                    path: entry.clone(),
+                })?;
+            wanted.push((written, paths::normalize(source.root())));
         }
-        let entry = self.entry_for(source.root());
-        let target = paths::normalize(source.root());
-        let written =
-            paths::to_config_string(&entry).ok_or_else(|| WorkspaceError::NonUtf8Path {
-                path: entry.clone(),
-            })?;
         let root = self.root.clone();
 
         self.edit_array(LOADED_KEY, move |array| {
-            if let Some(existing) = entries(array)
-                .into_iter()
-                .find(|entry| points_at(&root, entry, &target))
-            {
-                return Ok((existing, Registration::AlreadyRegistered));
-            }
-            array.push(written.as_str());
-            Ok((PathBuf::from(&written), Registration::Added))
+            Ok(wanted
+                .iter()
+                .map(|(written, target)| {
+                    // Against the array as this edit leaves it, so two
+                    // spellings of one source in one call are one load.
+                    if let Some(existing) = entries(array)
+                        .into_iter()
+                        .find(|entry| points_at(&root, entry, target))
+                    {
+                        return (existing, Registration::AlreadyRegistered);
+                    }
+                    array.push(written.as_str());
+                    (PathBuf::from(written), Registration::Added)
+                })
+                .collect())
         })
     }
 
