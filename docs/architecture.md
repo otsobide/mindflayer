@@ -2217,9 +2217,8 @@ what an agent reads, and where, is a fact about that agent, so a new one is a
 new arm in every match. An agent named at runtime would meet a table with no
 entry for it and quietly reach nothing.
 
-`TargetTable` says where each kind goes in a project for each agent, one entry
-per kind and agent, every location relative to the project's root.
-`TargetTable::standard` is
+`TargetTable` says where each kind goes in a project for each agent, every
+location relative to the project's root. `TargetTable::standard` is
 [D-07](#d-07-one-copy-per-agent-folder)'s layout, and the facts under it are
 the ones docs/agents.md lists for #28:
 
@@ -2250,11 +2249,12 @@ table carries that. MCP servers, entries in each agent's own config file, come
 in M6.
 
 `TargetTable::targets(kind, agents)` gives one target (`AgentTarget`) per
-location, each with the agents it serves: all three agents take a skill in two
-places, Codex and OpenCode share one copy, and an empty list takes none. An agent named twice is served once,
-and an agent the kind does not reach adds nothing. The targets are sorted by
-location and their agents in report order, in core, so two front ends list
-them alike. Installing a copy into each (#34) starts from this list.
+location, each with the agents it is for: all three agents take a skill in two
+places, Codex and OpenCode share one copy, and an empty list takes none. An
+agent named twice is served once, and an agent the kind does not reach adds
+nothing. The targets are sorted by location and their agents in report order,
+in core, so two front ends list them alike. Installing a copy into each (#34)
+starts from this list.
 
 The table is a value a caller is handed, not a function it reaches for,
 because the standard layout is only the default: the owner's amendment to
@@ -2267,6 +2267,14 @@ hard-wire and #40 would have to find again; and a folder per agent alone,
 which cannot say that a skill and a rule reach Claude in different places.
 Checking what an override names, that it stays inside the project, is #40's,
 where the override is read.
+
+A target's agents are the ones its copy is for, not proof that they read it:
+the standard layout is built from what each agent reads, but a folder an
+override names reaches an agent only once that agent is pointed at it, and
+warning of a target none of them reads is #40's status check. The table's
+shape is private so the override can fit it: one location per kind and agent
+is all the standard layout needs, and it can grow into the list of folders
+per kind that the override names when #40 lands, without a caller noticing.
 
 It is pure: nothing is looked for on disk, and locations are joined a folder
 at a time, so each has one kind of separator on Windows too. Whether a folder
