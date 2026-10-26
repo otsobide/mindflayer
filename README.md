@@ -155,6 +155,40 @@ run `flayer init` there first.
 `init` never overwrites an existing marker. Run it twice and it says so and
 changes nothing, so it is safe in a script.
 
+## Try it with the examples
+
+`examples/` in this repository is a workspace of its own, holding two skills
+and two rules written to be used as they are, so there is something to
+install before you have gathered anything. With the repository cloned in
+`~/src/mindflayer`, [name it](#choosing-a-workspace) to see what it holds:
+
+```
+$ flayer -W ~/src/mindflayer/examples list
+skill  code-review     Reviews a change for bugs, safety, tests and scope, most severe first
+skill  commit-style    Writes commit messages in the form "<area>: <imperative summary>"
+rule   git/commits     Commit one coherent step at a time
+rule   style/comments  Comments say why, not what
+```
+
+[Load it](#loading-another-workspace) into the workspace that manages your
+projects, and install from it:
+
+```
+$ cd ~/Projects
+$ flayer load ~/src/mindflayer/examples
+loaded examples as ../src/mindflayer/examples: 2 skills to install
+  into the workspace at /home/you/Projects
+
+$ flayer install -p collapse commit-style
+installed commit-style into collapse, from load:../src/mindflayer/examples
+```
+
+`collapse/skills/commit-style` now holds the skill and the
+`references/examples.md` it carries. Only the skills are offered, because a
+rule cannot be installed yet: the two rules are there to read, and to copy
+into a project by hand. `flayer -W ~/src/mindflayer/examples validate` says
+all four are ok.
+
 ## Commands
 
 The surface is split the way the model is. `mind` acts on the project you are
@@ -959,7 +993,8 @@ apps/web     mindflayer-web    — the web panel the server embeds: Vue and
 ```
 
 See [docs/architecture.md](docs/architecture.md) for why the split is where it
-is.
+is. `examples/` sits beside `apps/` and is not an app: it is the workspace
+[to try Mindflayer with](#try-it-with-the-examples).
 
 ## Development
 
