@@ -97,6 +97,13 @@ under `apps/` with its own `Makefile`:
   libraries for the CSP. `src/*.d.ts` are written by the Vite plugins and
   committed.
 
+Beside them, `examples/` is content and not an app: a flayer workspace whose
+own two skills and two rules anyone can `flayer load` to try Mindflayer
+without gathering. `apps/cli/tests/examples_test.rs` holds every example to
+`validate` with no warning and finds the README's "Try it with the examples"
+output in what the commands print, so changing an example's summary line
+means changing the README too.
+
 ## Invariants that hold the design together
 
 These are easy to break from a single file without noticing.

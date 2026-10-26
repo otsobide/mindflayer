@@ -21,6 +21,32 @@ the panel are the apps [D-17](#d-17-the-next-front-end-is-a-local-web-panel)
 adds. Both sit beside the CLI rather than around it. The panel is in
 `NODE_APPS` rather than `APPS` for now (see [the web panel](#the-web-panel)).
 
+### The examples are a workspace
+
+`examples/` sits beside `apps/` and is content, not an app: a flayer
+workspace (`examples/.mindflayer/flayer.toml`) holding two skills and two
+rules of its own, so there is something to install while gathering is
+paused. A workspace rather than files the binaries embed or `flayer init`
+copies in, because [loading](#loading-a-third-place-read-live) already offers
+one's own skills to any other, read live from the clone: the examples take
+the path a team's workspace takes, and need no command of their own.
+
+Its `[directories]` are spelled out, so it reads the same whatever a new
+workspace defaults to
+([D-05](#d-05-a-workspaces-library-lives-in-mindflayer)). They sit beside the
+marker rather than in `.mindflayer/library`, because the examples are meant
+to be read where the repository is browsed. No agent working on this
+repository reads them there: each looks for skills and rules in a folder of
+its own, such as `.claude` or `.agents`, not in one called `skills` or
+`rules`.
+
+`apps/cli/tests/examples_test.rs` uses the folder where it is rather than a
+copy, since that folder is what a person loads. It holds every example to
+`validate` with neither a problem nor a warning, installs `commit-style` with
+the reference it carries, checks that nothing it ran wrote into the folder,
+and finds the README's walk-through in the output of the commands it shows.
+An example whose summary changes changes the README with it.
+
 ## Where the line between core and a front end falls
 
 `mindflayer-core` knows what a mind project is, what a flayer workspace is, and
@@ -2460,6 +2486,16 @@ leak into the lifecycle code. Unblocks #33, #45, #62, #93, #94 and #95.
   [D-03](#d-03-rules-reach-every-agent-through-agentsmd) answers it: a rule
   reaches a project as its section of a managed block in `AGENTS.md`, with
   `.claude/rules/mindflayer` as Claude's fallback, and #45 carries it out.
+  Until then [the examples'](#the-examples-are-a-workspace) two rules are
+  listed and validated, but a load offers only their skills.
+- **Examples outside a clone.** The examples are a folder in the repository,
+  so only somebody with a clone has them to load; a binary that arrives some
+  other way, as a release would, has none. Embedding them in the binary, or
+  copying them into a workspace on `flayer init`, would reach everybody, at
+  the price of a second way into a workspace beside loading, and of files a
+  workspace holds without having asked. #134 left both out, with gathering
+  paused; a gathered or published copy of `examples/` would answer it
+  without either.
 - **An edited copy that stays managed.** Editing an installed skill makes it
   its author's, so updates from the shelf stop reaching it — the safe answer,
   not the best one. A hash of what was installed, kept in the ledger, would let
