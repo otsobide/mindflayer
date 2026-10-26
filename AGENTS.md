@@ -90,7 +90,9 @@ These are easy to break from a single file without noticing.
   (`lifecycle::add`, `finish_edit`, `rename` and `remove`) drop any record
   they would leave behind and return what they did (`lifecycle::Record`),
   which the CLI only renders. `install::disown` is private to core, so no
-  front end drops a record on its own.
+  front end drops a record on its own. A front end adds through
+  `lifecycle::add`, never `create` or `create_from`, which leave a stale
+  record in place.
 - **Loaded and gathered content is untrusted.**
   - An installed name must be one folder name (`install::is_folder_name`).
   - Symlinks are followed only inside the source (`copy::tree`'s `within`).

@@ -565,7 +565,8 @@ pub fn uninstall(
 ///
 /// Only the changes in [`crate::lifecycle`] call it, each when its change
 /// calls for it. Public, it would let a front end drop a record on a rule of
-/// its own, or forget to, which is what moving the rule into core was for.
+/// its own. Keeping it here cannot make a front end drop one; changing things
+/// through [`crate::lifecycle`] does.
 ///
 /// `workspace` is the one the front end resolved for the command, given
 /// rather than found by walking up from the project: a walk misses every

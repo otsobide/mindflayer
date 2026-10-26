@@ -8,8 +8,11 @@
 //!
 //! Each change also sees to the ledger's record of what was installed under
 //! the names it touches, and says in its result what it did ([`Record`]). The
-//! rule is one, and it lives here rather than with each front end that makes
-//! a change, so a second front end cannot forget it or apply it differently.
+//! rule is one, and it lives here rather than in a front end, so that no
+//! front end can apply it differently. Only one that changes things through
+//! these functions gets it, though: [`create`] and [`create_from`], the
+//! writers [`add`] is built on, see to no record, and a front end that added
+//! with them would leave a stale one in place.
 
 use std::fs;
 use std::io;

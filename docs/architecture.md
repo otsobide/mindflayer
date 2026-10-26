@@ -847,10 +847,13 @@ after the change, as it once did, put a rule outside core: the web panel, and
 installed rules and MCP entries when they come, would each have had to repeat
 it and could each have got it wrong. Each change returns what it did to the
 record (`lifecycle::Record`), and the CLI only says so; `install::disown`, which
-does the dropping, is private to core so that nothing else can. A record that
-cannot be dropped is reported beside the change rather than instead of it, and
-the CLI prints it as a warning: the change has been made, and saying it was
-not would be false.
+does the dropping, is private to core so that nothing else can. That keeps a
+front end from applying the rule differently, not from skipping it: `create`
+and `create_from`, the writers `lifecycle::add` is built on, see to no record
+and stay public for core's tests, so a front end adds through `add`. A record
+that cannot be dropped is reported beside the change rather than instead of
+it, and the CLI prints it as a warning: the change has been made, and saying
+it was not would be false.
 
 Editing is split in two, because the editor is not core's to run: which one
 comes from `$VISUAL` or `$EDITOR`, and core never reads the environment.
