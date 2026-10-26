@@ -245,6 +245,11 @@ variable the agent itself reads, then from its folder in your home:
 As with `--home`, set to empty (`--codex-home ""`) there is none, and that
 agent's folder is left alone.
 
+OpenCode itself reads `$OPENCODE_CONFIG_DIR` on top of `~/.config/opencode`
+rather than in its place, by its own documentation. Mindflayer takes one
+folder for each agent for now, the first the table gives; whether a check has
+to read both of OpenCode's is still open.
+
 ## Gathering skills from elsewhere
 
 A workspace has a **shelf**: skills collected from somewhere else, held by the

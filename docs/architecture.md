@@ -763,6 +763,12 @@ the agent itself reads (`$CLAUDE_CONFIG_DIR`, `$CODEX_HOME`,
 it belongs to no one agent, so none of their variables moves it. Core takes
 the answer as an `AgentHomes` and never resolves one.
 
+For OpenCode that order is a simplification: its documentation reads
+`$OPENCODE_CONFIG_DIR` as a folder loaded on top of `~/.config/opencode`, not
+one that replaces it. Nothing reads either yet, so the simpler shape stands
+until #17 checks the binary; the [open questions](#open-questions) say what
+changes if it is confirmed.
+
 Those folder names are core's all the same (`AgentHomes::defaults_under`),
 the way `.mindflayer` is: the CLI finds the user's home and core says which
 folder in it each agent reads. Which folder an agent reads is a fact about
@@ -1346,6 +1352,15 @@ leak into the lifecycle code. Unblocks #33, #45, #62, #93, #94 and #95.
   programs that follow the XDG base directories do, is unverified. If #17 finds
   that it does, that variable becomes the step before the default for
   `--opencode-config-dir`, and tests that spawn a binary clear it too.
+- **`$OPENCODE_CONFIG_DIR` beside OpenCode's folder, not instead of it.**
+  `--opencode-config-dir` takes the variable in place of `~/.config/opencode`,
+  as `--codex-home` takes `$CODEX_HOME` in place of `~/.codex`. OpenCode's
+  documentation says otherwise: the folder the variable names is loaded after
+  the global one and the project's `.opencode`, so it can override their
+  settings, and the global folder is still read. If #17 confirms that on the
+  real binary, a check that reads only one folder misses what OpenCode reads
+  from the other whenever the variable is set, and `AgentHomes` needs both
+  for OpenCode: `~/.config/opencode`, and the variable's folder on top.
 - **An empty agent variable.** An empty `$CLAUDE_CONFIG_DIR`, `$CODEX_HOME` or
   `$OPENCODE_CONFIG_DIR` means no folder at all here, following
   `$MINDFLAYER_HOME`. An agent that reads an empty one as unset uses its
