@@ -118,6 +118,50 @@ fn a_skill_with_nested_metadata_is_still_listed_with_a_warning() {
 }
 
 #[test]
+fn validate_reports_a_gathered_skill_without_hiding_it() {
+    let source = repository(&[
+        ("skills/a--b/SKILL.md", &skill_file("a--b", "Doubled")),
+        ("skills/fine/SKILL.md", &skill_file("fine", "Nothing wrong")),
+    ]);
+    let dir = workspace_with_two();
+    let url = source.path().to_string_lossy().into_owned();
+    let gathered = flayer(dir.path(), &["gather", "git", &url]).unwrap();
+    assert!(
+        gathered.stdout.contains("added  a--b"),
+        "{}",
+        gathered.stdout
+    );
+
+    let outcome = flayer(dir.path(), &["validate"]).unwrap();
+
+    let shelf = fs::read_dir(dir.path().join(FLAYER_DIR).join("skills"))
+        .unwrap()
+        .next()
+        .unwrap()
+        .unwrap()
+        .file_name()
+        .into_string()
+        .unwrap();
+    assert_eq!(
+        outcome.stdout,
+        format!(
+            "a--b (shelf/{shelf}): 1 problem\n  \
+             - `a--b` is not usable as a name: it has to be lowercase letters and digits, joined by single hyphens\n\
+             alpha (alpha): ok\n\
+             beta (beta): ok\n\
+             fine (shelf/{shelf}): ok\n\
+             \n\
+             4 skills checked, 1 invalid\n"
+        )
+    );
+    assert!(outcome.stderr.is_empty(), "{:?}", outcome.stderr);
+    assert!(!outcome.ok);
+    // One project's report is that project's, and the shelf is nobody's.
+    let one = flayer(dir.path(), &["validate", "-p", "alpha"]).unwrap();
+    assert_eq!(one.stdout, "alpha: ok\n\n1 skill checked, 0 invalid\n");
+}
+
+#[test]
 fn gather_list_names_where_each_skill_came_from() {
     let source = repository(&[("skills/deploy/SKILL.md", &skill_file("deploy", "Ship it"))]);
     let dir = TempDir::new().unwrap();

@@ -5,6 +5,7 @@
 //! in what that catalog holds and in how much a row has to name to be told
 //! apart from the others.
 
+use std::borrow::Cow;
 use std::fmt::Write as _;
 use std::path::PathBuf;
 
@@ -91,6 +92,40 @@ pub(crate) fn everywhere<F>(
 where
     F: FnOnce(&Catalog, &[MindProject], Level) -> Result<(String, bool), CliError>,
 {
+    workspace_wide(workspace, warnings, projects, kinds, false, command)
+}
+
+/// `everywhere`, and what the workspace has gathered onto its shelf too.
+///
+/// For `validate`, which is where a gathered skill's problems are reported:
+/// gathering takes one that breaks the rules rather than hiding it, so
+/// something has to be able to say so again later. Listing the shelf is
+/// `gather list`'s, so `list` and `show` keep to what is held.
+pub(crate) fn everywhere_and_the_shelf<F>(
+    workspace: &FlayerWorkspace,
+    warnings: Vec<String>,
+    projects: &[MindProject],
+    kinds: Vec<Kind>,
+    command: F,
+) -> Result<Outcome, Failure>
+where
+    F: FnOnce(&Catalog, &[MindProject], Level) -> Result<(String, bool), CliError>,
+{
+    workspace_wide(workspace, warnings, projects, kinds, true, command)
+}
+
+/// The two above.
+fn workspace_wide<F>(
+    workspace: &FlayerWorkspace,
+    warnings: Vec<String>,
+    projects: &[MindProject],
+    kinds: Vec<Kind>,
+    shelf: bool,
+    command: F,
+) -> Result<Outcome, Failure>
+where
+    F: FnOnce(&Catalog, &[MindProject], Level) -> Result<(String, bool), CliError>,
+{
     // Only the kinds the workspace keeps apart from a project at its root:
     // the rest are that project's, and are found as its.
     let own: Vec<Kind> = workspace
@@ -98,9 +133,13 @@ where
         .into_iter()
         .filter(|kind| kinds.contains(kind))
         .collect();
+    // Every kind asked for, when the shelf is read at all: which of them are
+    // ever on it is discovery's to know.
+    let shelved = if shelf { kinds.clone() } else { Vec::new() };
     let catalog = Catalog::discover_kinds(projects, &kinds)
-        .merge(Catalog::discover_kinds(&[workspace.own()], &own));
-    let holders = Holders::of(workspace, &own);
+        .merge(Catalog::discover_kinds(&[workspace.own()], &own))
+        .merge(Catalog::discover_gathered(workspace, &shelved));
+    let holders = Holders::of(workspace, &own, &shelved);
     reading(
         warnings,
         &catalog,
@@ -180,7 +219,7 @@ pub(crate) fn list(catalog: &Catalog, projects: &[MindProject], level: Level) ->
         .map(|artifact| {
             let mut row = Vec::new();
             if qualify.project {
-                row.push(printable(holder_of(artifact, level)));
+                row.push(printable(&holder_of(artifact, level)));
             }
             if qualify.kind {
                 row.push(artifact.kind().slug().to_owned());
@@ -234,21 +273,44 @@ pub(crate) fn list_workspace(
 /// What a report calls the workspace, as the holder of its own artifacts.
 pub const WORKSPACE: &str = "workspace";
 
+/// What a report calls the shelf, before the source an artifact came from.
+pub const SHELF: &str = "shelf";
+
 /// Who holds what, once a report is above any one project.
 pub(crate) struct Holders {
     /// Where the workspace keeps its own, for the kinds it keeps apart.
     own: Vec<(Kind, PathBuf)>,
+    /// Where the shelf keeps each kind, for the kinds a report reads there.
+    shelf: Vec<(Kind, PathBuf)>,
 }
 
 impl Holders {
-    fn of(workspace: &FlayerWorkspace, kinds: &[Kind]) -> Self {
+    fn of(workspace: &FlayerWorkspace, own_kinds: &[Kind], shelf_kinds: &[Kind]) -> Self {
         let own = workspace.own();
         Self {
-            own: kinds
+            own: own_kinds
                 .iter()
                 .map(|kind| (*kind, own.directory_for(*kind)))
                 .collect(),
+            shelf: shelf_kinds
+                .iter()
+                .map(|kind| (*kind, workspace.gathered_dir(*kind)))
+                .collect(),
         }
+    }
+
+    /// The folder of the source an artifact on the shelf came from, when it
+    /// is on the shelf.
+    ///
+    /// The folder rather than the URL: it is what tells two sources offering
+    /// one name apart on disk, and it needs no ledger to read.
+    fn source_of<'a>(&self, artifact: &'a Artifact) -> Option<&'a str> {
+        let (_, shelf) = self
+            .shelf
+            .iter()
+            .find(|(kind, _)| *kind == artifact.kind())?;
+        let mut below = artifact.path().strip_prefix(shelf).ok()?.components();
+        below.next()?.as_os_str().to_str()
     }
 
     /// Whether an artifact is the workspace's own rather than a project's.
@@ -262,13 +324,18 @@ impl Holders {
     }
 }
 
-/// What holds an artifact, for display: the project it is in, or the
-/// workspace for the workspace's own.
-fn holder_of<'a>(artifact: &'a Artifact, level: Level<'_>) -> &'a str {
-    match level {
-        Level::Workspace(holders) if holders.is_own(artifact) => WORKSPACE,
-        _ => artifact.project_name().unwrap_or("?"),
+/// What holds an artifact, for display: the project it is in, the workspace
+/// for the workspace's own, or `shelf/<source>` for what was gathered.
+fn holder_of<'a>(artifact: &'a Artifact, level: Level<'_>) -> Cow<'a, str> {
+    if let Level::Workspace(holders) = level {
+        if let Some(source) = holders.source_of(artifact) {
+            return Cow::Owned(format!("{SHELF}/{source}"));
+        }
+        if holders.is_own(artifact) {
+            return Cow::Borrowed(WORKSPACE);
+        }
     }
+    Cow::Borrowed(artifact.project_name().unwrap_or("?"))
 }
 
 /// What a report has to name to keep its rows apart.
