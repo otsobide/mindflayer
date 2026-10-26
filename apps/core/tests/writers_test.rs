@@ -6,12 +6,13 @@
 //! it keeps apart two processes, on every platform this runs on.
 
 use std::fs;
-use std::sync::mpsc;
+use std::sync::{mpsc, Arc, Barrier};
 use std::thread;
 use std::time::{Duration, Instant};
 
+use mindflayer_core::ledger::{Action, Outcome};
 use mindflayer_core::lock::{HOLDER_FILE, WAIT};
-use mindflayer_core::{FlayerWorkspace, LockError};
+use mindflayer_core::{FlayerWorkspace, Ledger, LockError, LEDGER_FILE};
 use tempfile::TempDir;
 
 fn workspace() -> (TempDir, FlayerWorkspace) {
@@ -128,4 +129,71 @@ fn readers_never_wait_for_a_writer() {
 
     // A read that took the lock would have waited all of it and failed.
     assert!(started.elapsed() < WAIT);
+}
+
+/// What `PRAGMA journal_mode` says of the database at `path`.
+fn journal_mode(path: &std::path::Path) -> String {
+    rusqlite::Connection::open(path)
+        .unwrap()
+        .query_row("PRAGMA journal_mode", [], |row| row.get(0))
+        .unwrap()
+}
+
+#[test]
+fn two_ledger_connections_writing_at_once_both_succeed() {
+    let dir = TempDir::new().unwrap();
+    let path = dir.path().join(LEDGER_FILE);
+    // Made first, so what races is two writers, not two first opens.
+    drop(Ledger::open(&path).unwrap());
+
+    const ENTRIES: usize = 200;
+    let start = Arc::new(Barrier::new(2));
+    let writers: Vec<_> = (0..2)
+        .map(|writer| {
+            let (path, start) = (path.clone(), Arc::clone(&start));
+            thread::spawn(move || {
+                let ledger = Ledger::open(&path).unwrap();
+                start.wait();
+                for entry in 0..ENTRIES {
+                    let target = format!("writer {writer}, entry {entry}");
+                    ledger.log(Action::Gather, Some(&target), Outcome::Ok, None)?;
+                }
+                Ok::<_, mindflayer_core::LedgerError>(())
+            })
+        })
+        .collect();
+    for writer in writers {
+        writer.join().unwrap().unwrap();
+    }
+
+    let ledger = Ledger::open(&path).unwrap();
+    assert_eq!(ledger.history(usize::MAX >> 1).unwrap().len(), 2 * ENTRIES);
+}
+
+#[test]
+fn a_ledger_opened_to_write_keeps_a_write_ahead_log() {
+    let dir = TempDir::new().unwrap();
+    let path = dir.path().join(LEDGER_FILE);
+
+    drop(Ledger::open(&path).unwrap());
+
+    assert_eq!(journal_mode(&path), "wal");
+}
+
+#[test]
+fn a_ledger_opened_to_read_keeps_the_journal_it_had() {
+    let dir = TempDir::new().unwrap();
+    let path = dir.path().join(LEDGER_FILE);
+    drop(Ledger::open(&path).unwrap());
+    // A ledger an older Mindflayer made, before it kept a log.
+    rusqlite::Connection::open(&path)
+        .unwrap()
+        .query_row("PRAGMA journal_mode = DELETE", [], |row| {
+            row.get::<_, String>(0)
+        })
+        .unwrap();
+
+    drop(Ledger::open_existing(&path).unwrap().unwrap());
+
+    assert_eq!(journal_mode(&path), "delete");
 }
