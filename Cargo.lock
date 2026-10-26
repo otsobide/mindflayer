@@ -953,6 +953,7 @@ dependencies = [
  "gix-zlib",
  "nonempty",
  "parking_lot",
+ "prodash",
  "regex",
  "signal-hook 0.4.4",
  "smallvec",

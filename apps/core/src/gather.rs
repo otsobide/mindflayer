@@ -236,7 +236,7 @@ fn harvest(
     let cache = workspace.cache_dir().join(&source.directory);
     watch.report(Progress::Connecting);
     let clone = match &request.source {
-        Source::Git { url, reference } => git::clone(url, reference.as_deref(), &cache)?,
+        Source::Git { url, reference } => git::clone(url, reference.as_deref(), &cache, watch)?,
     };
     ledger.saw_source(source.id, clone.revision.as_deref())?;
 

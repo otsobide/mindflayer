@@ -387,22 +387,29 @@ fn a_gather_reports_reading_every_folder_before_placing_any() {
     .unwrap();
 
     let seen = seen.lock().unwrap();
-    assert_eq!(seen.first(), Some(&Progress::Connecting), "{seen:?}");
-    // What `gix` counts depends on how fast the clone is; what the harvest
-    // counts does not.
-    let harvest: Vec<Progress> = seen
+    // What `gix` counts while it fetches depends on how fast the clone is,
+    // so only the steps every gather says are compared whole.
+    let said: Vec<Progress> = seen
         .iter()
         .copied()
         .filter(|progress| {
             matches!(
                 progress,
-                Progress::Harvesting { .. } | Progress::Placing { .. }
+                Progress::Connecting
+                    | Progress::CheckingOut { total: None, .. }
+                    | Progress::Harvesting { .. }
+                    | Progress::Placing { .. }
             )
         })
         .collect();
     assert_eq!(
-        harvest,
+        said,
         [
+            Progress::Connecting,
+            Progress::CheckingOut {
+                done: 0,
+                total: None
+            },
             Progress::Harvesting { done: 0, total: 2 },
             Progress::Harvesting { done: 1, total: 2 },
             Progress::Harvesting { done: 2, total: 2 },
@@ -411,6 +418,15 @@ fn a_gather_reports_reading_every_folder_before_placing_any() {
             Progress::Placing { done: 1, total: 1 },
         ]
     );
+    // And what it does count is said while it fetches, never after.
+    let reading = seen
+        .iter()
+        .position(|progress| matches!(progress, Progress::Harvesting { .. }))
+        .unwrap();
+    assert!(seen[reading..].iter().all(|progress| matches!(
+        progress,
+        Progress::Harvesting { .. } | Progress::Placing { .. }
+    )));
 }
 
 #[test]
