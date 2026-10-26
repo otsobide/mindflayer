@@ -612,14 +612,17 @@ Why that file, and why written that way:
   shares one file.
 - **Anchored at the work tree root.** Entries are relative to the work tree,
   not to the project, so a project at `packages/app` gets
-  `/packages/app/.agents/skills/<name>/`. Without the leading `/` the line
-  would catch a folder of that name anywhere in the tree, a teammate's
-  committed one in another project included. A directory ends in `/`, and a
-  route's glob characters are escaped, so `apps/[legacy]` is that folder
-  rather than a class of letters. The route is worked out from resolved paths,
-  not lexically as elsewhere: git matches the tree as it is on disk and never
-  follows a symlinked directory, so a project reached through `current ->
-  packages/app-v2` is excluded under `packages/app-v2`.
+  `/packages/app/.agents/skills/<name>/`. Git anchors a pattern with a `/` in
+  its middle on its own, but one segment matches at every level: without the
+  leading `/`, a root project's `AGENTS.md` would keep every `AGENTS.md` in
+  the tree out of git, a teammate's committed one in another project
+  included. Every entry starts with `/`, so one rule covers both shapes. A
+  directory ends in `/`, and a route's glob characters are escaped, so
+  `apps/[legacy]` is that folder rather than a class of letters. The route is
+  worked out from resolved paths, not lexically as elsewhere: git matches the
+  tree as it is on disk and never follows a symlinked directory, so a project
+  reached through `current -> packages/app-v2` is excluded under
+  `packages/app-v2`.
 - **One group per project.** Several projects can share a repository, so each
   owns the lines under its `# project <key>` header and an edit rewrites only
   those. The key is whatever the caller names the project by, its id once

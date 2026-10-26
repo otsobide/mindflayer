@@ -264,11 +264,13 @@ impl Entry {
     /// The exclude line for this entry in a project at `route` below the work
     /// tree root (empty for a project at the root).
     ///
-    /// Anchored with a leading `/`: entries in the exclude file are relative
-    /// to the work tree, and an unanchored `.agents/skills/review/` would keep
-    /// every folder of that name out of git, a teammate's in another project
-    /// included. A directory ends in `/`, so a file that happens to take its
-    /// name is not caught. Each segment is written literally, its glob
+    /// Anchored with a leading `/`. Git already anchors a pattern with a `/`
+    /// in its middle at the work tree root, but one segment matches at every
+    /// level: unanchored, a root project's `AGENTS.md` would keep every
+    /// `AGENTS.md` in the tree out of git, a teammate's committed one in
+    /// another project included. Every line starts with `/`, so one rule
+    /// covers both shapes. A directory ends in `/`, so a file that happens to
+    /// take its name is not caught. Each segment is written literally, its glob
     /// characters escaped, so a route like `apps/[legacy]` names that folder
     /// rather than a class of letters.
     pub fn pattern(&self, route: &Path) -> Result<String, ExcludeError> {
