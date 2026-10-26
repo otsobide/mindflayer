@@ -518,9 +518,32 @@ reading](#strict-when-writing-lenient-when-reading)).
 Nothing depends on a `git` being installed, or on which `git` is first on the
 PATH, and core keeps doing its own I/O rather than supervising a process. The
 cost is that authentication for private repositories is ours to solve rather
-than inherited whole from `git`, and it is not solved yet:
-[D-16](#d-16-credentials-come-from-the-front-end-never-from-a-prompt) decides
-how.
+than inherited whole from `git`.
+
+Half of it is solved: a fetch **never prompts** for a credential. When a server
+asks who is fetching, `gix`'s own answer runs the credential helpers git config
+names and, when none of them has a credential, asks a person: an askpass
+program, then the terminal. The TUI owns the terminal while a gather runs, so
+that prompt is a screen that stops answering, and the server that comes next
+has no terminal at all. So every connection `gix` lets a clone configure is
+given a credentials callback (`gather::credentials`) that runs the same helper
+cascade with the prompt and askpass turned off. A credential no helper has is
+`GitError::Credentials`: the URL without its userinfo, and the two ways to
+provide one, a git credential helper or, for an ssh URL, ssh-agent. Over ssh,
+`gix` runs the system `ssh`, which authenticates with keys of its own and asks
+the helpers only for a user name, so a login ssh refuses is reported the same
+way. Whether a fetch went over ssh is read from the URL `gix` connected to, not
+the one typed: git config's `url.<base>.insteadOf` can turn a typed https URL
+into an ssh one, or the reverse. What ssh itself asks on the terminal is
+outside the callback's reach, and so is the one connection `gix` opens without
+letting the clone configure it; both are [open questions](#open-questions).
+
+The callback is set on the connection rather than asked for through git
+config (`gitoxide.credentials.terminalPrompt=false`), which would also stop
+the prompt: the guarantee then lives in code a test reaches, not in a string
+among the user's own settings, and the credential a front end supplies needs
+the callback to arrive through anyway. That other half is
+[D-16](#d-16-credentials-come-from-the-front-end-never-from-a-prompt)'s.
 
 `gix`'s error types are large and would become part of this crate's public API
 if they were carried, tying its version to gix's, so `GitError` keeps what they
@@ -811,9 +834,10 @@ included: `flayer list`, `flayer scan`, `mind install` and opening `flayer`'s
 TUI all go through `locate_or_default`, so the first of them run outside every
 workspace leaves a `~/.mindflayer` behind. The exceptions are the commands
 that only list or take away a load — `flayer load` on its own, `unload` — which
-use `locate_except`, and `mind` opening its TUI, which uses `default_at`: both
-open the home workspace if it exists and never create it. Whether reading
-should create it at all is an [open question](#open-questions).
+use `locate_except`, and the `mind` commands that only consult a workspace —
+opening its TUI, `add`, `edit`, `rename`, `remove`, `templates` — which use
+`default_at`: both open the home workspace if it exists and never create it.
+Whether reading should create it at all is an [open question](#open-questions).
 
 Where home is comes from the front end, not from core: `--home`, then
 `$MINDFLAYER_HOME`, then the user's home directory, and empty means there is
@@ -843,8 +867,25 @@ name, never removed by unticking one.
 `.mind/templates/` and `.mindflayer/templates/`, not beside the code: the
 artifacts are beside the code because agents read them, and nothing but
 Mindflayer reads a template. A workspace's templates count for the projects it
-manages, found by walking up, the rule every workspace-wide thing follows; of
-two templates of one kind and name, the closer wins.
+manages and for its own artifacts; of two templates of one kind and name, the
+closer wins.
+
+Which workspace that is, the command says. Core takes it as a parameter
+(`template::templates`, `template::find`) rather than walking up from the
+project, because a walk misses a workspace that links the project from beside
+it, and `flayer add -p` run there would not find the workspace's own
+templates. `flayer` passes the workspace it runs in. `mind` passes the one above
+the project, or else the default one in your home if it has been made — the
+order `mind link` looks in, without making anything (`commands::consulted`) —
+and the TUI offers in its add form what that finds, since the form runs a
+`mind` line. Core still checks that the workspace manages the project, so one
+that does not lends it nothing.
+
+A workspace `mind` cannot read refuses `mind add --template`, since passing it
+over would let a farther template of the same name, a built-in one say, stand
+in for its own. `edit`, `rename`, `remove` and an add from nothing only warn,
+after the change: there the workspace is only told. `mind templates` lists what
+it could read, with the same warning.
 
 A template's front matter keeps whatever it says except `name` and
 `description`, which `mind add` always sets: the template's lines for those
@@ -897,6 +938,12 @@ would be inherited by whatever is written there next, and the install screen
 would then delete somebody's work because a box looked untidy. So each of them
 drops the record (`install::disown`), and `mind add` drops any stale one under
 the name it writes. An installed skill that is edited becomes its author's.
+
+The record dropped is the one held by the workspace the command resolved, the
+one its templates come from, and it is given to `install::disown` for the same
+reason: a workspace beside the project, which a walk up from the project never
+reaches, would keep a record of a copy that has changed. Another workspace that
+links the same project keeps its own, an [open question](#open-questions).
 
 ## Scanning
 
@@ -1296,11 +1343,23 @@ leak into the lifecycle code. Unblocks #33, #45, #62, #93, #94 and #95.
   update the first while leaving the second alone.
   [D-04](#d-04-an-edited-copy-is-detected-not-disowned) chose that hash, one
   per target, and #47 carries it out.
-- **Disowning from elsewhere.** `install::disown` finds the workspace by
-  walking up from the project, so a workspace that links the project from
-  somewhere that is not above it keeps its stale record. Every workspace
-  linking a project would have to be findable from the project for that to
-  change.
+- **Disowning from elsewhere.** A change drops the record of the workspace
+  its command resolved, wherever that sits, but not of any other workspace
+  that links the same project: nothing in the project says which workspaces
+  link it, so each of them keeps its stale record. Every workspace linking a
+  project would have to be findable from the project for that to change. The
+  TUI runs into it from inside: a project's row runs `mind -C <entry>`, the
+  line somebody in the project would type, and that consults the project's
+  workspace (the one above it, or the default) rather than the one on
+  screen. A screen on a workspace beside the project therefore leaves that
+  workspace's record behind, and its add form offers the other one's
+  templates. Nothing has to wait for that to change: `flayer <cmd> -p
+  <entry>`, run where the screen's lines run, already consults the workspace
+  on screen. The rows keep the `mind` line because the screen is at both
+  levels, as the CLI is, and a project's row teaches the project's command.
+  `-W` ([D-08](#d-08-an-explicit-or-activated-workspace-wins)) would let that
+  line name the screen's workspace as well, so which of the two a project's
+  row runs is still to choose.
 - **Reading commands create the home workspace.** `flayer list`, `show`,
   `validate`, `scan`, `templates`, `gather list`, `minds`, the `flayer` TUI and
   `mind install`/`uninstall` all make `~/.mindflayer` when nothing up the tree
@@ -1317,12 +1376,28 @@ leak into the lifecycle code. Unblocks #33, #45, #62, #93, #94 and #95.
   folder that is not one.
 - **Private repositories.** Mindflayer gives `gix` no credentials of its own,
   so a private source gets through only when a git-config helper (or, for an
-  ssh URL, ssh itself) has them, and otherwise the fetch can stop at a terminal
-  prompt. What it should be given is decided in
+  ssh URL, ssh itself) has them, and otherwise the gather fails and says how to
+  provide one, never at a prompt (see
+  [Why `gix`](#why-gix-rather-than-running-git)). What else it should be given
+  is decided in
   [D-16](#d-16-credentials-come-from-the-front-end-never-from-a-prompt): a
-  provider the front end supplies, through a callback that never prompts, then
-  the git-config helpers `gix` runs itself, then the system ssh binary. #26 and
-  #110 carry it out.
+  provider the front end supplies, through that same callback. #110 carries it
+  out, and #109 checks the helpers and ssh-agent against a real private
+  repository. ssh's own questions are still open: a passphrase for a key the
+  agent does not hold, a password when the server accepts password
+  authentication, or whether to trust a host seen for the first time, is asked
+  by ssh on the terminal, out of the callback's reach. `BatchMode=yes` in
+  the ssh command would make those failures too. One connection never sees
+  the callback either: when the remote has a branch named `HEAD`, which
+  clashes with the `HEAD` a clone fetches to know what to check out, `gix`
+  0.87 retries on a new connection without calling `configure_connection`, and
+  that one runs the helpers and then prompts, as `gix` does by default. While
+  the helpers are the only source, it asks them what the first connections
+  already got answered; once #110 supplies a token through the callback, that
+  connection will not have it. An in-memory `gitoxide.credentials.terminalPrompt=false`
+  on the clone would keep that prompt off the terminal, though not an askpass
+  named by `GIT_ASKPASS` or `SSH_ASKPASS`; a `gix` that configures the retry
+  too would close it.
 - **Rules that want to declare something.** Today a rule has no front matter,
   so a leading `---` in one is content. If rules later want metadata, that
   becomes a breaking reading of files written now. The escape hatch is cheap

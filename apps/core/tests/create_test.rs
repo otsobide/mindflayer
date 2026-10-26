@@ -187,7 +187,7 @@ fn the_description_is_one_line_that_says_something() {
 #[test]
 fn the_built_in_full_template_brings_scripts_and_references() {
     let (dir, project) = project();
-    let full = template::find(&project, Kind::Skill, "full").unwrap();
+    let full = template::find(None, &project, Kind::Skill, "full").unwrap();
     assert_eq!(full.origin, Origin::BuiltIn);
 
     let skill = create_from(&project, Kind::Skill, "deploy", "Ship it", &full).unwrap();
@@ -216,7 +216,7 @@ fn a_template_is_copied_whole_with_only_its_manifest_filled_in() {
         ".mind/templates/runbook/scripts/run.sh",
         "echo {{name}}\n",
     );
-    let runbook = template::find(&project, Kind::Skill, "runbook").unwrap();
+    let runbook = template::find(None, &project, Kind::Skill, "runbook").unwrap();
 
     let skill = create_from(
         &project,
@@ -256,7 +256,7 @@ fn a_template_that_does_not_parse_writes_nothing() {
         ".mind/templates/broken/SKILL.md",
         "---\nallowed-tools: [unclosed\n---\n",
     );
-    let broken = template::find(&project, Kind::Skill, "broken").unwrap();
+    let broken = template::find(None, &project, Kind::Skill, "broken").unwrap();
 
     let error = create_from(&project, Kind::Skill, "deploy", "Ship it", &broken).unwrap_err();
 
@@ -278,8 +278,8 @@ fn a_rule_template_opens_with_the_description_unless_it_says_where_it_goes() {
         "# {{description}}\n\nFiled as {{name}}.\n",
     );
 
-    let policy = template::find(&project, Kind::Rule, "policy").unwrap();
-    let placed = template::find(&project, Kind::Rule, "placed").unwrap();
+    let policy = template::find(None, &project, Kind::Rule, "policy").unwrap();
+    let placed = template::find(None, &project, Kind::Rule, "placed").unwrap();
     create_from(
         &project,
         Kind::Rule,
@@ -314,10 +314,11 @@ fn the_closest_template_of_a_name_wins() {
     );
 
     // Not managed, so the workspace's templates are not this project's.
-    assert!(template::find(&project, Kind::Skill, "runbook").is_err());
+    assert!(template::find(Some(&workspace), &project, Kind::Skill, "runbook").is_err());
 
     workspace.link(&project).unwrap();
-    let from_workspace = template::find(&project, Kind::Skill, "runbook").unwrap();
+    let from_workspace =
+        template::find(Some(&workspace), &project, Kind::Skill, "runbook").unwrap();
     assert_eq!(
         from_workspace.origin,
         Origin::Path(dir.path().join(".mindflayer/templates/runbook"))
@@ -329,7 +330,7 @@ fn the_closest_template_of_a_name_wins() {
         "---\n---\nthe project's\n",
     );
     write(&root, ".mind/templates/full/SKILL.md", "---\n---\nmine\n");
-    let listed = template::templates(&project).unwrap();
+    let listed = template::templates(Some(&workspace), &project).unwrap();
     let origins: Vec<(&str, &Origin)> = listed
         .iter()
         .map(|template| (template.name.as_str(), &template.origin))
@@ -358,19 +359,42 @@ fn a_template_the_listing_shows_can_be_used_whatever_its_name() {
         "---\nname: x\ndescription: y\n---\n\n# {{name}}\n",
     );
 
-    let found = template::find(&project, Kind::Skill, "my--tpl").unwrap();
+    let found = template::find(None, &project, Kind::Skill, "my--tpl").unwrap();
     let skill = create_from(&project, Kind::Skill, "fresh", "Do it", &found).unwrap();
 
     assert_eq!(skill.validate(), vec![]);
 }
 
 #[test]
+fn a_workspace_that_manages_a_project_from_beside_it_offers_its_templates() {
+    // Walking up from the project never reaches the workspace; the one given
+    // is the one asked.
+    let dir = TempDir::new().unwrap();
+    let hub = dir.path().join("hub");
+    fs::create_dir(&hub).unwrap();
+    let (mut workspace, _) = FlayerWorkspace::init(&hub).unwrap();
+    let root = dir.path().join("collapse");
+    fs::create_dir(&root).unwrap();
+    let (project, _) = MindProject::init(&root).unwrap();
+    write(&hub, ".mindflayer/templates/runbook/SKILL.md", "---\n---\n");
+    workspace.link(&project).unwrap();
+
+    let runbook = template::find(Some(&workspace), &project, Kind::Skill, "runbook").unwrap();
+
+    assert_eq!(
+        runbook.origin,
+        Origin::Path(hub.join(".mindflayer/templates/runbook"))
+    );
+    assert!(template::find(None, &project, Kind::Skill, "runbook").is_err());
+}
+
+#[test]
 fn a_template_is_asked_for_by_its_name_and_its_kind() {
     let (_dir, project) = project();
 
-    let climbing = template::find(&project, Kind::Skill, "../../etc").unwrap_err();
-    let wrong_kind = template::find(&project, Kind::Rule, "full").unwrap_err();
-    let unknown = template::find(&project, Kind::Skill, "nope").unwrap_err();
+    let climbing = template::find(None, &project, Kind::Skill, "../../etc").unwrap_err();
+    let wrong_kind = template::find(None, &project, Kind::Rule, "full").unwrap_err();
+    let unknown = template::find(None, &project, Kind::Skill, "nope").unwrap_err();
 
     assert!(matches!(climbing, TemplateError::BadName { .. }));
     assert!(matches!(wrong_kind, TemplateError::WrongKind { .. }));

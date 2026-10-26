@@ -314,6 +314,21 @@ $ flayer install -p collapse pdf--forms
 error: `pdf--forms` cannot be installed: `pdf--forms` is not usable as a name: it has to be lowercase letters and digits, joined by single hyphens
 ```
 
+A private repository is fetched with whatever your git credential helpers
+already know, or, over ssh, with the keys ssh already uses (your ssh-agent's,
+or one in `~/.ssh`). Mindflayer itself never stops to ask for a username or a
+password, so a source that needs one nobody has fails, and says what to set
+up:
+
+```
+$ flayer gather git https://github.com/acme/private-skills
+error: https://github.com/acme/private-skills: needs credentials, and gathering never prompts for them: configure a git credential helper, or use ssh-agent for an ssh URL
+```
+
+ssh is a program of its own and can still ask on the terminal: for the
+passphrase of a key your ssh-agent does not hold, for a password when the
+server accepts one, or whether to trust a host it has not seen before.
+
 ### What a workspace keeps
 
 ```
@@ -673,6 +688,8 @@ mind add skill deploy "Ship the service" --template full
 `.mindflayer/templates/` for every project it manages — a folder holding a
 `SKILL.md` for a skill, a markdown file for a rule. `mind templates` lists what
 is available and where each comes from; of two with one name, the closer wins.
+`flayer add -p` finds the workspace's wherever the project sits; `mind add`
+finds those of the workspace above the project, or else the one in your home.
 
 A template is copied whole. In its manifest, `name` and `description` are set by
 `mind add`, whatever the template had for them, and `{{name}}` and
@@ -700,8 +717,10 @@ renaming it or editing it drops the workspace's record that Mindflayer
 installed it, so the install screen shows it as somebody's and never
 overwrites or deletes it — and a skill you write later under the same name does
 not inherit a record that was about something else. The record dropped is the
-one held by the workspace at or above the project; one that links it from
-elsewhere keeps its own (an [open question](docs/architecture.md#open-questions)).
+one held by the workspace the command works in: `flayer`'s, wherever the
+project sits, or for `mind` the workspace above the project, or else the one in
+your home. Another workspace that links the same project keeps its own (an
+[open question](docs/architecture.md#open-questions)).
 
 ## Roadmap
 
