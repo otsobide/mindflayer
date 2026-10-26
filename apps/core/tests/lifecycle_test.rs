@@ -446,3 +446,42 @@ fn a_record_that_cannot_be_dropped_is_reported_and_the_change_stands() {
     );
     assert!(added.artifact.file().is_file());
 }
+
+#[test]
+fn an_edit_that_changes_an_installed_copy_drops_its_record() {
+    let (dir, workspace, project, ledger) = installed(&["deploy"]);
+    let edit = lifecycle::start_edit(&find(&project, "deploy").unwrap());
+    let mut text = fs::read_to_string(edit.file()).unwrap();
+    text.push_str("Mine.\n");
+    fs::write(edit.file(), text).unwrap();
+
+    let edited = lifecycle::finish_edit(Some(&workspace), &project, edit);
+
+    assert!(edited.changed);
+    assert_eq!(edited.copy.unwrap(), Record::Dropped);
+    // Still there, and now it is somebody's: shown, never overwritten or
+    // deleted by unticking it.
+    assert_eq!(
+        standing(&workspace, &ledger, &project, "deploy"),
+        Standing::Foreign
+    );
+    assert_eq!(
+        install::uninstall(&workspace, &ledger, &project, Kind::Skill, "deploy").unwrap(),
+        install::Removed::Foreign {
+            name: String::from("deploy")
+        }
+    );
+    assert!(dir.path().join("collapse/skills/deploy/SKILL.md").is_file());
+}
+
+#[test]
+fn an_edit_that_changes_nothing_keeps_the_record() {
+    let (_dir, workspace, project, ledger) = installed(&["deploy"]);
+    let edit = lifecycle::start_edit(&find(&project, "deploy").unwrap());
+
+    let edited = lifecycle::finish_edit(Some(&workspace), &project, edit);
+
+    assert!(!edited.changed);
+    assert_eq!(edited.copy.unwrap(), Record::Untouched);
+    assert_eq!(records(&ledger), ["deploy"]);
+}

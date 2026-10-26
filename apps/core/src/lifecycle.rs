@@ -6,10 +6,11 @@
 //! needs to open and fix, so an artifact is also found by where its name would
 //! put it on disk, whether or not it reads.
 //!
-//! Adding also sees to the ledger's record of what was installed under the
-//! name it writes, and says in its result what it did ([`Record`]). The rule
-//! lives here rather than with each front end that makes a change, so a
-//! second front end cannot forget it or apply it differently.
+//! Adding and finishing an edit also see to the ledger's record of what was
+//! installed under the name they touch, and say in their result what they did
+//! ([`Record`]). The rule lives here rather than with each front end that
+//! makes a change, so a second front end cannot forget it or apply it
+//! differently.
 
 use std::fs;
 use std::io;
@@ -217,6 +218,66 @@ pub fn identify(project: &MindProject, file: &Path) -> Option<(Kind, String)> {
             }
         }
     })
+}
+
+/// An artifact opened to be edited, with what its file held then, so that
+/// finishing the edit can tell whether anything changed.
+///
+/// Running the editor is the front end's, since which one to run comes from
+/// the environment, and core never reads that. What the edit came to, and
+/// what that means for the copy's record, is core's.
+#[derive(Debug, Clone)]
+pub struct Edit {
+    kind: Kind,
+    name: String,
+    file: PathBuf,
+    before: Option<Vec<u8>>,
+}
+
+impl Edit {
+    /// The file to open in the editor.
+    pub fn file(&self) -> &Path {
+        &self.file
+    }
+}
+
+/// What an edit came to.
+#[derive(Debug)]
+pub struct Edited {
+    /// Whether the file is any different from when the edit started.
+    pub changed: bool,
+    /// The record of the copy edited, dropped when it changed: it is no longer
+    /// what was installed, so the install screen must not take it for its
+    /// own to overwrite.
+    pub copy: Result<Record, InstallError>,
+}
+
+/// Start editing `target`, noting what its file holds now.
+pub fn start_edit(target: &Target) -> Edit {
+    let file = target.file();
+    Edit {
+        kind: target.kind,
+        name: target.name.clone(),
+        before: fs::read(&file).ok(),
+        file,
+    }
+}
+
+/// Finish an edit of an artifact in `project` once the editor has closed,
+/// dropping the record of an install of it when the file changed.
+/// `workspace` is the one consulted, as for [`add`].
+pub fn finish_edit(
+    workspace: Option<&FlayerWorkspace>,
+    project: &MindProject,
+    edit: Edit,
+) -> Edited {
+    let changed = fs::read(&edit.file).ok() != edit.before;
+    let copy = if changed {
+        disowned(workspace, project, edit.kind, &edit.name)
+    } else {
+        Ok(Record::Untouched)
+    };
+    Edited { changed, copy }
 }
 
 /// How many files removing it would delete.
