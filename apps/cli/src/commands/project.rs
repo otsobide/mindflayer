@@ -11,7 +11,7 @@ use mindflayer_core::{
     WorkspaceError,
 };
 
-use super::{all_or_nothing, targets, workspace_here};
+use super::{all_or_nothing, project_here, targets, workspace_above, workspace_here};
 use crate::render::{as_stored, printable, table};
 use crate::{CliError, Failure, Outcome};
 
@@ -71,6 +71,22 @@ fn initialized(kind: &str, name: &str, marker: &Path, outcome: Initialization) -
             format!("{kind} `{name}` already initialized in {marker}\n")
         }
     }
+}
+
+/// `mind link`: the project here, registered with the workspace above it.
+pub(crate) fn link_here(directory: &Path, home: Option<&Path>) -> Result<Outcome, Failure> {
+    let project = project_here(directory)?;
+    let mut workspace = workspace_above(&project, home)?;
+    let (entry, registration) = workspace.link(&project)?;
+    Ok(Outcome::plain(linked(project.name(), &entry, registration)))
+}
+
+/// `mind unlink`: the project here, dropped from the workspace above it.
+pub(crate) fn unlink_here(directory: &Path, home: Option<&Path>) -> Result<Outcome, Failure> {
+    let project = project_here(directory)?;
+    let mut workspace = workspace_above(&project, home)?;
+    let removed = workspace.unlink(project.root())?;
+    Ok(Outcome::plain(unlinked(&removed)))
 }
 
 /// `flayer link`: every path given, registered with the workspace here.
@@ -133,7 +149,7 @@ pub(crate) fn unlink_projects(
 }
 
 /// What `link` says it did, at either level.
-pub(crate) fn linked(name: &str, entry: &Path, registration: Registration) -> String {
+fn linked(name: &str, entry: &Path, registration: Registration) -> String {
     let entry = as_stored(entry);
     match registration {
         Registration::Added => format!("linked {name} as {entry}\n"),
@@ -144,7 +160,7 @@ pub(crate) fn linked(name: &str, entry: &Path, registration: Registration) -> St
 /// What `unlink` says it did: every spelling that pointed at the project, not
 /// just the first. Reporting "unlinked" while one entry still registers it is
 /// the failure this reports its way out of.
-pub(crate) fn unlinked(removed: &[PathBuf]) -> String {
+fn unlinked(removed: &[PathBuf]) -> String {
     removed.iter().fold(String::new(), |mut text, entry| {
         let _ = writeln!(text, "unlinked {}", as_stored(entry));
         text

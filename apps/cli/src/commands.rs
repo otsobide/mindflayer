@@ -21,7 +21,7 @@ use artifact::{add_to, edit_in, remove_from, rename_in, templates_of};
 use gather::run_gather;
 use install::{install_named, uninstall_named};
 use project::{
-    init_project, init_workspace, link_projects, linked, scanned, unlink_projects, unlinked,
+    init_project, init_workspace, link_here, link_projects, scanned, unlink_here, unlink_projects,
 };
 use read::{
     everywhere, list, list_workspace, one_project, show, validate, wanted, Level, Selector,
@@ -82,18 +82,8 @@ pub fn run(cli: &Cli) -> Result<Outcome, Failure> {
                 validate(catalog, &selector, level)
             })
         }
-        Command::Link => {
-            let project = project_here(&directory)?;
-            let mut workspace = workspace_above(&project, home)?;
-            let (entry, registration) = workspace.link(&project)?;
-            Ok(Outcome::plain(linked(project.name(), &entry, registration)))
-        }
-        Command::Unlink => {
-            let project = project_here(&directory)?;
-            let mut workspace = workspace_above(&project, home)?;
-            let removed = workspace.unlink(project.root())?;
-            Ok(Outcome::plain(unlinked(&removed)))
-        }
+        Command::Link => link_here(&directory, home),
+        Command::Unlink => unlink_here(&directory, home),
         Command::Load { workspaces } => {
             let project = project_here(&directory)?;
             load_command(&directory, project.root(), workspaces, home)
