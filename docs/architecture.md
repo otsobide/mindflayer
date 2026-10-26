@@ -898,8 +898,11 @@ A run's lines are worked out on the writer thread just before it, against the
 disk the run itself meets after every write before it, and the entry is in the
 transcript before the reply leaves, so a client that asks for the transcript
 after its reply always finds its own run there. A client that stops waiting
-does not take its task back: it was queued, and it runs. A backend that panics
-loses that one reply but not the thread, so the tasks behind it still run.
+does not take its task back: it was queued, and it runs. An outcome that will
+not serialize is still a run, so it is recorded, and replied, as
+`{"error": ...}` beside the lines that ran rather than turned into a 500 that
+leaves the transcript a run short. A backend that panics loses that one reply
+but not the thread, so the tasks behind it still run.
 
 The transcript is the TUI's, kept where the panel can ask for it at any time:
 runs only, since a query or a preview changes nothing there is to replay, and
