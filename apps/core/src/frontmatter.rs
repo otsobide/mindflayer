@@ -62,32 +62,77 @@ fn is_fence(line: &str) -> bool {
     line.trim_end_matches(['\n', '\r']) == "---"
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
+// ---------------------------------------------------------------------------
+// Editing front matter a line at a time
+//
+// Front matter is written by people, with comments and a key order that mean
+// something to them, so a change to one key is made to that key's line and
+// nothing else — never by parsing and re-serializing the whole block. Whoever
+// calls these parses the result afterwards, to be sure the edit meant what it
+// was meant to.
+// ---------------------------------------------------------------------------
 
-    #[test]
-    fn splits_a_document_at_its_fences() {
-        let doc = split("---\nname: a\n---\nbody\n").unwrap();
-        assert_eq!(doc.front_matter, "name: a\n");
-        assert_eq!(doc.body, "body\n");
-    }
-
-    #[test]
-    fn keeps_inner_dashes_that_are_not_fences() {
-        let doc = split("---\nname: a\n---\nchapter\n---\nnext\n").unwrap();
-        assert_eq!(doc.front_matter, "name: a\n");
-        assert_eq!(doc.body, "chapter\n---\nnext\n");
-    }
-
-    #[test]
-    fn rejects_a_document_without_an_opening_fence() {
-        assert_eq!(split("name: a\n"), Err(FrontMatterError::Missing));
-        assert_eq!(split(""), Err(FrontMatterError::Missing));
-    }
-
-    #[test]
-    fn rejects_front_matter_that_is_never_closed() {
-        assert_eq!(split("---\nname: a\n"), Err(FrontMatterError::Unterminated));
-    }
+/// Whether a front matter line starts the top-level key `key`.
+pub(crate) fn is_key(line: &str, key: &str) -> bool {
+    line.strip_prefix(key)
+        .is_some_and(|rest| rest.trim_start_matches([' ', '\t']).starts_with(':'))
 }
+
+/// Front matter without the top-level `keys`, or the lines that continue them.
+///
+/// A blank or indented line belongs to the key above it — that is how a block
+/// scalar or a list goes on — so it leaves with that key.
+pub(crate) fn without_keys(front_matter: &str, keys: &[&str]) -> String {
+    let mut kept = String::with_capacity(front_matter.len());
+    let mut dropping = false;
+    for line in front_matter.split_inclusive('\n') {
+        let continues = line.starts_with([' ', '\t']) || line.trim().is_empty();
+        if !continues {
+            dropping = keys.iter().any(|key| is_key(line, key));
+        }
+        if !dropping {
+            kept.push_str(line);
+        }
+    }
+    kept
+}
+
+/// Front matter with the value of the top-level `key` replaced, every other
+/// byte as it was.
+///
+/// `None` unless the key is there exactly once with its whole value on its own
+/// line: a value that carries on below the key — a block scalar, a list — is
+/// more than one line, and replacing the first of them would leave the rest
+/// behind.
+pub(crate) fn with_key(front_matter: &str, key: &str, value: &str) -> Option<String> {
+    let mut out = String::with_capacity(front_matter.len() + value.len());
+    let mut found = 0;
+    let mut lines = front_matter.split_inclusive('\n').peekable();
+    while let Some(line) = lines.next() {
+        if !is_key(line, key) {
+            out.push_str(line);
+            continue;
+        }
+        found += 1;
+        let (_, old) = line.split_once(':')?;
+        let old = old.trim();
+        let goes_on = old.is_empty()
+            || old.starts_with(['|', '>'])
+            || lines
+                .peek()
+                .is_some_and(|next| next.starts_with([' ', '\t']) && !next.trim().is_empty());
+        if goes_on {
+            return None;
+        }
+        let ending = &line[line.trim_end_matches(['\n', '\r']).len()..];
+        out.push_str(key);
+        out.push_str(": ");
+        out.push_str(value);
+        out.push_str(ending);
+    }
+    (found == 1).then_some(out)
+}
+
+#[cfg(test)]
+#[path = "frontmatter_test.rs"]
+mod tests;

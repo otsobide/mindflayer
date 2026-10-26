@@ -23,7 +23,8 @@ use state::{Pending, Screen, Step, Target};
 
 /// Build the screen for a workspace, run it, and carry out what it asked for.
 pub fn run(workspace: &FlayerWorkspace, ledger: &Ledger) -> Result<Outcome, Failure> {
-    let (projects, warnings) = registered(workspace);
+    let (projects, mut warnings) = registered(workspace);
+    warnings.extend(crate::load_warnings(workspace));
     let screen = build(workspace, ledger, projects).map_err(CliError::from)?;
 
     if screen.targets.is_empty() {
@@ -40,7 +41,10 @@ pub fn run(workspace: &FlayerWorkspace, ledger: &Ledger) -> Result<Outcome, Fail
     // `try_init` rather than `init`, which panics: this command is the one
     // thing here that needs a terminal, and being run without one — in CI,
     // with the output redirected — deserves a sentence rather than a panic.
-    let mut terminal = ratatui::try_init().map_err(|source| CliError::NoTerminal { source })?;
+    let mut terminal = ratatui::try_init().map_err(|source| CliError::NoTerminal {
+        command: "flayer install",
+        source,
+    })?;
     let outcome = drive(&mut terminal, screen);
     ratatui::restore();
 
@@ -81,7 +85,11 @@ pub fn build(
     let mut targets = Vec::new();
     for project in projects {
         let candidates = install::survey(workspace, ledger, &project, Kind::Skill)?;
-        targets.push(Target::new(project, candidates));
+        let mut target = Target::new(project, candidates);
+        // Which of several offers of one name is the copy the project holds.
+        let project = target.project.clone();
+        target.settle(|candidate| install::is_current(workspace, &project, candidate));
+        targets.push(target);
     }
     Ok(Screen::new(targets))
 }
@@ -129,7 +137,21 @@ pub fn apply(
 
         match what {
             Pending::Install => {
-                match install::install(workspace, ledger, project, &entry.candidate)? {
+                // One that cannot be installed is said and passed over: the
+                // rest were marked too, and what was already done is reported.
+                // Only the ledger failing stops everything.
+                let result = match install::install(workspace, ledger, project, &entry.candidate) {
+                    Err(install::InstallError::Ledger(error)) => return Err(error.into()),
+                    result => result,
+                };
+                let done = match result {
+                    Ok(done) => done,
+                    Err(error) => {
+                        stderr.push(format!("warning: {}: {error}", project.name()));
+                        continue;
+                    }
+                };
+                match done {
                     Installed::Added { name, .. } | Installed::Updated { name, .. } => {
                         installed += 1;
                         let _ = writeln!(stdout, "{}: installed {name}", project.name());
@@ -146,7 +168,16 @@ pub fn apply(
             }
             Pending::Remove => {
                 let name = entry.candidate.name();
-                match install::uninstall(workspace, ledger, project, Kind::Skill, name)? {
+                let taken = match install::uninstall(workspace, ledger, project, Kind::Skill, name)
+                {
+                    Err(install::InstallError::Ledger(error)) => return Err(error.into()),
+                    Err(error) => {
+                        stderr.push(format!("warning: {}: {error}", project.name()));
+                        continue;
+                    }
+                    Ok(taken) => taken,
+                };
+                match taken {
                     Removed::Removed { name, .. } => {
                         removed += 1;
                         let _ = writeln!(stdout, "{}: removed {name}", project.name());

@@ -58,18 +58,40 @@ impl Catalog {
             }
         }
 
+        catalog.settle();
+        catalog
+    }
+
+    /// Two catalogs as one, in the same order and with each file once.
+    ///
+    /// For a report over holders that are found differently — a workspace's
+    /// own artifacts beside its projects' — which still has to read as one
+    /// listing.
+    pub fn merge(mut self, other: Catalog) -> Catalog {
+        self.artifacts.extend(other.artifacts);
+        self.failures.extend(other.failures);
+        self.settle();
+        self
+    }
+
+    /// Put everything in report order, each file once.
+    fn settle(&mut self) {
         // Grouped by kind, then by name. Kind first because a mixed listing
         // reads as blocks of like things rather than an alphabetical shuffle
         // of two different sorts of thing; name second because that is what
         // the reader is scanning within a block.
-        catalog.artifacts.sort_by(|a, b| {
+        self.artifacts.sort_by(|a, b| {
             a.kind()
                 .cmp(&b.kind())
                 .then_with(|| a.name().cmp(b.name()))
                 .then_with(|| a.project().cmp(b.project()))
         });
-        catalog.failures.sort_by(|a, b| a.path().cmp(b.path()));
-        catalog
+        // One file is one artifact, however many holders can see it: a
+        // workspace whose root is also a project it manages would otherwise
+        // list everything there twice.
+        self.artifacts.dedup_by(|a, b| a.path() == b.path());
+        self.failures.sort_by(|a, b| a.path().cmp(b.path()));
+        self.failures.dedup_by(|a, b| a.path() == b.path());
     }
 
     /// One artifact per immediate subdirectory holding `manifest`.
@@ -184,6 +206,11 @@ impl Catalog {
     /// What could not be read, ordered by path.
     pub fn failures(&self) -> &[DiscoveryFailure] {
         &self.failures
+    }
+
+    /// Both halves, owned, for a caller that passes the failures on.
+    pub fn into_parts(self) -> (Vec<Artifact>, Vec<DiscoveryFailure>) {
+        (self.artifacts, self.failures)
     }
 
     /// Whether anything at all was found.

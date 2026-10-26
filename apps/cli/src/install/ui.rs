@@ -73,7 +73,9 @@ fn skills(screen: &Screen, frame: &mut Frame, area: Rect) {
 
     let heading = title(target);
     if target.rows.is_empty() {
-        let empty = Paragraph::new("nothing on the shelf — `flayer gather git <url>` first")
+        let empty = Paragraph::new(
+            "nothing on the shelf — `flayer gather git <url>`, `flayer load <path>` or `flayer add skill` first",
+        )
             .block(pane(&heading, focused));
         frame.render_widget(empty, area);
         return;
@@ -117,7 +119,7 @@ fn row(entry: &super::state::Row) -> ListItem<'_> {
         None => {}
     }
 
-    let summary = entry.candidate.gathered.summary.as_deref().unwrap_or("");
+    let summary = entry.candidate.summary().unwrap_or("");
     let detail = Line::from(vec![
         Span::raw("    "),
         Span::styled(summary.to_owned(), Style::default().fg(Color::Gray)),
@@ -182,7 +184,7 @@ fn title(target: &Target) -> String {
 }
 
 /// A bordered pane, drawn heavier when the keyboard is in it.
-fn pane(title: &str, focused: bool) -> Block<'_> {
+pub(crate) fn pane(title: &str, focused: bool) -> Block<'_> {
     let block = Block::bordered().title(format!(" {title} "));
     if focused {
         block
@@ -195,7 +197,7 @@ fn pane(title: &str, focused: bool) -> Block<'_> {
 
 /// The cursor line, dimmed while the keyboard is in the other column so there
 /// is never a question about which one a key will move.
-fn selected(focused: bool) -> Style {
+pub(crate) fn selected(focused: bool) -> Style {
     if focused {
         Style::default().add_modifier(Modifier::BOLD | Modifier::REVERSED)
     } else {
@@ -214,7 +216,7 @@ fn mark(entry: &super::state::Row) -> Color {
 }
 
 /// A box of that size in the middle of `area`.
-fn centred(area: Rect, width: u16, height: u16) -> Rect {
+pub(crate) fn centred(area: Rect, width: u16, height: u16) -> Rect {
     let width = width.min(area.width);
     let height = height.min(area.height);
     Rect {

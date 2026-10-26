@@ -176,7 +176,12 @@ impl MindProject {
         let config_path = dir.join(MIND_CONFIG);
 
         for (kind, directory) in directories.resolved() {
-            check_inside(kind, &directory)?;
+            if !stays_inside(&directory) {
+                return Err(WorkspaceError::OutsideProject {
+                    path: directory,
+                    kind,
+                });
+            }
         }
         create_dir(&dir)?;
 
@@ -276,6 +281,14 @@ pub struct FlayerConfig {
     /// The mind projects this workspace manages, relative to its root.
     #[serde(default)]
     pub projects: Vec<PathBuf>,
+    /// Other flayer workspaces whose own artifacts this one offers to its
+    /// projects, read live from where they are; relative to its root.
+    #[serde(default)]
+    pub loaded: Vec<PathBuf>,
+    /// Where the workspace keeps its own artifacts — the ones it shares with
+    /// every project it manages — relative to its root.
+    #[serde(default)]
+    pub directories: Directories,
 }
 
 /// A directory orchestrating several mind projects, identified by its
@@ -293,10 +306,32 @@ impl FlayerWorkspace {
     /// about, and guessing which neighbouring directories were meant would be
     /// the kind of surprise that is hard to undo.
     pub fn init(root: impl AsRef<Path>) -> Result<(Self, Initialization), WorkspaceError> {
+        Self::init_with(root, &Directories::default())
+    }
+
+    /// The same, saying where the workspace keeps its own artifacts.
+    ///
+    /// Unlike a project's, those folders are not made here. A workspace sits
+    /// in a directory already full of other people's work — the repositories
+    /// it manages — and puts nothing beside them until there is something to
+    /// put: the first artifact added makes its folder. As with a project, a
+    /// second run changes nothing, `directories` included.
+    pub fn init_with(
+        root: impl AsRef<Path>,
+        directories: &Directories,
+    ) -> Result<(Self, Initialization), WorkspaceError> {
         let root = absolute(root.as_ref())?;
         let dir = root.join(FLAYER_DIR);
         let config_path = dir.join(FLAYER_CONFIG);
 
+        for (kind, directory) in directories.resolved() {
+            if !stays_inside(&directory) {
+                return Err(WorkspaceError::OutsideWorkspace {
+                    path: directory,
+                    kind,
+                });
+            }
+        }
         create_dir(&dir)?;
 
         if config_path.is_file() {
@@ -304,7 +339,7 @@ impl FlayerWorkspace {
         }
 
         let name = directory_name(&root);
-        write_new(&config_path, &flayer_template(&name))?;
+        write_new(&config_path, &flayer_template(&name, directories))?;
         Ok((Self::open(&root)?, Initialization::Created))
     }
 
@@ -326,6 +361,101 @@ impl FlayerWorkspace {
             Some(root) => Self::open(root).map(Some),
             None => Ok(None),
         }
+    }
+
+    /// The workspace at or above `start`, or else the default one at `home`,
+    /// made there the first time it is needed.
+    ///
+    /// A workspace somewhere up the tree always wins: one made on purpose with
+    /// `flayer init` says more about where you are than a default does. With
+    /// none, the default means there is always a workspace to link projects
+    /// into, the way there is always a global git config to write to. `home`
+    /// is `None` when there is no default, and then neither is there a
+    /// workspace.
+    pub fn locate_or_default(
+        start: impl AsRef<Path>,
+        home: Option<&Path>,
+    ) -> Result<Option<Self>, WorkspaceError> {
+        if let Some(workspace) = Self::locate(start)? {
+            return Ok(Some(workspace));
+        }
+        match home {
+            Some(home) => Self::init(home).map(|(workspace, _)| Some(workspace)),
+            None => Ok(None),
+        }
+    }
+
+    /// Like [`locate_or_default`](Self::locate_or_default), passing over the
+    /// workspaces rooted at any of `excluded`.
+    ///
+    /// For `flayer load`: run from inside the workspace being loaded, the one
+    /// found first is that workspace, and a workspace cannot load itself, so
+    /// the walk carries on above it — and ends at the default in `home` when
+    /// nothing up there is left. That default is never one of `excluded`
+    /// either: loading your home workspace from inside it is refused rather
+    /// than answered with the workspace itself.
+    pub fn locate_or_default_except(
+        start: impl AsRef<Path>,
+        excluded: &[PathBuf],
+        home: Option<&Path>,
+    ) -> Result<Option<Self>, WorkspaceError> {
+        let start = absolute(start.as_ref())?;
+        let skipped = |root: &Path| excluded.iter().any(|path| same_directory(root, path));
+        let found = start.ancestors().find(|candidate| {
+            candidate.join(FLAYER_DIR).join(FLAYER_CONFIG).is_file() && !skipped(candidate)
+        });
+        if let Some(root) = found {
+            return Self::open(root).map(Some);
+        }
+        match home {
+            Some(home) if skipped(home) => Err(WorkspaceError::LoadsItself {
+                path: absolute(home)?,
+            }),
+            Some(home) => Self::init(home).map(|(workspace, _)| Some(workspace)),
+            None => Ok(None),
+        }
+    }
+
+    /// Like [`locate_or_default_except`](Self::locate_or_default_except),
+    /// but never making the default: for a command that can only read or
+    /// take away, which is no reason to write a marker into somebody's home.
+    pub fn locate_except(
+        start: impl AsRef<Path>,
+        excluded: &[PathBuf],
+        home: Option<&Path>,
+    ) -> Result<Option<Self>, WorkspaceError> {
+        let start = absolute(start.as_ref())?;
+        let skipped = |root: &Path| excluded.iter().any(|path| same_directory(root, path));
+        let found = start.ancestors().find(|candidate| {
+            candidate.join(FLAYER_DIR).join(FLAYER_CONFIG).is_file() && !skipped(candidate)
+        });
+        if let Some(root) = found {
+            return Self::open(root).map(Some);
+        }
+        match home {
+            Some(home) if skipped(home) => Ok(None),
+            _ => Self::default_at(home),
+        }
+    }
+
+    /// The default workspace at `home`, if it has been made.
+    ///
+    /// For a question that must not make it: whether a project is managed by
+    /// it, say, which is no reason to write a marker into somebody's home.
+    pub fn default_at(home: Option<&Path>) -> Result<Option<Self>, WorkspaceError> {
+        match home {
+            Some(home) if home.join(FLAYER_DIR).join(FLAYER_CONFIG).is_file() => {
+                Self::open(home).map(Some)
+            }
+            _ => Ok(None),
+        }
+    }
+
+    /// Whether this is the default workspace at `home` rather than one found
+    /// up the tree.
+    pub fn is_default(&self, home: Option<&Path>) -> bool {
+        home.and_then(|home| absolute(home).ok())
+            .is_some_and(|home| home == self.root)
     }
 
     /// The directory holding `.mindflayer`.
@@ -459,35 +589,136 @@ impl FlayerWorkspace {
     /// there is a typo far more often than it is a no-op, and saying so is
     /// what turns a silent success into a fixable mistake.
     pub fn unlink(&mut self, project_root: &Path) -> Result<Vec<PathBuf>, WorkspaceError> {
-        let target = paths::normalize(project_root);
-        let root = self.root.clone();
-
-        let removed = self.edit_projects(move |array| {
-            let mut removed = Vec::new();
-            let mut index = 0;
-            while index < array.len() {
-                match array.get(index).and_then(|value| value.as_str()) {
-                    Some(entry) if points_at(&root, Path::new(entry), &target) => {
-                        removed.push(PathBuf::from(entry));
-                        array.remove(index);
-                    }
-                    _ => index += 1,
-                }
-            }
-            Ok(removed)
-        })?;
-
-        if removed.is_empty() {
-            return Err(WorkspaceError::NotRegistered {
-                path: project_root.to_path_buf(),
-                workspace: self.root.clone(),
-            });
-        }
-        Ok(removed)
+        self.unlink_all(&[project_root.to_path_buf()])
     }
 
-    /// Rewrite the `projects` array in place, leaving every other byte of the
-    /// file alone: comments, key order, spacing.
+    /// [`unlink`](Self::unlink) several at once, in one rewrite of the file:
+    /// all of them or, if any is not registered, none. Two spellings of one
+    /// directory are one project, not a second one to fail on.
+    pub fn unlink_all(&mut self, roots: &[PathBuf]) -> Result<Vec<PathBuf>, WorkspaceError> {
+        let workspace = self.root.clone();
+        self.drop_entries(PROJECTS_KEY, roots)?
+            .map_err(|path| WorkspaceError::NotRegistered { path, workspace })
+    }
+
+    /// Remove every entry of the array `key` pointing at any of `roots`, in
+    /// one edit — or, when one of them has no entry, nothing, returning that
+    /// one.
+    fn drop_entries(
+        &mut self,
+        key: &str,
+        roots: &[PathBuf],
+    ) -> Result<Result<Vec<PathBuf>, PathBuf>, WorkspaceError> {
+        let targets: Vec<(PathBuf, PathBuf)> = roots
+            .iter()
+            .map(|root| (root.clone(), paths::normalize(root)))
+            .collect();
+        let root = self.root.clone();
+        self.edit_array(key, move |array| {
+            let stored = entries(array);
+            if let Some((missing, _)) = targets
+                .iter()
+                .find(|(_, target)| !stored.iter().any(|entry| points_at(&root, entry, target)))
+            {
+                return Ok(Err(missing.clone()));
+            }
+            let mut removed = Vec::new();
+            for (_, target) in &targets {
+                removed.extend(remove_pointing_at(array, &root, target));
+            }
+            Ok(Ok(removed))
+        })
+    }
+
+    /// Offer another workspace's own artifacts to this one's projects.
+    ///
+    /// Recorded, not copied: the entry is where to read them from, so an edit
+    /// made there is what installs here next, without loading it again.
+    /// Idempotent, like `link`, and a workspace cannot load itself.
+    pub fn load(
+        &mut self,
+        source: &FlayerWorkspace,
+    ) -> Result<(PathBuf, Registration), WorkspaceError> {
+        if same_directory(source.root(), &self.root) {
+            return Err(WorkspaceError::LoadsItself {
+                path: self.root.clone(),
+            });
+        }
+        let entry = self.entry_for(source.root());
+        let target = paths::normalize(source.root());
+        let written =
+            paths::to_config_string(&entry).ok_or_else(|| WorkspaceError::NonUtf8Path {
+                path: entry.clone(),
+            })?;
+        let root = self.root.clone();
+
+        self.edit_array(LOADED_KEY, move |array| {
+            if let Some(existing) = entries(array)
+                .into_iter()
+                .find(|entry| points_at(&root, entry, &target))
+            {
+                return Ok((existing, Registration::AlreadyRegistered));
+            }
+            array.push(written.as_str());
+            Ok((PathBuf::from(&written), Registration::Added))
+        })
+    }
+
+    /// Stop offering a loaded workspace's artifacts, returning every entry
+    /// that pointed at it. A path rather than a workspace, as for `unlink`: a
+    /// source that has moved away is the one most worth dropping.
+    pub fn unload(&mut self, source_root: &Path) -> Result<Vec<PathBuf>, WorkspaceError> {
+        self.unload_all(&[source_root.to_path_buf()])
+    }
+
+    /// [`unload`](Self::unload) several at once, all or none, in one rewrite.
+    pub fn unload_all(&mut self, roots: &[PathBuf]) -> Result<Vec<PathBuf>, WorkspaceError> {
+        let workspace = self.root.clone();
+        self.drop_entries(LOADED_KEY, roots)?
+            .map_err(|path| WorkspaceError::NotLoaded { path, workspace })
+    }
+
+    /// Whether some `loaded` entry points at the directory `root`.
+    pub fn is_loaded(&self, root: &Path) -> bool {
+        let target = paths::normalize(root);
+        self.config
+            .loaded
+            .iter()
+            .any(|entry| points_at(&self.root, entry, &target))
+    }
+
+    /// Every loaded entry, in marker order, with the workspace it opens or the
+    /// reason it does not — the same shape as [`members`](Self::members), so
+    /// a source that has gone away is shown where it can be unloaded.
+    ///
+    /// Only one level deep: what a loaded workspace loads itself is not
+    /// followed, so two workspaces loading each other is not a loop.
+    pub fn loads(&self) -> Vec<Loaded> {
+        self.config
+            .loaded
+            .iter()
+            .map(|entry| {
+                let root = paths::normalize(&self.root.join(entry));
+                let workspace = FlayerWorkspace::open(&root);
+                Loaded {
+                    entry: entry.clone(),
+                    root,
+                    workspace,
+                }
+            })
+            .collect()
+    }
+
+    /// Rewrite the `projects` array in place. See [`edit_array`](Self::edit_array).
+    fn edit_projects<F, T>(&mut self, edit: F) -> Result<T, WorkspaceError>
+    where
+        F: FnOnce(&mut toml_edit::Array) -> Result<T, String>,
+    {
+        self.edit_array(PROJECTS_KEY, edit)
+    }
+
+    /// Rewrite one array of the marker in place, leaving every other byte of
+    /// the file alone: comments, key order, spacing.
     ///
     /// This is why `toml_edit` is a dependency. Reading is serde's job, but
     /// re-serializing to write would throw away the comment that explains what
@@ -496,7 +727,7 @@ impl FlayerWorkspace {
     /// The array is read from disk here rather than taken from `self.config`,
     /// so an edit decides what to do from the file it is about to write, not
     /// from a copy that may be minutes old.
-    fn edit_projects<F, T>(&mut self, edit: F) -> Result<T, WorkspaceError>
+    fn edit_array<F, T>(&mut self, key: &str, edit: F) -> Result<T, WorkspaceError>
     where
         F: FnOnce(&mut toml_edit::Array) -> Result<T, String>,
     {
@@ -512,15 +743,16 @@ impl FlayerWorkspace {
                     detail: error.to_string(),
                 })?;
 
-        // A workspace whose `projects` key was deleted by hand still links.
-        if !document.as_table().contains_key("projects") {
-            document["projects"] = toml_edit::value(toml_edit::Array::new());
+        // A key deleted by hand — or a marker from before `loaded` existed —
+        // is made again rather than refused.
+        if !document.as_table().contains_key(key) {
+            document[key] = toml_edit::value(toml_edit::Array::new());
         }
-        let array = document["projects"]
+        let array = document[key]
             .as_array_mut()
             .ok_or_else(|| WorkspaceError::Edit {
                 path: path.clone(),
-                detail: "`projects` is not an array".to_owned(),
+                detail: format!("`{key}` is not an array"),
             })?;
 
         let value = edit(array).map_err(|detail| WorkspaceError::Edit {
@@ -551,17 +783,146 @@ impl FlayerWorkspace {
     pub fn projects(&self) -> (Vec<MindProject>, Vec<WorkspaceError>) {
         let mut projects = Vec::new();
         let mut failures = Vec::new();
-        for entry in &self.config.projects {
-            // Relative to the workspace root, so a workspace can be moved with
-            // its projects and keep working.
-            let path = self.root.join(entry);
-            match MindProject::open(path) {
+        for member in self.members() {
+            match member.project {
                 Ok(project) => projects.push(project),
                 Err(error) => failures.push(error),
             }
         }
         (projects, failures)
     }
+
+    /// Every registered entry, in the order the marker lists them, with the
+    /// project each one opens or the reason it does not.
+    ///
+    /// What [`projects`](Self::projects) is built on, for a front end that
+    /// shows a stale entry beside the ones that work: the entry is what
+    /// `unlink` is given to remove it, and an error alone does not say which
+    /// entry it came from.
+    pub fn members(&self) -> Vec<Member> {
+        self.config
+            .projects
+            .iter()
+            .map(|entry| {
+                // Relative to the workspace root, so a workspace can be moved
+                // with its projects and keep working.
+                let root = paths::normalize(&self.root.join(entry));
+                let project = MindProject::open(&root);
+                Member {
+                    entry: entry.clone(),
+                    root,
+                    project,
+                }
+            })
+            .collect()
+    }
+
+    /// The workspace's own artifacts, held the way a project holds its own: in
+    /// the directories its marker names.
+    ///
+    /// A `MindProject` rather than a type of its own, because everything that
+    /// reads, creates, renames or removes an artifact asks its holder the same
+    /// three things — where it is, what it is called, where each kind lives —
+    /// and a workspace answers them exactly as a project does. So the rules
+    /// for the workspace's artifacts are the rules for everybody's, with no
+    /// second copy of them to drift.
+    pub fn own(&self) -> MindProject {
+        MindProject {
+            root: self.root.clone(),
+            config: MindConfig {
+                version: FORMAT_VERSION,
+                name: self.config.name.clone(),
+                directories: self.config.directories.clone(),
+            },
+        }
+    }
+
+    /// The kinds the workspace keeps artifacts of its own for.
+    ///
+    /// Every kind, except where the workspace's root is itself a project it
+    /// manages and both keep that kind in the same folder: what sits there is
+    /// the project's, and counting it twice would list every one of them
+    /// twice.
+    pub fn own_kinds(&self) -> Vec<Kind> {
+        let own = self.own();
+        let here = self
+            .members()
+            .into_iter()
+            .filter_map(|member| member.project.ok())
+            .find(|project| project.root() == self.root);
+        Kind::ALL
+            .into_iter()
+            .filter(|kind| {
+                here.as_ref()
+                    .is_none_or(|project| project.directory_for(*kind) != own.directory_for(*kind))
+            })
+            .collect()
+    }
+
+    /// Whether some registered entry points at the directory `root`.
+    ///
+    /// By where entries point, not how they are spelled — the same matching
+    /// `link` uses — so a project registered as `./collapse` is linked when
+    /// asked about as `collapse`.
+    pub fn is_linked(&self, root: &Path) -> bool {
+        let target = paths::normalize(root);
+        self.config
+            .projects
+            .iter()
+            .any(|entry| points_at(&self.root, entry, &target))
+    }
+}
+
+/// One entry in a workspace's registry, and what it opens.
+#[derive(Debug)]
+pub struct Member {
+    /// The entry as the marker spells it.
+    pub entry: PathBuf,
+    /// Where it points, resolved against the workspace root.
+    pub root: PathBuf,
+    /// The project there, or why there is none.
+    pub project: Result<MindProject, WorkspaceError>,
+}
+
+/// One entry in a workspace's `loaded` list, and what it opens.
+#[derive(Debug)]
+pub struct Loaded {
+    /// The entry as the marker spells it.
+    pub entry: PathBuf,
+    /// Where it points, resolved against the workspace root.
+    pub root: PathBuf,
+    /// The workspace there, or why there is none.
+    pub workspace: Result<FlayerWorkspace, WorkspaceError>,
+}
+
+const PROJECTS_KEY: &str = "projects";
+const LOADED_KEY: &str = "loaded";
+
+/// Remove every entry of `array` pointing at `target`, returning them.
+fn remove_pointing_at(array: &mut toml_edit::Array, root: &Path, target: &Path) -> Vec<PathBuf> {
+    let mut removed = Vec::new();
+    let mut index = 0;
+    while index < array.len() {
+        match array.get(index).and_then(|value| value.as_str()) {
+            Some(entry) if points_at(root, Path::new(entry), target) => {
+                removed.push(PathBuf::from(entry));
+                array.remove(index);
+            }
+            _ => index += 1,
+        }
+    }
+    removed
+}
+
+/// Whether two spellings name one directory: lexically first, then through
+/// the filesystem, so a symlinked spelling of a root is still that root.
+fn same_directory(a: &Path, b: &Path) -> bool {
+    let (a, b) = (paths::normalize(a), paths::normalize(b));
+    a == b
+        || matches!(
+            (fs::canonicalize(&a), fs::canonicalize(&b)),
+            (Ok(a), Ok(b)) if a == b
+        )
 }
 
 // ---------------------------------------------------------------------------
@@ -599,10 +960,16 @@ pub enum WorkspaceError {
     Edit { path: PathBuf, detail: String },
     #[error("{path}: not registered in the workspace at {workspace}")]
     NotRegistered { path: PathBuf, workspace: PathBuf },
+    #[error("{path}: a workspace cannot load itself")]
+    LoadsItself { path: PathBuf },
+    #[error("{path}: not loaded by the workspace at {workspace}")]
+    NotLoaded { path: PathBuf, workspace: PathBuf },
     #[error("{path}: not valid UTF-8, so it cannot be written into a TOML file")]
     NonUtf8Path { path: PathBuf },
     #[error("{path}: cannot hold a project's {kind}s, because it is not inside the project")]
     OutsideProject { path: PathBuf, kind: Kind },
+    #[error("{path}: cannot hold the workspace's {kind}s, because it is not inside the workspace")]
+    OutsideWorkspace { path: PathBuf, kind: Kind },
 }
 
 impl WorkspaceError {
@@ -617,8 +984,11 @@ impl WorkspaceError {
             | WorkspaceError::Version { path, .. }
             | WorkspaceError::Edit { path, .. }
             | WorkspaceError::NotRegistered { path, .. }
+            | WorkspaceError::LoadsItself { path }
+            | WorkspaceError::NotLoaded { path, .. }
             | WorkspaceError::NonUtf8Path { path }
-            | WorkspaceError::OutsideProject { path, .. } => path,
+            | WorkspaceError::OutsideProject { path, .. }
+            | WorkspaceError::OutsideWorkspace { path, .. } => path,
         }
     }
 }
@@ -725,7 +1095,7 @@ fn climbs(route: &Path) -> bool {
 /// The rename is the point: a crash mid-write leaves either the old config or
 /// the new one, never half of each. The temporary sits beside the original so
 /// the rename stays inside one filesystem, which is where it is atomic.
-fn replace_file(path: &Path, contents: &str) -> Result<(), WorkspaceError> {
+pub(crate) fn replace_file(path: &Path, contents: &str) -> Result<(), WorkspaceError> {
     // Follow a symlinked config to the file it names. Replacing the link
     // itself would silently detach a workspace from a config someone chose to
     // share, and leave the original holding stale contents.
@@ -789,14 +1159,7 @@ fn directory_name(root: &Path) -> String {
 /// answer to "where do this project's skills go" is in the file rather than in
 /// a function somebody has to go and read.
 fn mind_template(name: &str, directories: &Directories) -> String {
-    let mut configured = String::new();
-    for (kind, directory) in directories.resolved() {
-        configured.push_str(&format!(
-            "{} = {}\n",
-            kind.folder(),
-            toml_string(&directory.to_string_lossy())
-        ));
-    }
+    let configured = directory_lines(directories);
 
     format!(
         "# Mindflayer mind project.\n\
@@ -820,26 +1183,54 @@ fn mind_template(name: &str, directories: &Directories) -> String {
     )
 }
 
-fn flayer_template(name: &str) -> String {
+fn flayer_template(name: &str, directories: &Directories) -> String {
     format!(
         "# Mindflayer workspace.\n\
          #\n\
          # It orchestrates the mind projects listed below, so their skills can be\n\
          # managed together. Paths are relative to this file's grandparent, the\n\
          # directory holding {FLAYER_DIR}.\n\
+         #\n\
+         # `directories` says where the workspace keeps its own skills and rules:\n\
+         # the ones every project it manages can install, beside the projects'\n\
+         # own. They are made the first time something is added to them.\n\
+         #\n\
+         # `loaded` lists other flayer workspaces whose own skills its projects\n\
+         # can install too, read from there each time: `flayer load <path>`.\n\
          version = {FORMAT_VERSION}\n\
          name = {}\n\
-         projects = []\n",
-        toml_string(name)
+         projects = []\n\
+         loaded = []\n\
+         \n\
+         [directories]\n\
+         {}",
+        toml_string(name),
+        directory_lines(directories),
     )
 }
 
-/// Refuse a directory that would not travel with the project.
+/// `skills = "skills"`, a line per kind, spelled out even for the defaults.
+fn directory_lines(directories: &Directories) -> String {
+    directories
+        .resolved()
+        .into_iter()
+        .map(|(kind, directory)| {
+            format!(
+                "{} = {}\n",
+                kind.folder(),
+                toml_string(&directory.to_string_lossy())
+            )
+        })
+        .collect()
+}
+
+/// Whether a kind's directory stays inside what it belongs to.
 ///
 /// A mind project is meant to be committed, and its artifacts with it, so a
-/// kind's directory has to be somewhere inside it. Anything else describes a
-/// project whose skills are not the project's, and `mind init --skills /etc`
-/// should say so rather than making the folder.
+/// kind's directory has to be somewhere inside it; a workspace's own
+/// artifacts belong to it the same way. Anything else describes artifacts
+/// that are not the holder's, and `mind init --skills /etc` should say so
+/// rather than making the folder.
 ///
 /// The test is that the first component, once `.` and `..` are resolved, is a
 /// plain name. Not `is_absolute()`, which is **false on Windows** for
@@ -847,18 +1238,11 @@ fn flayer_template(name: &str) -> String {
 /// current drive's root, which is still not inside anything. Asking for a
 /// plain name instead covers absolute paths, rooted ones, `C:` prefixes and
 /// `..` at once, on both platforms, with one rule and no platform branch.
-fn check_inside(kind: Kind, directory: &Path) -> Result<(), WorkspaceError> {
-    let normalized = paths::normalize(directory);
-    if !matches!(
-        normalized.components().next(),
+fn stays_inside(directory: &Path) -> bool {
+    matches!(
+        paths::normalize(directory).components().next(),
         Some(std::path::Component::Normal(_))
-    ) {
-        return Err(WorkspaceError::OutsideProject {
-            path: directory.to_path_buf(),
-            kind,
-        });
-    }
-    Ok(())
+    )
 }
 
 /// A TOML basic string. Directory names are arbitrary, so the quoting is not
@@ -873,31 +1257,5 @@ fn toml_string(value: &str) -> String {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn templates_round_trip_through_the_parser() {
-        let mind: MindConfig =
-            toml::from_str(&mind_template("collapse", &Directories::default())).unwrap();
-        assert_eq!(mind.version, FORMAT_VERSION);
-        assert_eq!(mind.name, "collapse");
-        // Spelled out rather than left to the default, so the file answers
-        // where a project's skills go without anyone reading the source.
-        assert_eq!(mind.directories.get(Kind::Skill), Some(Path::new("skills")));
-        assert_eq!(mind.directories.get(Kind::Rule), Some(Path::new("rules")));
-
-        let flayer: FlayerConfig = toml::from_str(&flayer_template("projects")).unwrap();
-        assert_eq!(flayer.version, FORMAT_VERSION);
-        assert_eq!(flayer.name, "projects");
-        assert!(flayer.projects.is_empty());
-    }
-
-    #[test]
-    fn a_name_needing_quotes_still_round_trips() {
-        let awkward = "quote\" and \\ backslash";
-        let mind: MindConfig =
-            toml::from_str(&mind_template(awkward, &Directories::default())).unwrap();
-        assert_eq!(mind.name, awkward);
-    }
-}
+#[path = "workspace_test.rs"]
+mod tests;

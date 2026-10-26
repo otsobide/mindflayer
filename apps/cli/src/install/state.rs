@@ -32,6 +32,9 @@ pub struct Row {
     /// What it showed when the screen opened, which is what "pending" is
     /// measured against.
     pub was: bool,
+    /// Another offer of the same name was checked in its place: installing
+    /// that one replaces this one's copy, so this one is not removed.
+    pub superseded: bool,
 }
 
 impl Row {
@@ -41,6 +44,7 @@ impl Row {
             candidate,
             checked,
             was: checked,
+            superseded: false,
         }
     }
 
@@ -52,6 +56,9 @@ impl Row {
 
     /// What this row is asking for, if anything.
     pub fn pending(&self) -> Option<Pending> {
+        if self.superseded {
+            return None;
+        }
         match (self.was, self.checked) {
             (false, true) => Some(Pending::Install),
             (true, false) => Some(Pending::Remove),
@@ -71,6 +78,38 @@ pub struct Target {
 }
 
 impl Target {
+    /// When several offers of one name are in the project — they share its
+    /// one folder, so standing alone says each of them is — keep the box of
+    /// the one whose copy is there, as `current` tells, and clear the rest;
+    /// the first, if none matches because the copy was changed since.
+    pub fn settle(&mut self, current: impl Fn(&Candidate) -> bool) {
+        let mut names: Vec<String> = Vec::new();
+        for row in &self.rows {
+            let name = row.candidate.name().to_owned();
+            if row.was && !row.foreign() && !names.contains(&name) {
+                names.push(name);
+            }
+        }
+        for name in names {
+            let same: Vec<usize> = (0..self.rows.len())
+                .filter(|&index| self.rows[index].candidate.name() == name)
+                .collect();
+            if same.len() < 2 {
+                continue;
+            }
+            let chosen = same
+                .iter()
+                .copied()
+                .find(|&index| current(&self.rows[index].candidate))
+                .unwrap_or(same[0]);
+            for index in same {
+                let row = &mut self.rows[index];
+                row.was = index == chosen;
+                row.checked = row.was;
+            }
+        }
+    }
+
     pub fn new(project: MindProject, candidates: Vec<Candidate>) -> Self {
         Self {
             project,
@@ -219,7 +258,9 @@ impl Screen {
                 if self.current().is_some_and(|target| !target.rows.is_empty()) {
                     self.focus = Focus::Skills;
                 } else {
-                    self.message = Some(String::from("nothing on the shelf to install"));
+                    self.message = Some(String::from(
+                        "nothing on the shelf to install, and nothing loaded or of the workspace's own",
+                    ));
                 }
             }
             KeyCode::Esc => return Step::Quit,
@@ -266,22 +307,31 @@ fn toggle(target: &mut Target) -> Option<String> {
 
     let checked = !row.checked;
     let name = row.candidate.name().to_owned();
-    target.rows[cursor].checked = checked;
 
-    // One name, one artifact. Two shelves can offer `deploy`, but a project
+    // One name, one artifact. Two places can offer `deploy`, but a project
     // has one directory called `deploy`, so marking one unmarks the other
-    // rather than letting both be applied and the second win silently.
-    if checked {
-        let mut displaced = None;
-        for (index, other) in target.rows.iter_mut().enumerate() {
-            if index != cursor && other.checked && other.candidate.name() == name {
-                other.checked = false;
+    // rather than letting both be applied and the second win silently —
+    // and the one it displaces is not removed as well, because installing
+    // this one replaces it. Unmarking it again puts back what it displaced.
+    let mut displaced = None;
+    for (index, other) in target.rows.iter_mut().enumerate() {
+        if index == cursor || other.candidate.name() != name {
+            continue;
+        }
+        if checked && (other.checked || other.was) {
+            if other.checked {
                 displaced = Some(other.candidate.origin());
             }
-        }
-        if let Some(origin) = displaced {
-            return Some(format!("{name}: unmarked the one from {origin}"));
+            other.checked = false;
+            other.superseded = true;
+        } else if !checked && other.superseded {
+            other.superseded = false;
+            other.checked = other.was;
         }
     }
-    None
+    let row = &mut target.rows[cursor];
+    row.checked = checked;
+    row.superseded = false;
+
+    displaced.map(|origin| format!("{name}: unmarked the one from {origin}"))
 }
