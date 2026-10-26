@@ -8,9 +8,13 @@
 //! before it reads what it is about to change, and holds it until the change
 //! is written ([`crate::workspace::FlayerWorkspace::lock`]).
 //!
-//! Readers never take it, and never wait. A marker is replaced by a rename and
-//! the ledger keeps a write-ahead log, so a reader finds what was there before
-//! a write or what is there after it, never part of one.
+//! Readers never take it. A marker is replaced by a rename, and a read of the
+//! ledger sees only what was committed, so each file a reader opens is whole,
+//! as it was before a write or after it. A change made in several steps is
+//! not: a read between an install's copy and its record finds the copy
+//! without the record. The ledger keeps a write-ahead log, so a read does not
+//! wait for a write to it either, except on a filesystem that cannot keep
+//! one, where it waits for the write to be committed.
 //!
 //! The lock is the operating system's, through `std`'s `File::lock`, for the
 //! reason a stage's is ([`crate::copy::Stage`]): the system drops it when its

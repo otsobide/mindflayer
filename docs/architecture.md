@@ -1955,7 +1955,7 @@ created yet.
 The commands were written for a person at one terminal, running one at a time.
 The TUI runs them while another terminal runs its own, and the server under the
 panel runs them while both do. Three things keep two writers from undoing each
-other, and none of them makes a reader wait.
+other, and none of them makes a reader wait for the workspace.
 
 - **A temporary of its own.** A file Mindflayer replaces — a marker, the
   `SKILL.md` a rename rewrites, git's exclude file — is written whole into a
@@ -2037,9 +2037,15 @@ How the lock behaves, and why:
   file locked, no other can read a byte of it, and the id is wanted by exactly
   the processes that cannot have the lock. Writing it is best effort, and a
   waiting writer that finds none says "another process".
-- **Readers never take it.** A marker is replaced by a rename and the ledger
-  keeps its log, so a read finds what was there before a write or what is
-  there after it, never part of one, and has nothing to wait for.
+- **Readers never take it.** A marker is replaced by a rename, and a read of
+  the ledger sees only what was committed, so each file a read opens is
+  whole, as it was before a write or after it. A change made in several steps
+  is not seen whole: a read between an install's copy and its record finds the
+  copy without the record, and calls it somebody's, and a read during a gather
+  finds some shelf copies replaced and others not yet. With its log the ledger
+  never keeps a read waiting for a write; in the journal a filesystem without
+  one leaves it in, a read waits for a write to be committed, as readers and
+  writers take turns there.
   `ledger_for_reading` migrates an older ledger as `ledger` does, in the same
   transaction, so the most a read waits for is another process's migration,
   once after an upgrade.
