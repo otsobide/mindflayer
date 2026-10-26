@@ -384,6 +384,24 @@ fn the_copy_is_no_more_readable_than_the_ledger() {
     assert_eq!(mode & 0o777, 0o600);
 }
 
+#[cfg(unix)]
+#[test]
+fn the_copy_is_no_more_readable_than_the_ledger_before_anything_is_in_it() {
+    use std::os::unix::fs::PermissionsExt;
+
+    let dir = tempfile::TempDir::new().unwrap();
+    let path = dir.path().join(LEDGER_FILE);
+    version_1_at(&path);
+    std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o600)).unwrap();
+    let temporary = dir.path().join("mindflayer.db.v1.bak.tmp");
+
+    create_like(&temporary, &path).unwrap();
+
+    let made = std::fs::metadata(&temporary).unwrap();
+    assert_eq!(made.len(), 0);
+    assert_eq!(made.permissions().mode() & 0o777, 0o600);
+}
+
 /// An installation of `name` with a copy at each of `targets`.
 fn installation_of(name: &str, targets: &[(Option<&str>, &str)]) -> InstallRecord {
     InstallRecord {

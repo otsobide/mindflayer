@@ -343,9 +343,10 @@ impl Ledger {
     /// one holds the migration's write lock and SQLite will not copy from a
     /// connection in the middle of writing; reading beside that lock is
     /// allowed. Written to a temporary beside it and renamed, so an
-    /// interrupted copy is never mistaken for a whole one, and given the
-    /// database's permissions, so a ledger kept private does not leave a
-    /// readable copy of itself.
+    /// interrupted copy is never mistaken for a whole one, and made with the
+    /// database's permissions before anything is written to it, so a ledger
+    /// kept private is never readable through its copy, not even while the
+    /// copy is being written.
     ///
     /// Called with the write lock held, which is what makes the temporary's
     /// one fixed name safe: no other process is copying, so whatever is
@@ -374,6 +375,8 @@ impl Ledger {
             let _ = fs::remove_file(journal_of(&temporary));
             return Err(failed(error));
         }
+        // Exactly the database's once it is whole: it was made with the
+        // owner's read and write added, and less whatever the umask took.
         if let Ok(metadata) = fs::metadata(&self.path) {
             let _ = fs::set_permissions(&temporary, metadata.permissions());
         }
@@ -819,6 +822,7 @@ fn copy_database(from: &Path, to: &Path, version: u32) -> Result<(), io::Error> 
         | OpenFlags::SQLITE_OPEN_URI
         | OpenFlags::SQLITE_OPEN_NO_MUTEX;
     let source = Connection::open_with_flags(from, flags).map_err(io::Error::other)?;
+    create_like(to, from)?;
     let mut copy = Connection::open(to).map_err(io::Error::other)?;
     {
         let copying = Backup::new(&source, &mut copy).map_err(io::Error::other)?;
@@ -845,6 +849,30 @@ fn copy_database(from: &Path, to: &Path, version: u32) -> Result<(), io::Error> 
         )));
     }
     Ok(())
+}
+
+/// Create `path` empty, no more readable than the file at `like`, for SQLite
+/// to copy that file into.
+///
+/// Made with that mode rather than given it once the copy is written: SQLite
+/// creates a file anyone the umask allows may read, and whoever opened it
+/// before its mode changed could read the whole ledger through that handle
+/// afterwards. The owner may always read and write it, which SQLite needs
+/// and nobody else gains by. SQLite opens an empty file as an empty
+/// database, and gives the journal it keeps beside it the same mode.
+fn create_like(path: &Path, like: &Path) -> Result<(), io::Error> {
+    let mut options = fs::OpenOptions::new();
+    options.write(true).create_new(true);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::{OpenOptionsExt, PermissionsExt};
+        options.mode((fs::metadata(like)?.permissions().mode() & 0o777) | 0o600);
+    }
+    // Elsewhere a new file takes its folder's access rules, and the one
+    // flag left, read-only, is given to the copy once it is whole.
+    #[cfg(not(unix))]
+    let _ = like;
+    options.open(path).map(drop)
 }
 
 /// The rollback journal SQLite keeps beside a database while writing it.
