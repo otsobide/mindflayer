@@ -655,7 +655,11 @@ target: every target is written from one copy, so one hash is what each is
 compared with, and a copy somebody edited is the one whose own hash no longer
 matches it. An install records the hash of the copy as it stands once
 written; one that cannot be read back is recorded with none rather than not
-at all, since without a record it would be Foreign for good.
+at all, since without a record it would be Foreign for good. That is a
+`warning:` and a non-zero exit, and the log's entry says why, rather than a
+plain success: a copy an install left as it was can hold a link somebody
+put there, which `copy::same` follows and the hash refuses, and a record
+with no hash is read as one from before hashes were kept.
 
 ## Installing
 
