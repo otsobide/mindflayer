@@ -103,9 +103,9 @@ fn password_goes_on(scheme: &str, authority: &str) -> bool {
     if scheme.eq_ignore_ascii_case("file") || authority.starts_with('[') {
         return false;
     }
-    authority.split_once(':').is_some_and(|(_, port)| {
-        port.is_empty() || !port.bytes().all(|byte| byte.is_ascii_digit())
-    })
+    authority
+        .split_once(':')
+        .is_some_and(|(_, port)| port.is_empty() || !port.bytes().all(|byte| byte.is_ascii_digit()))
 }
 
 /// The scheme written just before the `://` at `separator`.

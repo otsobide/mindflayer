@@ -12,9 +12,9 @@ use std::fmt::Write as _;
 use std::io;
 use std::time::Duration;
 
+use mindflayer_core::gather::Scrub;
 use mindflayer_core::install::{self, Installed, Removed};
 use mindflayer_core::ledger::Ledger;
-use mindflayer_core::gather::Scrub;
 use mindflayer_core::{FlayerWorkspace, Kind, MindProject};
 use ratatui::crossterm::event::{self, Event, KeyEventKind};
 use ratatui::DefaultTerminal;
