@@ -47,9 +47,14 @@ pub enum Intent {
 
 /// Which rule chose the workspace.
 ///
-/// Returned beside it rather than worked out again afterwards: whether a
-/// workspace is the default one, say, is not something its path alone
-/// answers once `-W` can name the directory home is.
+/// Returned beside it rather than worked out again afterwards: why a
+/// workspace is the one in use is not something its path answers. The
+/// directory home is can be named with `-W`, activated or found walking up
+/// from below it as well as fallen back to, and only the last is what the
+/// TUI means by "no workspace here or above". Whether a workspace *is* the
+/// one in home is a question about the workspace rather than the rule, which
+/// [`FlayerWorkspace::is_default`] answers from paths: `load` and `unload`
+/// ask that, so they call it the default one however it was reached.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Reason {
     /// Named on the command line.
