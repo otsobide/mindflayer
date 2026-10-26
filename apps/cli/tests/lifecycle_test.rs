@@ -252,6 +252,40 @@ fn an_installed_skill_that_is_edited_is_yours_from_then_on() {
     );
 }
 
+#[cfg(unix)]
+#[test]
+fn an_installed_skill_is_yours_when_the_editor_writes_it_and_then_fails() {
+    let (dir, workspace, ledger) = shelved(&["collapse"], &["deploy"]);
+    installed(dir.path(), &workspace, &ledger);
+    let project = dir.path().join("collapse");
+
+    // Writes, then exits non-zero, as vim does on `:cq` after `:w`.
+    let failure = mind(
+        &project,
+        &[
+            "edit",
+            "deploy",
+            "--editor",
+            "printf 'Mine.\\n' >> \"$1\"; false",
+        ],
+    )
+    .unwrap_err();
+
+    assert!(
+        matches!(*failure.error, CliError::EditorFailed { .. }),
+        "{}",
+        failure.error
+    );
+    assert!(failure.warnings.is_empty(), "{:?}", failure.warnings);
+    let manifest = fs::read_to_string(project.join("skills/deploy/SKILL.md")).unwrap();
+    assert!(manifest.ends_with("Mine.\n"), "{manifest}");
+    let screen = screen_for(&workspace, &ledger);
+    assert_eq!(
+        screen.targets[0].rows[0].candidate.standing,
+        Standing::Foreign
+    );
+}
+
 /// `hub`, a workspace, and `collapse`, a project it links from beside it
 /// rather than from above: walking up from the project never reaches it.
 fn linked_from_beside() -> (TempDir, PathBuf, PathBuf) {
