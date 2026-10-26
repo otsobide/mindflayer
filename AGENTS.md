@@ -90,7 +90,9 @@ These are easy to break from a single file without noticing.
   drop the record (`install::disown`).
 - **Strict when writing, lenient when reading.** A skill's front matter is
   the Agent Skills format. `mind add`, `rename` and `install` refuse a name or
-  description that breaks its rules (`ValidationIssue::is_strict`); gathering
+  description that breaks its rules, all through `artifact::strict_issues`
+  (what `ValidationIssue::is_strict` picks out), so change the rules there and
+  nowhere else; gathering
   takes such a skill with a `warning:` per problem, and `validate` reports
   everything, the shelf included. Keys the format does not define pass through
   untouched.

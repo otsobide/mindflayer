@@ -191,10 +191,13 @@ been a second rule to keep in step with the first.
 `Artifact::validate` gives one list of problems, and it is treated three ways:
 
 - **Refused** when Mindflayer writes a skill into a project, if the name or
-  the description breaks the rules (`ValidationIssue::is_strict`): `mind add`,
-  `rename` and `install` all check both — `rename` too, although the name is
-  all it writes, because what it leaves behind is a skill Mindflayer wrote.
-  Those are what agents refuse: Codex skips a skill whose name is over 64
+  the description breaks the rules. `mind add`, `rename` and `install` all
+  ask `artifact::strict_issues`, which keeps what `ValidationIssue::is_strict`
+  picks out of that list, for the skill as it is about to be written — so one
+  change to the set reaches all three. `rename` asks too, although the name is
+  all it writes, because what it leaves behind is a skill Mindflayer wrote;
+  `mind add` checks the name and the description before building anything as
+  well, only for messages of its own. Those are what agents refuse: Codex skips a skill whose name is over 64
   characters or whose description is empty, so writing one would put a skill
   in the project that never loads. So is a name that is not the folder the
   skill is filed in, since an agent finds a skill by one or the other — asked
