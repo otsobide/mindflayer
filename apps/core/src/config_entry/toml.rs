@@ -26,7 +26,8 @@
 //!   what toml_edit writes.
 //! - toml_edit writes every line ending as LF. A file whose lines all end in
 //!   CRLF has them put back; one that mixes the two is refused, since which
-//!   line had which would be lost.
+//!   line had which would be lost. It ends the last line too, which a file
+//!   that left it unended gets back unended.
 
 use std::fmt::Write as _;
 
@@ -81,7 +82,12 @@ pub(super) fn edit(text: Option<&str>, key: &[&str], edit: &Edit) -> Result<Stri
     // A file of comments alone holds them after everything, where toml_edit
     // writes what is inserted before them; they are put back on top.
     if document.is_empty() && matches!(edit, Edit::Insert(_)) {
-        let comments = document.trailing().clone();
+        let mut comments = document.trailing().as_str().unwrap_or_default().to_owned();
+        // A last comment with no line ending would take in what is written
+        // after it; the ending goes back out below.
+        if comments.contains('#') && !comments.ends_with('\n') {
+            comments.push('\n');
+        }
         document.set_trailing("");
         document.decor_mut().set_prefix(comments);
     }
@@ -103,6 +109,14 @@ pub(super) fn edit(text: Option<&str>, key: &[&str], edit: &Edit) -> Result<Stri
     }
     if crlf {
         written = to_crlf(&written);
+    }
+    // toml_edit ends every line it writes, the last one too; a file whose
+    // last line had no ending is left without one.
+    if !text.is_empty() && !text.ends_with('\n') {
+        let ending = if crlf { "\r\n" } else { "\n" };
+        if let Some(unended) = written.strip_suffix(ending) {
+            written.truncate(unended.len());
+        }
     }
     Ok(written)
 }

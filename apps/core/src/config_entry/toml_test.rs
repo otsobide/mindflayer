@@ -201,6 +201,53 @@ fn crlf_is_kept_by_every_edit() {
 }
 
 #[test]
+fn a_file_whose_last_line_has_no_ending_is_left_without_one() {
+    let cases = [
+        (
+            "x = 0\na = 1",
+            &["x"][..],
+            Edit::Replace(Value::from(9)),
+            "x = 9\na = 1",
+        ),
+        (
+            "[t]\nx = 0\n\n[u]\na = 1",
+            &["t", "x"],
+            Edit::Replace(Value::from(9)),
+            "[t]\nx = 9\n\n[u]\na = 1",
+        ),
+        ("x = 0\na = 1", &["x"], Edit::Remove, "a = 1"),
+        (
+            "x = 0\na = 1",
+            &["b"],
+            Edit::Insert(Value::from(2)),
+            "x = 0\na = 1\nb = 2",
+        ),
+        (
+            "x = 0\r\na = 1",
+            &["x"],
+            Edit::Replace(Value::from(9)),
+            "x = 9\r\na = 1",
+        ),
+        (
+            "# Codex, for this project.",
+            &["mcp_servers", "github"],
+            Edit::Insert(Value::object([("command", Value::from("gh"))])),
+            "# Codex, for this project.\n[mcp_servers.github]\ncommand = \"gh\"",
+        ),
+        // A comment on the last line is no line toml_edit writes.
+        (
+            "a = 1\n# end",
+            &["b"],
+            Edit::Insert(Value::from(2)),
+            "a = 1\nb = 2\n# end",
+        ),
+    ];
+    for (text, key, change, expected) in cases {
+        assert_eq!(edit(Format::Toml, text, key, &change).unwrap(), expected);
+    }
+}
+
+#[test]
 fn a_file_whose_line_endings_are_mixed_is_refused() {
     let error = edit(
         Format::Toml,
@@ -337,7 +384,9 @@ fn removing_what_was_inserted_gives_back_the_file_byte_for_byte() {
         &crlf,
         "",
         "# only comments, as a template leaves it\n",
+        "# only comments, the last line unended",
         "model = \"o3\"\n",
+        "model = \"o3\"",
         "[mcp_servers]\n  filesystem = { command = \"npx\" }\n",
         "mcp_servers = { filesystem = { command = \"npx\" } }\n",
         "mcp_servers.filesystem.command = \"npx\"\n",
