@@ -1804,23 +1804,25 @@ One function in core decides, `resolve`
 feeds it: each command, and the TUI's screens. In order:
 
 1. the workspace `-W DIR` names, by its root or by its `.mindflayer`;
-2. the one `$MINDFLAYER_WORKSPACE` activates, which `flayer activate` is to
-   set (#55);
+2. the one `$MINDFLAYER_WORKSPACE` activates, which `flayer activate` sets
+   (see [activating a workspace](#activating-a-workspace));
 3. the first one found walking up from where the command starts: the
    directory for a `flayer` command, the project's root for a `mind` one;
 4. the default one, in home.
 
 It hands back the workspace with the `Reason` that chose it (`Explicit`,
 `Activated`, `Above`, `Home`), so a front end that says why it is showing a
-workspace asks the answer rather than working it out from paths. The TUI's
-header says there is no workspace here or above only for `Home`: the
-directory home is can also be named with `-W`, activated, or reached walking
-up from below it. Which workspace a command changed is another question,
-about the workspace rather than the rule, and `load` and `unload` answer it
-from the path (`FlayerWorkspace::is_default`). They call the one in home the
-default one however it was reached, so their line reads the same on the run
-that makes it, from anywhere, as on every run after, which from below home
-finds it walking up.
+workspace asks the answer rather than working it out from paths. `flayer
+which` puts it into words beside the root, and the TUI's header names it for
+every workspace it shows (`named with -W`, `activated`, `found above`,
+`default workspace`). Only for `Home` does the TUI also say there is no
+workspace here or above: the directory home is can also be named with `-W`,
+activated, or reached walking up from below it. Which workspace a command
+changed is another question, about the workspace rather than the rule, and
+`load` and `unload` answer it from the path (`FlayerWorkspace::is_default`).
+They call the one in home the default one however it was reached, so their
+line reads the same on the run that makes it, from anywhere, as on every run
+after, which from below home finds it walking up.
 
 The first two are choices somebody made on purpose, so they win over where
 somebody happens to stand. Activating a workspace is meant to override
@@ -1842,6 +1844,69 @@ where the default lives: reusing them to choose a workspace would confuse
 where the default is with which workspace to use. A relative `-W` is taken
 from where the command was run, as `--home` is, rather than from `-C`, which
 moves where a command works and not what it was told.
+
+### Activating a workspace
+
+`flayer activate [DIR]` prints shell code that sets `$MINDFLAYER_WORKSPACE`
+for the rest of the shell, puts `(flayer:<name>) ` in front of the prompt,
+and defines `flayer-deactivate`, which puts both back; it is run as `eval
+"$(flayer activate DIR)"`. Printed for the shell to run rather than written
+to a file to be sourced: activation lasts as long as the shell, as a
+virtualenv's does, and D-08 rejected an activation file as hidden state in
+repositories meant to stay minimal. Activating writes nothing at all. It
+opens `DIR` the way `-W` does (`resolve::named`), by its root or its
+`.mindflayer`, and without `DIR` it activates what a read resolves from
+where it runs, so `-W` and an earlier activation count, and the default one
+only once it is made. What cannot be activated is an error with nothing on
+stdout, so `eval` runs nothing. `flayer init PATH` makes the workspace to
+activate, wherever it is to go.
+
+The code is core's (`activate::script`): what it sets is what `resolve` is
+fed from, and how a path is quoted for a shell is a safety rule, so no front
+end that offers to activate a workspace can write it differently. So is the
+variable's name (`activate::WORKSPACE_VARIABLE`), by which the CLI reads it,
+so the code that sets it and the front end that reads it cannot spell it two
+ways; the agents' variables, which nothing here writes, stay the CLI's. The
+CLI only decides the shell, from `--shell` or else from `$SHELL`, which it
+reads because core never reads the environment. `$SHELL` names the login shell,
+which is the running one more often than not; asking the system which
+process started this one would be right more often, for much more
+machinery, and `--shell` covers the rest.
+
+bash and zsh share one code, since everything it uses means the same in
+both. The prefix is put in front of `PS1` and taken out again by its text,
+wherever it is by then, rather than by restoring a copy saved on the way in,
+as a Python virtualenv does: restoring would also take out a virtualenv's
+prefix added since. The virtualenv's own copy, `_OLD_VIRTUAL_PS1`, gets the
+prefix and loses it the same way, so the virtualenv's `deactivate` neither
+drops the prefix while a workspace is active nor brings it back once none
+is. Between them, either deactivate undoes only its own activate, in either
+order, which `tests/shells_test.rs` checks beside a real virtualenv, in bash
+and in zsh where it is installed. Each of those runs its shell with no
+startup file and an environment holding only a `PATH`, a temporary `HOME` and
+what the test sets, so no developer's shell or activation gets in. The
+function is never called `deactivate`: defining that would take the
+virtualenv's away. Activating again runs an existing `flayer-deactivate`
+first, so one workspace is swapped for the other, and what the variable held
+before the first is what the last puts back.
+
+fish and PowerShell keep the prompt in a function, which the code wraps once
+per shell. The wrapper prints the prefix only while a workspace is active,
+and deactivating leaves it where it is. Unwrapping, as a virtualenv does,
+would break the prompt of whatever wrapped it since: a virtualenv activated
+afterwards keeps a copy of the wrapper, which calls the function unwrapping
+takes away. Those two are asserted as text, in core, until something runs
+them.
+
+The name in the prompt is the marker's, and a marker comes with whatever
+directory holds it, a cloned one included. A prompt is expanded every time
+it is drawn: bash, and zsh with `PROMPT_SUBST`, run a `$(…)` or a backquote
+in it, `\` and `%` are escapes, and `!` is a history number. Each of those,
+and every control character, is shown as `_` (`activate::prompt`). Escaping
+them instead would take one escaper per shell and per option (`promptvars`,
+`PROMPT_SUBST`, `PROMPT_BANG`), none of which the code can see when it is
+written. The path is only ever one single-quoted word, in each shell's own
+quoting, and one that is not UTF-8 is refused rather than spelled wrong.
 
 ### The default, made only by a write
 
@@ -2481,7 +2546,9 @@ which confuses where the default lives with which workspace to use; and a
 direnv-style activation file, hidden state in repositories meant to stay
 minimal. Unblocks #54, #55 and #56. #54 carried it out: core's `resolve`,
 with `-W/--workspace` on both binaries (see [which workspace a command
-uses](#which-workspace-a-command-uses)).
+uses](#which-workspace-a-command-uses)). #55 added what sets the variable,
+`flayer activate` and `flayer-deactivate`, and `flayer which`, which says the
+reason (see [activating a workspace](#activating-a-workspace)).
 
 ### D-09: Project settings live in the project
 
@@ -2826,6 +2893,24 @@ leak into the lifecycle code. Unblocks #33, #45, #62, #93, #94 and #95.
   shell without the same `-W` or activation they walk up instead. Writing it
   into every line would make the transcript replayable anywhere, at the
   price of lines nobody would type from inside the workspace.
+- **A prompt rebuilt every time.** Starship, powerlevel10k, oh-my-posh and
+  the like write the prompt anew before each one, which drops the prefix
+  activating puts in front of it: the workspace is still active, and `flayer
+  which` still says so, but the prompt does not. A
+  `$MINDFLAYER_DISABLE_PROMPT`, as a virtualenv has
+  `$VIRTUAL_ENV_DISABLE_PROMPT`, and a word on showing `$MINDFLAYER_WORKSPACE`
+  from the prompt's own configuration would serve them.
+- **A wrapper a virtualenv throws away.** In fish and PowerShell, a
+  workspace activated on top of a virtualenv wraps the virtualenv's prompt,
+  and the virtualenv's `deactivate` puts back the prompt it saved, without
+  the wrapper. The workspace stays active without its prefix, and since the
+  prompt is wrapped once per shell, a later activation in that shell shows
+  none either. Nothing breaks, and the prefix is missing. Wrapping again
+  whenever the wrapper is no longer reachable would mend it, given a way to
+  tell that without breaking whatever wrapped it since.
+- **Shells elsewhere.** The tests that run a shell run on Linux only. macOS
+  has bash 3.2 and zsh, and Windows has PowerShell, and each wants running
+  there before activation is said to work on it.
 - **Worktrees share one exclude file.** Every linked worktree of a repository
   reads the same `info/exclude`, and an entry is anchored at whichever work
   tree reads it. A project checked out in two worktrees under one key has one
