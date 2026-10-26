@@ -1,8 +1,8 @@
 .DEFAULT_GOAL := help
 
-# Every unit of the product lives under apps/. Adding one (a desktop shell, a
-# server backend) means a directory with its own Makefile and a line here.
-APPS := core cli
+# Every unit of the product lives under apps/. Adding one (the web panel, a
+# desktop shell) means a directory with its own Makefile and a line here.
+APPS := core cli server
 
 # ---------------------------------------------------------------------------
 # Per-app delegation — `make <app>/<target>` runs <target> in apps/<app>/Makefile
