@@ -421,3 +421,163 @@ fn a_project_with_an_empty_shelf_is_told_where_skills_come_from() {
 
     assert!(rendered(&screen).contains("nothing on the shelf"));
 }
+
+/// Put a token into the URL of every source on the shelf, the way a Mindflayer
+/// from before the refusal stored one.
+fn token_in_the_shelf(workspace: &FlayerWorkspace) {
+    rusqlite::Connection::open(workspace.ledger_path())
+        .unwrap()
+        .execute(
+            "UPDATE sources SET url = 'https://me:ghp_t0ken@example.com/acme/skills'",
+            [],
+        )
+        .unwrap();
+}
+
+const SCRUBBED: &str = "note: https://example.com/acme/skills: the user name, password or \
+     token an older Mindflayer stored in this URL is taken out; gathering it again needs a git \
+     credential helper that has it";
+
+/// How many sources still hold a credential in the file, which a read hands
+/// back without it.
+fn tainted(workspace: &FlayerWorkspace) -> usize {
+    workspace
+        .ledger_for_reading()
+        .unwrap()
+        .tainted_sources()
+        .unwrap()
+        .len()
+}
+
+#[test]
+fn opening_the_screen_scrubs_nothing_and_applying_scrubs_first_and_says_so_without_failing() {
+    let (_dir, workspace, _ledger) = shelved(&["collapse"], &["deploy"]);
+    token_in_the_shelf(&workspace);
+    let (projects, _) = install_screen::registered(&workspace);
+
+    let mut screen = install_screen::open(&workspace, projects).unwrap();
+
+    assert_eq!(tainted(&workspace), 1, "opening the screen is a read");
+    press(&mut screen, &[KeyCode::Right, KeyCode::Char(' ')]);
+    let outcome = install_screen::commit(&workspace, &screen).unwrap();
+
+    assert!(outcome.ok, "{:?}", outcome.stderr);
+    assert_eq!(outcome.stderr, [SCRUBBED]);
+    assert!(
+        outcome.stdout.starts_with("collapse: installed deploy\n"),
+        "{}",
+        outcome.stdout
+    );
+    assert_eq!(tainted(&workspace), 0);
+}
+
+/// What an older build could leave: the same place gathered twice, once with
+/// a token in its URL, into the folder `older`, and once, later, without.
+fn gathered_twice(workspace: &FlayerWorkspace) -> rusqlite::Connection {
+    let database = rusqlite::Connection::open(workspace.ledger_path()).unwrap();
+    database
+        .execute_batch(
+            "UPDATE sources SET url = 'https://example.com/acme/skills', last_seen = 20;
+             INSERT INTO sources (kind, url, reference, subdirectory, directory, first_seen, last_seen)
+                 SELECT kind, 'https://me:ghp_t0ken@example.com/acme/skills', reference,
+                        subdirectory, 'older', 0, 0 FROM sources;
+             INSERT INTO artifacts (kind, name, source_id, path, summary, revision, gathered_at)
+                 SELECT kind, name, (SELECT id FROM sources WHERE directory = 'older'), path,
+                        summary, revision, 0 FROM artifacts;",
+        )
+        .unwrap();
+    database
+}
+
+/// Put the cursor on the row offering `name` from the source gathered into
+/// `directory`, and mark it.
+fn mark_from(screen: &mut Screen, name: &str, directory: &str) {
+    use mindflayer_core::install::Offer;
+
+    let target = &mut screen.targets[0];
+    target.cursor = target
+        .rows
+        .iter()
+        .position(|row| {
+            row.candidate.name() == name
+                && matches!(&row.candidate.offer, Offer::Shelf(gathered)
+                    if gathered.source.directory == directory)
+        })
+        .unwrap();
+    press(screen, &[KeyCode::Right, KeyCode::Char(' ')]);
+}
+
+#[test]
+fn a_mark_on_a_source_the_scrub_makes_one_with_another_installs_from_the_one_kept_on_record() {
+    let (dir, workspace, _ledger) = shelved(&["collapse"], &["deploy"]);
+    gathered_twice(&workspace);
+    let (projects, _) = install_screen::registered(&workspace);
+    let mut screen = install_screen::open(&workspace, projects).unwrap();
+    // Twice, as the file has it until a write scrubs it: a read takes the
+    // token out of what it shows, not the row out of the file.
+    assert_eq!(screen.targets[0].rows.len(), 2, "{}", rendered(&screen));
+
+    // The row the scrub drops, whose source is gone by the time it installs.
+    mark_from(&mut screen, "deploy", "older");
+    let outcome = install_screen::commit(&workspace, &screen).unwrap();
+
+    assert!(outcome.ok, "{:?}", outcome.stderr);
+    assert!(dir.path().join("collapse/skills/deploy/SKILL.md").is_file());
+    assert_eq!(
+        workspace
+            .ledger_for_reading()
+            .unwrap()
+            .installations("collapse", Kind::Skill)
+            .unwrap(),
+        ["deploy"],
+        "recorded, so Mindflayer still counts the copy as its own"
+    );
+}
+
+#[test]
+fn a_mark_on_what_only_the_source_the_scrub_drops_had_is_said_and_left_undone() {
+    let (dir, workspace, _ledger) = shelved(&["collapse"], &["deploy"]);
+    gathered_twice(&workspace)
+        .execute(
+            "INSERT INTO artifacts (kind, name, source_id, path, gathered_at)
+                 SELECT 'skill', 'lint', id, '.mindflayer/skills/older/lint', 0
+                   FROM sources WHERE directory = 'older'",
+            [],
+        )
+        .unwrap();
+    let (projects, _) = install_screen::registered(&workspace);
+    let mut screen = install_screen::open(&workspace, projects).unwrap();
+
+    mark_from(&mut screen, "lint", "older");
+    let outcome = install_screen::commit(&workspace, &screen).unwrap();
+
+    assert!(!outcome.ok);
+    assert_eq!(
+        outcome.stderr,
+        [
+            SCRUBBED,
+            "warning: collapse: lint from https://example.com/acme/skills is no longer on the \
+             shelf once the ledger was scrubbed, so it was left as it was"
+        ]
+    );
+    assert!(!dir.path().join("collapse/skills/lint").exists());
+}
+
+#[test]
+fn installing_and_uninstalling_one_skill_scrub_the_ledger_first() {
+    let (dir, workspace, _ledger) = shelved(&["collapse"], &["deploy"]);
+    token_in_the_shelf(&workspace);
+
+    let installed = flayer(dir.path(), &["install", "-p", "collapse", "deploy"]).unwrap();
+    assert!(installed.ok, "{:?}", installed.stderr);
+    assert_eq!(installed.stderr, [SCRUBBED]);
+    assert_eq!(
+        installed.stdout,
+        "installed deploy into collapse, from https://example.com/acme/skills\n"
+    );
+
+    token_in_the_shelf(&workspace);
+    let removed = mind(&dir.path().join("collapse"), &["uninstall", "deploy"]).unwrap();
+    assert!(removed.ok, "{:?}", removed.stderr);
+    assert_eq!(removed.stderr, [SCRUBBED]);
+}

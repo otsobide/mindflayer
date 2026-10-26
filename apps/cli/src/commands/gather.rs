@@ -4,18 +4,19 @@
 use std::fmt::Write as _;
 use std::path::Path;
 
-use mindflayer_core::gather::{self, Report, Request};
+use mindflayer_core::gather::{self, Report, Request, Scrub};
+use mindflayer_core::url::redacted;
 use mindflayer_core::{FlayerWorkspace, Kind};
 
 use super::{reading_workspace, workspace_here};
 use crate::render::{indent, plural, printable, table};
-use crate::{CliError, Failure, GatherCommand, Outcome};
+use crate::{CliError, Failure, GatherCommand, Lookup, Outcome};
 
 /// Collect artifacts onto the workspace shelf, or say what is already on it.
 pub(crate) fn run_gather(
     command: &GatherCommand,
     directory: &Path,
-    home: Option<&Path>,
+    lookup: &Lookup,
 ) -> Result<Outcome, Failure> {
     match command {
         GatherCommand::Git {
@@ -23,15 +24,21 @@ pub(crate) fn run_gather(
             path,
             reference,
         } => {
-            let workspace = workspace_here(directory, home)?;
-            let ledger = workspace.ledger().map_err(CliError::from)?;
+            let workspace = workspace_here(directory, lookup)?;
+            let (ledger, scrub) = workspace.ledger_to_write().map_err(CliError::from)?;
+            let said = scrubbed(&scrub);
             let request = Request::git(url.clone())
                 .from_subdirectory(path.clone())
                 .at(reference.clone());
-            let report = gather::gather(&workspace, &ledger, &request).map_err(CliError::from)?;
-            Ok(gathered(url, &report))
+            match gather::gather(&workspace, &ledger, &request) {
+                Ok(report) => Ok(said.before(gathered(url, &report))),
+                Err(error) => Err(Failure {
+                    error: Box::new(error.into()),
+                    warnings: said.lines(),
+                }),
+            }
         }
-        GatherCommand::List => reading_workspace(directory, home, shelf),
+        GatherCommand::List => reading_workspace(directory, lookup, shelf),
     }
 }
 
@@ -72,9 +79,87 @@ fn shelf(workspace: &FlayerWorkspace) -> Result<Outcome, Failure> {
     })
 }
 
+/// What a scrub of the ledger has to tell, for a command that writes to it.
+///
+/// Notes rather than warnings, for what it took out: the command did what it
+/// was asked, and an exit code that failed once because of a fix would be a
+/// script broken by nothing it did. What it could not take out is a warning,
+/// since the credential is still on disk.
+#[derive(Debug, Default, Clone)]
+pub(crate) struct Scrubbed {
+    notes: Vec<String>,
+    warnings: Vec<String>,
+}
+
+impl Scrubbed {
+    /// Every line, notes first, for a command that stopped before it had
+    /// anything else to say: the scrub happened all the same, and says so
+    /// only this once.
+    pub(crate) fn lines(self) -> Vec<String> {
+        let mut lines = self.notes;
+        lines.extend(self.warnings);
+        lines
+    }
+
+    /// Put in front of what the command went on to say.
+    pub(crate) fn before(self, mut outcome: Outcome) -> Outcome {
+        outcome.ok = outcome.ok && self.warnings.is_empty();
+        outcome.stderr.splice(0..0, self.lines());
+        outcome
+    }
+}
+
+/// What the scrub that opening the ledger to write runs took out
+/// ([`mindflayer_core::FlayerWorkspace::ledger_to_write`]), said the way a
+/// person can act on: every source it scrubbed now needs its credential from
+/// a git credential helper.
+pub(crate) fn scrubbed(scrub: &Scrub) -> Scrubbed {
+    let mut notes: Vec<String> = scrub
+        .sources
+        .iter()
+        .map(|source| {
+            format!(
+                "note: {}: the user name, password or token an older Mindflayer stored in this \
+                 URL is taken out; gathering it again needs a git credential helper that has it",
+                source.url
+            )
+        })
+        .collect();
+    match scrub.actions {
+        0 => {}
+        1 => notes.push(String::from(
+            "note: 1 action log entry: the user name, password or token an older Mindflayer \
+             stored in a URL in it is taken out",
+        )),
+        entries => notes.push(format!(
+            "note: {entries} action log entries: the user names, passwords or tokens an older \
+             Mindflayer stored in URLs in them are taken out"
+        )),
+    }
+    Scrubbed {
+        notes,
+        warnings: scrub
+            .failures
+            .iter()
+            .map(|failure| format!("warning: {failure}"))
+            .chain(
+                scrub
+                    .leftovers
+                    .iter()
+                    .map(|leftover| format!("warning: {leftover}")),
+            )
+            .collect(),
+    }
+}
+
 /// What one gather did, in the order it is worth reading: the source, then
 /// every artifact and what happened to it, then the count.
+///
+/// The source is named without credentials, as everywhere a URL is shown.
+/// A gather that got this far was given none, since core refuses them, so
+/// this costs nothing today and still holds if that ever changes.
 fn gathered(url: &str, report: &Report) -> Outcome {
+    let url = redacted(url);
     let mut stdout = String::new();
     let at = report
         .revision

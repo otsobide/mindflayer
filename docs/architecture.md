@@ -66,14 +66,18 @@ The grammar is in `parse.rs`, the work in `commands.rs` and a module per
 family of commands under `commands/`, and what a command produced, with the
 helpers every report is laid out with, in `render.rs`. `CliError` has
 `error.rs` to itself, `homes.rs` decides where the default workspace's home and
-each agent's own folder are, and `lib.rs` only says what is public.
+each agent's own folder are, and gathers what `-W` and `$MINDFLAYER_WORKSPACE`
+say (`Lookup`), and `lib.rs` only says what is public.
 
 The split is by family. One file holding the parser, every command and the
 rendering was where every change to a command met every other, so pieces of
 work on different commands collided in it. One module per command would
 scatter what a family shares instead: `load` and `unload` report the same way,
 and `list`, `show` and `validate` read one catalog. `commands.rs` dispatches,
-and finds what a command acts on, the one thing every family needs.
+and asks core what a command acts on, the one thing every family needs: which
+workspace is core's `resolve` to decide (see [which workspace a command
+uses](#which-workspace-a-command-uses)), and which of its projects `-p` names
+is `FlayerWorkspace::pick`.
 
 ## The kinds, and how a kind is described
 
@@ -336,15 +340,18 @@ the directory alone. An empty `.mind` left behind by a failed copy is not a
 project, and saying so costs one `is_file()`.
 
 Both are found by walking up from a starting directory, so `mind list` works from
-anywhere inside a project, like every git command.
+anywhere inside a project, like every git command. A workspace can also be
+named, with `-W` or by activating one, and then it wins over the walk: see
+[which workspace a command uses](#which-workspace-a-command-uses).
 
 Nothing stops one directory from being both.
 
 ### The command surface is split the same way
 
 `mind <cmd>` acts on the project you are standing in; `mind flayer <cmd>`, and
-therefore `flayer <cmd>`, acts on the workspace above it. The split decides two
-things that used to be guesses:
+therefore `flayer <cmd>`, acts on the workspace above it, or the one `-W` names
+or an activation chooses. The split decides two things that used to be
+guesses:
 
 - **What is in scope.** `mind list` is the project's own artifacts, never its
   neighbours'. `flayer list` is the workspace's own and every registered
@@ -371,7 +378,8 @@ What can be done to a project can be done from the workspace, and the other
 way round where it means anything. `flayer add`, `edit`, `rename`, `remove` and
 `templates` act on the workspace's own artifacts, or on one of its projects
 with `-p`; `mind link`, `unlink`, `install` and `uninstall` act on the project
-you are in, against the workspace above it. `flayer list`, `show` and
+you are in, against its workspace: the one named or activated, or else the one
+above it. `flayer list`, `show` and
 `validate` read everything — the workspace's own and every project's — or one
 project with `-p`; `flayer validate` reads the shelf as well, labelling what it
 finds there `shelf/<source folder>`. Reads look everywhere; a change needs one
@@ -484,7 +492,7 @@ An older marker is read the way it was written, never refused.
 version: a workspace's number says nothing about where a project keeps its
 artifacts. The ledger carries its version in SQLite's `user_version` and is
 refused from the future the same way, but an older one is migrated forward
-rather than read as written
+rather than read as written, after a copy of it is set aside
 ([Why the ledger is SQLite](#why-the-ledger-is-sqlite)).
 
 ## Failures are collected, not raised
@@ -626,7 +634,7 @@ that prompt is a screen that stops answering, and the server that comes next
 has no terminal at all. So every connection `gix` lets a clone configure is
 given a credentials callback (`gather::credentials`) that runs the same helper
 cascade with the prompt and askpass turned off. A credential no helper has is
-`GitError::Credentials`: the URL without its userinfo, and the two ways to
+`GitError::Credentials`: the URL without its credentials, and the two ways to
 provide one, a git credential helper or, for an ssh URL, ssh-agent. Over ssh,
 `gix` runs the system `ssh`, which authenticates with keys of its own and asks
 the helpers only for a user name, so a login ssh refuses is reported the same
@@ -647,6 +655,118 @@ the callback to arrive through anyway. That other half is
 if they were carried, tying its version to gix's, so `GitError` keeps what they
 said and not what they were.
 
+### A URL is kept without its credentials
+
+A source is stored, logged, listed and named in errors by its URL, so a token
+typed into one would be repeated everywhere: in `mindflayer.db`, in the
+clone's `.git/config`, in every report, and soon in a snapshot, `--json`
+output and the panel. One function takes it out, `url::redacted`, and
+everything that keeps or shows a URL goes through it.
+
+What it takes out is everything before the `@` of a `scheme://` URL, except
+the user name of an ssh URL: that is who ssh logs in as, part of where the
+repository is rather than a secret, and a later gather from the stored URL
+needs it. Over http(s) a user name goes as well, because GitHub takes a token
+in that place and a credential helper is what names the user. The scp-like
+form (`git@host:path`) is left alone, since `gix` reads everything before its
+first `:` as user and host, which leaves no room for a password. A password
+with a `/` in it is looked for past the first `/`, whenever what comes before
+that `/` has a `:` and no port: every parser reads `https://me:p/ss@host` as
+host `me` and port `p`, so nothing else would find the password, and the
+refusal for an unparseable URL would store and print it whole. It works on
+text rather than on one URL, because the other place a credential turns up is
+`gix`'s own error messages, which quote the URL they failed on, and the URL a
+fetch connected to may carry a token the typed one did not when git config
+rewrites it with `url.<base>.insteadOf`. Parsing with `gix::url` and dropping
+the user was rejected: the parser also rewrites what it keeps, a default port
+dropped or a scheme lowercased, and cannot find a URL inside a sentence.
+
+A gather URL that carries a credential is **refused** before anything is
+registered or fetched, rather than used for that one fetch and stored without
+it: a token on the command line is already where `ps` and the shell history
+show it, and refusing is what points at a git credential helper, which keeps
+it off the command line altogether, as the front-end provider of
+[D-16](#d-16-credentials-come-from-the-front-end-never-from-a-prompt) will.
+Behind that refusal the rest holds whichever caller is writing. The ledger
+redacts every URL on the way in and again on the way out, so nothing it hands
+back carries a credential, scrubbed yet or not. Every `GitError` redacts the
+URL and what `gix` said. A clone is scrubbed as soon as it is made
+(`git::scrub`): `gix` writes the URL into the remote's entry in `.git/config`
+and into every reflog as `clone: from <url>`, and those files are rewritten
+through the same function. A clone a gather makes now has nothing to take out,
+and finding that costs a few small reads. A `--from` typed with credentials
+names the source they were taken out of. The CLI's report prints URLs
+redacted, and the TUI redacts a command line where it is built for showing
+(`state::shell`), so the box that says what is running and the transcript
+printed on the way out both leave the token out.
+
+What a Mindflayer from before the refusal stored is **scrubbed** when a
+command that writes opens the ledger. `FlayerWorkspace::ledger_to_write` is
+the one way to open it for writing: it runs `gather::scrub`, which only core
+can call, and hands back what that took out for the front end to say, the way
+`resolve` with `Intent::Write` is the one way to find a workspace that may be
+created.
+Which commands write is the front end's to know, but what opening to write
+involves is core's, so no front end can write first and scrub after. `gather
+git`, `install` and `uninstall` open it that way, as does `install::disown`,
+through which core's lifecycle changes (`lifecycle::add`, `finish_edit`,
+`rename` and `remove`) drop a record. Each hands back what the scrub took out
+(its result's `scrub`) beside what it did to the record, since a scrub says
+what it found only the first time and a change that dropped it would leave it
+unsaid for good. `rename` opens the ledger once for each name and tells what
+both scrubs found once (`Scrub::absorb`): the second finds only the clones
+the first could not rewrite. So does the install screen, in both screens,
+when what it marked is applied (`install::commit`) rather than as it opens,
+which is a read ([A read leaves the ledger as it finds
+it](#a-read-leaves-the-ledger-as-it-finds-it)). A scrub can make two sources
+one row, and a mark on the row that went would install from folders the scrub
+removed, or copy the files and then fail to record them. So once a scrub has
+taken out a source, the screen is built again from the scrubbed ledger and
+each mark is made again on the row offering the same name from the same
+place, as the row it became one with does; a mark on what only the row that
+went had gathered is a warning and is not carried out. Scrubbing as the screen
+opened would have spared that, and is rejected: opening it is a read.
+
+The scrub rewrites the sources whose URL carries a credential, each clone made
+from one, the origin of every installation from one, which schema 3 copied
+from the URL as it was stored, and the action log. A clone is rewritten before
+its row, so a clone that cannot be rewritten keeps its row tainted and is
+tried again next time, as a warning; what was taken out is a note, said once,
+since the command did what it was asked and an exit code that failed because
+of a fix would break a script for nothing it did. When the URL without
+credentials is already another source's, with the same branch and folder, the
+two are one place gathered twice and become one row: two rows would offer each
+skill twice under one origin, and SQLite's UNIQUE would refuse the rewrite
+outright when a branch is set. The row kept is the one whose shelf was filled
+most recently, since its folder holds the newer files, and a row whose gather
+failed before it took anything loses however recently it was tried. What the
+other row gathered goes with it, and its clone and shelf folder are removed (a
+folder that will not go is a warning), rather than its records moving to the
+kept row: they would point into a folder the ledger no longer reserves, which
+the next source with the same readable name would be given and gather over.
+The ledger turns on SQLite's `secure_delete`, so a rewritten row leaves no
+copy of its old text in the file's free space.
+
+It runs every time rather than once, as a schema step would, because an older
+build could keep writing to the same file after a newer one had scrubbed it,
+and the schema steps are spoken for by the changes that need a new version.
+Schema 3 is a file such a build refuses, so the scrub could now be part of
+that step; whether it should is open (see the open questions). With
+nothing to do it still reads, every time a command writes: a scan of the
+sources and one of the action log, in a transaction. Neither can use an index,
+so the log's grows with the log, and every entry naming an ssh URL, which
+keeps its `@`, is read and found clean again each time. Recording that the log
+had been scrubbed would skip that, and is rejected for the reason the scrub
+runs every time: an older build writing a token again would go unnoticed. The
+cost ends when the scrub can stop (see the open questions). A read is left
+alone: what it shows is redacted on the way out anyway, and a read should not
+write. Until a command that writes scrubs it, a place an older build gathered
+both with a token and without one is read as the file has it, two sources
+offering each skill under one origin. Deleting the old
+clones instead of rewriting them would have been simpler and was rejected:
+the clone is kept so a gather can be looked at afterwards, and a scrub has no
+reason to take that away.
+
 ### Why the ledger is SQLite
 
 Everything else Mindflayer writes is a file a person opens: TOML with comments
@@ -666,14 +786,97 @@ it](#a-read-leaves-the-ledger-as-it-finds-it)).
 
 Four things are recorded: the **sources** gathered from, the **artifacts** on
 the shelf and which source each came from, the **installations** — which skill
-Mindflayer put into which project — and an **action log**. The log keeps
-failures too — a log of only what worked cannot answer the question anybody
-opens it with. Timestamps are Unix seconds, which needs no date library and
-which SQLite renders with `datetime(at, 'unixepoch')`.
+Mindflayer put into which project, from where, every copy it wrote and a hash
+of what it wrote — and an **action log**. The log keeps failures too — a log
+of only what worked cannot answer the question anybody opens it with.
+Timestamps are Unix seconds, which needs no date library and which SQLite
+renders with `datetime(at, 'unixepoch')`.
+
+No URL this build writes into it, or reads back out of it, carries a
+credential. One an older build stored stays in the file until the next command
+that writes scrubs it, and for good in the copy a schema step took before that
+(see the open questions). An older build could store one again after a scrub
+until schema 3, which it refuses
+([A URL is kept without its credentials](#a-url-is-kept-without-its-credentials)).
 
 A source's shelf folder is stored rather than derived: two URLs can reduce to
 the same readable name, and where a source's files went is a fact about the
 past that must not move when the naming rule changes.
+
+The schema has had three versions, each a block in `Ledger::migrate` and a
+constant beside it:
+
+1. `sources`, `artifacts` and `actions`: what was gathered, from where, and
+   what happened.
+2. `installations`: which artifact went into which project, which is what
+   lets an uninstall tell Mindflayer's copy from somebody's.
+3. `installation_targets`, one row for each copy an installation wrote, with
+   the agent it is for when it is one agent's
+   ([D-07](#d-07-one-copy-per-agent-folder)); and on `installations`, the
+   `origin` it came from, spelled as `--from` takes it, and the
+   `content_hash` of what it wrote
+   ([D-04](#d-04-an-edited-copy-is-detected-not-disowned)). The
+   installation's own path moved into its one target, so a copy's path is
+   kept in one place (#30).
+
+An older ledger is migrated step by step, so one made two versions ago ends
+where one made today begins, and two rules hold for every step:
+
+- **The file is copied aside first.** Before the first step, the ledger is
+  copied beside itself as `mindflayer.db.v<old>.bak` (`Ledger::back_up`), and
+  nothing is migrated unless the copy is whole and opens at the old version.
+  A step that turns out wrong then leaves the file it started from: the copy
+  opens at the old version, and the build that wrote it reads it as it
+  always did. It is named after the version it holds, so which build reads
+  it is in its name, and a ledger brought forward by several builds in turn
+  leaves one for each version it had. It is taken once the migration holds
+  the write lock, not before: a copy taken after an unlocked read of the
+  version could be of a ledger another process has since migrated, and would
+  replace that process's copy of the old version with one of the new. It is
+  SQLite's online backup rather than a copy of the file, because opening the
+  file outside SQLite while a connection holds it would drop that
+  connection's locks on Unix, and it reads through a second connection,
+  because SQLite will not copy from one in the middle of writing. It goes
+  through a temporary and a rename, so a copy cut short is never mistaken
+  for a whole one, and the temporary is made with the ledger's permissions
+  before anything is written to it, so a ledger kept private is not readable
+  through its copy even while the copy is written. A step to come is one
+  more block in `migrate`, and the copy is taken for it without its asking.
+- **The steps run in one transaction**, with the stamp of the new version.
+  Run a statement at a time, a step that failed, or a process that died
+  halfway, left a database half migrated under its old version, which the
+  next open would try to migrate again and fail on.
+
+A step fills in what it can from what the version before recorded, spelled
+as that version's code spelled it, in the step's own SQL rather than through
+the code that spells it now: a later change to the spelling would otherwise
+change what an earlier step wrote. Version 3 gives an installation from a
+source that source's origin, and one from the workspace or a load none, since
+version 2 kept nothing to say which; it makes up no hash for a copy nobody
+hashed when it was written, and D-04 says how a missing one reads. Each step
+comes with a fixture of what the version before it wrote
+(`apps/core/tests/fixtures/ledger-v<N>.sql`, dumped from a ledger that build
+made), from which a test migrates, checks every row is kept, and opens the
+copy at the old version.
+
+The hash is `hash::tree`, its only definition: SHA-256 over every folder and
+file under a copy, by their `/`-separated paths in byte order, each file's
+length before its bytes. The order is not the filesystem's and the separator
+not the platform's, so one tree hashes alike on Linux, macOS and Windows, and
+alike in every agent's folder, since the copy's own folder is not part of it.
+Folders count, so two copies hash alike exactly when `copy::same` calls them
+the same. A link is refused rather than followed: Mindflayer never writes one
+into a copy, since `copy::tree` copies what a link points at, and following
+one could read anything. It is kept once per installation, not once per
+target: every target is written from one copy, so one hash is what each is
+compared with, and a copy somebody edited is the one whose own hash no longer
+matches it. An install records the hash of the copy as it stands once
+written; one that cannot be read back is recorded with none rather than not
+at all, since without a record it would be Foreign for good. That is a
+`warning:` and a non-zero exit, and the log's entry says why, rather than a
+plain success: a copy an install left as it was can hold a link somebody
+put there, which `copy::same` follows and the hash refuses, and a record
+with no hash is read as one from before hashes were kept.
 
 ## Installing
 
@@ -711,15 +914,28 @@ or, if it is the workspace's own, fixed where it is.
 
 ### It only manages what it installed
 
-The ledger records every installation against `(project, kind, name)`, and that
-record is what separates a file this tool put there from one somebody wrote. A
-skill present but unrecorded is `Standing::Foreign`, and Foreign is inert in
-both directions: never overwritten, never deleted, and the caller is told so
-rather than obeyed quietly.
+The ledger records every installation against `(project, kind, name)`, with
+each copy it wrote as a target of it, and that record is what separates a
+file this tool put there from one somebody wrote. Today an install writes one
+copy, in the folder the project's marker names; one in each agent's folder is
+#34's. A skill present but unrecorded is `Standing::Foreign`, and Foreign is
+inert in both directions: never overwritten, never deleted, and the caller is
+told so rather than obeyed quietly.
 
 Without that, an install screen is a thing that can delete a colleague's work
 because a checkbox looked untidy. The rule costs one query and removes the
 whole class.
+
+The record names the project by its route from the workspace, taken to where
+the workspace's own entry for it leads (`FlayerWorkspace::spelling_of`)
+rather than to however the command spelled the project. `mind` spells its
+project the way the operating system reports the directory it runs in,
+through no symlink, while a workspace named with `-W` or activated keeps the
+spelling it was given. The route between those two is not the entry's, so a
+record written under it would be one `flayer -p` never finds: a copy nobody
+may update, or, the other way round, a record that outlives its copy. A
+spelling that already matches the entry as written is kept, so no record
+written before is named differently now.
 
 A project has one directory per artifact name, so two shelf entries offering
 `commit-style` cannot both be installed. The screen settles it by unticking the
@@ -797,9 +1013,10 @@ questions.
 ### Two places offer, one command takes
 
 What can be installed comes from the workspace's own skills, offered first,
-the workspaces it loads (below), and the shelf (`install::Offer`). An installation from the shelf records
-the source it came from; one of the workspace's own records none, because it
-came from nowhere but the workspace.
+the workspaces it loads (below), and the shelf (`install::Offer`). Every
+installation records its origin, in the spelling `--from` takes; one from the
+shelf also points at the source it came from, and one of the workspace's own
+at none, because it came from nowhere but the workspace.
 
 `mind install <skill>` and `flayer install -p <project> <skill>` install one
 without the screen, through `install::offered`: the one candidate of that name,
@@ -823,15 +1040,20 @@ Three decisions shape it:
   That is the difference from gathering, which snapshots a repository onto the
   shelf; a loaded workspace is usually one on the same disk that is still
   being worked on. An installation from it records no source id — like the
-  workspace's own — because there is no shelf row to point at.
+  workspace's own — because there is no shelf row to point at, only its
+  origin, `load:<entry>`.
 - **One level deep.** Only a loaded workspace's own artifacts are offered,
   never what it loads, so two workspaces loading each other is not a loop, and
   what a workspace offers is what its marker names, not a graph.
 - **Into the workspace that is not the source.** Run from inside the workspace
   being loaded, the first workspace found walking up is that one, and a
-  workspace cannot load itself. `FlayerWorkspace::locate_or_default_except`
-  walks on past it — and past every path given — to the next one, or the
-  default in your home; loading the home workspace from inside it is refused.
+  workspace cannot load itself. `resolve_except` walks on past it — and past
+  every path given — to the next one, or the default in your home; loading the
+  home workspace from inside it is refused. One named with `-W` or activated
+  is taken as it is, since it was chosen, and loading it into itself is
+  refused by the load: by `load_all`, before any of the paths given is
+  written, so a source listed ahead of it is not left loaded by a command
+  that failed.
 
 A loaded entry's origin is `load:<entry>`: disjoint by construction from
 `workspace` and from any shelf source's address — even a repository gathered
@@ -864,8 +1086,9 @@ What a load cannot offer — a workspace that has gone, an artifact that cannot
 be read, a name that is refused — is collected by `install::offered_by_loads`
 and said as `warning:` lines wherever offers are shown or used, and the
 install screen reports a row it could not apply and carries on with the rest.
-Two spellings of one loaded directory are one source; `unload_all` and
-`unlink_all` rewrite the marker once, for all of the paths or none.
+Two spellings of one loaded directory are one source; `load_all`,
+`unload_all` and `unlink_all` rewrite the marker once, for all of the paths or
+none.
 
 ### What keeps an install out of git
 
@@ -978,7 +1201,9 @@ everything by running CLI commands**.
 
 It is at both levels too. The workspace's own artifacts are its first row,
 marked `◆`, and a key on that row runs the `flayer` command where a key on a
-project's row runs `mind -C <project>`: a task carries its holder, and the
+project's row runs `mind -C <project>` (`mind -W . -C <project>` for one the
+workspace manages from outside its own tree; see [the TUI looks where it was
+told](#the-tui-looks-where-it-was-told)): a task carries its holder, and the
 holder decides the level of the line it becomes. `mind` on its own opens the
 same screen on the project it was run in — inside the workspace that manages
 it, where its neighbours and its installs are, or on the project alone when
@@ -1009,9 +1234,12 @@ Two things follow, and both are deliberate:
   repeated in a script. Commands that only read — show, validate, the shelf —
   are left out, because they changed nothing.
 
-A `-C` in those words is relative to the workspace root, which is how someone
-reading the transcript takes it, so it is resolved against the root rather than
-against wherever the process started. A command that opens a screen of its own
+A `-C` or a `-W` in those words is relative to the workspace root, which is
+how someone reading the transcript takes it, so it is resolved against the
+root rather than against wherever the process started. What the screen was
+opened with is passed along rather than spelled: its home, and the `-W` or
+activation that chose its workspace (`tui::execute`), as they were given to
+`flayer` itself. A command that opens a screen of its own
 — `flayer`, `flayer tui`, `flayer minds`, `flayer install` with no skill named,
 `mind`, `mind tui` — is refused if it ever reaches that path, rather than drawn
 inside this one.
@@ -1073,11 +1301,13 @@ command that reports failure.
 ([D-17](#d-17-the-next-front-end-is-a-local-web-panel)): a library crate that
 binds a port, checks who is asking, carries JSON between the browser and a
 front end, and serves the panel's files. No binary runs it yet. `flayer ui`
-(#68) will, over the CLI's backend (#67), and not before the checks on the
-Host, Origin and Fetch Metadata headers (#66) are in. The token keeps other
-processes out; those checks are what keep out other pages in the same
-browser: one on another port of 127.0.0.1, which the browser counts as the
-same site, or one whose DNS name has been rebound to 127.0.0.1.
+(#68) will, over the CLI's backend (#67). The token keeps out a process that
+connects without it, and [the guards](#what-keeps-other-pages-out) keep out
+other pages in the same browser: one on another port of 127.0.0.1, which the
+browser counts as the same site, or one whose DNS name has been rebound to
+127.0.0.1. Neither keeps out a server on another port of 127.0.0.1 that the
+browser visits, because the cookie takes the token there as well (an
+[open question](#open-questions)).
 
 ### Transport only
 
@@ -1164,17 +1394,123 @@ launch link carries it once, as `/?token=...`; that request is answered with
 a 303 to `/` and the token in a cookie, and the redirect is what takes the
 token out of the address bar and the history. The cookie is `HttpOnly`, so the
 panel's own scripts never hold it, and `SameSite=Strict`, so no other site's
-page sends it, though a page on another port is the same site (#66 again). It
-is not `Secure`, which a browser that does not count
-127.0.0.1 as a secure origin would drop. And it is named for the port,
-`mf_<port>`, because cookies are not isolated by port: under one name, a panel
-launched on a second port would overwrite the first one's token in the browser
-and lock it out.
+page sends it, though a page on another port is the same site, which is what
+[the guards](#what-keeps-other-pages-out) are for. It is not `Secure`, which a
+browser that does not count 127.0.0.1 as a secure origin would drop. And it is
+named for the port, `mf_<port>`, because cookies are not isolated by port:
+under one name, a panel launched on a second port would overwrite the first
+one's token in the browser and lock it out.
 
 Scripts and tests send `Authorization: Bearer <token>` instead, and either is
 compared in constant time. Only `/api` asks for it: the panel's files are the
 same for everybody, and a browser that has not been through the link yet still
 needs the page that will tell it so.
+
+### What keeps other pages out
+
+The token stops a process that connects to the port without it. It does not
+stop another page in the browser that holds the cookie, and the panel is
+opened in a browser full of them. Three kinds of page can reach a loopback
+port, and a different check stops each:
+
+- **A remote page**, any site open in another tab. It can make the browser
+  send 127.0.0.1 a GET, a form or a `text/plain` POST without asking, though
+  not read the answer, and the cookie, being `SameSite=Strict`, does not go
+  with it. Where the browser says which page sent it, its Origin is refused
+  before the token is even looked for; where it does not, as on a GET, there
+  is no cookie to stand in for the token.
+- **A rebound name.** A page on `attacker.example` has its DNS answer changed
+  to 127.0.0.1 once it has loaded. To the browser it is still
+  `attacker.example`, so its requests here count as same-origin and the
+  same-origin policy no longer hides the answers from it. It holds neither the
+  cookie, which belongs to `127.0.0.1`, nor the token, so the API would refuse
+  it anyway; but it names `attacker.example:<port>` in Host, and for that
+  every request it makes, the panel's files and the launch link included, is
+  refused before anything else.
+- **Another port on loopback**: a dev server, a notebook, a tool's sign-in
+  callback, anything else listening on 127.0.0.1. Cookies are not isolated by
+  port ([RFC 6265, section 8.5](https://www.rfc-editor.org/rfc/rfc6265#section-8.5)),
+  and `SameSite` counts sites, not origins, so the browser sends `mf_<port>`
+  with that page's requests here. It cannot read the answers, since nothing
+  here grants it CORS, but a change does its harm whether or not anybody
+  reads the reply. That is cross-site request forgery from the same site, and
+  the checks on a change by cookie are for it.
+
+The checks, in the order a request meets them (`src/guard.rs`, and the gate
+in `src/auth.rs`):
+
+1. **Host**, on every request: exactly one Host header, naming
+   `127.0.0.1:<port>`, `localhost:<port>` or `[::1]:<port>` in any case, or a
+   403. The raw header and never `X-Forwarded-Host`, since no proxy stands in
+   front to have forwarded anything. An allow-list of loopback's own names,
+   because a deny-list would have to guess every name an attacker can buy.
+   No browser sends `[::1]` yet: the listener binds only 127.0.0.1, so a
+   connection to ::1 is refused before any Host is sent. It is on the list
+   because accepting it costs nothing, and a server that also bound ::1
+   would then need no change here.
+2. **Origin**, on every request that sends one: `http://` and the name in
+   Host, or a 403. That one origin, not any of the three: a page loaded as
+   `localhost` that asks `127.0.0.1` is another origin to the browser, and
+   `null`, from a sandboxed frame or a file, is no origin of the server's.
+   Its absence proves nothing, since a browser leaves it off a same-origin GET
+   and a script off everything. `flayer ui --dev` (#68) is to accept exactly
+   one more, the panel's dev server's (an [open question](#open-questions)).
+3. **The token**, under `/api` only: a 401 without it.
+4. **A change by cookie** — any method but GET and HEAD, on a request whose
+   token came as the cookie — must carry `Sec-Fetch-Site: same-origin` (or a
+   403), `X-Mindflayer: 1` (or a 403) and `Content-Type: application/json`
+   (or a 415). By method rather than by endpoint, so an endpoint added later
+   is covered without being listed; `POST /api/query` is held to it as well,
+   at no cost, because the panel sends every POST alike.
+
+Fetch Metadata answers the third kind of page directly: the browser writes
+`Sec-Fetch-Site` itself, no page can change it, and it says `same-site` for a
+page on another port. Browsers send it only to a potentially trustworthy URL,
+which each of loopback's three names is, and the Host check admits no other.
+The custom header and the JSON body say the same by other means. A page may
+send another origin a form, `text/plain` or multipart unasked, but any other
+content type, or a header of its own, needs a CORS preflight first, which
+nothing here answers, so the request never leaves the browser. Either alone
+would do in a browser that keeps to the rules; both are there for one that
+gets a rule wrong.
+
+A change with no `Sec-Fetch-Site` is taken only with a Bearer token. Chrome,
+Firefox and Safari have all sent the header since 2023, so its absence means
+a script, and a script that belongs here holds the token: the cookie is
+`HttpOnly`, so not even the panel's own scripts can read it, and no page can
+put an `Authorization` header on a request to another origin without the
+preflight it never passes. Of these checks, a Bearer request meets only Host
+and Origin. A browser too old for Fetch Metadata can read the panel but not
+change anything through it, which is the right way round to fail.
+
+So the panel (#69) fetches its own origin, letting the browser send the
+cookie, and sends every POST with `Content-Type: application/json` and
+`X-Mindflayer: 1`.
+
+Every answer carries `Content-Security-Policy: default-src 'self';
+frame-ancestors 'none'` and `X-Content-Type-Options: nosniff`. The policy
+loads nothing from another origin and runs no inline script, so markup that
+reached the page by some mistake, a gathered skill's say, could not bring a
+script with it; `script-src` is left to `default-src` and never allows
+`'unsafe-inline'`. No page can frame the panel to steer a click onto one of
+its buttons. `nosniff` holds the browser to each answer's Content-Type, so a
+page on another port that loads `/api/transcript` with a `<script>` tag has
+it refused rather than run. And there is no CORS layer at all: no answer
+grants another origin anything, and a preflight is never passed.
+
+What none of this stops is the server behind such a page. The browser sends
+`mf_<port>` to every port of 127.0.0.1, since cookies are not isolated by port
+and those requests are same-site, so any server there that the browser sends
+a request to while the cookie is set receives the token in its Cookie header:
+a page of it the user opens, or anything a page on 127.0.0.1 loads from it.
+That server can then send the token as Bearer, with the Host a script writes
+and no Origin, and pass every check above. So the guards keep out a benign
+server's hostile pages, not a hostile server, which on a machine one person
+uses is theirs, and on a shared machine may be another user's (an
+[open question](#open-questions)). Such a server can also set cookies for
+127.0.0.1, overwriting `mf_<port>` and locking the panel out until its link is
+opened again; a cookie it adds under another path is no worse, because the
+gate takes the token from whichever `mf_<port>` holds it.
 
 ### The log
 
@@ -1216,21 +1552,67 @@ segment is never looked up and gets `index.html`, as one of the panel's routes
 may. A release build only looks names up in a table, and the check keeps the
 two answering alike.
 
-## The default workspace
+## Which workspace a command uses
 
-A workspace is found by walking up, and when nothing up there has one, the
-workspace-level commands fall back to the one at the default home. Home sits
-above most of what a person works on, so it is the one directory where a
-workspace can manage projects anywhere, and making it on demand means `flayer
-link ~/code/x` works before anyone has chosen a directory.
+One function in core decides, `resolve`
+([D-08](#d-08-an-explicit-or-activated-workspace-wins)), and every front end
+feeds it: each command, and the TUI's screens. In order:
+
+1. the workspace `-W DIR` names, by its root or by its `.mindflayer`;
+2. the one `$MINDFLAYER_WORKSPACE` activates, which `flayer activate` is to
+   set (#55);
+3. the first one found walking up from where the command starts: the
+   directory for a `flayer` command, the project's root for a `mind` one;
+4. the default one, in home.
+
+It hands back the workspace with the `Reason` that chose it (`Explicit`,
+`Activated`, `Above`, `Home`), so a front end that says why it is showing a
+workspace asks the answer rather than working it out from paths. The TUI's
+header says there is no workspace here or above only for `Home`: the
+directory home is can also be named with `-W`, activated, or reached walking
+up from below it. Which workspace a command changed is another question,
+about the workspace rather than the rule, and `load` and `unload` answer it
+from the path (`FlayerWorkspace::is_default`). They call the one in home the
+default one however it was reached, so their line reads the same on the run
+that makes it, from anywhere, as on every run after, which from below home
+finds it walking up.
+
+The first two are choices somebody made on purpose, so they win over where
+somebody happens to stand. Activating a workspace is meant to override
+location, as activating a Python virtualenv does; with the walk up first, an
+activated workspace would lose, silently, to any workspace above the current
+directory. A choice that does not open as a workspace is an error and never a
+reason to carry on down the list, which would act on a workspace nobody chose
+and say nothing about it. Nor is a chosen directory made into a workspace for
+the occasion, a write included: `flayer init` makes workspaces, where it runs.
+
+`-W` given at all is the whole explicit answer. Given empty, it names none and
+also keeps the activated one out, as `--home=` keeps the default out; that is
+what lets the test helpers pin `--workspace=`, so no test picks up what the
+developer's shell activated. An empty `$MINDFLAYER_WORKSPACE` names none, as
+an empty `$MINDFLAYER_HOME` does. Both are read by the front end, as home is
+(`Lookup::given` in the CLI), and handed to core in `Inputs`, so core never
+reads the environment. `--home` and `$MINDFLAYER_HOME` keep meaning only
+where the default lives: reusing them to choose a workspace would confuse
+where the default is with which workspace to use. A relative `-W` is taken
+from where the command was run, as `--home` is, rather than from `-C`, which
+moves where a command works and not what it was told.
+
+### The default, made only by a write
+
+When nothing chooses a workspace and nothing up the tree has one, a command
+falls back to the one at the default home. Home sits above most of what a
+person works on, so it is the one directory where a workspace can manage
+projects anywhere, and making it on demand means `flayer link ~/code/x` works
+before anyone has chosen a directory.
 
 It is made by the first command that **writes** to it, and by nothing that
-only reads. `flayer link`, `add`, `gather git`, `load`, `install` and
-`uninstall` go through `FlayerWorkspace::locate_or_default`, which makes
-`~/.mindflayer` when nothing up the tree has one. A read goes through
-`locate_or_unmade`, which falls back instead to `FlayerWorkspace::unmade`: the
-workspace `init` would make there, parsed from the same template rather than
-written. That is `flayer list`, `show`, `validate`, `scan`, `templates`,
+only reads, and the caller says which with an `Intent`. `flayer link`, `add`,
+`gather git`, `load`, `install` and `uninstall` resolve with `Intent::Write`,
+which makes `~/.mindflayer` when nothing up the tree has one. A read resolves
+with `Intent::Read`, which falls back instead to `FlayerWorkspace::unmade`:
+the workspace `init` would make there, parsed from the same template rather
+than written. That is `flayer list`, `show`, `validate`, `scan`, `templates`,
 `gather list`, and `load` and `install` on their own.
 
 A read of the unmade workspace answers as a read of one made a moment before
@@ -1251,7 +1633,8 @@ screen shows it and the transcript says so. Left to the change, the command
 that writes would make it, as it does from the shell; but the screen's lines
 run from the workspace root and walk up from there, and before it is made no
 marker at the root stops them, so with a workspace above home the change would
-land in that one. For the same reason the minds screen is built from where
+land in that one. `-W` cannot name it instead: a directory with no marker is
+refused, not made. For the same reason the minds screen is built from where
 `flayer minds` was run, as the TUI is, and the TUI opens its install screen on
 the root it shows rather than walking up from it. The install screen itself
 does not open on an unmade workspace: like any workspace with no projects, it
@@ -1262,15 +1645,58 @@ refused as it is for any directory that is not a workspace, and so is opening
 its ledger to write to, which would otherwise leave a `.mindflayer` holding a
 database and no marker. A command that writes asks for the real one.
 
-Two older routes also never make it: the `mind` commands that only consult a
-workspace (opening its TUI, `add`, `edit`, `rename`, `remove`, `templates`)
-use `default_at`, and `unload`, which only takes away, uses `locate_except`.
-Both open the home workspace if it exists.
+`unload`, which only takes away, resolves as a read and wants a made
+workspace, since an unmade one has loaded nothing.
 
-Where home is comes from the front end, not from core: `--home`, then
-`$MINDFLAYER_HOME`, then the user's home directory, and empty means there is
-none. Core takes it as a parameter, which keeps it free of the environment and
-is what lets the tests run every command with the fallback switched off.
+### A project's workspace
+
+A `mind` command resolves from the project's root, not from the directory it
+was run in, because a project's workspace is the one above the project: core
+moves the start there itself (`resolve::managing` and `resolve::consulted`).
+`mind link` and `unlink` register the project with the workspace resolved;
+`install` and `uninstall` need that workspace to link the project, and are
+refused (`NotManaged`) when it does not (`managing`); `add`, `edit`, `rename`,
+`remove` and `templates` consult it, to drop the record of what they change
+and to lend templates, and only if it is made (`consulted`): a change to a
+project is no reason to write a marker into somebody's home, and a workspace
+made just now would hold nothing to drop or lend. One found above that
+cannot be read is a `warning:` after the change, since the change is the
+project's and the workspace was only to be told; one named or activated
+that will not open refuses it, as it refuses every other command, because
+whoever chose it meant that one to be told.
+
+With `-W` or an activation, that is the chosen workspace wherever it sits,
+which is how a project linked from beside its workspace is managed from
+inside the project: walking up never reaches such a workspace. Which of a
+workspace's projects `-p` names is core's too (`FlayerWorkspace::pick`, and
+`holder` for the workspace's own when nothing is named).
+
+`load` resolves with `resolve_except`, which passes over the workspaces being
+loaded on the walk up and at home (see
+[Loading](#loading-a-third-place-read-live)). A workspace named or activated
+is never passed over: it was chosen, and a workspace loading itself is
+refused where loads are.
+
+### The TUI looks where it was told
+
+The TUI resolves through the same function. `tui::load` and `load_project`
+ask `resolve` and `consulted` with the `Lookup` the screen was opened with,
+and `tui::execute` hands that lookup to every line the screen runs, as it
+hands them home, rather than letting each line read the environment again: a
+screen opened with `-W` or an activation runs every line against that
+workspace. A `-W` among a line's own words wins, and is typed from the root
+the lines run from, as a `-C` is.
+
+A project's row runs `mind -C <entry>`, the line somebody in the project would
+type, which consults the project's own workspace. Where that is not the
+workspace on screen, because the project is linked from outside its tree or
+from above a nearer workspace, the row runs `mind -W . -C <entry>` instead
+(`Holder::Elsewhere`), so a change drops the record of the workspace on screen
+and the add form offers that workspace's templates, which are the ones its
+line finds. The `-W` is there only where leaving it out would consult another
+workspace, so every other row still teaches the plain project command; a
+`flayer <cmd> -p <entry>` line would have consulted the same workspace, at the
+price of a project's row no longer teaching a project's command.
 
 ### A read leaves the ledger as it finds it
 
@@ -1281,17 +1707,22 @@ answers from an empty ledger in memory, which says what a ledger nothing was
 ever written to would. So `flayer gather list`, the TUI's shelf count and the
 install screen leave a workspace that has never gathered or installed anything
 without one. The install screen is a read until something on it is applied;
-applying opens the ledger with `ledger()`, which makes it, and never the
-stand-in, whose records would be gone when it was dropped.
+applying opens the ledger to write (`ledger_to_write`, through
+`install::commit`), which makes it, and never the stand-in, whose records
+would be gone when it was dropped. Nor does a read scrub an existing ledger of
+what an older build stored with a credential, which waits for the next
+command that writes ([A URL is kept without its
+credentials](#a-url-is-kept-without-its-credentials)).
 
 A read does write to one thing: an existing ledger from an older schema is
 migrated to this build's, as every open migrates it. A build reads its own
 schema and no other, so declining would leave the file unreadable rather than
 untouched; that step is upkeep of Mindflayer's own file, not a change anybody
-asked for. Each schema step is to copy the database aside before it migrates
-(#30), and a read migrates through the same step, so it takes that copy too.
-Until the first such step lands there is no copy to take, and a read migrates
-the way every open does today.
+asked for. Every migration copies the database aside before its first step
+([Why the ledger is SQLite](#why-the-ledger-is-sqlite)), and a read migrates
+through the same `Ledger::migrate`, so it leaves that copy too: the first
+`flayer gather list` after an upgrade puts `mindflayer.db.v2.bak` beside a
+ledger version 2 wrote.
 
 ## The agents' own folders
 
@@ -1370,18 +1801,25 @@ Which workspace that is, the command says. Core takes it as a parameter
 (`template::templates`, `template::find`) rather than walking up from the
 project, because a walk misses a workspace that links the project from beside
 it, and `flayer add -p` run there would not find the workspace's own
-templates. `flayer` passes the workspace it runs in. `mind` passes the one above
-the project, or else the default one in your home if it has been made — the
-order `mind link` looks in, without making anything (`commands::consulted`) —
-and the TUI offers in its add form what that finds, since the form runs a
-`mind` line. Core still checks that the workspace manages the project, so one
+templates. `flayer` passes the workspace it runs in. `mind` passes what
+`resolve::consulted` resolves from the project: the one `-W` names, then the
+activated one, then the one above the project, then the default one in your
+home if it has been made, without making anything. `-W` is how a workspace
+beside the project lends it templates from inside it. The TUI's add form
+offers the templates its line will find. On a workspace's screen those are
+the workspace on screen's: a row whose project would consult another runs
+`mind -W . -C <entry>` to reach it (see [the TUI looks where it was
+told](#the-tui-looks-where-it-was-told)). Core still checks that the workspace manages the project, so one
 that does not lends it nothing.
 
 A workspace `mind` cannot read refuses `mind add --template`, since passing it
 over would let a farther template of the same name, a built-in one say, stand
-in for its own. `edit`, `rename`, `remove` and an add from nothing only warn,
-after the change: there the workspace is only told. `mind templates` lists what
-it could read, with the same warning.
+in for its own. For `edit`, `rename`, `remove`, an add from nothing and `mind
+templates`, one found above that cannot be read is a warning after the
+change, since there the workspace is only told, and `mind templates` lists
+what it could read. One named or activated that will not open refuses all of
+them, as it refuses every other command (see [a project's
+workspace](#a-projects-workspace)).
 
 A skill template's front matter keeps whatever it says except `name` and
 `description`, which `mind add` always sets: the template's lines for those
@@ -1462,9 +1900,11 @@ after the change, as it once did, put a rule outside core, and
 left in the CLI to move into core before the panel runs its writes through
 the CLI. Installed rules and MCP entries, when they come, would each have
 needed calls of their own there, and each could have got them wrong. Each
-change returns what it did to the record (`lifecycle::Record`), and the CLI
-only says so; `install::disown`, which does the dropping, is private to core
-so that nothing else can. That keeps a front end from applying the rule
+change returns what it did to the record (`lifecycle::Record`), with what
+opening the ledger to do it scrubbed out ([A URL is kept without its
+credentials](#a-url-is-kept-without-its-credentials)), and the CLI only says
+so; `install::disown`, which does the dropping, is private to core so that
+nothing else can. That keeps a front end from applying the rule
 differently, not from skipping it: `create` and `create_from`, the writers
 `lifecycle::add` is built on, see to no record and stay public for core's
 tests, so a front end adds through `add`. A record that cannot be dropped is
@@ -1478,7 +1918,8 @@ and `lifecycle::finish_edit` decides whether anything changed and what that
 means for the record. The CLI finishes the edit even when the editor fails:
 one that writes the file and then exits non-zero, as vim does on `:cq`, has
 changed the copy all the same, and a record left behind would let `flayer
-uninstall` delete the change.
+uninstall` delete the change. What dropping it scrubbed out of the ledger goes
+with the editor's error, said there or never.
 
 The record dropped is the one held by the workspace the command resolved, the
 one its templates come from, and each change is given it for the same reason:
@@ -1682,6 +2123,16 @@ stops updates at the first edit; overwriting on update, which loses the edit;
 and a three-way merge, too complex for skills that ship scripts. Unblocks #23,
 #30, #47, #48, #50 and #93.
 
+Carrying it out, #30 keeps the hash once per installation, on
+`installations`, rather than once per target: every copy D-07 writes is
+staged from one tree, so each is compared with the same hash, and an edited
+copy is the one whose own hash no longer matches it. A target whose content
+differs from its installation's in form — a rule's section of the managed
+block in `AGENTS.md` beside its `.claude/rules/mindflayer/<route>.md` file
+(D-03) — shares no one tree with the others, and would need a hash of its
+own on `installation_targets`, added by the schema step that first records
+one.
+
 ### D-05: A workspace's library lives in `.mindflayer`
 
 New workspaces keep their own artifacts in `.mindflayer/library/<kind>`.
@@ -1742,7 +2193,9 @@ virtualenv does. Rejected: walking up first, under which an activated flayer
 silently loses to any workspace above the current directory; reusing `--home`,
 which confuses where the default lives with which workspace to use; and a
 direnv-style activation file, hidden state in repositories meant to stay
-minimal. Unblocks #54, #55 and #56.
+minimal. Unblocks #54, #55 and #56. #54 carried it out: core's `resolve`,
+with `-W/--workspace` on both binaries (see [which workspace a command
+uses](#which-workspace-a-command-uses)).
 
 ### D-09: Project settings live in the project
 
@@ -2020,25 +2473,40 @@ leak into the lifecycle code. Unblocks #33, #45, #62, #93, #94 and #95.
   the install screen tell an untouched copy from an edited one, and offer to
   update the first while leaving the second alone.
   [D-04](#d-04-an-edited-copy-is-detected-not-disowned) chose that hash, one
-  per target, and #47 carries it out, in the lifecycle changes that now hold
-  the rule (`lifecycle::finish_edit`, `rename` and `remove`).
+  per target. #30 records it, once per installation since every target is
+  written from one copy, and #47 reads it, in the lifecycle changes that now
+  hold the rule (`lifecycle::finish_edit`, `rename` and `remove`).
+- **Old copies of the ledger.** Each migration leaves a
+  `mindflayer.db.v<old>.bak` beside the ledger, and nothing removes one: a
+  copy is the way back from a step that went wrong, and when it is no longer
+  needed is for whoever owns the workspace to say. A command to list and
+  remove them, or a doctor check (#96) that mentions them, would make them
+  something seen rather than found by browsing `.mindflayer`.
+- **What a copy keeps.** A copy is the ledger as it was, so a URL an older
+  Mindflayer stored with its credentials in it stays in the copy once the
+  scrub has rewritten the ledger itself without them, and the copy is taken
+  as the file is opened, before any scrub. Rewriting the copy too, or taking
+  it without them, would close that, at the cost of a way back that is no
+  longer the file as it was: two of its sources the rewrite makes one would
+  have to be merged in the copy, as the scrub merges them in the ledger.
 - **Disowning from elsewhere.** A change drops the record of the workspace
   its command resolved, wherever that sits, but not of any other workspace
   that links the same project: nothing in the project says which workspaces
   link it, so each of them keeps its stale record. Every workspace linking a
   project would have to be findable from the project for that to change. The
-  TUI runs into it from inside: a project's row runs `mind -C <entry>`, the
-  line somebody in the project would type, and that consults the project's
-  workspace (the one above it, or the default) rather than the one on
-  screen. A screen on a workspace beside the project therefore leaves that
-  workspace's record behind, and its add form offers the other one's
-  templates. Nothing has to wait for that to change: `flayer <cmd> -p
-  <entry>`, run where the screen's lines run, already consults the workspace
-  on screen. The rows keep the `mind` line because the screen is at both
-  levels, as the CLI is, and a project's row teaches the project's command.
-  `-W` ([D-08](#d-08-an-explicit-or-activated-workspace-wins)) would let that
-  line name the screen's workspace as well, so which of the two a project's
-  row runs is still to choose.
+  TUI no longer runs into it from inside: a project's row whose own workspace
+  is not the one on screen runs `mind -W . -C <entry>`, which consults the
+  one on screen (see [the TUI looks where it was
+  told](#the-tui-looks-where-it-was-told)).
+- **A project stored by its absolute path.** The ledger names a project by
+  the route from the workspace's root to where its entry leads, whatever the
+  command called the project. An entry `link` stored absolute, because no
+  route from the root reached it, still gives a route that depends on how the
+  root itself was spelled: `/tmp/hub` and `/private/tmp/hub` climb a
+  different number of `..`s to it. `-C` could always spell a root two ways;
+  `-W` and an activation make it likelier. Keying such a project by its entry
+  as stored would settle it, at the price of re-keying the records already
+  written under the route.
 - **Writes that refuse after making the home workspace.** A command that
   writes makes the default workspace before it finds out whether there is
   anything to do in it. Outside every workspace, `mind install` and `mind
@@ -2046,16 +2514,25 @@ leak into the lifecycle code. Unblocks #33, #45, #62, #93, #94 and #95.
   uninstall -p`, and `unlink` at either level leave a `~/.mindflayer` behind
   and then refuse, since a workspace just made manages nothing. `flayer edit`,
   `rename` and `remove` make it to change its own artifacts, `remove`'s dry
-  run included. Each could look with `locate_or_unmade` first and make it only
+  run included. Each could resolve with `Intent::Read` first and make it only
   when it is about to write; whether each should is a choice per command, and
   they were left as writes when the reads stopped making it.
 - **Reads from a screen on the unmade default.** The TUI's reads (`v`, `s`,
   and showing an artifact) run from the default workspace's root, as its
   changes do. Before the default is made, with a workspace above home, they
   walk up to that one and read it instead. A change makes the default first;
-  a read cannot without making the home workspace to read it. `-W`
-  ([D-08](#d-08-an-explicit-or-activated-workspace-wins)) would let those
-  lines name the screen's workspace.
+  a read cannot without making the home workspace to read it. Nor can `-W`
+  name it ([D-08](#d-08-an-explicit-or-activated-workspace-wins)): a named
+  directory with no marker is refused. A way to say "no walk, only the
+  default", or a `-W` that takes the unmade default for a read, would settle
+  it.
+- **A transcript from a screen opened on a named workspace.** A screen
+  opened with `-W` runs every line against that workspace, but its
+  transcript does not spell the `-W`, as it does not spell `--home`: the
+  lines read as somebody would type them at the root, and replayed in a
+  shell without the same `-W` or activation they walk up instead. Writing it
+  into every line would make the transcript replayable anywhere, at the
+  price of lines nobody would type from inside the workspace.
 - **Worktrees share one exclude file.** Every linked worktree of a repository
   reads the same `info/exclude`, and an entry is anchored at whichever work
   tree reads it. A project checked out in two worktrees under one key has one
@@ -2085,8 +2562,12 @@ leak into the lifecycle code. Unblocks #33, #45, #62, #93, #94 and #95.
   so a private source gets through only when a git-config helper (or, for an
   ssh URL, ssh itself) has them, and otherwise the gather fails and says how to
   provide one, never at a prompt (see
-  [Why `gix`](#why-gix-rather-than-running-git)). What else it should be given
-  is decided in
+  [Why `gix`](#why-gix-rather-than-running-git)). A URL is stored, logged and
+  shown without credentials, and a gather URL that carries one is refused, so
+  a helper is also the only place a token typed into a URL can go (see
+  [A URL is kept without its
+  credentials](#a-url-is-kept-without-its-credentials)). What else it should
+  be given is decided in
   [D-16](#d-16-credentials-come-from-the-front-end-never-from-a-prompt): a
   provider the front end supplies, through that same callback. #110 carries it
   out, and #109 checks the helpers and ssh-agent against a real private
@@ -2105,6 +2586,28 @@ leak into the lifecycle code. Unblocks #33, #45, #62, #93, #94 and #95.
   on the clone would keep that prompt off the terminal, though not an askpass
   named by `GIT_ASKPASS` or `SSH_ASKPASS`; a `gix` that configures the retry
   too would close it.
+- **When the scrub can stop.** `gather::scrub` runs whenever a command
+  opens the ledger to write (`FlayerWorkspace::ledger_to_write`), because an
+  older build could write a token into the same file. Schema 3 (#30) changes
+  that, since a build older than it refuses the file: the scrub could run
+  once, as part of that migration, and stop. It has not moved there, because
+  a read migrates too ([A read leaves the ledger as it
+  finds it](#a-read-leaves-the-ledger-as-it-finds-it)), so a scrub folded into
+  that step would run on a read as well, rewriting clones as well as the file,
+  and a read would then have to say what it took out, as only a command that
+  writes does now.
+- **A user name on its own in an https URL.** #25 allows a bare user name,
+  and its examples are ssh's (`git@host:...`, `ssh://git@host/...`). Only ssh
+  keeps one here: over http(s) a user name is refused at gather and taken out
+  by the scrub, because GitHub takes a token in that place and nothing in the
+  text tells a token from a user name. That refuses the https URLs Bitbucket
+  Cloud and Azure DevOps hand out (`https://<user>@bitbucket.org/...`), which
+  then have to be gathered without the user name, with a credential helper
+  naming it. The other reading would let them through and store and show
+  them without the user name, which also lets a token typed there through,
+  for that one fetch, from the command line. The error and the scrub's note
+  say a user name was refused or taken out rather than calling it a password.
+  Which reading holds is the owner's to confirm.
 - **OpenCode's folder and `$XDG_CONFIG_HOME`.** Without
   `$OPENCODE_CONFIG_DIR`, OpenCode's folder is taken to be
   `~/.config/opencode`. Whether OpenCode moves it with `$XDG_CONFIG_HOME`, as
@@ -2137,6 +2640,41 @@ leak into the lifecycle code. Unblocks #33, #45, #62, #93, #94 and #95.
   transcript when it closes; the server keeps the panel's in memory and drops
   it when it stops. Whether `flayer ui` prints it on the way out, as the TUI
   does, is for #68 to choose.
+- **A style nonce for the panel.** The policy allows no inline style, so a
+  `<style>` element that a library writes into the page at run time is
+  blocked, as theming and colour-mode helpers often do; style the panel's
+  scripts set through the CSSOM, as Vue's bindings do, is not governed by
+  it. If #69 finds the panel needs one, the server would issue a nonce with
+  each launch, add it to `style-src`, and write it into `index.html` where
+  Vite's `html.cspNonce` leaves its placeholder. `script-src` never gets
+  `'unsafe-inline'` either way.
+- **A hostile server on loopback.** The cookie reaches every port of
+  127.0.0.1, so a server there that the browser visits while the panel runs
+  receives the token and can use it as Bearer
+  ([What keeps other pages out](#what-keeps-other-pages-out)). On a machine
+  one person uses, that server is theirs, and a hostile program of theirs
+  could read the browser's profile as easily; on a shared machine it can be
+  another user's, and nothing here keeps it out. Two changes would. The panel
+  could hold the token in memory and send it in a header of its own, which
+  goes nowhere the panel does not send it, at the price of the `HttpOnly`
+  that keeps the token from the panel's scripts, and of a reload that loses
+  it. Or each launch could bind an address of its own in 127.0.0.0/8, so the
+  cookie's host is the panel's alone, where the system allows it: Linux and
+  Windows answer the whole block, macOS only 127.0.0.1 until an alias is
+  added. Either changes the launch #15 validated (127.0.0.1, and a cookie
+  named per port), so it is the owner's to choose, or to accept as it is.
+- **The panel's dev server.** #68 gives `flayer ui` a `--dev` flag that also
+  accepts the Vite origin, and #69 has Vite proxy `/api` to `flayer ui --dev
+  --port 7878`. Through that proxy a change arrives with the browser's Origin,
+  the dev server's (`http://127.0.0.1:5173`, say), which the Origin check
+  refuses like every origin but the server's own. The widening meant for it is
+  one exact origin, handed to the server by the front end and accepted only
+  under `--dev`, never a pattern. Host stays checked as it is, so the proxy
+  sets `changeOrigin` and names the server in Host rather than the dev server.
+  Fetch Metadata needs nothing, since the browser sees a same-origin request
+  to the dev server. Nor does the gate while the dev server is opened as
+  127.0.0.1, where the launch link's cookie reaches it whatever its port;
+  opened as `localhost`, it has no cookie to forward.
 - **A run that panics.** A backend that panics while running a task has no
   outcome to record, so the task is not in the transcript, though it may have
   changed something before it stopped. The CLI's commands collect their

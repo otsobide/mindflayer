@@ -11,7 +11,7 @@ async fn a_command_runs_on_the_writer_thread_and_says_what_it_was() {
     let (server, runs) = launch();
 
     let reply = post(
-        &server.router(),
+        &server,
         "/api/commands",
         Auth::Bearer(server.token()),
         json!({ "name": "link beta" }),
@@ -34,7 +34,7 @@ async fn a_task_the_backend_cannot_read_runs_nothing() {
     let (server, runs) = launch();
 
     let reply = post(
-        &server.router(),
+        &server,
         "/api/commands",
         Auth::Bearer(server.token()),
         json!({ "nombre": "link beta" }),
@@ -49,11 +49,10 @@ async fn a_task_the_backend_cannot_read_runs_nothing() {
 #[tokio::test]
 async fn a_run_whose_outcome_is_not_json_is_still_transcribed() {
     let (server, runs) = launch();
-    let router = server.router();
     let token = Auth::Bearer(server.token());
 
     let reply = post(
-        &router,
+        &server,
         "/api/commands",
         token,
         json!({ "name": "odd", "unwritable": true }),
@@ -69,7 +68,7 @@ async fn a_run_whose_outcome_is_not_json_is_still_transcribed() {
     assert_eq!(reply.status, StatusCode::OK);
     assert_eq!(reply.json(), entry);
     assert_eq!(*runs.lock().unwrap(), ["start odd", "end odd"]);
-    let transcript = get(&router, "/api/transcript", token).await;
+    let transcript = get(&server, "/api/transcript", token).await;
     assert_eq!(transcript.json(), json!([entry]));
 }
 
@@ -78,13 +77,12 @@ async fn concurrent_writes_run_one_at_a_time_in_arrival_order() {
     let fake = Fake::default();
     let runs = Arc::clone(&fake.runs);
     let hold = Arc::clone(&fake.hold);
-    let server = Server::new(fake).bind().unwrap();
+    let server = Arc::new(Server::new(fake).bind().unwrap());
     let write = |task: Value| {
-        let router = server.router();
-        let token = server.token().to_owned();
-        tokio::spawn(
-            async move { post(&router, "/api/commands", Auth::Bearer(&token), task).await },
-        )
+        let server = Arc::clone(&server);
+        tokio::spawn(async move {
+            post(&server, "/api/commands", Auth::Bearer(server.token()), task).await
+        })
     };
 
     let release = Release(Arc::clone(&hold));
@@ -123,12 +121,7 @@ async fn concurrent_writes_run_one_at_a_time_in_arrival_order() {
         ]
     );
 
-    let transcript = get(
-        &server.router(),
-        "/api/transcript",
-        Auth::Bearer(server.token()),
-    )
-    .await;
+    let transcript = get(&server, "/api/transcript", Auth::Bearer(server.token())).await;
     assert_eq!(
         transcript.json(),
         Value::Array(replies.iter().map(Reply::json).collect()),
@@ -139,25 +132,24 @@ async fn concurrent_writes_run_one_at_a_time_in_arrival_order() {
 #[tokio::test]
 async fn the_transcript_keeps_runs_and_nothing_that_only_read() {
     let (server, _) = launch();
-    let router = server.router();
     let token = Auth::Bearer(server.token());
-    let transcript = || get(&router, "/api/transcript", token);
+    let transcript = || get(&server, "/api/transcript", token);
     assert_eq!(transcript().await.json(), json!([]));
 
-    post(&router, "/api/query", token, json!({ "echo": "x" })).await;
+    post(&server, "/api/query", token, json!({ "echo": "x" })).await;
     post(
-        &router,
+        &server,
         "/api/commands/preview",
         token,
         json!({ "name": "a" }),
     )
     .await;
-    post(&router, "/api/commands", token, json!({ "nombre": "nope" })).await;
+    post(&server, "/api/commands", token, json!({ "nombre": "nope" })).await;
     assert_eq!(transcript().await.json(), json!([]));
 
-    post(&router, "/api/commands", token, json!({ "name": "init" })).await;
+    post(&server, "/api/commands", token, json!({ "name": "init" })).await;
     post(
-        &router,
+        &server,
         "/api/commands",
         token,
         json!({ "name": "link beta" }),

@@ -25,6 +25,7 @@ use std::time::Duration;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
+use crate::gather::{self, Scrub};
 use crate::kind::Kind;
 use crate::ledger::{Ledger, LedgerError, LEDGER_FILE};
 use crate::lock::{self, LockError, WorkspaceLock};
@@ -435,8 +436,9 @@ impl FlayerWorkspace {
     /// projects, nothing loaded, an empty ledger — and coming first changes
     /// nothing about what it says. Nothing is written through it: an edit of
     /// its marker is refused as it is for any directory that is not a
-    /// workspace, and so is its ledger. What writes makes the real one, with
-    /// [`locate_or_default`](Self::locate_or_default).
+    /// workspace, and so is its ledger. What writes makes the real one:
+    /// [`resolve`](crate::resolve::resolve) does, for a command that means to
+    /// write.
     pub fn unmade(root: impl AsRef<Path>) -> Result<Self, WorkspaceError> {
         let root = absolute(root.as_ref())?;
         let marker = flayer_template(&directory_name(&root), &Directories::default());
@@ -463,123 +465,6 @@ impl FlayerWorkspace {
             Some(root) => Self::open(root).map(Some),
             None => Ok(None),
         }
-    }
-
-    /// The workspace at or above `start`, or else the default one at `home`,
-    /// made there the first time it is needed.
-    ///
-    /// A workspace somewhere up the tree always wins: one made on purpose with
-    /// `flayer init` says more about where you are than a default does. With
-    /// none, the default means there is always a workspace to link projects
-    /// into, the way there is always a global git config to write to. `home`
-    /// is `None` when there is no default, and then neither is there a
-    /// workspace.
-    pub fn locate_or_default(
-        start: impl AsRef<Path>,
-        home: Option<&Path>,
-    ) -> Result<Option<Self>, WorkspaceError> {
-        if let Some(workspace) = Self::locate(start)? {
-            return Ok(Some(workspace));
-        }
-        match home {
-            Some(home) => Self::init(home).map(|(workspace, _)| Some(workspace)),
-            None => Ok(None),
-        }
-    }
-
-    /// Like [`locate_or_default`](Self::locate_or_default), passing over the
-    /// workspaces rooted at any of `excluded`.
-    ///
-    /// For `flayer load`: run from inside the workspace being loaded, the one
-    /// found first is that workspace, and a workspace cannot load itself, so
-    /// the walk carries on above it — and ends at the default in `home` when
-    /// nothing up there is left. That default is never one of `excluded`
-    /// either: loading your home workspace from inside it is refused rather
-    /// than answered with the workspace itself.
-    pub fn locate_or_default_except(
-        start: impl AsRef<Path>,
-        excluded: &[PathBuf],
-        home: Option<&Path>,
-    ) -> Result<Option<Self>, WorkspaceError> {
-        let start = absolute(start.as_ref())?;
-        let skipped = |root: &Path| excluded.iter().any(|path| same_directory(root, path));
-        let found = start.ancestors().find(|candidate| {
-            candidate.join(FLAYER_DIR).join(FLAYER_CONFIG).is_file() && !skipped(candidate)
-        });
-        if let Some(root) = found {
-            return Self::open(root).map(Some);
-        }
-        match home {
-            Some(home) if skipped(home) => Err(WorkspaceError::LoadsItself {
-                path: absolute(home)?,
-            }),
-            Some(home) => Self::init(home).map(|(workspace, _)| Some(workspace)),
-            None => Ok(None),
-        }
-    }
-
-    /// Like [`locate_or_default_except`](Self::locate_or_default_except),
-    /// but never making the default: for a command that can only read or
-    /// take away, which is no reason to write a marker into somebody's home.
-    pub fn locate_except(
-        start: impl AsRef<Path>,
-        excluded: &[PathBuf],
-        home: Option<&Path>,
-    ) -> Result<Option<Self>, WorkspaceError> {
-        let start = absolute(start.as_ref())?;
-        let skipped = |root: &Path| excluded.iter().any(|path| same_directory(root, path));
-        let found = start.ancestors().find(|candidate| {
-            candidate.join(FLAYER_DIR).join(FLAYER_CONFIG).is_file() && !skipped(candidate)
-        });
-        if let Some(root) = found {
-            return Self::open(root).map(Some);
-        }
-        match home {
-            Some(home) if skipped(home) => Ok(None),
-            _ => Self::default_at(home),
-        }
-    }
-
-    /// The default workspace at `home`, if it has been made.
-    ///
-    /// For a question that must not make it: whether a project is managed by
-    /// it, say, which is no reason to write a marker into somebody's home.
-    pub fn default_at(home: Option<&Path>) -> Result<Option<Self>, WorkspaceError> {
-        match home {
-            Some(home) if home.join(FLAYER_DIR).join(FLAYER_CONFIG).is_file() => {
-                Self::open(home).map(Some)
-            }
-            _ => Ok(None),
-        }
-    }
-
-    /// The default workspace at `home` as a command that only reads sees it:
-    /// the one made there, or else the one that would be, [`unmade`]. `None`
-    /// only when there is no default at all.
-    ///
-    /// [`unmade`]: Self::unmade
-    pub fn default_or_unmade(home: Option<&Path>) -> Result<Option<Self>, WorkspaceError> {
-        let Some(home) = home else {
-            return Ok(None);
-        };
-        match Self::default_at(Some(home))? {
-            Some(workspace) => Ok(Some(workspace)),
-            None => Self::unmade(home).map(Some),
-        }
-    }
-
-    /// Like [`locate_or_default`](Self::locate_or_default), for a command that
-    /// only reads: with nothing up the tree, the default it falls back to is
-    /// the one made in `home` or, until something makes it, the one that would
-    /// be — the same answer, without the marker.
-    pub fn locate_or_unmade(
-        start: impl AsRef<Path>,
-        home: Option<&Path>,
-    ) -> Result<Option<Self>, WorkspaceError> {
-        if let Some(workspace) = Self::locate(start)? {
-            return Ok(Some(workspace));
-        }
-        Self::default_or_unmade(home)
     }
 
     /// Whether this is the default workspace at `home` rather than one found
@@ -664,6 +549,12 @@ impl FlayerWorkspace {
     /// keep one: creating it would leave half a workspace behind, a
     /// `.mindflayer` holding a database and no marker.
     ///
+    /// What a command opens it through, rather than how: one that writes to it
+    /// opens it with [`FlayerWorkspace::ledger_to_write`], which scrubs it
+    /// first, and one that only reads with
+    /// [`FlayerWorkspace::ledger_for_reading`], which neither makes it nor
+    /// scrubs it.
+    ///
     /// Opened with the workspace held ([`lock`](Self::lock)), because opening
     /// is when a ledger is made or migrated: two writers opening one an older
     /// build left would both step it forward, and the second would fail on
@@ -679,6 +570,23 @@ impl FlayerWorkspace {
         Ledger::open(self.ledger_path())
     }
 
+    /// Open that database for a command that writes to it: scrubbed first of
+    /// what an older build stored with a credential ([`gather::scrub`]), with
+    /// what the scrub took out handed back for the front end to say.
+    ///
+    /// The one way to open it for writing, rather than a scrub each front end
+    /// remembers to run: which commands write is the front end's to know, as
+    /// whether one may create a workspace is with the
+    /// [`Intent`](crate::resolve::Intent) it hands
+    /// [`resolve`](crate::resolve::resolve), but what opening to write
+    /// involves is core's, so no front end can write first and scrub after,
+    /// or not at all.
+    pub fn ledger_to_write(&self) -> Result<(Ledger, Scrub), LedgerError> {
+        let ledger = self.ledger()?;
+        let scrub = gather::scrub(self, &ledger)?;
+        Ok((ledger, scrub))
+    }
+
     /// The ledger, for a command that only reads it: the one on disk when
     /// there is one, and otherwise an empty one in memory, which answers every
     /// question the way a ledger nothing was ever written to would, without
@@ -686,7 +594,13 @@ impl FlayerWorkspace {
     ///
     /// Never for a write. What is recorded in the stand-in is gone when it is
     /// dropped, and a copy installed without its record is one Mindflayer
-    /// would afterwards refuse to touch; a write opens [`ledger`](Self::ledger).
+    /// would afterwards refuse to touch; a write opens
+    /// [`ledger_to_write`](Self::ledger_to_write).
+    ///
+    /// Nor is the one on disk scrubbed of what an older build stored with a
+    /// credential: everything the ledger hands back is redacted on the way out
+    /// anyway, and reading is no reason to write. It is left for the next
+    /// command that writes.
     ///
     /// Never waits for a writer either, though an older ledger is migrated
     /// here as it is there: readers do not wait, so a read's migration is
@@ -836,28 +750,50 @@ impl FlayerWorkspace {
         &mut self,
         source: &FlayerWorkspace,
     ) -> Result<(PathBuf, Registration), WorkspaceError> {
-        if same_directory(source.root(), &self.root) {
-            return Err(WorkspaceError::LoadsItself {
-                path: self.root.clone(),
-            });
+        let mut loaded = self.load_all(std::slice::from_ref(source))?;
+        Ok(loaded.remove(0))
+    }
+
+    /// [`load`](Self::load) several at once, in one rewrite of the file: all
+    /// of them or, if one is this workspace, none. A workspace named with
+    /// `-W` is not passed over for being among what it is told to load, so
+    /// the refusal has to come before the first entry is written.
+    pub fn load_all(
+        &mut self,
+        sources: &[FlayerWorkspace],
+    ) -> Result<Vec<(PathBuf, Registration)>, WorkspaceError> {
+        let mut wanted = Vec::new();
+        for source in sources {
+            if same_directory(source.root(), &self.root) {
+                return Err(WorkspaceError::LoadsItself {
+                    path: self.root.clone(),
+                });
+            }
+            let entry = self.entry_for(source.root());
+            let written =
+                paths::to_config_string(&entry).ok_or_else(|| WorkspaceError::NonUtf8Path {
+                    path: entry.clone(),
+                })?;
+            wanted.push((written, paths::normalize(source.root())));
         }
-        let entry = self.entry_for(source.root());
-        let target = paths::normalize(source.root());
-        let written =
-            paths::to_config_string(&entry).ok_or_else(|| WorkspaceError::NonUtf8Path {
-                path: entry.clone(),
-            })?;
         let root = self.root.clone();
 
         self.edit_array(LOADED_KEY, move |array| {
-            if let Some(existing) = entries(array)
-                .into_iter()
-                .find(|entry| points_at(&root, entry, &target))
-            {
-                return Ok((existing, Registration::AlreadyRegistered));
-            }
-            array.push(written.as_str());
-            Ok((PathBuf::from(&written), Registration::Added))
+            Ok(wanted
+                .iter()
+                .map(|(written, target)| {
+                    // Against the array as this edit leaves it, so two
+                    // spellings of one source in one call are one load.
+                    if let Some(existing) = entries(array)
+                        .into_iter()
+                        .find(|entry| points_at(&root, entry, target))
+                    {
+                        return (existing, Registration::AlreadyRegistered);
+                    }
+                    array.push(written.as_str());
+                    (PathBuf::from(written), Registration::Added)
+                })
+                .collect())
         })
     }
 
@@ -1086,6 +1022,34 @@ impl FlayerWorkspace {
             .iter()
             .any(|entry| points_at(&self.root, entry, &target))
     }
+
+    /// The directory `root` names, spelled the way this workspace's entry
+    /// for it leads there; `root` itself when no entry points at it.
+    ///
+    /// For the ledger, which names a project by its route from the
+    /// workspace, so one directory spelled two ways would be two projects to
+    /// it. A `mind` command spells its project the way the operating system
+    /// reports the directory it runs in, through no symlink, while a
+    /// workspace named with `-W` keeps the spelling it was given, `/tmp` on
+    /// a Mac say; the route between those two is not the one `flayer -p`
+    /// takes from the entry, and a record written under one would not be
+    /// found under the other. A spelling that already matches as written is
+    /// kept, so nothing that matched before is named differently now.
+    pub(crate) fn spelling_of(&self, root: &Path) -> PathBuf {
+        let target = paths::normalize(root);
+        let led: Vec<PathBuf> = self
+            .config
+            .projects
+            .iter()
+            .map(|entry| paths::normalize(&self.root.join(entry)))
+            .collect();
+        if led.contains(&target) {
+            return target;
+        }
+        led.into_iter()
+            .find(|candidate| same_directory(candidate, &target))
+            .unwrap_or(target)
+    }
 }
 
 /// One entry in a workspace's registry, and what it opens.
@@ -1131,7 +1095,7 @@ fn remove_pointing_at(array: &mut toml_edit::Array, root: &Path, target: &Path) 
 
 /// Whether two spellings name one directory: lexically first, then through
 /// the filesystem, so a symlinked spelling of a root is still that root.
-fn same_directory(a: &Path, b: &Path) -> bool {
+pub(crate) fn same_directory(a: &Path, b: &Path) -> bool {
     let (a, b) = (paths::normalize(a), paths::normalize(b));
     a == b
         || matches!(
@@ -1397,7 +1361,7 @@ fn temporary_beside(path: &Path) -> Result<(PathBuf, fs::File), (PathBuf, io::Er
 /// that `..` in place. Every root would then carry it, and two paths naming
 /// one directory would stop comparing equal — which is what `in_project` and
 /// the link deduplication are built on.
-fn absolute(path: &Path) -> Result<PathBuf, WorkspaceError> {
+pub(crate) fn absolute(path: &Path) -> Result<PathBuf, WorkspaceError> {
     let absolute = std::path::absolute(path).map_err(|source| WorkspaceError::Read {
         path: path.to_path_buf(),
         source,

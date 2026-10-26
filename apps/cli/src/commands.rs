@@ -13,10 +13,10 @@ pub(crate) mod workspace;
 
 use std::path::{Path, PathBuf};
 
+use mindflayer_core::resolve::{self, resolve, Intent};
 use mindflayer_core::{paths, Catalog, FlayerWorkspace, MindProject, Reference};
 
-use crate::homes::default_home;
-use crate::render::as_stored;
+use crate::homes::Lookup;
 use crate::{tui, Cli, CliError, Command, Failure, FlayerCli, FlayerCommand, Outcome};
 use artifact::{add_to, edit_in, remove_from, rename_in, templates_of};
 use gather::run_gather;
@@ -33,14 +33,23 @@ use workspace::{load_command, unload_command};
 
 /// Run `mind`.
 pub fn run(cli: &Cli) -> Result<Outcome, Failure> {
+    run_with(
+        cli,
+        &Lookup::given(cli.home.as_deref(), cli.workspace.as_deref()),
+    )
+}
+
+/// Run `mind` with where to look for a workspace already decided: what
+/// [`run`] does once it has read that from the command line and the
+/// environment, and what the TUI does with its own, so the lines it runs look
+/// where its screen did. What `cli` says about it is not read again.
+pub(crate) fn run_with(cli: &Cli, lookup: &Lookup) -> Result<Outcome, Failure> {
     let directory = working_directory(cli.directory.as_deref())?;
-    let home = default_home(cli.home.as_deref());
-    let home = home.as_deref();
     match cli.command.as_ref().unwrap_or(&Command::Tui) {
         Command::Flayer { command } => run_flayer(
             command.as_ref().unwrap_or(&FlayerCommand::Tui),
             &directory,
-            home,
+            lookup,
         ),
         Command::Init { skills, rules } => {
             init_project(&directory, skills.as_deref(), rules.as_deref())
@@ -58,7 +67,7 @@ pub fn run(cli: &Cli) -> Result<Outcome, Failure> {
                 // template of the same name, a built-in one say, stand in
                 // for its own and write the artifact from that.
                 Some(template) => {
-                    let workspace = consulted(&project, home)?;
+                    let workspace = consulted(&project, lookup)?;
                     add_to(
                         workspace.as_ref(),
                         &project,
@@ -68,32 +77,32 @@ pub fn run(cli: &Cli) -> Result<Outcome, Failure> {
                         Some(template),
                     )
                 }
-                None => consulting(&project, home, |workspace| {
+                None => consulting(&project, lookup, |workspace| {
                     add_to(workspace, &project, *kind, name, description, None)
                 }),
             }
         }
         Command::Edit { reference, editor } => {
             let project = project_here(&directory)?;
-            consulting(&project, home, |workspace| {
+            consulting(&project, lookup, |workspace| {
                 edit_in(workspace, &project, reference, editor.as_deref())
             })
         }
         Command::Rename { reference, to } => {
             let project = project_here(&directory)?;
-            consulting(&project, home, |workspace| {
+            consulting(&project, lookup, |workspace| {
                 rename_in(workspace, &project, reference, to)
             })
         }
         Command::Remove { reference, yes } => {
             let project = project_here(&directory)?;
-            consulting(&project, home, |workspace| {
+            consulting(&project, lookup, |workspace| {
                 remove_from(workspace, &project, reference, *yes)
             })
         }
         Command::Templates => {
             let project = project_here(&directory)?;
-            consulting(&project, home, |workspace| {
+            consulting(&project, lookup, |workspace| {
                 templates_of(workspace, &project)
             })
         }
@@ -117,38 +126,45 @@ pub fn run(cli: &Cli) -> Result<Outcome, Failure> {
                 validate(catalog, &selector, level)
             })
         }
-        Command::Link => link_here(&directory, home),
-        Command::Unlink => unlink_here(&directory, home),
+        Command::Link => link_here(&directory, lookup),
+        Command::Unlink => unlink_here(&directory, lookup),
         Command::Load { workspaces } => {
             let project = project_here(&directory)?;
-            load_command(&directory, project.root(), workspaces, home)
+            load_command(&directory, project.root(), workspaces, lookup)
         }
         Command::Unload { workspaces } => {
             let project = project_here(&directory)?;
-            unload_command(&directory, project.root(), workspaces, home)
+            unload_command(&directory, project.root(), workspaces, lookup)
         }
         Command::Install { name, from } => {
             let project = project_here(&directory)?;
-            let workspace = managing(&project, home)?;
+            let workspace = managing(&project, lookup)?;
             install_named(&workspace, &project, name, from.as_deref(), &directory)
         }
         Command::Uninstall { name } => {
             let project = project_here(&directory)?;
-            let workspace = managing(&project, home)?;
+            let workspace = managing(&project, lookup)?;
             uninstall_named(&workspace, &project, name)
         }
-        Command::Tui => tui::run_project(&directory, home),
+        Command::Tui => tui::run_project(&directory, lookup),
     }
 }
 
 /// Run `flayer`, which is the same as running `mind flayer`.
 pub fn run_flayer_cli(cli: &FlayerCli) -> Result<Outcome, Failure> {
+    run_flayer_with(
+        cli,
+        &Lookup::given(cli.home.as_deref(), cli.workspace.as_deref()),
+    )
+}
+
+/// [`run_with`], for `flayer`.
+pub(crate) fn run_flayer_with(cli: &FlayerCli, lookup: &Lookup) -> Result<Outcome, Failure> {
     let directory = working_directory(cli.directory.as_deref())?;
-    let home = default_home(cli.home.as_deref());
     run_flayer(
         cli.command.as_ref().unwrap_or(&FlayerCommand::Tui),
         &directory,
-        home.as_deref(),
+        lookup,
     )
 }
 
@@ -160,7 +176,7 @@ pub fn run_flayer_cli(cli: &FlayerCli) -> Result<Outcome, Failure> {
 fn run_flayer(
     command: &FlayerCommand,
     directory: &Path,
-    home: Option<&Path>,
+    lookup: &Lookup,
 ) -> Result<Outcome, Failure> {
     match command {
         FlayerCommand::Init { skills, rules } => {
@@ -174,10 +190,10 @@ fn run_flayer(
             description,
             template,
         } => {
-            let workspace = workspace_here(directory, home)?;
+            let workspace = workspace_here(directory, lookup)?;
             add_to(
                 Some(&workspace),
-                &holder(&workspace, project.as_deref())?,
+                &workspace.holder(project.as_deref())?,
                 *kind,
                 name,
                 description,
@@ -189,10 +205,10 @@ fn run_flayer(
             project,
             editor,
         } => {
-            let workspace = workspace_here(directory, home)?;
+            let workspace = workspace_here(directory, lookup)?;
             edit_in(
                 Some(&workspace),
-                &holder(&workspace, project.as_deref())?,
+                &workspace.holder(project.as_deref())?,
                 reference,
                 editor.as_deref(),
             )
@@ -202,10 +218,10 @@ fn run_flayer(
             to,
             project,
         } => {
-            let workspace = workspace_here(directory, home)?;
+            let workspace = workspace_here(directory, lookup)?;
             rename_in(
                 Some(&workspace),
-                &holder(&workspace, project.as_deref())?,
+                &workspace.holder(project.as_deref())?,
                 reference,
                 to,
             )
@@ -215,35 +231,37 @@ fn run_flayer(
             project,
             yes,
         } => {
-            let workspace = workspace_here(directory, home)?;
+            let workspace = workspace_here(directory, lookup)?;
             remove_from(
                 Some(&workspace),
-                &holder(&workspace, project.as_deref())?,
+                &workspace.holder(project.as_deref())?,
                 reference,
                 *yes,
             )
         }
-        FlayerCommand::Templates { project } => reading_workspace(directory, home, |workspace| {
-            templates_of(Some(workspace), &holder(workspace, project.as_deref())?)
+        FlayerCommand::Templates { project } => reading_workspace(directory, lookup, |workspace| {
+            templates_of(Some(workspace), &workspace.holder(project.as_deref())?)
         }),
 
-        FlayerCommand::Link { projects } => link_projects(directory, projects, home),
-        FlayerCommand::Unlink { projects } => unlink_projects(directory, projects, home),
+        FlayerCommand::Link { projects } => link_projects(directory, projects, lookup),
+        FlayerCommand::Unlink { projects } => unlink_projects(directory, projects, lookup),
 
-        FlayerCommand::Load { workspaces } => load_command(directory, directory, workspaces, home),
+        FlayerCommand::Load { workspaces } => {
+            load_command(directory, directory, workspaces, lookup)
+        }
         FlayerCommand::Unload { workspaces } => {
-            unload_command(directory, directory, workspaces, home)
+            unload_command(directory, directory, workspaces, lookup)
         }
 
         // A screen, so it opens as one: on the default workspace before it
         // is made too, which its first change makes.
-        FlayerCommand::Minds => tui::run_minds(directory, home),
+        FlayerCommand::Minds => tui::run_minds(directory, lookup),
 
         FlayerCommand::Scan => {
-            reading_workspace(directory, home, |workspace| Ok(scan_workspace(workspace)))
+            reading_workspace(directory, lookup, |workspace| Ok(scan_workspace(workspace)))
         }
 
-        FlayerCommand::Gather(command) => run_gather(command, directory, home),
+        FlayerCommand::Gather(command) => run_gather(command, directory, lookup),
 
         FlayerCommand::Install {
             project,
@@ -253,12 +271,12 @@ fn run_flayer(
             // The screen reads until something on it is applied, so it is
             // opened the way a read is: on the default workspace before it
             // is made too, which manages nothing to install into.
-            (None, None) => reading_workspace(directory, home, crate::install::run),
+            (None, None) => reading_workspace(directory, lookup, crate::install::run),
             (Some(name), Some(project)) => {
-                let workspace = workspace_here(directory, home)?;
+                let workspace = workspace_here(directory, lookup)?;
                 install_named(
                     &workspace,
-                    &pick(&workspace, project)?,
+                    &workspace.pick(project)?,
                     name,
                     from.as_deref(),
                     directory,
@@ -270,16 +288,16 @@ fn run_flayer(
             (None, Some(_)) => Err(CliError::InstallWhat.into()),
         },
         FlayerCommand::Uninstall { project, name } => {
-            let workspace = workspace_here(directory, home)?;
-            uninstall_named(&workspace, &pick(&workspace, project)?, name)
+            let workspace = workspace_here(directory, lookup)?;
+            uninstall_named(&workspace, &workspace.pick(project)?, name)
         }
 
-        FlayerCommand::Tui => tui::run(directory, home),
+        FlayerCommand::Tui => tui::run(directory, lookup),
 
         FlayerCommand::List { kind, project } => {
-            reading_workspace(directory, home, |workspace| match project {
+            reading_workspace(directory, lookup, |workspace| match project {
                 Some(project) => one_project(
-                    pick(workspace, project)?,
+                    workspace.pick(project)?,
                     wanted(*kind),
                     |catalog, projects, level| Ok(list(catalog, projects, level)),
                 ),
@@ -303,8 +321,8 @@ fn run_flayer(
             let read = |catalog: &Catalog, _: &[MindProject], level: Level| {
                 show(catalog, &reference, level)
             };
-            reading_workspace(directory, home, |workspace| match project {
-                Some(project) => one_project(pick(workspace, project)?, kinds, read),
+            reading_workspace(directory, lookup, |workspace| match project {
+                Some(project) => one_project(workspace.pick(project)?, kinds, read),
                 None => {
                     let (projects, warnings) = managed(workspace);
                     everywhere(workspace, warnings, &projects, kinds, read)
@@ -317,8 +335,8 @@ fn run_flayer(
             let read = |catalog: &Catalog, _: &[MindProject], level: Level| {
                 validate(catalog, &selector, level)
             };
-            reading_workspace(directory, home, |workspace| match project {
-                Some(project) => one_project(pick(workspace, project)?, kinds, read),
+            reading_workspace(directory, lookup, |workspace| match project {
+                Some(project) => one_project(workspace.pick(project)?, kinds, read),
                 None => {
                     let (projects, warnings) = managed(workspace);
                     everywhere_and_the_shelf(workspace, warnings, &projects, kinds, read)
@@ -340,8 +358,9 @@ fn working_directory(path: Option<&Path>) -> Result<PathBuf, CliError> {
     }
 }
 
-/// Resolve a path a user typed, against the directory the command works in.
-fn resolve(directory: &Path, path: &Path) -> Result<PathBuf, CliError> {
+/// A path a user typed, made absolute against the directory the command
+/// works in.
+fn typed(directory: &Path, path: &Path) -> Result<PathBuf, CliError> {
     let joined = directory.join(path);
     let absolute = std::path::absolute(&joined).map_err(|source| CliError::Resolve {
         path: joined.clone(),
@@ -355,24 +374,26 @@ fn project_here(directory: &Path) -> Result<MindProject, CliError> {
     MindProject::locate(directory)?.ok_or_else(|| CliError::NotInProject(directory.to_path_buf()))
 }
 
-/// The flayer workspace the caller is standing in: the one at or above
-/// `directory`, or else the default one in `home`, made there the first time
-/// a command that writes needs it. A command that only reads asks
-/// [`workspace_to_read`] instead.
-fn workspace_here(directory: &Path, home: Option<&Path>) -> Result<FlayerWorkspace, CliError> {
-    FlayerWorkspace::locate_or_default(directory, home)?
+/// The flayer workspace a command that writes acts on: the one `lookup`
+/// resolves from `directory`, which is the default one in home, made there
+/// the first time a command needs it, when nothing chooses another. A
+/// command that only reads asks [`workspace_to_read`] instead.
+fn workspace_here(directory: &Path, lookup: &Lookup) -> Result<FlayerWorkspace, CliError> {
+    resolve(&lookup.inputs(directory, Intent::Write))?
+        .map(|resolved| resolved.workspace)
         .ok_or_else(|| CliError::NotInWorkspace(directory.to_path_buf()))
 }
 
-/// The flayer workspace a command that only reads looks at: the one at or
-/// above `directory`, or else the default one in `home` — made, or as it
-/// will be once something makes it.
+/// The flayer workspace a command that only reads looks at: the one `lookup`
+/// resolves from `directory` — the default one in home made, or as it will
+/// be once something makes it.
 ///
 /// Never made for the occasion. A read is no reason to write a marker into
 /// somebody's home, and the workspace that would be made there answers every
 /// read as the made one would a moment later.
-fn workspace_to_read(directory: &Path, home: Option<&Path>) -> Result<FlayerWorkspace, CliError> {
-    FlayerWorkspace::locate_or_unmade(directory, home)?
+fn workspace_to_read(directory: &Path, lookup: &Lookup) -> Result<FlayerWorkspace, CliError> {
+    resolve(&lookup.inputs(directory, Intent::Read))?
+        .map(|resolved| resolved.workspace)
         .ok_or_else(|| CliError::NotInWorkspace(directory.to_path_buf()))
 }
 
@@ -384,10 +405,10 @@ fn workspace_to_read(directory: &Path, home: Option<&Path>) -> Result<FlayerWork
 /// say of an empty one.
 fn reading_workspace(
     directory: &Path,
-    home: Option<&Path>,
+    lookup: &Lookup,
     read: impl FnOnce(&FlayerWorkspace) -> Result<Outcome, Failure>,
 ) -> Result<Outcome, Failure> {
-    reading(&workspace_to_read(directory, home)?, read)
+    reading(&workspace_to_read(directory, lookup)?, read)
 }
 
 /// Run a read on a workspace found some other way, with the same one line
@@ -422,7 +443,7 @@ fn unmade_hint(workspace: &FlayerWorkspace) -> String {
 fn targets(directory: &Path, paths: &[PathBuf]) -> Result<Vec<PathBuf>, CliError> {
     let mut resolved: Vec<PathBuf> = Vec::new();
     for path in paths {
-        let target = resolve(directory, path)?;
+        let target = typed(directory, path)?;
         if !resolved.contains(&target) {
             resolved.push(target);
         }
@@ -462,64 +483,58 @@ fn managed(workspace: &FlayerWorkspace) -> (Vec<MindProject>, Vec<String>) {
     (projects, warnings)
 }
 
-/// The workspace above a project, whether or not it manages it yet: where
-/// `mind link` registers it — the default one in `home` when there is none
-/// up the tree.
-fn workspace_above(
-    project: &MindProject,
-    home: Option<&Path>,
-) -> Result<FlayerWorkspace, CliError> {
-    FlayerWorkspace::locate_or_default(project.root(), home)?
+/// The workspace a project's own commands register it with: the one
+/// `lookup` resolves from the project, whether or not it manages it yet —
+/// where `mind link` adds it, and the default one in home when nothing
+/// chooses another and there is none up the tree.
+fn workspace_for(project: &MindProject, lookup: &Lookup) -> Result<FlayerWorkspace, CliError> {
+    resolve(&lookup.inputs(project.root(), Intent::Write))?
+        .map(|resolved| resolved.workspace)
         .ok_or_else(|| CliError::NoWorkspaceAbove(project.root().to_path_buf()))
 }
 
-/// The workspace above a project that manages it: the one whose ledger
-/// records what is installed there.
-fn managing(project: &MindProject, home: Option<&Path>) -> Result<FlayerWorkspace, CliError> {
-    let workspace = workspace_above(project, home)?;
-    if !workspace.is_linked(project.root()) {
-        return Err(CliError::NotManaged {
-            project: project.root().to_path_buf(),
-            workspace: workspace.root().to_path_buf(),
-        });
-    }
-    Ok(workspace)
+/// The workspace that manages a project, as core's
+/// [`managing`](resolve::managing) resolves it: the one whose ledger records
+/// what is installed there.
+fn managing(project: &MindProject, lookup: &Lookup) -> Result<FlayerWorkspace, CliError> {
+    resolve::managing(&lookup.inputs(project.root(), Intent::Write), project)?
+        .ok_or_else(|| CliError::NoWorkspaceAbove(project.root().to_path_buf()))
 }
 
-/// The workspace a `mind` command consults about the project it changes:
-/// the one above it, or else the default one in `home` — the order `mind
-/// link` and `mind install` look in.
+/// The workspace a `mind` command consults about the project it changes, as
+/// core's [`consulted`](resolve::consulted) resolves it: the one `mind link`
+/// and `mind install` find, if it has been made.
 ///
-/// The default only if it has been made: a change to a project is no reason
-/// to write a marker into somebody's home, and a workspace made just now
-/// holds no record to drop and no template to offer.
-///
-/// The TUI asks it too, for the workspace `mind` opens its screen on and for
-/// the templates its add form offers a project, so both are what the `mind`
-/// lines it runs will find.
+/// The TUI asks it too, for the templates its add form offers a project, so
+/// they are what the `mind` lines it runs will find.
 pub(crate) fn consulted(
     project: &MindProject,
-    home: Option<&Path>,
+    lookup: &Lookup,
 ) -> Result<Option<FlayerWorkspace>, CliError> {
-    match FlayerWorkspace::locate(project.root())? {
-        Some(workspace) => Ok(Some(workspace)),
-        None => Ok(FlayerWorkspace::default_at(home)?),
-    }
+    Ok(
+        resolve::consulted(&lookup.inputs(project.root(), Intent::Read), project)?
+            .map(|resolved| resolved.workspace),
+    )
 }
 
 /// Make a change to `project` with the workspace [`consulted`] about it.
 ///
-/// One that cannot be read is a warning after the change rather than a
+/// One found that cannot be read is a warning after the change rather than a
 /// refusal of it: the change is the project's, and the workspace was only to
 /// be told. Not so for `mind add --template`, where the workspace lends what
-/// the change is made from, which is why that asks [`consulted`] itself.
+/// the change is made from, which is why that asks [`consulted`] itself. Nor
+/// for one `-W` or the activation names that is no workspace, which refuses
+/// the change as it refuses every other command: whoever chose it meant that
+/// one to be told, and a change made without it would leave its record
+/// behind once the name is put right.
 fn consulting(
     project: &MindProject,
-    home: Option<&Path>,
+    lookup: &Lookup,
     change: impl FnOnce(Option<&FlayerWorkspace>) -> Result<Outcome, Failure>,
 ) -> Result<Outcome, Failure> {
-    let (workspace, unread) = match consulted(project, home) {
+    let (workspace, unread) = match consulted(project, lookup) {
         Ok(workspace) => (workspace, None),
+        Err(error @ CliError::Chosen { .. }) => return Err(error.into()),
         Err(error) => (None, Some(format!("warning: {error}"))),
     };
     let mut result = change(workspace.as_ref());
@@ -533,58 +548,4 @@ fn consulting(
         }
     }
     result
-}
-
-/// What a workspace command changes: the workspace's own artifacts, or the
-/// one project `-p` names.
-fn holder(workspace: &FlayerWorkspace, project: Option<&str>) -> Result<MindProject, CliError> {
-    match project {
-        None => Ok(workspace.own()),
-        Some(wanted) => pick(workspace, wanted),
-    }
-}
-
-/// The one managed project `wanted` names: by its name, by its entry as the
-/// marker spells it, or by its path from the workspace.
-fn pick(workspace: &FlayerWorkspace, wanted: &str) -> Result<MindProject, CliError> {
-    let target = paths::normalize(&workspace.root().join(wanted));
-    let mut found: Vec<MindProject> = Vec::new();
-    let mut broken = None;
-    for member in workspace.members() {
-        let spelled = as_stored(&member.entry) == wanted || member.root == target;
-        match member.project {
-            // Two spellings of one directory are one project, not a choice.
-            Ok(project) if spelled || project.name() == wanted => {
-                if !found.iter().any(|other| other.root() == project.root()) {
-                    found.push(project);
-                }
-            }
-            Err(error) if spelled => broken = Some(error),
-            _ => {}
-        }
-    }
-    match found.len() {
-        1 => Ok(found.remove(0)),
-        // Named exactly, but it does not open: why is more use than "no
-        // such project".
-        0 => Err(match broken {
-            Some(error) => CliError::Workspace(error),
-            None => CliError::UnknownProject {
-                wanted: wanted.to_owned(),
-                known: workspace
-                    .members()
-                    .into_iter()
-                    .filter_map(|member| member.project.ok())
-                    .map(|project| project.name().to_owned())
-                    .collect(),
-            },
-        }),
-        _ => Err(CliError::AmbiguousProject {
-            wanted: wanted.to_owned(),
-            matches: found
-                .iter()
-                .map(|project| as_stored(&workspace.entry_for(project.root())))
-                .collect(),
-        }),
-    }
 }

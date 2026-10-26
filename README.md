@@ -61,6 +61,41 @@ hint: no workspace here or above, and the default one is not made yet; the first
 home; set to empty (`--home ""`) there is no default, and a command outside
 every workspace says so instead.
 
+### Choosing a workspace
+
+Walking up is what happens when nothing says otherwise. `-W DIR`
+(`--workspace`) names the workspace a command uses, by its directory or its
+`.mindflayer`, from wherever you are; `$MINDFLAYER_WORKSPACE` does the same
+for every command run in a shell, the way an activated Python virtualenv does.
+Either one wins over a workspace above you, so you can keep several flayers
+for different purposes and pick one:
+
+```
+$ cd ~/Projects/collapse                   # under the ~/Projects workspace
+$ flayer -W ~/flayers/writing list         # a workspace beside it instead
+prose-style  How every essay here is written
+
+$ export MINDFLAYER_WORKSPACE=~/flayers/writing
+$ flayer list                              # the same, for every command
+prose-style  How every essay here is written
+$ mind link                                # this project, into that one
+linked collapse as ../../Projects/collapse
+```
+
+`mind` commands use it too: `mind install` installs from it, and a change to
+an installed skill drops its record there, which is how a project managed by a
+workspace somewhere else is worked on from inside it. What `-W` or the
+variable names has to be a workspace already. Anything else is refused,
+never passed over for the one above and never made into one:
+
+```
+$ flayer -W ~/notes list
+error: -W names a workspace that cannot be used: /home/you/notes: not a flayer workspace (no .mindflayer/flayer.toml)
+```
+
+`-W ""` names none and leaves `$MINDFLAYER_WORKSPACE` out too, and an empty
+variable counts as unset. `--home` still says only where the default lives.
+
 ## The two kinds
 
 | | Lives in | Shape | Declares |
@@ -172,6 +207,8 @@ flayer uninstall -p PROJECT <SKILL>
 mind flayer <cmd>          # the long way round; `flayer <cmd>` is the shortcut
 mind ls / flayer ls        # alias for list; `flayer gather ls` for gather list
 mind -C <dir> ...          # work in <dir> instead of the current directory
+mind -W <dir> ...          # the workspace to use, from anywhere; "" for none
+                           # named; $MINDFLAYER_WORKSPACE otherwise
 mind --home <dir> ...      # where the default workspace lives; "" for none
 mind --claude-config-dir|--codex-home|--opencode-config-dir|--agents-dir <dir> ...
                            # where each agent's own folder is; "" for none
@@ -179,7 +216,8 @@ mind tui / flayer tui      # the TUIs, spelled out
 ```
 
 Both find what they act on the way git does, by walking up from wherever you
-are. Both levels answer a different question, and that is the point:
+are, unless [a workspace is named](#choosing-a-workspace). Both levels answer
+a different question, and that is the point:
 
 ```
 $ cd ~/Projects/collapse && mind list      # just this project
@@ -366,13 +404,54 @@ ssh is a program of its own and can still ask on the terminal: for the
 passphrase of a key your ssh-agent does not hold, for a password when the
 server accepts one, or whether to trust a host it has not seen before.
 
+A URL with a password or a token in it is refused before anything is fetched.
+What is gathered is stored, listed and reported by its URL, and a token typed
+into a command line is already where `ps` and your shell history show it. Give
+the token to a git credential helper, and gather the URL without it:
+
+```
+$ flayer gather git https://me:ghp_t0ken@github.com/acme/private-skills
+error: https://github.com/acme/private-skills: a password, a token or, over http(s), a user name in the URL is refused, because gathering stores and shows the URL: gather it without one, and configure a git credential helper that has it
+```
+
+The user ssh logs in as is not a credential, and is kept
+(`git@github.com:acme/skills`, `ssh://git@github.com/acme/skills`). Over https
+a user name on its own is refused too, because a token can stand in for one:
+GitHub takes `https://<token>@github.com/...`, and nothing in the URL tells the
+two apart. That includes the https URLs Bitbucket and Azure DevOps hand out
+(`https://<user>@bitbucket.org/...`); gather those without the user name, and
+let the credential helper supply it.
+
+A workspace an older Mindflayer gathered into with a token in a URL is cleaned
+up by the next command that writes to it — a gather, an install or an
+uninstall, or an `add`, `edit`, `rename` or `remove` in a project it manages.
+The token is taken out of `mindflayer.db` and out of the clone in
+`cache/`, and the command says so once, on stderr, without failing because of
+it:
+
+```
+$ flayer install -p collapse deploy
+installed deploy into collapse, from https://github.com/acme/private-skills
+note: https://github.com/acme/private-skills: the user name, password or token an older Mindflayer stored in this URL is taken out; gathering it again needs a git credential helper that has it
+note: 2 action log entries: the user names, passwords or tokens an older Mindflayer stored in URLs in them are taken out
+```
+
+The install screen does it when you apply what you marked, not when it opens.
+A command that only reads, such as `flayer gather list`, shows the URL without
+the token and leaves the file as it is.
+
 ### What a workspace keeps
 
 ```
 .mindflayer/
   flayer.toml     the projects it manages, and the workspaces it loads
   mindflayer.db   what was gathered and from where, what was installed where,
-                  and every action taken
+                  and every action taken; a URL goes in without credentials,
+                  and one an older Mindflayer stored is taken out by the next
+                  command that writes
+  mindflayer.db.v2.bak
+                  the database as it was before this version of Mindflayer
+                  updated it, if it did
   lock            held by a command while it changes the workspace
   cache/<source>/ the clone, kept so a gather can be looked at afterwards
   skills/<source>/<name>/SKILL.md
@@ -384,6 +463,13 @@ not meant to be read by hand — it answers questions a file cannot, like which
 of two identically named skills came from which repository, at which revision.
 The first gather, install or uninstall makes it; a command that only reads
 never does.
+When a new version of Mindflayer changes how the database is laid out, the
+first command to open it updates it, after copying it aside as
+`mindflayer.db.v<old version>.bak`. The copy is never removed for you, and it
+is the way back: an older Mindflayer refuses the updated database, and reads
+the copy put back in its place. It is the database as it was, so a token an
+older Mindflayer stored in a URL stays in the copy after the next command that
+writes takes it out of `mindflayer.db`.
 Timestamps are Unix seconds, so `datetime(at, 'unixepoch')` renders them:
 
 ```sql
@@ -599,6 +685,12 @@ Every key runs a command you could have typed, through the same parser:
 | `i` | install from the workspace's own, a loaded workspace, or the shelf | `flayer install` |
 | `R` | read the disk again | nothing: it changes nothing |
 
+A project whose own commands would reach another workspace — linked from
+outside the workspace's tree, or with a nearer workspace above it — runs `mind
+-W . -C <project> …` instead, so the line acts on the workspace on screen
+rather than on the one the project would find by itself. `flayer -W <dir>` opens the screen on the
+workspace it names, and every line it runs uses that one.
+
 `m`, or `flayer minds` straight from the shell, opens a list of every
 project the workspace links and every repository under it that it does not,
 ticked where it does. Tick and untick, then `a` applies all of it in one go —
@@ -813,7 +905,9 @@ mind add skill deploy "Ship the service" --template full
 `SKILL.md` for a skill, a markdown file for a rule. `mind templates` lists what
 is available and where each comes from; of two with one name, the closer wins.
 `flayer add -p` finds the workspace's wherever the project sits; `mind add`
-finds those of the workspace above the project, or else the one in your home.
+finds those of [the workspace named or
+activated](#choosing-a-workspace), or else the one above the project, or else
+the one in your home.
 
 A template is copied whole. In a skill's manifest, `name` and `description` are
 set by `mind add`, whatever the template had for them, and `{{name}}` and
@@ -847,8 +941,9 @@ installed it, so the install screen shows it as somebody's and never
 overwrites or deletes it — and a skill you write later under the same name does
 not inherit a record that was about something else. The record dropped is the
 one held by the workspace the command works in: `flayer`'s, wherever the
-project sits, or for `mind` the workspace above the project, or else the one in
-your home. Another workspace that links the same project keeps its own (an
+project sits, or for `mind` the one named or activated, or else the workspace
+above the project, or else the one in your home. Another workspace that links
+the same project keeps its own (an
 [open question](docs/architecture.md#open-questions)).
 
 ## Roadmap
@@ -900,10 +995,12 @@ make cli/run ARGS="flayer list"
 Tests live in their own files, named for what they test and ending in
 `_test.rs`: `apps/<app>/tests/<area>_test.rs` for each area of the command
 surface, with what they share in `tests/common/`, and a module's unit tests in
-`src/<module>_test.rs` beside it. No test touches your home: the CLI suites
-run every command with `--home ""`. Nor do they touch your agents' folders,
-which no command reads yet, and the commands they run themselves give every
-agent-home option empty. The server's suites never leave 127.0.0.1, and run
+`src/<module>_test.rs` beside it. No test touches your home, or a workspace
+your shell has activated: the CLI suites run every command with `--home ""`
+and `--workspace ""`, and the few that run the binaries clear
+`$MINDFLAYER_HOME` and `$MINDFLAYER_WORKSPACE` and give them a home of their
+own. Nor do they touch your agents' folders, which no command reads yet, and
+the commands they run themselves give every agent-home option empty. The server's suites never leave 127.0.0.1, and run
 against a fake front end rather than the CLI.
 
 ```bash

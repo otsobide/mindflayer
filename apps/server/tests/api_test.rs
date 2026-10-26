@@ -12,7 +12,7 @@ async fn a_query_reaches_the_backend_and_its_answer_comes_back() {
     let (server, runs) = launch();
 
     let reply = post(
-        &server.router(),
+        &server,
         "/api/query",
         Auth::Bearer(server.token()),
         json!({ "echo": "what is linked" }),
@@ -28,10 +28,9 @@ async fn a_query_reaches_the_backend_and_its_answer_comes_back() {
 #[tokio::test]
 async fn a_query_the_backend_cannot_read_gets_a_json_error() {
     let (server, _) = launch();
-    let router = server.router();
 
     let reply = post(
-        &router,
+        &server,
         "/api/query",
         Auth::Bearer(server.token()),
         json!({ "wrong": 1 }),
@@ -41,7 +40,7 @@ async fn a_query_the_backend_cannot_read_gets_a_json_error() {
     assert!(reply.json()["error"].as_str().unwrap().contains("echo"));
 
     let reply = send(
-        &router,
+        &server,
         Method::POST,
         "/api/query",
         Auth::Bearer(server.token()),
@@ -57,7 +56,7 @@ async fn a_preview_shows_a_tasks_lines_and_runs_nothing() {
     let (server, runs) = launch();
 
     let reply = post(
-        &server.router(),
+        &server,
         "/api/commands/preview",
         Auth::Bearer(server.token()),
         json!({ "name": "link beta" }),
@@ -72,7 +71,6 @@ async fn a_preview_shows_a_tasks_lines_and_runs_nothing() {
 #[tokio::test]
 async fn an_unknown_api_path_gets_a_json_404() {
     let (server, _) = launch();
-    let router = server.router();
 
     for path in [
         "/api/no-such-endpoint",
@@ -80,7 +78,7 @@ async fn an_unknown_api_path_gets_a_json_404() {
         "/api",
         "/api/",
     ] {
-        let reply = get(&router, path, Auth::Bearer(server.token())).await;
+        let reply = get(&server, path, Auth::Bearer(server.token())).await;
         assert_eq!(reply.status, StatusCode::NOT_FOUND, "{path}");
         assert_eq!(reply.header("content-type"), Some("application/json"));
         assert_eq!(
@@ -94,7 +92,7 @@ async fn an_unknown_api_path_gets_a_json_404() {
 async fn an_endpoint_asked_with_the_wrong_method_says_so_in_json() {
     let (server, _) = launch();
 
-    let reply = get(&server.router(), "/api/query", Auth::Bearer(server.token())).await;
+    let reply = get(&server, "/api/query", Auth::Bearer(server.token())).await;
 
     assert_eq!(reply.status, StatusCode::METHOD_NOT_ALLOWED);
     assert_eq!(reply.header("allow"), Some("POST"));
