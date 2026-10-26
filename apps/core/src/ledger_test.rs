@@ -207,3 +207,126 @@ fn a_step_that_fails_leaves_the_ledger_as_it_was() {
         .unwrap();
     assert_eq!(tables, 0, "the table the failed step made is still there");
 }
+
+/// A ledger as version 1 left it, with one source in it.
+fn version_1_at(path: &Path) {
+    let connection = Connection::open(path).unwrap();
+    connection.execute_batch(SCHEMA_V1).unwrap();
+    connection
+        .execute(
+            "INSERT INTO sources
+                 (kind, url, reference, subdirectory, revision, directory, first_seen, last_seen)
+             VALUES ('git', 'https://h/a', NULL, 'skills', NULL, 'h-a', 1, 1)",
+            [],
+        )
+        .unwrap();
+    connection.pragma_update(None, "user_version", 1).unwrap();
+}
+
+fn version_of(path: &Path) -> u32 {
+    Connection::open(path)
+        .unwrap()
+        .pragma_query_value(None, "user_version", |row| row.get(0))
+        .unwrap()
+}
+
+#[test]
+fn an_older_ledger_is_copied_aside_before_it_is_migrated() {
+    let dir = tempfile::TempDir::new().unwrap();
+    let path = dir.path().join(LEDGER_FILE);
+    version_1_at(&path);
+
+    Ledger::open(&path).unwrap();
+
+    let backup = dir.path().join("mindflayer.db.v1.bak");
+    assert_eq!(backup_path(&path, 1), backup);
+    // Opened raw: opening it as a ledger would migrate the copy too.
+    assert_eq!(version_of(&backup), 1);
+    let copy = Connection::open(&backup).unwrap();
+    let url: String = copy
+        .query_row("SELECT url FROM sources", [], |row| row.get(0))
+        .unwrap();
+    assert_eq!(url, "https://h/a");
+    let installations: i64 = copy
+        .query_row(
+            "SELECT count(*) FROM sqlite_master WHERE name = 'installations'",
+            [],
+            |row| row.get(0),
+        )
+        .unwrap();
+    assert_eq!(installations, 0, "the copy was taken after the step");
+    assert_eq!(version_of(&path), SCHEMA_VERSION);
+}
+
+#[test]
+fn a_ledger_made_now_or_already_current_is_not_copied() {
+    let dir = tempfile::TempDir::new().unwrap();
+    let path = dir.path().join(LEDGER_FILE);
+
+    Ledger::open(&path).unwrap();
+    Ledger::open(&path).unwrap();
+
+    let names: Vec<_> = std::fs::read_dir(dir.path())
+        .unwrap()
+        .map(|entry| entry.unwrap().file_name())
+        .collect();
+    assert_eq!(names, [LEDGER_FILE], "{names:?}");
+}
+
+#[test]
+fn what_an_earlier_attempt_left_beside_the_ledger_is_replaced() {
+    let dir = tempfile::TempDir::new().unwrap();
+    let path = dir.path().join(LEDGER_FILE);
+    version_1_at(&path);
+    let backup = backup_path(&path, 1);
+    std::fs::write(&backup, "an older copy").unwrap();
+    std::fs::write(dir.path().join("mindflayer.db.v1.bak.tmp"), "half a copy").unwrap();
+    std::fs::write(dir.path().join("mindflayer.db.v1.bak.tmp-journal"), "junk").unwrap();
+
+    Ledger::open(&path).unwrap();
+
+    assert_eq!(version_of(&backup), 1);
+    assert!(!dir.path().join("mindflayer.db.v1.bak.tmp").exists());
+    assert!(!dir.path().join("mindflayer.db.v1.bak.tmp-journal").exists());
+}
+
+#[test]
+fn a_ledger_that_cannot_be_copied_is_not_migrated() {
+    let dir = tempfile::TempDir::new().unwrap();
+    let path = dir.path().join(LEDGER_FILE);
+    version_1_at(&path);
+    // A folder holding something, where the copy would go, which no rename
+    // replaces.
+    let backup = backup_path(&path, 1);
+    std::fs::create_dir(&backup).unwrap();
+    std::fs::write(backup.join("keep"), "mine").unwrap();
+
+    let error = Ledger::open(&path).unwrap_err();
+
+    assert!(matches!(error, LedgerError::Backup { .. }), "{error}");
+    assert!(
+        error.to_string().contains("so it is left as it is"),
+        "{error}"
+    );
+    assert_eq!(version_of(&path), 1);
+    assert!(backup.join("keep").is_file());
+}
+
+#[cfg(unix)]
+#[test]
+fn the_copy_is_no_more_readable_than_the_ledger() {
+    use std::os::unix::fs::PermissionsExt;
+
+    let dir = tempfile::TempDir::new().unwrap();
+    let path = dir.path().join(LEDGER_FILE);
+    version_1_at(&path);
+    std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o600)).unwrap();
+
+    Ledger::open(&path).unwrap();
+
+    let mode = std::fs::metadata(backup_path(&path, 1))
+        .unwrap()
+        .permissions()
+        .mode();
+    assert_eq!(mode & 0o777, 0o600);
+}

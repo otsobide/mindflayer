@@ -11,9 +11,12 @@
 //! Nothing here decides *what* is worth gathering. It records what
 //! [`crate::gather`] did.
 
+use std::fs;
+use std::io;
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
+use rusqlite::backup::{Backup, StepResult};
 use rusqlite::{Connection, OpenFlags, OptionalExtension, Transaction, TransactionBehavior};
 use thiserror::Error;
 
@@ -156,7 +159,7 @@ impl Ledger {
     pub fn open(path: impl Into<PathBuf>) -> Result<Self, LedgerError> {
         let path = path.into();
         if let Some(parent) = path.parent() {
-            std::fs::create_dir_all(parent).map_err(|source| LedgerError::Create {
+            fs::create_dir_all(parent).map_err(|source| LedgerError::Create {
                 path: parent.to_path_buf(),
                 source,
             })?;
@@ -223,6 +226,10 @@ impl Ledger {
     /// `user_version` rather than a table of our own: SQLite carries the
     /// integer in the file header, so reading it costs nothing and it cannot
     /// itself be missing from a database that was half created.
+    ///
+    /// A database that already holds something is [backed up](Self::back_up)
+    /// first, whichever step it is about to take. A step to come is one more
+    /// block below, and the copy is taken for it without its asking.
     fn migrate(&self) -> Result<(), LedgerError> {
         self.connection
             .execute_batch("PRAGMA foreign_keys = ON;")
@@ -231,8 +238,13 @@ impl Ledger {
         // Read before taking the write lock, so that opening a database that
         // is already current — every open but the first after an upgrade —
         // writes nothing, and still works on a file it may only read.
-        if self.schema_version()? == SCHEMA_VERSION {
+        let found = self.schema_version()?;
+        if found == SCHEMA_VERSION {
             return Ok(());
+        }
+        // Version 0 is a database just created, with nothing in it to keep.
+        if found > 0 {
+            self.back_up(found)?;
         }
 
         // Every step and the stamp in one transaction. Run one statement at a
@@ -269,6 +281,67 @@ impl Ledger {
         transaction
             .commit()
             .map_err(|source| self.failed("finishing the migration", source))
+    }
+
+    /// Copy the database, at schema `version`, to [`backup_path`] before a
+    /// step changes it.
+    ///
+    /// So that a step that turns out wrong, or a build that misreads what it
+    /// wrote, leaves the file it started from to go back to: the copy opens at
+    /// the old version, and an older Mindflayer reads it as it always did. One
+    /// copy per version, replaced if an earlier attempt at the same step left
+    /// one, since both are of the same file at the same version and the newer
+    /// is the one the step is about to change. Nothing is migrated unless the
+    /// copy is whole.
+    ///
+    /// Taken by SQLite's online backup rather than by copying the file:
+    /// opening and closing the file outside SQLite while this connection
+    /// holds it would drop the connection's locks on Unix, where they belong
+    /// to the process. Written to a temporary beside it and renamed, so an
+    /// interrupted copy is never mistaken for a whole one, and given the
+    /// database's permissions, so a ledger kept private does not leave a
+    /// readable copy of itself.
+    fn back_up(&self, version: u32) -> Result<(), LedgerError> {
+        let backup = backup_path(&self.path, version);
+        let failed = |source: io::Error| LedgerError::Backup {
+            path: self.path.clone(),
+            backup: backup.clone(),
+            source,
+        };
+        let mut name = backup.file_name().unwrap_or_default().to_os_string();
+        name.push(".tmp");
+        let temporary = backup.with_file_name(name);
+
+        // What an interrupted attempt left, its journal included, which
+        // SQLite would otherwise replay into the fresh copy.
+        for leftover in [temporary.clone(), journal_of(&temporary)] {
+            match fs::remove_file(&leftover) {
+                Err(error) if error.kind() != io::ErrorKind::NotFound => return Err(failed(error)),
+                _ => {}
+            }
+        }
+        {
+            let mut copy = Connection::open(&temporary).map_err(|e| failed(io::Error::other(e)))?;
+            let copying = Backup::new(&self.connection, &mut copy)
+                .map_err(|e| failed(io::Error::other(e)))?;
+            // Every page in one step, so the copy is one moment of the
+            // database rather than pages from either side of a write.
+            match copying.step(-1).map_err(|e| failed(io::Error::other(e)))? {
+                StepResult::Done => {}
+                other => {
+                    return Err(failed(io::Error::other(format!(
+                        "something else was writing to it ({other:?}), so try again"
+                    ))))
+                }
+            }
+        }
+        if let Ok(metadata) = fs::metadata(&self.path) {
+            let _ = fs::set_permissions(&temporary, metadata.permissions());
+        }
+        fs::rename(&temporary, &backup).map_err(|error| {
+            let _ = fs::remove_file(&temporary);
+            failed(error)
+        })
     }
 
     /// The schema version on disk, refused when it is newer than this build's.
@@ -603,6 +676,25 @@ struct Row {
     directory: String,
 }
 
+/// Where a ledger at `path` is copied before a schema step takes it on from
+/// `version`: beside it, as `mindflayer.db.v2.bak` for version 2.
+///
+/// Named after the version it holds rather than numbered or dated, so which
+/// build reads a copy is in its name, and the copies of a ledger taken
+/// through several steps sit side by side, one per version it passed.
+pub fn backup_path(path: &Path, version: u32) -> PathBuf {
+    let mut name = path.file_name().unwrap_or_default().to_os_string();
+    name.push(format!(".v{version}.bak"));
+    path.with_file_name(name)
+}
+
+/// The rollback journal SQLite keeps beside a database while writing it.
+fn journal_of(path: &Path) -> PathBuf {
+    let mut name = path.file_name().unwrap_or_default().to_os_string();
+    name.push("-journal");
+    path.with_file_name(name)
+}
+
 /// What a `SELECT` over `sources` maps to.
 fn read_source(row: &rusqlite::Row<'_>) -> rusqlite::Result<Source> {
     let slug: String = row.get(1)?;
@@ -674,7 +766,7 @@ pub enum LedgerError {
     Create {
         path: PathBuf,
         #[source]
-        source: std::io::Error,
+        source: io::Error,
     },
     #[error("{path}: cannot be opened: {source}")]
     Open {
@@ -684,6 +776,13 @@ pub enum LedgerError {
     },
     #[error("{path}: written by a newer Mindflayer (schema version {found}, this one reads {SCHEMA_VERSION})")]
     Version { path: PathBuf, found: u32 },
+    #[error("{path}: cannot be copied to {backup} before its schema changes, so it is left as it is: {source}")]
+    Backup {
+        path: PathBuf,
+        backup: PathBuf,
+        #[source]
+        source: io::Error,
+    },
     #[error("{path}: no workspace has been made here yet, so there is no ledger to write to")]
     Unmade { path: PathBuf },
     #[error("{path}: {doing} failed: {source}")]
@@ -702,6 +801,7 @@ impl LedgerError {
             LedgerError::Create { path, .. }
             | LedgerError::Open { path, .. }
             | LedgerError::Version { path, .. }
+            | LedgerError::Backup { path, .. }
             | LedgerError::Unmade { path }
             | LedgerError::Query { path, .. } => path,
         }
