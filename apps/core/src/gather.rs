@@ -322,7 +322,7 @@ fn take(
     // The last moment a cancel is honoured, and the reason everything is read
     // first: past here the shelf and the ledger change, and a gather stopped
     // halfway through that would leave them neither as they were nor as the
-    // source has them.
+    // source has them. `Progress::cancellable` says so of every step after.
     if watch.is_cancelled() {
         return Err(GatherError::Cancelled);
     }

@@ -582,6 +582,58 @@ fn a_cancel_once_placing_has_begun_comes_too_late_to_stop_it() {
 }
 
 #[test]
+fn a_cancel_stops_a_gather_at_every_step_said_to_be_cancellable_and_no_other() {
+    let source = repository(&[
+        ("skills/deploy/SKILL.md", &skill("deploy", "Ship it")),
+        ("skills/review/SKILL.md", &skill("review", "Look first")),
+    ]);
+    let (watch, seen) = recording();
+    {
+        let (_dir, workspace) = workspace();
+        let ledger = workspace.ledger().unwrap();
+        gather::gather(
+            &workspace,
+            &ledger,
+            &Request::git(url(&source)).watched_by(watch),
+        )
+        .unwrap();
+    }
+    // Only the steps every gather says: `gix`'s counts depend on how fast
+    // the clone is, so a cancel at one of them could not be made to land.
+    let steps: Vec<Progress> = seen
+        .lock()
+        .unwrap()
+        .iter()
+        .copied()
+        .filter(|progress| {
+            !matches!(
+                progress,
+                Progress::Receiving { .. }
+                    | Progress::Resolving { .. }
+                    | Progress::CheckingOut { total: Some(_), .. }
+            )
+        })
+        .collect();
+    assert!(steps.iter().any(|step| !step.cancellable()), "{steps:?}");
+
+    for step in steps {
+        let (_dir, workspace) = workspace();
+        let ledger = workspace.ledger().unwrap();
+        let outcome = gather::gather(
+            &workspace,
+            &ledger,
+            &Request::git(url(&source)).watched_by(cancelled_at(move |progress| progress == step)),
+        );
+
+        assert_eq!(
+            matches!(outcome, Err(GatherError::Cancelled)),
+            step.cancellable(),
+            "cancelled at {step:?}: {outcome:?}"
+        );
+    }
+}
+
+#[test]
 fn the_ledger_lands_beside_the_marker_file() {
     let (dir, workspace) = workspace();
     let ledger = Ledger::open(workspace.ledger_path()).unwrap();
