@@ -1282,17 +1282,23 @@ pub(crate) fn replace_file(path: &Path, contents: &str) -> Result<(), WorkspaceE
 /// local exclude file is bytes, and its failures belong to its own module's
 /// error, not to a workspace's.
 pub(crate) fn replace_bytes(path: &Path, contents: &[u8]) -> Result<(), (PathBuf, io::Error)> {
+    use std::io::Write as _;
+
     // Follow a symlinked config to the file it names. Replacing the link
     // itself would silently detach a workspace from a config someone chose to
     // share, and leave the original holding stale contents.
     let resolved = fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf());
     let path = resolved.as_path();
 
-    let mut name = path.file_name().unwrap_or_default().to_os_string();
-    name.push(".tmp");
-    let temporary = path.with_file_name(name);
-
-    fs::write(&temporary, contents).map_err(|source| (temporary.clone(), source))?;
+    let (temporary, mut file) = temporary_beside(path)?;
+    let written = file.write_all(contents);
+    drop(file);
+    // A temporary left behind by a write or a rename that failed is litter
+    // nothing owns, so every way out after it is made takes it away.
+    if let Err(source) = written {
+        let _ = fs::remove_file(&temporary);
+        return Err((temporary, source));
+    }
 
     // A rename carries the temporary file's permissions with it, so the
     // original's are copied across first: a config chmodded to 600 must not
@@ -1302,10 +1308,37 @@ pub(crate) fn replace_bytes(path: &Path, contents: &[u8]) -> Result<(), (PathBuf
         let _ = fs::set_permissions(&temporary, metadata.permissions());
     }
     fs::rename(&temporary, path).map_err(|source| {
-        // A temporary left behind by a failed rename is litter nothing owns.
         let _ = fs::remove_file(&temporary);
         (path.to_path_buf(), source)
     })
+}
+
+/// A new, empty file beside `path` to build its replacement in, named after
+/// it and this run (`flayer.toml.<pid>-<suffix>.tmp`).
+///
+/// Not `flayer.toml.tmp`, the one name every writer used to share: two
+/// writers at once wrote into one temporary, so either could rename the
+/// other's half-written bytes into place, and the second rename found
+/// nothing to move. Made with `create_new`, so a file somebody else has
+/// under that name is never written into.
+fn temporary_beside(path: &Path) -> Result<(PathBuf, fs::File), (PathBuf, io::Error)> {
+    let mut attempts = 0;
+    loop {
+        let mut name = path.file_name().unwrap_or_default().to_os_string();
+        name.push(format!(".{}.tmp", crate::copy::unique_name()));
+        let temporary = path.with_file_name(name);
+        match fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&temporary)
+        {
+            Ok(file) => return Ok((temporary, file)),
+            Err(error) if error.kind() == io::ErrorKind::AlreadyExists && attempts < 8 => {
+                attempts += 1;
+            }
+            Err(error) => return Err((temporary, error)),
+        }
+    }
 }
 
 /// An absolute, `..`-free path, without requiring the path to exist yet.
