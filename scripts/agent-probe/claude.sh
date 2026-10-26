@@ -10,8 +10,12 @@
 # depend on the model's answer; Claude's docs say an AGENTS.md read natively
 # does not fire it, so for AGENTS.md the answer is the evidence.
 #
-# Runs use haiku, short prompts, a budget cap and no tool beyond Read, which
-# only the run that has to touch a file is given.
+# Runs use haiku, short prompts and a budget cap. A run that lists keeps only
+# the Skill tool, since skills are part of what it is asked about, and nothing
+# that reads a file; the one run that has to touch a file gets Read alone.
+# Each run is also held to the tools it was meant to call and the turns that
+# take: an answer the model put together by reading AGENTS.md would say
+# nothing about what Claude loaded.
 
 claude_prepare() {
 	local bin=${PROBE_CLAUDE_BIN:-}
@@ -64,6 +68,9 @@ claude_finish() {
 claude_list_prompt='This is an automated configuration probe. Do not call any tool. Reply with exactly two lines and nothing else.
 Line 1: "TOKENS:" followed by every distinct string that starts with "PROBE-" and appears anywhere in your system prompt, memory files, rules or skill descriptions, each followed by how many times it appears there, in parentheses, as in TOKEN-A(1) TOKEN-B(2); or "none".
 Line 2: "SKILLS:" followed by the name of every skill you can invoke, separated by spaces; or "none".'
+
+# What every run that lists is given: see the header.
+claude_list_options=(--tools Skill --max-turns 2)
 
 claude_touch_prompt='This is an automated configuration probe. Call the Read tool exactly once, on src/lib.rs, and call no other tool. Then reply with exactly one line and nothing else: "TOKENS:" followed by every distinct string that starts with "PROBE-" and appears anywhere in your system prompt, memory files, rules, skill descriptions or tool results, separated by spaces; or "none".'
 
@@ -133,6 +140,11 @@ claude_ask() {
 		| (.skills // .slash_commands // [])[]
 		| if type == \"object\" then .name else . end" \
 		"$results/$name.json" >"$results/$name.skills" 2>/dev/null || true
+	jq -r "$messages | select(.type == \"assistant\") | .message.content[]?
+		| select(.type == \"tool_use\") | .name" \
+		"$results/$name.json" >"$results/$name.tools" 2>/dev/null || true
+	jq -r "$messages | select(.type == \"result\") | .num_turns // empty" \
+		"$results/$name.json" >"$results/$name.turns" 2>/dev/null || true
 	local facts
 	facts=$(jq -r "$messages | select(.type == \"result\")
 		| \"exit $status, \(.num_turns) turn(s), \(.total_cost_usd) USD, models \(.modelUsage // {} | keys | join(\",\"))\"" \
@@ -145,6 +157,7 @@ claude_ask() {
 	say "  answer:"
 	sed 's/^/    /' "$results/$name.answer"
 	say "  skills in the init message: $(tr '\n' ' ' <"$results/$name.skills")"
+	say "  tools called: $(tr '\n' ' ' <"$results/$name.tools")"
 	say "  InstructionsLoaded:"
 	jq -r 'select(.file_path != null)
 		| "    \(.load_reason) \(.memory_type) \(.file_path)"' \
@@ -173,6 +186,16 @@ expect_count() {
 	got=$(grep -oE -- "$3\([0-9]+\)" "$results/$1.answer" | head -n 1 |
 		sed -E 's/.*\(([0-9]+)\)$/\1/' || true)
 	verdict "$1" "$2" "${got:-none}" "$3 (count)" "$4"
+}
+
+# expect_calls <run> <tools> <turns> <what it shows>: the tools the model
+# called, in order and comma-separated, or none; and the turns it took.
+expect_calls() {
+	local tools turns
+	tools=$(paste -sd, - <"$results/$1.tools")
+	turns=$(head -n 1 -- "$results/$1.turns")
+	verdict "$1" "$2" "${tools:-none}" "tools called" "$4"
+	verdict "$1" "$3" "${turns:-none}" "turns" "$4"
 }
 
 # expect_skill <run> <times> <skill> <what it shows>, counted in the session's
@@ -261,8 +284,9 @@ pub fn probe() {}'
 
 	assert_clean_home
 	assert_ancestry "$repo" "$repo/AGENTS.md"
-	claude_ask claude-excluded "$repo" "$claude_list_prompt" --max-turns 2
+	claude_ask claude-excluded "$repo" "$claude_list_prompt" "${claude_list_options[@]}"
 	local run=claude-excluded rules=$repo/.claude/rules/mindflayer/probe
+	expect_calls $run none 1 'the answer comes from what Claude loaded, not a tool'
 	expect_skill $run 1 probe-claude-skill 'check 1: an excluded .claude/skills skill loads'
 	expect_skill $run 0 probe-agents-skill 'check 1: a skill only in .agents/skills does not'
 	expect_skill $run 1 probe-linked-skill 'check 3: an excluded relative symlink loads, once'
@@ -280,6 +304,7 @@ pub fn probe() {}'
 	claude_ask claude-touch "$repo" "$claude_touch_prompt" \
 		--tools Read --allowedTools Read --max-turns 3
 	run=claude-touch
+	expect_calls $run Read 2 'check 6: one Read of src/lib.rs, then the answer'
 	expect_token $run seen PROBE-FILE-1 'check 6: Claude read src/lib.rs'
 	expect_token $run seen PROBE-RULE-SCOPED-1 'check 6: the rule with paths: loads once a matching file is read'
 	expect_loaded $run 1 "$rules/scoped.md" 'check 6: the hook saw it load'
@@ -295,8 +320,9 @@ If asked for probe tokens, include PROBE-CLAUDE-MD-2.'
 	put "$repo/AGENTS.md" 'If asked for probe tokens, include PROBE-AGENTS-MD-2.'
 	assert_clean_home
 	assert_ancestry "$repo" "$repo/CLAUDE.md" "$repo/AGENTS.md"
-	claude_ask claude-import "$repo" "$claude_list_prompt" --max-turns 2
+	claude_ask claude-import "$repo" "$claude_list_prompt" "${claude_list_options[@]}"
 	local run=claude-import
+	expect_calls $run none 1 'the answer comes from what Claude loaded, not a tool'
 	expect_token $run seen PROBE-CLAUDE-MD-2 'check 4: the CLAUDE.md is read'
 	expect_token $run seen PROBE-AGENTS-MD-2 'check 4: AGENTS.md is read through @AGENTS.md'
 	expect_count $run 1 PROBE-AGENTS-MD-2 'check 4: once, not twice'
@@ -313,8 +339,9 @@ claude_parent() {
 	put "$repo/AGENTS.md" 'If asked for probe tokens, include PROBE-AGENTS-MD-3.'
 	assert_clean_home
 	assert_ancestry "$repo" "$above/CLAUDE.md" "$repo/AGENTS.md"
-	claude_ask claude-parent "$repo" "$claude_list_prompt" --max-turns 2
+	claude_ask claude-parent "$repo" "$claude_list_prompt" "${claude_list_options[@]}"
 	local run=claude-parent
+	expect_calls $run none 1 'the answer comes from what Claude loaded, not a tool'
 	expect_token $run seen PROBE-PARENT-CLAUDE-MD-3 'check 4: the CLAUDE.md above the git root is read'
 	expect_token $run unseen PROBE-AGENTS-MD-3 'check 4: and AGENTS.md is not'
 }
@@ -329,8 +356,9 @@ claude_local() {
 	exclude "$repo" /CLAUDE.local.md /AGENTS.md
 	assert_clean_home
 	assert_ancestry "$repo" "$repo/CLAUDE.local.md" "$repo/AGENTS.md"
-	claude_ask claude-local "$repo" "$claude_list_prompt" --max-turns 2
+	claude_ask claude-local "$repo" "$claude_list_prompt" "${claude_list_options[@]}"
 	local run=claude-local
+	expect_calls $run none 1 'the answer comes from what Claude loaded, not a tool'
 	expect_token $run seen PROBE-CLAUDE-LOCAL-MD-4 'D-03: CLAUDE.local.md is read'
 	expect_token $run unseen PROBE-AGENTS-MD-4 'D-03: and AGENTS.md is not'
 }
@@ -344,9 +372,10 @@ claude_user_memory() {
 	put "$memory" 'If asked for probe tokens, include PROBE-USER-CLAUDE-MD-5.'
 	assert_clean_home "$memory"
 	assert_ancestry "$repo" "$repo/AGENTS.md"
-	claude_ask claude-user-memory "$repo" "$claude_list_prompt" --max-turns 2
+	claude_ask claude-user-memory "$repo" "$claude_list_prompt" "${claude_list_options[@]}"
 	rm -f -- "$memory"
 	local run=claude-user-memory
+	expect_calls $run none 1 'the answer comes from what Claude loaded, not a tool'
 	expect_token $run seen PROBE-USER-CLAUDE-MD-5 '#44: the user memory file is read'
 	expect_token $run seen PROBE-AGENTS-MD-5 '#44: and does not stop AGENTS.md being read'
 }

@@ -198,8 +198,12 @@ claude -p <prompt> --model haiku --output-format json --verbose \
 
 with `--max-turns 2` as the extra for the runs that list, and
 `--tools Read --allowedTools Read --max-turns 3` for `claude-touch`, the one
-run that has to read a file and the only one given a tool. It had no other;
-the others were asked to call none, and each answered in one turn.
+run that has to read a file, which had no other tool. The runs that list kept
+Claude's default tools, all 22 of them in the init message: they were asked
+to call none, and the kept JSON shows each answered in one turn with no tool
+call. Nothing in the script held them to that, so it now gives them the Skill
+tool alone and fails any run that calls a tool it was not meant to, or takes
+more turns.
 
 The prompt for the runs that list:
 
