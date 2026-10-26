@@ -136,3 +136,81 @@ fn a_database_from_the_future_is_refused() {
     let error = Ledger::open(&path).unwrap_err();
     assert!(matches!(error, LedgerError::Version { .. }), "{error}");
 }
+
+/// Every text column `table` holds, as stored, for asserting on what reached
+/// the file rather than on what the ledger hands back.
+fn stored(ledger: &Ledger, table: &str) -> String {
+    let mut statement = ledger
+        .connection
+        .prepare(&format!("SELECT * FROM {table}"))
+        .unwrap();
+    let columns = statement.column_count();
+    let rows = statement
+        .query_map([], |row| {
+            Ok((0..columns)
+                .map(|column| row.get::<_, Option<String>>(column).ok().flatten())
+                .map(Option::unwrap_or_default)
+                .collect::<Vec<_>>()
+                .join("|"))
+        })
+        .unwrap();
+    rows.map(Result::unwrap).collect::<Vec<_>>().join("\n")
+}
+
+#[test]
+fn a_source_is_stored_and_found_without_the_credentials_in_its_url() {
+    let ledger = Ledger::in_memory().unwrap();
+    let source = ledger
+        .source_for(SourceKind::Git, "https://me:hunter2@h/a", None, "skills")
+        .unwrap();
+
+    assert_eq!(source.url, "https://h/a");
+    assert!(!stored(&ledger, "sources").contains("hunter2"));
+    // The same place, asked for without them, is the same source.
+    let again = ledger
+        .source_for(SourceKind::Git, "https://h/a", None, "skills")
+        .unwrap();
+    assert_eq!(again, source);
+}
+
+#[test]
+fn the_log_keeps_no_credential_in_what_it_was_about_or_what_it_said() {
+    let ledger = Ledger::in_memory().unwrap();
+    ledger
+        .log(
+            Action::Gather,
+            Some("https://me:hunter2@h/a"),
+            Outcome::Failed,
+            Some("https://me:hunter2@h/a: cannot be fetched"),
+        )
+        .unwrap();
+
+    assert!(!stored(&ledger, "actions").contains("hunter2"));
+    let history = ledger.history(1).unwrap();
+    assert_eq!(history[0].target.as_deref(), Some("https://h/a"));
+    assert_eq!(
+        history[0].detail.as_deref(),
+        Some("https://h/a: cannot be fetched")
+    );
+}
+
+#[test]
+fn a_row_an_older_build_wrote_with_credentials_is_read_back_without_them() {
+    let ledger = Ledger::in_memory().unwrap();
+    ledger
+        .connection
+        .execute_batch(
+            "INSERT INTO sources (id, kind, url, reference, subdirectory, directory, first_seen, last_seen)
+                 VALUES (1, 'git', 'https://me:hunter2@h/a', NULL, 'skills', 'h-a', 0, 0);
+             INSERT INTO artifacts (kind, name, source_id, path, gathered_at)
+                 VALUES ('skill', 'deploy', 1, '.mindflayer/skills/h-a/deploy', 0);
+             INSERT INTO actions (at, action, target, outcome, detail)
+                 VALUES (0, 'gather', 'https://me:hunter2@h/a', 'ok', 'from https://me:hunter2@h/a');",
+        )
+        .unwrap();
+
+    assert_eq!(ledger.gathered().unwrap()[0].source.url, "https://h/a");
+    let history = ledger.history(1).unwrap();
+    assert_eq!(history[0].target.as_deref(), Some("https://h/a"));
+    assert_eq!(history[0].detail.as_deref(), Some("from https://h/a"));
+}

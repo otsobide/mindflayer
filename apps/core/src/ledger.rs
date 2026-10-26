@@ -10,6 +10,11 @@
 //!
 //! Nothing here decides *what* is worth gathering. It records what
 //! [`crate::gather`] did.
+//!
+//! Nor does it keep a credential. Every URL is [`redacted`] on the way in,
+//! whoever is writing, and again on the way out, for a row a Mindflayer from
+//! before the redaction wrote: the ledger is the one place everything stored
+//! passes through, so it is where the guarantee is cheapest to keep.
 
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -18,6 +23,7 @@ use rusqlite::{Connection, OptionalExtension};
 use thiserror::Error;
 
 use crate::kind::Kind;
+use crate::url::redacted;
 
 /// The schema version this build writes.
 ///
@@ -61,7 +67,8 @@ pub struct Source {
     /// Its row id, which is what gathered artifacts point at.
     pub id: i64,
     pub kind: SourceKind,
-    /// The URL as the user typed it.
+    /// The URL as the user typed it, without the credentials [`redacted`]
+    /// takes out.
     pub url: String,
     /// The branch or tag asked for, or `None` for whatever the remote's HEAD
     /// points at.
@@ -137,10 +144,10 @@ pub struct Entry {
     /// When it happened, in seconds since the Unix epoch.
     pub at: i64,
     pub action: String,
-    /// What the action was about: a URL, a name.
+    /// What the action was about: a URL, a name. A URL is [`redacted`].
     pub target: Option<String>,
     pub outcome: String,
-    /// What it said, successful or not.
+    /// What it said, successful or not, with every URL in it [`redacted`].
     pub detail: Option<String>,
 }
 
@@ -240,13 +247,14 @@ impl Ledger {
         reference: Option<&str>,
         subdirectory: &str,
     ) -> Result<Option<Source>, LedgerError> {
+        let url = redacted(url);
         self.connection
             .query_row(
                 "SELECT id, kind, url, reference, subdirectory, revision, directory
                    FROM sources
                   WHERE kind = ?1 AND url = ?2 AND subdirectory = ?3
                     AND reference IS ?4",
-                rusqlite::params![kind.slug(), url, subdirectory, reference],
+                rusqlite::params![kind.slug(), url.as_ref(), subdirectory, reference],
                 read_source,
             )
             .optional()
@@ -264,25 +272,33 @@ impl Ledger {
         reference: Option<&str>,
         subdirectory: &str,
     ) -> Result<Source, LedgerError> {
-        if let Some(existing) = self.source(kind, url, reference, subdirectory)? {
+        let url = redacted(url);
+        if let Some(existing) = self.source(kind, &url, reference, subdirectory)? {
             return Ok(existing);
         }
 
-        let directory = self.free_directory(&slug(url))?;
+        let directory = self.free_directory(&slug(&url))?;
         let at = now();
         self.connection
             .execute(
                 "INSERT INTO sources
                      (kind, url, reference, subdirectory, revision, directory, first_seen, last_seen)
                  VALUES (?1, ?2, ?3, ?4, NULL, ?5, ?6, ?6)",
-                rusqlite::params![kind.slug(), url, reference, subdirectory, directory, at],
+                rusqlite::params![
+                    kind.slug(),
+                    url.as_ref(),
+                    reference,
+                    subdirectory,
+                    directory,
+                    at
+                ],
             )
             .map_err(|source| self.failed("registering a source", source))?;
 
         Ok(Source {
             id: self.connection.last_insert_rowid(),
             kind,
-            url: url.to_owned(),
+            url: url.into_owned(),
             reference: reference.map(str::to_owned),
             subdirectory: subdirectory.to_owned(),
             revision: None,
@@ -413,7 +429,7 @@ impl Ledger {
                 source: Source {
                     id: row.source_id,
                     kind: source_kind,
-                    url: row.url,
+                    url: redacted(&row.url).into_owned(),
                     reference: row.reference,
                     subdirectory: row.subdirectory,
                     revision: row.source_revision,
@@ -488,11 +504,19 @@ impl Ledger {
         outcome: Outcome,
         detail: Option<&str>,
     ) -> Result<(), LedgerError> {
+        let target = target.map(redacted);
+        let detail = detail.map(redacted);
         self.connection
             .execute(
                 "INSERT INTO actions (at, action, target, outcome, detail)
                  VALUES (?1, ?2, ?3, ?4, ?5)",
-                rusqlite::params![now(), action.slug(), target, outcome.slug(), detail],
+                rusqlite::params![
+                    now(),
+                    action.slug(),
+                    target.as_deref(),
+                    outcome.slug(),
+                    detail.as_deref()
+                ],
             )
             .map(|_| ())
             .map_err(|source| self.failed("writing to the action log", source))
@@ -509,12 +533,14 @@ impl Ledger {
             .map_err(|source| self.failed("reading the action log", source))?;
         let rows = statement
             .query_map([limit as i64], |row| {
+                let target: Option<String> = row.get(2)?;
+                let detail: Option<String> = row.get(4)?;
                 Ok(Entry {
                     at: row.get(0)?,
                     action: row.get(1)?,
-                    target: row.get(2)?,
+                    target: target.map(|text| redacted(&text).into_owned()),
                     outcome: row.get(3)?,
-                    detail: row.get(4)?,
+                    detail: detail.map(|text| redacted(&text).into_owned()),
                 })
             })
             .map_err(|source| self.failed("reading the action log", source))?;
@@ -562,10 +588,11 @@ fn read_source(row: &rusqlite::Row<'_>) -> rusqlite::Result<Source> {
             format!("unknown source kind `{slug}`").into(),
         )
     })?;
+    let url: String = row.get(2)?;
     Ok(Source {
         id: row.get(0)?,
         kind,
-        url: row.get(2)?,
+        url: redacted(&url).into_owned(),
         reference: row.get(3)?,
         subdirectory: row.get(4)?,
         revision: row.get(5)?,
