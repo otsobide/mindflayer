@@ -623,6 +623,15 @@ not inherit a record that was about something else. The record dropped is the
 one held by the workspace at or above the project; one that links it from
 elsewhere keeps its own (an [open question](docs/architecture.md#open-questions)).
 
+## Roadmap
+
+What comes next is planned as
+[milestones](https://github.com/otsobide/mindflayer/milestones), each ending
+with something usable on real repositories, and each issue in them is one pull
+request. [#15](https://github.com/otsobide/mindflayer/issues/15) tracks the
+whole plan, and the decisions it rests on are recorded in
+[docs/architecture.md](docs/architecture.md#decisions).
+
 ## Repository layout
 
 Every unit of the product is an app under `apps/`, so adding a front end means
