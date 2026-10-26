@@ -31,6 +31,7 @@ pub mod workspace;
 pub use artifact::{Artifact, ArtifactError, Declared, ValidationIssue};
 pub use catalog::{Catalog, DiscoveryFailure, Reference, QUALIFIER};
 pub use create::{create, create_from, CreateError};
+pub use exclude::{ExcludeError, ExcludeFile, Excluded};
 pub use frontmatter::{Document, FrontMatterError};
 pub use gather::{gather, GatherError, Report, Request, Source, DEFAULT_SUBDIRECTORY};
 pub use install::{install, survey, uninstall, Candidate, InstallError, Standing};

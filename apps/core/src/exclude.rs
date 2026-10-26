@@ -19,10 +19,20 @@
 //! Several projects can share one repository, so each owns a group under its
 //! own header and an edit for one never rewrites another's lines. Everything
 //! outside the block is somebody else's and comes back byte for byte.
+//!
+//! Not `.gitignore`, which is the team's: it is committed, so a line there
+//! puts copies one machine has into every teammate's diff. Not
+//! `core.excludesFile` either, which is the user's and spans every
+//! repository they have. Mindflayer edits neither, ever.
 
+use std::fs;
+use std::io;
 use std::path::{Component, Path, PathBuf};
 
 use thiserror::Error;
+
+use crate::paths;
+use crate::workspace::replace_bytes;
 
 /// The line that opens Mindflayer's block.
 pub const BEGIN: &str = "# mindflayer:begin";
@@ -33,6 +43,188 @@ pub const GROUP: &str = "# project ";
 
 const LF: &[u8] = b"\n";
 const CRLF: &[u8] = b"\r\n";
+
+/// Keep `entries` of the project at `project` out of git, in the group
+/// headed `key`.
+///
+/// `key` is whatever names the project for good: its id, or until projects
+/// have one, its route. It is only compared, never parsed.
+pub fn add(project: &Path, key: &str, entries: &[Entry]) -> Result<Excluded, ExcludeError> {
+    change(project, key, entries, ExcludeFile::add)
+}
+
+/// Stop keeping `entries` of the project at `project` out of git, dropping
+/// its group when that empties it.
+pub fn remove(project: &Path, key: &str, entries: &[Entry]) -> Result<Excluded, ExcludeError> {
+    change(project, key, entries, ExcludeFile::remove)
+}
+
+/// What [`add`] or [`remove`] did.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Excluded {
+    /// The exclude file was rewritten.
+    Written { file: PathBuf },
+    /// It already said so, and was left alone.
+    Unchanged { file: PathBuf },
+    /// No git work tree holds the project, so nothing was written.
+    ///
+    /// Not a failure, since a project need not be in git, but not silent
+    /// either: what local mode installs is then kept out of nothing, and a
+    /// repository made there later would offer all of it to be committed.
+    /// [`Excluded::warning`] says so.
+    Outside { project: PathBuf },
+}
+
+impl Excluded {
+    /// What a front end should warn about, if anything.
+    pub fn warning(&self) -> Option<String> {
+        match self {
+            Excluded::Outside { project } => Some(format!(
+                "{}: not in a git work tree, so nothing keeps what is installed there out of git",
+                project.display()
+            )),
+            Excluded::Written { .. } | Excluded::Unchanged { .. } => None,
+        }
+    }
+}
+
+/// Where a project's entries are kept.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Location {
+    /// `info/exclude` in the repository's common dir, which need not exist
+    /// yet.
+    pub file: PathBuf,
+    /// The project's directory relative to the work tree root: `.` at the
+    /// root.
+    pub route: PathBuf,
+}
+
+/// The exclude file git reads for the work tree `project` is in, and where
+/// in that work tree it is. `None` when no git work tree holds it.
+///
+/// The common dir, not the git dir: a linked worktree has a git dir of its
+/// own under the main repository's `.git/worktrees/`, but git reads
+/// `info/exclude` only from the common dir, so every worktree shares it.
+///
+/// The repository is opened isolated, reading neither the environment nor
+/// the user's git config. Core never reads the environment, and `GIT_DIR`
+/// pointing somewhere else must not send one project's entries into another
+/// repository's file.
+pub fn locate(project: &Path) -> Result<Option<Location>, ExcludeError> {
+    let repository =
+        match gix::discover_opts(project, Default::default(), gix::open::Options::isolated()) {
+            Ok(repository) => repository,
+            Err(gix::discover::Error::Discover(
+                gix::discover::upwards::Error::NoGitRepository { .. }
+                | gix::discover::upwards::Error::NoGitRepositoryWithinCeiling { .. }
+                | gix::discover::upwards::Error::NoGitRepositoryWithinFs { .. },
+            )) => return Ok(None),
+            Err(error) => {
+                return Err(ExcludeError::Repository {
+                    project: project.to_path_buf(),
+                    detail: error.to_string(),
+                })
+            }
+        };
+    // A bare repository has no work tree, so nothing in it is untracked.
+    let Some(worktree) = repository.workdir() else {
+        return Ok(None);
+    };
+    let route = route(worktree, project).ok_or_else(|| ExcludeError::Route {
+        project: project.to_path_buf(),
+        worktree: worktree.to_path_buf(),
+    })?;
+    Ok(Some(Location {
+        file: repository.common_dir().join("info").join("exclude"),
+        route,
+    }))
+}
+
+/// Where `project` sits below `worktree`, or `None` when it is not below it.
+///
+/// Lexically first, as everywhere else. Discovery may hand back the work tree
+/// spelled the way the filesystem resolves it (`/private/tmp` for `/tmp` on a
+/// Mac), and then only resolving both says where the project is.
+fn route(worktree: &Path, project: &Path) -> Option<PathBuf> {
+    let below = |route: &Path| {
+        route
+            .components()
+            .all(|component| matches!(component, Component::Normal(_) | Component::CurDir))
+    };
+    let project = std::path::absolute(project).ok()?;
+    paths::relative_to(&project, worktree)
+        .filter(|route| below(route))
+        .or_else(|| {
+            let worktree = fs::canonicalize(worktree).ok()?;
+            let project = fs::canonicalize(&project).ok()?;
+            let route = project.strip_prefix(&worktree).ok()?.to_path_buf();
+            Some(if route.as_os_str().is_empty() {
+                PathBuf::from(".")
+            } else {
+                route
+            })
+        })
+}
+
+/// One edit of the block, read, made and written back whole.
+///
+/// Nothing is written unless the edit changes something, and nothing at all
+/// when the block cannot be read: a failure here is collected by the caller,
+/// never a reason to leave the file half rewritten.
+fn change(
+    project: &Path,
+    key: &str,
+    entries: &[Entry],
+    edit: fn(&mut ExcludeFile, &str, &[String]) -> Result<bool, ExcludeError>,
+) -> Result<Excluded, ExcludeError> {
+    // What the caller asked for is checked before looking for a repository,
+    // so a bad key or entry is refused the same way inside git or out.
+    check(key, &[])?;
+    for entry in entries {
+        entry.pattern(Path::new(""))?;
+    }
+    let Some(location) = locate(project)? else {
+        return Ok(Excluded::Outside {
+            project: project.to_path_buf(),
+        });
+    };
+    let patterns = entries
+        .iter()
+        .map(|entry| entry.pattern(&location.route))
+        .collect::<Result<Vec<_>, _>>()?;
+
+    let bytes = match fs::read(&location.file) {
+        Ok(bytes) => bytes,
+        Err(error) if error.kind() == io::ErrorKind::NotFound => Vec::new(),
+        Err(source) => {
+            return Err(ExcludeError::Read {
+                path: location.file,
+                source,
+            })
+        }
+    };
+    let mut file = ExcludeFile::parse(&bytes).map_err(|problem| ExcludeError::Malformed {
+        file: location.file.clone(),
+        problem,
+    })?;
+    if !edit(&mut file, key, &patterns)? {
+        return Ok(Excluded::Unchanged {
+            file: location.file,
+        });
+    }
+
+    if let Some(info) = location.file.parent() {
+        fs::create_dir_all(info).map_err(|source| ExcludeError::Write {
+            path: info.to_path_buf(),
+            source,
+        })?;
+    }
+    replace_bytes(&location.file, &file.to_bytes())
+        .map_err(|(path, source)| ExcludeError::Write { path, source })?;
+    Ok(Excluded::Written {
+        file: location.file,
+    })
+}
 
 /// One path to keep out of git, relative to the project it is in.
 ///
@@ -480,6 +672,24 @@ pub enum ExcludeError {
     Pattern { pattern: String },
     #[error("{path}: no line of the exclude file can name it, so it cannot be kept out of git")]
     Path { path: PathBuf },
+    #[error("{project}: the git repository it is in cannot be opened: {detail}")]
+    Repository { project: PathBuf, detail: String },
+    #[error("{project}: not below {worktree}, the work tree of the repository it is in")]
+    Route { project: PathBuf, worktree: PathBuf },
+    #[error("{path}: cannot be read: {source}")]
+    Read {
+        path: PathBuf,
+        #[source]
+        source: io::Error,
+    },
+    #[error("{path}: cannot be written: {source}")]
+    Write {
+        path: PathBuf,
+        #[source]
+        source: io::Error,
+    },
+    #[error("{file}: {problem}, so nothing was written")]
+    Malformed { file: PathBuf, problem: Malformed },
 }
 
 #[cfg(test)]
