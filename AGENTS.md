@@ -88,6 +88,12 @@ These are easy to break from a single file without noticing.
   install is what allows overwriting and deleting. An unrecorded artifact is
   `Standing::Foreign` and is never touched. `edit`, `rename` and `remove`
   drop the record (`install::disown`).
+- **Strict when writing, lenient when reading.** A skill's front matter is
+  the Agent Skills format. `mind add`, `rename` and `install` refuse a name or
+  description that breaks its rules (`ValidationIssue::is_strict`); gathering
+  takes such a skill with a `warning:` per problem, and `validate` reports
+  everything, the shelf included. Keys the format does not define pass through
+  untouched.
 - **Loaded and gathered content is untrusted.**
   - An installed name must be one folder name (`install::is_folder_name`).
   - Symlinks are followed only inside the source (`copy::tree`'s `within`).
