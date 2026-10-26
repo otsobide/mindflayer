@@ -140,6 +140,11 @@ impl TargetTable {
     /// Sorted here, by location and then by agent in report order, so every
     /// front end lists them alike; an agent named twice is served once, and
     /// one the kind does not reach adds nothing.
+    ///
+    /// Pure, as the table is: nothing is read on disk, and every location
+    /// comes from the table it is called on, which for
+    /// [`standard`](TargetTable::standard) rests on the facts in
+    /// `docs/agents.md`.
     pub fn targets(&self, kind: Kind, agents: &[Agent]) -> Vec<AgentTarget> {
         let mut served: BTreeMap<&Path, BTreeSet<Agent>> = BTreeMap::new();
         for &agent in agents {
