@@ -296,12 +296,17 @@ fn remove(parent: Parent<'_>, key: &[&str], text: &str) -> Result<Option<String>
     let missing = || EntryError::Missing { key: display(key) };
     let table = match parent {
         Parent::Inline(table) => {
+            let was_last = table.iter().last().is_some_and(|(last, _)| last == name);
             let gone = table.remove(name).ok_or_else(missing)?;
             // The space before the closing brace goes back to the member
-            // that is last again, as an insert took it from it.
-            if let Some(closing) = gone.decor().suffix().cloned() {
-                if let Some((_, last)) = table.iter_mut().last() {
-                    last.decor_mut().set_suffix(closing);
+            // that is last again, as an insert took it from it. Only from
+            // the last member: what any other holds is the space before its
+            // comma, and the space before the brace is still where it was.
+            if was_last {
+                if let Some(closing) = gone.decor().suffix().cloned() {
+                    if let Some((_, last)) = table.iter_mut().last() {
+                        last.decor_mut().set_suffix(closing);
+                    }
                 }
             }
             return Ok(None);

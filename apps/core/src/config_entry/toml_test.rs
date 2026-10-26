@@ -271,6 +271,30 @@ fn an_object_is_written_the_way_the_objects_beside_it_are() {
 }
 
 #[test]
+fn removing_any_member_of_an_inline_table_keeps_the_space_before_its_brace() {
+    let cases = [
+        ("m = { a = 1, b = 2 }\n", "a", "m = { b = 2 }\n"),
+        ("m = { a = 1, b = 2 }\n", "b", "m = { a = 1 }\n"),
+        (
+            "m = { a = 1, b = 2, c = 3 }\n",
+            "b",
+            "m = { a = 1, c = 3 }\n",
+        ),
+        (
+            "m = { github = { command = \"gh\" }, gitlab = { command = \"glab\" } }\n",
+            "github",
+            "m = { gitlab = { command = \"glab\" } }\n",
+        ),
+    ];
+    for (text, name, expected) in cases {
+        assert_eq!(
+            edit(Format::Toml, text, &["m", name], &Edit::Remove).unwrap(),
+            expected
+        );
+    }
+}
+
+#[test]
 fn an_empty_object_among_dotted_keys_is_written_inline() {
     // Dotted keys with nothing under them write nothing at all.
     let text = "mcp_servers.filesystem.command = \"npx\"\n";
