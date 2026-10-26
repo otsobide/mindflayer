@@ -20,12 +20,14 @@ use std::fmt;
 use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
+use std::time::Duration;
 
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 use crate::kind::Kind;
 use crate::ledger::{Ledger, LedgerError, LEDGER_FILE};
+use crate::lock::{self, LockError, WorkspaceLock};
 use crate::paths;
 
 /// The layout version written into new `mind.toml` markers, and the newest
@@ -630,6 +632,30 @@ impl FlayerWorkspace {
         self.flayer_dir().join(LEDGER_FILE)
     }
 
+    /// The file a writer locks ([`lock::LOCK_FILE`]), whether or not one has
+    /// made it yet.
+    pub fn lock_path(&self) -> PathBuf {
+        self.flayer_dir().join(lock::LOCK_FILE)
+    }
+
+    /// Hold this workspace for a change, waiting up to [`lock::WAIT`] for a
+    /// writer that holds it, then failing with [`LockError::Busy`], which
+    /// names that writer's process.
+    ///
+    /// Core's writers take it themselves — an edit of the marker, an install
+    /// or an uninstall, a gather, opening the ledger to write — so a front end
+    /// has no need to, and must not while it asks core to write: the lock is
+    /// not re-entrant, and a writer that asks for it twice waits for itself.
+    /// Readers never take it.
+    pub fn lock(&self) -> Result<WorkspaceLock, LockError> {
+        self.lock_waiting(lock::WAIT)
+    }
+
+    /// [`lock`](Self::lock), waiting up to `wait` rather than [`lock::WAIT`].
+    pub fn lock_waiting(&self, wait: Duration) -> Result<WorkspaceLock, LockError> {
+        WorkspaceLock::acquire(&self.flayer_dir(), wait)
+    }
+
     /// Open that database, creating it if this workspace has never had one.
     ///
     /// Refused for an [`unmade`](Self::unmade) workspace, which has nowhere to
@@ -1144,6 +1170,8 @@ pub enum WorkspaceError {
     OutsideProject { path: PathBuf, kind: Kind },
     #[error("{path}: cannot hold the workspace's {kind}s, because it is not inside the workspace")]
     OutsideWorkspace { path: PathBuf, kind: Kind },
+    #[error(transparent)]
+    Lock(#[from] LockError),
 }
 
 impl WorkspaceError {
@@ -1163,6 +1191,7 @@ impl WorkspaceError {
             | WorkspaceError::NonUtf8Path { path }
             | WorkspaceError::OutsideProject { path, .. }
             | WorkspaceError::OutsideWorkspace { path, .. } => path,
+            WorkspaceError::Lock(error) => error.path(),
         }
     }
 }

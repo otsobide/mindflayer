@@ -23,6 +23,7 @@ pub mod install;
 pub mod kind;
 pub mod ledger;
 pub mod lifecycle;
+pub mod lock;
 pub mod paths;
 pub mod rule;
 pub mod scan;
@@ -41,6 +42,7 @@ pub use install::{install, survey, uninstall, Candidate, InstallError, Standing}
 pub use kind::{Kind, Layout, UnknownKind};
 pub use ledger::{Ledger, LedgerError, SourceKind, LEDGER_FILE};
 pub use lifecycle::{LifecycleError, Target};
+pub use lock::{LockError, WorkspaceLock};
 pub use rule::{Lenient, RuleManifest};
 pub use scan::{scan, Found, Scan, ScanFailure};
 pub use skill::{
