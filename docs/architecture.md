@@ -852,10 +852,18 @@ alternative was an empty answer written for each command, which is one more
 thing to keep in step with what the made workspace says, and every front end
 would have to write its own.
 
-The TUI, the minds screen and the install screen open on it the same way:
-empty, with a header saying it is not made yet. The first change made from one
-of them makes it, because that change is a command line like any other, and
-the command that writes does the making.
+The TUI and the minds screen open on it the same way: empty, under a header
+saying it is not made yet. The first change made from either runs `flayer
+init` before its own lines (`App::lines`), so the workspace is made where the
+screen shows it and the transcript says so. Left to the change, the command
+that writes would make it, as it does from the shell; but the screen's lines
+run from the workspace root and walk up from there, and before it is made no
+marker at the root stops them, so with a workspace above home the change would
+land in that one. For the same reason the minds screen is built from where
+`flayer minds` was run, as the TUI is, and the TUI opens its install screen on
+the root it shows rather than walking up from it. The install screen itself
+does not open on an unmade workspace: like any workspace with no projects, it
+says there are none to install into.
 
 Nothing is written through an unmade workspace. An edit of its marker is
 refused as it is for any directory that is not a workspace, and so is opening
@@ -1466,6 +1474,13 @@ leak into the lifecycle code. Unblocks #33, #45, #62, #93, #94 and #95.
   run included. Each could look with `locate_or_unmade` first and make it only
   when it is about to write; whether each should is a choice per command, and
   they were left as writes when the reads stopped making it.
+- **Reads from a screen on the unmade default.** The TUI's reads (`v`, `s`,
+  and showing an artifact) run from the default workspace's root, as its
+  changes do. Before the default is made, with a workspace above home, they
+  walk up to that one and read it instead. A change makes the default first;
+  a read cannot without making the home workspace to read it. `-W`
+  ([D-08](#d-08-an-explicit-or-activated-workspace-wins)) would let those
+  lines name the screen's workspace.
 - **Long work in the TUI.** A gather holds the screen until it finishes, with a
   box saying what is running, and cannot be cancelled. A background thread
   would change that; it has not been needed yet.

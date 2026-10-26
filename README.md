@@ -586,12 +586,12 @@ created skill deploy at /home/you/Projects/tanukeys/skills/deploy/SKILL.md
 Opened where there is no workspace and no default one either (`--home ""`), it
 offers to create one there, then goes straight to linking; with a default, it
 opens that one and says so — empty, and marked not made yet, until the first
-change you make from it makes it. The link form lists what `flayer scan` finds
-under the workspace — mind projects, and git repositories that are not one yet
-— and picking a repository asks before running `mind init` in it, because that
-writes into it. A project whose directory has gone is listed with a `!`, where
-`u` drops it; an artifact `validate` would reject is marked `✗`, with the
-reason underneath.
+change you make from it, which runs `flayer init` there first. The link form
+lists what `flayer scan` finds under the workspace — mind projects, and git
+repositories that are not one yet — and picking a repository asks before
+running `mind init` in it, because that writes into it. A project whose
+directory has gone is listed with a `!`, where `u` drops it; an artifact
+`validate` would reject is marked `✗`, with the reason underneath.
 
 ## Where a project keeps its artifacts
 
