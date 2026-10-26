@@ -16,6 +16,7 @@
 //! behind by a failed copy is not mistaken for a project.
 
 use std::collections::BTreeMap;
+use std::fmt;
 use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
@@ -49,6 +50,28 @@ pub const MIND_CONFIG: &str = "mind.toml";
 pub const FLAYER_DIR: &str = ".mindflayer";
 /// The marker file inside [`FLAYER_DIR`].
 pub const FLAYER_CONFIG: &str = "flayer.toml";
+
+/// Which of the two marker files a version was read from.
+///
+/// Named in a refusal because the path alone leaves the reader to know which
+/// file is which level's, and a front end deciding what to say about it should
+/// not have to compare file names.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Marker {
+    /// A mind project's [`MIND_CONFIG`].
+    Project,
+    /// A flayer workspace's [`FLAYER_CONFIG`].
+    Workspace,
+}
+
+impl fmt::Display for Marker {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(match self {
+            Marker::Project => "project marker",
+            Marker::Workspace => "workspace marker",
+        })
+    }
+}
 /// Where a workspace keeps the clones it gathered from, inside [`FLAYER_DIR`].
 ///
 /// Kept rather than discarded so a gather can be inspected after the fact, and
@@ -220,7 +243,7 @@ impl MindProject {
             return Err(WorkspaceError::NotAProject { path: root });
         }
         let config: MindConfig = read_config(&config_path)?;
-        check_version(&config_path, config.version)?;
+        check_version(&config_path, Marker::Project, config.version)?;
         Ok(Self { root, config })
     }
 
@@ -353,7 +376,7 @@ impl FlayerWorkspace {
             return Err(WorkspaceError::NotAWorkspace { path: root });
         }
         let config: FlayerConfig = read_config(&config_path)?;
-        check_version(&config_path, config.version)?;
+        check_version(&config_path, Marker::Workspace, config.version)?;
         Ok(Self { root, config })
     }
 
@@ -773,7 +796,7 @@ impl FlayerWorkspace {
         // Re-read, so what is in memory is what is on disk rather than what we
         // believe we wrote.
         let config: FlayerConfig = read_config(&path)?;
-        check_version(&path, config.version)?;
+        check_version(&path, Marker::Workspace, config.version)?;
         self.config = config;
         Ok(value)
     }
@@ -956,8 +979,12 @@ pub enum WorkspaceError {
     NotAProject { path: PathBuf },
     #[error("{path}: not a flayer workspace (no {FLAYER_DIR}/{FLAYER_CONFIG})")]
     NotAWorkspace { path: PathBuf },
-    #[error("{path}: written by a newer Mindflayer (format version {found}, this one reads {FORMAT_VERSION})")]
-    Version { path: PathBuf, found: u32 },
+    #[error("{path}: written by a newer Mindflayer ({marker} version {found}, this one reads {FORMAT_VERSION})")]
+    Version {
+        path: PathBuf,
+        marker: Marker,
+        found: u32,
+    },
     #[error("{path}: cannot be edited: {detail}")]
     Edit { path: PathBuf, detail: String },
     #[error("{path}: not registered in the workspace at {workspace}")]
@@ -1019,10 +1046,11 @@ fn read_config<T: for<'de> Deserialize<'de>>(path: &Path) -> Result<T, Workspace
 }
 
 /// Refuse a marker written by a version that knows more than this one.
-fn check_version(path: &Path, found: u32) -> Result<(), WorkspaceError> {
+fn check_version(path: &Path, marker: Marker, found: u32) -> Result<(), WorkspaceError> {
     if found > FORMAT_VERSION {
         return Err(WorkspaceError::Version {
             path: path.to_path_buf(),
+            marker,
             found,
         });
     }
