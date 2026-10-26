@@ -921,6 +921,11 @@ impl FlayerWorkspace {
                 path: self.root.clone(),
             });
         }
+        // Held from before the file is read until what is written has been
+        // read back. Reading from disk is not enough on its own: two writers
+        // at once would both read the file before either wrote, and the
+        // second rename would put back a marker without the first one's entry.
+        let _lock = self.lock()?;
         let path = self.config_path();
         let text = fs::read_to_string(&path).map_err(|source| WorkspaceError::Read {
             path: path.clone(),

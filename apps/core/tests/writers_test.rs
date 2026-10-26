@@ -12,13 +12,49 @@ use std::time::{Duration, Instant};
 
 use mindflayer_core::ledger::{Action, Outcome};
 use mindflayer_core::lock::{HOLDER_FILE, WAIT};
-use mindflayer_core::{FlayerWorkspace, Ledger, LockError, LEDGER_FILE};
+use mindflayer_core::{FlayerWorkspace, Ledger, LockError, MindProject, LEDGER_FILE};
 use tempfile::TempDir;
 
 fn workspace() -> (TempDir, FlayerWorkspace) {
     let dir = TempDir::new().unwrap();
     let (workspace, _) = FlayerWorkspace::init(dir.path()).unwrap();
     (dir, workspace)
+}
+
+/// Run `write` while `workspace` is held, let go after a moment, and fail
+/// unless `write` finished only after that: it waited for the writer before
+/// it rather than writing beside it.
+fn waits_for_the_writer_before_it(
+    workspace: &FlayerWorkspace,
+    write: impl FnOnce() + Send + 'static,
+) {
+    let held = workspace.lock().unwrap();
+    let (sent, done) = mpsc::channel();
+    let writer = thread::spawn(move || {
+        write();
+        sent.send(Instant::now()).unwrap();
+    });
+    thread::sleep(Duration::from_millis(100));
+    let released = Instant::now();
+    drop(held);
+
+    let finished = done.recv().unwrap();
+    writer.join().unwrap();
+    assert!(
+        finished >= released,
+        "wrote while another writer held the workspace"
+    );
+}
+
+/// `count` mind projects under `dir`, named `<prefix>-<n>`.
+fn projects(dir: &std::path::Path, prefix: &str, count: usize) -> Vec<MindProject> {
+    (0..count)
+        .map(|n| {
+            let root = dir.join(format!("{prefix}-{n}"));
+            fs::create_dir(&root).unwrap();
+            MindProject::init(&root).unwrap().0
+        })
+        .collect()
 }
 
 #[test]
@@ -196,4 +232,57 @@ fn a_ledger_opened_to_read_keeps_the_journal_it_had() {
     drop(Ledger::open_existing(&path).unwrap().unwrap());
 
     assert_eq!(journal_mode(&path), "delete");
+}
+
+#[test]
+fn two_threads_linking_different_projects_at_once_leave_every_entry_in_the_marker() {
+    let (dir, workspace) = workspace();
+    // Many each, so that without the lock the two would all but surely read
+    // the marker at once at least one time, and one entry would be lost.
+    const EACH: usize = 20;
+    let start = Arc::new(Barrier::new(2));
+    let linkers: Vec<_> = ["one", "two"]
+        .into_iter()
+        .map(|prefix| {
+            let batch = projects(dir.path(), prefix, EACH);
+            let root = workspace.root().to_path_buf();
+            let start = Arc::clone(&start);
+            thread::spawn(move || {
+                let mut workspace = FlayerWorkspace::open(&root).unwrap();
+                start.wait();
+                for project in &batch {
+                    workspace.link(project).unwrap();
+                }
+                batch
+            })
+        })
+        .collect();
+    let linked: Vec<MindProject> = linkers
+        .into_iter()
+        .flat_map(|linker| linker.join().unwrap())
+        .collect();
+
+    let workspace = FlayerWorkspace::open(workspace.root()).unwrap();
+    assert_eq!(workspace.config().projects.len(), 2 * EACH);
+    for project in &linked {
+        assert!(
+            workspace.is_linked(project.root()),
+            "{} was lost",
+            project.root().display()
+        );
+    }
+}
+
+#[test]
+fn a_link_waits_for_the_writer_before_it() {
+    let (dir, workspace) = workspace();
+    let project = projects(dir.path(), "alpha", 1).remove(0);
+    let mut linking = workspace.clone();
+
+    waits_for_the_writer_before_it(&workspace, move || {
+        linking.link(&project).unwrap();
+    });
+
+    let workspace = FlayerWorkspace::open(workspace.root()).unwrap();
+    assert_eq!(workspace.config().projects.len(), 1);
 }
