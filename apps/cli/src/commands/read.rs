@@ -5,12 +5,13 @@
 //! in what that catalog holds and in how much a row has to name to be told
 //! apart from the others.
 
+use std::borrow::Cow;
 use std::fmt::Write as _;
 use std::path::PathBuf;
 
 use mindflayer_core::{Artifact, Catalog, Declared, FlayerWorkspace, Kind, MindProject, Reference};
 
-use crate::render::{plural, printable, table};
+use crate::render::{plural, printable, table, verdict};
 use crate::{CliError, Failure, Outcome};
 
 /// Which level a command reports at.
@@ -91,6 +92,40 @@ pub(crate) fn everywhere<F>(
 where
     F: FnOnce(&Catalog, &[MindProject], Level) -> Result<(String, bool), CliError>,
 {
+    workspace_wide(workspace, warnings, projects, kinds, false, command)
+}
+
+/// `everywhere`, and what the workspace has gathered onto its shelf too.
+///
+/// For `validate`, which is where a gathered skill's problems are reported:
+/// gathering takes one that breaks the rules rather than hiding it, so
+/// something has to be able to say so again later. Listing the shelf is
+/// `gather list`'s, so `list` and `show` keep to what is held.
+pub(crate) fn everywhere_and_the_shelf<F>(
+    workspace: &FlayerWorkspace,
+    warnings: Vec<String>,
+    projects: &[MindProject],
+    kinds: Vec<Kind>,
+    command: F,
+) -> Result<Outcome, Failure>
+where
+    F: FnOnce(&Catalog, &[MindProject], Level) -> Result<(String, bool), CliError>,
+{
+    workspace_wide(workspace, warnings, projects, kinds, true, command)
+}
+
+/// The two above.
+fn workspace_wide<F>(
+    workspace: &FlayerWorkspace,
+    warnings: Vec<String>,
+    projects: &[MindProject],
+    kinds: Vec<Kind>,
+    shelf: bool,
+    command: F,
+) -> Result<Outcome, Failure>
+where
+    F: FnOnce(&Catalog, &[MindProject], Level) -> Result<(String, bool), CliError>,
+{
     // Only the kinds the workspace keeps apart from a project at its root:
     // the rest are that project's, and are found as its.
     let own: Vec<Kind> = workspace
@@ -98,9 +133,13 @@ where
         .into_iter()
         .filter(|kind| kinds.contains(kind))
         .collect();
+    // Every kind asked for, when the shelf is read at all: which of them are
+    // ever on it is discovery's to know.
+    let shelved = if shelf { kinds.clone() } else { Vec::new() };
     let catalog = Catalog::discover_kinds(projects, &kinds)
-        .merge(Catalog::discover_kinds(&[workspace.own()], &own));
-    let holders = Holders::of(workspace, &own);
+        .merge(Catalog::discover_kinds(&[workspace.own()], &own))
+        .merge(Catalog::discover_gathered(workspace, &shelved));
+    let holders = Holders::of(workspace, &own, &shelved);
     reading(
         warnings,
         &catalog,
@@ -180,7 +219,7 @@ pub(crate) fn list(catalog: &Catalog, projects: &[MindProject], level: Level) ->
         .map(|artifact| {
             let mut row = Vec::new();
             if qualify.project {
-                row.push(printable(holder_of(artifact, level)));
+                row.push(printable(&holder_of(artifact, level)));
             }
             if qualify.kind {
                 row.push(artifact.kind().slug().to_owned());
@@ -234,21 +273,44 @@ pub(crate) fn list_workspace(
 /// What a report calls the workspace, as the holder of its own artifacts.
 pub const WORKSPACE: &str = "workspace";
 
+/// What a report calls the shelf, before the source an artifact came from.
+pub const SHELF: &str = "shelf";
+
 /// Who holds what, once a report is above any one project.
 pub(crate) struct Holders {
     /// Where the workspace keeps its own, for the kinds it keeps apart.
     own: Vec<(Kind, PathBuf)>,
+    /// Where the shelf keeps each kind, for the kinds a report reads there.
+    shelf: Vec<(Kind, PathBuf)>,
 }
 
 impl Holders {
-    fn of(workspace: &FlayerWorkspace, kinds: &[Kind]) -> Self {
+    fn of(workspace: &FlayerWorkspace, own_kinds: &[Kind], shelf_kinds: &[Kind]) -> Self {
         let own = workspace.own();
         Self {
-            own: kinds
+            own: own_kinds
                 .iter()
                 .map(|kind| (*kind, own.directory_for(*kind)))
                 .collect(),
+            shelf: shelf_kinds
+                .iter()
+                .map(|kind| (*kind, workspace.gathered_dir(*kind)))
+                .collect(),
         }
+    }
+
+    /// The folder of the source an artifact on the shelf came from, when it
+    /// is on the shelf.
+    ///
+    /// The folder rather than the URL: it is what tells two sources offering
+    /// one name apart on disk, and it needs no ledger to read.
+    fn source_of<'a>(&self, artifact: &'a Artifact) -> Option<&'a str> {
+        let (_, shelf) = self
+            .shelf
+            .iter()
+            .find(|(kind, _)| *kind == artifact.kind())?;
+        let mut below = artifact.path().strip_prefix(shelf).ok()?.components();
+        below.next()?.as_os_str().to_str()
     }
 
     /// Whether an artifact is the workspace's own rather than a project's.
@@ -262,13 +324,18 @@ impl Holders {
     }
 }
 
-/// What holds an artifact, for display: the project it is in, or the
-/// workspace for the workspace's own.
-fn holder_of<'a>(artifact: &'a Artifact, level: Level<'_>) -> &'a str {
-    match level {
-        Level::Workspace(holders) if holders.is_own(artifact) => WORKSPACE,
-        _ => artifact.project_name().unwrap_or("?"),
+/// What holds an artifact, for display: the project it is in, the workspace
+/// for the workspace's own, or `shelf/<source>` for what was gathered.
+fn holder_of<'a>(artifact: &'a Artifact, level: Level<'_>) -> Cow<'a, str> {
+    if let Level::Workspace(holders) = level {
+        if let Some(source) = holders.source_of(artifact) {
+            return Cow::Owned(format!("{SHELF}/{source}"));
+        }
+        if holders.is_own(artifact) {
+            return Cow::Borrowed(WORKSPACE);
+        }
     }
+    Cow::Borrowed(artifact.project_name().unwrap_or("?"))
 }
 
 /// What a report has to name to keep its rows apart.
@@ -302,17 +369,22 @@ impl Qualify {
 }
 
 /// How an artifact is labelled in a report: as bare as the context allows.
+///
+/// Made printable, as a row is: a declared name is from a file somebody wrote,
+/// gathered ones from anywhere, and a carriage return in one would let the
+/// label pass for another artifact's line.
 fn label(artifact: &Artifact, qualify: Qualify, level: Level) -> String {
     let name = if qualify.kind {
         artifact.qualified_name()
     } else {
         artifact.name().to_owned()
     };
-    if qualify.project {
+    let label = if qualify.project {
         format!("{name} ({})", holder_of(artifact, level))
     } else {
         name
-    }
+    };
+    printable(&label)
 }
 
 /// The first line of a summary, short enough to sit in a column.
@@ -355,15 +427,38 @@ pub(crate) fn show(
         // so it gets no metadata block rather than an empty one.
         if let Declared::Skill(manifest) = artifact.declared() {
             let _ = writeln!(text, "{}", manifest.description);
+            // One line per key, each made printable: a value is from a file
+            // somebody wrote, and a carriage return in one could pass for a
+            // key it does not declare.
+            let mut keys = String::new();
             if let Some(tools) = &manifest.allowed_tools {
-                let _ = writeln!(text, "\nallowed-tools: {}", tools.join(", "));
+                let _ = writeln!(keys, "allowed-tools: {}", printable(&tools.join(", ")));
             }
             if let Some(license) = &manifest.license {
-                let _ = writeln!(text, "license: {license}");
+                let _ = writeln!(keys, "license: {}", printable(license));
+            }
+            if let Some(compatibility) = manifest.compatibility.stated() {
+                let _ = writeln!(keys, "compatibility: {}", printable(compatibility));
+            }
+            // Only the entries that are strings: the rest are `validate`'s to
+            // report, and are still in the file for whoever reads it.
+            if !manifest.metadata.entries.is_empty() {
+                keys.push_str("metadata:\n");
+                for (key, value) in &manifest.metadata.entries {
+                    let _ = writeln!(keys, "  {}: {}", printable(key), printable(value));
+                }
+            }
+            if !keys.is_empty() {
+                let _ = write!(text, "\n{keys}");
             }
             let _ = writeln!(text);
         }
-        let _ = writeln!(text, "{}", artifact.contents()?.trim_end());
+        // Blank lines trimmed at both ends, not indentation: the body usually
+        // opens with a blank line after the fence, and the line above is
+        // already one.
+        let contents = artifact.contents()?;
+        let body = contents.trim_start_matches(['\n', '\r']).trim_end();
+        let _ = writeln!(text, "{body}");
     }
     Ok((text, true))
 }
@@ -395,16 +490,9 @@ pub(crate) fn validate(
     let mut text = String::new();
     let mut invalid = 0usize;
     for artifact in &artifacts {
-        let issues = artifact.validate();
         let label = label(artifact, qualify, level);
-        if issues.is_empty() {
-            let _ = writeln!(text, "{label}: ok");
-            continue;
-        }
-        invalid += 1;
-        let _ = writeln!(text, "{label}: {}", plural(issues.len(), "problem"));
-        for issue in issues {
-            let _ = writeln!(text, "  - {issue}");
+        if verdict(&mut text, &label, &artifact.validate()) {
+            invalid += 1;
         }
     }
 

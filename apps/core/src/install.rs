@@ -16,6 +16,7 @@ use std::path::{Component, Path, PathBuf};
 
 use thiserror::Error;
 
+use crate::artifact::{self, issue_list, Artifact, ArtifactError, ValidationIssue};
 use crate::catalog::{Catalog, DiscoveryFailure};
 use crate::copy;
 use crate::kind::{Kind, Layout};
@@ -474,6 +475,16 @@ pub fn install(
         return Err(InstallError::KeptByALoad { path: to, loaded });
     }
 
+    // Strict, where gathering was lenient: the copy is what the project's
+    // agents load, so one they would skip is not put there.
+    let refused = unfit(kind, &from, &name)?;
+    if !refused.is_empty() {
+        return Err(InstallError::Unfit {
+            name,
+            issues: refused,
+        });
+    }
+
     // Links are followed only inside where the artifact comes from: the
     // workspace that keeps it, or the shelf folder it was gathered into.
     let within = match &candidate.offer {
@@ -501,6 +512,31 @@ pub fn install(
         copy::Change::Updated => Installed::Updated { name, path: to },
         copy::Change::Unchanged => Installed::Unchanged { name, path: to },
     })
+}
+
+/// What stops the artifact at `from` from being installed as `name`:
+/// whichever strict rules it breaks once filed under that name
+/// ([`artifact::strict_issues`]).
+///
+/// Read from the files about to be copied rather than from what the ledger
+/// noted when it was gathered, because the shelf is a folder anybody can
+/// edit, and the workspace's own are edited as a matter of course. And held
+/// to `name` rather than to the folder they sit in, because `name` is the
+/// folder the copy will be: a shelf folder keeps the source's spelling, and
+/// `name` is what the ledger recorded, which the files stop declaring once
+/// they are edited, or once the source renames the skill and the record of
+/// the old name stays behind.
+fn unfit(kind: Kind, from: &Path, name: &str) -> Result<Vec<ValidationIssue>, InstallError> {
+    // Matched on the kind, so a third one has to say what it is held to.
+    let artifact = match kind {
+        Kind::Skill => Artifact::skill(from, from)?,
+        // A rule is one file, and installing copies a directory, so none is
+        // ever offered.
+        Kind::Rule => return Ok(Vec::new()),
+    };
+    Ok(artifact
+        .manifest()
+        .map_or_else(Vec::new, |manifest| artifact::strict_issues(manifest, name)))
 }
 
 /// Take one artifact back out of a project.
@@ -752,6 +788,13 @@ pub enum InstallError {
     },
     #[error("`{name}` is not one folder name, so it cannot be installed or removed")]
     UnsafeName { name: String },
+    #[error("`{name}` cannot be installed: {}", issue_list(.issues))]
+    Unfit {
+        name: String,
+        issues: Vec<ValidationIssue>,
+    },
+    #[error(transparent)]
+    Artifact(#[from] ArtifactError),
     #[error("{from} and {to} are one inside the other, so installing one onto the other would delete it")]
     Overlaps { from: PathBuf, to: PathBuf },
     #[error("{path} is where the workspace loaded from {loaded} keeps its own, so Mindflayer neither installs nor removes there — `flayer unload {loaded}` first to manage it as a project")]

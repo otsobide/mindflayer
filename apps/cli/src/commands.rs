@@ -15,6 +15,7 @@ use std::path::{Path, PathBuf};
 
 use mindflayer_core::{paths, Catalog, FlayerWorkspace, MindProject, Reference};
 
+use crate::homes::default_home;
 use crate::render::as_stored;
 use crate::{tui, Cli, CliError, Command, Failure, FlayerCli, FlayerCommand, Outcome};
 use artifact::{add_to, edit_in, remove_from, rename_in, templates_of};
@@ -25,7 +26,8 @@ use project::{
     unlink_projects,
 };
 use read::{
-    everywhere, list, list_workspace, one_project, show, validate, wanted, Level, Selector,
+    everywhere, everywhere_and_the_shelf, list, list_workspace, one_project, show, validate,
+    wanted, Level, Selector,
 };
 use workspace::{load_command, unload_command};
 
@@ -148,22 +150,6 @@ pub fn run_flayer_cli(cli: &FlayerCli) -> Result<Outcome, Failure> {
         &directory,
         home.as_deref(),
     )
-}
-
-/// Where the default workspace lives: `--home`, then `$MINDFLAYER_HOME`, then
-/// the user's home directory. Empty, from either, means there is none.
-///
-/// A string rather than a path because empty is a meaningful answer here,
-/// and one a path cannot spell.
-pub fn default_home(given: Option<&str>) -> Option<PathBuf> {
-    let chosen = match given {
-        Some(given) => given.to_owned(),
-        None => match std::env::var("MINDFLAYER_HOME") {
-            Ok(from_environment) => from_environment,
-            Err(_) => return std::env::home_dir(),
-        },
-    };
-    (!chosen.is_empty()).then(|| PathBuf::from(chosen))
 }
 
 /// The workspace half, shared by `mind flayer <cmd>` and `flayer <cmd>`.
@@ -342,7 +328,7 @@ fn run_flayer(
                 }
                 None => {
                     let (workspace, projects, warnings) = managed(directory, home)?;
-                    everywhere(&workspace, warnings, &projects, kinds, read)
+                    everywhere_and_the_shelf(&workspace, warnings, &projects, kinds, read)
                 }
             }
         }

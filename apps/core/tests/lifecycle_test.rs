@@ -60,6 +60,35 @@ fn a_skill_that_does_not_read_is_still_found_by_its_folder() {
 }
 
 #[test]
+fn a_folder_the_naming_rules_refuse_is_still_found_to_be_fixed() {
+    // `a--b` was a name before the rules took doubled hyphens away, and a
+    // folder of that name has to stay reachable: by its folder when it does
+    // not read, and when what it declares is something else.
+    let (dir, project) = project();
+    write(dir.path(), "skills/a--b/SKILL.md", "no front matter\n");
+    write(
+        dir.path(),
+        "skills/c--d/SKILL.md",
+        "---\nname: cd\ndescription: Declared otherwise\n---\n",
+    );
+
+    let broken = find(&project, "a--b").unwrap();
+    lifecycle::remove(None, &project, &broken).unwrap();
+    assert!(!dir.path().join("skills/a--b").exists());
+
+    let mismatched = find(&project, "c--d").unwrap();
+    let renamed = lifecycle::rename(None, &project, &mismatched, "c-d").unwrap();
+    assert_eq!(renamed.target.artifact.unwrap().validate(), vec![]);
+    assert!(!dir.path().join("skills/c--d").exists());
+
+    // A way out of the project is still not a place.
+    assert!(matches!(
+        find(&project, "../outside"),
+        Err(LifecycleError::NotFound { .. })
+    ));
+}
+
+#[test]
 fn one_name_for_two_kinds_has_to_be_qualified() {
     let (_dir, project) = project();
     create(&project, Kind::Skill, "deploy", "Ship it").unwrap();
@@ -183,6 +212,76 @@ fn renaming_a_skill_moves_its_folder_and_rewrites_nothing_but_its_name() {
         WRITTEN_BY_HAND.replace("name: deploy\n", "name: ship\n")
     );
     assert_eq!(renamed.artifact.unwrap().validate(), vec![]);
+}
+
+#[test]
+fn renaming_keeps_every_key_it_does_not_model_byte_for_byte() {
+    // Claude Code's own keys, and metadata no agent should have written
+    // nested, all pass through: they are somebody's, not Mindflayer's.
+    const AGENT_KEYS: &str = "---\nname: deploy\ndescription: Ship it\ndisable-model-invocation: true\npaths:\n  - 'src/**'\nallowed-tools: Bash(git add *) Read\ncompatibility: Requires git\nmetadata:\n  author: acme\n  owner:\n    team: ops\n---\n\nRun the pipeline.\n";
+    let (dir, project) = project();
+    write(dir.path(), "skills/deploy/SKILL.md", AGENT_KEYS);
+
+    lifecycle::rename(None, &project, &find(&project, "deploy").unwrap(), "ship").unwrap();
+
+    let manifest = fs::read_to_string(dir.path().join("skills/ship/SKILL.md")).unwrap();
+    assert_eq!(
+        manifest,
+        AGENT_KEYS.replace("name: deploy\n", "name: ship\n")
+    );
+}
+
+#[test]
+fn renaming_refuses_a_name_that_breaks_the_rules() {
+    let (dir, project) = project();
+    create(&project, Kind::Skill, "deploy", "Ship it").unwrap();
+
+    let error =
+        lifecycle::rename(None, &project, &find(&project, "deploy").unwrap(), "a--b").unwrap_err();
+
+    assert!(matches!(error, LifecycleError::Name { .. }), "{error}");
+    assert!(dir.path().join("skills/deploy/SKILL.md").is_file());
+    assert!(!dir.path().join("skills/a--b").exists());
+}
+
+#[test]
+fn renaming_refuses_a_skill_whose_description_breaks_the_rules() {
+    // A rename writes only the name, but what it leaves behind is a skill
+    // Mindflayer wrote, and an agent skips one with an empty description.
+    let (dir, project) = project();
+    write(
+        dir.path(),
+        "skills/quiet/SKILL.md",
+        "---\nname: quiet\ndescription: ''\n---\n",
+    );
+
+    let error =
+        lifecycle::rename(None, &project, &find(&project, "quiet").unwrap(), "hush").unwrap_err();
+
+    assert_eq!(
+        error.to_string(),
+        "`quiet` cannot be renamed until it is fixed: `description` is empty"
+    );
+    assert!(dir.path().join("skills/quiet/SKILL.md").is_file());
+    assert!(!dir.path().join("skills/hush").exists());
+}
+
+#[test]
+fn renaming_fixes_a_name_and_folder_that_broke_the_rules() {
+    // What is wrong with the old name is what a rename is for, so it is the
+    // skill as renamed that is judged.
+    let (dir, project) = project();
+    write(
+        dir.path(),
+        "skills/a--b/SKILL.md",
+        "---\nname: a--b\ndescription: Doubled\n---\n",
+    );
+
+    let renamed =
+        lifecycle::rename(None, &project, &find(&project, "a--b").unwrap(), "a-b").unwrap();
+
+    assert_eq!(renamed.target.artifact.unwrap().validate(), vec![]);
+    assert!(!dir.path().join("skills/a--b").exists());
 }
 
 #[test]

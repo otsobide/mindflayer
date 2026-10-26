@@ -17,7 +17,7 @@ use mindflayer_core::lifecycle::{self, Record};
 use mindflayer_core::template::{self, Origin};
 use mindflayer_core::{paths, FlayerWorkspace, Kind, MindProject, Reference, Target};
 
-use crate::render::{plural, printable, table};
+use crate::render::{printable, table, verdict};
 use crate::{CliError, Failure, Outcome};
 
 pub(crate) fn add_to(
@@ -244,18 +244,12 @@ fn edited(project: &MindProject, target: &Target, changed: bool) -> Outcome {
         }
     };
 
-    let issues = artifact.validate();
-    if issues.is_empty() {
-        return Outcome::plain(format!("{head}: ok\n"));
-    }
-    let mut stdout = format!("{head}: {}\n", plural(issues.len(), "problem"));
-    for issue in issues {
-        let _ = writeln!(stdout, "  - {issue}");
-    }
+    let mut stdout = String::new();
+    let invalid = verdict(&mut stdout, &head, &artifact.validate());
     Outcome {
         stdout,
         stderr: Vec::new(),
-        ok: false,
+        ok: !invalid,
     }
 }
 
