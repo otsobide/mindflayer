@@ -1,5 +1,5 @@
 import { fileURLToPath, URL } from 'node:url'
-import { defineConfig } from 'vite'
+import { defineConfig } from 'vitest/config'
 import vue from '@vitejs/plugin-vue'
 import router from 'vue-router/vite'
 import ui from '@nuxt/ui/vite'
@@ -14,7 +14,9 @@ export default defineConfig({
     vue(),
     ui({
       // Committed, so vue-tsc knows Nuxt UI's components on a fresh clone.
-      components: { dts: 'src/components.d.ts' },
+      // Not written by a test run, which only meets the components its
+      // tests import and would leave out the rest.
+      components: { dts: !process.env.VITEST && 'src/components.d.ts' },
       autoImport: { dts: 'src/auto-imports.d.ts' }
     })
   ],
@@ -22,5 +24,9 @@ export default defineConfig({
     alias: [
       { find: '@', replacement: here('./src') }
     ]
+  },
+  test: {
+    environment: 'happy-dom',
+    include: ['tests/**/*.test.ts']
   }
 })
