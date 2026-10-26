@@ -1026,6 +1026,66 @@ dependencies in [Why `gix`](#why-gix-rather-than-running-git). Rejected: HTTPS
 tokens only, which leaves ssh remotes out; and shelling out to `git`, which
 gives up what `gix` was chosen for. Unblocks #26 and #110.
 
+### D-17: The next front end is a local web panel
+
+`flayer ui` and `mind ui` serve a Vue single-page app embedded in the same
+binary, behind a default-on cargo feature, `ui`. A library crate,
+`apps/server`, runs axum on 127.0.0.1 and handles transport only: it is generic
+over a `Backend` trait with associated `Query`, `Task` and `Outcome` types, so
+it only moves JSON, and the CLI implements the trait. There is one binary to
+install, it works in any browser, the associated types keep the Cargo graph
+free of a cli/server cycle without an extra crate, and the server's tests use a
+fake `Backend`. Rejected: a separate protocol crate for `Task` and the outcome
+types, which the associated types make unnecessary; a Tauri desktop app first,
+while Tauri 3 is alpha, though a `Transport` interface in the frontend keeps a
+later Tauri shell cheap; and a separate server binary or daemon, the re-exec
+wrapper [the line between core and a front
+end](#where-the-line-between-core-and-a-front-end-falls) already rejects. #68
+measures the feature's binary size and compile time, and makes it opt-in if the
+cost is too high. Unblocks #65, #68 and #69.
+
+### D-18: The panel writes by running commands
+
+As in the TUI, the panel's reads are typed queries that core answers, and its
+writes are typed Tasks turned into CLI command lines and run through the same
+parser on one worker thread, each line shown before it runs. That extends
+[every change is a command line](#every-change-is-a-command-line) to a second
+front end, so the three cannot disagree, and gives the panel a transcript the
+user can replay. Four things come first: the remaining CLI-side orchestration
+moves into core (#23, #54), CLI warnings carry core error codes (#63), batch
+rules for assignment are planned in core (#78) rather than reimplemented in
+TypeScript, and every Task from the browser passes a path policy (#67).
+Rejected: a core service layer the server calls directly, which duplicates
+every command's entry point; and shelling out to the `flayer` binary, which
+needs the argument forwarding already rejected for the two binaries. Unblocks
+#63, #67, #76 and #78.
+
+### D-19: The panel is built on Nuxt UI
+
+The panel uses Nuxt UI 4: MIT, built on Reka UI and Tailwind v4, with a
+dashboard layout, a command palette, a virtualized data table and colour mode,
+and an official dashboard-vue template on Vue 3.5, Vite 8 and TypeScript 6. It
+covers the control-panel pieces out of the box under a GPL-compatible licence,
+so it needs the least custom code. Rejected: shadcn-vue, the same base with
+component source copied into the repository, which can still be compared on one
+screen of the #69 scaffold during M1 to M3; PrimeVue 5, whose proprietary,
+keyed licence is incompatible with GPL-3.0-only; and Naive UI, with
+accessibility gaps open since 2021. Unblocks #69.
+
+### D-21: The panel's views follow the capabilities they show
+
+The views are built after the core capabilities they reuse: agents (M1), rules
+and updates (M2) and the hub (M3), so they sit on the final data model and need
+no rework. The server shell, its guards and the scaffold can be built in
+parallel during M1 to M3, so the owner can review the look (D-19) early, and
+MCP and connectors then ship in core, CLI, TUI and web together. The snapshot
+lists kinds from `Kind::ALL`, so MCP reaches the panel without frontend rework.
+Rejected: views right after M0, on today's data model, which are reworked when
+the hub and the agent targets land; and the panel last, after MCP and
+connectors, which leaves the owner's top wish to the end. Unblocks #65, #66 and
+#69, which need nothing from M1 to M3, and #61, which needs only #36; the views
+wait for the snapshot (#62).
+
 ## Open questions
 
 - **Precedence between projects.** Two projects in one workspace can declare
