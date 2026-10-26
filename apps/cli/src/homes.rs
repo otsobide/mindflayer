@@ -21,8 +21,9 @@ pub fn default_home(given: Option<&str>) -> Option<PathBuf> {
 }
 
 /// Where each agent keeps what it reads for every project: the option, then
-/// the variable the agent itself reads, then its folder in the user's home.
-/// Empty, from either, means there is none.
+/// the variable the agent itself reads, then its folder in the user's home,
+/// which core names ([`AgentHomes::defaults_under`]). Empty, from either of
+/// the first two, means there is none.
 ///
 /// Decided once per command line, and handed to core as a value: core never
 /// looks them up, so a test that pins every option cannot reach the real
@@ -37,34 +38,28 @@ fn agent_homes_from(
     variable: &dyn Fn(&str) -> Option<String>,
     user: Option<&Path>,
 ) -> AgentHomes {
-    let under = |folders: &[&str]| {
-        user.map(|user| {
-            folders
-                .iter()
-                .fold(user.to_path_buf(), |path, folder| path.join(folder))
-        })
-    };
+    // Only which home the folders sit in is decided here; the folders
+    // themselves are core's.
+    let fallback = user.map(AgentHomes::defaults_under).unwrap_or_default();
     AgentHomes {
         claude_config_dir: resolve(
             given.claude_config_dir.as_deref(),
             variable("CLAUDE_CONFIG_DIR"),
-            under(&[".claude"]),
+            fallback.claude_config_dir,
         ),
         codex_home: resolve(
             given.codex_home.as_deref(),
             variable("CODEX_HOME"),
-            under(&[".codex"]),
+            fallback.codex_home,
         ),
-        // Joined a folder at a time rather than as `.config/opencode`, so the
-        // path has one separator on Windows too.
         opencode_config_dir: resolve(
             given.opencode_config_dir.as_deref(),
             variable("OPENCODE_CONFIG_DIR"),
-            under(&[".config", "opencode"]),
+            fallback.opencode_config_dir,
         ),
         // No variable: the folder belongs to no one agent, so none of their
         // variables moves it.
-        agents_dir: resolve(given.agents_dir.as_deref(), None, under(&[".agents"])),
+        agents_dir: resolve(given.agents_dir.as_deref(), None, fallback.agents_dir),
     }
 }
 

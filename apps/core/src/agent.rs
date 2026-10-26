@@ -4,7 +4,7 @@
 //! that will need those folders (Claude's user memory, Codex's config, the
 //! skills in `~/.agents`) are handed them rather than looking them up.
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 /// Where each agent keeps what it reads for every project, beside whatever a
 /// project holds.
@@ -33,3 +33,28 @@ pub struct AgentHomes {
     /// skills from it, whatever their own folders say.
     pub agents_dir: Option<PathBuf>,
 }
+
+impl AgentHomes {
+    /// Where each agent keeps its folder when nothing moves it: the fallback a
+    /// front end takes once neither its option nor the agent's own variable
+    /// answers.
+    ///
+    /// Named here, as [`FLAYER_DIR`](crate::FLAYER_DIR) is, rather than in the
+    /// front end: which folder an agent reads is a fact about the agent, and a
+    /// second front end must not spell it differently. Finding the user's home
+    /// is still the front end's, so this reads no environment.
+    pub fn defaults_under(user_home: &Path) -> AgentHomes {
+        AgentHomes {
+            claude_config_dir: Some(user_home.join(".claude")),
+            codex_home: Some(user_home.join(".codex")),
+            // Joined a folder at a time rather than as `.config/opencode`, so
+            // the path has one kind of separator on Windows too.
+            opencode_config_dir: Some(user_home.join(".config").join("opencode")),
+            agents_dir: Some(user_home.join(".agents")),
+        }
+    }
+}
+
+#[cfg(test)]
+#[path = "agent_test.rs"]
+mod tests;

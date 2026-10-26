@@ -763,6 +763,13 @@ the agent itself reads (`$CLAUDE_CONFIG_DIR`, `$CODEX_HOME`,
 it belongs to no one agent, so none of their variables moves it. Core takes
 the answer as an `AgentHomes` and never resolves one.
 
+Those folder names are core's all the same (`AgentHomes::defaults_under`),
+the way `.mindflayer` is: the CLI finds the user's home and core says which
+folder in it each agent reads. Which folder an agent reads is a fact about
+the agent, and spelling it in the CLI would leave a second front end to copy
+it and, one day, to disagree. The variable names stay in the CLI, the only
+one that reads them.
+
 They are options rather than variables read where a check needs them, for the
 reasons `--home` is one: core reads no environment, and a test cannot safely
 set a variable, because every other test in the process would see it. An

@@ -125,11 +125,13 @@ These are easy to break from a single file without noticing.
   (`--claude-config-dir`, `--codex-home`, `--opencode-config-dir`,
   `--agents-dir`), then `$CLAUDE_CONFIG_DIR`, `$CODEX_HOME` or
   `$OPENCODE_CONFIG_DIR`, then `~/.claude`, `~/.codex`, `~/.config/opencode`
-  or `~/.agents`; empty means none. Core takes them as `AgentHomes` and never
-  resolves one. No command calls `agent_homes` yet, and the first that does
-  also makes `tui::execute` hand each command the TUI's own, as it hands them
-  `--home`: a command the TUI runs carries none of the four options, so it
-  would decide them again from the environment.
+  or `~/.agents`; empty means none. Those folder names are core's
+  (`AgentHomes::defaults_under`), and only the user's home is the CLI's to
+  find. Core takes the answer as `AgentHomes` and never resolves one. No
+  command calls `agent_homes` yet, and the first that does also makes
+  `tui::execute` hand each command the TUI's own, as it hands them `--home`:
+  a command the TUI runs carries none of the four options, so it would decide
+  them again from the environment.
 - **`Kind` is a closed enum.** To add a kind, follow "Adding a third kind" in
   the architecture doc; the compiler's exhaustive matches are the checklist.
 
