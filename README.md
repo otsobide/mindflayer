@@ -329,7 +329,11 @@ https://github.com/acme/skills at a1b2c3d
 ```
 
 The repository's `skills` folder is what gets harvested; `--path agents` takes
-another one, and `--ref v2` takes a branch or a tag instead of the default.
+another one, and `--ref v2` takes a branch or a tag instead of the default. A
+repository that is a flayer workspace made by `flayer init` keeps its own in
+[its library](#the-workspaces-own-skills-and-rules), so it is gathered with
+`--path .mindflayer/library/skills`, or [loaded](#loading-another-workspace)
+from a clone instead.
 
 Gathering fills the shelf and stops there. **Nothing is written into a mind
 project**: which of these a project should carry is a separate decision, and a

@@ -2451,6 +2451,16 @@ leak into the lifecycle code. Unblocks #33, #45, #62, #93, #94 and #95.
   them: they stay where they are, untouched, until `[directories]` names them
   or #53's migration moves them. That migration could look for those folders
   wherever a marker names none.
+- **Gathering a repository that is a workspace.** A team repository made by
+  `flayer init` and `flayer add` keeps its own skills in
+  `.mindflayer/library/skills`, where a workspace made before the library kept
+  them in `skills`, the folder `flayer gather` harvests by default. So a plain
+  `flayer gather git <url>` of it, which used to work, now says there is no
+  `skills` folder, and `--path .mindflayer/library/skills` is needed. Gather
+  could read a cloned workspace's `flayer.toml` for where its own are when no
+  `--path` is given, as `load` reads a loaded one's, or look in
+  `.mindflayer/library/skills` among the layouts #101 harvests; whether to
+  trust a marker that came from a source is part of that choice.
 - **Directories edited into a marker by hand.** Where a holder's directories
   may be (inside it and, for a workspace, clear of the shelf and the cache) is
   checked when `init` writes the marker, not each time it is read, so a marker
