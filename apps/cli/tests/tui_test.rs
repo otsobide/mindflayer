@@ -580,6 +580,34 @@ fn esc_cancels_a_running_gather_and_the_form_says_so() {
 }
 
 #[test]
+fn a_gather_already_placing_says_a_cancel_is_too_late_and_finishes() {
+    let dir = TempDir::new().unwrap();
+    flayer(dir.path(), &["init"]).unwrap();
+    let mut app = tui_in(dir.path());
+    let (go, gate) = mpsc::channel();
+    app.runner = Some(placing_gather(gate));
+    start_gather(&mut app, Progress::Placing { done: 0, total: 3 });
+    let drawn = tui_drawn(&app);
+    assert!(drawn.contains("placing on the shelf 0/3"), "{drawn}");
+    // No key offered that would change nothing.
+    assert!(!drawn.contains("esc cancels"), "{drawn}");
+    assert!(drawn.contains("too late to cancel: placing"), "{drawn}");
+
+    assert_eq!(press_key(&mut app, KeyCode::Esc), TuiStep::Stay);
+
+    // Nor a stop claimed that the gather will not make.
+    let drawn = tui_drawn(&app);
+    assert!(!drawn.contains("cancelling"), "{drawn}");
+    assert!(drawn.contains("too late to cancel: placing"), "{drawn}");
+    go.send(()).unwrap();
+    settle_until(&mut app, |app| app.running.is_none());
+    let Mode::Reading(reader) = &app.mode else {
+        panic!("{:?}", app.mode);
+    };
+    assert_eq!(reader.lines[0].1, "3 skills: 3 added");
+}
+
+#[test]
 fn leaving_while_a_gather_runs_cancels_it_and_waits_for_it() {
     let dir = TempDir::new().unwrap();
     flayer(dir.path(), &["init"]).unwrap();
@@ -1182,18 +1210,42 @@ fn slow_gather(go: mpsc::Receiver<()>) -> Runner {
     })
 }
 
+/// A stand-in for a gather past its last check: it says it is placing
+/// three, and finishes when `go` says so, whatever cancel comes first, as a
+/// real gather does once it has started placing.
+fn placing_gather(go: mpsc::Receiver<()>) -> Runner {
+    let go = Mutex::new(go);
+    Runner::new(move |words, _, _, watch| {
+        let go = go.lock().unwrap();
+        watch.report(Progress::Placing { done: 0, total: 3 });
+        // A test that has gone is not waited for.
+        let _ = go.recv();
+        watch.report(Progress::Placing { done: 3, total: 3 });
+        Done {
+            command: tui::state::shell(words),
+            stdout: String::from("3 skills: 3 added\n"),
+            stderr: Vec::new(),
+            error: None,
+            ok: true,
+        }
+    })
+}
+
 /// Ask for the slow gather from the gather form, and let it get as far as
 /// reading its first folder.
 fn start_slow_gather(app: &mut App) {
+    start_gather(app, Progress::Harvesting { done: 0, total: 3 });
+}
+
+/// Ask for a gather from the gather form, and let it get as far as `step`.
+fn start_gather(app: &mut App, step: Progress) {
     press_key(app, KeyCode::Char('g'));
     type_text(app, SLOW);
     let TuiStep::Run(task) = press_key(app, KeyCode::Enter) else {
         panic!("{:?}", app.mode);
     };
     tui::step(app, task);
-    settle_until(app, |app| {
-        reported(app) == Some(Progress::Harvesting { done: 0, total: 3 })
-    });
+    settle_until(app, |app| reported(app) == Some(step));
 }
 
 /// The step the task running apart last reported, as the screen has it.

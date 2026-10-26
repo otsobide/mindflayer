@@ -2149,7 +2149,7 @@ impl Reader {
             ),
             (
                 "esc",
-                "while a gather runs: stop it, before it places anything",
+                "while a gather runs: stop it, until it starts placing",
                 &[],
             ),
             ("s", "what is on the shelf", &["flayer gather list"]),

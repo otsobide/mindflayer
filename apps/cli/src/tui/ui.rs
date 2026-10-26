@@ -986,16 +986,23 @@ fn working(busy: &str, frame: &mut Frame, area: Rect) {
 }
 
 /// Drawn while a task runs apart: the command it is, the last step it
-/// reported, redrawn as it reports more, and how to stop it.
+/// reported, redrawn as it reports more, and how to stop it while it still
+/// can be.
 fn watching(running: &Running, frame: &mut Frame, area: Rect) {
     let command = printable(&running.task.describe());
     let step = running
         .progress
         .map_or_else(|| String::from("starting"), said);
-    let (stop, style) = if running.cancelling {
-        ("cancelling, before anything is placed", warn())
-    } else {
-        ("esc cancels", dim())
+    let (stop, style) = match running.progress {
+        // Past the gather's last check, where `esc` changes nothing: said, so
+        // that neither the key nor a cancel already asked for promises a stop
+        // the gather will not make. Loud only for whoever asked for one.
+        Some(progress) if !progress.cancellable() => (
+            "too late to cancel: placing",
+            if running.cancelling { warn() } else { dim() },
+        ),
+        _ if running.cancelling => ("cancelling, before anything is placed", warn()),
+        _ => ("esc cancels", dim()),
     };
     let longest = [command.chars().count(), step.chars().count(), stop.len()]
         .into_iter()
