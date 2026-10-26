@@ -291,7 +291,9 @@ impl MindProject {
         // A folder per kind, so the layout is visible in a fresh project
         // rather than being something you have to read the docs to discover.
         for kind in Kind::ALL {
-            create_dir(&project.directory_for(kind))?;
+            if let Some(directory) = project.directory_for(kind) {
+                create_dir(&directory)?;
+            }
         }
 
         Ok((
@@ -340,20 +342,40 @@ impl MindProject {
         self.mind_dir().join(SCRATCH_DIR)
     }
 
-    /// The folder holding one kind, whether or not it exists yet.
+    /// The folder holding one kind, whether or not it exists yet, or `None`
+    /// when the project keeps none of that kind of its own.
     ///
     /// What the marker says, or the default when it says nothing, except for
     /// a marker written before [`DIRECTORIES_VERSION`], which described a
     /// layout where every kind lived inside `.mind`. Such a project is read
     /// the way it was written.
-    pub fn directory_for(&self, kind: Kind) -> PathBuf {
-        match self.config.directories.get(kind) {
+    ///
+    /// An `Option` rather than a folder always, so that a project can say it
+    /// authors no artifacts of a kind: a reader then finds none there, which
+    /// is an absence and not a failure, and a change that needs the folder
+    /// asks [`required_directory`](Self::required_directory), which refuses.
+    /// Answering with a default instead would put a kind added later in a
+    /// folder at the project's root that nobody asked for.
+    pub fn directory_for(&self, kind: Kind) -> Option<PathBuf> {
+        Some(match self.config.directories.get(kind) {
             Some(directory) => self.root.join(directory),
             None if self.config.version < DIRECTORIES_VERSION => {
                 self.mind_dir().join(kind.folder())
             }
             None => self.root.join(Directories::default_for(kind)),
-        }
+        })
+    }
+
+    /// [`directory_for`](Self::directory_for), for what has to have the
+    /// folder to do anything at all: an artifact made there, a copy put
+    /// there. A project that keeps no artifacts of `kind` is refused,
+    /// rather than given a folder its marker never named.
+    pub fn required_directory(&self, kind: Kind) -> Result<PathBuf, WorkspaceError> {
+        self.directory_for(kind)
+            .ok_or_else(|| WorkspaceError::NoDirectory {
+                path: self.root.clone(),
+                kind,
+            })
     }
 
     /// The project's declared name.
@@ -1246,6 +1268,8 @@ pub enum WorkspaceError {
     NonUtf8Path { path: PathBuf },
     #[error("{path}: cannot hold a project's {kind}s, because it is not inside the project")]
     OutsideProject { path: PathBuf, kind: Kind },
+    #[error("{path}: keeps no {kind}s of its own, since its marker names no folder for them")]
+    NoDirectory { path: PathBuf, kind: Kind },
     #[error("{path}: cannot hold the workspace's {kind}s, because it is not inside the workspace")]
     OutsideWorkspace { path: PathBuf, kind: Kind },
     #[error(
@@ -1277,6 +1301,7 @@ impl WorkspaceError {
             | WorkspaceError::NotLoaded { path, .. }
             | WorkspaceError::NonUtf8Path { path }
             | WorkspaceError::OutsideProject { path, .. }
+            | WorkspaceError::NoDirectory { path, .. }
             | WorkspaceError::OutsideWorkspace { path, .. }
             | WorkspaceError::OverlapsGathered { path, .. } => path,
             WorkspaceError::Lock(error) => error.path(),

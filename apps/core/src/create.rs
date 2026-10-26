@@ -28,7 +28,7 @@ use crate::kind::{Kind, Layout};
 use crate::rule::RuleManifest;
 use crate::skill::{SkillManifest, MAX_DESCRIPTION_LEN};
 use crate::template::{Template, TemplateError};
-use crate::workspace::MindProject;
+use crate::workspace::{MindProject, WorkspaceError};
 
 /// What a template writes where the name goes.
 pub const NAME_PLACEHOLDER: &str = "{{name}}";
@@ -99,7 +99,7 @@ fn scaffold(
     let description = description.trim();
     check_description(kind, description)?;
 
-    let directory = project.directory_for(kind);
+    let directory = project.required_directory(kind)?;
     // Matched on the kind rather than its layout, so a third kind has to say
     // how it is scaffolded before it compiles.
     match kind {
@@ -466,4 +466,6 @@ pub enum CreateError {
     Template(#[from] TemplateError),
     #[error(transparent)]
     Artifact(#[from] ArtifactError),
+    #[error(transparent)]
+    Workspace(#[from] WorkspaceError),
 }

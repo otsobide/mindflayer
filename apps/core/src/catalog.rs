@@ -37,7 +37,11 @@ impl Catalog {
 
         for project in projects {
             for kind in kinds {
-                let root = project.directory_for(*kind);
+                // A kind the project keeps no folder for holds nothing: an
+                // absence, like a folder nobody has made yet.
+                let Some(root) = project.directory_for(*kind) else {
+                    continue;
+                };
                 match kind.layout() {
                     Layout::Directory { manifest } => {
                         // Skill is the only directory-shaped kind, so this

@@ -219,7 +219,7 @@ pub fn library_plan(workspace: &FlayerWorkspace) -> Plan {
     plan.kinds = Kind::ALL
         .into_iter()
         .filter_map(|kind| {
-            let from = paths::normalize(&own.directory_for(kind));
+            let from = paths::normalize(&own.directory_for(kind)?);
             let to = paths::normalize(&workspace.root().join(Directories::library_for(kind)));
             (from != to).then_some(Repoint { kind, from, to })
         })
@@ -451,7 +451,10 @@ fn held_by(
     let mut held = Vec::new();
     for project in projects {
         for kind in Kind::ALL {
-            let folder = paths::normalize(&project.directory_for(kind));
+            let Some(folder) = project.directory_for(kind) else {
+                continue;
+            };
+            let folder = paths::normalize(&folder);
             if !kinds.iter().any(|repoint| overlap(&repoint.from, &folder)) {
                 continue;
             }

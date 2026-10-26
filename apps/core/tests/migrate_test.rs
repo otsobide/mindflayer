@@ -484,7 +484,7 @@ fn a_project_at_the_root_keeps_what_it_shares_and_the_marker_moves_on() {
     assert!(migrated.plan.moves.is_empty());
     assert!(root.join("skills/deploy/SKILL.md").is_file());
     assert_eq!(
-        workspace.own().directory_for(Kind::Skill),
+        workspace.own().directory_for(Kind::Skill).unwrap(),
         library(root, Kind::Skill)
     );
     // No longer one folder for both, so the workspace counts it as its own

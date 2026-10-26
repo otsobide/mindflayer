@@ -370,7 +370,7 @@ fn gathering_writes_nothing_into_a_mind_project() {
 
     gather::gather(&workspace, &ledger, &Request::git(url(&source))).unwrap();
 
-    let skills = project.directory_for(Kind::Skill);
+    let skills = project.directory_for(Kind::Skill).unwrap();
     assert!(skills.is_dir(), "init made it");
     assert_eq!(
         fs::read_dir(&skills).unwrap().count(),

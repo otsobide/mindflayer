@@ -41,7 +41,7 @@ fn marker(workspace: &FlayerWorkspace) -> String {
 }
 
 fn installed_at(project: &MindProject, name: &str) -> PathBuf {
-    project.directory_for(Kind::Skill).join(name)
+    project.directory_for(Kind::Skill).unwrap().join(name)
 }
 
 // ---------------------------------------------------------------------------
@@ -275,6 +275,7 @@ fn installing_a_loaded_skill_copies_it_and_a_later_edit_there_updates_it() {
     let source = team
         .own()
         .directory_for(Kind::Skill)
+        .unwrap()
         .join("deploy/SKILL.md");
     let edited = fs::read_to_string(&source).unwrap() + "\nNew steps.\n";
     fs::write(&source, edited).unwrap();
@@ -364,7 +365,13 @@ fn a_loaded_skill_whose_folder_went_away_says_to_unload_it() {
     let ledger = Ledger::in_memory().unwrap();
     let candidate =
         install::offered(&target, &ledger, &project, Kind::Skill, "deploy", None).unwrap();
-    fs::remove_dir_all(team.own().directory_for(Kind::Skill).join("deploy")).unwrap();
+    fs::remove_dir_all(
+        team.own()
+            .directory_for(Kind::Skill)
+            .unwrap()
+            .join("deploy"),
+    )
+    .unwrap();
 
     let error = install::install(&target, &ledger, &project, &candidate).unwrap_err();
 
@@ -424,7 +431,11 @@ fn a_loaded_workspace_that_is_the_project_itself_is_never_copied_onto_itself() {
 
 /// Write a skill by hand into a workspace's own skills, declaring `name`.
 fn write_declaring(workspace: &FlayerWorkspace, folder: &str, name: &str) {
-    let dir = workspace.own().directory_for(Kind::Skill).join(folder);
+    let dir = workspace
+        .own()
+        .directory_for(Kind::Skill)
+        .unwrap()
+        .join(folder);
     fs::create_dir_all(&dir).unwrap();
     fs::write(
         dir.join("SKILL.md"),
@@ -501,7 +512,7 @@ fn a_loaded_workspace_inside_the_folder_it_would_install_into_is_not_deleted() {
     let (project, _) = MindProject::init(dir.path().join("target/app")).unwrap();
     target.link(&project).unwrap();
     // A workspace sitting where the project would put `deploy`.
-    let nested = project.directory_for(Kind::Skill).join("deploy");
+    let nested = project.directory_for(Kind::Skill).unwrap().join("deploy");
     let (inner, _) = FlayerWorkspace::init(&nested).unwrap();
     mindflayer_core::create(&inner.own(), Kind::Skill, "deploy", "Nested").unwrap();
     target.load(&inner).unwrap();
@@ -520,6 +531,7 @@ fn a_loaded_workspace_inside_the_folder_it_would_install_into_is_not_deleted() {
     assert!(inner
         .own()
         .directory_for(Kind::Skill)
+        .unwrap()
         .join("deploy/SKILL.md")
         .is_file());
 }
@@ -550,7 +562,11 @@ fn a_link_out_of_the_loaded_workspace_is_refused_not_copied() {
     let (dir, mut target, project, team) = target_and_team(&["deploy"]);
     let secret = dir.path().join("private.env");
     fs::write(&secret, "SECRET=hunter2").unwrap();
-    let skill = team.own().directory_for(Kind::Skill).join("deploy");
+    let skill = team
+        .own()
+        .directory_for(Kind::Skill)
+        .unwrap()
+        .join("deploy");
     std::os::unix::fs::symlink(&secret, skill.join("config.env")).unwrap();
     // A link that stays inside the workspace is fine, and is copied as a file.
     fs::write(team.root().join("shared.md"), "shared").unwrap();
@@ -764,7 +780,11 @@ fn a_refused_update_leaves_the_installed_copy_as_it_was() {
     let installed = installed_at(&project, "deploy");
     let before = fs::read_to_string(installed.join("SKILL.md")).unwrap();
     // The teammate adds a link out of their workspace, and edits the skill.
-    let skill = team.own().directory_for(Kind::Skill).join("deploy");
+    let skill = team
+        .own()
+        .directory_for(Kind::Skill)
+        .unwrap()
+        .join("deploy");
     fs::write(dir.path().join("private.env"), "SECRET").unwrap();
     std::os::unix::fs::symlink(dir.path().join("private.env"), skill.join("aaa.env")).unwrap();
     fs::write(skill.join("SKILL.md"), before.clone() + "\nMore.\n").unwrap();
@@ -778,7 +798,7 @@ fn a_refused_update_leaves_the_installed_copy_as_it_was() {
         before
     );
     assert!(!installed.join("aaa.env").exists());
-    let leftovers: Vec<_> = fs::read_dir(project.directory_for(Kind::Skill))
+    let leftovers: Vec<_> = fs::read_dir(project.directory_for(Kind::Skill).unwrap())
         .unwrap()
         .map(|entry| entry.unwrap().file_name())
         .collect();
@@ -789,7 +809,11 @@ fn a_refused_update_leaves_the_installed_copy_as_it_was() {
 #[test]
 fn a_refused_first_install_leaves_nothing_so_it_can_be_tried_again() {
     let (dir, mut target, project, team) = target_and_team(&["deploy"]);
-    let skill = team.own().directory_for(Kind::Skill).join("deploy");
+    let skill = team
+        .own()
+        .directory_for(Kind::Skill)
+        .unwrap()
+        .join("deploy");
     fs::write(dir.path().join("private.env"), "SECRET").unwrap();
     let link = skill.join("config.env");
     std::os::unix::fs::symlink(dir.path().join("private.env"), &link).unwrap();
@@ -824,7 +848,7 @@ fn a_link_inside_the_skill_itself_is_followed_wherever_the_skills_folder_lives()
     fs::write(shared.join("v2.md"), "v2").unwrap();
     std::os::unix::fs::symlink("v2.md", shared.join("latest.md")).unwrap();
     let (mut target, _) = FlayerWorkspace::init(dir.path().join("target")).unwrap();
-    let own = target.own().directory_for(Kind::Skill);
+    let own = target.own().directory_for(Kind::Skill).unwrap();
     fs::create_dir_all(own.parent().unwrap()).unwrap();
     std::os::unix::fs::symlink(dir.path().join("shared/skills"), own).unwrap();
     let (project, _) = MindProject::init(dir.path().join("target/app")).unwrap();
@@ -843,7 +867,11 @@ fn a_link_inside_the_skill_itself_is_followed_wherever_the_skills_folder_lives()
 #[test]
 fn directories_linking_to_each_other_are_refused_not_copied_forever() {
     let (_dir, mut target, project, team) = target_and_team(&["deploy"]);
-    let skill = team.own().directory_for(Kind::Skill).join("deploy");
+    let skill = team
+        .own()
+        .directory_for(Kind::Skill)
+        .unwrap()
+        .join("deploy");
     fs::create_dir_all(skill.join("a")).unwrap();
     fs::create_dir_all(skill.join("b")).unwrap();
     std::os::unix::fs::symlink("../b", skill.join("a/tob")).unwrap();

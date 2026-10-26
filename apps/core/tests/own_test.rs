@@ -35,11 +35,11 @@ fn a_new_workspace_says_where_its_own_artifacts_go_and_makes_nothing_yet() {
     // In its library, where no agent looks, rather than beside the
     // repositories it manages.
     assert_eq!(
-        workspace.own().directory_for(Kind::Skill),
+        workspace.own().directory_for(Kind::Skill).unwrap(),
         dir.path().join(".mindflayer/library/skills")
     );
     assert_eq!(
-        workspace.own().directory_for(Kind::Rule),
+        workspace.own().directory_for(Kind::Rule).unwrap(),
         dir.path().join(".mindflayer/library/rules")
     );
     // And made by the first artifact added, as anywhere else.
@@ -69,16 +69,16 @@ fn a_kind_the_marker_does_not_name_is_kept_in_the_library() {
     // workspace, whatever its marker says.
     for kind in Kind::ALL {
         assert_eq!(
-            none.own().directory_for(kind),
+            none.own().directory_for(kind).unwrap(),
             dir.path().join(".mindflayer/library").join(kind.folder())
         );
     }
     assert_eq!(
-        one.own().directory_for(Kind::Skill),
+        one.own().directory_for(Kind::Skill).unwrap(),
         dir.path().join("skills")
     );
     assert_eq!(
-        one.own().directory_for(Kind::Rule),
+        one.own().directory_for(Kind::Rule).unwrap(),
         dir.path().join(".mindflayer/library/rules")
     );
 }
@@ -119,7 +119,7 @@ fn a_workspace_can_be_told_where_to_keep_them_as_long_as_it_is_inside() {
     .unwrap_err();
 
     assert_eq!(
-        workspace.own().directory_for(Kind::Skill),
+        workspace.own().directory_for(Kind::Skill).unwrap(),
         dir.path().join("shared/skills")
     );
     assert!(
@@ -180,7 +180,7 @@ fn a_workspace_directory_elsewhere_in_mindflayer_is_allowed() {
     .unwrap();
 
     assert_eq!(
-        workspace.own().directory_for(Kind::Skill),
+        workspace.own().directory_for(Kind::Skill).unwrap(),
         dir.path().join(".mindflayer/mine/skills")
     );
 }

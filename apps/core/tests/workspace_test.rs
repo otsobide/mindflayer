@@ -20,7 +20,7 @@ fn initializing_a_mind_project_creates_its_marker_and_its_skills_folder() {
 
     assert_eq!(outcome, Initialization::Created);
     assert!(dir.path().join(MIND_DIR).join(MIND_CONFIG).is_file());
-    assert!(project.directory_for(Kind::Skill).is_dir());
+    assert!(project.directory_for(Kind::Skill).unwrap().is_dir());
     assert_eq!(project.root(), dir.path());
     assert_eq!(project.config().version, MIND_FORMAT_VERSION);
 }
@@ -54,12 +54,12 @@ fn initializing_twice_never_rewrites_the_marker() {
 fn initializing_fills_in_a_skills_folder_someone_deleted() {
     let dir = TempDir::new().unwrap();
     let (project, _) = MindProject::init(dir.path()).unwrap();
-    fs::remove_dir(project.directory_for(Kind::Skill)).unwrap();
+    fs::remove_dir(project.directory_for(Kind::Skill).unwrap()).unwrap();
 
     let (project, outcome) = MindProject::init(dir.path()).unwrap();
 
     assert_eq!(outcome, Initialization::AlreadyInitialized);
-    assert!(project.directory_for(Kind::Skill).is_dir());
+    assert!(project.directory_for(Kind::Skill).unwrap().is_dir());
 }
 
 #[test]
@@ -562,10 +562,13 @@ fn a_new_project_keeps_its_artifacts_beside_the_code() {
     // Beside the code, not inside `.mind`: these are files the agents
     // themselves read, and an agent does not know what a `.mind` is.
     assert_eq!(
-        project.directory_for(Kind::Skill),
+        project.directory_for(Kind::Skill).unwrap(),
         dir.path().join("skills")
     );
-    assert_eq!(project.directory_for(Kind::Rule), dir.path().join("rules"));
+    assert_eq!(
+        project.directory_for(Kind::Rule).unwrap(),
+        dir.path().join("rules")
+    );
     assert!(dir.path().join("skills").is_dir());
     assert!(dir.path().join("rules").is_dir());
 }
@@ -591,12 +594,15 @@ fn a_project_can_keep_its_skills_where_its_agents_look() {
     let (project, _) = MindProject::init_with(dir.path(), &directories).unwrap();
 
     assert_eq!(
-        project.directory_for(Kind::Skill),
+        project.directory_for(Kind::Skill).unwrap(),
         dir.path().join(".claude/skills")
     );
     assert!(dir.path().join(".claude").join("skills").is_dir());
     // The kind that was not mentioned keeps its default.
-    assert_eq!(project.directory_for(Kind::Rule), dir.path().join("rules"));
+    assert_eq!(
+        project.directory_for(Kind::Rule).unwrap(),
+        dir.path().join("rules")
+    );
 }
 
 #[test]
@@ -608,7 +614,7 @@ fn where_a_project_keeps_things_survives_reopening_it() {
     let reopened = MindProject::open(dir.path()).unwrap();
 
     assert_eq!(
-        reopened.directory_for(Kind::Skill),
+        reopened.directory_for(Kind::Skill).unwrap(),
         dir.path().join("docs/skills")
     );
 }
@@ -627,7 +633,7 @@ fn a_second_init_does_not_move_where_a_project_keeps_things() {
     assert_eq!(outcome, Initialization::AlreadyInitialized);
     // The marker already answered the question, and `init` never overwrites it.
     assert_eq!(
-        project.directory_for(Kind::Skill),
+        project.directory_for(Kind::Skill).unwrap(),
         dir.path().join("skills")
     );
     assert!(!dir.path().join("elsewhere").exists());
@@ -673,7 +679,7 @@ fn a_marker_written_before_directories_existed_is_read_the_way_it_was_written() 
     // Today's default would point it at a directory it has never had, and it
     // would list nothing without saying why.
     assert_eq!(
-        project.directory_for(Kind::Skill),
+        project.directory_for(Kind::Skill).unwrap(),
         dir.path().join(MIND_DIR).join("skills")
     );
 }
@@ -766,7 +772,7 @@ fn a_read_with_nothing_above_sees_the_default_workspace_without_making_it() {
     assert!(workspace.config().projects.is_empty());
     assert!(workspace.loads().is_empty());
     assert_eq!(
-        workspace.own().directory_for(Kind::Skill),
+        workspace.own().directory_for(Kind::Skill).unwrap(),
         home.join(FLAYER_DIR).join("library/skills")
     );
     assert!(!home.join(FLAYER_DIR).exists());

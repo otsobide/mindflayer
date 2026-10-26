@@ -161,6 +161,7 @@ pub fn directory_for(root: &Path, kind: Kind) -> PathBuf {
     MindProject::open(root)
         .expect("an initialized mind project")
         .directory_for(kind)
+        .unwrap()
 }
 
 /// Where the workspace at `root` keeps its own of a kind, asked of the
@@ -170,6 +171,7 @@ pub fn own_directory_for(root: &Path, kind: Kind) -> PathBuf {
         .expect("an initialized flayer workspace")
         .own()
         .directory_for(kind)
+        .unwrap()
 }
 
 pub fn write_skill(root: &Path, directory: &str, contents: &str) {
