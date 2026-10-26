@@ -347,15 +347,20 @@ pub(crate) fn issue_list(issues: &[ValidationIssue]) -> String {
         .join("; ")
 }
 
-/// Lowercase letters, digits and inner hyphens: what an agent can be asked to
-/// invoke without quoting or case folding.
+/// Lowercase letters and digits, in words joined by single hyphens —
+/// `^[a-z0-9]+(-[a-z0-9]+)*$`, the Agent Skills rule for a skill's name: what
+/// an agent can be asked to invoke without quoting or case folding.
+///
+/// Split on the hyphen rather than checked character by character, because
+/// that is what makes a leading, trailing or doubled hyphen an empty word, and
+/// so wrong, without a rule of its own for each.
 fn is_kebab_case(segment: &str) -> bool {
-    !segment.is_empty()
-        && !segment.starts_with('-')
-        && !segment.ends_with('-')
-        && segment
-            .chars()
-            .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-')
+    segment.split('-').all(|word| {
+        !word.is_empty()
+            && word
+                .chars()
+                .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit())
+    })
 }
 
 /// Something that stops an artifact from being usable, or will.
@@ -380,7 +385,7 @@ impl fmt::Display for ValidationIssue {
             ValidationIssue::NameEmpty => write!(f, "the name is empty"),
             ValidationIssue::NameNotKebabCase { segment } => write!(
                 f,
-                "`{segment}` is not usable as a name: only lowercase letters, digits and inner hyphens are"
+                "`{segment}` is not usable as a name: it has to be lowercase letters and digits, joined by single hyphens"
             ),
             ValidationIssue::NameSegmentTooLong { segment, length } => write!(
                 f,

@@ -82,6 +82,29 @@ fn flags_names_hyphenated_at_the_edges() {
 }
 
 #[test]
+fn flags_a_doubled_hyphen_and_says_what_a_name_has_to_be() {
+    let issues = skill("a--b", "Fill forms", "/s/a--b").validate();
+    assert_eq!(
+        issues,
+        vec![ValidationIssue::NameNotKebabCase {
+            segment: "a--b".into()
+        }]
+    );
+    assert!(
+        issues[0].to_string().contains("joined by single hyphens"),
+        "{}",
+        issues[0]
+    );
+    // A rule's route is held to it segment by segment, the same rule.
+    assert_eq!(
+        rule("git/no--force", Some("Never")).validate(),
+        vec![ValidationIssue::NameNotKebabCase {
+            segment: "no--force".into()
+        }]
+    );
+}
+
+#[test]
 fn flags_an_empty_or_whitespace_description() {
     assert_eq!(
         skill("a", "   ", "/s/a").validate(),
