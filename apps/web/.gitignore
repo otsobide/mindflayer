@@ -1,0 +1,4 @@
+# What pnpm installs, which the lockfile pins, and what the build writes,
+# which the server embeds from here.
+node_modules/
+dist/

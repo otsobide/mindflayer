@@ -595,6 +595,21 @@ impl Ledger {
             .map_err(|source| self.failed("updating a source", source))
     }
 
+    /// Forget a source, and with it what it brought; an installation from it
+    /// keeps its `origin` but no longer points at it (see the schema's notes
+    /// on what a forgotten source takes with it). Whether there was one to
+    /// forget.
+    ///
+    /// For a gather that registered a source and then was cancelled, which
+    /// leaves the ledger as it found it: a source nothing came from would
+    /// otherwise hold on to its folder name. Its files are the caller's.
+    pub(crate) fn forget_source(&self, id: i64) -> Result<bool, LedgerError> {
+        self.connection
+            .execute("DELETE FROM sources WHERE id = ?1", [id])
+            .map(|deleted| deleted > 0)
+            .map_err(|source| self.failed("forgetting a source", source))
+    }
+
     /// Record one gathered artifact, replacing what that source held under the
     /// same name.
     ///

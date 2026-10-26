@@ -13,6 +13,7 @@ pub(crate) mod workspace;
 
 use std::path::{Path, PathBuf};
 
+use mindflayer_core::gather::Watch;
 use mindflayer_core::resolve::{self, resolve, Intent};
 use mindflayer_core::{paths, Catalog, FlayerWorkspace, MindProject, Reference};
 
@@ -33,23 +34,35 @@ use workspace::{load_command, unload_command};
 
 /// Run `mind`.
 pub fn run(cli: &Cli) -> Result<Outcome, Failure> {
+    run_watched(cli, &Watch::new())
+}
+
+/// Run `mind`, telling `watch` how a gather goes and stopping one when it is
+/// cancelled: how a front end that shows progress, or can stop what it
+/// started, runs the same line `run` does.
+///
+/// A parameter beside the parsed line rather than a field of it, because it
+/// is not something a person types: the line stays exactly what was typed.
+pub fn run_watched(cli: &Cli, watch: &Watch) -> Result<Outcome, Failure> {
     run_with(
         cli,
         &Lookup::given(cli.home.as_deref(), cli.workspace.as_deref()),
+        watch,
     )
 }
 
 /// Run `mind` with where to look for a workspace already decided: what
-/// [`run`] does once it has read that from the command line and the
+/// [`run_watched`] does once it has read that from the command line and the
 /// environment, and what the TUI does with its own, so the lines it runs look
 /// where its screen did. What `cli` says about it is not read again.
-pub(crate) fn run_with(cli: &Cli, lookup: &Lookup) -> Result<Outcome, Failure> {
+pub(crate) fn run_with(cli: &Cli, lookup: &Lookup, watch: &Watch) -> Result<Outcome, Failure> {
     let directory = working_directory(cli.directory.as_deref())?;
     match cli.command.as_ref().unwrap_or(&Command::Tui) {
         Command::Flayer { command } => run_flayer(
             command.as_ref().unwrap_or(&FlayerCommand::Tui),
             &directory,
             lookup,
+            watch,
         ),
         Command::Init { skills, rules } => {
             init_project(&directory, skills.as_deref(), rules.as_deref())
@@ -152,19 +165,31 @@ pub(crate) fn run_with(cli: &Cli, lookup: &Lookup) -> Result<Outcome, Failure> {
 
 /// Run `flayer`, which is the same as running `mind flayer`.
 pub fn run_flayer_cli(cli: &FlayerCli) -> Result<Outcome, Failure> {
+    run_flayer_cli_watched(cli, &Watch::new())
+}
+
+/// Run `flayer` with a gather's progress and cancel going through `watch`,
+/// as [`run_watched`] does for `mind`.
+pub fn run_flayer_cli_watched(cli: &FlayerCli, watch: &Watch) -> Result<Outcome, Failure> {
     run_flayer_with(
         cli,
         &Lookup::given(cli.home.as_deref(), cli.workspace.as_deref()),
+        watch,
     )
 }
 
 /// [`run_with`], for `flayer`.
-pub(crate) fn run_flayer_with(cli: &FlayerCli, lookup: &Lookup) -> Result<Outcome, Failure> {
+pub(crate) fn run_flayer_with(
+    cli: &FlayerCli,
+    lookup: &Lookup,
+    watch: &Watch,
+) -> Result<Outcome, Failure> {
     let directory = working_directory(cli.directory.as_deref())?;
     run_flayer(
         cli.command.as_ref().unwrap_or(&FlayerCommand::Tui),
         &directory,
         lookup,
+        watch,
     )
 }
 
@@ -177,6 +202,7 @@ fn run_flayer(
     command: &FlayerCommand,
     directory: &Path,
     lookup: &Lookup,
+    watch: &Watch,
 ) -> Result<Outcome, Failure> {
     match command {
         FlayerCommand::Init { skills, rules } => {
@@ -261,7 +287,7 @@ fn run_flayer(
             reading_workspace(directory, lookup, |workspace| Ok(scan_workspace(workspace)))
         }
 
-        FlayerCommand::Gather(command) => run_gather(command, directory, lookup),
+        FlayerCommand::Gather(command) => run_gather(command, directory, lookup, watch),
 
         FlayerCommand::Install {
             project,

@@ -322,6 +322,11 @@ https://github.com/acme/skills at a1b2c3d
 The repository's `skills` folder is what gets harvested; `--path agents` takes
 another one, and `--ref v2` takes a branch or a tag instead of the default.
 
+With stderr on a terminal it says what it is doing while it does it
+(`connecting`, `receiving objects 120/340`, `reading folders 3/40`) on one line
+there, which it wipes before the report, so the report reads as above. With
+stderr piped or redirected, it says nothing until the report.
+
 Gathering fills the shelf and stops there. **Nothing is written into a mind
 project**: which of these a project should carry is a separate decision, and a
 `git clone` that quietly edited your repositories would be the wrong kind of
@@ -683,7 +688,7 @@ Every key runs a command you could have typed, through the same parser:
 | `l` | link a project | `flayer link <path>` |
 | `u` | unlink the project | `flayer unlink <path>` |
 | `v` | validate everything | `flayer validate` |
-| `g` | gather from a git repository | `flayer gather git <url>` |
+| `g` | gather from a git repository, showing how far it has got; `esc` stops it, until it starts placing | `flayer gather git <url>` |
 | `L` | load another workspace's own skills; enter on a loaded one unloads it | `flayer load <path>`, `flayer unload <path>` |
 | `s` | what is on the shelf | `flayer gather list` |
 | `i` | install from the workspace's own, a loaded workspace, or the shelf | `flayer install` |
@@ -974,6 +979,9 @@ apps/server  mindflayer-server — the local server behind the web panel, still
                                  unused by the binaries. Transport only: it
                                  moves JSON between the browser and a front
                                  end, and holds no rules.
+apps/web     mindflayer-web    — the web panel the server embeds: Vue and
+                                 Nuxt UI, built with Vite. It asks through
+                                 the server and draws; no rules here either.
 ```
 
 See [docs/architecture.md](docs/architecture.md) for why the split is where it
@@ -986,7 +994,7 @@ A root `Makefile` delegates to each app, and CI invokes the same targets.
 `apps/<app>/Makefile`:
 
 ```bash
-make test              # every suite
+make test              # every Rust suite; the panel's is make web/test
 make build             # debug build of every crate
 make fmt               # cargo fmt --all
 make lint              # clippy across the workspace
@@ -1036,6 +1044,64 @@ make dev/link BINDIR=.          # `./mind`, `./flayer` and `./mf`, right here
 The repository root is a fine answer if you would rather not put a
 work-in-progress binary on your PATH at all: `.gitignore` already covers all
 three names.
+
+## Developing the panel
+
+`apps/web` is the web panel, in Vue 3.5 and Nuxt UI 4 on Vite, written in
+TypeScript. So far it is the frame the views will fill: a sidebar, a header
+and an empty overview, dark unless you switch it to light, which the next
+launch remembers. It needs Node 24 (`apps/web/.node-version`) and pnpm, at
+the version `package.json` pins in `packageManager`, which `corepack enable`
+provides. Without corepack, name any other way to run it in `PNPM`:
+
+```bash
+make web/test          # vitest
+make web/lint          # ESLint, its style included; make web/fmt fixes that
+make web/build         # check the types, then build apps/web/dist
+make web/types         # check the types alone (vue-tsc)
+make web/clean         # remove dist/ and the tools' caches
+
+make web/test PNPM='npx --yes pnpm@12.15.0'
+```
+
+Every target that runs a tool first installs what `pnpm-lock.yaml` pins,
+when `node_modules` is missing or older than `package.json`, the lockfile or
+`pnpm-workspace.yaml`. `make test` leaves the panel out for now, so the Rust
+suites still need no Node; the panel joins it once CI installs Node
+([#71](https://github.com/otsobide/mindflayer/issues/71)). Its tests are
+`apps/web/tests/<area>.test.ts`.
+
+`make web/build` writes `apps/web/dist`, which the server embeds as it
+compiles. A server compiled before any build answers every page with one
+saying to run it, and goes on doing so after the build until
+`mindflayer-server` compiles again: which is built first is an [open
+question](docs/architecture.md#open-questions) until
+[#68](https://github.com/otsobide/mindflayer/issues/68) settles it.
+`make web/e2e` has no browser suite to run yet, and says so
+([#75](https://github.com/otsobide/mindflayer/issues/75)).
+
+`make web/dev` serves the panel on `http://127.0.0.1:5173` and reloads it as
+you edit. It passes `/api` on to `flayer ui --dev --port 7878`, the command
+[#68](https://github.com/otsobide/mindflayer/issues/68) adds, and the launch
+link too: open the link that command prints with its port changed to 5173,
+and the token is traded for its cookie where the panel runs.
+
+Three rules keep the panel working under the server's content security
+policy, which lets nothing in from another host and nothing inline:
+
+- **The transport is the only way out.** Views ask `useTransport()` and
+  never `fetch`: ESLint refuses `fetch`, `EventSource`, `WebSocket` and
+  `XMLHttpRequest` everywhere but `src/api/http.ts`.
+- **Nothing comes from another host.** The fonts are Geist and Geist Mono
+  from Fontsource, the icons Lucide's, bundled when a component names them
+  as `i-lucide-<name>`. A test builds the panel and fails on any URL that
+  names another host.
+- **Nothing inline.** No `<script>` or `<style>` written into the page, which
+  is why the palette is declared in `src/assets/css/main.css` (from the
+  mapping in `src/theme.ts`) rather than injected, as Nuxt UI would.
+
+A test also checks that every package installed carries a licence
+GPL-3.0-only can take in.
 
 ## License
 
