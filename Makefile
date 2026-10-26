@@ -43,8 +43,25 @@ fmt/check: ## Fail if any Rust code is not formatted
 	cargo fmt --all --check
 
 .PHONY: lint
-lint: ## Run clippy across the workspace
+lint: lint/em-dash ## Run clippy across the workspace, once no em dash is found
 	cargo clippy --workspace --all-targets
+
+# The em dash reads as machine-written, so `lint` keeps it out of every
+# tracked file: docs, comments, messages and test expectations alike, the
+# panel's included, which is why this is not a clippy lint. Tracked files
+# only, because an untracked folder (an agent's worktree, a scratch clone)
+# is not the repository's text. The character is spelled as its UTF-8 bytes
+# so this file does not hold one. `git grep` exits 0 on a match and 1 on
+# none; anything else is git failing, which must not pass for a clean tree.
+.PHONY: lint/em-dash
+lint/em-dash: ## Fail if a tracked file holds an em dash
+	@git grep -n -I -F "$$(printf '\342\200\224')"; status=$$?; \
+	if [ $$status -eq 0 ]; then \
+		echo "error: an em dash above; write a comma, a colon, parentheses or a new sentence instead" >&2; \
+		exit 1; \
+	elif [ $$status -ne 1 ]; then \
+		exit $$status; \
+	fi
 
 .PHONY: run
 run: ## Run the CLI (pass args via ARGS="list")
