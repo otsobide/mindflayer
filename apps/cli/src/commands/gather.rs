@@ -5,6 +5,7 @@ use std::fmt::Write as _;
 use std::path::Path;
 
 use mindflayer_core::gather::{self, Report, Request, Scrub};
+use mindflayer_core::url::redacted;
 use mindflayer_core::Kind;
 
 use super::workspace_here;
@@ -139,7 +140,12 @@ pub(crate) fn scrubbed(scrub: &Scrub) -> Scrubbed {
 
 /// What one gather did, in the order it is worth reading: the source, then
 /// every artifact and what happened to it, then the count.
+///
+/// The source is named without credentials, as everywhere a URL is shown.
+/// A gather that got this far was given none, since core refuses them, so
+/// this costs nothing today and still holds if that ever changes.
 fn gathered(url: &str, report: &Report) -> Outcome {
+    let url = redacted(url);
     let mut stdout = String::new();
     let at = report
         .revision

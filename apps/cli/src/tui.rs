@@ -22,6 +22,7 @@ use std::time::Duration;
 use std::error::Error as _;
 
 use clap::Parser;
+use mindflayer_core::url::redacted;
 use mindflayer_core::workspace::Member as Registered;
 use mindflayer_core::{
     lifecycle, paths, scan, template, Catalog, FlayerWorkspace, Kind, MindProject, WorkspaceError,
@@ -230,7 +231,11 @@ fn run_all(lines: &[Vec<String>], base: &Path, home: Option<&Path>) -> Vec<Done>
 /// passed along rather than looked up again, so no command it runs can reach
 /// a different one.
 pub fn execute(words: &[String], base: &Path, home: Option<&Path>) -> Done {
-    let command = state::shell(words);
+    // As it is shown and kept for the transcript: the words themselves run as
+    // typed, so a URL with a token in it is refused rather than quietly
+    // fetched without one, but the line printed when the TUI closes must not
+    // repeat the token.
+    let command = redacted(&state::shell(words)).into_owned();
     let from = |directory: Option<PathBuf>| {
         Some(directory.map_or_else(|| base.to_path_buf(), |directory| base.join(directory)))
     };

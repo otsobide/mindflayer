@@ -467,6 +467,25 @@ fn gathering_in_the_tui_is_flayer_gather_git() {
 }
 
 #[test]
+fn a_gather_refused_for_a_token_in_its_url_leaves_the_token_out_of_the_transcript() {
+    let dir = TempDir::new().unwrap();
+    flayer(dir.path(), &["init"]).unwrap();
+    let mut app = tui_in(dir.path());
+
+    press_key(&mut app, KeyCode::Char('g'));
+    type_text(&mut app, "https://me:ghp_t0ken@example.com/acme/skills");
+    press_and_run(&mut app, KeyCode::Enter);
+
+    let transcript = app.transcript();
+    assert!(
+        transcript.starts_with("$ flayer gather git https://example.com/acme/skills\n"),
+        "{transcript}"
+    );
+    assert!(transcript.contains("is refused"), "{transcript}");
+    assert!(!transcript.contains("ghp_t0ken"), "{transcript}");
+}
+
+#[test]
 fn the_install_screen_opens_inside_the_tui_and_applies_from_there() {
     let (dir, _workspace, _ledger) = shelved(&["collapse"], &["deploy"]);
     let mut app = tui_in(dir.path());

@@ -310,7 +310,11 @@ fn left_by_an_older_build(dir: &Path, url: &str) {
 /// database, byte for byte, and every text file in its cache.
 fn kept_by(dir: &Path) -> String {
     fn text_under(root: &Path, into: &mut String) {
-        for entry in fs::read_dir(root).unwrap() {
+        // No cache yet is nothing kept in one.
+        let Ok(entries) = fs::read_dir(root) else {
+            return;
+        };
+        for entry in entries {
             let path = entry.unwrap().path();
             if path.is_dir() {
                 text_under(&path, into);
@@ -378,4 +382,35 @@ fn a_token_an_older_build_stored_is_never_listed_and_a_command_that_writes_takes
     // Said once: there is nothing left to say the second time.
     let again = flayer(dir.path(), &["gather", "git", &second]).unwrap();
     assert!(again.stderr.is_empty(), "{:?}", again.stderr);
+}
+
+#[test]
+fn a_url_with_a_token_in_it_is_refused_and_nothing_kept_or_said_repeats_the_token() {
+    let dir = TempDir::new().unwrap();
+    flayer(dir.path(), &["init"]).unwrap();
+
+    let failure = flayer(
+        dir.path(),
+        &[
+            "gather",
+            "git",
+            "https://me:ghp_t0ken@example.com/acme/skills",
+        ],
+    )
+    .unwrap_err();
+
+    assert_eq!(
+        failure.error.to_string(),
+        "https://example.com/acme/skills: a password or token in the URL is refused, because \
+         gathering stores and shows the URL: gather it without one, and configure a git \
+         credential helper that has it"
+    );
+    assert!(failure.warnings.is_empty(), "{:?}", failure.warnings);
+    assert!(!kept_by(dir.path()).contains("ghp_t0ken"));
+    let listed = flayer(dir.path(), &["gather", "list"]).unwrap();
+    assert!(
+        listed.stdout.starts_with("nothing gathered yet"),
+        "{}",
+        listed.stdout
+    );
 }
