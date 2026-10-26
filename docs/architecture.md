@@ -529,7 +529,12 @@ happen.
   stays where it is and is said, and the marker's line moves to the library
   all the same, where the workspace's own of that kind start empty. The root
   counts unlinked because the agents reading `~/skills` do not ask whether
-  the workspace was told about the project.
+  the workspace was told about the project. `own_kinds` draws that line
+  elsewhere, counting what an unlinked root project shares as the
+  workspace's own, so such a leftover was listed and offered by the
+  workspace and stops being either; the plan marks it (`Left::counted`) and
+  its line says so, since an install of it keeps a record no offer matches
+  any more (an [open question](#open-questions)).
 - **Refused as a whole.** Nothing moves while the plan has any reason not to,
   and every reason is said at once: something already where an artifact would
   go; a copy of the marker an earlier migration kept; a link whose target is
@@ -3055,6 +3060,14 @@ leak into the lifecycle code. Unblocks #33, #45, #62, #93, #94 and #95.
   nothing for such a workspace. It could look for those folders wherever a
   marker names none, leaving them to a project at the root that keeps a kind
   there.
+- **An unlinked project at the root.** `own_kinds` counts what a project at
+  the workspace's root shares with it as the workspace's own unless the
+  workspace links that project; a migration leaves it to the project linked
+  or not, so the workspace stops offering it and an install of it keeps a
+  record nothing offers. Counting the root as a holder in `own_kinds` too
+  would make the two agree, at the price of a home's skills dropping out of
+  `flayer list` and the install screen until the home is linked; moving them
+  would take a project's artifacts, which a migration never does.
 - **Links inside a moved skill.** A skill holding a link aimed by a relative
   route out of itself, `scripts` to `../../shared/scripts` say, points
   elsewhere once a migration has moved the skill to another depth. The plan

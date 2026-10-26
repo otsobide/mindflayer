@@ -1135,7 +1135,7 @@ $ flayer migrate --library --yes
 nothing to move: the workspace keeps its own in its library already
 ```
 
-What you installed from the workspace into a project stays installed, and
+What you installed into a project from what moved stays installed, and
 current: an install records that it came from `workspace`, not from which
 folder, so `flayer install` still finds the project's copy the same as the
 skill it came from.
@@ -1159,7 +1159,10 @@ purpose.
 A project's artifacts are never moved. When your home is itself a project
 keeping its skills in `~/skills` too, those are the project's: they stay where
 they are, the command says so, and the workspace's own skills start empty in
-its library. A move that fails puts back what had moved, and leaves
+its library. If you never linked your home, the workspace counted those skills
+as its own until then, and the line says it no longer does: one you installed
+from there stays installed and recorded, so `flayer uninstall` still takes it
+out, but nothing offers it to `flayer install` any more. A move that fails puts back what had moved, and leaves
 `flayer.toml` as it was. To undo a migration that worked, put `flayer.toml.v2`
 in place of `flayer.toml` and move the artifacts back.
 
