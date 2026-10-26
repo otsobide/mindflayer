@@ -605,6 +605,11 @@ pub fn uninstall(
 /// screen leave to overwrite and delete, so it must not outlive the copy it
 /// was about — whatever somebody writes there next would inherit it.
 ///
+/// Only the changes in [`crate::lifecycle`] call it, each when its change
+/// calls for it. Public, it would let a front end drop a record on a rule of
+/// its own. Keeping it here cannot make a front end drop one; changing things
+/// through [`crate::lifecycle`] does.
+///
 /// `workspace` is the one the front end resolved for the command, given
 /// rather than found by walking up from the project: a walk misses every
 /// workspace that links the project from somewhere that is not above it, and
@@ -613,9 +618,9 @@ pub fn uninstall(
 /// which workspaces link it.
 ///
 /// The ledger is opened to write, as by every command that writes to it, so
-/// what that scrubbed comes back too: `add`, `edit`, `rename` and `remove`
-/// reach the ledger only through here.
-pub fn disown(
+/// what that scrubbed comes back too, for the change to hand on: the changes
+/// in [`crate::lifecycle`] reach the ledger only through here.
+pub(crate) fn disown(
     workspace: &FlayerWorkspace,
     project: &MindProject,
     kind: Kind,
@@ -642,7 +647,7 @@ pub fn disown(
 
 /// What [`disown`] did.
 #[derive(Debug, Default)]
-pub struct Disowned {
+pub(crate) struct Disowned {
     /// Whether there was a record, which is now gone.
     pub dropped: bool,
     /// What opening the ledger to write took out of it, for the front end to

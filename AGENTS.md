@@ -43,9 +43,9 @@ Two crates in one Cargo workspace, each an app under `apps/` with its own
 `Makefile`:
 
 - `apps/core` (`mindflayer-core`): the engine. Projects, workspaces, kinds,
-  the catalog, gathering (`gix`), the SQLite ledger, installing, creating and
-  changing artifacts. Its only I/O is files, and it never reads the
-  environment.
+  the catalog, gathering (`gix`), the SQLite ledger, installing, keeping
+  installs out of git (`exclude`), creating and changing artifacts. Its only
+  I/O is files, and it never reads the environment.
 - `apps/cli` (`mindflayer-cli`): the binaries `mind` (`src/main.rs`) and
   `flayer` (`src/bin/flayer.rs`), and the TUI. `src/lib.rs` only re-exports
   the public API. The parsers are in `src/parse.rs`. `src/commands.rs`
@@ -85,10 +85,21 @@ These are easy to break from a single file without noticing.
   - Creation uses `create_new` or `create_dir`.
   - `rename` rewrites only the `name:` line (`frontmatter::with_key`).
   - `remove` is a dry run without `--yes`.
+  - A file somebody else owns is edited only inside Mindflayer's marked
+    blocks, every byte outside them kept, and a malformed block is refused,
+    not repaired. The blocks: `# mindflayer:begin`/`# mindflayer:end` in
+    `$GIT_COMMON_DIR/info/exclude` (`exclude`), where an edit rewrites only its
+    own project's `# project <key>` group. `.gitignore` and
+    `core.excludesFile` are never edited.
 - **Mindflayer only manages what it installed.** The ledger's record of an
   install is what allows overwriting and deleting. An unrecorded artifact is
-  `Standing::Foreign` and is never touched. `edit`, `rename` and `remove`
-  drop the record (`install::disown`).
+  `Standing::Foreign` and is never touched. Core's lifecycle changes
+  (`lifecycle::add`, `finish_edit`, `rename` and `remove`) drop any record
+  they would leave behind and return what they did (`lifecycle::Record`, and
+  the `scrub` that opening the ledger ran), which the CLI only renders. `install::disown` is private to core, so no
+  front end drops a record on its own. A front end adds through
+  `lifecycle::add`, never `create` or `create_from`, which leave a stale
+  record in place.
 - **Strict when writing, lenient when reading.** A skill's front matter is
   the Agent Skills format. `mind add`, `rename` and `install` refuse a name or
   description that breaks its rules, all through `artifact::strict_issues`
@@ -135,10 +146,10 @@ These are easy to break from a single file without noticing.
   `$MINDFLAYER_HOME`, then the user's home; empty means none. Only commands
   that write may create `~/.mindflayer` (`locate_or_default`). Reads use
   `default_at`, which never creates it.
-- **So does the workspace a change consults.** `install::disown` and template
-  lookup take it as a parameter, the one the command resolved, and core never
-  walks up from the project to find one: a walk misses a workspace that links
-  the project from beside it.
+- **So does the workspace a change consults.** The lifecycle changes and
+  template lookup take it as a parameter, the one the command resolved, and
+  core never walks up from the project to find one: a walk misses a workspace
+  that links the project from beside it.
 - **So do the agent homes.** `homes::agent_homes` takes each from its option
   (`--claude-config-dir`, `--codex-home`, `--opencode-config-dir`,
   `--agents-dir`), then `$CLAUDE_CONFIG_DIR`, `$CODEX_HOME` or

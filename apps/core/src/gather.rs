@@ -220,6 +220,27 @@ impl Scrub {
             && self.failures.is_empty()
             && self.leftovers.is_empty()
     }
+
+    /// Add what a later scrub took out, for a change that opened the ledger
+    /// to write more than once ([`crate::lifecycle::rename`]).
+    ///
+    /// A clone that could not be rewritten keeps its source's URL, so every
+    /// scrub tries it again and fails again: one thing to tell, as two
+    /// branches of one URL are one credential.
+    pub(crate) fn absorb(&mut self, later: Scrub) {
+        for source in later.sources {
+            if !self.sources.iter().any(|seen| seen.url == source.url) {
+                self.sources.push(source);
+            }
+        }
+        self.actions += later.actions;
+        for failure in later.failures {
+            if !self.failures.iter().any(|seen| seen.url == failure.url) {
+                self.failures.push(failure);
+            }
+        }
+        self.leftovers.extend(later.leftovers);
+    }
 }
 
 /// Take out the credentials a Mindflayer from before they were refused
