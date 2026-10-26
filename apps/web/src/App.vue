@@ -1,9 +1,10 @@
 <script setup lang="ts">
 import AppSidebar from './components/AppSidebar.vue'
 
-// The sidebar's size and whether it is collapsed are kept in localStorage,
-// not in the cookie Nuxt UI keeps them in by default: outside Nuxt, that
-// cookie is a stub that keeps nothing.
+// The sidebar's size and whether it is collapsed go to vueuse's useStorage
+// (`storage="local"`), which src/preferences.ts points at a cookie of the
+// panel's own, so they outlive the launch. Nuxt UI's default, `"cookie"`, is
+// a stub outside Nuxt that keeps nothing.
 </script>
 
 <template>
@@ -11,7 +12,6 @@ import AppSidebar from './components/AppSidebar.vue'
     <UDashboardGroup
       unit="rem"
       storage="local"
-      storage-key="mindflayer-panel"
     >
       <AppSidebar />
       <RouterView />

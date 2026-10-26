@@ -6,6 +6,7 @@ import { VueQueryPlugin } from '@tanstack/vue-query'
 import ui from '@nuxt/ui/vue-plugin'
 import { transportKey, type Transport } from './api/transport'
 import { installColorMode } from './color-mode'
+import { installPreferences } from './preferences'
 import { createQueryClient } from './query'
 
 export interface PanelOptions {
@@ -30,7 +31,9 @@ export function createPanel({ transport, history = createWebHistory() }: PanelOp
   return {
     router,
     install(app) {
-      // Before Nuxt UI, whose plugin starts watching the colour mode.
+      // Before Nuxt UI, whose plugin starts watching the colour mode, and
+      // the colour mode before it, so that both keep it in the cookie.
+      installPreferences()
       installColorMode()
       app.provide(transportKey, transport)
       app.use(router)

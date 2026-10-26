@@ -26,6 +26,36 @@ function recording() {
   return { calls, transport }
 }
 
+/** Where a launch serves the panel; each takes a port of its own. */
+const LAUNCH = 'http://127.0.0.1:41001/'
+const NEXT_LAUNCH = 'http://127.0.0.1:41002/'
+
+/**
+ * Open the page at another address, as the next `flayer ui` would. A browser
+ * keeps localStorage per origin, so a new port opens on an empty one; happy-dom
+ * keeps one for every address, so it is emptied here.
+ */
+function openAt(url: string) {
+  (window as unknown as { happyDOM: { setURL(url: string): void } }).happyDOM.setURL(url)
+  localStorage.clear()
+}
+
+/** The value of a cookie the page can read, or undefined. */
+function cookie(name: string): string | undefined {
+  const pair = document.cookie.split(/;\s*/).find(each => each.startsWith(`${name}=`))
+  return pair === undefined ? undefined : decodeURIComponent(pair.slice(name.length + 1))
+}
+
+/** Forget every choice this browser made on 127.0.0.1. */
+function forgetChoices() {
+  for (const pair of document.cookie.split(/;\s*/)) {
+    const name = pair.split('=')[0]
+    if (name) {
+      document.cookie = `${name}=; Path=/; Expires=Thu, 01 Jan 1970 00:00:00 GMT`
+    }
+  }
+}
+
 let wrapper: VueWrapper | undefined
 let styles: Element[]
 let watching: MutationObserver
@@ -39,7 +69,8 @@ async function render(path: string, transport: Transport = recording().transport
 }
 
 beforeEach(() => {
-  localStorage.clear()
+  openAt(LAUNCH)
+  forgetChoices()
   document.documentElement.className = 'dark'
   // Every <style> element anything adds, for as long as the test runs.
   styles = []
@@ -55,11 +86,15 @@ beforeEach(() => {
   watching.observe(document, { childList: true, subtree: true })
 })
 
-afterEach(() => {
-  watching.disconnect()
+function close() {
   wrapper?.unmount()
   wrapper = undefined
   document.body.innerHTML = ''
+}
+
+afterEach(() => {
+  watching.disconnect()
+  close()
 })
 
 describe('the shell', () => {
@@ -105,7 +140,20 @@ describe('the shell', () => {
     await page.get('[data-testid="overview"] button[aria-label="Collapse sidebar"]').trigger('click')
     await flushPromises()
 
-    expect(JSON.parse(localStorage.getItem('mindflayer-panel-sidebar-default') ?? '{}')).toMatchObject({ collapsed: true })
+    expect(JSON.parse(cookie('mindflayer-dashboard-sidebar-default') ?? '{}')).toMatchObject({ collapsed: true })
+  })
+
+  it('opens the next launch, on a port of its own, with the sidebar as it was left', async () => {
+    const page = await render('/')
+    await page.get('[data-testid="overview"] button[aria-label="Collapse sidebar"]').trigger('click')
+    await flushPromises()
+    close()
+
+    openAt(NEXT_LAUNCH)
+    const next = await render('/')
+
+    expect(useShell().sidebarCollapsed).toBe(true)
+    expect(next.get('[data-testid="sidebar"]').text()).not.toContain('Mindflayer')
   })
 
   it('adds no style element, which the CSP would refuse', async () => {
@@ -143,11 +191,11 @@ describe('the colour mode', () => {
     await render('/')
 
     expect(document.documentElement.classList.contains('dark')).toBe(true)
-    expect(localStorage.getItem('vueuse-color-scheme')).toBe('dark')
+    expect(cookie('mindflayer-vueuse-color-scheme')).toBe('dark')
   })
 
   it('keeps the light mode this browser chose', async () => {
-    localStorage.setItem('vueuse-color-scheme', 'light')
+    document.cookie = 'mindflayer-vueuse-color-scheme=light; Path=/'
 
     await render('/')
 
@@ -163,7 +211,30 @@ describe('the colour mode', () => {
 
     expect(document.documentElement.classList.contains('light')).toBe(true)
     expect(document.documentElement.classList.contains('dark')).toBe(false)
-    expect(localStorage.getItem('vueuse-color-scheme')).toBe('light')
+    expect(cookie('mindflayer-vueuse-color-scheme')).toBe('light')
     expect(styles).toEqual([])
+  })
+
+  it('opens the next launch, on a port of its own, in the mode chosen in the last', async () => {
+    const page = await render('/')
+    await page.get('[data-testid="overview"] button[aria-label="Switch to light mode"]').trigger('click')
+    await flushPromises()
+    close()
+    document.documentElement.className = 'dark'
+
+    openAt(NEXT_LAUNCH)
+    await render('/')
+
+    expect(document.documentElement.classList.contains('light')).toBe(true)
+    expect(document.documentElement.classList.contains('dark')).toBe(false)
+  })
+
+  it('keeps no choice in localStorage, which the next port would not see', async () => {
+    const page = await render('/')
+    await page.get('[data-testid="overview"] button[aria-label="Switch to light mode"]').trigger('click')
+    await page.get('[data-testid="overview"] button[aria-label="Collapse sidebar"]').trigger('click')
+    await flushPromises()
+
+    expect(Object.keys(localStorage)).toEqual([])
   })
 })
