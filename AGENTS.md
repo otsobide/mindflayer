@@ -362,6 +362,8 @@ These are easy to break from a single file without noticing.
   which starts in `docs/agents.md`. Either way the compiler's exhaustive
   matches are the checklist: the target table's `standard` matches every kind
   and agent with no wildcard, so neither compiles until it says where it goes.
+  "Adding an agent" also lists what no match covers: `Agent::ALL`, and an
+  agent home's field, option and place in `common::PINNED` and `CLEARED`.
 
 ## Tests
 

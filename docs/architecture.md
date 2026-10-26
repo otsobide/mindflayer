@@ -2290,7 +2290,18 @@ Record what it reads first, in docs/agents.md, verified or docs-only with a
 fallback. Then a variant on `Agent` and its name, and its arm for each kind in
 the table's `standard`, which matches every pair with no wildcard: neither a
 new agent nor a new kind compiles until somebody has said where it goes. The
-compiler lists the rest, since every match on `Agent` is exhaustive.
+compiler lists every match on `Agent`, since each is exhaustive, but not what
+is not a match:
+
+- **`Agent::ALL`**, an array. A variant left out of it still compiles, parses
+  as no agent, and gets no entry in the standard table, which is built from
+  it, whatever its arm in `standard` says.
+- **Its home, if it keeps a folder of its own for every project.** A field on
+  `AgentHomes` and its folder in `AgentHomes::defaults_under`, its option in
+  `AgentHomeOptions` and its variable in `homes::agent_homes`, and both in the
+  tests' `common::PINNED` and `common::CLEARED`, or a test could read the
+  developer's real folder. AGENTS.md's "So do the agent homes" and
+  [the agents' own folders](#the-agents-own-folders) list them too.
 
 ## The agents' own folders
 
