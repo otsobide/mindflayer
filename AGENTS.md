@@ -92,6 +92,12 @@ These are easy to break from a single file without noticing.
   - An installed name must be one folder name (`install::is_folder_name`).
   - Symlinks are followed only inside the source (`copy::tree`'s `within`).
   - A project's artifact directories must stay inside the project.
+- **A gather never prompts for a credential.** Every connection a clone opens
+  gets the callback in `gather/credentials.rs`, which runs the git-config
+  credential helpers with `gix`'s prompt and askpass turned off. A credential
+  none of them has is `GitError::Credentials`, never a question on a terminal
+  the TUI owns or a server lacks. Anything new that connects to a remote takes
+  the same callback.
 - **Formats are versioned.** Each marker carries its own `version`
   (`MIND_FORMAT_VERSION` for `mind.toml`, `FLAYER_FORMAT_VERSION` for
   `flayer.toml`, so bumping one never makes older builds refuse the other; see
