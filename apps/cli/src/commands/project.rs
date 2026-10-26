@@ -15,11 +15,43 @@ use super::{all_or_nothing, targets, workspace_here};
 use crate::render::{as_stored, printable, table};
 use crate::{CliError, Failure, Outcome};
 
+/// `mind init`: the directory made a mind project.
+pub(crate) fn init_project(
+    directory: &Path,
+    skills: Option<&Path>,
+    rules: Option<&Path>,
+) -> Result<Outcome, Failure> {
+    let directories = asked_directories(skills, rules);
+    let (project, outcome) = MindProject::init_with(directory, &directories)?;
+    Ok(Outcome::plain(initialized(
+        "mind project",
+        project.name(),
+        &project.mind_dir(),
+        outcome,
+    )))
+}
+
+/// `flayer init`: the directory made a flayer workspace.
+pub(crate) fn init_workspace(
+    directory: &Path,
+    skills: Option<&Path>,
+    rules: Option<&Path>,
+) -> Result<Outcome, Failure> {
+    let directories = asked_directories(skills, rules);
+    let (workspace, outcome) = FlayerWorkspace::init_with(directory, &directories)?;
+    Ok(Outcome::plain(initialized(
+        "flayer workspace",
+        workspace.name(),
+        &workspace.flayer_dir(),
+        outcome,
+    )))
+}
+
 /// What `init` was asked to put where, at either level.
 ///
 /// Only what was asked for is set. A kind nobody mentioned is left to the
 /// default rather than pinned to it here, so the default lives in one place.
-pub(crate) fn asked_directories(skills: Option<&Path>, rules: Option<&Path>) -> Directories {
+fn asked_directories(skills: Option<&Path>, rules: Option<&Path>) -> Directories {
     let mut directories = Directories::default();
     if let Some(skills) = skills {
         directories = directories.with(Kind::Skill, skills);
@@ -31,12 +63,7 @@ pub(crate) fn asked_directories(skills: Option<&Path>, rules: Option<&Path>) -> 
 }
 
 /// What `init` says it did, at either level.
-pub(crate) fn initialized(
-    kind: &str,
-    name: &str,
-    marker: &Path,
-    outcome: Initialization,
-) -> String {
+fn initialized(kind: &str, name: &str, marker: &Path, outcome: Initialization) -> String {
     let marker = marker.display();
     match outcome {
         Initialization::Created => format!("initialized {kind} `{name}` in {marker}\n"),

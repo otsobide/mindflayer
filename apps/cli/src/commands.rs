@@ -21,7 +21,7 @@ use artifact::{add_to, edit_in, remove_from, rename_in, templates_of};
 use gather::run_gather;
 use install::{install_named, uninstall_named};
 use project::{
-    asked_directories, initialized, link_projects, linked, scanned, unlink_projects, unlinked,
+    init_project, init_workspace, link_projects, linked, scanned, unlink_projects, unlinked,
 };
 use read::{
     everywhere, list, list_workspace, one_project, show, validate, wanted, Level, Selector,
@@ -40,14 +40,7 @@ pub fn run(cli: &Cli) -> Result<Outcome, Failure> {
             home,
         ),
         Command::Init { skills, rules } => {
-            let directories = asked_directories(skills.as_deref(), rules.as_deref());
-            let (project, outcome) = MindProject::init_with(&directory, &directories)?;
-            Ok(Outcome::plain(initialized(
-                "mind project",
-                project.name(),
-                &project.mind_dir(),
-                outcome,
-            )))
+            init_project(&directory, skills.as_deref(), rules.as_deref())
         }
         Command::Add {
             kind,
@@ -162,14 +155,7 @@ fn run_flayer(
 ) -> Result<Outcome, Failure> {
     match command {
         FlayerCommand::Init { skills, rules } => {
-            let directories = asked_directories(skills.as_deref(), rules.as_deref());
-            let (workspace, outcome) = FlayerWorkspace::init_with(directory, &directories)?;
-            Ok(Outcome::plain(initialized(
-                "flayer workspace",
-                workspace.name(),
-                &workspace.flayer_dir(),
-                outcome,
-            )))
+            init_workspace(directory, skills.as_deref(), rules.as_deref())
         }
 
         FlayerCommand::Add {
