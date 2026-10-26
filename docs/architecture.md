@@ -582,10 +582,10 @@ it: a token on the command line is already where `ps` and the shell history
 show it, and refusing is what points at a git credential helper, which keeps
 it off the command line altogether, as the front-end provider of
 [D-16](#d-16-credentials-come-from-the-front-end-never-from-a-prompt) will.
-Behind that refusal the rest holds whoever is writing. The ledger redacts
-every URL on the way in and again on the way out, so nothing it hands back
-carries a credential, scrubbed yet or not. Every `GitError` redacts the URL
-and what `gix` said. A clone is scrubbed as soon as it is made
+Behind that refusal the rest holds whichever caller is writing. The ledger
+redacts every URL on the way in and again on the way out, so nothing it hands
+back carries a credential, scrubbed yet or not. Every `GitError` redacts the
+URL and what `gix` said. A clone is scrubbed as soon as it is made
 (`git::scrub`): `gix` writes the URL into the remote's entry in `.git/config`
 and into every reflog as `clone: from <url>`, and those files are rewritten
 through the same function. A clone a gather makes now has nothing to take out,
@@ -656,7 +656,9 @@ failures too — a log of only what worked cannot answer the question anybody
 opens it with. Timestamps are Unix seconds, which needs no date library and
 which SQLite renders with `datetime(at, 'unixepoch')`.
 
-No URL in it carries a credential, whoever wrote it
+No URL this build writes into it, or reads back out of it, carries a
+credential. One an older build stored stays in the file until the next command
+that writes scrubs it, and an older build can store one again after that
 ([A URL is kept without its credentials](#a-url-is-kept-without-its-credentials)).
 
 A source's shelf folder is stored rather than derived: two URLs can reduce to

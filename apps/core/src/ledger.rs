@@ -11,10 +11,11 @@
 //! Nothing here decides *what* is worth gathering. It records what
 //! [`crate::gather`] did.
 //!
-//! Nor does it keep a credential. Every URL is [`redacted`] on the way in,
-//! whoever is writing, and again on the way out, for a row a Mindflayer from
-//! before the redaction wrote: the ledger is the one place everything stored
-//! passes through, so it is where the guarantee is cheapest to keep.
+//! Nor does it write a credential. Every URL is [`redacted`] on the way in,
+//! whichever caller is writing, and again on the way out, for a row a
+//! Mindflayer from before the redaction wrote, which stays in the file until
+//! a command that writes scrubs it: the ledger is the one place everything
+//! stored passes through, so it is where the guarantee is cheapest to keep.
 
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};

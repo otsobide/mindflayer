@@ -392,7 +392,9 @@ note: 2 action log entries: the user names, passwords or tokens an older Mindfla
 .mindflayer/
   flayer.toml     the projects it manages, and the workspaces it loads
   mindflayer.db   what was gathered and from where, what was installed where,
-                  and every action taken, with no credential in any URL
+                  and every action taken; a URL goes in without credentials,
+                  and one an older Mindflayer stored is taken out by the next
+                  command that writes
   cache/<source>/ the clone, kept so a gather can be looked at afterwards
   skills/<source>/<name>/SKILL.md
   templates/      templates for every project it manages, if you add any
