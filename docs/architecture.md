@@ -560,7 +560,8 @@ stderr, and wipes it before the report. Piped or captured it draws nothing,
 so what it prints there is what it always printed. The binaries run every
 line with that line's watch (`run_watched`, `run_flayer_cli_watched`), and
 `run` and `run_flayer_cli`, which the tests call, with one nobody follows. The
-TUI runs a gather on a thread of its own, and `esc` cancels it.
+TUI runs a gather on a thread of its own, and `esc` cancels it ([A gather runs
+apart](#a-gather-runs-apart)).
 
 ### Why `gix` rather than running `git`
 
@@ -911,11 +912,12 @@ not a command, because it changes nothing.
   to; like `state.rs`, it touches nothing.
 - `tui.rs` — the loop, reading the disk into what the screen shows, and running
   tasks. `step` is everything the loop does between a key and the next frame,
-  and it is public so a test can do exactly that without a terminal.
+  and `settle` what it does before each frame while a task runs apart; both
+  are public so a test can do exactly that without a terminal.
 
 The loop draws a box saying what is running before it runs it, because a
-gather is the network and a frozen screen reads as a hung one. Keys pressed
-while it ran are dropped: they were aimed at a screen that has since changed.
+frozen screen reads as a hung one. Keys pressed while it ran are dropped: they
+were aimed at a screen that has since changed.
 
 `mind edit` is the one command that needs the terminal itself, because an
 editor draws a screen of its own. For it the loop steps aside — raw mode off,
@@ -923,6 +925,35 @@ back to the normal screen — runs the command as it runs any other, and builds
 its own screen again from scratch when the editor closes. The task says so
 (`takes_terminal`), so the loop does not have to know which commands are
 editors.
+
+### A gather runs apart
+
+A gather is the network, and the one task that runs apart
+(`Task::runs_apart`). `step` starts its lines on a thread of their own and
+returns at once, with a [watch](#following-a-gather-and-stopping-it) whose
+steps come back over a channel. Before each frame the loop calls `settle`,
+which takes in the last step and, once the task is over, shows what came of it
+exactly as `step` does for a task that ran in place. Everything else is the
+local disk, over before anybody could read a count, and stays on the loop's
+thread rather than paying for one of its own.
+
+The box shows the command, the last step and that `esc` cancels. The screen is
+the task's until it is over, so every other key is ignored, as one pressed
+while a task ran in place is dropped. `esc` cancels the watch: the gather
+stops before it places anything, and the form it came from says so, as for
+any gather that did not get as far as a report. Leaving cancels it too, and
+`wait` holds the screen until it has stopped, so what it did reaches the
+transcript and nothing is half done when the process ends. The lines are still
+the task's command lines, parsed and run by `execute`: the thread changes where
+they run, not what they are.
+
+They go through a `Runner` on the way, which is the real parsers and commands
+unless `App::runner` holds a stand-in. A gather from a repository on the local
+disk is over before a frame could show it, so the test of the progress and the
+cancel stands in a gather that goes on only when the test says so, and drives
+it through `step`, `settle` and the keys as the loop would. The stand-in is
+handed the words all the same, so even then there is nothing the screen runs
+that is not a command line.
 
 ### What it asks before it writes
 
@@ -1590,9 +1621,13 @@ leak into the lifecycle code. Unblocks #33, #45, #62, #93, #94 and #95.
   `Excluded::Outside` warns. Asking gix's `excludes` whether each path is
   ignored once it is written, as the tests do, would let the installing side
   or a doctor check say so.
-- **Long work in the TUI.** A gather holds the screen until it finishes, with a
-  box saying what is running, and cannot be cancelled. A background thread
-  would change that; it has not been needed yet.
+- **Ctrl-C during `flayer gather`.** The watch's flag is there to be set, but
+  the CLI installs no signal handler, so Ctrl-C ends the process wherever the
+  gather has got to. Ended before it places anything, it costs the clone and
+  can leave registered a source nothing came from; ended while it places, it
+  can leave the shelf between two revisions, and the ledger behind it. A
+  handler that cancels the watch would make the command line stop where the
+  TUI's `esc` does.
 - **Gathering rules.** Only skills are gatherable. A rule is a loose file at any
   depth, so harvesting one means deciding what its name is relative to — the
   same question `Catalog::take_files` answers inside a project, asked of a
