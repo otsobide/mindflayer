@@ -688,8 +688,13 @@ fn holds(directory: &Path, kind: Kind, name: &str) -> bool {
 
 /// How the ledger names a project: relative to the workspace, the way a
 /// registered project is stored, so moving the two together keeps it true.
+///
+/// The route to where the workspace's own entry leads
+/// ([`FlayerWorkspace::spelling_of`]), not to however the caller spelled the
+/// project: `mind` run inside it and `flayer -p` must read and write one
+/// record, whichever symlinks either went through.
 fn project_entry(workspace: &FlayerWorkspace, project: &MindProject) -> String {
-    route(workspace.root(), project.root())
+    route(workspace.root(), &workspace.spelling_of(project.root()))
 }
 
 /// A path below another, `/` separated, or the path itself when there is no

@@ -912,6 +912,34 @@ impl FlayerWorkspace {
             .iter()
             .any(|entry| points_at(&self.root, entry, &target))
     }
+
+    /// The directory `root` names, spelled the way this workspace's entry
+    /// for it leads there; `root` itself when no entry points at it.
+    ///
+    /// For the ledger, which names a project by its route from the
+    /// workspace, so one directory spelled two ways would be two projects to
+    /// it. A `mind` command spells its project the way the operating system
+    /// reports the directory it runs in, through no symlink, while a
+    /// workspace named with `-W` keeps the spelling it was given, `/tmp` on
+    /// a Mac say; the route between those two is not the one `flayer -p`
+    /// takes from the entry, and a record written under one would not be
+    /// found under the other. A spelling that already matches as written is
+    /// kept, so nothing that matched before is named differently now.
+    pub(crate) fn spelling_of(&self, root: &Path) -> PathBuf {
+        let target = paths::normalize(root);
+        let led: Vec<PathBuf> = self
+            .config
+            .projects
+            .iter()
+            .map(|entry| paths::normalize(&self.root.join(entry)))
+            .collect();
+        if led.contains(&target) {
+            return target;
+        }
+        led.into_iter()
+            .find(|candidate| same_directory(candidate, &target))
+            .unwrap_or(target)
+    }
 }
 
 /// One entry in a workspace's registry, and what it opens.

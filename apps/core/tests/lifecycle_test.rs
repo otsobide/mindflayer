@@ -718,3 +718,35 @@ fn a_change_drops_the_record_of_the_workspace_it_is_given_wherever_that_sits() {
         Standing::Foreign
     );
 }
+
+#[cfg(unix)]
+#[test]
+fn a_record_is_kept_under_the_workspaces_spelling_of_a_project_whatever_the_symlinks() {
+    // A workspace named with `-W` keeps the spelling it was given, and `mind`
+    // spells its project the way the operating system does, through no
+    // symlink: `/tmp` is one on every Mac. Either way round, the record is
+    // the one `flayer -p` reads, under the entry the workspace stores.
+    let dir = TempDir::new().unwrap();
+    let real = dir.path().join("real");
+    fs::create_dir_all(real.join("collapse")).unwrap();
+    std::os::unix::fs::symlink(&real, dir.path().join("link")).unwrap();
+    let (mut workspace, _) = FlayerWorkspace::init(real.join("hub")).unwrap();
+    let (project, _) = MindProject::init(real.join("collapse")).unwrap();
+    workspace.link(&project).unwrap();
+    create(&workspace.own(), Kind::Skill, "deploy", "Ship it").unwrap();
+    let through_link = FlayerWorkspace::open(dir.path().join("link/hub")).unwrap();
+    let ledger = workspace.ledger().unwrap();
+    let recorded = || ledger.installations("../collapse", Kind::Skill).unwrap();
+
+    for candidate in install::survey(&through_link, &ledger, &project, Kind::Skill).unwrap() {
+        install::install(&through_link, &ledger, &project, &candidate).unwrap();
+    }
+    assert_eq!(recorded(), ["deploy"]);
+
+    let linked = MindProject::open(dir.path().join("link/collapse")).unwrap();
+    let removed =
+        lifecycle::remove(Some(&workspace), &linked, &find(&linked, "deploy").unwrap()).unwrap();
+
+    assert_eq!(removed.copy.unwrap(), Record::Dropped);
+    assert_eq!(recorded(), Vec::<String>::new());
+}
