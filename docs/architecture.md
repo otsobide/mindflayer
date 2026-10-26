@@ -1901,12 +1901,15 @@ and defines `flayer-deactivate`, which puts both back; it is run as `eval
 to a file to be sourced: activation lasts as long as the shell, as a
 virtualenv's does, and D-08 rejected an activation file as hidden state in
 repositories meant to stay minimal. Activating writes nothing at all. It
-opens `DIR` the way `-W` does (`resolve::named`), by its root or its
+opens `DIR` as `-W` opens a workspace (`resolve::named`), by its root or its
 `.mindflayer`, and without `DIR` it activates what a read resolves from
 where it runs, so `-W` and an earlier activation count, and the default one
 only once it is made. What cannot be activated is an error with nothing on
 stdout, so `eval` runs nothing. `flayer init PATH` makes the workspace to
-activate, wherever it is to go.
+activate, wherever it is to go. A relative `DIR` or `PATH` is taken from
+where the command works, `-C` included, as `link`'s and `load`'s paths are:
+each is one of the command's own words, unlike `-W`, which is taken from
+where the command was run, as said above.
 
 The code is core's (`activate::script`): what it sets is what `resolve` is
 fed from, and how a path is quoted for a shell is a safety rule, so no front
