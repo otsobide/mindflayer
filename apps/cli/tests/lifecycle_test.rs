@@ -266,6 +266,47 @@ fn removing_an_install_scrubs_the_ledger_it_drops_the_record_from_and_says_so() 
 
 #[cfg(unix)]
 #[test]
+fn an_editor_that_writes_and_then_fails_still_says_what_the_scrub_took_out() {
+    let (dir, workspace, ledger) = shelved(&["collapse"], &["deploy"]);
+    installed(dir.path(), &workspace, &ledger);
+    rusqlite::Connection::open(workspace.ledger_path())
+        .unwrap()
+        .execute(
+            "UPDATE sources SET url = 'https://me:ghp_t0ken@example.com/acme/skills'",
+            [],
+        )
+        .unwrap();
+
+    let failure = mind(
+        &dir.path().join("collapse"),
+        &[
+            "edit",
+            "deploy",
+            "--editor",
+            "printf 'Mine.\\n' >> \"$1\"; false",
+        ],
+    )
+    .unwrap_err();
+
+    // Said only this once, so said with the error rather than not at all.
+    assert!(
+        matches!(*failure.error, CliError::EditorFailed { .. }),
+        "{}",
+        failure.error
+    );
+    assert_eq!(
+        failure.warnings,
+        [
+            "note: https://example.com/acme/skills: the user name, password or token an older \
+             Mindflayer stored in this URL is taken out; gathering it again needs a git \
+             credential helper that has it"
+        ]
+    );
+    assert_eq!(ledger.tainted_sources().unwrap(), []);
+}
+
+#[cfg(unix)]
+#[test]
 fn an_installed_skill_that_is_edited_is_yours_from_then_on() {
     let (dir, workspace, ledger) = shelved(&["collapse"], &["deploy"]);
     installed(dir.path(), &workspace, &ledger);
