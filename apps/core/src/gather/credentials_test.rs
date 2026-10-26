@@ -64,6 +64,19 @@ fn a_credential_no_helper_has_is_an_error_and_never_a_prompt() {
 }
 
 #[test]
+fn a_helper_that_quits_leaves_the_credential_missing() {
+    let shortfalls = Shortfalls::default();
+    // What `gix`'s cascade returns when a helper answers `quit=1` and gives
+    // no credential.
+    let mut credentials = never_prompting(|_, _| Err(protocol::Error::Quit), shortfalls.clone());
+
+    let answer = credentials(Action::get_for_url(PRIVATE));
+
+    assert!(matches!(answer, Err(protocol::Error::Quit)), "{answer:?}");
+    assert_eq!(shortfalls.last(), Some(Shortfall::Missing));
+}
+
+#[test]
 fn a_credential_the_server_takes_leaves_no_shortfall() {
     let shortfalls = Shortfalls::default();
     let mut credentials = never_prompting(a_helper_that_answers(), shortfalls.clone());

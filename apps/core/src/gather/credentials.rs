@@ -26,7 +26,8 @@ use gix::prompt;
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(super) enum Shortfall {
     /// The server asked, and nothing that may answer had one it would take:
-    /// no helper had one to give, or, over ssh, ssh had no key it accepted.
+    /// no helper had one to give (or one told git to stop asking), or, over
+    /// ssh, ssh had no key it accepted.
     Missing,
     /// A helper gave one over http(s), and the server turned it down.
     Refused,
@@ -88,7 +89,12 @@ pub(super) fn never_prompting(
             } else {
                 Shortfall::Refused
             }));
-        } else if let Err(protocol::Error::IdentityMissing { .. }) = answer {
+        } else if let Err(
+            // A helper that answers `quit=1` has none either, and tells git to
+            // stop asking anyone else.
+            protocol::Error::IdentityMissing { .. } | protocol::Error::Quit,
+        ) = answer
+        {
             shortfalls.0.set(Some(Shortfall::Missing));
         }
         answer
