@@ -1972,15 +1972,41 @@ leak into the lifecycle code. Unblocks #33, #45, #62, #93, #94 and #95.
   to. Printing the batch as those lines would make a session with the screen in
   it as repeatable as one without.
 - **Gathering still stages beside.** `copy::replace` builds a shelf copy as a
-  hidden sibling, `.<name>.mindflayer-new`, under names taken from the skill:
-  two gathers of one source at once collide as two installs did, and a gather
-  stopped halfway leaves its staging on the shelf. No agent reads the shelf,
-  which is why installs moved first. A `copy::Stage` in a scratch folder of the
+  hidden sibling, `.<name>.mindflayer-new`, under names taken from the skill,
+  so a gather stopped halfway leaves its staging on the shelf. Two gathers no
+  longer meet there, since each holds the workspace's lock ([Writers at the
+  same time](#writers-at-the-same-time)). No agent reads the shelf, which is
+  why installs moved first. A `copy::Stage` in a scratch folder of the
   workspace's own would do for gathering what `.mind/tmp` does for installs.
 - **Removing is not staged.** `uninstall` deletes a copy where it is, so one
   stopped halfway leaves part of a skill in a folder agents read. Renaming the
   copy into a stage first, and deleting it there, would make a removal as all
   or nothing as an install.
+- **A batch takes turns row by row.** The install screen's batch calls core
+  once for each row, and each call takes the workspace's lock for itself:
+  another writer can come between two rows, and with the workspace busy every
+  row waits the whole ten seconds before it is passed over. Holding the lock
+  across the batch needs core to apply the batch, which is where #78 plans it.
+- **A read migrating beside a writer.** A read migrates an older ledger
+  without the workspace's lock, so it can meet a writer migrating the same
+  file. A step is several statements, and SQLite orders them one at a time:
+  one of the two fails on a table the other has just made, and the other
+  finishes the step. A migration made in one transaction that reads the
+  version again once it holds SQLite's write lock would make the second wait
+  and then find nothing to do, which is how #30 migrates.
+- **Changes to an artifact take no lock.** `add`, `edit`, `rename` and
+  `remove` write into a project or the workspace's own folders and then drop a
+  record ([A record must not outlive the copy it is
+  about](#a-record-must-not-outlive-the-copy-it-is-about)). Opening the ledger
+  to drop it takes the lock, but the change and the record are not held
+  together, so an install of the same name can come between them, and the
+  record dropped be that install's.
+- **Two first writers making one workspace.** `init` makes a marker with
+  `create_new` and then fills it, so a second writer making the same
+  workspace at that moment — two first commands in a home with no
+  `.mindflayer` yet — finds a marker it cannot read, or fails to create one.
+  Writing the marker whole under a name of its own and linking it into place
+  would let the second find it whole.
 - **Installing rules.** Installing copies a directory, so only skills can be
   installed — from the shelf, and now from the workspace's own. The workspace's
   own rules have no way into a project yet; a rule is one file, filed by its
