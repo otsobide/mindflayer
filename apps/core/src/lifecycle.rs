@@ -1,14 +1,15 @@
-//! Changing what a project already holds: finding an artifact by what somebody
-//! typed, renaming it, removing it.
+//! Changing what a project holds: adding to it, finding an artifact by what
+//! somebody typed, renaming it, removing it.
 //!
 //! Finding is more forgiving than listing. A skill whose front matter does not
 //! parse is left out of every listing, but it is exactly the one somebody
 //! needs to open and fix, so an artifact is also found by where its name would
 //! put it on disk, whether or not it reads.
 //!
-//! None of this touches the ledger: whether a change leaves a stale record of
-//! an installation behind is [`crate::install::disown`]'s question, asked by
-//! whoever made the change.
+//! Adding also sees to the ledger's record of what was installed under the
+//! name it writes, and says in its result what it did ([`Record`]). The rule
+//! lives here rather than with each front end that makes a change, so a
+//! second front end cannot forget it or apply it differently.
 
 use std::fs;
 use std::io;
@@ -18,11 +19,14 @@ use thiserror::Error;
 
 use crate::artifact::{self, issue_list, Artifact, ArtifactError, ValidationIssue};
 use crate::catalog::{Catalog, Reference, QUALIFIER};
+use crate::create::{create, create_from, CreateError};
 use crate::frontmatter;
+use crate::install::{self, InstallError};
 use crate::kind::{Kind, Layout};
 use crate::paths;
 use crate::skill::SkillManifest;
-use crate::workspace::{replace_file, MindProject, WorkspaceError};
+use crate::template::Template;
+use crate::workspace::{replace_file, FlayerWorkspace, MindProject, WorkspaceError};
 
 /// An artifact found by what somebody typed.
 #[derive(Debug, Clone)]
@@ -47,6 +51,61 @@ impl Target {
     pub fn qualified_name(&self) -> String {
         format!("{}{QUALIFIER}{}", self.kind.slug(), self.name)
     }
+}
+
+/// What a change did to the ledger's record that Mindflayer installed what
+/// is under one name.
+///
+/// That record is what gives the install screen leave to overwrite and
+/// delete, so it must not outlive the copy it was about: whatever somebody
+/// writes there next would inherit it.
+///
+/// A change reports it as `Result<Record, InstallError>` beside what it made
+/// rather than failing with it: by the time the record is seen to, the change
+/// has been made, and reporting it as not made would be false.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Record {
+    /// No record was changed: there was none — no workspace was consulted,
+    /// the one consulted does not manage the project, or it installed nothing
+    /// under that name — or the change gave no reason to touch it.
+    Untouched,
+    /// The record was dropped, and what is there now is its author's.
+    Dropped,
+}
+
+/// What adding an artifact made, and what it did to a record under its name.
+#[derive(Debug)]
+pub struct Added {
+    pub artifact: Artifact,
+    /// A record of an install under the same name. Nothing was there for the
+    /// new artifact to be written over, so the copy it was about had gone,
+    /// and left in place the record would make somebody's new work look like
+    /// something Mindflayer put there.
+    pub stale: Result<Record, InstallError>,
+}
+
+/// Write a new artifact into `project`, from `template` when one is given
+/// ([`create`], [`create_from`]), and drop any record of an install under its
+/// name.
+///
+/// `workspace` is the one the front end consulted about the project, given
+/// rather than found by walking up from it: a walk misses every workspace
+/// that links the project from somewhere that is not above it. With none,
+/// there is no record to drop.
+pub fn add(
+    workspace: Option<&FlayerWorkspace>,
+    project: &MindProject,
+    kind: Kind,
+    name: &str,
+    description: &str,
+    template: Option<&Template>,
+) -> Result<Added, CreateError> {
+    let artifact = match template {
+        None => create(project, kind, name, description),
+        Some(template) => create_from(project, kind, name, description, template),
+    }?;
+    let stale = disowned(workspace, project, kind, name);
+    Ok(Added { artifact, stale })
 }
 
 /// The one artifact in `project` a reference names.
@@ -412,6 +471,23 @@ fn file_of(kind: Kind, path: &Path) -> PathBuf {
 /// Whether an artifact of `kind` sits at `path`.
 fn holds(kind: Kind, path: &Path) -> bool {
     file_of(kind, path).is_file()
+}
+
+/// Drop the record `workspace` keeps of an install of `name` into `project`.
+fn disowned(
+    workspace: Option<&FlayerWorkspace>,
+    project: &MindProject,
+    kind: Kind,
+    name: &str,
+) -> Result<Record, InstallError> {
+    let Some(workspace) = workspace else {
+        return Ok(Record::Untouched);
+    };
+    Ok(if install::disown(workspace, project, kind, name)? {
+        Record::Dropped
+    } else {
+        Record::Untouched
+    })
 }
 
 /// Why an artifact could not be found, renamed or removed.

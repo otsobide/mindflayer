@@ -1,10 +1,13 @@
-//! Finding, renaming and removing what a project already holds.
+//! Adding to what a project holds, and finding, renaming and removing what it
+//! already does — and what each of those does to the ledger's records.
 
 use std::fs;
 use std::path::Path;
 
-use mindflayer_core::lifecycle::{self, Target};
-use mindflayer_core::{create, Kind, LifecycleError, MindProject, Reference};
+use mindflayer_core::install::{self, InstallError, Standing};
+use mindflayer_core::ledger::Ledger;
+use mindflayer_core::lifecycle::{self, Record, Target};
+use mindflayer_core::{create, FlayerWorkspace, Kind, LifecycleError, MindProject, Reference};
 use tempfile::TempDir;
 
 fn project() -> (TempDir, MindProject) {
@@ -290,4 +293,156 @@ fn renaming_a_rule_refiles_it_by_its_new_route() {
         fs::read_to_string(dir.path().join("rules/vcs/no-force-push.md")).unwrap(),
         "# Never force-push\n"
     );
+}
+
+// ---------------------------------------------------------------------------
+// The ledger's records
+// ---------------------------------------------------------------------------
+
+/// A workspace managing one project, `collapse`, from above it, with each of
+/// `names` among the workspace's own skills and installed into the project.
+fn installed(names: &[&str]) -> (TempDir, FlayerWorkspace, MindProject, Ledger) {
+    let dir = TempDir::new().unwrap();
+    let (mut workspace, _) = FlayerWorkspace::init(dir.path()).unwrap();
+    let root = dir.path().join("collapse");
+    fs::create_dir(&root).unwrap();
+    let (project, _) = MindProject::init(&root).unwrap();
+    workspace.link(&project).unwrap();
+    for name in names {
+        create(&workspace.own(), Kind::Skill, name, "From the workspace").unwrap();
+    }
+    let ledger = workspace.ledger().unwrap();
+    for candidate in install::survey(&workspace, &ledger, &project, Kind::Skill).unwrap() {
+        install::install(&workspace, &ledger, &project, &candidate).unwrap();
+    }
+    (dir, workspace, project, ledger)
+}
+
+/// The skills `ledger` says Mindflayer installed into `collapse`.
+fn records(ledger: &Ledger) -> Vec<String> {
+    ledger.installations("collapse", Kind::Skill).unwrap()
+}
+
+/// How the workspace's own `name` stands with the project now.
+fn standing(
+    workspace: &FlayerWorkspace,
+    ledger: &Ledger,
+    project: &MindProject,
+    name: &str,
+) -> Standing {
+    install::survey(workspace, ledger, project, Kind::Skill)
+        .unwrap()
+        .into_iter()
+        .find(|candidate| candidate.name() == name)
+        .unwrap_or_else(|| panic!("the workspace offers no {name}"))
+        .standing
+}
+
+#[test]
+fn adding_where_an_installed_copy_was_deleted_by_hand_drops_its_record() {
+    let (dir, workspace, project, ledger) = installed(&["deploy"]);
+    fs::remove_dir_all(dir.path().join("collapse/skills/deploy")).unwrap();
+
+    let added = lifecycle::add(
+        Some(&workspace),
+        &project,
+        Kind::Skill,
+        "deploy",
+        "Mine now",
+        None,
+    )
+    .unwrap();
+
+    // Left in place, the record would make what was just written look like
+    // the workspace's to overwrite.
+    assert_eq!(added.stale.unwrap(), Record::Dropped);
+    assert_eq!(records(&ledger), Vec::<String>::new());
+    assert_eq!(
+        standing(&workspace, &ledger, &project, "deploy"),
+        Standing::Foreign
+    );
+}
+
+#[test]
+fn adding_touches_no_record_but_one_under_the_name_it_writes() {
+    let (_dir, workspace, project, ledger) = installed(&["deploy"]);
+
+    let added = lifecycle::add(
+        Some(&workspace),
+        &project,
+        Kind::Skill,
+        "notes",
+        "Mine",
+        None,
+    )
+    .unwrap();
+
+    assert_eq!(added.stale.unwrap(), Record::Untouched);
+    assert_eq!(records(&ledger), ["deploy"]);
+}
+
+#[test]
+fn a_change_asks_only_a_workspace_that_manages_the_project_and_creates_no_ledger() {
+    let dir = TempDir::new().unwrap();
+    let (mut workspace, _) = FlayerWorkspace::init(dir.path()).unwrap();
+    let root = dir.path().join("collapse");
+    fs::create_dir(&root).unwrap();
+    let (project, _) = MindProject::init(&root).unwrap();
+
+    let unmanaged = lifecycle::add(
+        Some(&workspace),
+        &project,
+        Kind::Skill,
+        "deploy",
+        "Ship it",
+        None,
+    )
+    .unwrap();
+    workspace.link(&project).unwrap();
+    let managed = lifecycle::add(
+        Some(&workspace),
+        &project,
+        Kind::Rule,
+        "deploy",
+        "How we ship",
+        None,
+    )
+    .unwrap();
+    let alone = lifecycle::add(None, &project, Kind::Skill, "notes", "Mine", None).unwrap();
+
+    for added in [unmanaged, managed, alone] {
+        assert_eq!(added.stale.unwrap(), Record::Untouched);
+    }
+    // A workspace that never installed anything has no ledger, and looking
+    // must not give it one.
+    assert!(!workspace.ledger_path().exists());
+}
+
+#[test]
+fn a_record_that_cannot_be_dropped_is_reported_and_the_change_stands() {
+    let (dir, workspace, project, _ledger) = installed(&["deploy"]);
+    fs::remove_dir_all(dir.path().join("collapse/skills/deploy")).unwrap();
+    // A ledger a newer Mindflayer wrote is refused, so nothing in it can be
+    // changed from here.
+    rusqlite::Connection::open(workspace.ledger_path())
+        .unwrap()
+        .pragma_update(None, "user_version", 99)
+        .unwrap();
+
+    let added = lifecycle::add(
+        Some(&workspace),
+        &project,
+        Kind::Skill,
+        "deploy",
+        "Mine now",
+        None,
+    )
+    .unwrap();
+
+    assert!(
+        matches!(added.stale, Err(InstallError::Ledger(_))),
+        "{:?}",
+        added.stale
+    );
+    assert!(added.artifact.file().is_file());
 }
