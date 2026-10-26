@@ -62,17 +62,18 @@ Three crates in one Cargo workspace, and the panel they serve, each an app
 under `apps/` with its own `Makefile`:
 
 - `apps/core` (`mindflayer-core`): the engine. Projects, workspaces, which
-  workspace a command uses (`resolve`), kinds, the catalog, gathering
-  (`gix`), the SQLite ledger, installing, keeping installs out of git
-  (`exclude`), creating and changing artifacts. Its only I/O is files, and it
-  never reads the environment.
+  workspace a command uses (`resolve`), the shell code that activates one
+  (`activate`), kinds, the catalog, gathering (`gix`), the SQLite ledger,
+  installing, keeping installs out of git (`exclude`), creating and changing
+  artifacts. Its only I/O is files, and it never reads the environment.
 - `apps/cli` (`mindflayer-cli`): the binaries `mind` (`src/main.rs`) and
   `flayer` (`src/bin/flayer.rs`), and the TUI. `src/lib.rs` only re-exports
   the public API. The parsers are in `src/parse.rs`. `src/commands.rs`
   dispatches them and asks core what a command acts on, and each family of
   commands has a file under `src/commands/`: `project` (init, link, unlink,
-  scan), `workspace` (load, unload), `artifact` (add, edit, rename, remove,
-  templates), `read` (list, show, validate), `gather` and `install`.
+  scan), `workspace` (load, unload), `activate` (activate, which),
+  `artifact` (add, edit, rename, remove, templates), `read` (list, show,
+  validate), `gather` and `install`.
   `src/render.rs` holds `Outcome`, `Failure` and the table helpers,
   `src/error.rs` holds `CliError`, and `src/homes.rs` decides the default
   home and the agent homes, and gathers `-W` and `$MINDFLAYER_WORKSPACE`
