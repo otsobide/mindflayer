@@ -971,9 +971,11 @@ fn standing(standing: minds::Standing) -> (&'static str, Style) {
 /// Drawn while a command runs, which for a gather means the network.
 fn working(busy: &str, frame: &mut Frame, area: Rect) {
     let text = printable(busy);
+    // A floor rather than a `clamp` to the screen's width, which panics on a
+    // screen narrower than the floor; `centred` keeps it on the screen.
     let width = u16::try_from(text.chars().count() + 4)
         .unwrap_or(u16::MAX)
-        .clamp(30, area.width.max(1));
+        .max(30);
     let box_ = centred(area, width, 3);
     frame.render_widget(Clear, box_);
     let block = Block::bordered()
@@ -999,9 +1001,9 @@ fn watching(running: &Running, frame: &mut Frame, area: Rect) {
         .into_iter()
         .max()
         .unwrap_or(0);
-    let width = u16::try_from(longest + 4)
-        .unwrap_or(u16::MAX)
-        .clamp(30, area.width.max(1));
+    // Floored as `working` floors its box: this one is drawn on every frame
+    // of a gather, and a panic here would end the gather wherever it was.
+    let width = u16::try_from(longest + 4).unwrap_or(u16::MAX).max(30);
     let box_ = centred(area, width, 5);
     frame.render_widget(Clear, box_);
     let block = Block::bordered()

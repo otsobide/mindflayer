@@ -600,6 +600,26 @@ fn leaving_while_a_gather_runs_cancels_it_and_waits_for_it() {
 }
 
 #[test]
+fn the_working_boxes_are_drawn_on_a_terminal_narrower_than_they_are() {
+    let dir = TempDir::new().unwrap();
+    flayer(dir.path(), &["init"]).unwrap();
+    let mut app = tui_in(dir.path());
+    let (_go, gate) = mpsc::channel();
+    app.runner = Some(slow_gather(gate));
+    start_slow_gather(&mut app);
+    let mut terminal = Terminal::new(TestBackend::new(20, 30)).unwrap();
+
+    // Drawn on every frame while the gather runs, so a pane split narrow
+    // halfway through must not end the process, and the gather with it.
+    terminal.draw(|frame| tui::ui::draw(&app, frame)).unwrap();
+    app.running.as_mut().unwrap().cancel();
+    tui::wait(&mut app);
+    // And the box a task that runs in place is drawn with.
+    app.busy = Some(format!("flayer gather git {SLOW}"));
+    terminal.draw(|frame| tui::ui::draw(&app, frame)).unwrap();
+}
+
+#[test]
 fn the_install_screen_opens_inside_the_tui_and_applies_from_there() {
     let (dir, _workspace, _ledger) = shelved(&["collapse"], &["deploy"]);
     let mut app = tui_in(dir.path());
