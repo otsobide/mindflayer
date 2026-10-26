@@ -1,18 +1,25 @@
 .DEFAULT_GOAL := help
 
-# Every unit of the product lives under apps/. Adding one (the web panel, a
-# desktop shell) means a directory with its own Makefile and a line here.
+# Every unit of the product lives under apps/. Adding one (a desktop shell)
+# means a directory with its own Makefile and a line here.
 APPS := core cli server
+
+# Apps built with a toolchain CI does not install yet. `make web/<target>`
+# reaches them like any other app, but they stay out of the aggregates below
+# until CI sets up Node and pnpm (#71): in there, `make test` would fail on
+# every runner for want of pnpm, test-cross's macOS and Windows above all,
+# and say nothing about the code.
+NODE_APPS := web
 
 # ---------------------------------------------------------------------------
 # Per-app delegation — `make <app>/<target>` runs <target> in apps/<app>/Makefile
-# e.g. `make core/test`, `make cli/run ARGS="list"`
+# e.g. `make core/test`, `make cli/run ARGS="list"`, `make web/build`
 # ---------------------------------------------------------------------------
 define APP_DELEGATE
 $(1)/%:
 	$$(MAKE) -C apps/$(1) $$*
 endef
-$(foreach app,$(APPS),$(eval $(call APP_DELEGATE,$(app))))
+$(foreach app,$(APPS) $(NODE_APPS),$(eval $(call APP_DELEGATE,$(app))))
 
 # ---------------------------------------------------------------------------
 # Global targets — CI invokes these, so they are the contract, not cargo.
@@ -122,4 +129,4 @@ help: ## Show this help
 	@echo "Mindflayer — make targets:"
 	@grep -hE '^[a-zA-Z0-9_/-]+:.*?## ' $(MAKEFILE_LIST) \
 		| awk 'BEGIN{FS=":.*?## "}{printf "  \033[36m%-12s\033[0m %s\n", $$1, $$2}'
-	@printf "  \033[36m%-12s\033[0m %s\n" "<app>/<t>" "run target <t> in an app — apps: $(APPS)"
+	@printf "  \033[36m%-12s\033[0m %s\n" "<app>/<t>" "run target <t> in an app — apps: $(APPS) $(NODE_APPS)"
