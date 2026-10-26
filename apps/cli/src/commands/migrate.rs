@@ -75,10 +75,10 @@ fn refused(refusals: Vec<migrate::Refusal>) -> Result<(), Failure> {
 /// A line for each artifact moved, each one a project keeps, and the
 /// marker's rewrite: as what will happen in a dry run, and as what did.
 fn report(workspace: &FlayerWorkspace, plan: &Plan, done: bool) -> String {
-    let (moving, leaving) = if done {
-        ("moved", "left")
+    let (moving, leaving, uncounted) = if done {
+        ("moved", "left", "no longer counts")
     } else {
-        ("would move", "would leave")
+        ("would move", "would leave", "would no longer count")
     };
     let mut text = String::new();
     for one in &plan.moves {
@@ -90,12 +90,18 @@ fn report(workspace: &FlayerWorkspace, plan: &Plan, done: bool) -> String {
         );
     }
     for left in &plan.left {
-        let _ = writeln!(
+        // Said on its line, since it is what changes for whoever installed
+        // it: the workspace listed and offered it, and will not.
+        let _ = write!(
             text,
             "{leaving} {} where it is: the project at {} holds it",
             left.path.display(),
             left.project.display()
         );
+        if left.counted {
+            let _ = write!(text, ", and the workspace {uncounted} it as its own");
+        }
+        text.push('\n');
     }
     let kinds: Vec<&str> = plan
         .kinds

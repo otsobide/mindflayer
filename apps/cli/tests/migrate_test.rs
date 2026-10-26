@@ -198,6 +198,57 @@ fn a_project_at_the_root_keeps_what_it_shares_and_is_said_to() {
 }
 
 #[test]
+fn what_an_unlinked_project_at_the_root_keeps_is_said_to_be_the_workspaces_no_more() {
+    let dir = TempDir::new().unwrap();
+    let root = dir.path();
+    // A home made a project and never linked: the workspace counts what is
+    // in `skills` as its own, and installs it from there.
+    mind(root, &["init"]).unwrap();
+    flayer(root, &["init", "--skills", "skills", "--rules", "rules"]).unwrap();
+    let alpha = root.join("alpha");
+    fs::create_dir(&alpha).unwrap();
+    mind(&alpha, &["init"]).unwrap();
+    flayer(root, &["link", "alpha"]).unwrap();
+    flayer(root, &["add", "skill", "x", "Ours"]).unwrap();
+    flayer(root, &["install", "-p", "alpha", "x"]).unwrap();
+
+    let dry = flayer(root, &["migrate", "--library"]).unwrap();
+    let migrated = flayer(root, &["migrate", "--library", "--yes"]).unwrap();
+    let installed = flayer(root, &["install", "-p", "alpha", "x"]).unwrap_err();
+    let uninstalled = flayer(root, &["uninstall", "-p", "alpha", "x"]).unwrap();
+
+    let skill = at(root, &["skills", "x"]);
+    let project = root.display();
+    assert!(
+        dry.stdout.starts_with(&format!(
+            "would leave {skill} where it is: the project at {project} holds it, \
+             and the workspace would no longer count it as its own\n"
+        )),
+        "{}",
+        dry.stdout
+    );
+    assert!(
+        migrated.stdout.starts_with(&format!(
+            "left {skill} where it is: the project at {project} holds it, \
+             and the workspace no longer counts it as its own\n"
+        )),
+        "{}",
+        migrated.stdout
+    );
+    assert!(root.join("skills/x/SKILL.md").is_file());
+    // Still recorded, so it can be taken out, but offered by nothing.
+    assert!(
+        installed
+            .error
+            .to_string()
+            .starts_with("nothing called `x` can be installed"),
+        "{}",
+        installed.error
+    );
+    assert!(uninstalled.ok, "{uninstalled:?}");
+}
+
+#[test]
 fn migrate_is_told_what_to_migrate() {
     let dir = TempDir::new().unwrap();
 
