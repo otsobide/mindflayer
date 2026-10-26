@@ -31,8 +31,8 @@ use crate::ledger::{Ledger, LedgerError, LEDGER_FILE};
 use crate::lock::{self, LockError, WorkspaceLock};
 use crate::paths;
 
-/// The layout version written into new `mind.toml` markers, and the newest
-/// one this build reads.
+/// The newest version of a project's marker this build reads: version 3, a
+/// `.mind/settings.json` ([`SETTINGS_VERSION`]).
 ///
 /// Refusing to read a version from the future is what lets the format change
 /// later without an old binary silently misreading a newer project. The
@@ -40,7 +40,17 @@ use crate::paths;
 /// [`FLAYER_FORMAT_VERSION`]: shared, a change to either format would be a new
 /// version of both, and an older build would refuse a workspace that had not
 /// changed at all.
-pub const MIND_FORMAT_VERSION: u32 = 2;
+pub const MIND_FORMAT_VERSION: u32 = 3;
+
+/// The newest version a `mind.toml` holds, and the one `init` still writes
+/// into a new project: what came before [`SETTINGS_VERSION`].
+///
+/// Not [`MIND_FORMAT_VERSION`], which is the newest a project's marker holds
+/// in either file. A new project is written as version 2 until `mind init`
+/// writes settings (#35), so this build reads a version it does not yet
+/// make, and an older build, which refuses settings it cannot find, never
+/// meets a project this one made.
+pub const MIND_TOML_VERSION: u32 = 2;
 
 /// The layout version written into new `flayer.toml` markers, and the newest
 /// one this build reads. Its own, for the reason [`MIND_FORMAT_VERSION`] is.
@@ -55,6 +65,16 @@ pub const FLAYER_FORMAT_VERSION: u32 = 2;
 /// point a project at directories it has never had and list nothing, silently,
 /// which is exactly what the version field exists to prevent.
 pub const DIRECTORIES_VERSION: u32 = 2;
+
+/// The first [`MIND_FORMAT_VERSION`] whose marker is `.mind/settings.json`
+/// ([`crate::settings`]) rather than `.mind/mind.toml`.
+///
+/// A line drawn the way [`DIRECTORIES_VERSION`] is: a marker from before it is
+/// read the way it was written, as TOML, and one from it on as JSON. Past it,
+/// a kind the marker names no folder for has none
+/// ([`MindProject::directory_for`]), where a `mind.toml` from version 2 gives
+/// it the default beside the code.
+pub const SETTINGS_VERSION: u32 = 3;
 
 /// The directory a mind project is identified by.
 pub const MIND_DIR: &str = ".mind";
@@ -101,8 +121,9 @@ pub enum Marker {
 }
 
 impl Marker {
-    /// The newest version of this marker this build reads, which is also the
-    /// one it writes.
+    /// The newest version of this marker this build reads. For a workspace,
+    /// also the one it writes; a new project is still written as
+    /// [`MIND_TOML_VERSION`].
     pub const fn version(self) -> u32 {
         match self {
             Marker::Project => MIND_FORMAT_VERSION,
@@ -186,6 +207,29 @@ impl Directories {
     /// Whether anything was configured at all.
     pub fn is_empty(&self) -> bool {
         self.0.is_empty()
+    }
+
+    /// Say where whatever `key` names lives, a key this build may not know
+    /// included: what a marker read from a newer build holds.
+    pub(crate) fn with_key(mut self, key: &str, directory: impl Into<PathBuf>) -> Self {
+        self.0.insert(key.to_owned(), directory.into());
+        self
+    }
+
+    /// Every entry, the kinds this build knows first, in report order, then
+    /// any other key in name order: the order a marker writes them in.
+    pub(crate) fn entries(&self) -> Vec<(&str, &Path)> {
+        let known = Kind::ALL
+            .into_iter()
+            .filter_map(|kind| self.0.get_key_value(kind.folder()));
+        let other = self
+            .0
+            .iter()
+            .filter(|(key, _)| Kind::ALL.iter().all(|kind| kind.folder() != key.as_str()));
+        known
+            .chain(other)
+            .map(|(key, directory)| (key.as_str(), directory.as_path()))
+            .collect()
     }
 
     /// What a project uses when it says nothing: a folder per kind beside the
@@ -315,6 +359,19 @@ impl MindProject {
         }
         let config: MindConfig = read_config(&config_path)?;
         check_version(&config_path, Marker::Project, config.version)?;
+        // Not newer than this build, and not a version a `mind.toml` holds
+        // either: from `SETTINGS_VERSION` on, the marker is another file, and
+        // what a `mind.toml` claiming that version means is nobody's to say.
+        if config.version >= SETTINGS_VERSION {
+            return Err(WorkspaceError::Malformed {
+                path: config_path,
+                detail: format!(
+                    "version {} is written as {}, not as {MIND_CONFIG}, which holds versions up to {MIND_TOML_VERSION}",
+                    config.version,
+                    crate::settings::SETTINGS_FILE
+                ),
+            });
+        }
         Ok(Self { root, config })
     }
 
@@ -1093,8 +1150,10 @@ impl FlayerWorkspace {
                 // line drawn in the project format, and below it sends every
                 // kind its marker does not name into `.mind`, where a
                 // workspace has never kept its artifacts and a v1
-                // `flayer.toml` would send them.
-                version: MIND_FORMAT_VERSION,
+                // `flayer.toml` would send them. The newest a `mind.toml`
+                // holds, since what this is read as is one: every kind is
+                // named below, so no version gives one a different folder.
+                version: MIND_TOML_VERSION,
                 name: self.config.name.clone(),
                 directories: self
                     .config
@@ -1246,6 +1305,11 @@ pub enum WorkspaceError {
         #[source]
         source: toml::de::Error,
     },
+    /// A marker that is not what its format says, for a reason no parser
+    /// gives: a project's settings, which are read a key at a time, or a
+    /// version the file it is in does not hold.
+    #[error("{path}: not valid Mindflayer configuration: {detail}")]
+    Malformed { path: PathBuf, detail: String },
     #[error("{path}: not a mind project (no {MIND_DIR}/{MIND_CONFIG})")]
     NotAProject { path: PathBuf },
     #[error("{path}: not a flayer workspace (no {FLAYER_DIR}/{FLAYER_CONFIG})")]
@@ -1264,7 +1328,7 @@ pub enum WorkspaceError {
     LoadsItself { path: PathBuf },
     #[error("{path}: not loaded by the workspace at {workspace}")]
     NotLoaded { path: PathBuf, workspace: PathBuf },
-    #[error("{path}: not valid UTF-8, so it cannot be written into a TOML file")]
+    #[error("{path}: not valid UTF-8, so it cannot be written into a marker")]
     NonUtf8Path { path: PathBuf },
     #[error("{path}: cannot hold a project's {kind}s, because it is not inside the project")]
     OutsideProject { path: PathBuf, kind: Kind },
@@ -1292,6 +1356,7 @@ impl WorkspaceError {
             WorkspaceError::Create { path, .. }
             | WorkspaceError::Read { path, .. }
             | WorkspaceError::Parse { path, .. }
+            | WorkspaceError::Malformed { path, .. }
             | WorkspaceError::NotAProject { path }
             | WorkspaceError::NotAWorkspace { path }
             | WorkspaceError::Version { path, .. }
@@ -1333,7 +1398,7 @@ fn read_config<T: for<'de> Deserialize<'de>>(path: &Path) -> Result<T, Workspace
 }
 
 /// Refuse a marker written by a version that knows more than this one.
-fn check_version(path: &Path, marker: Marker, found: u32) -> Result<(), WorkspaceError> {
+pub(crate) fn check_version(path: &Path, marker: Marker, found: u32) -> Result<(), WorkspaceError> {
     if found > marker.version() {
         return Err(WorkspaceError::Version {
             path: path.to_path_buf(),
@@ -1540,7 +1605,7 @@ fn mind_template(name: &str, directories: &Directories) -> String {
          # holding this {MIND_DIR}. Point them wherever the agents that read them\n\
          # already look (.claude/skills, docs/rules) and Mindflayer follows.\n\
          # They are meant to be committed: they travel with the project.\n\
-         version = {MIND_FORMAT_VERSION}\n\
+         version = {MIND_TOML_VERSION}\n\
          name = {}\n\
          \n\
          [directories]\n\

@@ -412,7 +412,7 @@ fn claim(scratch: &Path) -> Result<PathBuf, io::Error> {
 /// A number nobody can guess, without a dependency for it: `std` draws its
 /// hashers' keys from the operating system. The count keeps two calls in one
 /// process apart even if those keys were not random.
-fn random() -> u64 {
+pub(crate) fn random() -> u64 {
     static CALLS: AtomicU64 = AtomicU64::new(0);
     let mut hasher = RandomState::new().build_hasher();
     hasher.write_u64(CALLS.fetch_add(1, Ordering::Relaxed));

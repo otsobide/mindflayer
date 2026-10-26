@@ -6,7 +6,8 @@ use super::*;
 fn templates_round_trip_through_the_parser() {
     let mind: MindConfig =
         toml::from_str(&mind_template("collapse", &Directories::default())).unwrap();
-    assert_eq!(mind.version, MIND_FORMAT_VERSION);
+    // Not the newest a project's marker holds, which is a settings file's.
+    assert_eq!(mind.version, MIND_TOML_VERSION);
     assert_eq!(mind.name, "collapse");
     // Spelled out rather than left to the default, so the file answers
     // where a project's skills go without anyone reading the source.
@@ -135,9 +136,9 @@ fn a_refusal_names_the_marker_that_is_newer() {
     );
 }
 
-// Both constants are 2 today, so these two cannot yet tell a swapped check
-// from a right one. They are written against each marker's own constant so
-// that the first bump of either makes them do exactly that.
+// Written against each marker's own constant, so that a check holding one
+// marker to the other's version fails one of them: the second does since a
+// project's marker went to 3 while a workspace's stayed at 2.
 
 #[test]
 fn a_newer_project_marker_is_refused_while_a_current_workspace_marker_is_read() {
@@ -161,7 +162,7 @@ fn a_newer_project_marker_is_refused_while_a_current_workspace_marker_is_read() 
 #[test]
 fn a_newer_workspace_marker_is_refused_while_a_current_project_marker_is_read() {
     let (dir, mind, flayer) = both_markers();
-    with_version(&mind, MIND_FORMAT_VERSION);
+    with_version(&mind, MIND_TOML_VERSION);
     with_version(&flayer, FLAYER_FORMAT_VERSION + 1);
 
     let error = FlayerWorkspace::open(dir.path()).unwrap_err();
@@ -174,7 +175,26 @@ fn a_newer_workspace_marker_is_refused_while_a_current_project_marker_is_read() 
         "{error}"
     );
     let project = MindProject::open(dir.path()).unwrap();
-    assert_eq!(project.config().version, MIND_FORMAT_VERSION);
+    assert_eq!(project.config().version, MIND_TOML_VERSION);
+}
+
+#[test]
+fn a_mind_toml_claiming_the_settings_version_is_refused_rather_than_guessed_at() {
+    let (dir, mind, _) = both_markers();
+    with_version(&mind, SETTINGS_VERSION);
+
+    let error = MindProject::open(dir.path()).unwrap_err();
+
+    assert!(
+        matches!(&error, WorkspaceError::Malformed { path, .. } if *path == mind),
+        "{error}"
+    );
+    assert!(
+        error
+            .to_string()
+            .contains("version 3 is written as settings.json"),
+        "{error}"
+    );
 }
 
 /// The names in `dir`, sorted.

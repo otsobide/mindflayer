@@ -4,7 +4,7 @@ use std::fs;
 use std::path::Path;
 
 use mindflayer_core::ledger::{Action, LedgerError, Outcome};
-use mindflayer_core::workspace::{FLAYER_FORMAT_VERSION, MIND_FORMAT_VERSION};
+use mindflayer_core::workspace::{FLAYER_FORMAT_VERSION, MIND_FORMAT_VERSION, MIND_TOML_VERSION};
 use mindflayer_core::{
     resolve, Directories, FlayerWorkspace, Initialization, Inputs, Intent, Kind, MindProject,
     Reason, Registration, Resolved, WorkspaceError, FLAYER_CONFIG, FLAYER_DIR, MIND_CONFIG,
@@ -22,7 +22,7 @@ fn initializing_a_mind_project_creates_its_marker_and_its_skills_folder() {
     assert!(dir.path().join(MIND_DIR).join(MIND_CONFIG).is_file());
     assert!(project.directory_for(Kind::Skill).unwrap().is_dir());
     assert_eq!(project.root(), dir.path());
-    assert_eq!(project.config().version, MIND_FORMAT_VERSION);
+    assert_eq!(project.config().version, MIND_TOML_VERSION);
 }
 
 #[test]

@@ -32,6 +32,7 @@ pub mod paths;
 pub mod resolve;
 pub mod rule;
 pub mod scan;
+pub mod settings;
 pub mod skill;
 pub mod template;
 pub mod url;
@@ -53,6 +54,7 @@ pub use lock::{LockError, WorkspaceLock};
 pub use resolve::{resolve, resolve_except, Inputs, Intent, Reason, ResolveError, Resolved};
 pub use rule::{Lenient, RuleManifest};
 pub use scan::{scan, Found, Scan, ScanFailure};
+pub use settings::{ProjectId, Settings, Share, SETTINGS_FILE};
 pub use skill::{
     Compatibility, Metadata, SkillManifest, MAX_COMPATIBILITY_LEN, MAX_DESCRIPTION_LEN,
     MAX_NAME_SEGMENT_LEN,
@@ -61,5 +63,5 @@ pub use template::{Template, TemplateError, TEMPLATES_DIR};
 pub use workspace::{
     Directories, FlayerConfig, FlayerWorkspace, Initialization, Loaded, Marker, Member, MindConfig,
     MindProject, Registration, WorkspaceError, CACHE_DIR, DIRECTORIES_VERSION, FLAYER_CONFIG,
-    FLAYER_DIR, LIBRARY_DIR, MIND_CONFIG, MIND_DIR,
+    FLAYER_DIR, LIBRARY_DIR, MIND_CONFIG, MIND_DIR, SETTINGS_VERSION,
 };
