@@ -3,10 +3,12 @@
 use std::sync::Arc;
 
 use axum::extract::{Request, State};
-use axum::http::header::{AUTHORIZATION, COOKIE, WWW_AUTHENTICATE};
-use axum::http::{HeaderMap, HeaderValue, StatusCode};
+use axum::http::header::{
+    AUTHORIZATION, CACHE_CONTROL, CONTENT_TYPE, COOKIE, LOCATION, SET_COOKIE, WWW_AUTHENTICATE,
+};
+use axum::http::{HeaderMap, HeaderValue, Method, StatusCode};
 use axum::middleware::Next;
-use axum::response::Response;
+use axum::response::{IntoResponse, Response};
 
 use crate::api;
 use crate::token::Token;
@@ -55,6 +57,18 @@ impl Gate {
     }
 }
 
+/// The query parameter the launch link carries the token in.
+pub(crate) const PARAMETER: &str = "token";
+
+/// The token a query string offers, decoded as a browser encodes a form, so
+/// `%74oken` is `token` here exactly as it is to anything else that reads
+/// the query.
+pub(crate) fn offered(query: Option<&str>) -> Option<String> {
+    form_urlencoded::parse(query?.as_bytes())
+        .find(|(name, _)| name == PARAMETER)
+        .map(|(_, value)| value.into_owned())
+}
+
 /// The cookie's name on a given port.
 ///
 /// Per port because cookies are not: a browser sends a cookie set by
@@ -83,4 +97,48 @@ pub(crate) async fn require(
             .insert(WWW_AUTHENTICATE, HeaderValue::from_static("Bearer"));
         response
     }
+}
+
+/// Trade the launch link's token for a cookie: `GET /?token=...` answers with
+/// the cookie and a 303 to `/`.
+///
+/// The redirect is what takes the token out of the address bar, the history
+/// and anything the page later links to, so it is in a URL exactly once. The
+/// cookie is `HttpOnly`, so the panel's own scripts never hold the token, and
+/// `SameSite=Strict`, so a page on another site cannot send it. It carries no
+/// `Secure`: the panel is plain HTTP on loopback, and a browser that does not
+/// count 127.0.0.1 as a secure origin would drop the cookie altogether.
+pub(crate) async fn exchange(
+    State(gate): State<Arc<Gate>>,
+    request: Request,
+    next: Next,
+) -> Response {
+    let launch =
+        matches!(*request.method(), Method::GET | Method::HEAD) && request.uri().path() == "/";
+    let Some(offered) = launch.then(|| offered(request.uri().query())).flatten() else {
+        return next.run(request).await;
+    };
+    if !gate.token.matches(&offered) {
+        return (
+            StatusCode::UNAUTHORIZED,
+            [(CONTENT_TYPE, "text/plain; charset=utf-8")],
+            "This link's token is not this server's: open the link printed when it started.\n",
+        )
+            .into_response();
+    }
+    let cookie = format!(
+        "{}={}; Path=/; HttpOnly; SameSite=Strict",
+        gate.cookie,
+        gate.token.as_str()
+    );
+    (
+        StatusCode::SEE_OTHER,
+        [
+            (LOCATION, String::from("/")),
+            (SET_COOKIE, cookie),
+            // A response that sets the secret is not one to keep.
+            (CACHE_CONTROL, String::from("no-store")),
+        ],
+    )
+        .into_response()
 }

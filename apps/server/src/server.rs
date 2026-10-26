@@ -68,6 +68,18 @@ impl Listening {
         self.token.as_str()
     }
 
+    /// The link that opens the panel: `http://127.0.0.1:<port>/?token=...`.
+    /// The first request trades the token for a cookie and drops it from the
+    /// address bar.
+    pub fn url(&self) -> String {
+        format!(
+            "http://{}/?{}={}",
+            self.address,
+            auth::PARAMETER,
+            self.token.as_str()
+        )
+    }
+
     /// The name of the cookie the token is kept in on this port.
     pub fn cookie(&self) -> String {
         auth::cookie_name(self.address.port())
@@ -106,8 +118,13 @@ fn route<B: Backend>(server: Server<B>, token: &Token, port: u16) -> Router {
         .route("/api/{*rest}", any(api::missing))
         // `route_layer`, so the gate guards the routes above and nothing
         // added after them.
-        .route_layer(middleware::from_fn_with_state(gate, auth::require))
+        .route_layer(middleware::from_fn_with_state(
+            Arc::clone(&gate),
+            auth::require,
+        ))
         .with_state(api)
+        // Outside every route, so it sees `/` before anything that serves it.
+        .layer(middleware::from_fn_with_state(gate, auth::exchange))
 }
 
 /// An endpoint that answers a method it does not take in JSON, like every

@@ -2594,6 +2594,7 @@ name = "mindflayer-server"
 version = "0.1.0"
 dependencies = [
  "axum",
+ "form_urlencoded",
  "rand 0.10.2",
  "serde",
  "serde_json",
