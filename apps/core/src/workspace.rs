@@ -1258,6 +1258,17 @@ fn climbs(route: &Path) -> bool {
 /// the new one, never half of each. The temporary sits beside the original so
 /// the rename stays inside one filesystem, which is where it is atomic.
 pub(crate) fn replace_file(path: &Path, contents: &str) -> Result<(), WorkspaceError> {
+    replace_bytes(path, contents.as_bytes())
+        .map_err(|(path, source)| WorkspaceError::Create { path, source })
+}
+
+/// [`replace_file`] for bytes, failing with the path the error is about (the
+/// temporary or the file) rather than a `WorkspaceError`.
+///
+/// Split out for files that are not markers and need not be UTF-8: git's
+/// local exclude file is bytes, and its failures belong to its own module's
+/// error, not to a workspace's.
+pub(crate) fn replace_bytes(path: &Path, contents: &[u8]) -> Result<(), (PathBuf, io::Error)> {
     // Follow a symlinked config to the file it names. Replacing the link
     // itself would silently detach a workspace from a config someone chose to
     // share, and leave the original holding stale contents.
@@ -1268,10 +1279,7 @@ pub(crate) fn replace_file(path: &Path, contents: &str) -> Result<(), WorkspaceE
     name.push(".tmp");
     let temporary = path.with_file_name(name);
 
-    fs::write(&temporary, contents).map_err(|source| WorkspaceError::Create {
-        path: temporary.clone(),
-        source,
-    })?;
+    fs::write(&temporary, contents).map_err(|source| (temporary.clone(), source))?;
 
     // A rename carries the temporary file's permissions with it, so the
     // original's are copied across first: a config chmodded to 600 must not
@@ -1283,10 +1291,7 @@ pub(crate) fn replace_file(path: &Path, contents: &str) -> Result<(), WorkspaceE
     fs::rename(&temporary, path).map_err(|source| {
         // A temporary left behind by a failed rename is litter nothing owns.
         let _ = fs::remove_file(&temporary);
-        WorkspaceError::Create {
-            path: path.to_path_buf(),
-            source,
-        }
+        (path.to_path_buf(), source)
     })
 }
 
