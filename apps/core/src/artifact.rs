@@ -336,6 +336,15 @@ impl Artifact {
         self.differ |= differs || other.differ;
     }
 
+    /// Mark as installed each copy `recorded` says Mindflayer put where it
+    /// is, and every other as not.
+    pub(crate) fn record(&mut self, recorded: impl Fn(&Path) -> bool) {
+        self.placement.installed = recorded(&self.path);
+        for copy in &mut self.others {
+            copy.placement.installed = recorded(&copy.path);
+        }
+    }
+
     /// The root of the mind project this was found in.
     pub fn project(&self) -> &Path {
         &self.project

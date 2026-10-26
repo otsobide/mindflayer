@@ -1,6 +1,6 @@
 //! Every artifact held by a set of mind projects.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
@@ -10,7 +10,9 @@ use thiserror::Error;
 use crate::agent::Agent;
 use crate::artifact::{Artifact, ArtifactError};
 use crate::hash;
+use crate::install;
 use crate::kind::{Kind, Layout};
+use crate::ledger::{Ledger, LedgerError};
 use crate::paths;
 use crate::workspace::{same_directory, FlayerWorkspace, MindProject};
 
@@ -261,6 +263,51 @@ impl Catalog {
 
         catalog.settle();
         catalog
+    }
+
+    /// The same catalog, with every copy `ledger` records Mindflayer putting
+    /// into a project `workspace` links marked as installed
+    /// ([`Provenance::Installed`](crate::Provenance::Installed)).
+    ///
+    /// What makes a skill in a folder a project authors in its own or an
+    /// install's, and one in an agent's folder an install's or somebody
+    /// else's: the ledger, by the path of each copy it records
+    /// ([`Ledger::copies`]), not by name, so an install of one name into one
+    /// folder does not claim what somebody keeps under that name in another.
+    /// Apart from discovery, which reads files and nothing else: a listing
+    /// that says nothing of who put what where opens no ledger, and one that
+    /// does is handed the one its workspace keeps, whose records are that
+    /// workspace's alone. A project it does not link has none there.
+    ///
+    /// A ledger that cannot be read is a failure, said once for each project
+    /// and kind it was asked about, and leaves their copies unrecorded:
+    /// foreign or authored, which nothing changes, rather than installed,
+    /// which an uninstall may delete.
+    pub fn with_records(mut self, workspace: &FlayerWorkspace, ledger: &Ledger) -> Self {
+        let mut recorded: BTreeMap<(PathBuf, Kind), BTreeSet<String>> = BTreeMap::new();
+        let Catalog {
+            artifacts,
+            failures,
+        } = &mut self;
+        for artifact in artifacts.iter_mut() {
+            let (root, kind) = (artifact.project().to_path_buf(), artifact.kind());
+            if !workspace.is_linked(&root) {
+                continue;
+            }
+            let copies = recorded.entry((root.clone(), kind)).or_insert_with(|| {
+                let entry = install::entry_for_root(workspace, &root);
+                match ledger.copies(&entry, kind) {
+                    Ok(copies) => copies.into_iter().collect(),
+                    Err(error) => {
+                        failures.push(DiscoveryFailure::Ledger(error));
+                        BTreeSet::new()
+                    }
+                }
+            });
+            artifact.record(|path| copies.contains(&install::route(&root, path)));
+        }
+        self.settle();
+        self
     }
 
     /// Two catalogs as one, in the same order and with each file once.
@@ -562,6 +609,9 @@ pub enum DiscoveryFailure {
         /// Every copy, the one listed first.
         paths: Vec<PathBuf>,
     },
+    /// The ledger, read to say which copies were installed, could not be.
+    #[error(transparent)]
+    Ledger(LedgerError),
     /// A copy that could not be read through to be compared with the others
     /// of its name: one holding a link, or a file that cannot be read.
     #[error("{path}: cannot be compared with the other copies of `{name}`: {source}")]
@@ -582,6 +632,7 @@ impl DiscoveryFailure {
             | DiscoveryFailure::UnusableName { path }
             | DiscoveryFailure::Uncompared { path, .. } => path,
             DiscoveryFailure::Artifact(error) => error.path(),
+            DiscoveryFailure::Ledger(error) => error.path(),
             DiscoveryFailure::Diverged { paths, .. } => &paths[0],
         }
     }
@@ -594,6 +645,7 @@ impl DiscoveryFailure {
             DiscoveryFailure::Directory { .. }
             | DiscoveryFailure::UnusableName { .. }
             | DiscoveryFailure::Artifact(_)
+            | DiscoveryFailure::Ledger(_)
             | DiscoveryFailure::Uncompared { .. } => true,
             DiscoveryFailure::Diverged { .. } => false,
         }

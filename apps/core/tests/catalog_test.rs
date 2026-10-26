@@ -3,9 +3,10 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 
+use mindflayer_core::ledger::{InstallRecord, Target};
 use mindflayer_core::{
-    Agent, Catalog, Declared, Directories, DiscoveryFailure, Kind, MindProject, Provenance,
-    Reference, RuleManifest, Share, ValidationIssue,
+    Agent, ArtifactCopy, Catalog, Declared, Directories, DiscoveryFailure, FlayerWorkspace, Kind,
+    Ledger, MindProject, Provenance, Reference, RuleManifest, Share, ValidationIssue,
 };
 use tempfile::TempDir;
 
@@ -769,4 +770,143 @@ fn a_copy_holding_a_link_is_said_rather_than_followed_to_compare_it() {
     assert!(matches!(failure, DiscoveryFailure::Uncompared { .. }));
     assert!(failure.is_unreadable());
     assert_eq!(failure.path(), claudes);
+}
+
+/// A workspace in a temporary folder, linking `alpha` beside it, a project
+/// marked by its settings naming every agent and authoring skills in
+/// `skills`, if anywhere.
+fn linked(skills: Option<&str>) -> (TempDir, FlayerWorkspace, MindProject) {
+    let dir = TempDir::new().unwrap();
+    let (mut workspace, _) = FlayerWorkspace::init(dir.path()).unwrap();
+    let project = marked(&dir, "alpha", &Agent::ALL, skills);
+    workspace.link(&project).unwrap();
+    (dir, workspace, project)
+}
+
+/// Record in `ledger` that `name` was installed into `alpha`, the route the
+/// workspace stores it by, with a copy at each of `paths`.
+fn record(ledger: &Ledger, name: &str, paths: &[&str]) {
+    ledger
+        .installed(
+            "alpha",
+            &InstallRecord {
+                kind: Kind::Skill,
+                name: name.to_owned(),
+                source_id: None,
+                origin: Some(String::from("workspace")),
+                content_hash: None,
+                targets: paths
+                    .iter()
+                    .map(|path| Target {
+                        agent: None,
+                        path: (*path).to_owned(),
+                    })
+                    .collect(),
+            },
+        )
+        .unwrap();
+}
+
+#[test]
+fn a_skill_where_the_project_authors_for_an_agent_is_installed_or_authored_as_the_ledger_says() {
+    let (_dir, workspace, one) = linked(Some(".claude/skills"));
+    put(&one, ".claude/skills/audit", &skill_file("audit"));
+    put(&one, ".claude/skills/deploy", &skill_file("deploy"));
+    let ledger = workspace.ledger().unwrap();
+    record(&ledger, "deploy", &[".claude/skills/deploy"]);
+
+    let catalog = Catalog::discover(std::slice::from_ref(&one)).with_records(&workspace, &ledger);
+
+    assert!(catalog.failures().is_empty(), "{:?}", catalog.failures());
+    let found: Vec<(&str, usize, Provenance)> = catalog
+        .artifacts()
+        .iter()
+        .map(|artifact| {
+            (
+                artifact.name(),
+                artifact.copies().len(),
+                artifact.provenance(),
+            )
+        })
+        .collect();
+    assert_eq!(
+        found,
+        [
+            ("audit", 1, Provenance::Authored),
+            ("deploy", 1, Provenance::Installed)
+        ]
+    );
+    // Without the ledger, nothing is anybody's but the project's.
+    let unrecorded = Catalog::discover(std::slice::from_ref(&one));
+    assert_eq!(unrecorded.artifacts()[1].provenance(), Provenance::Authored);
+}
+
+#[test]
+fn a_copy_in_an_agents_folder_is_installed_only_at_a_path_the_ledger_records() {
+    let (_dir, workspace, one) = linked(Some("skills"));
+    put(&one, ".agents/skills/deploy", &skill_file("deploy"));
+    put(&one, ".claude/skills/deploy", &skill_file("deploy"));
+    put(&one, ".agents/skills/review", &skill_file("review"));
+    put(&one, ".agents/skills/triage", &skill_file("triage"));
+    put(&one, ".claude/skills/triage", &skill_file("triage"));
+    let ledger = workspace.ledger().unwrap();
+    record(
+        &ledger,
+        "deploy",
+        &[".agents/skills/deploy", ".claude/skills/deploy"],
+    );
+    // Installed under that name, somewhere else: the copy here is still
+    // somebody's.
+    record(&ledger, "review", &["skills/review"]);
+    record(&ledger, "triage", &[".claude/skills/triage"]);
+
+    let catalog = Catalog::discover(std::slice::from_ref(&one)).with_records(&workspace, &ledger);
+
+    let found: Vec<(&str, Provenance)> = catalog
+        .artifacts()
+        .iter()
+        .map(|artifact| (artifact.name(), artifact.provenance()))
+        .collect();
+    assert_eq!(
+        found,
+        [
+            ("deploy", Provenance::Installed),
+            ("review", Provenance::Foreign),
+            ("triage", Provenance::Foreign)
+        ]
+    );
+    let triage: Vec<Provenance> = catalog.artifacts()[2]
+        .copies()
+        .iter()
+        .map(ArtifactCopy::provenance)
+        .collect();
+    assert_eq!(triage, [Provenance::Foreign, Provenance::Installed]);
+}
+
+#[test]
+fn a_project_the_workspace_does_not_link_has_no_record_in_its_ledger() {
+    let (dir, workspace, _) = linked(None);
+    let other = marked(&dir, "beta", &Agent::ALL, None);
+    put(&other, ".claude/skills/deploy", &skill_file("deploy"));
+    let ledger = workspace.ledger().unwrap();
+    ledger
+        .installed(
+            "beta",
+            &InstallRecord {
+                kind: Kind::Skill,
+                name: String::from("deploy"),
+                source_id: None,
+                origin: None,
+                content_hash: None,
+                targets: vec![Target {
+                    agent: None,
+                    path: String::from(".claude/skills/deploy"),
+                }],
+            },
+        )
+        .unwrap();
+
+    let catalog = Catalog::discover(std::slice::from_ref(&other)).with_records(&workspace, &ledger);
+
+    assert_eq!(catalog.artifacts()[0].provenance(), Provenance::Foreign);
 }
