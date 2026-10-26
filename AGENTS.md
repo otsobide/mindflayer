@@ -116,11 +116,22 @@ These are easy to break from a single file without noticing.
   `-p`) are one implementation given a different holder
   (`FlayerWorkspace::own` makes the workspace look like a `MindProject`).
 - **The TUI only runs commands.** A key produces a `Task`, and
-  `Task::commands` turns it into argument lines that are parsed by
-  `Cli`/`FlayerCli` and run through `run_with`/`run_flayer_with`, what
-  `run`/`run_flayer_cli` call once they have read the environment. A new
-  feature is written as a command first; the TUI gains it by producing that
-  command's words. Never add a TUI-only code path.
+  `Task::commands` turns it into argument lines that a `Runner` hands to
+  `execute`, which parses them with `Cli`/`FlayerCli` and runs them through
+  `run_with`/`run_flayer_with` with the screen's `Lookup` and a
+  `gather::Watch`: what the binaries' `run_watched`/`run_flayer_cli_watched`
+  call once they have read the environment. A test's stand-in `Runner` is
+  handed the same words. A new feature is written as a command first; the
+  TUI gains it by producing that command's words. Never add a TUI-only code
+  path. A gather's lines run on a thread of their own (`Task::runs_apart`),
+  still through the same parsers: the thread changes where they run, not
+  what they are.
+- **A gather is watched, and stops only before it places.** Its `Request`
+  carries a `gather::Watch`, core's progress callback and cancel flag; no gix
+  type reaches a front end. A cancel is honoured until the shelf starts to
+  change, and leaves the shelf and the ledger as they were, so a write to
+  either before that last check is undone on a cancel, as registering the
+  source is.
 - **Output is built, then printed.** Commands return an `Outcome` (stdout
   text, stderr lines, ok), so tests assert on the exact text a user sees.
 - **Failures are collected, not raised.** One unreadable artifact or stale
@@ -319,7 +330,9 @@ These are easy to break from a single file without noticing.
 - Screens are tested without a terminal. Drive `state` with key events, or
   call `tui::step`, and render `ui` into `ratatui::backend::TestBackend`. Only
   the event loops in `tui.rs` and `install.rs` go untested, so keep logic out
-  of them.
+  of them. A task that runs apart is started by `tui::step` and taken in by
+  `tui::settle` or `tui::wait`; to make one slow, stand a `Runner` in for the
+  real command lines (`App::runner`).
 - Fixtures use `tempfile::TempDir`. Test names are sentences
   (`init_flayer_is_the_same_as_init`).
 

@@ -10,11 +10,12 @@ pub use clap::Parser;
 pub use mindflayer_cli::install::state::{Focus, Screen, Step};
 pub use mindflayer_cli::install::{self as install_screen, ui};
 pub use mindflayer_cli::tui;
-pub use mindflayer_cli::tui::state::{App, Holder, Mode, Scope, Task, View};
+pub use mindflayer_cli::tui::state::{App, Done, Holder, Mode, Runner, Scope, Task, View};
 pub use mindflayer_cli::{
-    agent_homes, default_home, run, run_flayer_cli, AgentHomeOptions, Cli, CliError, Failure,
-    FlayerCli, Lookup, Outcome,
+    agent_homes, default_home, run, run_flayer_cli, run_flayer_cli_watched, run_watched,
+    AgentHomeOptions, Cli, CliError, Failure, FlayerCli, Lookup, Outcome,
 };
+pub use mindflayer_core::gather::{Progress, Watch};
 pub use mindflayer_core::install::Standing;
 pub use mindflayer_core::ledger::Ledger;
 pub use mindflayer_core::{AgentHomes, FlayerWorkspace};
@@ -376,6 +377,9 @@ pub fn press_and_run(app: &mut App, code: KeyCode) -> Option<Task> {
     match press_key(app, code) {
         tui::state::Step::Run(task) => {
             tui::step(app, task.clone());
+            // To its end, as the loop's frames would see it, when it runs
+            // apart.
+            tui::wait(app);
             Some(task)
         }
         _ => None,

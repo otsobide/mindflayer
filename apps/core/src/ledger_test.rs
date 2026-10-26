@@ -43,6 +43,40 @@ fn two_urls_with_one_readable_name_get_separate_directories() {
 }
 
 #[test]
+fn a_forgotten_source_frees_its_directory_and_takes_its_artifacts() {
+    let ledger = Ledger::in_memory().unwrap();
+    let source = ledger
+        .source_for(SourceKind::Git, "https://h/a", None, "skills")
+        .unwrap();
+    ledger
+        .record(
+            &source,
+            Kind::Skill,
+            "deploy",
+            "skills/h-a/deploy",
+            None,
+            None,
+        )
+        .unwrap();
+
+    assert!(ledger.forget_source(source.id).unwrap());
+    assert!(!ledger.forget_source(source.id).unwrap(), "already gone");
+
+    assert!(ledger.gathered().unwrap().is_empty());
+    assert_eq!(
+        ledger
+            .source(SourceKind::Git, "https://h/a", None, "skills")
+            .unwrap(),
+        None
+    );
+    // The name it had is free for the next source to reduce to it.
+    let next = ledger
+        .source_for(SourceKind::Git, "ssh://h/a", None, "skills")
+        .unwrap();
+    assert_eq!(next.directory, "h-a");
+}
+
+#[test]
 fn a_reference_is_part_of_what_makes_a_source() {
     let ledger = Ledger::in_memory().unwrap();
     let main = ledger

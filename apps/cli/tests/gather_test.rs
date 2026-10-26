@@ -2,6 +2,8 @@
 
 mod common;
 
+use std::sync::{Arc, Mutex};
+
 use common::*;
 
 // ---------------------------------------------------------------------------
@@ -275,6 +277,63 @@ fn gather_list_tells_two_branches_of_one_repository_apart() {
         outcome.stdout.contains(&format!("{url}#{branch}")),
         "{}",
         outcome.stdout
+    );
+}
+
+#[test]
+fn a_watched_gather_reports_its_steps_and_prints_what_an_unwatched_one_does() {
+    let source = repository(&[("skills/deploy/SKILL.md", &skill_file("deploy", "Ship it"))]);
+    let url = source.path().to_string_lossy().into_owned();
+    let (watched, plain) = (TempDir::new().unwrap(), TempDir::new().unwrap());
+    flayer(watched.path(), &["init"]).unwrap();
+    flayer(plain.path(), &["init"]).unwrap();
+    let seen = Arc::new(Mutex::new(Vec::new()));
+    let watch = Watch::new().reporting_to({
+        let seen = Arc::clone(&seen);
+        move |progress| seen.lock().unwrap().push(progress)
+    });
+
+    let outcome = run_flayer_cli_watched(
+        &parsed_flayer(watched.path(), &["gather", "git", &url]),
+        &watch,
+    )
+    .unwrap();
+
+    let seen = seen.lock().unwrap();
+    assert_eq!(seen.first(), Some(&Progress::Connecting), "{seen:?}");
+    assert_eq!(seen.last(), Some(&Progress::Placing { done: 1, total: 1 }));
+    // The progress is the front end's to show; the report is the command's.
+    assert_eq!(
+        outcome,
+        flayer(plain.path(), &["gather", "git", &url]).unwrap()
+    );
+}
+
+#[test]
+fn a_cancelled_gather_says_so_and_leaves_the_shelf_as_it_was() {
+    let source = repository(&[("skills/deploy/SKILL.md", &skill_file("deploy", "Ship it"))]);
+    let dir = TempDir::new().unwrap();
+    flayer(dir.path(), &["init"]).unwrap();
+    let url = source.path().to_string_lossy().into_owned();
+    let watch = Watch::new();
+    watch.cancel();
+
+    // The long way round as well, which is `mind`'s run path.
+    let failure = run_watched(
+        &parsed_mind(dir.path(), &["flayer", "gather", "git", &url]),
+        &watch,
+    )
+    .unwrap_err();
+
+    assert_eq!(
+        failure.error.to_string(),
+        "cancelled, with nothing put on the shelf"
+    );
+    let shelf = flayer(dir.path(), &["gather", "list"]).unwrap();
+    assert!(
+        shelf.stdout.starts_with("nothing gathered yet"),
+        "{}",
+        shelf.stdout
     );
 }
 

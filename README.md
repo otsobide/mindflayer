@@ -356,6 +356,11 @@ https://github.com/acme/skills at a1b2c3d
 The repository's `skills` folder is what gets harvested; `--path agents` takes
 another one, and `--ref v2` takes a branch or a tag instead of the default.
 
+With stderr on a terminal it says what it is doing while it does it
+(`connecting`, `receiving objects 120/340`, `reading folders 3/40`) on one line
+there, which it wipes before the report, so the report reads as above. With
+stderr piped or redirected, it says nothing until the report.
+
 Gathering fills the shelf and stops there. **Nothing is written into a mind
 project**: which of these a project should carry is a separate decision, and a
 `git clone` that quietly edited your repositories would be the wrong kind of
@@ -696,7 +701,7 @@ Every key runs a command you could have typed, through the same parser:
 | `l` | link a project | `flayer link <path>` |
 | `u` | unlink the project | `flayer unlink <path>` |
 | `v` | validate everything | `flayer validate` |
-| `g` | gather from a git repository | `flayer gather git <url>` |
+| `g` | gather from a git repository, showing how far it has got; `esc` stops it, until it starts placing | `flayer gather git <url>` |
 | `L` | load another workspace's own skills; enter on a loaded one unloads it | `flayer load <path>`, `flayer unload <path>` |
 | `s` | what is on the shelf | `flayer gather list` |
 | `i` | install from the workspace's own, a loaded workspace, or the shelf | `flayer install` |
