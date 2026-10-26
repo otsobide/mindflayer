@@ -20,8 +20,9 @@
 //! be told apart by name from everybody else's.
 //!
 //! JSON and JSONC are edited through jsonc-parser's CST, which holds every
-//! byte of the text, comments and whitespace included, and edits it in
-//! place. Not parsed into a value and serialized again, as `serde_json`
+//! byte of the text, comments and whitespace included: a replace or a remove
+//! changes it in place, and an insert is spliced into the text where it
+//! says. Not parsed into a value and serialized again, as `serde_json`
 //! would: that writes the whole file in its own layout and drops every
 //! comment in it. TOML is edited through toml_edit, for the same reason, as
 //! the markers are.
@@ -209,7 +210,7 @@ fn edit_document(
 /// (nothing, for a remove), and holds everything else `before` held.
 ///
 /// Compared as values, by their canonical forms: the bytes outside the entry
-/// are the libraries' to keep, and the tests' to hold them to.
+/// are kept by how each format's edit is made, and the tests hold them to it.
 fn kept(
     format: Format,
     before: &Value,

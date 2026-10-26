@@ -200,10 +200,12 @@ fn tabs_are_kept_by_every_edit() {
 #[test]
 fn removing_what_was_inserted_gives_back_the_file_byte_for_byte() {
     let tabs = "{\n\t\"mcpServers\": {\n\t\t\"filesystem\": {\n\t\t\t\"command\": \"npx\"\n\t\t}\n\t}\n}\n";
+    let blank = "{\n  \"mcpServers\": {\n\n    \"a\": 1\n\n  }\n}\n";
     for (format, original) in [
         (Format::Jsonc, JSONC),
         (Format::Json, CRLF),
         (Format::Json, tabs),
+        (Format::Json, blank),
     ] {
         let parent = if format == Format::Jsonc {
             "mcp"
@@ -315,10 +317,7 @@ fn removing_the_last_entry_leaves_its_object_empty() {
 }
 
 #[test]
-fn jsonc_parser_drops_blank_lines_just_inside_the_object_an_entry_goes_into() {
-    // Its layout, not ours, pinned so an upgrade that changes it is noticed:
-    // the blank line under `{` and the one above `}` go. The blank line
-    // between the other members stays.
+fn blank_lines_just_inside_the_object_an_entry_goes_into_stay() {
     let text = "{\n  \"mcpServers\": {\n\n    \"a\": 1,\n\n    \"b\": 2\n\n  }\n}\n";
     let edited = edit(
         Format::Json,
@@ -329,25 +328,104 @@ fn jsonc_parser_drops_blank_lines_just_inside_the_object_an_entry_goes_into() {
     .unwrap();
     assert_eq!(
         edited,
-        "{\n  \"mcpServers\": {\n    \"a\": 1,\n\n    \"b\": 2,\n    \"c\": 3\n  }\n}\n"
+        "{\n  \"mcpServers\": {\n\n    \"a\": 1,\n\n    \"b\": 2,\n    \"c\": 3\n\n  }\n}\n"
     );
 }
 
 #[test]
-fn jsonc_parser_breaks_a_one_line_object_an_entry_goes_into() {
-    // Its layout too: a member goes on a line of its own, so the object it
-    // goes into is laid out on several.
-    let text = "{ \"mcpServers\": { \"a\": 1 } }\n";
+fn an_object_written_on_one_line_takes_an_entry_on_that_line() {
+    let gh = Value::object([
+        ("command", Value::from("gh")),
+        ("args", Value::array(["mcp"])),
+        ("env", Value::object(Vec::<(String, Value)>::new())),
+    ]);
+    let cases = [
+        (
+            "{ \"mcpServers\": { \"a\": 1 } }\n",
+            "{ \"mcpServers\": { \"a\": 1, \"github\": { \"command\": \"gh\", \"args\": [\"mcp\"], \"env\": {} } } }\n",
+        ),
+        // Minified, as a tool that writes JSON without spaces leaves it.
+        (
+            "{\"mcpServers\":{\"a\":1,\"b\":2}}",
+            "{\"mcpServers\":{\"a\":1,\"b\":2, \"github\": { \"command\": \"gh\", \"args\": [\"mcp\"], \"env\": {} }}}",
+        ),
+        // An object on one line in a file on several: the file's lines stay.
+        (
+            "{\n  \"mcpServers\": {\"a\": {\"enabled\": true}}\n}\n",
+            "{\n  \"mcpServers\": {\"a\": {\"enabled\": true}, \"github\": { \"command\": \"gh\", \"args\": [\"mcp\"], \"env\": {} }}\n}\n",
+        ),
+    ];
+    for (text, expected) in cases {
+        let key = ["mcpServers", "github"];
+        let edited = edit(Format::Json, text, &key, &Edit::Insert(gh.clone())).unwrap();
+        assert_eq!(edited, expected);
+        assert_eq!(
+            edit(Format::Json, &edited, &key, &Edit::Remove).unwrap(),
+            text
+        );
+    }
+}
+
+#[test]
+fn an_insert_goes_after_the_comment_on_the_last_entry_s_line_and_its_comma_before() {
+    let text = "{\n  \"a\": 1 // the first\n  // above the brace\n}\n";
+    let edited = edit(Format::Jsonc, text, &["b"], &Edit::Insert(Value::from(2))).unwrap();
+    assert_eq!(
+        edited,
+        "{\n  \"a\": 1, // the first\n  \"b\": 2\n  // above the brace\n}\n"
+    );
+}
+
+#[test]
+fn an_entry_goes_into_an_empty_object_after_the_comments_in_it() {
+    let text = "{\n  \"mcp\": {\n    // none yet\n  },\n  \"theme\": \"dark\",\n}\n";
+    let edited = edit(
+        Format::Jsonc,
+        text,
+        &["mcp", "github"],
+        &Edit::Insert(Value::object([("command", Value::from("gh"))])),
+    )
+    .unwrap();
+    // With trailing commas, since the file writes them.
+    assert_eq!(
+        edited,
+        "{\n  \"mcp\": {\n    // none yet\n    \"github\": {\n      \"command\": \"gh\",\n    },\n  },\n  \"theme\": \"dark\",\n}\n"
+    );
+
     let edited = edit(
         Format::Json,
-        text,
-        &["mcpServers", "b"],
-        &Edit::Insert(Value::from(2)),
+        "{\n  \"mcpServers\": {},\n  \"theme\": \"dark\"\n}\n",
+        &["mcpServers", "github"],
+        &Edit::Insert(Value::object([("command", Value::from("gh"))])),
     )
     .unwrap();
     assert_eq!(
         edited,
-        "{ \"mcpServers\": {\n    \"a\": 1,\n    \"b\": 2\n  } }\n"
+        "{\n  \"mcpServers\": {\n    \"github\": {\n      \"command\": \"gh\"\n    }\n  },\n  \"theme\": \"dark\"\n}\n"
+    );
+}
+
+#[test]
+fn an_array_of_objects_is_laid_out_on_lines_and_one_of_values_on_one() {
+    let edited = edit(
+        Format::Json,
+        "{\n  \"a\": 1\n}\n",
+        &["b"],
+        &Edit::Insert(Value::object([
+            ("flat", Value::array([Value::from(1), Value::from(2)])),
+            (
+                "nested",
+                Value::array([
+                    Value::object([("x", Value::from(1))]),
+                    Value::array([] as [Value; 0]),
+                ]),
+            ),
+        ])),
+    )
+    .unwrap();
+    assert_eq!(
+        edited,
+        "{\n  \"a\": 1,\n  \"b\": {\n    \"flat\": [1, 2],\n    \"nested\": [\n      {\n        \"x\": 1\n      },\n      []\n    ]\n  }\n}\n"
     );
 }
 

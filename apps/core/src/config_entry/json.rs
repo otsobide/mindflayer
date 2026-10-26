@@ -1,27 +1,33 @@
 //! JSON and JSONC entries, through jsonc-parser's CST.
 //!
-//! What the CST keeps, and what it does not, is jsonc-parser's, and the
-//! tests here pin it:
+//! What an edit keeps, the tests here pin:
 //!
-//! - An insert goes after the last member of its object, on a line of its
-//!   own, indented as that member is, with the file's line ending, and with
-//!   a trailing comma when the file writes them.
+//! - An insert goes after the last member of its object, after the comment
+//!   that shares that member's line, with the file's line ending, and with a
+//!   trailing comma when that member has one. On a line of its own, indented
+//!   as that member is, when the object is written on several lines; after
+//!   it on the same line when the object is written on one.
 //! - A replace rewrites the value and nothing before it: the key, and the
 //!   comments on the lines above, stay.
 //! - A remove takes the member, its comma, and a comment that shares its
 //!   line. A comment on a line above is left where it is: nothing says it
 //!   was about this member and not about what follows.
-//! - Two things are its own layout, not ours. Blank lines just inside the
-//!   braces of the object an entry goes into are dropped, and an object
-//!   written on one line is broken onto several when an entry goes into it,
-//!   since a member is always written on a line of its own.
+//!
+//! An insert is spliced into the text, the CST only saying where, rather
+//! than made through the CST's own `append`: that lays the object out again
+//! first, dropping the blank lines just inside its braces and breaking one
+//! written on a single line onto several. A replace and a remove go through
+//! the CST, which touches nothing outside the member there.
+
+use std::fmt::Write as _;
 
 use jsonc_parser::cst::{
-    CstContainerNode, CstInputValue, CstLeafNode, CstNode, CstObject, CstObjectProp, CstRootNode,
+    CstContainerNode, CstInputValue, CstLeafNode, CstNewlineKind, CstNode, CstObject,
+    CstObjectProp, CstRootNode,
 };
 use jsonc_parser::{CollectOptions, ParseOptions};
 
-use super::{display, number, unique, Edit, EntryError, Format, Value};
+use super::{display, number, quote, unique, Edit, EntryError, Format, Value};
 
 /// What `format` lets a text hold, and nothing more.
 ///
@@ -68,8 +74,8 @@ pub(super) fn document(format: Format, text: &str) -> Result<Value, EntryError> 
     value_of(format, &top)
 }
 
-/// `text` with `edit` made through the CST. `None` is a file not there yet,
-/// which becomes an object holding the entry.
+/// `text` with `edit` made to it. `None` is a file not there yet, which
+/// becomes an object holding the entry.
 ///
 /// What [`super::edit`] checks first is checked again here, rather than
 /// trusted, so a mistake there is an error and not a panic.
@@ -79,13 +85,12 @@ pub(super) fn edit(
     key: &[&str],
     edit: &Edit,
 ) -> Result<String, EntryError> {
+    let text = text.unwrap_or("{}\n");
     // The root must outlive every node taken from it: they hold it weakly.
-    let root = parse(format, text.unwrap_or_default())?;
-    let top = match text {
-        Some(_) => root.object_value(),
-        None => root.object_value_or_create(),
-    }
-    .ok_or_else(|| EntryError::NotAnObject { key: String::new() })?;
+    let root = parse(format, text)?;
+    let top = root
+        .object_value()
+        .ok_or_else(|| EntryError::NotAnObject { key: String::new() })?;
 
     match edit {
         Edit::Insert(value) => {
@@ -107,16 +112,296 @@ pub(super) fn edit(
             }
             // Whatever is missing on the way goes in with the entry, as one
             // member of the deepest object that is there, laid out once.
-            let mut nested = input(format, value)?;
+            let mut nested = value.clone();
             for segment in key[depth + 1..].iter().rev() {
-                nested = CstInputValue::Object(vec![((*segment).to_owned(), nested)]);
+                nested = Value::Object(vec![((*segment).to_owned(), nested)]);
             }
-            object.append(key[depth], nested);
+            return splice(format, &root, text, &object, key[depth], &nested);
         }
         Edit::Replace(value) => entry(&top, key)?.set_value(input(format, value)?),
         Edit::Remove => entry(&top, key)?.remove(),
     }
     Ok(root.to_string())
+}
+
+/// `text` with the member `name` holding `value` written after the last
+/// member of `object`, a node of `root`, which was parsed from `text`.
+///
+/// Every byte of `text` stays, in order: what goes in is the member and the
+/// comma before it, or, in an object with no members, the member on a line
+/// of its own between the braces.
+fn splice(
+    format: Format,
+    root: &CstRootNode,
+    text: &str,
+    object: &CstObject,
+    name: &str,
+    value: &Value,
+) -> Result<String, EntryError> {
+    let node = CstNode::from(object.clone());
+    let open = start(&node);
+    let close = end(&node) - 1;
+    let newline = match root.newline_kind() {
+        CstNewlineKind::CarriageReturnLineFeed => "\r\n",
+        _ => "\n",
+    };
+    let opening = indentation(text, open);
+    let unit = || {
+        root.single_indent_text()
+            .filter(|unit| !unit.is_empty())
+            .unwrap_or_else(|| "  ".to_owned())
+    };
+
+    let mut member = String::new();
+    let (comma, at) = match object.properties().last() {
+        Some(last) => {
+            let last = CstNode::from(last.clone());
+            let trailing = last.trailing_comma().map(CstNode::from);
+            // A comma for the member that is last now, right after it and
+            // before any comment on its line, unless it has one already.
+            let comma = trailing.is_none().then(|| end(&last));
+            let after = trailing.clone().unwrap_or_else(|| last.clone());
+            let at = after
+                .trailing_comments_same_line()
+                .last()
+                .map_or_else(|| end(&after), |comment| end(&comment.into()));
+
+            if node.children().iter().any(CstNode::is_newline) {
+                // Indented as the last member is, unless it shares the
+                // opening brace's line, and a level deeper than the brace's
+                // line for what is inside the member.
+                let (indent, unit) = if line_start(text, start(&last)) > open {
+                    let indent = indentation(text, start(&last));
+                    let unit = indent
+                        .strip_prefix(opening)
+                        .filter(|unit| !unit.is_empty())
+                        .map_or_else(unit, str::to_owned);
+                    (indent.to_owned(), unit)
+                } else {
+                    let unit = unit();
+                    (format!("{opening}{unit}"), unit)
+                };
+                let lines = Lines {
+                    newline,
+                    unit: &unit,
+                    trailing: trailing.is_some(),
+                };
+                member.push_str(newline);
+                member.push_str(&indent);
+                write_member(format, name, value, Some(&lines), &indent, &mut member)?;
+            } else {
+                member.push(' ');
+                write_member(format, name, value, None, "", &mut member)?;
+            }
+            if trailing.is_some() {
+                member.push(',');
+            }
+            (comma, at)
+        }
+        None => {
+            // After the last comment between the braces, if any.
+            let at = node
+                .children()
+                .iter()
+                .rfind(|child| child.is_comment())
+                .map_or(open + 1, end);
+            let unit = unit();
+            let indent = format!("{opening}{unit}");
+            // No member to follow, so the file's: whether the top object's
+            // last member has a trailing comma.
+            let trailing = root.value().is_some_and(|top| top.uses_trailing_commas());
+            let lines = Lines {
+                newline,
+                unit: &unit,
+                trailing,
+            };
+            member.push_str(newline);
+            member.push_str(&indent);
+            write_member(format, name, value, Some(&lines), &indent, &mut member)?;
+            if trailing {
+                member.push(',');
+            }
+            if !text[at..close].contains('\n') {
+                member.push_str(newline);
+                member.push_str(opening);
+            }
+            (None, at)
+        }
+    };
+
+    let mut spliced = String::with_capacity(text.len() + member.len() + 1);
+    let mut from = 0;
+    if let Some(comma) = comma {
+        spliced.push_str(&text[..comma]);
+        spliced.push(',');
+        from = comma;
+    }
+    spliced.push_str(&text[from..at]);
+    spliced.push_str(&member);
+    spliced.push_str(&text[at..]);
+    Ok(spliced)
+}
+
+/// Where `node` starts in the text its CST was parsed from. The CST keeps no
+/// positions, but it keeps every byte, so it is the length of everything
+/// written before the node.
+fn start(node: &CstNode) -> usize {
+    let mut offset = 0;
+    let mut node = node.clone();
+    loop {
+        offset += node
+            .previous_siblings()
+            .map(|sibling| sibling.to_string().len())
+            .sum::<usize>();
+        match node.parent() {
+            Some(parent) => node = parent.into(),
+            None => return offset,
+        }
+    }
+}
+
+/// Where `node` ends: the position just past its last byte.
+fn end(node: &CstNode) -> usize {
+    start(node) + node.to_string().len()
+}
+
+/// Where the line holding the byte at `at` starts.
+fn line_start(text: &str, at: usize) -> usize {
+    text[..at].rfind('\n').map_or(0, |index| index + 1)
+}
+
+/// The spaces and tabs the line holding the byte at `at` starts with.
+fn indentation(text: &str, at: usize) -> &str {
+    let line = &text[line_start(text, at)..];
+    let width = line.len() - line.trim_start_matches([' ', '\t']).len();
+    &line[..width]
+}
+
+/// How a member spliced in is laid out over several lines: the file's line
+/// ending, its indentation for one level, and whether it writes a trailing
+/// comma after the last member of an object or element of an array.
+struct Lines<'a> {
+    newline: &'a str,
+    unit: &'a str,
+    trailing: bool,
+}
+
+/// `"name": value`, with what is inside `value` laid out as `lines` says,
+/// below a line indented by `indent`, or on one line when `lines` is `None`.
+///
+/// Laid out as jsonc-parser lays out what its CST is given, so a member
+/// spliced in reads as one it would have written: an object with members on
+/// lines of its own, and an array on one line unless it holds an object or
+/// an array with something in it.
+fn write_member(
+    format: Format,
+    name: &str,
+    value: &Value,
+    lines: Option<&Lines>,
+    indent: &str,
+    text: &mut String,
+) -> Result<(), EntryError> {
+    quote(name, text);
+    text.push_str(": ");
+    write_value(format, value, lines, indent, text)
+}
+
+fn write_value(
+    format: Format,
+    value: &Value,
+    lines: Option<&Lines>,
+    indent: &str,
+    text: &mut String,
+) -> Result<(), EntryError> {
+    match value {
+        Value::Null => text.push_str("null"),
+        Value::Bool(value) => text.push_str(if *value { "true" } else { "false" }),
+        Value::Integer(value) => {
+            let _ = write!(text, "{value}");
+        }
+        // As `input` writes one, for the same reason.
+        Value::Float(value) if value.is_finite() => text.push_str(&number(*value)),
+        Value::Float(_) => {
+            return Err(EntryError::Unrepresentable {
+                format,
+                what: "a number that is not finite",
+            })
+        }
+        Value::String(value) => quote(value, text),
+        Value::Array(values) => {
+            let spread = values.iter().any(|value| match value {
+                Value::Array(inner) => !inner.is_empty(),
+                Value::Object(inner) => !inner.is_empty(),
+                _ => false,
+            });
+            let items = values.iter().map(|value| (None, value));
+            let lines = lines.filter(|_| spread);
+            write_container(format, ['[', ']'], items, lines, indent, text)?;
+        }
+        Value::Object(members) => {
+            unique(members)?;
+            let items = members
+                .iter()
+                .map(|(name, value)| (Some(name.as_str()), value));
+            write_container(format, ['{', '}'], items, lines, indent, text)?;
+        }
+    }
+    Ok(())
+}
+
+/// An array's elements or an object's members between `brackets`: each on a
+/// line of its own when `lines` says how, and on one line, `[a, b]` or
+/// `{ "a": 1 }`, when it is `None`.
+fn write_container<'a>(
+    format: Format,
+    [open, close]: [char; 2],
+    items: impl ExactSizeIterator<Item = (Option<&'a str>, &'a Value)>,
+    lines: Option<&Lines>,
+    indent: &str,
+    text: &mut String,
+) -> Result<(), EntryError> {
+    let count = items.len();
+    text.push(open);
+    if count == 0 {
+        text.push(close);
+        return Ok(());
+    }
+    let inner = lines.map(|lines| format!("{indent}{}", lines.unit));
+    let padded = open == '{';
+    for (index, (name, value)) in items.enumerate() {
+        match (lines, &inner) {
+            (Some(lines), Some(inner)) => {
+                text.push_str(lines.newline);
+                text.push_str(inner);
+            }
+            _ if index > 0 || padded => text.push(' '),
+            _ => {}
+        }
+        if let Some(name) = name {
+            quote(name, text);
+            text.push_str(": ");
+        }
+        write_value(
+            format,
+            value,
+            lines,
+            inner.as_deref().unwrap_or(indent),
+            text,
+        )?;
+        if index + 1 < count || lines.is_some_and(|lines| lines.trailing) {
+            text.push(',');
+        }
+    }
+    match lines {
+        Some(lines) => {
+            text.push_str(lines.newline);
+            text.push_str(indent);
+        }
+        None if padded => text.push(' '),
+        None => {}
+    }
+    text.push(close);
+    Ok(())
 }
 
 /// The member of `object` named `key[depth]`, if there is one.
