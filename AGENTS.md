@@ -156,7 +156,9 @@ These are easy to break from a single file without noticing.
     (`replace_file`, named for the run) plus a rename.
   - Creation uses `create_new` or `create_dir`.
   - `rename` rewrites only the `name:` line (`frontmatter::with_key`).
-  - `remove` is a dry run without `--yes`.
+  - `remove` and `flayer migrate --library` are dry runs without `--yes`.
+    A migration moves nothing a project holds, refuses as a whole, and keeps
+    the marker it rewrites as `flayer.toml.v<version>` (`create_new`).
   - A file somebody else owns is edited only inside Mindflayer's marked
     blocks, every byte outside them kept, and a malformed block is refused,
     not repaired. The blocks: `# mindflayer:begin`/`# mindflayer:end` in
