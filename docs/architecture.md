@@ -1983,9 +1983,27 @@ other, and none of them makes a reader wait.
   rename wins. So a writer holds `.mindflayer/lock` from before it reads what
   it will change until the change is written: an edit of the marker (`link`,
   `unlink`, `load`, `unload`), an install or an uninstall, a gather — clone and
-  all, since two gathers of one source clone into one folder — and opening the
-  ledger to write, which is when it is made or migrated. Core takes it inside
-  each of them (`FlayerWorkspace::lock`), so no front end has to remember to.
+  all, since two gathers of one source clone into one folder — and the scrub
+  that opening the ledger to write runs (`ledger_to_write`), while it rewrites
+  clones an older build left a credential in and removes the folders of a
+  source made one with another, which a gather beside it would be filling.
+  Core takes it inside each of them (`FlayerWorkspace::lock`), so no front end
+  has to remember to. An install looks again at what the project holds once
+  it has the lock: the standing it is handed comes from a survey made before,
+  minutes before on the install screen, and a copy an edit has made its
+  author's since is left alone rather than written over and recorded again.
+- **Opening the ledger takes no lock**, though it is when a ledger is made or
+  migrated. A migration is one transaction that reads the version again once
+  it holds SQLite's write lock (`Ledger::migrate`), so two processes opening
+  one an older build left take turns there and the second finds nothing to
+  do — a read's migration included, which the workspace's lock could not keep
+  apart, since readers never take it. Taking that lock as well made every
+  change to an artifact wait behind a gather to drop its record, once the
+  change was made, and fail as busy when the gather ran long, leaving the
+  record behind. The scrub takes it only when it has clones to rewrite, the
+  first write after an upgrade from a build that stored a credential, and a
+  record drop then waits for it without a deadline: the change it follows is
+  made, and trying it again would find nothing to change.
 
 How the lock behaves, and why:
 
@@ -2022,9 +2040,9 @@ How the lock behaves, and why:
 - **Readers never take it.** A marker is replaced by a rename and the ledger
   keeps its log, so a read finds what was there before a write or what is
   there after it, never part of one, and has nothing to wait for.
-  `ledger_for_reading` migrates an older ledger as `ledger` does, but without
-  the lock, so a read's migration is kept apart from a writer's by SQLite's
-  locking alone ([open questions](#open-questions)).
+  `ledger_for_reading` migrates an older ledger as `ledger` does, in the same
+  transaction, so the most a read waits for is another process's migration,
+  once after an upgrade.
 - **Not re-entrant.** Two handles on the file are two writers even in one
   process, which is what lets threads stand in for processes in the tests,
   from a link on each of two threads at once to every writer waiting for a
@@ -2440,20 +2458,17 @@ leak into the lifecycle code. Unblocks #33, #45, #62, #93, #94 and #95.
   another writer can come between two rows, and with the workspace busy every
   row waits the whole ten seconds before it is passed over. Holding the lock
   across the batch needs core to apply the batch, which is where #78 plans it.
-- **A read migrating beside a writer.** A read migrates an older ledger
-  without the workspace's lock, so it can meet a writer migrating the same
-  file. A step is several statements, and SQLite orders them one at a time:
-  one of the two fails on a table the other has just made, and the other
-  finishes the step. A migration made in one transaction that reads the
-  version again once it holds SQLite's write lock would make the second wait
-  and then find nothing to do, which is how #30 migrates.
 - **Changes to an artifact take no lock.** `add`, `edit`, `rename` and
   `remove` write into a project or the workspace's own folders and then drop a
   record ([A record must not outlive the copy it is
-  about](#a-record-must-not-outlive-the-copy-it-is-about)). Opening the ledger
-  to drop it takes the lock, but the change and the record are not held
-  together, so an install of the same name can come between them, and the
-  record dropped be that install's.
+  about](#a-record-must-not-outlive-the-copy-it-is-about)), and neither step
+  holds the workspace: an edit is made in an editor, for as long as somebody
+  keeps it open, and holding the lock that long would keep every other writer
+  waiting. An install that takes the lock after the change finds the copy its
+  author's and leaves it. One already past that look when the change lands
+  writes over it, and the record dropped is then that install's, which leaves
+  its copy unrecorded. Taking the lock for the change itself, where there is
+  no editor to wait for, would close it for `add`, `rename` and `remove`.
 - **Two first writers making one workspace.** `init` makes a marker with
   `create_new` and then fills it, so a second writer making the same
   workspace at that moment — two first commands in a home with no

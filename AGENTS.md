@@ -145,12 +145,14 @@ These are easy to break from a single file without noticing.
 - **Writers take turns; readers never wait.** Core's writers hold the
   workspace's `.mindflayer/lock` (`FlayerWorkspace::lock`) while they change
   it: `edit_array`, `install::install` and `uninstall`, `gather::gather`, and
-  `FlayerWorkspace::ledger`, which opens the ledger to write. A new writer
-  takes it the same way, inside core. The lock is not re-entrant: a writer
-  never calls another while it holds it, and a front end never takes it.
-  Reads (`FlayerWorkspace::open`, `ledger_for_reading`) never take it, and a
-  wait is bounded (`lock::WAIT`), ending in a `LockError::Busy` that names the
-  holder's pid.
+  `gather::scrub`, which `FlayerWorkspace::ledger_to_write` runs, when it has
+  clones to rewrite. A new writer takes it the same way, inside core. Opening
+  the ledger takes no lock: a migration keeps itself apart in its own
+  transaction. The lock is not re-entrant: a writer never calls another while
+  it holds it, and a front end never takes it. Reads (`FlayerWorkspace::open`,
+  `ledger_for_reading`) never take it. A wait is bounded (`lock::WAIT`),
+  ending in a `LockError::Busy` that names the holder's pid, except a record
+  drop's (`install::disown`), which follows a change already made.
 - **A gather never prompts for a credential itself.** Every connection `gix`
   lets a clone configure gets the callback in `gather/credentials.rs`, which
   runs the git-config credential helpers with `gix`'s prompt and askpass
