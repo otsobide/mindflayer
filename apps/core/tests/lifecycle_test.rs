@@ -589,3 +589,33 @@ fn changing_something_mindflayer_did_not_install_touches_no_record() {
     // Nor the record of what was installed beside it.
     assert_eq!(records(&ledger), ["deploy"]);
 }
+
+#[test]
+fn a_change_drops_the_record_of_the_workspace_it_is_given_wherever_that_sits() {
+    // Beside the project rather than above it, the way the one in your home
+    // is for a project anywhere else: walking up from the project never
+    // reaches it.
+    let dir = TempDir::new().unwrap();
+    let hub = dir.path().join("hub");
+    fs::create_dir(&hub).unwrap();
+    let (mut workspace, _) = FlayerWorkspace::init(&hub).unwrap();
+    let root = dir.path().join("collapse");
+    fs::create_dir(&root).unwrap();
+    let (project, _) = MindProject::init(&root).unwrap();
+    workspace.link(&project).unwrap();
+    create(&workspace.own(), Kind::Skill, "deploy", "Ship it").unwrap();
+    let ledger = workspace.ledger().unwrap();
+    for candidate in install::survey(&workspace, &ledger, &project, Kind::Skill).unwrap() {
+        install::install(&workspace, &ledger, &project, &candidate).unwrap();
+    }
+    let edit = lifecycle::start_edit(&find(&project, "deploy").unwrap());
+    type_into(edit.file());
+
+    let edited = lifecycle::finish_edit(Some(&workspace), &project, edit);
+
+    assert_eq!(edited.copy.unwrap(), Record::Dropped);
+    assert_eq!(
+        standing(&workspace, &ledger, &project, "deploy"),
+        Standing::Foreign
+    );
+}
