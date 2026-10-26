@@ -276,44 +276,40 @@ fn run_flayer(
 
         FlayerCommand::Tui => tui::run(directory, home),
 
-        FlayerCommand::List { kind, project } => match project {
-            Some(project) => {
-                let workspace = workspace_here(directory, home)?;
-                one_project(
-                    pick(&workspace, project)?,
+        FlayerCommand::List { kind, project } => {
+            reading_workspace(directory, home, |workspace| match project {
+                Some(project) => one_project(
+                    pick(workspace, project)?,
                     wanted(*kind),
                     |catalog, projects, level| Ok(list(catalog, projects, level)),
-                )
-            }
-            None => {
-                let (workspace, projects, warnings) = managed(directory, home)?;
-                everywhere(
-                    &workspace,
-                    warnings,
-                    &projects,
-                    wanted(*kind),
-                    |catalog, projects, level| {
-                        Ok(list_workspace(catalog, projects, &workspace, level))
-                    },
-                )
-            }
-        },
+                ),
+                None => {
+                    let (projects, warnings) = managed(workspace);
+                    everywhere(
+                        workspace,
+                        warnings,
+                        &projects,
+                        wanted(*kind),
+                        |catalog, projects, level| {
+                            Ok(list_workspace(catalog, projects, workspace, level))
+                        },
+                    )
+                }
+            })
+        }
         FlayerCommand::Show { reference, project } => {
             let reference = Reference::parse(reference);
             let kinds = wanted(reference.kind());
             let read = |catalog: &Catalog, _: &[MindProject], level: Level| {
                 show(catalog, &reference, level)
             };
-            match project {
-                Some(project) => {
-                    let workspace = workspace_here(directory, home)?;
-                    one_project(pick(&workspace, project)?, kinds, read)
-                }
+            reading_workspace(directory, home, |workspace| match project {
+                Some(project) => one_project(pick(workspace, project)?, kinds, read),
                 None => {
-                    let (workspace, projects, warnings) = managed(directory, home)?;
-                    everywhere(&workspace, warnings, &projects, kinds, read)
+                    let (projects, warnings) = managed(workspace);
+                    everywhere(workspace, warnings, &projects, kinds, read)
                 }
-            }
+            })
         }
         FlayerCommand::Validate { target, project } => {
             let selector = Selector::parse(target.as_deref());
@@ -321,16 +317,13 @@ fn run_flayer(
             let read = |catalog: &Catalog, _: &[MindProject], level: Level| {
                 validate(catalog, &selector, level)
             };
-            match project {
-                Some(project) => {
-                    let workspace = workspace_here(directory, home)?;
-                    one_project(pick(&workspace, project)?, kinds, read)
-                }
+            reading_workspace(directory, home, |workspace| match project {
+                Some(project) => one_project(pick(workspace, project)?, kinds, read),
                 None => {
-                    let (workspace, projects, warnings) = managed(directory, home)?;
-                    everywhere_and_the_shelf(&workspace, warnings, &projects, kinds, read)
+                    let (projects, warnings) = managed(workspace);
+                    everywhere_and_the_shelf(workspace, warnings, &projects, kinds, read)
                 }
-            }
+            })
         }
     }
 }
@@ -363,10 +356,57 @@ fn project_here(directory: &Path) -> Result<MindProject, CliError> {
 }
 
 /// The flayer workspace the caller is standing in: the one at or above
-/// `directory`, or else the default one in `home`.
+/// `directory`, or else the default one in `home`, made there the first time
+/// a command that writes needs it. A command that only reads asks
+/// [`workspace_to_read`] instead.
 fn workspace_here(directory: &Path, home: Option<&Path>) -> Result<FlayerWorkspace, CliError> {
     FlayerWorkspace::locate_or_default(directory, home)?
         .ok_or_else(|| CliError::NotInWorkspace(directory.to_path_buf()))
+}
+
+/// The flayer workspace a command that only reads looks at: the one at or
+/// above `directory`, or else the default one in `home` — made, or as it
+/// will be once something makes it.
+///
+/// Never made for the occasion. A read is no reason to write a marker into
+/// somebody's home, and the workspace that would be made there answers every
+/// read as the made one would a moment later.
+fn workspace_to_read(directory: &Path, home: Option<&Path>) -> Result<FlayerWorkspace, CliError> {
+    FlayerWorkspace::locate_or_unmade(directory, home)?
+        .ok_or_else(|| CliError::NotInWorkspace(directory.to_path_buf()))
+}
+
+/// Run a read on the workspace [`workspace_to_read`] finds, with one line
+/// more when that has not been made: where it will be.
+///
+/// A hint rather than a warning, and so no reason to fail: nothing is wrong
+/// with a workspace nobody has needed yet, and the read says what it would
+/// say of an empty one.
+fn reading_workspace(
+    directory: &Path,
+    home: Option<&Path>,
+    read: impl FnOnce(&FlayerWorkspace) -> Result<Outcome, Failure>,
+) -> Result<Outcome, Failure> {
+    let workspace = workspace_to_read(directory, home)?;
+    let mut result = read(&workspace);
+    if !workspace.is_made() {
+        let hint = unmade_hint(&workspace);
+        match &mut result {
+            Ok(outcome) => outcome.stderr.push(hint),
+            Err(failure) => failure.warnings.push(hint),
+        }
+    }
+    result
+}
+
+/// What a read says about a default workspace nothing has made yet: that
+/// it is not there, and where the first command that writes will put it.
+fn unmade_hint(workspace: &FlayerWorkspace) -> String {
+    format!(
+        "hint: no workspace here or above, and the default one is not made yet; \
+         the first command that writes to it, such as `flayer link <path>`, makes it in {}",
+        workspace.flayer_dir().display()
+    )
 }
 
 /// Every path a command was given, resolved and each named once: the same
@@ -398,23 +438,20 @@ fn all_or_nothing(mut refused: Vec<CliError>) -> Option<Failure> {
     })
 }
 
-/// The workspace here and the projects it manages.
+/// The projects a workspace manages, and a warning for each entry that
+/// would not open.
 ///
 /// Only the registered ones. A workspace manages what it was told to manage,
 /// so a project that happens to sit inside it is not in scope until it is
 /// linked — otherwise `flayer list` would answer a different question
 /// depending on which directory it was run from.
-fn managed(
-    directory: &Path,
-    home: Option<&Path>,
-) -> Result<(FlayerWorkspace, Vec<MindProject>, Vec<String>), CliError> {
-    let workspace = workspace_here(directory, home)?;
+fn managed(workspace: &FlayerWorkspace) -> (Vec<MindProject>, Vec<String>) {
     let (projects, failures) = workspace.projects();
     let warnings = failures
         .iter()
         .map(|failure| format!("warning: {failure}"))
         .collect();
-    Ok((workspace, projects, warnings))
+    (projects, warnings)
 }
 
 /// The workspace above a project, whether or not it manages it yet: where
