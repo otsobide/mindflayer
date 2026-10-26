@@ -96,10 +96,10 @@ These are easy to break from a single file without noticing.
   `Standing::Foreign` and is never touched. Core's lifecycle changes
   (`lifecycle::add`, `finish_edit`, `rename` and `remove`) drop any record
   they would leave behind and return what they did (`lifecycle::Record`, and
-  the `scrub` that opening the ledger ran), which the CLI only renders. `install::disown` is private to core, so no
-  front end drops a record on its own. A front end adds through
-  `lifecycle::add`, never `create` or `create_from`, which leave a stale
-  record in place.
+  the `scrub` that opening the ledger ran), which the CLI only renders.
+  `install::disown` is private to core, so no front end drops a record on its
+  own. A front end adds through `lifecycle::add`, never `create` or
+  `create_from`, which leave a stale record in place.
 - **Strict when writing, lenient when reading.** A skill's front matter is
   the Agent Skills format. `mind add`, `rename` and `install` refuse a name or
   description that breaks its rules, all through `artifact::strict_issues`
