@@ -191,8 +191,9 @@ been a second rule to keep in step with the first.
 `Artifact::validate` gives one list of problems, and it is treated three ways:
 
 - **Refused** when Mindflayer writes a skill into a project, if the name or
-  the description breaks the rules (`ValidationIssue::is_strict`): `mind add`
-  and `install` check both, and `rename` the name, the one thing it writes.
+  the description breaks the rules (`ValidationIssue::is_strict`): `mind add`,
+  `rename` and `install` all check both — `rename` too, although the name is
+  all it writes, because what it leaves behind is a skill Mindflayer wrote.
   Those are what agents refuse: Codex skips a skill whose name is over 64
   characters or whose description is empty, so writing one would put a skill
   in the project that never loads. So is a name that is not the folder the

@@ -206,6 +206,44 @@ fn renaming_refuses_a_name_that_breaks_the_rules() {
 }
 
 #[test]
+fn renaming_refuses_a_skill_whose_description_breaks_the_rules() {
+    // A rename writes only the name, but what it leaves behind is a skill
+    // Mindflayer wrote, and an agent skips one with an empty description.
+    let (dir, project) = project();
+    write(
+        dir.path(),
+        "skills/quiet/SKILL.md",
+        "---\nname: quiet\ndescription: ''\n---\n",
+    );
+
+    let error = lifecycle::rename(&project, &find(&project, "quiet").unwrap(), "hush").unwrap_err();
+
+    assert_eq!(
+        error.to_string(),
+        "`quiet` cannot be renamed until it is fixed: `description` is empty"
+    );
+    assert!(dir.path().join("skills/quiet/SKILL.md").is_file());
+    assert!(!dir.path().join("skills/hush").exists());
+}
+
+#[test]
+fn renaming_fixes_a_name_and_folder_that_broke_the_rules() {
+    // What is wrong with the old name is what a rename is for, so it is the
+    // skill as renamed that is judged.
+    let (dir, project) = project();
+    write(
+        dir.path(),
+        "skills/a--b/SKILL.md",
+        "---\nname: a--b\ndescription: Doubled\n---\n",
+    );
+
+    let renamed = lifecycle::rename(&project, &find(&project, "a--b").unwrap(), "a-b").unwrap();
+
+    assert_eq!(renamed.artifact.unwrap().validate(), vec![]);
+    assert!(!dir.path().join("skills/a--b").exists());
+}
+
+#[test]
 fn a_name_yaml_would_read_as_something_else_is_quoted() {
     let (dir, project) = project();
     create(&project, Kind::Skill, "deploy", "Ship it").unwrap();

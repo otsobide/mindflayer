@@ -594,9 +594,9 @@ Anything else in the front matter — an agent's own keys, like Claude Code's
 stays in the file.
 
 The name and the description are the rules Mindflayer will not break when it
-writes a skill, because agents skip a skill that does: `mind add` and `install`
-refuse one that breaks either, and `rename` a name that does. Everything else
-is reported by `validate`, and gathering is lenient about all of it.
+writes a skill, because agents skip a skill that does: `mind add`, `rename` and
+`install` refuse one that breaks either. Everything else is reported by
+`validate`, and gathering is lenient about all of it.
 
 ```
 $ mind show commit-style

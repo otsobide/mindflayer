@@ -244,6 +244,23 @@ fn rename_skill(
             path: target.file(),
         });
     };
+    // Held to the strict rules as it will be, the rules `add` and `install`
+    // hold a skill to: what is left behind is a skill Mindflayer wrote, if
+    // only its name, and one an agent would skip is not left behind. Judged as
+    // renamed, because its name and folder are what a rename fixes.
+    if let Some(manifest) = artifact.manifest() {
+        let renamed = SkillManifest {
+            name: to.to_owned(),
+            ..manifest.clone()
+        };
+        let issues = artifact::strict_issues(&renamed, to);
+        if !issues.is_empty() {
+            return Err(LifecycleError::Unfit {
+                name: artifact.name().to_owned(),
+                issues,
+            });
+        }
+    }
 
     let folder = directory.join(to);
     let moves = folder != target.path;
@@ -428,6 +445,11 @@ pub enum LifecycleError {
     },
     #[error("`{name}`: a skill's name cannot contain `/`; skills are flat, and only rules are filed in folders")]
     Nested { name: String },
+    #[error("`{name}` cannot be renamed until it is fixed: {}", issue_list(.issues))]
+    Unfit {
+        name: String,
+        issues: Vec<ValidationIssue>,
+    },
     #[error("it is already called `{name}`")]
     Unchanged { name: String },
     #[error("{path}: already exists, and is left alone")]
