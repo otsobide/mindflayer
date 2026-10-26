@@ -294,7 +294,9 @@ and neither moves when the other does.
 An older marker is read the way it was written, never refused.
 `DIRECTORIES_VERSION` is the one line drawn so far, and it is a project-marker
 version: a workspace's number says nothing about where a project keeps its
-artifacts. The ledger is versioned the same way, in SQLite's `user_version`
+artifacts. The ledger carries its version in SQLite's `user_version` and is
+refused from the future the same way, but an older one is migrated forward
+rather than read as written
 ([Why the ledger is SQLite](#why-the-ledger-is-sqlite)).
 
 ## Failures are collected, not raised
