@@ -23,6 +23,13 @@ claude_prepare() {
 	# namespace hides.
 	[[ $(head -c 2 -- "$bin") != '#!' ]] ||
 		die "$bin is a wrapper script: set PROBE_CLAUDE_BIN to the claude binary itself"
+	# A version manager's shim is no script: mise's is a link to mise itself,
+	# which would then answer every run as mise. Asking the binary what it is
+	# catches any such stand-in, where a list of known shims would not.
+	local version
+	version=$("$bin" --version 2>/dev/null | head -n 1) || version=
+	[[ $version == *'(Claude Code)'* ]] ||
+		die "$bin is not Claude Code (its --version says '${version:-nothing}'): set PROBE_CLAUDE_BIN to the binary itself, as \`mise which claude\` prints it"
 
 	# Only the login, never the rest of the folder: the operator's settings,
 	# skills, rules, CLAUDE.md and plugins are exactly what must not take part.
@@ -43,7 +50,7 @@ claude_prepare() {
 
 	expose+=("$bin")
 	namespace_env+=(PROBE_CLAUDE_BIN "$bin")
-	say "claude: $("$bin" --version) at $bin"
+	say "claude: $version at $bin"
 	say "claude: login copied from $login, valid for another $left minutes"
 }
 
