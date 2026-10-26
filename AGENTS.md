@@ -93,8 +93,13 @@ These are easy to break from a single file without noticing.
     `core.excludesFile` are never edited.
 - **Mindflayer only manages what it installed.** The ledger's record of an
   install is what allows overwriting and deleting. An unrecorded artifact is
-  `Standing::Foreign` and is never touched. `edit`, `rename` and `remove`
-  drop the record (`install::disown`).
+  `Standing::Foreign` and is never touched. Core's lifecycle changes
+  (`lifecycle::add`, `finish_edit`, `rename` and `remove`) drop any record
+  they would leave behind and return what they did (`lifecycle::Record`),
+  which the CLI only renders. `install::disown` is private to core, so no
+  front end drops a record on its own. A front end adds through
+  `lifecycle::add`, never `create` or `create_from`, which leave a stale
+  record in place.
 - **Strict when writing, lenient when reading.** A skill's front matter is
   the Agent Skills format. `mind add`, `rename` and `install` refuse a name or
   description that breaks its rules, all through `artifact::strict_issues`
@@ -132,10 +137,10 @@ These are easy to break from a single file without noticing.
   `$MINDFLAYER_HOME`, then the user's home; empty means none. Only commands
   that write may create `~/.mindflayer` (`locate_or_default`). Reads use
   `default_at`, which never creates it.
-- **So does the workspace a change consults.** `install::disown` and template
-  lookup take it as a parameter, the one the command resolved, and core never
-  walks up from the project to find one: a walk misses a workspace that links
-  the project from beside it.
+- **So does the workspace a change consults.** The lifecycle changes and
+  template lookup take it as a parameter, the one the command resolved, and
+  core never walks up from the project to find one: a walk misses a workspace
+  that links the project from beside it.
 - **So do the agent homes.** `homes::agent_homes` takes each from its option
   (`--claude-config-dir`, `--codex-home`, `--opencode-config-dir`,
   `--agents-dir`), then `$CLAUDE_CONFIG_DIR`, `$CODEX_HOME` or
