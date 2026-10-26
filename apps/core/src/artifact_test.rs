@@ -1,6 +1,7 @@
 //! Unit tests for `artifact.rs`, kept beside it rather than inside it.
 
 use super::*;
+use crate::rule::{Lenient, RuleManifest};
 use crate::skill::{Compatibility, Metadata};
 
 /// A skill built without touching the disk, to check the rules rather
@@ -32,11 +33,16 @@ fn compatible(compatibility: &str) -> Artifact {
 }
 
 fn rule(name: &str, summary: Option<&str>) -> Artifact {
+    declaring(name, summary, RuleManifest::default())
+}
+
+/// `rule`, with front matter that says `manifest`.
+fn declaring(name: &str, summary: Option<&str>, manifest: RuleManifest) -> Artifact {
     Artifact {
         name: name.to_owned(),
         path: PathBuf::from("/work/repo/.mind/rules").join(format!("{name}.md")),
         project: PathBuf::from("/work/repo"),
-        declared: Declared::Rule,
+        declared: Declared::Rule(manifest),
         summary: summary.map(str::to_owned),
     }
 }
@@ -206,6 +212,77 @@ fn a_rule_is_judged_only_on_what_it_has() {
 }
 
 #[test]
+fn front_matter_that_does_not_parse_is_a_warning_and_not_a_problem() {
+    // Read as content, so the rule still says everything it was written to.
+    let manifest = RuleManifest {
+        unparsed: Some("found unknown anchor".into()),
+        ..RuleManifest::default()
+    };
+    let issues = declaring("typescript", Some("---"), manifest).validate();
+
+    assert_eq!(
+        issues,
+        vec![ValidationIssue::FrontMatterUnparsed {
+            reason: "found unknown anchor".into()
+        }]
+    );
+    assert!(issues.iter().all(ValidationIssue::is_warning));
+    assert!(
+        issues[0].to_string().contains("read as content"),
+        "{}",
+        issues[0]
+    );
+}
+
+#[test]
+fn a_rules_keys_in_another_shape_are_warnings() {
+    let manifest = RuleManifest {
+        paths: Lenient::Ignored,
+        description: Lenient::Ignored,
+        unparsed: None,
+    };
+    assert_eq!(
+        declaring("api", Some("API"), manifest).validate(),
+        vec![
+            ValidationIssue::PathsNotStrings,
+            ValidationIssue::DescriptionNotAString
+        ]
+    );
+
+    let manifest = RuleManifest {
+        paths: Lenient::Stated(vec!["src/**".into()]),
+        description: Lenient::Stated("The API".into()),
+        unparsed: None,
+    };
+    assert_eq!(declaring("api", Some("API"), manifest).validate(), vec![]);
+}
+
+#[test]
+fn a_rule_with_front_matter_and_no_body_has_nothing_to_say() {
+    let manifest = RuleManifest {
+        paths: Lenient::Stated(vec!["src/**".into()]),
+        ..RuleManifest::default()
+    };
+    assert_eq!(
+        declaring("api", None, manifest).validate(),
+        vec![ValidationIssue::Empty]
+    );
+}
+
+#[test]
+fn a_rule_describes_itself_only_when_its_front_matter_says() {
+    assert_eq!(rule("api", Some("API")).description(), None);
+    let manifest = RuleManifest {
+        description: Lenient::Stated("The API".into()),
+        ..RuleManifest::default()
+    };
+    assert_eq!(
+        declaring("api", Some("API"), manifest).description(),
+        Some("The API")
+    );
+}
+
+#[test]
 fn a_description_opening_with_a_blank_line_still_summarises() {
     // A YAML block scalar routinely opens with one, and listing that skill
     // with no summary would be a formatting accident showing through.
@@ -247,6 +324,9 @@ fn only_the_name_its_folder_and_the_description_are_strict() {
         ValidationIssue::MetadataNotAString { key: "k".into() },
         ValidationIssue::MetadataRepeated { key: "k".into() },
         ValidationIssue::Empty,
+        ValidationIssue::FrontMatterUnparsed { reason: "r".into() },
+        ValidationIssue::PathsNotStrings,
+        ValidationIssue::DescriptionNotAString,
     ];
     assert!(strict.iter().all(ValidationIssue::is_strict));
     assert!(!lenient.iter().any(ValidationIssue::is_strict));
@@ -261,6 +341,9 @@ fn only_what_an_agent_reads_past_is_a_warning() {
         ValidationIssue::MetadataNotAMap,
         ValidationIssue::MetadataNotAString { key: "k".into() },
         ValidationIssue::MetadataRepeated { key: "k".into() },
+        ValidationIssue::FrontMatterUnparsed { reason: "r".into() },
+        ValidationIssue::PathsNotStrings,
+        ValidationIssue::DescriptionNotAString,
     ];
     let problems = [
         ValidationIssue::NameEmpty,

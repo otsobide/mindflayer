@@ -98,8 +98,9 @@ These are easy to break from a single file without noticing.
     blocks, every byte outside them kept, and a malformed block is refused,
     not repaired. The blocks: `# mindflayer:begin`/`# mindflayer:end` in
     `$GIT_COMMON_DIR/info/exclude` (`exclude`), where an edit rewrites only its
-    own project's `# project <key>` group. `.gitignore` and
-    `core.excludesFile` are never edited.
+    own project's `# project <key>` group. A team's `.gitignore` and
+    `core.excludesFile` are never edited; the one `.gitignore` Mindflayer
+    writes is `.mind/tmp`'s, inside a folder it owns, made with `create_new`.
 - **Mindflayer only manages what it installed.** The ledger's record of an
   install is what allows overwriting and deleting. An unrecorded artifact is
   `Standing::Foreign` and is never touched. Core's lifecycle changes
@@ -117,7 +118,10 @@ These are easy to break from a single file without noticing.
   takes such a skill with a `warning:` per problem, and `validate` reports
   everything — `flayer validate` without `-p` reads the shelf too — but calls
   an artifact invalid only for what is not `ValidationIssue::is_warning`. Keys the format does not define pass through
-  untouched.
+  untouched. A rule's front matter is optional (`rule::RuleManifest`): read
+  only when its fences hold a YAML mapping, and whatever it leaves unread is a
+  warning, never a reason to hide the rule. `mind add --template` refuses that
+  same list (`artifact::rule_issues`) for the rule it is about to write.
 - **Loaded and gathered content is untrusted.**
   - An installed name must be one folder name (`install::is_folder_name`).
   - Symlinks are followed only inside the source (`copy::tree`'s `within`).
@@ -137,6 +141,13 @@ These are easy to break from a single file without noticing.
   `DIRECTORIES_VERSION` for how a v1 `mind.toml` is still read) and the ledger
   uses SQLite's `user_version`. Anything from a newer version is refused. A
   format change must keep reading old files the way they were written.
+- **Nothing is staged where agents look.** An install builds its copy in a
+  `copy::Stage` under the project's `.mind/tmp` and renames it into place.
+  A temporary beside an installed copy is a skill an agent may load, so never
+  write one there. The next install sweeps what an interrupted one left in
+  `.mind/tmp`, only when the stage lock says no other run is going, clears the
+  `.<name>.mindflayer-new` and `-old` older versions left beside the copy, and
+  reports both, even when its own copy then fails.
 - **Paths are lexical and portable.** Route arithmetic lives in
   `apps/core/src/paths.rs`. Registry entries are stored relative to the
   workspace with forward slashes, and `link` verifies a route before storing

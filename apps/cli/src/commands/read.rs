@@ -423,35 +423,58 @@ pub(crate) fn show(
         let _ = writeln!(text, "{}", artifact.file().display());
         let _ = writeln!(text);
 
-        // Only what the artifact actually declares. A rule declares nothing,
-        // so it gets no metadata block rather than an empty one.
-        if let Declared::Skill(manifest) = artifact.declared() {
-            let _ = writeln!(text, "{}", manifest.description);
-            // One line per key, each made printable: a value is from a file
-            // somebody wrote, and a carriage return in one could pass for a
-            // key it does not declare.
-            let mut keys = String::new();
-            if let Some(tools) = &manifest.allowed_tools {
-                let _ = writeln!(keys, "allowed-tools: {}", printable(&tools.join(", ")));
+        // Only what the artifact actually declares. A rule that declares
+        // nothing, as most do, gets no metadata block rather than an empty one.
+        match artifact.declared() {
+            Declared::Skill(manifest) => {
+                let _ = writeln!(text, "{}", manifest.description);
+                // One line per key, each made printable: a value is from a
+                // file somebody wrote, and a carriage return in one could pass
+                // for a key it does not declare.
+                let mut keys = String::new();
+                if let Some(tools) = &manifest.allowed_tools {
+                    let _ = writeln!(keys, "allowed-tools: {}", printable(&tools.join(", ")));
+                }
+                if let Some(license) = &manifest.license {
+                    let _ = writeln!(keys, "license: {}", printable(license));
+                }
+                if let Some(compatibility) = manifest.compatibility.stated() {
+                    let _ = writeln!(keys, "compatibility: {}", printable(compatibility));
+                }
+                // Only the entries that are strings: the rest are
+                // `validate`'s to report, and are still in the file for
+                // whoever reads it.
+                if !manifest.metadata.entries.is_empty() {
+                    keys.push_str("metadata:\n");
+                    for (key, value) in &manifest.metadata.entries {
+                        let _ = writeln!(keys, "  {}: {}", printable(key), printable(value));
+                    }
+                }
+                if !keys.is_empty() {
+                    let _ = write!(text, "\n{keys}");
+                }
+                let _ = writeln!(text);
             }
-            if let Some(license) = &manifest.license {
-                let _ = writeln!(keys, "license: {}", printable(license));
-            }
-            if let Some(compatibility) = manifest.compatibility.stated() {
-                let _ = writeln!(keys, "compatibility: {}", printable(compatibility));
-            }
-            // Only the entries that are strings: the rest are `validate`'s to
-            // report, and are still in the file for whoever reads it.
-            if !manifest.metadata.entries.is_empty() {
-                keys.push_str("metadata:\n");
-                for (key, value) in &manifest.metadata.entries {
-                    let _ = writeln!(keys, "  {}: {}", printable(key), printable(value));
+            // Laid out as a skill's is, a part at a time, since either part
+            // may be missing.
+            Declared::Rule(manifest) => {
+                let mut parts = Vec::new();
+                if let Some(description) = manifest.description.stated() {
+                    parts.push(format!("{description}\n"));
+                }
+                // One pattern a line rather than joined like `allowed-tools`:
+                // a brace expansion such as `*.{ts,tsx}` has commas of its own.
+                if let Some(paths) = manifest.paths.stated() {
+                    let mut keys = String::from("paths:\n");
+                    for pattern in paths {
+                        let _ = writeln!(keys, "  - {}", printable(pattern));
+                    }
+                    parts.push(keys);
+                }
+                if !parts.is_empty() {
+                    let _ = writeln!(text, "{}", parts.join("\n"));
                 }
             }
-            if !keys.is_empty() {
-                let _ = write!(text, "\n{keys}");
-            }
-            let _ = writeln!(text);
         }
         // Blank lines trimmed at both ends, not indentation: the body usually
         // opens with a blank line after the fence, and the line above is

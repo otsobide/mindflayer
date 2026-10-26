@@ -83,14 +83,15 @@ field:
 ```rust
 pub enum Declared {
     Skill(SkillManifest),
-    Rule,
+    Rule(RuleManifest),
 }
 ```
 
 `Declared` *is* the kind, so an artifact cannot carry a discriminant that
-disagrees with what was parsed — there is only one. A rule that declares a
-description is not a state the type can hold, and no `Option` field sits
-permanently `None` for one of them.
+disagrees with what was parsed — there is only one. Each payload says what its
+kind requires: a skill without a description is not a state the type can hold,
+a rule's front matter is optional all through, and no `Option` field on
+`Artifact` sits permanently `None` for one kind because only the other has it.
 
 Where a kind lives and what shape it has is a second, smaller thing:
 
@@ -132,21 +133,30 @@ contain one at all, so the collision is gone rather than narrowed.
 
 From wherever it is declared. A skill declares one in its front matter, so that
 is its name and disagreeing with its directory is a problem `validate` reports.
-A rule declares nowhere, so its name is its route. This is why the two are not
-symmetric, and the asymmetry is the honest one.
+A rule's front matter has no name in it — a `name:` there passes through like
+any key Mindflayer does not read — so its name is its route. This is why the
+two are not symmetric, and the asymmetry is the honest one.
 
-### What a listing shows for something that declares nothing
+### What a listing shows for a rule
 
-A skill has a `description`. A rule has the file. Its **opening line** — the
-first line carrying any text, with leading `#` stripped — is the closest thing
-to a description it has, and it is captured when the file is loaded, because
-the file was read anyway.
+A skill has a `description`. A rule has its body: the file, less any front
+matter. The body's **opening line** — the first line carrying any text, with
+leading `#` stripped — is what a listing shows, and it is captured when the file
+is loaded, because the file was read anyway. A rule without front matter is
+summarised exactly as it always was.
+
+Not the file's opening line, which for a rule with front matter is a fence, so
+every scoped rule would be listed as `---`. And not a `description` the rule
+declares either: the body is what an agent is given once the front matter is
+taken off, which is how a rule reaches the `AGENTS.md` block (#42), so its
+opening line is what the agent meets first, and a listing that shows something
+else would describe the rule by a line no agent reads.
 
 That one value does double duty: it is the summary a listing prints, and its
-absence is the single thing `validate` can say about a rule, since a file with
-no line of text has nothing to offer an agent. Storing the fact rather than the
-verdict is what keeps `validate` pure — every check it makes was decided when
-the file was read, so asking whether something is valid cannot itself fail.
+absence is the one thing that makes a rule invalid, since a body with no line of
+text has nothing to offer an agent. Storing the fact rather than the verdict is
+what keeps `validate` pure — every check it makes was decided when the file was
+read, so asking whether something is valid cannot itself fail.
 
 ### What a skill declares
 
@@ -194,6 +204,76 @@ The name rule is held to every name, a rule's route segment by segment
 included. A looser one for rules was the alternative, and it would only have
 been a second rule to keep in step with the first.
 
+### What a rule declares
+
+Most rules declare nothing: a rule is a markdown file that gives context.
+Claude Code's rules can open with front matter saying which files they are
+about, and [D-03](#d-03-rules-reach-every-agent-through-agentsmd) sends a rule
+that does to `.claude/rules/mindflayer` only, so a rule may carry some.
+`RuleManifest` holds the two keys Mindflayer reads, both optional:
+
+| Key | | Read as |
+|---|---|---|
+| `paths` | optional | glob patterns: a list of them, or one on its own |
+| `description` | optional | a string |
+
+Rules were written long before any of them was read this way, and markdown is
+free to open with a `---` horizontal rule. So a fenced block at the top is
+front matter only when it holds a YAML mapping. Anything else is content, as
+it always was: an opening fence that never closes, prose between two
+horizontal rules that YAML reads as a plain string, a list, two horizontal
+rules with nothing between them, and a
+block of nothing but comments too, since what YAML reads past as a comment is a
+heading to markdown. An empty block could have been front matter that declares
+nothing, but taking its fences off would drop two lines that read today and
+gain nothing. The block is parsed as a YAML value before anything is read from
+it, so that what it *is* decides whether it is front matter; deserializing
+straight into a struct would have to tell a sentence from a broken mapping by
+the wording of its error.
+
+A block that does not parse at all is content too, and `validate` warns about
+it, since it is most likely front matter written wrong: a glob opening with `*`
+is a YAML alias unless it is quoted. Refusing the rule, as a skill whose front
+matter does not parse is refused, was the alternative. It would hide from every
+listing a rule that still works as text, over how its first lines are written;
+a skill without its front matter has no name to be found by, and a rule never
+needed one.
+
+The line is YAML's, not the author's intent, so prose between two horizontal
+rules can land on either side of it. A sentence shaped like `Note: never
+force-push` is a mapping with one key nothing reads, so it is front matter and
+left out of the body an agent is given, without a word. One opening with `**`,
+a backtick or a link does not parse, so it is content, with the warning above.
+Both are rare at the top of a rule. Warning about a mapping that declares
+neither `paths` nor `description` would catch the first, and was turned down:
+it would warn just as loudly about every rule carrying only another agent's
+keys, such as Cursor's `globs`, which pass through by design.
+
+The keys are read leniently, as a skill's `metadata` and `compatibility` are: a
+`paths` that is not a pattern or a list of them, or a `description` that is not
+a string, is ignored, reported as a warning and left in the file. A list
+holding anything but strings is ignored whole, since keeping its strings would
+scope the rule to fewer files than its author wrote. One pattern is never split
+on commas, because a brace expansion such as `src/**/*.{ts,tsx}` has one inside
+it. Every other key — Cursor's `globs`, a `name` — passes through, as it does on
+a skill.
+
+A key with nothing in it is unstated, as `paths:` with no value is: a blank
+`description`, and a `paths` that is a blank string or an empty list. A blank
+pattern matches no file, so one in a list is left out and the rest read. This
+matters for #42 and #43, where a rule that states `paths` goes to
+`.claude/rules/mindflayer` only: read as stated, `paths: []` would scope a rule
+to no file, which is a rule no agent is ever given, and `show` would print an
+empty description or a `paths:` heading with nothing under it. Warning about
+an empty key, as `compatibility: ""` is warned about on a skill, was the
+alternative; but a skill's `compatibility` is shown to an agent as written,
+while an empty `paths` says nothing an agent could act on.
+
+`Artifact::contents` is the body without the front matter, for a rule as for a
+skill. It is what a renderer puts in front of an agent, so the fences are never
+pasted into `AGENTS.md`, and what `show` prints below the description and the
+`paths` a rule declares.
+
 ### Strict when writing, lenient when reading
 
 `Artifact::validate` gives one list of problems, and it is treated three ways:
@@ -211,7 +291,10 @@ been a second rule to keep in step with the first.
   skill is filed in, since an agent finds a skill by one or the other — asked
   of the folder Mindflayer is about to write, not the one the files were read
   from. `compatibility` and `metadata` are not refused, because an agent reads
-  past them.
+  past them. A rule `mind add` writes from a template is refused for whatever
+  its front matter would leave unread (`artifact::rule_issues`), which reading
+  only warns about ([Templates live inside the
+  markers](#templates-live-inside-the-markers)).
 - **Warned about** when gathering, which takes the skill anyway, as the
   agentskills.io client guide advises for skills written for other agents. The
   shelf is a record of what a source holds, and leaving a skill off it would
@@ -220,7 +303,8 @@ been a second rule to keep in step with the first.
   too, so what gathering warned about can be found again later. Only a
   problem makes an artifact invalid and the exit non-zero; what an agent reads
   past (`ValidationIssue::is_warning`, the same `compatibility` and `metadata`
-  that are not refused) is listed as a warning and leaves the verdict at `ok`.
+  that are not refused, and whatever a rule's front matter leaves unread) is
+  listed as a warning and leaves the verdict at `ok`.
   Counted as invalid, a skill installed with nested metadata would fail its
   project's `validate` from then on, and the only way to clear it would be to
   edit the copy, which disowns it. The TUI's `✗` follows the same line.
@@ -635,6 +719,74 @@ A project has one directory per artifact name, so two shelf entries offering
 `commit-style` cannot both be installed. The screen settles it by unticking the
 other rather than letting both apply and the second win — a conflict resolved
 where somebody can see it happening.
+
+### Built where no agent looks
+
+An install never writes beside the copy it replaces. It builds the new copy in
+a stage of its own under the project's `.mind/tmp` (`copy::Stage`), and renames
+it into place once it is whole. Beside is where the agents look: OpenCode's
+first line globs hidden folders in a skills folder too, so the
+`.deploy.mindflayer-new` that staging used to put next to `deploy` was a skill
+it could load half made, and one an interrupted run left there it would load
+every time after. A name taken from the skill was also shared by every run
+installing that skill at once, each deleting what the other was building.
+
+- **`.mind/tmp`, made by the first install.** Inside `.mind`, a folder
+  Mindflayer owns and no agent reads, and inside the project, so putting the
+  copy in place is a rename on one filesystem. The system's temporary folder was
+  the alternative, and it is often another filesystem, where a rename fails and
+  a second copy would be the half-made state all over again. A move across
+  filesystems is not attempted: a rename that fails is an error naming both
+  paths. The folder holds a `.gitignore` of `*`, written with `create_new`, so
+  nothing staged is committed even while `.mind` is. A rule of its own rather
+  than an entry in [the exclude block](#what-keeps-an-install-out-of-git), for
+  the reason [D-01](#d-01-a-projects-mind-ignores-itself) gives `.mind` one:
+  a folder Mindflayer owns can carry it, so it needs no repository and goes
+  with the folder. It is not the team's `.gitignore`, which is never edited.
+- **A stage per run.** Named after the run's process id and a random suffix,
+  and made with `create_dir`, which refuses a name that is there rather than
+  sharing it: two installs at once, from two terminals or two workspaces that
+  link one project, never build in one folder. The copy is built in the
+  stage's `new`, the one it replaces moves aside to its `old`, and the stage
+  goes when the install is done.
+- **What an interrupted run left is swept by the next, and said.** Every run
+  holds a shared lock on `.mind/tmp/.lock` while its stage lives. A run that
+  can take the lock exclusively is alone, so every stage it finds was left by
+  a run that stopped halfway: it removes them, and `Installation::swept` names
+  them for the CLI to print under what the install did. When the copy then
+  fails, `InstallError::swept` names them instead, printed before the error:
+  they were cleared all the same. A ledger that fails after the copy stops
+  everything, as it does wherever it fails, and they go unsaid with the rest.
+  A run that cannot take the lock exclusively sweeps nothing, because what it
+  finds may be in use. A lock rather than the process ids in the names,
+  because whether a process still runs is a question each platform answers
+  differently, and a lock the system drops when its process dies answers it on
+  all of them. Only folders named the way a stage is are swept; anything else
+  in there, somebody else put there. A stage that will not be removed is left
+  for a later run, unsaid, rather than failing this one: it is litter in a
+  folder nothing reads. On a filesystem without locks nothing is swept at all,
+  since no run there can tell a live stage from a leftover, and what is left
+  stays until somebody deletes it; the names still keep runs apart. Any error
+  taking the lock counts as such a filesystem, not only an unsupported one: NFS
+  without its lock daemon says "no locks available", and refusing that would
+  make every install there fail.
+- **What earlier versions left beside is cleared too.** A project that
+  upgraded can still hold the `.deploy.mindflayer-new` or `-old` of an install
+  an earlier version did not finish, and no sweep of `.mind/tmp` would find
+  it. The next install of that skill removes both, whether or not it changes
+  anything else, and says so as it says a swept stage. It does so without the
+  lock, because no run of this version stages there, and those versions
+  cleared each other's anyway. One it cannot remove fails the install, as it
+  did when staging there, rather than staying where an agent reads.
+- **The folder the copy goes in is made when it is missing.** Staging beside
+  made it on the way. A fresh clone has no empty folders, so a project's
+  `skills/` can be missing although its marker names it.
+
+So an agent reading a skills folder finds the old copy, the new one, or, for
+the moment between the two renames of an update, neither, but never part of
+one and never anything beside it. Gathering still stages beside the shelf copy
+(`copy::replace`), because no agent reads `.mindflayer`; see the open
+questions.
 
 ### Two places offer, one command takes
 
@@ -1330,12 +1482,31 @@ in for its own. `edit`, `rename`, `remove` and an add from nothing only warn,
 after the change: there the workspace is only told. `mind templates` lists what
 it could read, with the same warning.
 
-A template's front matter keeps whatever it says except `name` and
+A skill template's front matter keeps whatever it says except `name` and
 `description`, which `mind add` always sets: the template's lines for those
 two are dropped, continuation lines and all, before anything parses the rest —
 so a template may write `name: {{name}}`, which is not YAML anybody could read,
 and still work. The result is parsed back before the first file is written, so
 a template with broken front matter costs nothing but the error.
+
+A rule template is filled in throughout, front matter included, so it may
+scope its rule to `{{name}}/**`. Whether its fences hold front matter is
+decided as for any rule, but on what they hold once filled in, since
+`{{name}}/**` is a YAML flow mapping until it is. A `description` the front
+matter declares is set as a skill's is, dropped and serialized afresh: pasted
+in as text, a description breaks the YAML at its first `: `, and one opening
+with `#` is a comment that declares nothing. The result is read back before
+anything is written and refused for whatever `validate` would warn about
+(`artifact::rule_issues`) — front matter that does not parse, a `paths` or a
+`description` it cannot read. Reading a rule takes those as content or passes
+over them, because a rule somebody wrote still says what it says; writing one
+is the moment to find out, and a template's `paths:` that became content would
+scope nothing and say so nowhere.
+
+A rule template that does not say where `{{description}}` goes gets it as a
+heading on top of its body, below any front matter it declares. On top of the
+file, the heading would push the fences down a line, where they stop being
+front matter.
 
 ### Finding what to change
 
@@ -1805,6 +1976,16 @@ leak into the lifecycle code. Unblocks #33, #45, #62, #93, #94 and #95.
   `flayer install` rather than the `install` and `uninstall` lines it amounts
   to. Printing the batch as those lines would make a session with the screen in
   it as repeatable as one without.
+- **Gathering still stages beside.** `copy::replace` builds a shelf copy as a
+  hidden sibling, `.<name>.mindflayer-new`, under names taken from the skill:
+  two gathers of one source at once collide as two installs did, and a gather
+  stopped halfway leaves its staging on the shelf. No agent reads the shelf,
+  which is why installs moved first. A `copy::Stage` in a scratch folder of the
+  workspace's own would do for gathering what `.mind/tmp` does for installs.
+- **Removing is not staged.** `uninstall` deletes a copy where it is, so one
+  stopped halfway leaves part of a skill in a folder agents read. Renaming the
+  copy into a stage first, and deleting it there, would make a removal as all
+  or nothing as an install.
 - **Installing rules.** Installing copies a directory, so only skills can be
   installed — from the shelf, and now from the workspace's own. The workspace's
   own rules have no way into a project yet; a rule is one file, filed by its
@@ -1975,13 +2156,6 @@ leak into the lifecycle code. Unblocks #33, #45, #62, #93, #94 and #95.
   changed something before it stopped. The CLI's commands collect their
   failures rather than panic, so this is a bug's path, but the transcript then
   cannot say what the bug left behind.
-- **Rules that want to declare something.** Today a rule has no front matter,
-  so a leading `---` in one is content. If rules later want metadata, that
-  becomes a breaking reading of files written now. The escape hatch is cheap
-  and deliberate: `Declared::Rule` is a variant, so giving it a payload is a
-  local change. [D-03](#d-03-rules-reach-every-agent-through-agentsmd) settles
-  the if: a rule that declares `paths:` goes only to `.claude/rules/mindflayer`,
-  so rules will carry front matter, and #41 gives `Declared::Rule` that payload.
 - **Names outside ASCII.** The specification allows "unicode lowercase
   alphanumeric characters" in a name, while listing `a-z` and `0-9`, and its
   reference validator accepts more than ASCII. Mindflayer holds names to ASCII,
