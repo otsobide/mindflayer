@@ -142,7 +142,7 @@ pub enum Command {
 
     /// Show one artifact in full.
     Show {
-        /// Its name, or `kind/name` when one name belongs to two kinds.
+        /// Its name, or `kind:name` when one name belongs to two kinds.
         reference: String,
     },
 
@@ -1964,9 +1964,9 @@ fn wanted(kind: Option<Kind>) -> Vec<Kind> {
 /// What a `validate` positional named.
 ///
 /// One positional serving both is a grammar the user learns once: a bare kind
-/// word selects a kind, anything else names an artifact, and `kind/name`
+/// word selects a kind, anything else names an artifact, and `kind:name`
 /// always names an artifact. An artifact literally called `rules` is reachable
-/// as `rule/rules`.
+/// as `rule:rules`.
 enum Selector {
     /// Everything in scope.
     Everything,
