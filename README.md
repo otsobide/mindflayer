@@ -54,7 +54,7 @@ every workspace says so instead.
 | | Lives in | Shape | Declares |
 |---|---|---|---|
 | **Skill** | `skills/<name>/SKILL.md` | a directory each, so it can carry scripts and references beside its instructions | front matter in the [Agent Skills](https://agentskills.io/specification) format: `name`, `description`, and optionally `license`, `compatibility`, `metadata` and `allowed-tools` |
-| **Rule** | `rules/<name>.md` | one markdown file each | nothing — it is context, and its name is its filename |
+| **Rule** | `rules/<name>.md` | one markdown file each | usually nothing — it is context, and its name is its filename — though it may open with front matter: `paths` and `description`, both optional |
 
 Folders under `rules/` group and mean nothing else, so
 `rules/git/no-force-push.md` is the rule `git/no-force-push`. Skills are flat,
@@ -221,16 +221,16 @@ rule:git/no-force-push: ok
 
 Each kind is checked against what it actually declares. A skill is held to the
 [Agent Skills rules](#what-a-skill-looks-like) — its name has to match its
-directory, its description has to fit, and so on; a rule declares nothing, so
-the only things left to check are that its name is usable and that the file is
-not empty. `flayer validate` checks what is on the
-[shelf](#gathering-skills-from-elsewhere) too.
+directory, its description has to fit, and so on; a rule's front matter is
+optional, so the only things left to check are that its name is usable and that
+the file says something beyond its front matter. `flayer validate` checks what
+is on the [shelf](#gathering-skills-from-elsewhere) too.
 
 `validate` exits non-zero when anything is wrong, so it works in CI. What an
 agent reads past — a `metadata` entry that is not a string, a `compatibility`
-over 500 characters — is listed as a warning instead, under an artifact that is
-still `ok`. An artifact that cannot be read at all is a warning on stderr and
-does not hide the ones next to it.
+over 500 characters, a rule's front matter that does not parse — is listed as a
+warning instead, under an artifact that is still `ok`. An artifact that cannot
+be read at all is a warning on stderr and does not hide the ones next to it.
 
 ### The agents' own folders
 
@@ -669,7 +669,7 @@ metadata:
 Use `<area>: <imperative summary>`, imperative and in English.
 ```
 
-A rule is simpler, because it declares nothing at all. `rules/git/no-force-push.md`:
+A rule is simpler, because it usually declares nothing at all. `rules/git/no-force-push.md`:
 
 ```markdown
 # Never force-push a shared branch
@@ -682,6 +682,53 @@ opening line, which is why leading with a heading or a one-line summary is
 worth doing. Every name, declared or derived, is checked segment by segment:
 lowercase letters and digits joined by single hyphens, each segment at most 64
 characters.
+
+A rule may open with front matter, as Claude Code's rules do to say which files
+they are about. `rules/api/errors.md`:
+
+```markdown
+---
+description: How errors leave the API layer
+paths:
+  - "src/api/**/*.{ts,tsx}"
+---
+
+# Return errors as values
+
+Never throw across a handler boundary; return a `Result`.
+```
+
+| Key | | Rule |
+|---|---|---|
+| `paths` | optional | glob patterns, as a list or one on its own; quote a pattern that opens with `*`, which YAML reads as an alias |
+| `description` | optional | a string |
+
+The fences only open front matter when what they hold is a YAML mapping, so a
+rule that opens with a `---` horizontal rule reads as it always did. Front
+matter that does not parse is read as content, fences and all, and `validate`
+warns about it. It warns too about a `paths` or a `description` it cannot read,
+which is ignored and left in the file; any other key passes through untouched.
+Listings show the opening line below the front matter, and `show` prints what
+it declares above that:
+
+```
+$ mind list rules
+api/errors         Return errors as values
+git/no-force-push  Never force-push a shared branch
+
+$ mind show api/errors
+api/errors
+/home/you/Projects/collapse/rules/api/errors.md
+
+How errors leave the API layer
+
+paths:
+  - src/api/**/*.{ts,tsx}
+
+# Return errors as values
+
+Never throw across a handler boundary; return a `Result`.
+```
 
 ### Creating one
 
@@ -719,6 +766,8 @@ finds those of the workspace above the project, or else the one in your home.
 A template is copied whole. In its manifest, `name` and `description` are set by
 `mind add`, whatever the template had for them, and `{{name}}` and
 `{{description}}` in the body are filled in. Other files are copied as they are.
+A rule template without `{{description}}` gets the description as a heading on
+top of its body, below any front matter, which stays front matter.
 
 ### Changing one
 
