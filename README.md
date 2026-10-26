@@ -354,13 +354,40 @@ ssh is a program of its own and can still ask on the terminal: for the
 passphrase of a key your ssh-agent does not hold, for a password when the
 server accepts one, or whether to trust a host it has not seen before.
 
+A URL with a password or a token in it is refused before anything is fetched.
+What is gathered is stored, listed and reported by its URL, and a token typed
+into a command line is already where `ps` and your shell history show it. Give
+the token to a git credential helper, and gather the URL without it:
+
+```
+$ flayer gather git https://me:ghp_t0ken@github.com/acme/private-skills
+error: https://github.com/acme/private-skills: a password or token in the URL is refused, because gathering stores and shows the URL: gather it without one, and configure a git credential helper that has it
+```
+
+The user ssh logs in as is not a credential, and is kept
+(`git@github.com:acme/skills`, `ssh://git@github.com/acme/skills`). Over https
+a user name on its own is refused too, because a token can stand in for one.
+
+A workspace an older Mindflayer gathered into with a token in a URL is cleaned
+up by the next command that writes to it — a gather, an install or an
+uninstall. The token is taken out of `mindflayer.db` and out of the clone in
+`cache/`, and the command says so once, on stderr, without failing because of
+it:
+
+```
+$ flayer install -p collapse deploy
+installed deploy into collapse, from https://github.com/acme/private-skills
+note: https://github.com/acme/private-skills: the credential an older Mindflayer stored in this URL is taken out; gathering it again needs a git credential helper that has it
+note: 2 action log entries: the credentials an older Mindflayer stored in them are taken out
+```
+
 ### What a workspace keeps
 
 ```
 .mindflayer/
   flayer.toml     the projects it manages, and the workspaces it loads
   mindflayer.db   what was gathered and from where, what was installed where,
-                  and every action taken
+                  and every action taken, with no credential in any URL
   cache/<source>/ the clone, kept so a gather can be looked at afterwards
   skills/<source>/<name>/SKILL.md
   templates/      templates for every project it manages, if you add any
