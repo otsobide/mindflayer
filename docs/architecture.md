@@ -174,7 +174,10 @@ a shipping agent writes nested maps and booleans in it
 and failing the whole manifest over one entry would leave the skill out of
 every listing. So the string entries are read, the others are named for
 `validate` to report, and nothing is rewritten: what is ignored here is still
-in the file for whichever agent wrote it.
+in the file for whichever agent wrote it. `compatibility` is read the same way,
+since a list of the agents a skill was made for is the obvious thing to write
+in place of the specification's sentence: a value that is not a string is
+ignored and reported.
 
 The name rule is held to every name, a rule's route segment by segment
 included. A looser one for rules was the alternative, and it would only have

@@ -38,7 +38,8 @@ pub use ledger::{Ledger, LedgerError, SourceKind, LEDGER_FILE};
 pub use lifecycle::{LifecycleError, Target};
 pub use scan::{scan, Found, Scan, ScanFailure};
 pub use skill::{
-    Metadata, SkillManifest, MAX_COMPATIBILITY_LEN, MAX_DESCRIPTION_LEN, MAX_NAME_SEGMENT_LEN,
+    Compatibility, Metadata, SkillManifest, MAX_COMPATIBILITY_LEN, MAX_DESCRIPTION_LEN,
+    MAX_NAME_SEGMENT_LEN,
 };
 pub use template::{Template, TemplateError, TEMPLATES_DIR};
 pub use workspace::{

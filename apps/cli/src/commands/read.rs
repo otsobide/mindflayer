@@ -432,7 +432,7 @@ pub(crate) fn show(
             if let Some(license) = &manifest.license {
                 let _ = writeln!(keys, "license: {}", printable(license));
             }
-            if let Some(compatibility) = &manifest.compatibility {
+            if let Some(compatibility) = manifest.compatibility.stated() {
                 let _ = writeln!(keys, "compatibility: {}", printable(compatibility));
             }
             // Only the entries that are strings: the rest are `validate`'s to

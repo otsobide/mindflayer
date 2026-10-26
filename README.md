@@ -589,8 +589,9 @@ format, which Claude Code, Codex and OpenCode all read:
 | `allowed-tools` | optional | separated by spaces; commas still work, and a YAML list does too |
 
 Anything else in the front matter — an agent's own keys, like Claude Code's
-`paths` — is carried along untouched, and so is a `metadata` entry that is not
-a string: `validate` says it is ignored, and it stays in the file.
+`paths` — is carried along untouched, and so is a `metadata` entry or a
+`compatibility` that is not a string: `validate` says it is ignored, and it
+stays in the file.
 
 The name and the description are the rules Mindflayer will not break when it
 writes a skill, because agents skip a skill that does: `mind add` and `install`

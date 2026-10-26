@@ -212,6 +212,32 @@ fn a_skill_that_breaks_the_rules_is_gathered_with_a_warning() {
 }
 
 #[test]
+fn a_compatibility_written_as_a_list_is_gathered_with_a_warning() {
+    // A list of agents is what an author writes when the specification's
+    // prose string does not occur to them; the skill is still a skill.
+    let source = repository(&[(
+        "skills/deploy/SKILL.md",
+        "---\nname: deploy\ndescription: Ship it\ncompatibility: [claude-code, codex]\n---\n",
+    )]);
+    let (_dir, workspace) = workspace();
+    let ledger = workspace.ledger().unwrap();
+
+    let report = gather::gather(&workspace, &ledger, &Request::git(url(&source))).unwrap();
+
+    let names: Vec<&str> = report.added.iter().map(|h| h.name.as_str()).collect();
+    assert_eq!(names, ["deploy"]);
+    assert!(report.failures.is_empty(), "{:?}", report.failures);
+    let shelf = workspace.gathered_dir(Kind::Skill).join(&report.directory);
+    assert_eq!(
+        report.warnings,
+        vec![Warning {
+            path: shelf.join("deploy").join("SKILL.md"),
+            issue: ValidationIssue::CompatibilityNotAString,
+        }]
+    );
+}
+
+#[test]
 fn a_directory_without_a_manifest_is_not_a_skill() {
     let source = repository(&[
         ("skills/deploy/SKILL.md", &skill("deploy", "Ship it")),

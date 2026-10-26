@@ -47,12 +47,34 @@ fn reads_compatibility_when_it_is_there() {
     let manifest =
         SkillManifest::parse("name: a\ndescription: d\ncompatibility: Requires git and jq\n")
             .unwrap();
-    assert_eq!(
-        manifest.compatibility.as_deref(),
-        Some("Requires git and jq")
-    );
+    assert_eq!(manifest.compatibility.stated(), Some("Requires git and jq"));
     let manifest = SkillManifest::parse("name: a\ndescription: d\n").unwrap();
-    assert_eq!(manifest.compatibility, None);
+    assert_eq!(manifest.compatibility, Compatibility::Unstated);
+    let manifest = SkillManifest::parse("name: a\ndescription: d\ncompatibility:\n").unwrap();
+    assert_eq!(manifest.compatibility, Compatibility::Unstated);
+}
+
+#[test]
+fn a_compatibility_that_is_not_a_string_is_noted_rather_than_refused() {
+    // A list of agents is the obvious thing to write; the skill still reads.
+    for written in [
+        "compatibility: [claude-code, codex]\n",
+        "compatibility:\n  - claude-code\n  - codex\n",
+        "compatibility:\n  os: linux\n",
+        "compatibility: 2\n",
+        "compatibility: true\n",
+        // Skipped, not built: a repeated key in it is not a reason to fail.
+        "compatibility:\n  os: linux\n  os: macos\n",
+    ] {
+        let manifest = SkillManifest::parse(&format!("name: a\ndescription: d\n{written}"))
+            .unwrap_or_else(|error| panic!("{written}: {error}"));
+        assert_eq!(
+            manifest.compatibility,
+            Compatibility::NotAString,
+            "{written}"
+        );
+        assert_eq!(manifest.compatibility.stated(), None);
+    }
 }
 
 #[test]

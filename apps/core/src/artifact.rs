@@ -11,7 +11,7 @@ use thiserror::Error;
 use crate::frontmatter::{self, FrontMatterError};
 use crate::kind::{Kind, Layout};
 use crate::skill::{
-    SkillManifest, MAX_COMPATIBILITY_LEN, MAX_DESCRIPTION_LEN, MAX_NAME_SEGMENT_LEN,
+    Compatibility, SkillManifest, MAX_COMPATIBILITY_LEN, MAX_DESCRIPTION_LEN, MAX_NAME_SEGMENT_LEN,
 };
 
 /// What an artifact declared about itself.
@@ -230,13 +230,19 @@ impl Artifact {
                 }
                 // Optional, but once written it has to say something and fit:
                 // an agent may show it to the model when the skill is loaded.
-                if let Some(compatibility) = &manifest.compatibility {
-                    let compatibility = compatibility.trim();
-                    let length = compatibility.chars().count();
-                    if compatibility.is_empty() {
-                        issues.push(ValidationIssue::CompatibilityEmpty);
-                    } else if length > MAX_COMPATIBILITY_LEN {
-                        issues.push(ValidationIssue::CompatibilityTooLong { length });
+                match &manifest.compatibility {
+                    Compatibility::Unstated => {}
+                    Compatibility::Stated(compatibility) => {
+                        let compatibility = compatibility.trim();
+                        let length = compatibility.chars().count();
+                        if compatibility.is_empty() {
+                            issues.push(ValidationIssue::CompatibilityEmpty);
+                        } else if length > MAX_COMPATIBILITY_LEN {
+                            issues.push(ValidationIssue::CompatibilityTooLong { length });
+                        }
+                    }
+                    Compatibility::NotAString => {
+                        issues.push(ValidationIssue::CompatibilityNotAString);
                     }
                 }
                 // Read leniently, so the skill still lists; said here, so the
@@ -374,6 +380,7 @@ pub enum ValidationIssue {
     DescriptionTooLong { length: usize },
     CompatibilityEmpty,
     CompatibilityTooLong { length: usize },
+    CompatibilityNotAString,
     MetadataNotAMap,
     MetadataNotAString { key: String },
     Empty,
@@ -430,6 +437,10 @@ impl fmt::Display for ValidationIssue {
             ValidationIssue::CompatibilityTooLong { length } => write!(
                 f,
                 "`compatibility` is {length} characters, over the {MAX_COMPATIBILITY_LEN} character limit"
+            ),
+            ValidationIssue::CompatibilityNotAString => write!(
+                f,
+                "`compatibility` is not a string, so it is ignored, and left in the file as written"
             ),
             ValidationIssue::MetadataNotAMap => write!(
                 f,

@@ -4,7 +4,10 @@
 //! [`Artifact`](crate::artifact::Artifact) like any other kind; this is the
 //! half that is specific to skills.
 
-use serde::Deserialize;
+use std::fmt;
+
+use serde::de::{self, IgnoredAny, Visitor};
+use serde::{Deserialize, Deserializer};
 
 /// The longest a single segment of a name may be.
 ///
@@ -40,8 +43,8 @@ pub struct SkillManifest {
     pub license: Option<String>,
     /// What the skill needs from where it runs — the product it was made for,
     /// system packages, network access — in prose, when it needs anything.
-    #[serde(default)]
-    pub compatibility: Option<String>,
+    #[serde(default, deserialize_with = "lenient_compatibility")]
+    pub compatibility: Compatibility,
     /// Whatever else its author, or a tool, wanted to record about it.
     #[serde(default, deserialize_with = "lenient_metadata")]
     pub metadata: Metadata,
@@ -51,6 +54,144 @@ impl SkillManifest {
     /// Parse front matter that has already been separated from its body.
     pub fn parse(front_matter: &str) -> Result<Self, serde_yaml_ng::Error> {
         serde_yaml_ng::from_str(front_matter)
+    }
+}
+
+/// `compatibility`, read leniently.
+///
+/// The specification makes it a string, but a list of the agents a skill was
+/// made for is the obvious thing to write instead, and refusing the whole
+/// skill over it would hide it from every listing, as with `metadata`. So a
+/// value that is not a string is noted for `validate` to say so, and left in
+/// the file as written.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub enum Compatibility {
+    /// Not written, or written with nothing after it.
+    #[default]
+    Unstated,
+    /// Written as a string, as the specification has it.
+    Stated(String),
+    /// Written as something else — a list, a map, a number — and so ignored.
+    NotAString,
+}
+
+impl Compatibility {
+    /// What it says, when it was written as a string.
+    pub fn stated(&self) -> Option<&str> {
+        match self {
+            Compatibility::Stated(text) => Some(text),
+            Compatibility::Unstated | Compatibility::NotAString => None,
+        }
+    }
+}
+
+fn lenient_compatibility<'de, D>(deserializer: D) -> Result<Compatibility, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    Ok(match Option::<Text>::deserialize(deserializer)? {
+        None => Compatibility::Unstated,
+        Some(Text(Some(text))) => Compatibility::Stated(text),
+        Some(Text(None)) => Compatibility::NotAString,
+    })
+}
+
+/// A YAML value: its text when it is a string, and nothing otherwise.
+///
+/// Whatever is not a string is skipped rather than built, because building it
+/// can fail where skipping cannot — a map refuses a repeated key — and one
+/// stray key inside a value that is about to be ignored anyway is no reason to
+/// fail the manifest.
+struct Text(Option<String>);
+
+impl<'de> Deserialize<'de> for Text {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        deserializer.deserialize_any(TextVisitor).map(Text)
+    }
+}
+
+struct TextVisitor;
+
+impl<'de> Visitor<'de> for TextVisitor {
+    type Value = Option<String>;
+
+    fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+        formatter.write_str("any YAML value")
+    }
+
+    fn visit_str<E: de::Error>(self, text: &str) -> Result<Self::Value, E> {
+        Ok(Some(text.to_owned()))
+    }
+
+    fn visit_string<E: de::Error>(self, text: String) -> Result<Self::Value, E> {
+        Ok(Some(text))
+    }
+
+    fn visit_bool<E: de::Error>(self, _: bool) -> Result<Self::Value, E> {
+        Ok(None)
+    }
+
+    fn visit_i64<E: de::Error>(self, _: i64) -> Result<Self::Value, E> {
+        Ok(None)
+    }
+
+    fn visit_i128<E: de::Error>(self, _: i128) -> Result<Self::Value, E> {
+        Ok(None)
+    }
+
+    fn visit_u64<E: de::Error>(self, _: u64) -> Result<Self::Value, E> {
+        Ok(None)
+    }
+
+    fn visit_u128<E: de::Error>(self, _: u128) -> Result<Self::Value, E> {
+        Ok(None)
+    }
+
+    fn visit_f64<E: de::Error>(self, _: f64) -> Result<Self::Value, E> {
+        Ok(None)
+    }
+
+    fn visit_bytes<E: de::Error>(self, _: &[u8]) -> Result<Self::Value, E> {
+        Ok(None)
+    }
+
+    fn visit_unit<E: de::Error>(self) -> Result<Self::Value, E> {
+        Ok(None)
+    }
+
+    fn visit_none<E: de::Error>(self) -> Result<Self::Value, E> {
+        Ok(None)
+    }
+
+    fn visit_some<D>(self, deserializer: D) -> Result<Self::Value, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        deserializer.deserialize_any(self)
+    }
+
+    fn visit_seq<A>(self, seq: A) -> Result<Self::Value, A::Error>
+    where
+        A: de::SeqAccess<'de>,
+    {
+        IgnoredAny.visit_seq(seq).map(|_| None)
+    }
+
+    fn visit_map<A>(self, map: A) -> Result<Self::Value, A::Error>
+    where
+        A: de::MapAccess<'de>,
+    {
+        IgnoredAny.visit_map(map).map(|_| None)
+    }
+
+    fn visit_enum<A>(self, data: A) -> Result<Self::Value, A::Error>
+    where
+        A: de::EnumAccess<'de>,
+    {
+        IgnoredAny.visit_enum(data).map(|_| None)
     }
 }
 

@@ -1,7 +1,7 @@
 //! Unit tests for `artifact.rs`, kept beside it rather than inside it.
 
 use super::*;
-use crate::skill::Metadata;
+use crate::skill::{Compatibility, Metadata};
 
 /// A skill built without touching the disk, to check the rules rather
 /// than the loading.
@@ -15,7 +15,7 @@ fn skill(name: &str, description: &str, directory: &str) -> Artifact {
             description: description.to_owned(),
             allowed_tools: None,
             license: None,
-            compatibility: None,
+            compatibility: Compatibility::Unstated,
             metadata: Metadata::default(),
         }),
         summary: first_line(description),
@@ -26,7 +26,7 @@ fn skill(name: &str, description: &str, directory: &str) -> Artifact {
 fn compatible(compatibility: &str) -> Artifact {
     let mut artifact = skill("a", "d", "/s/a");
     if let Declared::Skill(manifest) = &mut artifact.declared {
-        manifest.compatibility = Some(compatibility.to_owned());
+        manifest.compatibility = Compatibility::Stated(compatibility.to_owned());
     }
     artifact
 }
@@ -144,6 +144,15 @@ fn a_compatibility_once_written_has_to_say_something_and_fit() {
             length: MAX_COMPATIBILITY_LEN + 1
         }]
     );
+
+    let mut artifact = skill("a", "d", "/s/a");
+    if let Declared::Skill(manifest) = &mut artifact.declared {
+        manifest.compatibility = Compatibility::NotAString;
+    }
+    assert_eq!(
+        artifact.validate(),
+        vec![ValidationIssue::CompatibilityNotAString]
+    );
 }
 
 #[test]
@@ -229,6 +238,7 @@ fn only_the_name_and_the_description_are_strict() {
         },
         ValidationIssue::CompatibilityEmpty,
         ValidationIssue::CompatibilityTooLong { length: 501 },
+        ValidationIssue::CompatibilityNotAString,
         ValidationIssue::MetadataNotAMap,
         ValidationIssue::MetadataNotAString { key: "k".into() },
         ValidationIssue::Empty,
