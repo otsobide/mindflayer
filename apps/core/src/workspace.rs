@@ -1385,13 +1385,24 @@ pub(crate) fn replace_file(path: &Path, contents: &str) -> Result<(), WorkspaceE
 /// local exclude file is bytes, and its failures belong to its own module's
 /// error, not to a workspace's.
 pub(crate) fn replace_bytes(path: &Path, contents: &[u8]) -> Result<(), (PathBuf, io::Error)> {
-    use std::io::Write as _;
-
     // Follow a symlinked config to the file it names. Replacing the link
     // itself would silently detach a workspace from a config someone chose to
     // share, and leave the original holding stale contents.
     let resolved = fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf());
-    let path = resolved.as_path();
+    replace_bytes_unresolved(&resolved, contents)
+}
+
+/// [`replace_bytes`] at `path` as it is spelled, never resolved: the
+/// temporary is made beside it and renamed onto it.
+///
+/// For a file whose route its caller refuses to follow a link on
+/// (`config_entry::ConfigFile`), where resolving one would carry the write
+/// out of the folder it was meant for.
+pub(crate) fn replace_bytes_unresolved(
+    path: &Path,
+    contents: &[u8],
+) -> Result<(), (PathBuf, io::Error)> {
+    use std::io::Write as _;
 
     let (temporary, mut file) = temporary_beside(path)?;
     let written = file.write_all(contents);

@@ -2170,6 +2170,150 @@ own to every command it runs, as `tui::execute` passes its `Lookup`. Otherwise
 a command run from the TUI decides them again from the environment, and a test
 that drives the TUI reaches the real folders.
 
+## One entry of a config file somebody else owns
+
+An MCP server reaches an agent as one entry in that agent's own config file
+([D-10](#d-10-an-mcp-server-is-one-owned-entry-per-agent)): `.mcp.json`,
+`opencode.json`, `.codex/config.toml`. Those files are the team's, the user's
+and the agents' own CLIs', so `config_entry` changes the one entry it is asked
+to and keeps every other byte. It knows no agent: which file, which key path
+and what an entry holds are the caller's, and the agents' shapes are #90 to
+#92's. Nothing calls it yet.
+
+An entry is found by its key path, the keys of the objects that lead to it
+(`["mcpServers", "github"]`), and holds a `config_entry::Value`. Its own type
+rather than `serde_json::Value` or toml_edit's, because one entry is rendered
+into both formats and neither can stand for the other: JSON has a null that
+TOML lacks, and TOML keeps integers and floats apart where JSON does not. A
+value a format cannot write is refused there, not bent into something it was
+not. Arrays are not walked into: an entry Mindflayer owns is a member of an
+object, which is what lets it be told apart by name from everybody else's.
+
+### Edited in a tree that holds every byte
+
+JSON and JSONC go through jsonc-parser's CST (its `cst` feature), TOML through
+`toml_edit`, the crate the markers are edited with. Both hold the whole text,
+comments and whitespace included, and change one node of it. Parsing into a
+value and serializing it again, as `serde_json` would, writes the whole file in
+the library's layout and drops every comment. The agents' CLIs are no way
+round it either: D-10 turned them down, since `codex mcp add` writes only the
+user's config and re-serializes every entry in it.
+
+The format is the caller's to say, never guessed from a file's name: OpenCode
+reads `opencode.json` as JSONC. JSON is held strict, because Claude reads
+`.mcp.json` with a strict parser, so a file with a comment or a trailing comma
+is refused rather than edited, and one without stays without. JSONC allows
+comments and trailing commas and nothing more: jsonc-parser's defaults take
+every JSON5 extension (single quotes, bare keys, hexadecimal numbers), which
+the agents' parsers refuse. The text is parsed once without the CST to hold it
+to that, because in 0.34 the CST's own parse lets a comment through
+`allow_comments: false`. Two things no option of its covers are refused in
+JSON by a scan of the text once it has parsed: a control character written as
+itself in a string, and whitespace other than space, tab, LF and CR between
+tokens, both of which `JSON.parse` refuses.
+
+Where a library keeps less than every byte, the module makes up the
+difference, and the tests pin what is left:
+
+- toml_edit files the comments above an entry with the entry, so removing it
+  would take them, where jsonc-parser leaves them. A TOML entry with comments
+  above it is first replaced by a one-line stand-in that keeps them, marked by
+  a comment nothing else in the file holds, and that line is cut from what
+  toml_edit writes. Dotted keys file them with the last key of their first
+  line, which a replace carries over to the new first line.
+- toml_edit writes every line ending as LF. A file whose lines all end in CRLF
+  has them put back, and one that mixes the two is refused, since which line
+  had which would be lost. jsonc-parser keeps the file's own. toml_edit also
+  ends the last line and drops a byte-order mark: a file whose last line had
+  no ending is left without one, and a mark is put back.
+- A string with a line break is written on one line, the break escaped, where
+  toml_edit would open a multi-line string: in a CRLF file its breaks would
+  then be the file's line endings to the file and part of the value to its
+  reader. A float is written as the fingerprint writes it, in both formats,
+  where the libraries write every digit of `1e300`.
+- A TOML object is laid out as the objects already beside it are: a `[table]`
+  of its own after theirs, inline, or dotted keys. Anything else is a key after
+  the keys beside it, indented as the one before it.
+- jsonc-parser's own `append` lays the object an entry goes into out again
+  first: it drops the blank lines just inside the braces and breaks an object
+  written on one line onto several. So a JSON insert takes only its place from
+  the CST, after the last member and the comment on that member's line, and is
+  spliced into the text there, laid out as jsonc-parser lays out what it is
+  given: on a line of its own, indented as the last member, in an object
+  written on several lines, and on the same line in one written on one. A
+  replace and a remove go through the CST, which changes nothing outside the
+  member.
+
+### What an edit is held to
+
+What an edit wrote is read back before it is handed over: it must parse, the
+entry must hold what was asked (nothing, for a remove), and everything else
+must hold what it held before, compared as values (`config_entry::kept`). A
+library that changed more than the entry is then a refusal, not a file somebody
+has to repair. The objects on the entry's way that it leaves empty are left out
+of that comparison, because the formats differ there: jsonc-parser keeps
+`"mcpServers": {}` when its last entry goes, and toml_edit drops a
+`[mcp_servers]` that was never written, only implied by `[mcp_servers.github]`.
+
+A key written twice on the way to an entry, or as the entry, is refused rather
+than one copy picked, since which one an agent reads is its parser's. A replace
+with what the entry already means hands the text back untouched, so installing
+again over an entry somebody reformatted leaves their layout alone.
+
+### The fingerprint
+
+An entry can carry no mark of its own: OpenCode refuses keys it does not know,
+`codex --strict-config` fails on them, and `.mcp.json` allows no comments. So
+what the ledger will keep of an entry Mindflayer wrote (#93) is its
+fingerprint, `Value::fingerprint`: the SHA-256 of its canonical JSON form, as
+[RFC 8785](https://www.rfc-editor.org/rfc/rfc8785), the JSON Canonicalization
+Scheme, writes it. Members sorted by UTF-16 code units at every depth, no
+whitespace, strings escaped only where JSON must be, and numbers written as
+ECMAScript writes a double, so `1`, `1.0` and `1e0` are one value. A published
+scheme rather than one of ours, and one that keeps no integer apart from a
+float: a file Claude rewrites goes through `JSON.stringify`, which keeps
+neither, so anything stricter would call an entry nobody changed edited. It
+departs from the scheme only for what JSON cannot spell. An integer past 2^53
+is written digit for digit, since TOML's are 64-bit and two of them must not
+read as one, and a float that is not finite as ECMAScript names it.
+
+The fingerprint stays the same whatever a file does to an entry's layout (its
+indentation, the order of its keys, a table or an inline table, its quotes) and
+changes with any value. So a reformatted file still holds Mindflayer's entry,
+and an edited one holds its editor's. A digest rather than the canonical text,
+so every row is as long as every other, as a copy's `hash::tree` is.
+
+### The file around the entry
+
+`ConfigFile` reads the text from a file and writes it back. The file is named
+by a route of plain folder names from a folder the caller trusts, a project's
+root, and the route is checked by its spelling before anything is read, as a
+project's artifact directories are kept inside it. A symbolic link anywhere on
+that route, the file included, is refused, for a read as for a write. An
+agent's folder, `.claude/` or `.codex/`, is somebody's to point anywhere, and a
+gathered repository can hold one that points at the user's own `~/.claude`: an
+entry written through it would land outside the project, in a file of the
+user's, which the project's ledger row would then claim. The root itself may
+be reached through a link, as a project often is. The route is looked at when
+the file is read and again just before it is written, since a folder on it may
+have become a link in between, and the write goes to the path as spelled,
+never resolved: `replace_bytes`, which the markers go through, resolves it
+first, to follow a config somebody shared by a link
+([open questions](#open-questions)).
+
+A file that does not parse is refused and left as it is: what it was meant to
+say is its owner's to settle. A changed file is written whole through
+`replace_bytes_unresolved`, a temporary of its own and a rename, with its
+permissions kept, so a crash leaves the old file or the new one. A file not
+there yet is
+made, with the folders on its route, by `create_dir` and `create_new`, where a
+rename would put it over one an agent's CLI made after the read found none. A
+replace that changes nothing writes nothing, modification time included.
+
+The caller holds the workspace's lock, as an install does, so two of
+Mindflayer's writers take turns over one file. `ConfigFile` takes none: the
+lock is not re-entrant, and nothing here knows about workspaces.
+
 ## Creating and changing artifacts
 
 `mind add` writes the least that passes `validate`: a skill's front matter and
@@ -3166,6 +3310,24 @@ leak into the lifecycle code. Unblocks #33, #45, #62, #93, #94 and #95.
   of 1 and 4, are what a `codex.sh` and an `opencode.sh` beside the probe
   would run, and the place to run them is before #34 and #42 rely on those
   facts.
+- **An agent's CLI writing the same config file.** The workspace's lock keeps
+  Mindflayer's writers apart, not the agents': `claude mcp add` rewriting
+  `.mcp.json` between `ConfigFile::edit`'s read and its rename is undone by the
+  rename. Reading the file again just before the rename would narrow that to
+  the rename itself; nothing closes it while the agents take no lock of ours.
+- **A folder made a link while a config file is written.** `ConfigFile::edit`
+  looks for links on the route again just before it writes, and the rename is
+  onto the path as spelled, so a link that the file itself has become is
+  replaced, not written through. A folder on the route that becomes a link in
+  the moment between that look and the rename is still followed by the
+  operating system. Only opening each folder without following links and
+  writing relative to it (`openat` with `O_NOFOLLOW`, then `renameat`) closes
+  that, which is a platform layer of its own for a window that small.
+- **A config file left empty by its last entry.** Removing the last server
+  leaves `"mcpServers": {}` in a JSON file, and a `.codex/config.toml` that
+  Mindflayer made holding nothing, and the file stays, with any folder made for
+  it. Removing them needs a record that Mindflayer made them, which the
+  ledger's MCP rows (#93) could carry.
 - **A panel built after the server.** A release build embeds what
   `apps/web/dist` held when `mindflayer-server` last compiled, and a debug
   build reads the folder at run time only if it existed then, because
