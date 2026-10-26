@@ -638,11 +638,12 @@ rules = ".mindflayer/library/rules"
 ```
 
 `flayer init --skills DIR --rules DIR` says otherwise, as `mind init` does for
-a project: anywhere inside the workspace but the shelf and the cache, which
-gathering rewrites, so `--skills .mindflayer/skills` is refused. A workspace
-made before the library keeps them in `skills/` and `rules/` beside its
-projects, because that is what its `flayer.toml` says. Either way nothing is
-made until the first one is added.
+a project. Any folder inside the workspace will do except the shelf and the
+cache, which are reserved for gathering, a folder inside them, or one holding
+them, so `--skills .mindflayer/skills` and `--rules .mindflayer` are refused. A
+workspace made before the library keeps them in `skills/` and `rules/` beside
+its projects, because that is what its `flayer.toml` says. Either way nothing
+is made until the first one is added.
 
 A project holds what is in its own folders, because that is what its agents
 read, so the workspace's skills reach a project by being installed into it —
