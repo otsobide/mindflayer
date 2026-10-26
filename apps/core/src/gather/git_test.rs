@@ -127,3 +127,70 @@ fn a_url_gix_cannot_parse_is_named_without_its_credentials_and_so_is_what_gix_sa
     assert!(matches!(error, GitError::Url { .. }), "{error}");
     assert!(!error.to_string().contains("hunter2"), "{error}");
 }
+
+/// A clone's `.git` as `gix` leaves it after cloning `url`, without the
+/// objects, which no scrub reads.
+fn clone_made_from(url: &str) -> tempfile::TempDir {
+    let clone = tempfile::TempDir::new().unwrap();
+    let git = clone.path().join(".git");
+    let logs = git.join("logs").join("refs").join("remotes").join("origin");
+    fs::create_dir_all(&logs).unwrap();
+    fs::write(
+        git.join("config"),
+        format!(
+            "[core]\n\tbare = false\n[remote \"origin\"]\n\turl = {url}\n\
+             \tfetch = +refs/heads/main:refs/remotes/origin/main\n"
+        ),
+    )
+    .unwrap();
+    let entry = format!("0000 1111 Fixture <fixture@example.com> 0 +0000\tclone: from {url}\n");
+    fs::write(git.join("logs").join("HEAD"), &entry).unwrap();
+    fs::write(logs.join("HEAD"), &entry).unwrap();
+    clone
+}
+
+/// Every file under `root`, read as text, for asserting on what is left.
+fn everything_in(root: &Path) -> String {
+    let mut files = Vec::new();
+    files_under(root, &mut files).unwrap();
+    files
+        .iter()
+        .map(|file| fs::read_to_string(file).unwrap())
+        .collect()
+}
+
+#[test]
+fn scrubbing_a_clone_takes_the_credentials_out_of_its_config_and_its_reflogs() {
+    let clone = clone_made_from("https://me:hunter2@example.com/acme/private.git");
+
+    assert!(scrub(clone.path()).unwrap());
+
+    let left = everything_in(clone.path());
+    assert!(!left.contains("hunter2"), "{left}");
+    assert!(
+        left.contains("\turl = https://example.com/acme/private.git\n"),
+        "{left}"
+    );
+    assert!(
+        left.contains("\tclone: from https://example.com/acme/private.git\n"),
+        "{left}"
+    );
+    // The rest of the config is left as it was.
+    assert!(left.contains("fetch = +refs/heads/main:refs/remotes/origin/main"));
+}
+
+#[test]
+fn scrubbing_a_clone_again_or_one_without_credentials_changes_nothing() {
+    let clone = clone_made_from("https://me:hunter2@example.com/acme/private.git");
+    scrub(clone.path()).unwrap();
+    assert!(!scrub(clone.path()).unwrap());
+
+    let clean = clone_made_from("git@example.com:acme/private.git");
+    let before = everything_in(clean.path());
+    assert!(!scrub(clean.path()).unwrap());
+    assert_eq!(everything_in(clean.path()), before);
+
+    // Nothing there at all is nothing to scrub.
+    let gone = tempfile::TempDir::new().unwrap();
+    assert!(!scrub(&gone.path().join("never-cloned")).unwrap());
+}
