@@ -141,7 +141,8 @@ fn a_rule_reaches_no_agent_through_a_folder_yet() {
 #[test]
 fn agents_sharing_a_location_another_table_names_get_one_target() {
     // What a project's settings could make of the table (#40): one folder
-    // for every agent is one copy, serving all three.
+    // for every agent is one copy, for all three, whether or not any of them
+    // reads it.
     let table = TargetTable {
         locations: Agent::ALL
             .into_iter()

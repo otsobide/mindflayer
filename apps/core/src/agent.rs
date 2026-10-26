@@ -90,7 +90,7 @@ impl fmt::Display for UnknownAgent {
     }
 }
 
-/// Where each kind goes in a project for each agent to read it.
+/// Where each kind goes in a project for each agent.
 ///
 /// One table in core, so no front end ever spells an agent's folder: an
 /// install (#34) asks it where to put a copy for each agent a project names,
@@ -99,7 +99,15 @@ impl fmt::Display for UnknownAgent {
 /// A value rather than a function a caller reaches for, because the
 /// standard layout is only the default: a project's settings may put a kind
 /// somewhere else for every agent (#40), and a caller handed the table then
-/// follows that without changing. One entry per kind and agent. A pair with
+/// follows that without changing. Where a kind goes for an agent is where
+/// its copy is put for that agent, not proof the agent reads it there: the
+/// standard layout is built from what each one reads, but an override's
+/// folder reaches an agent only once the agent is pointed at it, which is
+/// #40's status check to say.
+///
+/// One location per kind and agent for now, which is all the standard layout
+/// needs, kept private so it can grow into the list of folders per kind the
+/// override names when #40 lands, without a caller noticing. A pair with
 /// none is a kind that reaches that agent some other way, or not at all,
 /// which is every rule for now: D-03 puts rules in a block of `AGENTS.md`,
 /// which M2 adds here, as M6 adds MCP servers.
@@ -135,7 +143,7 @@ impl TargetTable {
     }
 
     /// Where `kind` goes for `agents`: one target per location, each with
-    /// the agents it serves, so two agents that read one folder get one copy.
+    /// the agents it is for, so two agents sent to one folder get one copy.
     ///
     /// Sorted here, by location and then by agent in report order, so every
     /// front end lists them alike; an agent named twice is served once, and
@@ -177,15 +185,17 @@ fn standard(kind: Kind, agent: Agent) -> Option<PathBuf> {
     }
 }
 
-/// One place in a project where a kind's copies go, and the agents that
-/// read them there.
+/// One place in a project where a kind's copies go, and the agents they go
+/// there for.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct AgentTarget {
     /// Relative to the project's root. For a skill, the folder its copy goes
     /// in, under the skill's own name.
     pub path: PathBuf,
-    /// Every agent this location serves, each once, in report order. Never
-    /// empty: a location no agent reads is not a target.
+    /// The agents asked about that the table sends here, each once, in report
+    /// order. Never empty: a location none of them is sent to is not one of
+    /// their targets. Under the standard table these are agents that read the
+    /// location; under an override (#40) they need not be.
     pub agents: Vec<Agent>,
 }
 
