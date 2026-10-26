@@ -165,7 +165,7 @@ install before you have gathered anything. With the repository cloned in
 ```
 $ flayer -W ~/src/mindflayer/examples list
 skill  code-review     Reviews a change for bugs, safety, tests and scope, most severe first
-skill  commit-style    Writes commit messages in the form "<area>: <imperative summary>"
+skill  commit-style    Writes commit messages as "area: imperative summary"
 rule   git/commits     Commit one coherent step at a time
 rule   style/comments  Comments say why, not what
 ```

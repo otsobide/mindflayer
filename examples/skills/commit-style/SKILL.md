@@ -1,6 +1,6 @@
 ---
 name: commit-style
-description: 'Writes commit messages in the form "<area>: <imperative summary>"'
+description: 'Writes commit messages as "area: imperative summary"'
 ---
 
 # Commit style
