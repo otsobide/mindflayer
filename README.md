@@ -274,6 +274,21 @@ ddd-reviewer  https://github.com/acme/skills  Review a change against the DDD la
 A skill that cannot be read is a warning on stderr and does not stop the ones
 beside it from being gathered.
 
+A private repository is fetched with whatever your git credential helpers
+already know, or, over ssh, with the keys ssh already uses (your ssh-agent's,
+or one in `~/.ssh`). Mindflayer itself never stops to ask for a username or a
+password, so a source that needs one nobody has fails, and says what to set
+up:
+
+```
+$ flayer gather git https://github.com/acme/private-skills
+error: https://github.com/acme/private-skills: needs credentials, and gathering never prompts for them: configure a git credential helper, or use ssh-agent for an ssh URL
+```
+
+ssh is a program of its own and can still ask on the terminal: for the
+passphrase of a key your ssh-agent does not hold, for a password when the
+server accepts one, or whether to trust a host it has not seen before.
+
 ### What a workspace keeps
 
 ```

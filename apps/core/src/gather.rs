@@ -11,6 +11,7 @@
 //! lets two repositories both offer `commit-style`; [`crate::ledger`] is what
 //! remembers which is which.
 
+mod credentials;
 pub mod git;
 
 use std::fs;

@@ -436,9 +436,32 @@ nothing.
 Nothing depends on a `git` being installed, or on which `git` is first on the
 PATH, and core keeps doing its own I/O rather than supervising a process. The
 cost is that authentication for private repositories is ours to solve rather
-than inherited whole from `git`, and it is not solved yet:
-[D-16](#d-16-credentials-come-from-the-front-end-never-from-a-prompt) decides
-how.
+than inherited whole from `git`.
+
+Half of it is solved: a fetch **never prompts** for a credential. When a server
+asks who is fetching, `gix`'s own answer runs the credential helpers git config
+names and, when none of them has a credential, asks a person: an askpass
+program, then the terminal. The TUI owns the terminal while a gather runs, so
+that prompt is a screen that stops answering, and the server that comes next
+has no terminal at all. So every connection `gix` lets a clone configure is
+given a credentials callback (`gather::credentials`) that runs the same helper
+cascade with the prompt and askpass turned off. A credential no helper has is
+`GitError::Credentials`: the URL without its userinfo, and the two ways to
+provide one, a git credential helper or, for an ssh URL, ssh-agent. Over ssh,
+`gix` runs the system `ssh`, which authenticates with keys of its own and asks
+the helpers only for a user name, so a login ssh refuses is reported the same
+way. Whether a fetch went over ssh is read from the URL `gix` connected to, not
+the one typed: git config's `url.<base>.insteadOf` can turn a typed https URL
+into an ssh one, or the reverse. What ssh itself asks on the terminal is
+outside the callback's reach, and so is the one connection `gix` opens without
+letting the clone configure it; both are [open questions](#open-questions).
+
+The callback is set on the connection rather than asked for through git
+config (`gitoxide.credentials.terminalPrompt=false`), which would also stop
+the prompt: the guarantee then lives in code a test reaches, not in a string
+among the user's own settings, and the credential a front end supplies needs
+the callback to arrive through anyway. That other half is
+[D-16](#d-16-credentials-come-from-the-front-end-never-from-a-prompt)'s.
 
 `gix`'s error types are large and would become part of this crate's public API
 if they were carried, tying its version to gix's, so `GitError` keeps what they
@@ -1217,12 +1240,28 @@ leak into the lifecycle code. Unblocks #33, #45, #62, #93, #94 and #95.
   folder that is not one.
 - **Private repositories.** Mindflayer gives `gix` no credentials of its own,
   so a private source gets through only when a git-config helper (or, for an
-  ssh URL, ssh itself) has them, and otherwise the fetch can stop at a terminal
-  prompt. What it should be given is decided in
+  ssh URL, ssh itself) has them, and otherwise the gather fails and says how to
+  provide one, never at a prompt (see
+  [Why `gix`](#why-gix-rather-than-running-git)). What else it should be given
+  is decided in
   [D-16](#d-16-credentials-come-from-the-front-end-never-from-a-prompt): a
-  provider the front end supplies, through a callback that never prompts, then
-  the git-config helpers `gix` runs itself, then the system ssh binary. #26 and
-  #110 carry it out.
+  provider the front end supplies, through that same callback. #110 carries it
+  out, and #109 checks the helpers and ssh-agent against a real private
+  repository. ssh's own questions are still open: a passphrase for a key the
+  agent does not hold, a password when the server accepts password
+  authentication, or whether to trust a host seen for the first time, is asked
+  by ssh on the terminal, out of the callback's reach. `BatchMode=yes` in
+  the ssh command would make those failures too. One connection never sees
+  the callback either: when the remote has a branch named `HEAD`, which
+  clashes with the `HEAD` a clone fetches to know what to check out, `gix`
+  0.87 retries on a new connection without calling `configure_connection`, and
+  that one runs the helpers and then prompts, as `gix` does by default. While
+  the helpers are the only source, it asks them what the first connections
+  already got answered; once #110 supplies a token through the callback, that
+  connection will not have it. An in-memory `gitoxide.credentials.terminalPrompt=false`
+  on the clone would keep that prompt off the terminal, though not an askpass
+  named by `GIT_ASKPASS` or `SSH_ASKPASS`; a `gix` that configures the retry
+  too would close it.
 - **Rules that want to declare something.** Today a rule has no front matter,
   so a leading `---` in one is content. If rules later want metadata, that
   becomes a breaking reading of files written now. The escape hatch is cheap
