@@ -1,10 +1,11 @@
 //! The engine every Mindflayer front end is built on.
 //!
 //! Mindflayer works at two levels. A **mind project** carries a `.mind`, the
-//! way a repository carries a `.git`, and holds skills under
-//! `.mind/skills/<name>/SKILL.md`. A **flayer workspace** carries a
-//! `.mindflayer` that references the mind projects it manages, so their skills
-//! can be handled together. Both live in [`workspace`].
+//! way a repository carries a `.git`, and holds skills and rules in the
+//! directories its marker names (`skills/` and `rules/` by default). A
+//! **flayer workspace** carries a `.mindflayer` that references the mind
+//! projects it manages, so their artifacts can be handled together. Both live
+//! in [`workspace`].
 //!
 //! Nothing in here knows about a terminal or a window. The CLI in `apps/cli`,
 //! and whatever front end comes after it, decides how to render what these

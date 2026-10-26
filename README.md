@@ -30,9 +30,11 @@ and rules. A flayer workspace is the level above, where several projects are
 managed together — and where the skills and rules that belong to all of them
 live, once, to be installed into whichever needs them.
 
-Every command works at both levels: `mind <cmd>` on the project you are in,
-`flayer <cmd>` on the workspace — its own artifacts, or one of its projects
-with `-p`.
+Every command that reads or changes artifacts works at both levels: `mind
+<cmd>` on the project you are in, `flayer <cmd>` on the workspace — its own
+artifacts, or one of its projects with `-p`. What only a workspace has —
+`scan`, `gather`, `minds` — is `flayer`'s, and `mind flayer <cmd>` reaches it
+from inside a project.
 
 ### The workspace in your home
 
@@ -60,9 +62,6 @@ because a skill's directory already belongs to it.
 
 Those are the defaults, and a project can say otherwise — see [where a project
 keeps its artifacts](#where-a-project-keeps-its-artifacts).
-
-Both are found the way git finds a repository: by walking up from wherever you
-are until the marker file appears.
 
 ## Getting started
 
@@ -101,8 +100,10 @@ flayer list                    # every skill across all of them
 ```
 
 Or run `flayer` on its own and do all of that from [the TUI](#the-tui): it
-offers to create the workspace if there is none, and lists the repositories
-under it so linking is a pick rather than a path to remember.
+opens the workspace at or above where you are — or, with none, the one in your
+home, and says so — and lists the repositories under it so linking is a pick
+rather than a path to remember. To give `~/Projects` a workspace of its own,
+run `flayer init` there first.
 
 `init` never overwrites an existing marker. Run it twice and it says so and
 changes nothing, so it is safe in a script.
@@ -114,10 +115,12 @@ standing in; `flayer` acts on the workspace above it.
 
 ```bash
 mind                       # the TUI, on this project
-mind init [--skills DIR]   # create a .mind here, saying where its artifacts go
+mind init [--skills DIR] [--rules DIR]
+                           # create a .mind here, saying where its artifacts go
 mind add <KIND> <NAME> <DESCRIPTION> [--template NAME]
                            # create a skill or a rule that validates as written
-mind edit <NAME>           # open it in $VISUAL or $EDITOR, then check it
+mind edit <NAME> [--editor CMD]
+                           # open it in $VISUAL or $EDITOR, then check it
 mind rename <NAME> <NEW>   # folder and declared name together; `mv` for short
 mind remove <NAME> --yes   # delete it; without --yes, say what would go; `rm`
 mind templates             # what `add --template` can start from here
@@ -132,7 +135,8 @@ mind install <SKILL> [--from ORIGIN]
 mind uninstall <SKILL>     # take one Mindflayer installed back out
 
 flayer                     # the TUI: everything below, a key each
-flayer init [--skills DIR] # create a .mindflayer here
+flayer init [--skills DIR] [--rules DIR]
+                           # create a .mindflayer here
 flayer add|edit|rename|remove|templates [-p PROJECT] ...
                            # the same as mind's: the workspace's own by
                            # default, one of its projects with -p
@@ -153,8 +157,9 @@ flayer install -p PROJECT <SKILL> [--from ORIGIN]
 flayer uninstall -p PROJECT <SKILL>
 
 mind flayer <cmd>          # the long way round; `flayer <cmd>` is the shortcut
-mind ls / flayer ls        # alias for list
+mind ls / flayer ls        # alias for list; `flayer gather ls` for gather list
 mind -C <dir> ...          # work in <dir> instead of the current directory
+mind --home <dir> ...      # where the default workspace lives; "" for none
 mind tui / flayer tui      # the TUIs, spelled out
 ```
 
@@ -171,8 +176,8 @@ git/no-force-push  Never force-push a shared branch
 
 $ flayer list                              # every project it manages
 collapse  skill  commit-style       How this repo writes commit messages
-collapse  rule   git/no-force-push  Never force-push a shared branch
 tanukeys  skill  ddd-reviewer       Review a change against the DDD rules
+collapse  rule   git/no-force-push  Never force-push a shared branch
 ```
 
 A column appears only when it tells you something. The kind column is absent
@@ -273,10 +278,12 @@ beside it from being gathered.
 
 ```
 .mindflayer/
-  flayer.toml     the projects it manages
-  mindflayer.db   what was gathered, from where, and every action taken
+  flayer.toml     the projects it manages, and the workspaces it loads
+  mindflayer.db   what was gathered and from where, what was installed where,
+                  and every action taken
   cache/<source>/ the clone, kept so a gather can be looked at afterwards
   skills/<source>/<name>/SKILL.md
+  templates/      templates for every project it manages, if you add any
 ```
 
 `mindflayer.db` is SQLite, and it is the one thing Mindflayer writes that is
@@ -298,7 +305,7 @@ ticked where that project already holds the skill:
 │> collapse  (1)     │┃  [x] commit-style  (not installed by mindflayer) ┃
 │  tanukeys          │┃      How this repo writes commits  [acme/skills] ┃
 │                    │┃> [x] deploy  + install                           ┃
-│                    │┃      Ship the service to staging   [acme/skills] ┃
+│                    │┃      Ship the service to staging  [acme/skills]  ┃
 └────────────────────┘┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 ↑↓ skill   space mark   ←/esc back   a apply   q quit
 1 to install, 0 to remove
@@ -429,15 +436,16 @@ on the first row, marked `◆`, then every project it manages, and on the right
 what the one under the cursor holds.
 
 ```
- mindflayer  projects  · 3 on the shelf  · /home/you/Projects
-┏ Projects (3) ━━━━━━━━━━━━┓┌ collapse ───────────────────────────────────────────┐
-┃  ◆ projects  2           ┃│  skill commit-style       How this repo writes commits│
-┃> collapse  2             ┃│  rule  git/no-force-push  Never force-push a shared …│
-┃  tanukeys  1  ✗ 1        ┃│                                                      │
-┃  ! old-api               ┃│                                                      │
-┗━━━━━━━━━━━━━━━━━━━━━━━━━━┛└──────────────────────────────────────────────────────┘
- q quit  ? keys  → open  a add  l link  u unlink  v validate  g gather  s shelf  i install
- every change is a command, printed when you quit — ? lists them
+ mindflayer  Projects  · 3 on the shelf  · /home/you/Projects
+┏ Projects (3) ━━━━━━━━━━━━━━━━┓┌ collapse ──────────────────────────────────────────────────────────────┐
+┃  ◆ Projects  2               ┃│>   skill commit-style       How this repo writes commits               │
+┃> collapse  2                 ┃│    rule  git/no-force-push  Never force-push a shared branch           │
+┃  tanukeys  1  ✗ 1            ┃│                                                                        │
+┃  ! old-api                   ┃│                                                                        │
+┃                              ┃│                                                                        │
+┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛└────────────────────────────────────────────────────────────────────────┘
+q quit  ? keys  → open  a add  m minds  l link  u unlink  v validate  g gather  L load  s shelf  i install
+every change is a command, printed when you quit — ? lists them
 ```
 
 `mind` on its own opens the same screen from inside a project: on that project,
@@ -460,7 +468,8 @@ Every key runs a command you could have typed, through the same parser:
 | `g` | gather from a git repository | `flayer gather git <url>` |
 | `L` | load another workspace's own skills; enter on a loaded one unloads it | `flayer load <path>`, `flayer unload <path>` |
 | `s` | what is on the shelf | `flayer gather list` |
-| `i` | install from the workspace's own or the shelf | `flayer install` |
+| `i` | install from the workspace's own, a loaded workspace, or the shelf | `flayer install` |
+| `R` | read the disk again | nothing: it changes nothing |
 
 `m`, or `flayer minds` straight from the shell, opens a list of every
 project the workspace links and every repository under it that it does not,
@@ -480,8 +489,9 @@ $ mind -C tanukeys add skill deploy 'Ship the service to staging'
 created skill deploy at /home/you/Projects/tanukeys/skills/deploy/SKILL.md
 ```
 
-Opened where there is no workspace, it offers to create one there, then goes
-straight to linking. The link form lists what `flayer scan` finds under the
+Opened where there is no workspace and no default one either (`--home ""`), it
+offers to create one there, then goes straight to linking; with a default, it
+opens that one and says so. The link form lists what `flayer scan` finds under the
 workspace — mind projects, and git repositories that are not one yet — and
 picking a repository asks before running `mind init` in it, because that
 writes into it. A project whose directory has gone is listed with a `!`, where
@@ -536,7 +546,7 @@ Use `<area>: <imperative summary>`, imperative and in English.
 ```
 
 `name` and `description` are required; `name` has to match the directory and
-`description` stay under 1024 characters. `allowed-tools` accepts either a
+`description` be at most 1024 characters. `allowed-tools` accepts either a
 comma separated string or a YAML list. Anything else in the front matter is
 carried along untouched.
 
@@ -551,7 +561,7 @@ Use `--force-with-lease`, which refuses when someone else has pushed.
 Its name is `git/no-force-push`, from where the file sits. Listings show its
 opening line, which is why leading with a heading or a one-line summary is
 worth doing. Every name, declared or derived, is checked segment by segment:
-lowercase letters, digits and inner hyphens, each segment under 64 characters.
+lowercase letters, digits and inner hyphens, each segment at most 64 characters.
 
 ### Creating one
 
@@ -609,7 +619,9 @@ Changing something `flayer install` put there makes it yours. Removing it,
 renaming it or editing it drops the workspace's record that Mindflayer
 installed it, so the install screen shows it as somebody's and never
 overwrites or deletes it — and a skill you write later under the same name does
-not inherit a record that was about something else.
+not inherit a record that was about something else. The record dropped is the
+one held by the workspace at or above the project; one that links it from
+elsewhere keeps its own (an [open question](docs/architecture.md#open-questions)).
 
 ## Repository layout
 
@@ -617,7 +629,8 @@ Every unit of the product is an app under `apps/`, so adding a front end means
 adding a directory rather than reshaping the tree:
 
 ```
-apps/core   mindflayer-core — projects, workspaces, skills. No I/O beyond files.
+apps/core   mindflayer-core — projects, workspaces, artifacts.
+                              No I/O beyond files, and git when gathering.
 apps/cli    mindflayer-cli  — the `mind` and `flayer` binaries, and the TUI.
                               Parsing and rendering only; all of it goes
                               through one parser.
@@ -628,8 +641,9 @@ is.
 
 ## Development
 
-A root `Makefile` delegates to each app, and CI invokes the same targets, so
-`make help` is the list of everything there is to run:
+A root `Makefile` delegates to each app, and CI invokes the same targets.
+`make help` lists the root ones; each app's own, such as `cli/release`, are in
+`apps/<app>/Makefile`:
 
 ```bash
 make test              # every suite
