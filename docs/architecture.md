@@ -749,6 +749,40 @@ Where home is comes from the front end, not from core: `--home`, then
 none. Core takes it as a parameter, which keeps it free of the environment and
 is what lets the tests run every command with the fallback switched off.
 
+## The agents' own folders
+
+Checks to come read what an agent reads for every project, not only what a
+project holds: Claude's user memory, Codex's config, OpenCode's configuration
+folder and the skills in `~/.agents` (#44, #91, #96). Those folders come in
+the way home does. `--claude-config-dir`, `--codex-home`,
+`--opencode-config-dir` and `--agents-dir` are global options on both parsers,
+and `homes::agent_homes` takes each from its option, then from the variable
+the agent itself reads (`$CLAUDE_CONFIG_DIR`, `$CODEX_HOME`,
+`$OPENCODE_CONFIG_DIR`), then from its folder in the user's home (`~/.claude`,
+`~/.codex`, `~/.config/opencode`, `~/.agents`). `~/.agents` has no variable:
+it belongs to no one agent, so none of their variables moves it. Core takes
+the answer as an `AgentHomes` and never resolves one.
+
+They are options rather than variables read where a check needs them, for the
+reasons `--home` is one: core reads no environment, and a test cannot safely
+set a variable, because every other test in the process would see it. An
+option is pinned per command line, so `common::mind` and `common::flayer` give
+all four empty and no test can read a developer's real `~/.claude`. A test that
+spawns a binary has no parser to pin through, so it clears the variables and
+points `HOME` at a temp dir instead.
+
+Empty means none, not "unset, so use the default", because that is what makes
+pinning work: an empty option has to switch the lookup off rather than fall
+through to the environment running the tests. An empty variable means none
+too, as an empty `$MINDFLAYER_HOME` does; whether the agents agree is an [open
+question](#open-questions).
+
+No command reads them yet, so none takes them, and `agent_homes` is first
+called by the first one that does. That one also has to make the TUI pass its
+own to every command it runs, as `tui::execute` passes `--home`. Otherwise a
+command run from the TUI decides them again from the environment, and a test
+that drives the TUI reaches the real folders.
+
 ## Creating and changing artifacts
 
 `mind add` writes the least that passes `validate`: a skill's front matter and
@@ -1299,6 +1333,17 @@ leak into the lifecycle code. Unblocks #33, #45, #62, #93, #94 and #95.
   on the clone would keep that prompt off the terminal, though not an askpass
   named by `GIT_ASKPASS` or `SSH_ASKPASS`; a `gix` that configures the retry
   too would close it.
+- **OpenCode's folder and `$XDG_CONFIG_HOME`.** Without
+  `$OPENCODE_CONFIG_DIR`, OpenCode's folder is taken to be
+  `~/.config/opencode`. Whether OpenCode moves it with `$XDG_CONFIG_HOME`, as
+  programs that follow the XDG base directories do, is unverified. If #17 finds
+  that it does, that variable becomes the step before the default for
+  `--opencode-config-dir`, and tests that spawn a binary clear it too.
+- **An empty agent variable.** An empty `$CLAUDE_CONFIG_DIR`, `$CODEX_HOME` or
+  `$OPENCODE_CONFIG_DIR` means no folder at all here, following
+  `$MINDFLAYER_HOME`. An agent that reads an empty one as unset uses its
+  default instead, and a check would then leave out a folder that agent does
+  read. How each agent reads it is for #17 to record.
 - **Rules that want to declare something.** Today a rule has no front matter,
   so a leading `---` in one is content. If rules later want metadata, that
   becomes a breaking reading of files written now. The escape hatch is cheap
