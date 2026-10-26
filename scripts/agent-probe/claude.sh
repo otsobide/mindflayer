@@ -7,8 +7,9 @@
 # invoke. A token in the answer means that file reached the model; a skill in
 # the session's init message means Claude loaded it. The InstructionsLoaded
 # hook adds a record of which instruction files loaded and why that does not
-# depend on the model's answer; Claude's docs say an AGENTS.md read natively
-# does not fire it, so for AGENTS.md the answer is the evidence.
+# depend on the model's answer. An AGENTS.md read natively does not fire it, as
+# Claude's docs say; the debug log's "AGENTS.md loaded: <path>" line is the
+# record of that read instead, and is counted too.
 #
 # Runs use haiku, short prompts and a budget cap. A run that lists keeps only
 # the Skill tool, since skills are part of what it is asked about, and nothing
@@ -198,6 +199,15 @@ expect_calls() {
 	verdict "$1" "$3" "${turns:-none}" "turns" "$4"
 }
 
+# expect_native <run> <times> <file> <what it shows>, counted in the debug
+# log's "AGENTS.md loaded: <path>" lines, the native read's only record that
+# does not come from the model.
+expect_native() {
+	local got
+	got=$(grep -cF -- "AGENTS.md loaded: $3" "$results/$1.debug.txt" || true)
+	verdict "$1" "$2" "$got" "native ${3##*/}" "$4"
+}
+
 # expect_skill <run> <times> <skill> <what it shows>, counted in the session's
 # init message rather than in the answer.
 expect_skill() {
@@ -294,6 +304,7 @@ pub fn probe() {}'
 	expect_token $run unseen PROBE-AGENTS-SKILL-1 'check 1: the .agents-only one does not'
 	expect_token $run seen PROBE-LINKED-SKILL-1 'check 3: the symlinked one does'
 	expect_token $run seen PROBE-AGENTS-MD-1 'checks 1, 4: an excluded AGENTS.md is read when no CLAUDE.md exists'
+	expect_native $run 1 "$repo/AGENTS.md" 'checks 1, 4: the debug log records the native read'
 	expect_token $run seen PROBE-RULE-UNSCOPED-1 'check 6: an excluded rule without paths: loads at start'
 	expect_token $run unseen PROBE-RULE-SCOPED-1 'check 6: a rule with paths: does not, at start'
 	expect_loaded $run 1 "$rules/unscoped.md" 'check 6: the hook saw the rule without paths: once'
@@ -327,6 +338,7 @@ If asked for probe tokens, include PROBE-CLAUDE-MD-2.'
 	expect_token $run seen PROBE-AGENTS-MD-2 'check 4: AGENTS.md is read through @AGENTS.md'
 	expect_count $run 1 PROBE-AGENTS-MD-2 'check 4: once, not twice'
 	expect_loaded $run 1 "$repo/AGENTS.md" 'check 4: the hook saw AGENTS.md load once'
+	expect_native $run 0 "$repo/AGENTS.md" 'check 4: through the import, not natively as well'
 }
 
 # Check 4: a CLAUDE.md in a folder above the git root, as ~/Work would hold,
@@ -344,6 +356,7 @@ claude_parent() {
 	expect_calls $run none 1 'the answer comes from what Claude loaded, not a tool'
 	expect_token $run seen PROBE-PARENT-CLAUDE-MD-3 'check 4: the CLAUDE.md above the git root is read'
 	expect_token $run unseen PROBE-AGENTS-MD-3 'check 4: and AGENTS.md is not'
+	expect_native $run 0 "$repo/AGENTS.md" 'check 4: the debug log records no native read'
 }
 
 # D-03: a CLAUDE.local.md alone, excluded as it usually is, also stops Claude
@@ -361,6 +374,7 @@ claude_local() {
 	expect_calls $run none 1 'the answer comes from what Claude loaded, not a tool'
 	expect_token $run seen PROBE-CLAUDE-LOCAL-MD-4 'D-03: CLAUDE.local.md is read'
 	expect_token $run unseen PROBE-AGENTS-MD-4 'D-03: and AGENTS.md is not'
+	expect_native $run 0 "$repo/AGENTS.md" 'D-03: the debug log records no native read'
 }
 
 # #44: the user memory file does not count as a CLAUDE.md for the AGENTS.md
@@ -378,4 +392,5 @@ claude_user_memory() {
 	expect_calls $run none 1 'the answer comes from what Claude loaded, not a tool'
 	expect_token $run seen PROBE-USER-CLAUDE-MD-5 '#44: the user memory file is read'
 	expect_token $run seen PROBE-AGENTS-MD-5 '#44: and does not stop AGENTS.md being read'
+	expect_native $run 1 "$repo/AGENTS.md" '#44: the debug log records the native read'
 }

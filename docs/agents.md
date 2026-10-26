@@ -90,7 +90,9 @@ login, so it is run by hand, never by CI or `make test`.
   reached the model. Skills are counted in the session's init message, not in
   the answer. Claude's `InstructionsLoaded` hook, set in the temp home's user
   settings, records each instruction file that loads and why, which does not
-  depend on the model at all.
+  depend on the model at all. A natively read `AGENTS.md` fires no hook, so
+  for it the script counts the debug log's `AGENTS.md loaded: <path>` lines
+  instead, and fails a run whose count is not the expected one.
 
 To re-run it: Linux with `bwrap`, and `jq` and `git` in `/usr/bin` or `/bin`,
 the only `PATH` inside the namespace; and a logged-in Claude Code, its native
