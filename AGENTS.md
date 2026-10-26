@@ -73,7 +73,8 @@ under `apps/` with its own `Makefile`:
 
 - `apps/core` (`mindflayer-core`): the engine. Projects, workspaces, which
   workspace a command uses (`resolve`), the shell code that activates one
-  (`activate`), kinds, the catalog, gathering (`gix`), the SQLite ledger,
+  (`activate`), kinds, the agents and where each kind goes for them
+  (`agent`), the catalog, gathering (`gix`), the SQLite ledger,
   installing, keeping installs out of git (`exclude`), creating and changing
   artifacts, and moving a workspace's own into its library (`migrate`). Its
   only I/O is files, and it never reads the environment.
@@ -125,8 +126,12 @@ one agent's checks (only `claude.sh` so far).
 These are easy to break from a single file without noticing.
 
 - **Rules live in core.** The CLI parses, asks core and renders. Name limits,
-  front matter, where a kind lives and sort order are all core's, so a future
-  front end cannot disagree with this one.
+  front matter, where a kind lives, where it goes for each agent and sort order
+  are all core's, so a future front end cannot disagree with this one. No front
+  end spells an agent's folder or calls `TargetTable::standard`: which table
+  applies is the project's, in core, the standard one until #40 reads an
+  override from its settings, so code that needs one takes the `TargetTable`
+  the project hands it, as an install will (#34).
 - **Two binaries, one parser.** `flayer <cmd>` is `mind flayer <cmd>`, and
   both reach the same function. `mind add` and `flayer add` (with or without
   `-p`) are one implementation given a different holder
@@ -352,8 +357,13 @@ These are easy to break from a single file without noticing.
   front end. The code undoes only what it did, through `flayer-deactivate`
   and never `deactivate`, and a workspace's name reaches a prompt only
   through `activate::prompt`.
-- **`Kind` is a closed enum.** To add a kind, follow "Adding a third kind" in
-  the architecture doc; the compiler's exhaustive matches are the checklist.
+- **`Kind` and `Agent` are closed enums.** To add a kind, follow "Adding a
+  third kind" in the architecture doc, and to add an agent, "Adding an agent",
+  which starts in `docs/agents.md`. Either way the compiler's exhaustive
+  matches are the checklist: the target table's `standard` matches every kind
+  and agent with no wildcard, so neither compiles until it says where it goes.
+  "Adding an agent" also lists what no match covers: `Agent::ALL`, and an
+  agent home's field, option and place in `common::PINNED` and `CLEARED`.
 
 ## Tests
 
