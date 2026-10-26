@@ -46,6 +46,33 @@ async fn a_task_the_backend_cannot_read_runs_nothing() {
     assert!(runs.lock().unwrap().is_empty());
 }
 
+#[tokio::test]
+async fn a_run_whose_outcome_is_not_json_is_still_transcribed() {
+    let (server, runs) = launch();
+    let router = server.router();
+    let token = Auth::Bearer(server.token());
+
+    let reply = post(
+        &router,
+        "/api/commands",
+        token,
+        json!({ "name": "odd", "unwritable": true }),
+    )
+    .await;
+
+    let entry = json!({
+        "lines": ["fake run odd"],
+        "outcome": {
+            "error": "the backend's outcome is not JSON: this part cannot be written",
+        },
+    });
+    assert_eq!(reply.status, StatusCode::OK);
+    assert_eq!(reply.json(), entry);
+    assert_eq!(*runs.lock().unwrap(), ["start odd", "end odd"]);
+    let transcript = get(&router, "/api/transcript", token).await;
+    assert_eq!(transcript.json(), json!([entry]));
+}
+
 #[tokio::test(flavor = "multi_thread")]
 async fn concurrent_writes_run_one_at_a_time_in_arrival_order() {
     let fake = Fake::default();

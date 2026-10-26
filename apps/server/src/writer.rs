@@ -5,6 +5,7 @@ use std::panic::{self, AssertUnwindSafe};
 use std::sync::{mpsc, Arc};
 use std::thread;
 
+use serde_json::json;
 use tokio::sync::oneshot;
 
 use crate::transcript::{Entry, Transcript};
@@ -46,9 +47,7 @@ impl<T: Send + 'static> Writer<T> {
                     // A backend that panics has a bug, but the thread
                     // outlives it so the tasks queued behind can still run.
                     let done = panic::catch_unwind(AssertUnwindSafe(|| perform(&*backend, task)))
-                        .unwrap_or_else(|_| {
-                            Err(String::from("the backend panicked while running the task"))
-                        });
+                        .map_err(|_| String::from("the backend panicked while running the task"));
                     if let Ok(entry) = &done {
                         transcript.record(entry.clone());
                     }
@@ -74,10 +73,16 @@ impl<T: Send + 'static> Writer<T> {
 
 /// Run one task: its lines first, worked out on this thread, so they are the
 /// lines of the disk the run itself meets, after every write before it.
-fn perform<B: Backend>(backend: &B, task: B::Task) -> Result<Entry, String> {
+///
+/// An outcome that will not serialize is still a run that happened, so it is
+/// recorded as an error beside the lines that ran rather than raised: raised,
+/// it would leave the transcript a run short, and the client a bare 500 for
+/// lines that may well have changed the disk.
+fn perform<B: Backend>(backend: &B, task: B::Task) -> Entry {
     let lines = backend.preview(&task);
     let outcome = backend.run(task);
-    let outcome = serde_json::to_value(outcome)
-        .map_err(|error| format!("the backend's outcome is not JSON: {error}"))?;
-    Ok(Entry { lines, outcome })
+    let outcome = serde_json::to_value(outcome).unwrap_or_else(
+        |error| json!({ "error": format!("the backend's outcome is not JSON: {error}") }),
+    );
+    Entry { lines, outcome }
 }

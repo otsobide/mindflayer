@@ -13,7 +13,7 @@ pub use mindflayer_server::{Backend, Listening, Server};
 pub use serde_json::{json, Value};
 pub use std::sync::{Arc, Condvar, Mutex};
 
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Serialize, Serializer};
 use std::path::PathBuf;
 use std::time::Duration;
 use tower::ServiceExt;
@@ -28,13 +28,15 @@ pub struct FakeQuery {
     pub echo: String,
 }
 
-/// The fake's task: a name to run under, and whether to wait at the fake's
-/// hold before finishing.
+/// The fake's task: a name to run under, whether to wait at the fake's hold
+/// before finishing, and whether to finish with an outcome JSON cannot carry.
 #[derive(Deserialize)]
 pub struct FakeTask {
     pub name: String,
     #[serde(default)]
     pub hold: bool,
+    #[serde(default)]
+    pub unwritable: bool,
 }
 
 /// What running a fake task says.
@@ -43,6 +45,18 @@ pub struct FakeOutcome {
     pub ran: String,
     /// The thread it ran on.
     pub thread: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub unwritable: Option<Unwritable>,
+}
+
+/// A part of an outcome that refuses to serialize, as a path that is not
+/// UTF-8 or a map keyed by something other than strings does.
+pub struct Unwritable;
+
+impl Serialize for Unwritable {
+    fn serialize<S: Serializer>(&self, _: S) -> Result<S::Ok, S::Error> {
+        Err(serde::ser::Error::custom("this part cannot be written"))
+    }
 }
 
 /// A backend that knows nothing of mindflayer, which is the point: the server
@@ -81,6 +95,7 @@ impl Backend for Fake {
         FakeOutcome {
             ran: task.name,
             thread: std::thread::current().name().map(str::to_owned),
+            unwritable: task.unwritable.then_some(Unwritable),
         }
     }
 
