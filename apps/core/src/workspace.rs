@@ -25,12 +25,13 @@ use std::time::Duration;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
+use crate::agent::Agent;
 use crate::gather::{self, Scrub};
 use crate::kind::Kind;
 use crate::ledger::{Ledger, LedgerError, LEDGER_FILE};
 use crate::lock::{self, LockError, WorkspaceLock};
 use crate::paths;
-use crate::settings::{Settings, SETTINGS_FILE};
+use crate::settings::{Settings, Share, SETTINGS_FILE};
 
 /// The newest version of a project's marker this build reads: version 3, a
 /// `.mind/settings.json` ([`SETTINGS_VERSION`]).
@@ -106,6 +107,15 @@ pub const LIBRARY_DIR: &str = "library";
 /// system's temporary folder, which can be another filesystem: inside the
 /// project, a finished copy is moved into place by a rename.
 pub const SCRATCH_DIR: &str = "tmp";
+
+/// The `.gitignore` a local project's `.mind` is given: `*`, which keeps out
+/// of git everything in the folder, this file included, as a Python venv
+/// ignores itself.
+pub const MIND_IGNORE: &str = "\
+# Mindflayer keeps this project's settings here, for this checkout alone.
+# Nothing in this folder is meant to be committed.
+*
+";
 
 /// Which of the two marker files a version was read from.
 ///
@@ -391,6 +401,88 @@ impl MindProject {
         let project = Self::open(&root)?;
         // A folder per kind, so the layout is visible in a fresh project
         // rather than being something you have to read the docs to discover.
+        for kind in Kind::ALL {
+            if let Some(directory) = project.directory_for(kind) {
+                create_dir(&directory)?;
+            }
+        }
+
+        Ok((
+            project,
+            if already {
+                Initialization::AlreadyInitialized
+            } else {
+                Initialization::Created
+            },
+        ))
+    }
+
+    /// Make `root` a project marked by its settings ([`SETTINGS_VERSION`]):
+    /// `.mind/settings.json`, a `.mind/.gitignore` holding `*` unless the
+    /// project is [shared](Share::Shared), and the folder of each kind
+    /// `directories` names. A kind it leaves out has no folder, and none is
+    /// made for it.
+    ///
+    /// The `.gitignore` is the venv's way of keeping a folder out of git
+    /// (D-01): inside the folder it is about, so it needs no repository yet,
+    /// goes with a copy of the project and goes when `.mind` does, and
+    /// changes no file the team owns. A shared project's settings are the
+    /// team's, to commit.
+    ///
+    /// As [`init_with`](Self::init_with), never a rewrite: a project already
+    /// marked, by settings or by a `mind.toml`, keeps its marker, and only
+    /// what its marker asks for and is missing is made, a folder or the
+    /// `.gitignore` of a local project. Moving a project from a `mind.toml`
+    /// to settings is a migration's (#38), not this.
+    pub fn init_settings(
+        root: impl AsRef<Path>,
+        agents: &[Agent],
+        share: Share,
+        directories: &Directories,
+    ) -> Result<(Self, Initialization), WorkspaceError> {
+        let root = absolute(root.as_ref())?;
+        let dir = root.join(MIND_DIR);
+
+        for kind in Kind::ALL {
+            if let Some(directory) = directories.get(kind) {
+                if !stays_inside(directory) {
+                    return Err(WorkspaceError::OutsideProject {
+                        path: directory.to_path_buf(),
+                        kind,
+                    });
+                }
+            }
+        }
+        let settings = Settings::new(
+            directory_name(&root),
+            agents.to_vec(),
+            share,
+            directories.clone(),
+        );
+        let text = settings.text()?;
+        create_dir(&dir)?;
+
+        let already = Self::is_marked(&root);
+        if !already {
+            // Before the marker, so a local project's settings never show
+            // in `git status`, not even for a moment.
+            if share == Share::Local {
+                ignore_itself(&dir)?;
+            }
+            write_new(&dir.join(SETTINGS_FILE), &text)?;
+        }
+
+        // What the marker asks for, as `init_with` makes the folders: a
+        // `.gitignore` deleted from a local project is made again, and none
+        // is made for a shared one, or for one still marked by a
+        // `mind.toml`, which was meant to be committed.
+        let project = Self::open(&root)?;
+        if project
+            .settings()
+            .is_some_and(|settings| settings.share == Share::Local)
+        {
+            ignore_itself(&dir)?;
+        }
         for kind in Kind::ALL {
             if let Some(directory) = project.directory_for(kind) {
                 create_dir(&directory)?;
@@ -1534,6 +1626,20 @@ fn create_dir(path: &Path) -> Result<(), WorkspaceError> {
         path: path.to_path_buf(),
         source,
     })
+}
+
+/// Give the `.mind` at `dir` the `.gitignore` that keeps it out of git,
+/// unless it has one. `create_new`, so one somebody changed is left as they
+/// left it.
+fn ignore_itself(dir: &Path) -> Result<(), WorkspaceError> {
+    match write_new(&dir.join(".gitignore"), MIND_IGNORE) {
+        Err(WorkspaceError::Create { source, .. })
+            if source.kind() == io::ErrorKind::AlreadyExists =>
+        {
+            Ok(())
+        }
+        written => written,
+    }
 }
 
 /// Write a file that must not already exist.

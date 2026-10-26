@@ -64,5 +64,5 @@ pub use workspace::{
     Directories, FlayerConfig, FlayerWorkspace, Initialization, Loaded, Marker, Member, MindConfig,
     MindProject, ProjectConfig, ProjectWarning, Registration, WorkspaceError, CACHE_DIR,
     DIRECTORIES_VERSION, FLAYER_CONFIG, FLAYER_DIR, LIBRARY_DIR, MIND_CONFIG, MIND_DIR,
-    SETTINGS_VERSION,
+    MIND_IGNORE, SETTINGS_VERSION,
 };
