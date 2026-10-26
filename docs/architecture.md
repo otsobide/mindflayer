@@ -1530,6 +1530,18 @@ leak into the lifecycle code. Unblocks #33, #45, #62, #93, #94 and #95.
   (the first planned is #30's) changes that, since a build older than it
   refuses the file: the scrub can then run once, as part of that migration,
   and stop.
+- **A user name on its own in an https URL.** #25 allows a bare user name,
+  and its examples are ssh's (`git@host:...`, `ssh://git@host/...`). Only ssh
+  keeps one here: over http(s) a user name is refused at gather and taken out
+  by the scrub, because GitHub takes a token in that place and nothing in the
+  text tells a token from a user name. That refuses the https URLs Bitbucket
+  Cloud and Azure DevOps hand out (`https://<user>@bitbucket.org/...`), which
+  then have to be gathered without the user name, with a credential helper
+  naming it. The other reading would let them through and store and show
+  them without the user name, which also lets a token typed there through,
+  for that one fetch, from the command line. The error and the scrub's note
+  say a user name was refused or taken out rather than calling it a password.
+  Which reading holds is the owner's to confirm.
 - **OpenCode's folder and `$XDG_CONFIG_HOME`.** Without
   `$OPENCODE_CONFIG_DIR`, OpenCode's folder is taken to be
   `~/.config/opencode`. Whether OpenCode moves it with `$XDG_CONFIG_HOME`, as

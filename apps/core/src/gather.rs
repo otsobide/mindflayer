@@ -474,12 +474,14 @@ pub enum GatherError {
     #[error(transparent)]
     Ledger(#[from] LedgerError),
     /// The URL carries a password or token, or a user name where a token can
-    /// stand in for one. `url` is shown without it, which is the URL to
+    /// stand in for one, which the message names as a user name: calling it a
+    /// password would send somebody looking for one that is not there. `url` is shown without it, which is the URL to
     /// gather instead. A provider the front end supplies (#110) will be a
     /// second way to give the credential.
     #[error(
-        "{url}: a password or token in the URL is refused, because gathering stores and shows \
-         the URL: gather it without one, and configure a git credential helper that has it"
+        "{url}: a password, a token or, over http(s), a user name in the URL is refused, because \
+         gathering stores and shows the URL: gather it without one, and configure a git \
+         credential helper that has it"
     )]
     CredentialsInUrl { url: String },
     #[error("{url}: has no `{subdirectory}` folder to gather from")]

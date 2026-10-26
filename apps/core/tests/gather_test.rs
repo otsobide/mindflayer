@@ -396,9 +396,9 @@ fn a_url_with_a_token_in_it_is_refused_and_the_token_is_kept_nowhere() {
     );
     assert_eq!(
         error.to_string(),
-        "https://example.com/acme/skills: a password or token in the URL is refused, because \
-         gathering stores and shows the URL: gather it without one, and configure a git \
-         credential helper that has it"
+        "https://example.com/acme/skills: a password, a token or, over http(s), a user name in \
+         the URL is refused, because gathering stores and shows the URL: gather it without one, \
+         and configure a git credential helper that has it"
     );
     // Nothing was registered, and nothing was fetched into the cache.
     assert!(ledger

@@ -361,12 +361,16 @@ the token to a git credential helper, and gather the URL without it:
 
 ```
 $ flayer gather git https://me:ghp_t0ken@github.com/acme/private-skills
-error: https://github.com/acme/private-skills: a password or token in the URL is refused, because gathering stores and shows the URL: gather it without one, and configure a git credential helper that has it
+error: https://github.com/acme/private-skills: a password, a token or, over http(s), a user name in the URL is refused, because gathering stores and shows the URL: gather it without one, and configure a git credential helper that has it
 ```
 
 The user ssh logs in as is not a credential, and is kept
 (`git@github.com:acme/skills`, `ssh://git@github.com/acme/skills`). Over https
-a user name on its own is refused too, because a token can stand in for one.
+a user name on its own is refused too, because a token can stand in for one:
+GitHub takes `https://<token>@github.com/...`, and nothing in the URL tells the
+two apart. That includes the https URLs Bitbucket and Azure DevOps hand out
+(`https://<user>@bitbucket.org/...`); gather those without the user name, and
+let the credential helper supply it.
 
 A workspace an older Mindflayer gathered into with a token in a URL is cleaned
 up by the next command that writes to it — a gather, an install or an
@@ -377,8 +381,8 @@ it:
 ```
 $ flayer install -p collapse deploy
 installed deploy into collapse, from https://github.com/acme/private-skills
-note: https://github.com/acme/private-skills: the credential an older Mindflayer stored in this URL is taken out; gathering it again needs a git credential helper that has it
-note: 2 action log entries: the credentials an older Mindflayer stored in them are taken out
+note: https://github.com/acme/private-skills: the user name, password or token an older Mindflayer stored in this URL is taken out; gathering it again needs a git credential helper that has it
+note: 2 action log entries: the user names, passwords or tokens an older Mindflayer stored in URLs in them are taken out
 ```
 
 ### What a workspace keeps

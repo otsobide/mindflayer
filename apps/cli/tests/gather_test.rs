@@ -364,9 +364,11 @@ fn a_token_an_older_build_stored_is_never_listed_and_a_command_that_writes_takes
     assert_eq!(
         gathered.stderr,
         [
-            "note: https://example.com/acme/skills: the credential an older Mindflayer stored in \
-             this URL is taken out; gathering it again needs a git credential helper that has it",
-            "note: 1 action log entry: the credential an older Mindflayer stored in it is taken out",
+            "note: https://example.com/acme/skills: the user name, password or token an older \
+             Mindflayer stored in this URL is taken out; gathering it again needs a git \
+             credential helper that has it",
+            "note: 1 action log entry: the user name, password or token an older Mindflayer \
+             stored in a URL in it is taken out",
         ]
     );
     assert!(!kept_by(dir.path()).contains("ghp_t0ken"));
@@ -401,9 +403,9 @@ fn a_url_with_a_token_in_it_is_refused_and_nothing_kept_or_said_repeats_the_toke
 
     assert_eq!(
         failure.error.to_string(),
-        "https://example.com/acme/skills: a password or token in the URL is refused, because \
-         gathering stores and shows the URL: gather it without one, and configure a git \
-         credential helper that has it"
+        "https://example.com/acme/skills: a password, a token or, over http(s), a user name in \
+         the URL is refused, because gathering stores and shows the URL: gather it without one, \
+         and configure a git credential helper that has it"
     );
     assert!(failure.warnings.is_empty(), "{:?}", failure.warnings);
     assert!(!kept_by(dir.path()).contains("ghp_t0ken"));

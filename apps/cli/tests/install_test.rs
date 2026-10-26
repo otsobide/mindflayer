@@ -309,9 +309,9 @@ fn token_in_the_shelf(workspace: &FlayerWorkspace) {
         .unwrap();
 }
 
-const SCRUBBED: &str = "note: https://example.com/acme/skills: the credential an older \
-     Mindflayer stored in this URL is taken out; gathering it again needs a git credential \
-     helper that has it";
+const SCRUBBED: &str = "note: https://example.com/acme/skills: the user name, password or \
+     token an older Mindflayer stored in this URL is taken out; gathering it again needs a git \
+     credential helper that has it";
 
 #[test]
 fn applying_the_screen_scrubs_the_ledger_first_and_says_so_without_failing() {
