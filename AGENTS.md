@@ -102,6 +102,13 @@ These are easy to break from a single file without noticing.
   - An installed name must be one folder name (`install::is_folder_name`).
   - Symlinks are followed only inside the source (`copy::tree`'s `within`).
   - A project's artifact directories must stay inside the project.
+  - URLs are stored, logged and shown without credentials. `url::redacted`
+    is the one function that takes them out: the ledger applies it to every
+    URL it writes and reads, `GitError` to what it says, `git::scrub` to a
+    clone's config and reflogs. A gather refuses a URL that carries one, and
+    every command that writes to the ledger runs `gather::scrub` first, for
+    what an older build stored. Anything new that keeps or prints a URL goes
+    through `url::redacted` too.
 - **A gather never prompts for a credential itself.** Every connection `gix`
   lets a clone configure gets the callback in `gather/credentials.rs`, which
   runs the git-config credential helpers with `gix`'s prompt and askpass
