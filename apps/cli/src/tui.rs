@@ -183,7 +183,7 @@ pub fn step(app: &mut App, task: Task) {
 pub fn perform(task: &Task, app: &App) -> Performed {
     let base = app.base().to_path_buf();
     match task {
-        Task::OpenInstall => open_install(&base),
+        Task::OpenInstall => open_install(&base, app.home.as_deref()),
         Task::ApplyInstall => match &app.mode {
             Mode::Installing(screen) => Performed::Ran(vec![apply_install(&base, screen)]),
             _ => Performed::Ran(Vec::new()),
@@ -303,12 +303,16 @@ fn draws_mind(command: Option<&Command>) -> bool {
     }
 }
 
-/// Build the install screen for the workspace at `base`.
-fn open_install(base: &Path) -> Performed {
-    let screen = FlayerWorkspace::open(base)
+/// Build the install screen for the workspace at `base`: the one `flayer
+/// install` finds from there, so the default workspace before it is made too,
+/// with nothing to install into. Built as that command builds it, from the
+/// ledger as it is: opening the screen makes nothing.
+fn open_install(base: &Path, home: Option<&Path>) -> Performed {
+    let screen = FlayerWorkspace::locate_or_unmade(base, home)
         .map_err(CliError::from)
+        .and_then(|workspace| workspace.ok_or_else(|| CliError::NotInWorkspace(base.to_path_buf())))
         .and_then(|workspace| {
-            let ledger = workspace.ledger().map_err(CliError::from)?;
+            let ledger = workspace.ledger_for_reading().map_err(CliError::from)?;
             // What would not open is already on screen, beside what did.
             let (projects, _) = install::registered(&workspace);
             install::build(&workspace, &ledger, projects).map_err(CliError::from)
@@ -353,12 +357,17 @@ fn apply_install(base: &Path, screen: &InstallScreen) -> Done {
 // ---------------------------------------------------------------------------
 
 /// Read everything the screen shows from the disk: the workspace at or above
-/// `directory`, or else the default one in `home`, made there the first time.
+/// `directory`, or else the default one in `home` — as it will be, when
+/// nothing has made it yet.
+///
+/// Opening a screen is no reason to make it. The first change made from the
+/// screen is, and that runs a command that writes, which makes it the way it
+/// would from the shell.
 pub fn load(directory: &Path, home: Option<&Path>) -> Result<View, CliError> {
     if let Some(workspace) = FlayerWorkspace::locate(directory)? {
         return Ok(View::Workspace(workspace_view(&workspace, false, home)));
     }
-    Ok(match FlayerWorkspace::locate_or_default(directory, home)? {
+    Ok(match FlayerWorkspace::default_or_unmade(home)? {
         Some(workspace) => View::Workspace(workspace_view(&workspace, true, home)),
         None => View::Nowhere,
     })
@@ -413,6 +422,7 @@ pub fn load_project(directory: &Path, home: Option<&Path>) -> Result<View, CliEr
             .map(|workspace| workspace.root().to_path_buf())
             .or_else(|| home.map(Path::to_path_buf)),
         default: false,
+        made: true,
     }))
 }
 
@@ -453,6 +463,7 @@ fn workspace_view(workspace: &FlayerWorkspace, default: bool, home: Option<&Path
         scope: Scope::Workspace,
         above: None,
         default,
+        made: workspace.is_made(),
     }
 }
 
@@ -626,11 +637,8 @@ fn within(project: &MindProject, kind: Kind) -> String {
 
 /// How much is on the shelf, without creating a ledger just to look.
 fn shelf(workspace: &FlayerWorkspace) -> usize {
-    if !workspace.ledger_path().is_file() {
-        return 0;
-    }
     workspace
-        .ledger()
+        .ledger_for_reading()
         .and_then(|ledger| ledger.gathered())
         .map_or(0, |gathered| gathered.len())
 }

@@ -66,6 +66,10 @@ pub struct Workspace {
     /// The default workspace in the home directory, opened because there was
     /// none at or above where the TUI was opened.
     pub default: bool,
+    /// Whether it is on disk. Only the default workspace is ever shown
+    /// otherwise: before anything has made it, as it will be once the first
+    /// change made from here does.
+    pub made: bool,
 }
 
 impl Workspace {
@@ -694,6 +698,10 @@ impl App {
         let first = workspace.members.iter().position(|member| !member.own);
         let lonely = workspace.scope == Scope::Workspace && workspace.projects() == 0;
         let message = match (&workspace.above, workspace.scope) {
+            _ if workspace.default && !workspace.made => Some(format!(
+                "no workspace here or above — your default one, in {}, is made by the first change; `flayer init` makes one here",
+                workspace.root.display()
+            )),
             _ if workspace.default => Some(format!(
                 "no workspace here or above — this is your default one, in {}; `flayer init` makes one here",
                 workspace.root.display()
