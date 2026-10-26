@@ -142,6 +142,8 @@ fn a_home_workspace_migrates_and_what_it_installed_stays_current() {
         .is_file());
     assert!(!home_path.join("skills").exists());
     // Recorded, unchanged, and still the copy of what the workspace offers.
+    // `install` saying so stands in for `flayer status` (#36), which the
+    // issue names but is not there yet; that check belongs here once it is.
     assert_eq!(installed.stdout, "x in alpha was already current\n");
     assert!(installed.ok, "{installed:?}");
 }
