@@ -792,6 +792,28 @@ fn the_add_form_offers_what_the_workspace_in_your_home_has_to_a_project_elsewher
 }
 
 #[test]
+fn mind_calls_the_workspace_in_your_home_the_default_only_when_it_is_not_above() {
+    let home = TempDir::new().unwrap();
+    let elsewhere = TempDir::new().unwrap();
+    let far = elsewhere.path().join("far");
+    let near = home.path().join("near");
+    for project in [&far, &near] {
+        fs::create_dir(project).unwrap();
+        mind(project, &["init"]).unwrap();
+    }
+    flayer_at_home(elsewhere.path(), home.path(), &["link", "far"]).unwrap();
+    flayer_at_home(home.path(), home.path(), &["link", "near"]).unwrap();
+    let default = |project: &Path| match tui::load_project(project, Some(home.path())).unwrap() {
+        View::Workspace(workspace) => workspace.default,
+        View::Nowhere => panic!("no screen for {}", project.display()),
+    };
+
+    // Above `near`, the walk up finds it as it would any other workspace.
+    assert!(default(&far));
+    assert!(!default(&near));
+}
+
+#[test]
 fn a_skill_that_cannot_be_read_is_listed_where_it_can_be_dealt_with() {
     let dir = workspace_with_two();
     write_skill(

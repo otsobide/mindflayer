@@ -374,10 +374,15 @@ pub fn load_project(directory: &Path, home: Option<&Path>) -> Result<View, CliEr
     let Some(project) = MindProject::locate(directory)? else {
         return Ok(View::Nowhere);
     };
-    let (above, default) = match FlayerWorkspace::locate(project.root())? {
-        Some(workspace) => (Some(workspace), false),
-        None => (FlayerWorkspace::default_at(home)?, true),
-    };
+    // The workspace `mind` consults about the project, asked of the function
+    // that decides it for the `mind` lines this screen runs, so the two
+    // cannot come to disagree.
+    let above = consulted(&project, home)?;
+    // One not above the project is the default: the walk up would otherwise
+    // have found it at that very ancestor.
+    let default = above
+        .as_ref()
+        .is_some_and(|workspace| !project.root().starts_with(workspace.root()));
     if let Some(workspace) = &above {
         if workspace.is_linked(project.root()) {
             return Ok(View::Workspace(workspace_view(workspace, default, home)));
@@ -388,8 +393,7 @@ pub fn load_project(directory: &Path, home: Option<&Path>) -> Result<View, CliEr
     let root = project.root().to_path_buf();
     Ok(View::Workspace(Workspace {
         name: project.name().to_owned(),
-        // `above` is the workspace `mind` consults about the project, so its
-        // templates are the ones `mind add` will find.
+        // `above`'s templates, the ones `mind add` will find.
         members: vec![held(
             entry,
             root.clone(),

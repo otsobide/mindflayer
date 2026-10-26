@@ -463,8 +463,9 @@ fn managing(project: &MindProject, home: Option<&Path>) -> Result<FlayerWorkspac
 /// to write a marker into somebody's home, and a workspace made just now
 /// holds no record to drop and no template to offer.
 ///
-/// The TUI asks it too, so the templates its add form offers for a project
-/// are the ones the `mind` line it runs will find.
+/// The TUI asks it too, for the workspace `mind` opens its screen on and for
+/// the templates its add form offers a project, so both are what the `mind`
+/// lines it runs will find.
 pub(crate) fn consulted(
     project: &MindProject,
     home: Option<&Path>,
