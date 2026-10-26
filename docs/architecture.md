@@ -397,7 +397,7 @@ An older marker is read the way it was written, never refused.
 version: a workspace's number says nothing about where a project keeps its
 artifacts. The ledger carries its version in SQLite's `user_version` and is
 refused from the future the same way, but an older one is migrated forward
-rather than read as written
+rather than read as written, after a copy of it is set aside
 ([Why the ledger is SQLite](#why-the-ledger-is-sqlite)).
 
 ## Failures are collected, not raised
@@ -576,14 +576,80 @@ it](#a-read-leaves-the-ledger-as-it-finds-it)).
 
 Four things are recorded: the **sources** gathered from, the **artifacts** on
 the shelf and which source each came from, the **installations** — which skill
-Mindflayer put into which project — and an **action log**. The log keeps
-failures too — a log of only what worked cannot answer the question anybody
-opens it with. Timestamps are Unix seconds, which needs no date library and
-which SQLite renders with `datetime(at, 'unixepoch')`.
+Mindflayer put into which project, from where, every copy it wrote and a hash
+of what it wrote — and an **action log**. The log keeps failures too — a log
+of only what worked cannot answer the question anybody opens it with.
+Timestamps are Unix seconds, which needs no date library and which SQLite
+renders with `datetime(at, 'unixepoch')`.
 
 A source's shelf folder is stored rather than derived: two URLs can reduce to
 the same readable name, and where a source's files went is a fact about the
 past that must not move when the naming rule changes.
+
+The schema has had three versions, each a block in `Ledger::migrate` and a
+constant beside it:
+
+1. `sources`, `artifacts` and `actions`: what was gathered, from where, and
+   what happened.
+2. `installations`: which artifact went into which project, which is what
+   lets an uninstall tell Mindflayer's copy from somebody's.
+3. `installation_targets`, one row for each copy an installation wrote, with
+   the agent it is for when it is one agent's
+   ([D-07](#d-07-one-copy-per-agent-folder)); and on `installations`, the
+   `origin` it came from, spelled as `--from` takes it, and the
+   `content_hash` of what it wrote
+   ([D-04](#d-04-an-edited-copy-is-detected-not-disowned)). The
+   installation's own path moved into its one target, so a copy's path is
+   kept in one place (#30).
+
+An older ledger is migrated step by step, so one made two versions ago ends
+where one made today begins, and two rules hold for every step:
+
+- **The file is copied aside first.** Before the first step, the ledger is
+  copied beside itself as `mindflayer.db.v<old>.bak` (`Ledger::back_up`), and
+  nothing is migrated unless the copy is whole. A step that turns out wrong
+  then leaves the file it started from: the copy opens at the old version,
+  and the build that wrote it reads it as it always did. It is named after
+  the version it holds, so which build reads it is in its name, and a ledger
+  brought forward by several builds in turn leaves one for each version it
+  had. It is
+  SQLite's online backup rather than a copy of the file, because opening the
+  file outside SQLite while a connection holds it would drop that
+  connection's locks on Unix; it goes through a temporary and a rename, so a
+  copy cut short is never mistaken for a whole one, and keeps the ledger's
+  permissions. A step to come is one more block in `migrate`, and the copy is
+  taken for it without its asking.
+- **The steps run in one transaction**, with the stamp of the new version.
+  Run a statement at a time, a step that failed, or a process that died
+  halfway, left a database half migrated under its old version, which the
+  next open would try to migrate again and fail on.
+
+A step fills in what it can from what the version before recorded, spelled
+as that version's code spelled it, in the step's own SQL rather than through
+the code that spells it now: a later change to the spelling would otherwise
+change what an earlier step wrote. Version 3 gives an installation from a
+source that source's origin, and one from the workspace or a load none, since
+version 2 kept nothing to say which; it makes up no hash for a copy nobody
+hashed when it was written, and D-04 says how a missing one reads. Each step
+comes with a fixture of what the version before it wrote
+(`apps/core/tests/fixtures/ledger-v<N>.sql`, dumped from a ledger that build
+made), from which a test migrates, checks every row is kept, and opens the
+copy at the old version.
+
+The hash is `hash::tree`, its only definition: SHA-256 over every folder and
+file under a copy, by their `/`-separated paths in byte order, each file's
+length before its bytes. The order is not the filesystem's and the separator
+not the platform's, so one tree hashes alike on Linux, macOS and Windows, and
+alike in every agent's folder, since the copy's own folder is not part of it.
+Folders count, so two copies hash alike exactly when `copy::same` calls them
+the same. A link is refused rather than followed: Mindflayer never writes one
+into a copy, since `copy::tree` copies what a link points at, and following
+one could read anything. It is kept once per installation, not once per
+target: every target is written from one copy, so one hash is what each is
+compared with, and a copy somebody edited is the one whose own hash no longer
+matches it. An install records the hash of the copy as it stands once
+written; one that cannot be read back is recorded with none rather than not
+at all, since without a record it would be Foreign for good.
 
 ## Installing
 
@@ -621,11 +687,13 @@ or, if it is the workspace's own, fixed where it is.
 
 ### It only manages what it installed
 
-The ledger records every installation against `(project, kind, name)`, and that
-record is what separates a file this tool put there from one somebody wrote. A
-skill present but unrecorded is `Standing::Foreign`, and Foreign is inert in
-both directions: never overwritten, never deleted, and the caller is told so
-rather than obeyed quietly.
+The ledger records every installation against `(project, kind, name)`, with
+each copy it wrote as a target of it, and that record is what separates a
+file this tool put there from one somebody wrote. Today an install writes one
+copy, in the folder the project's marker names; one in each agent's folder is
+#34's. A skill present but unrecorded is `Standing::Foreign`, and Foreign is
+inert in both directions: never overwritten, never deleted, and the caller is
+told so rather than obeyed quietly.
 
 Without that, an install screen is a thing that can delete a colleague's work
 because a checkbox looked untidy. The rule costs one query and removes the
@@ -639,9 +707,10 @@ where somebody can see it happening.
 ### Two places offer, one command takes
 
 What can be installed comes from the workspace's own skills, offered first,
-the workspaces it loads (below), and the shelf (`install::Offer`). An installation from the shelf records
-the source it came from; one of the workspace's own records none, because it
-came from nowhere but the workspace.
+the workspaces it loads (below), and the shelf (`install::Offer`). Every
+installation records its origin, in the spelling `--from` takes; one from the
+shelf also points at the source it came from, and one of the workspace's own
+at none, because it came from nowhere but the workspace.
 
 `mind install <skill>` and `flayer install -p <project> <skill>` install one
 without the screen, through `install::offered`: the one candidate of that name,
@@ -665,7 +734,8 @@ Three decisions shape it:
   That is the difference from gathering, which snapshots a repository onto the
   shelf; a loaded workspace is usually one on the same disk that is still
   being worked on. An installation from it records no source id — like the
-  workspace's own — because there is no shelf row to point at.
+  workspace's own — because there is no shelf row to point at, only its
+  origin, `load:<entry>`.
 - **One level deep.** Only a loaded workspace's own artifacts are offered,
   never what it loads, so two workspaces loading each other is not a loop, and
   what a workspace offers is what its marker names, not a graph.
@@ -1127,10 +1197,11 @@ A read does write to one thing: an existing ledger from an older schema is
 migrated to this build's, as every open migrates it. A build reads its own
 schema and no other, so declining would leave the file unreadable rather than
 untouched; that step is upkeep of Mindflayer's own file, not a change anybody
-asked for. Each schema step is to copy the database aside before it migrates
-(#30), and a read migrates through the same step, so it takes that copy too.
-Until the first such step lands there is no copy to take, and a read migrates
-the way every open does today.
+asked for. Every migration copies the database aside before its first step
+([Why the ledger is SQLite](#why-the-ledger-is-sqlite)), and a read migrates
+through the same `Ledger::migrate`, so it leaves that copy too: the first
+`flayer gather list` after an upgrade puts `mindflayer.db.v2.bak` beside a
+ledger version 2 wrote.
 
 ## The agents' own folders
 
@@ -1710,8 +1781,19 @@ leak into the lifecycle code. Unblocks #33, #45, #62, #93, #94 and #95.
   the install screen tell an untouched copy from an edited one, and offer to
   update the first while leaving the second alone.
   [D-04](#d-04-an-edited-copy-is-detected-not-disowned) chose that hash, one
-  per target, and #47 carries it out, in the lifecycle changes that now hold
-  the rule (`lifecycle::finish_edit`, `rename` and `remove`).
+  per target. #30 records it, once per installation since every target is
+  written from one copy, and #47 reads it, in the lifecycle changes that now
+  hold the rule (`lifecycle::finish_edit`, `rename` and `remove`).
+- **Old copies of the ledger.** Each migration leaves a
+  `mindflayer.db.v<old>.bak` beside the ledger, and nothing removes one: a
+  copy is the way back from a step that went wrong, and when it is no longer
+  needed is for whoever owns the workspace to say. A command to list and
+  remove them, or a doctor check (#96) that mentions them, would make them
+  something seen rather than found by browsing `.mindflayer`.
+- **What a copy keeps.** A copy is the ledger as it was, so a URL an older
+  Mindflayer stored with its credentials in it stays in the copy once #25
+  rewrites the ledger itself without them. Rewriting the copy too, or taking
+  it without them, would close that.
 - **Disowning from elsewhere.** A change drops the record of the workspace
   its command resolved, wherever that sits, but not of any other workspace
   that links the same project: nothing in the project says which workspaces
