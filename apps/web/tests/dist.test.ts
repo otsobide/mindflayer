@@ -32,15 +32,20 @@ const BANNER = /\/\*![\s\S]*?\*\//g
 // The panel as `make web/build` builds it, but into a folder of its own, so
 // the test needs no build beforehand and leaves dist/ as it found it. In a
 // process of its own too: in this one, vitest's NODE_ENV=test would make it
-// a development build, and that is not what the server embeds.
+// a development build, and that is not what the server embeds. Nor does it
+// write the committed declarations under src/, which no test run does
+// (vite.config.ts).
 let out: string
 const files = new Map<string, string>()
 
 beforeAll(() => {
   out = mkdtempSync(join(root, 'node_modules', '.dist-test-'))
-  const env = Object.fromEntries(
-    Object.entries(process.env).filter(([name]) => name !== 'NODE_ENV' && !name.startsWith('VITEST'))
-  )
+  const env = {
+    ...Object.fromEntries(
+      Object.entries(process.env).filter(([name]) => name !== 'NODE_ENV' && !name.startsWith('VITEST'))
+    ),
+    MINDFLAYER_PANEL_DTS: 'off'
+  }
   execFileSync(
     process.execPath,
     [join(root, 'node_modules', 'vite', 'bin', 'vite.js'), 'build', '--outDir', out, '--emptyOutDir', '--logLevel', 'error'],

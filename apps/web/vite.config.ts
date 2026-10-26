@@ -10,6 +10,17 @@ const SERVER = 'http://127.0.0.1:7878'
 
 const here = (path: string) => fileURLToPath(new URL(path, import.meta.url))
 
+/**
+ * Whether this run writes the declarations of Nuxt UI's components and
+ * composables, which are committed so vue-tsc knows them on a fresh clone. A
+ * build or the dev server does; a test run never does. vitest only meets the
+ * components its tests import, and would write a list without the rest. The
+ * build tests/dist.test.ts runs has none of vitest's variables, so it sets
+ * this one instead. And a test that rewrote them would mend a stale file
+ * behind the back of the test that looks for one (declarations.test.ts).
+ */
+const declarations = !process.env.VITEST && process.env.MINDFLAYER_PANEL_DTS !== 'off'
+
 export default defineConfig({
   plugins: [
     // File routes: a page is a file under src/pages, so adding a view is
@@ -25,11 +36,8 @@ export default defineConfig({
       // bundle: the server's CSP refuses the Iconify API, so an icon that is
       // not bundled is one that never shows.
       icon: { clientBundle: { scan: true } },
-      // Committed, so vue-tsc knows Nuxt UI's components on a fresh clone.
-      // Not written by a test run, which only meets the components its
-      // tests import and would leave out the rest.
-      components: { dts: !process.env.VITEST && 'src/components.d.ts' },
-      autoImport: { dts: 'src/auto-imports.d.ts' }
+      components: { dts: declarations && 'src/components.d.ts' },
+      autoImport: { dts: declarations && 'src/auto-imports.d.ts' }
     })
   ],
   resolve: {
