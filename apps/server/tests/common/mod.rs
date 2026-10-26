@@ -8,7 +8,6 @@
 
 pub use axum::body::{Body, Bytes};
 pub use axum::http::{header, HeaderMap, Method, Request, StatusCode};
-pub use axum::Router;
 pub use mindflayer_server::{Backend, Listening, Server};
 pub use serde_json::{json, Value};
 pub use std::sync::{Arc, Condvar, Mutex};
@@ -179,7 +178,9 @@ pub fn launch_logged() -> (Listening, Arc<Mutex<Vec<String>>>) {
 pub enum Auth<'a> {
     Nothing,
     Bearer(&'a str),
-    /// A whole `name=value` pair, as a browser sends it.
+    /// A whole `name=value` pair, sent as the panel's page sends it: with the
+    /// headers the browser adds to every request the page makes, and the one
+    /// the panel adds itself.
     Cookie(&'a str),
 }
 
@@ -205,30 +206,46 @@ impl Reply {
     }
 }
 
-/// Send one request through the router, in process.
-pub async fn send(
-    router: &Router,
+/// The request [`send`] sends, for a test that changes it before it goes.
+///
+/// It names the server as the launch link does, `Host: 127.0.0.1:<port>`:
+/// over the socket every request names one, a browser's and a script's alike.
+pub fn request(
+    server: &Listening,
     method: Method,
     path: &str,
     auth: Auth<'_>,
     body: Option<Value>,
-) -> Reply {
-    let mut request = Request::builder().method(method).uri(path);
+) -> Request<Body> {
+    let mut request = Request::builder()
+        .method(method)
+        .uri(path)
+        .header(header::HOST, server.address().to_string());
     match auth {
         Auth::Nothing => {}
         Auth::Bearer(token) => {
             request = request.header(header::AUTHORIZATION, format!("Bearer {token}"))
         }
-        Auth::Cookie(pair) => request = request.header(header::COOKIE, pair),
+        Auth::Cookie(pair) => {
+            request = request
+                .header(header::COOKIE, pair)
+                .header(header::ORIGIN, format!("http://{}", server.address()))
+                .header("sec-fetch-site", "same-origin")
+                .header("x-mindflayer", "1")
+        }
     }
-    let request = match body {
+    match body {
         Some(body) => request
             .header(header::CONTENT_TYPE, "application/json")
             .body(Body::from(body.to_string())),
         None => request.body(Body::empty()),
     }
-    .unwrap();
-    let response = router.clone().oneshot(request).await.unwrap();
+    .unwrap()
+}
+
+/// Send a request through the server's router, in process.
+pub async fn deliver(server: &Listening, request: Request<Body>) -> Reply {
+    let response = server.router().oneshot(request).await.unwrap();
     let status = response.status();
     let headers = response.headers().clone();
     let body = axum::body::to_bytes(response.into_body(), usize::MAX)
@@ -241,12 +258,23 @@ pub async fn send(
     }
 }
 
+/// Send one request to the server, in process.
+pub async fn send(
+    server: &Listening,
+    method: Method,
+    path: &str,
+    auth: Auth<'_>,
+    body: Option<Value>,
+) -> Reply {
+    deliver(server, request(server, method, path, auth, body)).await
+}
+
 /// `GET path`.
-pub async fn get(router: &Router, path: &str, auth: Auth<'_>) -> Reply {
-    send(router, Method::GET, path, auth, None).await
+pub async fn get(server: &Listening, path: &str, auth: Auth<'_>) -> Reply {
+    send(server, Method::GET, path, auth, None).await
 }
 
 /// `POST path` with a JSON body.
-pub async fn post(router: &Router, path: &str, auth: Auth<'_>, body: Value) -> Reply {
-    send(router, Method::POST, path, auth, Some(body)).await
+pub async fn post(server: &Listening, path: &str, auth: Auth<'_>, body: Value) -> Reply {
+    send(server, Method::POST, path, auth, Some(body)).await
 }

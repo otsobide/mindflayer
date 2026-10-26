@@ -11,6 +11,7 @@ use axum::middleware::Next;
 use axum::response::{IntoResponse, Response};
 
 use crate::api;
+use crate::guard;
 use crate::token::Token;
 
 /// The check every `/api` request passes before a handler sees it.
@@ -28,10 +29,22 @@ impl Gate {
         }
     }
 
-    /// Whether a request carries the token, as a cookie (the panel) or as a
-    /// bearer token (scripts and tests, which have no cookie jar to speak of).
-    pub(crate) fn admits(&self, headers: &HeaderMap) -> bool {
-        self.bearer(headers) || self.cookie(headers)
+    /// How a request carries the token, if it does: as a cookie (the panel)
+    /// or as a bearer token (scripts and tests, which have no cookie jar to
+    /// speak of).
+    ///
+    /// The bearer token first. A request with both is a script's, since
+    /// whoever wrote the header holds the token, and no page does: the
+    /// cookie is `HttpOnly`, and the link that carried the token is gone from
+    /// the address bar before the panel's scripts run.
+    pub(crate) fn credential(&self, headers: &HeaderMap) -> Option<Credential> {
+        if self.bearer(headers) {
+            Some(Credential::Bearer)
+        } else if self.cookie(headers) {
+            Some(Credential::Cookie)
+        } else {
+            None
+        }
     }
 
     fn bearer(&self, headers: &HeaderMap) -> bool {
@@ -57,6 +70,15 @@ impl Gate {
     }
 }
 
+/// How a request proved that it holds the token.
+#[derive(Clone, Copy)]
+pub(crate) enum Credential {
+    /// `Authorization: Bearer <token>`.
+    Bearer,
+    /// The cookie the launch link set, which the browser sends by itself.
+    Cookie,
+}
+
 /// The query parameter the launch link carries the token in.
 pub(crate) const PARAMETER: &str = "token";
 
@@ -79,24 +101,37 @@ pub(crate) fn cookie_name(port: u16) -> String {
     format!("mf_{port}")
 }
 
-/// Turn away a request without the token, before it reaches a handler.
+/// Turn away a request without the token, and a change that brings it as
+/// the cookie from anywhere but the panel's own page, before either reaches
+/// a handler.
 pub(crate) async fn require(
     State(gate): State<Arc<Gate>>,
     request: Request,
     next: Next,
 ) -> Response {
-    if gate.admits(request.headers()) {
-        next.run(request).await
-    } else {
-        let mut response = api::error(
-            StatusCode::UNAUTHORIZED,
-            "this needs the launch token, as the cookie its link sets or as a Bearer token",
-        );
-        response
-            .headers_mut()
-            .insert(WWW_AUTHENTICATE, HeaderValue::from_static("Bearer"));
-        response
+    match gate.credential(request.headers()) {
+        None => {
+            let mut response = api::error(
+                StatusCode::UNAUTHORIZED,
+                "this needs the launch token, as the cookie its link sets or as a Bearer token",
+            );
+            response
+                .headers_mut()
+                .insert(WWW_AUTHENTICATE, HeaderValue::from_static("Bearer"));
+            return response;
+        }
+        // The browser sends the cookie for any page on the same site; only
+        // the token's holder can write the header.
+        Some(Credential::Cookie) => {
+            if let Err((status, message)) =
+                guard::from_the_panel(request.method(), request.headers())
+            {
+                return api::error(status, message);
+            }
+        }
+        Some(Credential::Bearer) => {}
     }
+    next.run(request).await
 }
 
 /// Trade the launch link's token for a cookie: `GET /?token=...` answers with

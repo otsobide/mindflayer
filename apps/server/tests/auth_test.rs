@@ -8,7 +8,6 @@ use common::*;
 #[tokio::test]
 async fn a_request_without_the_token_is_refused() {
     let (server, runs) = launch();
-    let router = server.router();
 
     for (method, path, body) in [
         (Method::POST, "/api/query", Some(json!({ "echo": "hi" }))),
@@ -24,7 +23,7 @@ async fn a_request_without_the_token_is_refused() {
         (Method::GET, "/api/", None),
         (Method::POST, "/api/", None),
     ] {
-        let reply = send(&router, method.clone(), path, Auth::Nothing, body).await;
+        let reply = send(&server, method.clone(), path, Auth::Nothing, body).await;
         assert_eq!(reply.status, StatusCode::UNAUTHORIZED, "{method} {path}");
         assert_eq!(reply.header("www-authenticate"), Some("Bearer"));
         assert!(reply.json()["error"].as_str().unwrap().contains("token"));
@@ -35,7 +34,6 @@ async fn a_request_without_the_token_is_refused() {
 #[tokio::test]
 async fn a_wrong_token_is_refused() {
     let (server, _) = launch();
-    let router = server.router();
     let (other, _) = launch();
 
     for auth in [
@@ -43,7 +41,7 @@ async fn a_wrong_token_is_refused() {
         Auth::Bearer(""),
         Auth::Cookie(&format!("{}={}", server.cookie(), other.token())),
     ] {
-        let reply = post(&router, "/api/query", auth, json!({ "echo": "hi" })).await;
+        let reply = post(&server, "/api/query", auth, json!({ "echo": "hi" })).await;
         assert_eq!(reply.status, StatusCode::UNAUTHORIZED);
     }
 }
@@ -53,7 +51,7 @@ async fn a_bearer_token_is_accepted() {
     let (server, _) = launch();
 
     let reply = post(
-        &server.router(),
+        &server,
         "/api/query",
         Auth::Bearer(server.token()),
         json!({ "echo": "hi" }),
@@ -74,7 +72,7 @@ async fn the_cookie_named_for_the_port_is_accepted_among_others() {
     );
 
     let reply = post(
-        &server.router(),
+        &server,
         "/api/query",
         Auth::Cookie(&cookies),
         json!({ "echo": "hi" }),
@@ -91,7 +89,7 @@ async fn the_token_under_another_ports_cookie_is_refused() {
     let elsewhere = format!("mf_{}={}", port.wrapping_add(1), server.token());
 
     let reply = post(
-        &server.router(),
+        &server,
         "/api/query",
         Auth::Cookie(&elsewhere),
         json!({ "echo": "hi" }),
@@ -115,7 +113,6 @@ fn set_pair(reply: &Reply) -> String {
 #[tokio::test]
 async fn the_launch_link_trades_its_token_for_a_cookie() {
     let (server, _) = launch();
-    let router = server.router();
     let port = server.address().port();
     assert_eq!(
         server.url(),
@@ -125,7 +122,7 @@ async fn the_launch_link_trades_its_token_for_a_cookie() {
         .url()
         .replace(&format!("http://127.0.0.1:{port}"), "");
 
-    let reply = get(&router, &path, Auth::Nothing).await;
+    let reply = get(&server, &path, Auth::Nothing).await;
 
     assert_eq!(reply.status, StatusCode::SEE_OTHER);
     assert_eq!(reply.header("location"), Some("/"));
@@ -140,7 +137,7 @@ async fn the_launch_link_trades_its_token_for_a_cookie() {
 
     let cookie = set_pair(&reply);
     let reply = post(
-        &router,
+        &server,
         "/api/query",
         Auth::Cookie(&cookie),
         json!({ "echo": "in" }),
@@ -155,7 +152,7 @@ async fn a_launch_link_with_another_token_sets_no_cookie() {
     let (other, _) = launch();
 
     let reply = get(
-        &server.router(),
+        &server,
         &format!("/?token={}", other.token()),
         Auth::Nothing,
     )
@@ -171,7 +168,7 @@ async fn the_token_is_found_however_the_link_encodes_its_name() {
     let (server, _) = launch();
 
     let reply = get(
-        &server.router(),
+        &server,
         &format!("/?panel=1&%74oken={}", server.token()),
         Auth::Nothing,
     )
@@ -189,7 +186,7 @@ async fn two_servers_on_different_ports_set_differently_named_cookies() {
     let mut pairs = Vec::new();
     for server in [&first, &second] {
         let reply = get(
-            &server.router(),
+            server,
             &format!("/?token={}", server.token()),
             Auth::Nothing,
         )
@@ -210,7 +207,7 @@ async fn two_servers_on_different_ports_set_differently_named_cookies() {
     let both = format!("{}; {}", pairs[0], pairs[1]);
     for server in [&first, &second] {
         let reply = post(
-            &server.router(),
+            server,
             "/api/query",
             Auth::Cookie(&both),
             json!({ "echo": "x" }),
@@ -219,7 +216,7 @@ async fn two_servers_on_different_ports_set_differently_named_cookies() {
         assert_eq!(reply.status, StatusCode::OK);
     }
     let reply = post(
-        &second.router(),
+        &second,
         "/api/query",
         Auth::Cookie(&pairs[0]),
         json!({ "echo": "x" }),
