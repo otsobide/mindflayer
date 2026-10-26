@@ -14,7 +14,7 @@
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use rusqlite::{Connection, OpenFlags, OptionalExtension};
+use rusqlite::{Connection, OpenFlags, OptionalExtension, Transaction, TransactionBehavior};
 use thiserror::Error;
 
 use crate::kind::Kind;
@@ -228,17 +228,24 @@ impl Ledger {
             .execute_batch("PRAGMA foreign_keys = ON;")
             .map_err(|source| self.failed("enabling foreign keys", source))?;
 
-        let found: u32 = self
-            .connection
-            .pragma_query_value(None, "user_version", |row| row.get(0))
-            .map_err(|source| self.failed("reading the schema version", source))?;
-
-        if found > SCHEMA_VERSION {
-            return Err(LedgerError::Version {
-                path: self.path.clone(),
-                found,
-            });
+        // Read before taking the write lock, so that opening a database that
+        // is already current — every open but the first after an upgrade —
+        // writes nothing, and still works on a file it may only read.
+        if self.schema_version()? == SCHEMA_VERSION {
+            return Ok(());
         }
+
+        // Every step and the stamp in one transaction. Run one statement at a
+        // time, a step that fails, or a process that dies halfway, would leave
+        // a database half migrated under its old number, which the next open
+        // would try to migrate again and fail on; this way it is left as it
+        // was.
+        let transaction =
+            Transaction::new_unchecked(&self.connection, TransactionBehavior::Immediate)
+                .map_err(|source| self.failed("starting the migration", source))?;
+        // Read again under the lock, because another process may have
+        // migrated it in the meantime.
+        let found = self.schema_version()?;
         if found == SCHEMA_VERSION {
             return Ok(());
         }
@@ -246,19 +253,37 @@ impl Ledger {
         // One block per version, applied in order, so a database created two
         // versions ago arrives at the same schema as one created today.
         if found < 1 {
-            self.connection
+            transaction
                 .execute_batch(SCHEMA_V1)
                 .map_err(|source| self.failed("creating the schema", source))?;
         }
         if found < 2 {
-            self.connection
+            transaction
                 .execute_batch(SCHEMA_V2)
                 .map_err(|source| self.failed("adding the installations table", source))?;
         }
 
-        self.connection
+        transaction
             .pragma_update(None, "user_version", SCHEMA_VERSION)
-            .map_err(|source| self.failed("stamping the schema version", source))
+            .map_err(|source| self.failed("stamping the schema version", source))?;
+        transaction
+            .commit()
+            .map_err(|source| self.failed("finishing the migration", source))
+    }
+
+    /// The schema version on disk, refused when it is newer than this build's.
+    fn schema_version(&self) -> Result<u32, LedgerError> {
+        let found: u32 = self
+            .connection
+            .pragma_query_value(None, "user_version", |row| row.get(0))
+            .map_err(|source| self.failed("reading the schema version", source))?;
+        if found > SCHEMA_VERSION {
+            return Err(LedgerError::Version {
+                path: self.path.clone(),
+                found,
+            });
+        }
+        Ok(found)
     }
 
     /// The source matching this coordinate, if it has been gathered before.

@@ -171,3 +171,39 @@ fn opening_only_an_existing_ledger_still_brings_an_older_one_up_to_date() {
         .unwrap()
         .is_empty());
 }
+
+#[test]
+fn a_step_that_fails_leaves_the_ledger_as_it_was() {
+    let dir = tempfile::TempDir::new().unwrap();
+    let path = dir.path().join(LEDGER_FILE);
+    {
+        // A version 1 ledger that already has an index by the name the second
+        // step gives its own, so that step fails after creating its table.
+        let connection = Connection::open(&path).unwrap();
+        connection.execute_batch(SCHEMA_V1).unwrap();
+        connection
+            .execute_batch("CREATE INDEX installations_by_project ON sources (url);")
+            .unwrap();
+        connection.pragma_update(None, "user_version", 1).unwrap();
+    }
+
+    let error = Ledger::open(&path).unwrap_err();
+
+    assert!(
+        error.to_string().contains("adding the installations table"),
+        "{error}"
+    );
+    let connection = Connection::open(&path).unwrap();
+    let version: u32 = connection
+        .pragma_query_value(None, "user_version", |row| row.get(0))
+        .unwrap();
+    assert_eq!(version, 1);
+    let tables: i64 = connection
+        .query_row(
+            "SELECT count(*) FROM sqlite_master WHERE name = 'installations'",
+            [],
+            |row| row.get(0),
+        )
+        .unwrap();
+    assert_eq!(tables, 0, "the table the failed step made is still there");
+}
