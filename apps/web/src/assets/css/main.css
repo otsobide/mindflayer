@@ -135,8 +135,25 @@
 }
 
 @layer base {
+  html {
+    color-scheme: light;
+  }
+
+  html.dark {
+    color-scheme: dark;
+  }
+
   body {
     @apply bg-default text-default font-sans text-sm antialiased;
+  }
+
+  /* Set for the instant the colour mode switches (src/color-mode.ts), so
+     the whole page changes at once rather than fading piece by piece. */
+  .switching-color-mode,
+  .switching-color-mode *,
+  .switching-color-mode *::before,
+  .switching-color-mode *::after {
+    transition: none !important;
   }
 
   ::selection {

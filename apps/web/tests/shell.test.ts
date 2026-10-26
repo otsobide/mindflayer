@@ -18,8 +18,8 @@ async function render(path: string) {
 }
 
 beforeEach(() => {
-  // The sidebar remembers whether it was collapsed.
   localStorage.clear()
+  document.documentElement.className = 'dark'
   // Every <style> element anything adds, for as long as the test runs.
   styles = []
   watching = new MutationObserver((records) => {
@@ -74,10 +74,12 @@ describe('the shell', () => {
     expect(page.get('[data-testid="address"]').text()).toBe('')
   })
 
-  it('writes its palette into no style element, which the CSP would refuse', async () => {
+  it('adds no style element, which the CSP would refuse', async () => {
     await render('/')
 
-    expect(styles.filter(style => style.textContent?.includes('--ui-color-'))).toEqual([])
+    // Not the palette, which Nuxt UI writes into one at run time, and not
+    // the colour mode, which adds one for each switch.
+    expect(styles).toEqual([])
   })
 
   it('draws every icon it names from the bundle', async () => {
@@ -91,5 +93,35 @@ describe('the shell', () => {
       expect(icon.element).toBeInstanceOf(SVGElement)
       expect((icon.element as SVGElement).innerHTML).not.toBe('')
     }
+  })
+})
+
+describe('the colour mode', () => {
+  it('starts dark when this browser has chosen nothing', async () => {
+    await render('/')
+
+    expect(document.documentElement.classList.contains('dark')).toBe(true)
+    expect(localStorage.getItem('vueuse-color-scheme')).toBe('dark')
+  })
+
+  it('keeps the light mode this browser chose', async () => {
+    localStorage.setItem('vueuse-color-scheme', 'light')
+
+    await render('/')
+
+    expect(document.documentElement.classList.contains('dark')).toBe(false)
+    expect(document.documentElement.classList.contains('light')).toBe(true)
+  })
+
+  it('switches from the header without adding a style element', async () => {
+    const page = await render('/')
+
+    await page.get('[data-testid="overview"] button[aria-label="Switch to light mode"]').trigger('click')
+    await flushPromises()
+
+    expect(document.documentElement.classList.contains('light')).toBe(true)
+    expect(document.documentElement.classList.contains('dark')).toBe(false)
+    expect(localStorage.getItem('vueuse-color-scheme')).toBe('light')
+    expect(styles).toEqual([])
   })
 })

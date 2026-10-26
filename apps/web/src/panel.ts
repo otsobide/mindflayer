@@ -3,6 +3,7 @@ import { createRouter, createWebHistory, type Router, type RouterHistory } from 
 import { routes } from 'vue-router/auto-routes'
 import { createPinia } from 'pinia'
 import ui from '@nuxt/ui/vue-plugin'
+import { installColorMode } from './color-mode'
 
 export interface PanelOptions {
   /** The browser's address bar, unless a test keeps routes in memory. */
@@ -24,6 +25,8 @@ export function createPanel({ history = createWebHistory() }: PanelOptions = {})
   return {
     router,
     install(app) {
+      // Before Nuxt UI, whose plugin starts watching the colour mode.
+      installColorMode()
       app.use(router)
       app.use(createPinia())
       app.use(ui)
