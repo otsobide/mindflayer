@@ -134,8 +134,11 @@ pub fn locate(project: &Path) -> Result<Option<Location>, ExcludeError> {
         project: project.to_path_buf(),
         worktree: worktree.to_path_buf(),
     })?;
+    // A linked worktree names its common dir from its own git dir, as
+    // `../..`, and that is how gix hands it back. Normalized, so what a
+    // front end reports is the file a person would go and open.
     Ok(Some(Location {
-        file: repository.common_dir().join("info").join("exclude"),
+        file: paths::normalize(&repository.common_dir().join("info").join("exclude")),
         route,
     }))
 }

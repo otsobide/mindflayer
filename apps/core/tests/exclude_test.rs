@@ -295,3 +295,55 @@ fn an_entry_outside_the_project_is_refused_in_git_or_out() {
         Err(ExcludeError::Path { .. })
     ));
 }
+
+/// A linked worktree of the repository at `main`, at `at`, laid out the way
+/// `git worktree add` lays one out: a private git dir under the main
+/// repository's `.git/worktrees/` that points back at the common dir, and a
+/// `.git` file in the worktree that points at it. Written by hand, because
+/// gix does not add worktrees and these tests run no `git`.
+fn worktree(main: &Path, at: &Path) {
+    let private = main.join(".git").join("worktrees").join("linked");
+    fs::create_dir_all(&private).unwrap();
+    fs::write(private.join("HEAD"), "ref: refs/heads/linked\n").unwrap();
+    fs::write(private.join("commondir"), "../..\n").unwrap();
+    fs::write(
+        private.join("gitdir"),
+        format!("{}\n", at.join(".git").display()),
+    )
+    .unwrap();
+    fs::create_dir_all(at).unwrap();
+    fs::write(at.join(".git"), format!("gitdir: {}\n", private.display())).unwrap();
+}
+
+#[test]
+fn a_linked_worktree_keeps_its_entries_in_the_common_dir() {
+    let main = repository();
+    let elsewhere = TempDir::new().unwrap();
+    let linked = elsewhere.path().join("linked");
+    worktree(main.path(), &linked);
+    let app = project(&linked, "packages/app");
+
+    let outcome = exclude::add(&app, "packages/app", &[skill("commit-style")]).unwrap();
+    let file = exclude_file(main.path());
+    assert_eq!(outcome, Excluded::Written { file: file.clone() });
+    assert_eq!(
+        group(&file, "packages/app"),
+        [
+            "# project packages/app",
+            "/packages/app/.agents/skills/commit-style/"
+        ]
+    );
+    // Not the worktree's own git dir, which git never reads excludes from.
+    let private = main.path().join(".git").join("worktrees").join("linked");
+    assert!(!private.join("info").exists());
+    assert!(ignored(
+        &linked,
+        "packages/app/.agents/skills/commit-style/"
+    ));
+
+    exclude::remove(&app, "packages/app", &[skill("commit-style")]).unwrap();
+    assert!(!ignored(
+        &linked,
+        "packages/app/.agents/skills/commit-style/"
+    ));
+}
