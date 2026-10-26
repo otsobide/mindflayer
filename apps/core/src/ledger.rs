@@ -27,7 +27,7 @@ use crate::kind::Kind;
 /// Refused if the file on disk is newer, for the same reason a marker file is:
 /// an old binary silently misreading a newer database is the failure that has
 /// no error message.
-pub const SCHEMA_VERSION: u32 = 2;
+pub const SCHEMA_VERSION: u32 = 3;
 
 /// The file name, under `.mindflayer/`.
 pub const LEDGER_FILE: &str = "mindflayer.db";
@@ -273,6 +273,11 @@ impl Ledger {
             transaction
                 .execute_batch(SCHEMA_V2)
                 .map_err(|source| self.failed("adding the installations table", source))?;
+        }
+        if found < 3 {
+            transaction
+                .execute_batch(SCHEMA_V3)
+                .map_err(|source| self.failed("giving installations their targets", source))?;
         }
 
         transaction
@@ -560,18 +565,34 @@ impl Ledger {
         source_id: Option<i64>,
         path: &str,
     ) -> Result<(), LedgerError> {
-        self.connection
-            .execute(
-                "INSERT INTO installations (project, kind, name, source_id, path, installed_at)
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6)
+        let failed = |source| self.failed("recording an installation", source);
+        let transaction = self.connection.unchecked_transaction().map_err(failed)?;
+        let id: i64 = transaction
+            .query_row(
+                "INSERT INTO installations (project, kind, name, source_id, installed_at)
+                 VALUES (?1, ?2, ?3, ?4, ?5)
                  ON CONFLICT (project, kind, name) DO UPDATE SET
                      source_id = excluded.source_id,
-                     path = excluded.path,
-                     installed_at = excluded.installed_at",
-                rusqlite::params![project, kind.slug(), name, source_id, path, now()],
+                     installed_at = excluded.installed_at
+                 RETURNING id",
+                rusqlite::params![project, kind.slug(), name, source_id, now()],
+                |row| row.get(0),
             )
-            .map(|_| ())
-            .map_err(|source| self.failed("recording an installation", source))
+            .map_err(failed)?;
+        transaction
+            .execute(
+                "DELETE FROM installation_targets WHERE installation_id = ?1",
+                [id],
+            )
+            .map_err(failed)?;
+        transaction
+            .execute(
+                "INSERT INTO installation_targets (installation_id, agent, path)
+                 VALUES (?1, NULL, ?2)",
+                rusqlite::params![id, path],
+            )
+            .map_err(failed)?;
+        transaction.commit().map_err(failed)
     }
 
     /// Forget an installation, returning whether there was one.
@@ -872,6 +893,56 @@ CREATE TABLE installations (
 );
 
 CREATE INDEX installations_by_project ON installations (project);
+";
+
+/// The third schema: one installation, a copy in each place its agents read
+/// (D-07), and enough about what it wrote to tell it apart later (D-04).
+///
+/// An installation keeps one row, and every copy it wrote is a target of it:
+/// installed, updated and removed together, since an agent that reads two of
+/// the copies (OpenCode reads `.agents/skills` and `.claude/skills`) must
+/// never see two versions. A target's `path` is relative to the project and
+/// `/` separated, as the installation's own was, which goes: kept in both
+/// places, the two could disagree. `agent` names the one agent a copy is for,
+/// and is empty for a copy no one agent owns: the folder a v2 project's
+/// marker names, or `.agents/skills`, which two agents read. One row per path,
+/// so such a copy is never recorded twice.
+///
+/// `origin` is where the installation came from, spelled as `--from` takes
+/// it, which the workspace's own and a loaded workspace's had no other way to
+/// say: their `source_id` is empty. `content_hash` is [`crate::hash::tree`]
+/// of what was written, once for the installation rather than once a target,
+/// because every target is written from one copy and is compared with it.
+///
+/// What version 2 recorded becomes one target at the path it had. Its origin
+/// is filled in where it points at a source, spelled as `--from` takes a
+/// source's offer at this version — the address, with `#` and the branch when
+/// one was asked for — and here rather than through the code that spells it
+/// now, so a later change to that spelling cannot change what this step
+/// writes. An install from the workspace or a load gets none, since version 2
+/// kept nothing that says which. No hash is made up for a copy nobody hashed
+/// when it was written: D-04 reads an empty one as current only while the
+/// copy matches its offer byte for byte.
+const SCHEMA_V3: &str = "
+CREATE TABLE installation_targets (
+    installation_id INTEGER NOT NULL REFERENCES installations(id) ON DELETE CASCADE,
+    agent           TEXT,
+    path            TEXT    NOT NULL,
+    UNIQUE (installation_id, path)
+);
+
+INSERT INTO installation_targets (installation_id, agent, path)
+    SELECT id, NULL, path FROM installations;
+
+ALTER TABLE installations DROP COLUMN path;
+ALTER TABLE installations ADD COLUMN origin TEXT;
+ALTER TABLE installations ADD COLUMN content_hash TEXT;
+
+UPDATE installations
+   SET origin = (SELECT s.url || coalesce('#' || s.reference, '')
+                   FROM sources s
+                  WHERE s.id = installations.source_id)
+ WHERE source_id IS NOT NULL;
 ";
 
 #[cfg(test)]
