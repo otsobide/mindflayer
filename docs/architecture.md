@@ -2,22 +2,24 @@
 
 ## The shape of the tree
 
-Every unit of the product is an app under `apps/`, with its own `Cargo.toml`
-and its own `Makefile`. The root `Makefile` delegates (`make <app>/<target>`)
-and CI invokes those targets, so adding a front end is adding a directory, a
-line in `APPS` and the workspace `members`, and its test and build jobs in
-CI — never reshaping the tree.
+Every unit of the product is an app under `apps/`, with its own manifest
+(`Cargo.toml`, or `package.json` for the panel) and its own `Makefile`. The
+root `Makefile` delegates (`make <app>/<target>`) and CI invokes those
+targets, so adding a front end is adding a directory, a line in `APPS` and the
+workspace `members`, and its test and build jobs in CI — never reshaping the
+tree.
 
 ```
 apps/core    mindflayer-core   — the engine
 apps/cli     mindflayer-cli    — the `mind` and `flayer` binaries
 apps/server  mindflayer-server — the local server behind the web panel
+apps/web     mindflayer-web    — the web panel, in Vue
 ```
 
-The layout exists because there would be more than two, and the server is the
-first of the apps [D-17](#d-17-the-next-front-end-is-a-local-web-panel) adds;
-the web panel it serves comes next, as `apps/web`. Both sit beside the CLI
-rather than around it.
+The layout exists because there would be more than two, and the server and
+the panel are the apps [D-17](#d-17-the-next-front-end-is-a-local-web-panel)
+adds. Both sit beside the CLI rather than around it. The panel is in
+`NODE_APPS` rather than `APPS` for now (see [the web panel](#the-web-panel)).
 
 ## Where the line between core and a front end falls
 
@@ -46,7 +48,8 @@ TUI](#the-tui).
 The local server is a crate of its own, and it holds no rules either: it
 carries JSON between the browser and whichever front end implements its
 `Backend`, and depends on neither core nor the CLI. See [the local
-server](#the-local-server).
+server](#the-local-server). Nor does the panel it serves: it asks through the
+server and draws the answers. See [the web panel](#the-web-panel).
 
 The line is there so that when a second front end arrives, it cannot disagree
 with the first about what a valid skill is. Every rule that could drift lives
@@ -1521,8 +1524,8 @@ The panel is embedded with rust-embed from `apps/web/dist`, spelled
 `$CARGO_MANIFEST_DIR/../web/dist`, so the binary stays the one thing to
 install. `allow_missing` lets the crate build, and its tests pass, on a
 machine without Node where nothing built the panel; the server then answers
-every page with a 503 saying `panel not built: run make web/build`. #69 brings
-`apps/web` and that target.
+every page with a 503 saying `panel not built: run make web/build`, the
+target that writes the folder.
 
 Files under `assets/` are named by Vite for their contents, so they are sent
 as immutable, to be kept for a year; everything else, `index.html` above all,
@@ -1542,6 +1545,125 @@ which no browser sends, is a 404, and one with a drive letter or an empty
 segment is never looked up and gets `index.html`, as one of the panel's routes
 may. A release build only looks names up in a table, and the check keeps the
 two answering alike.
+
+## The web panel
+
+`apps/web` is the panel [D-19](#d-19-the-panel-is-built-on-nuxt-ui) chose:
+Vue 3.5 and Nuxt UI 4 on Vite 8, in TypeScript 6 checked by vue-tsc, laid out
+the way Nuxt UI's dashboard-vue template lays out a dashboard, with a page
+per file under `src/pages`. It holds no rules, any more than the server
+does: what a valid task is, or what a project has, is core's to say, and the
+panel asks. So far it is a frame, a sidebar and a header around an empty
+overview; the views come with the snapshot (#72 onward).
+
+### One way out: the transport
+
+Every request the panel makes goes through a `Transport`
+(`src/api/transport.ts`): `query` for a read, `send` for a task to preview or
+run, and `subscribe` for the events #74 will stream. Views get it from
+`useTransport`. The server's fourth endpoint, the transcript, has no call
+yet, because nothing shows it: the transcript drawer (#76) adds one, so that
+it too reaches the server through the transport, and a desktop shell can
+answer it. The HTTP transport (`src/api/http.ts`) is the only file allowed
+`fetch`, `EventSource`, `WebSocket` or `XMLHttpRequest`: an ESLint rule
+refuses them in every other file, and a test runs the rule.
+
+So authentication lives in one place. The transport uses relative URLs, so
+the panel talks to whichever server sent it, on whatever port it took. The
+token travels in the cookie the launch link set, which is `HttpOnly`, so the
+panel's own scripts never hold it. And every request it posts is JSON and
+carries `X-Mindflayer: 1`, a header no form or link can add, as the server
+asks of a change by cookie ([What keeps other pages
+out](#what-keeps-other-pages-out)). A desktop shell, the reason D-17 asks
+for the interface, would answer the same three calls without HTTP, and no
+view would change.
+
+What the server answers lives in Vue Query's cache, which knows when an
+answer is stale and asks again; a refusal is not asked again, since the
+server would only refuse it again. Pinia keeps what only the browser
+decides, such as whether the sidebar is collapsed. A store holding a copy of
+something the server said would be a second answer that cannot tell when it
+has gone wrong.
+
+What the browser decides and a launch should not forget, the colour mode and
+the sidebar's size and collapse, is kept in cookies (`src/preferences.ts`)
+rather than localStorage. localStorage is kept per origin, and each launch
+takes a port of its own, so every one would open on an empty store; a cookie
+is kept per host, whatever the port. Neither choice can be handed a storage,
+since Nuxt UI reads the colour mode through a bare `useDark()` and the
+sidebar through a bare `useStorage`, so the cookies are vueuse's default
+storage (its `getDefaultStorage` handler). The browser sends them to
+whatever listens on 127.0.0.1, so they hold nothing about anybody's work.
+
+### Nothing the CSP refuses
+
+The server's CSP is `default-src 'self'` ([What keeps other pages
+out](#what-keeps-other-pages-out)): nothing from another host, no inline
+script or style, no `data:` URLs. The panel is built to need nothing more,
+though three of its libraries assume otherwise:
+
+- Geist and Geist Mono come from Fontsource, as files of the build.
+- Icons are Lucide's, bundled: Nuxt UI's own and every one a component
+  names. Iconify's online build fetches from its API any icon it was not
+  handed, so `@iconify/vue` resolves to `src/overrides/iconify.ts`, over
+  its offline build, which has no code that could ask. An icon left out of
+  the bundle draws as nothing, which the shell test checks for.
+- Nuxt UI's colours plugin writes the palette's variables into a `<style>`
+  element at run time. The plugin resolves to a stub that does nothing, and
+  `main.css` declares the same variables, from the mapping in `src/theme.ts`:
+  zinc for the neutrals, and violet as the one accent.
+- vueuse adds a `<style>` for every colour mode switch, to stop transitions
+  while the classes change, and runs a switch as the page starts.
+  `src/color-mode.ts` takes over the `updateHTMLAttrs` handler vueuse lets
+  a program replace, and stops them with a class `main.css` holds instead.
+  It also makes dark the default: `index.html` carries the class before any
+  script runs, and dark is stored when this browser has chosen nothing.
+- Vite inlines nothing as a `data:` URL (`assetsInlineLimit: 0`).
+
+A nonce per launch would have let the style elements in, at the price of the
+server rewriting the page each time and the panel handing the nonce to each
+library that writes one. `tests/dist.test.ts` builds the panel as `make
+web/build` does, in a process of its own, and fails on a URL naming another
+host anywhere in the page, the scripts or the styles (namespace names, and
+the links Vue prints beside a production error, aside), a reference not to
+the panel's own files, an inline script or style in the page, a palette
+variable missing, or Iconify's API or the injected palette back in the
+scripts. The shell test fails on any `<style>` element added while the panel
+starts and switches colour mode.
+
+### Out of `make test` until CI has Node
+
+`make web/<target>` reaches the panel's `Makefile` as it reaches any app's,
+but `web` is in `NODE_APPS`, not `APPS`, so `make test` and `make build`
+leave it out until CI installs Node and pnpm (#71). In the aggregates, they
+would fail on every runner for want of pnpm, test-cross's macOS and Windows
+included, and say nothing about the code. The server builds without the
+panel meanwhile, through `allow_missing`.
+
+Node is 24, the LTS line (`.node-version`), and pnpm is pinned through
+`packageManager`; `PNPM` names another way to run it, such as `npx`, where
+corepack is not set up. Every target that runs a tool first installs from
+the lockfile, frozen, when `node_modules` is older than it, `package.json` or
+`pnpm-workspace.yaml`. pnpm holds back any version published less than a
+day ago (`pnpm-workspace.yaml`), and runs no dependency's install script:
+the two that ask, esbuild's and vue-demi's, have nothing to do here. A test
+reads the licence of every package installed, development tools included,
+and fails on one a GPL-3.0-only program could not take in, or one that
+declares none and is not named with what its source says.
+
+Nuxt UI's plugins declare its components and composables for vue-tsc in
+`src/components.d.ts` and `src/auto-imports.d.ts`, committed so a fresh
+clone type-checks. They name each file by its path in pnpm's store, whose
+folder for `@nuxt/ui` carries a hash of its peers, so a bump of one leaves
+every path naming nothing, and each type `any` without a word from vue-tsc.
+A test fails on such a path, and `make web/build` writes the files again; no
+test run writes them, or it would mend a stale one before the test saw it.
+
+`make web/dev` serves the panel from Vite on 127.0.0.1:5173 and proxies
+`/api`, and the launch link's `/?token=`, to `flayer ui --dev --port 7878`
+(#68). Through the proxy the token is traded for its cookie where the panel
+runs. `changeOrigin`, so the Host the server checks is its own address; the
+Origin stays the dev server's, which `--dev` accepts.
 
 ## Which workspace a command uses
 
@@ -2507,6 +2629,17 @@ leak into the lifecycle code. Unblocks #33, #45, #62, #93, #94 and #95.
   when the folder changes would, at the price of rerunning on every build
   while the folder is missing, since cargo counts a missing path as changed.
   #68, which puts the panel into the binaries, settles the build order.
+- **The palette in two places.** `src/theme.ts` names the palette for Nuxt
+  UI, and `main.css` spells it out as the variables Nuxt UI's colours plugin
+  would have written at run time. The build test holds the two to each
+  other. A Vite plugin writing those variables into the stylesheet at build
+  time, from `src/theme.ts`, would leave the palette in one place.
+- **A light panel starts dark.** `index.html` carries `dark`, so the default
+  never flashes light, but a browser that chose light sees one dark frame
+  before the script applies the choice. A script in the page that read it
+  first is what the CSP refuses. The choice is in a cookie the server
+  receives with the page's request, but acting on it would need the server
+  to rewrite the page as it sends it.
 - **The panel's transcript ends with the server.** The TUI prints its
   transcript when it closes; the server keeps the panel's in memory and drops
   it when it stops. Whether `flayer ui` prints it on the way out, as the TUI
@@ -2515,10 +2648,16 @@ leak into the lifecycle code. Unblocks #33, #45, #62, #93, #94 and #95.
   `<style>` element that a library writes into the page at run time is
   blocked, as theming and colour-mode helpers often do; style the panel's
   scripts set through the CSSOM, as Vue's bindings do, is not governed by
-  it. If #69 finds the panel needs one, the server would issue a nonce with
-  each launch, add it to `style-src`, and write it into `index.html` where
-  Vite's `html.cspNonce` leaves its placeholder. `script-src` never gets
-  `'unsafe-inline'` either way.
+  it. The panel needs no nonce so far: Nuxt UI's palette is declared in the
+  stylesheet and the colour mode switches by class ([Nothing the CSP
+  refuses](#nothing-the-csp-refuses)). The one library left that writes a
+  `<style>` is vaul-vue, under Nuxt UI's `UDrawer`, when it loads, with the
+  nonce of a `meta[property=csp-nonce]` if the page has one; nothing loads
+  it yet, since the sidebar opens over a narrow screen as a slideover. A view
+  that wants a drawer needs vaul's styles in the stylesheet, or a nonce: the
+  server would issue one with each launch, add it to `style-src`, and write
+  it into `index.html` where Vite's `html.cspNonce` leaves its placeholder.
+  `script-src` never gets `'unsafe-inline'` either way.
 - **A hostile server on loopback.** The cookie reaches every port of
   127.0.0.1, so a server there that the browser visits while the panel runs
   receives the token and can use it as Bearer
