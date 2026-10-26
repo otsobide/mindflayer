@@ -133,7 +133,7 @@ fn a_workspace_can_be_told_where_to_keep_them_as_long_as_it_is_inside() {
 }
 
 #[test]
-fn a_workspace_directory_where_gathering_writes_is_refused_before_anything_is_made() {
+fn a_workspace_directory_overlapping_what_is_reserved_for_gathering_is_refused() {
     // The shelf of either kind, somewhere inside it, the cache, and
     // `.mindflayer` itself, which holds both. Case aside: on macOS and
     // Windows `.Mindflayer/Skills` is the shelf.

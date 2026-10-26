@@ -274,11 +274,19 @@ fn a_workspace_cannot_keep_its_own_on_the_shelf() {
     let dir = TempDir::new().unwrap();
 
     let failure = flayer(dir.path(), &["init", "--skills", ".mindflayer/skills"]).unwrap_err();
+    // A folder holding the shelf overlaps it too, which the words say rather
+    // than leaving a folder nobody typed to explain itself.
+    let holding = flayer(dir.path(), &["init", "--rules", ".mindflayer"]).unwrap_err();
 
     assert_eq!(
         failure.error.to_string(),
         ".mindflayer/skills: cannot hold the workspace's skills, \
-         because gathering writes to .mindflayer/skills"
+         because it overlaps .mindflayer/skills, which is reserved for gathering"
+    );
+    assert_eq!(
+        holding.error.to_string(),
+        ".mindflayer: cannot hold the workspace's rules, \
+         because it overlaps .mindflayer/skills, which is reserved for gathering"
     );
     assert!(!dir.path().join(FLAYER_DIR).exists());
 }

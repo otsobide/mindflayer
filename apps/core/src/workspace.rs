@@ -423,9 +423,9 @@ impl FlayerWorkspace {
     /// first artifact added makes its folder. As with a project, a second run
     /// changes nothing, `directories` included.
     ///
-    /// A directory outside the workspace, or one sharing a folder with the
-    /// shelf or the cache, which gathering writes, is refused before anything
-    /// is made.
+    /// A directory outside the workspace, or one overlapping the shelf or the
+    /// cache, which are reserved for gathering, is refused before anything is
+    /// made.
     pub fn init_with(
         root: impl AsRef<Path>,
         directories: &Directories,
@@ -1170,7 +1170,10 @@ pub enum WorkspaceError {
     OutsideProject { path: PathBuf, kind: Kind },
     #[error("{path}: cannot hold the workspace's {kind}s, because it is not inside the workspace")]
     OutsideWorkspace { path: PathBuf, kind: Kind },
-    #[error("{path}: cannot hold the workspace's {kind}s, because gathering writes to {gathered}")]
+    #[error(
+        "{path}: cannot hold the workspace's {kind}s, \
+         because it overlaps {gathered}, which is reserved for gathering"
+    )]
     OverlapsGathered {
         path: PathBuf,
         kind: Kind,
@@ -1459,18 +1462,24 @@ fn stays_inside(directory: &Path) -> bool {
     )
 }
 
-/// Where gathering writes that a workspace's own `directory` would share, if
-/// anywhere: the shelf, a folder per kind ([`FlayerWorkspace::gathered_dir`]),
-/// or the cache of clones ([`FlayerWorkspace::cache_dir`]), as a route from
-/// the workspace's root.
+/// The folder reserved for gathering that a workspace's own `directory` would
+/// overlap, if any: the shelf, a folder per kind
+/// ([`FlayerWorkspace::gathered_dir`]), or the cache of clones
+/// ([`FlayerWorkspace::cache_dir`]), as a route from the workspace's root.
 ///
 /// Those folders are gathering's alone. It replaces and deletes what is in
 /// them by names of its own, so an artifact somebody wrote there could go with
 /// the next gather, and a listing could no longer tell what was gathered from
-/// what the workspace keeps. Sharing counts either way round: `.mindflayer`
-/// holds both, and a rules folder there would read every markdown file in
-/// every clone as one of the workspace's rules. The rest of `.mindflayer` is
-/// not gathering's, so a directory there is allowed.
+/// what the workspace keeps. Overlapping counts either way round:
+/// `.mindflayer` holds both, and a rules folder there would read every
+/// markdown file in every clone as one of the workspace's rules. The rest of
+/// `.mindflayer` is not gathering's, so a directory there is allowed.
+///
+/// Every kind's shelf is reserved, not only a gatherable kind's, rather than
+/// matched on the kind as `gather` is: scrubbing a source already deletes its
+/// folder from each one (`gather::remove_folders_of`), and a kind made
+/// gatherable later has to find its shelf free, not holding a workspace's
+/// own.
 ///
 /// Compared a component at a time, ignoring ASCII case: where the filesystem
 /// does, as macOS's and Windows' do by default, `.Mindflayer/Skills` is the
