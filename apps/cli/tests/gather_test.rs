@@ -372,11 +372,14 @@ fn a_token_an_older_build_stored_is_never_listed_and_a_command_that_writes_takes
         ]
     );
     assert!(!kept_by(dir.path()).contains("ghp_t0ken"));
+    // Compared word by word: the second source is a temp dir, whose length
+    // (long on macOS and Windows) sets how wide the URL column is padded.
     let listed = flayer(dir.path(), &["gather", "list"]).unwrap();
     assert!(
-        listed
-            .stdout
-            .contains("deploy  https://example.com/acme/skills  Ship it\n"),
+        listed.stdout.lines().any(|line| {
+            line.split_whitespace().collect::<Vec<_>>()
+                == ["deploy", "https://example.com/acme/skills", "Ship", "it"]
+        }),
         "{}",
         listed.stdout
     );
