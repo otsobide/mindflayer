@@ -639,6 +639,17 @@ Without that, an install screen is a thing that can delete a colleague's work
 because a checkbox looked untidy. The rule costs one query and removes the
 whole class.
 
+The record names the project by its route from the workspace, taken to where
+the workspace's own entry for it leads (`FlayerWorkspace::spelling_of`)
+rather than to however the command spelled the project. `mind` spells its
+project the way the operating system reports the directory it runs in,
+through no symlink, while a workspace named with `-W` or activated keeps the
+spelling it was given. The route between those two is not the entry's, so a
+record written under it would be one `flayer -p` never finds: a copy nobody
+may update, or, the other way round, a record that outlives its copy. A
+spelling that already matches the entry as written is kept, so no record
+written before is named differently now.
+
 A project has one directory per artifact name, so two shelf entries offering
 `commit-style` cannot both be installed. The screen settles it by unticking the
 other rather than letting both apply and the second win — a conflict resolved
@@ -1822,6 +1833,15 @@ leak into the lifecycle code. Unblocks #33, #45, #62, #93, #94 and #95.
   is not the one on screen runs `mind -W . -C <entry>`, which consults the
   one on screen (see [the TUI looks where it was
   told](#the-tui-looks-where-it-was-told)).
+- **A project stored by its absolute path.** The ledger names a project by
+  the route from the workspace's root to where its entry leads, whatever the
+  command called the project. An entry `link` stored absolute, because no
+  route from the root reached it, still gives a route that depends on how the
+  root itself was spelled: `/tmp/hub` and `/private/tmp/hub` climb a
+  different number of `..`s to it. `-C` could always spell a root two ways;
+  `-W` and an activation make it likelier. Keying such a project by its entry
+  as stored would settle it, at the price of re-keying the records already
+  written under the route.
 - **Writes that refuse after making the home workspace.** A command that
   writes makes the default workspace before it finds out whether there is
   anything to do in it. Outside every workspace, `mind install` and `mind
