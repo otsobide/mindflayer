@@ -703,6 +703,53 @@ fn a_change_that_drops_a_record_hands_back_what_scrubbing_the_ledger_took_out() 
 }
 
 #[test]
+fn an_edit_that_changes_nothing_leaves_the_ledger_unscrubbed() {
+    let (_dir, workspace, project, ledger) = installed(&["deploy"]);
+    tainted(&workspace, &ledger);
+    let edit = lifecycle::start_edit(&find(&project, "deploy").unwrap());
+
+    let edited = lifecycle::finish_edit(Some(&workspace), &project, edit);
+
+    // Nothing changed, so there was no record to drop and no reason to write.
+    assert!(edited.scrub.is_empty(), "{:?}", edited.scrub);
+    assert_eq!(ledger.tainted_sources().unwrap().len(), 1);
+}
+
+// Unix only: what listing a file as a directory fails with is the platform's
+// to say, and only there is it sure not to read as an absence.
+#[cfg(unix)]
+#[test]
+fn a_rename_tells_once_of_a_clone_neither_of_its_scrubs_could_rewrite() {
+    let (_dir, workspace, project, ledger) = installed(&["deploy"]);
+    let clone = tainted(&workspace, &ledger);
+    // A file where the scrub lists the reflogs: the clone keeps its
+    // credential, so its source keeps its URL for every scrub to try again.
+    fs::create_dir_all(clone.join(".git")).unwrap();
+    fs::write(clone.join(".git").join("logs"), "").unwrap();
+
+    let renamed = lifecycle::rename(
+        Some(&workspace),
+        &project,
+        &find(&project, "deploy").unwrap(),
+        "ship",
+    )
+    .unwrap();
+
+    assert_eq!(renamed.copy.unwrap(), Record::Dropped);
+    // The ledger was opened once for each name, and both scrubs failed on the
+    // same clone.
+    let failed: Vec<&str> = renamed
+        .scrub
+        .failures
+        .iter()
+        .map(|failure| failure.url.as_str())
+        .collect();
+    assert_eq!(failed, ["https://example.com/acme/skills"]);
+    assert!(renamed.scrub.sources.is_empty());
+    assert_eq!(ledger.tainted_sources().unwrap().len(), 1);
+}
+
+#[test]
 fn changing_something_mindflayer_did_not_install_touches_no_record() {
     let (_dir, workspace, project, ledger) = installed(&["deploy"]);
     create(&workspace.own(), Kind::Skill, "notes", "The workspace's").unwrap();
