@@ -209,8 +209,38 @@ impl Ledger {
             path: path.clone(),
             source,
         })?;
+        // A connection that finds another one writing waits for it, as long
+        // as a writer waits for the workspace, rather than failing with
+        // "database is locked": the CLI, the TUI and the server can each have
+        // the ledger open. rusqlite waits five seconds of its own accord, but
+        // as a library's default; set here, the wait is Mindflayer's.
+        connection
+            .busy_timeout(crate::lock::WAIT)
+            .map_err(|source| LedgerError::Open {
+                path: path.clone(),
+                source,
+            })?;
         let ledger = Self { connection, path };
         ledger.migrate()?;
+        // And write-ahead logging, so that readers and a writer do not wait
+        // for each other at all: a reader goes on reading the ledger as the
+        // last write left it while the next is made. It needs every process
+        // using the file on one machine, sharing memory through
+        // `mindflayer.db-shm`, so a workspace on a network filesystem used
+        // from two machines at once is beyond it, as it is beyond the
+        // workspace lock.
+        //
+        // Only once `migrate` has accepted the version: the mode is kept in
+        // the file's header, so switching first would change a ledger a newer
+        // build wrote before refusing it. And never a reason to refuse the
+        // ledger, since every mode keeps it whole: a filesystem that cannot
+        // keep the log stays in the journal it had, where readers and writers
+        // take turns instead, and a switch that finds another connection
+        // writing fails at once, without the busy wait, because waiting there
+        // could deadlock with it. That one is left to the next open.
+        let _ = ledger
+            .connection
+            .pragma_update_and_check(None, "journal_mode", "wal", |_| Ok(()));
         Ok(ledger)
     }
 
@@ -238,9 +268,54 @@ impl Ledger {
                 path: path.clone(),
                 source,
             })?;
+        // Waiting for a writer as `open` does, but in whatever journal the
+        // file keeps: changing it is a write, and a read makes none but a
+        // migration.
+        connection
+            .busy_timeout(crate::lock::WAIT)
+            .map_err(|source| LedgerError::Open {
+                path: path.clone(),
+                source,
+            })?;
         let ledger = Self { connection, path };
-        ledger.migrate()?;
-        Ok(Some(ledger))
+        match ledger.migrate() {
+            Ok(()) => Ok(Some(ledger)),
+            Err(error) if cannot_make_the_log(&ledger.path, &error) => {
+                Self::open_immutable(&ledger.path).map(Some).ok_or(error)
+            }
+            Err(error) => Err(error),
+        }
+    }
+
+    /// A ledger that keeps a write-ahead log, read where the log's files
+    /// cannot be made, as a file nobody is changing.
+    ///
+    /// SQLite makes `mindflayer.db-wal` and `mindflayer.db-shm` to read a
+    /// ledger that keeps its log, and takes them away when the last
+    /// connection closes. So in a folder this process may read and not write
+    /// — a sandboxed agent's view of the workspace, a read-only mount,
+    /// somebody else's workspace — reading fails though nothing is to be
+    /// written, where the journal the ledger had before let it be read.
+    /// Called only when there is no log, which is when everything is in the
+    /// file itself, and SQLite's `immutable` then reads it without the log or
+    /// any lock. What somebody who can write there writes goes into a log
+    /// this does not see, so this reads the ledger as their last checkpoint
+    /// left it; a checkpoint made between two of its reads is the one thing
+    /// that could change the file under it.
+    ///
+    /// `None` when it cannot be opened that way either, or migrating it would
+    /// need a write, and the error that sent it here is the one to tell.
+    fn open_immutable(path: &Path) -> Option<Self> {
+        let flags = OpenFlags::SQLITE_OPEN_READ_ONLY
+            | OpenFlags::SQLITE_OPEN_URI
+            | OpenFlags::SQLITE_OPEN_NO_MUTEX;
+        let connection = Connection::open_with_flags(immutable_uri(path)?, flags).ok()?;
+        let ledger = Self {
+            connection,
+            path: path.to_path_buf(),
+        };
+        ledger.migrate().ok()?;
+        Some(ledger)
     }
 
     /// An in-memory ledger, for tests and for anything that must not persist.
@@ -518,6 +593,21 @@ impl Ledger {
             )
             .map(|_| ())
             .map_err(|source| self.failed("updating a source", source))
+    }
+
+    /// Forget a source, and with it what it brought; an installation from it
+    /// keeps its `origin` but no longer points at it (see the schema's notes
+    /// on what a forgotten source takes with it). Whether there was one to
+    /// forget.
+    ///
+    /// For a gather that registered a source and then was cancelled, which
+    /// leaves the ledger as it found it: a source nothing came from would
+    /// otherwise hold on to its folder name. Its files are the caller's.
+    pub(crate) fn forget_source(&self, id: i64) -> Result<bool, LedgerError> {
+        self.connection
+            .execute("DELETE FROM sources WHERE id = ?1", [id])
+            .map(|deleted| deleted > 0)
+            .map_err(|source| self.failed("forgetting a source", source))
     }
 
     /// Record one gathered artifact, replacing what that source held under the
@@ -1134,6 +1224,52 @@ fn create_like(path: &Path, like: &Path) -> Result<(), io::Error> {
 }
 
 /// The rollback journal SQLite keeps beside a database while writing it.
+/// Whether `error` is SQLite failing to make the files a write-ahead log
+/// needs beside the ledger at `path`, with no log there to read.
+fn cannot_make_the_log(path: &Path, error: &LedgerError) -> bool {
+    let LedgerError::Query {
+        source: rusqlite::Error::SqliteFailure(failure, _),
+        ..
+    } = error
+    else {
+        return false;
+    };
+    let mut log = path.file_name().unwrap_or_default().to_os_string();
+    log.push("-wal");
+    matches!(
+        failure.code,
+        rusqlite::ErrorCode::ReadOnly | rusqlite::ErrorCode::CannotOpen
+    ) && !path.with_file_name(log).exists()
+}
+
+/// `path` as the URI SQLite opens as [`immutable`](Ledger::open_immutable):
+/// `None` for one that is not UTF-8, which a URI cannot spell.
+///
+/// Only what SQLite reads as part of the URI's syntax is escaped — `%`, and
+/// `?` and `#`, which would end the path — since it takes everything else
+/// as it is. An absolute path goes after an empty authority, `file:///`, so
+/// one that starts with two slashes is not read as naming a host; on Windows
+/// a slash goes before it too (`file:///C:/...`), which SQLite drops again.
+fn immutable_uri(path: &Path) -> Option<String> {
+    let mut uri = String::from("file:");
+    if path.is_absolute() {
+        uri.push_str("//");
+        if cfg!(windows) {
+            uri.push('/');
+        }
+    }
+    for character in path.to_str()?.chars() {
+        match character {
+            '%' => uri.push_str("%25"),
+            '?' => uri.push_str("%3F"),
+            '#' => uri.push_str("%23"),
+            other => uri.push(other),
+        }
+    }
+    uri.push_str("?immutable=1");
+    Some(uri)
+}
+
 fn journal_of(path: &Path) -> PathBuf {
     let mut name = path.file_name().unwrap_or_default().to_os_string();
     name.push("-journal");
@@ -1208,6 +1344,10 @@ fn now() -> i64 {
 /// Why the ledger could not be opened, read or written.
 #[derive(Debug, Error)]
 pub enum LedgerError {
+    /// The workspace could not be had to scrub clones in, opening its ledger
+    /// to write ([`crate::workspace::FlayerWorkspace::ledger_to_write`]).
+    #[error(transparent)]
+    Lock(#[from] crate::lock::LockError),
     #[error("{path}: cannot be created: {source}")]
     Create {
         path: PathBuf,
@@ -1244,6 +1384,7 @@ impl LedgerError {
     /// The file the failure is about.
     pub fn path(&self) -> &Path {
         match self {
+            LedgerError::Lock(error) => error.path(),
             LedgerError::Create { path, .. }
             | LedgerError::Open { path, .. }
             | LedgerError::Version { path, .. }

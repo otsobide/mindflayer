@@ -1,0 +1,49 @@
+{
+  "name": "mindflayer-web",
+  "version": "0.1.0",
+  "private": true,
+  "description": "The web panel the local server embeds",
+  "license": "GPL-3.0-only",
+  "type": "module",
+  "packageManager": "pnpm@12.15.0",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "dev": "vite",
+    "build": "vue-tsc --build && vite build",
+    "preview": "vite preview",
+    "test": "vitest run",
+    "lint": "eslint .",
+    "fmt": "eslint . --fix",
+    "typecheck": "vue-tsc --build"
+  },
+  "dependencies": {
+    "@fontsource-variable/geist": "^5.3.0",
+    "@fontsource-variable/geist-mono": "^5.3.0",
+    "@iconify-json/lucide": "^1.2.147",
+    "@iconify/vue": "^5.0.4",
+    "@nuxt/ui": "^4.12.0",
+    "@tanstack/vue-query": "^5.104.5",
+    "@vueuse/core": "^14.4.0",
+    "pinia": "^4.1.0",
+    "tailwindcss": "^4.3.3",
+    "vue": "^3.5.44",
+    "vue-router": "^5.4.0"
+  },
+  "devDependencies": {
+    "@stylistic/eslint-plugin": "^5.10.0",
+    "@types/node": "^24.19.2",
+    "@vitejs/plugin-vue": "^6.0.10",
+    "@vue/eslint-config-typescript": "^14.9.0",
+    "@vue/test-utils": "^2.5.1",
+    "@vue/tsconfig": "^0.9.1",
+    "eslint": "^10.13.0",
+    "eslint-plugin-vue": "^10.11.1",
+    "happy-dom": "^21.0.4",
+    "typescript": "~6.0.3",
+    "vite": "^8.3.5",
+    "vitest": "^5.0.5",
+    "vue-tsc": "^3.3.13"
+  }
+}

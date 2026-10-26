@@ -2,26 +2,54 @@
 
 ## The shape of the tree
 
-Every unit of the product is an app under `apps/`, with its own `Cargo.toml`
-and its own `Makefile`. The root `Makefile` delegates (`make <app>/<target>`)
-and CI invokes those targets, so adding a front end is adding a directory, a
-line in `APPS` and the workspace `members`, and its test and build jobs in
-CI — never reshaping the tree.
+Every unit of the product is an app under `apps/`, with its own manifest
+(`Cargo.toml`, or `package.json` for the panel) and its own `Makefile`. The
+root `Makefile` delegates (`make <app>/<target>`) and CI invokes those
+targets, so adding a front end is adding a directory, a line in `APPS` and the
+workspace `members`, and its test and build jobs in CI — never reshaping the
+tree.
 
 ```
 apps/core    mindflayer-core   — the engine
 apps/cli     mindflayer-cli    — the `mind` and `flayer` binaries
 apps/server  mindflayer-server — the local server behind the web panel
+apps/web     mindflayer-web    — the web panel, in Vue
 ```
 
-The layout exists because there would be more than two, and the server is the
-first of the apps [D-17](#d-17-the-next-front-end-is-a-local-web-panel) adds;
-the web panel it serves comes next, as `apps/web`. Both sit beside the CLI
-rather than around it.
+The layout exists because there would be more than two, and the server and
+the panel are the apps [D-17](#d-17-the-next-front-end-is-a-local-web-panel)
+adds. Both sit beside the CLI rather than around it. The panel is in
+`NODE_APPS` rather than `APPS` for now (see [the web panel](#the-web-panel)).
 
 `scripts/agent-probe/` is not an app, and nothing builds or tests it. It is
 the probe behind [docs/agents.md](agents.md), run by hand against the real
 agents with the operator's own login, which is why CI never runs it.
+
+### The examples are a workspace
+
+`examples/` sits beside `apps/` and is content, not an app: a flayer
+workspace (`examples/.mindflayer/flayer.toml`) holding two skills and two
+rules of its own, so there is something to install while gathering is
+paused. A workspace rather than files the binaries embed or `flayer init`
+copies in, because [loading](#loading-a-third-place-read-live) already offers
+one's own skills to any other, read live from the clone: the examples take
+the path a team's workspace takes, and need no command of their own.
+
+Its `[directories]` are spelled out, so it reads the same whatever a new
+workspace defaults to
+([D-05](#d-05-a-workspaces-library-lives-in-mindflayer)). They sit beside the
+marker rather than in `.mindflayer/library`, because the examples are meant
+to be read where the repository is browsed. No agent working on this
+repository reads them there: each looks for skills and rules in a folder of
+its own, such as `.claude` or `.agents`, not in one called `skills` or
+`rules`.
+
+`apps/cli/tests/examples_test.rs` uses the folder where it is rather than a
+copy, since that folder is what a person loads. It holds every example to
+`validate` with neither a problem nor a warning, installs `commit-style` with
+the reference it carries, checks that nothing it ran wrote into the folder,
+and finds the README's walk-through in the output of the commands it shows.
+An example whose summary changes changes the README with it.
 
 ## Where the line between core and a front end falls
 
@@ -50,7 +78,8 @@ TUI](#the-tui).
 The local server is a crate of its own, and it holds no rules either: it
 carries JSON between the browser and whichever front end implements its
 `Backend`, and depends on neither core nor the CLI. See [the local
-server](#the-local-server).
+server](#the-local-server). Nor does the panel it serves: it asks through the
+server and draws the answers. See [the web panel](#the-web-panel).
 
 The line is there so that when a second front end arrives, it cannot disagree
 with the first about what a valid skill is. Every rule that could drift lives
@@ -71,7 +100,8 @@ family of commands under `commands/`, and what a command produced, with the
 helpers every report is laid out with, in `render.rs`. `CliError` has
 `error.rs` to itself, `homes.rs` decides where the default workspace's home and
 each agent's own folder are, and gathers what `-W` and `$MINDFLAYER_WORKSPACE`
-say (`Lookup`), and `lib.rs` only says what is public.
+say (`Lookup`), `progress.rs` says what a gather's steps read as and draws
+them on stderr, and `lib.rs` only says what is public.
 
 The split is by family. One file holding the parser, every command and the
 rendering was where every change to a command met every other, so pieces of
@@ -472,7 +502,10 @@ why `toml_edit` is a dependency: `flayer link` rewrites the one `projects`
 array and leaves every other byte alone. Reading stays serde's job. The two
 halves agree because an edit re-reads the file afterwards rather than trusting
 what it believes it wrote, and the write itself goes through a temporary file
-and a rename, so a crash leaves either the old config or the new one.
+and a rename, so a crash leaves either the old config or the new one. The edit
+holds the workspace's lock from its read to that re-read, so a second writer
+edits what the first one wrote ([Writers at the same
+time](#writers-at-the-same-time)).
 
 ### Formats are versioned
 
@@ -555,7 +588,9 @@ worth removing is one whose directory has moved away, and that cannot be opened
 as a project any more.
 
 Rewrites go through a temporary file and a rename, so a crash leaves either the
-old config or the new one. The original's permissions are copied onto the
+old config or the new one. The temporary is named for the run that writes it,
+never shared with another writer ([Writers at the same
+time](#writers-at-the-same-time)). The original's permissions are copied onto the
 temporary first, and a symlinked config is followed to the file it names —
 otherwise an edit would quietly widen a chmodded config or detach a shared one.
 A hard link is the case this cannot preserve: a rename breaks it, and keeping
@@ -570,6 +605,7 @@ the workspace and belonging to no project yet.
 .mindflayer/
   flayer.toml
   mindflayer.db
+  lock                       held by whoever is writing
   cache/<source>/            the clone
   skills/<source>/<name>/    what was taken out of it
 ```
@@ -617,6 +653,62 @@ nothing. One that reads but breaks a rule is taken, with a warning for each
 problem ([Strict when writing, lenient when
 reading](#strict-when-writing-lenient-when-reading)).
 
+### Following a gather, and stopping it
+
+A gather is the network, so it can take long enough that somebody wants to
+know how it is going, and to change their mind. A `gather::Request` carries a
+`Watch`: a callback the gather tells each `Progress` to, and a flag that
+cancels it. Both are core's own types. `gix` has a progress tree and an
+interrupt flag of its own, and handing those to the front ends would tie each
+of them, the server that will stream progress (#112) included, to gix's
+version and to the names it gives its steps.
+
+The steps are connecting, receiving objects, resolving deltas, checking out
+files, reading the folders that hold a manifest, `n` of `m`, and placing what
+was read on the shelf, `n` of `m`. The counts during the fetch are gix's: the
+clone hands it a progress tree and reads it from a thread of its own ten times
+a second, because gix counts most of its work on shared atomics, from threads
+of its own, without telling the progress anything. The counts are picked out
+by the identifiers gix gives them, not the names it shows, which it is free to
+reword. That thread is joined before the clone says its next step, so a front
+end never hears a count after the step that follows it. The callback is a
+plain `Fn` that is `Send` and `Sync`, rather than a channel, so each front end
+chooses how the news travels: the CLI writes a line, the TUI sends it to the
+thread that draws, and a server can stream it.
+
+The flag is gix's interrupt, so a cancel stops the fetch or the checkout where
+gix checks, and the clone it had begun is removed. gix does not check it while
+it connects, only once the pack is coming, so a cancel while connecting waits
+for the connection to be made or to fail: as long as a server takes to answer,
+or a prompt to be answered. One made while the gather waits for [the
+workspace's lock](#writers-at-the-same-time) waits too, since nothing checks
+the flag until the lock is held: as long as the writer holding it takes, and a
+wait that runs out ends the gather as busy rather than cancelled, unlogged all
+the same. The harvest checks it once more after every folder
+is read and before anything is placed, which is why it reads them all first
+rather than reading and placing each in turn. That is the last moment a cancel
+is honoured: past it the shelf and the ledger change, and a gather stopped
+halfway through that would leave them neither as they were nor as the source
+has them. A cancel that comes later is too late, and the gather finishes.
+`Progress::cancellable` says which steps are which, so a front end that offers
+a cancel stops offering it when the gather stops honouring it, rather than
+knowing where the check is. Cancelled in time, the shelf and the ledger are as
+they were: the gather is not logged, and a source it registered is forgotten
+again. It is registered before the fetch because the clone needs the folder
+name registering gives it; holding the registration in a transaction until the
+gather ends was the other way, and is rejected, because every other write to
+the ledger would wait as long as the network does. The clone is not part of the
+promise: every gather re-makes it, so a cancelled one can leave a known source
+with the new clone, or with none.
+
+`flayer gather` on a terminal draws each step over the last on one line of
+stderr, and wipes it before the report. Piped or captured it draws nothing,
+so what it prints there is what it always printed. The binaries run every
+line with that line's watch (`run_watched`, `run_flayer_cli_watched`), and
+`run` and `run_flayer_cli`, which the tests call, with one nobody follows. The
+TUI runs a gather on a thread of its own, and `esc` cancels it ([A gather runs
+apart](#a-gather-runs-apart)).
+
 ### Why `gix` rather than running `git`
 
 Nothing depends on a `git` being installed, or on which `git` is first on the
@@ -628,7 +720,7 @@ Half of it is solved: a fetch **never prompts** for a credential. When a server
 asks who is fetching, `gix`'s own answer runs the credential helpers git config
 names and, when none of them has a credential, asks a person: an askpass
 program, then the terminal. The TUI owns the terminal while a gather runs, so
-that prompt is a screen that stops answering, and the server that comes next
+that prompt is drawn over, its keys raced for, and the server that comes next
 has no terminal at all. So every connection `gix` lets a clone configure is
 given a credentials callback (`gather::credentials`) that runs the same helper
 cascade with the prompt and askpass turned off. A credential no helper has is
@@ -1213,9 +1305,12 @@ running, and `l` is `mind link`, after which the screen is the workspace's.
 A key that asks for work produces a `Task`, and `Task::commands` turns it into
 the words a person would type — `flayer link beta`, `mind -C beta add skill
 deploy 'Ship it'`. Those words are parsed by `Cli` and `FlayerCli`, the parsers
-the binaries use, and run through `run` and `run_flayer_cli`, the functions the
-binaries call. The TUI has no code path of its own for linking, adding or
-gathering, and it cannot grow one, because there is nowhere in it to put one.
+the binaries use, and run through `run_with` and `run_flayer_with`, what the
+binaries' `run_watched` and `run_flayer_cli_watched` call once they have read
+where to look for a workspace (`run` and `run_flayer_cli` are the same with a
+watch nobody follows). The TUI has no code path of its own for linking, adding
+or gathering, and it cannot grow one, because there is nowhere in it to put
+one.
 
 That is what turns "every feature has a command and a place in the TUI" from a
 promise into a property. A feature is written once, as a command, and the TUI
@@ -1257,11 +1352,12 @@ not a command, because it changes nothing.
   to; like `state.rs`, it touches nothing.
 - `tui.rs` — the loop, reading the disk into what the screen shows, and running
   tasks. `step` is everything the loop does between a key and the next frame,
-  and it is public so a test can do exactly that without a terminal.
+  and `settle` what it does before each frame while a task runs apart; both
+  are public so a test can do exactly that without a terminal.
 
 The loop draws a box saying what is running before it runs it, because a
-gather is the network and a frozen screen reads as a hung one. Keys pressed
-while it ran are dropped: they were aimed at a screen that has since changed.
+frozen screen reads as a hung one. Keys pressed while it ran are dropped: they
+were aimed at a screen that has since changed.
 
 `mind edit` is the one command that needs the terminal itself, because an
 editor draws a screen of its own. For it the loop steps aside — raw mode off,
@@ -1269,6 +1365,42 @@ back to the normal screen — runs the command as it runs any other, and builds
 its own screen again from scratch when the editor closes. The task says so
 (`takes_terminal`), so the loop does not have to know which commands are
 editors.
+
+### A gather runs apart
+
+A gather is the network, and the one task that runs apart
+(`Task::runs_apart`). `step` starts its lines on a thread of their own and
+returns at once, with a [watch](#following-a-gather-and-stopping-it) whose
+steps come back over a channel. Before each frame the loop calls `settle`,
+which takes in the last step and, once the task is over, shows what came of it
+exactly as `step` does for a task that ran in place. Everything else is the
+local disk, over before anybody could read a count, and stays on the loop's
+thread rather than paying for one of its own.
+
+The box shows the command, the last step and that `esc` cancels. The screen is
+the task's until it is over, so every other key is ignored, as one pressed
+while a task ran in place is dropped. `esc` cancels the watch: the gather stops
+before it places anything, and the form it came from says so, as for any gather
+that did not get as far as a report. Once the step is placing, which is no
+longer `cancellable`, the box says a cancel is too late instead, and the gather
+finishes with its report. Leaving cancels it too, and `wait` holds the screen
+until it has stopped, so what it did reaches the transcript and nothing is half
+done when the process ends. A gather still connecting takes a cancel only once
+it is connected, so `esc` there, or leaving, waits as long as the network does;
+and since the loop goes on reading the terminal, a question ssh asks there is
+raced for its answer, as the [open questions](#open-questions) say under
+Private repositories. The lines are still the task's command lines, as
+`App::lines` gives every task (`flayer init` first on the [default
+workspace](#the-default-workspace) before it is made), parsed and run by
+`execute`: the thread changes where they run, not what they are.
+
+They go through a `Runner` on the way, which is the real parsers and commands
+unless `App::runner` holds a stand-in. A gather from a repository on the local
+disk is over before a frame could show it, so the test of the progress and the
+cancel stands in a gather that goes on only when the test says so, and drives
+it through `step`, `settle` and the keys as the loop would. The stand-in is
+handed the words all the same, so even then there is nothing the screen runs
+that is not a command line.
 
 ### What it asks before it writes
 
@@ -1358,9 +1490,12 @@ waiting on the same thread.
   first in, first out, so tasks run in the order they arrived, which a lock
   does not promise whoever waits on it. One thread means two writes never run
   side by side, which is the world the commands underneath were written for:
-  a CLI, where one command at a time is all there is. And a long run holds
-  that thread rather than one of the pool's, so the panel goes on reading
-  while it waits.
+  a CLI, where one command at a time is all there is. It orders the
+  panel's own writes and nobody else's: beside a terminal or a TUI writing
+  to the same workspace, the two take turns through the workspace's lock
+  ([Writers at the same time](#writers-at-the-same-time)). And a long run
+  holds that thread rather than one of the pool's, so the panel goes on
+  reading while it waits.
 
 A run's lines are worked out on the writer thread just before it, against the
 disk the run itself meets after every write before it, and the entry is in the
@@ -1525,8 +1660,8 @@ The panel is embedded with rust-embed from `apps/web/dist`, spelled
 `$CARGO_MANIFEST_DIR/../web/dist`, so the binary stays the one thing to
 install. `allow_missing` lets the crate build, and its tests pass, on a
 machine without Node where nothing built the panel; the server then answers
-every page with a 503 saying `panel not built: run make web/build`. #69 brings
-`apps/web` and that target.
+every page with a 503 saying `panel not built: run make web/build`, the
+target that writes the folder.
 
 Files under `assets/` are named by Vite for their contents, so they are sent
 as immutable, to be kept for a year; everything else, `index.html` above all,
@@ -1546,6 +1681,125 @@ which no browser sends, is a 404, and one with a drive letter or an empty
 segment is never looked up and gets `index.html`, as one of the panel's routes
 may. A release build only looks names up in a table, and the check keeps the
 two answering alike.
+
+## The web panel
+
+`apps/web` is the panel [D-19](#d-19-the-panel-is-built-on-nuxt-ui) chose:
+Vue 3.5 and Nuxt UI 4 on Vite 8, in TypeScript 6 checked by vue-tsc, laid out
+the way Nuxt UI's dashboard-vue template lays out a dashboard, with a page
+per file under `src/pages`. It holds no rules, any more than the server
+does: what a valid task is, or what a project has, is core's to say, and the
+panel asks. So far it is a frame, a sidebar and a header around an empty
+overview; the views come with the snapshot (#72 onward).
+
+### One way out: the transport
+
+Every request the panel makes goes through a `Transport`
+(`src/api/transport.ts`): `query` for a read, `send` for a task to preview or
+run, and `subscribe` for the events #74 will stream. Views get it from
+`useTransport`. The server's fourth endpoint, the transcript, has no call
+yet, because nothing shows it: the transcript drawer (#76) adds one, so that
+it too reaches the server through the transport, and a desktop shell can
+answer it. The HTTP transport (`src/api/http.ts`) is the only file allowed
+`fetch`, `EventSource`, `WebSocket` or `XMLHttpRequest`: an ESLint rule
+refuses them in every other file, and a test runs the rule.
+
+So authentication lives in one place. The transport uses relative URLs, so
+the panel talks to whichever server sent it, on whatever port it took. The
+token travels in the cookie the launch link set, which is `HttpOnly`, so the
+panel's own scripts never hold it. And every request it posts is JSON and
+carries `X-Mindflayer: 1`, a header no form or link can add, as the server
+asks of a change by cookie ([What keeps other pages
+out](#what-keeps-other-pages-out)). A desktop shell, the reason D-17 asks
+for the interface, would answer the same three calls without HTTP, and no
+view would change.
+
+What the server answers lives in Vue Query's cache, which knows when an
+answer is stale and asks again; a refusal is not asked again, since the
+server would only refuse it again. Pinia keeps what only the browser
+decides, such as whether the sidebar is collapsed. A store holding a copy of
+something the server said would be a second answer that cannot tell when it
+has gone wrong.
+
+What the browser decides and a launch should not forget, the colour mode and
+the sidebar's size and collapse, is kept in cookies (`src/preferences.ts`)
+rather than localStorage. localStorage is kept per origin, and each launch
+takes a port of its own, so every one would open on an empty store; a cookie
+is kept per host, whatever the port. Neither choice can be handed a storage,
+since Nuxt UI reads the colour mode through a bare `useDark()` and the
+sidebar through a bare `useStorage`, so the cookies are vueuse's default
+storage (its `getDefaultStorage` handler). The browser sends them to
+whatever listens on 127.0.0.1, so they hold nothing about anybody's work.
+
+### Nothing the CSP refuses
+
+The server's CSP is `default-src 'self'` ([What keeps other pages
+out](#what-keeps-other-pages-out)): nothing from another host, no inline
+script or style, no `data:` URLs. The panel is built to need nothing more,
+though three of its libraries assume otherwise:
+
+- Geist and Geist Mono come from Fontsource, as files of the build.
+- Icons are Lucide's, bundled: Nuxt UI's own and every one a component
+  names. Iconify's online build fetches from its API any icon it was not
+  handed, so `@iconify/vue` resolves to `src/overrides/iconify.ts`, over
+  its offline build, which has no code that could ask. An icon left out of
+  the bundle draws as nothing, which the shell test checks for.
+- Nuxt UI's colours plugin writes the palette's variables into a `<style>`
+  element at run time. The plugin resolves to a stub that does nothing, and
+  `main.css` declares the same variables, from the mapping in `src/theme.ts`:
+  zinc for the neutrals, and violet as the one accent.
+- vueuse adds a `<style>` for every colour mode switch, to stop transitions
+  while the classes change, and runs a switch as the page starts.
+  `src/color-mode.ts` takes over the `updateHTMLAttrs` handler vueuse lets
+  a program replace, and stops them with a class `main.css` holds instead.
+  It also makes dark the default: `index.html` carries the class before any
+  script runs, and dark is stored when this browser has chosen nothing.
+- Vite inlines nothing as a `data:` URL (`assetsInlineLimit: 0`).
+
+A nonce per launch would have let the style elements in, at the price of the
+server rewriting the page each time and the panel handing the nonce to each
+library that writes one. `tests/dist.test.ts` builds the panel as `make
+web/build` does, in a process of its own, and fails on a URL naming another
+host anywhere in the page, the scripts or the styles (namespace names, and
+the links Vue prints beside a production error, aside), a reference not to
+the panel's own files, an inline script or style in the page, a palette
+variable missing, or Iconify's API or the injected palette back in the
+scripts. The shell test fails on any `<style>` element added while the panel
+starts and switches colour mode.
+
+### Out of `make test` until CI has Node
+
+`make web/<target>` reaches the panel's `Makefile` as it reaches any app's,
+but `web` is in `NODE_APPS`, not `APPS`, so `make test` and `make build`
+leave it out until CI installs Node and pnpm (#71). In the aggregates, they
+would fail on every runner for want of pnpm, test-cross's macOS and Windows
+included, and say nothing about the code. The server builds without the
+panel meanwhile, through `allow_missing`.
+
+Node is 24, the LTS line (`.node-version`), and pnpm is pinned through
+`packageManager`; `PNPM` names another way to run it, such as `npx`, where
+corepack is not set up. Every target that runs a tool first installs from
+the lockfile, frozen, when `node_modules` is older than it, `package.json` or
+`pnpm-workspace.yaml`. pnpm holds back any version published less than a
+day ago (`pnpm-workspace.yaml`), and runs no dependency's install script:
+the two that ask, esbuild's and vue-demi's, have nothing to do here. A test
+reads the licence of every package installed, development tools included,
+and fails on one a GPL-3.0-only program could not take in, or one that
+declares none and is not named with what its source says.
+
+Nuxt UI's plugins declare its components and composables for vue-tsc in
+`src/components.d.ts` and `src/auto-imports.d.ts`, committed so a fresh
+clone type-checks. They name each file by its path in pnpm's store, whose
+folder for `@nuxt/ui` carries a hash of its peers, so a bump of one leaves
+every path naming nothing, and each type `any` without a word from vue-tsc.
+A test fails on such a path, and `make web/build` writes the files again; no
+test run writes them, or it would mend a stale one before the test saw it.
+
+`make web/dev` serves the panel from Vite on 127.0.0.1:5173 and proxies
+`/api`, and the launch link's `/?token=`, to `flayer ui --dev --port 7878`
+(#68). Through the proxy the token is traded for its cookie where the panel
+runs. `changeOrigin`, so the Host the server checks is its own address; the
+Origin stays the dev server's, which `--dev` accepts.
 
 ## Which workspace a command uses
 
@@ -1676,11 +1930,11 @@ refused where loads are.
 
 The TUI resolves through the same function. `tui::load` and `load_project`
 ask `resolve` and `consulted` with the `Lookup` the screen was opened with,
-and `tui::execute` hands that lookup to every line the screen runs, as it
-hands them home, rather than letting each line read the environment again: a
-screen opened with `-W` or an activation runs every line against that
-workspace. A `-W` among a line's own words wins, and is typed from the root
-the lines run from, as a `-C` is.
+and `tui::execute` hands that lookup, home and all, to every line the screen
+runs, rather than letting each line read the environment again: a screen
+opened with `-W` or an activation runs every line against that workspace. A
+`-W` among a line's own words wins, and is typed from the root the lines run
+from, as a `-C` is.
 
 A project's row runs `mind -C <entry>`, the line somebody in the project would
 type, which consults the project's own workspace. Where that is not the
@@ -1769,8 +2023,8 @@ question](#open-questions).
 
 No command reads them yet, so none takes them, and `agent_homes` is first
 called by the first one that does. That one also has to make the TUI pass its
-own to every command it runs, as `tui::execute` passes `--home`. Otherwise a
-command run from the TUI decides them again from the environment, and a test
+own to every command it runs, as `tui::execute` passes its `Lookup`. Otherwise
+a command run from the TUI decides them again from the environment, and a test
 that drives the TUI reaches the real folders.
 
 ## Creating and changing artifacts
@@ -1951,6 +2205,141 @@ complete. A folder that cannot be listed is a failure reported beside what was
 found, except a root that is not there at all: that holds nothing, and only
 the default workspace before it is made can have one, in a home nobody has
 created yet.
+
+## Writers at the same time
+
+The commands were written for a person at one terminal, running one at a time.
+The TUI runs them while another terminal runs its own, and the server under the
+panel runs them while both do. Three things keep two writers from undoing each
+other, and none of them makes a reader wait for the workspace.
+
+- **A temporary of its own.** A file Mindflayer replaces — a marker, the
+  `SKILL.md` a rename rewrites, git's exclude file — is written whole into a
+  temporary beside it and renamed into place (`replace_file`). The temporary
+  was `flayer.toml.tmp`, one name for every writer: two at once wrote into one
+  file, either could rename the other's half into place, and the second rename
+  found nothing to move. It is named for the run now,
+  `flayer.toml.<pid>-<suffix>.tmp` as [a stage](#built-where-no-agent-looks)
+  is, made with `create_new`, and taken away when the write or the rename
+  fails.
+- **A ledger that waits, and keeps a log.** `Ledger::open` gives its
+  connection SQLite's busy timeout, as long as a writer waits for the
+  workspace, so a second writer waits for the first rather than failing with
+  "database is locked". rusqlite sets five seconds of its own accord, but as a
+  library's default; set there, the wait is Mindflayer's. It also turns on
+  write-ahead logging: a reader goes on reading what the last write left while
+  the next is made, and a writer does not wait for readers. The mode is kept in
+  the file's header, so a ledger switches once, at the first open to write,
+  and SQLite keeps `mindflayer.db-wal` and `mindflayer.db-shm` beside it while
+  it is open. It switches only once `migrate` has accepted the version, since
+  switching first would change a ledger a newer build wrote before refusing
+  it, and a switch that fails is never a reason to refuse the ledger: one that
+  finds another connection writing fails at once, because SQLite will not wait
+  where waiting could deadlock, and is left to the next open. `open_existing`
+  sets the timeout and not the mode, because switching is a write, and a read
+  makes none but a migration.
+
+  A ledger that keeps its log needs those two files made beside it even to be
+  read, and SQLite takes them away when the last connection closes, so in a
+  folder the reader may read and not write — a sandboxed agent's view of the
+  workspace, a read-only mount, another user's workspace — the first read
+  fails, where the journal the ledger had before let it be read.
+  `open_existing` then opens it as SQLite's `immutable`, which needs neither
+  file and takes no lock, but only when there is no log: then everything is
+  in the file itself. Somebody who can write there writes into a log the read
+  does not see, so what it reads is the ledger as their last checkpoint left
+  it, and a checkpoint made between two of its reads is the one thing that
+  could change the file under it.
+- **A lock on the workspace.** Unique names keep each file whole, not each
+  entry in it: two `flayer link`s that both read `flayer.toml` before either
+  writes each put back a marker with only their own entry, and the second
+  rename wins. So a writer holds `.mindflayer/lock` from before it reads what
+  it will change until the change is written: an edit of the marker (`link`,
+  `unlink`, `load`, `unload`), an install or an uninstall, a gather — clone and
+  all, since two gathers of one source clone into one folder — and the scrub
+  that opening the ledger to write runs (`ledger_to_write`), while it rewrites
+  clones an older build left a credential in and removes the folders of a
+  source made one with another, which a gather beside it would be filling.
+  Core takes it inside each of them (`FlayerWorkspace::lock`), so no front end
+  has to remember to. An install looks again at what the project holds once
+  it has the lock: the standing it is handed comes from a survey made before,
+  minutes before on the install screen, and a copy an edit has made its
+  author's since is left alone rather than written over and recorded again.
+- **Opening the ledger takes no lock**, though it is when a ledger is made or
+  migrated. A migration is one transaction that reads the version again once
+  it holds SQLite's write lock (`Ledger::migrate`), so two processes opening
+  one an older build left take turns there and the second finds nothing to
+  do — a read's migration included, which the workspace's lock could not keep
+  apart, since readers never take it. Taking that lock as well made every
+  change to an artifact wait behind a gather to drop its record, once the
+  change was made, and fail as busy when the gather ran long, leaving the
+  record behind. The scrub takes it only when it has clones to rewrite, the
+  first write after an upgrade from a build that stored a credential, and a
+  record drop then waits for it without a deadline: the change it follows is
+  made, and trying it again would find nothing to change.
+
+How the lock behaves, and why:
+
+- **The system's lock, as a stage's is.** `std`'s `File::lock`, which is
+  `flock` on Linux and macOS and `LockFileEx` on Windows. The system drops it
+  when its process dies, however it dies, so a writer that was killed leaves
+  nothing to clear, and nothing has to decide whether a process named in a
+  file is still running. The file itself is never deleted, not even by the
+  writer that made it: a writer waiting on the file it opened would then lock
+  one nobody else can see, beside the one the next writer makes, and the two
+  would write at once.
+- **A bounded wait.** A writer that finds the lock held tries again, every
+  few milliseconds at first and every tenth of a second at most, for
+  `lock::WAIT`: polled, because `std` cannot wait for a lock with a deadline,
+  and a thread blocked in `lock` could not be told to stop. Then it gives up
+  with `LockError::Busy`, which names whoever holds it:
+
+  ```
+  /home/you/Projects/.mindflayer/lock: workspace busy: waited 10s for process 3234405 to finish writing to it; try again once it has
+  ```
+
+  Ten seconds is longer than anything but a gather takes, and short enough
+  that a command kept waiting by a process that has stopped answering says
+  so rather than looks hung. The error is collected like any other: the CLI
+  prints it, and the install screen prints it for the row it was applying
+  and goes on to the next.
+- **Who holds it, in a file of its own.** The writer holding the lock writes
+  its process id to `.mindflayer/lock.pid`, and takes it away while it still
+  holds the lock, so it never names a writer that has let go. Not in `lock`
+  itself, because a lock is mandatory on Windows: while one process holds a
+  file locked, no other can read a byte of it, and the id is wanted by exactly
+  the processes that cannot have the lock. Writing it is best effort, and a
+  waiting writer that finds none says "another process".
+- **Readers never take it.** A marker is replaced by a rename, and a read of
+  the ledger sees only what was committed, so each file a read opens is
+  whole, as it was before a write or after it. A change made in several steps
+  is not seen whole: a read between an install's copy and its record finds the
+  copy without the record, and calls it somebody's, and a read during a gather
+  finds some shelf copies replaced and others not yet. With its log the ledger
+  never keeps a read waiting for a write; in the journal a filesystem without
+  one leaves it in, a read waits for a write to be committed, as readers and
+  writers take turns there.
+  `ledger_for_reading` migrates an older ledger as `ledger` does, in the same
+  transaction, so the most a read waits for is another process's migration,
+  once after an upgrade.
+- **Not re-entrant.** Two handles on the file are two writers even in one
+  process, which is what lets threads stand in for processes in the tests,
+  from a link on each of two threads at once to every writer waiting for a
+  lock the test holds. It also means a writer that asks for the lock while it
+  holds it waits for itself, and fails as busy. Core's writers each take it
+  once and call none of the others while they hold it, and a front end does
+  not take it at all.
+- **A filesystem without locks lets writers through unlocked**, as it lets
+  installs through without a sweep: refusing would refuse every change there.
+  Any error taking the lock counts, for the reason a stage gives — NFS
+  without its lock daemon says "no locks available". The unique names still
+  keep every file whole.
+
+Writers on two machines are out of reach, and not attempted. On a network
+filesystem `flock` is emulated with locks that belong to a process rather than
+to a handle, and the write-ahead log needs every process using the ledger to
+share memory on one machine. A workspace on a network share is safe used from
+one machine at a time.
 
 ## Decisions
 
@@ -2342,15 +2731,38 @@ leak into the lifecycle code. Unblocks #33, #45, #62, #93, #94 and #95.
   to. Printing the batch as those lines would make a session with the screen in
   it as repeatable as one without.
 - **Gathering still stages beside.** `copy::replace` builds a shelf copy as a
-  hidden sibling, `.<name>.mindflayer-new`, under names taken from the skill:
-  two gathers of one source at once collide as two installs did, and a gather
-  stopped halfway leaves its staging on the shelf. No agent reads the shelf,
-  which is why installs moved first. A `copy::Stage` in a scratch folder of the
+  hidden sibling, `.<name>.mindflayer-new`, under names taken from the skill,
+  so a gather stopped halfway leaves its staging on the shelf. Two gathers no
+  longer meet there, since each holds the workspace's lock ([Writers at the
+  same time](#writers-at-the-same-time)). No agent reads the shelf, which is
+  why installs moved first. A `copy::Stage` in a scratch folder of the
   workspace's own would do for gathering what `.mind/tmp` does for installs.
 - **Removing is not staged.** `uninstall` deletes a copy where it is, so one
   stopped halfway leaves part of a skill in a folder agents read. Renaming the
   copy into a stage first, and deleting it there, would make a removal as all
   or nothing as an install.
+- **A batch takes turns row by row.** The install screen's batch calls core
+  once for each row, and each call takes the workspace's lock for itself:
+  another writer can come between two rows, and with the workspace busy every
+  row waits the whole ten seconds before it is passed over. Holding the lock
+  across the batch needs core to apply the batch, which is where #78 plans it.
+- **Changes to an artifact take no lock.** `add`, `edit`, `rename` and
+  `remove` write into a project or the workspace's own folders and then drop a
+  record ([A record must not outlive the copy it is
+  about](#a-record-must-not-outlive-the-copy-it-is-about)), and neither step
+  holds the workspace: an edit is made in an editor, for as long as somebody
+  keeps it open, and holding the lock that long would keep every other writer
+  waiting. An install that takes the lock after the change finds the copy its
+  author's and leaves it. One already past that look when the change lands
+  writes over it, and the record dropped is then that install's, which leaves
+  its copy unrecorded. Taking the lock for the change itself, where there is
+  no editor to wait for, would close it for `add`, `rename` and `remove`.
+- **Two first writers making one workspace.** `init` makes a marker with
+  `create_new` and then fills it, so a second writer making the same
+  workspace at that moment — two first commands in a home with no
+  `.mindflayer` yet — finds a marker it cannot read, or fails to create one.
+  Writing the marker whole under a name of its own and linking it into place
+  would let the second find it whole.
 - **Installing rules.** Installing copies a directory, so only skills can be
   installed — from the shelf, and now from the workspace's own. The workspace's
   own rules have no way into a project yet; a rule is one file, filed by its
@@ -2358,6 +2770,16 @@ leak into the lifecycle code. Unblocks #33, #45, #62, #93, #94 and #95.
   [D-03](#d-03-rules-reach-every-agent-through-agentsmd) answers it: a rule
   reaches a project as its section of a managed block in `AGENTS.md`, with
   `.claude/rules/mindflayer` as Claude's fallback, and #45 carries it out.
+  Until then [the examples'](#the-examples-are-a-workspace) two rules are
+  listed and validated, but a load offers only their skills.
+- **Examples outside a clone.** The examples are a folder in the repository,
+  so only somebody with a clone has them to load; a binary that arrives some
+  other way, as a release would, has none. Embedding them in the binary, or
+  copying them into a workspace on `flayer init`, would reach everybody, at
+  the price of a second way into a workspace beside loading, and of files a
+  workspace holds without having asked. #134 left both out, with gathering
+  paused; a gathered or published copy of `examples/` would answer it
+  without either.
 - **An edited copy that stays managed.** Editing an installed skill makes it
   its author's, so updates from the shelf stop reaching it — the safe answer,
   not the best one. A hash of what was installed, kept in the ledger, would let
@@ -2442,9 +2864,13 @@ leak into the lifecycle code. Unblocks #33, #45, #62, #93, #94 and #95.
   `Excluded::Outside` warns. Asking gix's `excludes` whether each path is
   ignored once it is written, as the tests do, would let the installing side
   or a doctor check say so.
-- **Long work in the TUI.** A gather holds the screen until it finishes, with a
-  box saying what is running, and cannot be cancelled. A background thread
-  would change that; it has not been needed yet.
+- **Ctrl-C during `flayer gather`.** The watch's flag is there to be set, but
+  the CLI installs no signal handler, so Ctrl-C ends the process wherever the
+  gather has got to. Ended before it places anything, it costs the clone and
+  can leave registered a source nothing came from; ended while it places, it
+  can leave the shelf between two revisions, and the ledger behind it. A
+  handler that cancels the watch would make the command line stop where the
+  TUI's `esc` does.
 - **Gathering rules.** Only skills are gatherable. A rule is a loose file at any
   depth, so harvesting one means deciding what its name is relative to — the
   same question `Catalog::take_files` answers inside a project, asked of a
@@ -2476,7 +2902,12 @@ leak into the lifecycle code. Unblocks #33, #45, #62, #93, #94 and #95.
   connection will not have it. An in-memory `gitoxide.credentials.terminalPrompt=false`
   on the clone would keep that prompt off the terminal, though not an askpass
   named by `GIT_ASKPASS` or `SSH_ASKPASS`; a `gix` that configures the retry
-  too would close it.
+  too would close it. In the TUI either prompt is worse than at the command
+  line: a gather runs apart while the loop goes on reading the terminal and
+  drops every key but `esc` and Ctrl-C, so the loop races the prompt for its
+  answer; and neither key stops a gather waiting on one, since `gix` takes a
+  cancel only once it is receiving. `BatchMode=yes` would close the TUI's ssh
+  case too.
 - **When the scrub can stop.** `gather::scrub` runs whenever a command
   opens the ledger to write (`FlayerWorkspace::ledger_to_write`), because an
   older build could write a token into the same file. Schema 3 (#30) changes
@@ -2539,6 +2970,17 @@ leak into the lifecycle code. Unblocks #33, #45, #62, #93, #94 and #95.
   when the folder changes would, at the price of rerunning on every build
   while the folder is missing, since cargo counts a missing path as changed.
   #68, which puts the panel into the binaries, settles the build order.
+- **The palette in two places.** `src/theme.ts` names the palette for Nuxt
+  UI, and `main.css` spells it out as the variables Nuxt UI's colours plugin
+  would have written at run time. The build test holds the two to each
+  other. A Vite plugin writing those variables into the stylesheet at build
+  time, from `src/theme.ts`, would leave the palette in one place.
+- **A light panel starts dark.** `index.html` carries `dark`, so the default
+  never flashes light, but a browser that chose light sees one dark frame
+  before the script applies the choice. A script in the page that read it
+  first is what the CSP refuses. The choice is in a cookie the server
+  receives with the page's request, but acting on it would need the server
+  to rewrite the page as it sends it.
 - **The panel's transcript ends with the server.** The TUI prints its
   transcript when it closes; the server keeps the panel's in memory and drops
   it when it stops. Whether `flayer ui` prints it on the way out, as the TUI
@@ -2547,10 +2989,16 @@ leak into the lifecycle code. Unblocks #33, #45, #62, #93, #94 and #95.
   `<style>` element that a library writes into the page at run time is
   blocked, as theming and colour-mode helpers often do; style the panel's
   scripts set through the CSSOM, as Vue's bindings do, is not governed by
-  it. If #69 finds the panel needs one, the server would issue a nonce with
-  each launch, add it to `style-src`, and write it into `index.html` where
-  Vite's `html.cspNonce` leaves its placeholder. `script-src` never gets
-  `'unsafe-inline'` either way.
+  it. The panel needs no nonce so far: Nuxt UI's palette is declared in the
+  stylesheet and the colour mode switches by class ([Nothing the CSP
+  refuses](#nothing-the-csp-refuses)). The one library left that writes a
+  `<style>` is vaul-vue, under Nuxt UI's `UDrawer`, when it loads, with the
+  nonce of a `meta[property=csp-nonce]` if the page has one; nothing loads
+  it yet, since the sidebar opens over a narrow screen as a slideover. A view
+  that wants a drawer needs vaul's styles in the stylesheet, or a nonce: the
+  server would issue one with each launch, add it to `style-src`, and write
+  it into `index.html` where Vite's `html.cspNonce` leaves its placeholder.
+  `script-src` never gets `'unsafe-inline'` either way.
 - **A hostile server on loopback.** The cookie reaches every port of
   127.0.0.1, so a server there that the browser visits while the panel runs
   receives the token and can use it as Bearer

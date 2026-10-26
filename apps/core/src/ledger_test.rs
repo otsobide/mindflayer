@@ -43,6 +43,40 @@ fn two_urls_with_one_readable_name_get_separate_directories() {
 }
 
 #[test]
+fn a_forgotten_source_frees_its_directory_and_takes_its_artifacts() {
+    let ledger = Ledger::in_memory().unwrap();
+    let source = ledger
+        .source_for(SourceKind::Git, "https://h/a", None, "skills")
+        .unwrap();
+    ledger
+        .record(
+            &source,
+            Kind::Skill,
+            "deploy",
+            "skills/h-a/deploy",
+            None,
+            None,
+        )
+        .unwrap();
+
+    assert!(ledger.forget_source(source.id).unwrap());
+    assert!(!ledger.forget_source(source.id).unwrap(), "already gone");
+
+    assert!(ledger.gathered().unwrap().is_empty());
+    assert_eq!(
+        ledger
+            .source(SourceKind::Git, "https://h/a", None, "skills")
+            .unwrap(),
+        None
+    );
+    // The name it had is free for the next source to reduce to it.
+    let next = ledger
+        .source_for(SourceKind::Git, "ssh://h/a", None, "skills")
+        .unwrap();
+    assert_eq!(next.directory, "h-a");
+}
+
+#[test]
 fn a_reference_is_part_of_what_makes_a_source() {
     let ledger = Ledger::in_memory().unwrap();
     let main = ledger
@@ -838,4 +872,26 @@ fn forgetting_an_installation_forgets_its_copies() {
         })
         .unwrap();
     assert_eq!(targets, 0);
+}
+
+#[test]
+fn a_ledger_waits_for_another_writer_as_long_as_a_writer_waits_for_the_workspace() {
+    let dir = tempfile::TempDir::new().unwrap();
+    let path = dir.path().join(LEDGER_FILE);
+    let opened = Ledger::open(&path).unwrap();
+    let existing = Ledger::open_existing(&path).unwrap().unwrap();
+
+    // Read off each connection rather than shown by two writers racing:
+    // rusqlite waits five seconds of its own accord, which is long enough
+    // for any race a test can stage.
+    for ledger in [&opened, &existing] {
+        let waits: i64 = ledger
+            .connection
+            .pragma_query_value(None, "busy_timeout", |row| row.get(0))
+            .unwrap();
+        assert_eq!(
+            u128::try_from(waits).unwrap(),
+            crate::lock::WAIT.as_millis()
+        );
+    }
 }

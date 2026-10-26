@@ -20,6 +20,7 @@ use std::fmt;
 use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
+use std::time::Duration;
 
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
@@ -27,6 +28,7 @@ use thiserror::Error;
 use crate::gather::{self, Scrub};
 use crate::kind::Kind;
 use crate::ledger::{Ledger, LedgerError, LEDGER_FILE};
+use crate::lock::{self, LockError, WorkspaceLock};
 use crate::paths;
 
 /// The layout version written into new `mind.toml` markers, and the newest
@@ -515,6 +517,33 @@ impl FlayerWorkspace {
         self.flayer_dir().join(LEDGER_FILE)
     }
 
+    /// The file a writer locks ([`lock::LOCK_FILE`]), whether or not one has
+    /// made it yet.
+    pub fn lock_path(&self) -> PathBuf {
+        self.flayer_dir().join(lock::LOCK_FILE)
+    }
+
+    /// Hold this workspace for a change, waiting up to [`lock::WAIT`] for a
+    /// writer that holds it, then failing with [`LockError::Busy`], which
+    /// names that writer's process.
+    ///
+    /// Core's writers take it themselves — an edit of the marker, an install
+    /// or an uninstall, a gather, the scrub that opening the ledger to write
+    /// runs when it has clones to rewrite — so a front end
+    /// has no need to, and must not while it asks core to write: the lock is
+    /// not re-entrant, and a writer that asks for it twice waits for itself.
+    /// Readers never take it.
+    pub fn lock(&self) -> Result<WorkspaceLock, LockError> {
+        self.lock_waiting(lock::WAIT)
+    }
+
+    /// [`lock`](Self::lock), waiting up to `wait` rather than [`lock::WAIT`]:
+    /// [`Duration::ZERO`] tries once, and a wait too long to count from now,
+    /// [`Duration::MAX`], never gives up.
+    pub fn lock_waiting(&self, wait: Duration) -> Result<WorkspaceLock, LockError> {
+        WorkspaceLock::acquire(&self.flayer_dir(), wait)
+    }
+
     /// Open that database, creating it if this workspace has never had one.
     ///
     /// Refused for an [`unmade`](Self::unmade) workspace, which has nowhere to
@@ -526,6 +555,17 @@ impl FlayerWorkspace {
     /// first, and one that only reads with
     /// [`FlayerWorkspace::ledger_for_reading`], which neither makes it nor
     /// scrubs it.
+    ///
+    /// Opened without the workspace's [`lock`](Self::lock), though opening is
+    /// when a ledger is made or migrated: a migration is one transaction that
+    /// reads the version again once it holds SQLite's write lock
+    /// ([`Ledger::open`]), so two processes opening one an older build left
+    /// take turns there, and the second finds nothing to do. That keeps a
+    /// read's migration apart from a writer's too, which the workspace's lock
+    /// could not, since readers never take it. Taking it here as well would
+    /// only keep every change to an artifact waiting behind a gather to drop
+    /// its record, after the change was made, and failing as busy when the
+    /// gather ran long, with the record left behind.
     pub fn ledger(&self) -> Result<Ledger, LedgerError> {
         if !self.made {
             return Err(LedgerError::Unmade {
@@ -546,9 +586,23 @@ impl FlayerWorkspace {
     /// [`resolve`](crate::resolve::resolve), but what opening to write
     /// involves is core's, so no front end can write first and scrub after,
     /// or not at all.
+    ///
+    /// The scrub holds the workspace while it rewrites clones, which is only
+    /// when an older build left a credential in one, and like any writer gives
+    /// up as busy after [`lock::WAIT`].
     pub fn ledger_to_write(&self) -> Result<(Ledger, Scrub), LedgerError> {
+        self.ledger_to_write_waiting(lock::WAIT)
+    }
+
+    /// [`ledger_to_write`](Self::ledger_to_write), with the scrub waiting up to
+    /// `wait` for the workspace rather than [`lock::WAIT`], for a writer that
+    /// must not give up ([`crate::install::disown`]).
+    pub(crate) fn ledger_to_write_waiting(
+        &self,
+        wait: Duration,
+    ) -> Result<(Ledger, Scrub), LedgerError> {
         let ledger = self.ledger()?;
-        let scrub = gather::scrub(self, &ledger)?;
+        let scrub = gather::scrub(self, &ledger, wait)?;
         Ok((ledger, scrub))
     }
 
@@ -566,6 +620,11 @@ impl FlayerWorkspace {
     /// credential: everything the ledger hands back is redacted on the way out
     /// anyway, and reading is no reason to write. It is left for the next
     /// command that writes.
+    ///
+    /// Never waits for the workspace's lock either, though an older ledger is
+    /// migrated here as it is there: the migration's own transaction keeps it
+    /// apart from a writer's ([`ledger`](Self::ledger)), so the most a read
+    /// waits for is another process's migration, once after an upgrade.
     pub fn ledger_for_reading(&self) -> Result<Ledger, LedgerError> {
         // An unmade workspace has no ledger, whatever a stray file says.
         if !self.made {
@@ -831,6 +890,11 @@ impl FlayerWorkspace {
                 path: self.root.clone(),
             });
         }
+        // Held from before the file is read until what is written has been
+        // read back. Reading from disk is not enough on its own: two writers
+        // at once would both read the file before either wrote, and the
+        // second rename would put back a marker without the first one's entry.
+        let _lock = self.lock()?;
         let path = self.config_path();
         let text = fs::read_to_string(&path).map_err(|source| WorkspaceError::Read {
             path: path.clone(),
@@ -1108,6 +1172,8 @@ pub enum WorkspaceError {
     OutsideProject { path: PathBuf, kind: Kind },
     #[error("{path}: cannot hold the workspace's {kind}s, because it is not inside the workspace")]
     OutsideWorkspace { path: PathBuf, kind: Kind },
+    #[error(transparent)]
+    Lock(#[from] LockError),
 }
 
 impl WorkspaceError {
@@ -1127,6 +1193,7 @@ impl WorkspaceError {
             | WorkspaceError::NonUtf8Path { path }
             | WorkspaceError::OutsideProject { path, .. }
             | WorkspaceError::OutsideWorkspace { path, .. } => path,
+            WorkspaceError::Lock(error) => error.path(),
         }
     }
 }
@@ -1246,17 +1313,23 @@ pub(crate) fn replace_file(path: &Path, contents: &str) -> Result<(), WorkspaceE
 /// local exclude file is bytes, and its failures belong to its own module's
 /// error, not to a workspace's.
 pub(crate) fn replace_bytes(path: &Path, contents: &[u8]) -> Result<(), (PathBuf, io::Error)> {
+    use std::io::Write as _;
+
     // Follow a symlinked config to the file it names. Replacing the link
     // itself would silently detach a workspace from a config someone chose to
     // share, and leave the original holding stale contents.
     let resolved = fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf());
     let path = resolved.as_path();
 
-    let mut name = path.file_name().unwrap_or_default().to_os_string();
-    name.push(".tmp");
-    let temporary = path.with_file_name(name);
-
-    fs::write(&temporary, contents).map_err(|source| (temporary.clone(), source))?;
+    let (temporary, mut file) = temporary_beside(path)?;
+    let written = file.write_all(contents);
+    drop(file);
+    // A temporary left behind by a write or a rename that failed is litter
+    // nothing owns, so every way out after it is made takes it away.
+    if let Err(source) = written {
+        let _ = fs::remove_file(&temporary);
+        return Err((temporary, source));
+    }
 
     // A rename carries the temporary file's permissions with it, so the
     // original's are copied across first: a config chmodded to 600 must not
@@ -1266,10 +1339,37 @@ pub(crate) fn replace_bytes(path: &Path, contents: &[u8]) -> Result<(), (PathBuf
         let _ = fs::set_permissions(&temporary, metadata.permissions());
     }
     fs::rename(&temporary, path).map_err(|source| {
-        // A temporary left behind by a failed rename is litter nothing owns.
         let _ = fs::remove_file(&temporary);
         (path.to_path_buf(), source)
     })
+}
+
+/// A new, empty file beside `path` to build its replacement in, named after
+/// it and this run (`flayer.toml.<pid>-<suffix>.tmp`).
+///
+/// Not `flayer.toml.tmp`, the one name every writer used to share: two
+/// writers at once wrote into one temporary, so either could rename the
+/// other's half-written bytes into place, and the second rename found
+/// nothing to move. Made with `create_new`, so a file somebody else has
+/// under that name is never written into.
+fn temporary_beside(path: &Path) -> Result<(PathBuf, fs::File), (PathBuf, io::Error)> {
+    let mut attempts = 0;
+    loop {
+        let mut name = path.file_name().unwrap_or_default().to_os_string();
+        name.push(format!(".{}.tmp", crate::copy::unique_name()));
+        let temporary = path.with_file_name(name);
+        match fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&temporary)
+        {
+            Ok(file) => return Ok((temporary, file)),
+            Err(error) if error.kind() == io::ErrorKind::AlreadyExists && attempts < 8 => {
+                attempts += 1;
+            }
+            Err(error) => return Err((temporary, error)),
+        }
+    }
 }
 
 /// An absolute, `..`-free path, without requiring the path to exist yet.

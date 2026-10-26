@@ -375,18 +375,30 @@ fn is_stage_name(name: &str) -> bool {
     })
 }
 
-/// Make a folder in `scratch` no other run has: named after this process and
-/// a random suffix, and made with `create_dir`, which refuses a name that is
-/// already there rather than sharing it.
+/// A name for something this run makes that no other run picks: this
+/// process's id and a random suffix.
+///
+/// The id says whose it is to anybody looking, and the suffix keeps apart
+/// two runs of one process, or a process that reuses the id of one that
+/// left something behind. Neither makes the name safe to take on its own:
+/// whatever is made under it is made with `create_new` or `create_dir`, so
+/// a name that is somehow there already is refused rather than shared.
+pub(crate) fn unique_name() -> String {
+    format!(
+        "{}-{:0width$x}",
+        std::process::id(),
+        random(),
+        width = SUFFIX_LEN
+    )
+}
+
+/// Make a folder in `scratch` no other run has, named by [`unique_name`] and
+/// made with `create_dir`, which refuses a name that is already there rather
+/// than sharing it.
 fn claim(scratch: &Path) -> Result<PathBuf, io::Error> {
     let mut attempts = 0;
     loop {
-        let dir = scratch.join(format!(
-            "{}-{:0width$x}",
-            std::process::id(),
-            random(),
-            width = SUFFIX_LEN
-        ));
+        let dir = scratch.join(unique_name());
         match fs::create_dir(&dir) {
             Ok(()) => return Ok(dir),
             Err(error) if error.kind() == io::ErrorKind::AlreadyExists && attempts < 8 => {

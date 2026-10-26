@@ -155,6 +155,40 @@ run `flayer init` there first.
 `init` never overwrites an existing marker. Run it twice and it says so and
 changes nothing, so it is safe in a script.
 
+## Try it with the examples
+
+`examples/` in this repository is a workspace of its own, holding two skills
+and two rules written to be used as they are, so there is something to
+install before you have gathered anything. With the repository cloned in
+`~/src/mindflayer`, [name it](#choosing-a-workspace) to see what it holds:
+
+```
+$ flayer -W ~/src/mindflayer/examples list
+skill  code-review     Reviews a change for bugs, safety, tests and scope, most severe first.…
+skill  commit-style    Writes commit messages as "area: imperative summary". Use when writing,…
+rule   git/commits     Commit one coherent step at a time
+rule   style/comments  Comments say why, not what
+```
+
+[Load it](#loading-another-workspace) into the workspace that manages your
+projects, and install from it:
+
+```
+$ cd ~/Projects
+$ flayer load ~/src/mindflayer/examples
+loaded examples as ../src/mindflayer/examples: 2 skills to install
+  into the workspace at /home/you/Projects
+
+$ flayer install -p collapse commit-style
+installed commit-style into collapse, from load:../src/mindflayer/examples
+```
+
+`collapse/skills/commit-style` now holds the skill and the
+`references/examples.md` it carries. Only the skills are offered, because a
+rule cannot be installed yet: the two rules are there to read, and to copy
+into a project by hand. `flayer -W ~/src/mindflayer/examples validate` says
+all four are ok.
+
 ## Commands
 
 The surface is split the way the model is. `mind` acts on the project you are
@@ -326,6 +360,11 @@ https://github.com/acme/skills at a1b2c3d
 The repository's `skills` folder is what gets harvested; `--path agents` takes
 another one, and `--ref v2` takes a branch or a tag instead of the default.
 
+With stderr on a terminal it says what it is doing while it does it
+(`connecting`, `receiving objects 120/340`, `reading folders 3/40`) on one line
+there, which it wipes before the report, so the report reads as above. With
+stderr piped or redirected, it says nothing until the report.
+
 Gathering fills the shelf and stops there. **Nothing is written into a mind
 project**: which of these a project should carry is a separate decision, and a
 `git clone` that quietly edited your repositories would be the wrong kind of
@@ -456,6 +495,7 @@ the token and leaves the file as it is.
   mindflayer.db.v2.bak
                   the database as it was before this version of Mindflayer
                   updated it, if it did
+  lock            held by a command while it changes the workspace
   cache/<source>/ the clone, kept so a gather can be looked at afterwards
   skills/<source>/<name>/SKILL.md
   templates/      templates for every project it manages, if you add any
@@ -478,6 +518,26 @@ Timestamps are Unix seconds, so `datetime(at, 'unixepoch')` renders them:
 ```sql
 SELECT datetime(at, 'unixepoch'), action, outcome, detail FROM actions;
 ```
+
+The TUI and any number of terminals can be open on one workspace, and the
+commands that change it take turns. Linking, loading, gathering, installing and
+uninstalling each hold `lock` while they write, with the process's id in
+`lock.pid` beside it. One that finds the workspace held waits up to ten seconds
+for the other to finish, then gives up and says who it waited for:
+
+```
+$ flayer link tanukeys
+error: /home/you/Projects/.mindflayer/lock: workspace busy: waited 10s for process 3234405 to finish writing to it; try again once it has
+```
+
+Reading never waits for `lock`. Listing, showing and the TUI's screens read
+each file whole, as the last write to it left it, though a read made while a
+gather or an install is under way can find some of what it changes changed
+and the rest not yet. The database keeps a write-ahead log, so a read does not
+wait for a write to it either, except on a filesystem that cannot keep one,
+where it waits for the write to finish. A workspace on a network share is safe
+used from one machine at a time: the lock and the database keep apart programs
+on one machine, not programs on two.
 
 ## Installing into a project
 
@@ -666,7 +726,7 @@ Every key runs a command you could have typed, through the same parser:
 | `l` | link a project | `flayer link <path>` |
 | `u` | unlink the project | `flayer unlink <path>` |
 | `v` | validate everything | `flayer validate` |
-| `g` | gather from a git repository | `flayer gather git <url>` |
+| `g` | gather from a git repository, showing how far it has got; `esc` stops it, until it starts placing | `flayer gather git <url>` |
 | `L` | load another workspace's own skills; enter on a loaded one unloads it | `flayer load <path>`, `flayer unload <path>` |
 | `s` | what is on the shelf | `flayer gather list` |
 | `i` | install from the workspace's own, a loaded workspace, or the shelf | `flayer install` |
@@ -957,10 +1017,14 @@ apps/server  mindflayer-server — the local server behind the web panel, still
                                  unused by the binaries. Transport only: it
                                  moves JSON between the browser and a front
                                  end, and holds no rules.
+apps/web     mindflayer-web    — the web panel the server embeds: Vue and
+                                 Nuxt UI, built with Vite. It asks through
+                                 the server and draws; no rules here either.
 ```
 
 See [docs/architecture.md](docs/architecture.md) for why the split is where it
-is.
+is. `examples/` sits beside `apps/` and is not an app: it is the workspace
+[to try Mindflayer with](#try-it-with-the-examples).
 
 ## Development
 
@@ -969,7 +1033,7 @@ A root `Makefile` delegates to each app, and CI invokes the same targets.
 `apps/<app>/Makefile`:
 
 ```bash
-make test              # every suite
+make test              # every Rust suite; the panel's is make web/test
 make build             # debug build of every crate
 make fmt               # cargo fmt --all
 make lint              # clippy across the workspace
@@ -1024,6 +1088,64 @@ three names.
 [docs/agents.md](docs/agents.md) records. It runs them against their APIs with
 your own login, in a temp home under `target/` with your real home hidden, so
 neither CI nor `make test` runs it. It needs Linux, `bwrap`, `jq` and `git`.
+
+## Developing the panel
+
+`apps/web` is the web panel, in Vue 3.5 and Nuxt UI 4 on Vite, written in
+TypeScript. So far it is the frame the views will fill: a sidebar, a header
+and an empty overview, dark unless you switch it to light, which the next
+launch remembers. It needs Node 24 (`apps/web/.node-version`) and pnpm, at
+the version `package.json` pins in `packageManager`, which `corepack enable`
+provides. Without corepack, name any other way to run it in `PNPM`:
+
+```bash
+make web/test          # vitest
+make web/lint          # ESLint, its style included; make web/fmt fixes that
+make web/build         # check the types, then build apps/web/dist
+make web/types         # check the types alone (vue-tsc)
+make web/clean         # remove dist/ and the tools' caches
+
+make web/test PNPM='npx --yes pnpm@12.15.0'
+```
+
+Every target that runs a tool first installs what `pnpm-lock.yaml` pins,
+when `node_modules` is missing or older than `package.json`, the lockfile or
+`pnpm-workspace.yaml`. `make test` leaves the panel out for now, so the Rust
+suites still need no Node; the panel joins it once CI installs Node
+([#71](https://github.com/otsobide/mindflayer/issues/71)). Its tests are
+`apps/web/tests/<area>.test.ts`.
+
+`make web/build` writes `apps/web/dist`, which the server embeds as it
+compiles. A server compiled before any build answers every page with one
+saying to run it, and goes on doing so after the build until
+`mindflayer-server` compiles again: which is built first is an [open
+question](docs/architecture.md#open-questions) until
+[#68](https://github.com/otsobide/mindflayer/issues/68) settles it.
+`make web/e2e` has no browser suite to run yet, and says so
+([#75](https://github.com/otsobide/mindflayer/issues/75)).
+
+`make web/dev` serves the panel on `http://127.0.0.1:5173` and reloads it as
+you edit. It passes `/api` on to `flayer ui --dev --port 7878`, the command
+[#68](https://github.com/otsobide/mindflayer/issues/68) adds, and the launch
+link too: open the link that command prints with its port changed to 5173,
+and the token is traded for its cookie where the panel runs.
+
+Three rules keep the panel working under the server's content security
+policy, which lets nothing in from another host and nothing inline:
+
+- **The transport is the only way out.** Views ask `useTransport()` and
+  never `fetch`: ESLint refuses `fetch`, `EventSource`, `WebSocket` and
+  `XMLHttpRequest` everywhere but `src/api/http.ts`.
+- **Nothing comes from another host.** The fonts are Geist and Geist Mono
+  from Fontsource, the icons Lucide's, bundled when a component names them
+  as `i-lucide-<name>`. A test builds the panel and fails on any URL that
+  names another host.
+- **Nothing inline.** No `<script>` or `<style>` written into the page, which
+  is why the palette is declared in `src/assets/css/main.css` (from the
+  mapping in `src/theme.ts`) rather than injected, as Nuxt UI would.
+
+A test also checks that every package installed carries a licence
+GPL-3.0-only can take in.
 
 ## License
 
