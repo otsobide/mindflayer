@@ -164,6 +164,40 @@ run `flayer init` there first.
 `init` never overwrites an existing marker. Run it twice and it says so and
 changes nothing, so it is safe in a script.
 
+## Try it with the examples
+
+`examples/` in this repository is a workspace of its own, holding two skills
+and two rules written to be used as they are, so there is something to
+install before you have gathered anything. With the repository cloned in
+`~/src/mindflayer`, [name it](#choosing-a-workspace) to see what it holds:
+
+```
+$ flayer -W ~/src/mindflayer/examples list
+skill  code-review     Reviews a change for bugs, safety, tests and scope, most severe first.…
+skill  commit-style    Writes commit messages as "area: imperative summary". Use when writing,…
+rule   git/commits     Commit one coherent step at a time
+rule   style/comments  Comments say why, not what
+```
+
+[Load it](#loading-another-workspace) into the workspace that manages your
+projects, and install from it:
+
+```
+$ cd ~/Projects
+$ flayer load ~/src/mindflayer/examples
+loaded examples as ../src/mindflayer/examples: 2 skills to install
+  into the workspace at /home/you/Projects
+
+$ flayer install -p collapse commit-style
+installed commit-style into collapse, from load:../src/mindflayer/examples
+```
+
+`collapse/skills/commit-style` now holds the skill and the
+`references/examples.md` it carries. Only the skills are offered, because a
+rule cannot be installed yet: the two rules are there to read, and to copy
+into a project by hand. `flayer -W ~/src/mindflayer/examples validate` says
+all four are ok.
+
 ## Commands
 
 The surface is split the way the model is. `mind` acts on the project you are
@@ -474,6 +508,7 @@ the token and leaves the file as it is.
   mindflayer.db.v2.bak
                   the database as it was before this version of Mindflayer
                   updated it, if it did
+  lock            held by a command while it changes the workspace
   cache/<source>/ the clone, kept so a gather can be looked at afterwards
   skills/<source>/<name>/SKILL.md
   templates/      templates for every project it manages, if you add any
@@ -496,6 +531,26 @@ Timestamps are Unix seconds, so `datetime(at, 'unixepoch')` renders them:
 ```sql
 SELECT datetime(at, 'unixepoch'), action, outcome, detail FROM actions;
 ```
+
+The TUI and any number of terminals can be open on one workspace, and the
+commands that change it take turns. Linking, loading, gathering, installing and
+uninstalling each hold `lock` while they write, with the process's id in
+`lock.pid` beside it. One that finds the workspace held waits up to ten seconds
+for the other to finish, then gives up and says who it waited for:
+
+```
+$ flayer link tanukeys
+error: /home/you/Projects/.mindflayer/lock: workspace busy: waited 10s for process 3234405 to finish writing to it; try again once it has
+```
+
+Reading never waits for `lock`. Listing, showing and the TUI's screens read
+each file whole, as the last write to it left it, though a read made while a
+gather or an install is under way can find some of what it changes changed
+and the rest not yet. The database keeps a write-ahead log, so a read does not
+wait for a write to it either, except on a filesystem that cannot keep one,
+where it waits for the write to finish. A workspace on a network share is safe
+used from one machine at a time: the lock and the database keep apart programs
+on one machine, not programs on two.
 
 ## Installing into a project
 
@@ -995,7 +1050,8 @@ apps/web     mindflayer-web    — the web panel the server embeds: Vue and
 ```
 
 See [docs/architecture.md](docs/architecture.md) for why the split is where it
-is.
+is. `examples/` sits beside `apps/` and is not an app: it is the workspace
+[to try Mindflayer with](#try-it-with-the-examples).
 
 ## Development
 

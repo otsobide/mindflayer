@@ -148,3 +148,46 @@ fn a_newer_workspace_marker_is_refused_while_a_current_project_marker_is_read() 
     let project = MindProject::open(dir.path()).unwrap();
     assert_eq!(project.config().version, MIND_FORMAT_VERSION);
 }
+
+/// The names in `dir`, sorted.
+fn names_in(dir: &Path) -> Vec<String> {
+    let mut names: Vec<String> = fs::read_dir(dir)
+        .unwrap()
+        .map(|entry| entry.unwrap().file_name().to_string_lossy().into_owned())
+        .collect();
+    names.sort();
+    names
+}
+
+#[test]
+fn a_replacement_builds_in_a_temporary_of_its_own() {
+    let dir = tempfile::TempDir::new().unwrap();
+    let file = dir.path().join("flayer.toml");
+    fs::write(&file, "old").unwrap();
+    // The one name every writer used to build in. Somebody's now, or another
+    // writer's: either way not this one's to write into or take away.
+    let shared = dir.path().join("flayer.toml.tmp");
+    fs::write(&shared, "somebody's").unwrap();
+
+    replace_file(&file, "new").unwrap();
+
+    assert_eq!(fs::read_to_string(&file).unwrap(), "new");
+    assert_eq!(fs::read_to_string(&shared).unwrap(), "somebody's");
+    assert_eq!(names_in(dir.path()), ["flayer.toml", "flayer.toml.tmp"]);
+}
+
+#[test]
+fn a_replacement_that_cannot_be_put_in_place_leaves_no_temporary_behind() {
+    let dir = tempfile::TempDir::new().unwrap();
+    // A folder where the file should be: the temporary is written whole, and
+    // then no rename can put a file in its place.
+    let file = dir.path().join("flayer.toml");
+    fs::create_dir(&file).unwrap();
+    fs::write(file.join("inside"), "kept").unwrap();
+
+    let (path, _) = replace_bytes(&file, b"new").unwrap_err();
+
+    assert_eq!(path, fs::canonicalize(&file).unwrap());
+    assert_eq!(names_in(dir.path()), ["flayer.toml"]);
+    assert_eq!(fs::read_to_string(file.join("inside")).unwrap(), "kept");
+}
