@@ -10,6 +10,7 @@ use thiserror::Error;
 
 use crate::frontmatter::{self, FrontMatterError};
 use crate::kind::{Kind, Layout};
+use crate::rule::{Lenient, RuleManifest};
 use crate::skill::{
     Compatibility, SkillManifest, MAX_COMPATIBILITY_LEN, MAX_DESCRIPTION_LEN, MAX_NAME_SEGMENT_LEN,
 };
@@ -18,14 +19,17 @@ use crate::skill::{
 ///
 /// This enum, not a field on [`Artifact`], is where the kinds differ — and it
 /// *is* the kind, so an artifact cannot carry a discriminant that disagrees
-/// with what was parsed, because there is only one. A rule that declares a
-/// description is not a state this type can hold.
+/// with what was parsed, because there is only one. Each kind's payload says
+/// what that kind requires: a skill without a description is not a state this
+/// type can hold, while a rule's description is as optional as the rest of its
+/// front matter.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Declared {
     /// A skill's front matter.
     Skill(SkillManifest),
-    /// A rule declares nothing. It is a markdown file and that is all.
-    Rule,
+    /// A rule's front matter, which is optional: most rules are a markdown
+    /// file and that is all, and declare nothing.
+    Rule(RuleManifest),
 }
 
 impl Declared {
@@ -33,7 +37,7 @@ impl Declared {
     pub fn kind(&self) -> Kind {
         match self {
             Declared::Skill(_) => Kind::Skill,
-            Declared::Rule => Kind::Rule,
+            Declared::Rule(_) => Kind::Rule,
         }
     }
 }
@@ -95,15 +99,18 @@ impl Artifact {
     ) -> Result<Self, ArtifactError> {
         let path = file.into();
         let source = read(&path)?;
-        // No front matter, by definition: a rule is a markdown file that gives
-        // context and declares nothing. Its opening line is the closest thing
-        // to a description it has, so that is what a listing shows.
+        // Reading it never fails, as a skill's can: a rule's front matter is
+        // optional, so whatever cannot be read as front matter is content.
+        let (manifest, body) = RuleManifest::read(&source);
+        // The opening line of the body, not of the file, and not a declared
+        // description: the body is what an agent reads once the front matter
+        // is taken off, so its opening line is what the agent meets first.
         Ok(Self {
             name,
             path,
             project: project.into(),
-            declared: Declared::Rule,
-            summary: opening_line(&source),
+            declared: Declared::Rule(manifest),
+            summary: opening_line(body),
         })
     }
 
@@ -152,16 +159,18 @@ impl Artifact {
     }
 
     /// One line saying what this is: declared by a skill, derived from the
-    /// opening line for a rule, and absent when there is nothing to show.
+    /// opening line of its body for a rule, and absent when there is nothing
+    /// to show.
     pub fn summary(&self) -> Option<&str> {
         self.summary.as_deref()
     }
 
-    /// The description, for the kinds that declare one.
+    /// The description, when this declares one: always for a skill, and for
+    /// a rule only when its front matter says.
     pub fn description(&self) -> Option<&str> {
         match &self.declared {
             Declared::Skill(manifest) => Some(&manifest.description),
-            Declared::Rule => None,
+            Declared::Rule(manifest) => manifest.description.stated().map(String::as_str),
         }
     }
 
@@ -169,12 +178,16 @@ impl Artifact {
     pub fn manifest(&self) -> Option<&SkillManifest> {
         match &self.declared {
             Declared::Skill(manifest) => Some(manifest),
-            Declared::Rule => None,
+            Declared::Rule(_) => None,
         }
     }
 
-    /// The markdown an agent reads: the body after a skill's front matter, or
-    /// the whole of a rule's file.
+    /// The markdown an agent reads: the body after the front matter, or the
+    /// whole file when there is none.
+    ///
+    /// What a renderer puts in front of an agent, so a rule's front matter is
+    /// never pasted into a file that has no use for it, and what `show` prints
+    /// beneath what the front matter declares.
     pub fn contents(&self) -> Result<String, ArtifactError> {
         let path = self.file();
         let source = read(&path)?;
@@ -187,7 +200,9 @@ impl Artifact {
                     })?;
                 Ok(document.body.to_owned())
             }
-            Declared::Rule => Ok(source),
+            // Decided again from the file as it is now, by the same reading
+            // that loaded it.
+            Declared::Rule(_) => Ok(RuleManifest::read(&source).1.to_owned()),
         }
     }
 
@@ -210,16 +225,17 @@ impl Artifact {
                 manifest,
                 self.path.file_name().and_then(|name| name.to_str()),
             ),
-            Declared::Rule => {
+            Declared::Rule(manifest) => {
                 // Every kind is looked up by name, so every kind is checked
                 // for one.
                 let mut issues = name_issues(&self.name);
-                // A rule declares nothing, so there is exactly one thing left
-                // that can be wrong with it: having nothing to say. `summary`
-                // is None only when no line held any text.
+                // A rule's front matter is optional, so the one thing that
+                // makes it unusable is having nothing to say. `summary` is
+                // None only when no line of the body held any text.
                 if self.summary.is_none() {
                     issues.push(ValidationIssue::Empty);
                 }
+                issues.extend(rule_issues(manifest));
                 issues
             }
         }
@@ -286,6 +302,24 @@ fn skill_issues(manifest: &SkillManifest, folder: Option<&str>) -> Vec<Validatio
             .iter()
             .map(|key| ValidationIssue::MetadataRepeated { key: key.clone() }),
     );
+    issues
+}
+
+/// What a rule's front matter left unread, each only worth a warning: what is
+/// not read is still in the file, and the rule still says what it says.
+fn rule_issues(manifest: &RuleManifest) -> Vec<ValidationIssue> {
+    let mut issues = Vec::new();
+    if let Some(reason) = &manifest.unparsed {
+        issues.push(ValidationIssue::FrontMatterUnparsed {
+            reason: reason.clone(),
+        });
+    }
+    if manifest.paths == Lenient::Ignored {
+        issues.push(ValidationIssue::PathsNotStrings);
+    }
+    if manifest.description == Lenient::Ignored {
+        issues.push(ValidationIssue::DescriptionNotAString);
+    }
     issues
 }
 
@@ -415,6 +449,9 @@ pub enum ValidationIssue {
     MetadataNotAString { key: String },
     MetadataRepeated { key: String },
     Empty,
+    FrontMatterUnparsed { reason: String },
+    PathsNotStrings,
+    DescriptionNotAString,
 }
 
 impl ValidationIssue {
@@ -448,8 +485,10 @@ impl ValidationIssue {
     /// were they invalid, a skill installed with nested metadata would fail
     /// its project's `validate` from then on, and the only way to clear it
     /// would be to edit the copy, which stops Mindflayer from updating it.
-    /// Matched in full rather than with `matches!`, so a new issue has to say
-    /// which it is.
+    /// And whatever a rule's front matter leaves unread, since a rule needs
+    /// none to be read: front matter that does not parse is content, and a key
+    /// written in another shape is ignored. Matched in full rather than with
+    /// `matches!`, so a new issue has to say which it is.
     pub fn is_warning(&self) -> bool {
         match self {
             ValidationIssue::CompatibilityEmpty
@@ -457,7 +496,10 @@ impl ValidationIssue {
             | ValidationIssue::CompatibilityNotAString
             | ValidationIssue::MetadataNotAMap
             | ValidationIssue::MetadataNotAString { .. }
-            | ValidationIssue::MetadataRepeated { .. } => true,
+            | ValidationIssue::MetadataRepeated { .. }
+            | ValidationIssue::FrontMatterUnparsed { .. }
+            | ValidationIssue::PathsNotStrings
+            | ValidationIssue::DescriptionNotAString => true,
             ValidationIssue::NameEmpty
             | ValidationIssue::NameNotKebabCase { .. }
             | ValidationIssue::NameSegmentTooLong { .. }
@@ -515,6 +557,18 @@ impl fmt::Display for ValidationIssue {
                 "`metadata` entry `{key}` is written more than once, so only the first is read"
             ),
             ValidationIssue::Empty => write!(f, "the file has no content"),
+            ValidationIssue::FrontMatterUnparsed { reason } => write!(
+                f,
+                "the front matter does not parse, so it is read as content, fences and all: {reason}"
+            ),
+            ValidationIssue::PathsNotStrings => write!(
+                f,
+                "`paths` is not a pattern or a list of patterns, so it is ignored, and left in the file as written"
+            ),
+            ValidationIssue::DescriptionNotAString => write!(
+                f,
+                "`description` is not a string, so it is ignored, and left in the file as written"
+            ),
         }
     }
 }
