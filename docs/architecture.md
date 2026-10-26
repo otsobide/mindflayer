@@ -762,6 +762,12 @@ and the TUI offers in its add form what that finds, since the form runs a
 `mind` line. Core still checks that the workspace manages the project, so one
 that does not lends it nothing.
 
+A workspace `mind` cannot read refuses `mind add --template`, since passing it
+over would let a farther template of the same name, a built-in one say, stand
+in for its own. `edit`, `rename`, `remove` and an add from nothing only warn,
+after the change: there the workspace is only told. `mind templates` lists what
+it could read, with the same warning.
+
 A template's front matter keeps whatever it says except `name` and
 `description`, which `mind add` always sets: the template's lines for those
 two are dropped, continuation lines and all, before anything parses the rest —

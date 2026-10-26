@@ -370,3 +370,36 @@ fn a_workspace_beside_a_project_offers_it_the_workspaces_templates() {
          runbook  skill  ../hub/.mindflayer/templates/runbook\n"
     );
 }
+
+#[test]
+fn mind_add_from_a_template_refuses_when_the_workspace_that_lends_it_cannot_be_read() {
+    let dir = workspace_with_two();
+    let template = dir.path().join(".mindflayer/templates/full/SKILL.md");
+    fs::create_dir_all(template.parent().unwrap()).unwrap();
+    fs::write(&template, "---\n---\n\n# {{name}}\n\nThe team's full.\n").unwrap();
+    let marker = dir.path().join(FLAYER_DIR).join(FLAYER_CONFIG);
+    let newer: String = fs::read_to_string(&marker)
+        .unwrap()
+        .lines()
+        .map(|line| {
+            if line.starts_with("version = ") {
+                String::from("version = 99\n")
+            } else {
+                format!("{line}\n")
+            }
+        })
+        .collect();
+    fs::write(&marker, newer).unwrap();
+    let alpha = dir.path().join("alpha");
+
+    let failure = mind(
+        &alpha,
+        &["add", "skill", "deploy", "Ship it", "--template", "full"],
+    )
+    .unwrap_err();
+
+    // Passed over, the workspace's `full` would leave the built-in one to
+    // stand in for it.
+    assert!(matches!(*failure.error, CliError::Workspace(_)));
+    assert!(!alpha.join("skills/deploy").exists());
+}

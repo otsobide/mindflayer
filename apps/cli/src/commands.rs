@@ -50,16 +50,26 @@ pub fn run(cli: &Cli) -> Result<Outcome, Failure> {
             template,
         } => {
             let project = project_here(&directory)?;
-            consulting(&project, home, |workspace| {
-                add_to(
-                    workspace,
-                    &project,
-                    *kind,
-                    name,
-                    description,
-                    template.as_deref(),
-                )
-            })
+            match template {
+                // The workspace lends the template, so one that cannot be
+                // read refuses the add: passed over, it would let a farther
+                // template of the same name, a built-in one say, stand in
+                // for its own and write the artifact from that.
+                Some(template) => {
+                    let workspace = consulted(&project, home)?;
+                    add_to(
+                        workspace.as_ref(),
+                        &project,
+                        *kind,
+                        name,
+                        description,
+                        Some(template),
+                    )
+                }
+                None => consulting(&project, home, |workspace| {
+                    add_to(workspace, &project, *kind, name, description, None)
+                }),
+            }
         }
         Command::Edit { reference, editor } => {
             let project = project_here(&directory)?;
@@ -469,7 +479,8 @@ pub(crate) fn consulted(
 ///
 /// One that cannot be read is a warning after the change rather than a
 /// refusal of it: the change is the project's, and the workspace was only to
-/// be told.
+/// be told. Not so for `mind add --template`, where the workspace lends what
+/// the change is made from, which is why that asks [`consulted`] itself.
 fn consulting(
     project: &MindProject,
     home: Option<&Path>,
