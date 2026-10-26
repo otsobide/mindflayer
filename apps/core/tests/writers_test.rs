@@ -20,7 +20,7 @@ use mindflayer_core::ledger::{Action, Outcome, SourceKind};
 use mindflayer_core::lifecycle::{self, Record};
 use mindflayer_core::lock::{HOLDER_FILE, WAIT};
 use mindflayer_core::{
-    FlayerWorkspace, Kind, Ledger, LockError, MindProject, Reference, LEDGER_FILE,
+    FlayerWorkspace, Kind, Ledger, LockError, MindProject, Reference, WorkspaceError, LEDGER_FILE,
 };
 use tempfile::TempDir;
 
@@ -92,6 +92,33 @@ fn a_writer_kept_waiting_past_the_wait_is_told_the_workspace_is_busy_and_by_whom
             std::process::id()
         )
     );
+}
+
+#[test]
+fn a_writer_kept_waiting_gives_up_as_busy_once_its_own_wait_is_over() {
+    let (dir, workspace) = workspace();
+    let project = projects(dir.path(), "alpha", 1).remove(0);
+    let _held = workspace.lock().unwrap();
+    let mut linking = workspace.clone();
+
+    // The whole of `WAIT`, for the one thing no shorter wait shows: that a
+    // writer's own wait, not only one a test picks, comes to an end.
+    let started = Instant::now();
+    let error = linking.link(&project).unwrap_err();
+    let waited = started.elapsed();
+
+    assert!(waited >= WAIT, "gave up before the wait was over");
+    assert!(waited < 2 * WAIT, "went on waiting past it");
+    assert!(
+        matches!(
+            &error,
+            WorkspaceError::Lock(LockError::Busy { pid, waited, .. })
+                if *pid == Some(std::process::id()) && *waited == WAIT
+        ),
+        "{error:?}"
+    );
+    let workspace = FlayerWorkspace::open(workspace.root()).unwrap();
+    assert!(!workspace.is_linked(project.root()), "linked all the same");
 }
 
 #[test]
