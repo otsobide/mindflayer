@@ -544,7 +544,11 @@ fn a_source_that_becomes_one_with_another_takes_its_folders_with_it() {
     let older = "example.com-acme-skills";
     let shelf = workspace.gathered_dir(Kind::Skill).join(older);
     fs::create_dir_all(shelf.join("deploy")).unwrap();
-    fs::write(shelf.join("deploy").join("SKILL.md"), skill("deploy", "Old")).unwrap();
+    fs::write(
+        shelf.join("deploy").join("SKILL.md"),
+        skill("deploy", "Old"),
+    )
+    .unwrap();
     let clone = workspace.cache_dir().join(older).join(".git");
     fs::create_dir_all(&clone).unwrap();
     fs::write(
@@ -578,4 +582,32 @@ fn a_source_that_becomes_one_with_another_takes_its_folders_with_it() {
         .join(&report.directory)
         .join("deploy")
         .is_dir());
+}
+
+#[test]
+fn one_url_scrubbed_out_of_several_sources_is_told_about_once() {
+    let (_dir, workspace) = workspace();
+    let ledger = workspace.ledger().unwrap();
+    drop(ledger);
+    // Two branches and another folder of one repository, all gathered with
+    // the same token: one credential, to be given to a helper once.
+    rusqlite::Connection::open(workspace.ledger_path())
+        .unwrap()
+        .execute_batch(
+            "INSERT INTO sources (kind, url, reference, subdirectory, directory, first_seen, last_seen)
+                 VALUES ('git', 'https://me:ghp_t0ken@example.com/acme/skills', 'main', 'skills', 'a', 0, 0),
+                        ('git', 'https://me:ghp_t0ken@example.com/acme/skills', 'dev', 'skills', 'b', 0, 0),
+                        ('git', 'https://me:ghp_t0ken@example.com/acme/skills', 'main', 'more', 'c', 0, 0);",
+        )
+        .unwrap();
+
+    let (ledger, scrub) = workspace.ledger_to_write().unwrap();
+
+    let told: Vec<&str> = scrub
+        .sources
+        .iter()
+        .map(|source| source.url.as_str())
+        .collect();
+    assert_eq!(told, ["https://example.com/acme/skills"]);
+    assert_eq!(ledger.tainted_sources().unwrap(), []);
 }
