@@ -4,7 +4,7 @@
 use std::fmt::Write as _;
 use std::path::Path;
 
-use mindflayer_core::gather::{self, Report, Request};
+use mindflayer_core::gather::{self, Report, Request, Scrub};
 use mindflayer_core::Kind;
 
 use super::workspace_here;
@@ -26,11 +26,17 @@ pub(crate) fn run_gather(
             path,
             reference,
         } => {
+            let said = scrubbed(&gather::scrub(&workspace, &ledger).map_err(CliError::from)?);
             let request = Request::git(url.clone())
                 .from_subdirectory(path.clone())
                 .at(reference.clone());
-            let report = gather::gather(&workspace, &ledger, &request).map_err(CliError::from)?;
-            Ok(gathered(url, &report))
+            match gather::gather(&workspace, &ledger, &request) {
+                Ok(report) => Ok(said.before(gathered(url, &report))),
+                Err(error) => Err(Failure {
+                    error: Box::new(error.into()),
+                    warnings: said.lines(),
+                }),
+            }
         }
         GatherCommand::List => {
             use mindflayer_core::install::{offered_by_loads, Offer};
@@ -64,6 +70,70 @@ pub(crate) fn run_gather(
                 ok,
             })
         }
+    }
+}
+
+/// What a scrub of the ledger has to tell, for a command that writes to it.
+///
+/// Notes rather than warnings, for what it took out: the command did what it
+/// was asked, and an exit code that failed once because of a fix would be a
+/// script broken by nothing it did. What it could not take out is a warning,
+/// since the credential is still on disk.
+#[derive(Debug, Default, Clone)]
+pub(crate) struct Scrubbed {
+    notes: Vec<String>,
+    warnings: Vec<String>,
+}
+
+impl Scrubbed {
+    /// Every line, notes first, for a command that stopped before it had
+    /// anything else to say: the scrub happened all the same, and says so
+    /// only this once.
+    pub(crate) fn lines(self) -> Vec<String> {
+        let mut lines = self.notes;
+        lines.extend(self.warnings);
+        lines
+    }
+
+    /// Put in front of what the command went on to say.
+    pub(crate) fn before(self, mut outcome: Outcome) -> Outcome {
+        outcome.ok = outcome.ok && self.warnings.is_empty();
+        outcome.stderr.splice(0..0, self.lines());
+        outcome
+    }
+}
+
+/// What [`gather::scrub`] took out, said the way a person can act on: every
+/// source it scrubbed now needs its credential from a git credential helper.
+pub(crate) fn scrubbed(scrub: &Scrub) -> Scrubbed {
+    let mut notes: Vec<String> = scrub
+        .sources
+        .iter()
+        .map(|source| {
+            format!(
+                "note: {}: the credential an older Mindflayer stored in this URL is taken out; \
+                 gathering it again needs a git credential helper that has it",
+                source.url
+            )
+        })
+        .collect();
+    match scrub.actions {
+        0 => {}
+        1 => notes.push(String::from(
+            "note: 1 action log entry: the credential an older Mindflayer stored in it is taken out",
+        )),
+        entries => notes.push(format!(
+            "note: {entries} action log entries: the credentials an older Mindflayer stored in \
+             them are taken out"
+        )),
+    }
+    Scrubbed {
+        notes,
+        warnings: scrub
+            .failures
+            .iter()
+            .map(|failure| format!("warning: {failure}"))
+            .collect(),
     }
 }
 

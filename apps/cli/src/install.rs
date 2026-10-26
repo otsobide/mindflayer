@@ -14,10 +14,11 @@ use std::time::Duration;
 
 use mindflayer_core::install::{self, Installed, Removed};
 use mindflayer_core::ledger::Ledger;
-use mindflayer_core::{FlayerWorkspace, Kind, MindProject};
+use mindflayer_core::{gather, FlayerWorkspace, Kind, MindProject};
 use ratatui::crossterm::event::{self, Event, KeyEventKind};
 use ratatui::DefaultTerminal;
 
+use crate::commands::gather::scrubbed;
 use crate::commands::workspace::load_warnings;
 use crate::{CliError, Failure, Outcome};
 use state::{Pending, Screen, Step, Target};
@@ -58,8 +59,10 @@ pub fn run(workspace: &FlayerWorkspace, ledger: &Ledger) -> Result<Outcome, Fail
             ok: true,
         },
     };
+    // Judged by the warnings rather than by stderr, which may also hold the
+    // notes a scrub leaves, and those are not a failure.
+    outcome.ok = outcome.ok && warnings.is_empty();
     outcome.stderr.splice(0..0, warnings);
-    outcome.ok = outcome.ok && outcome.stderr.is_empty();
     Ok(outcome)
 }
 
@@ -122,11 +125,16 @@ fn drive(terminal: &mut DefaultTerminal, mut screen: Screen) -> Result<(Screen, 
 }
 
 /// Carry out everything the screen marked, and say what happened.
+///
+/// The ledger is scrubbed first, as by every command that writes to it; here
+/// rather than in the two callers, so the screen `flayer install` opens and
+/// the one inside the TUI cannot differ about it.
 pub fn apply(
     workspace: &FlayerWorkspace,
     ledger: &Ledger,
     screen: &Screen,
 ) -> Result<Outcome, install::InstallError> {
+    let said = scrubbed(&gather::scrub(workspace, ledger)?);
     let mut stdout = String::new();
     let mut stderr = Vec::new();
     let (mut installed, mut removed) = (0usize, 0usize);
@@ -197,5 +205,5 @@ pub fn apply(
 
     let _ = writeln!(stdout, "\n{} installed, {} removed", installed, removed);
     let ok = stderr.is_empty();
-    Ok(Outcome { stdout, stderr, ok })
+    Ok(said.before(Outcome { stdout, stderr, ok }))
 }

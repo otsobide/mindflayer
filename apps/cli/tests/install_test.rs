@@ -296,3 +296,56 @@ fn a_project_with_an_empty_shelf_is_told_where_skills_come_from() {
 
     assert!(rendered(&screen).contains("nothing on the shelf"));
 }
+
+/// Put a token into the URL of every source on the shelf, the way a Mindflayer
+/// from before the refusal stored one.
+fn token_in_the_shelf(workspace: &FlayerWorkspace) {
+    rusqlite::Connection::open(workspace.ledger_path())
+        .unwrap()
+        .execute(
+            "UPDATE sources SET url = 'https://me:ghp_t0ken@example.com/acme/skills'",
+            [],
+        )
+        .unwrap();
+}
+
+const SCRUBBED: &str = "note: https://example.com/acme/skills: the credential an older \
+     Mindflayer stored in this URL is taken out; gathering it again needs a git credential \
+     helper that has it";
+
+#[test]
+fn applying_the_screen_scrubs_the_ledger_first_and_says_so_without_failing() {
+    let (_dir, workspace, ledger) = shelved(&["collapse"], &["deploy"]);
+    token_in_the_shelf(&workspace);
+    let mut screen = screen_for(&workspace, &ledger);
+    press(&mut screen, &[KeyCode::Right, KeyCode::Char(' ')]);
+
+    let outcome = install_screen::apply(&workspace, &ledger, &screen).unwrap();
+
+    assert!(outcome.ok, "{:?}", outcome.stderr);
+    assert_eq!(outcome.stderr, [SCRUBBED]);
+    assert_eq!(
+        ledger.tainted_sources().unwrap(),
+        [],
+        "the scrub rewrote the row"
+    );
+}
+
+#[test]
+fn installing_and_uninstalling_one_skill_scrub_the_ledger_first() {
+    let (dir, workspace, _ledger) = shelved(&["collapse"], &["deploy"]);
+    token_in_the_shelf(&workspace);
+
+    let installed = flayer(dir.path(), &["install", "-p", "collapse", "deploy"]).unwrap();
+    assert!(installed.ok, "{:?}", installed.stderr);
+    assert_eq!(installed.stderr, [SCRUBBED]);
+    assert_eq!(
+        installed.stdout,
+        "installed deploy into collapse, from https://example.com/acme/skills\n"
+    );
+
+    token_in_the_shelf(&workspace);
+    let removed = mind(&dir.path().join("collapse"), &["uninstall", "deploy"]).unwrap();
+    assert!(removed.ok, "{:?}", removed.stderr);
+    assert_eq!(removed.stderr, [SCRUBBED]);
+}

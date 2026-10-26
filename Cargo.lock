@@ -2510,6 +2510,7 @@ dependencies = [
  "gix",
  "mindflayer-core",
  "ratatui",
+ "rusqlite",
  "tempfile",
  "thiserror 2.0.20",
 ]

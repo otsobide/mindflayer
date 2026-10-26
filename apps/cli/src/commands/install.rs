@@ -4,8 +4,9 @@
 
 use std::path::Path;
 
-use mindflayer_core::{FlayerWorkspace, Kind, MindProject};
+use mindflayer_core::{gather, FlayerWorkspace, Kind, MindProject};
 
+use crate::commands::gather::scrubbed;
 use crate::commands::workspace::load_warnings;
 use crate::{CliError, Failure, Outcome};
 
@@ -25,13 +26,23 @@ pub(crate) fn install_named(
     use mindflayer_core::install::{self as installing, Installed};
 
     let warnings = load_warnings(workspace);
+    let ledger = workspace.ledger().map_err(|error| Failure {
+        error: Box::new(error.into()),
+        warnings: warnings.clone(),
+    })?;
+    let said = gather::scrub(workspace, &ledger)
+        .map(|scrub| scrubbed(&scrub))
+        .map_err(|error| Failure {
+            error: Box::new(error.into()),
+            warnings: warnings.clone(),
+        })?;
+    // What the scrub said goes with an error too: it happened all the same.
+    let mut told = said.clone().lines();
+    told.extend(warnings.iter().cloned());
     let with_warnings = |error: CliError| Failure {
         error: Box::new(error),
-        warnings: warnings.clone(),
+        warnings: told.clone(),
     };
-    let ledger = workspace
-        .ledger()
-        .map_err(|error| with_warnings(error.into()))?;
     // As typed first, so a shelf source's address or `workspace` means what
     // it says; only when that names nothing, as a path to a loaded workspace.
     let offered = |from: Option<&str>| {
@@ -71,7 +82,7 @@ pub(crate) fn install_named(
         outcome.stderr.extend(warnings);
         outcome.ok = false;
     }
-    Ok(outcome)
+    Ok(said.before(outcome))
 }
 
 /// Take one skill Mindflayer installed back out of one project.
@@ -83,26 +94,35 @@ pub(crate) fn uninstall_named(
     use mindflayer_core::install::{self as installing, Removed};
 
     let ledger = workspace.ledger().map_err(CliError::from)?;
+    let said = scrubbed(&gather::scrub(workspace, &ledger).map_err(CliError::from)?);
     let from = project.name();
-    match installing::uninstall(workspace, &ledger, project, Kind::Skill, name)
-        .map_err(CliError::from)?
-    {
+    let failed = |error: CliError, said: super::gather::Scrubbed| Failure {
+        error: Box::new(error),
+        warnings: said.lines(),
+    };
+    let taken = match installing::uninstall(workspace, &ledger, project, Kind::Skill, name) {
+        Ok(taken) => taken,
+        Err(error) => return Err(failed(error.into(), said)),
+    };
+    match taken {
         Removed::Removed { name, .. } => {
-            Ok(Outcome::plain(format!("removed {name} from {from}\n")))
+            Ok(said.before(Outcome::plain(format!("removed {name} from {from}\n"))))
         }
-        Removed::Foreign { name } => Ok(Outcome {
+        Removed::Foreign { name } => Ok(said.before(Outcome {
             stdout: String::new(),
             stderr: vec![format!(
                 "warning: {name} in {from} was not installed by Mindflayer, so it was left alone"
             )],
             ok: false,
-        }),
+        })),
         // Taking out something that is not there is a typo far more often
         // than it is a no-op, the reason `unlink` says so too.
-        Removed::Absent { name } => Err(CliError::NotInstalled {
-            name,
-            project: from.to_owned(),
-        }
-        .into()),
+        Removed::Absent { name } => Err(failed(
+            CliError::NotInstalled {
+                name,
+                project: from.to_owned(),
+            },
+            said,
+        )),
     }
 }
