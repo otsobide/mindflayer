@@ -1656,8 +1656,10 @@ than written. That is `flayer list`, `show`, `validate`, `scan`, `templates`,
 Made, it puts one thing in the home directory, `.mindflayer`. Its own
 artifacts go in its library ([The workspace's own
 artifacts](#the-workspaces-own-artifacts)), so no `~/skills` or `~/rules` sits
-above every project under home, and Mindflayer never writes an `AGENTS.md` or
-a `CLAUDE.md` there.
+above every project under home, and the workspace writes no `AGENTS.md` or
+`CLAUDE.md` there. What an install into a project at home writes there is
+that project's, as for any project
+([D-03](#d-03-rules-reach-every-agent-through-agentsmd)).
 
 A read of the unmade workspace answers as a read of one made a moment before
 would, because it is the same marker: `flayer list` says it manages no

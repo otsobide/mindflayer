@@ -103,10 +103,12 @@ These are easy to break from a single file without noticing.
     own project's `# project <key>` group. A team's `.gitignore` and
     `core.excludesFile` are never edited; the one `.gitignore` Mindflayer
     writes is `.mind/tmp`'s, inside a folder it owns, made with `create_new`.
-  - `flayer init` refuses a directory for the workspace's own that shares a
-    folder with the shelf or the cache, which gathering replaces
-    (`gathered_overlap`). Nothing writes `AGENTS.md` or `CLAUDE.md` into a
-    workspace.
+  - `flayer init` refuses a directory for the workspace's own that overlaps
+    the shelf or the cache, which are reserved for gathering
+    (`gathered_overlap`). `flayer init` and the workspace's own artifacts
+    never put an `AGENTS.md`, a `CLAUDE.md` or a kind's folder in the
+    workspace's directory; they live in `.mindflayer`. An install into a
+    project at the workspace's root is that project's (D-03).
 - **Mindflayer only manages what it installed.** The ledger's record of an
   install — one installation, a target for each copy it wrote, its origin and
   the `hash::tree` of what it wrote, that hash's one definition — is what
