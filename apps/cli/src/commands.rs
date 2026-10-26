@@ -388,10 +388,18 @@ fn reading_workspace(
     home: Option<&Path>,
     read: impl FnOnce(&FlayerWorkspace) -> Result<Outcome, Failure>,
 ) -> Result<Outcome, Failure> {
-    let workspace = workspace_to_read(directory, home)?;
-    let mut result = read(&workspace);
+    reading(&workspace_to_read(directory, home)?, read)
+}
+
+/// Run a read on a workspace found some other way, with the same one line
+/// more when it has not been made.
+fn reading(
+    workspace: &FlayerWorkspace,
+    read: impl FnOnce(&FlayerWorkspace) -> Result<Outcome, Failure>,
+) -> Result<Outcome, Failure> {
+    let mut result = read(workspace);
     if !workspace.is_made() {
-        let hint = unmade_hint(&workspace);
+        let hint = unmade_hint(workspace);
         match &mut result {
             Ok(outcome) => outcome.stderr.push(hint),
             Err(failure) => failure.warnings.push(hint),

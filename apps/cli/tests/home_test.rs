@@ -152,6 +152,25 @@ fn flayer_gather_list_reads_the_default_workspace_without_making_it() {
 }
 
 #[test]
+fn flayer_load_on_its_own_reads_the_default_workspace_without_making_it() {
+    let (home, elsewhere) = unmade_home();
+
+    let outcome = flayer_at_home(elsewhere.path(), home.path(), &["load"]).unwrap();
+
+    assert_eq!(
+        outcome.stdout,
+        format!(
+            "nothing loaded\n  offer another workspace's own with `flayer load <path>`\n  \
+             in the workspace at {}, the default one\n",
+            home.path().display()
+        )
+    );
+    assert_eq!(outcome.stderr, vec![hint(home.path())]);
+    assert!(outcome.ok);
+    assert!(!made(home.path()));
+}
+
+#[test]
 fn once_something_writes_the_workspace_is_made_and_the_hint_is_gone() {
     let (home, elsewhere) = unmade_home();
     let alpha = elsewhere.path().join("alpha");
