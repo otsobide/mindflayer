@@ -4,7 +4,7 @@
 use std::fmt::Write as _;
 use std::path::Path;
 
-use mindflayer_core::gather::{self, Report, Request, Scrub};
+use mindflayer_core::gather::{self, Report, Request, Scrub, Watch};
 use mindflayer_core::url::redacted;
 use mindflayer_core::{FlayerWorkspace, Kind};
 
@@ -13,10 +13,15 @@ use crate::render::{indent, plural, printable, table};
 use crate::{CliError, Failure, GatherCommand, Lookup, Outcome};
 
 /// Collect artifacts onto the workspace shelf, or say what is already on it.
+///
+/// A gather reports to `watch` and stops when it is cancelled; what it then
+/// prints is the same either way, so a front end that draws the progress
+/// shows the same report afterwards as one that does not.
 pub(crate) fn run_gather(
     command: &GatherCommand,
     directory: &Path,
     lookup: &Lookup,
+    watch: &Watch,
 ) -> Result<Outcome, Failure> {
     match command {
         GatherCommand::Git {
@@ -29,7 +34,8 @@ pub(crate) fn run_gather(
             let said = scrubbed(&scrub);
             let request = Request::git(url.clone())
                 .from_subdirectory(path.clone())
-                .at(reference.clone());
+                .at(reference.clone())
+                .watched_by(watch.clone());
             match gather::gather(&workspace, &ledger, &request) {
                 Ok(report) => Ok(said.before(gathered(url, &report))),
                 Err(error) => Err(Failure {
