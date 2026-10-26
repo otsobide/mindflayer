@@ -2278,12 +2278,18 @@ agent's folder, `.claude/` or `.codex/`, is somebody's to point anywhere, and a
 gathered repository can hold one that points at the user's own `~/.claude`: an
 entry written through it would land outside the project, in a file of the
 user's, which the project's ledger row would then claim. The root itself may
-be reached through a link, as a project often is.
+be reached through a link, as a project often is. The route is looked at when
+the file is read and again just before it is written, since a folder on it may
+have become a link in between, and the write goes to the path as spelled,
+never resolved: `replace_bytes`, which the markers go through, resolves it
+first, to follow a config somebody shared by a link
+([open questions](#open-questions)).
 
 A file that does not parse is refused and left as it is: what it was meant to
 say is its owner's to settle. A changed file is written whole through
-`replace_bytes`, a temporary of its own and a rename, with its permissions
-kept, so a crash leaves the old file or the new one. A file not there yet is
+`replace_bytes_unresolved`, a temporary of its own and a rename, with its
+permissions kept, so a crash leaves the old file or the new one. A file not
+there yet is
 made, with the folders on its route, by `create_dir` and `create_new`, where a
 rename would put it over one an agent's CLI made after the read found none. A
 replace that changes nothing writes nothing, modification time included.
@@ -3293,6 +3299,14 @@ leak into the lifecycle code. Unblocks #33, #45, #62, #93, #94 and #95.
   `.mcp.json` between `ConfigFile::edit`'s read and its rename is undone by the
   rename. Reading the file again just before the rename would narrow that to
   the rename itself; nothing closes it while the agents take no lock of ours.
+- **A folder made a link while a config file is written.** `ConfigFile::edit`
+  looks for links on the route again just before it writes, and the rename is
+  onto the path as spelled, so a link that the file itself has become is
+  replaced, not written through. A folder on the route that becomes a link in
+  the moment between that look and the rename is still followed by the
+  operating system. Only opening each folder without following links and
+  writing relative to it (`openat` with `O_NOFOLLOW`, then `renameat`) closes
+  that, which is a platform layer of its own for a window that small.
 - **A config file left empty by its last entry.** Removing the last server
   leaves `"mcpServers": {}` in a JSON file, and a `.codex/config.toml` that
   Mindflayer made holding nothing, and the file stays, with any folder made for

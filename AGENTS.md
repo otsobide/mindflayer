@@ -173,9 +173,9 @@ These are easy to break from a single file without noticing.
     `toml_edit`, never parsed and serialized again, so every byte outside the
     entry is kept. What an edit wrote is read back and refused unless only
     the entry changed, and a file that does not parse is refused, never
-    rewritten. A changed file goes through `replace_bytes`, keeping its
-    permissions; a new one is made with `create_new`. The module knows no
-    agent: the file, the key path and the entry are the caller's.
+    rewritten. A changed file goes through `replace_bytes_unresolved`,
+    keeping its permissions; a new one is made with `create_new`. The module
+    knows no agent: the file, the key path and the entry are the caller's.
   - `flayer init` refuses a directory for the workspace's own that overlaps
     the shelf or the cache, which are reserved for gathering
     (`gathered_overlap`). `flayer init` and the workspace's own artifacts
@@ -211,7 +211,10 @@ These are easy to break from a single file without noticing.
   - A project's artifact directories must stay inside the project.
   - A config file is named by a route of folder names from the project, and
     a symlink anywhere on it, the file included, is refused, never followed
-    (`config_entry::ConfigFile`).
+    (`config_entry::ConfigFile`): the route is looked at when the file is
+    read and again just before it is written, and the write is never
+    resolved. A folder made a link between that last look and the rename is
+    the one window left (architecture.md, open questions).
   - URLs are stored, logged and shown without credentials. `url::redacted`
     is the one function that takes them out: the ledger applies it to every
     URL it writes and reads, `GitError` to what it says, `git::scrub` to a
