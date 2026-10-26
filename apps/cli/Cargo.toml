@@ -6,6 +6,9 @@ license = "GPL-3.0-only"
 # clap shows this as the tool's one-line `--help` summary, so it says what the
 # tool does rather than what kind of crate it is.
 description = "Manage agent skills across mind projects"
+# Two binaries leave `cargo run` unable to choose, which breaks `make run`.
+# `mind` is the one that reaches both levels (`mind flayer <cmd>`).
+default-run = "mind"
 
 # Not `mf`: that is METAFONT, which ships with every TeX distribution and is
 # already on the PATH of anyone who writes LaTeX.
