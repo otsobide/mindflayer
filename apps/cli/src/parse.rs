@@ -47,7 +47,7 @@ pub struct Cli {
 }
 
 /// Where each agent keeps what it reads for every project: global options on
-/// both binaries, decided in `homes.rs` beside `--home`.
+/// both binaries, which `agent_homes` decides beside `default_home`.
 ///
 /// Options, rather than variables read where a check needs them, so a test
 /// can pin all four to none the way it pins `--home=`. Strings for the same
