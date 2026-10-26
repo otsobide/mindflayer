@@ -89,7 +89,8 @@ These are easy to break from a single file without noticing.
   to hide the rest. An absence (no `skills/` folder yet) is not a failure.
 - **Never overwrite what somebody wrote.**
   - New markers are written from string templates so their comments survive.
-    Edits go through `toml_edit` (`edit_array`) and a temp file plus a rename.
+    Edits go through `toml_edit` (`edit_array`) and a temp file of their own
+    (`replace_file`, named for the run) plus a rename.
   - Creation uses `create_new` or `create_dir`.
   - `rename` rewrites only the `name:` line (`frontmatter::with_key`).
   - `remove` is a dry run without `--yes`.
@@ -125,6 +126,15 @@ These are easy to break from a single file without noticing.
   - An installed name must be one folder name (`install::is_folder_name`).
   - Symlinks are followed only inside the source (`copy::tree`'s `within`).
   - A project's artifact directories must stay inside the project.
+- **Writers take turns; readers never wait.** Core's writers hold the
+  workspace's `.mindflayer/lock` (`FlayerWorkspace::lock`) while they change
+  it: `edit_array`, `install::install` and `uninstall`, `gather::gather`, and
+  `FlayerWorkspace::ledger`, which opens the ledger to write. A new writer
+  takes it the same way, inside core. The lock is not re-entrant: a writer
+  never calls another while it holds it, and a front end never takes it.
+  Reads (`FlayerWorkspace::open`, `ledger_for_reading`) never take it, and a
+  wait is bounded (`lock::WAIT`), ending in a `LockError::Busy` that names the
+  holder's pid.
 - **A gather never prompts for a credential itself.** Every connection `gix`
   lets a clone configure gets the callback in `gather/credentials.rs`, which
   runs the git-config credential helpers with `gix`'s prompt and askpass
