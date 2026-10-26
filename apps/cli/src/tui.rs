@@ -105,6 +105,14 @@ fn open(mut app: App, command: &'static str) -> Result<Outcome, Failure> {
     let mut terminal =
         ratatui::try_init().map_err(|source| CliError::NoTerminal { command, source })?;
     let outcome = drive(&mut terminal, &mut app);
+    // However the loop ended, a key that asked to leave or a terminal that
+    // failed it, a task still running is stopped and waited for rather than
+    // left behind, so what it did is in the transcript and nothing is half
+    // done when the process ends.
+    if let Some(running) = app.running.as_mut() {
+        running.cancel();
+    }
+    wait(&mut app);
     ratatui::restore();
     outcome.map_err(|source| CliError::Screen { source })?;
 
@@ -146,14 +154,9 @@ fn drive(terminal: &mut DefaultTerminal, app: &mut App) -> Result<(), io::Error>
 
         match app.press(key) {
             Step::Stay => {}
-            // A task still running is stopped by the key that asked to
-            // leave, and waited for rather than left behind, so what it did
-            // is in the transcript and nothing is half done when the process
-            // ends.
-            Step::Quit => {
-                wait(app);
-                return Ok(());
-            }
+            // A task still running is waited for by `open`, which does that
+            // however the loop ends.
+            Step::Quit => return Ok(()),
             // An editor draws a screen of its own, so this one steps aside
             // for it — raw mode off, back to the normal screen — and is drawn
             // again from scratch once the editor is closed.
