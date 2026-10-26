@@ -12,7 +12,7 @@
 use std::path::{Path, PathBuf};
 
 use mindflayer_core::paths;
-use mindflayer_core::{scan, Catalog, FlayerWorkspace, Kind, MindProject, Reference};
+use mindflayer_core::{scan, Catalog, FlayerWorkspace, MindProject, Reference};
 
 pub(crate) mod commands;
 pub(crate) mod error;
@@ -23,6 +23,7 @@ pub mod tui;
 
 use commands::artifact::{add_to, edit_in, remove_from, rename_in, templates_of};
 use commands::gather::run_gather;
+use commands::install::{install_named, uninstall_named};
 use commands::project::{
     asked_directories, initialized, link_projects, linked, scanned, unlink_projects, unlinked,
 };
@@ -30,7 +31,7 @@ pub use commands::read::WORKSPACE;
 use commands::read::{
     everywhere, list, list_workspace, one_project, show, validate, wanted, Level, Selector,
 };
-use commands::workspace::{load_command, load_warnings, unload_command};
+use commands::workspace::{load_command, unload_command};
 pub use error::CliError;
 pub use parse::{Cli, Command, FlayerCli, FlayerCommand, GatherCommand};
 use render::as_stored;
@@ -336,108 +337,6 @@ fn run_flayer(
                 }
             }
         }
-    }
-}
-
-// ---------------------------------------------------------------------------
-// Registering, and installing into, one project
-// ---------------------------------------------------------------------------
-
-/// Put one skill into one project, from wherever it is offered.
-///
-/// `from` may be a path to a loaded workspace typed from `directory`, as it was
-/// given to `load`. What the loaded workspaces could not offer is said as
-/// warnings, whether or not the install then works: a loaded workspace that
-/// has gone is why a skill is "not offered", and the error alone cannot say so.
-fn install_named(
-    workspace: &FlayerWorkspace,
-    project: &MindProject,
-    name: &str,
-    from: Option<&str>,
-    directory: &Path,
-) -> Result<Outcome, Failure> {
-    use mindflayer_core::install::{self as installing, Installed};
-
-    let warnings = load_warnings(workspace);
-    let with_warnings = |error: CliError| Failure {
-        error: Box::new(error),
-        warnings: warnings.clone(),
-    };
-    let ledger = workspace
-        .ledger()
-        .map_err(|error| with_warnings(error.into()))?;
-    // As typed first, so a shelf source's address or `workspace` means what
-    // it says; only when that names nothing, as a path to a loaded workspace.
-    let offered = |from: Option<&str>| {
-        installing::offered(workspace, &ledger, project, Kind::Skill, name, from)
-    };
-    let candidate = match (offered(from), from) {
-        (Err(installing::InstallError::NotOffered { .. }), Some(typed)) => {
-            offered(Some(&installing::resolve_from(workspace, directory, typed)))
-        }
-        (result, _) => result,
-    }
-    .map_err(|error| with_warnings(error.into()))?;
-    let origin = candidate.origin();
-    let into = project.name();
-    let mut outcome = match installing::install(workspace, &ledger, project, &candidate)
-        .map_err(|error| with_warnings(error.into()))?
-    {
-            Installed::Added { name, .. } => {
-                Outcome::plain(format!("installed {name} into {into}, from {origin}\n"))
-            }
-            Installed::Updated { name, .. } => {
-                Outcome::plain(format!("updated {name} in {into}, from {origin}\n"))
-            }
-            Installed::Unchanged { name, .. } => {
-                Outcome::plain(format!("{name} in {into} was already current\n"))
-            }
-            // Refused rather than obeyed: somebody wrote that one.
-            Installed::Foreign { name } => Outcome {
-                stdout: String::new(),
-                stderr: vec![format!(
-                    "warning: {into} already has a {name} that Mindflayer did not put there, so it was left alone"
-                )],
-                ok: false,
-            },
-    };
-    if !warnings.is_empty() {
-        outcome.stderr.extend(warnings);
-        outcome.ok = false;
-    }
-    Ok(outcome)
-}
-
-/// Take one skill Mindflayer installed back out of one project.
-fn uninstall_named(
-    workspace: &FlayerWorkspace,
-    project: &MindProject,
-    name: &str,
-) -> Result<Outcome, Failure> {
-    use mindflayer_core::install::{self as installing, Removed};
-
-    let ledger = workspace.ledger().map_err(CliError::from)?;
-    let from = project.name();
-    match installing::uninstall(workspace, &ledger, project, Kind::Skill, name)
-        .map_err(CliError::from)?
-    {
-        Removed::Removed { name, .. } => {
-            Ok(Outcome::plain(format!("removed {name} from {from}\n")))
-        }
-        Removed::Foreign { name } => Ok(Outcome {
-            stdout: String::new(),
-            stderr: vec![format!(
-                "warning: {name} in {from} was not installed by Mindflayer, so it was left alone"
-            )],
-            ok: false,
-        }),
-        // Taking out something that is not there is a typo far more often
-        // than it is a no-op, the reason `unlink` says so too.
-        Removed::Absent { name } => Err(CliError::NotInstalled {
-            name,
-            project: from.to_owned(),
-        }
-        .into()),
     }
 }
 
