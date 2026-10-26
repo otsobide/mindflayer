@@ -7,7 +7,7 @@
 
 use std::num::NonZeroU32;
 use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::Ordering;
 use std::sync::mpsc::{self, RecvTimeoutError};
 use std::thread;
 use std::time::Duration;
@@ -45,6 +45,11 @@ pub fn clone(
     into: &Path,
     watch: &Watch,
 ) -> Result<Clone, GitError> {
+    // Before the clone already there is removed, which a cancel should not
+    // cost.
+    if watch.is_cancelled() {
+        return Err(GitError::Cancelled);
+    }
     if into.exists() {
         std::fs::remove_dir_all(into).map_err(|source| GitError::Cache {
             path: into.to_path_buf(),
@@ -95,14 +100,20 @@ pub fn clone(
             })?;
     }
 
-    // Nothing here can be interrupted from outside yet, so the flag is a
-    // constant. It is what gix asks for, and a shared one is what a `Ctrl-C`
-    // handler would set later.
-    let interrupt = AtomicBool::new(false);
+    // The watch's own flag, so a cancel stops `gix` where it checks, between
+    // the objects it receives and the files it writes, rather than once it
+    // is done. A clone it stops partway is removed by `gix` itself.
+    let interrupt = watch.flag();
     let (mut checkout, _) = counted(watch, |progress| {
         prepare
-            .fetch_then_checkout(progress, &interrupt)
-            .map_err(|error| fetch_failed(url, shortfalls.last(), error.to_string()))
+            .fetch_then_checkout(progress, interrupt)
+            .map_err(|error| {
+                if interrupt.load(Ordering::Relaxed) {
+                    GitError::Cancelled
+                } else {
+                    fetch_failed(url, shortfalls.last(), error.to_string())
+                }
+            })
     })?;
     // Said before the checkout starts rather than once its count is first
     // read, so the step is named even when it is over before that.
@@ -110,14 +121,23 @@ pub fn clone(
         done: 0,
         total: None,
     });
-    let (repository, _) = counted(watch, |progress| {
+    let checked_out = counted(watch, |progress| {
         checkout
-            .main_worktree(progress, &interrupt)
+            .main_worktree(progress, interrupt)
             .map_err(|error| GitError::Checkout {
                 url: url.to_owned(),
                 detail: error.to_string(),
             })
-    })?;
+    });
+    // A checkout `gix` stops partway still succeeds, with some of the files
+    // written, and is then no longer `gix`'s to remove. What will not go is
+    // replaced by the next clone, as every clone replaces what is there.
+    if interrupt.load(Ordering::Relaxed) {
+        drop(checkout);
+        let _ = std::fs::remove_dir_all(into);
+        return Err(GitError::Cancelled);
+    }
+    let (repository, _) = checked_out?;
 
     Ok(Clone {
         root: repository
@@ -263,6 +283,10 @@ pub enum GitError {
     Credentials { url: String },
     #[error("{url}: cloned, but its files could not be checked out: {detail}")]
     Checkout { url: String, detail: String },
+    /// The [`Watch`] was cancelled before the clone was finished. What there
+    /// was of it is gone.
+    #[error("the clone was cancelled before it was finished")]
+    Cancelled,
 }
 
 #[cfg(test)]

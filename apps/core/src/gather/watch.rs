@@ -77,6 +77,11 @@ impl Watch {
         self.cancelled.load(Ordering::Relaxed)
     }
 
+    /// The flag itself, for `gix` to stop at.
+    pub(crate) fn flag(&self) -> &AtomicBool {
+        &self.cancelled
+    }
+
     /// Tell the sink, if there is one.
     pub(crate) fn report(&self, progress: Progress) {
         if let Some(sink) = &self.sink {

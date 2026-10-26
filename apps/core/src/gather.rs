@@ -196,6 +196,9 @@ pub fn gather(
                 Some(&detail),
             )?;
         }
+        // Not logged: a cancel leaves the ledger as it found it, and the
+        // person who cancelled knows already.
+        Err(GatherError::Cancelled) => {}
         Err(error) => {
             let _ = ledger.log(
                 Action::Gather,
@@ -225,6 +228,20 @@ fn harvest(
         return Err(GatherError::NotGatherable { kind: request.kind });
     };
 
+    // Before the source is registered, so a gather cancelled before it began
+    // has nothing to undo.
+    if request.watch.is_cancelled() {
+        return Err(GatherError::Cancelled);
+    }
+
+    let new = ledger
+        .source(
+            request.source.kind(),
+            request.source.url(),
+            request.source.reference(),
+            &request.subdirectory,
+        )?
+        .is_none();
     let source = ledger.source_for(
         request.source.kind(),
         request.source.url(),
@@ -232,13 +249,41 @@ fn harvest(
         &request.subdirectory,
     )?;
 
+    let outcome = take(workspace, ledger, request, &source, manifest);
+    if new && matches!(outcome, Err(GatherError::Cancelled)) {
+        // Undone rather than never done: the clone needs the folder name that
+        // registering gives it before anything is fetched. Holding the
+        // registration in a transaction until the gather ends was the other
+        // way, and is rejected: every other write to the ledger would wait
+        // for as long as the network takes.
+        ledger.forget_source(source.id)?;
+        // Nothing points at its clone any more. One that will not go is left
+        // for the next source given its folder name, whose clone replaces
+        // whatever is there, as every clone does.
+        let _ = fs::remove_dir_all(workspace.cache_dir().join(&source.directory));
+    }
+    outcome
+}
+
+/// Fetch `source`, read what it offers, and put that on the shelf: the
+/// gather, once its source is registered.
+fn take(
+    workspace: &FlayerWorkspace,
+    ledger: &Ledger,
+    request: &Request,
+    source: &ledger::Source,
+    manifest: &str,
+) -> Result<Report, GatherError> {
     let watch = &request.watch;
     let cache = workspace.cache_dir().join(&source.directory);
     watch.report(Progress::Connecting);
     let clone = match &request.source {
-        Source::Git { url, reference } => git::clone(url, reference.as_deref(), &cache, watch)?,
+        Source::Git { url, reference } => git::clone(url, reference.as_deref(), &cache, watch)
+            .map_err(|error| match error {
+                git::GitError::Cancelled => GatherError::Cancelled,
+                error => error.into(),
+            })?,
     };
-    ledger.saw_source(source.id, clone.revision.as_deref())?;
 
     let harvested_from = clone.root.join(&request.subdirectory);
     if !harvested_from.is_dir() {
@@ -256,9 +301,8 @@ fn harvest(
     };
 
     // Everything is read before anything is placed, rather than each
-    // artifact read and placed in turn, so that what is on the shelf only
-    // starts to change once all of it is known: that is the point up to
-    // which a gather can still be stopped without leaving half of one.
+    // artifact read and placed in turn, so that the shelf only starts to
+    // change once all of it is known.
     let found = candidates(&harvested_from, manifest)?;
     let mut taken = Vec::with_capacity(found.len());
     watch.report(Progress::Harvesting {
@@ -274,6 +318,17 @@ fn harvest(
             total: found.len(),
         });
     }
+
+    // The last moment a cancel is honoured, and the reason everything is read
+    // first: past here the shelf and the ledger change, and a gather stopped
+    // halfway through that would leave them neither as they were nor as the
+    // source has them.
+    if watch.is_cancelled() {
+        return Err(GatherError::Cancelled);
+    }
+    // Noted only now, and not by a gather that fails before it gets here,
+    // since the revision a source names is the one its shelf holds.
+    ledger.saw_source(source.id, clone.revision.as_deref())?;
 
     watch.report(Progress::Placing {
         done: 0,
@@ -309,7 +364,7 @@ fn harvest(
 
         let recorded = relative(workspace, &destination);
         ledger.record(
-            &source,
+            source,
             request.kind,
             artifact.name(),
             &recorded,
@@ -449,6 +504,10 @@ pub enum GatherError {
     Git(#[from] git::GitError),
     #[error(transparent)]
     Ledger(#[from] LedgerError),
+    /// Its [`Watch`] was cancelled before anything was put on the shelf,
+    /// which is as it was, and so is the ledger.
+    #[error("cancelled, with nothing put on the shelf")]
+    Cancelled,
     #[error("{url}: has no `{subdirectory}` folder to gather from")]
     NoSuchFolder { subdirectory: String, url: String },
     #[error("{kind}s cannot be gathered yet")]
