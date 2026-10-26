@@ -1291,7 +1291,7 @@ project's row runs `mind -C <project>` (`mind -W . -C <project>` for one the
 workspace manages from outside its own tree; see [the TUI looks where it was
 told](#the-tui-looks-where-it-was-told)): a task carries its holder, and the
 holder decides the level of the line it becomes. `mind` on its own opens the
-same screen on the project it was run in — inside the workspace that manages
+same screen on the project it was run in: inside the workspace that manages
 it, where its neighbours and its installs are, or on the project alone when
 none does. Alone, the keys that belong to a workspace say so instead of
 running, and `l` is `mind link`, after which the screen is the workspace's.
@@ -1299,7 +1299,7 @@ running, and `l` is `mind link`, after which the screen is the workspace's.
 ### Every change is a command line
 
 A key that asks for work produces a `Task`, and `Task::commands` turns it into
-the words a person would type — `flayer link beta`, `mind -C beta add skill
+the words a person would type: `flayer link beta`, `mind -C beta add skill
 deploy 'Ship it'`. Those words are parsed by `Cli` and `FlayerCli`, the parsers
 the binaries use, and run through `run_with` and `run_flayer_with`, what the
 binaries' `run_watched` and `run_flayer_cli_watched` call once they have read
@@ -1310,8 +1310,8 @@ one.
 
 That is what turns "every feature has a command and a place in the TUI" from a
 promise into a property. A feature is written once, as a command, and the TUI
-gains it by producing that command's words. A test parses every task's lines —
-free text shaped to break a naive command line included — so a task that could
+gains it by producing that command's words. A test parses every task's lines
+(free text shaped to break a naive command line included), so a task that could
 not be typed cannot be written.
 
 Two things follow, and both are deliberate:
@@ -1320,7 +1320,7 @@ Two things follow, and both are deliberate:
   line. The TUI teaches the CLI rather than standing in front of it.
 - **Closing the TUI prints a transcript**: every command that changed
   something, with what each said. The session can be read afterwards and
-  repeated in a script. Commands that only read — show, validate, the shelf —
+  repeated in a script. Commands that only read (show, validate, the shelf)
   are left out, because they changed nothing.
 
 A `-C` or a `-W` in those words is relative to the workspace root, which is
@@ -1329,8 +1329,8 @@ root rather than against wherever the process started. What the screen was
 opened with is passed along rather than spelled: its home, and the `-W` or
 activation that chose its workspace (`tui::execute`), as they were given to
 `flayer` itself. A command that opens a screen of its own
-— `flayer`, `flayer tui`, `flayer minds`, `flayer install` with no skill named,
-`mind`, `mind tui` — is refused if it ever reaches that path, rather than drawn
+(`flayer`, `flayer tui`, `flayer minds`, `flayer install` with no skill named,
+`mind`, `mind tui`) is refused if it ever reaches that path, rather than drawn
 inside this one.
 
 The exceptions are named, not hidden: the install screen is embedded as it is,
@@ -1339,14 +1339,14 @@ not a command, because it changes nothing.
 
 ### Split three ways, like the install screen
 
-- `tui/state.rs` — what a key does. It moves cursors, fills forms and returns
+- `tui/state.rs`: what a key does. It moves cursors, fills forms and returns
   tasks; nothing in it touches a file, so a test drives it with the keys a
   person presses.
-- `tui/ui.rs` — what the screen looks like, rendered into an in-memory
+- `tui/ui.rs`: what the screen looks like, rendered into an in-memory
   terminal by the tests.
-- `tui/minds.rs` — the minds screen's rows and ticks, and the task they amount
+- `tui/minds.rs`: the minds screen's rows and ticks, and the task they amount
   to; like `state.rs`, it touches nothing.
-- `tui.rs` — the loop, reading the disk into what the screen shows, and running
+- `tui.rs`: the loop, reading the disk into what the screen shows, and running
   tasks. `step` is everything the loop does between a key and the next frame,
   and `settle` what it does before each frame while a task runs apart; both
   are public so a test can do exactly that without a terminal.
@@ -1356,8 +1356,8 @@ frozen screen reads as a hung one. Keys pressed while it ran are dropped: they
 were aimed at a screen that has since changed.
 
 `mind edit` is the one command that needs the terminal itself, because an
-editor draws a screen of its own. For it the loop steps aside — raw mode off,
-back to the normal screen — runs the command as it runs any other, and builds
+editor draws a screen of its own. For it the loop steps aside (raw mode off,
+back to the normal screen), runs the command as it runs any other, and builds
 its own screen again from scratch when the editor closes. The task says so
 (`takes_terminal`), so the loop does not have to know which commands are
 editors.
@@ -1402,7 +1402,7 @@ that is not a command line.
 
 The link form offers what `flayer scan` finds under the workspace. A git
 repository that is not a mind project yet can be picked, but making it one
-writes into it, so `mind init` is asked about, not assumed — and a typed path
+writes into it, so `mind init` is asked about, not assumed, and a typed path
 that turns out to be a plain directory is asked about the same way. Unlinking
 asks too, and says that nothing on disk is deleted. A command that fails from a
 form leaves the form open with the reason in it, so a typo is fixed where it
@@ -1411,7 +1411,7 @@ was made rather than typed out again.
 ### The minds screen
 
 `m`, or `flayer minds`, lists every project the workspace links, ticked, and
-every one `flayer scan` finds under it that it does not, unticked — in one
+every one `flayer scan` finds under it that it does not, unticked, all in one
 list by path, because the question it answers is "which of these", not "which
 kind". Ticking only marks. Applying turns the marks into lines like any other
 task: `mind -C <path> init` for each repository that is not a project yet, then
@@ -1441,16 +1441,16 @@ It holds no rules. It cannot tell a valid task from an invalid one, a linked
 project from a path to refuse, or a skill from a rule, and it is not to learn:
 each of those answers is core's, reached through the backend, so the panel
 cannot disagree with the CLI and the TUI about any of them. What it knows is
-HTTP — routes, the token, cache headers, a log line — and none of that would
+HTTP (routes, the token, cache headers, a log line), and none of that would
 differ between two front ends.
 
 The panel's whole API is four endpoints, which are
 [D-18](#d-18-the-panel-writes-by-running-commands) in HTTP:
 
-- `POST /api/query` — a read, answered with JSON of the backend's own shape.
-- `POST /api/commands/preview` — the command lines a task is, with nothing run.
-- `POST /api/commands` — run a task; the reply is its lines and its outcome.
-- `GET /api/transcript` — every task the session ran, with what each produced.
+- `POST /api/query`: a read, answered with JSON of the backend's own shape.
+- `POST /api/commands/preview`: the command lines a task is, with nothing run.
+- `POST /api/commands`: run a task; the reply is its lines and its outcome.
+- `GET /api/transcript`: every task the session ran, with what each produced.
 
 Any other path under `/api` is a JSON 404, and every refusal, a body the
 backend cannot read included, is `{"error": "..."}`, so a script never has to
@@ -1582,8 +1582,8 @@ in `src/auth.rs`):
    and a script off everything. `flayer ui --dev` (#68) is to accept exactly
    one more, the panel's dev server's (an [open question](#open-questions)).
 3. **The token**, under `/api` only: a 401 without it.
-4. **A change by cookie** — any method but GET and HEAD, on a request whose
-   token came as the cookie — must carry `Sec-Fetch-Site: same-origin` (or a
+4. **A change by cookie** (any method but GET and HEAD, on a request whose
+   token came as the cookie) must carry `Sec-Fetch-Site: same-origin` (or a
    403), `X-Mindflayer: 1` (or a 403) and `Content-Type: application/json`
    (or a 415). By method rather than by endpoint, so an endpoint added later
    is covered without being listed; `POST /api/query` is held to it as well,
@@ -1641,9 +1641,10 @@ gate takes the token from whichever `mf_<port>` holds it.
 ### The log
 
 The server prints nothing of its own accord. A front end that wants a log hands
-`Server::log` a function, and gets a line per request once it is answered —
-`GET /api/transcript 200`: the method, the path and query, the status. Never a
-header, since the cookie and the Bearer token travel in them, and never a body.
+`Server::log` a function, and gets a line per request once it is answered,
+like `GET /api/transcript 200`: the method, the path and query, the status.
+Never a header, since the cookie and the Bearer token travel in them, and never
+a body.
 The value of a `token` parameter is replaced by `<redacted>` however its name
 is encoded, decoded the way the exchange decodes it to find it; and the token
 is scrubbed from anywhere else in the line, upper-cased or pasted into a path,
@@ -1663,7 +1664,7 @@ Files under `assets/` are named by Vite for their contents, so they are sent
 as immutable, to be kept for a year; everything else, `index.html` above all,
 is `no-cache`, so a rebuild shows on the next load. A path outside `/api` that
 names no file gets `index.html`, because the panel draws its own routes in the
-browser — except under `assets/`, where a missing file is one an old page asks
+browser, except under `assets/`, where a missing file is one an old page asks
 for after a rebuild, and a 404 is easier to read than a page delivered as a
 script. A test hands the server a panel of its own (`Panel::embedded`, any
 folder rust-embed can embed), so the suites cover all of this without a build.
