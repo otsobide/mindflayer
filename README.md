@@ -67,6 +67,9 @@ $ flayer add skill commit-style "How every repo here writes commits"
 created skill commit-style at /home/you/.mindflayer/library/skills/commit-style/SKILL.md
 ```
 
+One an older Mindflayer made keeps them in `~/skills` and `~/rules` until you
+[move them into its library](#upgrading).
+
 `--home DIR`, or `$MINDFLAYER_HOME`, puts the default somewhere other than your
 home; set to empty (`--home ""`) there is no default, and a command outside
 every workspace says so instead.
@@ -307,6 +310,9 @@ flayer install             # a screen for putting skills into its projects
 flayer install -p PROJECT <SKILL> [--from ORIGIN]
                            # one, without the screen
 flayer uninstall -p PROJECT <SKILL>
+flayer migrate --library [--yes]
+                           # move its own skills and rules into its library;
+                           # without --yes, say what would move
 
 mind flayer <cmd>          # the long way round; `flayer <cmd>` is the shortcut
 mind ls / flayer ls        # alias for list; `flayer gather ls` for gather list
@@ -563,6 +569,8 @@ the token and leaves the file as it is.
 .mindflayer/
   flayer.toml     the projects it manages, the workspaces it loads, and where
                   its own skills and rules are
+  flayer.toml.v2  flayer.toml as it was before `flayer migrate --library`
+                  rewrote it, if it did
   library/skills/<name>/SKILL.md
   library/rules/<name>.md
                   its own, unless flayer.toml says otherwise
@@ -598,10 +606,11 @@ SELECT datetime(at, 'unixepoch'), action, outcome, detail FROM actions;
 ```
 
 The TUI and any number of terminals can be open on one workspace, and the
-commands that change it take turns. Linking, loading, gathering, installing and
-uninstalling each hold `lock` while they write, with the process's id in
-`lock.pid` beside it. One that finds the workspace held waits up to ten seconds
-for the other to finish, then gives up and says who it waited for:
+commands that change it take turns. Linking, loading, gathering, installing,
+uninstalling and migrating each hold `lock` while they write, with the
+process's id in `lock.pid` beside it. One that finds the workspace held waits
+up to ten seconds for the other to finish, then gives up and says who it
+waited for:
 
 ```
 $ flayer link tanukeys
@@ -771,8 +780,9 @@ a project. Any folder inside the workspace will do except the shelf and the
 cache, which are reserved for gathering, a folder inside them, or one holding
 them, so `--skills .mindflayer/skills` and `--rules .mindflayer` are refused. A
 workspace made before the library keeps them in `skills/` and `rules/` beside
-its projects, because that is what its `flayer.toml` says. Either way nothing
-is made until the first one is added.
+its projects, because that is what its `flayer.toml` says, until `flayer
+migrate --library` [moves them](#upgrading). Either way nothing is made until
+the first one is added.
 
 A project holds what is in its own folders, because that is what its agents
 read, so the workspace's skills reach a project by being installed into it —
@@ -1086,6 +1096,66 @@ project sits, or for `mind` the one named or activated, or else the workspace
 above the project, or else the one in your home. Another workspace that links
 the same project keeps its own (an
 [open question](docs/architecture.md#open-questions)).
+
+## Upgrading
+
+A newer Mindflayer reads what an older one wrote exactly as it was written. It
+changes a marker only when you tell it to, and the database only after
+copying it aside ([what a workspace keeps](#what-a-workspace-keeps)).
+
+### A workspace made before the library
+
+`flayer init` used to keep a workspace's own skills and rules in `skills/` and
+`rules/` beside its projects: `~/skills` and `~/rules`, for the workspace in
+your home. Such a workspace still works, because its `flayer.toml` names those
+folders, and keeps them there until you move them into its library. On its own
+the command changes nothing and says what `--yes` would do:
+
+```
+$ flayer migrate --library
+would move /home/you/skills/commit-style to /home/you/.mindflayer/library/skills/commit-style
+would move /home/you/rules/git/no-force-push.md to /home/you/.mindflayer/library/rules/git/no-force-push.md
+would point skills and rules in /home/you/.mindflayer/flayer.toml at the library, keeping it as it is in /home/you/.mindflayer/flayer.toml.v2
+nothing moved: add --yes to go ahead
+
+$ flayer migrate --library --yes
+moved /home/you/skills/commit-style to /home/you/.mindflayer/library/skills/commit-style
+moved /home/you/rules/git/no-force-push.md to /home/you/.mindflayer/library/rules/git/no-force-push.md
+pointed skills and rules in /home/you/.mindflayer/flayer.toml at the library, kept as it was in /home/you/.mindflayer/flayer.toml.v2
+```
+
+Each artifact is moved as it is, a skill whose front matter is broken
+included, and a folder it leaves empty goes with it, so your home keeps no
+empty `~/skills`. Only the values in `[directories]` change; the comments and
+everything else in `flayer.toml` stay as they were. Run again, it has nothing
+to do and writes nothing:
+
+```
+$ flayer migrate --library --yes
+nothing to move: the workspace keeps its own in its library already
+```
+
+What you installed from the workspace into a project stays installed, and
+current: an install records that it came from `workspace`, not from which
+folder, so `flayer install` still finds the project's copy the same as the
+skill it came from.
+
+Nothing moves while anything is in the way, and every reason is said at once:
+something already where an artifact would go, a `flayer.toml.v2` an earlier
+migration kept, a link whose target is relative to where it is, or a folder
+that cannot be read:
+
+```
+$ flayer migrate --library --yes
+error: nothing moved: /home/you/.mindflayer/library/skills/commit-style: already there, so /home/you/skills/commit-style cannot be moved onto it
+```
+
+A project's artifacts are never moved. When your home is itself a project
+keeping its skills in `~/skills` too, those are the project's: they stay where
+they are, the command says so, and the workspace's own skills start empty in
+its library. A move that fails puts back what had moved, and leaves
+`flayer.toml` as it was. To undo a migration that worked, put `flayer.toml.v2`
+in place of `flayer.toml` and move the artifacts back.
 
 ## Roadmap
 
