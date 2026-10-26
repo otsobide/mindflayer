@@ -5,12 +5,18 @@
 # environment, the commands and what every agent answered.
 #
 #   scripts/agent-probe/probe.sh [claude]
+#   PROBE_ONLY='claude-import claude-local' scripts/agent-probe/probe.sh
 #
 # It runs the agents against their APIs with the operator's own login, which is
 # why it is run by hand and never by CI or `make test`. Only Claude Code has
 # checks so far. An agent gets them from a file beside this one, <agent>.sh,
-# defining <agent>_prepare, run out here where the real home is visible, and
-# <agent>_checks, run inside the namespace below (see claude.sh).
+# defining <agent>_prepare, run out here where the real home is visible,
+# <agent>_checks, run inside the namespace below, and <agent>_runs, the names
+# of its runs (see claude.sh).
+#
+# Every run costs a paid agent call, so PROBE_ONLY, a space-separated list of
+# those names, limits a re-run to the runs it names, after a change to those
+# alone. Unset, everything runs.
 #
 # Linux only. It needs bubblewrap (bwrap) on PATH, jq and git in /usr/bin or
 # /bin, the only PATH inside the namespace, and each agent's own binary
@@ -153,16 +159,23 @@ outside() {
 	local before after
 	before=$(fingerprint "${watched[@]}")
 
-	# Each agent's prepare copies in its login and names the binaries the
-	# namespace must see and the variables it must carry.
 	expose=()
 	namespace_env=()
-	local agent
+	local agent runs=() name
 	for agent in "${agents[@]}"; do
 		# shellcheck source=/dev/null
 		source "$here/$agent.sh"
-		"${agent}_prepare"
+		local -n agent_runs=${agent}_runs
+		runs+=("${agent_runs[@]}")
+		unset -n agent_runs
 	done
+	# A misspelt name would otherwise quietly leave out a run that was meant.
+	for name in ${PROBE_ONLY:-}; do
+		in_list "$name" "${runs[@]}" || die "PROBE_ONLY names '$name', which is no run (${runs[*]})"
+	done
+	# Each agent's prepare copies in its login and names the binaries the
+	# namespace must see and the variables it must carry.
+	for agent in "${agents[@]}"; do "${agent}_prepare"; done
 
 	local args=(
 		--die-with-parent
@@ -189,6 +202,7 @@ outside() {
 		PATH "$namespace_path"
 		LANG C.UTF-8
 		PROBE_REAL_HOME "$real_home"
+		PROBE_ONLY "${PROBE_ONLY:-}"
 		"${namespace_env[@]}"
 	)
 	args+=(--clearenv)
@@ -300,6 +314,13 @@ show_ignored() {
 			git -C "$repo" check-ignore -v --no-index -- "$path" || printf 'not ignored: %s\n' "$path"
 		done
 	} | tee "$results/$name.git.txt" | sed 's/^/  /'
+}
+
+# Whether PROBE_ONLY lets a run go.
+selected() {
+	[[ -z ${PROBE_ONLY:-} ]] && return 0
+	# shellcheck disable=SC2086 # a list of names, split on purpose
+	in_list "$1" $PROBE_ONLY
 }
 
 verdict() {

@@ -104,13 +104,16 @@ mise's.
 
 ```bash
 scripts/agent-probe/probe.sh            # same as: probe.sh claude
+PROBE_ONLY='claude-import claude-local' scripts/agent-probe/probe.sh
 ```
 
 It prints every command, answer and verdict, keeps them in
 `target/agent-probe-results/<time>/`, and exits non-zero when a result
-differs from what this page says. Codex and OpenCode get checks from a
-`codex.sh` or `opencode.sh` beside it, defining `<agent>_prepare` (copy the
-login in) and `<agent>_checks`; the harness already points `CODEX_HOME` and
+differs from what this page says. Each run is a paid call, so `PROBE_ONLY`
+names the runs to do when only some changed; a name that is no run is
+refused. Codex and OpenCode get checks from a `codex.sh` or `opencode.sh`
+beside it, defining `<agent>_prepare` (copy the login in), `<agent>_checks`
+and `<agent>_runs`; the harness already points `CODEX_HOME` and
 `OPENCODE_CONFIG_DIR` into the temp dir. Until those exist, `probe.sh codex`
 refuses.
 

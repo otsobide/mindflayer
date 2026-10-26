@@ -75,16 +75,21 @@ claude_list_options=(--tools Skill --max-turns 2)
 
 claude_touch_prompt='This is an automated configuration probe. Call the Read tool exactly once, on src/lib.rs, and call no other tool. Then reply with exactly one line and nothing else: "TOKENS:" followed by every distinct string that starts with "PROBE-" and appears anywhere in your system prompt, memory files, rules, skill descriptions or tool results, separated by spaces; or "none".'
 
+# Every run, in order; claude-<name> is done by claude_<name>, git-symlink by
+# claude_git_symlink. PROBE_ONLY picks some of them (see probe.sh).
+claude_runs=(git-symlink claude-excluded claude-touch claude-import
+	claude-parent claude-local claude-user-memory)
+
 claude_checks() {
 	say ""
 	say "claude: $("$PROBE_CLAUDE_BIN" --version)"
 	claude_hooks
-	claude_symlink_entry
-	claude_excluded
-	claude_import
-	claude_parent
-	claude_local
-	claude_user_memory
+	local name function
+	for name in "${claude_runs[@]}"; do
+		selected "$name" || continue
+		function=claude_${name#claude-}
+		"${function//-/_}"
+	done
 }
 
 claude_hooks() {
@@ -256,7 +261,7 @@ agents_md() {
 # an entry written as a directory's, with the trailing slash Mindflayer gives
 # one, would not cover it. Worth knowing before D-07's symlink opt-in writes
 # one; the check needs git only.
-claude_symlink_entry() {
+claude_git_symlink() {
 	local repo=$stage/git-symlink with=no without=no
 	new_repo "$repo"
 	put "$repo/.agents/skills/linked/SKILL.md" 'linked'
@@ -274,9 +279,11 @@ claude_symlink_entry() {
 
 # Checks 1, 3, 4 (no CLAUDE.md) and 6: everything Mindflayer would install,
 # excluded through info/exclude, in a repository with no CLAUDE.md anywhere
-# above it.
-claude_excluded() {
+# above it. claude-excluded and claude-touch share it, and whichever runs
+# first builds it.
+claude_excluded_repo() {
 	local repo=$stage/claude-excluded
+	[[ ! -d $repo ]] || return 0
 	new_repo "$repo"
 	put "$repo/AGENTS.md" "$(agents_md 1)"
 	skill "$repo/.claude/skills/probe-claude-skill" PROBE-CLAUDE-SKILL-1
@@ -309,7 +316,11 @@ pub fn probe() {}'
 		.agents/skills/probe-linked-skill .claude/skills/probe-claude-skill \
 		.claude/skills/probe-linked-skill .claude/rules/mindflayer/probe/unscoped.md \
 		.claude/rules/mindflayer/probe/scoped.md
+}
 
+claude_excluded() {
+	local repo=$stage/claude-excluded
+	claude_excluded_repo
 	assert_clean_home
 	assert_ancestry "$repo" "$repo/AGENTS.md"
 	claude_ask claude-excluded "$repo" "$claude_list_prompt" "${claude_list_options[@]}"
@@ -329,12 +340,17 @@ pub fn probe() {}'
 	expect_token $run unseen PROBE-RULE-SCOPED-1 'check 6: a rule with paths: does not, at start'
 	expect_loaded $run 1 "$rules/unscoped.md" 'check 6: the hook saw the rule without paths: once'
 	expect_loaded $run 0 "$rules/scoped.md" 'check 6: and not the one with paths:'
+}
 
+# Check 6, on touching a file that matches the rule with paths:.
+claude_touch() {
+	local repo=$stage/claude-excluded
+	local run=claude-touch rules=$repo/.claude/rules/mindflayer/probe
+	claude_excluded_repo
 	assert_clean_home
 	assert_ancestry "$repo" "$repo/AGENTS.md"
 	claude_ask claude-touch "$repo" "$claude_touch_prompt" \
 		--tools Read --allowedTools Read --max-turns 3
-	run=claude-touch
 	expect_calls $run Read 2 'check 6: one Read of src/lib.rs, then the answer'
 	expect_token $run seen PROBE-FILE-1 'check 6: Claude read src/lib.rs'
 	expect_token $run seen PROBE-RULE-SCOPED-1 'check 6: the rule with paths: loads once a matching file is read'
