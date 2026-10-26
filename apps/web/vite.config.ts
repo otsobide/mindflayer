@@ -34,6 +34,11 @@ export default defineConfig({
       { find: /^@iconify\/vue$/, replacement: here('./src/overrides/iconify.ts') }
     ]
   },
+  build: {
+    // Nothing inlined as a data: URL: the CSP's default-src 'self' refuses
+    // those for fonts and images alike, so every asset is a file of its own.
+    assetsInlineLimit: 0
+  },
   test: {
     environment: 'happy-dom',
     include: ['tests/**/*.test.ts']
