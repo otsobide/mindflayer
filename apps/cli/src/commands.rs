@@ -223,10 +223,9 @@ fn run_flayer(
                 *yes,
             )
         }
-        FlayerCommand::Templates { project } => {
-            let workspace = workspace_here(directory, home)?;
-            templates_of(Some(&workspace), &holder(&workspace, project.as_deref())?)
-        }
+        FlayerCommand::Templates { project } => reading_workspace(directory, home, |workspace| {
+            templates_of(Some(workspace), &holder(workspace, project.as_deref())?)
+        }),
 
         FlayerCommand::Link { projects } => link_projects(directory, projects, home),
         FlayerCommand::Unlink { projects } => unlink_projects(directory, projects, home),
@@ -241,7 +240,9 @@ fn run_flayer(
             tui::run_minds(workspace.root(), home)
         }
 
-        FlayerCommand::Scan => scan_workspace(directory, home),
+        FlayerCommand::Scan => {
+            reading_workspace(directory, home, |workspace| Ok(scan_workspace(workspace)))
+        }
 
         FlayerCommand::Gather(command) => run_gather(command, directory, home),
 

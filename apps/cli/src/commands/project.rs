@@ -170,10 +170,10 @@ fn unlinked(removed: &[PathBuf]) -> String {
     })
 }
 
-/// `flayer scan`: every repository under the workspace here.
-pub(crate) fn scan_workspace(directory: &Path, home: Option<&Path>) -> Result<Outcome, Failure> {
-    let workspace = workspace_here(directory, home)?;
-    Ok(scanned(&workspace, &scan(&workspace)))
+/// `flayer scan`: every repository under the workspace here — the default
+/// one too before it is made, since what is under it does not wait for that.
+pub(crate) fn scan_workspace(workspace: &FlayerWorkspace) -> Outcome {
+    scanned(workspace, &scan(workspace))
 }
 
 /// Every repository under a workspace, and whether it is linked yet.

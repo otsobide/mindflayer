@@ -105,6 +105,37 @@ fn flayer_list_of_a_project_names_none_and_makes_nothing() {
 }
 
 #[test]
+fn flayer_scan_reads_the_default_workspace_without_making_it() {
+    let (home, elsewhere) = unmade_home();
+    fs::create_dir_all(home.path().join("code/api/.git")).unwrap();
+
+    let outcome = flayer_at_home(elsewhere.path(), home.path(), &["scan"]).unwrap();
+
+    // What is under it does not wait for it to be made.
+    assert!(
+        outcome.stdout.starts_with("code/api  not linked"),
+        "{}",
+        outcome.stdout
+    );
+    assert_eq!(outcome.stderr, vec![hint(home.path())]);
+    assert!(outcome.ok);
+    assert!(!made(home.path()));
+}
+
+#[test]
+fn flayer_templates_reads_the_default_workspace_without_making_it() {
+    let (home, elsewhere) = unmade_home();
+
+    let outcome = flayer_at_home(elsewhere.path(), home.path(), &["templates"]).unwrap();
+
+    assert!(outcome.stdout.contains("full"), "{}", outcome.stdout);
+    assert!(outcome.stdout.contains("built in"), "{}", outcome.stdout);
+    assert_eq!(outcome.stderr, vec![hint(home.path())]);
+    assert!(outcome.ok);
+    assert!(!made(home.path()));
+}
+
+#[test]
 fn once_something_writes_the_workspace_is_made_and_the_hint_is_gone() {
     let (home, elsewhere) = unmade_home();
     let alpha = elsewhere.path().join("alpha");
