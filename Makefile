@@ -12,7 +12,7 @@ APPS := core cli server
 NODE_APPS := web
 
 # ---------------------------------------------------------------------------
-# Per-app delegation — `make <app>/<target>` runs <target> in apps/<app>/Makefile
+# Per-app delegation: `make <app>/<target>` runs <target> in apps/<app>/Makefile
 # e.g. `make core/test`, `make cli/run ARGS="list"`, `make web/build`
 # ---------------------------------------------------------------------------
 define APP_DELEGATE
@@ -22,7 +22,7 @@ endef
 $(foreach app,$(APPS) $(NODE_APPS),$(eval $(call APP_DELEGATE,$(app))))
 
 # ---------------------------------------------------------------------------
-# Global targets — CI invokes these, so they are the contract, not cargo.
+# Global targets: CI invokes these, so they are the contract, not cargo.
 #
 # The aggregates are derived from APPS rather than spelled out, so that adding
 # an app really is the one line above: a name left out of `test` would be an
@@ -47,7 +47,7 @@ lint: ## Run clippy across the workspace
 	cargo clippy --workspace --all-targets
 
 .PHONY: run
-run: ## Run the CLI — pass args via ARGS="list"
+run: ## Run the CLI (pass args via ARGS="list")
 	$(MAKE) -C apps/cli run ARGS="$(ARGS)"
 
 .PHONY: clean
@@ -60,13 +60,13 @@ clean: ## Remove build artifacts
 # Two ways, for two situations. `install` is a copy: it is what you want if you
 # just want to use the tools. `dev/link` is a symlink to the debug build, so
 # every `make build` updates the binaries on your PATH without reinstalling
-# anything — that is what you want while working on them.
+# anything, which is what you want while working on them.
 #
 # Both binaries, not just `mind`: `flayer` is a second entry point into the
 # same crate, and half an install is worse than none.
 #
-# `mf` is a short name for `flayer` — the one that manages minds, so `mf init`
-# makes a workspace — linked beside the two: a symlink rather than a third
+# `mf` is a short name for `flayer` (the one that manages minds, so `mf init`
+# makes a workspace), linked beside the two: a symlink rather than a third
 # binary, so it cannot be a different version of the same one. Only a link,
 # never a cargo `[[bin]]`: `mf` is METAFONT wherever TeX is installed, and a
 # link is something you asked for on your own machine.
@@ -112,7 +112,7 @@ dev/unlink: ## Remove the dev/link symlinks (leaves installed copies alone)
 			rm "$$target" && echo "removed $$target"; \
 		elif [ -e "$$target" ]; then \
 			echo "$$target is a real file, not a symlink: left alone"; \
-			echo "(that is an installed copy — remove it with \`cargo uninstall mindflayer-cli\`)"; \
+			echo "(that is an installed copy; remove it with \`cargo uninstall mindflayer-cli\`)"; \
 		else \
 			echo "nothing to remove at $$target"; \
 		fi; \
@@ -126,7 +126,7 @@ dev/watch: ## Rebuild on every change, so the dev/link symlink is always current
 
 .PHONY: help
 help: ## Show this help
-	@echo "Mindflayer — make targets:"
+	@echo "Mindflayer make targets:"
 	@grep -hE '^[a-zA-Z0-9_/-]+:.*?## ' $(MAKEFILE_LIST) \
 		| awk 'BEGIN{FS=":.*?## "}{printf "  \033[36m%-12s\033[0m %s\n", $$1, $$2}'
-	@printf "  \033[36m%-12s\033[0m %s\n" "<app>/<t>" "run target <t> in an app — apps: $(APPS) $(NODE_APPS)"
+	@printf "  \033[36m%-12s\033[0m %s\n" "<app>/<t>" "run target <t> in an app (apps: $(APPS) $(NODE_APPS))"
