@@ -74,7 +74,12 @@ async fn an_unknown_api_path_gets_a_json_404() {
     let (server, _) = launch();
     let router = server.router();
 
-    for path in ["/api/no-such-endpoint", "/api/query/deeper", "/api"] {
+    for path in [
+        "/api/no-such-endpoint",
+        "/api/query/deeper",
+        "/api",
+        "/api/",
+    ] {
         let reply = get(&router, path, Auth::Bearer(server.token())).await;
         assert_eq!(reply.status, StatusCode::NOT_FOUND, "{path}");
         assert_eq!(reply.header("content-type"), Some("application/json"));

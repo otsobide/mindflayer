@@ -147,8 +147,12 @@ fn route<B: Backend>(server: Server<B>, token: &Token, port: u16) -> io::Result<
         .route("/api/commands", endpoint(post(api::commands::<B>)))
         .route("/api/transcript", endpoint(get(api::transcript::<B>)))
         // The bare prefix and everything under it that names no endpoint,
-        // so a typo in a script gets a JSON 404 rather than the panel.
+        // so a typo in a script gets a JSON 404 rather than the panel. `/api/`
+        // needs a route of its own: the catch-all wants at least one
+        // character after the slash, and without one the prefix would reach
+        // the panel past the gate.
         .route("/api", any(api::missing))
+        .route("/api/", any(api::missing))
         .route("/api/{*rest}", any(api::missing))
         // `route_layer`, so the gate guards the routes above and nothing
         // added after them: not the panel, whose files are the same for
