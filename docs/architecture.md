@@ -1765,11 +1765,11 @@ refused where loads are.
 
 The TUI resolves through the same function. `tui::load` and `load_project`
 ask `resolve` and `consulted` with the `Lookup` the screen was opened with,
-and `tui::execute` hands that lookup to every line the screen runs, as it
-hands them home, rather than letting each line read the environment again: a
-screen opened with `-W` or an activation runs every line against that
-workspace. A `-W` among a line's own words wins, and is typed from the root
-the lines run from, as a `-C` is.
+and `tui::execute` hands that lookup, home and all, to every line the screen
+runs, rather than letting each line read the environment again: a screen
+opened with `-W` or an activation runs every line against that workspace. A
+`-W` among a line's own words wins, and is typed from the root the lines run
+from, as a `-C` is.
 
 A project's row runs `mind -C <entry>`, the line somebody in the project would
 type, which consults the project's own workspace. Where that is not the
@@ -1851,8 +1851,8 @@ question](#open-questions).
 
 No command reads them yet, so none takes them, and `agent_homes` is first
 called by the first one that does. That one also has to make the TUI pass its
-own to every command it runs, as `tui::execute` passes `--home`. Otherwise a
-command run from the TUI decides them again from the environment, and a test
+own to every command it runs, as `tui::execute` passes its `Lookup`. Otherwise
+a command run from the TUI decides them again from the environment, and a test
 that drives the TUI reaches the real folders.
 
 ## Creating and changing artifacts
