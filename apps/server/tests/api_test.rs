@@ -53,6 +53,23 @@ async fn a_query_the_backend_cannot_read_gets_a_json_error() {
 }
 
 #[tokio::test]
+async fn a_preview_shows_a_tasks_lines_and_runs_nothing() {
+    let (server, runs) = launch();
+
+    let reply = post(
+        &server.router(),
+        "/api/commands/preview",
+        Auth::Bearer(server.token()),
+        json!({ "name": "link beta" }),
+    )
+    .await;
+
+    assert_eq!(reply.status, StatusCode::OK);
+    assert_eq!(reply.json(), json!({ "lines": ["fake run link beta"] }));
+    assert!(runs.lock().unwrap().is_empty());
+}
+
+#[tokio::test]
 async fn an_unknown_api_path_gets_a_json_404() {
     let (server, _) = launch();
     let router = server.router();

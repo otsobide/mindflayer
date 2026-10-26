@@ -112,6 +112,7 @@ fn route<B: Backend>(server: Server<B>, token: &Token, port: u16) -> Router {
     });
     Router::new()
         .route("/api/query", endpoint(post(api::query::<B>)))
+        .route("/api/commands/preview", endpoint(post(api::preview::<B>)))
         // The bare prefix and everything under it that names no endpoint,
         // so a typo in a script gets a 404 it can read.
         .route("/api", any(api::missing))

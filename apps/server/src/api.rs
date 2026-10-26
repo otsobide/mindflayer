@@ -39,6 +39,27 @@ pub(crate) async fn query<B: Backend>(
     }
 }
 
+/// `POST /api/commands/preview`: the command lines a task is, and nothing
+/// run. On the blocking pool for the same reason as a query: working out a
+/// line can mean reading the disk.
+pub(crate) async fn preview<B: Backend>(
+    State(api): State<Arc<Api<B>>>,
+    body: Result<Json<B::Task>, JsonRejection>,
+) -> Response {
+    let task = match body {
+        Ok(Json(task)) => task,
+        Err(rejection) => return refused(rejection),
+    };
+    let backend = Arc::clone(&api.backend);
+    match tokio::task::spawn_blocking(move || backend.preview(&task)).await {
+        Ok(lines) => Json(json!({ "lines": lines })).into_response(),
+        Err(_) => error(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "the backend failed while previewing the task",
+        ),
+    }
+}
+
 /// Any other path under `/api`: a 404 a script can read, in JSON like every
 /// other answer here, rather than axum's empty one.
 pub(crate) async fn missing(method: Method, uri: Uri) -> Response {

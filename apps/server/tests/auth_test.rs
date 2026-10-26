@@ -12,6 +12,11 @@ async fn a_request_without_the_token_is_refused() {
 
     for (method, path, body) in [
         (Method::POST, "/api/query", Some(json!({ "echo": "hi" }))),
+        (
+            Method::POST,
+            "/api/commands/preview",
+            Some(json!({ "name": "a" })),
+        ),
         (Method::GET, "/api/no-such-endpoint", None),
         (Method::GET, "/api", None),
     ] {
