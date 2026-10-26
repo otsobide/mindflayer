@@ -1198,3 +1198,81 @@ fn mind_with_no_project_offers_to_make_one() {
     assert!(dir.path().join(MIND_DIR).join(MIND_CONFIG).is_file());
     assert_eq!(app.scope(), Scope::Project);
 }
+
+// ---------------------------------------------------------------------------
+// A workspace named for the TUI
+// ---------------------------------------------------------------------------
+
+/// Under one directory: `outer`, a workspace, and `hub` beside it, which
+/// links `collapse`, a project under neither, and has installed its own
+/// `hub-skill` there.
+fn hub_beside_outer() -> (TempDir, PathBuf, PathBuf, PathBuf) {
+    let dir = TempDir::new().unwrap();
+    let (outer, hub, collapse) = (
+        dir.path().join("outer"),
+        dir.path().join("hub"),
+        dir.path().join("collapse"),
+    );
+    for root in [&outer, &hub, &collapse] {
+        fs::create_dir(root).unwrap();
+    }
+    flayer(&outer, &["init"]).unwrap();
+    flayer(&hub, &["init"]).unwrap();
+    mind(&collapse, &["init"]).unwrap();
+    flayer(&hub, &["link", "../collapse"]).unwrap();
+    flayer(&hub, &["add", "skill", "hub-skill", "The hub's"]).unwrap();
+    flayer(&hub, &["install", "-p", "collapse", "hub-skill"]).unwrap();
+    (dir, outer, hub, collapse)
+}
+
+/// What `hub`'s ledger says it installed into `collapse`.
+fn recorded_in_hub(hub: &Path) -> Vec<String> {
+    FlayerWorkspace::open(hub)
+        .unwrap()
+        .ledger()
+        .unwrap()
+        .installations("../collapse", Kind::Skill)
+        .unwrap()
+}
+
+#[test]
+fn opened_on_a_named_workspace_the_tui_runs_every_line_against_it() {
+    let (_dir, outer, hub, collapse) = hub_beside_outer();
+    let lookup = Lookup {
+        flag: Some(hub.clone()),
+        ..Lookup::default()
+    };
+    // Opened inside `outer`, which walking up would find instead.
+    let mut app = App::new(outer.clone(), tui::load(&outer, &lookup).unwrap()).with_lookup(lookup);
+    assert_eq!(app.base(), hub);
+
+    // `collapse`, then its one skill.
+    press_key(&mut app, KeyCode::Right);
+    press_key(&mut app, KeyCode::Char('d'));
+    press_and_run(&mut app, KeyCode::Char('y'));
+
+    // The line consulted the workspace on screen, not whatever is above the
+    // project or in a home, so that workspace's record went with the copy.
+    assert!(
+        app.transcript()
+            .starts_with("$ mind -C ../collapse remove --yes skill:hub-skill\n"),
+        "{}",
+        app.transcript()
+    );
+    assert!(!collapse.join("skills/hub-skill").exists());
+    assert!(recorded_in_hub(&hub).is_empty());
+}
+
+#[test]
+fn a_w_among_a_lines_words_is_typed_from_the_workspace_root() {
+    let (_dir, outer, _hub, _collapse) = hub_beside_outer();
+    let words: Vec<String> = ["flayer", "-W", "../hub", "list"]
+        .iter()
+        .map(|word| (*word).to_owned())
+        .collect();
+
+    let done = tui::execute(&words, &outer, &Lookup::default());
+
+    assert_eq!(done.error, None);
+    assert!(done.stdout.contains("hub-skill"), "{}", done.stdout);
+}

@@ -240,16 +240,32 @@ fn run_all(lines: &[Vec<String>], base: &Path, lookup: &Lookup) -> Vec<Done> {
 /// Run one command line through the real parsers, from `base`.
 ///
 /// The words are what a person would type from the workspace root, so a `-C`
-/// among them is resolved against it rather than against wherever this
-/// process happened to be started. Where to look for a workspace is the
-/// TUI's own, passed along rather than looked up again, so a command that
-/// falls back to the default workspace falls back to the one on screen. Each
-/// still walks up from `base` first, as from the shell, which is why a change
-/// to the default before it is made makes it first ([`App::lines`]).
+/// or a `-W` among them is resolved against it rather than against wherever
+/// this process happened to be started. Where to look for a workspace is
+/// otherwise the TUI's own, passed along rather than looked up again: a
+/// screen opened on the workspace `-W` names, or the one activated, runs
+/// every line against it, and a command that falls back to the default
+/// workspace falls back to the one on screen. With neither, each walks up
+/// from `base` first, as from the shell, which is why a change to the default
+/// before it is made makes it first ([`App::lines`]).
 pub fn execute(words: &[String], base: &Path, lookup: &Lookup) -> Done {
     let command = state::shell(words);
     let from = |directory: Option<PathBuf>| {
         Some(directory.map_or_else(|| base.to_path_buf(), |directory| base.join(directory)))
+    };
+    // A line's own `-W` is the whole answer, as on a command line; empty
+    // stays empty rather than becoming the root, which joining would make it.
+    let looking = |named: Option<String>| match named {
+        Some(named) => Lookup {
+            flag: Some(if named.is_empty() {
+                PathBuf::new()
+            } else {
+                base.join(named)
+            }),
+            activated: None,
+            home: lookup.home.clone(),
+        },
+        None => lookup.clone(),
     };
 
     let result = match words.first().map(String::as_str) {
@@ -260,7 +276,8 @@ pub fn execute(words: &[String], base: &Path, lookup: &Lookup) -> Done {
             }
             Ok(mut cli) => {
                 cli.directory = from(cli.directory.take());
-                run_with(&cli, lookup)
+                let lookup = looking(cli.workspace.take());
+                run_with(&cli, &lookup)
             }
         },
         Some("flayer") => match FlayerCli::try_parse_from(words) {
@@ -270,7 +287,8 @@ pub fn execute(words: &[String], base: &Path, lookup: &Lookup) -> Done {
             }
             Ok(mut cli) => {
                 cli.directory = from(cli.directory.take());
-                run_flayer_with(&cli, lookup)
+                let lookup = looking(cli.workspace.take());
+                run_flayer_with(&cli, &lookup)
             }
         },
         _ => return Done::failed(command, "not a `mind` or `flayer` command"),
