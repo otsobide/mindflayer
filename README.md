@@ -707,8 +707,9 @@ make cli/run ARGS="flayer list"
 Tests live in their own files, named for what they test and ending in
 `_test.rs`: `apps/<app>/tests/<area>_test.rs` for each area of the command
 surface, with what they share in `tests/common/`, and a module's unit tests in
-`src/<module>_test.rs` beside it. No test touches your home or your agents'
-folders: the CLI suites run every command with `--home ""` and every
+`src/<module>_test.rs` beside it. No test touches your home: the CLI suites
+run every command with `--home ""`. Nor do they touch your agents' folders,
+which no command reads yet, and the commands they run themselves give every
 agent-home option empty.
 
 ```bash

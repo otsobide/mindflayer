@@ -126,7 +126,10 @@ These are easy to break from a single file without noticing.
   `--agents-dir`), then `$CLAUDE_CONFIG_DIR`, `$CODEX_HOME` or
   `$OPENCODE_CONFIG_DIR`, then `~/.claude`, `~/.codex`, `~/.config/opencode`
   or `~/.agents`; empty means none. Core takes them as `AgentHomes` and never
-  resolves one.
+  resolves one. No command calls `agent_homes` yet, and the first that does
+  also makes `tui::execute` hand each command the TUI's own, as it hands them
+  `--home`: a command the TUI runs carries none of the four options, so it
+  would decide them again from the environment.
 - **`Kind` is a closed enum.** To add a kind, follow "Adding a third kind" in
   the architecture doc; the compiler's exhaustive matches are the checklist.
 
@@ -141,11 +144,13 @@ These are easy to break from a single file without noticing.
   `OPENCODE_CONFIG_DIR` lead to. In-process tests pin options: CLI tests call
   `common::mind` / `common::flayer`, which parse through the real parsers and
   append `-C <dir>`, `--home=` and the four agent-home options empty
-  (`common::PINNED`), so no test can reach or create the real home workspace
-  or read a real agent folder. A test that spawns a binary clears those
-  variables and sets `HOME` (`USERPROFILE` on Windows) to a temp dir. Not to
-  empty: the standard library then falls back to the account's real home.
-  Keep it that way.
+  (`common::PINNED`), so no command they run can reach or create the real
+  home workspace or read a real agent folder. A command a TUI test runs gets
+  only the TUI's own `--home`, the one the test chose, and none of the
+  agent-home options (see "So do the agent homes"). A test that spawns a
+  binary clears those variables and sets `HOME` (`USERPROFILE` on Windows)
+  to a temp dir. Not to empty: the standard library then falls back to the
+  account's real home. Keep it that way.
 - Git sources are built in-process with `gix` (`common::repository`): no
   network and no `git` binary.
 - Screens are tested without a terminal. Drive `state` with key events, or
