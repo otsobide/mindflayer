@@ -1087,7 +1087,9 @@ three names.
 `scripts/agent-probe/probe.sh` checks on the real agents what
 [docs/agents.md](docs/agents.md) records. It runs them against their APIs with
 your own login, in a temp home under `target/` with your real home hidden, so
-neither CI nor `make test` runs it. It needs Linux, `bwrap`, `jq` and `git`.
+neither CI nor `make test` runs it. It needs Linux, `bwrap`, `jq` and `git`
+in `/usr/bin` or `/bin`, and Claude Code's native binary rather than an npm
+launcher or a version manager's shim.
 
 ## Developing the panel
 

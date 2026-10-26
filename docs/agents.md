@@ -88,8 +88,12 @@ login, so it is run by hand, never by CI or `make test`.
   settings, records each instruction file that loads and why, which does not
   depend on the model at all.
 
-To re-run it: Linux with `bwrap`, `jq` and `git`, and a logged-in `claude` on
-`PATH` (or `PROBE_CLAUDE_BIN` naming the binary).
+To re-run it: Linux with `bwrap`, and `jq` and `git` in `/usr/bin` or `/bin`,
+the only `PATH` inside the namespace; and a logged-in Claude Code, its native
+binary on `PATH` or named by `PROBE_CLAUDE_BIN`. A launcher script, as an npm
+install gives, is refused, and so is a version manager's shim, since the
+binary must call itself Claude Code: `mise which claude` names the one behind
+mise's.
 
 ```bash
 scripts/agent-probe/probe.sh            # same as: probe.sh claude

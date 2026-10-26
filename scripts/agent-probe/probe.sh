@@ -12,7 +12,9 @@
 # defining <agent>_prepare, run out here where the real home is visible, and
 # <agent>_checks, run inside the namespace below (see claude.sh).
 #
-# Linux only: it needs bubblewrap (bwrap), jq and git.
+# Linux only. It needs bubblewrap (bwrap) on PATH, jq and git in /usr/bin or
+# /bin, the only PATH inside the namespace, and each agent's own binary
+# rather than a script or shim that would run something the namespace hides.
 #
 # Isolation. An agent reads folders in the user's home whatever its own
 # variable says: Codex and OpenCode read ~/.agents/skills, which on the owner's
@@ -51,6 +53,7 @@ set -euo pipefail
 here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)
 mount_root=/mnt/agent-probe
 mount_scripts=/mnt/agent-probe-scripts
+namespace_path=/usr/bin:/bin
 known_agents=(claude codex opencode)
 
 die() {
@@ -102,8 +105,16 @@ fingerprint() {
 outside() {
 	agents_from "$@"
 	local tool
-	for tool in bwrap jq git sha256sum; do
+	for tool in bwrap sha256sum; do
 		command -v "$tool" >/dev/null || die "needs $tool on PATH"
+	done
+	# The checks run jq and git inside the namespace, where the real home is
+	# hidden. One found only in ~/.local/bin or a version manager's folder
+	# would pass out here and be missing in there, and every answer would
+	# then come out empty, as if the agent had loaded nothing.
+	for tool in jq git; do
+		[[ -x /usr/bin/$tool || -x /bin/$tool ]] ||
+			die "needs $tool in /usr/bin or /bin, the only PATH inside the namespace"
 	done
 	[[ -n ${HOME:-} && -d $HOME ]] || die "HOME is not a directory"
 	real_home=$(cd "$HOME" && pwd -P)
@@ -166,7 +177,7 @@ outside() {
 		CLAUDE_CONFIG_DIR "$mount_root/home/.claude"
 		CODEX_HOME "$mount_root/home/.codex"
 		OPENCODE_CONFIG_DIR "$mount_root/home/.config/opencode"
-		PATH /usr/bin:/bin
+		PATH "$namespace_path"
 		LANG C.UTF-8
 		PROBE_REAL_HOME "$real_home"
 		"${namespace_env[@]}"
@@ -178,7 +189,7 @@ outside() {
 	done
 	args+=(--chdir "$mount_root")
 
-	say "agent-probe: $(date -u +%Y-%m-%dT%H:%M:%SZ), $(uname -sr), $(bwrap --version), $(git --version)"
+	say "agent-probe: $(date -u +%Y-%m-%dT%H:%M:%SZ), $(uname -sr), $(bwrap --version), $(env PATH="$namespace_path" git --version)"
 	say "namespace environment (cleared first):"
 	for ((i = 0; i < ${#env[@]}; i += 2)); do say "  ${env[i]}=${env[i + 1]}"; done
 
