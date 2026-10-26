@@ -3,6 +3,7 @@
 
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::time::{Duration, SystemTime};
 
 use mindflayer_core::{
     create, scan, Agent, Catalog, CreateError, Directories, FlayerWorkspace, Initialization, Kind,
@@ -374,4 +375,213 @@ fn git_sees_a_shared_projects_settings() {
     MindProject::init_settings(dir.path(), &Agent::ALL, Share::Shared, &both_beside()).unwrap();
 
     assert!(!ignored(dir.path(), ".mind/settings.json"));
+}
+
+/// Settings as somebody keeps them by hand: four spaces a level, the keys in
+/// an order of their own, a key this build does not know among them and
+/// another in `directories`, which is written on one line.
+const BY_HAND: &str = r#"{
+    "name": "collapse",
+    "targets": {"skills": [".skills"]},
+    "version": 3,
+    "agents": ["claude"],
+    "id": "0123456789abcdef0123456789abcdef",
+    "share": "local",
+    "directories": {"mcp": "mcp", "skills": "skills"}
+}
+"#;
+
+/// A project at `root` marked by [`BY_HAND`], and where its settings are.
+fn by_hand(root: &Path) -> (MindProject, PathBuf) {
+    fs::create_dir_all(root.join(MIND_DIR)).unwrap();
+    let path = root.join(MIND_DIR).join(SETTINGS_FILE);
+    fs::write(&path, BY_HAND).unwrap();
+    (MindProject::open(root).unwrap(), path)
+}
+
+#[test]
+fn an_edit_keeps_an_unknown_key_and_the_order_the_keys_are_in() {
+    let dir = TempDir::new().unwrap();
+    let (mut project, path) = by_hand(dir.path());
+
+    project
+        .change_settings(|settings| settings.agents = vec![Agent::Claude, Agent::Codex])
+        .unwrap();
+
+    assert_eq!(
+        fs::read_to_string(&path).unwrap(),
+        BY_HAND.replace(
+            r#""agents": ["claude"]"#,
+            r#""agents": ["claude", "codex"]"#
+        )
+    );
+    assert_eq!(
+        project.settings().unwrap().agents,
+        [Agent::Claude, Agent::Codex]
+    );
+}
+
+#[test]
+fn an_edit_that_changes_nothing_writes_nothing() {
+    let dir = TempDir::new().unwrap();
+    let (mut project, path) = by_hand(dir.path());
+    let long_ago = SystemTime::UNIX_EPOCH + Duration::from_secs(1_000_000);
+    fs::File::options()
+        .write(true)
+        .open(&path)
+        .unwrap()
+        .set_modified(long_ago)
+        .unwrap();
+
+    let agents = project
+        .change_settings(|settings| {
+            settings.share = Share::Local;
+            settings.agents.clone()
+        })
+        .unwrap();
+
+    assert_eq!(agents, [Agent::Claude]);
+    assert_eq!(fs::read_to_string(&path).unwrap(), BY_HAND);
+    assert_eq!(fs::metadata(&path).unwrap().modified().unwrap(), long_ago);
+}
+
+#[test]
+fn an_edit_adds_a_key_the_file_left_out_only_when_it_has_something_to_say() {
+    let dir = TempDir::new().unwrap();
+    let (mut project, path) = by_hand(dir.path());
+
+    // Left out, `edit_tracked` reads as off: renaming is no reason to say so.
+    project
+        .change_settings(|settings| settings.name = "renamed".to_owned())
+        .unwrap();
+    let renamed = BY_HAND.replace(r#""name": "collapse""#, r#""name": "renamed""#);
+    assert_eq!(fs::read_to_string(&path).unwrap(), renamed);
+
+    project
+        .change_settings(|settings| settings.edit_tracked = true)
+        .unwrap();
+    assert_eq!(
+        fs::read_to_string(&path).unwrap(),
+        renamed.replace(
+            "\"skills\": \"skills\"}\n}",
+            "\"skills\": \"skills\"},\n    \"edit_tracked\": true\n}"
+        )
+    );
+    assert!(project.settings().unwrap().edit_tracked);
+}
+
+#[test]
+fn an_edit_changes_directories_an_entry_at_a_time() {
+    let dir = TempDir::new().unwrap();
+    let (mut project, path) = by_hand(dir.path());
+
+    project
+        .change_settings(|settings| {
+            settings.directories = settings
+                .directories
+                .clone()
+                .without(Kind::Skill)
+                .with(Kind::Rule, "docs/rules");
+        })
+        .unwrap();
+
+    assert_eq!(
+        fs::read_to_string(&path).unwrap(),
+        BY_HAND.replace(
+            r#""directories": {"mcp": "mcp", "skills": "skills"}"#,
+            r#""directories": {"mcp": "mcp", "rules": "docs/rules"}"#
+        )
+    );
+    assert_eq!(project.directory_for(Kind::Skill), None);
+    assert_eq!(
+        project.directory_for(Kind::Rule),
+        Some(dir.path().join("docs/rules"))
+    );
+}
+
+#[test]
+fn an_edit_names_a_folder_in_settings_that_named_none() {
+    let dir = TempDir::new().unwrap();
+    let (mut project, path) = by_hand(dir.path());
+    let without = BY_HAND.replace(
+        ",\n    \"directories\": {\"mcp\": \"mcp\", \"skills\": \"skills\"}",
+        "",
+    );
+    fs::write(&path, &without).unwrap();
+
+    project
+        .change_settings(|settings| {
+            settings.directories = Directories::default().with(Kind::Skill, ".claude/skills");
+        })
+        .unwrap();
+
+    assert_eq!(
+        fs::read_to_string(&path).unwrap(),
+        without.replace(
+            "\"share\": \"local\"\n}",
+            "\"share\": \"local\",\n    \"directories\": {\n        \"skills\": \".claude/skills\"\n    }\n}"
+        )
+    );
+}
+
+#[test]
+fn an_edit_of_the_version_or_the_id_is_refused_and_writes_nothing() {
+    let dir = TempDir::new().unwrap();
+    let (mut project, path) = by_hand(dir.path());
+
+    let version = project
+        .change_settings(|settings| settings.version = 4)
+        .unwrap_err();
+    let id = project
+        .change_settings(|settings| settings.id = mindflayer_core::ProjectId::generate())
+        .unwrap_err();
+
+    for error in [version, id] {
+        assert!(matches!(error, WorkspaceError::Edit { .. }), "{error}");
+    }
+    assert_eq!(fs::read_to_string(&path).unwrap(), BY_HAND);
+}
+
+#[test]
+fn a_project_a_mind_toml_marks_has_no_settings_to_change() {
+    let dir = TempDir::new().unwrap();
+    let (mut project, _) = MindProject::init(dir.path()).unwrap();
+
+    let error = project
+        .change_settings(|settings| settings.edit_tracked = true)
+        .unwrap_err();
+
+    assert!(
+        matches!(error, WorkspaceError::NoSettings { .. }),
+        "{error}"
+    );
+    assert!(!dir.path().join(MIND_DIR).join(SETTINGS_FILE).exists());
+}
+
+#[test]
+fn settings_somebody_broke_since_they_were_read_are_refused_and_left_as_they_are() {
+    let dir = TempDir::new().unwrap();
+    let (mut project, path) = by_hand(dir.path());
+    let broken = BY_HAND.replace("\"version\": 3,", "\"version\": 3, // three");
+    fs::write(&path, &broken).unwrap();
+
+    let error = project
+        .change_settings(|settings| settings.edit_tracked = true)
+        .unwrap_err();
+
+    assert!(matches!(error, WorkspaceError::Malformed { .. }), "{error}");
+    assert_eq!(fs::read_to_string(&path).unwrap(), broken);
+}
+
+#[test]
+fn an_edit_leaves_nothing_else_beside_the_settings() {
+    let dir = TempDir::new().unwrap();
+    let (mut project, _) = by_hand(dir.path());
+
+    project
+        .change_settings(|settings| settings.share = Share::Shared)
+        .unwrap();
+
+    assert_eq!(names_in(&dir.path().join(MIND_DIR)), ["settings.json"]);
+    assert_eq!(project.settings().unwrap().share, Share::Shared);
 }

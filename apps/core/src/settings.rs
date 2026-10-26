@@ -26,7 +26,7 @@ use std::fmt;
 use std::path::Path;
 
 use crate::agent::Agent;
-use crate::config_entry::{self, Format, Value};
+use crate::config_entry::{self, Edit, Format, Value};
 use crate::paths;
 use crate::workspace::{check_version, Directories, Marker, WorkspaceError, SETTINGS_VERSION};
 
@@ -266,6 +266,86 @@ pub(crate) fn parse(path: &Path, text: &str) -> Result<Settings, WorkspaceError>
         )));
     }
     members.settings(version).map_err(malformed)
+}
+
+/// `text`, the settings file at `path` holding `before`, changed to hold
+/// `wanted`, with every byte that is not a changed value as it was.
+///
+/// Only the keys whose values differ are touched, each as one entry
+/// (`config_entry::edit`), and `directories` an entry at a time: a key this
+/// build does not know, the order the keys are written in, the file's
+/// indentation and a value that did not change all stay as the file had
+/// them, so a file somebody edited by hand is not laid out again. A key the
+/// file left out goes in after the others, and only when what it holds is
+/// not what leaving it out reads as: `edit_tracked` off is not written in
+/// by an edit that changes something else.
+///
+/// The version and the id are refused rather than changed: a version moves
+/// with a migration, which writes the file its version describes, and an id
+/// names the project for good.
+pub(crate) fn edited(
+    path: &Path,
+    text: &str,
+    before: &Settings,
+    wanted: &Settings,
+) -> Result<String, WorkspaceError> {
+    let refused = |detail: String| WorkspaceError::Edit {
+        path: path.to_path_buf(),
+        detail,
+    };
+    if wanted.version != before.version {
+        return Err(refused(format!(
+            "`{VERSION}` changes with a migration, never with an edit"
+        )));
+    }
+    if wanted.id != before.id {
+        return Err(refused(format!(
+            "`{ID}` names the project for good, so no edit changes it"
+        )));
+    }
+
+    let mut edits: Vec<(Vec<String>, Edit)> = Vec::new();
+    for ((key, was), (_, now)) in before.members()?.into_iter().zip(wanted.members()?) {
+        if was == now {
+            continue;
+        }
+        if let (Value::Object(was), Value::Object(now)) = (&was, &now) {
+            // `directories`, the one object: an entry at a time, so one the
+            // change leaves alone, a key this build does not know included,
+            // stays where it is.
+            for (name, value) in now {
+                let edit = match was.iter().find(|(old, _)| old == name) {
+                    Some((_, old)) if old == value => continue,
+                    Some(_) => Edit::Replace(value.clone()),
+                    None => Edit::Insert(value.clone()),
+                };
+                edits.push((vec![key.to_owned(), name.clone()], edit));
+            }
+            for (name, _) in was {
+                if !now.iter().any(|(new, _)| new == name) {
+                    edits.push((vec![key.to_owned(), name.clone()], Edit::Remove));
+                }
+            }
+            continue;
+        }
+        let present = config_entry::get(Format::Json, text, &[key])
+            .map_err(|error| refused(error.to_string()))?
+            .is_some();
+        let edit = if present {
+            Edit::Replace(now)
+        } else {
+            Edit::Insert(now)
+        };
+        edits.push((vec![key.to_owned()], edit));
+    }
+
+    let mut text = text.to_owned();
+    for (key, edit) in edits {
+        let key: Vec<&str> = key.iter().map(String::as_str).collect();
+        text = config_entry::edit(Format::Json, &text, &key, &edit)
+            .map_err(|error| refused(error.to_string()))?;
+    }
+    Ok(text)
 }
 
 /// The members of a settings file's object, read a key at a time.

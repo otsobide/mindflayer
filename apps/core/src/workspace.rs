@@ -219,6 +219,13 @@ impl Directories {
         self
     }
 
+    /// Say that `kind` lives nowhere this names: the default in a
+    /// `mind.toml`, and no folder at all in a project's settings.
+    pub fn without(mut self, kind: Kind) -> Self {
+        self.0.remove(kind.folder());
+        self
+    }
+
     /// Whether anything was configured at all.
     pub fn is_empty(&self) -> bool {
         self.0.is_empty()
@@ -637,6 +644,56 @@ impl MindProject {
             ProjectConfig::Settings(settings) => Some(settings),
             ProjectConfig::Toml(_) => None,
         }
+    }
+
+    /// Change the project's settings as `change` changes a copy of them, and
+    /// write back only what it changed.
+    ///
+    /// The file is read here, not taken from what was read when the project
+    /// was opened, so a change is made to the file it is about to write and
+    /// not to a copy that may be minutes old, as a workspace's marker is
+    /// edited ([`FlayerWorkspace`]'s `edit_array`). Each key whose value
+    /// changed is edited where it stands (`settings::edited`), so a key this
+    /// build does not know, the order of the keys and the file's layout all
+    /// stay as somebody left them. A changed file is written through a
+    /// temporary and a rename (`replace_file`), so a crash leaves the old
+    /// settings or the new ones; an unchanged one is not written at all, its
+    /// modification time included. What is in memory afterwards is read back
+    /// from the file.
+    ///
+    /// Refused for a project a `mind.toml` marks, which has no settings until
+    /// it is moved to them, and when the change touches the version or the
+    /// id. A settings file this build refuses to read is refused here too,
+    /// and left as it is.
+    ///
+    /// Takes no lock. The settings are the project's, which has none of its
+    /// own, and a workspace's would keep out only that workspace's writers,
+    /// while several may link the project; what its first caller holds is
+    /// that caller's to decide (an open question).
+    pub fn change_settings<T>(
+        &mut self,
+        change: impl FnOnce(&mut Settings) -> T,
+    ) -> Result<T, WorkspaceError> {
+        if self.settings().is_none() {
+            return Err(WorkspaceError::NoSettings {
+                path: self.root.clone(),
+            });
+        }
+        let path = self.mind_dir().join(SETTINGS_FILE);
+        let text = fs::read_to_string(&path).map_err(|source| WorkspaceError::Read {
+            path: path.clone(),
+            source,
+        })?;
+        let before = crate::settings::parse(&path, &text)?;
+        let mut wanted = before.clone();
+        let value = change(&mut wanted);
+
+        let edited = crate::settings::edited(&path, &text, &before, &wanted)?;
+        if edited != text {
+            replace_file(&path, &edited)?;
+        }
+        self.config = ProjectConfig::Settings(Settings::read(&path)?);
+        Ok(value)
     }
 
     /// What opening the project found worth saying, for a front end to say:
@@ -1542,6 +1599,8 @@ pub enum WorkspaceError {
     OutsideProject { path: PathBuf, kind: Kind },
     #[error("{path}: keeps no {kind}s of its own, since its marker names no folder for them")]
     NoDirectory { path: PathBuf, kind: Kind },
+    #[error("{path}: has no {SETTINGS_FILE} to change, since a {MIND_CONFIG} marks it")]
+    NoSettings { path: PathBuf },
     #[error("{path}: cannot hold the workspace's {kind}s, because it is not inside the workspace")]
     OutsideWorkspace { path: PathBuf, kind: Kind },
     #[error(
@@ -1575,6 +1634,7 @@ impl WorkspaceError {
             | WorkspaceError::NonUtf8Path { path }
             | WorkspaceError::OutsideProject { path, .. }
             | WorkspaceError::NoDirectory { path, .. }
+            | WorkspaceError::NoSettings { path }
             | WorkspaceError::OutsideWorkspace { path, .. }
             | WorkspaceError::OverlapsGathered { path, .. } => path,
             WorkspaceError::Lock(error) => error.path(),
