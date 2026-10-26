@@ -345,6 +345,9 @@ pub struct FlayerConfig {
 pub struct FlayerWorkspace {
     root: PathBuf,
     config: FlayerConfig,
+    /// Whether its marker is on disk: false only for an
+    /// [`unmade`](Self::unmade) one.
+    made: bool,
 }
 
 impl FlayerWorkspace {
@@ -400,7 +403,43 @@ impl FlayerWorkspace {
         }
         let config: FlayerConfig = read_config(&config_path)?;
         check_version(&config_path, Marker::Workspace, config.version)?;
-        Ok(Self { root, config })
+        Ok(Self {
+            root,
+            config,
+            made: true,
+        })
+    }
+
+    /// The workspace [`init`](Self::init) would make at `root`, held in memory
+    /// rather than made: what a command that only reads is given where the
+    /// default workspace does not exist yet, since reading is no reason to
+    /// make it.
+    ///
+    /// Its marker is the one `init` would write, parsed instead of written, so
+    /// a read answers as it would of a workspace made a moment before — no
+    /// projects, nothing loaded, an empty ledger — and coming first changes
+    /// nothing about what it says. Nothing is written through it: an edit of
+    /// its marker is refused as it is for any directory that is not a
+    /// workspace, and so is its ledger. What writes makes the real one, with
+    /// [`locate_or_default`](Self::locate_or_default).
+    pub fn unmade(root: impl AsRef<Path>) -> Result<Self, WorkspaceError> {
+        let root = absolute(root.as_ref())?;
+        let marker = flayer_template(&directory_name(&root), &Directories::default());
+        let config = toml::from_str(&marker).map_err(|source| WorkspaceError::Parse {
+            path: root.join(FLAYER_DIR).join(FLAYER_CONFIG),
+            source,
+        })?;
+        Ok(Self {
+            root,
+            config,
+            made: false,
+        })
+    }
+
+    /// Whether it is on disk, which every workspace is but an
+    /// [`unmade`](Self::unmade) one.
+    pub fn is_made(&self) -> bool {
+        self.made
     }
 
     /// Walk up from `start` looking for a flayer workspace.
@@ -499,6 +538,35 @@ impl FlayerWorkspace {
         }
     }
 
+    /// The default workspace at `home` as a command that only reads sees it:
+    /// the one made there, or else the one that would be, [`unmade`]. `None`
+    /// only when there is no default at all.
+    ///
+    /// [`unmade`]: Self::unmade
+    pub fn default_or_unmade(home: Option<&Path>) -> Result<Option<Self>, WorkspaceError> {
+        let Some(home) = home else {
+            return Ok(None);
+        };
+        match Self::default_at(Some(home))? {
+            Some(workspace) => Ok(Some(workspace)),
+            None => Self::unmade(home).map(Some),
+        }
+    }
+
+    /// Like [`locate_or_default`](Self::locate_or_default), for a command that
+    /// only reads: with nothing up the tree, the default it falls back to is
+    /// the one made in `home` or, until something makes it, the one that would
+    /// be — the same answer, without the marker.
+    pub fn locate_or_unmade(
+        start: impl AsRef<Path>,
+        home: Option<&Path>,
+    ) -> Result<Option<Self>, WorkspaceError> {
+        if let Some(workspace) = Self::locate(start)? {
+            return Ok(Some(workspace));
+        }
+        Self::default_or_unmade(home)
+    }
+
     /// Whether this is the default workspace at `home` rather than one found
     /// up the tree.
     pub fn is_default(&self, home: Option<&Path>) -> bool {
@@ -550,7 +618,16 @@ impl FlayerWorkspace {
     }
 
     /// Open that database, creating it if this workspace has never had one.
+    ///
+    /// Refused for an [`unmade`](Self::unmade) workspace, which has nowhere to
+    /// keep one: creating it would leave half a workspace behind, a
+    /// `.mindflayer` holding a database and no marker.
     pub fn ledger(&self) -> Result<Ledger, LedgerError> {
+        if !self.made {
+            return Err(LedgerError::Unmade {
+                path: self.ledger_path(),
+            });
+        }
         Ledger::open(self.ledger_path())
     }
 
@@ -563,6 +640,10 @@ impl FlayerWorkspace {
     /// dropped, and a copy installed without its record is one Mindflayer
     /// would afterwards refuse to touch; a write opens [`ledger`](Self::ledger).
     pub fn ledger_for_reading(&self) -> Result<Ledger, LedgerError> {
+        // An unmade workspace has no ledger, whatever a stray file says.
+        if !self.made {
+            return Ledger::in_memory();
+        }
         match Ledger::open_existing(self.ledger_path())? {
             Some(ledger) => Ok(ledger),
             None => Ledger::in_memory(),
@@ -794,6 +875,13 @@ impl FlayerWorkspace {
     where
         F: FnOnce(&mut toml_edit::Array) -> Result<T, String>,
     {
+        // Not made, so there is no marker to edit, and writing one here would
+        // make the workspace behind the back of whatever asked only to read it.
+        if !self.made {
+            return Err(WorkspaceError::NotAWorkspace {
+                path: self.root.clone(),
+            });
+        }
         let path = self.config_path();
         let text = fs::read_to_string(&path).map_err(|source| WorkspaceError::Read {
             path: path.clone(),

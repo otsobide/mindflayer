@@ -659,6 +659,8 @@ pub enum LedgerError {
     },
     #[error("{path}: written by a newer Mindflayer (schema version {found}, this one reads {SCHEMA_VERSION})")]
     Version { path: PathBuf, found: u32 },
+    #[error("{path}: no workspace has been made here yet, so there is no ledger to write to")]
+    Unmade { path: PathBuf },
     #[error("{path}: {doing} failed: {source}")]
     Query {
         path: PathBuf,
@@ -675,6 +677,7 @@ impl LedgerError {
             LedgerError::Create { path, .. }
             | LedgerError::Open { path, .. }
             | LedgerError::Version { path, .. }
+            | LedgerError::Unmade { path }
             | LedgerError::Query { path, .. } => path,
         }
     }
