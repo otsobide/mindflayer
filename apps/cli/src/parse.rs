@@ -6,7 +6,7 @@
 
 use std::path::PathBuf;
 
-use clap::{Parser, Subcommand};
+use clap::{Args, Parser, Subcommand};
 use mindflayer_core::{Kind, DEFAULT_SUBDIRECTORY};
 
 /// Manage the agent skills in a mind project.
@@ -41,6 +41,42 @@ pub struct Cli {
     /// [default: $MINDFLAYER_HOME, then your home directory; empty for none].
     #[arg(long = "home", value_name = "DIR", global = true)]
     pub home: Option<String>,
+
+    #[command(flatten)]
+    pub agent_homes: AgentHomeOptions,
+}
+
+/// Where each agent keeps what it reads for every project: global options on
+/// both binaries, which `agent_homes` decides beside `default_home`.
+///
+/// Options, rather than variables read where a check needs them, so a test
+/// can pin all four to none the way it pins `--home=`. Strings for the same
+/// reason `--home` is one: empty means none, and a path cannot spell it.
+//
+// Each field is named after its flag rather than after its agent: a global
+// argument shares a namespace with every subcommand's own arguments, and
+// `agents` is what an option naming a project's agents would be called.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Args)]
+#[command(next_help_heading = "Agent homes")]
+pub struct AgentHomeOptions {
+    /// Claude Code's configuration folder [default: $CLAUDE_CONFIG_DIR, then
+    /// ~/.claude; empty for none].
+    #[arg(long = "claude-config-dir", value_name = "DIR", global = true)]
+    pub claude_config_dir: Option<String>,
+
+    /// Codex's home [default: $CODEX_HOME, then ~/.codex; empty for none].
+    #[arg(long = "codex-home", value_name = "DIR", global = true)]
+    pub codex_home: Option<String>,
+
+    /// OpenCode's configuration folder [default: $OPENCODE_CONFIG_DIR, then
+    /// ~/.config/opencode; empty for none].
+    #[arg(long = "opencode-config-dir", value_name = "DIR", global = true)]
+    pub opencode_config_dir: Option<String>,
+
+    /// The folder several agents share for your own skills [default:
+    /// ~/.agents; empty for none].
+    #[arg(long = "agents-dir", value_name = "DIR", global = true)]
+    pub agents_dir: Option<String>,
 }
 
 #[derive(Debug, Subcommand)]
@@ -209,6 +245,9 @@ pub struct FlayerCli {
     /// [default: $MINDFLAYER_HOME, then your home directory; empty for none].
     #[arg(long = "home", value_name = "DIR", global = true)]
     pub home: Option<String>,
+
+    #[command(flatten)]
+    pub agent_homes: AgentHomeOptions,
 }
 
 #[derive(Debug, Subcommand)]

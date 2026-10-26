@@ -53,8 +53,9 @@ Two crates in one Cargo workspace, each an app under `apps/` with its own
   commands has a file under `src/commands/`: `project` (init, link, unlink,
   scan), `workspace` (load, unload), `artifact` (add, edit, rename, remove,
   templates), `read` (list, show, validate), `gather` and `install`.
-  `src/render.rs` holds `Outcome`, `Failure` and the table helpers, and
-  `src/error.rs` holds `CliError`. `src/tui/` and `src/install/` are the two
+  `src/render.rs` holds `Outcome`, `Failure` and the table helpers,
+  `src/error.rs` holds `CliError`, and `src/homes.rs` decides the default
+  home and the agent homes. `src/tui/` and `src/install/` are the two
   screens.
 
 ## Invariants that hold the design together
@@ -129,6 +130,17 @@ These are easy to break from a single file without noticing.
   lookup take it as a parameter, the one the command resolved, and core never
   walks up from the project to find one: a walk misses a workspace that links
   the project from beside it.
+- **So do the agent homes.** `homes::agent_homes` takes each from its option
+  (`--claude-config-dir`, `--codex-home`, `--opencode-config-dir`,
+  `--agents-dir`), then `$CLAUDE_CONFIG_DIR`, `$CODEX_HOME` or
+  `$OPENCODE_CONFIG_DIR`, then `~/.claude`, `~/.codex`, `~/.config/opencode`
+  or `~/.agents`; empty means none. Those folder names are core's
+  (`AgentHomes::defaults_under`), and only the user's home is the CLI's to
+  find. Core takes the answer as `AgentHomes` and never resolves one. No
+  command calls `agent_homes` yet, and the first that does also makes
+  `tui::execute` hand each command the TUI's own, as it hands them `--home`:
+  a command the TUI runs carries none of the four options, so it would decide
+  them again from the environment.
 - **`Kind` is a closed enum.** To add a kind, follow "Adding a third kind" in
   the architecture doc; the compiler's exhaustive matches are the checklist.
 
@@ -138,9 +150,18 @@ These are easy to break from a single file without noticing.
   helpers in `tests/common/mod.rs` (`use common::*;`). Unit tests sit in
   `src/<module>_test.rs`, wired in with
   `#[cfg(test)] #[path = "<module>_test.rs"] mod tests;`.
-- CLI tests call `common::mind` / `common::flayer`. These parse through the
-  real parsers and append `-C <dir>` and `--home=`, so no test can reach or
-  create the real home workspace. Keep it that way.
+- No test reads the real home or the real agent homes, which `HOME`,
+  `MINDFLAYER_HOME`, `CLAUDE_CONFIG_DIR`, `CODEX_HOME` and
+  `OPENCODE_CONFIG_DIR` lead to. In-process tests pin options: CLI tests call
+  `common::mind` / `common::flayer`, which parse through the real parsers and
+  append `-C <dir>`, `--home=` and the four agent-home options empty
+  (`common::PINNED`), so no command they run can reach or create the real
+  home workspace or read a real agent folder. A command a TUI test runs gets
+  only the TUI's own `--home`, the one the test chose, and none of the
+  agent-home options (see "So do the agent homes"). A test that spawns a
+  binary clears those variables and sets `HOME` (`USERPROFILE` on Windows)
+  to a temp dir. Not to empty: the standard library then falls back to the
+  account's real home. Keep it that way.
 - Git sources are built in-process with `gix` (`common::repository`): no
   network and no `git` binary.
 - Screens are tested without a terminal. Drive `state` with key events, or
