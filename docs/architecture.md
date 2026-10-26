@@ -623,14 +623,22 @@ it took anything loses however recently it was tried. What the other row
 gathered goes with it, and its clone and shelf folder are removed (a folder
 that will not go is a warning), rather than its records moving to the kept
 row: they would point into a folder the ledger no longer reserves, which the
-next source with the same readable name would be given and gather over. The ledger turns on SQLite's `secure_delete`, so a
-rewritten row leaves no copy of its old text in the file's free space.
+next source with the same readable name would be given and gather over. The
+ledger turns on SQLite's `secure_delete`, so a rewritten row leaves no copy of
+its old text in the file's free space.
 
 It runs every time rather than once, as a schema step would, because an older
 build can keep writing to the same file after a newer one has scrubbed it, and
 the schema steps are spoken for by the changes that need a new version. With
-nothing to do it costs one query. A read is left alone: what it shows is
-redacted on the way out anyway, and a read should not write. Deleting the old
+nothing to do it still reads, every time a command writes: a scan of the
+sources and one of the action log, in a transaction. Neither can use an index,
+so the log's grows with the log, and every entry naming an ssh URL, which
+keeps its `@`, is read and found clean again each time. Recording that the log
+had been scrubbed would skip that, and is rejected for the reason the scrub
+runs every time: an older build writing a token again would go unnoticed. The
+cost ends when the scrub can stop (see the open questions). A read is left
+alone: what it shows is redacted on the way out anyway, and a read should not
+write. Deleting the old
 clones instead of rewriting them would have been simpler and was rejected:
 the clone is kept so a gather can be looked at afterwards, and a scrub has no
 reason to take that away.

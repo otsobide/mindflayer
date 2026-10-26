@@ -228,12 +228,13 @@ impl Scrub {
 ///
 /// Run by [`FlayerWorkspace::ledger_to_write`], which is how a command that
 /// writes opens the ledger, so it comes before anything is written. Every
-/// time rather than once, as a schema migration would, because an older build can keep writing to the same file after
-/// this one has scrubbed it, and the schema steps are spoken for by the
-/// changes that need a new version. Doing nothing costs one query, and the
-/// first time it finds something is the only time it says so. A read is left
-/// alone: what it shows is redacted on the way out anyway, and reading
-/// should not write.
+/// time rather than once, as a schema migration would, because an older build
+/// can keep writing to the same file after this one has scrubbed it, and the
+/// schema steps are spoken for by the changes that need a new version. With
+/// nothing to do it still scans the sources and the action log, and the first
+/// time it finds something is the only time it says so. A read is left alone:
+/// what it shows is redacted on the way out anyway, and reading should not
+/// write.
 pub(crate) fn scrub(workspace: &FlayerWorkspace, ledger: &Ledger) -> Result<Scrub, LedgerError> {
     let mut scrub = Scrub::default();
     for source in ledger.tainted_sources()? {
