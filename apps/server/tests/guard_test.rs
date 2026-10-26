@@ -42,23 +42,34 @@ fn from_the_panel(server: &Listening, changes: &[Change]) -> Request<Body> {
     request
 }
 
+/// Each case names a part of the refusal it must get, so it shows which check
+/// turned it away and not only that something did: the endpoint's JSON
+/// extractor would answer a text body with a 415 of its own, and a case that
+/// asserted only the status would pass with the guard's check gone.
 #[tokio::test]
 async fn a_request_the_panel_would_not_send_is_refused() {
     let (server, runs) = launch();
     let port = server.address().port();
+    let host = "answers only as";
+    let origin = "only from its own pages";
+    let fetch = "Sec-Fetch-Site: same-origin";
+    let json = "must be JSON";
+    let custom = "X-Mindflayer: 1";
 
-    let cases: Vec<(&str, Vec<Change>, StatusCode)> = vec![
+    let cases: Vec<(&str, Vec<Change>, StatusCode, &str)> = vec![
         (
             "a name rebound to 127.0.0.1",
             vec![set("host", format!("attacker.example:{port}"))],
             StatusCode::FORBIDDEN,
+            host,
         ),
         (
             "another port",
             vec![set("host", format!("127.0.0.1:{}", port.wrapping_add(1)))],
             StatusCode::FORBIDDEN,
+            host,
         ),
-        ("no Host", vec![unset("host")], StatusCode::FORBIDDEN),
+        ("no Host", vec![unset("host")], StatusCode::FORBIDDEN, host),
         (
             "a rebound name, forwarded as this one",
             vec![
@@ -66,11 +77,13 @@ async fn a_request_the_panel_would_not_send_is_refused() {
                 set("x-forwarded-host", format!("127.0.0.1:{port}")),
             ],
             StatusCode::FORBIDDEN,
+            host,
         ),
         (
             "a page on another site",
             vec![set("origin", "https://attacker.example")],
             StatusCode::FORBIDDEN,
+            origin,
         ),
         (
             "a page on the same site, from another port",
@@ -79,58 +92,77 @@ async fn a_request_the_panel_would_not_send_is_refused() {
                 format!("http://127.0.0.1:{}", port.wrapping_add(1)),
             )],
             StatusCode::FORBIDDEN,
+            origin,
         ),
         (
             "a page under another of the server's names",
             vec![set("origin", format!("http://localhost:{port}"))],
             StatusCode::FORBIDDEN,
+            origin,
         ),
         (
             "a sandboxed frame or a file",
             vec![set("origin", "null")],
             StatusCode::FORBIDDEN,
+            origin,
         ),
         (
             "the same site from another port, as Fetch Metadata tells it",
             vec![unset("origin"), set("sec-fetch-site", "same-site")],
             StatusCode::FORBIDDEN,
+            fetch,
         ),
         (
             "another site, as Fetch Metadata tells it",
             vec![unset("origin"), set("sec-fetch-site", "cross-site")],
             StatusCode::FORBIDDEN,
+            fetch,
         ),
-        ("no token", vec![unset("cookie")], StatusCode::UNAUTHORIZED),
+        (
+            "no token",
+            vec![unset("cookie")],
+            StatusCode::UNAUTHORIZED,
+            "launch token",
+        ),
         (
             "a text body, which a page may send anywhere unasked",
             vec![set("content-type", "text/plain")],
             StatusCode::UNSUPPORTED_MEDIA_TYPE,
+            json,
         ),
         (
             "a form",
             vec![set("content-type", "application/x-www-form-urlencoded")],
             StatusCode::UNSUPPORTED_MEDIA_TYPE,
+            json,
         ),
         (
             "no content type",
             vec![unset("content-type")],
             StatusCode::UNSUPPORTED_MEDIA_TYPE,
+            json,
         ),
         (
             "no X-Mindflayer",
             vec![unset("x-mindflayer")],
             StatusCode::FORBIDDEN,
+            custom,
         ),
         (
             "X-Mindflayer other than 1",
             vec![set("x-mindflayer", "yes")],
             StatusCode::FORBIDDEN,
+            custom,
         ),
     ];
-    for (case, changes, status) in cases {
+    for (case, changes, status, refusal) in cases {
         let reply = deliver(&server, from_the_panel(&server, &changes)).await;
         assert_eq!(reply.status, status, "{case}");
-        assert!(reply.json()["error"].is_string(), "{case}");
+        let error = reply.json()["error"].clone();
+        assert!(
+            error.as_str().is_some_and(|error| error.contains(refusal)),
+            "{case}: {error}"
+        );
     }
     let runs = runs.lock().unwrap();
     assert!(runs.is_empty(), "{runs:?}");
