@@ -30,6 +30,7 @@ use ratatui::crossterm::event::{self, Event, KeyEventKind};
 use ratatui::crossterm::terminal::{self, EnterAlternateScreen};
 use ratatui::DefaultTerminal;
 
+use crate::commands::consulted;
 use crate::commands::workspace::{load_warnings, same_directory};
 use crate::install::state::Screen as InstallScreen;
 use crate::render::as_stored;
@@ -355,10 +356,10 @@ fn apply_install(base: &Path, screen: &InstallScreen) -> Done {
 /// `directory`, or else the default one in `home`, made there the first time.
 pub fn load(directory: &Path, home: Option<&Path>) -> Result<View, CliError> {
     if let Some(workspace) = FlayerWorkspace::locate(directory)? {
-        return Ok(View::Workspace(workspace_view(&workspace, false)));
+        return Ok(View::Workspace(workspace_view(&workspace, false, home)));
     }
     Ok(match FlayerWorkspace::locate_or_default(directory, home)? {
-        Some(workspace) => View::Workspace(workspace_view(&workspace, true)),
+        Some(workspace) => View::Workspace(workspace_view(&workspace, true, home)),
         None => View::Nowhere,
     })
 }
@@ -373,13 +374,18 @@ pub fn load_project(directory: &Path, home: Option<&Path>) -> Result<View, CliEr
     let Some(project) = MindProject::locate(directory)? else {
         return Ok(View::Nowhere);
     };
-    let (above, default) = match FlayerWorkspace::locate(project.root())? {
-        Some(workspace) => (Some(workspace), false),
-        None => (FlayerWorkspace::default_at(home)?, true),
-    };
+    // The workspace `mind` consults about the project, asked of the function
+    // that decides it for the `mind` lines this screen runs, so the two
+    // cannot come to disagree.
+    let above = consulted(&project, home)?;
+    // One not above the project is the default: the walk up would otherwise
+    // have found it at that very ancestor.
+    let default = above
+        .as_ref()
+        .is_some_and(|workspace| !project.root().starts_with(workspace.root()));
     if let Some(workspace) = &above {
         if workspace.is_linked(project.root()) {
-            return Ok(View::Workspace(workspace_view(workspace, default)));
+            return Ok(View::Workspace(workspace_view(workspace, default, home)));
         }
     }
     // `.`, because the commands run from the project itself.
@@ -387,7 +393,15 @@ pub fn load_project(directory: &Path, home: Option<&Path>) -> Result<View, CliEr
     let root = project.root().to_path_buf();
     Ok(View::Workspace(Workspace {
         name: project.name().to_owned(),
-        members: vec![held(entry, root.clone(), false, &project, &Kind::ALL)],
+        // `above`'s templates, the ones `mind add` will find.
+        members: vec![held(
+            entry,
+            root.clone(),
+            false,
+            &project,
+            &Kind::ALL,
+            above.as_ref(),
+        )],
         root,
         unlinked: Vec::new(),
         shelf: 0,
@@ -404,7 +418,7 @@ pub fn load_project(directory: &Path, home: Option<&Path>) -> Result<View, CliEr
 
 /// A workspace as the screen shows it: its own artifacts first, then every
 /// project it manages.
-fn workspace_view(workspace: &FlayerWorkspace, default: bool) -> Workspace {
+fn workspace_view(workspace: &FlayerWorkspace, default: bool, home: Option<&Path>) -> Workspace {
     let own = workspace.own();
     let mut members = vec![held(
         String::new(),
@@ -412,8 +426,14 @@ fn workspace_view(workspace: &FlayerWorkspace, default: bool) -> Workspace {
         true,
         &own,
         &workspace.own_kinds(),
+        Some(workspace),
     )];
-    members.extend(workspace.members().into_iter().map(member));
+    members.extend(
+        workspace
+            .members()
+            .into_iter()
+            .map(|registered| member(registered, home)),
+    );
     let unlinked = scan(workspace)
         .found
         .into_iter()
@@ -475,10 +495,29 @@ fn loaded(workspace: &FlayerWorkspace) -> Vec<LoadedSource> {
 }
 
 /// One registry entry, opened and read.
-fn member(registered: Registered) -> Member {
+///
+/// Its templates are those of the workspace `mind` consults about the
+/// project, which need not be the one on screen: the add form runs `mind -C
+/// <entry> add`, and what it offers must be what that line finds.
+fn member(registered: Registered, home: Option<&Path>) -> Member {
     let entry = as_stored(&registered.entry);
     match registered.project {
-        Ok(project) => held(entry, registered.root, false, &project, &Kind::ALL),
+        Ok(project) => {
+            let consulted = consulted(&project, home);
+            let workspace = consulted.as_ref().ok().and_then(Option::as_ref);
+            let mut member = held(
+                entry,
+                registered.root,
+                false,
+                &project,
+                &Kind::ALL,
+                workspace,
+            );
+            if let (Err(error), Ok(holdings)) = (&consulted, &mut member.holdings) {
+                holdings.warnings.push(error.to_string());
+            }
+            member
+        }
         Err(error) => Member {
             name: entry.clone(),
             entry,
@@ -490,8 +529,16 @@ fn member(registered: Registered) -> Member {
 }
 
 /// What one holder holds, read from the disk: a project, or the workspace's
-/// own for the kinds it keeps apart.
-fn held(entry: String, root: PathBuf, own: bool, project: &MindProject, kinds: &[Kind]) -> Member {
+/// own for the kinds it keeps apart. `workspace` is the one whose templates
+/// count for it, if any.
+fn held(
+    entry: String,
+    root: PathBuf,
+    own: bool,
+    project: &MindProject,
+    kinds: &[Kind],
+    workspace: Option<&FlayerWorkspace>,
+) -> Member {
     let catalog = Catalog::discover_kinds(std::slice::from_ref(project), kinds);
     let mut items: Vec<Item> = catalog
         .artifacts()
@@ -537,7 +584,7 @@ fn held(entry: String, root: PathBuf, own: bool, project: &MindProject, kinds: &
         .into_iter()
         .map(|kind| (kind, within(project, kind)))
         .collect();
-    let templates = match template::templates(project) {
+    let templates = match template::templates(workspace, project) {
         Ok(templates) => templates
             .into_iter()
             .map(|template| Choice {

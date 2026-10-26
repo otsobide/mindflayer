@@ -48,21 +48,53 @@ pub fn run(cli: &Cli) -> Result<Outcome, Failure> {
             name,
             description,
             template,
-        } => add_to(
-            &project_here(&directory)?,
-            *kind,
-            name,
-            description,
-            template.as_deref(),
-        ),
+        } => {
+            let project = project_here(&directory)?;
+            match template {
+                // The workspace lends the template, so one that cannot be
+                // read refuses the add: passed over, it would let a farther
+                // template of the same name, a built-in one say, stand in
+                // for its own and write the artifact from that.
+                Some(template) => {
+                    let workspace = consulted(&project, home)?;
+                    add_to(
+                        workspace.as_ref(),
+                        &project,
+                        *kind,
+                        name,
+                        description,
+                        Some(template),
+                    )
+                }
+                None => consulting(&project, home, |workspace| {
+                    add_to(workspace, &project, *kind, name, description, None)
+                }),
+            }
+        }
         Command::Edit { reference, editor } => {
-            edit_in(&project_here(&directory)?, reference, editor.as_deref())
+            let project = project_here(&directory)?;
+            consulting(&project, home, |workspace| {
+                edit_in(workspace, &project, reference, editor.as_deref())
+            })
         }
-        Command::Rename { reference, to } => rename_in(&project_here(&directory)?, reference, to),
+        Command::Rename { reference, to } => {
+            let project = project_here(&directory)?;
+            consulting(&project, home, |workspace| {
+                rename_in(workspace, &project, reference, to)
+            })
+        }
         Command::Remove { reference, yes } => {
-            remove_from(&project_here(&directory)?, reference, *yes)
+            let project = project_here(&directory)?;
+            consulting(&project, home, |workspace| {
+                remove_from(workspace, &project, reference, *yes)
+            })
         }
-        Command::Templates => templates_of(&project_here(&directory)?),
+        Command::Templates => {
+            let project = project_here(&directory)?;
+            consulting(&project, home, |workspace| {
+                templates_of(workspace, &project)
+            })
+        }
         Command::List { kind } => {
             let project = project_here(&directory)?;
             one_project(project, wanted(*kind), |catalog, projects, level| {
@@ -158,6 +190,7 @@ fn run_flayer(
         } => {
             let workspace = workspace_here(directory, home)?;
             add_to(
+                Some(&workspace),
                 &holder(&workspace, project.as_deref())?,
                 *kind,
                 name,
@@ -172,6 +205,7 @@ fn run_flayer(
         } => {
             let workspace = workspace_here(directory, home)?;
             edit_in(
+                Some(&workspace),
                 &holder(&workspace, project.as_deref())?,
                 reference,
                 editor.as_deref(),
@@ -183,7 +217,12 @@ fn run_flayer(
             project,
         } => {
             let workspace = workspace_here(directory, home)?;
-            rename_in(&holder(&workspace, project.as_deref())?, reference, to)
+            rename_in(
+                Some(&workspace),
+                &holder(&workspace, project.as_deref())?,
+                reference,
+                to,
+            )
         }
         FlayerCommand::Remove {
             reference,
@@ -191,11 +230,16 @@ fn run_flayer(
             yes,
         } => {
             let workspace = workspace_here(directory, home)?;
-            remove_from(&holder(&workspace, project.as_deref())?, reference, *yes)
+            remove_from(
+                Some(&workspace),
+                &holder(&workspace, project.as_deref())?,
+                reference,
+                *yes,
+            )
         }
         FlayerCommand::Templates { project } => {
             let workspace = workspace_here(directory, home)?;
-            templates_of(&holder(&workspace, project.as_deref())?)
+            templates_of(Some(&workspace), &holder(&workspace, project.as_deref())?)
         }
 
         FlayerCommand::Link { projects } => link_projects(directory, projects, home),
@@ -409,6 +453,55 @@ fn managing(project: &MindProject, home: Option<&Path>) -> Result<FlayerWorkspac
         });
     }
     Ok(workspace)
+}
+
+/// The workspace a `mind` command consults about the project it changes:
+/// the one above it, or else the default one in `home` — the order `mind
+/// link` and `mind install` look in.
+///
+/// The default only if it has been made: a change to a project is no reason
+/// to write a marker into somebody's home, and a workspace made just now
+/// holds no record to drop and no template to offer.
+///
+/// The TUI asks it too, for the workspace `mind` opens its screen on and for
+/// the templates its add form offers a project, so both are what the `mind`
+/// lines it runs will find.
+pub(crate) fn consulted(
+    project: &MindProject,
+    home: Option<&Path>,
+) -> Result<Option<FlayerWorkspace>, CliError> {
+    match FlayerWorkspace::locate(project.root())? {
+        Some(workspace) => Ok(Some(workspace)),
+        None => Ok(FlayerWorkspace::default_at(home)?),
+    }
+}
+
+/// Make a change to `project` with the workspace [`consulted`] about it.
+///
+/// One that cannot be read is a warning after the change rather than a
+/// refusal of it: the change is the project's, and the workspace was only to
+/// be told. Not so for `mind add --template`, where the workspace lends what
+/// the change is made from, which is why that asks [`consulted`] itself.
+fn consulting(
+    project: &MindProject,
+    home: Option<&Path>,
+    change: impl FnOnce(Option<&FlayerWorkspace>) -> Result<Outcome, Failure>,
+) -> Result<Outcome, Failure> {
+    let (workspace, unread) = match consulted(project, home) {
+        Ok(workspace) => (workspace, None),
+        Err(error) => (None, Some(format!("warning: {error}"))),
+    };
+    let mut result = change(workspace.as_ref());
+    if let Some(warning) = unread {
+        match &mut result {
+            Ok(outcome) => {
+                outcome.stderr.push(warning);
+                outcome.ok = false;
+            }
+            Err(failure) => failure.warnings.push(warning),
+        }
+    }
+    result
 }
 
 /// What a workspace command changes: the workspace's own artifacts, or the

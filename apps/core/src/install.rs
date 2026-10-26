@@ -563,12 +563,18 @@ pub fn uninstall(
 /// screen leave to overwrite and delete, so it must not outlive the copy it
 /// was about — whatever somebody writes there next would inherit it.
 ///
-/// The workspace is found by walking up from the project, so one that links
-/// the project from somewhere that is not above it is not consulted.
-pub fn disown(project: &MindProject, kind: Kind, name: &str) -> Result<bool, InstallError> {
-    let Some(workspace) = FlayerWorkspace::locate(project.root())? else {
-        return Ok(false);
-    };
+/// `workspace` is the one the front end resolved for the command, given
+/// rather than found by walking up from the project: a walk misses every
+/// workspace that links the project from somewhere that is not above it, and
+/// each of those would keep its stale record. Another workspace that links
+/// the same project still keeps its own, since nothing in the project says
+/// which workspaces link it.
+pub fn disown(
+    workspace: &FlayerWorkspace,
+    project: &MindProject,
+    kind: Kind,
+    name: &str,
+) -> Result<bool, InstallError> {
     // Only a workspace that manages the project keeps records about it, and
     // one that has never installed anything has no ledger: this must not
     // create one just to look.
@@ -576,7 +582,7 @@ pub fn disown(project: &MindProject, kind: Kind, name: &str) -> Result<bool, Ins
         return Ok(false);
     }
     let ledger = workspace.ledger()?;
-    let entry = project_entry(&workspace, project);
+    let entry = project_entry(workspace, project);
     let dropped = ledger.uninstalled(&entry, kind, name)?;
     if dropped {
         let detail = format!(

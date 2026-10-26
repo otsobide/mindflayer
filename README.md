@@ -608,6 +608,8 @@ mind add skill deploy "Ship the service" --template full
 `.mindflayer/templates/` for every project it manages — a folder holding a
 `SKILL.md` for a skill, a markdown file for a rule. `mind templates` lists what
 is available and where each comes from; of two with one name, the closer wins.
+`flayer add -p` finds the workspace's wherever the project sits; `mind add`
+finds those of the workspace above the project, or else the one in your home.
 
 A template is copied whole. In its manifest, `name` and `description` are set by
 `mind add`, whatever the template had for them, and `{{name}}` and
@@ -635,8 +637,10 @@ renaming it or editing it drops the workspace's record that Mindflayer
 installed it, so the install screen shows it as somebody's and never
 overwrites or deletes it — and a skill you write later under the same name does
 not inherit a record that was about something else. The record dropped is the
-one held by the workspace at or above the project; one that links it from
-elsewhere keeps its own (an [open question](docs/architecture.md#open-questions)).
+one held by the workspace the command works in: `flayer`'s, wherever the
+project sits, or for `mind` the workspace above the project, or else the one in
+your home. Another workspace that links the same project keeps its own (an
+[open question](docs/architecture.md#open-questions)).
 
 ## Roadmap
 
