@@ -29,7 +29,13 @@ async fn a_client_route_serves_index_html_without_a_token() {
     let server = serving(Panel::embedded::<Built>());
     let router = server.router();
 
-    for path in ["/", "/projects/beta", "/skills?kind=rule"] {
+    for path in [
+        "/",
+        "/projects/beta",
+        "/projects/beta/",
+        "/skills/a:b",
+        "/skills?kind=rule",
+    ] {
         let reply = get(&router, path, Auth::Nothing).await;
         assert_eq!(reply.status, StatusCode::OK, "{path}");
         assert_eq!(reply.header("content-type"), Some("text/html"));
@@ -77,10 +83,40 @@ async fn a_missing_hashed_asset_is_a_404_rather_than_the_page() {
 #[tokio::test]
 async fn a_path_that_climbs_names_nothing() {
     let server = serving(Panel::embedded::<Built>());
+    let router = server.router();
 
-    let reply = get(&server.router(), "/assets/../index.html", Auth::Nothing).await;
+    for path in [
+        "/assets/../index.html",
+        "/assets/..\\index.html",
+        "/./robots.txt",
+    ] {
+        let reply = get(&router, path, Auth::Nothing).await;
+        assert_eq!(reply.status, StatusCode::NOT_FOUND, "{path}");
+    }
+}
 
-    assert_eq!(reply.status, StatusCode::NOT_FOUND);
+/// A debug build's embed reads the panel's folder from disk, where an
+/// absolute path replaces the folder and a symlink is followed wherever it
+/// leads.
+#[cfg(unix)]
+#[tokio::test]
+async fn a_symlink_outside_the_panel_is_never_read() {
+    let outside = tempfile::TempDir::new().unwrap();
+    std::fs::write(outside.path().join("secret"), "not the panel's").unwrap();
+    let link = outside.path().join("link");
+    std::os::unix::fs::symlink(outside.path().join("secret"), &link).unwrap();
+    let link = link.to_str().unwrap().replace('/', "\\");
+    let server = serving(Panel::embedded::<Built>());
+    let router = server.router();
+
+    for path in [
+        format!("/{link}"),
+        format!("/assets{}{link}", "\\..".repeat(64)),
+    ] {
+        let reply = get(&router, &path, Auth::Nothing).await;
+        assert_eq!(reply.status, StatusCode::NOT_FOUND, "{path}");
+        assert!(!reply.text().contains("not the panel's"), "{path}");
+    }
 }
 
 #[tokio::test]

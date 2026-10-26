@@ -29,3 +29,5 @@ rust-embed = { version = "8", features = ["interpolate-folder-path", "mime-guess
 tokio = { version = "1", features = ["macros", "rt-multi-thread", "time"] }
 # `oneshot`, to send a request through the router without a socket.
 tower = { version = "0.5", features = ["util"] }
+# A folder outside the panel, holding a symlink the panel must never read.
+tempfile = "3"

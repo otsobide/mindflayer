@@ -77,11 +77,17 @@ pub(crate) async fn serve(State(panel): State<Panel>, method: Method, uri: Uri) 
     }
     // Undecoded: Vite names everything it writes in plain ASCII.
     let path = uri.path().trim_start_matches('/');
-    // Climbing out names nothing here, whatever it would name on disk.
-    if path.split('/').any(|segment| segment == "..") {
+    // A browser drops dot segments and turns `\` into `/` before a request
+    // leaves it, so a path holding one was written by hand, to climb out. It
+    // names nothing here, whatever it would name on disk.
+    if path.contains('\\')
+        || path
+            .split('/')
+            .any(|segment| segment == "." || segment == "..")
+    {
         return missing();
     }
-    if let Some(file) = (!path.is_empty()).then(|| (panel.get)(path)).flatten() {
+    if let Some(file) = is_file_name(path).then(|| (panel.get)(path)).flatten() {
         return file_response(path, file);
     }
     // A hashed file that is not there is one an old page asks for after a
@@ -94,6 +100,19 @@ pub(crate) async fn serve(State(panel): State<Panel>, method: Method, uri: Uri) 
         Some(file) => file_response("index.html", file),
         None => not_built(),
     }
+}
+
+/// Whether `path` could be a name Vite wrote, the only kind handed to the
+/// embed.
+///
+/// A debug build's embed reads the folder from disk, where a drive letter
+/// replaces the folder on Windows and a symlink is followed wherever it
+/// leads; a release build only looks the name up in a table. Checking here
+/// keeps the debug build, which `make dev/link` installs, from reading past
+/// the panel, and the two builds answering alike. A path that fails may still
+/// be one of the panel's own routes, so it gets `index.html`.
+fn is_file_name(path: &str) -> bool {
+    !path.contains(':') && path.split('/').all(|segment| !segment.is_empty())
 }
 
 fn file_response(path: &str, file: EmbeddedFile) -> Response {

@@ -2683,6 +2683,7 @@ dependencies = [
  "rust-embed",
  "serde",
  "serde_json",
+ "tempfile",
  "tokio",
  "tower",
 ]
