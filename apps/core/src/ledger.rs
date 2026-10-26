@@ -152,8 +152,9 @@ pub struct InstallRecord {
     /// `None` for the workspace's own and a loaded workspace's.
     pub source_id: Option<i64>,
     /// Where it came from, spelled as `--from` takes it
-    /// ([`crate::install::Offer::origin`]). `None` only in a record from
-    /// before schema 3 of something that came from no source.
+    /// ([`crate::install::Offer::origin`]), without the credentials
+    /// [`redacted`] takes out. `None` only in a record from before schema 3
+    /// of something that came from no source.
     pub origin: Option<String>,
     /// [`crate::hash::tree`] of what was written, which every target holds.
     /// `None` in a record from before schema 3, which D-04 reads as current
@@ -630,6 +631,8 @@ impl Ledger {
         installation: &InstallRecord,
     ) -> Result<(), LedgerError> {
         let failed = |source| self.failed("recording an installation", source);
+        // An origin spells a source's URL, so it goes in as every URL does.
+        let origin = installation.origin.as_deref().map(redacted);
         let transaction = self.connection.unchecked_transaction().map_err(failed)?;
         let id: i64 = transaction
             .query_row(
@@ -647,7 +650,7 @@ impl Ledger {
                     installation.kind.slug(),
                     installation.name,
                     installation.source_id,
-                    installation.origin,
+                    origin.as_deref(),
                     installation.content_hash,
                     now()
                 ],
@@ -687,13 +690,23 @@ impl Ledger {
                 "SELECT id, source_id, origin, content_hash FROM installations
                   WHERE project = ?1 AND kind = ?2 AND name = ?3",
                 rusqlite::params![project, kind.slug(), name],
-                |row| Ok((row.get::<_, i64>(0)?, row.get(1)?, row.get(2)?, row.get(3)?)),
+                |row| {
+                    Ok((
+                        row.get::<_, i64>(0)?,
+                        row.get(1)?,
+                        row.get::<_, Option<String>>(2)?,
+                        row.get(3)?,
+                    ))
+                },
             )
             .optional()
             .map_err(failed)?
         else {
             return Ok(None);
         };
+        // And comes out as every URL does, for one schema 3 filled in from a
+        // source's URL as an older build stored it, until the scrub rewrites it.
+        let origin = origin.map(|text| redacted(&text).into_owned());
 
         let mut statement = self
             .connection
@@ -801,6 +814,10 @@ impl Ledger {
     /// installation that pointed at the other points at the kept one, which
     /// is the same place. The row that went is handed back for its folders to
     /// go too, which nothing points into any more.
+    ///
+    /// An installation's origin is rewritten with the URL it spells: schema 3
+    /// filled it in from the URL as it was stored, credentials and all, and
+    /// nothing else would take them out of it.
     pub fn scrub_source(&self, id: i64) -> Result<Option<Source>, LedgerError> {
         let failed = |source| self.failed("rewriting a source without credentials", source);
         let transaction = self.connection.unchecked_transaction().map_err(failed)?;
@@ -887,6 +904,29 @@ impl Ledger {
                 (kept, Some(gone))
             }
         };
+        let origins: Vec<(i64, String)> = {
+            let mut statement = transaction
+                .prepare(
+                    "SELECT id, origin FROM installations
+                      WHERE source_id = ?1 AND instr(origin, '@') > 0",
+                )
+                .map_err(failed)?;
+            let rows = statement
+                .query_map([kept], |row| Ok((row.get(0)?, row.get(1)?)))
+                .map_err(failed)?;
+            rows.collect::<Result<_, _>>().map_err(failed)?
+        };
+        for (installation, origin) in origins {
+            let clean = redacted(&origin);
+            if clean != origin {
+                transaction
+                    .execute(
+                        "UPDATE installations SET origin = ?2 WHERE id = ?1",
+                        rusqlite::params![installation, clean.as_ref()],
+                    )
+                    .map_err(failed)?;
+            }
+        }
         transaction
             .execute(
                 "UPDATE sources SET url = ?2 WHERE id = ?1",

@@ -389,6 +389,58 @@ fn merging_keeps_the_fresher_rows_artifacts_and_lets_the_others_go_with_its_row(
 }
 
 #[test]
+fn an_origin_is_recorded_and_read_back_without_credentials() {
+    let ledger = Ledger::in_memory().unwrap();
+    let mut written = installation_of("deploy", &[(None, "skills/deploy")]);
+    written.origin = Some(String::from("https://me:hunter2@h/a#main"));
+
+    ledger.installed("collapse", &written).unwrap();
+
+    assert!(!stored(&ledger, "installations").contains("hunter2"));
+    let read = ledger
+        .installation("collapse", Kind::Skill, "deploy")
+        .unwrap()
+        .unwrap();
+    assert_eq!(read.origin.as_deref(), Some("https://h/a#main"));
+}
+
+#[test]
+fn scrubbing_a_source_takes_the_credentials_out_of_the_origins_spelling_it() {
+    let (dir, ledger) = ledger_with_a_token_in_it();
+    // As schema 3 fills it in from a source an older build stored, and an
+    // ssh user name, which is no credential, in another source's.
+    ledger
+        .connection
+        .execute_batch(
+            "INSERT INTO sources (id, kind, url, reference, subdirectory, directory, first_seen, last_seen)
+                 VALUES (2, 'git', 'ssh://git@h/b', NULL, 'skills', 'h-b', 0, 0);
+             INSERT INTO installations (project, kind, name, source_id, origin, installed_at)
+                 VALUES ('../p', 'skill', 'deploy', 1, 'https://me:hunter2@h/a', 0),
+                        ('../p', 'skill', 'lint', 2, 'ssh://git@h/b', 0);",
+        )
+        .unwrap();
+    // Handed back without them before the scrub too.
+    let origin = |name: &str| {
+        ledger
+            .installation("../p", Kind::Skill, name)
+            .unwrap()
+            .unwrap()
+            .origin
+    };
+    assert_eq!(origin("deploy").as_deref(), Some("https://h/a"));
+
+    ledger.scrub_source(1).unwrap();
+    ledger.scrub_log().unwrap();
+
+    let installations = stored(&ledger, "installations");
+    assert!(installations.contains("|https://h/a|"), "{installations}");
+    assert!(installations.contains("|ssh://git@h/b|"), "{installations}");
+    assert_eq!(origin("lint").as_deref(), Some("ssh://git@h/b"));
+    let file = std::fs::read(dir.path().join(LEDGER_FILE)).unwrap();
+    assert!(!file.windows(7).any(|bytes| bytes == b"hunter2"));
+}
+
+#[test]
 fn scrubbing_the_log_rewrites_only_the_entries_with_credentials_and_counts_them() {
     let (_dir, ledger) = ledger_with_a_token_in_it();
     ledger
