@@ -20,8 +20,9 @@ use crate::artifact::{self, issue_list, Artifact, ArtifactError, ValidationIssue
 use crate::catalog::{Catalog, DiscoveryFailure};
 use crate::copy;
 use crate::gather::Scrub;
+use crate::hash;
 use crate::kind::{Kind, Layout};
-use crate::ledger::{Action, Gathered, Ledger, LedgerError, Outcome};
+use crate::ledger::{Action, Gathered, InstallRecord, Ledger, LedgerError, Outcome, Target};
 use crate::paths;
 use crate::url::redacted;
 use crate::workspace::{FlayerWorkspace, MindProject, WorkspaceError};
@@ -471,7 +472,12 @@ pub fn install(
     // Nothing is written, and above all nothing is recorded — a record would
     // let `uninstall` delete the loaded workspace's own files.
     if same_place(&from, &to) {
-        return Ok(Installed::Unchanged { name, path: to }.into());
+        return Ok(Installed::Unchanged {
+            name,
+            path: to,
+            unhashed: None,
+        }
+        .into());
     }
     // One inside the other is worse: replacing `to` starts by deleting it,
     // and with it `from` — or copies `from` into itself.
@@ -527,21 +533,64 @@ pub fn install(
     // Cleared before the ledger is written rather than after, so the scratch
     // folder is held for no longer than the copy takes.
     drop(stage);
+    // Of the copy as it now stands, not of where it came from: what was
+    // written is what a later look at the copy is compared with, and the
+    // source may hold links the copy resolved. A copy that cannot be read
+    // back is recorded all the same, with no hash, since without a record it
+    // would be Foreign for good, and D-04 reads a record with no hash as it
+    // reads one from before hashes were kept. That is said, in what this
+    // returns and in the log: a copy left as it was can hold a link somebody
+    // put there, which `copy::same` follows and the hash refuses.
+    let (content_hash, unhashed) = match hash::tree(&to) {
+        Ok(hash) => (Some(hash), None),
+        Err(error) => (None, Some(error.to_string())),
+    };
 
     // A source to point at only for what was gathered: the workspace's own
-    // came from nowhere but the workspace.
+    // came from nowhere but the workspace. The origin says where every offer
+    // came from, those two included, in the one spelling `--from` takes.
     let source_id = match &candidate.offer {
         Offer::Shelf(gathered) => Some(gathered.source.id),
         Offer::Workspace { .. } | Offer::Loaded { .. } => None,
     };
-    ledger.installed(&entry, kind, &name, source_id, &route(project.root(), &to))?;
-    let detail = format!("{name} into {}", project.name());
+    ledger.installed(
+        &entry,
+        &InstallRecord {
+            kind,
+            name: name.clone(),
+            source_id,
+            origin: Some(candidate.origin()),
+            content_hash,
+            // One copy, in the folder the project's marker names, which is no
+            // one agent's: a copy in each agent's folder is #34's to write.
+            targets: vec![Target {
+                agent: None,
+                path: route(project.root(), &to),
+            }],
+        },
+    )?;
+    let mut detail = format!("{name} into {}", project.name());
+    if let Some(reason) = &unhashed {
+        detail.push_str(&format!(", recorded without a hash: {reason}"));
+    }
     ledger.log(Action::Install, Some(&entry), Outcome::Ok, Some(&detail))?;
 
     let installed = match change {
-        copy::Change::Added => Installed::Added { name, path: to },
-        copy::Change::Updated => Installed::Updated { name, path: to },
-        copy::Change::Unchanged => Installed::Unchanged { name, path: to },
+        copy::Change::Added => Installed::Added {
+            name,
+            path: to,
+            unhashed,
+        },
+        copy::Change::Updated => Installed::Updated {
+            name,
+            path: to,
+            unhashed,
+        },
+        copy::Change::Unchanged => Installed::Unchanged {
+            name,
+            path: to,
+            unhashed,
+        },
     };
     Ok(Installation { installed, swept })
 }
@@ -683,24 +732,43 @@ pub(crate) struct Disowned {
 }
 
 /// What installing one artifact did.
+///
+/// Each that leaves a copy says whether the copy could be hashed
+/// (`unhashed`): one that could not is recorded all the same, and said
+/// rather than recorded quietly, since a record with no hash is read the
+/// way one from before hashes were kept is.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Installed {
     Added {
         name: String,
         path: PathBuf,
+        unhashed: Option<String>,
     },
     Updated {
         name: String,
         path: PathBuf,
+        unhashed: Option<String>,
     },
     Unchanged {
         name: String,
         path: PathBuf,
+        unhashed: Option<String>,
     },
     /// Something of that name is already there and is not ours to replace.
-    Foreign {
-        name: String,
-    },
+    Foreign { name: String },
+}
+
+impl Installed {
+    /// Why the copy could not be hashed, when it could not, so the ledger
+    /// records it with no hash.
+    pub fn unhashed(&self) -> Option<&str> {
+        match self {
+            Installed::Added { unhashed, .. }
+            | Installed::Updated { unhashed, .. }
+            | Installed::Unchanged { unhashed, .. } => unhashed.as_deref(),
+            Installed::Foreign { .. } => None,
+        }
+    }
 }
 
 /// What [`install`] did: to the artifact, and to the project's scratch folder
@@ -758,8 +826,13 @@ fn holds(directory: &Path, kind: Kind, name: &str) -> bool {
 
 /// How the ledger names a project: relative to the workspace, the way a
 /// registered project is stored, so moving the two together keeps it true.
+///
+/// The route to where the workspace's own entry leads
+/// ([`FlayerWorkspace::spelling_of`]), not to however the caller spelled the
+/// project: `mind` run inside it and `flayer -p` must read and write one
+/// record, whichever symlinks either went through.
 fn project_entry(workspace: &FlayerWorkspace, project: &MindProject) -> String {
-    route(workspace.root(), project.root())
+    route(workspace.root(), &workspace.spelling_of(project.root()))
 }
 
 /// A path below another, `/` separated, or the path itself when there is no
@@ -822,8 +895,9 @@ fn kept_by_a_load(workspace: &FlayerWorkspace, kind: Kind, path: &Path) -> Optio
 
 /// Whether `candidate` is the copy `project` holds: the same names and bytes
 /// as the folder there. For telling which of two offers of one name is the
-/// one installed, which the ledger does not record for what came from a
-/// workspace rather than the shelf.
+/// one installed, which a record from before schema 3 does not say for what
+/// came from a workspace rather than the shelf, and which an edit since may
+/// have made neither.
 pub fn is_current(
     workspace: &FlayerWorkspace,
     project: &MindProject,

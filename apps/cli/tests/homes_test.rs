@@ -68,7 +68,27 @@ fn an_agent_home_is_taken_wherever_a_global_option_is() {
 }
 
 #[test]
-fn the_helpers_pin_the_default_home_and_every_agent_home_to_none() {
+fn both_binaries_document_the_workspace_option_and_its_fallbacks() {
+    for line in [
+        vec!["mind", "--help"],
+        vec!["mind", "flayer", "list", "--help"],
+        vec!["flayer", "--help"],
+        vec!["flayer", "gather", "git", "--help"],
+    ] {
+        let text = help(&line);
+        let described: String = text
+            .lines()
+            .skip_while(|row| !row.contains("--workspace"))
+            .take(4)
+            .collect();
+        assert!(described.contains("-W"), "{line:?}:\n{text}");
+        assert!(described.contains("$MINDFLAYER_WORKSPACE"), "{described}");
+        assert!(described.contains("empty"), "{described}");
+    }
+}
+
+#[test]
+fn the_helpers_pin_the_default_home_the_workspace_and_every_agent_home_to_none() {
     let dir = TempDir::new().unwrap();
     let empty = Some(String::new());
     let pinned = AgentHomeOptions {
@@ -83,13 +103,16 @@ fn the_helpers_pin_the_default_home_and_every_agent_home_to_none() {
 
     // Given empty, not left out: left out, each would fall through to the
     // environment running the tests and to the developer's own home.
-    for (home, agents) in [
-        (&mind.home, &mind.agent_homes),
-        (&flayer.home, &flayer.agent_homes),
+    for (home, workspace, agents) in [
+        (&mind.home, &mind.workspace, &mind.agent_homes),
+        (&flayer.home, &flayer.workspace, &flayer.agent_homes),
     ] {
         assert_eq!(home, &empty);
+        assert_eq!(workspace, &empty);
         assert_eq!(agents, &pinned);
-        assert_eq!(default_home(home.as_deref()), None);
+        let lookup = Lookup::given(home.as_deref(), workspace.as_deref());
+        assert_eq!(lookup.home, None);
+        assert_eq!(lookup.activated, None);
         assert_eq!(agent_homes(agents), AgentHomes::default());
     }
 }
@@ -104,4 +127,19 @@ fn a_test_can_still_give_a_home_of_its_own_in_either_spelling() {
     assert_eq!(cli.home.as_deref(), Some("/h"));
     // The ones it did not give stay pinned.
     assert_eq!(cli.agent_homes.claude_config_dir.as_deref(), Some(""));
+}
+
+#[test]
+fn a_test_can_still_name_a_workspace_in_any_spelling() {
+    let dir = TempDir::new().unwrap();
+
+    for given in [
+        vec!["list", "-W", "/w"],
+        vec!["list", "-W/w"],
+        vec!["list", "--workspace", "/w"],
+        vec!["list", "--workspace=/w"],
+    ] {
+        let cli = parsed_flayer(dir.path(), &given);
+        assert_eq!(cli.workspace.as_deref(), Some("/w"), "{given:?}");
+    }
 }

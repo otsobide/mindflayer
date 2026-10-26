@@ -7,9 +7,72 @@
 
 use std::path::{Path, PathBuf};
 
-use mindflayer_core::AgentHomes;
+use mindflayer_core::{AgentHomes, Inputs, Intent};
 
 use crate::AgentHomeOptions;
+
+/// What a command line says about which workspace to use, apart from where
+/// the command starts: gathered here and handed to core's `resolve`, which
+/// alone decides what it adds up to.
+///
+/// Decided once per command line. The TUI keeps its own and hands it to every
+/// line it runs, so none of them looks again and finds something else.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct Lookup {
+    /// The workspace `-W` names, as given: empty when given empty.
+    pub flag: Option<PathBuf>,
+    /// The workspace `$MINDFLAYER_WORKSPACE` activates, as set.
+    pub activated: Option<PathBuf>,
+    /// Where the default workspace lives ([`default_home`]).
+    pub home: Option<PathBuf>,
+}
+
+impl Lookup {
+    /// What a command line gave as `--home` and `-W`, with the environment
+    /// for what it left out.
+    pub fn given(home: Option<&str>, workspace: Option<&str>) -> Self {
+        Self {
+            home: default_home(home),
+            ..Self::chosen(workspace, &variable)
+        }
+    }
+
+    /// What `-W` and `$MINDFLAYER_WORKSPACE` say, with the environment passed
+    /// in, so the order is tested on values.
+    ///
+    /// `-W` given at all, even empty, is the whole answer, and the variable is
+    /// not read: the order `--home` and `$MINDFLAYER_HOME` are taken in.
+    /// What an empty value means is core's to say, and it says none.
+    fn chosen(workspace: Option<&str>, variable: &dyn Fn(&str) -> Option<String>) -> Self {
+        Self {
+            flag: workspace.map(PathBuf::from),
+            activated: match workspace {
+                Some(_) => None,
+                None => variable("MINDFLAYER_WORKSPACE").map(PathBuf::from),
+            },
+            home: None,
+        }
+    }
+
+    /// Nothing named and nothing activated, with the default in `home`.
+    pub fn at_home(home: Option<&Path>) -> Self {
+        Self {
+            home: home.map(Path::to_path_buf),
+            ..Self::default()
+        }
+    }
+
+    /// What core is given to resolve a workspace from `start`.
+    pub fn inputs<'a>(&'a self, start: &'a Path, intent: Intent) -> Inputs<'a> {
+        Inputs {
+            flag: self.flag.as_deref(),
+            activated: self.activated.as_deref(),
+            start,
+            home: self.home.as_deref(),
+            intent,
+        }
+    }
+}
 
 /// Where the default workspace lives: `--home`, then `$MINDFLAYER_HOME`, then
 /// the user's home directory. Empty, from either, means there is none.

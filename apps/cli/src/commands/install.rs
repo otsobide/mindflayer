@@ -64,6 +64,7 @@ pub(crate) fn install_named(
             warnings: told,
         }
     })?;
+    let unhashed = done.installed.unhashed().map(str::to_owned);
     let mut outcome = match done.installed {
             Installed::Added { name, .. } => {
                 Outcome::plain(format!("installed {name} into {into}, from {origin}\n"))
@@ -84,6 +85,14 @@ pub(crate) fn install_named(
             },
     };
     outcome.stdout.push_str(&swept(project, &done.swept));
+    // Installed and recorded all the same, but without what tells a later
+    // edit apart, which is worth a look at what is in the copy.
+    if let Some(reason) = unhashed {
+        outcome.stderr.push(format!(
+            "warning: {name} in {into} was recorded without a hash of what it holds: {reason}"
+        ));
+        outcome.ok = false;
+    }
     if !warnings.is_empty() {
         outcome.stderr.extend(warnings);
         outcome.ok = false;

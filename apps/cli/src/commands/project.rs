@@ -14,9 +14,9 @@ use mindflayer_core::{
     WorkspaceError,
 };
 
-use super::{all_or_nothing, project_here, targets, workspace_above, workspace_here};
+use super::{all_or_nothing, project_here, targets, workspace_for, workspace_here};
 use crate::render::{as_stored, printable, table};
-use crate::{CliError, Failure, Outcome};
+use crate::{CliError, Failure, Lookup, Outcome};
 
 /// `mind init`: the directory made a mind project.
 pub(crate) fn init_project(
@@ -76,18 +76,18 @@ fn initialized(kind: &str, name: &str, marker: &Path, outcome: Initialization) -
     }
 }
 
-/// `mind link`: the project here, registered with the workspace above it.
-pub(crate) fn link_here(directory: &Path, home: Option<&Path>) -> Result<Outcome, Failure> {
+/// `mind link`: the project here, registered with its workspace.
+pub(crate) fn link_here(directory: &Path, lookup: &Lookup) -> Result<Outcome, Failure> {
     let project = project_here(directory)?;
-    let mut workspace = workspace_above(&project, home)?;
+    let mut workspace = workspace_for(&project, lookup)?;
     let (entry, registration) = workspace.link(&project)?;
     Ok(Outcome::plain(linked(project.name(), &entry, registration)))
 }
 
-/// `mind unlink`: the project here, dropped from the workspace above it.
-pub(crate) fn unlink_here(directory: &Path, home: Option<&Path>) -> Result<Outcome, Failure> {
+/// `mind unlink`: the project here, dropped from its workspace.
+pub(crate) fn unlink_here(directory: &Path, lookup: &Lookup) -> Result<Outcome, Failure> {
     let project = project_here(directory)?;
-    let mut workspace = workspace_above(&project, home)?;
+    let mut workspace = workspace_for(&project, lookup)?;
     let removed = workspace.unlink(project.root())?;
     Ok(Outcome::plain(unlinked(&removed)))
 }
@@ -96,9 +96,9 @@ pub(crate) fn unlink_here(directory: &Path, home: Option<&Path>) -> Result<Outco
 pub(crate) fn link_projects(
     directory: &Path,
     projects: &[PathBuf],
-    home: Option<&Path>,
+    lookup: &Lookup,
 ) -> Result<Outcome, Failure> {
-    let mut workspace = workspace_here(directory, home)?;
+    let mut workspace = workspace_here(directory, lookup)?;
     // All or nothing: every path is opened before any is registered,
     // so a typo in the third does not leave the first two linked by a
     // command that reports failure. Opening is the check — a
@@ -127,9 +127,9 @@ pub(crate) fn link_projects(
 pub(crate) fn unlink_projects(
     directory: &Path,
     projects: &[PathBuf],
-    home: Option<&Path>,
+    lookup: &Lookup,
 ) -> Result<Outcome, Failure> {
-    let mut workspace = workspace_here(directory, home)?;
+    let mut workspace = workspace_here(directory, lookup)?;
     let targets = targets(directory, projects)?;
     // All or nothing, for the reason `link` is: nothing is dropped
     // unless everything named is registered.

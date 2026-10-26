@@ -7,31 +7,34 @@
 use std::fmt::Write as _;
 use std::path::{Path, PathBuf};
 
-use mindflayer_core::{paths, FlayerWorkspace, Kind, Registration, WorkspaceError};
+use mindflayer_core::{
+    paths, resolve, resolve_except, FlayerWorkspace, Intent, Kind, Registration, WorkspaceError,
+};
 
 use super::{all_or_nothing, reading, targets};
 use crate::render::{as_stored, plural, printable, table};
-use crate::{CliError, Failure, Outcome};
+use crate::{CliError, Failure, Lookup, Outcome};
 
 /// `load`, at either level: the paths are typed from `directory`, and the
-/// workspace they go into is found from `start` — the directory itself for
-/// `flayer`, the project for `mind`. With no paths it lists what that
+/// workspace they go into is resolved from `start` — the directory itself
+/// for `flayer`, the project for `mind`. With no paths it lists what that
 /// workspace loads, as the other reads do: of the default one before it is
 /// made too, which loads nothing, rather than making it to say so.
 pub(crate) fn load_command(
     directory: &Path,
     start: &Path,
     workspaces: &[PathBuf],
-    home: Option<&Path>,
+    lookup: &Lookup,
 ) -> Result<Outcome, Failure> {
+    let home = lookup.home.as_deref();
     if workspaces.is_empty() {
-        let workspace = FlayerWorkspace::locate_or_unmade(start, home)?.ok_or_else(|| {
-            CliError::NowhereToLoad {
+        let workspace = resolve(&lookup.inputs(start, Intent::Read))?
+            .map(|resolved| resolved.workspace)
+            .ok_or_else(|| CliError::NowhereToLoad {
                 from: start.to_path_buf(),
                 verb: "list the loads of",
                 named: false,
-            }
-        })?;
+            })?;
         return reading(&workspace, |workspace| Ok(loaded_listing(workspace, home)));
     }
     let sources = targets(directory, workspaces)?;
@@ -48,15 +51,19 @@ pub(crate) fn load_command(
     if let Some(failure) = all_or_nothing(refused) {
         return Err(failure);
     }
-    let mut workspace = FlayerWorkspace::locate_or_default_except(start, &sources, home)?
+    // Passing over the ones being loaded, since a workspace cannot load
+    // itself: from inside one, the load goes into the workspace above it.
+    let mut workspace = resolve_except(&lookup.inputs(start, Intent::Write), &sources)?
+        .map(|resolved| resolved.workspace)
         .ok_or_else(|| CliError::NowhereToLoad {
             from: start.to_path_buf(),
             verb: "load into",
             named: true,
         })?;
+    // In one rewrite, refused whole when one source is the workspace itself:
+    // one named with `-W` is not passed over for being among them.
     let mut text = String::new();
-    for source in &opened {
-        let (entry, registration) = workspace.load(source)?;
+    for (source, (entry, registration)) in opened.iter().zip(workspace.load_all(&opened)?) {
         text.push_str(&loaded(&workspace, source.name(), &entry, registration));
     }
     text.push_str(&acted_on("into", &workspace, home));
@@ -69,21 +76,23 @@ pub(crate) fn load_command(
 }
 
 /// `unload`, at either level: all or nothing, in one rewrite of the marker,
-/// and never making the default workspace only to find it loads nothing.
+/// and never making the default workspace only to find it loads nothing —
+/// resolved as a read, and only a made workspace has anything to unload.
 pub(crate) fn unload_command(
     directory: &Path,
     start: &Path,
     workspaces: &[PathBuf],
-    home: Option<&Path>,
+    lookup: &Lookup,
 ) -> Result<Outcome, Failure> {
+    let home = lookup.home.as_deref();
     let sources = targets(directory, workspaces)?;
-    let mut workspace =
-        FlayerWorkspace::locate_except(start, &sources, home)?.ok_or_else(|| {
-            CliError::NowhereToLoad {
-                from: start.to_path_buf(),
-                verb: "unload from",
-                named: true,
-            }
+    let mut workspace = resolve_except(&lookup.inputs(start, Intent::Read), &sources)?
+        .map(|resolved| resolved.workspace)
+        .filter(FlayerWorkspace::is_made)
+        .ok_or_else(|| CliError::NowhereToLoad {
+            from: start.to_path_buf(),
+            verb: "unload from",
+            named: true,
         })?;
     let refused = sources
         .iter()

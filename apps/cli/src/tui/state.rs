@@ -19,6 +19,7 @@ use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
 use super::minds::{self, Minds};
 use crate::install::state::{Screen as InstallScreen, Step as InstallStep};
+use crate::Lookup;
 
 /// How far a page key scrolls a page of output.
 const PAGE: usize = 10;
@@ -94,6 +95,10 @@ pub struct Member {
     pub name: String,
     /// The workspace's own artifacts rather than a project's.
     pub own: bool,
+    /// A project whose own lines would consult some other workspace than
+    /// the one on screen: one linked from outside its tree, or from above a
+    /// nearer workspace. Its lines name the one on screen instead.
+    pub elsewhere: bool,
     /// What it holds, or why it could not be opened.
     pub holdings: Result<Holdings, String>,
 }
@@ -101,10 +106,10 @@ pub struct Member {
 impl Member {
     /// The level its commands run at.
     pub fn holder(&self) -> Holder {
-        if self.own {
-            Holder::Workspace
-        } else {
-            Holder::Project(self.entry.clone())
+        match (self.own, self.elsewhere) {
+            (true, _) => Holder::Workspace,
+            (false, true) => Holder::Elsewhere(self.entry.clone()),
+            (false, false) => Holder::Project(self.entry.clone()),
         }
     }
 
@@ -208,6 +213,15 @@ pub enum Holder {
     /// A project, by its entry: `mind -C <entry> <cmd>`, or `mind <cmd>` for
     /// the one at the root the commands run from.
     Project(String),
+    /// A project whose own workspace is not the one on screen, by its entry:
+    /// `mind -W . -C <entry> <cmd>`, which names the one on screen, so a
+    /// change drops that workspace's record and an add takes its templates.
+    ///
+    /// Still the project's command rather than `flayer <cmd> -p <entry>`,
+    /// which would consult the same workspace: a project's row teaches the
+    /// project's command, at every row alike, and `-W` only where leaving
+    /// it out would consult another.
+    Elsewhere(String),
 }
 
 /// Work a key asked for, as the command it is.
@@ -448,11 +462,19 @@ impl Task {
 /// One command line, at the level a holder is at: `flayer <command>` for the
 /// workspace's own, `mind -C <entry> <command>` for a project — and plain
 /// `mind <command>` for the one at the root, where `-C .` says nothing.
+///
+/// A `-W .` is typed from the root, as the `-C` is, so it names the
+/// workspace on screen.
 fn at(holder: &Holder, command: &[&str], positionals: &[&str]) -> Vec<String> {
     let start: Vec<String> = match holder {
         Holder::Workspace => vec![String::from("flayer")],
         Holder::Project(entry) if entry == "." => vec![String::from("mind")],
         Holder::Project(entry) => vec![String::from("mind"), String::from("-C"), directory(entry)],
+        Holder::Elsewhere(entry) => ["mind", "-W", ".", "-C"]
+            .into_iter()
+            .map(String::from)
+            .chain([directory(entry)])
+            .collect(),
     };
     let mut head: Vec<&str> = start.iter().map(String::as_str).collect();
     head.extend_from_slice(command);
@@ -576,20 +598,20 @@ impl Done {
 #[derive(Clone)]
 pub struct Runner(Arc<RunLine>);
 
-/// The function a [`Runner`] is: the words, where they run from, the default
-/// workspace's home, and the watch a gather among them reports to.
-type RunLine = dyn Fn(&[String], &Path, Option<&Path>, &Watch) -> Done + Send + Sync;
+/// The function a [`Runner`] is: the words, where they run from, where to
+/// look for a workspace, and the watch a gather among them reports to.
+type RunLine = dyn Fn(&[String], &Path, &Lookup, &Watch) -> Done + Send + Sync;
 
 impl Runner {
     pub fn new(
-        run: impl Fn(&[String], &Path, Option<&Path>, &Watch) -> Done + Send + Sync + 'static,
+        run: impl Fn(&[String], &Path, &Lookup, &Watch) -> Done + Send + Sync + 'static,
     ) -> Self {
         Self(Arc::new(run))
     }
 
     /// Run `words` from `base`.
-    pub fn run(&self, words: &[String], base: &Path, home: Option<&Path>, watch: &Watch) -> Done {
-        (self.0)(words, base, home, watch)
+    pub fn run(&self, words: &[String], base: &Path, lookup: &Lookup, watch: &Watch) -> Done {
+        (self.0)(words, base, lookup, watch)
     }
 }
 
@@ -781,9 +803,9 @@ pub struct App {
     /// What is running on a thread of its own, drawn over everything with
     /// the last step it reported until it is over.
     pub running: Option<Running>,
-    /// Where the default workspace lives, for when there is none above: what
-    /// every command this TUI runs is told, so none of them guesses.
-    pub home: Option<PathBuf>,
+    /// Where to look for a workspace: what every command this TUI runs is
+    /// told, so none of them looks again and finds another.
+    pub lookup: Lookup,
     /// What runs its command lines, when it is not the real thing: a test's
     /// stand-in.
     pub runner: Option<Runner>,
@@ -809,7 +831,7 @@ impl App {
             done: Vec::new(),
             busy: None,
             running: None,
-            home: None,
+            lookup: Lookup::default(),
             runner: None,
         };
         app.settle_in();
@@ -850,9 +872,10 @@ impl App {
         self.message = message.map(Message::info);
     }
 
-    /// Tell every command this TUI runs where the default workspace lives.
-    pub fn at_home(mut self, home: Option<&Path>) -> Self {
-        self.home = home.map(Path::to_path_buf);
+    /// Tell every command this TUI runs where to look for a workspace: the
+    /// lookup its screen was read with.
+    pub fn with_lookup(mut self, lookup: Lookup) -> Self {
+        self.lookup = lookup;
         self
     }
 
@@ -2218,6 +2241,12 @@ impl Reader {
             Tone::Info,
             String::from(
                 "On the workspace's own row the same keys run `flayer <cmd>` instead of `mind -C <project> <cmd>`.",
+            ),
+        ));
+        lines.push((
+            Tone::Info,
+            String::from(
+                "A project whose own commands would reach another workspace runs `mind -W . -C <project> <cmd>`, so the line acts on this one.",
             ),
         ));
         lines.push((

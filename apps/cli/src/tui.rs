@@ -25,6 +25,7 @@ use std::error::Error as _;
 
 use clap::Parser;
 use mindflayer_core::gather::Watch;
+use mindflayer_core::resolve::{self, resolve, Intent, Reason};
 use mindflayer_core::workspace::Member as Registered;
 use mindflayer_core::{
     lifecycle, paths, scan, template, Catalog, FlayerWorkspace, Kind, MindProject, WorkspaceError,
@@ -33,14 +34,11 @@ use ratatui::crossterm::event::{self, Event, KeyEventKind};
 use ratatui::crossterm::terminal::{self, EnterAlternateScreen};
 use ratatui::DefaultTerminal;
 
-use crate::commands::consulted;
 use crate::commands::workspace::{load_warnings, same_directory};
+use crate::commands::{consulted, run_flayer_with, run_with};
 use crate::install::state::Screen as InstallScreen;
 use crate::render::as_stored;
-use crate::{
-    install, run_flayer_cli_watched, run_watched, Cli, CliError, Command, Failure, FlayerCli,
-    FlayerCommand, Outcome,
-};
+use crate::{install, Cli, CliError, Command, Failure, FlayerCli, FlayerCommand, Lookup, Outcome};
 use state::{
     App, Choice, Done, Holdings, Item, LoadedSource, Member, Mode, Performed, Runner, Running,
     Scope, Step, Task, Unlinked, Update, View, Workspace,
@@ -53,27 +51,28 @@ const IDLE: Duration = Duration::from_millis(200);
 /// does.
 const WATCHING: Duration = Duration::from_millis(50);
 
-/// Open the TUI on the workspace at or above `directory`, and run it until it
-/// is closed.
+/// Open the TUI on the workspace `lookup` resolves from `directory`, and run
+/// it until it is closed.
 ///
 /// What comes back is the transcript: every command that changed something,
 /// so the session can be read, and repeated, once the screen is gone.
-pub fn run(directory: &Path, home: Option<&Path>) -> Result<Outcome, Failure> {
+pub fn run(directory: &Path, lookup: &Lookup) -> Result<Outcome, Failure> {
     // Checked before anything is drawn: a screen written into a pipe is noise
     // in whatever reads it.
     if !io::stdout().is_terminal() {
         return Err(CliError::NotATerminal.into());
     }
-    let app = App::new(directory.to_path_buf(), load(directory, home)?).at_home(home);
+    let app =
+        App::new(directory.to_path_buf(), load(directory, lookup)?).with_lookup(lookup.clone());
     open(app, "flayer")
 }
 
 /// Open the TUI straight onto the minds screen: what `flayer minds` does.
-pub fn run_minds(directory: &Path, home: Option<&Path>) -> Result<Outcome, Failure> {
+pub fn run_minds(directory: &Path, lookup: &Lookup) -> Result<Outcome, Failure> {
     if !io::stdout().is_terminal() {
         return Err(CliError::NotATerminal.into());
     }
-    open(minds(directory, home)?, "flayer minds")
+    open(minds(directory, lookup)?, "flayer minds")
 }
 
 /// The TUI `flayer minds` opens from `directory`: on the minds screen of the
@@ -82,12 +81,12 @@ pub fn run_minds(directory: &Path, home: Option<&Path>) -> Result<Outcome, Failu
 /// Read from `directory` rather than from the root of a workspace found
 /// first: the default workspace before it is made has no marker to stop a
 /// walk up from its root, which would carry on to any workspace above it.
-pub fn minds(directory: &Path, home: Option<&Path>) -> Result<App, CliError> {
-    let view = load(directory, home)?;
+pub fn minds(directory: &Path, lookup: &Lookup) -> Result<App, CliError> {
+    let view = load(directory, lookup)?;
     if matches!(view, View::Nowhere) {
         return Err(CliError::NotInWorkspace(directory.to_path_buf()));
     }
-    let mut app = App::new(directory.to_path_buf(), view).at_home(home);
+    let mut app = App::new(directory.to_path_buf(), view).with_lookup(lookup.clone());
     if let Some(workspace) = app.workspace() {
         app.mode = Mode::Minds(minds::Minds::of(workspace));
     }
@@ -100,16 +99,16 @@ pub fn minds(directory: &Path, home: Option<&Path>) -> Result<App, CliError> {
 /// A project a workspace manages opens in that workspace, on the project —
 /// the same screen `flayer` opens, since that is where the project's
 /// neighbours and its installs are. One no workspace manages opens on its own.
-pub fn run_project(directory: &Path, home: Option<&Path>) -> Result<Outcome, Failure> {
+pub fn run_project(directory: &Path, lookup: &Lookup) -> Result<Outcome, Failure> {
     if !io::stdout().is_terminal() {
         return Err(CliError::NotATerminal.into());
     }
     let mut app = App::opened_on(
         Scope::Project,
         directory.to_path_buf(),
-        load_project(directory, home)?,
+        load_project(directory, lookup)?,
     )
-    .at_home(home);
+    .with_lookup(lookup.clone());
     app.focus_on(directory);
     open(app, "mind")
 }
@@ -252,9 +251,9 @@ fn start(app: &mut App, task: Task) {
     let runner = runner(app);
     let lines = app.lines(&task);
     let base = app.base().to_path_buf();
-    let home = app.home.clone();
+    let lookup = app.lookup.clone();
     thread::spawn(move || {
-        let dones = run_all(&runner, &lines, &base, home.as_deref(), &reporting);
+        let dones = run_all(&runner, &lines, &base, &lookup, &reporting);
         // Nobody to tell is a screen already closed, which needs no answer.
         let _ = send.send(Update::Finished(dones));
     });
@@ -264,10 +263,9 @@ fn start(app: &mut App, task: Task) {
 /// Show what came of a task, with the disk read again when it asked for that.
 fn conclude(app: &mut App, task: &Task, performed: Performed) {
     let view = task.reloads().then(|| {
-        let home = app.home.as_deref();
         match app.opened {
-            Scope::Workspace => load(&app.directory, home),
-            Scope::Project => load_project(&app.directory, home),
+            Scope::Workspace => load(&app.directory, &app.lookup),
+            Scope::Project => load_project(&app.directory, &app.lookup),
         }
         .map_err(|error| error.to_string())
     });
@@ -295,7 +293,7 @@ pub fn perform(task: &Task, app: &App) -> Performed {
             &runner(app),
             &app.lines(task),
             &base,
-            app.home.as_deref(),
+            &app.lookup,
             &Watch::new(),
         )),
     }
@@ -322,12 +320,12 @@ fn run_all(
     runner: &Runner,
     lines: &[Vec<String>],
     base: &Path,
-    home: Option<&Path>,
+    lookup: &Lookup,
     watch: &Watch,
 ) -> Vec<Done> {
     let mut dones = Vec::new();
     for words in lines {
-        let done = runner.run(words, base, home, watch);
+        let done = runner.run(words, base, lookup, watch);
         let failed = done.error.is_some();
         dones.push(done);
         if failed {
@@ -340,19 +338,34 @@ fn run_all(
 /// Run one command line through the real parsers, from `base`.
 ///
 /// The words are what a person would type from the workspace root, so a `-C`
-/// among them is resolved against it rather than against wherever this
-/// process happened to be started. The home is the TUI's own, passed along
-/// rather than looked up again, so a command that falls back to the default
-/// workspace falls back to the one on screen. Each still walks up from `base`
-/// first, as from the shell, which is why a change to the default before it
-/// is made makes it first ([`App::lines`]). A gather among them reports to
-/// `watch`, and stops when it is cancelled.
-pub fn execute(words: &[String], base: &Path, home: Option<&Path>, watch: &Watch) -> Done {
+/// or a `-W` among them is resolved against it rather than against wherever
+/// this process happened to be started. Where to look for a workspace is
+/// otherwise the TUI's own, passed along rather than looked up again: a
+/// screen opened on the workspace `-W` names, or the one activated, runs
+/// every line against it, and a command that falls back to the default
+/// workspace falls back to the one on screen. With neither, each walks up
+/// from `base` first, as from the shell, which is why a change to the default
+/// before it is made makes it first ([`App::lines`]). A gather among them
+/// reports to `watch`, and stops when it is cancelled.
+pub fn execute(words: &[String], base: &Path, lookup: &Lookup, watch: &Watch) -> Done {
     let command = state::shell(words);
     let from = |directory: Option<PathBuf>| {
         Some(directory.map_or_else(|| base.to_path_buf(), |directory| base.join(directory)))
     };
-    let home = Some(home.map_or_else(String::new, |home| home.to_string_lossy().into_owned()));
+    // A line's own `-W` is the whole answer, as on a command line; empty
+    // stays empty rather than becoming the root, which joining would make it.
+    let looking = |named: Option<String>| match named {
+        Some(named) => Lookup {
+            flag: Some(if named.is_empty() {
+                PathBuf::new()
+            } else {
+                base.join(named)
+            }),
+            activated: None,
+            home: lookup.home.clone(),
+        },
+        None => lookup.clone(),
+    };
 
     let result = match words.first().map(String::as_str) {
         Some("mind") => match Cli::try_parse_from(words) {
@@ -362,8 +375,8 @@ pub fn execute(words: &[String], base: &Path, home: Option<&Path>, watch: &Watch
             }
             Ok(mut cli) => {
                 cli.directory = from(cli.directory.take());
-                cli.home = home;
-                run_watched(&cli, watch)
+                let lookup = looking(cli.workspace.take());
+                run_with(&cli, &lookup, watch)
             }
         },
         Some("flayer") => match FlayerCli::try_parse_from(words) {
@@ -373,8 +386,8 @@ pub fn execute(words: &[String], base: &Path, home: Option<&Path>, watch: &Watch
             }
             Ok(mut cli) => {
                 cli.directory = from(cli.directory.take());
-                cli.home = home;
-                run_flayer_cli_watched(&cli, watch)
+                let lookup = looking(cli.workspace.take());
+                run_flayer_with(&cli, &lookup, watch)
             }
         },
         _ => return Done::failed(command, "not a `mind` or `flayer` command"),
@@ -484,19 +497,20 @@ fn apply_install(base: &Path, screen: &InstallScreen) -> Done {
 // Reading what the screen shows
 // ---------------------------------------------------------------------------
 
-/// Read everything the screen shows from the disk: the workspace at or above
-/// `directory`, or else the default one in `home` — as it will be, when
-/// nothing has made it yet.
+/// Read everything the screen shows from the disk: the workspace `lookup`
+/// resolves from `directory`, as a read resolves it — the default one in
+/// home as it will be, when nothing has made it yet.
 ///
 /// Opening a screen is no reason to make it. The first change made from the
 /// screen is, and that runs a command that writes, which makes it the way it
 /// would from the shell.
-pub fn load(directory: &Path, home: Option<&Path>) -> Result<View, CliError> {
-    if let Some(workspace) = FlayerWorkspace::locate(directory)? {
-        return Ok(View::Workspace(workspace_view(&workspace, false, home)));
-    }
-    Ok(match FlayerWorkspace::default_or_unmade(home)? {
-        Some(workspace) => View::Workspace(workspace_view(&workspace, true, home)),
+pub fn load(directory: &Path, lookup: &Lookup) -> Result<View, CliError> {
+    Ok(match resolve(&lookup.inputs(directory, Intent::Read))? {
+        Some(resolved) => View::Workspace(workspace_view(
+            &resolved.workspace,
+            resolved.reason == Reason::Home,
+            lookup,
+        )),
         None => View::Nowhere,
     })
 }
@@ -504,25 +518,24 @@ pub fn load(directory: &Path, home: Option<&Path>) -> Result<View, CliError> {
 /// What `mind` shows: the workspace managing the project at or above
 /// `directory`, or that project on its own.
 ///
-/// Opening a project's screen makes nothing: the default workspace in `home`
+/// Opening a project's screen makes nothing: the default workspace in home
 /// counts when it already manages the project, and is otherwise only where
 /// `mind link` would put it.
-pub fn load_project(directory: &Path, home: Option<&Path>) -> Result<View, CliError> {
+pub fn load_project(directory: &Path, lookup: &Lookup) -> Result<View, CliError> {
     let Some(project) = MindProject::locate(directory)? else {
         return Ok(View::Nowhere);
     };
     // The workspace `mind` consults about the project, asked of the function
     // that decides it for the `mind` lines this screen runs, so the two
     // cannot come to disagree.
-    let above = consulted(&project, home)?;
-    // One not above the project is the default: the walk up would otherwise
-    // have found it at that very ancestor.
-    let default = above
+    let consulted = resolve::consulted(&lookup.inputs(project.root(), Intent::Read), &project)?;
+    let default = consulted
         .as_ref()
-        .is_some_and(|workspace| !project.root().starts_with(workspace.root()));
+        .is_some_and(|resolved| resolved.reason == Reason::Home);
+    let above = consulted.map(|resolved| resolved.workspace);
     if let Some(workspace) = &above {
         if workspace.is_linked(project.root()) {
-            return Ok(View::Workspace(workspace_view(workspace, default, home)));
+            return Ok(View::Workspace(workspace_view(workspace, default, lookup)));
         }
     }
     // `.`, because the commands run from the project itself.
@@ -548,7 +561,7 @@ pub fn load_project(directory: &Path, home: Option<&Path>) -> Result<View, CliEr
         scope: Scope::Project,
         above: above
             .map(|workspace| workspace.root().to_path_buf())
-            .or_else(|| home.map(Path::to_path_buf)),
+            .or_else(|| lookup.home.clone()),
         default: false,
         made: true,
     }))
@@ -556,7 +569,7 @@ pub fn load_project(directory: &Path, home: Option<&Path>) -> Result<View, CliEr
 
 /// A workspace as the screen shows it: its own artifacts first, then every
 /// project it manages.
-fn workspace_view(workspace: &FlayerWorkspace, default: bool, home: Option<&Path>) -> Workspace {
+fn workspace_view(workspace: &FlayerWorkspace, default: bool, lookup: &Lookup) -> Workspace {
     let own = workspace.own();
     let mut members = vec![held(
         String::new(),
@@ -570,7 +583,7 @@ fn workspace_view(workspace: &FlayerWorkspace, default: bool, home: Option<&Path
         workspace
             .members()
             .into_iter()
-            .map(|registered| member(registered, home)),
+            .map(|registered| member(registered, workspace, lookup)),
     );
     let unlinked = scan(workspace)
         .found
@@ -633,35 +646,39 @@ fn loaded(workspace: &FlayerWorkspace) -> Vec<LoadedSource> {
     shown
 }
 
-/// One registry entry, opened and read.
+/// One entry in `screen`'s registry, opened and read.
 ///
-/// Its templates are those of the workspace `mind` consults about the
-/// project, which need not be the one on screen: the add form runs `mind -C
-/// <entry> add`, and what it offers must be what that line finds.
-fn member(registered: Registered, home: Option<&Path>) -> Member {
+/// Its lines consult the workspace on screen, whatever `mind` would consult
+/// about the project from the shell: where that is another, or cannot be
+/// read, the row is [`elsewhere`](Member::elsewhere) and its lines say `-W
+/// .`. So its templates are the screen's too, the ones the add form's line
+/// will find.
+fn member(registered: Registered, screen: &FlayerWorkspace, lookup: &Lookup) -> Member {
     let entry = as_stored(&registered.entry);
     match registered.project {
         Ok(project) => {
-            let consulted = consulted(&project, home);
-            let workspace = consulted.as_ref().ok().and_then(Option::as_ref);
-            let mut member = held(
-                entry,
-                registered.root,
-                false,
-                &project,
-                &Kind::ALL,
-                workspace,
+            let elsewhere = !matches!(
+                consulted(&project, lookup),
+                Ok(Some(workspace)) if same_directory(workspace.root(), screen.root())
             );
-            if let (Err(error), Ok(holdings)) = (&consulted, &mut member.holdings) {
-                holdings.warnings.push(error.to_string());
+            Member {
+                elsewhere,
+                ..held(
+                    entry,
+                    registered.root,
+                    false,
+                    &project,
+                    &Kind::ALL,
+                    Some(screen),
+                )
             }
-            member
         }
         Err(error) => Member {
             name: entry.clone(),
             entry,
             root: registered.root,
             own: false,
+            elsewhere: false,
             holdings: Err(error.to_string()),
         },
     }
@@ -745,6 +762,7 @@ fn held(
         root,
         name: project.name().to_owned(),
         own,
+        elsewhere: false,
         holdings: Ok(Holdings {
             items,
             warnings,

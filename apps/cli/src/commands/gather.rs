@@ -10,7 +10,7 @@ use mindflayer_core::{FlayerWorkspace, Kind};
 
 use super::{reading_workspace, workspace_here};
 use crate::render::{indent, plural, printable, table};
-use crate::{CliError, Failure, GatherCommand, Outcome};
+use crate::{CliError, Failure, GatherCommand, Lookup, Outcome};
 
 /// Collect artifacts onto the workspace shelf, or say what is already on it.
 ///
@@ -20,7 +20,7 @@ use crate::{CliError, Failure, GatherCommand, Outcome};
 pub(crate) fn run_gather(
     command: &GatherCommand,
     directory: &Path,
-    home: Option<&Path>,
+    lookup: &Lookup,
     watch: &Watch,
 ) -> Result<Outcome, Failure> {
     match command {
@@ -29,7 +29,7 @@ pub(crate) fn run_gather(
             path,
             reference,
         } => {
-            let workspace = workspace_here(directory, home)?;
+            let workspace = workspace_here(directory, lookup)?;
             let (ledger, scrub) = workspace.ledger_to_write().map_err(CliError::from)?;
             let said = scrubbed(&scrub);
             let request = Request::git(url.clone())
@@ -44,7 +44,7 @@ pub(crate) fn run_gather(
                 }),
             }
         }
-        GatherCommand::List => reading_workspace(directory, home, shelf),
+        GatherCommand::List => reading_workspace(directory, lookup, shelf),
     }
 }
 
