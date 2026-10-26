@@ -1,5 +1,6 @@
 //! Which workspace a command uses: the one `-W` names, then the one
-//! `$MINDFLAYER_WORKSPACE` activates, then the one above, then the default.
+//! `$MINDFLAYER_WORKSPACE` activates, then the one above, then the default;
+//! and `flayer which`, which says which one and why.
 //!
 //! What the environment says can only be set for a binary of its own, so
 //! those tests spawn one (`common::spawn`); the rest run in process.
@@ -278,4 +279,141 @@ fn a_change_to_a_project_is_refused_when_the_named_workspace_will_not_open() {
         failure.error
     );
     assert!(fixture.collapse.join("skills/deploy").is_dir());
+}
+
+// ---------------------------------------------------------------------------
+// flayer which: the workspace a command would use, and why
+// ---------------------------------------------------------------------------
+
+#[test]
+fn which_says_a_workspace_named_with_w_is_used_because_it_was_named() {
+    let fixture = fixture();
+
+    let outcome = flayer(&fixture.alpha, &["which", "-W", &spelled(&fixture.hub)]).unwrap();
+
+    assert_eq!(
+        outcome,
+        Outcome {
+            stdout: format!("hub at {}, named by -W\n", fixture.hub.display()),
+            stderr: Vec::new(),
+            ok: true,
+        }
+    );
+}
+
+#[test]
+fn which_says_an_activated_workspace_is_used_because_it_was_activated() {
+    let fixture = fixture();
+
+    let printed = spawn(
+        "flayer",
+        &fixture.alpha,
+        &["which"],
+        &[("MINDFLAYER_WORKSPACE", &spelled(&fixture.hub))],
+    );
+
+    assert!(printed.ok, "{}", printed.stderr);
+    assert_eq!(
+        printed.stdout,
+        format!(
+            "hub at {}, activated by $MINDFLAYER_WORKSPACE\n",
+            fixture.hub.display()
+        )
+    );
+    assert_eq!(printed.stderr, "");
+}
+
+#[test]
+fn which_says_a_workspace_above_is_used_because_it_was_found_walking_up() {
+    let fixture = fixture();
+
+    let outcome = flayer(&fixture.alpha, &["which"]).unwrap();
+
+    assert_eq!(
+        outcome.stdout,
+        format!(
+            "outer at {}, found walking up from {}\n",
+            fixture.outer.display(),
+            fixture.alpha.display()
+        )
+    );
+}
+
+#[test]
+fn which_says_the_default_workspace_is_used_because_there_is_no_other() {
+    let fixture = fixture();
+    let home = TempDir::new().unwrap();
+    flayer(home.path(), &["init"]).unwrap();
+
+    let outcome = flayer_at_home(&fixture.collapse, home.path(), &["which"]).unwrap();
+
+    assert_eq!(
+        outcome.stdout,
+        format!(
+            "{} at {}, the default one\n",
+            home.path().file_name().unwrap().to_string_lossy(),
+            home.path().display()
+        )
+    );
+    assert!(outcome.stderr.is_empty(), "{:?}", outcome.stderr);
+}
+
+#[test]
+fn which_says_the_default_workspace_is_not_made_yet_and_leaves_it_so() {
+    let fixture = fixture();
+    let home = TempDir::new().unwrap();
+
+    let outcome = flayer_at_home(&fixture.collapse, home.path(), &["which"]).unwrap();
+
+    assert_eq!(
+        outcome.stdout,
+        format!(
+            "{} at {}, the default one, not made yet\n",
+            home.path().file_name().unwrap().to_string_lossy(),
+            home.path().display()
+        )
+    );
+    assert!(
+        outcome.stderr[0].starts_with("hint: no workspace here or above"),
+        "{:?}",
+        outcome.stderr
+    );
+    assert!(outcome.ok);
+    assert!(!home.path().join(FLAYER_DIR).exists());
+}
+
+#[test]
+fn which_with_no_workspace_anywhere_says_so() {
+    let fixture = fixture();
+
+    let failure = flayer(&fixture.collapse, &["which"]).unwrap_err();
+
+    assert!(
+        matches!(*failure.error, CliError::NotInWorkspace(_)),
+        "{}",
+        failure.error
+    );
+}
+
+#[test]
+fn which_says_why_an_activated_workspace_cannot_be_used() {
+    let fixture = fixture();
+    let gone = fixture.outer.join("gone");
+
+    let printed = spawn(
+        "flayer",
+        &fixture.alpha,
+        &["which"],
+        &[("MINDFLAYER_WORKSPACE", &spelled(&gone))],
+    );
+
+    assert!(!printed.ok);
+    assert_eq!(printed.stdout, "");
+    assert_eq!(
+        printed.stderr,
+        format!(
+            "error: $MINDFLAYER_WORKSPACE names a workspace that cannot be used: {}: not a flayer workspace (no .mindflayer/flayer.toml)\n",
+            gone.display()
+        )
+    );
 }

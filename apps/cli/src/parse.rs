@@ -310,6 +310,10 @@ pub enum FlayerCommand {
         shell: Option<Shell>,
     },
 
+    /// Say which workspace a command run here would use, and why: named with
+    /// -W, activated, found walking up, or the default one.
+    Which,
+
     /// Create a skill or a rule: the workspace's own, or a project's.
     Add {
         /// A project this workspace manages, by name or path, instead of the

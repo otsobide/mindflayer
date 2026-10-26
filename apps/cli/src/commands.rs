@@ -20,7 +20,7 @@ use mindflayer_core::{paths, Catalog, FlayerWorkspace, MindProject, Reference};
 
 use crate::homes::Lookup;
 use crate::{tui, Cli, CliError, Command, Failure, FlayerCli, FlayerCommand, Outcome};
-use activate::activate_command;
+use activate::{activate_command, which_command};
 use artifact::{add_to, edit_in, remove_from, rename_in, templates_of};
 use gather::run_gather;
 use install::{install_named, uninstall_named};
@@ -223,6 +223,7 @@ fn run_flayer(
         FlayerCommand::Activate { path, shell } => {
             activate_command(directory, path.as_deref(), *shell, lookup)
         }
+        FlayerCommand::Which => which_command(directory, lookup),
 
         FlayerCommand::Add {
             project,
