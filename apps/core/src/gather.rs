@@ -13,13 +13,14 @@
 
 pub mod git;
 
+use std::fmt;
 use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
 
 use thiserror::Error;
 
-use crate::artifact::{Artifact, ArtifactError};
+use crate::artifact::{Artifact, ArtifactError, ValidationIssue};
 use crate::copy::{self, Change};
 use crate::kind::{Kind, Layout};
 use crate::ledger::{self, Action, Ledger, LedgerError, Outcome, SourceKind};
@@ -130,6 +131,8 @@ pub struct Report {
     /// Artifacts in the source that could not be taken. One broken skill must
     /// not cost the forty next to it.
     pub failures: Vec<Failure>,
+    /// What is wrong with artifacts that were taken anyway.
+    pub warnings: Vec<Warning>,
 }
 
 impl Report {
@@ -201,6 +204,9 @@ fn harvest(
         Kind::Skill => {}
         Kind::Rule => return Err(GatherError::NotGatherable { kind: request.kind }),
     }
+    let Layout::Directory { manifest } = request.kind.layout() else {
+        return Err(GatherError::NotGatherable { kind: request.kind });
+    };
 
     let source = ledger.source_for(
         request.source.kind(),
@@ -230,7 +236,7 @@ fn harvest(
         ..Report::default()
     };
 
-    for directory in candidates(&harvested_from, request.kind)? {
+    for directory in candidates(&harvested_from, manifest)? {
         // The artifact is loaded to learn its name and its summary, then
         // dropped: `project` is the clone it was found in, which is where it
         // was found and not a claim that a clone is a mind project.
@@ -265,6 +271,16 @@ fn harvest(
             }
         };
 
+        // Lenient, as the Agent Skills client guide advises for skills
+        // written for other agents: what is wrong with one is said, and it is
+        // taken anyway. Installing it is where it is held to the rules.
+        report
+            .warnings
+            .extend(artifact.validate().into_iter().map(|issue| Warning {
+                path: destination.join(manifest),
+                issue,
+            }));
+
         let recorded = relative(workspace, &destination);
         ledger.record(
             &source,
@@ -289,18 +305,16 @@ fn harvest(
     }
 
     report.failures.sort_by(|a, b| a.path().cmp(b.path()));
+    // Stable, so one file's warnings stay in the order `validate` gives them.
+    report.warnings.sort_by(|a, b| a.path.cmp(&b.path));
     Ok(report)
 }
 
-/// The directories under `root` that hold an artifact of this kind.
+/// The directories under `root` that hold a `manifest`.
 ///
 /// Only the immediate ones, for the reason discovery has: the directory
 /// belongs to the artifact, assets and all.
-fn candidates(root: &Path, kind: Kind) -> Result<Vec<PathBuf>, GatherError> {
-    let Layout::Directory { manifest } = kind.layout() else {
-        return Err(GatherError::NotGatherable { kind });
-    };
-
+fn candidates(root: &Path, manifest: &str) -> Result<Vec<PathBuf>, GatherError> {
     let entries = fs::read_dir(root).map_err(|source| GatherError::Read {
         path: root.to_path_buf(),
         source,
@@ -352,6 +366,20 @@ impl Failure {
             Failure::Artifact(error) => error.path(),
             Failure::UnusableName { path } | Failure::Copy { path, .. } => path,
         }
+    }
+}
+
+/// Something wrong with an artifact that was gathered anyway.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Warning {
+    /// Its manifest, where it now sits on the shelf.
+    pub path: PathBuf,
+    pub issue: ValidationIssue,
+}
+
+impl fmt::Display for Warning {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}: {}", self.path.display(), self.issue)
     }
 }
 
