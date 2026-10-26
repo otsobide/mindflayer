@@ -46,7 +46,7 @@ pub enum View {
     /// Nothing yet where the TUI was opened: no workspace for `flayer`, no
     /// project for `mind`.
     Nowhere,
-    /// A workspace and everything it holds — or one project on its own.
+    /// A workspace and everything it holds, or one project on its own.
     Workspace(Workspace),
 }
 
@@ -313,8 +313,8 @@ impl Task {
     /// Not a description of the task: the task. The caller parses these with
     /// the real parsers and runs what comes out, so a line here that does not
     /// parse is a task that cannot happen. The two install tasks are the
-    /// exception — the screen does that work, and `flayer install` is the
-    /// command that opens the same screen — and a refresh changes nothing.
+    /// exception (the screen does that work, and `flayer install` is the
+    /// command that opens the same screen), and a refresh changes nothing.
     pub fn commands(&self) -> Vec<Vec<String>> {
         match self {
             Task::InitWorkspace => vec![words(&["flayer", "init"], &[])],
@@ -460,7 +460,7 @@ impl Task {
 }
 
 /// One command line, at the level a holder is at: `flayer <command>` for the
-/// workspace's own, `mind -C <entry> <command>` for a project — and plain
+/// workspace's own, `mind -C <entry> <command>` for a project, and plain
 /// `mind <command>` for the one at the root, where `-C .` says nothing.
 ///
 /// A `-W .` is typed from the root, as the `-C` is, so it names the
@@ -487,7 +487,7 @@ fn qualified(kind: Kind, name: &str) -> String {
 }
 
 /// A command line's words: `head`, then the positionals, behind a `--` when
-/// one of them would otherwise be read as a flag — a description is free
+/// one of them would otherwise be read as a flag; a description is free
 /// text, and `- the fast way` is a fine one.
 fn words(head: &[&str], positionals: &[&str]) -> Vec<String> {
     let mut line: Vec<String> = head.iter().map(|word| (*word).to_owned()).collect();
@@ -1409,7 +1409,7 @@ impl App {
                 if let Some(task) = self.load_task(&form) {
                     // The workspace a load goes into skips the one being
                     // loaded, so loading the one on screen would quietly go
-                    // somewhere else — into the one above, or your home's.
+                    // somewhere else: into the one above, or your home's.
                     if self.loads_itself(&form) {
                         form.error = Some(String::from(
                             "that is the workspace this would load into, and a workspace cannot load itself",
@@ -1485,7 +1485,7 @@ impl App {
 
     /// What the load form would run, if it were submitted now: `flayer load`
     /// on a workspace, `mind load` on a project on its own. Nothing without a
-    /// path — picking a loaded one is for unloading it.
+    /// path: picking a loaded one is for unloading it.
     pub fn load_task(&self, form: &LoadForm) -> Option<Task> {
         let path = form.path.text().trim();
         if path.is_empty() {
@@ -1661,7 +1661,7 @@ impl App {
                 self.mode = Mode::Browse;
                 self.select_item(*kind, name);
             }
-            // The project the TUI was opened on, now a project — or now one a
+            // The project the TUI was opened on, now a project, or now one a
             // workspace manages, which is what the screen shows from here on.
             Task::InitProject | Task::LinkHere => {
                 self.mode = Mode::Browse;

@@ -1,7 +1,7 @@
 //! Drawing the TUI.
 //!
-//! Two columns — the projects a workspace manages, and what the one under the
-//! cursor holds — with the keys underneath and, over them, whatever the mode
+//! Two columns (the projects a workspace manages, and what the one under the
+//! cursor holds), with the keys underneath and, over them, whatever the mode
 //! asks for: a form, a question, a page of output. Every form shows the
 //! command it is about to run, as it is typed. The install screen, when it is
 //! open, draws itself. Nothing here decides anything; [`super::state`] does.
@@ -149,7 +149,7 @@ fn header(workspace: &Workspace, frame: &mut Frame, area: Rect) {
         count => format!("{shelf} · {count} loaded"),
     };
     // Said, because it is not where you are: nothing at or above here was a
-    // workspace, so this is the one in your home — and, until the first
+    // workspace, so this is the one in your home and, until the first
     // change makes it, one that is not there yet.
     let shelf = match (workspace.default, workspace.made) {
         (true, false) => format!("default workspace, not made yet · {shelf}"),
@@ -383,7 +383,7 @@ fn holdings(app: &App, workspace: &Workspace, frame: &mut Frame, area: Rect) {
 /// it rather than as rows of their own.
 const ISSUE_INDENT: &str = "        ";
 
-/// One artifact: its kind, its name, what it is for — and, underneath, what
+/// One artifact: its kind, its name, what it is for, and, underneath, what
 /// `validate` would say about it, right beside the thing it is about, wrapped
 /// to `room` rather than cut off, because the end of a reason is usually the
 /// part that says what to do.
@@ -659,7 +659,7 @@ fn linking(app: &App, form: &LinkForm, frame: &mut Frame, area: Rect) {
     );
 }
 
-/// The load form: a path to type, over the workspaces already loaded — each
+/// The load form: a path to type, over the workspaces already loaded, each
 /// with what it offers, or why it cannot be read, and picked to unload.
 fn loading(app: &App, form: &LoadForm, frame: &mut Frame, area: Rect) {
     let Some(workspace) = app.workspace() else {
@@ -923,7 +923,7 @@ fn minds_screen(app: &App, screen: &Minds, frame: &mut Frame, area: Rect) {
 }
 
 /// One directory: its box, its path, where it stands, and what applying
-/// would do to it — coloured by what it will become, not by what it is.
+/// would do to it, coloured by what it will become, not by what it is.
 fn mind_row(row: &minds::Row, width: usize, said: usize) -> ListItem<'_> {
     let change = row.change();
     let colour = match change {
