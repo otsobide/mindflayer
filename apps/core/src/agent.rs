@@ -40,6 +40,11 @@ pub enum Agent {
 
 impl Agent {
     /// Every agent, in report order.
+    ///
+    /// An array, which the compiler does not hold to the enum: a new agent
+    /// is added here by hand, or it parses as no agent and the standard
+    /// table, built from this list, gives it no entry, whatever its arm in
+    /// `standard` says.
     pub const ALL: [Agent; 3] = [Agent::Claude, Agent::Codex, Agent::OpenCode];
 
     /// How it is named on a command line and in a project's settings: one
