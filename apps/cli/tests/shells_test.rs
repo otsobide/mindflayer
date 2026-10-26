@@ -7,7 +7,8 @@
 //! test sets: nothing here reads or changes anybody's own shell, and no
 //! `MINDFLAYER_*` variable of the shell running the tests gets in. A shell
 //! that is not installed is skipped, and so is a virtualenv when there is no
-//! python3 to make one; each says so on stderr.
+//! python3 to make one; each says so on stderr, except on CI, where it fails
+//! instead (see [`skipped`]).
 //!
 //! Linux only for now, where the shells are the ones the code is written
 //! for; fish and PowerShell are asserted as text, in core.
@@ -57,10 +58,24 @@ fn shells() -> Vec<Installed> {
                 program,
                 quiet,
             }),
-            None => eprintln!("skipped {name}: not installed"),
+            None => skipped(&format!("{name}: not installed")),
         }
     }
     found
+}
+
+/// Says on stderr that `what` keeps a check from running; on CI, where
+/// `$CI` is set, fails instead.
+///
+/// The stderr of a test that passes is not shown, so a runner without zsh
+/// would pass every zsh check without running one. CI installs what this
+/// suite runs, and anything missing there is a mistake to be told about.
+fn skipped(what: &str) {
+    assert!(
+        std::env::var_os("CI").is_none(),
+        "{what}, and CI must run every check here"
+    );
+    eprintln!("skipped {what}");
 }
 
 /// Where `name` is on the PATH the tests run with.
@@ -133,11 +148,11 @@ fn fixture() -> Fixture {
 }
 
 /// A Python virtualenv called `venv` under `dir`, made by the python3 on
-/// the PATH without pip, which nothing here runs; `None`, said on stderr,
-/// when there is no python3 that will make one.
+/// the PATH without pip, which nothing here runs; `None`, through
+/// [`skipped`], when there is no python3 that will make one.
 fn virtualenv(dir: &Path) -> Option<PathBuf> {
     let Some(python) = on_path("python3") else {
-        eprintln!("skipped: no python3 to make a virtualenv with");
+        skipped("the virtualenv: no python3 to make one with");
         return None;
     };
     let venv = dir.join("venv");
@@ -152,7 +167,7 @@ fn virtualenv(dir: &Path) -> Option<PathBuf> {
     match made {
         Ok(status) if status.success() => Some(venv),
         _ => {
-            eprintln!("skipped: python3 could not make a virtualenv");
+            skipped("the virtualenv: python3 could not make one");
             None
         }
     }
