@@ -194,7 +194,7 @@ pub fn gather(
     outcome
 }
 
-/// What [`scrub`] took out.
+/// What the scrub [`FlayerWorkspace::ledger_to_write`] runs took out.
 #[derive(Debug, Default)]
 pub struct Scrub {
     /// The sources whose URL carried credentials, as they are stored now.
@@ -220,15 +220,15 @@ impl Scrub {
 /// stored: in the URLs of sources, in the action log, and in the clones it
 /// made from those URLs.
 ///
-/// For a front end to run whenever a command that writes opens the ledger,
-/// before it writes. Every time rather than once, as a schema migration
-/// would, because an older build can keep writing to the same file after
+/// Run by [`FlayerWorkspace::ledger_to_write`], which is how a command that
+/// writes opens the ledger, so it comes before anything is written. Every
+/// time rather than once, as a schema migration would, because an older build can keep writing to the same file after
 /// this one has scrubbed it, and the schema steps are spoken for by the
 /// changes that need a new version. Doing nothing costs one query, and the
 /// first time it finds something is the only time it says so. A read is left
 /// alone: what it shows is redacted on the way out anyway, and reading
 /// should not write.
-pub fn scrub(workspace: &FlayerWorkspace, ledger: &Ledger) -> Result<Scrub, LedgerError> {
+pub(crate) fn scrub(workspace: &FlayerWorkspace, ledger: &Ledger) -> Result<Scrub, LedgerError> {
     let mut scrub = Scrub::default();
     for source in ledger.tainted_sources()? {
         // The clone first and the row after it: a row rewritten first would

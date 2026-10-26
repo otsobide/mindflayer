@@ -19,7 +19,6 @@ pub(crate) fn run_gather(
     home: Option<&Path>,
 ) -> Result<Outcome, Failure> {
     let workspace = workspace_here(directory, home)?;
-    let ledger = workspace.ledger().map_err(CliError::from)?;
 
     match command {
         GatherCommand::Git {
@@ -27,7 +26,8 @@ pub(crate) fn run_gather(
             path,
             reference,
         } => {
-            let said = scrubbed(&gather::scrub(&workspace, &ledger).map_err(CliError::from)?);
+            let (ledger, scrub) = workspace.ledger_to_write().map_err(CliError::from)?;
+            let said = scrubbed(&scrub);
             let request = Request::git(url.clone())
                 .from_subdirectory(path.clone())
                 .at(reference.clone());
@@ -52,6 +52,7 @@ pub(crate) fn run_gather(
                 .collect();
             let mut offers: Vec<Offer> = loads.offers;
             let mut stderr = stderr;
+            let ledger = workspace.ledger().map_err(CliError::from)?;
             for gathered in ledger.gathered().map_err(CliError::from)? {
                 // Listed only if it could be installed: a name that is not one
                 // folder name never can be, wherever it came from.
@@ -104,8 +105,10 @@ impl Scrubbed {
     }
 }
 
-/// What [`gather::scrub`] took out, said the way a person can act on: every
-/// source it scrubbed now needs its credential from a git credential helper.
+/// What the scrub that opening the ledger to write runs took out
+/// ([`mindflayer_core::FlayerWorkspace::ledger_to_write`]), said the way a
+/// person can act on: every source it scrubbed now needs its credential from
+/// a git credential helper.
 pub(crate) fn scrubbed(scrub: &Scrub) -> Scrubbed {
     let mut notes: Vec<String> = scrub
         .sources

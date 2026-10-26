@@ -511,7 +511,8 @@ fn what_an_older_build_stored_with_a_token_is_scrubbed_once_from_the_ledger_and_
         "https://me:ghp_t0ken@example.com/acme/skills",
     );
 
-    let scrub = gather::scrub(&workspace, &ledger).unwrap();
+    // Opened the way a command that writes opens it.
+    let (ledger, scrub) = workspace.ledger_to_write().unwrap();
 
     assert_eq!(scrub.sources.len(), 1, "{:?}", scrub.sources);
     assert_eq!(scrub.sources[0].url, "https://example.com/acme/skills");
@@ -529,5 +530,5 @@ fn what_an_older_build_stored_with_a_token_is_scrubbed_once_from_the_ledger_and_
     assert_eq!(gathered[0].source.url, "https://example.com/acme/skills");
 
     // Said once: the second time there is nothing left to say.
-    assert!(gather::scrub(&workspace, &ledger).unwrap().is_empty());
+    assert!(workspace.ledger_to_write().unwrap().1.is_empty());
 }

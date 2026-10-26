@@ -24,6 +24,7 @@ use std::path::{Path, PathBuf};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
+use crate::gather::{self, Scrub};
 use crate::kind::Kind;
 use crate::ledger::{Ledger, LedgerError, LEDGER_FILE};
 use crate::paths;
@@ -550,8 +551,27 @@ impl FlayerWorkspace {
     }
 
     /// Open that database, creating it if this workspace has never had one.
+    ///
+    /// For reading. A command that writes to it opens it with
+    /// [`FlayerWorkspace::ledger_to_write`].
     pub fn ledger(&self) -> Result<Ledger, LedgerError> {
         Ledger::open(self.ledger_path())
+    }
+
+    /// Open that database for a command that writes to it: scrubbed first of
+    /// what an older build stored with a credential ([`gather::scrub`]), with
+    /// what the scrub took out handed back for the front end to say.
+    ///
+    /// The one way to open it for writing, rather than a scrub each front end
+    /// remembers to run: which commands write is the front end's to know, as
+    /// whether one may create a workspace is with
+    /// [`FlayerWorkspace::locate_or_default`], but what opening to write
+    /// involves is core's, so no front end can write first and scrub after,
+    /// or not at all.
+    pub fn ledger_to_write(&self) -> Result<(Ledger, Scrub), LedgerError> {
+        let ledger = self.ledger()?;
+        let scrub = gather::scrub(self, &ledger)?;
+        Ok((ledger, scrub))
     }
 
     /// The entry this workspace would store for a project directory.

@@ -342,9 +342,9 @@ fn apply_install(base: &Path, screen: &InstallScreen) -> Done {
     let applied = FlayerWorkspace::open(base)
         .map_err(CliError::from)
         .and_then(|workspace| {
-            // Opened without a scrub: the one this command starts with ran
-            // when its screen was opened, and another here could make a row
-            // the screen holds go.
+            // Opened for reading rather than with `ledger_to_write`: the
+            // scrub this command starts with ran when its screen was opened,
+            // and another here could make a row the screen holds go.
             let ledger = workspace.ledger().map_err(CliError::from)?;
             let mut outcome =
                 install::apply(&workspace, &ledger, screen).map_err(CliError::from)?;

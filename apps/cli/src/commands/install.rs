@@ -4,7 +4,7 @@
 
 use std::path::Path;
 
-use mindflayer_core::{gather, FlayerWorkspace, Kind, MindProject};
+use mindflayer_core::{FlayerWorkspace, Kind, MindProject};
 
 use crate::commands::gather::scrubbed;
 use crate::commands::workspace::load_warnings;
@@ -26,16 +26,11 @@ pub(crate) fn install_named(
     use mindflayer_core::install::{self as installing, Installed};
 
     let warnings = load_warnings(workspace);
-    let ledger = workspace.ledger().map_err(|error| Failure {
+    let (ledger, scrub) = workspace.ledger_to_write().map_err(|error| Failure {
         error: Box::new(error.into()),
         warnings: warnings.clone(),
     })?;
-    let said = gather::scrub(workspace, &ledger)
-        .map(|scrub| scrubbed(&scrub))
-        .map_err(|error| Failure {
-            error: Box::new(error.into()),
-            warnings: warnings.clone(),
-        })?;
+    let said = scrubbed(&scrub);
     // What the scrub said goes with an error too: it happened all the same.
     let mut told = said.clone().lines();
     told.extend(warnings.iter().cloned());
@@ -93,8 +88,8 @@ pub(crate) fn uninstall_named(
 ) -> Result<Outcome, Failure> {
     use mindflayer_core::install::{self as installing, Removed};
 
-    let ledger = workspace.ledger().map_err(CliError::from)?;
-    let said = scrubbed(&gather::scrub(workspace, &ledger).map_err(CliError::from)?);
+    let (ledger, scrub) = workspace.ledger_to_write().map_err(CliError::from)?;
+    let said = scrubbed(&scrub);
     let from = project.name();
     let failed = |error: CliError, said: super::gather::Scrubbed| Failure {
         error: Box::new(error),

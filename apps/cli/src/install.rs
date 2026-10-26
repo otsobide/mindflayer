@@ -14,7 +14,7 @@ use std::time::Duration;
 
 use mindflayer_core::install::{self, Installed, Removed};
 use mindflayer_core::ledger::Ledger;
-use mindflayer_core::gather::{self, Scrub};
+use mindflayer_core::gather::Scrub;
 use mindflayer_core::{FlayerWorkspace, Kind, MindProject};
 use ratatui::crossterm::event::{self, Event, KeyEventKind};
 use ratatui::DefaultTerminal;
@@ -92,8 +92,7 @@ pub fn open(
     workspace: &FlayerWorkspace,
     projects: Vec<MindProject>,
 ) -> Result<(Ledger, Screen, Scrub), Failure> {
-    let ledger = workspace.ledger().map_err(CliError::from)?;
-    let scrub = gather::scrub(workspace, &ledger).map_err(CliError::from)?;
+    let (ledger, scrub) = workspace.ledger_to_write().map_err(CliError::from)?;
     match build(workspace, &ledger, projects) {
         Ok(screen) => Ok((ledger, screen, scrub)),
         Err(error) => Err(Failure {
