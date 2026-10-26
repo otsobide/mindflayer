@@ -3,6 +3,7 @@
 use std::fs;
 use std::path::Path;
 
+use mindflayer_core::ledger::{Action, Outcome};
 use mindflayer_core::workspace::{FLAYER_FORMAT_VERSION, MIND_FORMAT_VERSION};
 use mindflayer_core::{
     Directories, FlayerWorkspace, Initialization, Kind, MindProject, Registration, WorkspaceError,
@@ -736,4 +737,35 @@ fn with_no_home_there_is_no_default_workspace() {
         .unwrap()
         .is_none());
     assert!(FlayerWorkspace::default_at(None).unwrap().is_none());
+}
+
+// ---------------------------------------------------------------------------
+// Reading the ledger
+// ---------------------------------------------------------------------------
+
+#[test]
+fn reading_the_ledger_of_a_workspace_that_has_none_makes_none() {
+    let dir = TempDir::new().unwrap();
+    let (workspace, _) = FlayerWorkspace::init(dir.path()).unwrap();
+
+    let ledger = workspace.ledger_for_reading().unwrap();
+
+    assert!(ledger.gathered().unwrap().is_empty());
+    assert!(!workspace.ledger_path().exists());
+}
+
+#[test]
+fn reading_the_ledger_sees_what_was_written_to_it() {
+    let dir = TempDir::new().unwrap();
+    let (workspace, _) = FlayerWorkspace::init(dir.path()).unwrap();
+    workspace
+        .ledger()
+        .unwrap()
+        .log(Action::Gather, Some("https://h/a"), Outcome::Ok, None)
+        .unwrap();
+
+    let history = workspace.ledger_for_reading().unwrap().history(10).unwrap();
+
+    assert_eq!(history.len(), 1);
+    assert_eq!(history[0].target.as_deref(), Some("https://h/a"));
 }

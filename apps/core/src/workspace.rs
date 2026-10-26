@@ -554,6 +554,21 @@ impl FlayerWorkspace {
         Ledger::open(self.ledger_path())
     }
 
+    /// The ledger, for a command that only reads it: the one on disk when
+    /// there is one, and otherwise an empty one in memory, which answers every
+    /// question the way a ledger nothing was ever written to would, without
+    /// making a file to say so.
+    ///
+    /// Never for a write. What is recorded in the stand-in is gone when it is
+    /// dropped, and a copy installed without its record is one Mindflayer
+    /// would afterwards refuse to touch; a write opens [`ledger`](Self::ledger).
+    pub fn ledger_for_reading(&self) -> Result<Ledger, LedgerError> {
+        match Ledger::open_existing(self.ledger_path())? {
+            Some(ledger) => Ok(ledger),
+            None => Ledger::in_memory(),
+        }
+    }
+
     /// The entry this workspace would store for a project directory.
     ///
     /// A route relative to the workspace when one genuinely resolves, so the
