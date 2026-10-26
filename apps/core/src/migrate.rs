@@ -28,7 +28,6 @@ use crate::kind::Kind;
 use crate::paths;
 use crate::workspace::{
     misplaced_own, Directories, FlayerWorkspace, MindProject, WorkspaceError, FLAYER_CONFIG,
-    MIND_CONFIG, MIND_DIR,
 };
 
 /// What moving the workspace's own into its library would do, and what would
@@ -414,7 +413,7 @@ fn holders(workspace: &FlayerWorkspace) -> (Vec<MindProject>, Vec<(PathBuf, Work
         .into_iter()
         .map(|member| (member.root, member.project))
         .collect();
-    if root.join(MIND_DIR).join(MIND_CONFIG).is_file() {
+    if MindProject::is_marked(root) {
         opened.push((root.to_path_buf(), MindProject::open(root)));
     }
     // One directory linked twice, or linked and found at the root, is one

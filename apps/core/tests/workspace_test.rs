@@ -22,7 +22,7 @@ fn initializing_a_mind_project_creates_its_marker_and_its_skills_folder() {
     assert!(dir.path().join(MIND_DIR).join(MIND_CONFIG).is_file());
     assert!(project.directory_for(Kind::Skill).unwrap().is_dir());
     assert_eq!(project.root(), dir.path());
-    assert_eq!(project.config().version, MIND_TOML_VERSION);
+    assert_eq!(project.config().version(), MIND_TOML_VERSION);
 }
 
 #[test]

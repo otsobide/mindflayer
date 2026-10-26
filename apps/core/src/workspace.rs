@@ -30,6 +30,7 @@ use crate::kind::Kind;
 use crate::ledger::{Ledger, LedgerError, LEDGER_FILE};
 use crate::lock::{self, LockError, WorkspaceLock};
 use crate::paths;
+use crate::settings::{Settings, SETTINGS_FILE};
 
 /// The newest version of a project's marker this build reads: version 3, a
 /// `.mind/settings.json` ([`SETTINGS_VERSION`]).
@@ -166,7 +167,8 @@ pub enum Registration {
 // Mind projects
 // ---------------------------------------------------------------------------
 
-/// The contents of `.mind/mind.toml`.
+/// The contents of `.mind/mind.toml`, the marker of a version 1 or 2
+/// project.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct MindConfig {
     /// The layout version this project was written with.
@@ -186,8 +188,11 @@ pub struct MindConfig {
 /// rejected, for the reason unknown front matter keys are: the format grows,
 /// and a project configured by a newer Mindflayer is still a project.
 ///
-/// Empty means the defaults, which is what a marker written by hand and never
-/// touched since will be.
+/// What a kind left out means is the marker's to say, by its version. In a
+/// `mind.toml` it is the default beside the code, so an empty table, what a
+/// marker written by hand and never touched since will hold, means every
+/// default. In a project's settings ([`SETTINGS_VERSION`]) it is no folder
+/// at all.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(transparent)]
 pub struct Directories(BTreeMap<String, PathBuf>);
@@ -284,11 +289,61 @@ impl Directories {
     }
 }
 
+/// What a project's marker says, from whichever of the two files it is in.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ProjectConfig {
+    /// `.mind/mind.toml`: a project of version 1 or 2, read the way it was
+    /// written.
+    Toml(MindConfig),
+    /// `.mind/settings.json`: a project from [`SETTINGS_VERSION`] on.
+    Settings(Settings),
+}
+
+impl ProjectConfig {
+    /// The layout version the marker was written with.
+    pub fn version(&self) -> u32 {
+        match self {
+            ProjectConfig::Toml(config) => config.version,
+            ProjectConfig::Settings(settings) => settings.version,
+        }
+    }
+
+    /// The project's declared name.
+    pub fn name(&self) -> &str {
+        match self {
+            ProjectConfig::Toml(config) => &config.name,
+            ProjectConfig::Settings(settings) => &settings.name,
+        }
+    }
+
+    /// Where the marker says each kind lives. What a kind left out means
+    /// depends on the version ([`MindProject::directory_for`]).
+    pub fn directories(&self) -> &Directories {
+        match self {
+            ProjectConfig::Toml(config) => &config.directories,
+            ProjectConfig::Settings(settings) => &settings.directories,
+        }
+    }
+}
+
+/// Something about a project's marker worth saying, that is no reason not to
+/// read it.
+#[derive(Debug, Clone, PartialEq, Eq, Error)]
+pub enum ProjectWarning {
+    /// A `mind.toml` beside the settings file the project is read from: an
+    /// older build would read it instead, and say other things about the
+    /// project than this one does.
+    #[error("{path}: ignored, since the project is read from the {SETTINGS_FILE} beside it")]
+    Leftover { path: PathBuf },
+}
+
 /// A directory holding skills, identified by its `.mind`.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct MindProject {
     root: PathBuf,
-    config: MindConfig,
+    config: ProjectConfig,
+    /// A `mind.toml` found beside the settings file that was read instead.
+    leftover: Option<PathBuf>,
 }
 
 impl MindProject {
@@ -323,7 +378,9 @@ impl MindProject {
         }
         create_dir(&dir)?;
 
-        let already = config_path.is_file();
+        // Either marker, so a project read from its settings is not given a
+        // `mind.toml` beside them that an older build would read instead.
+        let already = Self::is_marked(&root);
         if !already {
             let name = directory_name(&root);
             write_new(&config_path, &mind_template(&name, directories))?;
@@ -350,10 +407,25 @@ impl MindProject {
         ))
     }
 
-    /// Open the mind project rooted at `root`.
+    /// Open the mind project rooted at `root`, from its settings when it
+    /// has them and from its `mind.toml` otherwise.
+    ///
+    /// The settings win when both are there: they are the newer marker, and
+    /// a `mind.toml` beside them is one an upgrade left, or a copy brought
+    /// back. Still a project rather than a refusal, since either file says
+    /// what it is, but a [warning](Self::warnings) names the one ignored.
     pub fn open(root: impl AsRef<Path>) -> Result<Self, WorkspaceError> {
         let root = absolute(root.as_ref())?;
+        let settings_path = root.join(MIND_DIR).join(SETTINGS_FILE);
         let config_path = root.join(MIND_DIR).join(MIND_CONFIG);
+        if settings_path.is_file() {
+            let settings = Settings::read(&settings_path)?;
+            return Ok(Self {
+                root,
+                config: ProjectConfig::Settings(settings),
+                leftover: config_path.is_file().then_some(config_path),
+            });
+        }
         if !config_path.is_file() {
             return Err(WorkspaceError::NotAProject { path: root });
         }
@@ -368,19 +440,34 @@ impl MindProject {
                 detail: format!(
                     "version {} is written as {}, not as {MIND_CONFIG}, which holds versions up to {MIND_TOML_VERSION}",
                     config.version,
-                    crate::settings::SETTINGS_FILE
+                    SETTINGS_FILE
                 ),
             });
         }
-        Ok(Self { root, config })
+        Ok(Self {
+            root,
+            config: ProjectConfig::Toml(config),
+            leftover: None,
+        })
     }
 
     /// Walk up from `start` looking for a mind project.
     pub fn locate(start: impl AsRef<Path>) -> Result<Option<Self>, WorkspaceError> {
-        match locate_marker(start.as_ref(), MIND_DIR, MIND_CONFIG)? {
+        match locate_marker(start.as_ref(), Self::is_marked)? {
             Some(root) => Self::open(root).map(Some),
             None => Ok(None),
         }
+    }
+
+    /// Whether `root` carries a project's marker, in either file: what makes
+    /// a directory a project, to everything that looks for one.
+    ///
+    /// The file, not the `.mind` alone, so an empty `.mind` left behind by a
+    /// failed copy is not taken for a project; and either file, so a project
+    /// made by this build and one made by an older one are found alike.
+    pub fn is_marked(root: &Path) -> bool {
+        let mind = root.join(MIND_DIR);
+        mind.join(SETTINGS_FILE).is_file() || mind.join(MIND_CONFIG).is_file()
     }
 
     /// The directory holding `.mind`.
@@ -402,10 +489,12 @@ impl MindProject {
     /// The folder holding one kind, whether or not it exists yet, or `None`
     /// when the project keeps none of that kind of its own.
     ///
-    /// What the marker says, or the default when it says nothing, except for
-    /// a marker written before [`DIRECTORIES_VERSION`], which described a
-    /// layout where every kind lived inside `.mind`. Such a project is read
-    /// the way it was written.
+    /// What the marker says, or, when it says nothing, what its version
+    /// meant by that. A project's settings ([`SETTINGS_VERSION`]) mean no
+    /// folder at all. A `mind.toml` means the default beside the code, except
+    /// one written before [`DIRECTORIES_VERSION`], which described a layout
+    /// where every kind lived inside `.mind`. Each is read the way it was
+    /// written.
     ///
     /// An `Option` rather than a folder always, so that a project can say it
     /// authors no artifacts of a kind: a reader then finds none there, which
@@ -414,13 +503,16 @@ impl MindProject {
     /// Answering with a default instead would put a kind added later in a
     /// folder at the project's root that nobody asked for.
     pub fn directory_for(&self, kind: Kind) -> Option<PathBuf> {
-        Some(match self.config.directories.get(kind) {
-            Some(directory) => self.root.join(directory),
-            None if self.config.version < DIRECTORIES_VERSION => {
-                self.mind_dir().join(kind.folder())
+        if let Some(directory) = self.config.directories().get(kind) {
+            return Some(self.root.join(directory));
+        }
+        match &self.config {
+            ProjectConfig::Settings(_) => None,
+            ProjectConfig::Toml(config) if config.version < DIRECTORIES_VERSION => {
+                Some(self.mind_dir().join(kind.folder()))
             }
-            None => self.root.join(Directories::default_for(kind)),
-        })
+            ProjectConfig::Toml(_) => Some(self.root.join(Directories::default_for(kind))),
+        }
     }
 
     /// [`directory_for`](Self::directory_for), for what has to have the
@@ -437,12 +529,32 @@ impl MindProject {
 
     /// The project's declared name.
     pub fn name(&self) -> &str {
-        &self.config.name
+        self.config.name()
     }
 
-    /// The parsed marker file.
-    pub fn config(&self) -> &MindConfig {
+    /// The parsed marker file, whichever it is.
+    pub fn config(&self) -> &ProjectConfig {
         &self.config
+    }
+
+    /// The project's settings, when its marker is a settings file; `None`
+    /// for a project still marked by a `mind.toml`, which has none of what
+    /// they add.
+    pub fn settings(&self) -> Option<&Settings> {
+        match &self.config {
+            ProjectConfig::Settings(settings) => Some(settings),
+            ProjectConfig::Toml(_) => None,
+        }
+    }
+
+    /// What opening the project found worth saying, for a front end to say:
+    /// collected rather than raised, since none of it stops the project
+    /// being read.
+    pub fn warnings(&self) -> Vec<ProjectWarning> {
+        self.leftover
+            .iter()
+            .map(|path| ProjectWarning::Leftover { path: path.clone() })
+            .collect()
     }
 }
 
@@ -582,7 +694,8 @@ impl FlayerWorkspace {
 
     /// Walk up from `start` looking for a flayer workspace.
     pub fn locate(start: impl AsRef<Path>) -> Result<Option<Self>, WorkspaceError> {
-        match locate_marker(start.as_ref(), FLAYER_DIR, FLAYER_CONFIG)? {
+        let marked = |root: &Path| root.join(FLAYER_DIR).join(FLAYER_CONFIG).is_file();
+        match locate_marker(start.as_ref(), marked)? {
             Some(root) => Self::open(root).map(Some),
             None => Ok(None),
         }
@@ -1144,7 +1257,8 @@ impl FlayerWorkspace {
     pub fn own(&self) -> MindProject {
         MindProject {
             root: self.root.clone(),
-            config: MindConfig {
+            leftover: None,
+            config: ProjectConfig::Toml(MindConfig {
                 // The project marker's version rather than the workspace's:
                 // `directory_for` holds it against `DIRECTORIES_VERSION`, a
                 // line drawn in the project format, and below it sends every
@@ -1160,7 +1274,7 @@ impl FlayerWorkspace {
                     .directories
                     .clone()
                     .filled(Directories::library_for),
-            },
+            }),
         }
     }
 
@@ -1310,7 +1424,9 @@ pub enum WorkspaceError {
     /// version the file it is in does not hold.
     #[error("{path}: not valid Mindflayer configuration: {detail}")]
     Malformed { path: PathBuf, detail: String },
-    #[error("{path}: not a mind project (no {MIND_DIR}/{MIND_CONFIG})")]
+    #[error(
+        "{path}: not a mind project (no {MIND_DIR}/{SETTINGS_FILE} or {MIND_DIR}/{MIND_CONFIG})"
+    )]
     NotAProject { path: PathBuf },
     #[error("{path}: not a flayer workspace (no {FLAYER_DIR}/{FLAYER_CONFIG})")]
     NotAWorkspace { path: PathBuf },
@@ -1374,14 +1490,18 @@ impl WorkspaceError {
     }
 }
 
-/// Walk `start` and its ancestors looking for `<dir>/<file>`.
-fn locate_marker(start: &Path, dir: &str, file: &str) -> Result<Option<PathBuf>, WorkspaceError> {
+/// Walk `start` and its ancestors looking for one `marked` says carries a
+/// marker.
+fn locate_marker(
+    start: &Path,
+    marked: impl Fn(&Path) -> bool,
+) -> Result<Option<PathBuf>, WorkspaceError> {
     // Absolute first: `ancestors()` on a relative path stops at the empty
     // component, so `mind list` run from a subdirectory would find nothing.
     let start = absolute(start)?;
     Ok(start
         .ancestors()
-        .find(|candidate| candidate.join(dir).join(file).is_file())
+        .find(|candidate| marked(candidate))
         .map(Path::to_path_buf))
 }
 
