@@ -22,6 +22,7 @@ use std::time::Duration;
 use std::error::Error as _;
 
 use clap::Parser;
+use mindflayer_core::gather::Watch;
 use mindflayer_core::workspace::Member as Registered;
 use mindflayer_core::{
     lifecycle, paths, scan, template, Catalog, FlayerWorkspace, Kind, MindProject, WorkspaceError,
@@ -35,12 +36,12 @@ use crate::commands::workspace::{load_warnings, same_directory};
 use crate::install::state::Screen as InstallScreen;
 use crate::render::as_stored;
 use crate::{
-    install, run as run_mind, run_flayer_cli, Cli, CliError, Command, Failure, FlayerCli,
+    install, run_flayer_cli_watched, run_watched, Cli, CliError, Command, Failure, FlayerCli,
     FlayerCommand, Outcome,
 };
 use state::{
-    App, Choice, Done, Holdings, Item, LoadedSource, Member, Mode, Performed, Scope, Step, Task,
-    Unlinked, View, Workspace,
+    App, Choice, Done, Holdings, Item, LoadedSource, Member, Mode, Performed, Runner, Scope, Step,
+    Task, Unlinked, View, Workspace,
 };
 
 /// Open the TUI on the workspace at or above `directory`, and run it until it
@@ -193,8 +194,19 @@ pub fn perform(task: &Task, app: &App) -> Performed {
         Task::Link { path } if needs_init(&base.join(path)) => {
             Performed::NeedsInit { path: path.clone() }
         }
-        _ => Performed::Ran(run_all(&task.commands(), &base, app.home.as_deref())),
+        _ => Performed::Ran(run_all(
+            &runner(app),
+            &task.commands(),
+            &base,
+            app.home.as_deref(),
+            &Watch::new(),
+        )),
     }
+}
+
+/// What runs `app`'s command lines: its stand-in, or the real thing.
+fn runner(app: &App) -> Runner {
+    app.runner.clone().unwrap_or_else(|| Runner::new(execute))
 }
 
 /// A directory that exists and is not a mind project.
@@ -209,10 +221,16 @@ fn needs_init(directory: &Path) -> bool {
 /// Run command lines in order, stopping at the first that fails: each leans
 /// on the one before, and `flayer link` after a failed `mind init` would only
 /// fail again, less clearly.
-fn run_all(lines: &[Vec<String>], base: &Path, home: Option<&Path>) -> Vec<Done> {
+fn run_all(
+    runner: &Runner,
+    lines: &[Vec<String>],
+    base: &Path,
+    home: Option<&Path>,
+    watch: &Watch,
+) -> Vec<Done> {
     let mut dones = Vec::new();
     for words in lines {
-        let done = execute(words, base, home);
+        let done = runner.run(words, base, home, watch);
         let failed = done.error.is_some();
         dones.push(done);
         if failed {
@@ -228,8 +246,9 @@ fn run_all(lines: &[Vec<String>], base: &Path, home: Option<&Path>) -> Vec<Done>
 /// among them is resolved against it rather than against wherever this
 /// process happened to be started. The default workspace is the TUI's own,
 /// passed along rather than looked up again, so no command it runs can reach
-/// a different one.
-pub fn execute(words: &[String], base: &Path, home: Option<&Path>) -> Done {
+/// a different one. A gather among them reports to `watch`, and stops when it
+/// is cancelled.
+pub fn execute(words: &[String], base: &Path, home: Option<&Path>, watch: &Watch) -> Done {
     let command = state::shell(words);
     let from = |directory: Option<PathBuf>| {
         Some(directory.map_or_else(|| base.to_path_buf(), |directory| base.join(directory)))
@@ -245,7 +264,7 @@ pub fn execute(words: &[String], base: &Path, home: Option<&Path>) -> Done {
             Ok(mut cli) => {
                 cli.directory = from(cli.directory.take());
                 cli.home = home;
-                run_mind(&cli)
+                run_watched(&cli, watch)
             }
         },
         Some("flayer") => match FlayerCli::try_parse_from(words) {
@@ -256,7 +275,7 @@ pub fn execute(words: &[String], base: &Path, home: Option<&Path>) -> Done {
             Ok(mut cli) => {
                 cli.directory = from(cli.directory.take());
                 cli.home = home;
-                run_flayer_cli(&cli)
+                run_flayer_cli_watched(&cli, watch)
             }
         },
         _ => return Done::failed(command, "not a `mind` or `flayer` command"),

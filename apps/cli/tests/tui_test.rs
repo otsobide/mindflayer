@@ -3,6 +3,8 @@
 
 mod common;
 
+use std::sync::{Arc, Mutex};
+
 use common::*;
 
 // ---------------------------------------------------------------------------
@@ -436,6 +438,34 @@ fn validate_in_the_tui_reads_as_flayer_validate_does() {
     assert_eq!(lines, expected.lines().collect::<Vec<_>>());
     press_key(&mut app, KeyCode::Esc);
     assert!(matches!(app.mode, Mode::Browse));
+}
+
+#[test]
+fn a_stand_in_runner_is_handed_the_lines_a_task_is() {
+    let dir = workspace_with_two();
+    let mut app = tui_in(dir.path());
+    let heard = Arc::new(Mutex::new(Vec::new()));
+    app.runner = Some(Runner::new({
+        let heard = Arc::clone(&heard);
+        move |words, _, _, _| {
+            heard.lock().unwrap().push(words.to_vec());
+            Done {
+                command: words.join(" "),
+                stdout: String::from("stood in\n"),
+                stderr: Vec::new(),
+                error: None,
+                ok: true,
+            }
+        }
+    }));
+
+    press_and_run(&mut app, KeyCode::Char('v'));
+
+    assert_eq!(*heard.lock().unwrap(), [["flayer", "validate"]]);
+    let Mode::Reading(reader) = &app.mode else {
+        panic!("{:?}", app.mode);
+    };
+    assert_eq!(reader.lines[0].1, "stood in");
 }
 
 #[test]

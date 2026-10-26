@@ -7,9 +7,11 @@
 //! the parsers `mind` and `flayer` use, and runs. There is nothing this screen
 //! can do that a command cannot.
 
-use std::fmt::Write as _;
+use std::fmt::{self, Write as _};
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 
+use mindflayer_core::gather::Watch;
 use mindflayer_core::{paths, Kind, Layout, DEFAULT_SUBDIRECTORY, QUALIFIER};
 use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
@@ -542,6 +544,40 @@ impl Done {
     }
 }
 
+/// What runs one command line from where the commands run, and says what came
+/// of it: the real parsers and commands ([`super::execute`]) unless something
+/// is stood in for them.
+///
+/// A stand-in is for a test of what the screen does while a command takes its
+/// time, which a real one on a local disk never does. It is handed the words
+/// all the same, so there is still nothing the screen runs that is not a
+/// command line.
+#[derive(Clone)]
+pub struct Runner(Arc<RunLine>);
+
+/// The function a [`Runner`] is: the words, where they run from, the default
+/// workspace's home, and the watch a gather among them reports to.
+type RunLine = dyn Fn(&[String], &Path, Option<&Path>, &Watch) -> Done + Send + Sync;
+
+impl Runner {
+    pub fn new(
+        run: impl Fn(&[String], &Path, Option<&Path>, &Watch) -> Done + Send + Sync + 'static,
+    ) -> Self {
+        Self(Arc::new(run))
+    }
+
+    /// Run `words` from `base`.
+    pub fn run(&self, words: &[String], base: &Path, home: Option<&Path>, watch: &Watch) -> Done {
+        (self.0)(words, base, home, watch)
+    }
+}
+
+impl fmt::Debug for Runner {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str("Runner")
+    }
+}
+
 /// What carrying out a task produced.
 #[derive(Debug)]
 pub enum Performed {
@@ -655,6 +691,9 @@ pub struct App {
     /// Where the default workspace lives, for when there is none above: what
     /// every command this TUI runs is told, so none of them guesses.
     pub home: Option<PathBuf>,
+    /// What runs its command lines, when it is not the real thing: a test's
+    /// stand-in.
+    pub runner: Option<Runner>,
 }
 
 impl App {
@@ -677,6 +716,7 @@ impl App {
             done: Vec::new(),
             busy: None,
             home: None,
+            runner: None,
         };
         app.settle_in();
         app

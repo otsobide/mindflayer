@@ -10,7 +10,7 @@ pub use clap::Parser;
 pub use mindflayer_cli::install::state::{Focus, Screen, Step};
 pub use mindflayer_cli::install::{self as install_screen, ui};
 pub use mindflayer_cli::tui;
-pub use mindflayer_cli::tui::state::{App, Holder, Mode, Scope, Task, View};
+pub use mindflayer_cli::tui::state::{App, Done, Holder, Mode, Runner, Scope, Task, View};
 pub use mindflayer_cli::{
     agent_homes, default_home, run, run_flayer_cli, run_flayer_cli_watched, run_watched,
     AgentHomeOptions, Cli, CliError, Failure, FlayerCli, Outcome,
