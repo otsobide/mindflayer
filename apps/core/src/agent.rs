@@ -62,9 +62,9 @@ impl fmt::Display for Agent {
 impl FromStr for Agent {
     type Err = UnknownAgent;
 
-    /// The name exactly, as [`Kind`] and [`Shell`](crate::Shell) are taken:
-    /// `Claude` or `open-code` would be one more spelling for a settings file
-    /// to hold and a second front end to agree with.
+    /// The name exactly, as a [`Shell`](crate::Shell) is taken: `Claude` or
+    /// `open-code` would be one more spelling for a settings file to hold and
+    /// a second front end to agree with.
     fn from_str(word: &str) -> Result<Self, Self::Err> {
         Agent::ALL
             .into_iter()
