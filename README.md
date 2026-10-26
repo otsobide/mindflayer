@@ -373,6 +373,7 @@ server accepts one, or whether to trust a host it has not seen before.
   flayer.toml     the projects it manages, and the workspaces it loads
   mindflayer.db   what was gathered and from where, what was installed where,
                   and every action taken
+  lock            held by a command while it changes the workspace
   cache/<source>/ the clone, kept so a gather can be looked at afterwards
   skills/<source>/<name>/SKILL.md
   templates/      templates for every project it manages, if you add any
@@ -388,6 +389,22 @@ Timestamps are Unix seconds, so `datetime(at, 'unixepoch')` renders them:
 ```sql
 SELECT datetime(at, 'unixepoch'), action, outcome, detail FROM actions;
 ```
+
+The TUI and any number of terminals can be open on one workspace, and the
+commands that change it take turns. Linking, loading, gathering, installing and
+uninstalling each hold `lock` while they write, with the process's id in
+`lock.pid` beside it. One that finds the workspace held waits up to ten seconds
+for the other to finish, then gives up and says who it waited for:
+
+```
+$ flayer link tanukeys
+error: /home/you/Projects/.mindflayer/lock: workspace busy: waited 10s for process 3234405 to finish writing to it; try again once it has
+```
+
+Reading never waits: listing, showing and the TUI's screens see what the last
+change left, never half of one. A workspace on a network share is safe used
+from one machine at a time: the lock and the database keep apart programs on
+one machine, not programs on two.
 
 ## Installing into a project
 
