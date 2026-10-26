@@ -122,6 +122,27 @@ impl Target {
         self.project.name()
     }
 
+    /// Make the box at `index` say `checked` as a space on it would, other
+    /// offers of its name included, saying whether it now does: a foreign
+    /// row's box cannot be changed.
+    ///
+    /// For marks made on another screen of the same projects, carried here
+    /// when the shelf changed under them.
+    pub fn mark(&mut self, index: usize, checked: bool) -> bool {
+        if self
+            .rows
+            .get(index)
+            .is_some_and(|row| row.checked != checked)
+        {
+            let cursor = std::mem::replace(&mut self.cursor, index);
+            toggle(self);
+            self.cursor = cursor;
+        }
+        self.rows
+            .get(index)
+            .is_some_and(|row| row.checked == checked)
+    }
+
     /// How many of this project's boxes disagree with how they started.
     pub fn changes(&self) -> usize {
         self.rows

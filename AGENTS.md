@@ -134,11 +134,11 @@ These are easy to break from a single file without noticing.
   install is what allows overwriting and deleting. An unrecorded artifact is
   `Standing::Foreign` and is never touched. Core's lifecycle changes
   (`lifecycle::add`, `finish_edit`, `rename` and `remove`) drop any record
-  they would leave behind and return what they did (`lifecycle::Record`),
-  which the CLI only renders. `install::disown` is private to core, so no
-  front end drops a record on its own. A front end adds through
-  `lifecycle::add`, never `create` or `create_from`, which leave a stale
-  record in place.
+  they would leave behind and return what they did (`lifecycle::Record`, and
+  the `scrub` that opening the ledger ran), which the CLI only renders.
+  `install::disown` is private to core, so no front end drops a record on its
+  own. A front end adds through `lifecycle::add`, never `create` or
+  `create_from`, which leave a stale record in place.
 - **Strict when writing, lenient when reading.** A skill's front matter is
   the Agent Skills format. `mind add`, `rename` and `install` refuse a name or
   description that breaks its rules, all through `artifact::strict_issues`
@@ -155,6 +155,17 @@ These are easy to break from a single file without noticing.
   - An installed name must be one folder name (`install::is_folder_name`).
   - Symlinks are followed only inside the source (`copy::tree`'s `within`).
   - A project's artifact directories must stay inside the project.
+  - URLs are stored, logged and shown without credentials. `url::redacted`
+    is the one function that takes them out: the ledger applies it to every
+    URL it writes and reads, `GitError` to what it says, `git::scrub` to a
+    clone's config and reflogs. A gather refuses a URL that carries one. A
+    command that writes to the ledger opens it with
+    `FlayerWorkspace::ledger_to_write`, which scrubs what an older build
+    stored first and hands back what it took out to be said; one that only
+    reads opens it with `ledger_for_reading`, which scrubs nothing. The
+    install screen is a read until it applies, so it scrubs then
+    (`install::commit`). Anything new that keeps or prints a URL goes through
+    `url::redacted` too.
 - **A gather never prompts for a credential itself.** Every connection `gix`
   lets a clone configure gets the callback in `gather/credentials.rs`, which
   runs the git-config credential helpers with `gix`'s prompt and askpass

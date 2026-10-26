@@ -19,9 +19,11 @@ use thiserror::Error;
 use crate::artifact::{self, issue_list, Artifact, ArtifactError, ValidationIssue};
 use crate::catalog::{Catalog, DiscoveryFailure};
 use crate::copy;
+use crate::gather::Scrub;
 use crate::kind::{Kind, Layout};
 use crate::ledger::{Action, Gathered, Ledger, LedgerError, Outcome};
 use crate::paths;
+use crate::url::redacted;
 use crate::workspace::{FlayerWorkspace, MindProject, WorkspaceError};
 
 /// How one shelf entry stands with respect to one project.
@@ -111,7 +113,8 @@ impl Offer {
     /// that same directory.
     ///
     /// One string for every front end: what a listing prints is what
-    /// `--from` accepts.
+    /// `--from` accepts. A source's address carries no credential, because
+    /// the ledger hands none back.
     pub fn origin(&self) -> String {
         match self {
             Offer::Shelf(gathered) => match &gathered.source.reference {
@@ -128,8 +131,11 @@ impl Offer {
     /// workspace's name, unless that is the word the workspace's own go by.
     /// A path to a loaded workspace is [`resolve_from`]'s to turn into its
     /// origin — only when nothing matches it as typed, so a path never takes
-    /// a shelf source's address or the workspace's own away.
+    /// a shelf source's address or the workspace's own away. An address typed
+    /// with credentials names the source they were taken out of.
     pub fn comes_from(&self, from: &str) -> bool {
+        let from = redacted(from);
+        let from = from.as_ref();
         self.origin() == from
             || match self {
                 Offer::Shelf(gathered) => gathered.source.url == from,
@@ -407,7 +413,7 @@ pub fn offered(
     match matching.len() {
         0 => Err(InstallError::NotOffered {
             name: name.to_owned(),
-            from: from.map(str::to_owned),
+            from: from.map(|from| redacted(from).into_owned()),
         }),
         1 => Ok(matching.remove(0)),
         _ => Err(InstallError::OfferedTwice {
@@ -617,7 +623,7 @@ pub fn uninstall(
     })
 }
 
-/// Drop the record that Mindflayer installed `name` into `project`, returning
+/// Drop the record that Mindflayer installed `name` into `project`, saying
 /// whether there was one.
 ///
 /// For when what is in the project stops being what was installed: it was
@@ -637,19 +643,23 @@ pub fn uninstall(
 /// each of those would keep its stale record. Another workspace that links
 /// the same project still keeps its own, since nothing in the project says
 /// which workspaces link it.
+///
+/// The ledger is opened to write, as by every command that writes to it, so
+/// what that scrubbed comes back too, for the change to hand on: the changes
+/// in [`crate::lifecycle`] reach the ledger only through here.
 pub(crate) fn disown(
     workspace: &FlayerWorkspace,
     project: &MindProject,
     kind: Kind,
     name: &str,
-) -> Result<bool, InstallError> {
+) -> Result<Disowned, InstallError> {
     // Only a workspace that manages the project keeps records about it, and
     // one that has never installed anything has no ledger: this must not
     // create one just to look.
     if !workspace.is_linked(project.root()) || !workspace.ledger_path().is_file() {
-        return Ok(false);
+        return Ok(Disowned::default());
     }
-    let ledger = workspace.ledger()?;
+    let (ledger, scrub) = workspace.ledger_to_write()?;
     let entry = project_entry(workspace, project);
     let dropped = ledger.uninstalled(&entry, kind, name)?;
     if dropped {
@@ -659,7 +669,17 @@ pub(crate) fn disown(
         );
         ledger.log(Action::Uninstall, Some(&entry), Outcome::Ok, Some(&detail))?;
     }
-    Ok(dropped)
+    Ok(Disowned { dropped, scrub })
+}
+
+/// What [`disown`] did.
+#[derive(Debug, Default)]
+pub(crate) struct Disowned {
+    /// Whether there was a record, which is now gone.
+    pub dropped: bool,
+    /// What opening the ledger to write took out of it, for the front end to
+    /// say; nothing when there was no ledger to open.
+    pub scrub: Scrub,
 }
 
 /// What installing one artifact did.

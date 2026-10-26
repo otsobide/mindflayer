@@ -28,6 +28,7 @@ pub mod rule;
 pub mod scan;
 pub mod skill;
 pub mod template;
+pub mod url;
 pub mod workspace;
 
 pub use agent::AgentHomes;

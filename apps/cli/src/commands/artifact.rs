@@ -7,7 +7,8 @@
 //! the workspace the command resolved and hands it to core: its templates are
 //! among those `add` starts from, and core's lifecycle drops its record of
 //! what it installed when a change would leave that record outliving the
-//! copy. Here that is only said.
+//! copy. Here that is only said, along with what opening the ledger to do it
+//! scrubbed out of it.
 
 use std::fmt::Write as _;
 use std::path::Path;
@@ -17,6 +18,7 @@ use mindflayer_core::lifecycle::{self, Record};
 use mindflayer_core::template::{self, Origin};
 use mindflayer_core::{paths, FlayerWorkspace, Kind, MindProject, Reference, Target};
 
+use crate::commands::gather::scrubbed;
 use crate::render::{printable, table, verdict};
 use crate::{CliError, Failure, Outcome};
 
@@ -52,7 +54,7 @@ pub(crate) fn add_to(
         added.stale,
         "an old record said `flayer install` had put one of that name here; it is gone",
     );
-    Ok(outcome)
+    Ok(scrubbed(&added.scrub).before(outcome))
 }
 
 pub(crate) fn edit_in(
@@ -71,6 +73,10 @@ pub(crate) fn edit_in(
     let finished = lifecycle::finish_edit(workspace, holder, edit);
     if let Err(error) = opened {
         let mut failure = Failure::from(error);
+        // What the scrub said goes with an error too: it happened all the same.
+        failure
+            .warnings
+            .splice(0..0, scrubbed(&finished.scrub).lines());
         if let Err(error) = finished.copy {
             failure.warnings.push(format!("warning: {error}"));
         }
@@ -83,7 +89,7 @@ pub(crate) fn edit_in(
         finished.copy,
         "it had been installed from the shelf; edited, it is yours, and `flayer install` leaves it alone",
     );
-    Ok(outcome)
+    Ok(scrubbed(&finished.scrub).before(outcome))
 }
 
 pub(crate) fn rename_in(
@@ -111,7 +117,7 @@ pub(crate) fn rename_in(
         renamed.stale,
         "an old record said `flayer install` had put one of that name here; it is gone",
     );
-    Ok(outcome)
+    Ok(scrubbed(&renamed.scrub).before(outcome))
 }
 
 pub(crate) fn remove_from(
@@ -143,7 +149,7 @@ pub(crate) fn remove_from(
         removed.copy,
         "it had been installed from the shelf; `flayer install` can put it back",
     );
-    Ok(outcome)
+    Ok(scrubbed(&removed.scrub).before(outcome))
 }
 
 pub(crate) fn templates_of(
