@@ -167,12 +167,13 @@ These are easy to break from a single file without noticing.
   - An entry in a config file somebody else owns (`.mcp.json`,
     `opencode.json`, `.codex/config.toml`) is changed one at a time through
     `config_entry`: JSON and JSONC entries are edited through jsonc-parser's
-    CST and TOML through `toml_edit`, never parsed and serialized again, so
-    every byte outside the entry is kept. What an edit wrote is read back and
-    refused unless only the entry changed, and a file that does not parse is
-    refused, never rewritten. A changed file goes through `replace_bytes`,
-    keeping its permissions; a new one is made with `create_new`. The module
-    knows no agent: the file, the key path and the entry are the caller's.
+    CST (an insert spliced into the text where it says) and TOML through
+    `toml_edit`, never parsed and serialized again, so every byte outside the
+    entry is kept. What an edit wrote is read back and refused unless only
+    the entry changed, and a file that does not parse is refused, never
+    rewritten. A changed file goes through `replace_bytes`, keeping its
+    permissions; a new one is made with `create_new`. The module knows no
+    agent: the file, the key path and the entry are the caller's.
   - `flayer init` refuses a directory for the workspace's own that overlaps
     the shelf or the cache, which are reserved for gathering
     (`gathered_overlap`). `flayer init` and the workspace's own artifacts

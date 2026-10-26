@@ -2213,10 +2213,15 @@ difference, and the tests pin what is left:
 - A TOML object is laid out as the objects already beside it are: a `[table]`
   of its own after theirs, inline, or dotted keys. Anything else is a key after
   the keys beside it, indented as the one before it.
-- jsonc-parser drops the blank lines just inside the braces of the object an
-  entry goes into, and breaks a one-line object onto several lines, since it
-  writes a member on a line of its own. Those are its layout, not ours, and
-  they stay ([open questions](#open-questions)).
+- jsonc-parser's own `append` lays the object an entry goes into out again
+  first: it drops the blank lines just inside the braces and breaks an object
+  written on one line onto several. So a JSON insert takes only its place from
+  the CST, after the last member and the comment on that member's line, and is
+  spliced into the text there, laid out as jsonc-parser lays out what it is
+  given: on a line of its own, indented as the last member, in an object
+  written on several lines, and on the same line in one written on one. A
+  replace and a remove go through the CST, which changes nothing outside the
+  member.
 
 ### What an edit is held to
 
@@ -3278,14 +3283,6 @@ leak into the lifecycle code. Unblocks #33, #45, #62, #93, #94 and #95.
   of 1 and 4, are what a `codex.sh` and an `opencode.sh` beside the probe
   would run, and the place to run them is before #34 and #42 rely on those
   facts.
-- **Blank lines and one-line objects an entry goes into.** jsonc-parser 0.34
-  drops the blank lines just inside the braces of the object an entry is
-  inserted into, and lays an object written on one line out on several, since
-  it writes a member on a line of its own. Everything else outside the entry is
-  kept, and the tests pin both, so an upgrade that changes them is seen.
-  Splicing the entry into the text by hand, with the CST only to say where,
-  would keep them, at the price of a layout of our own to get right for every
-  indentation and comma style.
 - **An agent's CLI writing the same config file.** The workspace's lock keeps
   Mindflayer's writers apart, not the agents': `claude mcp add` rewriting
   `.mcp.json` between `ConfigFile::edit`'s read and its rename is undone by the
