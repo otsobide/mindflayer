@@ -6,11 +6,10 @@
 //! needs to open and fix, so an artifact is also found by where its name would
 //! put it on disk, whether or not it reads.
 //!
-//! Adding and finishing an edit also see to the ledger's record of what was
-//! installed under the name they touch, and say in their result what they did
-//! ([`Record`]). The rule lives here rather than with each front end that
-//! makes a change, so a second front end cannot forget it or apply it
-//! differently.
+//! Each change also sees to the ledger's record of what was installed under
+//! the names it touches, and says in its result what it did ([`Record`]). The
+//! rule is one, and it lives here rather than with each front end that makes
+//! a change, so a second front end cannot forget it or apply it differently.
 
 use std::fs;
 use std::io;
@@ -300,16 +299,29 @@ pub fn files(target: &Target) -> usize {
     }
 }
 
+/// What removing an artifact did to the record of an install of it.
+#[derive(Debug)]
+pub struct Removed {
+    /// Dropped when the copy had been installed: it is gone, and the record
+    /// would be inherited by whatever is written under its name next.
+    pub copy: Result<Record, InstallError>,
+}
+
 /// Delete an artifact: a skill's whole directory, or a rule's file and any
-/// folder it leaves empty.
-pub fn remove(project: &MindProject, target: &Target) -> Result<(), LifecycleError> {
+/// folder it leaves empty. Then drop the record of an install of it.
+/// `workspace` is the one consulted, as for [`add`].
+pub fn remove(
+    workspace: Option<&FlayerWorkspace>,
+    project: &MindProject,
+    target: &Target,
+) -> Result<Removed, LifecycleError> {
     let directory = inside(project, target)?;
     match target.kind.layout() {
         Layout::Directory { .. } => {
             fs::remove_dir_all(&target.path).map_err(|source| LifecycleError::Io {
                 path: target.path.clone(),
                 source,
-            })
+            })?;
         }
         Layout::Files { .. } => {
             fs::remove_file(&target.path).map_err(|source| LifecycleError::Io {
@@ -317,9 +329,26 @@ pub fn remove(project: &MindProject, target: &Target) -> Result<(), LifecycleErr
                 source,
             })?;
             prune(&directory, target.path.parent());
-            Ok(())
         }
     }
+    Ok(Removed {
+        copy: disowned(workspace, project, target.kind, &target.name),
+    })
+}
+
+/// What renaming an artifact made, and what it did to the records under its
+/// old name and its new one.
+#[derive(Debug)]
+pub struct Renamed {
+    /// The artifact under its new name.
+    pub target: Target,
+    /// The record of the copy under its old name, dropped: renamed, it is no
+    /// longer what was installed.
+    pub copy: Result<Record, InstallError>,
+    /// A record under the new name, from an install that is no longer there:
+    /// stale, and left in place it would make what was just renamed look like
+    /// something Mindflayer put there.
+    pub stale: Result<Record, InstallError>,
 }
 
 /// Give an artifact a new name: a skill's folder and the `name` it declares
@@ -330,7 +359,15 @@ pub fn remove(project: &MindProject, target: &Target) -> Result<(), LifecycleErr
 /// is somebody's writing — comments, key order, the description — and is left
 /// byte for byte, and the result is parsed back to make sure the one line
 /// changed what it was meant to and nothing else.
-pub fn rename(project: &MindProject, target: &Target, to: &str) -> Result<Target, LifecycleError> {
+///
+/// Then the records under both names are dropped. `workspace` is the one
+/// consulted, as for [`add`].
+pub fn rename(
+    workspace: Option<&FlayerWorkspace>,
+    project: &MindProject,
+    target: &Target,
+    to: &str,
+) -> Result<Renamed, LifecycleError> {
     let issues = artifact::name_issues(to);
     if !issues.is_empty() {
         return Err(LifecycleError::Name {
@@ -340,10 +377,17 @@ pub fn rename(project: &MindProject, target: &Target, to: &str) -> Result<Target
     }
     let directory = inside(project, target)?;
     // Matched on the kind, so a third one has to say how it is renamed.
-    match target.kind {
+    let renamed = match target.kind {
         Kind::Skill => rename_skill(project, target, &directory, to),
         Kind::Rule => rename_rule(project, target, &directory, to),
-    }
+    }?;
+    let copy = disowned(workspace, project, target.kind, &target.name);
+    let stale = disowned(workspace, project, target.kind, &renamed.name);
+    Ok(Renamed {
+        target: renamed,
+        copy,
+        stale,
+    })
 }
 
 fn rename_skill(

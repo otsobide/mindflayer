@@ -123,7 +123,7 @@ fn removing_a_skill_takes_its_whole_folder() {
     let target = find(&project, "deploy").unwrap();
     assert_eq!(lifecycle::files(&target), 2);
 
-    lifecycle::remove(&project, &target).unwrap();
+    lifecycle::remove(None, &project, &target).unwrap();
 
     assert!(!dir.path().join("skills/deploy").exists());
     assert!(dir.path().join("skills").is_dir());
@@ -136,8 +136,13 @@ fn removing_a_rule_takes_the_folders_it_leaves_empty_and_no_more() {
     create(&project, Kind::Rule, "ci/green", "Keep it green").unwrap();
     create(&project, Kind::Rule, "ci/fast", "Keep it fast").unwrap();
 
-    lifecycle::remove(&project, &find(&project, "git/no-force-push").unwrap()).unwrap();
-    lifecycle::remove(&project, &find(&project, "ci/green").unwrap()).unwrap();
+    lifecycle::remove(
+        None,
+        &project,
+        &find(&project, "git/no-force-push").unwrap(),
+    )
+    .unwrap();
+    lifecycle::remove(None, &project, &find(&project, "ci/green").unwrap()).unwrap();
 
     assert!(
         !dir.path().join("rules/git").exists(),
@@ -165,7 +170,9 @@ fn renaming_a_skill_moves_its_folder_and_rewrites_nothing_but_its_name() {
     write(dir.path(), "skills/deploy/SKILL.md", WRITTEN_BY_HAND);
     write(dir.path(), "skills/deploy/scripts/run.sh", "echo ship\n");
 
-    let renamed = lifecycle::rename(&project, &find(&project, "deploy").unwrap(), "ship").unwrap();
+    let renamed = lifecycle::rename(None, &project, &find(&project, "deploy").unwrap(), "ship")
+        .unwrap()
+        .target;
 
     assert_eq!(renamed.name, "ship");
     assert!(!dir.path().join("skills/deploy").exists());
@@ -183,7 +190,9 @@ fn a_name_yaml_would_read_as_something_else_is_quoted() {
     let (dir, project) = project();
     create(&project, Kind::Skill, "deploy", "Ship it").unwrap();
 
-    let renamed = lifecycle::rename(&project, &find(&project, "deploy").unwrap(), "true").unwrap();
+    let renamed = lifecycle::rename(None, &project, &find(&project, "deploy").unwrap(), "true")
+        .unwrap()
+        .target;
 
     assert_eq!(renamed.name, "true");
     let manifest = fs::read_to_string(dir.path().join("skills/true/SKILL.md")).unwrap();
@@ -198,10 +207,10 @@ fn renaming_refuses_whatever_would_break_or_clobber_something() {
     let deploy = find(&project, "deploy").unwrap();
 
     let refusals = [
-        lifecycle::rename(&project, &deploy, "Bad Name").unwrap_err(),
-        lifecycle::rename(&project, &deploy, "tools/deploy").unwrap_err(),
-        lifecycle::rename(&project, &deploy, "ship").unwrap_err(),
-        lifecycle::rename(&project, &deploy, "deploy").unwrap_err(),
+        lifecycle::rename(None, &project, &deploy, "Bad Name").unwrap_err(),
+        lifecycle::rename(None, &project, &deploy, "tools/deploy").unwrap_err(),
+        lifecycle::rename(None, &project, &deploy, "ship").unwrap_err(),
+        lifecycle::rename(None, &project, &deploy, "deploy").unwrap_err(),
     ];
 
     assert!(matches!(refusals[0], LifecycleError::Name { .. }));
@@ -221,7 +230,7 @@ fn a_skill_whose_name_is_not_one_line_is_left_for_a_person() {
     write(dir.path(), "skills/deploy/SKILL.md", written);
 
     let error =
-        lifecycle::rename(&project, &find(&project, "deploy").unwrap(), "ship").unwrap_err();
+        lifecycle::rename(None, &project, &find(&project, "deploy").unwrap(), "ship").unwrap_err();
 
     assert!(matches!(error, LifecycleError::Rewrite { .. }), "{error}");
     assert!(!dir.path().join("skills/ship").exists(), "nothing moved");
@@ -237,7 +246,7 @@ fn a_skill_that_does_not_read_is_edited_before_it_is_renamed() {
     write(dir.path(), "skills/broken/SKILL.md", "no front matter\n");
 
     let error =
-        lifecycle::rename(&project, &find(&project, "broken").unwrap(), "fixed").unwrap_err();
+        lifecycle::rename(None, &project, &find(&project, "broken").unwrap(), "fixed").unwrap_err();
 
     assert!(
         matches!(error, LifecycleError::Unreadable { .. }),
@@ -260,7 +269,9 @@ fn renaming_puts_a_folder_back_in_line_with_what_it_declares() {
         "found by folder, named by itself"
     );
 
-    let renamed = lifecycle::rename(&project, &target, "deployment").unwrap();
+    let renamed = lifecycle::rename(None, &project, &target, "deployment")
+        .unwrap()
+        .target;
 
     assert!(dir.path().join("skills/deployment/SKILL.md").is_file());
     assert_eq!(renamed.artifact.unwrap().validate(), vec![]);
@@ -278,11 +289,13 @@ fn renaming_a_rule_refiles_it_by_its_new_route() {
     .unwrap();
 
     let renamed = lifecycle::rename(
+        None,
         &project,
         &find(&project, "git/no-force-push").unwrap(),
         "vcs/no-force-push",
     )
-    .unwrap();
+    .unwrap()
+    .target;
 
     assert_eq!(renamed.name, "vcs/no-force-push");
     assert!(
@@ -336,6 +349,13 @@ fn standing(
         .find(|candidate| candidate.name() == name)
         .unwrap_or_else(|| panic!("the workspace offers no {name}"))
         .standing
+}
+
+/// What somebody's editor does: add a line to the file.
+fn type_into(file: &Path) {
+    let mut text = fs::read_to_string(file).unwrap();
+    text.push_str("Mine.\n");
+    fs::write(file, text).unwrap();
 }
 
 #[test]
@@ -451,9 +471,7 @@ fn a_record_that_cannot_be_dropped_is_reported_and_the_change_stands() {
 fn an_edit_that_changes_an_installed_copy_drops_its_record() {
     let (dir, workspace, project, ledger) = installed(&["deploy"]);
     let edit = lifecycle::start_edit(&find(&project, "deploy").unwrap());
-    let mut text = fs::read_to_string(edit.file()).unwrap();
-    text.push_str("Mine.\n");
-    fs::write(edit.file(), text).unwrap();
+    type_into(edit.file());
 
     let edited = lifecycle::finish_edit(Some(&workspace), &project, edit);
 
@@ -483,5 +501,91 @@ fn an_edit_that_changes_nothing_keeps_the_record() {
 
     assert!(!edited.changed);
     assert_eq!(edited.copy.unwrap(), Record::Untouched);
+    assert_eq!(records(&ledger), ["deploy"]);
+}
+
+#[test]
+fn renaming_an_installed_copy_drops_its_record() {
+    let (_dir, workspace, project, ledger) = installed(&["deploy"]);
+
+    let renamed = lifecycle::rename(
+        Some(&workspace),
+        &project,
+        &find(&project, "deploy").unwrap(),
+        "ship",
+    )
+    .unwrap();
+
+    assert_eq!(renamed.copy.unwrap(), Record::Dropped);
+    assert_eq!(renamed.stale.unwrap(), Record::Untouched);
+    assert_eq!(records(&ledger), Vec::<String>::new());
+}
+
+#[test]
+fn renaming_onto_a_name_an_old_record_claims_drops_that_record_too() {
+    let (dir, workspace, project, ledger) = installed(&["deploy", "ship"]);
+    fs::remove_dir_all(dir.path().join("collapse/skills/ship")).unwrap();
+
+    let renamed = lifecycle::rename(
+        Some(&workspace),
+        &project,
+        &find(&project, "deploy").unwrap(),
+        "ship",
+    )
+    .unwrap();
+
+    assert_eq!(renamed.copy.unwrap(), Record::Dropped);
+    // Left in place, it would make what was just renamed look like the
+    // workspace's own `ship`, to overwrite.
+    assert_eq!(renamed.stale.unwrap(), Record::Dropped);
+    assert_eq!(
+        standing(&workspace, &ledger, &project, "ship"),
+        Standing::Foreign
+    );
+}
+
+#[test]
+fn removing_an_installed_copy_drops_its_record() {
+    let (_dir, workspace, project, ledger) = installed(&["deploy"]);
+
+    let removed = lifecycle::remove(
+        Some(&workspace),
+        &project,
+        &find(&project, "deploy").unwrap(),
+    )
+    .unwrap();
+
+    assert_eq!(removed.copy.unwrap(), Record::Dropped);
+    assert_eq!(records(&ledger), Vec::<String>::new());
+}
+
+#[test]
+fn changing_something_mindflayer_did_not_install_touches_no_record() {
+    let (_dir, workspace, project, ledger) = installed(&["deploy"]);
+    create(&workspace.own(), Kind::Skill, "notes", "The workspace's").unwrap();
+    create(&project, Kind::Skill, "notes", "Mine").unwrap();
+    assert_eq!(
+        standing(&workspace, &ledger, &project, "notes"),
+        Standing::Foreign
+    );
+
+    let edit = lifecycle::start_edit(&find(&project, "notes").unwrap());
+    type_into(edit.file());
+    let edited = lifecycle::finish_edit(Some(&workspace), &project, edit);
+    let renamed = lifecycle::rename(
+        Some(&workspace),
+        &project,
+        &find(&project, "notes").unwrap(),
+        "jots",
+    )
+    .unwrap();
+    let removed =
+        lifecycle::remove(Some(&workspace), &project, &find(&project, "jots").unwrap()).unwrap();
+
+    assert!(edited.changed);
+    for record in [edited.copy, renamed.copy, renamed.stale, removed.copy] {
+        assert_eq!(record.unwrap(), Record::Untouched);
+    }
+    // Nor the record of what was installed beside it.
     assert_eq!(records(&ledger), ["deploy"]);
 }

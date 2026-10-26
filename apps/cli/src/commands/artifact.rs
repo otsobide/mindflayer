@@ -4,8 +4,10 @@
 //! Each takes the holder it acts on — a project, or the workspace's own — so
 //! `mind add` and `flayer add -p alpha` are one function given one project,
 //! and `flayer add` is the same function given the workspace. Each also takes
-//! the workspace the command resolved: its templates are among those `add`
-//! starts from, and its record of what it installed must not outlive the copy.
+//! the workspace the command resolved and hands it to core: its templates are
+//! among those `add` starts from, and core's lifecycle drops its record of
+//! what it installed when a change would leave that record outliving the
+//! copy. Here that is only said.
 
 use std::fmt::Write as _;
 use std::path::Path;
@@ -81,30 +83,22 @@ pub(crate) fn rename_in(
     to: &str,
 ) -> Result<Outcome, Failure> {
     let target = lifecycle::find(holder, &Reference::parse(reference)).map_err(CliError::from)?;
-    let renamed = lifecycle::rename(holder, &target, to).map_err(CliError::from)?;
+    let renamed = lifecycle::rename(workspace, holder, &target, to).map_err(CliError::from)?;
     let mut outcome = Outcome::plain(format!(
         "renamed {} {} to {} at {}\n",
         target.kind,
         target.name,
-        renamed.name,
-        renamed.path.display()
+        renamed.target.name,
+        renamed.target.path.display()
     ));
-    disowned(
+    recorded(
         &mut outcome,
-        workspace,
-        holder,
-        target.kind,
-        &target.name,
+        renamed.copy,
         "it had been installed from the shelf; renamed, it is yours, and `flayer install` leaves it alone",
     );
-    // A stale claim on the new name would make what was just renamed look
-    // like something Mindflayer put there.
-    disowned(
+    recorded(
         &mut outcome,
-        workspace,
-        holder,
-        target.kind,
-        &renamed.name,
+        renamed.stale,
         "an old record said `flayer install` had put one of that name here; it is gone",
     );
     Ok(outcome)
@@ -127,19 +121,16 @@ pub(crate) fn remove_from(
         }
         .into());
     }
-    lifecycle::remove(holder, &target).map_err(CliError::from)?;
+    let removed = lifecycle::remove(workspace, holder, &target).map_err(CliError::from)?;
     let mut outcome = Outcome::plain(format!(
         "removed {} {} from {}\n",
         target.kind,
         target.name,
         target.path.display()
     ));
-    disowned(
+    recorded(
         &mut outcome,
-        workspace,
-        holder,
-        target.kind,
-        &target.name,
+        removed.copy,
         "it had been installed from the shelf; `flayer install` can put it back",
     );
     Ok(outcome)
@@ -261,43 +252,15 @@ fn edited(project: &MindProject, target: &Target, changed: bool) -> Outcome {
 /// Say what a change did to a record that `flayer install` put something
 /// into the project, when it did anything.
 ///
-/// A record that could not be changed is a warning rather than an error: the
-/// change it was about has already been made, and reporting it as not made
-/// would be false.
+/// A record that could not be changed is a warning rather than an error, as
+/// core reports it: the change it was about has already been made, and
+/// reporting it as not made would be false.
 fn recorded(outcome: &mut Outcome, record: Result<Record, InstallError>, why: &str) {
     match record {
         Ok(Record::Dropped) => {
             let _ = writeln!(outcome.stdout, "  {why}");
         }
         Ok(Record::Untouched) => {}
-        Err(error) => {
-            outcome.stderr.push(format!("warning: {error}"));
-            outcome.ok = false;
-        }
-    }
-}
-
-/// Drop a record saying `flayer install` put `name` into `project`, and say so
-/// when there was one. With no workspace there is no record to drop.
-///
-/// Failing to is a warning rather than an error: the change the record was
-/// about has already been made, and reporting it as not made would be false.
-fn disowned(
-    outcome: &mut Outcome,
-    workspace: Option<&FlayerWorkspace>,
-    project: &MindProject,
-    kind: Kind,
-    name: &str,
-    why: &str,
-) {
-    let Some(workspace) = workspace else {
-        return;
-    };
-    match mindflayer_core::install::disown(workspace, project, kind, name) {
-        Ok(true) => {
-            let _ = writeln!(outcome.stdout, "  {why}");
-        }
-        Ok(false) => {}
         Err(error) => {
             outcome.stderr.push(format!("warning: {error}"));
             outcome.ok = false;
