@@ -9,14 +9,15 @@ line in `APPS` and the workspace `members`, and its test and build jobs in
 CI — never reshaping the tree.
 
 ```
-apps/core   mindflayer-core — the engine
-apps/cli    mindflayer-cli  — the `mind` and `flayer` binaries
+apps/core    mindflayer-core   — the engine
+apps/cli     mindflayer-cli    — the `mind` and `flayer` binaries
+apps/server  mindflayer-server — the local server behind the web panel
 ```
 
-Only two today. The layout exists because there will be more: the next is a
-local server and the web panel it serves
-([D-17](#d-17-the-next-front-end-is-a-local-web-panel)), and they have to sit
-beside the CLI rather than around it.
+The layout exists because there would be more than two, and the server is the
+first of the apps [D-17](#d-17-the-next-front-end-is-a-local-web-panel) adds;
+the web panel it serves comes next, as `apps/web`. Both sit beside the CLI
+rather than around it.
 
 ## Where the line between core and a front end falls
 
@@ -40,6 +41,11 @@ get it wrong in exchange for nothing.
 The TUI is in the same crate, behind the same parser, rather than a front end
 of its own: it does everything by running these commands. See [the
 TUI](#the-tui).
+
+The local server is a crate of its own, and it holds no rules either: it
+carries JSON between the browser and whichever front end implements its
+`Backend`, and depends on neither core nor the CLI. See [the local
+server](#the-local-server).
 
 The line is there so that when a second front end arrives, it cannot disagree
 with the first about what a valid skill is. Every rule that could drift lives
@@ -821,6 +827,139 @@ screen needed `link` and `unlink` to take several paths, and they take them
 refused one leaves the registry as it was rather than half changed by a
 command that reports failure.
 
+## The local server
+
+`apps/server` (`mindflayer-server`) is the transport under the web panel
+([D-17](#d-17-the-next-front-end-is-a-local-web-panel)): a library crate that
+binds a port, checks who is asking, carries JSON between the browser and a
+front end, and serves the panel's files. No binary runs it yet. `flayer ui`
+(#68) will, over the CLI's backend (#67), and not before the checks on the
+Host, Origin and Fetch Metadata headers (#66) are in. The token keeps other
+processes out; those checks are what keep out other pages in the same
+browser: one on another port of 127.0.0.1, which the browser counts as the
+same site, or one whose DNS name has been rebound to 127.0.0.1.
+
+### Transport only
+
+It holds no rules. It cannot tell a valid task from an invalid one, a linked
+project from a path to refuse, or a skill from a rule, and it is not to learn:
+each of those answers is core's, reached through the backend, so the panel
+cannot disagree with the CLI and the TUI about any of them. What it knows is
+HTTP — routes, the token, cache headers, a log line — and none of that would
+differ between two front ends.
+
+The panel's whole API is four endpoints, which are
+[D-18](#d-18-the-panel-writes-by-running-commands) in HTTP:
+
+- `POST /api/query` — a read, answered with JSON of the backend's own shape.
+- `POST /api/commands/preview` — the command lines a task is, with nothing run.
+- `POST /api/commands` — run a task; the reply is its lines and its outcome.
+- `GET /api/transcript` — every task the session ran, with what each produced.
+
+Any other path under `/api` is a JSON 404, and every refusal, a body the
+backend cannot read included, is `{"error": "..."}`, so a script never has to
+parse the panel's page to learn that it typed a path wrong.
+
+### Generic over a backend
+
+The server is generic over a `Backend` trait whose `Query`, `Task` and
+`Outcome` are associated types. It deserializes into them, hands them over and
+serializes what comes back, without ever naming one. So the CLI can implement
+`Backend` with its own `Task` and depend on the server, while the server
+depends on no mindflayer crate at all, which `crate_test` checks through
+`cargo metadata`. A protocol crate holding the shared types was the
+alternative, and it would put a third crate between every change to a task
+and the code that runs it. The server's own suites use a fake backend whose
+types know nothing of mindflayer, which is the property the CLI relies on.
+
+`query` returns JSON rather than a fourth associated type, because each query
+has a shape of its own and one type standing for all of them would be an enum
+whose only job is to serialize untagged. `preview` takes the task by
+reference, so a task need not be `Clone` to be both shown and run.
+`watched_paths` is for live updates (#74); nothing reads it yet.
+
+### Threads
+
+axum runs on tokio, and nothing a backend does belongs on tokio's own
+threads, which are for moving bytes: one slow read there stalls every request
+waiting on the same thread.
+
+- **Queries and previews** go to tokio's blocking pool (`spawn_blocking`), as
+  many at once as arrive. They only read.
+- **Runs** go to one dedicated `std::thread`, fed by a channel. A channel is
+  first in, first out, so tasks run in the order they arrived, which a lock
+  does not promise whoever waits on it. One thread means two writes never run
+  side by side, which is the world the commands underneath were written for:
+  a CLI, where one command at a time is all there is. And a long run holds
+  that thread rather than one of the pool's, so the panel goes on reading
+  while it waits.
+
+A run's lines are worked out on the writer thread just before it, against the
+disk the run itself meets after every write before it, and the entry is in the
+transcript before the reply leaves, so a client that asks for the transcript
+after its reply always finds its own run there. A client that stops waiting
+does not take its task back: it was queued, and it runs. A backend that panics
+loses that one reply but not the thread, so the tasks behind it still run.
+
+The transcript is the TUI's, kept where the panel can ask for it at any time:
+runs only, since a query or a preview changes nothing there is to replay, and
+in memory only, for as long as the server runs.
+
+### Who it answers
+
+It binds 127.0.0.1 on port 0, with no option for another address: the panel
+is for the person at this machine, and beyond loopback the token would travel
+in clear text. Port 0 lets the system pick a free port rather than the server
+failing on a taken one.
+
+Every process on the machine can reach that port, so the address says nothing
+about who is asking. A 256-bit token, issued fresh at each launch, does. The
+launch link carries it once, as `/?token=...`; that request is answered with
+a 303 to `/` and the token in a cookie, and the redirect is what takes the
+token out of the address bar and the history. The cookie is `HttpOnly`, so the
+panel's own scripts never hold it, and `SameSite=Strict`, so no other site's
+page sends it, though a page on another port is the same site (#66 again). It
+is not `Secure`, which a browser that does not count
+127.0.0.1 as a secure origin would drop. And it is named for the port,
+`mf_<port>`, because cookies are not isolated by port: under one name, a panel
+launched on a second port would overwrite the first one's token in the browser
+and lock it out.
+
+Scripts and tests send `Authorization: Bearer <token>` instead, and either is
+compared in constant time. Only `/api` asks for it: the panel's files are the
+same for everybody, and a browser that has not been through the link yet still
+needs the page that will tell it so.
+
+### The log
+
+The server prints nothing of its own accord. A front end that wants a log hands
+`Server::log` a function, and gets a line per request once it is answered —
+`GET /api/transcript 200`: the method, the path and query, the status. Never a
+header, since the cookie and the Bearer token travel in them, and never a body.
+The value of a `token` parameter is replaced by `<redacted>` however its name
+is encoded, decoded the way the exchange decodes it to find it; and the token
+is scrubbed from anywhere else in the line, upper-cased or pasted into a path,
+because there it is still the secret. axum's `tracing` feature is off, so
+nothing logs on the server's behalf.
+
+### The panel's files
+
+The panel is embedded with rust-embed from `apps/web/dist`, spelled
+`$CARGO_MANIFEST_DIR/../web/dist`, so the binary stays the one thing to
+install. `allow_missing` lets the crate build, and its tests pass, on a
+machine without Node where nothing built the panel; the server then answers
+every page with a 503 saying `panel not built: run make web/build`. #69 brings
+`apps/web` and that target.
+
+Files under `assets/` are named by Vite for their contents, so they are sent
+as immutable, to be kept for a year; everything else, `index.html` above all,
+is `no-cache`, so a rebuild shows on the next load. A path outside `/api` that
+names no file gets `index.html`, because the panel draws its own routes in the
+browser — except under `assets/`, where a missing file is one an old page asks
+for after a rebuild, and a 404 is easier to read than a page delivered as a
+script. A test hands the server a panel of its own (`Panel::embedded`, any
+folder rust-embed can embed), so the suites cover all of this without a build.
+
 ## The default workspace
 
 A workspace is found by walking up, and when nothing up there has one, the
@@ -1466,6 +1605,23 @@ leak into the lifecycle code. Unblocks #33, #45, #62, #93, #94 and #95.
   `$MINDFLAYER_HOME`. An agent that reads an empty one as unset uses its
   default instead, and a check would then leave out a folder that agent does
   read. How each agent reads it is for #17 to record.
+- **A panel built after the server.** A release build embeds what
+  `apps/web/dist` held when `mindflayer-server` last compiled, and a debug
+  build reads the folder at run time only if it existed then, because
+  rust-embed resolves the folder's real path when it compiles. Neither sees a
+  panel built later until the crate compiles again. A build script that reruns
+  when the folder changes would, at the price of rerunning on every build
+  while the folder is missing, since cargo counts a missing path as changed.
+  #68, which puts the panel into the binaries, settles the build order.
+- **The panel's transcript ends with the server.** The TUI prints its
+  transcript when it closes; the server keeps the panel's in memory and drops
+  it when it stops. Whether `flayer ui` prints it on the way out, as the TUI
+  does, is for #68 to choose.
+- **A run that panics.** A backend that panics while running a task has no
+  outcome to record, so the task is not in the transcript, though it may have
+  changed something before it stopped. The CLI's commands collect their
+  failures rather than panic, so this is a bug's path, but the transcript then
+  cannot say what the bug left behind.
 - **Rules that want to declare something.** Today a rule has no front matter,
   so a leading `---` in one is content. If rules later want metadata, that
   becomes a breaking reading of files written now. The escape hatch is cheap
