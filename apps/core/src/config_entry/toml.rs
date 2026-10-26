@@ -27,7 +27,8 @@
 //! - toml_edit writes every line ending as LF. A file whose lines all end in
 //!   CRLF has them put back; one that mixes the two is refused, since which
 //!   line had which would be lost. It ends the last line too, which a file
-//!   that left it unended gets back unended.
+//!   that left it unended gets back unended, and drops a byte-order mark,
+//!   which is put back.
 
 use std::fmt::Write as _;
 
@@ -77,6 +78,12 @@ pub(super) fn edit(text: Option<&str>, key: &[&str], edit: &Edit) -> Result<Stri
         return Err(EntryError::NoKey);
     }
     let text = text.unwrap_or_default();
+    // toml_edit reads past a byte-order mark and writes none, so it is put
+    // back, as CRLF is.
+    let (bom, text) = match text.strip_prefix('\u{feff}') {
+        Some(rest) => ("\u{feff}", rest),
+        None => ("", text),
+    };
     let crlf = crlf(text)?;
     let mut document = parse(text)?;
     // A file of comments alone holds them after everything, where toml_edit
@@ -118,6 +125,7 @@ pub(super) fn edit(text: Option<&str>, key: &[&str], edit: &Edit) -> Result<Stri
             written.truncate(unended.len());
         }
     }
+    written.insert_str(0, bom);
     Ok(written)
 }
 

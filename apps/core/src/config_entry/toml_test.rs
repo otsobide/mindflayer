@@ -248,6 +248,39 @@ fn a_file_whose_last_line_has_no_ending_is_left_without_one() {
 }
 
 #[test]
+fn a_byte_order_mark_is_kept_by_every_edit() {
+    let cases = [
+        (
+            "\u{feff}a = 1\n",
+            &["c"][..],
+            Edit::Insert(Value::from(2)),
+            "\u{feff}a = 1\nc = 2\n",
+        ),
+        (
+            "\u{feff}a = 1\r\n",
+            &["a"],
+            Edit::Replace(Value::from(2)),
+            "\u{feff}a = 2\r\n",
+        ),
+        (
+            "\u{feff}a = 1\nb = 2\n",
+            &["a"],
+            Edit::Remove,
+            "\u{feff}b = 2\n",
+        ),
+        (
+            "\u{feff}# head\na = 1\n",
+            &["a"],
+            Edit::Remove,
+            "\u{feff}# head\n",
+        ),
+    ];
+    for (text, key, change, expected) in cases {
+        assert_eq!(edit(Format::Toml, text, key, &change).unwrap(), expected);
+    }
+}
+
+#[test]
 fn a_file_whose_line_endings_are_mixed_is_refused() {
     let error = edit(
         Format::Toml,
