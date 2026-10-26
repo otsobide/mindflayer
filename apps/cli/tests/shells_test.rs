@@ -202,10 +202,16 @@ fn bash_and_zsh_accept_the_code_as_printed() {
         let file = fixture.dir.path().join(format!("activate.{}", shell.name));
         fs::write(&file, code).unwrap();
 
+        // Started as `run` starts a shell: zsh reads `~/.zshenv` even to
+        // only check a file, and takes HOME from the account when it is unset.
+        let home = TempDir::new().unwrap();
         let checked = Command::new(&shell.program)
+            .args(shell.quiet)
             .arg("-n")
             .arg(&file)
             .env_clear()
+            .env("PATH", "/usr/bin:/bin")
+            .env("HOME", home.path())
             .output()
             .unwrap();
 
