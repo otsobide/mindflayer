@@ -389,9 +389,7 @@ up by the next command that writes to it — a gather, an install or an
 uninstall, or an `add`, `edit`, `rename` or `remove` in a project it manages.
 The token is taken out of `mindflayer.db` and out of the clone in
 `cache/`, and the command says so once, on stderr, without failing because of
-it. The install screen does it when you apply what you marked, not when it
-opens; a command that only reads, such as `flayer gather list`, shows the URL
-without the token and leaves the file as it is.
+it:
 
 ```
 $ flayer install -p collapse deploy
@@ -399,6 +397,10 @@ installed deploy into collapse, from https://github.com/acme/private-skills
 note: https://github.com/acme/private-skills: the user name, password or token an older Mindflayer stored in this URL is taken out; gathering it again needs a git credential helper that has it
 note: 2 action log entries: the user names, passwords or tokens an older Mindflayer stored in URLs in them are taken out
 ```
+
+The install screen does it when you apply what you marked, not when it opens.
+A command that only reads, such as `flayer gather list`, shows the URL without
+the token and leaves the file as it is.
 
 ### What a workspace keeps
 
