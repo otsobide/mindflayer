@@ -25,14 +25,20 @@
 //! would: that writes the whole file in its own layout and drops every
 //! comment in it. TOML is edited through toml_edit, for the same reason, as
 //! the markers are.
+//!
+//! [`get`] and [`edit`] work on text, which is what the tests hold to the
+//! byte; [`ConfigFile`] reads the text from a file and writes it back.
 
 use std::fmt::{self, Write as _};
 
 use sha2::{Digest, Sha256};
 use thiserror::Error;
 
+mod file;
 mod json;
 mod toml;
+
+pub use file::{ConfigFile, FileError, Written};
 
 /// The grammar a config file is written in.
 ///
