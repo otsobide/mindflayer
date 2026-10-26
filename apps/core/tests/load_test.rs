@@ -382,7 +382,7 @@ fn a_loaded_workspace_that_is_the_project_itself_is_never_copied_onto_itself() {
     let dir = TempDir::new().unwrap();
     let (mut target, _) = FlayerWorkspace::init(dir.path().join("target")).unwrap();
     let repo = dir.path().join("repo");
-    let (mut shared, _) = FlayerWorkspace::init(&repo).unwrap();
+    let (mut shared, _) = FlayerWorkspace::init_with(&repo, &common::beside()).unwrap();
     let (project, _) = MindProject::init(&repo).unwrap();
     shared.link(&project).unwrap();
     mindflayer_core::create(&project, Kind::Skill, "deploy", "Ship it").unwrap();
@@ -631,7 +631,7 @@ fn something_gathered_and_loaded_from_one_directory_has_two_origins() {
         "skills/deploy/SKILL.md",
         &common::skill("deploy", "Ship it"),
     )]);
-    FlayerWorkspace::init(repo.path()).unwrap();
+    FlayerWorkspace::init_with(repo.path(), &common::beside()).unwrap();
     let (_dir, mut target, project, _) = target_and_team(&[]);
     let ledger = target.ledger().unwrap();
     let url = common::url(&repo);
@@ -719,7 +719,7 @@ fn what_a_loaded_workspace_keeps_in_a_projects_folder_is_never_overwritten_or_re
     let ledger = Ledger::in_memory().unwrap();
     let ours = install::offered(&target, &ledger, &project, Kind::Skill, "x", None).unwrap();
     install::install(&target, &ledger, &project, &ours).unwrap();
-    let (lib, _) = FlayerWorkspace::init(project.root()).unwrap();
+    let (lib, _) = FlayerWorkspace::init_with(project.root(), &common::beside()).unwrap();
     let own = installed_at(&project, "x").join("SKILL.md");
     let edited = fs::read_to_string(&own).unwrap() + "\nlib's own edit\n";
     fs::write(&own, &edited).unwrap();
@@ -824,12 +824,9 @@ fn a_link_inside_the_skill_itself_is_followed_wherever_the_skills_folder_lives()
     fs::write(shared.join("v2.md"), "v2").unwrap();
     std::os::unix::fs::symlink("v2.md", shared.join("latest.md")).unwrap();
     let (mut target, _) = FlayerWorkspace::init(dir.path().join("target")).unwrap();
-    fs::remove_dir_all(target.root().join("skills")).ok();
-    std::os::unix::fs::symlink(
-        dir.path().join("shared/skills"),
-        target.root().join("skills"),
-    )
-    .unwrap();
+    let own = target.own().directory_for(Kind::Skill);
+    fs::create_dir_all(own.parent().unwrap()).unwrap();
+    std::os::unix::fs::symlink(dir.path().join("shared/skills"), own).unwrap();
     let (project, _) = MindProject::init(dir.path().join("target/app")).unwrap();
     target.link(&project).unwrap();
     let ledger = Ledger::in_memory().unwrap();
@@ -871,7 +868,7 @@ fn nothing_is_installed_into_the_folder_a_loaded_workspace_keeps_its_own_in() {
     let (mut target, _) = FlayerWorkspace::init(dir.path().join("target")).unwrap();
     mindflayer_core::create(&target.own(), Kind::Skill, "lint", "Ours").unwrap();
     let (project, _) = MindProject::init(dir.path().join("target/team")).unwrap();
-    let (team, _) = FlayerWorkspace::init(project.root()).unwrap();
+    let (team, _) = FlayerWorkspace::init_with(project.root(), &common::beside()).unwrap();
     target.link(&project).unwrap();
     target.load(&team).unwrap();
     let ledger = Ledger::in_memory().unwrap();
