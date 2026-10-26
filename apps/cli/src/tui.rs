@@ -25,7 +25,7 @@ use std::error::Error as _;
 
 use clap::Parser;
 use mindflayer_core::gather::Watch;
-use mindflayer_core::resolve::{self, resolve, Intent, Reason};
+use mindflayer_core::resolve::{self, resolve, Intent, Reason, Resolved};
 use mindflayer_core::workspace::Member as Registered;
 use mindflayer_core::{
     lifecycle, paths, scan, template, Catalog, FlayerWorkspace, Kind, MindProject, WorkspaceError,
@@ -506,11 +506,9 @@ fn apply_install(base: &Path, screen: &InstallScreen) -> Done {
 /// would from the shell.
 pub fn load(directory: &Path, lookup: &Lookup) -> Result<View, CliError> {
     Ok(match resolve(&lookup.inputs(directory, Intent::Read))? {
-        Some(resolved) => View::Workspace(workspace_view(
-            &resolved.workspace,
-            resolved.reason == Reason::Home,
-            lookup,
-        )),
+        Some(resolved) => {
+            View::Workspace(workspace_view(&resolved.workspace, resolved.reason, lookup))
+        }
         None => View::Nowhere,
     })
 }
@@ -529,15 +527,12 @@ pub fn load_project(directory: &Path, lookup: &Lookup) -> Result<View, CliError>
     // that decides it for the `mind` lines this screen runs, so the two
     // cannot come to disagree.
     let consulted = resolve::consulted(&lookup.inputs(project.root(), Intent::Read), &project)?;
-    let default = consulted
-        .as_ref()
-        .is_some_and(|resolved| resolved.reason == Reason::Home);
-    let above = consulted.map(|resolved| resolved.workspace);
-    if let Some(workspace) = &above {
+    if let Some(Resolved { workspace, reason }) = &consulted {
         if workspace.is_linked(project.root()) {
-            return Ok(View::Workspace(workspace_view(workspace, default, lookup)));
+            return Ok(View::Workspace(workspace_view(workspace, *reason, lookup)));
         }
     }
+    let above = consulted.map(|resolved| resolved.workspace);
     // `.`, because the commands run from the project itself.
     let entry = String::from(".");
     let root = project.root().to_path_buf();
@@ -562,14 +557,14 @@ pub fn load_project(directory: &Path, lookup: &Lookup) -> Result<View, CliError>
         above: above
             .map(|workspace| workspace.root().to_path_buf())
             .or_else(|| lookup.home.clone()),
-        default: false,
+        reason: None,
         made: true,
     }))
 }
 
 /// A workspace as the screen shows it: its own artifacts first, then every
 /// project it manages.
-fn workspace_view(workspace: &FlayerWorkspace, default: bool, lookup: &Lookup) -> Workspace {
+fn workspace_view(workspace: &FlayerWorkspace, reason: Reason, lookup: &Lookup) -> Workspace {
     let own = workspace.own();
     let mut members = vec![held(
         String::new(),
@@ -603,7 +598,7 @@ fn workspace_view(workspace: &FlayerWorkspace, default: bool, lookup: &Lookup) -
         loaded: loaded(workspace),
         scope: Scope::Workspace,
         above: None,
-        default,
+        reason: Some(reason),
         made: workspace.is_made(),
     }
 }

@@ -37,6 +37,34 @@ fn a_name_needing_quotes_still_round_trips() {
     assert_eq!(mind.name, awkward);
 }
 
+#[test]
+fn a_name_holding_control_characters_still_round_trips() {
+    // A basic string takes no control character as it is but a tab: each of
+    // these, written unescaped, makes a marker the parser refuses.
+    let awkward = "nul\u{0} esc\u{1b} cr\r del\u{7f} c1\u{85} nl\n tab\t";
+    let mind: MindConfig =
+        toml::from_str(&mind_template(awkward, &Directories::default())).unwrap();
+    assert_eq!(mind.name, awkward);
+    let flayer: FlayerConfig =
+        toml::from_str(&flayer_template(awkward, &Directories::default())).unwrap();
+    assert_eq!(flayer.name, awkward);
+}
+
+/// What `flayer init PATH` reaches with a typed argument: a directory whose
+/// name holds a control character is made a workspace that opens again.
+/// Unix only, as Windows takes no control character in a file name.
+#[cfg(unix)]
+#[test]
+fn a_workspace_whose_folder_name_holds_a_control_character_opens_again() {
+    let dir = tempfile::TempDir::new().unwrap();
+    let root = dir.path().join("cr\r esc\u{1b}");
+    FlayerWorkspace::init(&root).unwrap();
+    assert_eq!(
+        FlayerWorkspace::open(&root).unwrap().name(),
+        "cr\r esc\u{1b}"
+    );
+}
+
 /// Rewrite only the `version` line of the marker at `path`, rather than
 /// writing a two-line stand-in, so what is read back is the marker `init`
 /// wrote with nothing changed but its version.

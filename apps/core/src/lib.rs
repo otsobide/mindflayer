@@ -11,6 +11,7 @@
 //! and whatever front end comes after it, decides how to render what these
 //! types return, so the two can never disagree about what a skill is.
 
+pub mod activate;
 pub mod agent;
 pub mod artifact;
 pub mod catalog;
@@ -34,6 +35,7 @@ pub mod template;
 pub mod url;
 pub mod workspace;
 
+pub use activate::{ActivateError, Shell, UnknownShell};
 pub use agent::AgentHomes;
 pub use artifact::{Artifact, ArtifactError, Declared, ValidationIssue};
 pub use catalog::{Catalog, DiscoveryFailure, Reference, QUALIFIER};

@@ -1602,13 +1602,27 @@ fn gathered_overlap(directory: &Path) -> Option<PathBuf> {
 
 /// A TOML basic string. Directory names are arbitrary, so the quoting is not
 /// optional even though the common case never needs it.
+///
+/// A basic string takes no control character as it is but a tab, so every
+/// other one is escaped: a name holding an ESC or a CR, which `flayer init
+/// PATH` takes as typed, would otherwise be written into a marker that no
+/// command, `init` again included, could read. The C1 controls are allowed
+/// as they are, and escaped all the same, since `char::is_control` is the
+/// one test for the lot and the escape reads the same back.
 fn toml_string(value: &str) -> String {
-    let escaped = value
-        .replace('\\', "\\\\")
-        .replace('"', "\\\"")
-        .replace('\n', "\\n")
-        .replace('\t', "\\t");
-    format!("\"{escaped}\"")
+    let mut quoted = String::from("\"");
+    for c in value.chars() {
+        match c {
+            '\\' => quoted.push_str("\\\\"),
+            '"' => quoted.push_str("\\\""),
+            '\n' => quoted.push_str("\\n"),
+            '\t' => quoted.push_str("\\t"),
+            c if c.is_control() => quoted.push_str(&format!("\\u{:04X}", u32::from(c))),
+            c => quoted.push(c),
+        }
+    }
+    quoted.push('"');
+    quoted
 }
 
 #[cfg(test)]
