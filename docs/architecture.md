@@ -960,6 +960,16 @@ for after a rebuild, and a 404 is easier to read than a page delivered as a
 script. A test hands the server a panel of its own (`Panel::embedded`, any
 folder rust-embed can embed), so the suites cover all of this without a build.
 
+Only a name Vite could have written reaches the embed. A debug build's
+rust-embed reads the folder from disk, where it turns `\` into `/`, lets an
+absolute path or a drive letter replace the folder, and follows a symlink out
+of it; without a check, a request with no token could read whatever a symlink
+anywhere on disk leads to. So a path holding a backslash or a dot segment,
+which no browser sends, is a 404, and one with a drive letter or an empty
+segment is never looked up and gets `index.html`, as one of the panel's routes
+may. A release build only looks names up in a table, and the check keeps the
+two answering alike.
+
 ## The default workspace
 
 A workspace is found by walking up, and when nothing up there has one, the
