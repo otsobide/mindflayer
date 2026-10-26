@@ -369,17 +369,22 @@ impl Qualify {
 }
 
 /// How an artifact is labelled in a report: as bare as the context allows.
+///
+/// Made printable, as a row is: a declared name is from a file somebody wrote,
+/// gathered ones from anywhere, and a carriage return in one would let the
+/// label pass for another artifact's line.
 fn label(artifact: &Artifact, qualify: Qualify, level: Level) -> String {
     let name = if qualify.kind {
         artifact.qualified_name()
     } else {
         artifact.name().to_owned()
     };
-    if qualify.project {
+    let label = if qualify.project {
         format!("{name} ({})", holder_of(artifact, level))
     } else {
         name
-    }
+    };
+    printable(&label)
 }
 
 /// The first line of a summary, short enough to sit in a column.

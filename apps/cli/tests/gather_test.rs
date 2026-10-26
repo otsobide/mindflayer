@@ -162,6 +162,35 @@ fn validate_reports_a_gathered_skill_without_hiding_it() {
 }
 
 #[test]
+fn a_gathered_name_cannot_put_a_carriage_return_on_the_terminal() {
+    // A source writes the name and the metadata keys, and a carriage return
+    // in either would let a warning or a report line overwrite itself with a
+    // line that looks like a verdict.
+    let source = repository(&[(
+        "skills/evil/SKILL.md",
+        "---\nname: \"evil\\rfine (shelf/x): ok\"\ndescription: Evil\nmetadata:\n  \"k\\rok\": [1]\n---\n",
+    )]);
+    let dir = TempDir::new().unwrap();
+    flayer(dir.path(), &["init"]).unwrap();
+    let url = source.path().to_string_lossy().into_owned();
+
+    let gathered = flayer(dir.path(), &["gather", "git", &url]).unwrap();
+    let validated = flayer(dir.path(), &["validate"]).unwrap();
+
+    assert!(!gathered.stderr.is_empty());
+    for line in gathered.stderr.iter().chain([&validated.stdout]) {
+        assert!(!line.contains('\r'), "{line:?}");
+    }
+    assert!(
+        validated
+            .stdout
+            .starts_with("evil fine (shelf/x): ok: 3 problems"),
+        "{}",
+        validated.stdout
+    );
+}
+
+#[test]
 fn gather_list_names_where_each_skill_came_from() {
     let source = repository(&[("skills/deploy/SKILL.md", &skill_file("deploy", "Ship it"))]);
     let dir = TempDir::new().unwrap();

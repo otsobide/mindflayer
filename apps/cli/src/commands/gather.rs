@@ -115,11 +115,13 @@ fn gathered(url: &str, report: &Report) -> Outcome {
         .failures
         .iter()
         .map(|failure| format!("warning: {failure}"))
+        // Printable, because a warning quotes what the skill declares, which
+        // is the source's to write.
         .chain(
             report
                 .warnings
                 .iter()
-                .map(|warning| format!("warning: {warning}")),
+                .map(|warning| format!("warning: {}", printable(&warning.to_string()))),
         )
         .collect();
     let ok = stderr.is_empty();

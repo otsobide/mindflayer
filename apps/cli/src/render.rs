@@ -184,9 +184,10 @@ pub(crate) fn verdict(text: &mut String, label: &str, issues: &[ValidationIssue]
         counts.push(plural(warnings, "warning"));
     }
     let _ = writeln!(text, "{label}: {}", counts.join(", "));
+    // Printable, because an issue quotes the name or the key it is about.
     for issue in issues {
         let marked = if issue.is_warning() { "warning: " } else { "" };
-        let _ = writeln!(text, "  - {marked}{issue}");
+        let _ = writeln!(text, "  - {marked}{}", printable(&issue.to_string()));
     }
     problems > 0
 }
