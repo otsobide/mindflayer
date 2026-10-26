@@ -619,7 +619,7 @@ Two repositories may both offer `commit-style`, and both are worth having:
 choosing between them is what the shelf exists to make possible. So each source
 owns a folder, named after its URL and recorded once, and the same name from a
 different source is a different thing rather than a collision. This is the same
-answer `Catalog::find` gives inside a project — return both, decide nothing —
+answer `Catalog::find` gives inside a project (return both, decide nothing),
 one level up.
 
 The folder a skill lands in keeps the name the **source** gave it, not the name
@@ -857,9 +857,9 @@ reason to take that away.
 
 Everything else Mindflayer writes is a file a person opens: TOML with comments
 explaining itself. `mindflayer.db` is not, and the exception is deliberate. It
-answers questions a file cannot — which of two identically named skills came
+answers questions a file cannot (which of two identically named skills came
 from which repository, at which revision, and what happened the last four times
-a gather ran — and answering them from a flat file would mean writing a query
+a gather ran), and answering them from a flat file would mean writing a query
 engine badly.
 
 It sits in `.mindflayer/`, beside the marker it belongs to, so it travels with
@@ -871,9 +871,9 @@ one only to migrate it ([A read leaves the ledger as it finds
 it](#a-read-leaves-the-ledger-as-it-finds-it)).
 
 Four things are recorded: the **sources** gathered from, the **artifacts** on
-the shelf and which source each came from, the **installations** — which skill
+the shelf and which source each came from, the **installations** (which skill
 Mindflayer put into which project, from where, every copy it wrote and a hash
-of what it wrote — and an **action log**. The log keeps failures too — a log
+of what it wrote), and an **action log**. The log keeps failures too: a log
 of only what worked cannot answer the question anybody opens it with.
 Timestamps are Unix seconds, which needs no date library and which SQLite
 renders with `datetime(at, 'unixepoch')`.
@@ -980,7 +980,7 @@ On the shelf, renaming would repair a symptom and hide it: a skill whose
 directory disagrees with its front matter is something `validate` exists to
 report, and the shelf is a record of what a source actually contained. Inside a
 project the same mismatch is not a report, it is a skill that lists fine and
-never loads — the directory name is how an agent finds what it was told to
+never loads: the directory name is how an agent finds what it was told to
 invoke. So the copy is filed under the declared name, and the disagreement
 stays where it belongs, upstream.
 
@@ -1025,7 +1025,7 @@ written before is named differently now.
 
 A project has one directory per artifact name, so two shelf entries offering
 `commit-style` cannot both be installed. The screen settles it by unticking the
-other rather than letting both apply and the second win — a conflict resolved
+other rather than letting both apply and the second win: a conflict resolved
 where somebody can see it happening.
 
 ### Built where no agent looks
@@ -1106,7 +1106,7 @@ at none, because it came from nowhere but the workspace.
 
 `mind install <skill>` and `flayer install -p <project> <skill>` install one
 without the screen, through `install::offered`: the one candidate of that name,
-or an error naming every place that offers it when there is more than one —
+or an error naming every place that offers it when there is more than one;
 `--from` then says which, because which of two lands in the project's one folder
 of that name is not something to guess.
 
@@ -1125,16 +1125,16 @@ Three decisions shape it:
   workspace keeps it, so the next install of it takes whatever is there now.
   That is the difference from gathering, which snapshots a repository onto the
   shelf; a loaded workspace is usually one on the same disk that is still
-  being worked on. An installation from it records no source id — like the
-  workspace's own — because there is no shelf row to point at, only its
+  being worked on. An installation from it records no source id, like the
+  workspace's own, because there is no shelf row to point at, only its
   origin, `load:<entry>`.
 - **One level deep.** Only a loaded workspace's own artifacts are offered,
   never what it loads, so two workspaces loading each other is not a loop, and
   what a workspace offers is what its marker names, not a graph.
 - **Into the workspace that is not the source.** Run from inside the workspace
   being loaded, the first workspace found walking up is that one, and a
-  workspace cannot load itself. `resolve_except` walks on past it — and past
-  every path given — to the next one, or the default in your home; loading the
+  workspace cannot load itself. `resolve_except` walks on past it (and past
+  every path given) to the next one, or the default in your home; loading the
   home workspace from inside it is refused. One named with `-W` or activated
   is taken as it is, since it was chosen, and loading it into itself is
   refused by the load: by `load_all`, before any of the paths given is
@@ -1142,7 +1142,7 @@ Three decisions shape it:
   that failed.
 
 A loaded entry's origin is `load:<entry>`: disjoint by construction from
-`workspace` and from any shelf source's address — even a repository gathered
+`workspace` and from any shelf source's address, even a repository gathered
 from the very directory that is also loaded. What `gather list` prints is what
 `--from` takes; `install::resolve_from` also turns the path given to `load`,
 typed from anywhere, into that origin.
@@ -1168,8 +1168,8 @@ installing's trust in the name a `SKILL.md` declares under strain. So:
   any path there, not only one with a manifest, so a folder of notes started
   by hand is never replaced.
 
-What a load cannot offer — a workspace that has gone, an artifact that cannot
-be read, a name that is refused — is collected by `install::offered_by_loads`
+What a load cannot offer (a workspace that has gone, an artifact that cannot
+be read, a name that is refused) is collected by `install::offered_by_loads`
 and said as `warning:` lines wherever offers are shown or used, and the
 install screen reports a row it could not apply and carries on with the rest.
 Two spellings of one loaded directory are one source; `load_all`,
@@ -1260,18 +1260,18 @@ And how it edits:
 seen from the project under the cursor on the right. It is split so that only
 one of its three parts needs a terminal:
 
-- `install/state.rs` — what a key does. Marking a box is a statement of intent
+- `install/state.rs`: what a key does. Marking a box is a statement of intent
   and touches nothing; it is a plain state machine a test drives by pressing
   the keys a person would.
-- `install/ui.rs` — what the screen looks like. Rendered into an in-memory
+- `install/ui.rs`: what the screen looks like. Rendered into an in-memory
   terminal by the tests, so the exact text a user sees is asserted on, the same
   way every other command's output is.
-- `install.rs` — the loop that reads a real keyboard, and the batch that
+- `install.rs`: the loop that reads a real keyboard, and the batch that
   carries out what was marked. The loop is the only part with no test, and it
   holds nothing but the loop for that reason.
 
 Everything marked is applied in one batch, and what that batch did is printed
-afterwards as an ordinary `Outcome` — so a report from the screen reads like a
+afterwards as an ordinary `Outcome`, so a report from the screen reads like a
 report from any other command, warnings on stderr and a non-zero exit when
 something was left alone.
 
