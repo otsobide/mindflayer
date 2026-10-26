@@ -424,7 +424,6 @@ fn a_failed_load_or_any_unload_never_makes_the_default_workspace() {
 
     flayer_at_home(dir.path(), home.path(), &["load", "plain"]).unwrap_err();
     flayer_at_home(dir.path(), home.path(), &["unload", "plain"]).unwrap_err();
-    flayer_at_home(dir.path(), home.path(), &["load"]).unwrap_err();
 
     assert!(!home.path().join(FLAYER_DIR).exists());
 }

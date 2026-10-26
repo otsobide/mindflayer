@@ -23,10 +23,15 @@ use crate::{CliError, Failure, Outcome};
 use state::{Pending, Screen, Step, Target};
 
 /// Build the screen for a workspace, run it, and carry out what it asked for.
-pub fn run(workspace: &FlayerWorkspace, ledger: &Ledger) -> Result<Outcome, Failure> {
+///
+/// Built from the ledger as it is, without making one: opening the screen
+/// and leaving it changes nothing, so it is a read until something is
+/// applied. Only applying opens the ledger to write to, and makes it.
+pub fn run(workspace: &FlayerWorkspace) -> Result<Outcome, Failure> {
     let (projects, mut warnings) = registered(workspace);
     warnings.extend(load_warnings(workspace));
-    let screen = build(workspace, ledger, projects).map_err(CliError::from)?;
+    let read = workspace.ledger_for_reading().map_err(CliError::from)?;
+    let screen = build(workspace, &read, projects).map_err(CliError::from)?;
 
     if screen.targets.is_empty() {
         return Ok(Outcome {
@@ -51,7 +56,13 @@ pub fn run(workspace: &FlayerWorkspace, ledger: &Ledger) -> Result<Outcome, Fail
 
     let (screen, step) = outcome.map_err(|source| CliError::Screen { source })?;
     let mut outcome = match step {
-        Step::Apply => apply(workspace, ledger, &screen).map_err(CliError::from)?,
+        Step::Apply => {
+            // Never the stand-in the screen may have been built from: what
+            // is recorded there is gone when it is dropped.
+            drop(read);
+            let ledger = workspace.ledger().map_err(CliError::from)?;
+            apply(workspace, &ledger, &screen).map_err(CliError::from)?
+        }
         _ => Outcome {
             stdout: String::from("nothing applied\n"),
             stderr: Vec::new(),
@@ -148,11 +159,15 @@ pub fn apply(
                 let done = match result {
                     Ok(done) => done,
                     Err(error) => {
+                        // What it cleared first is still something it did.
+                        for line in crate::commands::install::cleared(project, error.swept()) {
+                            let _ = writeln!(stdout, "{}: {line}", project.name());
+                        }
                         stderr.push(format!("warning: {}: {error}", project.name()));
                         continue;
                     }
                 };
-                match done {
+                match done.installed {
                     Installed::Added { name, .. } | Installed::Updated { name, .. } => {
                         installed += 1;
                         let _ = writeln!(stdout, "{}: installed {name}", project.name());
@@ -166,6 +181,7 @@ pub fn apply(
                         project.name()
                     )),
                 }
+                stdout.push_str(&crate::commands::install::swept(project, &done.swept));
             }
             Pending::Remove => {
                 let name = entry.candidate.name();

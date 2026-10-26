@@ -46,9 +46,17 @@ pub(crate) fn install_named(
     .map_err(|error| with_warnings(error.into()))?;
     let origin = candidate.origin();
     let into = project.name();
-    let mut outcome = match installing::install(workspace, &ledger, project, &candidate)
-        .map_err(|error| with_warnings(error.into()))?
-    {
+    let done = installing::install(workspace, &ledger, project, &candidate).map_err(|error| {
+        // What it cleared before it failed comes first, being what it did:
+        // on stderr with the error, the only place a failure prints.
+        let mut said = cleared(project, error.swept());
+        said.extend(warnings.iter().cloned());
+        Failure {
+            error: Box::new(error.into()),
+            warnings: said,
+        }
+    })?;
+    let mut outcome = match done.installed {
             Installed::Added { name, .. } => {
                 Outcome::plain(format!("installed {name} into {into}, from {origin}\n"))
             }
@@ -67,11 +75,40 @@ pub(crate) fn install_named(
                 ok: false,
             },
     };
+    outcome.stdout.push_str(&swept(project, &done.swept));
     if !warnings.is_empty() {
         outcome.stderr.extend(warnings);
         outcome.ok = false;
     }
     Ok(outcome)
+}
+
+/// A line for each thing interrupted installs had left in `project` that
+/// installing cleared: on stdout, under what the install did, because it is
+/// part of what the install did rather than something wrong with it.
+pub(crate) fn swept(project: &MindProject, swept: &[std::path::PathBuf]) -> String {
+    cleared(project, swept)
+        .iter()
+        .map(|line| format!("  {line}\n"))
+        .collect()
+}
+
+/// What [`swept`] says of each, unindented, for where there is no line of
+/// what the install did to put it under. Shown from the project, where
+/// somebody would go and look.
+pub(crate) fn cleared(project: &MindProject, swept: &[std::path::PathBuf]) -> Vec<String> {
+    use mindflayer_core::paths;
+
+    swept
+        .iter()
+        .map(|path| {
+            let shown = paths::relative_to(path, project.root())
+                .as_deref()
+                .and_then(paths::to_config_string)
+                .unwrap_or_else(|| path.display().to_string());
+            format!("cleared {shown}, left by an install that did not finish")
+        })
+        .collect()
 }
 
 /// Take one skill Mindflayer installed back out of one project.

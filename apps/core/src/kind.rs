@@ -18,7 +18,8 @@ use thiserror::Error;
 pub enum Kind {
     /// A directory of instructions an agent can be asked to follow.
     Skill,
-    /// A markdown file that gives an agent context, and declares nothing.
+    /// A markdown file that gives an agent context, with optional front
+    /// matter that most rules go without.
     Rule,
 }
 

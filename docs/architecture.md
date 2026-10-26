@@ -86,14 +86,15 @@ field:
 ```rust
 pub enum Declared {
     Skill(SkillManifest),
-    Rule,
+    Rule(RuleManifest),
 }
 ```
 
 `Declared` *is* the kind, so an artifact cannot carry a discriminant that
-disagrees with what was parsed — there is only one. A rule that declares a
-description is not a state the type can hold, and no `Option` field sits
-permanently `None` for one of them.
+disagrees with what was parsed — there is only one. Each payload says what its
+kind requires: a skill without a description is not a state the type can hold,
+a rule's front matter is optional all through, and no `Option` field on
+`Artifact` sits permanently `None` for one kind because only the other has it.
 
 Where a kind lives and what shape it has is a second, smaller thing:
 
@@ -135,21 +136,30 @@ contain one at all, so the collision is gone rather than narrowed.
 
 From wherever it is declared. A skill declares one in its front matter, so that
 is its name and disagreeing with its directory is a problem `validate` reports.
-A rule declares nowhere, so its name is its route. This is why the two are not
-symmetric, and the asymmetry is the honest one.
+A rule's front matter has no name in it — a `name:` there passes through like
+any key Mindflayer does not read — so its name is its route. This is why the
+two are not symmetric, and the asymmetry is the honest one.
 
-### What a listing shows for something that declares nothing
+### What a listing shows for a rule
 
-A skill has a `description`. A rule has the file. Its **opening line** — the
-first line carrying any text, with leading `#` stripped — is the closest thing
-to a description it has, and it is captured when the file is loaded, because
-the file was read anyway.
+A skill has a `description`. A rule has its body: the file, less any front
+matter. The body's **opening line** — the first line carrying any text, with
+leading `#` stripped — is what a listing shows, and it is captured when the file
+is loaded, because the file was read anyway. A rule without front matter is
+summarised exactly as it always was.
+
+Not the file's opening line, which for a rule with front matter is a fence, so
+every scoped rule would be listed as `---`. And not a `description` the rule
+declares either: the body is what an agent is given once the front matter is
+taken off, which is how a rule reaches the `AGENTS.md` block (#42), so its
+opening line is what the agent meets first, and a listing that shows something
+else would describe the rule by a line no agent reads.
 
 That one value does double duty: it is the summary a listing prints, and its
-absence is the single thing `validate` can say about a rule, since a file with
-no line of text has nothing to offer an agent. Storing the fact rather than the
-verdict is what keeps `validate` pure — every check it makes was decided when
-the file was read, so asking whether something is valid cannot itself fail.
+absence is the one thing that makes a rule invalid, since a body with no line of
+text has nothing to offer an agent. Storing the fact rather than the verdict is
+what keeps `validate` pure — every check it makes was decided when the file was
+read, so asking whether something is valid cannot itself fail.
 
 ### What a skill declares
 
@@ -197,6 +207,76 @@ The name rule is held to every name, a rule's route segment by segment
 included. A looser one for rules was the alternative, and it would only have
 been a second rule to keep in step with the first.
 
+### What a rule declares
+
+Most rules declare nothing: a rule is a markdown file that gives context.
+Claude Code's rules can open with front matter saying which files they are
+about, and [D-03](#d-03-rules-reach-every-agent-through-agentsmd) sends a rule
+that does to `.claude/rules/mindflayer` only, so a rule may carry some.
+`RuleManifest` holds the two keys Mindflayer reads, both optional:
+
+| Key | | Read as |
+|---|---|---|
+| `paths` | optional | glob patterns: a list of them, or one on its own |
+| `description` | optional | a string |
+
+Rules were written long before any of them was read this way, and markdown is
+free to open with a `---` horizontal rule. So a fenced block at the top is
+front matter only when it holds a YAML mapping. Anything else is content, as
+it always was: an opening fence that never closes, prose between two
+horizontal rules that YAML reads as a plain string, a list, two horizontal
+rules with nothing between them, and a
+block of nothing but comments too, since what YAML reads past as a comment is a
+heading to markdown. An empty block could have been front matter that declares
+nothing, but taking its fences off would drop two lines that read today and
+gain nothing. The block is parsed as a YAML value before anything is read from
+it, so that what it *is* decides whether it is front matter; deserializing
+straight into a struct would have to tell a sentence from a broken mapping by
+the wording of its error.
+
+A block that does not parse at all is content too, and `validate` warns about
+it, since it is most likely front matter written wrong: a glob opening with `*`
+is a YAML alias unless it is quoted. Refusing the rule, as a skill whose front
+matter does not parse is refused, was the alternative. It would hide from every
+listing a rule that still works as text, over how its first lines are written;
+a skill without its front matter has no name to be found by, and a rule never
+needed one.
+
+The line is YAML's, not the author's intent, so prose between two horizontal
+rules can land on either side of it. A sentence shaped like `Note: never
+force-push` is a mapping with one key nothing reads, so it is front matter and
+left out of the body an agent is given, without a word. One opening with `**`,
+a backtick or a link does not parse, so it is content, with the warning above.
+Both are rare at the top of a rule. Warning about a mapping that declares
+neither `paths` nor `description` would catch the first, and was turned down:
+it would warn just as loudly about every rule carrying only another agent's
+keys, such as Cursor's `globs`, which pass through by design.
+
+The keys are read leniently, as a skill's `metadata` and `compatibility` are: a
+`paths` that is not a pattern or a list of them, or a `description` that is not
+a string, is ignored, reported as a warning and left in the file. A list
+holding anything but strings is ignored whole, since keeping its strings would
+scope the rule to fewer files than its author wrote. One pattern is never split
+on commas, because a brace expansion such as `src/**/*.{ts,tsx}` has one inside
+it. Every other key — Cursor's `globs`, a `name` — passes through, as it does on
+a skill.
+
+A key with nothing in it is unstated, as `paths:` with no value is: a blank
+`description`, and a `paths` that is a blank string or an empty list. A blank
+pattern matches no file, so one in a list is left out and the rest read. This
+matters for #42 and #43, where a rule that states `paths` goes to
+`.claude/rules/mindflayer` only: read as stated, `paths: []` would scope a rule
+to no file, which is a rule no agent is ever given, and `show` would print an
+empty description or a `paths:` heading with nothing under it. Warning about
+an empty key, as `compatibility: ""` is warned about on a skill, was the
+alternative; but a skill's `compatibility` is shown to an agent as written,
+while an empty `paths` says nothing an agent could act on.
+
+`Artifact::contents` is the body without the front matter, for a rule as for a
+skill. It is what a renderer puts in front of an agent, so the fences are never
+pasted into `AGENTS.md`, and what `show` prints below the description and the
+`paths` a rule declares.
+
 ### Strict when writing, lenient when reading
 
 `Artifact::validate` gives one list of problems, and it is treated three ways:
@@ -214,7 +294,10 @@ been a second rule to keep in step with the first.
   skill is filed in, since an agent finds a skill by one or the other — asked
   of the folder Mindflayer is about to write, not the one the files were read
   from. `compatibility` and `metadata` are not refused, because an agent reads
-  past them.
+  past them. A rule `mind add` writes from a template is refused for whatever
+  its front matter would leave unread (`artifact::rule_issues`), which reading
+  only warns about ([Templates live inside the
+  markers](#templates-live-inside-the-markers)).
 - **Warned about** when gathering, which takes the skill anyway, as the
   agentskills.io client guide advises for skills written for other agents. The
   shelf is a record of what a source holds, and leaving a skill off it would
@@ -223,7 +306,8 @@ been a second rule to keep in step with the first.
   too, so what gathering warned about can be found again later. Only a
   problem makes an artifact invalid and the exit non-zero; what an agent reads
   past (`ValidationIssue::is_warning`, the same `compatibility` and `metadata`
-  that are not refused) is listed as a warning and leaves the verdict at `ok`.
+  that are not refused, and whatever a rule's front matter leaves unread) is
+  listed as a warning and leaves the verdict at `ok`.
   Counted as invalid, a skill installed with nested metadata would fail its
   project's `validate` from then on, and the only way to clear it would be to
   edit the copy, which disowns it. The TUI's `✗` follows the same line.
@@ -572,7 +656,10 @@ engine badly.
 It sits in `.mindflayer/`, beside the marker it belongs to, so it travels with
 the workspace and two workspaces never share a history. It carries its schema
 version in SQLite's own `user_version` header field, and a database from the
-future is refused exactly as a marker file from the future is.
+future is refused exactly as a marker file from the future is. The first
+command that writes to it makes it; a read never does, and changes an existing
+one only to migrate it ([A read leaves the ledger as it finds
+it](#a-read-leaves-the-ledger-as-it-finds-it)).
 
 Four things are recorded: the **sources** gathered from, the **artifacts** on
 the shelf and which source each came from, the **installations** — which skill
@@ -635,6 +722,74 @@ A project has one directory per artifact name, so two shelf entries offering
 `commit-style` cannot both be installed. The screen settles it by unticking the
 other rather than letting both apply and the second win — a conflict resolved
 where somebody can see it happening.
+
+### Built where no agent looks
+
+An install never writes beside the copy it replaces. It builds the new copy in
+a stage of its own under the project's `.mind/tmp` (`copy::Stage`), and renames
+it into place once it is whole. Beside is where the agents look: OpenCode's
+first line globs hidden folders in a skills folder too, so the
+`.deploy.mindflayer-new` that staging used to put next to `deploy` was a skill
+it could load half made, and one an interrupted run left there it would load
+every time after. A name taken from the skill was also shared by every run
+installing that skill at once, each deleting what the other was building.
+
+- **`.mind/tmp`, made by the first install.** Inside `.mind`, a folder
+  Mindflayer owns and no agent reads, and inside the project, so putting the
+  copy in place is a rename on one filesystem. The system's temporary folder was
+  the alternative, and it is often another filesystem, where a rename fails and
+  a second copy would be the half-made state all over again. A move across
+  filesystems is not attempted: a rename that fails is an error naming both
+  paths. The folder holds a `.gitignore` of `*`, written with `create_new`, so
+  nothing staged is committed even while `.mind` is. A rule of its own rather
+  than an entry in [the exclude block](#what-keeps-an-install-out-of-git), for
+  the reason [D-01](#d-01-a-projects-mind-ignores-itself) gives `.mind` one:
+  a folder Mindflayer owns can carry it, so it needs no repository and goes
+  with the folder. It is not the team's `.gitignore`, which is never edited.
+- **A stage per run.** Named after the run's process id and a random suffix,
+  and made with `create_dir`, which refuses a name that is there rather than
+  sharing it: two installs at once, from two terminals or two workspaces that
+  link one project, never build in one folder. The copy is built in the
+  stage's `new`, the one it replaces moves aside to its `old`, and the stage
+  goes when the install is done.
+- **What an interrupted run left is swept by the next, and said.** Every run
+  holds a shared lock on `.mind/tmp/.lock` while its stage lives. A run that
+  can take the lock exclusively is alone, so every stage it finds was left by
+  a run that stopped halfway: it removes them, and `Installation::swept` names
+  them for the CLI to print under what the install did. When the copy then
+  fails, `InstallError::swept` names them instead, printed before the error:
+  they were cleared all the same. A ledger that fails after the copy stops
+  everything, as it does wherever it fails, and they go unsaid with the rest.
+  A run that cannot take the lock exclusively sweeps nothing, because what it
+  finds may be in use. A lock rather than the process ids in the names,
+  because whether a process still runs is a question each platform answers
+  differently, and a lock the system drops when its process dies answers it on
+  all of them. Only folders named the way a stage is are swept; anything else
+  in there, somebody else put there. A stage that will not be removed is left
+  for a later run, unsaid, rather than failing this one: it is litter in a
+  folder nothing reads. On a filesystem without locks nothing is swept at all,
+  since no run there can tell a live stage from a leftover, and what is left
+  stays until somebody deletes it; the names still keep runs apart. Any error
+  taking the lock counts as such a filesystem, not only an unsupported one: NFS
+  without its lock daemon says "no locks available", and refusing that would
+  make every install there fail.
+- **What earlier versions left beside is cleared too.** A project that
+  upgraded can still hold the `.deploy.mindflayer-new` or `-old` of an install
+  an earlier version did not finish, and no sweep of `.mind/tmp` would find
+  it. The next install of that skill removes both, whether or not it changes
+  anything else, and says so as it says a swept stage. It does so without the
+  lock, because no run of this version stages there, and those versions
+  cleared each other's anyway. One it cannot remove fails the install, as it
+  did when staging there, rather than staying where an agent reads.
+- **The folder the copy goes in is made when it is missing.** Staging beside
+  made it on the way. A fresh clone has no empty folders, so a project's
+  `skills/` can be missing although its marker names it.
+
+So an agent reading a skills folder finds the old copy, the new one, or, for
+the moment between the two renames of an update, neither, but never part of
+one and never anything beside it. Gathering still stages beside the shelf copy
+(`copy::replace`), because no agent reads `.mindflayer`; see the open
+questions.
 
 ### Two places offer, one command takes
 
@@ -915,11 +1070,13 @@ command that reports failure.
 ([D-17](#d-17-the-next-front-end-is-a-local-web-panel)): a library crate that
 binds a port, checks who is asking, carries JSON between the browser and a
 front end, and serves the panel's files. No binary runs it yet. `flayer ui`
-(#68) will, over the CLI's backend (#67), and not before the checks on the
-Host, Origin and Fetch Metadata headers (#66) are in. The token keeps other
-processes out; those checks are what keep out other pages in the same
-browser: one on another port of 127.0.0.1, which the browser counts as the
-same site, or one whose DNS name has been rebound to 127.0.0.1.
+(#68) will, over the CLI's backend (#67). The token keeps out a process that
+connects without it, and [the guards](#what-keeps-other-pages-out) keep out
+other pages in the same browser: one on another port of 127.0.0.1, which the
+browser counts as the same site, or one whose DNS name has been rebound to
+127.0.0.1. Neither keeps out a server on another port of 127.0.0.1 that the
+browser visits, because the cookie takes the token there as well (an
+[open question](#open-questions)).
 
 ### Transport only
 
@@ -1003,17 +1160,123 @@ launch link carries it once, as `/?token=...`; that request is answered with
 a 303 to `/` and the token in a cookie, and the redirect is what takes the
 token out of the address bar and the history. The cookie is `HttpOnly`, so the
 panel's own scripts never hold it, and `SameSite=Strict`, so no other site's
-page sends it, though a page on another port is the same site (#66 again). It
-is not `Secure`, which a browser that does not count
-127.0.0.1 as a secure origin would drop. And it is named for the port,
-`mf_<port>`, because cookies are not isolated by port: under one name, a panel
-launched on a second port would overwrite the first one's token in the browser
-and lock it out.
+page sends it, though a page on another port is the same site, which is what
+[the guards](#what-keeps-other-pages-out) are for. It is not `Secure`, which a
+browser that does not count 127.0.0.1 as a secure origin would drop. And it is
+named for the port, `mf_<port>`, because cookies are not isolated by port:
+under one name, a panel launched on a second port would overwrite the first
+one's token in the browser and lock it out.
 
 Scripts and tests send `Authorization: Bearer <token>` instead, and either is
 compared in constant time. Only `/api` asks for it: the panel's files are the
 same for everybody, and a browser that has not been through the link yet still
 needs the page that will tell it so.
+
+### What keeps other pages out
+
+The token stops a process that connects to the port without it. It does not
+stop another page in the browser that holds the cookie, and the panel is
+opened in a browser full of them. Three kinds of page can reach a loopback
+port, and a different check stops each:
+
+- **A remote page**, any site open in another tab. It can make the browser
+  send 127.0.0.1 a GET, a form or a `text/plain` POST without asking, though
+  not read the answer, and the cookie, being `SameSite=Strict`, does not go
+  with it. Where the browser says which page sent it, its Origin is refused
+  before the token is even looked for; where it does not, as on a GET, there
+  is no cookie to stand in for the token.
+- **A rebound name.** A page on `attacker.example` has its DNS answer changed
+  to 127.0.0.1 once it has loaded. To the browser it is still
+  `attacker.example`, so its requests here count as same-origin and the
+  same-origin policy no longer hides the answers from it. It holds neither the
+  cookie, which belongs to `127.0.0.1`, nor the token, so the API would refuse
+  it anyway; but it names `attacker.example:<port>` in Host, and for that
+  every request it makes, the panel's files and the launch link included, is
+  refused before anything else.
+- **Another port on loopback**: a dev server, a notebook, a tool's sign-in
+  callback, anything else listening on 127.0.0.1. Cookies are not isolated by
+  port ([RFC 6265, section 8.5](https://www.rfc-editor.org/rfc/rfc6265#section-8.5)),
+  and `SameSite` counts sites, not origins, so the browser sends `mf_<port>`
+  with that page's requests here. It cannot read the answers, since nothing
+  here grants it CORS, but a change does its harm whether or not anybody
+  reads the reply. That is cross-site request forgery from the same site, and
+  the checks on a change by cookie are for it.
+
+The checks, in the order a request meets them (`src/guard.rs`, and the gate
+in `src/auth.rs`):
+
+1. **Host**, on every request: exactly one Host header, naming
+   `127.0.0.1:<port>`, `localhost:<port>` or `[::1]:<port>` in any case, or a
+   403. The raw header and never `X-Forwarded-Host`, since no proxy stands in
+   front to have forwarded anything. An allow-list of loopback's own names,
+   because a deny-list would have to guess every name an attacker can buy.
+   No browser sends `[::1]` yet: the listener binds only 127.0.0.1, so a
+   connection to ::1 is refused before any Host is sent. It is on the list
+   because accepting it costs nothing, and a server that also bound ::1
+   would then need no change here.
+2. **Origin**, on every request that sends one: `http://` and the name in
+   Host, or a 403. That one origin, not any of the three: a page loaded as
+   `localhost` that asks `127.0.0.1` is another origin to the browser, and
+   `null`, from a sandboxed frame or a file, is no origin of the server's.
+   Its absence proves nothing, since a browser leaves it off a same-origin GET
+   and a script off everything. `flayer ui --dev` (#68) is to accept exactly
+   one more, the panel's dev server's (an [open question](#open-questions)).
+3. **The token**, under `/api` only: a 401 without it.
+4. **A change by cookie** — any method but GET and HEAD, on a request whose
+   token came as the cookie — must carry `Sec-Fetch-Site: same-origin` (or a
+   403), `X-Mindflayer: 1` (or a 403) and `Content-Type: application/json`
+   (or a 415). By method rather than by endpoint, so an endpoint added later
+   is covered without being listed; `POST /api/query` is held to it as well,
+   at no cost, because the panel sends every POST alike.
+
+Fetch Metadata answers the third kind of page directly: the browser writes
+`Sec-Fetch-Site` itself, no page can change it, and it says `same-site` for a
+page on another port. Browsers send it only to a potentially trustworthy URL,
+which each of loopback's three names is, and the Host check admits no other.
+The custom header and the JSON body say the same by other means. A page may
+send another origin a form, `text/plain` or multipart unasked, but any other
+content type, or a header of its own, needs a CORS preflight first, which
+nothing here answers, so the request never leaves the browser. Either alone
+would do in a browser that keeps to the rules; both are there for one that
+gets a rule wrong.
+
+A change with no `Sec-Fetch-Site` is taken only with a Bearer token. Chrome,
+Firefox and Safari have all sent the header since 2023, so its absence means
+a script, and a script that belongs here holds the token: the cookie is
+`HttpOnly`, so not even the panel's own scripts can read it, and no page can
+put an `Authorization` header on a request to another origin without the
+preflight it never passes. Of these checks, a Bearer request meets only Host
+and Origin. A browser too old for Fetch Metadata can read the panel but not
+change anything through it, which is the right way round to fail.
+
+So the panel (#69) fetches its own origin, letting the browser send the
+cookie, and sends every POST with `Content-Type: application/json` and
+`X-Mindflayer: 1`.
+
+Every answer carries `Content-Security-Policy: default-src 'self';
+frame-ancestors 'none'` and `X-Content-Type-Options: nosniff`. The policy
+loads nothing from another origin and runs no inline script, so markup that
+reached the page by some mistake, a gathered skill's say, could not bring a
+script with it; `script-src` is left to `default-src` and never allows
+`'unsafe-inline'`. No page can frame the panel to steer a click onto one of
+its buttons. `nosniff` holds the browser to each answer's Content-Type, so a
+page on another port that loads `/api/transcript` with a `<script>` tag has
+it refused rather than run. And there is no CORS layer at all: no answer
+grants another origin anything, and a preflight is never passed.
+
+What none of this stops is the server behind such a page. The browser sends
+`mf_<port>` to every port of 127.0.0.1, since cookies are not isolated by port
+and those requests are same-site, so any server there that the browser sends
+a request to while the cookie is set receives the token in its Cookie header:
+a page of it the user opens, or anything a page on 127.0.0.1 loads from it.
+That server can then send the token as Bearer, with the Host a script writes
+and no Origin, and pass every check above. So the guards keep out a benign
+server's hostile pages, not a hostile server, which on a machine one person
+uses is theirs, and on a shared machine may be another user's (an
+[open question](#open-questions)). Such a server can also set cookies for
+127.0.0.1, overwriting `mf_<port>` and locking the panel out until its link is
+opened again; a cookie it adds under another path is no worse, because the
+gate takes the token from whichever `mf_<port>` holds it.
 
 ### The log
 
@@ -1077,10 +1340,12 @@ refuses them in every other file, and a test runs the rule.
 So authentication lives in one place. The transport uses relative URLs, so
 the panel talks to whichever server sent it, on whatever port it took. The
 token travels in the cookie the launch link set, which is `HttpOnly`, so the
-panel's own scripts never hold it. And every request it posts carries
-`X-Mindflayer: 1`, a header no form or link can add, which #66 asks of a
-mutation. A desktop shell, the reason D-17 asks for the interface, would
-answer the same three calls without HTTP, and no view would change.
+panel's own scripts never hold it. And every request it posts is JSON and
+carries `X-Mindflayer: 1`, a header no form or link can add, as the server
+asks of a change by cookie ([What keeps other pages
+out](#what-keeps-other-pages-out)). A desktop shell, the reason D-17 asks
+for the interface, would answer the same three calls without HTTP, and no
+view would change.
 
 What the server answers lives in Vue Query's cache, which knows when an
 answer is stale and asks again; a refusal is not asked again, since the
@@ -1091,10 +1356,10 @@ has gone wrong.
 
 ### Nothing the CSP refuses
 
-The server's CSP (#66) is `default-src 'self'` without `'unsafe-inline'`:
-nothing from another host, no inline script or style, no `data:` URLs. The
-panel is built to need nothing more, though three of its libraries assume
-otherwise:
+The server's CSP is `default-src 'self'` ([What keeps other pages
+out](#what-keeps-other-pages-out)): nothing from another host, no inline
+script or style, no `data:` URLs. The panel is built to need nothing more,
+though three of its libraries assume otherwise:
 
 - Geist and Geist Mono come from Fontsource, as files of the build.
 - Icons are Lucide's, bundled: Nuxt UI's own and every one a component
@@ -1154,26 +1419,79 @@ Origin stays the dev server's, which `--dev` accepts.
 ## The default workspace
 
 A workspace is found by walking up, and when nothing up there has one, the
-workspace-level commands fall back to the one at the default home:
-`FlayerWorkspace::locate_or_default` makes `~/.mindflayer` the first time it
-is needed. Home sits above most of what a person works on, so it is the one
-directory where a workspace can manage projects anywhere, and making it on
-demand means `flayer link ~/code/x` works before anyone has chosen a directory.
+workspace-level commands fall back to the one at the default home. Home sits
+above most of what a person works on, so it is the one directory where a
+workspace can manage projects anywhere, and making it on demand means `flayer
+link ~/code/x` works before anyone has chosen a directory.
 
-It is made by any workspace command that finds none up the tree, reading ones
-included: `flayer list`, `flayer scan`, `mind install` and opening `flayer`'s
-TUI all go through `locate_or_default`, so the first of them run outside every
-workspace leaves a `~/.mindflayer` behind. The exceptions are the commands
-that only list or take away a load — `flayer load` on its own, `unload` — which
-use `locate_except`, and the `mind` commands that only consult a workspace —
-opening its TUI, `add`, `edit`, `rename`, `remove`, `templates` — which use
-`default_at`: both open the home workspace if it exists and never create it.
-Whether reading should create it at all is an [open question](#open-questions).
+It is made by the first command that **writes** to it, and by nothing that
+only reads. `flayer link`, `add`, `gather git`, `load`, `install` and
+`uninstall` go through `FlayerWorkspace::locate_or_default`, which makes
+`~/.mindflayer` when nothing up the tree has one. A read goes through
+`locate_or_unmade`, which falls back instead to `FlayerWorkspace::unmade`: the
+workspace `init` would make there, parsed from the same template rather than
+written. That is `flayer list`, `show`, `validate`, `scan`, `templates`,
+`gather list`, and `load` and `install` on their own.
+
+A read of the unmade workspace answers as a read of one made a moment before
+would, because it is the same marker: `flayer list` says it manages no
+projects yet, `flayer scan` lists what is under home, all of it unlinked,
+`flayer gather list` says nothing is gathered. Then one `hint:` line on stderr
+says the workspace is not made yet and where the first command that writes
+will make it. A hint, not a `warning:`: nothing is wrong with a workspace
+nobody has needed yet, so the exit is whatever the read alone makes it. The
+alternative was an empty answer written for each command, which is one more
+thing to keep in step with what the made workspace says, and every front end
+would have to write its own.
+
+The TUI and the minds screen open on it the same way: empty, under a header
+saying it is not made yet. The first change made from either runs `flayer
+init` before its own lines (`App::lines`), so the workspace is made where the
+screen shows it and the transcript says so. Left to the change, the command
+that writes would make it, as it does from the shell; but the screen's lines
+run from the workspace root and walk up from there, and before it is made no
+marker at the root stops them, so with a workspace above home the change would
+land in that one. For the same reason the minds screen is built from where
+`flayer minds` was run, as the TUI is, and the TUI opens its install screen on
+the root it shows rather than walking up from it. The install screen itself
+does not open on an unmade workspace: like any workspace with no projects, it
+says there are none to install into.
+
+Nothing is written through an unmade workspace. An edit of its marker is
+refused as it is for any directory that is not a workspace, and so is opening
+its ledger to write to, which would otherwise leave a `.mindflayer` holding a
+database and no marker. A command that writes asks for the real one.
+
+Two older routes also never make it: the `mind` commands that only consult a
+workspace (opening its TUI, `add`, `edit`, `rename`, `remove`, `templates`)
+use `default_at`, and `unload`, which only takes away, uses `locate_except`.
+Both open the home workspace if it exists.
 
 Where home is comes from the front end, not from core: `--home`, then
 `$MINDFLAYER_HOME`, then the user's home directory, and empty means there is
 none. Core takes it as a parameter, which keeps it free of the environment and
 is what lets the tests run every command with the fallback switched off.
+
+### A read leaves the ledger as it finds it
+
+`mindflayer.db` belongs to the workspace like its marker, and a read does not
+make it either. `FlayerWorkspace::ledger_for_reading` opens it only when it
+exists (`Ledger::open_existing`, without SQLite's create flag) and otherwise
+answers from an empty ledger in memory, which says what a ledger nothing was
+ever written to would. So `flayer gather list`, the TUI's shelf count and the
+install screen leave a workspace that has never gathered or installed anything
+without one. The install screen is a read until something on it is applied;
+applying opens the ledger with `ledger()`, which makes it, and never the
+stand-in, whose records would be gone when it was dropped.
+
+A read does write to one thing: an existing ledger from an older schema is
+migrated to this build's, as every open migrates it. A build reads its own
+schema and no other, so declining would leave the file unreadable rather than
+untouched; that step is upkeep of Mindflayer's own file, not a change anybody
+asked for. Each schema step is to copy the database aside before it migrates
+(#30), and a read migrates through the same step, so it takes that copy too.
+Until the first such step lands there is no copy to take, and a read migrates
+the way every open does today.
 
 ## The agents' own folders
 
@@ -1265,12 +1583,31 @@ in for its own. `edit`, `rename`, `remove` and an add from nothing only warn,
 after the change: there the workspace is only told. `mind templates` lists what
 it could read, with the same warning.
 
-A template's front matter keeps whatever it says except `name` and
+A skill template's front matter keeps whatever it says except `name` and
 `description`, which `mind add` always sets: the template's lines for those
 two are dropped, continuation lines and all, before anything parses the rest —
 so a template may write `name: {{name}}`, which is not YAML anybody could read,
 and still work. The result is parsed back before the first file is written, so
 a template with broken front matter costs nothing but the error.
+
+A rule template is filled in throughout, front matter included, so it may
+scope its rule to `{{name}}/**`. Whether its fences hold front matter is
+decided as for any rule, but on what they hold once filled in, since
+`{{name}}/**` is a YAML flow mapping until it is. A `description` the front
+matter declares is set as a skill's is, dropped and serialized afresh: pasted
+in as text, a description breaks the YAML at its first `: `, and one opening
+with `#` is a comment that declares nothing. The result is read back before
+anything is written and refused for whatever `validate` would warn about
+(`artifact::rule_issues`) — front matter that does not parse, a `paths` or a
+`description` it cannot read. Reading a rule takes those as content or passes
+over them, because a rule somebody wrote still says what it says; writing one
+is the moment to find out, and a template's `paths:` that became content would
+scope nothing and say so nowhere.
+
+A rule template that does not say where `{{description}}` goes gets it as a
+heading on top of its body, below any front matter it declares. On top of the
+file, the heading would push the fences down a line, where they stop being
+front matter.
 
 ### Finding what to change
 
@@ -1367,7 +1704,10 @@ on the deepest rather than on a whole neighbouring tree, and never into hidden
 folders, symlinks, `node_modules` or `target`. A repository is a leaf, since its
 folders are its own — except the workspace root, which is also where the others
 are kept. A scan that runs out of budget says so rather than passing for
-complete.
+complete. A folder that cannot be listed is a failure reported beside what was
+found, except a root that is not there at all: that holds nothing, and only
+the default workspace before it is made can have one, in a home nobody has
+created yet.
 
 ## Decisions
 
@@ -1737,6 +2077,16 @@ leak into the lifecycle code. Unblocks #33, #45, #62, #93, #94 and #95.
   `flayer install` rather than the `install` and `uninstall` lines it amounts
   to. Printing the batch as those lines would make a session with the screen in
   it as repeatable as one without.
+- **Gathering still stages beside.** `copy::replace` builds a shelf copy as a
+  hidden sibling, `.<name>.mindflayer-new`, under names taken from the skill:
+  two gathers of one source at once collide as two installs did, and a gather
+  stopped halfway leaves its staging on the shelf. No agent reads the shelf,
+  which is why installs moved first. A `copy::Stage` in a scratch folder of the
+  workspace's own would do for gathering what `.mind/tmp` does for installs.
+- **Removing is not staged.** `uninstall` deletes a copy where it is, so one
+  stopped halfway leaves part of a skill in a folder agents read. Renaming the
+  copy into a stage first, and deleting it there, would make a removal as all
+  or nothing as an install.
 - **Installing rules.** Installing copies a directory, so only skills can be
   installed — from the shelf, and now from the workspace's own. The workspace's
   own rules have no way into a project yet; a rule is one file, filed by its
@@ -1769,13 +2119,23 @@ leak into the lifecycle code. Unblocks #33, #45, #62, #93, #94 and #95.
   `-W` ([D-08](#d-08-an-explicit-or-activated-workspace-wins)) would let that
   line name the screen's workspace as well, so which of the two a project's
   row runs is still to choose.
-- **Reading commands create the home workspace.** `flayer list`, `show`,
-  `validate`, `scan`, `templates`, `gather list`, `minds`, the `flayer` TUI and
-  `mind install`/`uninstall` all make `~/.mindflayer` when nothing up the tree
-  has one, though only something that writes needs it to exist. `default_at`
-  already opens without creating; moving the reads onto it, and leaving
-  `locate_or_default` to the commands that write, would mean a first `flayer
-  list` outside every workspace no longer puts a marker in somebody's home.
+- **Writes that refuse after making the home workspace.** A command that
+  writes makes the default workspace before it finds out whether there is
+  anything to do in it. Outside every workspace, `mind install` and `mind
+  uninstall` in a project nothing manages, `flayer install -p` and `flayer
+  uninstall -p`, and `unlink` at either level leave a `~/.mindflayer` behind
+  and then refuse, since a workspace just made manages nothing. `flayer edit`,
+  `rename` and `remove` make it to change its own artifacts, `remove`'s dry
+  run included. Each could look with `locate_or_unmade` first and make it only
+  when it is about to write; whether each should is a choice per command, and
+  they were left as writes when the reads stopped making it.
+- **Reads from a screen on the unmade default.** The TUI's reads (`v`, `s`,
+  and showing an artifact) run from the default workspace's root, as its
+  changes do. Before the default is made, with a workspace above home, they
+  walk up to that one and read it instead. A change makes the default first;
+  a read cannot without making the home workspace to read it. `-W`
+  ([D-08](#d-08-an-explicit-or-activated-workspace-wins)) would let those
+  lines name the screen's workspace.
 - **Worktrees share one exclude file.** Every linked worktree of a repository
   reads the same `info/exclude`, and an entry is anchored at whichever work
   tree reads it. A project checked out in two worktrees under one key has one
@@ -1858,12 +2218,6 @@ leak into the lifecycle code. Unblocks #33, #45, #62, #93, #94 and #95.
   would have written at run time. The build test holds the two to each
   other. A Vite plugin writing those variables into the stylesheet at build
   time, from `src/theme.ts`, would leave the palette in one place.
-- **A drawer wants a nonce.** vaul-vue, under Nuxt UI's `UDrawer`, writes
-  its styles into a `<style>` element when it loads, with the nonce of a
-  `meta[property=csp-nonce]` if the page has one. Nothing loads it yet: the
-  sidebar opens over a narrow screen as a slideover. A view that wants a
-  drawer needs that nonce from the server, or vaul's styles in the
-  stylesheet.
 - **A light panel starts dark.** `index.html` carries `dark`, so the default
   never flashes light, but a browser that chose light sees one dark frame
   before the script applies the choice. A script in the page that read it
@@ -1873,18 +2227,52 @@ leak into the lifecycle code. Unblocks #33, #45, #62, #93, #94 and #95.
   transcript when it closes; the server keeps the panel's in memory and drops
   it when it stops. Whether `flayer ui` prints it on the way out, as the TUI
   does, is for #68 to choose.
+- **A style nonce for the panel.** The policy allows no inline style, so a
+  `<style>` element that a library writes into the page at run time is
+  blocked, as theming and colour-mode helpers often do; style the panel's
+  scripts set through the CSSOM, as Vue's bindings do, is not governed by
+  it. The panel needs no nonce so far: Nuxt UI's palette is declared in the
+  stylesheet and the colour mode switches by class ([Nothing the CSP
+  refuses](#nothing-the-csp-refuses)). The one library left that writes a
+  `<style>` is vaul-vue, under Nuxt UI's `UDrawer`, when it loads, with the
+  nonce of a `meta[property=csp-nonce]` if the page has one; nothing loads
+  it yet, since the sidebar opens over a narrow screen as a slideover. A view
+  that wants a drawer needs vaul's styles in the stylesheet, or a nonce: the
+  server would issue one with each launch, add it to `style-src`, and write
+  it into `index.html` where Vite's `html.cspNonce` leaves its placeholder.
+  `script-src` never gets `'unsafe-inline'` either way.
+- **A hostile server on loopback.** The cookie reaches every port of
+  127.0.0.1, so a server there that the browser visits while the panel runs
+  receives the token and can use it as Bearer
+  ([What keeps other pages out](#what-keeps-other-pages-out)). On a machine
+  one person uses, that server is theirs, and a hostile program of theirs
+  could read the browser's profile as easily; on a shared machine it can be
+  another user's, and nothing here keeps it out. Two changes would. The panel
+  could hold the token in memory and send it in a header of its own, which
+  goes nowhere the panel does not send it, at the price of the `HttpOnly`
+  that keeps the token from the panel's scripts, and of a reload that loses
+  it. Or each launch could bind an address of its own in 127.0.0.0/8, so the
+  cookie's host is the panel's alone, where the system allows it: Linux and
+  Windows answer the whole block, macOS only 127.0.0.1 until an alias is
+  added. Either changes the launch #15 validated (127.0.0.1, and a cookie
+  named per port), so it is the owner's to choose, or to accept as it is.
+- **The panel's dev server.** #68 gives `flayer ui` a `--dev` flag that also
+  accepts the Vite origin, and #69 has Vite proxy `/api` to `flayer ui --dev
+  --port 7878`. Through that proxy a change arrives with the browser's Origin,
+  the dev server's (`http://127.0.0.1:5173`, say), which the Origin check
+  refuses like every origin but the server's own. The widening meant for it is
+  one exact origin, handed to the server by the front end and accepted only
+  under `--dev`, never a pattern. Host stays checked as it is, so the proxy
+  sets `changeOrigin` and names the server in Host rather than the dev server.
+  Fetch Metadata needs nothing, since the browser sees a same-origin request
+  to the dev server. Nor does the gate while the dev server is opened as
+  127.0.0.1, where the launch link's cookie reaches it whatever its port;
+  opened as `localhost`, it has no cookie to forward.
 - **A run that panics.** A backend that panics while running a task has no
   outcome to record, so the task is not in the transcript, though it may have
   changed something before it stopped. The CLI's commands collect their
   failures rather than panic, so this is a bug's path, but the transcript then
   cannot say what the bug left behind.
-- **Rules that want to declare something.** Today a rule has no front matter,
-  so a leading `---` in one is content. If rules later want metadata, that
-  becomes a breaking reading of files written now. The escape hatch is cheap
-  and deliberate: `Declared::Rule` is a variant, so giving it a payload is a
-  local change. [D-03](#d-03-rules-reach-every-agent-through-agentsmd) settles
-  the if: a rule that declares `paths:` goes only to `.claude/rules/mindflayer`,
-  so rules will carry front matter, and #41 gives `Declared::Rule` that payload.
 - **Names outside ASCII.** The specification allows "unicode lowercase
   alphanumeric characters" in a name, while listing `a-z` and `0-9`, and its
   reference validator accepts more than ASCII. Mindflayer holds names to ASCII,

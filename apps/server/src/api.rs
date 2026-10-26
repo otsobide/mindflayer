@@ -85,6 +85,12 @@ pub(crate) async fn transcript<B: Backend>(State(api): State<Arc<Api<B>>>) -> Re
     Json(api.transcript.entries()).into_response()
 }
 
+/// Whether a path is the API's: `/api` and everything under it, where every
+/// answer is JSON, refusals included.
+pub(crate) fn is_api(path: &str) -> bool {
+    path == "/api" || path.starts_with("/api/")
+}
+
 /// Any other path under `/api`: a 404 a script can read, rather than the
 /// panel's page, which is what a path outside `/api` that names no file gets.
 pub(crate) async fn missing(method: Method, uri: Uri) -> Response {
