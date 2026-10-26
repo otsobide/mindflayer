@@ -6,8 +6,9 @@ use std::path::Path;
 use mindflayer_core::ledger::{Action, LedgerError, Outcome};
 use mindflayer_core::workspace::{FLAYER_FORMAT_VERSION, MIND_FORMAT_VERSION};
 use mindflayer_core::{
-    Directories, FlayerWorkspace, Initialization, Kind, MindProject, Registration, WorkspaceError,
-    FLAYER_CONFIG, FLAYER_DIR, MIND_CONFIG, MIND_DIR,
+    resolve, Directories, FlayerWorkspace, Initialization, Inputs, Intent, Kind, MindProject,
+    Reason, Registration, Resolved, WorkspaceError, FLAYER_CONFIG, FLAYER_DIR, MIND_CONFIG,
+    MIND_DIR,
 };
 use tempfile::TempDir;
 
@@ -692,25 +693,31 @@ fn a_marker_from_the_future_is_still_refused() {
     assert!(matches!(error, WorkspaceError::Version { .. }), "{error}");
 }
 
+/// The workspace a command started in `start` uses, with nothing named or
+/// activated and the default in `home`.
+fn resolved(start: &Path, home: Option<&Path>, intent: Intent) -> Option<Resolved> {
+    resolve(&Inputs {
+        flag: None,
+        activated: None,
+        start,
+        home,
+        intent,
+    })
+    .unwrap()
+}
+
 #[test]
 fn with_nothing_above_the_default_workspace_is_made_in_home() {
     let home = TempDir::new().unwrap();
     let elsewhere = TempDir::new().unwrap();
-    assert!(FlayerWorkspace::default_at(Some(home.path()))
-        .unwrap()
-        .is_none());
 
-    let workspace = FlayerWorkspace::locate_or_default(elsewhere.path(), Some(home.path()))
-        .unwrap()
-        .expect("the one in home");
+    let resolved =
+        resolved(elsewhere.path(), Some(home.path()), Intent::Write).expect("the one in home");
 
     assert!(home.path().join(FLAYER_DIR).join(FLAYER_CONFIG).is_file());
-    assert!(workspace.is_default(Some(home.path())));
+    assert_eq!(resolved.reason, Reason::Home);
+    assert!(resolved.workspace.is_default(Some(home.path())));
     assert!(!elsewhere.path().join(FLAYER_DIR).exists());
-    // And from then on it is there to be opened without being made.
-    assert!(FlayerWorkspace::default_at(Some(home.path()))
-        .unwrap()
-        .is_some());
 }
 
 #[test]
@@ -721,11 +728,10 @@ fn a_workspace_above_is_used_before_the_default_one() {
     let below = dir.path().join("deep/er");
     fs::create_dir_all(&below).unwrap();
 
-    let workspace = FlayerWorkspace::locate_or_default(&below, Some(home.path()))
-        .unwrap()
-        .unwrap();
+    let resolved = resolved(&below, Some(home.path()), Intent::Write).unwrap();
 
-    assert!(!workspace.is_default(Some(home.path())));
+    assert_eq!(resolved.reason, Reason::Above);
+    assert!(!resolved.workspace.is_default(Some(home.path())));
     assert!(!home.path().join(FLAYER_DIR).exists());
 }
 
@@ -733,10 +739,9 @@ fn a_workspace_above_is_used_before_the_default_one() {
 fn with_no_home_there_is_no_default_workspace() {
     let dir = TempDir::new().unwrap();
 
-    assert!(FlayerWorkspace::locate_or_default(dir.path(), None)
-        .unwrap()
-        .is_none());
-    assert!(FlayerWorkspace::default_at(None).unwrap().is_none());
+    for intent in [Intent::Read, Intent::Write] {
+        assert!(resolved(dir.path(), None, intent).is_none());
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -750,9 +755,9 @@ fn a_read_with_nothing_above_sees_the_default_workspace_without_making_it() {
     fs::create_dir(&home).unwrap();
     let elsewhere = TempDir::new().unwrap();
 
-    let workspace = FlayerWorkspace::locate_or_unmade(elsewhere.path(), Some(&home))
-        .unwrap()
-        .expect("the one in home, unmade");
+    let workspace = resolved(elsewhere.path(), Some(&home), Intent::Read)
+        .expect("the one in home, unmade")
+        .workspace;
 
     assert!(!workspace.is_made());
     assert!(workspace.is_default(Some(&home)));
@@ -774,9 +779,9 @@ fn a_read_sees_the_default_workspace_itself_once_it_is_made() {
     let elsewhere = TempDir::new().unwrap();
     FlayerWorkspace::init(home.path()).unwrap();
 
-    let workspace = FlayerWorkspace::locate_or_unmade(elsewhere.path(), Some(home.path()))
+    let workspace = resolved(elsewhere.path(), Some(home.path()), Intent::Read)
         .unwrap()
-        .unwrap();
+        .workspace;
 
     assert!(workspace.is_made());
     assert!(workspace.is_default(Some(home.path())));
@@ -790,23 +795,13 @@ fn a_read_uses_a_workspace_above_before_the_default_one() {
     let below = dir.path().join("deep/er");
     fs::create_dir_all(&below).unwrap();
 
-    let workspace = FlayerWorkspace::locate_or_unmade(&below, Some(home.path()))
+    let workspace = resolved(&below, Some(home.path()), Intent::Read)
         .unwrap()
-        .unwrap();
+        .workspace;
 
     assert!(workspace.is_made());
     assert!(!workspace.is_default(Some(home.path())));
     assert!(!home.path().join(FLAYER_DIR).exists());
-}
-
-#[test]
-fn with_no_home_a_read_finds_no_default_workspace() {
-    let dir = TempDir::new().unwrap();
-
-    assert!(FlayerWorkspace::locate_or_unmade(dir.path(), None)
-        .unwrap()
-        .is_none());
-    assert!(FlayerWorkspace::default_or_unmade(None).unwrap().is_none());
 }
 
 #[test]

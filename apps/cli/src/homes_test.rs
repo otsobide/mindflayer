@@ -49,6 +49,70 @@ fn default_home_takes_the_command_line_first() {
 }
 
 // ---------------------------------------------------------------------------
+// The workspace a command line names or activates
+// ---------------------------------------------------------------------------
+
+#[test]
+fn a_named_workspace_is_taken_and_the_variable_is_not_read() {
+    let activated = environment(&[("MINDFLAYER_WORKSPACE", "/activated")]);
+
+    let lookup = Lookup::chosen(Some("/named"), &activated);
+
+    assert_eq!(lookup.flag, path("/named"));
+    assert_eq!(lookup.activated, None);
+}
+
+#[test]
+fn a_workspace_named_empty_is_given_and_still_keeps_the_variable_out() {
+    // What the test helpers pass: an activated workspace must not reach a
+    // command whose line pins it.
+    let activated = environment(&[("MINDFLAYER_WORKSPACE", "/activated")]);
+
+    let lookup = Lookup::chosen(Some(""), &activated);
+
+    assert_eq!(lookup.flag, Some(PathBuf::new()));
+    assert_eq!(lookup.activated, None);
+}
+
+#[test]
+fn with_no_workspace_named_the_activated_one_is_read() {
+    let activated = environment(&[("MINDFLAYER_WORKSPACE", "/activated")]);
+
+    let lookup = Lookup::chosen(None, &activated);
+
+    assert_eq!(lookup.flag, None);
+    assert_eq!(lookup.activated, path("/activated"));
+    assert_eq!(Lookup::chosen(None, &environment(&[])), Lookup::default());
+}
+
+#[test]
+fn a_lookup_hands_core_what_it_holds() {
+    let lookup = Lookup {
+        flag: path("/named"),
+        activated: path("/activated"),
+        home: path("/home"),
+    };
+
+    let inputs = lookup.inputs(Path::new("/start"), Intent::Write);
+
+    assert_eq!(inputs.flag, Some(Path::new("/named")));
+    assert_eq!(inputs.activated, Some(Path::new("/activated")));
+    assert_eq!(inputs.home, Some(Path::new("/home")));
+    assert_eq!(inputs.start, Path::new("/start"));
+    assert_eq!(inputs.intent, Intent::Write);
+}
+
+#[test]
+fn given_takes_the_command_line_first() {
+    // As for `default_home`, only what the environment cannot change.
+    let lookup = Lookup::given(Some(""), Some("/named"));
+
+    assert_eq!(lookup.home, None);
+    assert_eq!(lookup.flag, path("/named"));
+    assert_eq!(lookup.activated, None);
+}
+
+// ---------------------------------------------------------------------------
 // Agent homes
 // ---------------------------------------------------------------------------
 

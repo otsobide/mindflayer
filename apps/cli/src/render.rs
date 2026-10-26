@@ -9,7 +9,7 @@ use std::io;
 use std::path::Path;
 use std::process::ExitCode;
 
-use mindflayer_core::{paths, ArtifactError, ValidationIssue, WorkspaceError};
+use mindflayer_core::{paths, ArtifactError, ResolveError, ValidationIssue, WorkspaceError};
 
 use crate::CliError;
 
@@ -103,6 +103,12 @@ impl From<CliError> for Failure {
 
 impl From<WorkspaceError> for Failure {
     fn from(error: WorkspaceError) -> Self {
+        CliError::from(error).into()
+    }
+}
+
+impl From<ResolveError> for Failure {
+    fn from(error: ResolveError) -> Self {
         CliError::from(error).into()
     }
 }
