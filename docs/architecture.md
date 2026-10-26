@@ -915,10 +915,13 @@ command that reports failure.
 ([D-17](#d-17-the-next-front-end-is-a-local-web-panel)): a library crate that
 binds a port, checks who is asking, carries JSON between the browser and a
 front end, and serves the panel's files. No binary runs it yet. `flayer ui`
-(#68) will, over the CLI's backend (#67). The token keeps other processes
-out, and [the guards](#what-keeps-other-pages-out) keep out other pages in
-the same browser: one on another port of 127.0.0.1, which the browser counts
-as the same site, or one whose DNS name has been rebound to 127.0.0.1.
+(#68) will, over the CLI's backend (#67). The token keeps out a process that
+connects without it, and [the guards](#what-keeps-other-pages-out) keep out
+other pages in the same browser: one on another port of 127.0.0.1, which the
+browser counts as the same site, or one whose DNS name has been rebound to
+127.0.0.1. Neither keeps out a server on another port of 127.0.0.1 that the
+browser visits, because the cookie takes the token there as well (an
+[open question](#open-questions)).
 
 ### Transport only
 
@@ -1016,10 +1019,10 @@ needs the page that will tell it so.
 
 ### What keeps other pages out
 
-The token stops every other process on the machine. It does not stop another
-page in the browser that holds the cookie, and the panel is opened in a
-browser full of them. Three kinds of page can reach a loopback port, and a
-different check stops each:
+The token stops a process that connects to the port without it. It does not
+stop another page in the browser that holds the cookie, and the panel is
+opened in a browser full of them. Three kinds of page can reach a loopback
+port, and a different check stops each:
 
 - **A remote page**, any site open in another tab. It can make the browser
   send 127.0.0.1 a GET, a form or a `text/plain` POST without asking, though
@@ -1101,12 +1104,19 @@ page on another port that loads `/api/transcript` with a `<script>` tag has
 it refused rather than run. And there is no CORS layer at all: no answer
 grants another origin anything, and a preflight is never passed.
 
-What another server on loopback can still do is set cookies for 127.0.0.1,
-since cookies are not isolated by port in that direction either. It can
-overwrite `mf_<port>` and lock the panel out until its link is opened again,
-but it cannot learn the token or set a valid one, so the harm stops there. A
-cookie it adds under another path is no worse: the gate takes the token from
-whichever `mf_<port>` holds it.
+What none of this stops is the server behind such a page. The browser sends
+`mf_<port>` to every port of 127.0.0.1, since cookies are not isolated by port
+and those requests are same-site, so any server there that the browser sends
+a request to while the cookie is set receives the token in its Cookie header:
+a page of it the user opens, or anything a page on 127.0.0.1 loads from it.
+That server can then send the token as Bearer, with the Host a script writes
+and no Origin, and pass every check above. So the guards keep out a benign
+server's hostile pages, not a hostile server, which on a machine one person
+uses is theirs, and on a shared machine may be another user's (an
+[open question](#open-questions)). Such a server can also set cookies for
+127.0.0.1, overwriting `mf_<port>` and locking the panel out until its link is
+opened again; a cookie it adds under another path is no worse, because the
+gate takes the token from whichever `mf_<port>` holds it.
 
 ### The log
 
@@ -1928,6 +1938,21 @@ leak into the lifecycle code. Unblocks #33, #45, #62, #93, #94 and #95.
   each launch, add it to `style-src`, and write it into `index.html` where
   Vite's `html.cspNonce` leaves its placeholder. `script-src` never gets
   `'unsafe-inline'` either way.
+- **A hostile server on loopback.** The cookie reaches every port of
+  127.0.0.1, so a server there that the browser visits while the panel runs
+  receives the token and can use it as Bearer
+  ([What keeps other pages out](#what-keeps-other-pages-out)). On a machine
+  one person uses, that server is theirs, and a hostile program of theirs
+  could read the browser's profile as easily; on a shared machine it can be
+  another user's, and nothing here keeps it out. Two changes would. The panel
+  could hold the token in memory and send it in a header of its own, which
+  goes nowhere the panel does not send it, at the price of the `HttpOnly`
+  that keeps the token from the panel's scripts, and of a reload that loses
+  it. Or each launch could bind an address of its own in 127.0.0.0/8, so the
+  cookie's host is the panel's alone, where the system allows it: Linux and
+  Windows answer the whole block, macOS only 127.0.0.1 until an alias is
+  added. Either changes the launch #15 validated (127.0.0.1, and a cookie
+  named per port), so it is the owner's to choose, or to accept as it is.
 - **A run that panics.** A backend that panics while running a task has no
   outcome to record, so the task is not in the transcript, though it may have
   changed something before it stopped. The CLI's commands collect their

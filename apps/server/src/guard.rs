@@ -1,9 +1,11 @@
 //! What keeps other pages out.
 //!
-//! The token keeps out other processes. These checks keep out other pages in
-//! the browser that holds it: one whose DNS name has been rebound to
-//! 127.0.0.1, and one on another port of 127.0.0.1, which the browser counts
-//! as the same site and sends the cookie from.
+//! The token keeps out a process that connects without it. These checks keep
+//! out other pages in the browser that holds it: one whose DNS name has been
+//! rebound to 127.0.0.1, and one on another port of 127.0.0.1, which the
+//! browser counts as the same site and sends the cookie from. Not the server
+//! behind that page, which the browser sends the cookie to as well, and which
+//! can then bring the token as Bearer; docs/architecture.md leaves that open.
 
 use std::sync::Arc;
 
