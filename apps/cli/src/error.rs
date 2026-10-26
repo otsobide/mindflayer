@@ -10,7 +10,8 @@ use std::path::{Path, PathBuf};
 use mindflayer_core::gather::GatherError;
 use mindflayer_core::ledger::LedgerError;
 use mindflayer_core::{
-    ArtifactError, CreateError, Kind, LifecycleError, ResolveError, TemplateError, WorkspaceError,
+    ArtifactError, CreateError, Kind, LifecycleError, Reason, ResolveError, TemplateError,
+    WorkspaceError,
 };
 use thiserror::Error;
 
@@ -30,6 +31,11 @@ pub enum CliError {
     },
     #[error(transparent)]
     Workspace(#[from] WorkspaceError),
+    #[error("{} names a workspace that cannot be used: {source}", named_by(.reason))]
+    Chosen {
+        reason: Reason,
+        source: WorkspaceError,
+    },
     #[error("{0} is not inside a mind project (run `mind init` to create one here)")]
     NotInProject(PathBuf),
     #[error("{0} is not inside a flayer workspace (run `flayer init` to create one here)")]
@@ -110,9 +116,8 @@ pub enum CliError {
 impl From<ResolveError> for CliError {
     fn from(error: ResolveError) -> Self {
         match error {
-            ResolveError::Chosen { source, .. } | ResolveError::Workspace(source) => {
-                CliError::Workspace(source)
-            }
+            ResolveError::Chosen { reason, source } => CliError::Chosen { reason, source },
+            ResolveError::Workspace(source) => CliError::Workspace(source),
             ResolveError::NotManaged { project, workspace } => {
                 CliError::NotManaged { project, workspace }
             }
@@ -123,6 +128,15 @@ impl From<ResolveError> for CliError {
                 CliError::AmbiguousProject { wanted, matches }
             }
         }
+    }
+}
+
+/// What chose a workspace that cannot be used, as it was spelled.
+fn named_by(reason: &Reason) -> &'static str {
+    match reason {
+        Reason::Activated => "$MINDFLAYER_WORKSPACE",
+        // Core refuses only what was chosen, so the other two never get here.
+        Reason::Explicit | Reason::Above | Reason::Home => "-W",
     }
 }
 

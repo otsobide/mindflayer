@@ -42,6 +42,15 @@ pub struct Cli {
     #[arg(long = "home", value_name = "DIR", global = true)]
     pub home: Option<String>,
 
+    // A string rather than a path for the reason `home` is one: empty is an
+    // answer, and a path cannot spell it.
+    /// The workspace to use, by its directory or its `.mindflayer`, wherever
+    /// you are [default: $MINDFLAYER_WORKSPACE, then the one at or above
+    /// here, then the default one; empty to name none and ignore
+    /// $MINDFLAYER_WORKSPACE].
+    #[arg(short = 'W', long = "workspace", value_name = "DIR", global = true)]
+    pub workspace: Option<String>,
+
     #[command(flatten)]
     pub agent_homes: AgentHomeOptions,
 }
@@ -245,6 +254,15 @@ pub struct FlayerCli {
     /// [default: $MINDFLAYER_HOME, then your home directory; empty for none].
     #[arg(long = "home", value_name = "DIR", global = true)]
     pub home: Option<String>,
+
+    // A string rather than a path for the reason `home` is one: empty is an
+    // answer, and a path cannot spell it.
+    /// The workspace to use, by its directory or its `.mindflayer`, wherever
+    /// you are [default: $MINDFLAYER_WORKSPACE, then the one at or above
+    /// here, then the default one; empty to name none and ignore
+    /// $MINDFLAYER_WORKSPACE].
+    #[arg(short = 'W', long = "workspace", value_name = "DIR", global = true)]
+    pub workspace: Option<String>,
 
     #[command(flatten)]
     pub agent_homes: AgentHomeOptions,

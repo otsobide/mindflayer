@@ -29,15 +29,21 @@ pub use tempfile::TempDir;
 
 /// Every option that would otherwise send a command looking outside the
 /// fixture, which `line` pins empty unless a test gives its own: `--home`, so
-/// no test falls back to, or creates, the workspace in the real home, and each
-/// agent home, so none reads the developer's real agent folders.
-pub const PINNED: [&str; 5] = [
+/// no test falls back to, or creates, the workspace in the real home;
+/// `--workspace`, so none picks up a workspace the developer's shell
+/// activated; and each agent home, so none reads the developer's real agent
+/// folders.
+pub const PINNED: [&str; 6] = [
     "--home",
+    "--workspace",
     "--claude-config-dir",
     "--codex-home",
     "--opencode-config-dir",
     "--agents-dir",
 ];
+
+/// The short spelling of an option in [`PINNED`] that has one.
+const SHORT: [(&str, &str); 1] = [("--workspace", "-W")];
 
 /// Build an argument line with `-C dir` appended, and every option in
 /// [`PINNED`] set to empty.
@@ -54,13 +60,70 @@ pub fn line(binary: &str, args: &[&str], dir: &Path) -> Vec<String> {
     line
 }
 
-/// Whether a test gave `option` itself, in either spelling clap takes:
-/// pinning it as well would be an option given twice, which clap refuses.
+/// Whether a test gave `option` itself, in any spelling clap takes, the
+/// short one included: pinning it as well would be an option given twice,
+/// which clap refuses.
 fn gives(args: &[&str], option: &str) -> bool {
+    let short = SHORT
+        .iter()
+        .find(|(long, _)| *long == option)
+        .map(|(_, short)| *short);
     args.iter().any(|arg| {
         arg.strip_prefix(option)
             .is_some_and(|rest| rest.is_empty() || rest.starts_with('='))
+            || short.is_some_and(|short| arg.starts_with(short))
     })
+}
+
+/// Every variable that would send a spawned binary outside the fixture: to
+/// the real home, a workspace the developer's shell activated, or the real
+/// agent folders.
+pub const CLEARED: [&str; 5] = [
+    "MINDFLAYER_HOME",
+    "MINDFLAYER_WORKSPACE",
+    "CLAUDE_CONFIG_DIR",
+    "CODEX_HOME",
+    "OPENCODE_CONFIG_DIR",
+];
+
+/// Run the built `binary` from `dir`, as a person would from a shell, with
+/// `env` as the only variables of [`CLEARED`] it sees, and a temporary
+/// directory as its home.
+///
+/// For what an in-process test cannot reach: what the environment says.
+/// Setting a variable in a test would set it for every test running in the
+/// same process. The home is a directory rather than empty because, with
+/// `HOME` empty, the standard library falls back to the account's real one.
+pub fn spawn(binary: &str, dir: &Path, args: &[&str], env: &[(&str, &str)]) -> Spawned {
+    let program = match binary {
+        "mind" => env!("CARGO_BIN_EXE_mind"),
+        "flayer" => env!("CARGO_BIN_EXE_flayer"),
+        _ => panic!("no binary called {binary}"),
+    };
+    let home = TempDir::new().unwrap();
+    let mut command = std::process::Command::new(program);
+    command.current_dir(dir).args(args);
+    for variable in CLEARED {
+        command.env_remove(variable);
+    }
+    command
+        .env("HOME", home.path())
+        .env("USERPROFILE", home.path());
+    command.envs(env.iter().copied());
+    let output = command.output().expect("run the binary");
+    Spawned {
+        stdout: String::from_utf8_lossy(&output.stdout).into_owned(),
+        stderr: String::from_utf8_lossy(&output.stderr).into_owned(),
+        ok: output.status.success(),
+    }
+}
+
+/// What a spawned binary printed, and whether it exited successfully.
+#[derive(Debug)]
+pub struct Spawned {
+    pub stdout: String,
+    pub stderr: String,
+    pub ok: bool,
 }
 
 /// What `mind ...` parses into, pinned as [`mind`] runs it.

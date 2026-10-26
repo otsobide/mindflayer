@@ -16,7 +16,7 @@ use std::path::{Path, PathBuf};
 use mindflayer_core::resolve::{self, resolve, Intent};
 use mindflayer_core::{paths, Catalog, FlayerWorkspace, MindProject, Reference};
 
-use crate::homes::{default_home, Lookup};
+use crate::homes::Lookup;
 use crate::{tui, Cli, CliError, Command, Failure, FlayerCli, FlayerCommand, Outcome};
 use artifact::{add_to, edit_in, remove_from, rename_in, templates_of};
 use gather::run_gather;
@@ -33,7 +33,10 @@ use workspace::{load_command, unload_command};
 
 /// Run `mind`.
 pub fn run(cli: &Cli) -> Result<Outcome, Failure> {
-    run_with(cli, &looked_up(cli.home.as_deref()))
+    run_with(
+        cli,
+        &Lookup::given(cli.home.as_deref(), cli.workspace.as_deref()),
+    )
 }
 
 /// Run `mind` with where to look for a workspace already decided: what
@@ -149,7 +152,10 @@ pub(crate) fn run_with(cli: &Cli, lookup: &Lookup) -> Result<Outcome, Failure> {
 
 /// Run `flayer`, which is the same as running `mind flayer`.
 pub fn run_flayer_cli(cli: &FlayerCli) -> Result<Outcome, Failure> {
-    run_flayer_with(cli, &looked_up(cli.home.as_deref()))
+    run_flayer_with(
+        cli,
+        &Lookup::given(cli.home.as_deref(), cli.workspace.as_deref()),
+    )
 }
 
 /// [`run_with`], for `flayer`.
@@ -160,12 +166,6 @@ pub(crate) fn run_flayer_with(cli: &FlayerCli, lookup: &Lookup) -> Result<Outcom
         &directory,
         lookup,
     )
-}
-
-/// Where a command line says to look for a workspace, with the environment
-/// for what it leaves out.
-fn looked_up(home: Option<&str>) -> Lookup {
-    Lookup::at_home(default_home(home).as_deref())
 }
 
 /// The workspace half, shared by `mind flayer <cmd>` and `flayer <cmd>`.

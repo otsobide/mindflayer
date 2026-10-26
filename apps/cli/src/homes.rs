@@ -28,6 +28,32 @@ pub struct Lookup {
 }
 
 impl Lookup {
+    /// What a command line gave as `--home` and `-W`, with the environment
+    /// for what it left out.
+    pub fn given(home: Option<&str>, workspace: Option<&str>) -> Self {
+        Self {
+            home: default_home(home),
+            ..Self::chosen(workspace, &variable)
+        }
+    }
+
+    /// What `-W` and `$MINDFLAYER_WORKSPACE` say, with the environment passed
+    /// in, so the order is tested on values.
+    ///
+    /// `-W` given at all, even empty, is the whole answer, and the variable is
+    /// not read: the order `--home` and `$MINDFLAYER_HOME` are taken in.
+    /// What an empty value means is core's to say, and it says none.
+    fn chosen(workspace: Option<&str>, variable: &dyn Fn(&str) -> Option<String>) -> Self {
+        Self {
+            flag: workspace.map(PathBuf::from),
+            activated: match workspace {
+                Some(_) => None,
+                None => variable("MINDFLAYER_WORKSPACE").map(PathBuf::from),
+            },
+            home: None,
+        }
+    }
+
     /// Nothing named and nothing activated, with the default in `home`.
     pub fn at_home(home: Option<&Path>) -> Self {
         Self {
