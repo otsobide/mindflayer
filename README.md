@@ -137,9 +137,10 @@ would use. `flayer which` says which workspace that is and why: named by
 `-W`, activated, found walking up, or the default one.
 
 It is `flayer-deactivate` and never `deactivate`, so it gets along with a
-virtualenv activated before it or after it: each one's deactivate takes out
-only what its own activate put in, whichever runs first. In the prompt, the
-name shows each of `` \ $ ` % ! `` as `_`, since a prompt would act on them.
+virtualenv activated before it or after it: in bash and zsh, each one's
+deactivate takes out only what its own activate put in, whichever runs first.
+In the prompt, the name shows each of `` \ $ ` % ! `` as `_`, since a prompt
+would act on them.
 
 The code is written for the shell `$SHELL` names, or for the one `--shell`
 does (`bash`, `zsh`, `fish` or `pwsh`). fish and PowerShell run it their own
@@ -149,6 +150,10 @@ way:
 flayer activate --shell fish ~/flayers/writing | source
 flayer activate --shell pwsh ~/flayers/writing | Out-String | Invoke-Expression
 ```
+
+In those two, a virtualenv activated before the flayer and deactivated before
+it takes the flayer's prefix with it: the flayer stays active, as `flayer
+which` says, but the prompt no longer shows it for the rest of that shell.
 
 Activating writes nothing anywhere, and what cannot be activated prints no
 code, so `eval` runs nothing and the shell is left as it was:
