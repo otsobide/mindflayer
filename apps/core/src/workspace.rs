@@ -651,7 +651,9 @@ impl FlayerWorkspace {
         self.lock_waiting(lock::WAIT)
     }
 
-    /// [`lock`](Self::lock), waiting up to `wait` rather than [`lock::WAIT`].
+    /// [`lock`](Self::lock), waiting up to `wait` rather than [`lock::WAIT`]:
+    /// [`Duration::ZERO`] tries once, and a wait too long to count from now,
+    /// [`Duration::MAX`], never gives up.
     pub fn lock_waiting(&self, wait: Duration) -> Result<WorkspaceLock, LockError> {
         WorkspaceLock::acquire(&self.flayer_dir(), wait)
     }

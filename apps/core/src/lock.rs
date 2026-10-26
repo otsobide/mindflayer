@@ -90,7 +90,8 @@ impl WorkspaceLock {
                 source,
             })?;
         let holder = dir.join(HOLDER_FILE);
-        let deadline = Instant::now() + wait;
+        // None for a wait too long to add to now, which is a wait with no end.
+        let deadline = Instant::now().checked_add(wait);
         let mut pause = FIRST_PAUSE;
         loop {
             match file.try_lock() {
@@ -105,7 +106,9 @@ impl WorkspaceLock {
                     });
                 }
                 Err(TryLockError::WouldBlock) => {
-                    let left = deadline.saturating_duration_since(Instant::now());
+                    let left = deadline.map_or(LONGEST_PAUSE, |deadline| {
+                        deadline.saturating_duration_since(Instant::now())
+                    });
                     if left.is_zero() {
                         return Err(LockError::Busy {
                             path,
