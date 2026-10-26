@@ -822,6 +822,40 @@ binaries. Local copies never reach teammates or cloud runs, and reach another
 worktree only for Claude, and only when that worktree has no `.claude/skills`
 of its own. Unblocks #17, #32, #34, #37, #38, #43, #44, #45 and #94.
 
+### D-03: Rules reach every agent through `AGENTS.md`
+
+Assigned rules are rendered between `<!-- mindflayer:begin -->` and
+`<!-- mindflayer:end -->` in the project's root `AGENTS.md`, one section per
+route. Where Claude would not read that file, a managed `@AGENTS.md` import
+goes into the project's own `CLAUDE.md`, or
+`.claude/rules/mindflayer/<route>.md` when no file may be edited (D-02); a rule
+that declares `paths:` goes only there. One core predicate (#44) decides,
+walking every ancestor directory and ignoring the user memory file. The root
+`AGENTS.md` is the only per-project file all three agents read, and Codex has
+no include mechanism; Claude 2.1.277+ reads it natively only when no
+`CLAUDE.md`, `.claude/CLAUDE.md` or `CLAUDE.local.md` sits in the start
+directory or above it, which is the case the import covers. Rejected: per-agent
+files, under which Claude reads every rule twice when there is no `CLAUDE.md`;
+and OpenCode's `instructions` globs with Codex's `developer_instructions`,
+unverified and honoured only in trusted projects. Mindflayer never creates a
+`CLAUDE.local.md`, which silently disables `AGENTS.md`, and warns when an
+`AGENTS.override.md` hides the file from Codex or the chain nears Codex's 32
+KiB budget. Unblocks #17, #42, #43, #44 and #45.
+
+### D-04: An edited copy is detected, not disowned
+
+The ledger keeps a content hash per target. An untouched copy stays managed and
+can be updated; one whose hash differs is Edited, reported, and never
+overwritten or deleted without `--force`. `edit` and `rename` keep the record,
+and removing an installed copy uninstalls it. A record from before hashes
+counts as current only when the copy matches its offer byte for byte, and as
+Edited otherwise. This keeps "never overwrite what somebody wrote" while
+updates still reach the copies nobody touched, and it catches a hand edit made
+outside Mindflayer, which today goes unseen. Rejected: today's rule, which
+stops updates at the first edit; overwriting on update, which loses the edit;
+and a three-way merge, too complex for skills that ship scripts. Unblocks #23,
+#30, #47, #48, #50 and #93.
+
 ## Open questions
 
 - **Precedence between projects.** Two projects in one workspace can declare
