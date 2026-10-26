@@ -85,6 +85,13 @@ pub struct Left {
     pub path: PathBuf,
     /// The root of the project holding it.
     pub project: PathBuf,
+    /// Whether the workspace counts it among its own as things stand, listing
+    /// it and offering it to install ([`FlayerWorkspace::own_kinds`]), and so
+    /// stops once the marker's line points at the library. It does for one a
+    /// project at its root shares with it when it does not manage that
+    /// project, which the migration leaves to the project all the same: an
+    /// install of it stays recorded, but nothing offers it any more.
+    pub counted: bool,
 }
 
 /// Why the workspace's own cannot be moved as they are.
@@ -191,7 +198,12 @@ impl MigrateError {
 /// the workspace names too, as a home workspace whose home is a project does
 /// when both say `skills`. That is left where it is, and the marker's line is
 /// still pointed at the library, where the workspace's own of that kind then
-/// starts empty.
+/// starts empty. One at the root that the workspace does not manage is a
+/// holder here, though [`FlayerWorkspace::own_kinds`] counts what it shares
+/// as the workspace's own: what a project holds is what its agents read, and
+/// they do not ask whether the workspace was told about the project. What
+/// the workspace counted is marked ([`Left::counted`]), since it stops being
+/// listed and offered.
 ///
 /// A folder the marker names outside the workspace, or on the shelf or the
 /// cache, is refused rather than emptied: `flayer init` refuses to name one,
@@ -230,6 +242,7 @@ pub fn library_plan(workspace: &FlayerWorkspace) -> Plan {
             .map(|(_, error)| Refusal::Unreadable(error)),
     );
     let theirs = held_by(&projects, &plan.kinds, &mut plan.refusals);
+    let counted = workspace.own_kinds();
 
     for repoint in &plan.kinds {
         let route = workspace
@@ -266,6 +279,7 @@ pub fn library_plan(workspace: &FlayerWorkspace) -> Plan {
                     kind: repoint.kind,
                     path,
                     project: project.clone(),
+                    counted: counted.contains(&repoint.kind),
                 });
                 continue;
             }

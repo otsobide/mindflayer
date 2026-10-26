@@ -129,18 +129,21 @@ fn what_a_project_at_the_root_shares_with_the_workspace_is_left_to_it() {
     create(&workspace.own(), Kind::Rule, "shared", "The workspace's").unwrap();
 
     // Linked or not: a home made a project keeps its skills there either way.
+    // Only unlinked did the workspace count them as its own, as `own_kinds`
+    // does, and so stop.
     let unlinked = migrate::library_plan(&workspace);
     let mut linked = workspace.clone();
     linked.link(&project).unwrap();
     let linked = migrate::library_plan(&linked);
 
-    for plan in [unlinked, linked] {
+    for (plan, counted) in [(unlinked, true), (linked, false)] {
         assert_eq!(
             plan.left,
             [Left {
                 kind: Kind::Skill,
                 path: root.join("skills/deploy"),
                 project: root.to_path_buf(),
+                counted,
             }]
         );
         let moved: Vec<&Path> = plan.moves.iter().map(|one| one.from.as_path()).collect();
