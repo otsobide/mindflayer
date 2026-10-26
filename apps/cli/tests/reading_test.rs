@@ -386,8 +386,8 @@ fn show_prints_no_metadata_block_for_a_rule() {
     );
     assert!(outcome.stdout.contains("no-force-push.md"));
     assert!(outcome.stdout.contains("Use --force-with-lease."));
-    // A rule declares nothing, so it gets no metadata section rather than an
-    // empty one.
+    // A rule that declares nothing, as most do, gets no metadata section
+    // rather than an empty one.
     assert!(!outcome.stdout.contains("allowed-tools"));
     assert!(!outcome.stdout.contains("description"));
 }

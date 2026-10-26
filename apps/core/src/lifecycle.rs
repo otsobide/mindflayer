@@ -347,8 +347,9 @@ fn rename_rule(
     })?;
     prune(directory, target.path.parent());
 
-    // A rule declares nothing, so there is nothing inside it to rewrite, and
-    // one that did not read before a move does not read after it either.
+    // A rule's front matter holds no name, so there is nothing inside it to
+    // rewrite, and one that did not read before a move does not read after it
+    // either.
     Ok(Target {
         kind: Kind::Rule,
         name: to.to_owned(),
