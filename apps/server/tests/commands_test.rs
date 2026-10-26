@@ -47,7 +47,7 @@ async fn a_task_the_backend_cannot_read_runs_nothing() {
 }
 
 #[tokio::test(flavor = "multi_thread")]
-async fn two_concurrent_writes_run_one_at_a_time_in_arrival_order() {
+async fn concurrent_writes_run_one_at_a_time_in_arrival_order() {
     let fake = Fake::default();
     let runs = Arc::clone(&fake.runs);
     let hold = Arc::clone(&fake.hold);
@@ -66,18 +66,34 @@ async fn two_concurrent_writes_run_one_at_a_time_in_arrival_order() {
     tokio::task::spawn_blocking(move || reached.reached())
         .await
         .unwrap();
-    let second = write(json!({ "name": "second" }));
-    // Time for the second to overtake the first, were anything to let it.
-    tokio::time::sleep(Duration::from_millis(100)).await;
-    assert_eq!(*runs.lock().unwrap(), ["start first"]);
+    // Two behind it, each given time to arrive before the next is sent, so
+    // the order they arrived in is known. Two, because with one waiting any
+    // lock would let it through second, ordered or not.
+    let mut waiting = Vec::new();
+    for name in ["second", "third"] {
+        waiting.push(write(json!({ "name": name })));
+        tokio::time::sleep(Duration::from_millis(100)).await;
+    }
+    assert_eq!(*runs.lock().unwrap(), ["start first"], "none overtook it");
     drop(release);
 
-    let (first, second) = (first.await.unwrap(), second.await.unwrap());
-    assert_eq!(first.json()["outcome"]["ran"], "first");
-    assert_eq!(second.json()["outcome"]["ran"], "second");
+    let mut replies = vec![first.await.unwrap()];
+    for reply in waiting {
+        replies.push(reply.await.unwrap());
+    }
+    for (reply, name) in replies.iter().zip(["first", "second", "third"]) {
+        assert_eq!(reply.json()["outcome"]["ran"], name);
+    }
     assert_eq!(
         *runs.lock().unwrap(),
-        ["start first", "end first", "start second", "end second"]
+        [
+            "start first",
+            "end first",
+            "start second",
+            "end second",
+            "start third",
+            "end third",
+        ]
     );
 
     let transcript = get(
@@ -88,8 +104,8 @@ async fn two_concurrent_writes_run_one_at_a_time_in_arrival_order() {
     .await;
     assert_eq!(
         transcript.json(),
-        json!([first.json(), second.json()]),
-        "both, in the order they ran"
+        Value::Array(replies.iter().map(Reply::json).collect()),
+        "all three, in the order they ran"
     );
 }
 
