@@ -1973,10 +1973,27 @@ other, and none of them makes a reader wait for the workspace.
   library's default; set there, the wait is Mindflayer's. It also turns on
   write-ahead logging: a reader goes on reading what the last write left while
   the next is made, and a writer does not wait for readers. The mode is kept in
-  the file, so a ledger switches once, at the first open to write, and SQLite
-  keeps `mindflayer.db-wal` and `mindflayer.db-shm` beside it while it is open.
-  `open_existing` sets the timeout and not the mode, because switching is a
-  write, and a read makes none but a migration.
+  the file's header, so a ledger switches once, at the first open to write,
+  and SQLite keeps `mindflayer.db-wal` and `mindflayer.db-shm` beside it while
+  it is open. It switches only once `migrate` has accepted the version, since
+  switching first would change a ledger a newer build wrote before refusing
+  it, and a switch that fails is never a reason to refuse the ledger: one that
+  finds another connection writing fails at once, because SQLite will not wait
+  where waiting could deadlock, and is left to the next open. `open_existing`
+  sets the timeout and not the mode, because switching is a write, and a read
+  makes none but a migration.
+
+  A ledger that keeps its log needs those two files made beside it even to be
+  read, and SQLite takes them away when the last connection closes, so in a
+  folder the reader may read and not write — a sandboxed agent's view of the
+  workspace, a read-only mount, another user's workspace — the first read
+  fails, where the journal the ledger had before let it be read.
+  `open_existing` then opens it as SQLite's `immutable`, which needs neither
+  file and takes no lock, but only when there is no log: then everything is
+  in the file itself. Somebody who can write there writes into a log the read
+  does not see, so what it reads is the ledger as their last checkpoint left
+  it, and a checkpoint made between two of its reads is the one thing that
+  could change the file under it.
 - **A lock on the workspace.** Unique names keep each file whole, not each
   entry in it: two `flayer link`s that both read `flayer.toml` before either
   writes each put back a marker with only their own entry, and the second
