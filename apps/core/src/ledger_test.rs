@@ -305,7 +305,10 @@ fn a_source_scrubbed_onto_one_already_at_its_url_becomes_one_row() {
     assert_eq!(gathered[0].source.directory, "h-a");
     assert_eq!(stored(&ledger, "sources").lines().count(), 1);
     // Handed back so its folder can go too.
-    assert_eq!(gone.map(|source| source.directory).as_deref(), Some("h-a-2"));
+    assert_eq!(
+        gone.map(|source| source.directory).as_deref(),
+        Some("h-a-2")
+    );
 }
 
 #[test]
