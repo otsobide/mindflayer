@@ -1343,6 +1343,26 @@ fn a_project_linked_from_beside_is_offered_the_screens_templates() {
 }
 
 #[test]
+fn the_keys_help_says_which_rows_run_their_lines_with_w() {
+    let (_dir, _outer, hub, _collapse) = hub_beside_outer();
+    let mut app = tui_in(&hub);
+
+    press_key(&mut app, KeyCode::Char('?'));
+
+    let Mode::Reading(reader) = &app.mode else {
+        panic!("{:?}", app.mode);
+    };
+    assert!(
+        reader
+            .lines
+            .iter()
+            .any(|(_, line)| line.contains("`mind -W . -C <project> <cmd>`")),
+        "{:?}",
+        reader.lines
+    );
+}
+
+#[test]
 fn a_project_under_the_workspace_on_screen_keeps_the_plain_line() {
     let dir = workspace_with_two();
     let app = tui_in(dir.path());

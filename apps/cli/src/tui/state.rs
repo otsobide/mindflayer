@@ -2082,6 +2082,12 @@ impl Reader {
         ));
         lines.push((
             Tone::Info,
+            String::from(
+                "A project whose own commands would reach another workspace runs `mind -W . -C <project> <cmd>`, so the line acts on this one.",
+            ),
+        ));
+        lines.push((
+            Tone::Info,
             String::from("What the link form offers is what `flayer scan` lists."),
         ));
         Self {
