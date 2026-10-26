@@ -6,8 +6,9 @@
 
 use std::path::PathBuf;
 
+use clap::builder::{PossibleValuesParser, TypedValueParser};
 use clap::{Args, Parser, Subcommand};
-use mindflayer_core::{Kind, DEFAULT_SUBDIRECTORY};
+use mindflayer_core::{Kind, Shell, DEFAULT_SUBDIRECTORY};
 
 /// Manage the agent skills in a mind project.
 //
@@ -292,6 +293,23 @@ pub enum FlayerCommand {
         rules: Option<PathBuf>,
     },
 
+    /// Print the shell code that activates a workspace for every command the
+    /// shell runs, as a Python virtualenv's `activate` does:
+    /// `eval "$(flayer activate DIR)"`. `flayer-deactivate` undoes it.
+    ///
+    /// It writes nothing, and prints no code when there is nothing to
+    /// activate, so a failed `eval` changes nothing either.
+    Activate {
+        /// The workspace, by its directory or its `.mindflayer` [default: the
+        /// one a command run here would use].
+        #[arg(value_name = "DIR")]
+        path: Option<PathBuf>,
+
+        /// The shell to write it for [default: the one $SHELL names].
+        #[arg(long, value_name = "SHELL", value_parser = shells())]
+        shell: Option<Shell>,
+    },
+
     /// Create a skill or a rule: the workspace's own, or a project's.
     Add {
         /// A project this workspace manages, by name or path, instead of the
@@ -506,4 +524,11 @@ pub enum GatherCommand {
     /// and where each artifact comes from.
     #[command(alias = "ls")]
     List,
+}
+
+/// What `--shell` takes, from core's list rather than spelled again here, as
+/// possible values so `--help` lists them and a typo is refused with them.
+fn shells() -> impl TypedValueParser<Value = Shell> {
+    PossibleValuesParser::new(Shell::ALL.map(Shell::name))
+        .map(|name| name.parse::<Shell>().expect("every listed shell parses"))
 }

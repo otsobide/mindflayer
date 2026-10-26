@@ -7,7 +7,7 @@
 use std::io;
 use std::path::{Path, PathBuf};
 
-use mindflayer_core::activate::WORKSPACE_VARIABLE;
+use mindflayer_core::activate::{self, ActivateError, WORKSPACE_VARIABLE};
 use mindflayer_core::gather::GatherError;
 use mindflayer_core::ledger::LedgerError;
 use mindflayer_core::{
@@ -63,6 +63,18 @@ pub enum CliError {
     Lifecycle(#[from] LifecycleError),
     #[error(transparent)]
     Template(#[from] TemplateError),
+    #[error(transparent)]
+    Activate(#[from] ActivateError),
+    #[error(
+        "$SHELL is not set; say which shell to write for with --shell ({})",
+        activate::expected()
+    )]
+    NoShell,
+    #[error(
+        "cannot tell which shell `{program}` is; say which to write for with --shell ({})",
+        activate::expected()
+    )]
+    UnknownShell { program: String },
     #[error("nothing removed: this deletes {}; add --yes to go ahead", deleting(.path, .kind, .files))]
     Unconfirmed {
         kind: Kind,

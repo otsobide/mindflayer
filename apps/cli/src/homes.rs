@@ -150,7 +150,7 @@ fn resolve(
 
 /// A variable's value. One that is not Unicode counts as unset, as it always
 /// has for `$MINDFLAYER_HOME`: a path that cannot be spelled is no answer.
-fn variable(name: &str) -> Option<String> {
+pub(crate) fn variable(name: &str) -> Option<String> {
     std::env::var(name).ok()
 }
 
