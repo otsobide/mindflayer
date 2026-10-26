@@ -501,6 +501,27 @@ pub enum FlayerCommand {
         name: String,
     },
 
+    /// Bring a workspace made by an older Mindflayer into the layout a new
+    /// one has.
+    ///
+    /// Without --yes nothing changes, and the command says what would.
+    Migrate {
+        /// Move the workspace's own skills and rules from the folders its
+        /// flayer.toml names into its library, `.mindflayer/library`, and
+        /// point flayer.toml there, keeping it as it was beside it.
+        //
+        // Required, and the only one so far: a flag per migration rather than
+        // a bare `migrate` that does all of them, so the next one is asked for
+        // by name and never run by a line typed for this one.
+        #[arg(long, required = true)]
+        library: bool,
+
+        /// Make the change. Without this nothing changes, and the command
+        /// says what would.
+        #[arg(short, long)]
+        yes: bool,
+    },
+
     /// Open the TUI: every managed project, and a key for each command.
     ///
     /// What `flayer` does on its own. Everything it changes, it changes by

@@ -479,8 +479,8 @@ beside the code.
 A workspace made before the library keeps the folders its marker names,
 `skills` and `rules` beside the projects as `flayer init` used to write them,
 and is read exactly as before: the default changed, the format did not, so no
-version moved. Moving them into the library is for #53's `flayer migrate
---library`, never for a read.
+version moved. Moving them into the library is for `flayer migrate --library`
+to do when asked ([below](#moving-them-into-the-library)), never for a read.
 
 The folders can be anywhere inside the workspace, `.mindflayer` included, but
 in what is reserved for gathering. A directory that is the shelf of either kind
@@ -515,6 +515,88 @@ twice. With the library, the two share a folder only when a marker says so, as
 an older workspace's does. Reports name a workspace's own artifact's holder
 `workspace`, told by where the file sits rather than by the root it was found
 from, since those two share a root.
+
+### Moving them into the library
+
+`flayer migrate --library` moves a workspace's own from the folders its marker
+names into `.mindflayer/library/<kind>`, and points `[directories]` there
+(`migrate::library`). Without `--yes` it plans, says what would happen and
+changes nothing (`migrate::library_plan`). That dry run is a report, and exits
+as one, where `remove`'s is a refusal: what it gives is a line per artifact to
+read before saying yes, not one deletion that was asked for and did not
+happen.
+
+- **What moves.** Every artifact of each kind whose folder is not the
+  library's, found the way discovery finds it but without reading it
+  (`Catalog::locate`). A skill whose front matter is broken is no less the
+  workspace's, and left behind it would drop out of every listing once the
+  marker points elsewhere. It goes to the same route below the library's
+  folder, by a rename: the library is inside the workspace, so on its
+  filesystem but for a mount in between, and a move across two fails naming
+  both paths, as an install's does, rather than turning into a copy. A folder
+  a move empties goes too, up to and including the kind's, with `remove_dir`,
+  which keeps a folder holding anything else: the workspace in a home leaves
+  no empty `~/skills`, and a `README.md` beside the skills keeps it.
+- **What a project holds stays.** A project the workspace manages, or one at
+  its root whether it is linked or not, can keep a kind in a folder the
+  workspace names too: a home made a project shares `~/skills` with the
+  workspace in it. What such a project's discovery finds there, of any kind,
+  stays where it is and is said, and the marker's line moves to the library
+  all the same, where the workspace's own of that kind start empty. The root
+  counts unlinked because the agents reading `~/skills` do not ask whether
+  the workspace was told about the project. `own_kinds` draws that line
+  elsewhere, counting what an unlinked root project shares as the
+  workspace's own, so such a leftover was listed and offered by the
+  workspace and stops being either; the plan marks it (`Left::counted`) and
+  its line says so, since an install of it keeps a record no offer matches
+  any more (an [open question](#open-questions)).
+- **Refused as a whole.** Nothing moves while the plan has any reason not to,
+  and every reason is said at once: something already where an artifact would
+  go; a copy of the marker an earlier migration kept; a link whose target is
+  relative, which a rename to another depth would aim elsewhere; a folder
+  overlapping the library, another kind's folder or a project's root, where
+  moving one file would carry another, or a project's, with it; a folder that
+  cannot be listed; a project whose marker cannot be read and whose root
+  holds a folder being moved from, which could keep anything there; a folder
+  the marker names outside the workspace or overlapping the shelf or the
+  cache, which `open` reads but `flayer init` refuses (`misplaced_own`, its
+  check), since what is there is somebody else's, or gathering's; a folder
+  that is a link, or is reached through one below the root, since what it
+  holds is kept elsewhere on purpose, a dotfiles repository say, and a rename
+  would empty that and leave the link aimed at nothing.
+- **Planned again under the lock.** It holds the workspace's lock from its
+  plan to its rewrite of the marker, and plans from the marker on disk once it
+  has the lock, so neither a plan shown a minute before nor a writer in
+  between decides what moves. The marker is rewritten with
+  `edit_marker_held`, the edit `edit_array` makes once it has taken the lock,
+  since the lock is not re-entrant.
+- **All or nothing, as far as renames go.** The marker is kept first, beside
+  itself as `flayer.toml.v<version>`, named after the version it holds as the
+  ledger's copy is, with `create_new`, so a copy an earlier migration kept is
+  never written over. Then every artifact is renamed, then the values in
+  `[directories]` are rewritten through `toml_edit`, the comments and every
+  other byte left alone. A step that fails puts back what had moved, the last
+  first, and takes the kept copy away, so the workspace reads as it did; what
+  cannot be put back is named (`MigrateError::stranded`).
+- **A second run is a no-op.** A kind already in the library plans nothing,
+  so a migrated workspace, or one made with its library, writes nothing, not
+  even a copy of its marker. No format version moves, for the reason the new
+  default needed none
+  ([D-05](#d-05-a-workspaces-library-lives-in-mindflayer)): the marker spells
+  its folders out.
+- **The ledger is not opened.** An installation of one of the workspace's own
+  records its origin as `workspace`, which names no folder, and its copies by
+  where they are in the project. Nothing in it says where the workspace's own
+  were, so every record reads the same once they have moved: an install
+  compares the project's copy with the offer, found wherever the marker now
+  says, and calls it current when they match. A workspace that loads this one
+  names its root, and reads its folders through its marker.
+- **Resolved as a read.** Even with `--yes` it finds its workspace with
+  `Intent::Read`, so the default one is not made only to find that, being
+  new, it keeps its own in its library already.
+- **`--library` is required.** A flag per migration, rather than a bare
+  `migrate` doing every one there is, so the next one is asked for by name
+  and never run by a line typed for this one.
 
 ### Where a project keeps its artifacts
 
@@ -2547,6 +2629,8 @@ other, and none of them makes a reader wait for the workspace.
   that opening the ledger to write runs (`ledger_to_write`), while it rewrites
   clones an older build left a credential in and removes the folders of a
   source made one with another, which a gather beside it would be filling.
+  A migration of the workspace's own into its library holds it from its plan
+  to its rewrite of the marker.
   Core takes it inside each of them (`FlayerWorkspace::lock`), so no front end
   has to remember to. An install looks again at what the project holds once
   it has the lock: the standing it is handed comes from a survey made before,
@@ -3131,9 +3215,29 @@ leak into the lifecycle code. Unblocks #33, #45, #62, #93, #94 and #95.
   before workspaces kept artifacts of their own names no folders, so it now
   reads them from the library. One that had artifacts added by a build in
   between, which put them in `skills` and `rules` at its root, stops listing
-  them: they stay where they are, untouched, until `[directories]` names them
-  or #53's migration moves them. That migration could look for those folders
-  wherever a marker names none.
+  them: they stay where they are, untouched, until `[directories]` names
+  them. `flayer migrate --library` moves only what a marker names, so it plans
+  nothing for such a workspace. It could look for those folders wherever a
+  marker names none, leaving them to a project at the root that keeps a kind
+  there.
+- **An unlinked project at the root.** `own_kinds` counts what a project at
+  the workspace's root shares with it as the workspace's own unless the
+  workspace links that project; a migration leaves it to the project linked
+  or not, so the workspace stops offering it and an install of it keeps a
+  record nothing offers. Counting the root as a holder in `own_kinds` too
+  would make the two agree, at the price of a home's skills dropping out of
+  `flayer list` and the install screen until the home is linked; moving them
+  would take a project's artifacts, which a migration never does.
+- **Links inside a moved skill.** A skill holding a link aimed by a relative
+  route out of itself, `scripts` to `../../shared/scripts` say, points
+  elsewhere once a migration has moved the skill to another depth. The plan
+  refuses an artifact that is itself such a link, but does not look inside
+  one. Re-aiming every such link would let a migration through where it now
+  refuses, at the price of rewriting links somebody made.
+- **Migrating from a screen.** The TUI has no key for `flayer migrate
+  --library`, which runs only from the command line. A key producing its two
+  lines, the dry run and then `--yes`, would bring it to the TUI the way every
+  other change gets there.
 - **Gathering a repository that is a workspace.** A team repository made by
   `flayer init` and `flayer add` keeps its own skills in
   `.mindflayer/library/skills`, where a workspace made before the library kept

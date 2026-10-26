@@ -27,6 +27,7 @@ pub mod kind;
 pub mod ledger;
 pub mod lifecycle;
 pub mod lock;
+pub mod migrate;
 pub mod paths;
 pub mod resolve;
 pub mod rule;

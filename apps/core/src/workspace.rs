@@ -437,18 +437,8 @@ impl FlayerWorkspace {
         let config_path = dir.join(FLAYER_CONFIG);
 
         for (kind, directory) in directories.resolved_with(Directories::library_for) {
-            if !stays_inside(&directory) {
-                return Err(WorkspaceError::OutsideWorkspace {
-                    path: directory,
-                    kind,
-                });
-            }
-            if let Some(gathered) = gathered_overlap(&directory) {
-                return Err(WorkspaceError::OverlapsGathered {
-                    path: directory,
-                    kind,
-                    gathered,
-                });
+            if let Some(error) = misplaced_own(kind, &directory) {
+                return Err(error);
             }
         }
         create_dir(&dir)?;
@@ -584,7 +574,9 @@ impl FlayerWorkspace {
     /// runs when it has clones to rewrite), so a front end
     /// has no need to, and must not while it asks core to write: the lock is
     /// not re-entrant, and a writer that asks for it twice waits for itself.
-    /// Readers never take it.
+    /// Moving the workspace's own into its library
+    /// ([`crate::migrate::library`]) takes it too, from its plan to its
+    /// rewrite of the marker. Readers never take it.
     pub fn lock(&self) -> Result<WorkspaceLock, LockError> {
         self.lock_waiting(lock::WAIT)
     }
@@ -936,17 +928,39 @@ impl FlayerWorkspace {
         F: FnOnce(&mut toml_edit::Array) -> Result<T, String>,
     {
         // Not made, so there is no marker to edit, and writing one here would
-        // make the workspace behind the back of whatever asked only to read it.
-        if !self.made {
-            return Err(WorkspaceError::NotAWorkspace {
-                path: self.root.clone(),
-            });
-        }
+        // make the workspace behind the back of whatever asked only to read
+        // it. Asked before the lock, whose file would be the first thing made.
+        self.refuse_unmade()?;
         // Held from before the file is read until what is written has been
         // read back. Reading from disk is not enough on its own: two writers
         // at once would both read the file before either wrote, and the
         // second rename would put back a marker without the first one's entry.
         let _lock = self.lock()?;
+        self.edit_marker_held(|document| {
+            // A key deleted by hand, or a marker from before `loaded`
+            // existed, is made again rather than refused.
+            if !document.as_table().contains_key(key) {
+                document[key] = toml_edit::value(toml_edit::Array::new());
+            }
+            let array = document[key]
+                .as_array_mut()
+                .ok_or_else(|| format!("`{key}` is not an array"))?;
+            edit(array)
+        })
+    }
+
+    /// Rewrite the marker in place, as [`edit_array`](Self::edit_array) does,
+    /// for a writer that already holds the workspace's [`lock`](Self::lock):
+    /// one whose change is more than the marker, and has to keep a second
+    /// writer out from before its first step until the marker is written.
+    ///
+    /// The caller's to hold rather than taken here, because the lock is not
+    /// re-entrant: a writer asking for it twice waits for itself.
+    pub(crate) fn edit_marker_held<F, T>(&mut self, edit: F) -> Result<T, WorkspaceError>
+    where
+        F: FnOnce(&mut toml_edit::DocumentMut) -> Result<T, String>,
+    {
+        self.refuse_unmade()?;
         let path = self.config_path();
         let text = fs::read_to_string(&path).map_err(|source| WorkspaceError::Read {
             path: path.clone(),
@@ -959,19 +973,7 @@ impl FlayerWorkspace {
                     detail: error.to_string(),
                 })?;
 
-        // A key deleted by hand (or a marker from before `loaded` existed)
-        // is made again rather than refused.
-        if !document.as_table().contains_key(key) {
-            document[key] = toml_edit::value(toml_edit::Array::new());
-        }
-        let array = document[key]
-            .as_array_mut()
-            .ok_or_else(|| WorkspaceError::Edit {
-                path: path.clone(),
-                detail: format!("`{key}` is not an array"),
-            })?;
-
-        let value = edit(array).map_err(|detail| WorkspaceError::Edit {
+        let value = edit(&mut document).map_err(|detail| WorkspaceError::Edit {
             path: path.clone(),
             detail,
         })?;
@@ -990,6 +992,18 @@ impl FlayerWorkspace {
         check_version(&path, Marker::Workspace, config.version)?;
         self.config = config;
         Ok(value)
+    }
+
+    /// Refuse an [`unmade`](Self::unmade) workspace's marker to a writer, as
+    /// any directory that is not a workspace is refused.
+    fn refuse_unmade(&self) -> Result<(), WorkspaceError> {
+        if self.made {
+            Ok(())
+        } else {
+            Err(WorkspaceError::NotAWorkspace {
+                path: self.root.clone(),
+            })
+        }
     }
 
     /// Open every registered mind project.
@@ -1571,6 +1585,29 @@ fn stays_inside(directory: &Path) -> bool {
         paths::normalize(directory).components().next(),
         Some(std::path::Component::Normal(_))
     )
+}
+
+/// Why `directory`, a route from a workspace's root, cannot hold the
+/// workspace's own `kind`s: it leads out of the workspace, or it overlaps
+/// what is reserved for gathering ([`gathered_overlap`]).
+///
+/// What [`FlayerWorkspace::init_with`] refuses before it makes anything, and
+/// what a migration refuses to move out of
+/// ([`crate::migrate::library_plan`]). `open` still reads a marker edited by
+/// hand to name such a folder, since reading one changes nothing; moving out
+/// of it would empty another directory, or gathering's, into this one.
+pub(crate) fn misplaced_own(kind: Kind, directory: &Path) -> Option<WorkspaceError> {
+    if !stays_inside(directory) {
+        return Some(WorkspaceError::OutsideWorkspace {
+            path: directory.to_path_buf(),
+            kind,
+        });
+    }
+    gathered_overlap(directory).map(|gathered| WorkspaceError::OverlapsGathered {
+        path: directory.to_path_buf(),
+        kind,
+        gathered,
+    })
 }
 
 /// The folder reserved for gathering that a workspace's own `directory` would

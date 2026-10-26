@@ -81,6 +81,10 @@ pub enum CliError {
         path: PathBuf,
         files: usize,
     },
+    #[error("nothing moved: {0}")]
+    Refused(mindflayer_core::migrate::Refusal),
+    #[error(transparent)]
+    Migrate(#[from] mindflayer_core::migrate::MigrateError),
     #[error("`{editor}` could not be started: {source}")]
     Editor {
         editor: String,

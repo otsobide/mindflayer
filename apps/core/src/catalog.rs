@@ -133,22 +133,26 @@ impl Catalog {
         self.failures.dedup_by(|a, b| a.path() == b.path());
     }
 
-    /// One artifact per immediate subdirectory holding `manifest`.
+    /// Where every artifact of `kind` in the folder `root` is, without reading
+    /// any of them, and why a folder in it could not be listed.
     ///
-    /// Only the immediate ones: the directory belongs to the artifact, assets
-    /// and all, so walking into it would turn its own files into artifacts.
-    fn take_directories(&mut self, root: &Path, manifest: &str, project: &Path) {
-        let mut directories = match self.read_dir(root) {
-            Some(entries) => entries,
-            None => return,
+    /// What discovery reads, found by the walk discovery uses, for a caller
+    /// that acts on the files rather than on what they declare: one moving
+    /// them has to move a skill whose front matter is broken too, since it is
+    /// no less the holder's for that. A folder that is not there holds none,
+    /// and is no failure.
+    pub fn locate(root: &Path, kind: Kind) -> (Vec<PathBuf>, Vec<DiscoveryFailure>) {
+        let mut catalog = Catalog::default();
+        let found = match kind.layout() {
+            Layout::Directory { manifest } => catalog.directories_in(root, manifest),
+            Layout::Files { extension } => catalog.files_in(root, extension),
         };
-        directories.sort();
-        for path in directories {
-            if !path.join(manifest).is_file() {
-                // Not a broken artifact: not one. Shared assets and stray
-                // dotfolders both land here.
-                continue;
-            }
+        (found, catalog.failures)
+    }
+
+    /// One artifact per immediate subdirectory holding `manifest`.
+    fn take_directories(&mut self, root: &Path, manifest: &str, project: &Path) {
+        for path in self.directories_in(root, manifest) {
             match Artifact::skill(path, project) {
                 Ok(artifact) => self.artifacts.push(artifact),
                 Err(error) => self.failures.push(error.into()),
@@ -156,11 +160,41 @@ impl Catalog {
         }
     }
 
+    /// Every immediate subdirectory of `root` holding `manifest`, in order.
+    ///
+    /// Only the immediate ones: the directory belongs to the artifact, assets
+    /// and all, so walking into it would turn its own files into artifacts.
+    fn directories_in(&mut self, root: &Path, manifest: &str) -> Vec<PathBuf> {
+        let Some(mut directories) = self.read_dir(root) else {
+            return Vec::new();
+        };
+        directories.sort();
+        // One without the manifest is not a broken artifact: it is not one.
+        // Shared assets and stray dotfolders both land there.
+        directories.retain(|path| path.join(manifest).is_file());
+        directories
+    }
+
     /// One artifact per file with `extension`, at any depth under `root`.
     ///
     /// The name is the route below `root` without the extension, so folders
     /// group and mean nothing else.
     fn take_files(&mut self, root: &Path, extension: &str, project: &Path) {
+        for path in self.files_in(root, extension) {
+            let Some(name) = route(root, &path) else {
+                self.failures.push(DiscoveryFailure::UnusableName { path });
+                continue;
+            };
+            match Artifact::rule(&path, name, project) {
+                Ok(artifact) => self.artifacts.push(artifact),
+                Err(error) => self.failures.push(error.into()),
+            }
+        }
+    }
+
+    /// Every file with `extension` at any depth under `root`, in order,
+    /// leaving out what is hidden.
+    fn files_in(&mut self, root: &Path, extension: &str) -> Vec<PathBuf> {
         let mut pending = vec![root.to_path_buf()];
         let mut files = Vec::new();
 
@@ -194,16 +228,7 @@ impl Catalog {
         }
 
         files.sort();
-        for path in files {
-            let Some(name) = route(root, &path) else {
-                self.failures.push(DiscoveryFailure::UnusableName { path });
-                continue;
-            };
-            match Artifact::rule(&path, name, project) {
-                Ok(artifact) => self.artifacts.push(artifact),
-                Err(error) => self.failures.push(error.into()),
-            }
-        }
+        files
     }
 
     /// The entries of a directory, or nothing when it is absent.

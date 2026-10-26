@@ -8,6 +8,7 @@ pub(crate) mod activate;
 pub(crate) mod artifact;
 pub(crate) mod gather;
 pub(crate) mod install;
+pub(crate) mod migrate;
 pub(crate) mod project;
 pub(crate) mod read;
 pub(crate) mod workspace;
@@ -24,6 +25,7 @@ use activate::{activate_command, which_command};
 use artifact::{add_to, edit_in, remove_from, rename_in, templates_of};
 use gather::run_gather;
 use install::{install_named, uninstall_named};
+use migrate::migrate_library;
 use project::{
     init_project, init_workspace, link_here, link_projects, scan_workspace, unlink_here,
     unlink_projects,
@@ -332,6 +334,15 @@ fn run_flayer(
         FlayerCommand::Uninstall { project, name } => {
             let workspace = workspace_here(directory, lookup)?;
             uninstall_named(&workspace, &workspace.pick(project)?, name)
+        }
+
+        // Resolved as a read, on the default workspace before it is made
+        // too: a workspace made for the occasion keeps its own in its
+        // library from the start, and has nothing to move.
+        FlayerCommand::Migrate { library: _, yes } => {
+            reading_workspace(directory, lookup, |workspace| {
+                migrate_library(workspace, *yes)
+            })
         }
 
         FlayerCommand::Tui => tui::run(directory, lookup),

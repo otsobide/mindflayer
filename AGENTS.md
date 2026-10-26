@@ -75,7 +75,8 @@ under `apps/` with its own `Makefile`:
   workspace a command uses (`resolve`), the shell code that activates one
   (`activate`), kinds, the catalog, gathering (`gix`), the SQLite ledger,
   installing, keeping installs out of git (`exclude`), creating and changing
-  artifacts. Its only I/O is files, and it never reads the environment.
+  artifacts, and moving a workspace's own into its library (`migrate`). Its
+  only I/O is files, and it never reads the environment.
 - `apps/cli` (`mindflayer-cli`): the binaries `mind` (`src/main.rs`) and
   `flayer` (`src/bin/flayer.rs`), and the TUI. `src/lib.rs` only re-exports
   the public API. The parsers are in `src/parse.rs`. `src/commands.rs`
@@ -83,7 +84,7 @@ under `apps/` with its own `Makefile`:
   commands has a file under `src/commands/`: `project` (init, link, unlink,
   scan), `workspace` (load, unload), `activate` (activate, which),
   `artifact` (add, edit, rename, remove, templates), `read` (list, show,
-  validate), `gather` and `install`.
+  validate), `gather`, `install` and `migrate` (migrate --library).
   `src/render.rs` holds `Outcome`, `Failure` and the table helpers,
   `src/error.rs` holds `CliError`, and `src/homes.rs` decides the default
   home and the agent homes, and gathers `-W` and `$MINDFLAYER_WORKSPACE`
@@ -154,11 +155,14 @@ These are easy to break from a single file without noticing.
   to hide the rest. An absence (no `skills/` folder yet) is not a failure.
 - **Never overwrite what somebody wrote.**
   - New markers are written from string templates so their comments survive.
-    Edits go through `toml_edit` (`edit_array`) and a temp file of their own
+    Edits go through `toml_edit` (`edit_array`, or `edit_marker_held` for a
+    writer that holds the lock already) and a temp file of their own
     (`replace_file`, named for the run) plus a rename.
   - Creation uses `create_new` or `create_dir`.
   - `rename` rewrites only the `name:` line (`frontmatter::with_key`).
-  - `remove` is a dry run without `--yes`.
+  - `remove` and `flayer migrate --library` are dry runs without `--yes`.
+    A migration moves nothing a project holds, refuses as a whole, and keeps
+    the marker it rewrites as `flayer.toml.v<version>` (`create_new`).
   - A file somebody else owns is edited only inside Mindflayer's marked
     blocks or, in an agent's config file, which can carry no marks, one entry
     at a time (next bullet). Every byte outside them is kept, and a malformed
@@ -230,13 +234,14 @@ These are easy to break from a single file without noticing.
     `url::redacted` too.
 - **Writers take turns; readers never wait.** Core's writers hold the
   workspace's `.mindflayer/lock` (`FlayerWorkspace::lock`) while they change
-  it: `edit_array`, `install::install` and `uninstall`, `gather::gather`, and
+  it: `edit_array`, `install::install` and `uninstall`, `gather::gather`,
   `gather::scrub`, which `FlayerWorkspace::ledger_to_write` runs, when it has
-  clones to rewrite. A new writer takes it the same way, inside core;
+  clones to rewrite, and `migrate::library`, from its plan to its rewrite of
+  the marker. A new writer takes it the same way, inside core;
   `config_entry::ConfigFile` takes none, since the writers that call it hold
-  it. Opening the ledger takes no lock: a migration keeps itself apart in its
-  own transaction. The lock is not re-entrant: a writer never calls another
-  while it holds it, and a front end never takes it. Reads
+  it. Opening the ledger takes no lock: a schema migration keeps itself apart
+  in its own transaction. The lock is not re-entrant: a writer never calls
+  another while it holds it, and a front end never takes it. Reads
   (`FlayerWorkspace::open`, `ledger_for_reading`) never take it. A wait is
   bounded (`lock::WAIT`), ending in a `LockError::Busy` that names the
   holder's pid, except a record drop's (`install::disown`), which follows a
