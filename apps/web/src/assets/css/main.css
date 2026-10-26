@@ -1,2 +1,24 @@
 @import "tailwindcss";
 @import "@nuxt/ui";
+/* Geist and Geist Mono as files of the build, never fetched from a font
+   service: the server's CSP lets nothing in from another host. */
+@import "@fontsource-variable/geist";
+@import "@fontsource-variable/geist-mono";
+
+@theme {
+  --font-sans: "Geist Variable", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "Geist Mono Variable", ui-monospace, monospace;
+}
+
+@layer base {
+  body {
+    @apply bg-default text-default font-sans text-sm antialiased;
+  }
+
+  code,
+  kbd,
+  samp,
+  pre {
+    font-variant-numeric: tabular-nums slashed-zero;
+  }
+}
