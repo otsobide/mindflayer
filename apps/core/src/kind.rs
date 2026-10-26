@@ -103,8 +103,8 @@ impl fmt::Display for UnknownKind {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Layout {
     /// One directory per artifact, holding a manifest with a fixed name. The
-    /// whole directory belongs to the artifact — its scripts, references and
-    /// assets included — which is why it is never walked recursively.
+    /// whole directory belongs to the artifact (its scripts, references and
+    /// assets included), which is why it is never walked recursively.
     Directory { manifest: &'static str },
     /// One file per artifact, at any depth. Folders under the kind's own
     /// folder group and mean nothing else.

@@ -293,8 +293,8 @@ impl Ledger {
     /// SQLite makes `mindflayer.db-wal` and `mindflayer.db-shm` to read a
     /// ledger that keeps its log, and takes them away when the last
     /// connection closes. So in a folder this process may read and not write
-    /// — a sandboxed agent's view of the workspace, a read-only mount,
-    /// somebody else's workspace — reading fails though nothing is to be
+    /// (a sandboxed agent's view of the workspace, a read-only mount,
+    /// somebody else's workspace), reading fails though nothing is to be
     /// written, where the journal the ledger had before let it be read.
     /// Called only when there is no log, which is when everything is in the
     /// file itself, and SQLite's `immutable` then reads it without the log or
@@ -359,7 +359,7 @@ impl Ledger {
             .map_err(|source| self.failed("turning on secure delete", source))?;
 
         // Read before taking the write lock, so that opening a database that
-        // is already current — every open but the first after an upgrade —
+        // is already current (every open but the first after an upgrade)
         // writes nothing, and still works on a file it may only read.
         let found = self.schema_version()?;
         if found == SCHEMA_VERSION {
@@ -1245,8 +1245,8 @@ fn cannot_make_the_log(path: &Path, error: &LedgerError) -> bool {
 /// `path` as the URI SQLite opens as [`immutable`](Ledger::open_immutable):
 /// `None` for one that is not UTF-8, which a URI cannot spell.
 ///
-/// Only what SQLite reads as part of the URI's syntax is escaped — `%`, and
-/// `?` and `#`, which would end the path — since it takes everything else
+/// Only what SQLite reads as part of the URI's syntax is escaped (`%`, and
+/// `?` and `#`, which would end the path), since it takes everything else
 /// as it is. An absolute path goes after an empty authority, `file:///`, so
 /// one that starts with two slashes is not read as naming a host; on Windows
 /// a slash goes before it too (`file:///C:/...`), which SQLite drops again.
@@ -1482,8 +1482,8 @@ CREATE INDEX installations_by_project ON installations (project);
 ///
 /// What version 2 recorded becomes one target at the path it had. Its origin
 /// is filled in where it points at a source, spelled as `--from` takes a
-/// source's offer at this version — the address, with `#` and the branch when
-/// one was asked for — and here rather than through the code that spells it
+/// source's offer at this version (the address, with `#` and the branch when
+/// one was asked for), and here rather than through the code that spells it
 /// now, so a later change to that spelling cannot change what this step
 /// writes. An install from the workspace or a load gets none, since version 2
 /// kept nothing that says which. No hash is made up for a copy nobody hashed

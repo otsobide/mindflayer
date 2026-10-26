@@ -62,7 +62,7 @@ pub fn relative_to(target: &Path, base: &Path) -> Option<PathBuf> {
 
     // A root or prefix left on either side means the two paths never met:
     // different Windows drives, or one absolute and one relative. Checking
-    // both sides matters — an unmatched root on the *target* would otherwise
+    // both sides matters: an unmatched root on the *target* would otherwise
     // be pushed onto the route and silently reset it to an absolute path.
     let target_rest: Vec<Component> = target_parts.collect();
     let unrooted = |c: &Component| !matches!(c, Component::Prefix(_) | Component::RootDir);

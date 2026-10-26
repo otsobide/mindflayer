@@ -4,7 +4,7 @@
 //! Three places offer what can be installed: the workspace's own artifacts,
 //! the own artifacts of every workspace it loads (read where they are), and
 //! the shelf gathering fills. This is the other half. It writes into a mind
-//! project — the only thing in Mindflayer that does — and the rule it works by
+//! project, the only thing in Mindflayer that does, and the rule it works by
 //! is that **it only manages what it installed**. An artifact somebody wrote by
 //! hand is neither overwritten nor deleted, whatever a caller asks for, and it
 //! is told so rather than being obeyed quietly. Which of the two a file is, is
@@ -110,7 +110,7 @@ impl Offer {
     /// Where it came from, as one string: [`WORKSPACE_ORIGIN`] for the
     /// workspace's own; for a gathered one its source's address, with the
     /// branch when one was asked for; for a loaded one its entry after
-    /// [`LOADED_PREFIX`] — `load:../team` — so it can be neither the word the
+    /// [`LOADED_PREFIX`] (`load:../team`), so it can be neither the word the
     /// workspace's own go by nor the address of something gathered, even from
     /// that same directory.
     ///
@@ -132,7 +132,7 @@ impl Offer {
     /// origin as printed; a source's address without its branch; a loaded
     /// workspace's name, unless that is the word the workspace's own go by.
     /// A path to a loaded workspace is [`resolve_from`]'s to turn into its
-    /// origin — only when nothing matches it as typed, so a path never takes
+    /// origin, and only when nothing matches it as typed, so a path never takes
     /// a shelf source's address or the workspace's own away. An address typed
     /// with credentials names the source they were taken out of.
     pub fn comes_from(&self, from: &str) -> bool {
@@ -159,7 +159,7 @@ impl Offer {
 pub const LOADED_PREFIX: &str = "load:";
 
 /// `from` as `--from` should match it: when it is a path, typed relative to
-/// `base` — bare or after `load:` — to a workspace `workspace` loads, that
+/// `base` (bare or after `load:`) to a workspace `workspace` loads, that
 /// workspace's origin; otherwise `from` as it is, and always for the word
 /// the workspace's own go by. So the path given to `flayer load` works as
 /// `--from` from wherever it was typed, not only spelled as the marker
@@ -184,8 +184,8 @@ pub fn resolve_from(workspace: &FlayerWorkspace, base: &Path, from: &str) -> Str
 
 /// Whether a declared name is one plain folder name, and so safe to join onto
 /// a project's folder. A name is read from somebody's `SKILL.md`; `..`, an
-/// absolute path or `a/b` would put the copy — and the deletion that
-/// replacing it starts with — somewhere else entirely.
+/// absolute path or `a/b` would put the copy (and the deletion that
+/// replacing it starts with) somewhere else entirely.
 pub fn is_folder_name(name: &str) -> bool {
     let mut components = Path::new(name).components();
     matches!(
@@ -349,7 +349,7 @@ pub fn survey(
 
     // The workspace's own come first: what it keeps for its projects before
     // what it gathered from elsewhere. Only kinds that are a directory each,
-    // because installing copies a directory — the same line the shelf draws.
+    // because installing copies a directory: the same line the shelf draws.
     let mut offers = Vec::new();
     let installable = matches!(kind.layout(), Layout::Directory { .. });
     if installable && workspace.own_kinds().contains(&kind) {
@@ -468,7 +468,7 @@ pub fn install(
 
     // A loaded workspace can be the project itself, keeping its own in the
     // project's folder: then what would be copied is what is already there.
-    // Nothing is written, and above all nothing is recorded — a record would
+    // Nothing is written, and above all nothing is recorded: a record would
     // let `uninstall` delete the loaded workspace's own files.
     if same_place(&from, &to) {
         return Ok(Installed::Unchanged {
@@ -479,7 +479,7 @@ pub fn install(
         .into());
     }
     // One inside the other is worse: replacing `to` starts by deleting it,
-    // and with it `from` — or copies `from` into itself.
+    // and with it `from`, or copies `from` into itself.
     if overlaps(&from, &to) {
         return Err(InstallError::Overlaps { from, to });
     }
@@ -696,7 +696,7 @@ pub fn uninstall(
 /// removed, renamed or edited by hand, or something new was written under a
 /// name an old record still claims. The record is what gives the install
 /// screen leave to overwrite and delete, so it must not outlive the copy it
-/// was about — whatever somebody writes there next would inherit it.
+/// was about: whatever somebody writes there next would inherit it.
 ///
 /// Only the changes in [`crate::lifecycle`] call it, each when its change
 /// calls for it. Public, it would let a front end drop a record on a rule of
@@ -910,12 +910,12 @@ fn resolved(path: &Path) -> Option<PathBuf> {
 }
 
 /// The loaded workspace that keeps its own of `kind` in a folder `path` is
-/// in, or around, if one does — spelled as its root, which `flayer unload`
-/// accepts from anywhere.
+/// in, or around, if one does (spelled as its root, which `flayer unload`
+/// accepts from anywhere).
 ///
 /// By the folder, not by what is in it yet: a project that is also a loaded
 /// workspace keeping both in one folder has nothing in it Mindflayer may
-/// write or remove, from the first install on — otherwise an install today
+/// write or remove, from the first install on; otherwise an install today
 /// is the loaded workspace's own tomorrow, and can never be updated again.
 fn kept_by_a_load(workspace: &FlayerWorkspace, kind: Kind, path: &Path) -> Option<PathBuf> {
     let at = resolved(path)?;
@@ -949,15 +949,13 @@ pub enum InstallError {
     Ledger(#[from] LedgerError),
     #[error(transparent)]
     Workspace(#[from] WorkspaceError),
-    #[error(
-        "{name}: the ledger has it at {path}, but nothing is there — gather {workspace} again"
-    )]
+    #[error("{name}: the ledger has it at {path}, but nothing is there; gather {workspace} again")]
     Missing {
         name: String,
         path: PathBuf,
         workspace: PathBuf,
     },
-    #[error("{name}: {path} is not there any more — the workspace loaded from {workspace} has changed; `flayer unload {workspace}` if it has gone")]
+    #[error("{name}: {path} is not there any more, because the workspace loaded from {workspace} has changed; `flayer unload {workspace}` if it has gone")]
     Gone {
         name: String,
         path: PathBuf,
@@ -974,7 +972,7 @@ pub enum InstallError {
     Artifact(#[from] ArtifactError),
     #[error("{from} and {to} are one inside the other, so installing one onto the other would delete it")]
     Overlaps { from: PathBuf, to: PathBuf },
-    #[error("{path} is where the workspace loaded from {loaded} keeps its own, so Mindflayer neither installs nor removes there — `flayer unload {loaded}` first to manage it as a project")]
+    #[error("{path} is where the workspace loaded from {loaded} keeps its own, so Mindflayer neither installs nor removes there; `flayer unload {loaded}` first to manage it as a project")]
     KeptByALoad { path: PathBuf, loaded: PathBuf },
     #[error("{path}: cannot be written: {source}")]
     Write {
@@ -987,7 +985,7 @@ pub enum InstallError {
     },
     #[error("nothing called `{name}` can be installed{}: gather it, load a workspace that has it with `flayer load`, or add it to the workspace with `flayer add`", from.as_deref().map(|from| format!(" from {from}")).unwrap_or_default())]
     NotOffered { name: String, from: Option<String> },
-    #[error("`{name}` is offered by more than one place — {} — so say which with --from", .origins.join(", "))]
+    #[error("`{name}` is offered by more than one place ({}), so say which with --from", .origins.join(", "))]
     OfferedTwice { name: String, origins: Vec<String> },
 }
 

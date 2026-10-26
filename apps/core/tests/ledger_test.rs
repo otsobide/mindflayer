@@ -1,5 +1,5 @@
 //! The ledger: what an install records in it, and opening one an older
-//! Mindflayer wrote — what it keeps, what it gains, and the copy of it left
+//! Mindflayer wrote: what it keeps, what it gains, and the copy of it left
 //! behind.
 
 mod common;

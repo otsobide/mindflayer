@@ -1,7 +1,7 @@
 //! The TUI: every project a workspace manages, and a key for each command.
 //!
 //! `flayer` on its own opens it. What it changes, it changes by running a
-//! command line — `flayer link beta`, `mind -C beta add skill deploy '…'` —
+//! command line (`flayer link beta`, `mind -C beta add skill deploy '…'`),
 //! parsed by the parsers the binaries use and run through the same functions,
 //! and those lines are printed when it closes. There is nothing the screen can
 //! do that a command cannot, and nothing a command says that the screen says
@@ -9,7 +9,7 @@
 //!
 //! Split the way the install screen it embeds is: [`state`] is what a key
 //! does, [`ui`] is what the screen looks like, and this file is the loop and
-//! the work — the only parts that touch a terminal or a disk.
+//! the work: the only parts that touch a terminal or a disk.
 
 pub mod minds;
 pub mod state;
@@ -96,7 +96,7 @@ pub fn minds(directory: &Path, lookup: &Lookup) -> Result<App, CliError> {
 /// Open the TUI on the project at or above `directory`: what `mind` does on
 /// its own.
 ///
-/// A project a workspace manages opens in that workspace, on the project —
+/// A project a workspace manages opens in that workspace, on the project:
 /// the same screen `flayer` opens, since that is where the project's
 /// neighbours and its installs are. One no workspace manages opens on its own.
 pub fn run_project(directory: &Path, lookup: &Lookup) -> Result<Outcome, Failure> {
@@ -171,7 +171,7 @@ fn drive(terminal: &mut DefaultTerminal, app: &mut App) -> Result<(), io::Error>
             // however the loop ends.
             Step::Quit => return Ok(()),
             // An editor draws a screen of its own, so this one steps aside
-            // for it — raw mode off, back to the normal screen — and is drawn
+            // for it (raw mode off, back to the normal screen) and is drawn
             // again from scratch once the editor is closed.
             Step::Run(task) if task.takes_terminal() => {
                 ratatui::restore();
@@ -415,7 +415,7 @@ pub fn execute(words: &[String], base: &Path, lookup: &Lookup, watch: &Watch) ->
 const SCREEN_IN_A_SCREEN: &str = "opens a screen of its own, so it is not run from inside this one";
 
 /// Whether a workspace command opens a screen of its own: the TUI, or the
-/// install screen — `flayer install` with nothing named to install.
+/// install screen (`flayer install` with nothing named to install).
 fn draws(command: Option<&FlayerCommand>) -> bool {
     matches!(
         command,
@@ -498,8 +498,8 @@ fn apply_install(base: &Path, screen: &InstallScreen) -> Done {
 // ---------------------------------------------------------------------------
 
 /// Read everything the screen shows from the disk: the workspace `lookup`
-/// resolves from `directory`, as a read resolves it — the default one in
-/// home as it will be, when nothing has made it yet.
+/// resolves from `directory`, as a read resolves it (the default one in
+/// home as it will be, when nothing has made it yet).
 ///
 /// Opening a screen is no reason to make it. The first change made from the
 /// screen is, and that runs a command that writes, which makes it the way it
@@ -603,7 +603,7 @@ fn workspace_view(workspace: &FlayerWorkspace, reason: Reason, lookup: &Lookup) 
     }
 }
 
-/// Every workspace this one loads, with how many of its own each offers —
+/// Every workspace this one loads, with how many of its own each offers,
 /// counted from the install machinery's own offers, so the number is what
 /// the install screen shows.
 fn loaded(workspace: &FlayerWorkspace) -> Vec<LoadedSource> {
@@ -712,7 +712,7 @@ fn held(
 
     // A file that does not read is listed where it would have been, by the
     // name its place gives it, so it can be opened and fixed from here. Only
-    // what cannot be pinned to an artifact — a folder that cannot be listed —
+    // what cannot be pinned to an artifact (a folder that cannot be listed)
     // is left as a warning on its own.
     let mut warnings = Vec::new();
     for failure in catalog.failures() {

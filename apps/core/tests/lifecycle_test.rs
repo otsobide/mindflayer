@@ -1,5 +1,5 @@
 //! Adding to what a project holds, and finding, renaming and removing what it
-//! already does — and what each of those does to the ledger's records.
+//! already does, and what each of those does to the ledger's records.
 
 use std::fs;
 use std::path::{Path, PathBuf};

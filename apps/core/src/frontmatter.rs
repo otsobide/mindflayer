@@ -37,7 +37,7 @@ pub fn split(source: &str) -> Result<Document<'_>, FrontMatterError> {
     let source = source.strip_prefix('\u{feff}').unwrap_or(source);
 
     // split_inclusive keeps the line terminators, so summing the lengths of
-    // the lines walked so far is a byte offset into `source` — that is what
+    // the lines walked so far is a byte offset into `source`, which is what
     // lets the two halves be borrowed slices rather than copies.
     let mut lines = source.split_inclusive('\n');
     let opening = lines.next().ok_or(FrontMatterError::Missing)?;
@@ -70,7 +70,7 @@ fn is_fence(line: &str) -> bool {
 //
 // Front matter is written by people, with comments and a key order that mean
 // something to them, so a change to one key is made to that key's line and
-// nothing else — never by parsing and re-serializing the whole block. Whoever
+// nothing else, never by parsing and re-serializing the whole block. Whoever
 // calls these parses the result afterwards, to be sure the edit meant what it
 // was meant to.
 // ---------------------------------------------------------------------------
@@ -83,8 +83,8 @@ pub(crate) fn is_key(line: &str, key: &str) -> bool {
 
 /// Front matter without the top-level `keys`, or the lines that continue them.
 ///
-/// A blank or indented line belongs to the key above it — that is how a block
-/// scalar or a list goes on — so it leaves with that key.
+/// A blank or indented line belongs to the key above it (that is how a block
+/// scalar or a list goes on), so it leaves with that key.
 pub(crate) fn without_keys(front_matter: &str, keys: &[&str]) -> String {
     let mut kept = String::with_capacity(front_matter.len());
     let mut dropping = false;
@@ -104,7 +104,7 @@ pub(crate) fn without_keys(front_matter: &str, keys: &[&str]) -> String {
 /// byte as it was.
 ///
 /// `None` unless the key is there exactly once with its whole value on its own
-/// line: a value that carries on below the key — a block scalar, a list — is
+/// line: a value that carries on below the key (a block scalar, a list) is
 /// more than one line, and replacing the first of them would leave the rest
 /// behind.
 pub(crate) fn with_key(front_matter: &str, key: &str, value: &str) -> Option<String> {

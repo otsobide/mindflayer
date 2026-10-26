@@ -161,7 +161,7 @@ pub(crate) fn indent(text: &str) -> String {
 /// Text safe to put in a row.
 ///
 /// A name or an opening line comes from a file somebody wrote, and a carriage
-/// return in one would let a row overwrite the row above it on the terminal —
+/// return in one would let a row overwrite the row above it on the terminal,
 /// hiding an entry, or fabricating one that looks real.
 pub(crate) fn printable(text: &str) -> String {
     text.chars()

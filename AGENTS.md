@@ -24,7 +24,7 @@ lists everything.
 ```bash
 make test                 # every Rust suite; the panel's is make web/test
 make fmt/check            # CI runs this first
-make lint                 # clippy --workspace --all-targets
+make lint                 # no em dash in a tracked file, then clippy --workspace --all-targets
 make run ARGS="flayer list"
 make core/test            # one app: make <app>/<target>
 ```
@@ -54,7 +54,9 @@ pnpm --dir apps/web exec vitest run tests/shell.test.ts      # one suite
 
 `make test`, `make build`, `make fmt` and `make lint` are Rust only: `web` is
 in the root Makefile's `NODE_APPS`, outside the aggregates, until CI installs
-Node (#71). A change to the panel runs its own targets.
+Node (#71). A change to the panel runs its own targets. The one exception is
+`make lint`'s em dash check (`make lint/em-dash`), which reads every tracked
+file, the panel's included.
 
 `make dev/link`, `make dev/unlink` and `make install` write into `~/.cargo/bin`
 (or `BINDIR`), outside the repository. Don't run them unless asked.
@@ -183,8 +185,8 @@ These are easy to break from a single file without noticing.
     workspace's directory; they live in `.mindflayer`. An install into a
     project at the workspace's root is that project's (D-03).
 - **Mindflayer only manages what it installed.** The ledger's record of an
-  install — one installation, a target for each copy it wrote, its origin and
-  the `hash::tree` of what it wrote, that hash's one definition — is what
+  install (one installation, a target for each copy it wrote, its origin and
+  the `hash::tree` of what it wrote, that hash's one definition) is what
   allows overwriting and deleting. An unrecorded artifact is
   `Standing::Foreign` and is never touched. Core's lifecycle changes
   (`lifecycle::add`, `finish_edit`, `rename` and `remove`) drop any record
@@ -199,7 +201,7 @@ These are easy to break from a single file without noticing.
   (what `ValidationIssue::is_strict` picks out), so change the rules there and
   nowhere else; gathering
   takes such a skill with a `warning:` per problem, and `validate` reports
-  everything — `flayer validate` without `-p` reads the shelf too — but calls
+  everything (`flayer validate` without `-p` reads the shelf too) but calls
   an artifact invalid only for what is not `ValidationIssue::is_warning`. Keys the format does not define pass through
   untouched. A rule's front matter is optional (`rule::RuleManifest`): read
   only when its fences hold a YAML mapping, and whatever it leaves unread is a
@@ -420,3 +422,9 @@ These are easy to break from a single file without noticing.
 Comments and doc comments explain *why* a choice was made, often naming the
 alternative that was rejected. They rarely narrate what the code does. Match
 that density and voice in code and docs alike.
+
+No em dash (U+2014), in docs, comments, messages or commit messages: the owner
+finds it reads as machine-written. Write a comma, a colon, parentheses or a
+new sentence instead, never a hyphen or a spaced en dash in its place.
+`make lint` fails on one in any tracked file; a commit message is yours to
+check.

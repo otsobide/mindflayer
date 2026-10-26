@@ -49,7 +49,7 @@ pub(crate) fn run_gather(
 }
 
 /// `flayer gather list`: what can be installed from elsewhere, from a
-/// ledger read without being made — a workspace that has gathered nothing
+/// ledger read without being made. A workspace that has gathered nothing
 /// has no database, and listing that is no reason to create one.
 fn shelf(workspace: &FlayerWorkspace) -> Result<Outcome, Failure> {
     use mindflayer_core::install::{offered_by_loads, Offer};
@@ -225,9 +225,9 @@ fn gathered(url: &str, report: &Report) -> Outcome {
 }
 
 /// Everything that can be installed from elsewhere, with where each thing
-/// comes from — spelled as `--from` takes it.
+/// comes from, spelled as `--from` takes it.
 ///
-/// Empty, it says how to fill it — and suggests loading only when nothing is
+/// Empty, it says how to fill it, and suggests loading only when nothing is
 /// loaded yet; `flayer load` on its own lists what is.
 fn shelf_listing(shelf: &[mindflayer_core::install::Offer], nothing_loaded: bool) -> String {
     if shelf.is_empty() {
