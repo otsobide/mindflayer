@@ -274,10 +274,6 @@ impl Ledger {
         if found == SCHEMA_VERSION {
             return Ok(());
         }
-        // Version 0 is a database just created, with nothing in it to keep.
-        if found > 0 {
-            self.back_up(found)?;
-        }
 
         // Every step and the stamp in one transaction. Run one statement at a
         // time, a step that fails, or a process that dies halfway, would leave
@@ -292,6 +288,15 @@ impl Ledger {
         let found = self.schema_version()?;
         if found == SCHEMA_VERSION {
             return Ok(());
+        }
+        // Copied under the lock too, not before it: a copy taken after the
+        // first read could be of what another process has since migrated,
+        // and would replace that process's copy of the old version with one of
+        // the new. Holding the lock, this is the one process migrating, and
+        // the file is at the version just read. Version 0 is a database just
+        // created, with nothing in it to keep.
+        if found > 0 {
+            self.back_up(found)?;
         }
 
         // One block per version, applied in order, so a database created two
@@ -334,10 +339,17 @@ impl Ledger {
     /// Taken by SQLite's online backup rather than by copying the file:
     /// opening and closing the file outside SQLite while this connection
     /// holds it would drop the connection's locks on Unix, where they belong
-    /// to the process. Written to a temporary beside it and renamed, so an
+    /// to the process. Read through a connection of its own, because this
+    /// one holds the migration's write lock and SQLite will not copy from a
+    /// connection in the middle of writing; reading beside that lock is
+    /// allowed. Written to a temporary beside it and renamed, so an
     /// interrupted copy is never mistaken for a whole one, and given the
     /// database's permissions, so a ledger kept private does not leave a
     /// readable copy of itself.
+    ///
+    /// Called with the write lock held, which is what makes the temporary's
+    /// one fixed name safe: no other process is copying, so whatever is
+    /// there is what an interrupted attempt left.
     fn back_up(&self, version: u32) -> Result<(), LedgerError> {
         let backup = backup_path(&self.path, version);
         let failed = |source: io::Error| LedgerError::Backup {
@@ -357,7 +369,7 @@ impl Ledger {
                 _ => {}
             }
         }
-        if let Err(error) = copy_database(&self.connection, &temporary) {
+        if let Err(error) = copy_database(&self.path, &temporary, version) {
             let _ = fs::remove_file(&temporary);
             let _ = fs::remove_file(journal_of(&temporary));
             return Err(failed(error));
@@ -798,19 +810,41 @@ pub fn backup_path(path: &Path, version: u32) -> PathBuf {
     path.with_file_name(name)
 }
 
-/// Copy the database `from` is connected to into a new one at `to`, closed
-/// once it is whole.
-fn copy_database(from: &Connection, to: &Path) -> Result<(), io::Error> {
+/// Copy the database at `from`, at schema `version`, into a new one at `to`,
+/// closed once it is whole.
+fn copy_database(from: &Path, to: &Path, version: u32) -> Result<(), io::Error> {
+    // Read-only and never created: a file gone since it was opened is an
+    // error, not an empty database to copy.
+    let flags = OpenFlags::SQLITE_OPEN_READ_ONLY
+        | OpenFlags::SQLITE_OPEN_URI
+        | OpenFlags::SQLITE_OPEN_NO_MUTEX;
+    let source = Connection::open_with_flags(from, flags).map_err(io::Error::other)?;
     let mut copy = Connection::open(to).map_err(io::Error::other)?;
-    let copying = Backup::new(from, &mut copy).map_err(io::Error::other)?;
-    // Every page in one step, so the copy is one moment of the database
-    // rather than pages from either side of a write.
-    match copying.step(-1).map_err(io::Error::other)? {
-        StepResult::Done => Ok(()),
-        other => Err(io::Error::other(format!(
-            "something else was writing to it ({other:?}), so try again"
-        ))),
+    {
+        let copying = Backup::new(&source, &mut copy).map_err(io::Error::other)?;
+        // Every page in one step, so the copy is one moment of the database
+        // rather than pages from either side of a write.
+        match copying.step(-1).map_err(io::Error::other)? {
+            StepResult::Done => {}
+            other => {
+                return Err(io::Error::other(format!(
+                    "something else was writing to it ({other:?}), so try again"
+                )))
+            }
+        }
     }
+    // What the copy is for is opening at the old version, so that is checked
+    // rather than assumed: a file that is not the one being migrated is no
+    // way back from migrating it.
+    let copied: u32 = copy
+        .pragma_query_value(None, "user_version", |row| row.get(0))
+        .map_err(io::Error::other)?;
+    if copied != version {
+        return Err(io::Error::other(format!(
+            "the copy is at schema version {copied}, not {version}, so it is not of the file being migrated"
+        )));
+    }
+    Ok(())
 }
 
 /// The rollback journal SQLite keeps beside a database while writing it.

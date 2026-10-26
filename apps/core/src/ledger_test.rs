@@ -278,6 +278,40 @@ fn an_older_ledger_is_copied_aside_before_it_is_migrated() {
 }
 
 #[test]
+fn a_ledger_another_process_migrates_meanwhile_is_left_to_that_ones_copy() {
+    let dir = tempfile::TempDir::new().unwrap();
+    let path = dir.path().join(LEDGER_FILE);
+    version_1_at(&path);
+    // The copy the other one took, which only it may write.
+    let backup = backup_path(&path, 1);
+    std::fs::write(&backup, "the other one's copy").unwrap();
+
+    // The other one, holding the write lock the migration takes.
+    let other = Connection::open(&path).unwrap();
+    other.execute_batch("BEGIN IMMEDIATE").unwrap();
+    let opening = std::thread::spawn({
+        let path = path.clone();
+        move || Ledger::open(path).map(drop)
+    });
+    // Long enough to read version 1 and wait for the lock, which is when a
+    // copy taken outside it would be taken.
+    std::thread::sleep(std::time::Duration::from_millis(300));
+    other.execute_batch(SCHEMA_V2).unwrap();
+    other.execute_batch(SCHEMA_V3).unwrap();
+    other
+        .pragma_update(None, "user_version", SCHEMA_VERSION)
+        .unwrap();
+    other.execute_batch("COMMIT").unwrap();
+
+    opening.join().unwrap().unwrap();
+    assert!(
+        std::fs::read(&backup).unwrap() == b"the other one's copy",
+        "the other one's copy was replaced"
+    );
+    assert_eq!(version_of(&path), SCHEMA_VERSION);
+}
+
+#[test]
 fn a_ledger_made_now_or_already_current_is_not_copied() {
     let dir = tempfile::TempDir::new().unwrap();
     let path = dir.path().join(LEDGER_FILE);
