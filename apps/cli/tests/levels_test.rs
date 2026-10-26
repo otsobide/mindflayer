@@ -210,6 +210,66 @@ fn a_workspace_can_be_told_where_to_keep_its_own() {
 }
 
 #[test]
+fn a_workspace_that_keeps_its_own_beside_its_projects_still_does() {
+    // The marker as `flayer init` wrote it before the library, word for word.
+    let dir = TempDir::new().unwrap();
+    let marker = "# Mindflayer workspace.\n\
+         #\n\
+         # It orchestrates the mind projects listed below, so their skills can be\n\
+         # managed together. Paths are relative to this file's grandparent, the\n\
+         # directory holding .mindflayer.\n\
+         #\n\
+         # `directories` says where the workspace keeps its own skills and rules:\n\
+         # the ones every project it manages can install, beside the projects'\n\
+         # own. They are made the first time something is added to them.\n\
+         #\n\
+         # `loaded` lists other flayer workspaces whose own skills its projects\n\
+         # can install too, read from there each time: `flayer load <path>`.\n\
+         version = 2\n\
+         name = \"projects\"\n\
+         projects = []\n\
+         loaded = []\n\
+         \n\
+         [directories]\n\
+         skills = \"skills\"\n\
+         rules = \"rules\"\n";
+    fs::create_dir(dir.path().join(FLAYER_DIR)).unwrap();
+    fs::write(dir.path().join(FLAYER_DIR).join(FLAYER_CONFIG), marker).unwrap();
+
+    let skill = flayer(dir.path(), &["add", "skill", "commit-style", "Shared"]).unwrap();
+    let rule = flayer(
+        dir.path(),
+        &["add", "rule", "git/no-force-push", "Never force-push"],
+    )
+    .unwrap();
+    let listed = flayer(dir.path(), &["list"]).unwrap();
+    let renamed = flayer(dir.path(), &["rename", "commit-style", "commits"]).unwrap();
+    flayer(dir.path(), &["remove", "git/no-force-push", "--yes"]).unwrap();
+
+    assert_eq!(
+        created(&skill, "skill commit-style"),
+        dir.path().join("skills/commit-style/SKILL.md")
+    );
+    assert_eq!(
+        created(&rule, "rule git/no-force-push"),
+        dir.path().join("rules/git/no-force-push.md")
+    );
+    assert_eq!(
+        listed.stdout,
+        "skill  commit-style       Shared\nrule   git/no-force-push  Never force-push\n"
+    );
+    assert!(renamed.ok, "{:?}", renamed.stderr);
+    assert!(dir.path().join("skills/commits/SKILL.md").is_file());
+    assert!(!dir.path().join("rules/git/no-force-push.md").exists());
+    assert!(!dir.path().join(FLAYER_DIR).join("library").exists());
+    assert_eq!(
+        registry(dir.path()),
+        marker,
+        "the marker is read, not rewritten"
+    );
+}
+
+#[test]
 fn a_workspace_cannot_keep_its_own_on_the_shelf() {
     let dir = TempDir::new().unwrap();
 
