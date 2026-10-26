@@ -980,9 +980,42 @@ fn the_first_change_from_the_tui_makes_the_default_workspace() {
     assert!(workspace.default);
     let drawn = tui_drawn(&app);
     assert!(drawn.contains("default workspace · "), "{drawn}");
-    assert!(app
-        .transcript()
-        .starts_with("$ flayer link alpha\nlinked alpha as alpha\n"));
+    // Made by a line of its own, where the screen showed it.
+    assert_eq!(
+        app.transcript(),
+        format!(
+            "$ flayer init\ninitialized flayer workspace `{}` in {}\n\
+             $ flayer link alpha\nlinked alpha as alpha\n",
+            home.path().file_name().unwrap().to_string_lossy(),
+            home.path().join(FLAYER_DIR).display()
+        )
+    );
+}
+
+#[test]
+fn the_first_change_from_the_tui_lands_in_the_default_workspace_not_in_one_above_its_home() {
+    let (outer, home) = home_inside_a_workspace();
+    let before = registry(outer.path());
+    let elsewhere = TempDir::new().unwrap();
+    let mut app = tui_at_home(elsewhere.path(), &home);
+
+    press_key(&mut app, KeyCode::Char('l'));
+    let task = press_and_run(&mut app, KeyCode::Enter);
+
+    assert_eq!(
+        task,
+        Some(Task::Link {
+            path: String::from("gamma")
+        })
+    );
+    assert!(registry(&home).contains("\"gamma\""));
+    assert_eq!(registry(outer.path()), before);
+    let View::Workspace(workspace) = &app.view else {
+        panic!("{:?}", app.view)
+    };
+    assert!(workspace.made);
+    assert!(workspace.default);
+    assert_eq!(workspace.root, home);
 }
 
 #[test]

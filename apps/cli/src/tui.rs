@@ -210,7 +210,7 @@ pub fn perform(task: &Task, app: &App) -> Performed {
         Task::Link { path } if needs_init(&base.join(path)) => {
             Performed::NeedsInit { path: path.clone() }
         }
-        _ => Performed::Ran(run_all(&task.commands(), &base, app.home.as_deref())),
+        _ => Performed::Ran(run_all(&app.lines(task), &base, app.home.as_deref())),
     }
 }
 
@@ -243,9 +243,11 @@ fn run_all(lines: &[Vec<String>], base: &Path, home: Option<&Path>) -> Vec<Done>
 ///
 /// The words are what a person would type from the workspace root, so a `-C`
 /// among them is resolved against it rather than against wherever this
-/// process happened to be started. The default workspace is the TUI's own,
-/// passed along rather than looked up again, so no command it runs can reach
-/// a different one.
+/// process happened to be started. The home is the TUI's own, passed along
+/// rather than looked up again, so a command that falls back to the default
+/// workspace falls back to the one on screen. Each still walks up from `base`
+/// first, as from the shell, which is why a change to the default before it
+/// is made makes it first ([`App::lines`]).
 pub fn execute(words: &[String], base: &Path, home: Option<&Path>) -> Done {
     let command = state::shell(words);
     let from = |directory: Option<PathBuf>| {

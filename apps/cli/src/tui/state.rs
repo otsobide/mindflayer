@@ -782,6 +782,25 @@ impl App {
             .map_or(self.directory.as_path(), |workspace| &workspace.root)
     }
 
+    /// The command lines a task runs from [`base`](Self::base): its
+    /// [`commands`](Task::commands), after a `flayer init` when it changes
+    /// the default workspace before anything has made it.
+    ///
+    /// Made by a line of its own rather than left to the change, which would
+    /// make it as well from the shell. The lines run from the workspace root
+    /// and walk up from there like any command, and before it is made there
+    /// is no marker at the root to stop them: with a workspace above home,
+    /// the change would land in that one. `flayer init` makes the workspace
+    /// where it is run, and the transcript says so.
+    pub fn lines(&self, task: &Task) -> Vec<Vec<String>> {
+        let mut lines = task.commands();
+        let unmade = self.workspace().is_some_and(|workspace| !workspace.made);
+        if unmade && task.writes() && !lines.is_empty() {
+            lines.insert(0, words(&["flayer", "init"], &[]));
+        }
+        lines
+    }
+
     /// Every command that changed something, as a shell session would show
     /// it. Printed when the TUI closes, so what it did outlives the screen and
     /// can be done again without it.
