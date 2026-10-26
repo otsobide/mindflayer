@@ -537,7 +537,13 @@ happen.
   overlapping the library, another kind's folder or a project's root, where
   moving one file would carry another, or a project's, with it; a folder that
   cannot be listed; a project whose marker cannot be read and whose root
-  holds a folder being moved from, which could keep anything there.
+  holds a folder being moved from, which could keep anything there; a folder
+  the marker names outside the workspace or overlapping the shelf or the
+  cache, which `open` reads but `flayer init` refuses (`misplaced_own`, its
+  check), since what is there is somebody else's, or gathering's; a folder
+  that is a link, or is reached through one below the root, since what it
+  holds is kept elsewhere on purpose, a dotfiles repository say, and a rename
+  would empty that and leave the link aimed at nothing.
 - **Planned again under the lock.** It holds the workspace's lock from its
   plan to its rewrite of the marker, and plans from the marker on disk once it
   has the lock, so neither a plan shown a minute before nor a writer in

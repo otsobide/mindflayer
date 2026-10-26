@@ -1150,6 +1150,12 @@ $ flayer migrate --library --yes
 error: nothing moved: /home/you/.mindflayer/library/skills/commit-style: already there, so /home/you/skills/commit-style cannot be moved onto it
 ```
 
+Nothing moves either while a folder it would empty is not the workspace's:
+one `flayer.toml` names outside the workspace or on its shelf, which `flayer
+init` would have refused, or one that is a link, or is reached through one, as
+`~/skills -> dotfiles/skills` is, which keeps its skills in your dotfiles on
+purpose.
+
 A project's artifacts are never moved. When your home is itself a project
 keeping its skills in `~/skills` too, those are the project's: they stay where
 they are, the command says so, and the workspace's own skills start empty in
