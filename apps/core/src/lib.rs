@@ -15,6 +15,7 @@ pub mod artifact;
 pub mod catalog;
 pub mod copy;
 pub mod create;
+pub mod exclude;
 pub mod frontmatter;
 pub mod gather;
 pub mod install;
