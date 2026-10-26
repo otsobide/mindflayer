@@ -3,6 +3,7 @@ import { defineConfig } from 'vitest/config'
 import vue from '@vitejs/plugin-vue'
 import router from 'vue-router/vite'
 import ui from '@nuxt/ui/vite'
+import { colors } from './src/theme.ts'
 
 const here = (path: string) => fileURLToPath(new URL(path, import.meta.url))
 
@@ -13,6 +14,10 @@ export default defineConfig({
     router({ dts: 'src/route-map.d.ts' }),
     vue(),
     ui({
+      // The colour names components take, and what each stands for; main.css
+      // turns the same palette into the variables the panel draws with.
+      theme: { colors: Object.keys(colors).filter(name => name !== 'neutral') },
+      ui: { colors },
       // Every Lucide icon a component names, and Nuxt UI's own, go into the
       // bundle: the server's CSP refuses the Iconify API, so an icon that is
       // not bundled is one that never shows.
@@ -31,7 +36,14 @@ export default defineConfig({
       // so its code holds the API's hosts; the offline build only draws what
       // it was handed. Swapping one for the other keeps that code out of the
       // bundle, rather than trusting the CSP to stop a request it makes.
-      { find: /^@iconify\/vue$/, replacement: here('./src/overrides/iconify.ts') }
+      { find: /^@iconify\/vue$/, replacement: here('./src/overrides/iconify.ts') },
+      // Nuxt UI's colours plugin writes its palette into a <style> element
+      // at run time, which a CSP without 'unsafe-inline' refuses. main.css
+      // declares the same variables in the stylesheet instead.
+      {
+        find: /^.*[\\/]@nuxt[\\/]ui[\\/]dist[\\/]runtime[\\/]plugins[\\/]colors\.js$/,
+        replacement: here('./src/overrides/colors.ts')
+      }
     ]
   },
   build: {

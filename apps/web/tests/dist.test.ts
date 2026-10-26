@@ -4,6 +4,7 @@ import { mkdtempSync, readdirSync, readFileSync, rmSync } from 'node:fs'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
+import { colors, shades } from '@/theme'
 
 const root = fileURLToPath(new URL('..', import.meta.url))
 
@@ -106,8 +107,22 @@ describe('the built panel', () => {
     expect(html).not.toMatch(/\son[a-z]+="/)
   })
 
-  it('leaves out the code that would fetch an icon', () => {
+  it('declares in its stylesheet the palette Nuxt UI would have injected', () => {
+    const css = sheets().join('\n')
+    for (const [name, color] of Object.entries(colors)) {
+      for (const shade of shades) {
+        expect(css).toContain(`--ui-color-${name}-${shade}:var(--color-${color}-${shade})`)
+        // And Tailwind emitted the colour each one points at.
+        expect(css).toMatch(new RegExp(`--color-${color}-${shade}:[^;}]`))
+      }
+    }
+    expect(css).toContain('--ui-primary:var(--ui-color-primary-500)')
+    expect(css).toContain('--ui-primary:var(--ui-color-primary-400)')
+  })
+
+  it('leaves out the code that would fetch an icon or inject the palette', () => {
     const scripts = [...files].filter(([path]) => path.endsWith('.js')).map(([, text]) => text).join('\n')
     expect(scripts).not.toContain('iconify.design')
+    expect(scripts).not.toContain('nuxt-ui-colors')
   })
 })
