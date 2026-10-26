@@ -763,11 +763,14 @@ is available and where each comes from; of two with one name, the closer wins.
 `flayer add -p` finds the workspace's wherever the project sits; `mind add`
 finds those of the workspace above the project, or else the one in your home.
 
-A template is copied whole. In its manifest, `name` and `description` are set by
-`mind add`, whatever the template had for them, and `{{name}}` and
+A template is copied whole. In a skill's manifest, `name` and `description` are
+set by `mind add`, whatever the template had for them, and `{{name}}` and
 `{{description}}` in the body are filled in. Other files are copied as they are.
-A rule template without `{{description}}` gets the description as a heading on
-top of its body, below any front matter, which stays front matter.
+A rule template is filled in throughout, front matter included, and a
+`description` its front matter declares is set by `mind add` in the same way.
+One without `{{description}}` gets the description as a heading on top of its
+body, below any front matter, which stays front matter. Front matter that
+`validate` would warn about is refused, and nothing is written.
 
 ### Changing one
 

@@ -262,7 +262,10 @@ pasted into `AGENTS.md`, and what `show` prints below the description and the
   skill is filed in, since an agent finds a skill by one or the other — asked
   of the folder Mindflayer is about to write, not the one the files were read
   from. `compatibility` and `metadata` are not refused, because an agent reads
-  past them.
+  past them. A rule `mind add` writes from a template is refused for whatever
+  its front matter would leave unread (`artifact::rule_issues`), which reading
+  only warns about ([Templates live inside the
+  markers](#templates-live-inside-the-markers)).
 - **Warned about** when gathering, which takes the skill anyway, as the
   agentskills.io client guide advises for skills written for other agents. The
   shelf is a record of what a source holds, and leaving a skill off it would
@@ -994,17 +997,31 @@ in for its own. `edit`, `rename`, `remove` and an add from nothing only warn,
 after the change: there the workspace is only told. `mind templates` lists what
 it could read, with the same warning.
 
-A template's front matter keeps whatever it says except `name` and
+A skill template's front matter keeps whatever it says except `name` and
 `description`, which `mind add` always sets: the template's lines for those
 two are dropped, continuation lines and all, before anything parses the rest —
 so a template may write `name: {{name}}`, which is not YAML anybody could read,
 and still work. The result is parsed back before the first file is written, so
 a template with broken front matter costs nothing but the error.
 
+A rule template is filled in throughout, front matter included, so it may
+scope its rule to `{{name}}/**`. Whether its fences hold front matter is
+decided as for any rule, but on what they hold once filled in, since
+`{{name}}/**` is a YAML flow mapping until it is. A `description` the front
+matter declares is set as a skill's is, dropped and serialized afresh: pasted
+in as text, a description breaks the YAML at its first `: `, and one opening
+with `#` is a comment that declares nothing. The result is read back before
+anything is written and refused for whatever `validate` would warn about
+(`artifact::rule_issues`) — front matter that does not parse, a `paths` or a
+`description` it cannot read. Reading a rule takes those as content or passes
+over them, because a rule somebody wrote still says what it says; writing one
+is the moment to find out, and a template's `paths:` that became content would
+scope nothing and say so nowhere.
+
 A rule template that does not say where `{{description}}` goes gets it as a
 heading on top of its body, below any front matter it declares. On top of the
 file, the heading would push the fences down a line, where they stop being
-front matter, and a template's `paths:` would quietly become content.
+front matter.
 
 ### Finding what to change
 
