@@ -1248,8 +1248,9 @@ leak into the lifecycle code. Unblocks #33, #45, #62, #93, #94 and #95.
   provider the front end supplies, through that same callback. #110 carries it
   out, and #109 checks the helpers and ssh-agent against a real private
   repository. ssh's own questions are still open: a passphrase for a key the
-  agent does not hold, or whether to trust a host seen for the first time, is
-  asked by ssh on the terminal, out of the callback's reach. `BatchMode=yes` in
+  agent does not hold, a password when the server accepts password
+  authentication, or whether to trust a host seen for the first time, is asked
+  by ssh on the terminal, out of the callback's reach. `BatchMode=yes` in
   the ssh command would make those failures too. One connection never sees
   the callback either: when the remote has a branch named `HEAD`, which
   clashes with the `HEAD` a clone fetches to know what to check out, `gix`
