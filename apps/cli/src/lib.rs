@@ -10,26 +10,25 @@
 //! out, and so both binaries cannot drift apart.
 
 use std::fmt::Write as _;
-use std::io;
 use std::path::{Path, PathBuf};
 
 use clap::{Parser, Subcommand};
-use mindflayer_core::gather::{self, GatherError, Report, Request};
-use mindflayer_core::ledger::LedgerError;
+use mindflayer_core::gather::{self, Report, Request};
 use mindflayer_core::paths;
 use mindflayer_core::scan::MAX_LISTED;
 use mindflayer_core::template::{self, Origin};
 use mindflayer_core::{
-    create, create_from, lifecycle, scan, Artifact, ArtifactError, Catalog, CreateError, Declared,
-    Directories, FlayerWorkspace, Initialization, Kind, LifecycleError, MindProject, Reference,
-    Registration, Scan, Target, TemplateError, WorkspaceError, DEFAULT_SUBDIRECTORY,
+    create, create_from, lifecycle, scan, Artifact, Catalog, Declared, Directories,
+    FlayerWorkspace, Initialization, Kind, MindProject, Reference, Registration, Scan, Target,
+    WorkspaceError, DEFAULT_SUBDIRECTORY,
 };
-use thiserror::Error;
 
+pub(crate) mod error;
 pub mod install;
 pub(crate) mod render;
 pub mod tui;
 
+pub use error::CliError;
 use render::{as_stored, indent, plural, printable, table};
 pub use render::{Failure, Outcome};
 
@@ -1652,29 +1651,6 @@ fn disowned(outcome: &mut Outcome, project: &MindProject, kind: Kind, name: &str
     }
 }
 
-/// "; it manages alpha, beta", or what to do when it manages nothing.
-fn known_projects(known: &[String]) -> String {
-    if known.is_empty() {
-        String::from("; it manages none yet — `flayer link <path>` adds one")
-    } else {
-        format!("; it manages {}", known.join(", "))
-    }
-}
-
-/// What `mind remove` would delete, as a sentence.
-fn deleting(path: &Path, kind: &Kind, files: &usize) -> String {
-    match kind.layout() {
-        mindflayer_core::Layout::Directory { .. } => {
-            format!(
-                "{} and the {} in it",
-                path.display(),
-                plural(*files, "file")
-            )
-        }
-        mindflayer_core::Layout::Files { .. } => path.display().to_string(),
-    }
-}
-
 // ---------------------------------------------------------------------------
 // Locating what a command acts on
 // ---------------------------------------------------------------------------
@@ -2273,93 +2249,4 @@ fn initialized(kind: &str, name: &str, marker: &Path, outcome: Initialization) -
             format!("{kind} `{name}` already initialized in {marker}\n")
         }
     }
-}
-
-/// Why a command could not run at all, as opposed to running and finding
-/// problems: those are in the [`Outcome`].
-#[derive(Debug, Error)]
-pub enum CliError {
-    #[error("cannot determine the current directory: {0}")]
-    CurrentDirectory(#[source] io::Error),
-    #[error("{path}: cannot be resolved: {source}")]
-    Resolve {
-        path: PathBuf,
-        #[source]
-        source: io::Error,
-    },
-    #[error(transparent)]
-    Workspace(#[from] WorkspaceError),
-    #[error("{0} is not inside a mind project (run `mind init` to create one here)")]
-    NotInProject(PathBuf),
-    #[error("{0} is not inside a flayer workspace (run `flayer init` to create one here)")]
-    NotInWorkspace(PathBuf),
-    #[error("no flayer workspace{} at or above {from} to {verb}, and no default one", if *named { " but the ones named" } else { "" })]
-    NowhereToLoad {
-        from: PathBuf,
-        verb: &'static str,
-        named: bool,
-    },
-    #[error("nothing named `{0}` here")]
-    UnknownArtifact(String),
-    #[error(transparent)]
-    Artifact(#[from] ArtifactError),
-    #[error(transparent)]
-    Gather(#[from] GatherError),
-    #[error(transparent)]
-    Ledger(#[from] LedgerError),
-    #[error(transparent)]
-    Install(#[from] mindflayer_core::install::InstallError),
-    #[error(transparent)]
-    Create(#[from] CreateError),
-    #[error(transparent)]
-    Lifecycle(#[from] LifecycleError),
-    #[error(transparent)]
-    Template(#[from] TemplateError),
-    #[error("nothing removed: this deletes {}; add --yes to go ahead", deleting(.path, .kind, .files))]
-    Unconfirmed {
-        kind: Kind,
-        path: PathBuf,
-        files: usize,
-    },
-    #[error("`{editor}` could not be started: {source}")]
-    Editor {
-        editor: String,
-        #[source]
-        source: io::Error,
-    },
-    #[error("`{editor}` failed ({status}), so the file is reported on no further")]
-    EditorFailed { editor: String, status: String },
-    #[error("no flayer workspace above {0}; make one with `flayer init` in the directory that holds your projects")]
-    NoWorkspaceAbove(PathBuf),
-    #[error("{project}: not managed by the workspace at {workspace}; `mind link` adds it")]
-    NotManaged {
-        project: PathBuf,
-        workspace: PathBuf,
-    },
-    #[error("no project called `{wanted}` in this workspace{}", known_projects(.known))]
-    UnknownProject { wanted: String, known: Vec<String> },
-    #[error("`{wanted}` names more than one project — {} — so name it by its path", .matches.join(", "))]
-    AmbiguousProject {
-        wanted: String,
-        matches: Vec<String>,
-    },
-    #[error("say which project to install into — `flayer install -p <project> <skill>` — or run `flayer install` alone for the screen")]
-    InstallWhere,
-    #[error("say which skill to install — `flayer install -p <project> <skill>` — or run `flayer install` alone for the screen")]
-    InstallWhat,
-    #[error("{project} has no {name} installed, so there is nothing to take out")]
-    NotInstalled { name: String, project: String },
-    #[error("`{command}` needs a terminal to draw on, and this is not one: {source}")]
-    NoTerminal {
-        command: &'static str,
-        #[source]
-        source: io::Error,
-    },
-    #[error("`flayer` on its own opens a screen, and this is not a terminal; `flayer --help` lists the commands")]
-    NotATerminal,
-    #[error("the screen could not be drawn: {source}")]
-    Screen {
-        #[source]
-        source: io::Error,
-    },
 }
