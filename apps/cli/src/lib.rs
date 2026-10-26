@@ -230,54 +230,8 @@ fn run_flayer(
             templates_of(&holder(&workspace, project.as_deref())?)
         }
 
-        FlayerCommand::Link { projects } => {
-            let mut workspace = workspace_here(directory, home)?;
-            // All or nothing: every path is opened before any is registered,
-            // so a typo in the third does not leave the first two linked by a
-            // command that reports failure. Opening is the check — a
-            // directory with no `.mind` is not a project, and registering one
-            // would only fail later, further from the command that caused it.
-            let mut opened: Vec<MindProject> = Vec::new();
-            let mut refused = Vec::new();
-            for target in targets(directory, projects)? {
-                match MindProject::open(&target) {
-                    Ok(project) => opened.push(project),
-                    Err(error) => refused.push(CliError::from(error)),
-                }
-            }
-            if let Some(failure) = all_or_nothing(refused) {
-                return Err(failure);
-            }
-            let mut text = String::new();
-            for project in &opened {
-                let (entry, registration) = workspace.link(project)?;
-                text.push_str(&linked(project.name(), &entry, registration));
-            }
-            Ok(Outcome::plain(text))
-        }
-
-        FlayerCommand::Unlink { projects } => {
-            let mut workspace = workspace_here(directory, home)?;
-            let targets = targets(directory, projects)?;
-            // All or nothing, for the reason `link` is: nothing is dropped
-            // unless everything named is registered.
-            let refused = targets
-                .iter()
-                .filter(|target| !workspace.is_linked(target))
-                .map(|target| {
-                    CliError::Workspace(WorkspaceError::NotRegistered {
-                        path: target.clone(),
-                        workspace: workspace.root().to_path_buf(),
-                    })
-                })
-                .collect();
-            if let Some(failure) = all_or_nothing(refused) {
-                return Err(failure);
-            }
-            // One rewrite for all of them: two spellings of one project are
-            // one project, not a second one to fail on halfway.
-            Ok(Outcome::plain(unlinked(&workspace.unlink_all(&targets)?)))
-        }
+        FlayerCommand::Link { projects } => link_projects(directory, projects, home),
+        FlayerCommand::Unlink { projects } => unlink_projects(directory, projects, home),
 
         FlayerCommand::Load { workspaces } => load_command(directory, directory, workspaces, home),
         FlayerCommand::Unload { workspaces } => {
@@ -404,6 +358,65 @@ fn asked_directories(skills: Option<&Path>, rules: Option<&Path>) -> Directories
 // ---------------------------------------------------------------------------
 // Registering, and installing into, one project
 // ---------------------------------------------------------------------------
+
+/// `flayer link`: every path given, registered with the workspace here.
+fn link_projects(
+    directory: &Path,
+    projects: &[PathBuf],
+    home: Option<&Path>,
+) -> Result<Outcome, Failure> {
+    let mut workspace = workspace_here(directory, home)?;
+    // All or nothing: every path is opened before any is registered,
+    // so a typo in the third does not leave the first two linked by a
+    // command that reports failure. Opening is the check — a
+    // directory with no `.mind` is not a project, and registering one
+    // would only fail later, further from the command that caused it.
+    let mut opened: Vec<MindProject> = Vec::new();
+    let mut refused = Vec::new();
+    for target in targets(directory, projects)? {
+        match MindProject::open(&target) {
+            Ok(project) => opened.push(project),
+            Err(error) => refused.push(CliError::from(error)),
+        }
+    }
+    if let Some(failure) = all_or_nothing(refused) {
+        return Err(failure);
+    }
+    let mut text = String::new();
+    for project in &opened {
+        let (entry, registration) = workspace.link(project)?;
+        text.push_str(&linked(project.name(), &entry, registration));
+    }
+    Ok(Outcome::plain(text))
+}
+
+/// `flayer unlink`: every path given, dropped from the workspace here.
+fn unlink_projects(
+    directory: &Path,
+    projects: &[PathBuf],
+    home: Option<&Path>,
+) -> Result<Outcome, Failure> {
+    let mut workspace = workspace_here(directory, home)?;
+    let targets = targets(directory, projects)?;
+    // All or nothing, for the reason `link` is: nothing is dropped
+    // unless everything named is registered.
+    let refused = targets
+        .iter()
+        .filter(|target| !workspace.is_linked(target))
+        .map(|target| {
+            CliError::Workspace(WorkspaceError::NotRegistered {
+                path: target.clone(),
+                workspace: workspace.root().to_path_buf(),
+            })
+        })
+        .collect();
+    if let Some(failure) = all_or_nothing(refused) {
+        return Err(failure);
+    }
+    // One rewrite for all of them: two spellings of one project are
+    // one project, not a second one to fail on halfway.
+    Ok(Outcome::plain(unlinked(&workspace.unlink_all(&targets)?)))
+}
 
 /// What `link` says it did, at either level.
 fn linked(name: &str, entry: &Path, registration: Registration) -> String {
