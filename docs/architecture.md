@@ -404,7 +404,9 @@ nothing.
 Nothing depends on a `git` being installed, or on which `git` is first on the
 PATH, and core keeps doing its own I/O rather than supervising a process. The
 cost is that authentication for private repositories is ours to solve rather
-than inherited from a credential helper, and it is not solved yet.
+than inherited whole from `git`, and it is not solved yet:
+[D-16](#d-16-credentials-come-from-the-front-end-never-from-a-prompt) decides
+how.
 
 `gix`'s error types are large and would become part of this crate's public API
 if they were carried, tying its version to gix's, so `GitError` keeps what they
