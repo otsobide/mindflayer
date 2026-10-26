@@ -1,8 +1,11 @@
-//! Splitting a `SKILL.md` into its YAML front matter and its markdown body.
+//! Splitting a `SKILL.md` or a rule into its YAML front matter and its
+//! markdown body.
 //!
 //! Only the split happens here: what the front matter *means* is
-//! [`crate::skill::SkillManifest`]'s business, and the body is handed back
-//! untouched because it is the prompt an agent reads.
+//! [`crate::skill::SkillManifest`]'s business, or
+//! [`crate::rule::RuleManifest`]'s, which also decides whether a rule's fences
+//! hold front matter at all; and the body is handed back untouched because it
+//! is the prompt an agent reads.
 
 use thiserror::Error;
 

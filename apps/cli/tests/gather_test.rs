@@ -219,6 +219,18 @@ fn an_empty_shelf_says_how_to_fill_it() {
 }
 
 #[test]
+fn listing_a_shelf_that_has_no_ledger_makes_none() {
+    let dir = TempDir::new().unwrap();
+    flayer(dir.path(), &["init"]).unwrap();
+    let ledger = dir.path().join(FLAYER_DIR).join("mindflayer.db");
+
+    let outcome = flayer(dir.path(), &["gather", "list"]).unwrap();
+
+    assert!(outcome.stdout.starts_with("nothing gathered yet"));
+    assert!(!ledger.exists());
+}
+
+#[test]
 fn gathering_outside_a_workspace_says_what_to_run() {
     let dir = TempDir::new().unwrap();
 

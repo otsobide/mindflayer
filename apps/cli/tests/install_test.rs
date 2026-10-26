@@ -255,6 +255,121 @@ fn one_name_from_two_shelves_cannot_be_marked_twice() {
     assert!(rendered(&screen).contains("unmarked the one from"));
 }
 
+// ---------------------------------------------------------------------------
+// What an interrupted install left behind
+// ---------------------------------------------------------------------------
+
+/// Leave in `project` what an install stopped halfway leaves: a stage named
+/// for a process that has gone, holding half a copy, in its scratch folder.
+fn interrupted(project: &Path) -> PathBuf {
+    let left = project.join(".mind/tmp/4242-00000000deadbeef");
+    fs::create_dir_all(left.join("new/deploy")).unwrap();
+    fs::write(left.join("new/deploy/SKILL.md"), "half").unwrap();
+    left
+}
+
+#[test]
+fn an_install_clears_what_an_interrupted_one_left_and_says_so_once() {
+    let dir = workspace_with_own();
+    let alpha = dir.path().join("alpha");
+    let left = interrupted(&alpha);
+
+    let outcome = mind(&alpha, &["install", "commit-style"]).unwrap();
+
+    assert_eq!(
+        outcome.stdout,
+        "installed commit-style into alpha, from workspace\n  \
+         cleared .mind/tmp/4242-00000000deadbeef, left by an install that did not finish\n"
+    );
+    assert!(
+        outcome.ok && outcome.stderr.is_empty(),
+        "{:?}",
+        outcome.stderr
+    );
+    assert!(!left.exists());
+    assert_eq!(
+        mind(&alpha, &["install", "commit-style"]).unwrap().stdout,
+        "commit-style in alpha was already current\n"
+    );
+}
+
+#[test]
+fn an_install_that_fails_still_says_what_it_cleared_before_the_error() {
+    let dir = workspace_with_own();
+    let alpha = dir.path().join("alpha");
+    let left = interrupted(&alpha);
+    // A file where the skills folder goes: the copy is built, but cannot be
+    // put in place.
+    let skills = directory_for(&alpha, Kind::Skill);
+    fs::remove_dir_all(&skills).unwrap();
+    fs::write(&skills, "not a folder").unwrap();
+
+    let failure = mind(&alpha, &["install", "commit-style"]).unwrap_err();
+
+    assert_eq!(
+        failure.warnings,
+        ["cleared .mind/tmp/4242-00000000deadbeef, left by an install that did not finish"]
+    );
+    assert!(
+        failure.error.to_string().contains("cannot be written"),
+        "{}",
+        failure.error
+    );
+    assert!(!left.exists());
+}
+
+#[test]
+fn applying_says_what_an_interrupted_install_left_in_a_project() {
+    let (dir, workspace, ledger) = shelved(&["collapse"], &["deploy"]);
+    interrupted(&dir.path().join("collapse"));
+    let mut screen = screen_for(&workspace, &ledger);
+    press(&mut screen, &[KeyCode::Right, KeyCode::Char(' ')]);
+
+    let outcome = install_screen::apply(&workspace, &ledger, &screen).unwrap();
+
+    assert!(outcome.ok, "{:?}", outcome.stderr);
+    assert!(
+        outcome.stdout.contains(
+            "collapse: installed deploy\n  \
+             cleared .mind/tmp/4242-00000000deadbeef, left by an install that did not finish\n"
+        ),
+        "{}",
+        outcome.stdout
+    );
+}
+
+#[test]
+fn applying_says_what_an_install_that_failed_had_cleared() {
+    let (dir, workspace, ledger) = shelved(&["collapse"], &["deploy"]);
+    let collapse = dir.path().join("collapse");
+    interrupted(&collapse);
+    let mut screen = screen_for(&workspace, &ledger);
+    press(&mut screen, &[KeyCode::Right, KeyCode::Char(' ')]);
+    // A file where the skills folder goes, once the screen is open: the copy
+    // is built, but cannot be put in place.
+    let skills = directory_for(&collapse, Kind::Skill);
+    fs::remove_dir_all(&skills).unwrap();
+    fs::write(&skills, "not a folder").unwrap();
+
+    let outcome = install_screen::apply(&workspace, &ledger, &screen).unwrap();
+
+    assert!(!outcome.ok);
+    assert_eq!(
+        outcome.stdout,
+        "collapse: cleared .mind/tmp/4242-00000000deadbeef, left by an install that did not finish\n\
+         \n0 installed, 0 removed\n"
+    );
+    assert!(
+        outcome
+            .stderr
+            .iter()
+            .any(|line| line.starts_with("warning: collapse: ")
+                && line.contains("cannot be written")),
+        "{:?}",
+        outcome.stderr
+    );
+}
+
 #[test]
 fn a_workspace_with_no_projects_says_so_instead_of_opening_a_screen() {
     let dir = TempDir::new().unwrap();
@@ -269,6 +384,16 @@ fn a_workspace_with_no_projects_says_so_instead_of_opening_a_screen() {
         outcome.stdout
     );
     assert!(outcome.stdout.contains("flayer link"), "{}", outcome.stdout);
+}
+
+#[test]
+fn opening_the_screen_makes_no_ledger() {
+    let dir = TempDir::new().unwrap();
+    flayer(dir.path(), &["init"]).unwrap();
+
+    flayer(dir.path(), &["install"]).unwrap();
+
+    assert!(!dir.path().join(FLAYER_DIR).join("mindflayer.db").exists());
 }
 
 #[test]
@@ -313,30 +438,42 @@ const SCRUBBED: &str = "note: https://example.com/acme/skills: the user name, pa
      token an older Mindflayer stored in this URL is taken out; gathering it again needs a git \
      credential helper that has it";
 
+/// How many sources still hold a credential in the file, which a read hands
+/// back without it.
+fn tainted(workspace: &FlayerWorkspace) -> usize {
+    workspace
+        .ledger_for_reading()
+        .unwrap()
+        .tainted_sources()
+        .unwrap()
+        .len()
+}
+
 #[test]
-fn opening_the_screen_scrubs_the_ledger_first_and_applying_says_so_without_failing() {
+fn opening_the_screen_scrubs_nothing_and_applying_scrubs_first_and_says_so_without_failing() {
     let (_dir, workspace, _ledger) = shelved(&["collapse"], &["deploy"]);
     token_in_the_shelf(&workspace);
     let (projects, _) = install_screen::registered(&workspace);
 
-    let (ledger, mut screen, scrub) = install_screen::open(&workspace, projects).unwrap();
+    let mut screen = install_screen::open(&workspace, projects).unwrap();
 
-    assert_eq!(scrub.sources.len(), 1, "{:?}", scrub.sources);
-    assert_eq!(
-        ledger.tainted_sources().unwrap(),
-        [],
-        "the scrub rewrote the row before the screen read it"
-    );
+    assert_eq!(tainted(&workspace), 1, "opening the screen is a read");
     press(&mut screen, &[KeyCode::Right, KeyCode::Char(' ')]);
-    let outcome = install_screen::apply(&workspace, &ledger, &screen).unwrap();
+    let outcome = install_screen::commit(&workspace, &screen).unwrap();
+
     assert!(outcome.ok, "{:?}", outcome.stderr);
+    assert_eq!(outcome.stderr, [SCRUBBED]);
+    assert!(
+        outcome.stdout.starts_with("collapse: installed deploy\n"),
+        "{}",
+        outcome.stdout
+    );
+    assert_eq!(tainted(&workspace), 0);
 }
 
-#[test]
-fn a_source_the_scrub_makes_one_with_another_is_offered_once_and_installs_on_record() {
-    let (dir, workspace, _ledger) = shelved(&["collapse"], &["deploy"]);
-    // What an older build could leave: the same place gathered twice, once
-    // with a token in its URL and once, later, without.
+/// What an older build could leave: the same place gathered twice, once with
+/// a token in its URL, into the folder `older`, and once, later, without.
+fn gathered_twice(workspace: &FlayerWorkspace) -> rusqlite::Connection {
     let database = rusqlite::Connection::open(workspace.ledger_path()).unwrap();
     database
         .execute_batch(
@@ -349,23 +486,81 @@ fn a_source_the_scrub_makes_one_with_another_is_offered_once_and_installs_on_rec
                         summary, revision, 0 FROM artifacts;",
         )
         .unwrap();
+    database
+}
+
+/// Put the cursor on the row offering `name` from the source gathered into
+/// `directory`, and mark it.
+fn mark_from(screen: &mut Screen, name: &str, directory: &str) {
+    use mindflayer_core::install::Offer;
+
+    let target = &mut screen.targets[0];
+    target.cursor = target
+        .rows
+        .iter()
+        .position(|row| {
+            row.candidate.name() == name
+                && matches!(&row.candidate.offer, Offer::Shelf(gathered)
+                    if gathered.source.directory == directory)
+        })
+        .unwrap();
+    press(screen, &[KeyCode::Right, KeyCode::Char(' ')]);
+}
+
+#[test]
+fn a_mark_on_a_source_the_scrub_makes_one_with_another_installs_from_the_one_kept_on_record() {
+    let (dir, workspace, _ledger) = shelved(&["collapse"], &["deploy"]);
+    gathered_twice(&workspace);
     let (projects, _) = install_screen::registered(&workspace);
+    let mut screen = install_screen::open(&workspace, projects).unwrap();
+    // Twice, as the file has it until a write scrubs it: a read takes the
+    // token out of what it shows, not the row out of the file.
+    assert_eq!(screen.targets[0].rows.len(), 2, "{}", rendered(&screen));
 
-    let (ledger, mut screen, _) = install_screen::open(&workspace, projects).unwrap();
-
-    // Once, from the row that stayed: a screen built before the scrub would
-    // offer it twice, once from the row the scrub drops.
-    assert_eq!(screen.targets[0].rows.len(), 1, "{}", rendered(&screen));
-    press(&mut screen, &[KeyCode::Right, KeyCode::Char(' ')]);
-    let outcome = install_screen::apply(&workspace, &ledger, &screen).unwrap();
+    // The row the scrub drops, whose source is gone by the time it installs.
+    mark_from(&mut screen, "deploy", "older");
+    let outcome = install_screen::commit(&workspace, &screen).unwrap();
 
     assert!(outcome.ok, "{:?}", outcome.stderr);
     assert!(dir.path().join("collapse/skills/deploy/SKILL.md").is_file());
     assert_eq!(
-        ledger.installations("collapse", Kind::Skill).unwrap(),
+        workspace
+            .ledger_for_reading()
+            .unwrap()
+            .installations("collapse", Kind::Skill)
+            .unwrap(),
         ["deploy"],
         "recorded, so Mindflayer still counts the copy as its own"
     );
+}
+
+#[test]
+fn a_mark_on_what_only_the_source_the_scrub_drops_had_is_said_and_left_undone() {
+    let (dir, workspace, _ledger) = shelved(&["collapse"], &["deploy"]);
+    gathered_twice(&workspace)
+        .execute(
+            "INSERT INTO artifacts (kind, name, source_id, path, gathered_at)
+                 SELECT 'skill', 'lint', id, '.mindflayer/skills/older/lint', 0
+                   FROM sources WHERE directory = 'older'",
+            [],
+        )
+        .unwrap();
+    let (projects, _) = install_screen::registered(&workspace);
+    let mut screen = install_screen::open(&workspace, projects).unwrap();
+
+    mark_from(&mut screen, "lint", "older");
+    let outcome = install_screen::commit(&workspace, &screen).unwrap();
+
+    assert!(!outcome.ok);
+    assert_eq!(
+        outcome.stderr,
+        [
+            SCRUBBED,
+            "warning: collapse: lint from https://example.com/acme/skills is no longer on the \
+             shelf once the ledger was scrubbed, so it was left as it was"
+        ]
+    );
+    assert!(!dir.path().join("collapse/skills/lint").exists());
 }
 
 #[test]

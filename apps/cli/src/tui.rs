@@ -31,7 +31,6 @@ use ratatui::crossterm::terminal::{self, EnterAlternateScreen};
 use ratatui::DefaultTerminal;
 
 use crate::commands::consulted;
-use crate::commands::gather::scrubbed;
 use crate::commands::workspace::{load_warnings, same_directory};
 use crate::install::state::Screen as InstallScreen;
 use crate::render::as_stored;
@@ -64,11 +63,25 @@ pub fn run_minds(directory: &Path, home: Option<&Path>) -> Result<Outcome, Failu
     if !io::stdout().is_terminal() {
         return Err(CliError::NotATerminal.into());
     }
-    let mut app = App::new(directory.to_path_buf(), load(directory, home)?).at_home(home);
+    open(minds(directory, home)?, "flayer minds")
+}
+
+/// The TUI `flayer minds` opens from `directory`: on the minds screen of the
+/// workspace the TUI itself would open there.
+///
+/// Read from `directory` rather than from the root of a workspace found
+/// first: the default workspace before it is made has no marker to stop a
+/// walk up from its root, which would carry on to any workspace above it.
+pub fn minds(directory: &Path, home: Option<&Path>) -> Result<App, CliError> {
+    let view = load(directory, home)?;
+    if matches!(view, View::Nowhere) {
+        return Err(CliError::NotInWorkspace(directory.to_path_buf()));
+    }
+    let mut app = App::new(directory.to_path_buf(), view).at_home(home);
     if let Some(workspace) = app.workspace() {
         app.mode = Mode::Minds(minds::Minds::of(workspace));
     }
-    open(app, "flayer minds")
+    Ok(app)
 }
 
 /// Open the TUI on the project at or above `directory`: what `mind` does on
@@ -184,7 +197,10 @@ pub fn step(app: &mut App, task: Task) {
 pub fn perform(task: &Task, app: &App) -> Performed {
     let base = app.base().to_path_buf();
     match task {
-        Task::OpenInstall => open_install(&base),
+        Task::OpenInstall => open_install(
+            &base,
+            app.workspace().is_some_and(|workspace| !workspace.made),
+        ),
         Task::ApplyInstall => match &app.mode {
             Mode::Installing(screen) => Performed::Ran(vec![apply_install(&base, screen)]),
             _ => Performed::Ran(Vec::new()),
@@ -194,7 +210,7 @@ pub fn perform(task: &Task, app: &App) -> Performed {
         Task::Link { path } if needs_init(&base.join(path)) => {
             Performed::NeedsInit { path: path.clone() }
         }
-        _ => Performed::Ran(run_all(&task.commands(), &base, app.home.as_deref())),
+        _ => Performed::Ran(run_all(&app.lines(task), &base, app.home.as_deref())),
     }
 }
 
@@ -227,9 +243,11 @@ fn run_all(lines: &[Vec<String>], base: &Path, home: Option<&Path>) -> Vec<Done>
 ///
 /// The words are what a person would type from the workspace root, so a `-C`
 /// among them is resolved against it rather than against wherever this
-/// process happened to be started. The default workspace is the TUI's own,
-/// passed along rather than looked up again, so no command it runs can reach
-/// a different one.
+/// process happened to be started. The home is the TUI's own, passed along
+/// rather than looked up again, so a command that falls back to the default
+/// workspace falls back to the one on screen. Each still walks up from `base`
+/// first, as from the shell, which is why a change to the default before it
+/// is made makes it first ([`App::lines`]).
 pub fn execute(words: &[String], base: &Path, home: Option<&Path>) -> Done {
     let command = state::shell(words);
     let from = |directory: Option<PathBuf>| {
@@ -304,50 +322,43 @@ fn draws_mind(command: Option<&Command>) -> bool {
     }
 }
 
-/// Build the install screen for the workspace at `base`, as `flayer install`
-/// does, scrub first included.
-fn open_install(base: &Path) -> Performed {
-    let command = String::from("flayer install");
-    let opened = FlayerWorkspace::open(base)
-        .map_err(Failure::from)
-        .and_then(|workspace| {
-            // What would not open is already on screen, beside what did.
-            let (projects, _) = install::registered(&workspace);
-            install::open(&workspace, projects)
-        });
-    match opened {
-        Ok((_, screen, scrub)) => {
-            // Said in the transcript, the one place the TUI keeps what a
-            // command said, since the screen it opens has no room for it.
-            let told = scrubbed(&scrub).before(Outcome::plain(String::new()));
-            let said = (!told.stderr.is_empty()).then_some(Done {
-                command,
-                stdout: told.stdout,
-                stderr: told.stderr,
-                error: None,
-                ok: told.ok,
-            });
-            Performed::Install { screen, said }
-        }
-        Err(failure) => Performed::Ran(vec![Done {
-            stderr: failure.warnings,
-            ..Done::failed(command, failure.error.to_string())
-        }]),
+/// Build the install screen for the workspace at `base`, which is the one on
+/// screen and the one applying opens: the default workspace too when nothing
+/// has made it yet (`unmade`), with nothing to install into.
+///
+/// Opened there exactly rather than found by walking up from it, as `flayer
+/// install` would: before the default is made there is no marker at `base`
+/// to stop the walk, which would carry on to any workspace above home. Built
+/// from the ledger as it is, as `flayer install` builds it, so opening the
+/// screen makes nothing and scrubs nothing.
+fn open_install(base: &Path, unmade: bool) -> Performed {
+    let workspace = if unmade {
+        FlayerWorkspace::unmade(base)
+    } else {
+        FlayerWorkspace::open(base)
+    };
+    let screen = workspace.map_err(CliError::from).and_then(|workspace| {
+        // What would not open is already on screen, beside what did.
+        let (projects, _) = install::registered(&workspace);
+        install::open(&workspace, projects)
+    });
+    match screen {
+        Ok(screen) => Performed::Install(screen),
+        Err(error) => Performed::Ran(vec![Done::failed(
+            String::from("flayer install"),
+            error.to_string(),
+        )]),
     }
 }
 
-/// Carry out what the install screen marked, the way `flayer install` does.
+/// Carry out what the install screen marked, the way `flayer install` does:
+/// through [`install::commit`], which scrubs the ledger first.
 fn apply_install(base: &Path, screen: &InstallScreen) -> Done {
     let command = String::from("flayer install");
     let applied = FlayerWorkspace::open(base)
-        .map_err(CliError::from)
+        .map_err(Failure::from)
         .and_then(|workspace| {
-            // Opened for reading rather than with `ledger_to_write`: the
-            // scrub this command starts with ran when its screen was opened,
-            // and another here could make a row the screen holds go.
-            let ledger = workspace.ledger().map_err(CliError::from)?;
-            let mut outcome =
-                install::apply(&workspace, &ledger, screen).map_err(CliError::from)?;
+            let mut outcome = install::commit(&workspace, screen)?;
             let warnings = load_warnings(&workspace);
             outcome.ok = outcome.ok && warnings.is_empty();
             outcome.stderr.extend(warnings);
@@ -361,7 +372,12 @@ fn apply_install(base: &Path, screen: &InstallScreen) -> Done {
             error: None,
             ok: outcome.ok,
         },
-        Err(error) => Done::failed(command, error.to_string()),
+        // What the scrub said goes with an error too: it happened all the
+        // same, and says so only this once.
+        Err(failure) => Done {
+            stderr: failure.warnings,
+            ..Done::failed(command, failure.error.to_string())
+        },
     }
 }
 
@@ -370,12 +386,17 @@ fn apply_install(base: &Path, screen: &InstallScreen) -> Done {
 // ---------------------------------------------------------------------------
 
 /// Read everything the screen shows from the disk: the workspace at or above
-/// `directory`, or else the default one in `home`, made there the first time.
+/// `directory`, or else the default one in `home` — as it will be, when
+/// nothing has made it yet.
+///
+/// Opening a screen is no reason to make it. The first change made from the
+/// screen is, and that runs a command that writes, which makes it the way it
+/// would from the shell.
 pub fn load(directory: &Path, home: Option<&Path>) -> Result<View, CliError> {
     if let Some(workspace) = FlayerWorkspace::locate(directory)? {
         return Ok(View::Workspace(workspace_view(&workspace, false, home)));
     }
-    Ok(match FlayerWorkspace::locate_or_default(directory, home)? {
+    Ok(match FlayerWorkspace::default_or_unmade(home)? {
         Some(workspace) => View::Workspace(workspace_view(&workspace, true, home)),
         None => View::Nowhere,
     })
@@ -430,6 +451,7 @@ pub fn load_project(directory: &Path, home: Option<&Path>) -> Result<View, CliEr
             .map(|workspace| workspace.root().to_path_buf())
             .or_else(|| home.map(Path::to_path_buf)),
         default: false,
+        made: true,
     }))
 }
 
@@ -470,6 +492,7 @@ fn workspace_view(workspace: &FlayerWorkspace, default: bool, home: Option<&Path
         scope: Scope::Workspace,
         above: None,
         default,
+        made: workspace.is_made(),
     }
 }
 
@@ -643,11 +666,8 @@ fn within(project: &MindProject, kind: Kind) -> String {
 
 /// How much is on the shelf, without creating a ledger just to look.
 fn shelf(workspace: &FlayerWorkspace) -> usize {
-    if !workspace.ledger_path().is_file() {
-        return 0;
-    }
     workspace
-        .ledger()
+        .ledger_for_reading()
         .and_then(|ledger| ledger.gathered())
         .map_or(0, |gathered| gathered.len())
 }

@@ -386,10 +386,69 @@ fn show_prints_no_metadata_block_for_a_rule() {
     );
     assert!(outcome.stdout.contains("no-force-push.md"));
     assert!(outcome.stdout.contains("Use --force-with-lease."));
-    // A rule declares nothing, so it gets no metadata section rather than an
-    // empty one.
+    // A rule that declares nothing, as most do, gets no metadata section
+    // rather than an empty one.
     assert!(!outcome.stdout.contains("allowed-tools"));
     assert!(!outcome.stdout.contains("description"));
+}
+
+#[test]
+fn show_prints_what_a_rule_declares_and_not_its_front_matter() {
+    let dir = TempDir::new().unwrap();
+    mind(dir.path(), &["init"]).unwrap();
+    write_rule(
+        dir.path(),
+        "api.md",
+        "---\ndescription: How the API is written\npaths:\n  - \"src/api/**/*.{ts,tsx}\"\n  - lib/**\n---\n\n# API rules\n\nReturn errors as values.\n",
+    );
+    write_rule(
+        dir.path(),
+        "scoped.md",
+        "---\npaths: src/**\n---\n# Scoped\n",
+    );
+
+    let both = mind(dir.path(), &["show", "api"]).unwrap();
+    let scoped = mind(dir.path(), &["show", "scoped"]).unwrap();
+
+    let rules = dir.path().join("rules");
+    // A pattern a line, since one can hold a comma of its own.
+    assert_eq!(
+        both.stdout,
+        format!(
+            "api\n{}\n\nHow the API is written\n\npaths:\n  - src/api/**/*.{{ts,tsx}}\n  - lib/**\n\n# API rules\n\nReturn errors as values.\n",
+            rules.join("api.md").display()
+        )
+    );
+    assert_eq!(
+        scoped.stdout,
+        format!(
+            "scoped\n{}\n\npaths:\n  - src/**\n\n# Scoped\n",
+            rules.join("scoped.md").display()
+        )
+    );
+}
+
+#[test]
+fn validate_warns_about_rule_front_matter_it_cannot_read_and_still_passes() {
+    let dir = TempDir::new().unwrap();
+    mind(dir.path(), &["init"]).unwrap();
+    // Unquoted, a glob opening with `*` is a YAML alias.
+    write_rule(
+        dir.path(),
+        "typescript.md",
+        "---\npaths:\n  - **/*.ts\n---\n\n# TypeScript\n",
+    );
+
+    let outcome = mind(dir.path(), &["validate"]).unwrap();
+
+    assert!(outcome.ok, "{}", outcome.stdout);
+    assert!(
+        outcome.stdout.contains(
+            "typescript: ok, 1 warning\n  - warning: the front matter does not parse, so it is read as content, fences and all: "
+        ),
+        "{}",
+        outcome.stdout
+    );
 }
 
 #[test]
@@ -421,18 +480,29 @@ fn validate_can_still_be_pointed_at_one_artifact() {
     mind(dir.path(), &["init"]).unwrap();
     write_skill(dir.path(), "good", &skill_file("good", "Fine"));
     write_rule(dir.path(), "empty.md", "\n  \n");
+    write_rule(
+        dir.path(),
+        "scoped.md",
+        "---\npaths:\n  - \"src/**\"\n---\n",
+    );
 
     let one = mind(dir.path(), &["validate", "good"]).unwrap();
     let broken = mind(dir.path(), &["validate", "empty"]).unwrap();
+    let scoped = mind(dir.path(), &["validate", "scoped"]).unwrap();
 
     assert!(one.ok);
     assert!(one.stdout.contains("1 skill checked, 0 invalid"));
-    assert!(!broken.ok);
-    assert!(
-        broken.stdout.contains("the file has no content"),
-        "{}",
-        broken.stdout
-    );
+    // A file of front matter alone has content, just none an agent reads.
+    for broken in [broken, scoped] {
+        assert!(!broken.ok);
+        assert!(
+            broken
+                .stdout
+                .contains("the file has no content beyond any front matter"),
+            "{}",
+            broken.stdout
+        );
+    }
 }
 
 #[test]
@@ -453,6 +523,31 @@ fn a_workspace_lists_every_kind_of_every_project() {
     // project column stops telling the reader anything and goes.
     let rules = flayer(dir.path(), &["list", "rules"]).unwrap();
     assert_eq!(rules.stdout, "team/style  House style.\n");
+}
+
+#[test]
+fn a_rule_is_listed_by_the_first_line_of_its_body() {
+    let dir = workspace_with_two();
+    write_rule(
+        &dir.path().join("alpha"),
+        "api.md",
+        "---\npaths:\n  - \"src/api/**\"\n---\n\n# Return errors as values\n",
+    );
+    write_rule(
+        &dir.path().join("beta"),
+        "plain.md",
+        "# Never force-push\n\nUse the lease.\n",
+    );
+
+    let rules = flayer(dir.path(), &["list", "rules"]).unwrap();
+
+    // Front matter is not what a rule says, so it is not its summary; a rule
+    // without any is summarised as it always was.
+    assert_eq!(
+        rules.stdout,
+        "alpha  api    Return errors as values\n\
+         beta   plain  Never force-push\n"
+    );
 }
 
 // ---------------------------------------------------------------------------

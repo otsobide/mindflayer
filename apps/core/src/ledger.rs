@@ -20,7 +20,7 @@
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use rusqlite::{Connection, OptionalExtension};
+use rusqlite::{Connection, OpenFlags, OptionalExtension};
 use thiserror::Error;
 
 use crate::kind::Kind;
@@ -176,6 +176,35 @@ impl Ledger {
         let ledger = Self { connection, path };
         ledger.migrate()?;
         Ok(ledger)
+    }
+
+    /// Open the ledger at `path` only if it is there: for a command that only
+    /// reads it, which is no reason to create a database, or the folder it
+    /// would sit in.
+    ///
+    /// One that is there is still brought up to [`SCHEMA_VERSION`], as
+    /// [`open`](Self::open) brings it. A build reads its own schema and no
+    /// other, so declining to migrate would leave an older ledger unreadable
+    /// rather than untouched: the step is upkeep of Mindflayer's own file, not
+    /// a change anybody asked for, and the one write a read may make.
+    pub fn open_existing(path: impl Into<PathBuf>) -> Result<Option<Self>, LedgerError> {
+        let path = path.into();
+        if !path.is_file() {
+            return Ok(None);
+        }
+        // Without `SQLITE_OPEN_CREATE`, so a file removed since the check is
+        // an error to report rather than an empty database left in its place.
+        let flags = OpenFlags::SQLITE_OPEN_READ_WRITE
+            | OpenFlags::SQLITE_OPEN_URI
+            | OpenFlags::SQLITE_OPEN_NO_MUTEX;
+        let connection =
+            Connection::open_with_flags(&path, flags).map_err(|source| LedgerError::Open {
+                path: path.clone(),
+                source,
+            })?;
+        let ledger = Self { connection, path };
+        ledger.migrate()?;
+        Ok(Some(ledger))
     }
 
     /// An in-memory ledger, for tests and for anything that must not persist.
@@ -849,6 +878,8 @@ pub enum LedgerError {
     },
     #[error("{path}: written by a newer Mindflayer (schema version {found}, this one reads {SCHEMA_VERSION})")]
     Version { path: PathBuf, found: u32 },
+    #[error("{path}: no workspace has been made here yet, so there is no ledger to write to")]
+    Unmade { path: PathBuf },
     #[error("{path}: {doing} failed: {source}")]
     Query {
         path: PathBuf,
@@ -865,6 +896,7 @@ impl LedgerError {
             LedgerError::Create { path, .. }
             | LedgerError::Open { path, .. }
             | LedgerError::Version { path, .. }
+            | LedgerError::Unmade { path }
             | LedgerError::Query { path, .. } => path,
         }
     }

@@ -12,7 +12,6 @@ use std::fmt::Write as _;
 use std::io;
 use std::time::Duration;
 
-use mindflayer_core::gather::Scrub;
 use mindflayer_core::install::{self, Installed, Removed};
 use mindflayer_core::ledger::Ledger;
 use mindflayer_core::{FlayerWorkspace, Kind, MindProject};
@@ -25,23 +24,25 @@ use crate::{CliError, Failure, Outcome};
 use state::{Pending, Screen, Step, Target};
 
 /// Build the screen for a workspace, run it, and carry out what it asked for.
+///
+/// Built from the ledger as it is ([`open`]), without making one or scrubbing
+/// it: opening the screen and leaving it changes nothing, so it is a read until
+/// something is applied. Only applying opens the ledger to write to
+/// ([`commit`]), which makes it and scrubs it.
 pub fn run(workspace: &FlayerWorkspace) -> Result<Outcome, Failure> {
     let (projects, mut warnings) = registered(workspace);
     warnings.extend(load_warnings(workspace));
-    let (ledger, screen, scrub) = open(workspace, projects)?;
-    let said = scrubbed(&scrub);
+    let screen = open(workspace, projects)?;
 
     if screen.targets.is_empty() {
-        let mut outcome = said.before(Outcome {
+        return Ok(Outcome {
             stdout: format!(
                 "{} manages no projects yet\n  link one with `flayer link <path>`\n",
                 workspace.name()
             ),
-            stderr: Vec::new(),
+            stderr: warnings,
             ok: true,
         });
-        outcome.stderr.splice(0..0, warnings);
-        return Ok(outcome);
     }
 
     // `try_init` rather than `init`, which panics: this command is the one
@@ -54,22 +55,15 @@ pub fn run(workspace: &FlayerWorkspace) -> Result<Outcome, Failure> {
     let outcome = drive(&mut terminal, screen);
     ratatui::restore();
 
-    let (screen, step) = outcome.map_err(|source| Failure {
-        error: Box::new(CliError::Screen { source }),
-        warnings: said.clone().lines(),
-    })?;
-    let outcome = match step {
-        Step::Apply => apply(workspace, &ledger, &screen).map_err(|error| Failure {
-            error: Box::new(error.into()),
-            warnings: said.clone().lines(),
-        })?,
+    let (screen, step) = outcome.map_err(|source| CliError::Screen { source })?;
+    let mut outcome = match step {
+        Step::Apply => commit(workspace, &screen)?,
         _ => Outcome {
             stdout: String::from("nothing applied\n"),
             stderr: Vec::new(),
             ok: true,
         },
     };
-    let mut outcome = said.before(outcome);
     // Judged by the warnings rather than by stderr, which may also hold the
     // notes a scrub leaves, and those are not a failure.
     outcome.ok = outcome.ok && warnings.is_empty();
@@ -77,29 +71,93 @@ pub fn run(workspace: &FlayerWorkspace) -> Result<Outcome, Failure> {
     Ok(outcome)
 }
 
-/// Open the ledger as a command that writes does, and build the screen from
-/// it: the screen `flayer install` opens and the one inside the TUI both
-/// start here, so they cannot differ about it.
+/// Build the screen from the ledger as it is, as a read: without making the
+/// ledger, or scrubbing it of what an older build stored with a credential.
 ///
-/// The scrub comes before the screen reads the shelf rather than when what
-/// it marked is applied. A scrub can make two sources one row, and a screen
-/// built before it would hold the row that went: its install would copy the
-/// files and then fail to record them, leaving a copy in the project that
-/// Mindflayer no longer counts as its own. What the scrub took out is handed
-/// back for the caller to say, and goes with an error as warnings, since it
-/// happened all the same.
-pub fn open(
-    workspace: &FlayerWorkspace,
-    projects: Vec<MindProject>,
-) -> Result<(Ledger, Screen, Scrub), Failure> {
+/// The screen `flayer install` opens and the one inside the TUI both open here
+/// and apply through [`commit`], so they cannot differ about either.
+pub fn open(workspace: &FlayerWorkspace, projects: Vec<MindProject>) -> Result<Screen, CliError> {
+    let read = workspace.ledger_for_reading()?;
+    Ok(build(workspace, &read, projects)?)
+}
+
+/// Open the ledger to write, which makes it and scrubs it first, and carry out
+/// what the screen marked; what the scrub took out is said before what was
+/// done, and with an error as warnings, since it happened all the same.
+///
+/// The screen was built from a read, so this scrub is the first to see the
+/// ledger. A scrub can make two sources one row, and a mark on the row that
+/// went would install from folders the scrub removed, or copy the files and
+/// then fail to record them against a source that is no longer there,
+/// leaving a copy Mindflayer no longer counts as its own. So once a scrub has
+/// taken out a source, what was marked is found again on the shelf it left
+/// ([`rebuilt`]) before anything is carried out. Scrubbing when the screen
+/// opened was the other way, and is rejected: opening it is a read, and a
+/// read writes nothing.
+pub fn commit(workspace: &FlayerWorkspace, screen: &Screen) -> Result<Outcome, Failure> {
     let (ledger, scrub) = workspace.ledger_to_write().map_err(CliError::from)?;
-    match build(workspace, &ledger, projects) {
-        Ok(screen) => Ok((ledger, screen, scrub)),
+    let said = scrubbed(&scrub);
+    let applied = if scrub.sources.is_empty() {
+        apply(workspace, &ledger, screen)
+    } else {
+        rebuilt(workspace, &ledger, screen).and_then(|(screen, lost)| {
+            let mut outcome = apply(workspace, &ledger, &screen)?;
+            outcome.ok = outcome.ok && lost.is_empty();
+            outcome.stderr.splice(0..0, lost);
+            Ok(outcome)
+        })
+    };
+    match applied {
+        Ok(outcome) => Ok(said.before(outcome)),
         Err(error) => Err(Failure {
             error: Box::new(error.into()),
-            warnings: scrubbed(&scrub).lines(),
+            warnings: said.lines(),
         }),
     }
+}
+
+/// `screen` built again from `ledger`, with each mark made again on the row
+/// offering the same name from the same place, and a warning for each mark
+/// left with no such row.
+///
+/// Carried by name and origin rather than by the source row, which a scrub
+/// can make one with another: the origin is shown without credentials before
+/// a scrub as after it, so the row that went and the row it became one with
+/// offer from the same place. What only the row that went had gathered went
+/// with it, and a mark on that is not carried out.
+fn rebuilt(
+    workspace: &FlayerWorkspace,
+    ledger: &Ledger,
+    screen: &Screen,
+) -> Result<(Screen, Vec<String>), install::InstallError> {
+    let projects = screen
+        .targets
+        .iter()
+        .map(|target| target.project.clone())
+        .collect();
+    let mut rebuilt = build(workspace, ledger, projects)?;
+    let mut lost = Vec::new();
+    for (was, now) in screen.targets.iter().zip(&mut rebuilt.targets) {
+        for row in &was.rows {
+            let Some(pending) = row.pending() else {
+                continue;
+            };
+            let (name, origin) = (row.candidate.name(), row.candidate.origin());
+            let carried = now
+                .rows
+                .iter()
+                .position(|row| row.candidate.name() == name && row.candidate.origin() == origin)
+                .is_some_and(|index| now.mark(index, pending == Pending::Install));
+            if !carried {
+                lost.push(format!(
+                    "warning: {}: {name} from {origin} is no longer on the shelf once the ledger \
+                     was scrubbed, so it was left as it was",
+                    was.name()
+                ));
+            }
+        }
+    }
+    Ok((rebuilt, lost))
 }
 
 /// The projects a workspace manages, and what could not be opened.
@@ -162,8 +220,7 @@ fn drive(terminal: &mut DefaultTerminal, mut screen: Screen) -> Result<(Screen, 
 
 /// Carry out everything the screen marked, and say what happened.
 ///
-/// With the ledger the screen was built from, scrubbed when [`open`] opened
-/// it.
+/// With a ledger opened to write: [`commit`] opens it, and scrubs it first.
 pub fn apply(
     workspace: &FlayerWorkspace,
     ledger: &Ledger,
@@ -190,11 +247,15 @@ pub fn apply(
                 let done = match result {
                     Ok(done) => done,
                     Err(error) => {
+                        // What it cleared first is still something it did.
+                        for line in crate::commands::install::cleared(project, error.swept()) {
+                            let _ = writeln!(stdout, "{}: {line}", project.name());
+                        }
                         stderr.push(format!("warning: {}: {error}", project.name()));
                         continue;
                     }
                 };
-                match done {
+                match done.installed {
                     Installed::Added { name, .. } | Installed::Updated { name, .. } => {
                         installed += 1;
                         let _ = writeln!(stdout, "{}: installed {name}", project.name());
@@ -208,6 +269,7 @@ pub fn apply(
                         project.name()
                     )),
                 }
+                stdout.push_str(&crate::commands::install::swept(project, &done.swept));
             }
             Pending::Remove => {
                 let name = entry.candidate.name();

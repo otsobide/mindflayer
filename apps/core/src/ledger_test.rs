@@ -389,3 +389,38 @@ fn scrubbing_the_log_rewrites_only_the_entries_with_credentials_and_counts_them(
     assert!(stored(&ledger, "actions").contains("ssh://git@h/b"));
     assert_eq!(ledger.scrub_log().unwrap(), 0);
 }
+
+#[test]
+fn opening_only_an_existing_ledger_makes_nothing_when_there_is_none() {
+    let dir = tempfile::TempDir::new().unwrap();
+    let folder = dir.path().join(".mindflayer");
+    let path = folder.join(LEDGER_FILE);
+
+    assert!(Ledger::open_existing(&path).unwrap().is_none());
+
+    // Not the database, and not the folder it would have gone in either.
+    assert!(!folder.exists());
+}
+
+#[test]
+fn opening_only_an_existing_ledger_still_brings_an_older_one_up_to_date() {
+    let dir = tempfile::TempDir::new().unwrap();
+    let path = dir.path().join(LEDGER_FILE);
+    {
+        let connection = Connection::open(&path).unwrap();
+        connection.execute_batch(SCHEMA_V1).unwrap();
+        connection.pragma_update(None, "user_version", 1).unwrap();
+    }
+
+    let ledger = Ledger::open_existing(&path).unwrap().unwrap();
+
+    let version: u32 = ledger
+        .connection
+        .pragma_query_value(None, "user_version", |row| row.get(0))
+        .unwrap();
+    assert_eq!(version, SCHEMA_VERSION);
+    assert!(ledger
+        .installations("collapse", Kind::Skill)
+        .unwrap()
+        .is_empty());
+}
