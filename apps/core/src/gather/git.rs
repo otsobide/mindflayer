@@ -2,13 +2,16 @@
 //!
 //! `gix` rather than shelling out to `git`: nothing here depends on a `git`
 //! being installed or on which one is first on the PATH, and core keeps doing
-//! its own I/O rather than supervising a process.
+//! its own I/O rather than supervising a process. A clone never prompts for a
+//! credential; [`super::credentials`] says why.
 
 use std::num::NonZeroU32;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::AtomicBool;
 
 use thiserror::Error;
+
+use super::credentials;
 
 /// A clone that is on disk and ready to be read.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -48,7 +51,17 @@ pub fn clone(url: &str, reference: Option<&str>, into: &Path) -> Result<Clone, G
         // Depth 1: the history is not what is being gathered, the files are.
         .with_shallow(gix::remote::fetch::Shallow::DepthAtRemote(
             NonZeroU32::new(1).expect("1 is not zero"),
-        ));
+        ))
+        // Every connection the clone opens, not only the first: a shallow
+        // clone connects once to find the branch and again to fetch it, and
+        // either one may be asked for a credential.
+        .configure_connection(|connection| {
+            let repository = connection.remote().repo().clone();
+            connection.set_credentials(credentials::never_prompting(credentials::configured(
+                repository,
+            )));
+            Ok(())
+        });
 
     if let Some(reference) = reference {
         prepare = prepare
