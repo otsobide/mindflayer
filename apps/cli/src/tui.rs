@@ -320,7 +320,7 @@ fn open_install(base: &Path) -> Performed {
             // Said in the transcript, the one place the TUI keeps what a
             // command said, since the screen it opens has no room for it.
             let told = scrubbed(&scrub).before(Outcome::plain(String::new()));
-            let said = (!told.stderr.is_empty()).then(|| Done {
+            let said = (!told.stderr.is_empty()).then_some(Done {
                 command,
                 stdout: told.stdout,
                 stderr: told.stderr,
