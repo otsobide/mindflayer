@@ -11,7 +11,10 @@ use mindflayer_core::copy;
 use mindflayer_core::gather::{self, Request};
 use mindflayer_core::install::{self, Installed, Removed, Standing};
 use mindflayer_core::ledger::Ledger;
-use mindflayer_core::{Directories, FlayerWorkspace, Kind, MindProject};
+use mindflayer_core::{
+    Agent, Directories, FlayerWorkspace, Kind, MindProject, Settings, Share, WorkspaceError,
+    MIND_DIR, SETTINGS_FILE,
+};
 use tempfile::TempDir;
 
 /// A workspace with one project in it, and a shelf holding `names`.
@@ -157,6 +160,42 @@ fn uninstalling_takes_it_back_out() {
     assert!(!installed_at(&project, "deploy").exists());
     let after = install::survey(&workspace, &ledger, &project, Kind::Skill).unwrap();
     assert_eq!(after[0].standing, Standing::Absent);
+}
+
+#[test]
+fn a_project_whose_settings_name_no_skills_folder_is_offered_nothing_and_refused_one_by_name() {
+    let (dir, workspace, _, ledger) = ready(&["deploy"]);
+    let root = dir.path().join("alpha");
+    fs::create_dir_all(root.join(MIND_DIR)).unwrap();
+    let settings = Settings::new(
+        "alpha",
+        Agent::ALL.to_vec(),
+        Share::Local,
+        Directories::default().with(Kind::Rule, "rules"),
+    );
+    fs::write(
+        root.join(MIND_DIR).join(SETTINGS_FILE),
+        settings.text().unwrap(),
+    )
+    .unwrap();
+    let project = MindProject::open(&root).unwrap();
+
+    let candidates = install::survey(&workspace, &ledger, &project, Kind::Skill).unwrap();
+    let refused =
+        install::offered(&workspace, &ledger, &project, Kind::Skill, "deploy", None).unwrap_err();
+
+    assert!(candidates.is_empty(), "{candidates:?}");
+    assert!(
+        matches!(
+            refused,
+            install::InstallError::Workspace(WorkspaceError::NoDirectory {
+                kind: Kind::Skill,
+                ..
+            })
+        ),
+        "{refused}"
+    );
+    assert!(!root.join("skills").exists());
 }
 
 // ---------------------------------------------------------------------------

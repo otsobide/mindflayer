@@ -337,15 +337,22 @@ pub enum LoadFailure {
 /// That is the list of what can be installed, so an artifact a project holds
 /// that is in neither does not appear: it is not a thing this command can
 /// offer to do anything about.
+///
+/// A project whose marker names no folder for `kind` is offered nothing,
+/// rather than refused: nothing can be put there, and the screen surveys
+/// every project a workspace links, where a refusal for one would hide the
+/// rest. Asking for one by name ([`offered`]) is refused.
 pub fn survey(
     workspace: &FlayerWorkspace,
     ledger: &Ledger,
     project: &MindProject,
     kind: Kind,
 ) -> Result<Vec<Candidate>, InstallError> {
+    let Some(directory) = project.directory_for(kind) else {
+        return Ok(Vec::new());
+    };
     let entry = project_entry(workspace, project);
     let ours = ledger.installations(&entry, kind)?;
-    let directory = project.required_directory(kind)?;
 
     // The workspace's own come first: what it keeps for its projects before
     // what it gathered from elsewhere. Only kinds that are a directory each,
@@ -392,6 +399,10 @@ pub fn survey(
 /// `from` is needed only when two places offer the same name: a project has
 /// one directory of that name, and which of the two goes in it is not
 /// something to guess.
+///
+/// A project that keeps no folder for `kind` is refused here, where
+/// [`survey`] offers it nothing: "not offered" would send somebody to gather
+/// what could never be installed there anyway.
 pub fn offered(
     workspace: &FlayerWorkspace,
     ledger: &Ledger,
@@ -400,6 +411,7 @@ pub fn offered(
     name: &str,
     from: Option<&str>,
 ) -> Result<Candidate, InstallError> {
+    project.required_directory(kind)?;
     let mut matching: Vec<Candidate> = survey(workspace, ledger, project, kind)?
         .into_iter()
         .filter(|candidate| candidate.name() == name)
