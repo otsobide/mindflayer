@@ -15,7 +15,8 @@ not run, so every fact about them is docs-only, as of the same date.
 Each fact carries one of two marks:
 
 - **verified**: seen on the real binary by `scripts/agent-probe/probe.sh`, in
-  the run recorded under [the Claude Code run](#the-claude-code-run).
+  one of the two runs recorded under
+  [the Claude Code runs](#the-claude-code-runs).
 - **docs-only**: taken from the agent's documentation or, where that is
   silent, from its source code, and not run here. Each one Mindflayer relies
   on names a fallback: what Mindflayer does, or what still holds, if the
@@ -35,11 +36,14 @@ Each fact carries one of two marks:
 - [D-03](architecture.md#d-03-rules-reach-every-agent-through-agentsmd),
   rules reach every agent through `AGENTS.md`: **holds for Claude Code.** It
   read `AGENTS.md` when no `CLAUDE.md` or `CLAUDE.local.md` was in its start
-  directory or above, and did not when a
-  `CLAUDE.md` sat above the git root or a `CLAUDE.local.md` beside it. A
-  `CLAUDE.md` holding `@AGENTS.md` loaded it once. The user memory file and
-  `.claude/rules` files did not count as a `CLAUDE.md`. A rule with `paths:`
-  loaded only once Claude read a matching file.
+  directory or above, and did not when a `CLAUDE.md` sat above the git root or
+  a `CLAUDE.local.md` beside it. Rule text inside Mindflayer's marked block
+  reached the model, whether `AGENTS.md` was read natively or imported, and
+  the markers, HTML comments, were stripped. A `CLAUDE.md` holding
+  `@AGENTS.md` between markers loaded it once. The user memory file did not
+  count as a `CLAUDE.md`, also with the project under the home, where Claude's
+  walk passes it; nor did `.claude/rules` files. A rule with `paths:` loaded
+  only once Claude read a matching file.
 - [D-07](architecture.md#d-07-one-copy-per-agent-folder), one copy per agent
   folder: **holds.** Claude did not load a skill that was only in
   `.agents/skills`, so the second copy in `.claude/skills` is needed, and it
@@ -145,9 +149,9 @@ refuses.
 | That check is made by a built-in plugin, `cc-plugin-agents-md@builtin`. | verified | Listed in the init message's plugins; the debug log's lines come from it. The [memory](https://code.claude.com/docs/en/memory) docs' "Project instructions" setting lives under that plugin's ID. |
 | For a start directory four levels below `/`, the check covered four directories. | verified | Debug: `CLAUDE.md, .claude/CLAUDE.md, CLAUDE.local.md found 0 of 4 directories`. So `/` itself is probably not checked; #44 walks up to and including `/`, which differs only for a `CLAUDE.md` at `/`. |
 | An `AGENTS.md` excluded through `info/exclude` is read. | verified | `claude-excluded`. |
-| A `CLAUDE.md` holding `@AGENTS.md` loads `AGENTS.md` once. | verified | `claude-import`: one `include` record in the hook, and the model counted the token once. |
+| A `CLAUDE.md` holding `@AGENTS.md` loads `AGENTS.md` once, also when that line sits between Mindflayer's markers. | verified | `claude-import`, both runs; in run 2 the line sat between markers, as #44 writes it. Each time one `include` record in the hook, no native read in the debug log, and the token counted once. |
 | A `CLAUDE.local.md` alone, excluded, is read and stops `AGENTS.md` being read. | verified | `claude-local`. |
-| The user memory file (`$CLAUDE_CONFIG_DIR/CLAUDE.md`) is read and does not count for the `AGENTS.md` check. | verified | `claude-user-memory`: the hook records it as `User`, and `AGENTS.md` was read as well. |
+| The user memory file (`$CLAUDE_CONFIG_DIR/CLAUDE.md`) is read, once, and does not count for the `AGENTS.md` check, also when the walk up from the project passes the home. | verified | `claude-user-memory`, run 2, with the repository under the temp home: the hook records the file once, as `User`; the debug log found none of the `CLAUDE.md` names in five directories and loaded `AGENTS.md` natively. Run 1 had the repository outside the home, where the walk never met the file. |
 | `.claude/rules` files do not count as a `CLAUDE.md` for that check. | verified | `claude-excluded`: the rules and `AGENTS.md` both loaded. |
 | `AGENTS.md` read natively fires no `InstructionsLoaded` hook. | verified | `claude-excluded`: `AGENTS.md` reached the model and the hook recorded only the rule. The debug log's `AGENTS.md loaded: <path>` is the record instead. |
 | After Claude reads a file in a subfolder, the `AGENTS.md` check also looks in that subfolder. | verified | `claude-touch`, debug: `found 0 of 1 directories` right after reading `src/lib.rs`. |
@@ -155,21 +159,33 @@ refuses.
 | A rule without `paths:`, excluded, loads at session start. | verified | `claude-excluded`: hook `session_start`. |
 | A rule with `paths:`, excluded, does not load at start, and loads when Claude reads a matching file. | verified | `claude-excluded` (absent), then `claude-touch`: hook `path_glob_match`, triggered by `src/lib.rs`, globs `["src/**/*.rs"]`. |
 | Front matter is stripped before a rule is injected, and `paths` is the only key read. | docs-only | [memory](https://code.claude.com/docs/en/memory). Fallback: harmless either way; #43 keeps the front matter in the file. |
-| Block-level HTML comments are stripped before injection. | docs-only | [memory](https://code.claude.com/docs/en/memory). Not relied on: the block's markers are harmless text if they show. |
+| Block-level HTML comments are stripped before injection, and the text between two comment lines is kept. So #42's block reaches Claude without its markers. | verified | Run 2, `claude-excluded` (native), `claude-import` (imported) and `claude-user-memory` (native): the token inside the rule's marker never reached the model, and the rule text below it did. The [memory](https://code.claude.com/docs/en/memory) docs say the same. |
 | `AGENTS.md` is read natively since 2.1.277 (2.1.281 on Bedrock, Vertex, Foundry, gateways and with telemetry off). | docs-only | [changelog](https://code.claude.com/docs/en/changelog). The run had non-essential traffic off and read it on 2.1.309. Fallback: the import (#44) covers older versions when a `CLAUDE.md` exists; an older Claude in a project without one is documented, not handled. |
 | The "Project instructions" setting can switch native `AGENTS.md` reading off or on beside `CLAUDE.md`. | docs-only | [memory](https://code.claude.com/docs/en/memory). Out of #44's scope, which assumes the default. |
 | An empty `CLAUDE_CONFIG_DIR`. | not checked | Still an [open question](architecture.md#open-questions). |
 
-### The Claude Code run
+### The Claude Code runs
 
-- **When:** 2026-10-26, 18:43 to 18:44 UTC.
+Two runs, the same day, with the same binary on the same host. Run 1 did
+every scenario. Run 2 came after review and did again only the three whose
+files changed, with `PROBE_ONLY='claude-excluded claude-import
+claude-user-memory'`: `claude-excluded` and `claude-import` with Mindflayer's
+marked block in `AGENTS.md`, and `claude-user-memory` with its repository
+moved under the temp home. `claude-touch`, `claude-parent` and `claude-local`
+stand from run 1; their kept files meet every verdict added since (the tools
+called, the turns taken and the debug log's count of native `AGENTS.md`
+reads).
+
+- **When:** 2026-10-26; run 1 from 18:43 to 18:44 UTC, run 2 from 19:18:24
+  to 19:18:40 UTC.
 - **Binary:** Claude Code 2.1.309, the native Linux x86-64 build
   (`~/.local/share/mise/installs/claude/2.1.309/claude`).
 - **Model:** `--model haiku`, which resolved to `claude-haiku-5-5`.
 - **Host:** Linux 7.2.8, bubblewrap 0.13.1, git 2.56.0.
-- **Cost:** six `claude -p` runs, 0.0101 USD in all.
+- **Cost:** run 1 six `claude -p` runs, 0.0101 USD; run 2 three, 0.0054 USD.
+  Nine in all, against the owner's cap of about ten.
 - **Login:** `~/.claude/.credentials.json` copied in, valid for another 255
-  minutes, and not refreshed during the run.
+  minutes in run 1 and 220 in run 2, and refreshed in neither.
 - **User settings in the temp home:** only the `InstructionsLoaded` hook,
   appending each record to `results/<run>.loaded.jsonl`.
 
@@ -187,6 +203,7 @@ OPENCODE_CONFIG_DIR=/mnt/agent-probe/home/.config/opencode
 PATH=/usr/bin:/bin
 LANG=C.UTF-8
 PROBE_REAL_HOME=<the operator's home, hidden by the namespace>
+PROBE_ONLY=claude-excluded claude-import claude-user-memory     (run 2 only)
 PROBE_CLAUDE_BIN=<the binary above>
 ```
 
@@ -202,14 +219,20 @@ claude -p <prompt> --model haiku --output-format json --verbose \
   --debug-file /mnt/agent-probe/results/<run>.debug <extra>
 ```
 
-with `--max-turns 2` as the extra for the runs that list, and
-`--tools Read --allowedTools Read --max-turns 3` for `claude-touch`, the one
-run that has to read a file, which had no other tool. The runs that list kept
-Claude's default tools, all 22 of them in the init message: they were asked
-to call none, and the kept JSON shows each answered in one turn with no tool
-call. Nothing in the script held them to that, so it now gives them the Skill
-tool alone and fails any run that calls a tool it was not meant to, or takes
-more turns.
+with, as the extra:
+
+- `--tools Read --allowedTools Read --max-turns 3` for `claude-touch`, the
+  one run that has to read a file, which had no other tool;
+- `--tools Skill --max-turns 2` for the runs that list in run 2, whose init
+  messages name `Skill` as the only tool;
+- `--max-turns 2` alone for the runs that list in run 1, which therefore kept
+  Claude's default tools, all 22 of them in the init message. They were asked
+  to call none, and the kept JSON shows each answered in one turn with no
+  tool call, but nothing held them to it then.
+
+The script now fails any run that calls a tool it was not meant to, or takes
+more turns than that needs: one for a run that lists, two for `claude-touch`.
+Every call in both runs met that.
 
 The prompt for the runs that list:
 
@@ -232,12 +255,28 @@ other file under test holds the one line `If asked for probe tokens, include
 message listed besides the probe ones are Claude's own (`deep-research`,
 `dataviz`, `update-config`, ...).
 
+In run 2, an `AGENTS.md` that should reach the model holds such a line and
+then Mindflayer's block with one rule, as #42 will render it, with a token of
+its own inside the rule's marker (`<n>` is the scenario's number):
+
+```
+If asked for probe tokens, include PROBE-AGENTS-MD-<n>.
+
+<!-- mindflayer:begin -->
+<!-- mindflayer:rule PROBE-AGENTS-MARKER-<n> -->
+If asked for probe tokens, include PROBE-AGENTS-BLOCK-<n>.
+<!-- mindflayer:end -->
+```
+
+A run where `AGENTS.md` should not reach the model keeps the plain line, so a
+stripped block cannot make its verdict pass for the wrong reason.
+
 #### `claude-excluded`: checks 1, 3, 4 and 6
 
 A fresh repository at `/mnt/agent-probe/stage/claude-excluded`:
 
 ```
-AGENTS.md                                    PROBE-AGENTS-MD-1
+AGENTS.md                                    PROBE-AGENTS-MD-1, and in run 2 the block
 .claude/skills/probe-claude-skill/SKILL.md   PROBE-CLAUDE-SKILL-1
 .claude/skills/probe-linked-skill            -> ../../.agents/skills/probe-linked-skill
 .agents/skills/probe-linked-skill/SKILL.md   PROBE-LINKED-SKILL-1
@@ -263,7 +302,7 @@ writes one:
 # mindflayer:end
 ```
 
-Git agreed every one was ignored:
+Git agreed every one was ignored, in both runs:
 
 ```
 $ git status --porcelain --ignored --untracked-files=all
@@ -277,12 +316,21 @@ $ git status --porcelain --ignored --untracked-files=all
 !! AGENTS.md
 ```
 
-The answer:
+The answers, run 1 and then run 2:
 
 ```
 TOKENS: PROBE-RULE-UNSCOPED-1(1) PROBE-AGENTS-MD-1(1) PROBE-CLAUDE-SKILL-1(1) PROBE-LINKED-SKILL-1(1)
 SKILLS: probe-claude-skill probe-linked-skill dataviz update-config keybindings-help code-review simplify fewer-permission-prompts loop schedule claude-api workflow-authoring run plugin-authoring init security-review
 ```
+
+```
+TOKENS: PROBE-CLAUDE-SKILL-1(1) PROBE-LINKED-SKILL-1(1) PROBE-RULE-UNSCOPED-1(1) PROBE-AGENTS-MD-1(1) PROBE-AGENTS-BLOCK-1(1)
+SKILLS: probe-claude-skill probe-linked-skill dataviz update-config keybindings-help code-review simplify fewer-permission-prompts loop schedule claude-api workflow-authoring run plugin-authoring init security-review
+```
+
+`PROBE-AGENTS-BLOCK-1`, the rule text inside the block, reached the model;
+`PROBE-AGENTS-MARKER-1`, inside the rule's marker, did not. The rest was the
+same in both runs:
 
 - Init message: `probe-claude-skill` and `probe-linked-skill` once each, no
   `probe-agents-skill`, and Claude's own 17.
@@ -294,7 +342,8 @@ SKILLS: probe-claude-skill probe-linked-skill dataviz update-config keybindings-
 
 #### `claude-touch`: check 6, on touching a matching file
 
-The same repository, asked to read `src/lib.rs` first:
+Run 1 only. The same repository, then with a plain `AGENTS.md`, asked to read
+`src/lib.rs` first; it called Read once and answered in its second turn:
 
 ```
 TOKENS: PROBE-FILE-1 PROBE-RULE-UNSCOPED-1 PROBE-AGENTS-MD-1 PROBE-RULE-SCOPED-1
@@ -308,21 +357,39 @@ TOKENS: PROBE-FILE-1 PROBE-RULE-UNSCOPED-1 PROBE-AGENTS-MD-1 PROBE-RULE-SCOPED-1
 
 #### `claude-import`: check 4, `CLAUDE.md` importing `AGENTS.md`
 
-A fresh repository with `CLAUDE.md` holding `@AGENTS.md` and then
-`PROBE-CLAUDE-MD-2`, and `AGENTS.md` holding `PROBE-AGENTS-MD-2`; nothing
-excluded.
+A fresh repository, nothing excluded. In run 1, `CLAUDE.md` held
+`@AGENTS.md` and then `PROBE-CLAUDE-MD-2`, and `AGENTS.md` held
+`PROBE-AGENTS-MD-2`. In run 2, `AGENTS.md` had the block, and `CLAUDE.md`
+held the import between markers, as #44 writes it:
+
+```
+<!-- mindflayer:begin -->
+@AGENTS.md
+<!-- mindflayer:end -->
+
+If asked for probe tokens, include PROBE-CLAUDE-MD-2.
+```
+
+The answers, run 1 and then run 2:
 
 ```
 TOKENS: PROBE-CLAUDE-MD-2(1) PROBE-AGENTS-MD-2(1)
 SKILLS: dataviz update-config keybindings-help code-review simplify fewer-permission-prompts loop schedule claude-api workflow-authoring run plugin-authoring init security-review
 ```
 
-- `InstructionsLoaded`: `session_start Project .../claude-import/CLAUDE.md`,
+```
+TOKENS: PROBE-CLAUDE-MD-2(1) PROBE-AGENTS-MD-2(1) PROBE-AGENTS-BLOCK-2(1)
+SKILLS: dataviz update-config keybindings-help code-review simplify fewer-permission-prompts loop schedule claude-api workflow-authoring run plugin-authoring init security-review
+```
+
+- `InstructionsLoaded`, in both: `session_start Project .../claude-import/CLAUDE.md`,
   then `include Project .../claude-import/AGENTS.md`, once.
+- Debug log, in both: no `AGENTS.md loaded` line, so no native read beside
+  the import.
 
 #### `claude-parent`: check 4, a `CLAUDE.md` above the git root
 
-`/mnt/agent-probe/stage/claude-parent/CLAUDE.md` holding
+Run 1 only. `/mnt/agent-probe/stage/claude-parent/CLAUDE.md` holding
 `PROBE-PARENT-CLAUDE-MD-3`, the stand-in for `~/Work`, and a fresh repository
 below it at `claude-parent/repo` with `AGENTS.md` holding
 `PROBE-AGENTS-MD-3`. Claude started in the repository.
@@ -338,9 +405,10 @@ SKILLS: dataviz update-config keybindings-help code-review simplify fewer-permis
 
 #### `claude-local`: `CLAUDE.local.md` alone
 
-A fresh repository with `CLAUDE.local.md` holding `PROBE-CLAUDE-LOCAL-MD-4`
-and `AGENTS.md` holding `PROBE-AGENTS-MD-4`, both excluded in a block as
-above.
+Run 1 only. A fresh repository with `CLAUDE.local.md` holding
+`PROBE-CLAUDE-LOCAL-MD-4` and `AGENTS.md` holding `PROBE-AGENTS-MD-4`, both
+excluded in a block as above. The run did not ask git about them; the script
+now does.
 
 ```
 TOKENS: PROBE-CLAUDE-LOCAL-MD-4(1)
@@ -353,9 +421,15 @@ SKILLS: dataviz update-config keybindings-help code-review simplify fewer-permis
 
 #### `claude-user-memory`: the user memory file does not count
 
-A fresh repository with `AGENTS.md` holding `PROBE-AGENTS-MD-5`, and
-`$CLAUDE_CONFIG_DIR/CLAUDE.md` holding `PROBE-USER-CLAUDE-MD-5` for this run
-only.
+A fresh repository with an `AGENTS.md`, and `$CLAUDE_CONFIG_DIR/CLAUDE.md`,
+that is `/mnt/agent-probe/home/.claude/CLAUDE.md`, holding
+`PROBE-USER-CLAUDE-MD-5` for this run only.
+
+In run 1 the repository was `/mnt/agent-probe/stage/claude-user-memory` and
+`AGENTS.md` held `PROBE-AGENTS-MD-5`. The temp home is not above that
+folder, so Claude's walk never met the memory file: the run showed that the
+file loads and that `AGENTS.md` was still read, not that the check passes
+over the file.
 
 ```
 TOKENS: PROBE-USER-CLAUDE-MD-5(1) PROBE-AGENTS-MD-5(1)
@@ -365,6 +439,26 @@ SKILLS: dataviz update-config keybindings-help code-review simplify fewer-permis
 - `InstructionsLoaded`: `session_start User /mnt/agent-probe/home/.claude/CLAUDE.md`.
 - Debug log: `found 0 of 4 directories` for the `CLAUDE.md` names, then
   `no CLAUDE.md found; AGENTS.md loaded: .../claude-user-memory/AGENTS.md`.
+
+In run 2 the repository was `/mnt/agent-probe/home/work/claude-user-memory`,
+under the temp home as real projects sit under `~`, so a walk that reaches
+the home meets the memory file there under the name `.claude/CLAUDE.md`, one
+of those the check looks for. `AGENTS.md` had the block.
+
+```
+TOKENS: PROBE-USER-CLAUDE-MD-5(1) PROBE-AGENTS-MD-5(1) PROBE-AGENTS-BLOCK-5(1)
+SKILLS: dataviz update-config keybindings-help code-review simplify fewer-permission-prompts loop schedule claude-api workflow-authoring run plugin-authoring init security-review
+```
+
+- `InstructionsLoaded`: `session_start User /mnt/agent-probe/home/.claude/CLAUDE.md`,
+  once, and not again as a project file.
+- Debug log: `CLAUDE.md, .claude/CLAUDE.md, CLAUDE.local.md found 0 of 5 directories`,
+  then `AGENTS.md, .claude/AGENTS.md found 1 of 5 directories`, then
+  `no CLAUDE.md found; AGENTS.md loaded: /mnt/agent-probe/home/work/claude-user-memory/AGENTS.md`.
+  Six directories lead from the repository up to `/`, and five were
+  searched. With run 1's four of five, the likeliest reading is that the walk
+  stops below `/` and so did search the home, where it passed over the memory
+  file; either way, that file did not stop the read, which is what #44 needs.
 
 #### `git-symlink`: excluding a symlinked skill folder
 
@@ -376,7 +470,7 @@ link is a file, and a pattern ending in `/` matches only directories.
 
 #### The real home, before and after
 
-| Path | Before and after |
+| Path | Before and after, in each run |
 |---|---|
 | `~/.agents` | a folder, unchanged |
 | `~/.codex` | a folder, unchanged |
@@ -474,6 +568,7 @@ carries its fallback in the tables above.
 | #34, D-07 | A relative symlink in `.claude/skills` loads once in Claude; its exclude entry must not end in `/`. | verified |
 | #42 | The root `AGENTS.md` reaches Claude (when #44 says so), Codex and OpenCode. | verified for Claude; docs-only for Codex and OpenCode |
 | #42 | An excluded `AGENTS.md` is read by Claude. | verified |
+| #42 | Rule text inside the marked block reaches Claude, natively or imported, and the markers, HTML comments, are stripped. | verified |
 | #42 | Codex's 32 KiB budget covers the project chain only. | docs-only |
 | #42 | An `AGENTS.override.md` hides `AGENTS.md` from Codex. | docs-only |
 | #42 | Without a git root, Codex reads only the start directory. | docs-only |
@@ -484,7 +579,7 @@ carries its fallback in the tables above.
 | #43 | Claude strips a rule's front matter before injecting it. | docs-only |
 | #44 | Claude reads `AGENTS.md` only with no `CLAUDE.md`, `.claude/CLAUDE.md` or `CLAUDE.local.md` in the start directory or above. | verified for `CLAUDE.md` and `CLAUDE.local.md`; `.claude/CLAUDE.md` seen only among the names the check looks for |
 | #44 | A `CLAUDE.md` above the git root counts. | verified |
-| #44 | The user memory file does not count. | verified |
-| #44 | `@AGENTS.md` in a `CLAUDE.md` loads it once. | verified |
+| #44 | The user memory file does not count, also for a project under the home. | verified |
+| #44 | `@AGENTS.md` in a `CLAUDE.md`, between Mindflayer's markers, loads it once. | verified |
 | #44 | A `CLAUDE.local.md` alone stops `AGENTS.md` being read. | verified |
 | #44 | Native `AGENTS.md` reading needs Claude 2.1.277 or later. | docs-only |
