@@ -36,8 +36,9 @@ cargo test -p mindflayer-server --test commands_test         # apps/server/tests
 ```
 
 The panel (`apps/web`) needs Node 24 and pnpm at the version `package.json`
-pins in `packageManager`. Its targets install from the lockfile first, and
-`PNPM` names pnpm where corepack has not put it on the PATH:
+pins in `packageManager`. The targets that run a tool install from the
+lockfile first, and `PNPM` names pnpm where corepack has not put it on the
+PATH:
 
 ```bash
 make web/test             # vitest: apps/web/tests/<area>.test.ts

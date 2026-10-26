@@ -1401,14 +1401,14 @@ panel meanwhile, through `allow_missing`.
 
 Node is 24, the LTS line (`.node-version`), and pnpm is pinned through
 `packageManager`; `PNPM` names another way to run it, such as `npx`, where
-corepack is not set up. Every target first installs from the lockfile,
-frozen, when `node_modules` is older than it. pnpm holds back any version
-published less than a day ago (`pnpm-workspace.yaml`), and runs no
-dependency's install script: the two that ask, esbuild's and vue-demi's,
-have nothing to do here. A test reads the licence of every package installed,
-development tools included, and fails on one a GPL-3.0-only program could
-not take in, or one that declares none and is not named with what its source
-says.
+corepack is not set up. Every target that runs a tool first installs from
+the lockfile, frozen, when `node_modules` is older than it, `package.json` or
+`pnpm-workspace.yaml`. pnpm holds back any version published less than a
+day ago (`pnpm-workspace.yaml`), and runs no dependency's install script:
+the two that ask, esbuild's and vue-demi's, have nothing to do here. A test
+reads the licence of every package installed, development tools included,
+and fails on one a GPL-3.0-only program could not take in, or one that
+declares none and is not named with what its source says.
 
 `make web/dev` serves the panel from Vite on 127.0.0.1:5173 and proxies
 `/api`, and the launch link's `/?token=`, to `flayer ui --dev --port 7878`

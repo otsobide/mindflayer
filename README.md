@@ -941,10 +941,10 @@ make web/clean         # remove dist/ and the tools' caches
 make web/test PNPM='npx --yes pnpm@12.15.0'
 ```
 
-Every target first installs what `pnpm-lock.yaml` pins, when `node_modules`
-is missing or older than `package.json` or the lockfile. `make test` leaves
-the panel out for now, so the Rust suites still need no Node; the panel
-joins it once CI installs Node
+Every target that runs a tool first installs what `pnpm-lock.yaml` pins,
+when `node_modules` is missing or older than `package.json`, the lockfile or
+`pnpm-workspace.yaml`. `make test` leaves the panel out for now, so the Rust
+suites still need no Node; the panel joins it once CI installs Node
 ([#71](https://github.com/otsobide/mindflayer/issues/71)). Its tests are
 `apps/web/tests/<area>.test.ts`.
 
