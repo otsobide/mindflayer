@@ -53,6 +53,20 @@ Two consequences worth stating, because they are what the split buys:
   string before printing it, which is what lets its tests assert on the exact
   text a user sees.
 
+### How the CLI crate is laid out
+
+The grammar is in `parse.rs`, the work in `commands.rs` and a module per
+family of commands under `commands/`, and what a command produced, with the
+helpers every report is laid out with, in `render.rs`. `CliError` has
+`error.rs` to itself, and `lib.rs` only says what is public.
+
+The split is by family. One file holding the parser, every command and the
+rendering was where every change to a command met every other, so pieces of
+work on different commands collided in it. One module per command would
+scatter what a family shares instead: `load` and `unload` report the same way,
+and `list`, `show` and `validate` read one catalog. `commands.rs` dispatches,
+and finds what a command acts on, the one thing every family needs.
+
 ## The kinds, and how a kind is described
 
 An artifact is a skill or a rule, and the difference is a **payload**, not a

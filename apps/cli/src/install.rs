@@ -18,13 +18,14 @@ use mindflayer_core::{FlayerWorkspace, Kind, MindProject};
 use ratatui::crossterm::event::{self, Event, KeyEventKind};
 use ratatui::DefaultTerminal;
 
+use crate::commands::workspace::load_warnings;
 use crate::{CliError, Failure, Outcome};
 use state::{Pending, Screen, Step, Target};
 
 /// Build the screen for a workspace, run it, and carry out what it asked for.
 pub fn run(workspace: &FlayerWorkspace, ledger: &Ledger) -> Result<Outcome, Failure> {
     let (projects, mut warnings) = registered(workspace);
-    warnings.extend(crate::load_warnings(workspace));
+    warnings.extend(load_warnings(workspace));
     let screen = build(workspace, ledger, projects).map_err(CliError::from)?;
 
     if screen.targets.is_empty() {

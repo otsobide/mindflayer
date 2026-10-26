@@ -47,8 +47,15 @@ Two crates in one Cargo workspace, each an app under `apps/` with its own
   changing artifacts. Its only I/O is files, and it never reads the
   environment.
 - `apps/cli` (`mindflayer-cli`): the binaries `mind` (`src/main.rs`) and
-  `flayer` (`src/bin/flayer.rs`), and the TUI. The parsers and every command
-  are in `src/lib.rs`. `src/tui/` and `src/install/` are the two screens.
+  `flayer` (`src/bin/flayer.rs`), and the TUI. `src/lib.rs` only re-exports
+  the public API. The parsers are in `src/parse.rs`. `src/commands.rs`
+  dispatches them and finds what a command acts on, and each family of
+  commands has a file under `src/commands/`: `project` (init, link, unlink,
+  scan), `workspace` (load, unload), `artifact` (add, edit, rename, remove,
+  templates), `read` (list, show, validate), `gather` and `install`.
+  `src/render.rs` holds `Outcome`, `Failure` and the table helpers, and
+  `src/error.rs` holds `CliError`. `src/tui/` and `src/install/` are the two
+  screens.
 
 ## Invariants that hold the design together
 

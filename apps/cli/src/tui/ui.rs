@@ -19,7 +19,7 @@ use super::state::{
     Mode, Reader, RenameForm, Scope, Task, Tone, View, Workspace, GATHER_FIELDS,
 };
 use crate::install::ui::{centred, pane, selected};
-use crate::printable;
+use crate::render::printable;
 
 /// How wide a form's labels are, so the values line up.
 const LABEL: u16 = 13;

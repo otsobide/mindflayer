@@ -30,10 +30,12 @@ use ratatui::crossterm::event::{self, Event, KeyEventKind};
 use ratatui::crossterm::terminal::{self, EnterAlternateScreen};
 use ratatui::DefaultTerminal;
 
+use crate::commands::workspace::{load_warnings, same_directory};
 use crate::install::state::Screen as InstallScreen;
+use crate::render::as_stored;
 use crate::{
-    as_stored, install, run as run_mind, run_flayer_cli, Cli, CliError, Command, Failure,
-    FlayerCli, FlayerCommand, Outcome,
+    install, run as run_mind, run_flayer_cli, Cli, CliError, Command, Failure, FlayerCli,
+    FlayerCommand, Outcome,
 };
 use state::{
     App, Choice, Done, Holdings, Item, LoadedSource, Member, Mode, Performed, Scope, Step, Task,
@@ -328,7 +330,7 @@ fn apply_install(base: &Path, screen: &InstallScreen) -> Done {
             let ledger = workspace.ledger().map_err(CliError::from)?;
             let mut outcome =
                 install::apply(&workspace, &ledger, screen).map_err(CliError::from)?;
-            let warnings = crate::load_warnings(&workspace);
+            let warnings = load_warnings(&workspace);
             outcome.ok = outcome.ok && warnings.is_empty();
             outcome.stderr.extend(warnings);
             Ok(outcome)
@@ -447,7 +449,7 @@ fn loaded(workspace: &FlayerWorkspace) -> Vec<LoadedSource> {
         // A second spelling of one workspace offers what the first does.
         let first = loads[..index]
             .iter()
-            .find(|earlier| crate::same_directory(&earlier.root, &loaded.root))
+            .find(|earlier| same_directory(&earlier.root, &loaded.root))
             .map_or_else(|| entry.clone(), |earlier| as_stored(&earlier.entry));
         shown.push(match &loaded.workspace {
             Ok(source) => LoadedSource {
