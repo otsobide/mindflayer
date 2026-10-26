@@ -10,6 +10,7 @@
 mod api;
 mod auth;
 mod backend;
+mod guard;
 mod log;
 mod panel;
 mod server;

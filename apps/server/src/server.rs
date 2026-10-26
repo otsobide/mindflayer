@@ -11,6 +11,7 @@ use axum::Router;
 
 use crate::api::{self, Api};
 use crate::auth::{self, Gate};
+use crate::guard::{self, Hosts};
 use crate::log::{self, Log, Sink};
 use crate::panel::{self, Panel};
 use crate::token::Token;
@@ -110,7 +111,8 @@ impl Listening {
     }
 
     /// Every route, for a caller that wants to send requests in process
-    /// rather than over the socket.
+    /// rather than over the socket. Each still needs the Host header one over
+    /// the socket would carry, naming this server.
     pub fn router(&self) -> Router {
         self.router.clone()
     }
@@ -165,9 +167,15 @@ fn route<B: Backend>(server: Server<B>, token: &Token, port: u16) -> io::Result<
         .fallback(panel::serve)
         .with_state(server.panel)
         // Outside every route, so it sees `/` before anything that serves it.
-        .layer(middleware::from_fn_with_state(gate, auth::exchange));
-    // Outermost, so a request the gate or the exchange turns away is logged
-    // too.
+        .layer(middleware::from_fn_with_state(gate, auth::exchange))
+        // Outside the exchange, so nothing is answered to a request that
+        // names another host, not even the launch link.
+        .layer(middleware::from_fn_with_state(
+            Arc::new(Hosts::new(port)),
+            guard::same_origin,
+        ));
+    // Outermost, so a request the guard, the gate or the exchange turns away
+    // is logged too.
     Ok(match log {
         Some(log) => router.layer(middleware::from_fn_with_state(log, log::record)),
         None => router,
