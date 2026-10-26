@@ -18,8 +18,9 @@ const HEADERS = {
 }
 
 /**
- * The transport for a panel the local server serves: its four endpoints,
- * over HTTP, under `/api`.
+ * The transport for a panel the local server serves, over HTTP: the server's
+ * query, preview and commands endpoints, and the event stream #74 adds, all
+ * under `/api`. Its transcript has no call yet (see `Transport`).
  *
  * Relative URLs, so the panel talks to whichever server sent it, on
  * whatever port it took, or to the Vite dev server that proxies `/api` to

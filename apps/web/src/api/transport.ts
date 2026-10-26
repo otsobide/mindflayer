@@ -31,6 +31,9 @@ export type Unsubscribe = () => void
  * lives in exactly one place: the implementation. Every request the panel
  * makes goes through one of these; a lint rule keeps `fetch` out of every
  * other file.
+ *
+ * The server's transcript (`GET /api/transcript`) has no call yet: nothing
+ * shows it until the transcript drawer (#76), which adds the call with it.
  */
 export interface Transport {
   /** Ask for a read. It changes nothing, so it may be asked again freely. */
