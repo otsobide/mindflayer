@@ -37,6 +37,21 @@ fn projects() -> (TempDir, PathBuf) {
     (dir, projects)
 }
 
+/// Runs `act` on `examples/` and fails if it wrote anything there. Every
+/// command the suite runs on the folder goes through here, a read through
+/// `-W` as much as a load or an install: `-W` opens the examples as the
+/// workspace, which is where a ledger or a scratch folder would be made.
+fn leaving_examples_alone<T>(act: impl FnOnce(&Path) -> T) -> T {
+    let examples = examples();
+    let before = snapshot(&examples);
+    let result = act(&examples);
+    assert!(
+        snapshot(&examples) == before,
+        "a command run on the examples wrote into examples/"
+    );
+    result
+}
+
 /// Every file under `root` with what it holds, to tell whether anything was
 /// written there.
 fn snapshot(root: &Path) -> Vec<(PathBuf, Vec<u8>)> {
@@ -70,7 +85,9 @@ fn first_words(stdout: &str) -> Vec<&str> {
 fn the_examples_are_two_skills_and_two_rules() {
     let dir = TempDir::new().unwrap();
 
-    let listed = flayer(dir.path(), &["-W", &text(&examples()), "list"]).unwrap();
+    let listed = leaving_examples_alone(|examples| {
+        flayer(dir.path(), &["-W", &text(examples), "list"]).unwrap()
+    });
 
     assert!(listed.ok, "{:?}", listed.stderr);
     let rows: Vec<Vec<&str>> = listed
@@ -98,7 +115,9 @@ fn every_example_validates_without_a_problem_or_a_warning() {
     // matter leaves unread as a warning: so all of them, or none, pass here.
     let dir = TempDir::new().unwrap();
 
-    let validated = flayer(dir.path(), &["-W", &text(&examples()), "validate"]).unwrap();
+    let validated = leaving_examples_alone(|examples| {
+        flayer(dir.path(), &["-W", &text(examples), "validate"]).unwrap()
+    });
 
     assert!(validated.ok, "{}{:?}", validated.stdout, validated.stderr);
     assert_eq!(
@@ -118,11 +137,13 @@ fn the_rule_with_front_matter_says_which_files_it_is_about() {
     // read as content, silently: what `show` declares is the proof it did not.
     let dir = TempDir::new().unwrap();
 
-    let shown = flayer(
-        dir.path(),
-        &["-W", &text(&examples()), "show", "style/comments"],
-    )
-    .unwrap();
+    let shown = leaving_examples_alone(|examples| {
+        flayer(
+            dir.path(),
+            &["-W", &text(examples), "show", "style/comments"],
+        )
+        .unwrap()
+    });
 
     assert!(
         shown.stdout.contains("\npaths:\n  - **/*.rs\n"),
@@ -134,10 +155,15 @@ fn the_rule_with_front_matter_says_which_files_it_is_about() {
 #[test]
 fn a_workspace_loads_the_examples_and_installs_commit_style_with_its_reference() {
     let (_dir, projects) = projects();
-    let examples = examples();
-    let before = snapshot(&examples);
 
-    let loaded = flayer(&projects, &["load", &text(&examples)]).unwrap();
+    let (loaded, offered, installed) = leaving_examples_alone(|examples| {
+        (
+            flayer(&projects, &["load", &text(examples)]).unwrap(),
+            flayer(&projects, &["gather", "list"]).unwrap(),
+            flayer(&projects, &["install", "-p", "collapse", "commit-style"]).unwrap(),
+        )
+    });
+
     assert!(loaded.ok, "{:?}", loaded.stderr);
     assert!(
         loaded.stdout.starts_with("loaded examples as ")
@@ -146,19 +172,15 @@ fn a_workspace_loads_the_examples_and_installs_commit_style_with_its_reference()
         loaded.stdout
     );
     // Only the skills: a rule cannot be installed yet, so none is offered.
-    let offered = flayer(&projects, &["gather", "list"]).unwrap();
     assert_eq!(
         first_words(&offered.stdout),
         ["code-review", "commit-style"],
         "{}",
         offered.stdout
     );
-
-    let installed = flayer(&projects, &["install", "-p", "collapse", "commit-style"]).unwrap();
-
     assert!(installed.ok, "{:?}", installed.stderr);
     let copy = projects.join("collapse/skills/commit-style");
-    let source = examples.join("skills/commit-style");
+    let source = examples().join("skills/commit-style");
     for file in ["SKILL.md", "references/examples.md"] {
         assert_eq!(
             fs::read(copy.join(file)).unwrap(),
@@ -166,20 +188,20 @@ fn a_workspace_loads_the_examples_and_installs_commit_style_with_its_reference()
             "{file}"
         );
     }
-    assert!(
-        snapshot(&examples) == before,
-        "loading the examples and installing from them wrote into examples/"
-    );
 }
 
 #[test]
 fn the_readme_walks_through_the_examples_as_the_commands_print_them() {
     let (_dir, projects) = projects();
-    let examples = text(&examples());
 
-    let listed = flayer(&projects, &["-W", &examples, "list"]).unwrap();
-    let loaded = flayer(&projects, &["load", &examples]).unwrap();
-    let installed = flayer(&projects, &["install", "-p", "collapse", "commit-style"]).unwrap();
+    let (listed, loaded, installed) = leaving_examples_alone(|examples| {
+        let examples = text(examples);
+        (
+            flayer(&projects, &["-W", &examples, "list"]).unwrap(),
+            flayer(&projects, &["load", &examples]).unwrap(),
+            flayer(&projects, &["install", "-p", "collapse", "commit-style"]).unwrap(),
+        )
+    });
     // The README shows stdout alone, which is all there is to show only when
     // nothing was said on stderr.
     for outcome in [&listed, &loaded, &installed] {
