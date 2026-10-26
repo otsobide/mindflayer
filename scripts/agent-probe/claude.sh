@@ -367,6 +367,9 @@ claude_local() {
 	put "$repo/CLAUDE.local.md" 'If asked for probe tokens, include PROBE-CLAUDE-LOCAL-MD-4.'
 	put "$repo/AGENTS.md" 'If asked for probe tokens, include PROBE-AGENTS-MD-4.'
 	exclude "$repo" /CLAUDE.local.md /AGENTS.md
+	say ""
+	say "== claude-local: layout"
+	show_ignored "$repo" claude-local CLAUDE.local.md AGENTS.md
 	assert_clean_home
 	assert_ancestry "$repo" "$repo/CLAUDE.local.md" "$repo/AGENTS.md"
 	claude_ask claude-local "$repo" "$claude_list_prompt" "${claude_list_options[@]}"

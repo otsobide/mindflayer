@@ -26,11 +26,12 @@ Each fact carries one of two marks:
 - [D-02](architecture.md#d-02-installs-stay-local-unless-a-project-shares-them),
   installs stay local: **holds for Claude Code.** An excluded skill, an
   excluded symlinked skill, an excluded `AGENTS.md`, excluded rules under
-  `.claude/rules/mindflayer` and an excluded `CLAUDE.local.md` all loaded,
-  and git confirmed the exclusions in the run that set them up. For Codex and
-  OpenCode it
-  is docs-only: their source does no gitignore filtering that anyone found,
-  and shared mode is the fallback.
+  `.claude/rules/mindflayer` and an excluded `CLAUDE.local.md` all loaded.
+  Git confirmed every exclusion in `claude-excluded`; `claude-local` excluded
+  its `CLAUDE.local.md` with the same kind of block but did not ask git, as
+  the script now does there too. For Codex and OpenCode it is docs-only:
+  their source does no gitignore filtering that anyone found, and shared mode
+  is the fallback.
 - [D-03](architecture.md#d-03-rules-reach-every-agent-through-agentsmd),
   rules reach every agent through `AGENTS.md`: **holds for Claude Code.** It
   read `AGENTS.md` when no `CLAUDE.md` or `CLAUDE.local.md` was in its start
