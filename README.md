@@ -83,7 +83,7 @@ linked collapse as ../../Projects/collapse
 ```
 
 `mind` commands use it too: `mind install` installs from it, and a change to
-an installed skill is recorded there, which is how a project managed by a
+an installed skill drops its record there, which is how a project managed by a
 workspace somewhere else is worked on from inside it. What `-W` or the
 variable names has to be a workspace already. Anything else is refused,
 never passed over for the one above and never made into one:
