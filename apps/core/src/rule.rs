@@ -84,7 +84,8 @@ impl RuleManifest {
 /// the file for whichever agent wrote it.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub enum Lenient<T> {
-    /// Not written, or written with nothing after it.
+    /// Not written, or written with nothing in it: no value, or a blank
+    /// string or an empty list where one is read.
     #[default]
     Unstated,
     /// Written in the shape it is meant to have.
@@ -109,23 +110,43 @@ impl<T> Lenient<T> {
 /// One string is one pattern, never split on commas: a brace expansion such as
 /// `src/**/*.{ts,tsx}` has one inside it. A list holding anything but strings
 /// is ignored whole, because keeping the strings in it would scope the rule to
-/// fewer files than its author wrote.
+/// fewer files than its author wrote. A blank pattern matches no file, so it
+/// is left out without changing which files the rule is about; and with no
+/// pattern left the key says nothing, as `paths:` alone does, rather than
+/// scoping the rule to no file at all, which is a rule no agent is ever given.
 fn paths(value: Option<&Value>) -> Lenient<Vec<String>> {
-    match value {
-        None | Some(Value::Null) => Lenient::Unstated,
-        Some(Value::String(pattern)) => Lenient::Stated(vec![pattern.clone()]),
-        Some(Value::Sequence(items)) => items
-            .iter()
-            .map(|item| item.as_str().map(str::to_owned))
-            .collect::<Option<Vec<_>>>()
-            .map_or(Lenient::Ignored, Lenient::Stated),
-        Some(_) => Lenient::Ignored,
+    let patterns = match value {
+        None | Some(Value::Null) => return Lenient::Unstated,
+        Some(Value::String(pattern)) => vec![pattern.clone()],
+        Some(Value::Sequence(items)) => {
+            let Some(patterns) = items
+                .iter()
+                .map(|item| item.as_str().map(str::to_owned))
+                .collect::<Option<Vec<_>>>()
+            else {
+                return Lenient::Ignored;
+            };
+            patterns
+        }
+        Some(_) => return Lenient::Ignored,
+    };
+    let patterns: Vec<String> = patterns
+        .into_iter()
+        .filter(|pattern| !pattern.trim().is_empty())
+        .collect();
+    if patterns.is_empty() {
+        Lenient::Unstated
+    } else {
+        Lenient::Stated(patterns)
     }
 }
 
+/// `description`, when it says something: a blank one is unstated, so that
+/// nothing shows an empty line as what the rule is for.
 fn description(value: Option<&Value>) -> Lenient<String> {
     match value {
         None | Some(Value::Null) => Lenient::Unstated,
+        Some(Value::String(text)) if text.trim().is_empty() => Lenient::Unstated,
         Some(Value::String(text)) => Lenient::Stated(text.clone()),
         Some(_) => Lenient::Ignored,
     }

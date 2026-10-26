@@ -125,11 +125,26 @@ fn keys_it_does_not_read_pass_through() {
 }
 
 #[test]
-fn a_key_with_nothing_after_it_is_unstated() {
-    let (manifest, _) = RuleManifest::read("---\npaths:\ndescription:\n---\nBody\n");
+fn a_key_with_nothing_in_it_is_unstated() {
+    for source in [
+        "---\npaths:\ndescription:\n---\nBody\n",
+        "---\npaths: []\ndescription: \"\"\n---\nBody\n",
+        "---\npaths: \"\"\ndescription: \"  \"\n---\nBody\n",
+        "---\npaths: [\"\", \" \"]\n---\nBody\n",
+    ] {
+        let (manifest, body) = RuleManifest::read(source);
 
-    assert_eq!(manifest.paths, Lenient::Unstated);
-    assert_eq!(manifest.description, Lenient::Unstated);
+        assert_eq!(manifest, RuleManifest::default(), "{source:?}");
+        // Still front matter, declaring nothing.
+        assert_eq!(body, "Body\n", "{source:?}");
+    }
+}
+
+#[test]
+fn a_blank_pattern_is_left_out_of_the_rest() {
+    let (manifest, _) = RuleManifest::read("---\npaths: [\"\", src/**]\n---\nBody\n");
+
+    assert_eq!(manifest.paths.stated(), Some(&vec![String::from("src/**")]));
 }
 
 #[test]

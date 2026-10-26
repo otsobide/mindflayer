@@ -240,6 +240,17 @@ on commas, because a brace expansion such as `src/**/*.{ts,tsx}` has one inside
 it. Every other key — Cursor's `globs`, a `name` — passes through, as it does on
 a skill.
 
+A key with nothing in it is unstated, as `paths:` with no value is: a blank
+`description`, and a `paths` that is a blank string or an empty list. A blank
+pattern matches no file, so one in a list is left out and the rest read. This
+matters for #42 and #43, where a rule that states `paths` goes to
+`.claude/rules/mindflayer` only: read as stated, `paths: []` would scope a rule
+to no file, which is a rule no agent is ever given, and `show` would print an
+empty description or a `paths:` heading with nothing under it. Warning about
+an empty key, as `compatibility: ""` is warned about on a skill, was the
+alternative; but a skill's `compatibility` is shown to an agent as written,
+while an empty `paths` says nothing an agent could act on.
+
 `Artifact::contents` is the body without the front matter, for a rule as for a
 skill. It is what a renderer puts in front of an agent, so the fences are never
 pasted into `AGENTS.md`, and what `show` prints below the description and the
