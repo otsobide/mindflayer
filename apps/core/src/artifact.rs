@@ -307,7 +307,10 @@ fn skill_issues(manifest: &SkillManifest, folder: Option<&str>) -> Vec<Validatio
 
 /// What a rule's front matter left unread, each only worth a warning: what is
 /// not read is still in the file, and the rule still says what it says.
-fn rule_issues(manifest: &RuleManifest) -> Vec<ValidationIssue> {
+///
+/// And each refused when Mindflayer writes a rule from a template, which is
+/// the time to find out that its front matter would not be read.
+pub(crate) fn rule_issues(manifest: &RuleManifest) -> Vec<ValidationIssue> {
     let mut issues = Vec::new();
     if let Some(reason) = &manifest.unparsed {
         issues.push(ValidationIssue::FrontMatterUnparsed {

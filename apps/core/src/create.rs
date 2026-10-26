@@ -56,10 +56,11 @@ pub fn create(
 /// A skill template is copied whole, and in its manifest the `name` and
 /// `description` are set — whatever the template had for them is replaced —
 /// and [`NAME_PLACEHOLDER`] and [`DESCRIPTION_PLACEHOLDER`] in the body are
-/// filled in. A rule template is filled in the same way, and opens with the
-/// description as a heading when it does not say where the description goes.
-/// Other files are copied as they are: a placeholder in a script is the
-/// script's business.
+/// filled in. A rule template is filled in throughout, front matter included,
+/// and gets the description as a heading on top of its body, below any front
+/// matter, when it does not say where the description goes; front matter that
+/// `validate` would warn about is refused. Other files are copied as they
+/// are: a placeholder in a script is the script's business.
 pub fn create_from(
     project: &MindProject,
     kind: Kind,
@@ -222,30 +223,18 @@ fn create_rule(
         unreachable!("a rule is a file");
     };
 
+    // Worked out before anything is written, as a skill's manifest is, so a
+    // template whose front matter would not be read costs nothing but the
+    // error.
     let text = match template {
         None => format!("# {description}\n"),
         Some(template) => {
             let text = template.rule_text()?;
-            // A rule's opening line is what every listing shows, so a template
-            // that does not say where the description goes gets it on top.
-            if text.contains(DESCRIPTION_PLACEHOLDER) {
-                fill(&text, name, description)
-            } else {
-                // On top of the body, which starts below any front matter the
-                // template declares: above it, the fences would no longer
-                // open the file, and the front matter would become content.
-                let (_, body) = RuleManifest::read(&text);
-                let front_matter = &text[..text.len() - body.len()];
-                if front_matter.is_empty() {
-                    format!("# {description}\n\n{}", fill(&text, name, description))
-                } else {
-                    format!(
-                        "{}\n# {description}\n\n{}",
-                        fill(front_matter, name, description),
-                        fill(body.trim_start_matches(['\n', '\r']), name, description)
-                    )
+            rule_from_template(&text, name, description).map_err(|reason| {
+                CreateError::Manifest {
+                    reason: format!("the template `{}`: {reason}", template.name),
                 }
-            }
+            })?
         }
     };
 
@@ -259,6 +248,48 @@ fn create_rule(
     write_new(&file, text.as_bytes())?;
 
     Ok(Artifact::rule(file, name.to_owned(), project.root())?)
+}
+
+/// A rule template filled in, with the description as a heading on top of
+/// its body when the template does not say where the description goes: a
+/// rule's opening line is what every listing shows.
+///
+/// Front matter is held to everything `validate` would warn about, so that
+/// a template's `paths:` never becomes content without a word: strict when
+/// writing, as a skill's manifest is.
+fn rule_from_template(text: &str, name: &str, description: &str) -> Result<String, String> {
+    let placed = text.contains(DESCRIPTION_PLACEHOLDER);
+    // Where the fences are is found on the template, and whether they hold
+    // front matter is decided on what they hold once filled in: `{{name}}`
+    // is a YAML flow mapping, so a template scoping its rule to `{{name}}/**`
+    // does not parse until it is.
+    if let Ok(document) = frontmatter::split(text) {
+        let block = fill(&text[..text.len() - document.body.len()], name, description);
+        let (manifest, rest) = RuleManifest::read(&block);
+        let issues = artifact::rule_issues(&manifest);
+        if !issues.is_empty() {
+            return Err(issue_list(&issues));
+        }
+        // Read as front matter, so the heading goes below it: above it, the
+        // fences would no longer open the file, and the front matter would
+        // become content. Otherwise the fences are horizontal rules, and the
+        // whole template is body.
+        if rest.is_empty() {
+            let body = fill(document.body, name, description);
+            return Ok(if placed {
+                format!("{block}{body}")
+            } else {
+                let body = body.trim_start_matches(['\n', '\r']);
+                format!("{block}\n# {description}\n\n{body}")
+            });
+        }
+    }
+    let body = fill(text, name, description);
+    Ok(if placed {
+        body
+    } else {
+        format!("# {description}\n\n{body}")
+    })
 }
 
 /// Refuse a description that would not survive as what it is meant to be.
