@@ -422,15 +422,38 @@ pub(crate) fn show(
         // so it gets no metadata block rather than an empty one.
         if let Declared::Skill(manifest) = artifact.declared() {
             let _ = writeln!(text, "{}", manifest.description);
+            // One line per key, each made printable: a value is from a file
+            // somebody wrote, and a carriage return in one could pass for a
+            // key it does not declare.
+            let mut keys = String::new();
             if let Some(tools) = &manifest.allowed_tools {
-                let _ = writeln!(text, "\nallowed-tools: {}", tools.join(", "));
+                let _ = writeln!(keys, "allowed-tools: {}", printable(&tools.join(", ")));
             }
             if let Some(license) = &manifest.license {
-                let _ = writeln!(text, "license: {license}");
+                let _ = writeln!(keys, "license: {}", printable(license));
+            }
+            if let Some(compatibility) = &manifest.compatibility {
+                let _ = writeln!(keys, "compatibility: {}", printable(compatibility));
+            }
+            // Only the entries that are strings: the rest are `validate`'s to
+            // report, and are still in the file for whoever reads it.
+            if !manifest.metadata.entries.is_empty() {
+                keys.push_str("metadata:\n");
+                for (key, value) in &manifest.metadata.entries {
+                    let _ = writeln!(keys, "  {}: {}", printable(key), printable(value));
+                }
+            }
+            if !keys.is_empty() {
+                let _ = write!(text, "\n{keys}");
             }
             let _ = writeln!(text);
         }
-        let _ = writeln!(text, "{}", artifact.contents()?.trim_end());
+        // Blank lines trimmed at both ends, not indentation: the body usually
+        // opens with a blank line after the fence, and the line above is
+        // already one.
+        let contents = artifact.contents()?;
+        let body = contents.trim_start_matches(['\n', '\r']).trim_end();
+        let _ = writeln!(text, "{body}");
     }
     Ok((text, true))
 }

@@ -30,6 +30,37 @@ fn show_prints_the_metadata_and_the_instructions() {
 }
 
 #[test]
+fn show_prints_compatibility_and_the_metadata_that_is_strings() {
+    let dir = TempDir::new().unwrap();
+    mind(dir.path(), &["init"]).unwrap();
+    write_skill(
+        dir.path(),
+        "deploy",
+        "---\nname: deploy\ndescription: Ship it\nlicense: MIT\ncompatibility: Requires git and jq\nmetadata:\n  author: acme\n  owner:\n    team: ops\n  version: \"1.0\"\n---\n\nRun the pipeline.\n",
+    );
+
+    let outcome = mind(dir.path(), &["show", "deploy"]).unwrap();
+
+    let file = dir.path().join("skills/deploy/SKILL.md");
+    assert_eq!(
+        outcome.stdout,
+        format!(
+            "deploy\n{}\n\nShip it\n\nlicense: MIT\ncompatibility: Requires git and jq\nmetadata:\n  author: acme\n  version: 1.0\n\nRun the pipeline.\n",
+            file.display()
+        )
+    );
+    // The nested entry is `validate`'s to report.
+    let checked = mind(dir.path(), &["validate"]).unwrap();
+    assert!(
+        checked
+            .stdout
+            .contains("`metadata` entry `owner` is not a string"),
+        "{}",
+        checked.stdout
+    );
+}
+
+#[test]
 fn show_names_the_skill_it_could_not_find() {
     let dir = TempDir::new().unwrap();
     mind(dir.path(), &["init"]).unwrap();
