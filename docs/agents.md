@@ -52,7 +52,18 @@ Each fact carries one of two marks:
   a symlink, so the exclude entry for one must not end in `/` as a directory's
   does, or it ignores nothing.
 
-No result contradicts D-02, D-03 or D-07.
+**One corner contradicts D-03 as written, and #44's predicate:** Claude's
+`AGENTS.md` check most likely stops below `/`. The debug log counted four
+directories searched from a start directory four levels below `/`, and five
+from one five levels below, each one short of the directories up to and
+including `/`. So a `CLAUDE.md` at `/` itself would not stop Claude reading
+`AGENTS.md`, where D-03 counts every directory above and #44 walks up to and
+including `/`. That is read from the counts, not tried: no run could put a
+file at `/`. In that one case #44 would choose Fallback while Claude went on
+reading `AGENTS.md` natively, so Claude would read each unscoped rule twice,
+once in the block and once in `.claude/rules`. It is raised on
+[D-03](architecture.md#d-03-rules-reach-every-agent-through-agentsmd) for #44
+to settle. Nothing else contradicts D-02, D-03 or D-07.
 
 ## How the checks are run
 
@@ -147,7 +158,7 @@ refuses.
 | `CLAUDE.md` is read from the start directory and every folder above it, past the git root. | verified | `claude-parent`. |
 | `AGENTS.md` is read natively only when no `CLAUDE.md`, `.claude/CLAUDE.md` or `CLAUDE.local.md` exists in the start directory or above. | verified, in part | `claude-excluded` and `claude-user-memory` (read), `claude-parent` and `claude-local` (not read). No run placed a `.claude/CLAUDE.md`, but the debug log shows the check looking for all three names. Fallback for that one: #44 counts it, and if Claude did not, the `@AGENTS.md` import would be redundant rather than a second read, since an import never loads the file twice ([memory](https://code.claude.com/docs/en/memory)). |
 | That check is made by a built-in plugin, `cc-plugin-agents-md@builtin`. | verified | Listed in the init message's plugins; the debug log's lines come from it. The [memory](https://code.claude.com/docs/en/memory) docs' "Project instructions" setting lives under that plugin's ID. |
-| For a start directory four levels below `/`, the check covered four directories. | verified | Debug: `CLAUDE.md, .claude/CLAUDE.md, CLAUDE.local.md found 0 of 4 directories`. So `/` itself is probably not checked; #44 walks up to and including `/`, which differs only for a `CLAUDE.md` at `/`. |
+| That check most likely stops below `/`: a `CLAUDE.md` at `/` itself does not count. | verified, in part | Debug: `found 0 of 4 directories` for the `CLAUDE.md` names from a start directory four levels below `/` (`claude-excluded`, and `claude-user-memory` in run 1), `found 0 of 5 directories` from one five levels below (`claude-user-memory`, run 2). Each count is one short of the directories up to and including `/`; no run could put a file at `/` to show it outright. Fallback: #44 walks up to and including `/`, which gives Claude each unscoped rule twice when the only `CLAUDE.md` is at `/`; raised on [D-03](architecture.md#d-03-rules-reach-every-agent-through-agentsmd). |
 | An `AGENTS.md` excluded through `info/exclude` is read. | verified | `claude-excluded`. |
 | A `CLAUDE.md` holding `@AGENTS.md` loads `AGENTS.md` once, also when that line sits between Mindflayer's markers. | verified | `claude-import`, both runs; in run 2 the line sat between markers, as #44 writes it. Each time one `include` record in the hook, no native read in the debug log, and the token counted once. |
 | A `CLAUDE.local.md` alone, excluded, is read and stops `AGENTS.md` being read. | verified | `claude-local`. |
@@ -579,6 +590,7 @@ carries its fallback in the tables above.
 | #43 | Claude strips a rule's front matter before injecting it. | docs-only |
 | #44 | Claude reads `AGENTS.md` only with no `CLAUDE.md`, `.claude/CLAUDE.md` or `CLAUDE.local.md` in the start directory or above. | verified for `CLAUDE.md` and `CLAUDE.local.md`; `.claude/CLAUDE.md` seen only among the names the check looks for |
 | #44 | A `CLAUDE.md` above the git root counts. | verified |
+| #44 | A `CLAUDE.md` at `/` itself does not count, unlike the predicate's walk. | verified in part: read from the debug log's directory counts, not tried |
 | #44 | The user memory file does not count, also for a project under the home. | verified |
 | #44 | `@AGENTS.md` in a `CLAUDE.md`, between Mindflayer's markers, loads it once. | verified |
 | #44 | A `CLAUDE.local.md` alone stops `AGENTS.md` being read. | verified |

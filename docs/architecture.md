@@ -2411,7 +2411,13 @@ each Claude behaviour this relies on: a `CLAUDE.md` above the git root or a
 `CLAUDE.local.md` stops `AGENTS.md` being read, the user memory file and
 `.claude/rules` do not, the import loads it once, and a rule with `paths:`
 loads only when a matching file is read ([docs/agents.md](agents.md)).
-Unblocks #17, #42, #43, #44 and #45.
+One corner differs from what this says: Claude's check most likely stops
+below `/`, so a `CLAUDE.md` at `/` alone does not stop it reading `AGENTS.md`
+(read from the directory counts in its debug log, not tried). #44's walk up
+to and including `/` would then choose Fallback while Claude still read the
+block, and give Claude each unscoped rule twice; whether #44 stops below `/`
+too is an [open question](#open-questions). Unblocks #17, #42, #43, #44 and
+#45.
 
 ### D-04: An edited copy is detected, not disowned
 
@@ -2955,6 +2961,14 @@ leak into the lifecycle code. Unblocks #33, #45, #62, #93, #94 and #95.
   read. #17 did not settle it: it ran only Claude Code and did not try an
   empty `$CLAUDE_CONFIG_DIR`, so how each agent reads one is for an addition
   to `scripts/agent-probe` to record.
+- **A `CLAUDE.md` at `/`.** D-03 counts a `CLAUDE.md` in any directory above
+  the project, and #44 walks up to and including `/`. Claude's own check most
+  likely stops below `/` ([docs/agents.md](agents.md)), so with a `CLAUDE.md`
+  at `/` and none nearer, Claude reads `AGENTS.md` natively while #44 would
+  choose Fallback, and Claude reads each unscoped rule twice. Stopping #44's
+  walk below `/` matches Claude, if Claude does stop there; #17 inferred that
+  from the debug log's directory counts and could not put a file at `/` to
+  try it. #44 settles which.
 - **Codex and OpenCode on their binaries.** #17 ran only Claude Code, so
   every Codex and OpenCode fact in [docs/agents.md](agents.md) is docs-only,
   each with a fallback. Its checks 2 (OpenCode given the same skill in both
