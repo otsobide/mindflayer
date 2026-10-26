@@ -1878,7 +1878,8 @@ activated workspace would lose, silently, to any workspace above the current
 directory. A choice that does not open as a workspace is an error and never a
 reason to carry on down the list, which would act on a workspace nobody chose
 and say nothing about it. Nor is a chosen directory made into a workspace for
-the occasion, a write included: `flayer init` makes workspaces, where it runs.
+the occasion, a write included: `flayer init` makes workspaces, where it runs
+or in the directory it is given.
 
 `-W` given at all is the whole explicit answer. Given empty, it names none and
 also keeps the activated one out, as `--home=` keeps the default out; that is
