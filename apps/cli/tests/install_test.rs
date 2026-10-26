@@ -255,6 +255,121 @@ fn one_name_from_two_shelves_cannot_be_marked_twice() {
     assert!(rendered(&screen).contains("unmarked the one from"));
 }
 
+// ---------------------------------------------------------------------------
+// What an interrupted install left behind
+// ---------------------------------------------------------------------------
+
+/// Leave in `project` what an install stopped halfway leaves: a stage named
+/// for a process that has gone, holding half a copy, in its scratch folder.
+fn interrupted(project: &Path) -> PathBuf {
+    let left = project.join(".mind/tmp/4242-00000000deadbeef");
+    fs::create_dir_all(left.join("new/deploy")).unwrap();
+    fs::write(left.join("new/deploy/SKILL.md"), "half").unwrap();
+    left
+}
+
+#[test]
+fn an_install_clears_what_an_interrupted_one_left_and_says_so_once() {
+    let dir = workspace_with_own();
+    let alpha = dir.path().join("alpha");
+    let left = interrupted(&alpha);
+
+    let outcome = mind(&alpha, &["install", "commit-style"]).unwrap();
+
+    assert_eq!(
+        outcome.stdout,
+        "installed commit-style into alpha, from workspace\n  \
+         cleared .mind/tmp/4242-00000000deadbeef, left by an install that did not finish\n"
+    );
+    assert!(
+        outcome.ok && outcome.stderr.is_empty(),
+        "{:?}",
+        outcome.stderr
+    );
+    assert!(!left.exists());
+    assert_eq!(
+        mind(&alpha, &["install", "commit-style"]).unwrap().stdout,
+        "commit-style in alpha was already current\n"
+    );
+}
+
+#[test]
+fn an_install_that_fails_still_says_what_it_cleared_before_the_error() {
+    let dir = workspace_with_own();
+    let alpha = dir.path().join("alpha");
+    let left = interrupted(&alpha);
+    // A file where the skills folder goes: the copy is built, but cannot be
+    // put in place.
+    let skills = directory_for(&alpha, Kind::Skill);
+    fs::remove_dir_all(&skills).unwrap();
+    fs::write(&skills, "not a folder").unwrap();
+
+    let failure = mind(&alpha, &["install", "commit-style"]).unwrap_err();
+
+    assert_eq!(
+        failure.warnings,
+        ["cleared .mind/tmp/4242-00000000deadbeef, left by an install that did not finish"]
+    );
+    assert!(
+        failure.error.to_string().contains("cannot be written"),
+        "{}",
+        failure.error
+    );
+    assert!(!left.exists());
+}
+
+#[test]
+fn applying_says_what_an_interrupted_install_left_in_a_project() {
+    let (dir, workspace, ledger) = shelved(&["collapse"], &["deploy"]);
+    interrupted(&dir.path().join("collapse"));
+    let mut screen = screen_for(&workspace, &ledger);
+    press(&mut screen, &[KeyCode::Right, KeyCode::Char(' ')]);
+
+    let outcome = install_screen::apply(&workspace, &ledger, &screen).unwrap();
+
+    assert!(outcome.ok, "{:?}", outcome.stderr);
+    assert!(
+        outcome.stdout.contains(
+            "collapse: installed deploy\n  \
+             cleared .mind/tmp/4242-00000000deadbeef, left by an install that did not finish\n"
+        ),
+        "{}",
+        outcome.stdout
+    );
+}
+
+#[test]
+fn applying_says_what_an_install_that_failed_had_cleared() {
+    let (dir, workspace, ledger) = shelved(&["collapse"], &["deploy"]);
+    let collapse = dir.path().join("collapse");
+    interrupted(&collapse);
+    let mut screen = screen_for(&workspace, &ledger);
+    press(&mut screen, &[KeyCode::Right, KeyCode::Char(' ')]);
+    // A file where the skills folder goes, once the screen is open: the copy
+    // is built, but cannot be put in place.
+    let skills = directory_for(&collapse, Kind::Skill);
+    fs::remove_dir_all(&skills).unwrap();
+    fs::write(&skills, "not a folder").unwrap();
+
+    let outcome = install_screen::apply(&workspace, &ledger, &screen).unwrap();
+
+    assert!(!outcome.ok);
+    assert_eq!(
+        outcome.stdout,
+        "collapse: cleared .mind/tmp/4242-00000000deadbeef, left by an install that did not finish\n\
+         \n0 installed, 0 removed\n"
+    );
+    assert!(
+        outcome
+            .stderr
+            .iter()
+            .any(|line| line.starts_with("warning: collapse: ")
+                && line.contains("cannot be written")),
+        "{:?}",
+        outcome.stderr
+    );
+}
+
 #[test]
 fn a_workspace_with_no_projects_says_so_instead_of_opening_a_screen() {
     let dir = TempDir::new().unwrap();

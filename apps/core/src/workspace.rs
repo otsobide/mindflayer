@@ -66,6 +66,13 @@ pub const FLAYER_CONFIG: &str = "flayer.toml";
 /// Kept rather than discarded so a gather can be inspected after the fact, and
 /// so what a source actually contained is still there when its report is not.
 pub const CACHE_DIR: &str = "cache";
+/// Where an install builds its copy before moving it into place, inside a
+/// project's [`MIND_DIR`].
+///
+/// Not beside the copy, because that is a folder agents read, and not in the
+/// system's temporary folder, which can be another filesystem: inside the
+/// project, a finished copy is moved into place by a rename.
+pub const SCRATCH_DIR: &str = "tmp";
 
 /// Which of the two marker files a version was read from.
 ///
@@ -286,6 +293,12 @@ impl MindProject {
     /// The `.mind` directory itself.
     pub fn mind_dir(&self) -> PathBuf {
         self.root.join(MIND_DIR)
+    }
+
+    /// Where an install into this project builds its copy ([`SCRATCH_DIR`]),
+    /// whether or not one has made it yet.
+    pub fn scratch_dir(&self) -> PathBuf {
+        self.mind_dir().join(SCRATCH_DIR)
     }
 
     /// The folder holding one kind, whether or not it exists yet.

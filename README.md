@@ -448,6 +448,23 @@ or name, and is only
 needed when two places offer the same name — which of the two lands in the
 project's one folder of that name is not something to guess.
 
+### Built out of sight
+
+An install never writes beside the copy it replaces, where an agent reading the
+skills folder would find it. It builds the copy in `.mind/tmp`, a folder that
+ignores itself, and moves it into place once it is whole, so the skills folder
+holds the old copy, the new one or, for the instant between two renames of an
+update, neither, and never part of either. Two installs at once each build in a
+folder of their own there. One that is stopped halfway leaves its work there
+too, and the next install clears it and says so, as it does the hidden
+`.<name>.mindflayer-new` an older version left beside a skill:
+
+```
+$ mind install commit-style
+installed commit-style into alpha, from workspace
+  cleared .mind/tmp/1901387-eb475fb4b6b73a14, left by an install that did not finish
+```
+
 ## Loading another workspace
 
 A flayer workspace can be a repository of skills in its own right: its own
