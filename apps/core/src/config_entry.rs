@@ -23,7 +23,8 @@
 //! byte of the text, comments and whitespace included, and edits it in
 //! place. Not parsed into a value and serialized again, as `serde_json`
 //! would: that writes the whole file in its own layout and drops every
-//! comment in it.
+//! comment in it. TOML is edited through toml_edit, for the same reason, as
+//! the markers are.
 
 use std::fmt::{self, Write as _};
 
@@ -31,6 +32,7 @@ use sha2::{Digest, Sha256};
 use thiserror::Error;
 
 mod json;
+mod toml;
 
 /// The grammar a config file is written in.
 ///
@@ -47,6 +49,8 @@ pub enum Format {
     /// numbers, which jsonc-parser takes by default, are refused, since the
     /// agents' own parsers refuse them.
     Jsonc,
+    /// TOML, as toml_edit reads it: `.codex/config.toml`.
+    Toml,
 }
 
 impl fmt::Display for Format {
@@ -54,6 +58,7 @@ impl fmt::Display for Format {
         f.write_str(match self {
             Format::Json => "JSON",
             Format::Jsonc => "JSONC",
+            Format::Toml => "TOML",
         })
     }
 }
@@ -89,6 +94,8 @@ pub enum EntryError {
     DuplicateKey { key: String },
     #[error("{format} has no way to write {what}")]
     Unrepresentable { format: Format, what: &'static str },
+    #[error("its lines end some in CRLF and some in LF, and toml_edit, which writes every line ending as LF, would lose which had which")]
+    MixedLineEndings,
     #[error("{}: the edit would have changed more than the entry, or not the entry as asked, so it was not made", at(.key))]
     Unkept { key: String },
 }
@@ -186,6 +193,7 @@ fn edit_document(
 
     let after = match format {
         Format::Json | Format::Jsonc => json::edit(format, text, key, edit)?,
+        Format::Toml => toml::edit(text, key, edit)?,
     };
     kept(format, &before, &after, key, wanted)?;
     Ok(after)
@@ -218,6 +226,7 @@ fn kept(
 fn document(format: Format, text: &str) -> Result<Value, EntryError> {
     match format {
         Format::Json | Format::Jsonc => json::document(format, text),
+        Format::Toml => toml::document(text),
     }
 }
 
