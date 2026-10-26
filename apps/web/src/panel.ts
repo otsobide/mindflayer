@@ -2,9 +2,11 @@ import type { App } from 'vue'
 import { createRouter, createWebHistory, type Router, type RouterHistory } from 'vue-router'
 import { routes } from 'vue-router/auto-routes'
 import { createPinia } from 'pinia'
+import { VueQueryPlugin } from '@tanstack/vue-query'
 import ui from '@nuxt/ui/vue-plugin'
 import { transportKey, type Transport } from './api/transport'
 import { installColorMode } from './color-mode'
+import { createQueryClient } from './query'
 
 export interface PanelOptions {
   /** How the panel reaches the server; a test hands it a fake. */
@@ -33,6 +35,7 @@ export function createPanel({ transport, history = createWebHistory() }: PanelOp
       app.provide(transportKey, transport)
       app.use(router)
       app.use(createPinia())
+      app.use(VueQueryPlugin, { queryClient: createQueryClient() })
       app.use(ui)
     }
   }
