@@ -337,15 +337,22 @@ pub enum LoadFailure {
 /// That is the list of what can be installed, so an artifact a project holds
 /// that is in neither does not appear: it is not a thing this command can
 /// offer to do anything about.
+///
+/// A project whose marker names no folder for `kind` is offered nothing,
+/// rather than refused: nothing can be put there, and the screen surveys
+/// every project a workspace links, where a refusal for one would hide the
+/// rest. Asking for one by name ([`offered`]) is refused.
 pub fn survey(
     workspace: &FlayerWorkspace,
     ledger: &Ledger,
     project: &MindProject,
     kind: Kind,
 ) -> Result<Vec<Candidate>, InstallError> {
+    let Some(directory) = project.directory_for(kind) else {
+        return Ok(Vec::new());
+    };
     let entry = project_entry(workspace, project);
     let ours = ledger.installations(&entry, kind)?;
-    let directory = project.directory_for(kind);
 
     // The workspace's own come first: what it keeps for its projects before
     // what it gathered from elsewhere. Only kinds that are a directory each,
@@ -392,6 +399,10 @@ pub fn survey(
 /// `from` is needed only when two places offer the same name: a project has
 /// one directory of that name, and which of the two goes in it is not
 /// something to guess.
+///
+/// A project that keeps no folder for `kind` is refused here, where
+/// [`survey`] offers it nothing: "not offered" would send somebody to gather
+/// what could never be installed there anyway.
 pub fn offered(
     workspace: &FlayerWorkspace,
     ledger: &Ledger,
@@ -400,6 +411,7 @@ pub fn offered(
     name: &str,
     from: Option<&str>,
 ) -> Result<Candidate, InstallError> {
+    project.required_directory(kind)?;
     let mut matching: Vec<Candidate> = survey(workspace, ledger, project, kind)?
         .into_iter()
         .filter(|candidate| candidate.name() == name)
@@ -464,7 +476,8 @@ pub fn install(
     // the shelf: inside a project a skill's directory has to match its
     // declared name, which is what `validate` checks and what an agent uses to
     // find it.
-    let to = project.directory_for(kind).join(&name);
+    let directory = project.required_directory(kind)?;
+    let to = directory.join(&name);
 
     // A loaded workspace can be the project itself, keeping its own in the
     // project's folder: then what would be copied is what is already there.
@@ -508,7 +521,7 @@ pub fn install(
     // happens here, and that one must: it is somebody's work, never written
     // over.
     let ours = ledger.installations(&entry, kind)?;
-    if standing(&project.directory_for(kind), kind, &name, &ours) == Standing::Foreign {
+    if standing(&directory, kind, &name, &ours) == Standing::Foreign {
         return Ok(Installed::Foreign { name }.into());
     }
 
@@ -647,6 +660,7 @@ pub fn uninstall(
             name: name.to_owned(),
         });
     }
+    let directory = project.required_directory(kind)?;
     // Held from before the record is read until it is dropped, for the
     // reason `install` holds it: an install of the same name at the same
     // moment comes wholly before this or wholly after it. Between the copy
@@ -656,7 +670,6 @@ pub fn uninstall(
     let entry = project_entry(workspace, project);
     let ours = ledger.installations(&entry, kind)?;
     if !ours.iter().any(|installed| installed == name) {
-        let directory = project.directory_for(kind);
         return Ok(if holds(&directory, kind, name) {
             Removed::Foreign {
                 name: name.to_owned(),
@@ -668,7 +681,7 @@ pub fn uninstall(
         });
     }
 
-    let path = project.directory_for(kind).join(name);
+    let path = directory.join(name);
     if let Some(loaded) = kept_by_a_load(workspace, kind, &path) {
         return Err(InstallError::KeptByALoad { path, loaded });
     }
@@ -921,7 +934,7 @@ fn kept_by_a_load(workspace: &FlayerWorkspace, kind: Kind, path: &Path) -> Optio
     let at = resolved(path)?;
     workspace.loads().into_iter().find_map(|loaded| {
         let source = loaded.workspace.ok()?;
-        let kept = fs::canonicalize(source.own().directory_for(kind)).ok()?;
+        let kept = fs::canonicalize(source.own().directory_for(kind)?).ok()?;
         (at.starts_with(&kept) || kept.starts_with(&at)).then_some(loaded.root)
     })
 }
@@ -936,9 +949,10 @@ pub fn is_current(
     project: &MindProject,
     candidate: &Candidate,
 ) -> bool {
-    let at = project
-        .directory_for(candidate.kind())
-        .join(candidate.name());
+    let Some(directory) = project.directory_for(candidate.kind()) else {
+        return false;
+    };
+    let at = directory.join(candidate.name());
     at.is_dir() && copy::same(&candidate.source(workspace), &at).unwrap_or(false)
 }
 

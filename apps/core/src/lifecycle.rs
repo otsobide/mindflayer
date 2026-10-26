@@ -156,7 +156,9 @@ pub fn find(project: &MindProject, reference: &Reference) -> Result<Target, Life
     let name = reference.name();
     if name.split('/').all(install::is_folder_name) {
         for kind in kinds {
-            let path = place(project, kind, name);
+            let Some(path) = place(project, kind, name) else {
+                continue;
+            };
             if !holds(kind, &path) || found.iter().any(|target| target.path == path) {
                 continue;
             }
@@ -190,9 +192,14 @@ pub fn find(project: &MindProject, reference: &Reference) -> Result<Target, Life
 }
 
 /// Where an artifact of `kind` called `name` lives in `project`, whether or
-/// not it is there.
-pub fn place(project: &MindProject, kind: Kind, name: &str) -> PathBuf {
-    let directory = project.directory_for(kind);
+/// not it is there; `None` when the project keeps no folder for `kind`.
+pub fn place(project: &MindProject, kind: Kind, name: &str) -> Option<PathBuf> {
+    Some(place_in(&project.directory_for(kind)?, kind, name))
+}
+
+/// Where an artifact of `kind` called `name` lives in `directory`, the
+/// folder that kind is kept in.
+fn place_in(directory: &Path, kind: Kind, name: &str) -> PathBuf {
     match kind.layout() {
         Layout::Directory { .. } => directory.join(name),
         Layout::Files { extension } => directory.join(format!("{name}.{extension}")),
@@ -219,7 +226,7 @@ pub fn load(
 /// renamed or removed) when all a listing has for it is the error.
 pub fn identify(project: &MindProject, file: &Path) -> Option<(Kind, String)> {
     Kind::ALL.into_iter().find_map(|kind| {
-        let below = file.strip_prefix(project.directory_for(kind)).ok()?;
+        let below = file.strip_prefix(project.directory_for(kind)?).ok()?;
         match kind.layout() {
             Layout::Directory { manifest } => {
                 let mut parts = below.components();
@@ -524,7 +531,7 @@ fn rename_rule(
     directory: &Path,
     to: &str,
 ) -> Result<Target, LifecycleError> {
-    let file = place(project, Kind::Rule, to);
+    let file = place_in(directory, Kind::Rule, to);
     if file == target.path {
         return Err(LifecycleError::Unchanged {
             name: to.to_owned(),
@@ -593,7 +600,7 @@ fn rewrite_name(source: &str, to: &str) -> Result<String, String> {
 /// The folder a target's kind lives in, having checked the target is inside
 /// it: nothing here deletes or moves anything anywhere else.
 fn inside(project: &MindProject, target: &Target) -> Result<PathBuf, LifecycleError> {
-    let directory = project.directory_for(target.kind);
+    let directory = project.required_directory(target.kind)?;
     if target.path == directory || !target.path.starts_with(&directory) {
         return Err(LifecycleError::Outside {
             path: target.path.clone(),

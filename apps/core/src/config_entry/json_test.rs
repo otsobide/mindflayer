@@ -1,7 +1,9 @@
 //! Unit tests for `config_entry/json.rs`: what an edit through the CST keeps,
 //! byte for byte, in files written the ways people write them.
 
-use crate::config_entry::{edit, edit_document, get, Edit, EntryError, Format, Value};
+use crate::config_entry::{
+    document, edit, edit_document, get, json_text, Edit, EntryError, Format, Value,
+};
 
 /// A server entry, the shape of which is nobody's in particular.
 fn server(name: &str) -> Value {
@@ -585,4 +587,74 @@ fn a_float_is_written_as_the_fingerprint_writes_it() {
     )
     .unwrap();
     assert_eq!(edited, "{\n  \"timeout\": 1e+300\n}\n");
+}
+
+/// Settings of a kind a file Mindflayer writes whole holds.
+fn settings(directories: Vec<(&str, Value)>) -> Value {
+    Value::object([
+        ("version", Value::Integer(3)),
+        ("name", Value::from("say \"hi\"")),
+        ("agents", Value::array(["claude", "codex"])),
+        ("none", Value::Array(Vec::new())),
+        ("directories", Value::object(directories)),
+        ("empty", Value::Object(Vec::new())),
+    ])
+}
+
+#[test]
+fn a_whole_file_is_laid_out_as_an_insert_lays_out_an_entry() {
+    let value = settings(vec![("skills", Value::from("skills"))]);
+
+    let text = json_text(&value).unwrap();
+
+    assert_eq!(
+        text,
+        r#"{
+  "version": 3,
+  "name": "say \"hi\"",
+  "agents": ["claude", "codex"],
+  "none": [],
+  "directories": {
+    "skills": "skills"
+  },
+  "empty": {}
+}
+"#
+    );
+    assert_eq!(document(Format::Json, &text).unwrap(), value);
+}
+
+#[test]
+fn an_entry_added_to_a_whole_file_reads_as_if_it_had_been_written_with_it() {
+    let written = json_text(&settings(vec![("skills", Value::from("skills"))])).unwrap();
+
+    let edited = edit(
+        Format::Json,
+        &written,
+        &["directories", "rules"],
+        &Edit::Insert(Value::from("rules")),
+    )
+    .unwrap();
+
+    let whole = settings(vec![
+        ("skills", Value::from("skills")),
+        ("rules", Value::from("rules")),
+    ]);
+    assert_eq!(edited, json_text(&whole).unwrap());
+}
+
+#[test]
+fn a_whole_file_refuses_what_json_cannot_write() {
+    let error = json_text(&Value::object([("ratio", Value::Float(f64::NAN))])).unwrap_err();
+
+    assert!(
+        matches!(
+            error,
+            EntryError::Unrepresentable {
+                format: Format::Json,
+                ..
+            }
+        ),
+        "{error}"
+    );
 }

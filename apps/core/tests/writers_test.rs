@@ -399,7 +399,11 @@ fn a_link_waits_for_the_writer_before_it() {
 /// to install it into.
 fn offering_deploy() -> (TempDir, FlayerWorkspace, MindProject) {
     let (dir, workspace) = workspace();
-    let folder = workspace.own().directory_for(Kind::Skill).join("deploy");
+    let folder = workspace
+        .own()
+        .directory_for(Kind::Skill)
+        .unwrap()
+        .join("deploy");
     fs::create_dir_all(&folder).unwrap();
     fs::write(folder.join("SKILL.md"), skill("deploy", "Ship it")).unwrap();
     let project = projects(dir.path(), "alpha", 1).remove(0);
@@ -418,7 +422,7 @@ fn an_install_waits_for_the_writer_before_it() {
         install::install(&installing, &ledger, &into, &candidate).unwrap();
     });
 
-    let copy = project.directory_for(Kind::Skill).join("deploy");
+    let copy = project.directory_for(Kind::Skill).unwrap().join("deploy");
     assert!(copy.join("SKILL.md").is_file());
 }
 
@@ -471,7 +475,11 @@ fn an_uninstall_waits_for_the_writer_before_it() {
         assert!(matches!(removed, Removed::Removed { .. }), "{removed:?}");
     });
 
-    assert!(!project.directory_for(Kind::Skill).join("deploy").exists());
+    assert!(!project
+        .directory_for(Kind::Skill)
+        .unwrap()
+        .join("deploy")
+        .exists());
 }
 
 #[test]

@@ -200,13 +200,12 @@ pub(crate) fn list(catalog: &Catalog, projects: &[MindProject], level: Level) ->
             }
         }
         for project in projects {
-            for kind in Kind::ALL {
-                let _ = writeln!(
-                    text,
-                    "  {}: {}",
-                    project.name(),
-                    project.directory_for(kind).display()
-                );
+            // A kind the project keeps no folder for was looked for nowhere.
+            for directory in Kind::ALL
+                .into_iter()
+                .filter_map(|kind| project.directory_for(kind))
+            {
+                let _ = writeln!(text, "  {}: {}", project.name(), directory.display());
             }
         }
         return (text, true);
@@ -290,7 +289,7 @@ impl Holders {
         Self {
             own: own_kinds
                 .iter()
-                .map(|kind| (*kind, own.directory_for(*kind)))
+                .filter_map(|kind| Some((*kind, own.directory_for(*kind)?)))
                 .collect(),
             shelf: shelf_kinds
                 .iter()

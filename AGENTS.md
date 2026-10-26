@@ -71,7 +71,8 @@ asked.
 Three crates in one Cargo workspace, and the panel they serve, each an app
 under `apps/` with its own `Makefile`:
 
-- `apps/core` (`mindflayer-core`): the engine. Projects, workspaces, which
+- `apps/core` (`mindflayer-core`): the engine. Projects, a project's
+  settings (`settings`, the v3 marker), workspaces, which
   workspace a command uses (`resolve`), the shell code that activates one
   (`activate`), kinds, the agents and where each kind goes for them
   (`agent`), the catalog, gathering (`gix`), the SQLite ledger,
@@ -163,6 +164,13 @@ These are easy to break from a single file without noticing.
     Edits go through `toml_edit` (`edit_array`, or `edit_marker_held` for a
     writer that holds the lock already) and a temp file of their own
     (`replace_file`, named for the run) plus a rename.
+  - A project's `.mind/settings.json`, which has no comments to keep, is
+    serialized (`Settings::text`) and made with `create_new`. It is changed
+    only through `MindProject::change_settings`, which reads the file again
+    and edits each key whose value changed, `directories` an entry at a time,
+    through `config_entry`, as an agent's config file is (below), then
+    `replace_file`: a key this build does not know, the key order and a
+    hand-made layout survive, and nothing is written when nothing changed.
   - Creation uses `create_new` or `create_dir`.
   - `rename` rewrites only the `name:` line (`frontmatter::with_key`).
   - `remove` and `flayer migrate --library` are dry runs without `--yes`.
@@ -175,8 +183,9 @@ These are easy to break from a single file without noticing.
     `# mindflayer:begin`/`# mindflayer:end` in
     `$GIT_COMMON_DIR/info/exclude` (`exclude`), where an edit rewrites only its
     own project's `# project <key>` group. A team's `.gitignore` and
-    `core.excludesFile` are never edited; the one `.gitignore` Mindflayer
-    writes is `.mind/tmp`'s, inside a folder it owns, made with `create_new`.
+    `core.excludesFile` are never edited; the `.gitignore`s Mindflayer writes
+    are `.mind/tmp`'s and a local project's `.mind`'s own (`MIND_IGNORE`),
+    each inside a folder it owns, made with `create_new`.
   - An entry in a config file somebody else owns (`.mcp.json`,
     `opencode.json`, `.codex/config.toml`) is changed one at a time through
     `config_entry`: JSON and JSONC entries are edited through jsonc-parser's
@@ -244,7 +253,10 @@ These are easy to break from a single file without noticing.
   clones to rewrite, and `migrate::library`, from its plan to its rewrite of
   the marker. A new writer takes it the same way, inside core;
   `config_entry::ConfigFile` takes none, since the writers that call it hold
-  it. Opening the ledger takes no lock: a schema migration keeps itself apart
+  it. `MindProject::change_settings` takes none yet: a project's settings are
+  not the workspace's, and which lock keeps their writers apart is an open
+  question in `docs/architecture.md` for its first caller (#37) to settle.
+  Opening the ledger takes no lock: a schema migration keeps itself apart
   in its own transaction. The lock is not re-entrant: a writer never calls
   another while it holds it, and a front end never takes it. Reads
   (`FlayerWorkspace::open`, `ledger_for_reading`) never take it. A wait is
@@ -261,11 +273,17 @@ These are easy to break from a single file without noticing.
   retry after a remote branch named `HEAD`, a connection the callback cannot
   reach.
 - **Formats are versioned.** Each marker carries its own `version`
-  (`MIND_FORMAT_VERSION` for `mind.toml`, `FLAYER_FORMAT_VERSION` for
-  `flayer.toml`, so bumping one never makes older builds refuse the other; see
-  `DIRECTORIES_VERSION` for how a v1 `mind.toml` is still read) and the ledger
-  uses SQLite's `user_version`. Anything from a newer version is refused. A
-  format change must keep reading old files the way they were written.
+  (`MIND_FORMAT_VERSION` for a project's, `FLAYER_FORMAT_VERSION` for
+  `flayer.toml`, so bumping one never makes older builds refuse the other)
+  and the ledger uses SQLite's `user_version`. A project's marker is
+  `mind.toml` up to `MIND_TOML_VERSION`, which `mind init` still writes, and
+  `settings.json` from `SETTINGS_VERSION`; either makes a directory a
+  project (`MindProject::is_marked`), and the settings win when both are
+  there. See `DIRECTORIES_VERSION` for how a v1 `mind.toml` is still read,
+  and `SETTINGS_VERSION` for why a kind a settings file does not name has no
+  folder (`directory_for` is `None`). Anything from a newer version is
+  refused. A format change must keep reading old files the way they were
+  written.
   - A ledger schema step is one more block in `Ledger::migrate`, which takes
     the write lock, copies the file to `mindflayer.db.v<old>.bak`
     (`Ledger::back_up`) and runs every step in one transaction. A step fills

@@ -58,6 +58,7 @@ fn flayer_show_reads_the_default_workspace_without_making_it() {
         .unwrap()
         .own()
         .directory_for(Kind::Skill)
+        .unwrap()
         .join("deploy");
     fs::create_dir_all(&skill).unwrap();
     fs::write(skill.join("SKILL.md"), skill_file("deploy", "Ship it")).unwrap();

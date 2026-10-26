@@ -141,6 +141,19 @@ pub(super) fn document(format: Format, text: &str) -> Result<Value, EntryError> 
     value_of(format, &top)
 }
 
+/// `value` as the whole of a new JSON text. See [`super::json_text`].
+pub(super) fn text(value: &Value) -> Result<String, EntryError> {
+    let lines = Lines {
+        newline: "\n",
+        unit: "  ",
+        trailing: false,
+    };
+    let mut text = String::new();
+    write_value(Format::Json, value, Some(&lines), "", &mut text)?;
+    text.push('\n');
+    Ok(text)
+}
+
 /// `text` with `edit` made to it. `None` is a file not there yet, which
 /// becomes an object holding the entry.
 ///

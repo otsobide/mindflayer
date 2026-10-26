@@ -1,0 +1,18 @@
+# Mindflayer mind project.
+#
+# Skills are a directory each, holding a SKILL.md, so a skill can carry
+# scripts and references beside its instructions. Rules are one markdown
+# file each, giving context and declaring nothing; folders under the rules
+# directory group and mean nothing else, so git/no-force-push.md is the
+# rule `git/no-force-push`.
+#
+# `directories` says where each kind lives, relative to the directory
+# holding this .mind. Point them wherever the agents that read them
+# already look (.claude/skills, docs/rules) and Mindflayer follows.
+# They are meant to be committed: they travel with the project.
+version = 2
+name = "collapse"
+
+[directories]
+skills = "skills"
+rules = "rules"

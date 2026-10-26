@@ -736,7 +736,7 @@ fn held(
 
     let directories = Kind::ALL
         .into_iter()
-        .map(|kind| (kind, within(project, kind)))
+        .filter_map(|kind| Some((kind, within(project, kind)?)))
         .collect();
     let templates = match template::templates(workspace, project) {
         Ok(templates) => templates
@@ -767,13 +767,16 @@ fn held(
     }
 }
 
-/// Where a project keeps a kind, relative to the project.
-fn within(project: &MindProject, kind: Kind) -> String {
-    let directory = project.directory_for(kind);
-    paths::relative_to(&directory, project.root())
-        .as_deref()
-        .and_then(paths::to_config_string)
-        .unwrap_or_else(|| directory.display().to_string())
+/// Where a project keeps a kind, relative to the project; `None` when it
+/// keeps no folder for it, which an empty project then does not mention.
+fn within(project: &MindProject, kind: Kind) -> Option<String> {
+    let directory = project.directory_for(kind)?;
+    Some(
+        paths::relative_to(&directory, project.root())
+            .as_deref()
+            .and_then(paths::to_config_string)
+            .unwrap_or_else(|| directory.display().to_string()),
+    )
 }
 
 /// How much is on the shelf, without creating a ledger just to look.

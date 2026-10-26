@@ -28,7 +28,6 @@ use crate::kind::Kind;
 use crate::paths;
 use crate::workspace::{
     misplaced_own, Directories, FlayerWorkspace, MindProject, WorkspaceError, FLAYER_CONFIG,
-    MIND_CONFIG, MIND_DIR,
 };
 
 /// What moving the workspace's own into its library would do, and what would
@@ -219,7 +218,7 @@ pub fn library_plan(workspace: &FlayerWorkspace) -> Plan {
     plan.kinds = Kind::ALL
         .into_iter()
         .filter_map(|kind| {
-            let from = paths::normalize(&own.directory_for(kind));
+            let from = paths::normalize(&own.directory_for(kind)?);
             let to = paths::normalize(&workspace.root().join(Directories::library_for(kind)));
             (from != to).then_some(Repoint { kind, from, to })
         })
@@ -414,7 +413,7 @@ fn holders(workspace: &FlayerWorkspace) -> (Vec<MindProject>, Vec<(PathBuf, Work
         .into_iter()
         .map(|member| (member.root, member.project))
         .collect();
-    if root.join(MIND_DIR).join(MIND_CONFIG).is_file() {
+    if MindProject::is_marked(root) {
         opened.push((root.to_path_buf(), MindProject::open(root)));
     }
     // One directory linked twice, or linked and found at the root, is one
@@ -451,7 +450,10 @@ fn held_by(
     let mut held = Vec::new();
     for project in projects {
         for kind in Kind::ALL {
-            let folder = paths::normalize(&project.directory_for(kind));
+            let Some(folder) = project.directory_for(kind) else {
+                continue;
+            };
+            let folder = paths::normalize(&folder);
             if !kinds.iter().any(|repoint| overlap(&repoint.from, &folder)) {
                 continue;
             }

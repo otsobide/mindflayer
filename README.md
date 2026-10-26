@@ -903,6 +903,14 @@ The values are written out even when they are the defaults, so the answer to
 memory. A workspace reads them too: it is how `flayer install` knows where a
 skill goes, without ever assuming.
 
+A project can also be marked by `.mind/settings.json`, the version 3 marker
+that `mind init` is moving to. It is plain JSON, any tool can read and change
+it, and it names the same folders under `directories`, beside the agents the
+project works with, whether what is installed into it is shared with the team
+and an id. A kind it leaves out of `directories` has no folder at all, rather
+than the default. Mindflayer finds and reads either marker, and when a project
+holds both it reads `settings.json`.
+
 ## What a skill looks like
 
 `skills/commit-style/SKILL.md`:

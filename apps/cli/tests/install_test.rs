@@ -422,6 +422,59 @@ fn a_project_with_an_empty_shelf_is_told_where_skills_come_from() {
     assert!(rendered(&screen).contains("nothing on the shelf"));
 }
 
+#[test]
+fn a_project_whose_settings_name_no_skills_folder_is_said_and_hides_no_other() {
+    let (dir, _, _) = shelved(&["beta"], &["deploy"]);
+    let root = dir.path().join("alpha");
+    fs::create_dir_all(root.join(MIND_DIR)).unwrap();
+    fs::write(
+        root.join(MIND_DIR).join("settings.json"),
+        r#"{
+  "version": 3,
+  "id": "0123456789abcdef0123456789abcdef",
+  "name": "alpha",
+  "agents": ["claude"],
+  "share": "local",
+  "directories": {"rules": "rules"}
+}
+"#,
+    )
+    .unwrap();
+    flayer(dir.path(), &["link", "alpha"]).unwrap();
+    let workspace = FlayerWorkspace::locate(dir.path()).unwrap().unwrap();
+    let ledger = workspace.ledger().unwrap();
+
+    let mut screen = screen_for(&workspace, &ledger);
+
+    let names: Vec<String> = screen
+        .targets
+        .iter()
+        .map(|target| target.name().to_owned())
+        .collect();
+    assert_eq!(names.len(), 2, "{names:?}");
+    let at = |name: &str| names.iter().position(|named| named == name).unwrap();
+    screen.cursor = at("alpha");
+    let drawn = rendered(&screen);
+    assert!(
+        drawn.contains("alpha keeps no skills of its own"),
+        "{drawn}"
+    );
+    assert!(!drawn.contains("nothing on the shelf"), "{drawn}");
+    press(&mut screen, &[KeyCode::Right]);
+    assert_eq!(screen.focus, Focus::Projects);
+    assert!(
+        screen
+            .message
+            .as_deref()
+            .is_some_and(|message| message.contains("keeps no skills of its own")),
+        "{:?}",
+        screen.message
+    );
+    screen.cursor = at("beta");
+    assert!(rendered(&screen).contains("[ ] deploy"));
+    assert!(!root.join("skills").exists());
+}
+
 /// Put a token into the URL of every source on the shelf, the way a Mindflayer
 /// from before the refusal stored one.
 fn token_in_the_shelf(workspace: &FlayerWorkspace) {
