@@ -1183,8 +1183,10 @@ leak into the lifecycle code. Unblocks #33, #45, #62, #93, #94 and #95.
   depth, so harvesting one means deciding what its name is relative to — the
   same question `Catalog::take_files` answers inside a project, asked of a
   folder that is not one.
-- **Private repositories.** `gix` is given no credentials, so a private source
-  fails at the fetch. What it should be given is decided in
+- **Private repositories.** Mindflayer gives `gix` no credentials of its own,
+  so a private source gets through only when a git-config helper (or, for an
+  ssh URL, ssh itself) has them, and otherwise the fetch can stop at a terminal
+  prompt. What it should be given is decided in
   [D-16](#d-16-credentials-come-from-the-front-end-never-from-a-prompt): a
   provider the front end supplies, through a callback that never prompts, then
   the git-config helpers `gix` runs itself, then the system ssh binary. #26 and
