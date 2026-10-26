@@ -1,0 +1,33 @@
+[package]
+name = "mindflayer-server"
+version = "0.1.0"
+edition = "2021"
+license = "GPL-3.0-only"
+description = "The local server that carries the web panel's requests to a mindflayer front end"
+
+# Transport only: no mindflayer crate is a dependency, the CLI least of all.
+# The front end that runs this server implements `Backend` for its own types,
+# so the dependency points from it to here and never back.
+[dependencies]
+# Without default features: no `tracing`, so nothing inside axum logs on the
+# server's behalf, and no form or query extractors, which nothing here takes.
+axum = { version = "0.8", default-features = false, features = ["http1", "json", "tokio"] }
+tokio = { version = "1", features = ["net", "rt", "sync"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+# The launch token. 0.10, the version already in the tree.
+rand = "0.10"
+# The launch link's query string, decoded the way a browser encodes it.
+form_urlencoded = "1"
+# The panel's files, in the binary rather than beside it, so there is one
+# thing to install. Since 8.12 it hashes with sha2 0.11, so digest 0.11 is
+# built beside the 0.10 that gix's sha1 uses; pinning 8.11 would share one,
+# at the price of staying behind.
+rust-embed = { version = "8", features = ["interpolate-folder-path", "mime-guess"] }
+
+[dev-dependencies]
+tokio = { version = "1", features = ["macros", "rt-multi-thread", "time"] }
+# `oneshot`, to send a request through the router without a socket.
+tower = { version = "0.5", features = ["util"] }
+# A folder outside the panel, holding a symlink the panel must never read.
+tempfile = "3"

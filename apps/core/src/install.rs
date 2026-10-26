@@ -626,13 +626,18 @@ pub fn uninstall(
 /// screen leave to overwrite and delete, so it must not outlive the copy it
 /// was about — whatever somebody writes there next would inherit it.
 ///
+/// Only the changes in [`crate::lifecycle`] call it, each when its change
+/// calls for it. Public, it would let a front end drop a record on a rule of
+/// its own. Keeping it here cannot make a front end drop one; changing things
+/// through [`crate::lifecycle`] does.
+///
 /// `workspace` is the one the front end resolved for the command, given
 /// rather than found by walking up from the project: a walk misses every
 /// workspace that links the project from somewhere that is not above it, and
 /// each of those would keep its stale record. Another workspace that links
 /// the same project still keeps its own, since nothing in the project says
 /// which workspaces link it.
-pub fn disown(
+pub(crate) fn disown(
     workspace: &FlayerWorkspace,
     project: &MindProject,
     kind: Kind,

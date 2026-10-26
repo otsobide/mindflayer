@@ -9,14 +9,15 @@ use std::path::{Path, PathBuf};
 
 use mindflayer_core::{paths, FlayerWorkspace, Kind, Registration, WorkspaceError};
 
-use super::{all_or_nothing, targets};
+use super::{all_or_nothing, reading, targets};
 use crate::render::{as_stored, plural, printable, table};
 use crate::{CliError, Failure, Outcome};
 
 /// `load`, at either level: the paths are typed from `directory`, and the
 /// workspace they go into is found from `start` — the directory itself for
 /// `flayer`, the project for `mind`. With no paths it lists what that
-/// workspace loads, without making the default one to say it loads nothing.
+/// workspace loads, as the other reads do: of the default one before it is
+/// made too, which loads nothing, rather than making it to say so.
 pub(crate) fn load_command(
     directory: &Path,
     start: &Path,
@@ -24,14 +25,14 @@ pub(crate) fn load_command(
     home: Option<&Path>,
 ) -> Result<Outcome, Failure> {
     if workspaces.is_empty() {
-        let workspace = FlayerWorkspace::locate_except(start, &[], home)?.ok_or_else(|| {
+        let workspace = FlayerWorkspace::locate_or_unmade(start, home)?.ok_or_else(|| {
             CliError::NowhereToLoad {
                 from: start.to_path_buf(),
                 verb: "list the loads of",
                 named: false,
             }
         })?;
-        return Ok(loaded_listing(&workspace, home));
+        return reading(&workspace, |workspace| Ok(loaded_listing(workspace, home)));
     }
     let sources = targets(directory, workspaces)?;
     // Every source opened before anything is found or made: a typo must not

@@ -102,3 +102,16 @@ fn the_workspace_root_is_a_candidate_too() {
     // where the other repositories are kept.
     assert_eq!(routes(&scan(&workspace).found), vec![".", "beside"]);
 }
+
+#[test]
+fn a_workspace_whose_root_is_not_there_yet_holds_nothing() {
+    let dir = TempDir::new().unwrap();
+    let home = dir.path().join("nobody-made-this");
+    let workspace = FlayerWorkspace::unmade(&home).unwrap();
+
+    let scan = scan(&workspace);
+
+    assert!(scan.found.is_empty());
+    assert!(scan.failures.is_empty(), "{:?}", scan.failures);
+    assert!(!home.exists());
+}

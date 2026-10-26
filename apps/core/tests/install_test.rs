@@ -11,7 +11,7 @@ use mindflayer_core::copy;
 use mindflayer_core::gather::{self, Request};
 use mindflayer_core::install::{self, Installed, Removed, Standing};
 use mindflayer_core::ledger::Ledger;
-use mindflayer_core::{create, Directories, FlayerWorkspace, Kind, MindProject};
+use mindflayer_core::{Directories, FlayerWorkspace, Kind, MindProject};
 use tempfile::TempDir;
 
 /// A workspace with one project in it, and a shelf holding `names`.
@@ -53,86 +53,6 @@ fn candidate<'a>(candidates: &'a [install::Candidate], name: &str) -> &'a instal
 
 fn installed_at(project: &MindProject, name: &str) -> std::path::PathBuf {
     project.directory_for(Kind::Skill).join(name)
-}
-
-#[test]
-fn a_disowned_copy_is_left_to_whoever_has_it_now() {
-    let (dir, _workspace, project, ledger) = ready(&["deploy"]);
-    let mut workspace = FlayerWorkspace::open(dir.path()).unwrap();
-    workspace.link(&project).unwrap();
-    let candidates = install::survey(&workspace, &ledger, &project, Kind::Skill).unwrap();
-    install::install(
-        &workspace,
-        &ledger,
-        &project,
-        candidate(&candidates, "deploy"),
-    )
-    .unwrap();
-
-    assert!(install::disown(&workspace, &project, Kind::Skill, "deploy").unwrap());
-
-    // Still there, and now it is somebody's: shown, never overwritten or
-    // deleted by unticking it.
-    let after = install::survey(&workspace, &ledger, &project, Kind::Skill).unwrap();
-    assert_eq!(candidate(&after, "deploy").standing, Standing::Foreign);
-    assert_eq!(
-        install::uninstall(&workspace, &ledger, &project, Kind::Skill, "deploy").unwrap(),
-        Removed::Foreign {
-            name: String::from("deploy")
-        }
-    );
-    assert!(installed_at(&project, "deploy").is_dir());
-    assert!(
-        !install::disown(&workspace, &project, Kind::Skill, "deploy").unwrap(),
-        "nothing left to drop"
-    );
-}
-
-#[test]
-fn disowning_asks_only_a_workspace_that_manages_the_project_and_creates_nothing() {
-    let dir = TempDir::new().unwrap();
-    let (mut workspace, _) = FlayerWorkspace::init(dir.path()).unwrap();
-    let root = dir.path().join("collapse");
-    fs::create_dir(&root).unwrap();
-    let (project, _) = MindProject::init(&root).unwrap();
-
-    assert!(!install::disown(&workspace, &project, Kind::Skill, "deploy").unwrap());
-    workspace.link(&project).unwrap();
-    assert!(!install::disown(&workspace, &project, Kind::Skill, "deploy").unwrap());
-
-    // A workspace that never installed anything has no ledger, and looking
-    // must not give it one.
-    assert!(!workspace.ledger_path().exists());
-}
-
-#[test]
-fn disowning_asks_the_workspace_it_is_given_wherever_that_sits() {
-    // Beside the project rather than above it, the way the one in your home
-    // is for a project anywhere else: walking up from the project never
-    // reaches it.
-    let dir = TempDir::new().unwrap();
-    let hub = dir.path().join("hub");
-    fs::create_dir(&hub).unwrap();
-    let (mut workspace, _) = FlayerWorkspace::init(&hub).unwrap();
-    let root = dir.path().join("collapse");
-    fs::create_dir(&root).unwrap();
-    let (project, _) = MindProject::init(&root).unwrap();
-    workspace.link(&project).unwrap();
-    create(&workspace.own(), Kind::Skill, "deploy", "Ship it").unwrap();
-    let ledger = workspace.ledger().unwrap();
-    let candidates = install::survey(&workspace, &ledger, &project, Kind::Skill).unwrap();
-    install::install(
-        &workspace,
-        &ledger,
-        &project,
-        candidate(&candidates, "deploy"),
-    )
-    .unwrap();
-
-    assert!(install::disown(&workspace, &project, Kind::Skill, "deploy").unwrap());
-
-    let after = install::survey(&workspace, &ledger, &project, Kind::Skill).unwrap();
-    assert_eq!(candidate(&after, "deploy").standing, Standing::Foreign);
 }
 
 #[test]
@@ -500,8 +420,10 @@ fn what_agents_read_past_does_not_stop_an_install() {
         .installed;
 
     assert!(matches!(outcome, Installed::Added { .. }), "{outcome:?}");
+    // Line endings are the gathering checkout's (CRLF under autocrlf on
+    // Windows), not Mindflayer's, so they are left out of the comparison.
     let copied = fs::read_to_string(installed_at(&project, "deploy").join("SKILL.md")).unwrap();
-    assert_eq!(copied, manifest, "copied as written");
+    assert_eq!(copied.replace("\r\n", "\n"), manifest, "copied as written");
 }
 
 // ---------------------------------------------------------------------------

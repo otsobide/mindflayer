@@ -9,14 +9,15 @@ line in `APPS` and the workspace `members`, and its test and build jobs in
 CI — never reshaping the tree.
 
 ```
-apps/core   mindflayer-core — the engine
-apps/cli    mindflayer-cli  — the `mind` and `flayer` binaries
+apps/core    mindflayer-core   — the engine
+apps/cli     mindflayer-cli    — the `mind` and `flayer` binaries
+apps/server  mindflayer-server — the local server behind the web panel
 ```
 
-Only two today. The layout exists because there will be more: the next is a
-local server and the web panel it serves
-([D-17](#d-17-the-next-front-end-is-a-local-web-panel)), and they have to sit
-beside the CLI rather than around it.
+The layout exists because there would be more than two, and the server is the
+first of the apps [D-17](#d-17-the-next-front-end-is-a-local-web-panel) adds;
+the web panel it serves comes next, as `apps/web`. Both sit beside the CLI
+rather than around it.
 
 ## Where the line between core and a front end falls
 
@@ -27,7 +28,8 @@ no idea a terminal exists.
 
 `mindflayer-cli` parses a command line, asks core for values, and renders them.
 It holds no rules about artifacts: not the name limits, not the front matter
-format, not which folder a kind lives in.
+format, not which folder a kind lives in, not when a change drops the record
+of an install.
 
 It ships **two binaries**, `mind` and `flayer`, and they are two entry points
 into one parser rather than one wrapping the other. `flayer <cmd>` and `mind
@@ -40,6 +42,11 @@ get it wrong in exchange for nothing.
 The TUI is in the same crate, behind the same parser, rather than a front end
 of its own: it does everything by running these commands. See [the
 TUI](#the-tui).
+
+The local server is a crate of its own, and it holds no rules either: it
+carries JSON between the browser and whichever front end implements its
+`Backend`, and depends on neither core nor the CLI. See [the local
+server](#the-local-server).
 
 The line is there so that when a second front end arrives, it cannot disagree
 with the first about what a valid skill is. Every rule that could drift lives
@@ -562,7 +569,10 @@ engine badly.
 It sits in `.mindflayer/`, beside the marker it belongs to, so it travels with
 the workspace and two workspaces never share a history. It carries its schema
 version in SQLite's own `user_version` header field, and a database from the
-future is refused exactly as a marker file from the future is.
+future is refused exactly as a marker file from the future is. The first
+command that writes to it makes it; a read never does, and changes an existing
+one only to migrate it ([A read leaves the ledger as it finds
+it](#a-read-leaves-the-ledger-as-it-finds-it)).
 
 Four things are recorded: the **sources** gathered from, the **artifacts** on
 the shelf and which source each came from, the **installations** — which skill
@@ -763,6 +773,84 @@ install screen reports a row it could not apply and carries on with the rest.
 Two spellings of one loaded directory are one source; `unload_all` and
 `unlink_all` rewrite the marker once, for all of the paths or none.
 
+### What keeps an install out of git
+
+A project in local mode
+([D-02](#d-02-installs-stay-local-unless-a-project-shares-them)) keeps what is
+installed into it out of git, through a block of anchored entries in
+`$GIT_COMMON_DIR/info/exclude` that `exclude` keeps. Nothing calls it yet:
+which paths to exclude is the installing side's to choose (#34 for skills, #43
+and #45 for rules, #94 for MCP config), and this module only writes them down.
+
+```
+# mindflayer:begin
+# project packages/app
+/packages/app/.agents/skills/commit-style/
+/packages/app/.claude/skills/commit-style/
+# project packages/web
+/packages/web/AGENTS.md
+# mindflayer:end
+```
+
+Why that file, and why written that way:
+
+- **Not `.gitignore`.** It is the team's file and it is committed, so a line
+  in it puts copies only one machine has into every teammate's diff, which is
+  the noise local mode exists to avoid. `core.excludesFile` is no better: it is
+  the user's, read by every repository they have. Mindflayer edits neither,
+  ever. `info/exclude` is read like a `.gitignore` and is never committed or
+  pushed.
+- **The common dir, not the git dir.** A linked worktree has a git dir of its
+  own under the main repository's `.git/worktrees/`, but git reads
+  `info/exclude` only from the common dir, so every worktree of a repository
+  shares one file.
+- **Anchored at the work tree root.** Entries are relative to the work tree,
+  not to the project, so a project at `packages/app` gets
+  `/packages/app/.agents/skills/<name>/`. Git anchors a pattern with a `/` in
+  its middle on its own, but one segment matches at every level: without the
+  leading `/`, a root project's `AGENTS.md` would keep every `AGENTS.md` in
+  the tree out of git, a teammate's committed one in another project
+  included. Every entry starts with `/`, so one rule covers both shapes. A
+  directory ends in `/`, and a route's glob characters are escaped, so
+  `apps/[legacy]` is that folder rather than a class of letters. The route is
+  worked out from resolved paths, not lexically as elsewhere: git matches the
+  tree as it is on disk and never follows a symlinked directory, so a project
+  reached through `current -> packages/app-v2` is excluded under
+  `packages/app-v2`.
+- **One group per project.** Several projects can share a repository, so each
+  owns the lines under its `# project <key>` header and an edit rewrites only
+  those. The key is whatever the caller names the project by, its id once
+  settings carry one (#29) and its route until then, and it is compared, never
+  parsed. The same path in two groups is two claims on it: dropping one leaves
+  the other excluding it. A group goes with its last entry, and the block with
+  its last group.
+
+And how it edits:
+
+- **Only between the markers.** Every line outside comes back byte for byte,
+  its line ending included. New lines take the ending the file already uses.
+  A last line without a newline gets one when a block has to follow it, and
+  the block's end marker goes without one instead, so the file still ends the
+  way it did and dropping the block gives that line back as it was. The file
+  is replaced through a temporary and a rename, as a marker edit is.
+- **A block it cannot read is left alone.** A begin with no end, an end with no
+  begin, a second block or a project with two groups is a failure for the
+  caller to collect, and nothing is written. Guessing where a missing end
+  belongs could pull somebody's lines into the block, and the next edit would
+  rewrite them as Mindflayer's.
+- **Outside a git work tree it writes nothing, and says so.**
+  `Excluded::Outside` is not a failure, since a project need not be in git,
+  but it carries a warning: whatever local mode installs there is kept out of
+  nothing, and a repository made there later would offer all of it to be
+  committed.
+- **Found with `gix`, opened isolated.** No `git` binary, and neither the
+  environment nor the user's git config takes part, so a `GIT_DIR` set in the
+  shell cannot send one project's entries into another repository's file.
+- **No version.** Unlike a marker, the block holds nothing but git's own
+  pattern syntax and two kinds of comment, and an edit rewrites only its own
+  group and keeps every other line where it is, so a block a newer Mindflayer
+  wrote survives an older one's edit.
+
 ### The screen, and why it is three files
 
 `flayer install` is a two-column screen: projects on the left, the shelf as
@@ -885,29 +973,228 @@ screen needed `link` and `unlink` to take several paths, and they take them
 refused one leaves the registry as it was rather than half changed by a
 command that reports failure.
 
+## The local server
+
+`apps/server` (`mindflayer-server`) is the transport under the web panel
+([D-17](#d-17-the-next-front-end-is-a-local-web-panel)): a library crate that
+binds a port, checks who is asking, carries JSON between the browser and a
+front end, and serves the panel's files. No binary runs it yet. `flayer ui`
+(#68) will, over the CLI's backend (#67), and not before the checks on the
+Host, Origin and Fetch Metadata headers (#66) are in. The token keeps other
+processes out; those checks are what keep out other pages in the same
+browser: one on another port of 127.0.0.1, which the browser counts as the
+same site, or one whose DNS name has been rebound to 127.0.0.1.
+
+### Transport only
+
+It holds no rules. It cannot tell a valid task from an invalid one, a linked
+project from a path to refuse, or a skill from a rule, and it is not to learn:
+each of those answers is core's, reached through the backend, so the panel
+cannot disagree with the CLI and the TUI about any of them. What it knows is
+HTTP — routes, the token, cache headers, a log line — and none of that would
+differ between two front ends.
+
+The panel's whole API is four endpoints, which are
+[D-18](#d-18-the-panel-writes-by-running-commands) in HTTP:
+
+- `POST /api/query` — a read, answered with JSON of the backend's own shape.
+- `POST /api/commands/preview` — the command lines a task is, with nothing run.
+- `POST /api/commands` — run a task; the reply is its lines and its outcome.
+- `GET /api/transcript` — every task the session ran, with what each produced.
+
+Any other path under `/api` is a JSON 404, and every refusal, a body the
+backend cannot read included, is `{"error": "..."}`, so a script never has to
+parse the panel's page to learn that it typed a path wrong.
+
+### Generic over a backend
+
+The server is generic over a `Backend` trait whose `Query`, `Task` and
+`Outcome` are associated types. It deserializes into them, hands them over and
+serializes what comes back, without ever naming one. So the CLI can implement
+`Backend` with its own `Task` and depend on the server, while the server
+depends on no mindflayer crate at all, which `crate_test` checks through
+`cargo metadata`. A protocol crate holding the shared types was the
+alternative, and it would put a third crate between every change to a task
+and the code that runs it. The server's own suites use a fake backend whose
+types know nothing of mindflayer, which is the property the CLI relies on.
+
+`query` returns JSON rather than a fourth associated type, because each query
+has a shape of its own and one type standing for all of them would be an enum
+whose only job is to serialize untagged. `preview` takes the task by
+reference, so a task need not be `Clone` to be both shown and run.
+`watched_paths` is for live updates (#74); nothing reads it yet.
+
+### Threads
+
+axum runs on tokio, and nothing a backend does belongs on tokio's own
+threads, which are for moving bytes: one slow read there stalls every request
+waiting on the same thread.
+
+- **Queries and previews** go to tokio's blocking pool (`spawn_blocking`), as
+  many at once as arrive. They only read.
+- **Runs** go to one dedicated `std::thread`, fed by a channel. A channel is
+  first in, first out, so tasks run in the order they arrived, which a lock
+  does not promise whoever waits on it. One thread means two writes never run
+  side by side, which is the world the commands underneath were written for:
+  a CLI, where one command at a time is all there is. And a long run holds
+  that thread rather than one of the pool's, so the panel goes on reading
+  while it waits.
+
+A run's lines are worked out on the writer thread just before it, against the
+disk the run itself meets after every write before it, and the entry is in the
+transcript before the reply leaves, so a client that asks for the transcript
+after its reply always finds its own run there. A client that stops waiting
+does not take its task back: it was queued, and it runs. An outcome that will
+not serialize is still a run, so it is recorded, and replied, as
+`{"error": ...}` beside the lines that ran rather than turned into a 500 that
+leaves the transcript a run short. A backend that panics loses that one reply
+but not the thread, so the tasks behind it still run.
+
+The transcript is the TUI's, kept where the panel can ask for it at any time:
+runs only, since a query or a preview changes nothing there is to replay, and
+in memory only, for as long as the server runs.
+
+### Who it answers
+
+It binds 127.0.0.1 on port 0, with no option for another address: the panel
+is for the person at this machine, and beyond loopback the token would travel
+in clear text. Port 0 lets the system pick a free port rather than the server
+failing on a taken one.
+
+Every process on the machine can reach that port, so the address says nothing
+about who is asking. A 256-bit token, issued fresh at each launch, does. The
+launch link carries it once, as `/?token=...`; that request is answered with
+a 303 to `/` and the token in a cookie, and the redirect is what takes the
+token out of the address bar and the history. The cookie is `HttpOnly`, so the
+panel's own scripts never hold it, and `SameSite=Strict`, so no other site's
+page sends it, though a page on another port is the same site (#66 again). It
+is not `Secure`, which a browser that does not count
+127.0.0.1 as a secure origin would drop. And it is named for the port,
+`mf_<port>`, because cookies are not isolated by port: under one name, a panel
+launched on a second port would overwrite the first one's token in the browser
+and lock it out.
+
+Scripts and tests send `Authorization: Bearer <token>` instead, and either is
+compared in constant time. Only `/api` asks for it: the panel's files are the
+same for everybody, and a browser that has not been through the link yet still
+needs the page that will tell it so.
+
+### The log
+
+The server prints nothing of its own accord. A front end that wants a log hands
+`Server::log` a function, and gets a line per request once it is answered —
+`GET /api/transcript 200`: the method, the path and query, the status. Never a
+header, since the cookie and the Bearer token travel in them, and never a body.
+The value of a `token` parameter is replaced by `<redacted>` however its name
+is encoded, decoded the way the exchange decodes it to find it; and the token
+is scrubbed from anywhere else in the line, upper-cased or pasted into a path,
+because there it is still the secret. axum's `tracing` feature is off, so
+nothing logs on the server's behalf.
+
+### The panel's files
+
+The panel is embedded with rust-embed from `apps/web/dist`, spelled
+`$CARGO_MANIFEST_DIR/../web/dist`, so the binary stays the one thing to
+install. `allow_missing` lets the crate build, and its tests pass, on a
+machine without Node where nothing built the panel; the server then answers
+every page with a 503 saying `panel not built: run make web/build`. #69 brings
+`apps/web` and that target.
+
+Files under `assets/` are named by Vite for their contents, so they are sent
+as immutable, to be kept for a year; everything else, `index.html` above all,
+is `no-cache`, so a rebuild shows on the next load. A path outside `/api` that
+names no file gets `index.html`, because the panel draws its own routes in the
+browser — except under `assets/`, where a missing file is one an old page asks
+for after a rebuild, and a 404 is easier to read than a page delivered as a
+script. A test hands the server a panel of its own (`Panel::embedded`, any
+folder rust-embed can embed), so the suites cover all of this without a build.
+
+Only a name Vite could have written reaches the embed. A debug build's
+rust-embed reads the folder from disk, where it turns `\` into `/`, lets an
+absolute path or a drive letter replace the folder, and follows a symlink out
+of it; without a check, a request with no token could read whatever a symlink
+anywhere on disk leads to. So a path holding a backslash or a dot segment,
+which no browser sends, is a 404, and one with a drive letter or an empty
+segment is never looked up and gets `index.html`, as one of the panel's routes
+may. A release build only looks names up in a table, and the check keeps the
+two answering alike.
+
 ## The default workspace
 
 A workspace is found by walking up, and when nothing up there has one, the
-workspace-level commands fall back to the one at the default home:
-`FlayerWorkspace::locate_or_default` makes `~/.mindflayer` the first time it
-is needed. Home sits above most of what a person works on, so it is the one
-directory where a workspace can manage projects anywhere, and making it on
-demand means `flayer link ~/code/x` works before anyone has chosen a directory.
+workspace-level commands fall back to the one at the default home. Home sits
+above most of what a person works on, so it is the one directory where a
+workspace can manage projects anywhere, and making it on demand means `flayer
+link ~/code/x` works before anyone has chosen a directory.
 
-It is made by any workspace command that finds none up the tree, reading ones
-included: `flayer list`, `flayer scan`, `mind install` and opening `flayer`'s
-TUI all go through `locate_or_default`, so the first of them run outside every
-workspace leaves a `~/.mindflayer` behind. The exceptions are the commands
-that only list or take away a load — `flayer load` on its own, `unload` — which
-use `locate_except`, and the `mind` commands that only consult a workspace —
-opening its TUI, `add`, `edit`, `rename`, `remove`, `templates` — which use
-`default_at`: both open the home workspace if it exists and never create it.
-Whether reading should create it at all is an [open question](#open-questions).
+It is made by the first command that **writes** to it, and by nothing that
+only reads. `flayer link`, `add`, `gather git`, `load`, `install` and
+`uninstall` go through `FlayerWorkspace::locate_or_default`, which makes
+`~/.mindflayer` when nothing up the tree has one. A read goes through
+`locate_or_unmade`, which falls back instead to `FlayerWorkspace::unmade`: the
+workspace `init` would make there, parsed from the same template rather than
+written. That is `flayer list`, `show`, `validate`, `scan`, `templates`,
+`gather list`, and `load` and `install` on their own.
+
+A read of the unmade workspace answers as a read of one made a moment before
+would, because it is the same marker: `flayer list` says it manages no
+projects yet, `flayer scan` lists what is under home, all of it unlinked,
+`flayer gather list` says nothing is gathered. Then one `hint:` line on stderr
+says the workspace is not made yet and where the first command that writes
+will make it. A hint, not a `warning:`: nothing is wrong with a workspace
+nobody has needed yet, so the exit is whatever the read alone makes it. The
+alternative was an empty answer written for each command, which is one more
+thing to keep in step with what the made workspace says, and every front end
+would have to write its own.
+
+The TUI and the minds screen open on it the same way: empty, under a header
+saying it is not made yet. The first change made from either runs `flayer
+init` before its own lines (`App::lines`), so the workspace is made where the
+screen shows it and the transcript says so. Left to the change, the command
+that writes would make it, as it does from the shell; but the screen's lines
+run from the workspace root and walk up from there, and before it is made no
+marker at the root stops them, so with a workspace above home the change would
+land in that one. For the same reason the minds screen is built from where
+`flayer minds` was run, as the TUI is, and the TUI opens its install screen on
+the root it shows rather than walking up from it. The install screen itself
+does not open on an unmade workspace: like any workspace with no projects, it
+says there are none to install into.
+
+Nothing is written through an unmade workspace. An edit of its marker is
+refused as it is for any directory that is not a workspace, and so is opening
+its ledger to write to, which would otherwise leave a `.mindflayer` holding a
+database and no marker. A command that writes asks for the real one.
+
+Two older routes also never make it: the `mind` commands that only consult a
+workspace (opening its TUI, `add`, `edit`, `rename`, `remove`, `templates`)
+use `default_at`, and `unload`, which only takes away, uses `locate_except`.
+Both open the home workspace if it exists.
 
 Where home is comes from the front end, not from core: `--home`, then
 `$MINDFLAYER_HOME`, then the user's home directory, and empty means there is
 none. Core takes it as a parameter, which keeps it free of the environment and
 is what lets the tests run every command with the fallback switched off.
+
+### A read leaves the ledger as it finds it
+
+`mindflayer.db` belongs to the workspace like its marker, and a read does not
+make it either. `FlayerWorkspace::ledger_for_reading` opens it only when it
+exists (`Ledger::open_existing`, without SQLite's create flag) and otherwise
+answers from an empty ledger in memory, which says what a ledger nothing was
+ever written to would. So `flayer gather list`, the TUI's shelf count and the
+install screen leave a workspace that has never gathered or installed anything
+without one. The install screen is a read until something on it is applied;
+applying opens the ledger with `ledger()`, which makes it, and never the
+stand-in, whose records would be gone when it was dropped.
+
+A read does write to one thing: an existing ledger from an older schema is
+migrated to this build's, as every open migrates it. A build reads its own
+schema and no other, so declining would leave the file unreadable rather than
+untouched; that step is upkeep of Mindflayer's own file, not a change anybody
+asked for. Each schema step is to copy the database aside before it migrates
+(#30), and a read migrates through the same step, so it takes that copy too.
+Until the first such step lands there is no copy to take, and a read migrates
+the way every open does today.
 
 ## The agents' own folders
 
@@ -1047,15 +1334,45 @@ The ledger's record of an installation is what gives the install screen leave
 to overwrite and delete. Remove, rename or edit an installed skill and the copy
 it was about is gone, or is no longer what was installed; a record left behind
 would be inherited by whatever is written there next, and the install screen
-would then delete somebody's work because a box looked untidy. So each of them
-drops the record (`install::disown`), and `mind add` drops any stale one under
-the name it writes. An installed skill that is edited becomes its author's.
+would then delete somebody's work because a box looked untidy. So
+`lifecycle::remove`, `lifecycle::rename` and `lifecycle::finish_edit` drop the
+record, and `lifecycle::add` drops any stale one under the name it writes, as
+`lifecycle::rename` does under the new name. An installed skill that is edited
+becomes its author's.
+
+Core applies that rule inside each change. Dropping the record in the CLI
+after the change, as it once did, put a rule outside core, and
+[D-18](#d-18-the-panel-writes-by-running-commands) asks for the orchestration
+left in the CLI to move into core before the panel runs its writes through
+the CLI. Installed rules and MCP entries, when they come, would each have
+needed calls of their own there, and each could have got them wrong. Each
+change returns what it did to the record (`lifecycle::Record`), and the CLI
+only says so; `install::disown`, which does the dropping, is private to core
+so that nothing else can. That keeps a front end from applying the rule
+differently, not from skipping it: `create` and `create_from`, the writers
+`lifecycle::add` is built on, see to no record and stay public for core's
+tests, so a front end adds through `add`. A record that cannot be dropped is
+reported beside the change rather than instead of it, and the CLI prints it
+as a warning: the change has been made, and saying it was not would be false.
+
+Editing is split in two, because the editor is not core's to run: which one
+comes from `$VISUAL` or `$EDITOR`, and core never reads the environment.
+`lifecycle::start_edit` notes what the file holds, the CLI runs the editor,
+and `lifecycle::finish_edit` decides whether anything changed and what that
+means for the record. The CLI finishes the edit even when the editor fails:
+one that writes the file and then exits non-zero, as vim does on `:cq`, has
+changed the copy all the same, and a record left behind would let `flayer
+uninstall` delete the change.
 
 The record dropped is the one held by the workspace the command resolved, the
-one its templates come from, and it is given to `install::disown` for the same
-reason: a workspace beside the project, which a walk up from the project never
-reaches, would keep a record of a copy that has changed. Another workspace that
-links the same project keeps its own, an [open question](#open-questions).
+one its templates come from, and each change is given it for the same reason:
+a workspace beside the project, which a walk up from the project never
+reaches, would keep a record of a copy that has changed. A change takes that
+workspace rather than its ledger, because opening a ledger creates one, and a
+workspace that never installed anything must not get a database because
+something in a project changed; core opens it only when it is there. Another
+workspace that links the same project keeps its own, an [open
+question](#open-questions).
 
 ## Scanning
 
@@ -1071,7 +1388,10 @@ on the deepest rather than on a whole neighbouring tree, and never into hidden
 folders, symlinks, `node_modules` or `target`. A repository is a leaf, since its
 folders are its own — except the workspace root, which is also where the others
 are kept. A scan that runs out of budget says so rather than passing for
-complete.
+complete. A folder that cannot be listed is a failure reported beside what was
+found, except a root that is not there at all: that holds nothing, and only
+the default workspace before it is made can have one, in a home nobody has
+created yet.
 
 ## Decisions
 
@@ -1464,7 +1784,8 @@ leak into the lifecycle code. Unblocks #33, #45, #62, #93, #94 and #95.
   the install screen tell an untouched copy from an edited one, and offer to
   update the first while leaving the second alone.
   [D-04](#d-04-an-edited-copy-is-detected-not-disowned) chose that hash, one
-  per target, and #47 carries it out.
+  per target, and #47 carries it out, in the lifecycle changes that now hold
+  the rule (`lifecycle::finish_edit`, `rename` and `remove`).
 - **Disowning from elsewhere.** A change drops the record of the workspace
   its command resolved, wherever that sits, but not of any other workspace
   that links the same project: nothing in the project says which workspaces
@@ -1482,13 +1803,41 @@ leak into the lifecycle code. Unblocks #33, #45, #62, #93, #94 and #95.
   `-W` ([D-08](#d-08-an-explicit-or-activated-workspace-wins)) would let that
   line name the screen's workspace as well, so which of the two a project's
   row runs is still to choose.
-- **Reading commands create the home workspace.** `flayer list`, `show`,
-  `validate`, `scan`, `templates`, `gather list`, `minds`, the `flayer` TUI and
-  `mind install`/`uninstall` all make `~/.mindflayer` when nothing up the tree
-  has one, though only something that writes needs it to exist. `default_at`
-  already opens without creating; moving the reads onto it, and leaving
-  `locate_or_default` to the commands that write, would mean a first `flayer
-  list` outside every workspace no longer puts a marker in somebody's home.
+- **Writes that refuse after making the home workspace.** A command that
+  writes makes the default workspace before it finds out whether there is
+  anything to do in it. Outside every workspace, `mind install` and `mind
+  uninstall` in a project nothing manages, `flayer install -p` and `flayer
+  uninstall -p`, and `unlink` at either level leave a `~/.mindflayer` behind
+  and then refuse, since a workspace just made manages nothing. `flayer edit`,
+  `rename` and `remove` make it to change its own artifacts, `remove`'s dry
+  run included. Each could look with `locate_or_unmade` first and make it only
+  when it is about to write; whether each should is a choice per command, and
+  they were left as writes when the reads stopped making it.
+- **Reads from a screen on the unmade default.** The TUI's reads (`v`, `s`,
+  and showing an artifact) run from the default workspace's root, as its
+  changes do. Before the default is made, with a workspace above home, they
+  walk up to that one and read it instead. A change makes the default first;
+  a read cannot without making the home workspace to read it. `-W`
+  ([D-08](#d-08-an-explicit-or-activated-workspace-wins)) would let those
+  lines name the screen's workspace.
+- **Worktrees share one exclude file.** Every linked worktree of a repository
+  reads the same `info/exclude`, and an entry is anchored at whichever work
+  tree reads it. A project checked out in two worktrees under one key has one
+  group for both, so uninstalling in one stops excluding the copy the other
+  still has. A key that names the checkout rather than the project would keep
+  them apart; nothing has to choose until #34 installs through it.
+- **A project that moves.** Exclude entries are anchored at the route the
+  project had when they were written. Moved within its repository, a project
+  keeps a group of lines pointing where it was, which removing its entries by
+  their new route never matches. Rewriting a project's whole group from what
+  the ledger says it has installed would heal it.
+- **A team's `.gitignore` outranks the block.** Git ranks every `.gitignore`
+  in the tree above `info/exclude`, so a negation there (`!.claude/skills/**`)
+  takes back what the block excludes, and a local install shows up in `git
+  status` with nothing said: the entry is written all the same, and only
+  `Excluded::Outside` warns. Asking gix's `excludes` whether each path is
+  ignored once it is written, as the tests do, would let the installing side
+  or a doctor check say so.
 - **Long work in the TUI.** A gather holds the screen until it finishes, with a
   box saying what is running, and cannot be cancelled. A background thread
   would change that; it has not been needed yet.
@@ -1540,6 +1889,23 @@ leak into the lifecycle code. Unblocks #33, #45, #62, #93, #94 and #95.
   `$MINDFLAYER_HOME`. An agent that reads an empty one as unset uses its
   default instead, and a check would then leave out a folder that agent does
   read. How each agent reads it is for #17 to record.
+- **A panel built after the server.** A release build embeds what
+  `apps/web/dist` held when `mindflayer-server` last compiled, and a debug
+  build reads the folder at run time only if it existed then, because
+  rust-embed resolves the folder's real path when it compiles. Neither sees a
+  panel built later until the crate compiles again. A build script that reruns
+  when the folder changes would, at the price of rerunning on every build
+  while the folder is missing, since cargo counts a missing path as changed.
+  #68, which puts the panel into the binaries, settles the build order.
+- **The panel's transcript ends with the server.** The TUI prints its
+  transcript when it closes; the server keeps the panel's in memory and drops
+  it when it stops. Whether `flayer ui` prints it on the way out, as the TUI
+  does, is for #68 to choose.
+- **A run that panics.** A backend that panics while running a task has no
+  outcome to record, so the task is not in the transcript, though it may have
+  changed something before it stopped. The CLI's commands collect their
+  failures rather than panic, so this is a bug's path, but the transcript then
+  cannot say what the bug left behind.
 - **Rules that want to declare something.** Today a rule has no front matter,
   so a leading `---` in one is content. If rules later want metadata, that
   becomes a breaking reading of files written now. The escape hatch is cheap

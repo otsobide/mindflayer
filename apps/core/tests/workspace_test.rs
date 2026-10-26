@@ -3,6 +3,7 @@
 use std::fs;
 use std::path::Path;
 
+use mindflayer_core::ledger::{Action, LedgerError, Outcome};
 use mindflayer_core::workspace::{FLAYER_FORMAT_VERSION, MIND_FORMAT_VERSION};
 use mindflayer_core::{
     Directories, FlayerWorkspace, Initialization, Kind, MindProject, Registration, WorkspaceError,
@@ -736,4 +737,130 @@ fn with_no_home_there_is_no_default_workspace() {
         .unwrap()
         .is_none());
     assert!(FlayerWorkspace::default_at(None).unwrap().is_none());
+}
+
+// ---------------------------------------------------------------------------
+// The default workspace, as a read sees it
+// ---------------------------------------------------------------------------
+
+#[test]
+fn a_read_with_nothing_above_sees_the_default_workspace_without_making_it() {
+    let parent = TempDir::new().unwrap();
+    let home = parent.path().join("you");
+    fs::create_dir(&home).unwrap();
+    let elsewhere = TempDir::new().unwrap();
+
+    let workspace = FlayerWorkspace::locate_or_unmade(elsewhere.path(), Some(&home))
+        .unwrap()
+        .expect("the one in home, unmade");
+
+    assert!(!workspace.is_made());
+    assert!(workspace.is_default(Some(&home)));
+    // Named as `init` would name it, and as empty as one made a moment ago.
+    assert_eq!(workspace.name(), "you");
+    assert!(workspace.config().projects.is_empty());
+    assert!(workspace.loads().is_empty());
+    assert_eq!(
+        workspace.own().directory_for(Kind::Skill),
+        home.join("skills")
+    );
+    assert!(!home.join(FLAYER_DIR).exists());
+    assert!(!elsewhere.path().join(FLAYER_DIR).exists());
+}
+
+#[test]
+fn a_read_sees_the_default_workspace_itself_once_it_is_made() {
+    let home = TempDir::new().unwrap();
+    let elsewhere = TempDir::new().unwrap();
+    FlayerWorkspace::init(home.path()).unwrap();
+
+    let workspace = FlayerWorkspace::locate_or_unmade(elsewhere.path(), Some(home.path()))
+        .unwrap()
+        .unwrap();
+
+    assert!(workspace.is_made());
+    assert!(workspace.is_default(Some(home.path())));
+}
+
+#[test]
+fn a_read_uses_a_workspace_above_before_the_default_one() {
+    let home = TempDir::new().unwrap();
+    let dir = TempDir::new().unwrap();
+    FlayerWorkspace::init(dir.path()).unwrap();
+    let below = dir.path().join("deep/er");
+    fs::create_dir_all(&below).unwrap();
+
+    let workspace = FlayerWorkspace::locate_or_unmade(&below, Some(home.path()))
+        .unwrap()
+        .unwrap();
+
+    assert!(workspace.is_made());
+    assert!(!workspace.is_default(Some(home.path())));
+    assert!(!home.path().join(FLAYER_DIR).exists());
+}
+
+#[test]
+fn with_no_home_a_read_finds_no_default_workspace() {
+    let dir = TempDir::new().unwrap();
+
+    assert!(FlayerWorkspace::locate_or_unmade(dir.path(), None)
+        .unwrap()
+        .is_none());
+    assert!(FlayerWorkspace::default_or_unmade(None).unwrap().is_none());
+}
+
+#[test]
+fn nothing_is_written_through_an_unmade_workspace() {
+    let home = TempDir::new().unwrap();
+    let elsewhere = TempDir::new().unwrap();
+    let (project, _) = MindProject::init(elsewhere.path()).unwrap();
+    let mut workspace = FlayerWorkspace::unmade(home.path()).unwrap();
+
+    let link = workspace.link(&project).unwrap_err();
+    let ledger = workspace.ledger().unwrap_err();
+
+    assert!(
+        matches!(link, WorkspaceError::NotAWorkspace { .. }),
+        "{link}"
+    );
+    assert!(matches!(ledger, LedgerError::Unmade { .. }), "{ledger}");
+    // Reading it is another matter: an empty ledger, as a new one would be.
+    assert!(workspace
+        .ledger_for_reading()
+        .unwrap()
+        .gathered()
+        .unwrap()
+        .is_empty());
+    assert!(!home.path().join(FLAYER_DIR).exists());
+}
+
+// ---------------------------------------------------------------------------
+// Reading the ledger
+// ---------------------------------------------------------------------------
+
+#[test]
+fn reading_the_ledger_of_a_workspace_that_has_none_makes_none() {
+    let dir = TempDir::new().unwrap();
+    let (workspace, _) = FlayerWorkspace::init(dir.path()).unwrap();
+
+    let ledger = workspace.ledger_for_reading().unwrap();
+
+    assert!(ledger.gathered().unwrap().is_empty());
+    assert!(!workspace.ledger_path().exists());
+}
+
+#[test]
+fn reading_the_ledger_sees_what_was_written_to_it() {
+    let dir = TempDir::new().unwrap();
+    let (workspace, _) = FlayerWorkspace::init(dir.path()).unwrap();
+    workspace
+        .ledger()
+        .unwrap()
+        .log(Action::Gather, Some("https://h/a"), Outcome::Ok, None)
+        .unwrap();
+
+    let history = workspace.ledger_for_reading().unwrap().history(10).unwrap();
+
+    assert_eq!(history.len(), 1);
+    assert_eq!(history[0].target.as_deref(), Some("https://h/a"));
 }

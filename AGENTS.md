@@ -32,6 +32,7 @@ One suite, one module or one test:
 cargo test -p mindflayer-cli --test tui_test                 # apps/cli/tests/tui_test.rs
 cargo test -p mindflayer-core --test install_test <substring>
 cargo test -p mindflayer-core --lib workspace                # src/workspace_test.rs
+cargo test -p mindflayer-server --test commands_test         # apps/server/tests/commands_test.rs
 ```
 
 `make dev/link`, `make dev/unlink` and `make install` write into `~/.cargo/bin`
@@ -39,13 +40,13 @@ cargo test -p mindflayer-core --lib workspace                # src/workspace_tes
 
 ## Layout
 
-Two crates in one Cargo workspace, each an app under `apps/` with its own
+Three crates in one Cargo workspace, each an app under `apps/` with its own
 `Makefile`:
 
 - `apps/core` (`mindflayer-core`): the engine. Projects, workspaces, kinds,
-  the catalog, gathering (`gix`), the SQLite ledger, installing, creating and
-  changing artifacts. Its only I/O is files, and it never reads the
-  environment.
+  the catalog, gathering (`gix`), the SQLite ledger, installing, keeping
+  installs out of git (`exclude`), creating and changing artifacts. Its only
+  I/O is files, and it never reads the environment.
 - `apps/cli` (`mindflayer-cli`): the binaries `mind` (`src/main.rs`) and
   `flayer` (`src/bin/flayer.rs`), and the TUI. `src/lib.rs` only re-exports
   the public API. The parsers are in `src/parse.rs`. `src/commands.rs`
@@ -57,6 +58,13 @@ Two crates in one Cargo workspace, each an app under `apps/` with its own
   `src/error.rs` holds `CliError`, and `src/homes.rs` decides the default
   home and the agent homes. `src/tui/` and `src/install/` are the two
   screens.
+- `apps/server` (`mindflayer-server`): the local server behind the web
+  panel, a library no binary runs yet. `src/backend.rs` is the `Backend`
+  trait, `src/server.rs` binds and routes, `src/auth.rs` holds the token's
+  cookie and Bearer checks, `src/api.rs` the JSON endpoints, `src/writer.rs`
+  the thread every run goes through, `src/transcript.rs` what the session
+  ran, `src/log.rs` the redacting request log and `src/panel.rs` the embedded
+  panel (`apps/web/dist`).
 
 ## Invariants that hold the design together
 
@@ -85,10 +93,21 @@ These are easy to break from a single file without noticing.
   - Creation uses `create_new` or `create_dir`.
   - `rename` rewrites only the `name:` line (`frontmatter::with_key`).
   - `remove` is a dry run without `--yes`.
+  - A file somebody else owns is edited only inside Mindflayer's marked
+    blocks, every byte outside them kept, and a malformed block is refused,
+    not repaired. The blocks: `# mindflayer:begin`/`# mindflayer:end` in
+    `$GIT_COMMON_DIR/info/exclude` (`exclude`), where an edit rewrites only its
+    own project's `# project <key>` group. `.gitignore` and
+    `core.excludesFile` are never edited.
 - **Mindflayer only manages what it installed.** The ledger's record of an
   install is what allows overwriting and deleting. An unrecorded artifact is
-  `Standing::Foreign` and is never touched. `edit`, `rename` and `remove`
-  drop the record (`install::disown`).
+  `Standing::Foreign` and is never touched. Core's lifecycle changes
+  (`lifecycle::add`, `finish_edit`, `rename` and `remove`) drop any record
+  they would leave behind and return what they did (`lifecycle::Record`),
+  which the CLI only renders. `install::disown` is private to core, so no
+  front end drops a record on its own. A front end adds through
+  `lifecycle::add`, never `create` or `create_from`, which leave a stale
+  record in place.
 - **Strict when writing, lenient when reading.** A skill's front matter is
   the Agent Skills format. `mind add`, `rename` and `install` refuse a name or
   description that breaks its rules, all through `artifact::strict_issues`
@@ -132,11 +151,13 @@ These are easy to break from a single file without noticing.
 - **Home comes from the front end.** The order is `--home`, then
   `$MINDFLAYER_HOME`, then the user's home; empty means none. Only commands
   that write may create `~/.mindflayer` (`locate_or_default`). Reads use
-  `default_at`, which never creates it.
-- **So does the workspace a change consults.** `install::disown` and template
-  lookup take it as a parameter, the one the command resolved, and core never
-  walks up from the project to find one: a walk misses a workspace that links
-  the project from beside it.
+  `locate_or_unmade`, which falls back to the workspace `init` would make
+  without making it, or `default_at`; a read opens `mindflayer.db` only
+  through `ledger_for_reading`, which never creates it either.
+- **So does the workspace a change consults.** The lifecycle changes and
+  template lookup take it as a parameter, the one the command resolved, and
+  core never walks up from the project to find one: a walk misses a workspace
+  that links the project from beside it.
 - **So do the agent homes.** `homes::agent_homes` takes each from its option
   (`--claude-config-dir`, `--codex-home`, `--opencode-config-dir`,
   `--agents-dir`), then `$CLAUDE_CONFIG_DIR`, `$CODEX_HOME` or
@@ -148,6 +169,16 @@ These are easy to break from a single file without noticing.
   `tui::execute` hand each command the TUI's own, as it hands them `--home`:
   a command the TUI runs carries none of the four options, so it would decide
   them again from the environment.
+- **The server holds no rules.** `apps/server` carries JSON between the
+  browser and a `Backend`, whose `Query`, `Task` and `Outcome` are associated
+  types, and depends on no mindflayer crate (`tests/crate_test.rs` checks it
+  with `cargo metadata`); a front end depends on it, as the CLI will (#67),
+  never the other way. A check, path rule or naming rule written there is one
+  the panel could disagree with the CLI about: it belongs in core, reached
+  through the backend. Queries and previews run on tokio's blocking pool, and
+  every run on the one writer thread, in the order it arrived. It binds
+  127.0.0.1 only, answers under `/api` only a request that carries the launch
+  token (in the cookie `mf_<port>`, or as Bearer), and never logs the token.
 - **`Kind` is a closed enum.** To add a kind, follow "Adding a third kind" in
   the architecture doc; the compiler's exhaustive matches are the checklist.
 
@@ -171,6 +202,10 @@ These are easy to break from a single file without noticing.
   account's real home. Keep it that way.
 - Git sources are built in-process with `gix` (`common::repository`): no
   network and no `git` binary.
+- The server's suites run against a fake backend with types of its own
+  (`common::Fake`), never the CLI's. They bind 127.0.0.1 on port 0 and send
+  requests through the router in process (`common::send`), or over loopback,
+  and serve a fixture panel (`tests/panel`), so they need no Node.
 - Screens are tested without a terminal. Drive `state` with key events, or
   call `tui::step`, and render `ui` into `ratatui::backend::TestBackend`. Only
   the event loops in `tui.rs` and `install.rs` go untested, so keep logic out
@@ -183,13 +218,13 @@ These are easy to break from a single file without noticing.
 - Gitflow is enforced by required checks. PRs into `dev` come from
   `feature/*`, `hotfix/*` or `release/*` (or `main`, for a back-merge). PRs
   into `main` come only from `dev`. PRs are merged with merge commits.
-- CI runs `fmt and clippy`, then `test (core)`, then `test (cli)`, and builds
-  each app after its tests pass. macOS and Windows run on pushes to
-  `dev`/`main`, on PRs from `dev`, `main` or `release/*`, and on PRs labelled
-  `full-matrix`.
+- CI runs `fmt and clippy`, then `test (core)`, then `test (cli)` and
+  `test (server)`, and builds each app after its tests pass. macOS and
+  Windows run on pushes to `dev`/`main`, on PRs from `dev`, `main` or
+  `release/*`, and on PRs labelled `full-matrix`.
 - Commit messages: `<area>: <imperative summary>`, where area is `core`,
-  `cli`, `docs`, `build`, `ci` or `chore` (`core, cli:` when a change spans
-  both crates).
+  `cli`, `server`, `docs`, `build`, `ci` or `chore` (`core, cli:` when a
+  change spans two crates).
 - When behaviour changes, update the README (its examples are literal output,
   so re-run them) and `docs/architecture.md`, including its "Open questions".
 

@@ -40,10 +40,22 @@ from inside a project.
 
 A workspace is found the way `.git` is, by walking up from where you are. When
 nothing up there has a `.mindflayer`, `flayer` uses **the one in your home**,
-`~/.mindflayer`, making it the first time it is needed — so projects scattered
-anywhere can still be managed together without choosing a directory first.
-`flayer init` somewhere else makes a workspace there, and from inside it that
-one wins. The TUI says when it is showing the default one.
+`~/.mindflayer` — so projects scattered anywhere can still be managed together
+without choosing a directory first. `flayer init` somewhere else makes a
+workspace there, and from inside it that one wins. The TUI says when it is
+showing the default one.
+
+The first command that writes to it makes it: `flayer link`, `add`, `gather
+git`, `load <path>`, `install -p PROJECT <SKILL>`. One that only reads — `load`
+and `install` on their own among them — leaves your home alone, answers as an
+empty workspace would, and says where the workspace will be:
+
+```
+$ flayer list
+you manages no projects yet
+  link one with `flayer link <path>`
+hint: no workspace here or above, and the default one is not made yet; the first command that writes to it, such as `flayer link <path>`, makes it in /home/you/.mindflayer
+```
 
 `--home DIR`, or `$MINDFLAYER_HOME`, puts the default somewhere other than your
 home; set to empty (`--home ""`) there is no default, and a command outside
@@ -369,6 +381,8 @@ server accepts one, or whether to trust a host it has not seen before.
 `mindflayer.db` is SQLite, and it is the one thing Mindflayer writes that is
 not meant to be read by hand — it answers questions a file cannot, like which
 of two identically named skills came from which repository, at which revision.
+The first gather, install or uninstall makes it; a command that only reads
+never does.
 Timestamps are Unix seconds, so `datetime(at, 'unixepoch')` renders them:
 
 ```sql
@@ -588,12 +602,13 @@ created skill deploy at /home/you/Projects/tanukeys/skills/deploy/SKILL.md
 
 Opened where there is no workspace and no default one either (`--home ""`), it
 offers to create one there, then goes straight to linking; with a default, it
-opens that one and says so. The link form lists what `flayer scan` finds under the
-workspace — mind projects, and git repositories that are not one yet — and
-picking a repository asks before running `mind init` in it, because that
-writes into it. A project whose directory has gone is listed with a `!`, where
-`u` drops it; an artifact `validate` would reject is marked `✗`, with the
-reason underneath.
+opens that one and says so — empty, and marked not made yet, until the first
+change you make from it, which runs `flayer init` there first. The link form
+lists what `flayer scan` finds under the workspace — mind projects, and git
+repositories that are not one yet — and picking a repository asks before
+running `mind init` in it, because that writes into it. A project whose
+directory has gone is listed with a `!`, where `u` drops it; an artifact
+`validate` would reject is marked `✗`, with the reason underneath.
 
 ## Where a project keeps its artifacts
 
@@ -779,11 +794,15 @@ Every unit of the product is an app under `apps/`, so adding a front end means
 adding a directory rather than reshaping the tree:
 
 ```
-apps/core   mindflayer-core — projects, workspaces, artifacts.
-                              No I/O beyond files, and git when gathering.
-apps/cli    mindflayer-cli  — the `mind` and `flayer` binaries, and the TUI.
-                              Parsing and rendering only; all of it goes
-                              through one parser.
+apps/core    mindflayer-core   — projects, workspaces, artifacts.
+                                 No I/O beyond files, and git when gathering.
+apps/cli     mindflayer-cli    — the `mind` and `flayer` binaries, and the TUI.
+                                 Parsing and rendering only; all of it goes
+                                 through one parser.
+apps/server  mindflayer-server — the local server behind the web panel, still
+                                 unused by the binaries. Transport only: it
+                                 moves JSON between the browser and a front
+                                 end, and holds no rules.
 ```
 
 See [docs/architecture.md](docs/architecture.md) for why the split is where it
@@ -812,7 +831,8 @@ surface, with what they share in `tests/common/`, and a module's unit tests in
 `src/<module>_test.rs` beside it. No test touches your home: the CLI suites
 run every command with `--home ""`. Nor do they touch your agents' folders,
 which no command reads yet, and the commands they run themselves give every
-agent-home option empty.
+agent-home option empty. The server's suites never leave 127.0.0.1, and run
+against a fake front end rather than the CLI.
 
 ```bash
 cargo test -p mindflayer-cli --test tui_test          # one area
