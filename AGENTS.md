@@ -164,6 +164,15 @@ These are easy to break from a single file without noticing.
     own project's `# project <key>` group. A team's `.gitignore` and
     `core.excludesFile` are never edited; the one `.gitignore` Mindflayer
     writes is `.mind/tmp`'s, inside a folder it owns, made with `create_new`.
+  - An entry in a config file somebody else owns (`.mcp.json`,
+    `opencode.json`, `.codex/config.toml`) is changed one at a time through
+    `config_entry`: JSON and JSONC entries are edited through jsonc-parser's
+    CST and TOML through `toml_edit`, never parsed and serialized again, so
+    every byte outside the entry is kept. What an edit wrote is read back and
+    refused unless only the entry changed, and a file that does not parse is
+    refused, never rewritten. A changed file goes through `replace_bytes`,
+    keeping its permissions; a new one is made with `create_new`. The module
+    knows no agent: the file, the key path and the entry are the caller's.
   - `flayer init` refuses a directory for the workspace's own that overlaps
     the shelf or the cache, which are reserved for gathering
     (`gathered_overlap`). `flayer init` and the workspace's own artifacts
@@ -197,6 +206,9 @@ These are easy to break from a single file without noticing.
   - An installed name must be one folder name (`install::is_folder_name`).
   - Symlinks are followed only inside the source (`copy::tree`'s `within`).
   - A project's artifact directories must stay inside the project.
+  - A config file is named by a route of folder names from the project, and
+    a symlink anywhere on it, the file included, is refused, never followed
+    (`config_entry::ConfigFile`).
   - URLs are stored, logged and shown without credentials. `url::redacted`
     is the one function that takes them out: the ledger applies it to every
     URL it writes and reads, `GitError` to what it says, `git::scrub` to a
@@ -212,13 +224,15 @@ These are easy to break from a single file without noticing.
   workspace's `.mindflayer/lock` (`FlayerWorkspace::lock`) while they change
   it: `edit_array`, `install::install` and `uninstall`, `gather::gather`, and
   `gather::scrub`, which `FlayerWorkspace::ledger_to_write` runs, when it has
-  clones to rewrite. A new writer takes it the same way, inside core. Opening
-  the ledger takes no lock: a migration keeps itself apart in its own
-  transaction. The lock is not re-entrant: a writer never calls another while
-  it holds it, and a front end never takes it. Reads (`FlayerWorkspace::open`,
-  `ledger_for_reading`) never take it. A wait is bounded (`lock::WAIT`),
-  ending in a `LockError::Busy` that names the holder's pid, except a record
-  drop's (`install::disown`), which follows a change already made.
+  clones to rewrite. A new writer takes it the same way, inside core;
+  `config_entry::ConfigFile` takes none, since the writers that call it hold
+  it. Opening the ledger takes no lock: a migration keeps itself apart in its
+  own transaction. The lock is not re-entrant: a writer never calls another
+  while it holds it, and a front end never takes it. Reads
+  (`FlayerWorkspace::open`, `ledger_for_reading`) never take it. A wait is
+  bounded (`lock::WAIT`), ending in a `LockError::Busy` that names the
+  holder's pid, except a record drop's (`install::disown`), which follows a
+  change already made.
 - **A gather never prompts for a credential itself.** Every connection `gix`
   lets a clone configure gets the callback in `gather/credentials.rs`, which
   runs the git-config credential helpers with `gix`'s prompt and askpass
