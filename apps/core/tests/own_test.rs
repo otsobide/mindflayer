@@ -2,6 +2,7 @@
 //! keeps for the projects it manages, beside those projects' own.
 
 use std::fs;
+use std::path::Path;
 
 use mindflayer_core::lifecycle;
 use mindflayer_core::template;
@@ -62,6 +63,59 @@ fn a_workspace_can_be_told_where_to_keep_them_as_long_as_it_is_inside() {
     assert!(
         !outside.path().join(".mindflayer").exists(),
         "refused before anything was made"
+    );
+}
+
+#[test]
+fn a_workspace_directory_where_gathering_writes_is_refused_before_anything_is_made() {
+    // The shelf of either kind, somewhere inside it, the cache, and
+    // `.mindflayer` itself, which holds both. Case aside: on macOS and
+    // Windows `.Mindflayer/Skills` is the shelf.
+    for (directory, gathered) in [
+        (".mindflayer/skills", ".mindflayer/skills"),
+        (".mindflayer/rules", ".mindflayer/rules"),
+        (".mindflayer/skills/mine", ".mindflayer/skills"),
+        ("./.mindflayer/cache", ".mindflayer/cache"),
+        (".mindflayer", ".mindflayer/skills"),
+        (".Mindflayer/Skills", ".mindflayer/skills"),
+    ] {
+        let dir = TempDir::new().unwrap();
+
+        let error = FlayerWorkspace::init_with(
+            dir.path(),
+            &Directories::default().with(Kind::Rule, directory),
+        )
+        .unwrap_err();
+
+        match &error {
+            WorkspaceError::OverlapsGathered {
+                kind, gathered: at, ..
+            } => {
+                assert_eq!(*kind, Kind::Rule);
+                assert_eq!(at.as_path(), Path::new(gathered), "{directory}");
+            }
+            _ => panic!("{directory}: {error}"),
+        }
+        assert!(
+            !dir.path().join(".mindflayer").exists(),
+            "{directory}: refused before anything was made"
+        );
+    }
+}
+
+#[test]
+fn a_workspace_directory_elsewhere_in_mindflayer_is_allowed() {
+    let dir = TempDir::new().unwrap();
+
+    let (workspace, _) = FlayerWorkspace::init_with(
+        dir.path(),
+        &Directories::default().with(Kind::Skill, ".mindflayer/mine/skills"),
+    )
+    .unwrap();
+
+    assert_eq!(
+        workspace.own().directory_for(Kind::Skill),
+        dir.path().join(".mindflayer/mine/skills")
     );
 }
 

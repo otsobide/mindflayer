@@ -381,6 +381,10 @@ impl FlayerWorkspace {
     /// it manages — and puts nothing beside them until there is something to
     /// put: the first artifact added makes its folder. As with a project, a
     /// second run changes nothing, `directories` included.
+    ///
+    /// A directory outside the workspace, or one sharing a folder with the
+    /// shelf or the cache, which gathering writes, is refused before anything
+    /// is made.
     pub fn init_with(
         root: impl AsRef<Path>,
         directories: &Directories,
@@ -394,6 +398,13 @@ impl FlayerWorkspace {
                 return Err(WorkspaceError::OutsideWorkspace {
                     path: directory,
                     kind,
+                });
+            }
+            if let Some(gathered) = gathered_overlap(&directory) {
+                return Err(WorkspaceError::OverlapsGathered {
+                    path: directory,
+                    kind,
+                    gathered,
                 });
             }
         }
@@ -1108,6 +1119,12 @@ pub enum WorkspaceError {
     OutsideProject { path: PathBuf, kind: Kind },
     #[error("{path}: cannot hold the workspace's {kind}s, because it is not inside the workspace")]
     OutsideWorkspace { path: PathBuf, kind: Kind },
+    #[error("{path}: cannot hold the workspace's {kind}s, because gathering writes to {gathered}")]
+    OverlapsGathered {
+        path: PathBuf,
+        kind: Kind,
+        gathered: PathBuf,
+    },
 }
 
 impl WorkspaceError {
@@ -1126,7 +1143,8 @@ impl WorkspaceError {
             | WorkspaceError::NotLoaded { path, .. }
             | WorkspaceError::NonUtf8Path { path }
             | WorkspaceError::OutsideProject { path, .. }
-            | WorkspaceError::OutsideWorkspace { path, .. } => path,
+            | WorkspaceError::OutsideWorkspace { path, .. }
+            | WorkspaceError::OverlapsGathered { path, .. } => path,
         }
     }
 }
@@ -1387,6 +1405,38 @@ fn stays_inside(directory: &Path) -> bool {
         paths::normalize(directory).components().next(),
         Some(std::path::Component::Normal(_))
     )
+}
+
+/// Where gathering writes that a workspace's own `directory` would share, if
+/// anywhere: the shelf, a folder per kind ([`FlayerWorkspace::gathered_dir`]),
+/// or the cache of clones ([`FlayerWorkspace::cache_dir`]), as a route from
+/// the workspace's root.
+///
+/// Those folders are gathering's alone. It replaces and deletes what is in
+/// them by names of its own, so an artifact somebody wrote there could go with
+/// the next gather, and a listing could no longer tell what was gathered from
+/// what the workspace keeps. Sharing counts either way round: `.mindflayer`
+/// holds both, and a rules folder there would read every markdown file in
+/// every clone as one of the workspace's rules. The rest of `.mindflayer` is
+/// not gathering's, so a directory there is allowed.
+///
+/// Compared a component at a time, ignoring ASCII case: where the filesystem
+/// does, as macOS's and Windows' do by default, `.Mindflayer/Skills` is the
+/// shelf, and refusing it on Linux as well costs nobody anything.
+fn gathered_overlap(directory: &Path) -> Option<PathBuf> {
+    let directory = paths::normalize(directory);
+    // Spelled with `/`, so a refusal reads the same on every platform.
+    Kind::ALL
+        .into_iter()
+        .map(Kind::folder)
+        .chain(std::iter::once(CACHE_DIR))
+        .map(|folder| PathBuf::from(format!("{FLAYER_DIR}/{folder}")))
+        .find(|gathered| {
+            directory
+                .components()
+                .zip(gathered.components())
+                .all(|(one, other)| one.as_os_str().eq_ignore_ascii_case(other.as_os_str()))
+        })
 }
 
 /// A TOML basic string. Directory names are arbitrary, so the quoting is not
