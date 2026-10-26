@@ -34,9 +34,25 @@ fn isolated_repository(dir: &TempDir) -> gix::Repository {
     .to_thread_local()
 }
 
+/// A helper that has a credential for every URL.
+fn a_helper_that_answers() -> impl FnMut(Action, prompt::Options) -> protocol::Result {
+    |action, _| match action {
+        Action::Get(context) => Ok(Some(protocol::Outcome {
+            identity: gix::sec::identity::Account {
+                username: "me".into(),
+                password: "hunter2".into(),
+                oauth_refresh_token: None,
+            },
+            next: context.into(),
+        })),
+        Action::Store(_) | Action::Erase(_) => Ok(None),
+    }
+}
+
 #[test]
 fn a_credential_no_helper_has_is_an_error_and_never_a_prompt() {
-    let mut credentials = never_prompting(no_helper_and_a_prompt_that_panics());
+    let shortfalls = Shortfalls::default();
+    let mut credentials = never_prompting(no_helper_and_a_prompt_that_panics(), shortfalls.clone());
 
     let answer = credentials(Action::get_for_url(PRIVATE));
 
@@ -44,12 +60,42 @@ fn a_credential_no_helper_has_is_an_error_and_never_a_prompt() {
         matches!(answer, Err(protocol::Error::IdentityMissing { .. })),
         "{answer:?}"
     );
+    assert_eq!(shortfalls.last(), Some(Shortfall::Missing));
+}
+
+#[test]
+fn a_credential_the_server_takes_leaves_no_shortfall() {
+    let shortfalls = Shortfalls::default();
+    let mut credentials = never_prompting(a_helper_that_answers(), shortfalls.clone());
+
+    let Ok(Some(answer)) = credentials(Action::get_for_url(PRIVATE)) else {
+        panic!("the helper's credential was not passed on");
+    };
+    assert_eq!(answer.identity.username, "me");
+    credentials(answer.next.store()).unwrap();
+
+    assert_eq!(shortfalls.last(), None);
+}
+
+#[test]
+fn a_credential_the_server_refuses_is_a_shortfall() {
+    let shortfalls = Shortfalls::default();
+    let mut credentials = never_prompting(a_helper_that_answers(), shortfalls.clone());
+
+    let Ok(Some(answer)) = credentials(Action::get_for_url(PRIVATE)) else {
+        panic!("the helper's credential was not passed on");
+    };
+    credentials(answer.next.erase()).unwrap();
+
+    assert_eq!(shortfalls.last(), Some(Shortfall::Refused));
 }
 
 #[test]
 fn the_configured_helpers_have_nothing_when_git_config_names_none() {
     let dir = TempDir::new().unwrap();
-    let mut credentials = never_prompting(configured(isolated_repository(&dir)));
+    let shortfalls = Shortfalls::default();
+    let mut credentials =
+        never_prompting(configured(isolated_repository(&dir)), shortfalls.clone());
 
     let answer = credentials(Action::get_for_url(PRIVATE));
 
@@ -57,6 +103,7 @@ fn the_configured_helpers_have_nothing_when_git_config_names_none() {
         matches!(answer, Err(protocol::Error::IdentityMissing { .. })),
         "{answer:?}"
     );
+    assert_eq!(shortfalls.last(), Some(Shortfall::Missing));
 }
 
 #[test]

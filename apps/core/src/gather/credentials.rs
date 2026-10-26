@@ -14,13 +14,41 @@
 // boxing it as clippy suggests is not ours to do.
 #![allow(clippy::result_large_err)]
 
+use std::cell::Cell;
+use std::rc::Rc;
+
 use gix::bstr::ByteSlice;
 use gix::credentials::helper::{Action, Cascade};
 use gix::credentials::protocol;
 use gix::prompt;
 
+/// Why a fetch got no credential it could use.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(super) enum Shortfall {
+    /// The server asked, and no helper had one to give.
+    Missing,
+    /// One was given, and the server turned it down.
+    Refused,
+}
+
+/// Where the callback leaves the last [`Shortfall`] it saw, for the clone to
+/// read once its fetch has failed.
+///
+/// Shared rather than read off the fetch's error: that error says the same
+/// thing several layers down a chain of `gix` types, and finding it there
+/// would tie this crate to the shape of every one of them. An `Rc` rather than
+/// an `Arc`, because `gix` asks for credentials on the thread that is cloning.
+#[derive(Debug, Clone, Default)]
+pub(super) struct Shortfalls(Rc<Cell<Option<Shortfall>>>);
+
+impl Shortfalls {
+    pub(super) fn last(&self) -> Option<Shortfall> {
+        self.0.get()
+    }
+}
+
 /// The credentials callback a fetch is given: `helpers`, run with every
-/// prompt turned off.
+/// prompt turned off, noting in `shortfalls` whatever they could not supply.
 ///
 /// `helpers` takes the prompt options it is to run with, because that is where
 /// `gix` decides whether to ask a person: [`configured`] is the real cascade,
@@ -31,15 +59,25 @@ use gix::prompt;
 /// front end supplies needs this callback to arrive through anyway.
 pub(super) fn never_prompting(
     mut helpers: impl FnMut(Action, prompt::Options) -> protocol::Result,
+    shortfalls: Shortfalls,
 ) -> impl FnMut(Action) -> protocol::Result {
     move |action| {
-        helpers(
+        // `gix` sends an `Erase` only once the server has refused what the
+        // `Get` before it answered.
+        let refused = matches!(action, Action::Erase(_));
+        let answer = helpers(
             action,
             prompt::Options {
                 askpass: None,
                 mode: prompt::Mode::Disable,
             },
-        )
+        );
+        if refused {
+            shortfalls.0.set(Some(Shortfall::Refused));
+        } else if let Err(protocol::Error::IdentityMissing { .. }) = answer {
+            shortfalls.0.set(Some(Shortfall::Missing));
+        }
+        answer
     }
 }
 

@@ -11,7 +11,7 @@ use std::sync::atomic::AtomicBool;
 
 use thiserror::Error;
 
-use super::credentials;
+use super::credentials::{self, Shortfall, Shortfalls};
 
 /// A clone that is on disk and ready to be read.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -43,6 +43,7 @@ pub fn clone(url: &str, reference: Option<&str>, into: &Path) -> Result<Clone, G
         })?;
     }
 
+    let shortfalls = Shortfalls::default();
     let mut prepare = gix::prepare_clone(url, into)
         .map_err(|error| GitError::Url {
             url: url.to_owned(),
@@ -55,12 +56,16 @@ pub fn clone(url: &str, reference: Option<&str>, into: &Path) -> Result<Clone, G
         // Every connection the clone opens, not only the first: a shallow
         // clone connects once to find the branch and again to fetch it, and
         // either one may be asked for a credential.
-        .configure_connection(|connection| {
-            let repository = connection.remote().repo().clone();
-            connection.set_credentials(credentials::never_prompting(credentials::configured(
-                repository,
-            )));
-            Ok(())
+        .configure_connection({
+            let shortfalls = shortfalls.clone();
+            move |connection| {
+                let repository = connection.remote().repo().clone();
+                connection.set_credentials(credentials::never_prompting(
+                    credentials::configured(repository),
+                    shortfalls.clone(),
+                ));
+                Ok(())
+            }
         });
 
     if let Some(reference) = reference {
@@ -78,10 +83,7 @@ pub fn clone(url: &str, reference: Option<&str>, into: &Path) -> Result<Clone, G
     let interrupt = AtomicBool::new(false);
     let (mut checkout, _) = prepare
         .fetch_then_checkout(gix::progress::Discard, &interrupt)
-        .map_err(|error| GitError::Fetch {
-            url: url.to_owned(),
-            detail: error.to_string(),
-        })?;
+        .map_err(|error| fetch_failed(url, shortfalls.last(), error.to_string()))?;
     let (repository, _) = checkout
         .main_worktree(gix::progress::Discard, &interrupt)
         .map_err(|error| GitError::Checkout {
@@ -98,6 +100,51 @@ pub fn clone(url: &str, reference: Option<&str>, into: &Path) -> Result<Clone, G
         // having nothing in it.
         revision: repository.head_id().ok().map(|id| id.to_string()),
     })
+}
+
+/// What a failed fetch is reported as: the credential it lacked, when that is
+/// what stopped it, and otherwise what `gix` said.
+fn fetch_failed(url: &str, shortfall: Option<Shortfall>, detail: String) -> GitError {
+    match shortfall {
+        Some(Shortfall::Missing) => GitError::Credentials { url: redacted(url) },
+        // ssh authenticates with keys of its own, and `gix` asks the helpers
+        // only for a user name to hand it. A refusal there means ssh had no
+        // key the server takes, which is as missing as a credential gets.
+        Some(Shortfall::Refused) if is_ssh(url) => GitError::Credentials { url: redacted(url) },
+        // Over https a refusal is of a credential a helper did give, and
+        // `gix` already says so.
+        Some(Shortfall::Refused) | None => GitError::Fetch {
+            url: url.to_owned(),
+            detail,
+        },
+    }
+}
+
+/// Whether `url` is fetched by running ssh, the scp-like `host:path` included.
+fn is_ssh(url: &str) -> bool {
+    gix::url::parse(url).is_ok_and(|url| url.scheme == gix::url::Scheme::Ssh)
+}
+
+/// `url` without the user name and password a `scheme://` URL can carry before
+/// its host, so an error can name a source without repeating a token somebody
+/// typed into it.
+///
+/// The scp-like form (`git@host:path`) is left alone: what it carries before
+/// the `@` can only be a user name. Parsing with `gix::url` and dropping the
+/// user was the other way, and is rejected because the parser also rewrites
+/// what it keeps (a default port dropped, a scheme lowercased), so the error
+/// would name a URL nobody typed.
+fn redacted(url: &str) -> String {
+    let Some(scheme) = url.find("://") else {
+        return url.to_owned();
+    };
+    let host = scheme + "://".len();
+    let rest = &url[host..];
+    let authority = rest.find(['/', '?', '#']).map_or(rest, |end| &rest[..end]);
+    match authority.rfind('@') {
+        Some(at) => format!("{}{}", &url[..host], &rest[at + 1..]),
+        None => url.to_owned(),
+    }
 }
 
 /// Why a repository could not be cloned.
@@ -120,6 +167,17 @@ pub enum GitError {
     },
     #[error("{url}: cannot be fetched: {detail}")]
     Fetch { url: String, detail: String },
+    /// The server asked who is fetching, and nothing that may answer had a
+    /// credential it would take. `url` is shown without its userinfo.
+    #[error(
+        "{url}: needs credentials, and gathering never prompts for them: \
+         configure a git credential helper, or use ssh-agent for an ssh URL"
+    )]
+    Credentials { url: String },
     #[error("{url}: cloned, but its files could not be checked out: {detail}")]
     Checkout { url: String, detail: String },
 }
+
+#[cfg(test)]
+#[path = "git_test.rs"]
+mod tests;
