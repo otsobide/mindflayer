@@ -1,6 +1,9 @@
-//! The commands that decide which projects a workspace manages: `init` at
-//! either level, `link`, `unlink`, and `scan`, which only finds what there is
-//! to link.
+//! The commands that set projects and workspaces up: `init`, which makes
+//! either one, `link` and `unlink`, which decide which projects a workspace
+//! manages, and `scan`, which only finds what there is to link.
+//!
+//! Both levels of `init`, `link` and `unlink` sit side by side here, so a
+//! command's two levels change together.
 
 use std::fmt::Write as _;
 use std::path::{Path, PathBuf};
