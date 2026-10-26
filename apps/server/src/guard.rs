@@ -8,7 +8,7 @@
 use std::sync::Arc;
 
 use axum::extract::{Request, State};
-use axum::http::header::{CONTENT_TYPE, HOST};
+use axum::http::header::{CONTENT_TYPE, HOST, ORIGIN};
 use axum::http::{HeaderMap, StatusCode};
 use axum::middleware::Next;
 use axum::response::{IntoResponse, Response};
@@ -68,7 +68,33 @@ impl Hosts {
     }
 }
 
-/// Turn away a request that does not name this server.
+/// Whether a request's Origin, if it sends one, is the origin it was sent
+/// to: `http://` and the name it reached the server by.
+///
+/// The browser writes Origin, and no page can change it, so when it is there
+/// it says which page asked. It is not always there: a browser leaves it out
+/// of a GET that is not cross-origin, and a script out of everything, so its
+/// absence proves nothing. `null`, sent by a sandboxed frame or a file, is no
+/// origin of the server's.
+///
+/// One origin, not any of the three: a page loaded as `localhost` that asks
+/// `127.0.0.1` is another origin to the browser, which keeps the two names'
+/// cookies apart, and is treated as one here too.
+pub(crate) fn from_itself(name: &str, headers: &HeaderMap) -> bool {
+    let mut origins = headers.get_all(ORIGIN).iter();
+    match (origins.next(), origins.next()) {
+        (None, _) => true,
+        (Some(origin), None) => origin.to_str().is_ok_and(|origin| {
+            // Neither a scheme nor a DNS name depends on its case.
+            let (scheme, host) = origin.split_at_checked(7).unwrap_or_default();
+            scheme.eq_ignore_ascii_case("http://") && host.eq_ignore_ascii_case(name)
+        }),
+        (Some(_), Some(_)) => false,
+    }
+}
+
+/// Turn away a request that does not name this server, or that a page of
+/// another origin sent.
 ///
 /// Every request, not only those under `/api`: the launch link is answered
 /// with the cookie, and a rebound page has no business with the panel either.
@@ -77,10 +103,17 @@ pub(crate) async fn same_origin(
     request: Request,
     next: Next,
 ) -> Response {
-    if hosts.named(request.headers()).is_none() {
+    let path = request.uri().path();
+    let Some(name) = hosts.named(request.headers()) else {
         return forbidden(
-            request.uri().path(),
+            path,
             &format!("this server answers only as {}", hosts.listed()),
+        );
+    };
+    if !from_itself(name, request.headers()) {
+        return forbidden(
+            path,
+            &format!("this server takes requests only from its own pages, at http://{name}"),
         );
     }
     next.run(request).await

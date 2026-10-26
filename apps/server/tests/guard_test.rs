@@ -67,6 +67,29 @@ async fn a_request_the_panel_would_not_send_is_refused() {
             ],
             StatusCode::FORBIDDEN,
         ),
+        (
+            "a page on another site",
+            vec![set("origin", "https://attacker.example")],
+            StatusCode::FORBIDDEN,
+        ),
+        (
+            "a page on the same site, from another port",
+            vec![set(
+                "origin",
+                format!("http://127.0.0.1:{}", port.wrapping_add(1)),
+            )],
+            StatusCode::FORBIDDEN,
+        ),
+        (
+            "a page under another of the server's names",
+            vec![set("origin", format!("http://localhost:{port}"))],
+            StatusCode::FORBIDDEN,
+        ),
+        (
+            "a sandboxed frame or a file",
+            vec![set("origin", "null")],
+            StatusCode::FORBIDDEN,
+        ),
     ];
     for (case, changes, status) in cases {
         let reply = deliver(&server, from_the_panel(&server, &changes)).await;
@@ -85,8 +108,15 @@ async fn a_request_the_panel_would_send_gets_through() {
     let cases: Vec<(&str, Vec<Change>)> = vec![
         ("as the launch link names it", vec![]),
         (
-            "as localhost",
-            vec![set("host", format!("localhost:{port}"))],
+            "with its own origin",
+            vec![set("origin", format!("http://127.0.0.1:{port}"))],
+        ),
+        (
+            "as localhost, from a page loaded as localhost",
+            vec![
+                set("host", format!("localhost:{port}")),
+                set("origin", format!("http://localhost:{port}")),
+            ],
         ),
         ("as [::1]", vec![set("host", format!("[::1]:{port}"))]),
         (

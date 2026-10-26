@@ -68,3 +68,54 @@ fn a_refusal_lists_the_names_the_server_answers_as() {
         "127.0.0.1:4000, localhost:4000 or [::1]:4000"
     );
 }
+
+/// Headers holding these Origins.
+fn origins(origins: &[&str]) -> HeaderMap {
+    let mut headers = HeaderMap::new();
+    for origin in origins {
+        headers.append(ORIGIN, HeaderValue::from_str(origin).unwrap());
+    }
+    headers
+}
+
+#[test]
+fn a_request_without_an_origin_is_not_held_to_one() {
+    assert!(from_itself("127.0.0.1:4000", &origins(&[])));
+}
+
+#[test]
+fn an_origin_must_be_the_one_the_request_was_sent_to() {
+    assert!(from_itself(
+        "127.0.0.1:4000",
+        &origins(&["http://127.0.0.1:4000"])
+    ));
+    assert!(from_itself("[::1]:4000", &origins(&["http://[::1]:4000"])));
+    assert!(from_itself(
+        "localhost:4000",
+        &origins(&["HTTP://LOCALHOST:4000"])
+    ));
+
+    for other in [
+        "https://attacker.example",
+        "http://attacker.example:4000",
+        "http://127.0.0.1:4001",
+        "http://localhost:4000",
+        "https://127.0.0.1:4000",
+        "http://127.0.0.1:4000/",
+        "127.0.0.1:4000",
+        "null",
+        "",
+    ] {
+        assert!(
+            !from_itself("127.0.0.1:4000", &origins(&[other])),
+            "{other:?}"
+        );
+    }
+}
+
+#[test]
+fn a_request_with_two_origins_is_from_neither() {
+    let both = origins(&["http://127.0.0.1:4000", "http://127.0.0.1:4000"]);
+
+    assert!(!from_itself("127.0.0.1:4000", &both));
+}
