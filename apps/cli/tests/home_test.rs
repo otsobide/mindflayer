@@ -68,9 +68,13 @@ fn flayer_show_reads_the_default_workspace_without_making_it() {
     assert!(outcome.stdout.contains("Ship it"), "{}", outcome.stdout);
     assert_eq!(outcome.stderr, vec![hint(home.path())]);
     assert!(outcome.ok);
-    // No marker written. The folder itself may be there already, holding the
-    // skill, when that is where the workspace keeps its own.
-    assert!(!home.path().join(FLAYER_DIR).join(FLAYER_CONFIG).exists());
+    // `.mindflayer` is there already, holding the library the skill is in,
+    // and the read adds nothing beside it: no marker, no ledger, no cache.
+    let inside: Vec<_> = fs::read_dir(home.path().join(FLAYER_DIR))
+        .unwrap()
+        .map(|entry| entry.unwrap().file_name())
+        .collect();
+    assert_eq!(inside, ["library"]);
 }
 
 #[test]
