@@ -12,6 +12,7 @@ mod auth;
 mod backend;
 mod server;
 mod token;
+mod writer;
 
 pub use backend::Backend;
 pub use server::{Listening, Server};

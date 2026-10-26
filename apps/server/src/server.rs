@@ -12,6 +12,7 @@ use axum::Router;
 use crate::api::{self, Api};
 use crate::auth::{self, Gate};
 use crate::token::Token;
+use crate::writer::Writer;
 use crate::Backend;
 
 /// A server not yet listening: a backend, and how to serve it.
@@ -38,7 +39,7 @@ impl<B: Backend> Server<B> {
         let listener = TcpListener::bind((Ipv4Addr::LOCALHOST, 0))?;
         let address = listener.local_addr()?;
         let token = Token::issue();
-        let router = route(self, &token, address.port());
+        let router = route(self, &token, address.port())?;
         Ok(Listening {
             listener,
             address,
@@ -105,14 +106,17 @@ impl Listening {
 }
 
 /// Every route, behind what guards it.
-fn route<B: Backend>(server: Server<B>, token: &Token, port: u16) -> Router {
+fn route<B: Backend>(server: Server<B>, token: &Token, port: u16) -> io::Result<Router> {
     let gate = Arc::new(Gate::new(token.clone(), port));
+    let backend = Arc::new(server.backend);
     let api = Arc::new(Api {
-        backend: Arc::new(server.backend),
+        writer: Writer::start(Arc::clone(&backend))?,
+        backend,
     });
-    Router::new()
+    let router = Router::new()
         .route("/api/query", endpoint(post(api::query::<B>)))
         .route("/api/commands/preview", endpoint(post(api::preview::<B>)))
+        .route("/api/commands", endpoint(post(api::commands::<B>)))
         // The bare prefix and everything under it that names no endpoint,
         // so a typo in a script gets a 404 it can read.
         .route("/api", any(api::missing))
@@ -125,7 +129,8 @@ fn route<B: Backend>(server: Server<B>, token: &Token, port: u16) -> Router {
         ))
         .with_state(api)
         // Outside every route, so it sees `/` before anything that serves it.
-        .layer(middleware::from_fn_with_state(gate, auth::exchange))
+        .layer(middleware::from_fn_with_state(gate, auth::exchange));
+    Ok(router)
 }
 
 /// An endpoint that answers a method it does not take in JSON, like every

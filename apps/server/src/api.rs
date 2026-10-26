@@ -9,11 +9,13 @@ use axum::response::{IntoResponse, Response};
 use axum::Json;
 use serde_json::json;
 
+use crate::writer::Writer;
 use crate::Backend;
 
 /// What every handler under `/api` shares.
 pub(crate) struct Api<B: Backend> {
     pub(crate) backend: Arc<B>,
+    pub(crate) writer: Writer<B::Task>,
 }
 
 /// `POST /api/query`: a read, answered by the backend.
@@ -57,6 +59,22 @@ pub(crate) async fn preview<B: Backend>(
             StatusCode::INTERNAL_SERVER_ERROR,
             "the backend failed while previewing the task",
         ),
+    }
+}
+
+/// `POST /api/commands`: run a task, once every task that arrived before it
+/// has run, and say what its lines were and what came of them.
+pub(crate) async fn commands<B: Backend>(
+    State(api): State<Arc<Api<B>>>,
+    body: Result<Json<B::Task>, JsonRejection>,
+) -> Response {
+    let task = match body {
+        Ok(Json(task)) => task,
+        Err(rejection) => return refused(rejection),
+    };
+    match api.writer.run(task).await {
+        Ok(entry) => Json(entry).into_response(),
+        Err(message) => error(StatusCode::INTERNAL_SERVER_ERROR, &message),
     }
 }
 
