@@ -837,15 +837,15 @@ goes into the project's own `CLAUDE.md`, or
 that declares `paths:` goes only there. One core predicate (#44) decides,
 walking every ancestor directory and ignoring the user memory file. The root
 `AGENTS.md` is the only per-project file all three agents read, and Codex has
-no include mechanism; Claude 2.1.277+ reads it natively only when no
+no include mechanism. Claude 2.1.277+ reads it natively only when no
 `CLAUDE.md`, `.claude/CLAUDE.md` or `CLAUDE.local.md` sits in the start
-directory or above it, which is the case the import covers. Rejected: per-agent
-files, under which Claude reads every rule twice when there is no `CLAUDE.md`;
-and OpenCode's `instructions` globs with Codex's `developer_instructions`,
-unverified and honoured only in trusted projects. Mindflayer never creates a
-`CLAUDE.local.md`, which silently disables `AGENTS.md`, and warns when an
-`AGENTS.override.md` hides the file from Codex or the chain nears Codex's 32
-KiB budget. Unblocks #17, #42, #43, #44 and #45.
+directory or above it; the import covers the other case, and Claude before
+2.1.277. Rejected: per-agent files, under which Claude reads every rule twice
+when there is no `CLAUDE.md`; and OpenCode's `instructions` globs with Codex's
+`developer_instructions`, unverified and honoured only in trusted projects.
+Mindflayer never creates a `CLAUDE.local.md`, which silently disables
+`AGENTS.md`, and warns when an `AGENTS.override.md` hides the file from Codex
+or the chain nears Codex's 32 KiB budget. Unblocks #17, #42, #43, #44 and #45.
 
 ### D-04: An edited copy is detected, not disowned
 
