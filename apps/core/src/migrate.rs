@@ -4,12 +4,21 @@
 //! one made before the library names `skills` and `rules` beside its
 //! projects: `~/skills` and `~/rules`, for the workspace in a home directory.
 //! It is read exactly as it was written, so nothing moves them but being
-//! asked to (D-05). [`library_plan`] says what asking would do: each of the
-//! workspace's own artifacts moved into `.mindflayer/library/<kind>`, and the
-//! marker's `[directories]` pointed there, with a copy of the marker as it
-//! was kept beside it.
+//! asked to (D-05). [`library_plan`] says what asking would do, and
+//! [`library`] does it: each of the workspace's own artifacts moved into
+//! `.mindflayer/library/<kind>`, and the marker's `[directories]` pointed
+//! there, with a copy of the marker as it was kept beside it.
+//!
+//! The ledger is not opened. An installation of one of the workspace's own
+//! records its origin as `workspace`, which names no folder, and its copies
+//! by where they are in the project, so nothing in it says where the
+//! workspace's own were, and every record reads the same once they have
+//! moved: the copy is still compared with the offer, found wherever the
+//! marker now says. A workspace that loads this one names its root, not its
+//! folders, and reads them through its marker as well.
 
 use std::fs;
+use std::io;
 use std::path::{Path, PathBuf};
 
 use thiserror::Error;
@@ -96,6 +105,62 @@ pub enum Refusal {
     Unlisted(DiscoveryFailure),
     #[error("{0}, so which of the workspace's own are that project's cannot be told")]
     Unreadable(WorkspaceError),
+}
+
+/// What [`library`] did.
+#[derive(Debug)]
+pub struct Migrated {
+    /// What was planned under the lock, and so done.
+    pub plan: Plan,
+    /// Where the marker was kept as it was; `None` when there was nothing to
+    /// do, and so nothing was written.
+    pub backup: Option<PathBuf>,
+}
+
+/// Why [`library`] did nothing, or stopped and put back what it had moved.
+#[derive(Debug, Error)]
+pub enum MigrateError {
+    #[error(transparent)]
+    Workspace(#[from] WorkspaceError),
+    #[error("nothing moved: {}", .0.iter().map(ToString::to_string).collect::<Vec<_>>().join("; "))]
+    Refused(Vec<Refusal>),
+    #[error("{path}: the marker cannot be kept as it was: {source}")]
+    Backup {
+        path: PathBuf,
+        #[source]
+        source: io::Error,
+    },
+    #[error("{from}: cannot be moved to {to}: {source}")]
+    Move {
+        from: PathBuf,
+        to: PathBuf,
+        #[source]
+        source: io::Error,
+        /// What had moved before and could not be put back
+        /// ([`MigrateError::stranded`]).
+        stranded: Vec<Move>,
+    },
+    #[error("{source}")]
+    Marker {
+        /// Boxed, as every error here would otherwise be the size of the
+        /// largest a workspace can fail with and a list beside it.
+        #[source]
+        source: Box<WorkspaceError>,
+        stranded: Vec<Move>,
+    },
+}
+
+impl MigrateError {
+    /// What had moved into the library when the migration failed and could
+    /// not be put back where it was, for a front end to say: the marker still
+    /// names the old folders, so it is nowhere the workspace looks until it
+    /// is moved back by hand.
+    pub fn stranded(&self) -> &[Move] {
+        match self {
+            MigrateError::Move { stranded, .. } | MigrateError::Marker { stranded, .. } => stranded,
+            _ => &[],
+        }
+    }
 }
 
 /// What moving `workspace`'s own into its library would do, read from what is
@@ -191,6 +256,82 @@ pub fn library_plan(workspace: &FlayerWorkspace) -> Plan {
         });
     }
     plan
+}
+
+/// Move `workspace`'s own into its library, as [`library_plan`] says, and
+/// point its marker there, keeping the marker as it was beside it.
+///
+/// Planned again once the workspace's lock is held, from the marker on disk
+/// rather than `workspace`, so what is moved is what is there: a plan shown
+/// a minute before can be out of date, and a second writer must not change
+/// the marker between the plan and the rewrite. Refused as a whole when the
+/// plan has any [`Refusal`], and a no-op, writing nothing, when it plans
+/// nothing, which is what makes a second run harmless.
+///
+/// All or nothing as far as a rename allows: the marker is kept first, then
+/// each artifact is renamed into place, then the marker is rewritten, and a
+/// step that fails puts back every artifact already moved and takes the kept
+/// copy away, so the workspace reads as it did before. A rename rather than
+/// a copy, because the library is inside the workspace and so, but for a
+/// folder mounted in between, on the same filesystem: a move across two is
+/// not attempted, and fails naming both paths, as an install's does. The
+/// folders a move emptied are removed, the kind's own included, so a home
+/// workspace leaves no empty `~/skills` behind; anything else in them stays.
+///
+/// An [`unmade`](FlayerWorkspace::unmade) workspace keeps its own in the
+/// library it would be made with, so there is nothing to move and nothing
+/// is made.
+pub fn library(workspace: &mut FlayerWorkspace) -> Result<Migrated, MigrateError> {
+    if !workspace.is_made() {
+        return Ok(Migrated {
+            plan: library_plan(workspace),
+            backup: None,
+        });
+    }
+    let _lock = workspace.lock().map_err(WorkspaceError::from)?;
+    let mut current = FlayerWorkspace::open(workspace.root())?;
+    let plan = library_plan(&current);
+    if !plan.refusals.is_empty() {
+        return Err(MigrateError::Refused(plan.refusals));
+    }
+    if plan.is_empty() {
+        *workspace = current;
+        return Ok(Migrated { plan, backup: None });
+    }
+
+    keep(&current.config_path(), &plan.backup).map_err(|source| MigrateError::Backup {
+        path: plan.backup.clone(),
+        source,
+    })?;
+    let mut moved: Vec<Move> = Vec::new();
+    for one in &plan.moves {
+        if let Err(source) = move_one(one) {
+            let stranded = put_back(&moved);
+            let _ = fs::remove_file(&plan.backup);
+            return Err(MigrateError::Move {
+                from: one.from.clone(),
+                to: one.to.clone(),
+                source,
+                stranded,
+            });
+        }
+        moved.push(one.clone());
+    }
+    if let Err(source) =
+        current.edit_marker_held(|document| point_at_library(document, &plan.kinds))
+    {
+        let stranded = put_back(&moved);
+        let _ = fs::remove_file(&plan.backup);
+        return Err(MigrateError::Marker {
+            source: Box::new(source),
+            stranded,
+        });
+    }
+    clear_emptied(&plan);
+
+    *workspace = current;
+    let backup = Some(plan.backup.clone());
+    Ok(Migrated { plan, backup })
 }
 
 /// Where `workspace`'s marker is kept before a migration rewrites it: beside
@@ -320,4 +461,108 @@ fn relative_link(path: &Path) -> Option<PathBuf> {
     fs::read_link(path)
         .ok()
         .filter(|target| target.is_relative())
+}
+
+/// Write a copy of the marker at `from` to `to`, which must not exist.
+///
+/// `create_new`, so a copy an earlier migration kept is never written over,
+/// though the plan refuses one already: something made there since is
+/// somebody's. A copy cut short is taken away rather than left looking
+/// whole. With the marker's permissions, as a rewrite of it keeps them.
+fn keep(from: &Path, to: &Path) -> io::Result<()> {
+    use std::io::Write as _;
+
+    let contents = fs::read(from)?;
+    let mut file = fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(to)?;
+    if let Err(error) = file.write_all(&contents).and_then(|()| file.sync_all()) {
+        drop(file);
+        let _ = fs::remove_file(to);
+        return Err(error);
+    }
+    if let Ok(metadata) = fs::metadata(from) {
+        let _ = fs::set_permissions(to, metadata.permissions());
+    }
+    Ok(())
+}
+
+/// Rename one artifact into the library, making the folders above it.
+///
+/// Looked for again just before: a rename onto a file replaces it, and
+/// something made there since the plan is somebody's.
+fn move_one(one: &Move) -> io::Result<()> {
+    if let Some(parent) = one.to.parent() {
+        fs::create_dir_all(parent)?;
+    }
+    if is_there(&one.to) {
+        return Err(io::Error::from(io::ErrorKind::AlreadyExists));
+    }
+    fs::rename(&one.from, &one.to)
+}
+
+/// Put every artifact in `moved` back where it was, the last one first, and
+/// say which could not be.
+fn put_back(moved: &[Move]) -> Vec<Move> {
+    moved
+        .iter()
+        .rev()
+        .filter(|one| fs::rename(&one.to, &one.from).is_err())
+        .cloned()
+        .collect()
+}
+
+/// Point every kind in `kinds` at its folder in the library, changing only
+/// the value of its line, so the comment beside it and every other byte of
+/// the marker stay as they were.
+fn point_at_library(
+    document: &mut toml_edit::DocumentMut,
+    kinds: &[Repoint],
+) -> Result<(), String> {
+    let table = document
+        .entry("directories")
+        .or_insert_with(toml_edit::table)
+        .as_table_like_mut()
+        .ok_or_else(|| String::from("`directories` is not a table"))?;
+    for repoint in kinds {
+        let library = Directories::library_for(repoint.kind);
+        let library = paths::to_config_string(&library).unwrap_or_default();
+        match table
+            .get_mut(repoint.kind.folder())
+            .and_then(toml_edit::Item::as_value_mut)
+        {
+            Some(value) => {
+                let decor = value.decor().clone();
+                *value = toml_edit::Value::from(library);
+                *value.decor_mut() = decor;
+            }
+            None => {
+                table.insert(repoint.kind.folder(), toml_edit::value(library));
+            }
+        }
+    }
+    Ok(())
+}
+
+/// Remove every folder a move left empty, from the one each artifact was in
+/// up to its kind's folder, which goes too once nothing is left in it.
+///
+/// `remove_dir`, which refuses a folder with anything in it, so what is not
+/// an artifact stays, and with it the folders above it: a `README.md` beside
+/// the skills keeps `~/skills`. Best effort: a folder left behind is litter,
+/// not a reason to call a migration that moved everything a failure.
+fn clear_emptied(plan: &Plan) {
+    for one in &plan.moves {
+        let Some(repoint) = plan.kinds.iter().find(|repoint| repoint.kind == one.kind) else {
+            continue;
+        };
+        let mut folder = one.from.parent();
+        while let Some(current) = folder {
+            if !current.starts_with(&repoint.from) || fs::remove_dir(current).is_err() {
+                break;
+            }
+            folder = current.parent();
+        }
+    }
 }

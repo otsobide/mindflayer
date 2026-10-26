@@ -5,7 +5,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use mindflayer_core::migrate::{self, Left, Move, Refusal};
-use mindflayer_core::{create, FlayerWorkspace, Kind, MindProject};
+use mindflayer_core::{create, Catalog, FlayerWorkspace, Kind, MindProject};
 use tempfile::TempDir;
 
 mod common;
@@ -216,4 +216,213 @@ fn a_link_aimed_by_a_relative_route_is_refused_by_the_plan() {
         "{:?}",
         plan.refusals
     );
+}
+
+// ---------------------------------------------------------------------------
+// Migrating
+// ---------------------------------------------------------------------------
+
+#[test]
+fn migrating_moves_them_and_points_the_marker_at_the_library() {
+    let (dir, mut workspace) = beside();
+    let root = dir.path().to_path_buf();
+    let before = marker(&workspace);
+
+    let migrated = migrate::library(&mut workspace).unwrap();
+
+    assert_eq!(migrated.plan.moves.len(), 2);
+    assert!(library(&root, Kind::Skill)
+        .join("commit-style/SKILL.md")
+        .is_file());
+    assert!(library(&root, Kind::Rule)
+        .join("git/no-force-push.md")
+        .is_file());
+    // The folders they left are gone, so a home keeps no empty ~/skills.
+    assert!(!root.join("skills").exists());
+    assert!(!root.join("rules").exists());
+    // Only the two values changed, the comments above them and every other
+    // byte as they were.
+    assert_eq!(
+        marker(&workspace),
+        before
+            .replace(
+                "skills = \"skills\"",
+                "skills = \".mindflayer/library/skills\""
+            )
+            .replace("rules = \"rules\"", "rules = \".mindflayer/library/rules\"")
+    );
+    let backup = root.join(".mindflayer/flayer.toml.v2");
+    assert_eq!(migrated.backup.as_deref(), Some(backup.as_path()));
+    assert_eq!(fs::read_to_string(&backup).unwrap(), before);
+    // The workspace handed back is the one on disk, and finds them there.
+    assert_eq!(workspace, FlayerWorkspace::open(&root).unwrap());
+    let catalog = Catalog::discover(&[workspace.own()]);
+    let names: Vec<&str> = catalog.artifacts().iter().map(|a| a.name()).collect();
+    assert_eq!(names, ["commit-style", "git/no-force-push"]);
+    assert!(catalog.failures().is_empty());
+}
+
+#[test]
+fn a_second_migration_changes_nothing() {
+    let (dir, mut workspace) = beside();
+    migrate::library(&mut workspace).unwrap();
+    let after_first = marker(&workspace);
+    let modified = fs::metadata(workspace.config_path())
+        .unwrap()
+        .modified()
+        .unwrap();
+    let backup = dir.path().join(".mindflayer/flayer.toml.v2");
+    let kept = fs::read_to_string(&backup).unwrap();
+
+    let again = migrate::library(&mut workspace).unwrap();
+
+    assert!(again.plan.is_empty());
+    assert_eq!(again.backup, None);
+    assert_eq!(marker(&workspace), after_first);
+    assert_eq!(
+        fs::metadata(workspace.config_path())
+            .unwrap()
+            .modified()
+            .unwrap(),
+        modified
+    );
+    assert_eq!(fs::read_to_string(&backup).unwrap(), kept);
+}
+
+#[test]
+fn a_refused_migration_moves_nothing_and_writes_nothing() {
+    let (dir, mut workspace) = beside();
+    let before = marker(&workspace);
+    fs::create_dir_all(library(dir.path(), Kind::Rule).join("git/no-force-push.md")).unwrap();
+
+    let error = migrate::library(&mut workspace).unwrap_err();
+
+    assert!(
+        matches!(&error, migrate::MigrateError::Refused(refusals) if refusals.len() == 1),
+        "{error}"
+    );
+    assert!(error.to_string().starts_with("nothing moved: "), "{error}");
+    assert!(dir.path().join("skills/commit-style/SKILL.md").is_file());
+    assert!(!library(dir.path(), Kind::Skill).exists());
+    assert_eq!(marker(&workspace), before);
+    assert!(!dir.path().join(".mindflayer/flayer.toml.v2").exists());
+}
+
+#[test]
+fn a_move_that_fails_puts_back_what_had_moved() {
+    let (dir, mut workspace) = beside();
+    let before = marker(&workspace);
+    // The skill moves first; the rule's folder cannot be made over a file.
+    fs::create_dir_all(dir.path().join(".mindflayer/library")).unwrap();
+    fs::write(library(dir.path(), Kind::Rule), "in the way\n").unwrap();
+
+    let error = migrate::library(&mut workspace).unwrap_err();
+
+    assert!(
+        matches!(&error, migrate::MigrateError::Move { from, .. }
+            if *from == dir.path().join("rules/git/no-force-push.md")),
+        "{error}"
+    );
+    assert!(error.stranded().is_empty());
+    assert!(dir.path().join("skills/commit-style/SKILL.md").is_file());
+    assert!(dir.path().join("rules/git/no-force-push.md").is_file());
+    assert!(!library(dir.path(), Kind::Skill)
+        .join("commit-style")
+        .exists());
+    assert_eq!(marker(&workspace), before);
+    assert!(!dir.path().join(".mindflayer/flayer.toml.v2").exists());
+}
+
+#[test]
+fn what_is_not_an_artifact_stays_and_keeps_its_folder() {
+    let (dir, mut workspace) = beside();
+    fs::write(dir.path().join("skills/README.md"), "Ours.\n").unwrap();
+
+    migrate::library(&mut workspace).unwrap();
+
+    assert!(dir.path().join("skills/README.md").is_file());
+    assert!(!dir.path().join("skills/commit-style").exists());
+    // A rule's folders went with the last rule in them.
+    assert!(!dir.path().join("rules").exists());
+}
+
+#[test]
+fn a_project_at_the_root_keeps_what_it_shares_and_the_marker_moves_on() {
+    let dir = TempDir::new().unwrap();
+    let root = dir.path();
+    let (project, _) = MindProject::init(root).unwrap();
+    let (mut workspace, _) = FlayerWorkspace::init_with(root, &common::beside()).unwrap();
+    workspace.link(&project).unwrap();
+    create(&project, Kind::Skill, "deploy", "The project's").unwrap();
+
+    let migrated = migrate::library(&mut workspace).unwrap();
+
+    assert!(migrated.plan.moves.is_empty());
+    assert!(root.join("skills/deploy/SKILL.md").is_file());
+    assert_eq!(
+        workspace.own().directory_for(Kind::Skill),
+        library(root, Kind::Skill)
+    );
+    // No longer one folder for both, so the workspace counts it as its own
+    // of every kind, and the project's skill is the project's.
+    assert_eq!(workspace.own_kinds(), Kind::ALL);
+    let catalog = Catalog::discover(&[workspace.own()]);
+    assert!(catalog.is_empty());
+}
+
+#[test]
+fn an_installed_skill_is_still_current_once_its_source_has_moved() {
+    use mindflayer_core::install::{self, Installed, Standing};
+
+    let (dir, mut workspace) = beside();
+    let alpha = dir.path().join("alpha");
+    fs::create_dir(&alpha).unwrap();
+    let (project, _) = MindProject::init(&alpha).unwrap();
+    workspace.link(&project).unwrap();
+    let ledger = workspace.ledger().unwrap();
+    let offered = |workspace: &FlayerWorkspace| {
+        install::offered(
+            workspace,
+            &ledger,
+            &project,
+            Kind::Skill,
+            "commit-style",
+            None,
+        )
+        .unwrap()
+    };
+    install::install(&workspace, &ledger, &project, &offered(&workspace)).unwrap();
+    let recorded = ledger
+        .installation("alpha", Kind::Skill, "commit-style")
+        .unwrap();
+
+    migrate::library(&mut workspace).unwrap();
+
+    let candidate = offered(&workspace);
+    assert_eq!(candidate.standing, Standing::Installed);
+    assert_eq!(candidate.origin(), "workspace");
+    assert!(install::is_current(&workspace, &project, &candidate));
+    assert_eq!(
+        ledger
+            .installation("alpha", Kind::Skill, "commit-style")
+            .unwrap(),
+        recorded
+    );
+    let again = install::install(&workspace, &ledger, &project, &candidate).unwrap();
+    assert!(
+        matches!(again.installed, Installed::Unchanged { .. }),
+        "{:?}",
+        again.installed
+    );
+}
+
+#[test]
+fn an_unmade_workspace_has_nothing_to_move_and_is_not_made() {
+    let dir = TempDir::new().unwrap();
+    let mut workspace = FlayerWorkspace::unmade(dir.path()).unwrap();
+
+    let migrated = migrate::library(&mut workspace).unwrap();
+
+    assert!(migrated.plan.is_empty());
+    assert!(!dir.path().join(".mindflayer").exists());
 }

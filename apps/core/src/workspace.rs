@@ -584,7 +584,9 @@ impl FlayerWorkspace {
     /// runs when it has clones to rewrite — so a front end
     /// has no need to, and must not while it asks core to write: the lock is
     /// not re-entrant, and a writer that asks for it twice waits for itself.
-    /// Readers never take it.
+    /// Moving the workspace's own into its library
+    /// ([`crate::migrate::library`]) takes it too, from its plan to its
+    /// rewrite of the marker. Readers never take it.
     pub fn lock(&self) -> Result<WorkspaceLock, LockError> {
         self.lock_waiting(lock::WAIT)
     }
