@@ -7,6 +7,7 @@
 use std::io;
 use std::path::{Path, PathBuf};
 
+use mindflayer_core::activate::{self, ActivateError, WORKSPACE_VARIABLE};
 use mindflayer_core::gather::GatherError;
 use mindflayer_core::ledger::LedgerError;
 use mindflayer_core::{
@@ -62,6 +63,18 @@ pub enum CliError {
     Lifecycle(#[from] LifecycleError),
     #[error(transparent)]
     Template(#[from] TemplateError),
+    #[error(transparent)]
+    Activate(#[from] ActivateError),
+    #[error(
+        "$SHELL is not set; say which shell to write for with --shell ({})",
+        activate::expected()
+    )]
+    NoShell,
+    #[error(
+        "cannot tell which shell `{program}` is; say which to write for with --shell ({})",
+        activate::expected()
+    )]
+    UnknownShell { program: String },
     #[error("nothing removed: this deletes {}; add --yes to go ahead", deleting(.path, .kind, .files))]
     Unconfirmed {
         kind: Kind,
@@ -132,11 +145,11 @@ impl From<ResolveError> for CliError {
 }
 
 /// What chose a workspace that cannot be used, as it was spelled.
-fn named_by(reason: &Reason) -> &'static str {
+fn named_by(reason: &Reason) -> String {
     match reason {
-        Reason::Activated => "$MINDFLAYER_WORKSPACE",
+        Reason::Activated => format!("${WORKSPACE_VARIABLE}"),
         // Core refuses only what was chosen, so the other two never get here.
-        Reason::Explicit | Reason::Above | Reason::Home => "-W",
+        Reason::Explicit | Reason::Above | Reason::Home => String::from("-W"),
     }
 }
 

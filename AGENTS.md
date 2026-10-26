@@ -72,17 +72,18 @@ Three crates in one Cargo workspace, and the panel they serve, each an app
 under `apps/` with its own `Makefile`:
 
 - `apps/core` (`mindflayer-core`): the engine. Projects, workspaces, which
-  workspace a command uses (`resolve`), kinds, the catalog, gathering
-  (`gix`), the SQLite ledger, installing, keeping installs out of git
-  (`exclude`), creating and changing artifacts. Its only I/O is files, and it
-  never reads the environment.
+  workspace a command uses (`resolve`), the shell code that activates one
+  (`activate`), kinds, the catalog, gathering (`gix`), the SQLite ledger,
+  installing, keeping installs out of git (`exclude`), creating and changing
+  artifacts. Its only I/O is files, and it never reads the environment.
 - `apps/cli` (`mindflayer-cli`): the binaries `mind` (`src/main.rs`) and
   `flayer` (`src/bin/flayer.rs`), and the TUI. `src/lib.rs` only re-exports
   the public API. The parsers are in `src/parse.rs`. `src/commands.rs`
   dispatches them and asks core what a command acts on, and each family of
   commands has a file under `src/commands/`: `project` (init, link, unlink,
-  scan), `workspace` (load, unload), `artifact` (add, edit, rename, remove,
-  templates), `read` (list, show, validate), `gather` and `install`.
+  scan), `workspace` (load, unload), `activate` (activate, which),
+  `artifact` (add, edit, rename, remove, templates), `read` (list, show,
+  validate), `gather` and `install`.
   `src/render.rs` holds `Outcome`, `Failure` and the table helpers,
   `src/error.rs` holds `CliError`, and `src/homes.rs` decides the default
   home and the agent homes, and gathers `-W` and `$MINDFLAYER_WORKSPACE`
@@ -320,6 +321,12 @@ These are easy to break from a single file without noticing.
   (`src/overrides/colors.ts`), and the colour mode switches by class
   (`src/color-mode.ts`). `tests/dist.test.ts` builds the panel and checks
   it; `tests/shell.test.ts` fails on any `<style>` element added at run time.
+- **Activating prints, and writes nothing.** `flayer activate` prints core's
+  code (`activate::script`), and nothing on stdout when it fails, so `eval`
+  runs nothing. Its shell comes from `--shell`, then `$SHELL`, read by the
+  front end. The code undoes only what it did, through `flayer-deactivate`
+  and never `deactivate`, and a workspace's name reaches a prompt only
+  through `activate::prompt`.
 - **`Kind` is a closed enum.** To add a kind, follow "Adding a third kind" in
   the architecture doc; the compiler's exhaustive matches are the checklist.
 
@@ -345,6 +352,13 @@ These are easy to break from a single file without noticing.
   library then falls back to the account's real home. Keep it that way.
 - Git sources are built in-process with `gix` (`common::repository`): no
   network and no `git` binary.
+- Tests that run a shell (`apps/cli/tests/shells_test.rs`, Linux only) start
+  it with no startup file and an environment holding only a `PATH`, a
+  temporary `HOME` and what the test sets, so no `MINDFLAYER_*` variable or
+  real shell configuration gets in. A shell, or a python3 to make a
+  virtualenv with, that is not installed is skipped and said on stderr,
+  except under `$CI`, where it fails the test: the `test (cli)` job
+  installs zsh so that both shells run there.
 - The server's suites run against a fake backend with types of its own
   (`common::Fake`), never the CLI's. They bind 127.0.0.1 on port 0 and send
   requests through the router in process (`common::send`), or over loopback,

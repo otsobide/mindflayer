@@ -1070,7 +1070,7 @@ fn mind_calls_the_workspace_in_your_home_the_default_only_when_it_is_not_above()
         |project: &Path| match tui::load_project(project, &Lookup::at_home(Some(home.path())))
             .unwrap()
         {
-            View::Workspace(workspace) => workspace.default,
+            View::Workspace(workspace) => workspace.reason == Some(Reason::Home),
             View::Nowhere => panic!("no screen for {}", project.display()),
         };
 
@@ -1244,7 +1244,7 @@ fn the_first_change_from_the_tui_makes_the_default_workspace() {
         panic!("{:?}", app.view)
     };
     assert!(workspace.made);
-    assert!(workspace.default);
+    assert_eq!(workspace.reason, Some(Reason::Home));
     let drawn = tui_drawn(&app);
     assert!(drawn.contains("default workspace · "), "{drawn}");
     // Made by a line of its own, where the screen showed it.
@@ -1281,7 +1281,7 @@ fn the_first_change_from_the_tui_lands_in_the_default_workspace_not_in_one_above
         panic!("{:?}", app.view)
     };
     assert!(workspace.made);
-    assert!(workspace.default);
+    assert_eq!(workspace.reason, Some(Reason::Home));
     assert_eq!(workspace.root, home);
 }
 
@@ -1654,6 +1654,53 @@ fn opened_on_a_named_workspace_the_tui_runs_every_line_against_it() {
     );
     assert!(!collapse.join("skills/hub-skill").exists());
     assert!(recorded_in_hub(&hub).is_empty());
+}
+
+#[test]
+fn the_header_says_why_the_workspace_on_screen_is_the_one_shown() {
+    let (_dir, outer, hub, _collapse) = hub_beside_outer();
+    let drawn = |lookup: Lookup| {
+        let view = tui::load(&outer, &lookup).unwrap();
+        tui_drawn(&App::new(outer.clone(), view).with_lookup(lookup))
+    };
+
+    let found = drawn(Lookup::default());
+    let named = drawn(Lookup {
+        flag: Some(hub.clone()),
+        ..Lookup::default()
+    });
+    let activated = drawn(Lookup {
+        activated: Some(hub.clone()),
+        ..Lookup::default()
+    });
+
+    let header = |drawn: &str| drawn.lines().next().unwrap_or_default().to_owned();
+    assert!(
+        header(&found).contains("outer  · found above · "),
+        "{found}"
+    );
+    assert!(
+        header(&named).contains("hub  · named with -W · "),
+        "{named}"
+    );
+    assert!(
+        header(&activated).contains("hub  · activated · "),
+        "{activated}"
+    );
+}
+
+#[test]
+fn the_header_of_a_project_on_its_own_gives_no_reason() {
+    let dir = TempDir::new().unwrap();
+    mind(dir.path(), &["init"]).unwrap();
+
+    let drawn = tui_drawn(&mind_tui_in(dir.path()));
+
+    let header = drawn.lines().next().unwrap_or_default();
+    assert!(
+        header.contains("· a project no workspace manages  · "),
+        "{drawn}"
+    );
 }
 
 #[test]

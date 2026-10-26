@@ -34,6 +34,46 @@ fn mind_init_creates_a_project_and_flayer_init_a_workspace() {
 }
 
 #[test]
+fn flayer_init_makes_the_workspace_in_the_directory_it_is_given() {
+    let dir = TempDir::new().unwrap();
+    let writing = dir.path().join("flayers/writing");
+
+    // Typed from where the command works, and made, parents and all, as
+    // `python -m venv` makes the directory it is given.
+    let outcome = flayer(dir.path(), &["init", "flayers/writing"]).unwrap();
+
+    assert_eq!(
+        outcome.stdout,
+        format!(
+            "initialized flayer workspace `writing` in {}\n",
+            writing.join(FLAYER_DIR).display()
+        )
+    );
+    assert!(writing.join(FLAYER_DIR).join(FLAYER_CONFIG).is_file());
+    assert!(!dir.path().join(FLAYER_DIR).exists());
+}
+
+#[test]
+fn flayer_init_given_a_workspace_already_there_changes_nothing() {
+    let dir = TempDir::new().unwrap();
+    flayer(dir.path(), &["init", "writing"]).unwrap();
+    let marker = dir
+        .path()
+        .join("writing")
+        .join(FLAYER_DIR)
+        .join(FLAYER_CONFIG);
+    let before = fs::read_to_string(&marker).unwrap();
+
+    let outcome = flayer(dir.path(), &["init", "writing", "--skills", "elsewhere"]).unwrap();
+
+    assert!(
+        outcome.stdout.contains("already initialized"),
+        "{outcome:?}"
+    );
+    assert_eq!(fs::read_to_string(&marker).unwrap(), before);
+}
+
+#[test]
 fn flayer_init_says_in_the_marker_that_its_own_go_in_its_library() {
     let dir = TempDir::new().unwrap();
 

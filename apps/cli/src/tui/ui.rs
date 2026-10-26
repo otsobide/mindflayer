@@ -6,7 +6,7 @@
 //! command it is about to run, as it is typed. The install screen, when it is
 //! open, draws itself. Nothing here decides anything; [`super::state`] does.
 
-use mindflayer_core::Kind;
+use mindflayer_core::{Kind, Reason};
 use ratatui::layout::{Constraint, Direction, Layout, Rect};
 use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
@@ -148,13 +148,21 @@ fn header(workspace: &Workspace, frame: &mut Frame, area: Rect) {
         0 => shelf,
         count => format!("{shelf} · {count} loaded"),
     };
-    // Said, because it is not where you are: nothing at or above here was a
-    // workspace, so this is the one in your home and, until the first
-    // change makes it, one that is not there yet.
-    let shelf = match (workspace.default, workspace.made) {
-        (true, false) => format!("default workspace, not made yet · {shelf}"),
-        (true, true) => format!("default workspace · {shelf}"),
-        (false, _) => shelf,
+    // Why this workspace, said because where you are does not say it: one
+    // named or activated wins over the one above you, and with neither and
+    // nothing at or above here it is the one in your home, which until the
+    // first change makes it is not there yet.
+    let why = match (workspace.reason, workspace.made) {
+        (Some(Reason::Explicit), _) => Some("named with -W"),
+        (Some(Reason::Activated), _) => Some("activated"),
+        (Some(Reason::Above), _) => Some("found above"),
+        (Some(Reason::Home), false) => Some("default workspace, not made yet"),
+        (Some(Reason::Home), true) => Some("default workspace"),
+        (None, _) => None,
+    };
+    let shelf = match why {
+        Some(why) => format!("{why} · {shelf}"),
+        None => shelf,
     };
     let line = Line::from(vec![
         Span::styled(

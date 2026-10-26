@@ -14,7 +14,7 @@ use std::sync::Arc;
 
 use mindflayer_core::gather::{Progress, Watch};
 use mindflayer_core::url::redacted;
-use mindflayer_core::{paths, Kind, Layout, DEFAULT_SUBDIRECTORY, QUALIFIER};
+use mindflayer_core::{paths, Kind, Layout, Reason, DEFAULT_SUBDIRECTORY, QUALIFIER};
 use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
 use super::minds::{self, Minds};
@@ -68,9 +68,12 @@ pub struct Workspace {
     /// For a project on its own: the workspace above it, which `mind link`
     /// would add it to.
     pub above: Option<PathBuf>,
-    /// The default workspace in the home directory, opened because there was
-    /// none at or above where the TUI was opened.
-    pub default: bool,
+    /// Why this is the workspace on screen, as core's `resolve` answered it:
+    /// named with `-W`, activated, found walking up, or the default one in
+    /// home, opened because none of the others gave one. Asked rather than
+    /// worked out from the root, which does not say: home can be reached all
+    /// four ways. `None` for a project on its own.
+    pub reason: Option<Reason>,
     /// Whether it is on disk. Only the default workspace is ever shown
     /// otherwise: before anything has made it, as it will be once the first
     /// change made from here does.
@@ -849,12 +852,13 @@ impl App {
         };
         let first = workspace.members.iter().position(|member| !member.own);
         let lonely = workspace.scope == Scope::Workspace && workspace.projects() == 0;
+        let default = workspace.reason == Some(Reason::Home);
         let message = match (&workspace.above, workspace.scope) {
-            _ if workspace.default && !workspace.made => Some(format!(
+            _ if default && !workspace.made => Some(format!(
                 "no workspace here or above: your default one, in {}, is made by the first change; `flayer init` makes one here",
                 workspace.root.display()
             )),
-            _ if workspace.default => Some(format!(
+            _ if default => Some(format!(
                 "no workspace here or above: this is your default one, in {}; `flayer init` makes one here",
                 workspace.root.display()
             )),
