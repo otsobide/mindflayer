@@ -55,5 +55,5 @@ pub use template::{Template, TemplateError, TEMPLATES_DIR};
 pub use workspace::{
     Directories, FlayerConfig, FlayerWorkspace, Initialization, Loaded, Marker, Member, MindConfig,
     MindProject, Registration, WorkspaceError, CACHE_DIR, DIRECTORIES_VERSION, FLAYER_CONFIG,
-    FLAYER_DIR, MIND_CONFIG, MIND_DIR,
+    FLAYER_DIR, LIBRARY_DIR, MIND_CONFIG, MIND_DIR,
 };

@@ -8,7 +8,7 @@
 //! A **flayer workspace** sits above them, carrying a `.mindflayer` that
 //! references the mind projects it manages, so their artifacts can be listed
 //! and moved across several projects at once, and holds artifacts of its own
-//! to share with them.
+//! to share with them, in a library inside that `.mindflayer` by default.
 //!
 //! Both are found the way git finds a repository: by walking up from a
 //! starting directory until the marker file appears. Both are described by a
@@ -67,6 +67,15 @@ pub const FLAYER_CONFIG: &str = "flayer.toml";
 /// Kept rather than discarded so a gather can be inspected after the fact, and
 /// so what a source actually contained is still there when its report is not.
 pub const CACHE_DIR: &str = "cache";
+/// Where a workspace keeps its own artifacts when its marker does not say,
+/// inside [`FLAYER_DIR`]: a folder per kind, named after it.
+///
+/// Inside `.mindflayer` rather than beside the projects, where a workspace
+/// made before it keeps them, named in its marker: no agent looks in
+/// `.mindflayer`, so the workspace in a home directory puts no `~/skills` or
+/// `~/rules` above every project there, and a workspace is one folder
+/// wherever it is made.
+pub const LIBRARY_DIR: &str = "library";
 /// Where an install builds its copy before moving it into place, inside a
 /// project's [`MIND_DIR`].
 ///
@@ -187,18 +196,45 @@ impl Directories {
         PathBuf::from(kind.folder())
     }
 
+    /// What a workspace uses when it says nothing: a folder per kind in its
+    /// library, `.mindflayer/library/<kind>` ([`LIBRARY_DIR`]).
+    ///
+    /// Not a project's default, which would put the workspace's own beside
+    /// the repositories it manages, or in a home directory; and spelled with
+    /// `/`, so the marker `init` writes reads the same on every platform.
+    pub fn library_for(kind: Kind) -> PathBuf {
+        PathBuf::from(format!("{FLAYER_DIR}/{LIBRARY_DIR}/{}", kind.folder()))
+    }
+
     /// Every kind's directory spelled out, which is what `init` writes so the
     /// answer is in the file rather than in this function.
     pub fn resolved(&self) -> Vec<(Kind, PathBuf)> {
+        self.resolved_with(Directories::default_for)
+    }
+
+    /// The same, with `default` answering for a kind nothing names: a
+    /// project's default or a workspace's.
+    fn resolved_with(&self, default: fn(Kind) -> PathBuf) -> Vec<(Kind, PathBuf)> {
         Kind::ALL
             .into_iter()
             .map(|kind| {
                 let directory = self
                     .get(kind)
-                    .map_or_else(|| Directories::default_for(kind), Path::to_path_buf);
+                    .map_or_else(|| default(kind), Path::to_path_buf);
                 (kind, directory)
             })
             .collect()
+    }
+
+    /// Every kind named, `default` answering for the ones that were not, and
+    /// any key this build does not recognise carried along.
+    fn filled(mut self, default: fn(Kind) -> PathBuf) -> Self {
+        for kind in Kind::ALL {
+            self.0
+                .entry(kind.folder().to_owned())
+                .or_insert_with(|| default(kind));
+        }
+        self
     }
 }
 
@@ -348,7 +384,8 @@ pub struct FlayerConfig {
     #[serde(default)]
     pub loaded: Vec<PathBuf>,
     /// Where the workspace keeps its own artifacts — the ones it shares with
-    /// every project it manages — relative to its root.
+    /// every project it manages — relative to its root. A kind it does not
+    /// name is kept in its library ([`Directories::library_for`]).
     #[serde(default)]
     pub directories: Directories,
 }
@@ -376,11 +413,15 @@ impl FlayerWorkspace {
 
     /// The same, saying where the workspace keeps its own artifacts.
     ///
-    /// Unlike a project's, those folders are not made here. A workspace sits
-    /// in a directory already full of other people's work — the repositories
-    /// it manages — and puts nothing beside them until there is something to
-    /// put: the first artifact added makes its folder. As with a project, a
-    /// second run changes nothing, `directories` included.
+    /// A kind `directories` does not name is kept in the workspace's library
+    /// ([`Directories::library_for`]), and the marker says so.
+    ///
+    /// Unlike a project's, those folders are not made here, wherever they
+    /// are. One told to keep them beside the repositories it manages puts
+    /// nothing among other people's work until there is something to put,
+    /// and the library follows the same rule rather than a second one: the
+    /// first artifact added makes its folder. As with a project, a second run
+    /// changes nothing, `directories` included.
     ///
     /// A directory outside the workspace, or one sharing a folder with the
     /// shelf or the cache, which gathering writes, is refused before anything
@@ -393,7 +434,7 @@ impl FlayerWorkspace {
         let dir = root.join(FLAYER_DIR);
         let config_path = dir.join(FLAYER_CONFIG);
 
-        for (kind, directory) in directories.resolved() {
+        for (kind, directory) in directories.resolved_with(Directories::library_for) {
             if !stays_inside(&directory) {
                 return Err(WorkspaceError::OutsideWorkspace {
                     path: directory,
@@ -937,6 +978,12 @@ impl FlayerWorkspace {
     /// and a workspace answers them exactly as a project does. So the rules
     /// for the workspace's artifacts are the rules for everybody's, with no
     /// second copy of them to drift.
+    ///
+    /// Every kind is named in it, the ones the marker leaves out in the
+    /// library ([`Directories::library_for`]): asked about a kind it was not
+    /// told of, a `MindProject` answers with a folder beside the code, which
+    /// for a workspace is beside other people's repositories, or in a home
+    /// directory.
     pub fn own(&self) -> MindProject {
         MindProject {
             root: self.root.clone(),
@@ -949,7 +996,11 @@ impl FlayerWorkspace {
                 // `flayer.toml` would send them.
                 version: MIND_FORMAT_VERSION,
                 name: self.config.name.clone(),
-                directories: self.config.directories.clone(),
+                directories: self
+                    .config
+                    .directories
+                    .clone()
+                    .filled(Directories::library_for),
             },
         }
     }
@@ -1321,7 +1372,7 @@ fn directory_name(root: &Path) -> String {
 /// answer to "where do this project's skills go" is in the file rather than in
 /// a function somebody has to go and read.
 fn mind_template(name: &str, directories: &Directories) -> String {
-    let configured = directory_lines(directories);
+    let configured = directory_lines(directories.resolved());
 
     format!(
         "# Mindflayer mind project.\n\
@@ -1353,9 +1404,11 @@ fn flayer_template(name: &str, directories: &Directories) -> String {
          # managed together. Paths are relative to this file's grandparent, the\n\
          # directory holding {FLAYER_DIR}.\n\
          #\n\
-         # `directories` says where the workspace keeps its own skills and rules:\n\
-         # the ones every project it manages can install, beside the projects'\n\
-         # own. They are made the first time something is added to them.\n\
+         # `directories` says where the workspace keeps its own skills and rules,\n\
+         # the ones every project it manages can install. By default that is its\n\
+         # library, inside {FLAYER_DIR} where no agent looks, and a kind not named\n\
+         # here is kept there too. Each folder is made the first time something\n\
+         # is added to it.\n\
          #\n\
          # `loaded` lists other flayer workspaces whose own skills its projects\n\
          # can install too, read from there each time: `flayer load <path>`.\n\
@@ -1367,14 +1420,13 @@ fn flayer_template(name: &str, directories: &Directories) -> String {
          [directories]\n\
          {}",
         toml_string(name),
-        directory_lines(directories),
+        directory_lines(directories.resolved_with(Directories::library_for)),
     )
 }
 
 /// `skills = "skills"`, a line per kind, spelled out even for the defaults.
-fn directory_lines(directories: &Directories) -> String {
-    directories
-        .resolved()
+fn directory_lines(resolved: Vec<(Kind, PathBuf)>) -> String {
+    resolved
         .into_iter()
         .map(|(kind, directory)| {
             format!(

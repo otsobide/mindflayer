@@ -25,17 +25,81 @@ fn a_new_workspace_says_where_its_own_artifacts_go_and_makes_nothing_yet() {
 
     let marker = fs::read_to_string(workspace.config_path()).unwrap();
     assert!(
-        marker.contains("[directories]\nskills = \"skills\"\nrules = \"rules\"\n"),
+        marker.ends_with(
+            "[directories]\n\
+             skills = \".mindflayer/library/skills\"\n\
+             rules = \".mindflayer/library/rules\"\n"
+        ),
         "{marker}"
     );
+    // In its library, where no agent looks, rather than beside the
+    // repositories it manages.
     assert_eq!(
         workspace.own().directory_for(Kind::Skill),
-        dir.path().join("skills")
+        dir.path().join(".mindflayer/library/skills")
     );
-    // A workspace sits among other people's work, so nothing appears beside
-    // it until there is something to put there.
+    assert_eq!(
+        workspace.own().directory_for(Kind::Rule),
+        dir.path().join(".mindflayer/library/rules")
+    );
+    // And made by the first artifact added, as anywhere else.
+    assert!(!dir.path().join(".mindflayer/library").exists());
     assert!(!dir.path().join("skills").exists());
     assert!(!dir.path().join("rules").exists());
+}
+
+#[test]
+fn a_kind_the_marker_does_not_name_is_kept_in_the_library() {
+    let dir = TempDir::new().unwrap();
+    let (workspace, _) = FlayerWorkspace::init(dir.path()).unwrap();
+    // Every key taken out, and then one put back beside the projects.
+    let marker = fs::read_to_string(workspace.config_path()).unwrap();
+    let without = marker.split("[directories]").next().unwrap().to_owned();
+    fs::write(workspace.config_path(), &without).unwrap();
+    let none = FlayerWorkspace::open(dir.path()).unwrap();
+    fs::write(
+        workspace.config_path(),
+        without + "[directories]\nskills = \"skills\"\n",
+    )
+    .unwrap();
+    let one = FlayerWorkspace::open(dir.path()).unwrap();
+
+    // Never a folder at the root, which for the default workspace is the
+    // home directory: a kind added later lands in the library of every
+    // workspace, whatever its marker says.
+    for kind in Kind::ALL {
+        assert_eq!(
+            none.own().directory_for(kind),
+            dir.path().join(".mindflayer/library").join(kind.folder())
+        );
+    }
+    assert_eq!(
+        one.own().directory_for(Kind::Skill),
+        dir.path().join("skills")
+    );
+    assert_eq!(
+        one.own().directory_for(Kind::Rule),
+        dir.path().join(".mindflayer/library/rules")
+    );
+}
+
+#[test]
+fn a_workspace_told_to_keep_its_own_beside_its_projects_still_does() {
+    // What every workspace made before the library was, and is until it is
+    // migrated: the marker names the folders, and they are where it says.
+    let dir = TempDir::new().unwrap();
+    let (workspace, _) = FlayerWorkspace::init_with(dir.path(), &common::beside()).unwrap();
+    let own = workspace.own();
+
+    create(&own, Kind::Skill, "commit-style", "Shared").unwrap();
+    create(&own, Kind::Rule, "git/no-force-push", "Never force-push").unwrap();
+    let target = lifecycle::find(&own, &Reference::parse("commit-style")).unwrap();
+    lifecycle::rename(None, &own, &target, "commits").unwrap();
+
+    assert!(dir.path().join("skills/commits/SKILL.md").is_file());
+    assert!(dir.path().join("rules/git/no-force-push.md").is_file());
+    assert_eq!(Catalog::discover(&[own]).artifacts().len(), 2);
+    assert!(!dir.path().join(".mindflayer/library").exists());
 }
 
 #[test]
@@ -135,15 +199,23 @@ fn a_workspace_holds_its_own_the_way_a_project_does() {
     .unwrap();
     create(&own, Kind::Rule, "git/no-force-push", "Never force-push").unwrap();
 
-    assert!(dir.path().join("skills/commit-style/SKILL.md").is_file());
-    assert!(dir.path().join("rules/git/no-force-push.md").is_file());
+    let library = dir.path().join(".mindflayer/library");
+    assert!(library.join("skills/commit-style/SKILL.md").is_file());
+    assert!(library.join("rules/git/no-force-push.md").is_file());
     let catalog = Catalog::discover(std::slice::from_ref(&own));
     assert_eq!(catalog.artifacts().len(), 2);
 
     // And changed the way a project's are.
     let target = lifecycle::find(&own, &Reference::parse("commit-style")).unwrap();
     lifecycle::rename(None, &own, &target, "commits").unwrap();
-    assert!(dir.path().join("skills/commits/SKILL.md").is_file());
+    assert!(library.join("skills/commits/SKILL.md").is_file());
+    // Nothing beside the workspace, and nothing an agent reads above it.
+    let mut top: Vec<_> = fs::read_dir(dir.path())
+        .unwrap()
+        .map(|entry| entry.unwrap().file_name())
+        .collect();
+    top.sort();
+    assert_eq!(top, [".mindflayer"]);
 }
 
 #[test]
