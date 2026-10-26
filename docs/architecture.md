@@ -2262,9 +2262,13 @@ D-07 lets a project's `.mind/settings.json` put a kind somewhere else, one
 `.skills` folder for every agent for instance (#40). A caller that takes the
 table then follows the project's without changing, and two agents the
 override sends to one folder get one target, as Codex and OpenCode do now.
-Rejected: a free `targets` over the standard layout, which every caller would
-hard-wire and #40 would have to find again; and a folder per agent alone,
-which cannot say that a skill and a rule reach Claude in different places.
+The project hands it on, in core: an install takes the table from the project
+it installs into (#34), which gives the standard one until #40 has it read its
+override, and no front end calls `TargetTable::standard`, which would pick a
+table the project's settings could contradict. Rejected: a free `targets`
+over the standard layout, which every caller would hard-wire and #40 would
+have to find again; and a folder per agent alone, which cannot say that a
+skill and a rule reach Claude in different places.
 Checking what an override names, that it stays inside the project, is #40's,
 where the override is read.
 

@@ -128,9 +128,10 @@ These are easy to break from a single file without noticing.
 - **Rules live in core.** The CLI parses, asks core and renders. Name limits,
   front matter, where a kind lives, where it goes for each agent and sort order
   are all core's, so a future front end cannot disagree with this one. No front
-  end spells an agent's folder, and code that needs one takes the
-  `TargetTable` it is handed rather than calling `TargetTable::standard`, the
-  default a project's settings will replace (#40).
+  end spells an agent's folder or calls `TargetTable::standard`: which table
+  applies is the project's, in core, the standard one until #40 reads an
+  override from its settings, so code that needs one takes the `TargetTable`
+  the project hands it, as an install will (#34).
 - **Two binaries, one parser.** `flayer <cmd>` is `mind flayer <cmd>`, and
   both reach the same function. `mind add` and `flayer add` (with or without
   `-p`) are one implementation given a different holder
