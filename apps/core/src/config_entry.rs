@@ -13,10 +13,277 @@
 //! know, `codex --strict-config` fails on them, and `.mcp.json` allows no
 //! comments), so what Mindflayer keeps of one it wrote is its
 //! [fingerprint](Value::fingerprint).
+//!
+//! An entry is found by its key path, the keys of the objects that lead to
+//! it: `["mcpServers", "github"]` in `.mcp.json`. Arrays are not walked into:
+//! an entry Mindflayer owns is a member of an object, which is what lets it
+//! be told apart by name from everybody else's.
+//!
+//! JSON and JSONC are edited through jsonc-parser's CST, which holds every
+//! byte of the text, comments and whitespace included, and edits it in
+//! place. Not parsed into a value and serialized again, as `serde_json`
+//! would: that writes the whole file in its own layout and drops every
+//! comment in it.
 
-use std::fmt::Write as _;
+use std::fmt::{self, Write as _};
 
 use sha2::{Digest, Sha256};
+use thiserror::Error;
+
+mod json;
+
+/// The grammar a config file is written in.
+///
+/// The caller's to say, not guessed from the file's name: OpenCode reads
+/// `opencode.json` as JSONC, comments and all.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Format {
+    /// RFC 8259 JSON and nothing more: no comments, no trailing commas.
+    /// Claude reads `.mcp.json` with a strict parser, so a file that is not
+    /// strict is refused rather than edited, and one that is stays strict.
+    Json,
+    /// JSON with comments and trailing commas, as VS Code and OpenCode read
+    /// it. Nothing looser: single quotes, unquoted keys and hexadecimal
+    /// numbers, which jsonc-parser takes by default, are refused, since the
+    /// agents' own parsers refuse them.
+    Jsonc,
+}
+
+impl fmt::Display for Format {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(match self {
+            Format::Json => "JSON",
+            Format::Jsonc => "JSONC",
+        })
+    }
+}
+
+/// One change to one entry.
+#[derive(Debug, Clone, PartialEq)]
+pub enum Edit {
+    /// Add the entry, which must not be there yet, after the entries already
+    /// beside it. Objects missing on the way to it are made.
+    Insert(Value),
+    /// Change what the entry holds where it stands. It must be there.
+    Replace(Value),
+    /// Take the entry out. It must be there.
+    Remove,
+}
+
+/// Why an entry could not be read or changed.
+#[derive(Debug, Error)]
+pub enum EntryError {
+    #[error("not valid {format}: {detail}")]
+    Malformed { format: Format, detail: String },
+    #[error("no key names the entry: an empty key path is the whole file")]
+    NoKey,
+    #[error("{}: neither an object nor a table, so it holds no entries", at(.key))]
+    NotAnObject { key: String },
+    #[error("{}: already there", at(.key))]
+    Exists { key: String },
+    #[error("{}: not there", at(.key))]
+    Missing { key: String },
+    #[error("{}: written more than once, so which one is meant cannot be told", at(.key))]
+    Ambiguous { key: String },
+    #[error("{key:?}: given more than once in one object of the entry")]
+    DuplicateKey { key: String },
+    #[error("{format} has no way to write {what}")]
+    Unrepresentable { format: Format, what: &'static str },
+    #[error("{}: the edit would have changed more than the entry, or not the entry as asked, so it was not made", at(.key))]
+    Unkept { key: String },
+}
+
+/// Where in a file an error is, for its message.
+fn at(key: &str) -> String {
+    if key.is_empty() {
+        "the top level".to_owned()
+    } else {
+        format!("`{key}`")
+    }
+}
+
+/// A key path as a person reads it: keys joined by `.`, each bare when it is
+/// letters, digits, `_` and `-`, and quoted as a JSON string when it is not,
+/// so `mcpServers."my.server"` names two keys and not three.
+fn display(key: &[&str]) -> String {
+    let mut text = String::new();
+    for (index, segment) in key.iter().enumerate() {
+        if index > 0 {
+            text.push('.');
+        }
+        let bare = !segment.is_empty()
+            && segment
+                .chars()
+                .all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-');
+        if bare {
+            text.push_str(segment);
+        } else {
+            quote(segment, &mut text);
+        }
+    }
+    text
+}
+
+/// The entry at `key` in `text`, or `None` when it is not there.
+///
+/// Refused when `text` is not valid `format`, when something on the way is
+/// not an object, and when a key on the way, or the entry's own, is written
+/// twice: which copy an agent reads depends on its parser, so neither is
+/// guessed.
+pub fn get(format: Format, text: &str, key: &[&str]) -> Result<Option<Value>, EntryError> {
+    if key.is_empty() {
+        return Err(EntryError::NoKey);
+    }
+    let document = document(format, text)?;
+    Ok(lookup(&document, key)?.cloned())
+}
+
+/// `text` with `edit` made to the entry at `key`, and every byte outside the
+/// entry as it was.
+///
+/// Refused, with nothing to write, when [`get`] would refuse, when the entry
+/// is there for an insert or missing for a replace or a remove, and when the
+/// value is one `format` cannot write.
+///
+/// What the edit wrote is read back before it is handed over: the entry must
+/// hold what was asked, and the rest of the document what it held before.
+/// A library that changed more than the entry is then a refusal, not a file
+/// somebody has to repair. A replace with what the entry already means hands
+/// `text` back untouched, so installing again over an entry somebody
+/// reformatted leaves their layout alone.
+pub fn edit(format: Format, text: &str, key: &[&str], edit: &Edit) -> Result<String, EntryError> {
+    edit_document(format, Some(text), key, edit)
+}
+
+/// [`edit`], where `None` is a file not there yet: an empty TOML text is a
+/// document, but an empty JSON text is not, and a file that is missing is not
+/// one that was emptied.
+fn edit_document(
+    format: Format,
+    text: Option<&str>,
+    key: &[&str],
+    edit: &Edit,
+) -> Result<String, EntryError> {
+    if key.is_empty() {
+        return Err(EntryError::NoKey);
+    }
+    let before = match text {
+        Some(text) => document(format, text)?,
+        None => Value::Object(Vec::new()),
+    };
+    let current = lookup(&before, key)?;
+    let wanted = match (edit, current) {
+        (Edit::Insert(_), Some(_)) => return Err(EntryError::Exists { key: display(key) }),
+        (Edit::Replace(_) | Edit::Remove, None) => {
+            return Err(EntryError::Missing { key: display(key) })
+        }
+        (Edit::Replace(value), Some(current)) if current.canonical() == value.canonical() => {
+            return Ok(text.unwrap_or_default().to_owned());
+        }
+        (Edit::Insert(value) | Edit::Replace(value), _) => Some(value),
+        (Edit::Remove, Some(_)) => None,
+    };
+
+    let after = match format {
+        Format::Json | Format::Jsonc => json::edit(format, text, key, edit)?,
+    };
+    kept(format, &before, &after, key, wanted)?;
+    Ok(after)
+}
+
+/// Refuse `after` unless it is valid `format`, holds `wanted` at `key`
+/// (nothing, for a remove), and holds everything else `before` held.
+///
+/// Compared as values, by their canonical forms: the bytes outside the entry
+/// are the libraries' to keep, and the tests' to hold them to.
+fn kept(
+    format: Format,
+    before: &Value,
+    after: &str,
+    key: &[&str],
+    wanted: Option<&Value>,
+) -> Result<(), EntryError> {
+    let unkept = || EntryError::Unkept { key: display(key) };
+    let written = document(format, after).map_err(|_| unkept())?;
+    let entry = lookup(&written, key).map_err(|_| unkept())?;
+    if entry.map(Value::canonical) != wanted.map(Value::canonical)
+        || without(&written, key).canonical() != without(before, key).canonical()
+    {
+        return Err(unkept());
+    }
+    Ok(())
+}
+
+/// The whole of `text` as a value.
+fn document(format: Format, text: &str) -> Result<Value, EntryError> {
+    match format {
+        Format::Json | Format::Jsonc => json::document(format, text),
+    }
+}
+
+/// The value at `key` in `document`, `None` when a key on the way is missing.
+fn lookup<'a>(document: &'a Value, key: &[&str]) -> Result<Option<&'a Value>, EntryError> {
+    let mut current = document;
+    for depth in 0..key.len() {
+        let Value::Object(members) = current else {
+            return Err(EntryError::NotAnObject {
+                key: display(&key[..depth]),
+            });
+        };
+        let mut named = members.iter().filter(|(name, _)| name == key[depth]);
+        match (named.next(), named.next()) {
+            (None, _) => return Ok(None),
+            (Some((_, value)), None) => current = value,
+            (Some(_), Some(_)) => {
+                return Err(EntryError::Ambiguous {
+                    key: display(&key[..=depth]),
+                })
+            }
+        }
+    }
+    Ok(Some(current))
+}
+
+/// `document` without the entry at `key`, and without the objects on the way
+/// to it that leaves empty.
+///
+/// What an edit must leave as it was, seen the same way before and after.
+/// The emptied objects go too because the formats differ there: jsonc-parser
+/// leaves `"mcpServers": {}` when its last entry goes, toml_edit drops a
+/// `[mcp_servers]` that was never written but implied by
+/// `[mcp_servers.github]`, and an insert makes the objects it needs.
+fn without(document: &Value, key: &[&str]) -> Value {
+    fn take(value: &mut Value, key: &[&str]) {
+        let (Value::Object(members), Some((first, rest))) = (value, key.split_first()) else {
+            return;
+        };
+        let Some(index) = members.iter().position(|(name, _)| name == first) else {
+            return;
+        };
+        if rest.is_empty() {
+            members.remove(index);
+            return;
+        }
+        take(&mut members[index].1, rest);
+        if matches!(&members[index].1, Value::Object(inner) if inner.is_empty()) {
+            members.remove(index);
+        }
+    }
+    let mut document = document.clone();
+    take(&mut document, key);
+    document
+}
+
+/// Refuse an object of an entry that names a member twice: a file would hold
+/// both, and which one its reader keeps is the reader's.
+fn unique(members: &[(String, Value)]) -> Result<(), EntryError> {
+    for (index, (name, _)) in members.iter().enumerate() {
+        if members[..index].iter().any(|(earlier, _)| earlier == name) {
+            return Err(EntryError::DuplicateKey { key: name.clone() });
+        }
+    }
+    Ok(())
+}
 
 /// What an entry holds, in neither format's terms.
 ///

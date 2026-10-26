@@ -213,3 +213,164 @@ fn the_fingerprint_changes_when_any_value_does() {
     // A number and the string of it are not one value.
     assert_ne!(Value::from(1).fingerprint(), Value::from("1").fingerprint());
 }
+
+const MCP: &str = r#"{
+  "mcpServers": {
+    "github": {"command": "npx", "args": ["-y", "@modelcontextprotocol/server-github"], "env": {"GITHUB_TOKEN": "${GITHUB_TOKEN}"}}
+  }
+}
+"#;
+
+#[test]
+fn the_fingerprint_stays_equal_across_reformatting() {
+    let reformatted = [
+        // Minified.
+        r#"{"mcpServers":{"github":{"command":"npx","args":["-y","@modelcontextprotocol/server-github"],"env":{"GITHUB_TOKEN":"${GITHUB_TOKEN}"}}}}"#,
+        // Laid out by another tool, its members in another order, with an
+        // escape where the original had the character itself.
+        "{\n    \"mcpServers\": {\n        \"github\": {\n            \"env\": {\n                \"GITHUB_TOKEN\": \"\\u0024{GITHUB_TOKEN}\"\n            },\n            \"args\": [\n                \"-y\",\n                \"@modelcontextprotocol/server-github\"\n            ],\n            \"command\": \"npx\"\n        }\n    }\n}\n",
+    ];
+    let key = ["mcpServers", "github"];
+    let original = get(Format::Json, MCP, &key).unwrap().unwrap();
+    assert_eq!(original.fingerprint(), server().fingerprint());
+    for text in reformatted {
+        let read = get(Format::Json, text, &key).unwrap().unwrap();
+        assert_eq!(read.fingerprint(), original.fingerprint(), "{text}");
+    }
+
+    let edited = MCP.replace("${GITHUB_TOKEN}", "${GH_TOKEN}");
+    let read = get(Format::Json, &edited, &key).unwrap().unwrap();
+    assert_ne!(read.fingerprint(), original.fingerprint());
+}
+
+#[test]
+fn a_replace_with_what_the_entry_already_means_leaves_the_text_untouched() {
+    // The members in another order: the same value, in somebody's layout.
+    let same = Value::object([
+        (
+            "env",
+            Value::object([("GITHUB_TOKEN", Value::from("${GITHUB_TOKEN}"))]),
+        ),
+        (
+            "args",
+            Value::array(["-y", "@modelcontextprotocol/server-github"]),
+        ),
+        ("command", Value::from("npx")),
+    ]);
+    let edited = edit(
+        Format::Json,
+        MCP,
+        &["mcpServers", "github"],
+        &Edit::Replace(same),
+    )
+    .unwrap();
+    assert_eq!(edited, MCP);
+}
+
+#[test]
+fn an_insert_needs_the_entry_missing_and_a_replace_or_remove_needs_it_there() {
+    let error = edit(
+        Format::Json,
+        MCP,
+        &["mcpServers", "github"],
+        &Edit::Insert(server()),
+    )
+    .unwrap_err();
+    assert_eq!(error.to_string(), "`mcpServers.github`: already there");
+
+    for change in [Edit::Replace(server()), Edit::Remove] {
+        let error = edit(Format::Json, MCP, &["mcpServers", "my.server"], &change).unwrap_err();
+        assert_eq!(error.to_string(), "`mcpServers.\"my.server\"`: not there");
+        // A missing object on the way is the same: the entry is not there.
+        let error = edit(Format::Json, MCP, &["servers", "github"], &change).unwrap_err();
+        assert!(matches!(error, EntryError::Missing { .. }), "{error}");
+    }
+}
+
+#[test]
+fn something_on_the_way_that_is_not_an_object_holds_no_entries() {
+    let error = edit(
+        Format::Json,
+        MCP,
+        &["mcpServers", "github", "command", "x"],
+        &Edit::Insert(Value::from(1)),
+    )
+    .unwrap_err();
+    assert_eq!(
+        error.to_string(),
+        "`mcpServers.github.command`: neither an object nor a table, so it holds no entries"
+    );
+}
+
+#[test]
+fn an_empty_key_path_names_no_entry() {
+    assert!(matches!(
+        get(Format::Json, MCP, &[]),
+        Err(EntryError::NoKey)
+    ));
+    assert!(matches!(
+        edit(Format::Json, MCP, &[], &Edit::Remove),
+        Err(EntryError::NoKey)
+    ));
+}
+
+#[test]
+fn an_entry_naming_a_member_twice_is_refused() {
+    let twice = Value::object([("command", Value::from("a")), ("command", Value::from("b"))]);
+    let error = edit(
+        Format::Json,
+        MCP,
+        &["mcpServers", "other"],
+        &Edit::Insert(Value::object([("nested", twice)])),
+    )
+    .unwrap_err();
+    assert_eq!(
+        error.to_string(),
+        "\"command\": given more than once in one object of the entry"
+    );
+}
+
+#[test]
+fn what_an_edit_must_keep_drops_the_objects_the_entry_leaves_empty_on_its_way() {
+    let document = Value::object([
+        (
+            "mcp",
+            Value::object([("servers", Value::object([("github", server())]))]),
+        ),
+        ("other", Value::object(Vec::<(String, Value)>::new())),
+    ]);
+    // `other` is empty too, but not on the way, so it stays.
+    assert_eq!(
+        without(&document, &["mcp", "servers", "github"]).canonical(),
+        r#"{"other":{}}"#
+    );
+    // Nothing is taken, or emptied, when the entry is not there.
+    assert_eq!(without(&document, &["mcp", "servers", "gitlab"]), document);
+}
+
+#[test]
+fn an_edit_that_changed_more_than_its_entry_is_refused() {
+    let before = super::document(Format::Json, MCP).unwrap();
+    let key = ["mcpServers", "gitlab"];
+    let gitlab = Value::object([("command", Value::from("glab"))]);
+    let good = r#"{"mcpServers": {"github": {"command": "npx", "args": ["-y", "@modelcontextprotocol/server-github"], "env": {"GITHUB_TOKEN": "${GITHUB_TOKEN}"}}, "gitlab": {"command": "glab"}}}"#;
+    kept(Format::Json, &before, good, &key, Some(&gitlab)).unwrap();
+
+    for after in [
+        // Another entry changed beside it.
+        good.replace("${GITHUB_TOKEN}", "${GH_TOKEN}"),
+        // The entry not as asked.
+        good.replace("glab", "gitlab"),
+        // Something beside the entry gone.
+        r#"{"mcpServers": {"gitlab": {"command": "glab"}}}"#.to_owned(),
+        // No longer the format.
+        good.replace("{\"mcpServers\"", "{ // a comment\n\"mcpServers\""),
+    ] {
+        let error = kept(Format::Json, &before, &after, &key, Some(&gitlab)).unwrap_err();
+        assert_eq!(
+            error.to_string(),
+            "`mcpServers.gitlab`: the edit would have changed more than the entry, or not the entry as asked, so it was not made",
+            "{after}"
+        );
+    }
+}
