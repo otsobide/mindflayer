@@ -434,14 +434,18 @@ version moved. Moving them into the library is for #53's `flayer migrate
 --library`, never for a read.
 
 The folders can be anywhere inside the workspace, `.mindflayer` included, but
-where gathering writes. A directory that is the shelf of either kind or the
-cache, is inside one, or holds one, as `.mindflayer` itself does, is refused by
-`flayer init` before anything is made (`WorkspaceError::OverlapsGathered`).
-Gathering replaces and deletes folders there by names of its own, so an
-artifact somebody wrote among them could go with the next gather; and a rules
-folder holding the cache would read every markdown file in every clone as one
-of the workspace's rules. The comparison ignores ASCII case, since on macOS and
-Windows `.Mindflayer/Skills` is the shelf.
+in what is reserved for gathering. A directory that is the shelf of either kind
+or the cache, is inside one, or holds one, as `.mindflayer` itself does, is
+refused by `flayer init` before anything is made
+(`WorkspaceError::OverlapsGathered`). Gathering replaces and deletes folders
+there by names of its own, so an artifact somebody wrote among them could go
+with the next gather; and a rules folder holding the cache would read every
+markdown file in every clone as one of the workspace's rules. The rules shelf
+is reserved too, though nothing gathers rules yet, rather than matched on the
+kind as `gather` is: scrubbing a source already deletes its folder from every
+kind's shelf, and a kind made gatherable later has to find its shelf free. The
+comparison ignores ASCII case, since on macOS and Windows `.Mindflayer/Skills`
+is the shelf.
 
 Unlike a project's, the folders are not made by `flayer init`, wherever they
 are. A workspace told to keep them beside its repositories puts nothing among
