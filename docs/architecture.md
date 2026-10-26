@@ -971,6 +971,61 @@ warns on them. Following a file's existing shape avoids mixing two in one file.
 Rejected: always the V1 shape; and running `opencode --version` on every write,
 which would tie core to a binary. Unblocks #92.
 
+### D-13: Sources have names, and a marketplace is a parent
+
+Every gathered source (closed issue #7) gets a unique, editable name in
+`[A-Za-z0-9._-]`, `owner-repo` for git and the catalog's own name for a
+marketplace by default, and `--from <name>` takes it. Its identity is a
+canonical, credential-free URL plus a non-null reference key. A marketplace is
+a parent source with one pinned child per plugin entry, gathered only when
+selected (`--plugin`, or a confirmed `--all`), and refreshing or removing the
+parent cascades. What a listing shows is then exactly what a command takes;
+each child keeps its own revision and its own failure, since entries point at
+different repositories and pins; a token in a URL never reaches
+`mindflayer.db`; and the duplicate hole where SQLite's UNIQUE ignores a NULL
+reference closes. Rejected: a `name@source` spelling, when `@` already means
+plugin@marketplace in Claude and skill@version in `gh`; and keeping URL
+strings. claude-community lists 2283 entries, so gathering a marketplace whole
+by default would clone thousands of repositories. Unblocks #98, #100 and #103.
+
+### D-14: Core owns HTTP, behind a seam
+
+Core owns catalog URLs, paging, caching and parsing behind an injectable `Http`
+trait. The default is a blocking client reusing `reqwest` with rustls, already
+in `Cargo.lock`, and tests pass a fake. Paging, retries and mapping are rules,
+so they belong where the CLI, the TUI and the server cannot disagree about
+them, and a synchronous client fits a synchronous core. Rejected: front ends
+fetching the bytes for core, which spreads those rules across them; and calling
+HTTP with no seam, which takes the tests online. Carrying it out amends [the
+line between core and a front
+end](#where-the-line-between-core-and-a-front-end-falls) and AGENTS.md's "only
+I/O is files". Unblocks #105, #106 and #108.
+
+### D-15: Skill search is GitHub plus opt-in finders
+
+`flayer gather search` queries GitHub code search when a token is supplied,
+plus opt-in finders, marked unstable, for skills.sh's `/api/search` and
+api.claude-plugins.dev; the owner reads those two services' terms first.
+Services that need a key or attribution (SkillsMP, Glama, PulseMCP, skills.sh
+v1) are excluded, because they bring terms and attribution obligations. A
+finder only returns addresses that resolve to git sources, so an endpoint that
+changes breaks nothing already gathered, and its failure is a warning.
+Rejected: GitHub alone, and no finders at all, both of which leave the skill
+directories out (vision point 5). Unblocks #108.
+
+### D-16: Credentials come from the front end, never from a prompt
+
+The front end supplies a credential provider, `--token-env VAR` or
+`gh auth token`, handed to `gix` through a credentials callback that never
+prompts. Failing that, the git-config helpers that `gix` runs itself are tried,
+then the system ssh binary for ssh URLs. A token is never persisted. This
+copies Claude Code's own non-interactive model, and a prompt would hang the TUI
+and the server, so the never-prompting callback lands early (#26) and the
+providers later (#110), which also documents the ssh-binary and git-helper
+dependencies in [Why `gix`](#why-gix-rather-than-running-git). Rejected: HTTPS
+tokens only, which leaves ssh remotes out; and shelling out to `git`, which
+gives up what `gix` was chosen for. Unblocks #26 and #110.
+
 ## Open questions
 
 - **Precedence between projects.** Two projects in one workspace can declare
