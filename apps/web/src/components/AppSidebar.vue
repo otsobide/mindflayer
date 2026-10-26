@@ -18,7 +18,13 @@ const address = window.location.host
 </script>
 
 <template>
+  <!--
+    An id of its own, or Nuxt UI keys the stored size and collapse on
+    useId(), whose value moves whenever something that renders before the
+    sidebar asks for an id too, and the stored state with it.
+  -->
   <UDashboardSidebar
+    id="default"
     v-model:open="sidebarOpen"
     v-model:collapsed="sidebarCollapsed"
     collapsible

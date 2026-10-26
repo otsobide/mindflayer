@@ -99,6 +99,15 @@ describe('the shell', () => {
     expect(page.get('[data-testid="address"]').text()).toBe('')
   })
 
+  it('keeps the sidebar under a name nothing rendered before it can move', async () => {
+    const page = await render('/')
+
+    await page.get('[data-testid="overview"] button[aria-label="Collapse sidebar"]').trigger('click')
+    await flushPromises()
+
+    expect(JSON.parse(localStorage.getItem('mindflayer-panel-sidebar-default') ?? '{}')).toMatchObject({ collapsed: true })
+  })
+
   it('adds no style element, which the CSP would refuse', async () => {
     await render('/')
 
