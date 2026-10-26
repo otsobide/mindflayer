@@ -258,9 +258,9 @@ fn holdings(app: &App, workspace: &Workspace, frame: &mut Frame, area: Rect) {
     let focused = app.focus == Focus::Items;
     let Some(member) = app.member() else {
         let text = if workspace.unlinked.is_empty() {
-            "nothing linked — l links a project by its path"
+            "nothing linked; l links a project by its path"
         } else {
-            "nothing linked — l picks from what is under this workspace"
+            "nothing linked; l picks from what is under this workspace"
         };
         frame.render_widget(
             Paragraph::new(Span::styled(text, dim()))
@@ -396,7 +396,7 @@ fn item_row(item: &Item, width: usize, room: usize) -> ListItem<'_> {
     let (mark, summary) = match &item.broken {
         Some(_) => (
             Span::styled("! ", red),
-            Span::styled("cannot be read — e opens it", red),
+            Span::styled("cannot be read; e opens it", red),
         ),
         None if !item.issues.is_empty() => (
             Span::styled("✗ ", red),
@@ -474,7 +474,7 @@ fn footer(app: &App, frame: &mut Frame, area: Rect) {
     let second = match &app.message {
         Some(message) => Span::styled(printable(&message.text), tone(message.tone)),
         None => Span::styled(
-            "every change is a command, printed when you quit — ? lists them",
+            "every change is a command, printed when you quit; ? lists them",
             dim(),
         ),
     };
@@ -634,7 +634,7 @@ fn linking(app: &App, form: &LinkForm, frame: &mut Frame, area: Rect) {
                 let what = if unlinked.mind {
                     Span::styled("  mind project", dim())
                 } else {
-                    Span::styled("  git repository — mind init first", warn())
+                    Span::styled("  git repository (mind init first)", warn())
                 };
                 ListItem::new(Line::from(vec![
                     Span::raw(format!("{route}{padding}")),
@@ -691,9 +691,9 @@ fn loading(app: &App, form: &LoadForm, frame: &mut Frame, area: Rect) {
 
     if workspace.loaded.is_empty() {
         let hint = if on_its_own {
-            "type a workspace's path, relative to this project — nothing loaded yet"
+            "type a workspace's path, relative to this project (nothing loaded yet)"
         } else {
-            "type a workspace's path, relative to this one — nothing loaded yet"
+            "type a workspace's path, relative to this one (nothing loaded yet)"
         };
         frame.render_widget(Paragraph::new(Span::styled(hint, dim())), rows[2]);
     } else {
@@ -721,7 +721,7 @@ fn loading(app: &App, form: &LoadForm, frame: &mut Frame, area: Rect) {
                         dim(),
                     ),
                     Err(_) => Span::styled(
-                        "  cannot be opened — enter unloads it",
+                        "  cannot be opened; enter unloads it",
                         Style::default().fg(Color::Red),
                     ),
                 };
@@ -885,7 +885,7 @@ fn minds_screen(app: &App, screen: &Minds, frame: &mut Frame, area: Rect) {
     if screen.rows.is_empty() {
         frame.render_widget(
             Paragraph::new(Span::styled(
-                "nothing linked, and no repository under this workspace — l links one by its path",
+                "nothing linked, and no repository under this workspace; l links one by its path",
                 dim(),
             ))
             .wrap(Wrap { trim: true }),
@@ -961,11 +961,11 @@ fn standing(standing: minds::Standing) -> (&'static str, Style) {
     match standing {
         minds::Standing::Linked { opens: true } => ("linked", dim()),
         minds::Standing::Linked { opens: false } => (
-            "cannot be opened — untick it to unlink",
+            "cannot be opened; untick it to unlink",
             Style::default().fg(Color::Red),
         ),
         minds::Standing::Found { mind: true } => ("mind project", dim()),
-        minds::Standing::Found { mind: false } => ("git repository — mind init first", warn()),
+        minds::Standing::Found { mind: false } => ("git repository (mind init first)", warn()),
     }
 }
 

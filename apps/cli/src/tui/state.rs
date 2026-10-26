@@ -851,19 +851,19 @@ impl App {
         let lonely = workspace.scope == Scope::Workspace && workspace.projects() == 0;
         let message = match (&workspace.above, workspace.scope) {
             _ if workspace.default && !workspace.made => Some(format!(
-                "no workspace here or above — your default one, in {}, is made by the first change; `flayer init` makes one here",
+                "no workspace here or above: your default one, in {}, is made by the first change; `flayer init` makes one here",
                 workspace.root.display()
             )),
             _ if workspace.default => Some(format!(
-                "no workspace here or above — this is your default one, in {}; `flayer init` makes one here",
+                "no workspace here or above: this is your default one, in {}; `flayer init` makes one here",
                 workspace.root.display()
             )),
             _ if lonely => Some(format!(
-                "{} manages no projects yet — l links one",
+                "{} manages no projects yet; l links one",
                 workspace.name
             )),
             (Some(above), Scope::Project) => Some(format!(
-                "no workspace manages this project; the one at {} would — l links it",
+                "no workspace manages this project, but the one at {} would; l links it",
                 above.display()
             )),
             _ => None,
@@ -1086,13 +1086,13 @@ impl App {
             ('L', Some(_)) => (Mode::Loading(LoadForm::default()), Step::Stay),
             ('l' | 'L', None) => {
                 self.message = Some(Message::info(
-                    "no workspace above this project — `flayer init` in the folder that holds your projects makes one",
+                    "no workspace above this project; `flayer init` in the folder that holds your projects makes one",
                 ));
                 (Mode::Browse, Step::Stay)
             }
             _ => {
                 self.message = Some(Message::info(
-                    "that is a workspace's, and no workspace manages this project — l links it to one",
+                    "that is a workspace's, and no workspace manages this project; l links it to one",
                 ));
                 (Mode::Browse, Step::Stay)
             }
@@ -1120,7 +1120,7 @@ impl App {
                     Some((false, _)) => self.focus = Focus::Items,
                     Some((true, name)) => {
                         self.message = Some(Message::info(format!(
-                            "nothing in {name} yet — a adds a skill or a rule"
+                            "nothing in {name} yet; a adds a skill or a rule"
                         )));
                     }
                     None => {}
@@ -1167,7 +1167,7 @@ impl App {
         };
         let Some((holder, kind, name)) = picked else {
             self.message = Some(Message::info(
-                "pick an artifact first — → moves over to them",
+                "pick an artifact first; → moves over to them",
             ));
             return (Mode::Browse, Step::Stay);
         };
@@ -1246,7 +1246,7 @@ impl App {
                 "{} cannot be opened, so nothing can be added to it",
                 member.name
             )),
-            None => Some(String::from("link a project first — l")),
+            None => Some(String::from("link a project first; l links one")),
         };
         match refusal {
             None => (Mode::Adding(AddForm::new(self.cursor)), Step::Stay),
@@ -1264,7 +1264,7 @@ impl App {
         };
         if member.own {
             self.message = Some(Message::info(
-                "these are the workspace's own, not a project it links — there is nothing to unlink",
+                "these are the workspace's own, not a project it links, so there is nothing to unlink",
             ));
             return (Mode::Browse, Step::Stay);
         }
@@ -1412,7 +1412,7 @@ impl App {
                     // somewhere else — into the one above, or your home's.
                     if self.loads_itself(&form) {
                         form.error = Some(String::from(
-                            "that is the workspace this would load into — a workspace cannot load itself",
+                            "that is the workspace this would load into, and a workspace cannot load itself",
                         ));
                         return (Mode::Loading(form), Step::Stay);
                     }
@@ -1582,7 +1582,7 @@ impl App {
             Performed::Install(screen) => {
                 if screen.targets.is_empty() {
                     self.message = Some(Message::info(
-                        "no projects to install into yet — l links one",
+                        "no projects to install into yet; l links one",
                     ));
                 } else {
                     self.mode = Mode::Installing(screen);
@@ -2104,7 +2104,7 @@ impl Confirm {
                 format!("{path} is not a mind project yet."),
                 String::new(),
                 String::from(
-                    "Make it one — a .mind marker and empty skills/ and rules/ folders — and link it?",
+                    "Make it one (a .mind marker and empty skills/ and rules/ folders) and link it?",
                 ),
             ],
             task: Task::InitAndLink { path },

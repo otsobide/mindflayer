@@ -85,14 +85,14 @@ pub enum CliError {
     },
     #[error("no project called `{wanted}` in this workspace{}", known_projects(.known))]
     UnknownProject { wanted: String, known: Vec<String> },
-    #[error("`{wanted}` names more than one project — {} — so name it by its path", .matches.join(", "))]
+    #[error("`{wanted}` names more than one project ({}), so name it by its path", .matches.join(", "))]
     AmbiguousProject {
         wanted: String,
         matches: Vec<String>,
     },
-    #[error("say which project to install into — `flayer install -p <project> <skill>` — or run `flayer install` alone for the screen")]
+    #[error("say which project to install into (`flayer install -p <project> <skill>`), or run `flayer install` alone for the screen")]
     InstallWhere,
-    #[error("say which skill to install — `flayer install -p <project> <skill>` — or run `flayer install` alone for the screen")]
+    #[error("say which skill to install (`flayer install -p <project> <skill>`), or run `flayer install` alone for the screen")]
     InstallWhat,
     #[error("{project} has no {name} installed, so there is nothing to take out")]
     NotInstalled { name: String, project: String },
@@ -143,7 +143,7 @@ fn named_by(reason: &Reason) -> &'static str {
 /// "; it manages alpha, beta", or what to do when it manages nothing.
 fn known_projects(known: &[String]) -> String {
     if known.is_empty() {
-        String::from("; it manages none yet — `flayer link <path>` adds one")
+        String::from("; it manages none yet: `flayer link <path>` adds one")
     } else {
         format!("; it manages {}", known.join(", "))
     }

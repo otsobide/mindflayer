@@ -74,7 +74,7 @@ fn skills(screen: &Screen, frame: &mut Frame, area: Rect) {
     let heading = title(target);
     if target.rows.is_empty() {
         let empty = Paragraph::new(
-            "nothing on the shelf — `flayer gather git <url>`, `flayer load <path>` or `flayer add skill` first",
+            "nothing on the shelf; `flayer gather git <url>`, `flayer load <path>` or `flayer add skill` first",
         )
             .block(pane(&heading, focused));
         frame.render_widget(empty, area);
