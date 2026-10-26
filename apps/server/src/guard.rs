@@ -8,8 +8,10 @@
 use std::sync::Arc;
 
 use axum::extract::{Request, State};
-use axum::http::header::{AsHeaderName, CONTENT_TYPE, HOST, ORIGIN};
-use axum::http::{HeaderMap, Method, StatusCode};
+use axum::http::header::{
+    AsHeaderName, CONTENT_SECURITY_POLICY, CONTENT_TYPE, HOST, ORIGIN, X_CONTENT_TYPE_OPTIONS,
+};
+use axum::http::{HeaderMap, HeaderValue, Method, StatusCode};
 use axum::middleware::Next;
 use axum::response::{IntoResponse, Response};
 
@@ -174,6 +176,32 @@ pub(crate) fn from_the_panel(
 fn is_json(content_type: &str) -> bool {
     let essence = content_type.split(';').next().unwrap_or_default();
     essence.trim().eq_ignore_ascii_case("application/json")
+}
+
+/// What a page of the server's may load, and who may show it: its own files,
+/// and nobody.
+///
+/// `default-src 'self'` stands for every kind of resource, scripts among
+/// them, so no inline script runs: whatever markup ever reached the page, a
+/// gathered skill's included, could not bring a script with it. Nor does
+/// anything from another origin. `frame-ancestors 'none'` keeps another page
+/// from showing the panel in a frame under its own and steering a click onto
+/// one of its buttons.
+const POLICY: &str = "default-src 'self'; frame-ancestors 'none'";
+
+/// Send the policy with every answer, and `nosniff`, so the browser takes an
+/// answer for what its Content-Type says it is and never guesses: a page on
+/// another port that loads `/api/transcript` as a script has it refused, not
+/// run, and JSON is never mistaken for a page.
+///
+/// No CORS layer goes with them, on purpose: without one, no answer grants
+/// another origin the right to read it, and a preflight is never passed.
+pub(crate) async fn restrict(request: Request, next: Next) -> Response {
+    let mut response = next.run(request).await;
+    let headers = response.headers_mut();
+    headers.insert(CONTENT_SECURITY_POLICY, HeaderValue::from_static(POLICY));
+    headers.insert(X_CONTENT_TYPE_OPTIONS, HeaderValue::from_static("nosniff"));
+    response
 }
 
 /// A header's value when a request sends it exactly once. Twice is as good

@@ -237,3 +237,83 @@ async fn a_read_by_cookie_needs_no_fetch_metadata() {
 
     assert_eq!(reply.status, StatusCode::OK);
 }
+
+#[tokio::test]
+async fn every_answer_carries_the_content_security_policy_and_nosniff() {
+    let (server, _) = launch();
+    let token = server.token();
+    let mut rebound = request(&server, Method::GET, "/", Auth::Nothing, None);
+    rebound.headers_mut().insert(
+        "host",
+        format!("attacker.example:{}", server.address().port())
+            .parse()
+            .unwrap(),
+    );
+
+    let replies = [
+        ("the panel", get(&server, "/", Auth::Nothing).await),
+        (
+            "the launch link",
+            get(&server, &format!("/?token={token}"), Auth::Nothing).await,
+        ),
+        (
+            "the API",
+            get(&server, "/api/transcript", Auth::Bearer(token)).await,
+        ),
+        (
+            "the gate's refusal",
+            get(&server, "/api/transcript", Auth::Nothing).await,
+        ),
+        ("the guard's refusal", deliver(&server, rebound).await),
+    ];
+    for (case, reply) in replies {
+        assert_eq!(
+            reply.header("content-security-policy"),
+            Some("default-src 'self'; frame-ancestors 'none'"),
+            "{case}"
+        );
+        assert_eq!(
+            reply.header("x-content-type-options"),
+            Some("nosniff"),
+            "{case}"
+        );
+    }
+}
+
+#[tokio::test]
+async fn no_answer_grants_another_origin_anything() {
+    let (server, _) = launch();
+    let port = server.address().port();
+
+    for origin in [
+        format!("http://127.0.0.1:{}", port.wrapping_add(1)),
+        format!("http://127.0.0.1:{port}"),
+    ] {
+        // A preflight: what a browser asks before it lets a page send a
+        // header of its own, or JSON, to another origin.
+        let mut preflight = request(
+            &server,
+            Method::OPTIONS,
+            "/api/commands",
+            Auth::Nothing,
+            None,
+        );
+        let headers = preflight.headers_mut();
+        headers.insert("origin", origin.parse().unwrap());
+        headers.insert("access-control-request-method", "POST".parse().unwrap());
+        headers.insert(
+            "access-control-request-headers",
+            "content-type, x-mindflayer".parse().unwrap(),
+        );
+
+        let reply = deliver(&server, preflight).await;
+
+        assert!(!reply.status.is_success(), "{origin}: {}", reply.status);
+        let granted: Vec<_> = reply
+            .headers
+            .keys()
+            .filter(|name| name.as_str().starts_with("access-control-"))
+            .collect();
+        assert!(granted.is_empty(), "{origin}: {granted:?}");
+    }
+}

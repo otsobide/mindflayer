@@ -173,7 +173,9 @@ fn route<B: Backend>(server: Server<B>, token: &Token, port: u16) -> io::Result<
         .layer(middleware::from_fn_with_state(
             Arc::new(Hosts::new(port)),
             guard::same_origin,
-        ));
+        ))
+        // Outside the guard, so its refusals carry them too.
+        .layer(middleware::from_fn(guard::restrict));
     // Outermost, so a request the guard, the gate or the exchange turns away
     // is logged too.
     Ok(match log {
