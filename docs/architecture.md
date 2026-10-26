@@ -928,6 +928,49 @@ Rejected: `[[project]]` tables in `flayer.toml`, which let two workspaces
 disagree about one project's files; and the ledger, which hides editable
 configuration in a database. Unblocks #29 and #37.
 
+### D-10: An MCP server is one owned entry per agent
+
+Each server is one versioned, neutral definition in the library,
+`mcp/<name>.toml`, shaped as a subset of the registry's `server.json` with
+typed inputs. Installing renders it as exactly one entry in each target agent's
+project config, and ownership is a ledger row holding a semantic fingerprint of
+that entry; project scope only, for now. This reuses the catalog and the
+create, rename, remove and validate lifecycle, maps registry entries easily,
+and touches one key per agent file. A marker key inside the entry cannot work,
+since OpenCode rejects unknown keys, `codex --strict-config` fails on them and
+`.mcp.json` allows no comments, so the fingerprint is the only ownership
+signal. Rejected: storing `server.json` verbatim; copying whole config files,
+which overwrites the user's other servers; and delegating to the agents' CLIs,
+which reach only Codex's user scope, where `codex mcp add` re-serializes every
+entry, though they may return for user scope (D-22). Unblocks #18, #86, #89,
+#93 and #94.
+
+### D-11: MCP secrets are environment references
+
+A secret is written as a reference in each agent's own syntax (Claude `${VAR}`;
+Codex `env_vars`, `env_http_headers` and `bearer_token_env_var`; OpenCode
+`{env:VAR}`), and its value is never stored. A literal in a secret input is
+refused, and so, for that agent, is a shape it cannot express: in Codex, secret
+arguments, a secret inside a URL, and composite secret headers other than
+`Authorization: Bearer`. References work in all three agents without Mindflayer
+running and keep committed files safe, and refusing rather than writing a
+literal keeps the guarantee where Codex has no interpolation. Rejected: values
+under `~/.mindflayer/secrets` read through OpenCode's `{file:...}`, which
+Claude and Codex cannot match; and, for now, a `mind mcp run` wrapper reading
+the OS keychain, which may come later as an opt-in but makes every teammate
+depend on the binary and does not cover remote headers. Unblocks #18, #86, #87,
+#90, #91 and #92.
+
+### D-12: OpenCode gets the V2 MCP shape
+
+The owner runs OpenCode 2.1.3, so Mindflayer writes a minimal V2
+`mcp.servers.<name>` entry, which V1 also reads since 1.18.24, and the V1
+`mcp.<name>` shape only when the target file already uses it. `codemode`,
+`protocol` and `timeout.startup` are left out unless asked for, because V1
+warns on them. Following a file's existing shape avoids mixing two in one file.
+Rejected: always the V1 shape; and running `opencode --version` on every write,
+which would tie core to a binary. Unblocks #92.
+
 ## Open questions
 
 - **Precedence between projects.** Two projects in one workspace can declare
