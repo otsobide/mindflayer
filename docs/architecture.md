@@ -540,23 +540,25 @@ chooses how the news travels: the CLI writes a line, the TUI sends it to the
 thread that draws, and a server can stream it.
 
 The flag is gix's interrupt, so a cancel stops the fetch or the checkout where
-gix checks, and the clone it had begun is removed. The harvest checks it once
-more after every folder is read and before anything is placed, which is why
-it reads them all first rather than reading and placing each in turn. That is
-the last moment a cancel is honoured: past it the shelf and the ledger change,
-and a gather stopped halfway through that would leave them neither as they
-were nor as the source has them. A cancel that comes later is too late, and
-the gather finishes. `Progress::cancellable` says which steps are which, so a
-front end that offers a cancel stops offering it when the gather stops
-honouring it, rather than knowing where the check is. Cancelled in time, the
-shelf and the ledger are as they
-were: the gather is not logged, and a source it registered is forgotten again.
-It is registered before the fetch because the clone needs the folder name
-registering gives it; holding the registration in a transaction until the
+gix checks, and the clone it had begun is removed. gix does not check it while
+it connects, only once the pack is coming, so a cancel while connecting waits
+for the connection to be made or to fail: as long as a server takes to answer,
+or a prompt to be answered. The harvest checks it once more after every folder
+is read and before anything is placed, which is why it reads them all first
+rather than reading and placing each in turn. That is the last moment a cancel
+is honoured: past it the shelf and the ledger change, and a gather stopped
+halfway through that would leave them neither as they were nor as the source
+has them. A cancel that comes later is too late, and the gather finishes.
+`Progress::cancellable` says which steps are which, so a front end that offers
+a cancel stops offering it when the gather stops honouring it, rather than
+knowing where the check is. Cancelled in time, the shelf and the ledger are as
+they were: the gather is not logged, and a source it registered is forgotten
+again. It is registered before the fetch because the clone needs the folder
+name registering gives it; holding the registration in a transaction until the
 gather ends was the other way, and is rejected, because every other write to
-the ledger would wait as long as the network does. The clone is not part of
-the promise: every gather re-makes it, so a cancelled one can leave a known
-source with the new clone, or with none.
+the ledger would wait as long as the network does. The clone is not part of the
+promise: every gather re-makes it, so a cancelled one can leave a known source
+with the new clone, or with none.
 
 `flayer gather` on a terminal draws each step over the last on one line of
 stderr, and wipes it before the report. Piped or captured it draws nothing,
@@ -577,7 +579,7 @@ Half of it is solved: a fetch **never prompts** for a credential. When a server
 asks who is fetching, `gix`'s own answer runs the credential helpers git config
 names and, when none of them has a credential, asks a person: an askpass
 program, then the terminal. The TUI owns the terminal while a gather runs, so
-that prompt is a screen that stops answering, and the server that comes next
+that prompt is drawn over, its keys raced for, and the server that comes next
 has no terminal at all. So every connection `gix` lets a clone configure is
 given a credentials callback (`gather::credentials`) that runs the same helper
 cascade with the prompt and askpass turned off. A credential no helper has is
@@ -944,15 +946,18 @@ thread rather than paying for one of its own.
 
 The box shows the command, the last step and that `esc` cancels. The screen is
 the task's until it is over, so every other key is ignored, as one pressed
-while a task ran in place is dropped. `esc` cancels the watch: the gather
-stops before it places anything, and the form it came from says so, as for
-any gather that did not get as far as a report. Once the step is placing,
-which is no longer `cancellable`, the box says a cancel is too late instead,
-and the gather finishes with its report. Leaving cancels it too, and
-`wait` holds the screen until it has stopped, so what it did reaches the
-transcript and nothing is half done when the process ends. The lines are still
-the task's command lines, parsed and run by `execute`: the thread changes where
-they run, not what they are.
+while a task ran in place is dropped. `esc` cancels the watch: the gather stops
+before it places anything, and the form it came from says so, as for any gather
+that did not get as far as a report. Once the step is placing, which is no
+longer `cancellable`, the box says a cancel is too late instead, and the gather
+finishes with its report. Leaving cancels it too, and `wait` holds the screen
+until it has stopped, so what it did reaches the transcript and nothing is half
+done when the process ends. A gather still connecting takes a cancel only once
+it is connected, so `esc` there, or leaving, waits as long as the network does;
+and since the loop goes on reading the terminal, a question ssh asks there is
+raced for its answer, as the [open questions](#open-questions) say under
+Private repositories. The lines are still the task's command lines, parsed and
+run by `execute`: the thread changes where they run, not what they are.
 
 They go through a `Runner` on the way, which is the real parsers and commands
 unless `App::runner` holds a stand-in. A gather from a repository on the local
@@ -1662,7 +1667,12 @@ leak into the lifecycle code. Unblocks #33, #45, #62, #93, #94 and #95.
   connection will not have it. An in-memory `gitoxide.credentials.terminalPrompt=false`
   on the clone would keep that prompt off the terminal, though not an askpass
   named by `GIT_ASKPASS` or `SSH_ASKPASS`; a `gix` that configures the retry
-  too would close it.
+  too would close it. In the TUI either prompt is worse than at the command
+  line: a gather runs apart while the loop goes on reading the terminal and
+  drops every key but `esc` and Ctrl-C, so the loop races the prompt for its
+  answer; and neither key stops a gather waiting on one, since `gix` takes a
+  cancel only once it is receiving. `BatchMode=yes` would close the TUI's ssh
+  case too.
 - **OpenCode's folder and `$XDG_CONFIG_HOME`.** Without
   `$OPENCODE_CONFIG_DIR`, OpenCode's folder is taken to be
   `~/.config/opencode`. Whether OpenCode moves it with `$XDG_CONFIG_HOME`, as
