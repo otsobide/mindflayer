@@ -2406,18 +2406,20 @@ when there is no `CLAUDE.md`; and OpenCode's `instructions` globs with Codex's
 `developer_instructions`, unverified and honoured only in trusted projects.
 Mindflayer never creates a `CLAUDE.local.md`, which silently disables
 `AGENTS.md`, and warns when an `AGENTS.override.md` hides the file from Codex
-or the chain nears Codex's 32 KiB budget. #17 confirmed on Claude Code 2.1.309
-each Claude behaviour this relies on: a `CLAUDE.md` above the git root or a
-`CLAUDE.local.md` stops `AGENTS.md` being read, the user memory file and
-`.claude/rules` do not, the import loads it once, and a rule with `paths:`
-loads only when a matching file is read ([docs/agents.md](agents.md)).
-One corner differs from what this says: Claude's check most likely stops
-below `/`, so a `CLAUDE.md` at `/` alone does not stop it reading `AGENTS.md`
-(read from the directory counts in its debug log, not tried). #44's walk up
-to and including `/` would then choose Fallback while Claude still read the
-block, and give Claude each unscoped rule twice; whether #44 stops below `/`
-too is an [open question](#open-questions). Unblocks #17, #42, #43, #44 and
-#45.
+or the chain nears Codex's 32 KiB budget. #17 confirmed these Claude behaviours
+on Claude Code 2.1.309: a `CLAUDE.md` above the git root or a `CLAUDE.local.md`
+stops `AGENTS.md` being read, the user memory file and `.claude/rules` do not,
+the block's text reaches Claude without its markers, the import loads it once,
+and a rule with `paths:` loads only when a matching file is read
+([docs/agents.md](agents.md)). Two it did not try: that a `.claude/CLAUDE.md`
+counts as well, seen only among the names in Claude's debug output, and the
+2.1.277 floor, which is docs-only. One corner differs from what this says:
+Claude's check most likely stops below `/`, so a `CLAUDE.md` at `/` alone does
+not stop it reading `AGENTS.md` (read from the directory counts in its debug
+log, not tried). #44's walk up to and including `/` would then choose Fallback
+while Claude still read the block, and give Claude each unscoped rule twice;
+whether #44 stops below `/` too is an [open question](#open-questions).
+Unblocks #17, #42, #43, #44 and #45.
 
 ### D-04: An edited copy is detected, not disowned
 
