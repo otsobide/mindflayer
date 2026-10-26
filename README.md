@@ -141,7 +141,8 @@ flayer add|edit|rename|remove|templates [-p PROJECT] ...
                            # the same as mind's: the workspace's own by
                            # default, one of its projects with -p
 flayer list|show|validate [-p PROJECT] ...
-                           # the workspace's own and every project's, or one
+                           # the workspace's own and every project's, or one;
+                           # validate checks the shelf too
 flayer scan                # the repositories under it, and which are linked
 flayer link <path>...      # register mind projects with it
 flayer unlink <path>...    # drop them

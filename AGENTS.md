@@ -94,8 +94,8 @@ These are easy to break from a single file without noticing.
   (what `ValidationIssue::is_strict` picks out), so change the rules there and
   nowhere else; gathering
   takes such a skill with a `warning:` per problem, and `validate` reports
-  everything, the shelf included, but calls an artifact invalid only for what
-  is not `ValidationIssue::is_warning`. Keys the format does not define pass through
+  everything — `flayer validate` without `-p` reads the shelf too — but calls
+  an artifact invalid only for what is not `ValidationIssue::is_warning`. Keys the format does not define pass through
   untouched.
 - **Loaded and gathered content is untrusted.**
   - An installed name must be one folder name (`install::is_folder_name`).

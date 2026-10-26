@@ -260,7 +260,8 @@ things that used to be guesses:
   command tried to be both and its answer changed depending on which directory
   it was run from.
 - **How an artifact is labelled.** Only the workspace level qualifies one by
-  what holds it — a project, or `workspace` for its own — because inside a
+  what holds it — a project, `workspace` for its own, or `shelf/<source
+  folder>` for what `flayer validate` finds on the shelf — because inside a
   single project that says nothing.
   The same rule governs the kind: `mind list` grows a kind column, and
   `validate` starts printing `rule:x` instead of `x`, only once more than one

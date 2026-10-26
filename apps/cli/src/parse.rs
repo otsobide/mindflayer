@@ -323,7 +323,8 @@ pub enum FlayerCommand {
         project: Option<String>,
     },
 
-    /// Check the workspace's own artifacts and every managed project's.
+    /// Check the workspace's own artifacts, every managed project's, and what
+    /// is on the shelf.
     Validate {
         /// A kind (`rules`), or one artifact by name [default: everything].
         target: Option<String>,
