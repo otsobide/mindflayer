@@ -467,15 +467,20 @@ fn gathering_in_the_tui_is_flayer_gather_git() {
 }
 
 #[test]
-fn a_gather_refused_for_a_token_in_its_url_leaves_the_token_out_of_the_transcript() {
+fn a_gather_refused_for_a_token_in_its_url_shows_the_token_neither_while_it_runs_nor_after() {
     let dir = TempDir::new().unwrap();
     flayer(dir.path(), &["init"]).unwrap();
     let mut app = tui_in(dir.path());
 
     press_key(&mut app, KeyCode::Char('g'));
     type_text(&mut app, "https://me:ghp_t0ken@example.com/acme/skills");
-    press_and_run(&mut app, KeyCode::Enter);
+    let task = press_and_run(&mut app, KeyCode::Enter).unwrap();
 
+    // What the box drawn over the screen says while it runs.
+    assert_eq!(
+        task.describe(),
+        "flayer gather git https://example.com/acme/skills"
+    );
     let transcript = app.transcript();
     assert!(
         transcript.starts_with("$ flayer gather git https://example.com/acme/skills\n"),

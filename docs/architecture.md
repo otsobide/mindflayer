@@ -590,8 +590,10 @@ and what `gix` said. A clone is scrubbed as soon as it is made
 and into every reflog as `clone: from <url>`, and those files are rewritten
 through the same function. A clone a gather makes now has nothing to take out,
 and finding that costs a few small reads. A `--from` typed with credentials
-names the source they were taken out of, and the CLI's report and the TUI's
-transcript print command lines and URLs redacted.
+names the source they were taken out of. The CLI's report prints URLs
+redacted, and the TUI redacts a command line where it is built for showing
+(`state::shell`), so the box that says what is running and the transcript
+printed on the way out both leave the token out.
 
 What a Mindflayer from before the refusal stored is **scrubbed** by
 `gather::scrub`, which every command that writes to the ledger runs first:
