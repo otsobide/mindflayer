@@ -564,7 +564,11 @@ repository is rather than a secret, and a later gather from the stored URL
 needs it. Over http(s) a user name goes as well, because GitHub takes a token
 in that place and a credential helper is what names the user. The scp-like
 form (`git@host:path`) is left alone, since `gix` reads everything before its
-first `:` as user and host, which leaves no room for a password. It works on
+first `:` as user and host, which leaves no room for a password. A password
+with a `/` in it is looked for past the first `/`, whenever what comes before
+that `/` has a `:` and no port: every parser reads `https://me:p/ss@host` as
+host `me` and port `p`, so nothing else would find the password, and the
+refusal for an unparseable URL would store and print it whole. It works on
 text rather than on one URL, because the other place a credential turns up is
 `gix`'s own error messages, which quote the URL they failed on, and the URL a
 fetch connected to may carry a token the typed one did not when git config

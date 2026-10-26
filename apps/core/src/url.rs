@@ -29,6 +29,14 @@ use std::borrow::Cow;
 /// is rejected because the parser also rewrites what it keeps (a default port
 /// dropped, a scheme lowercased), so the error would name a URL nobody typed,
 /// and because it cannot find a URL inside an error message.
+///
+/// A password typed with a `/` in it is the one place the first `/` is too
+/// soon: `https://me:p/ss@host` reads to every parser as host `me` and port
+/// `p`, which no URL can have, so it is refused as unparseable and would be
+/// stored, logged and repeated whole. When what comes before the first `/`
+/// has a `:` followed by anything but a port's digits, the `@` is looked for
+/// up to the next whitespace instead. A password of digits alone cut by a `/`
+/// still reads as a host, a port and a path, to `gix` as to this.
 pub fn redacted(text: &str) -> Cow<'_, str> {
     let mut kept = String::new();
     // How much of `text` is already in `kept`.
@@ -37,18 +45,27 @@ pub fn redacted(text: &str) -> Cow<'_, str> {
     while let Some(found) = text[from..].find("://") {
         let separator = from + found;
         let start = separator + "://".len();
+        let scheme = scheme_before(text, separator);
         let rest = &text[start..];
         let end = rest
             .find(|c: char| c == '/' || c.is_whitespace())
             .unwrap_or(rest.len());
-        from = start + end;
 
-        let Some(at) = rest[..end].rfind('@') else {
+        let at = match rest[..end].rfind('@') {
+            None if password_goes_on(scheme, &rest[..end]) => {
+                let line = rest.find(char::is_whitespace).unwrap_or(rest.len());
+                rest[..line].rfind('@')
+            }
+            at => at,
+        };
+        let Some(at) = at else {
+            from = start + end;
             continue;
         };
+        from = start + end.max(at + 1);
         let userinfo = &rest[..at];
         let user = userinfo.split_once(':').map_or(userinfo, |(user, _)| user);
-        let login = is_ssh(scheme_before(text, separator)) && !user.is_empty();
+        let login = is_ssh(scheme) && !user.is_empty();
         if login && user == userinfo {
             continue;
         }
@@ -73,6 +90,22 @@ pub fn redacted(text: &str) -> Cow<'_, str> {
 /// password, or a user name anywhere but in front of an ssh host.
 pub fn carries_credentials(url: &str) -> bool {
     matches!(redacted(url), Cow::Owned(_))
+}
+
+/// Whether `authority`, a URL's text from its `://` to its first `/`, is a
+/// user and the start of a password a `/` cut short rather than a host: a
+/// `:` with something other than a port's digits after it.
+///
+/// An IPv6 host, in brackets, is full of `:` and is a host all the same. A
+/// `file://` URL has no userinfo to cut, and on Windows its drive letter
+/// comes with a `:` and nothing after it.
+fn password_goes_on(scheme: &str, authority: &str) -> bool {
+    if scheme.eq_ignore_ascii_case("file") || authority.starts_with('[') {
+        return false;
+    }
+    authority.split_once(':').is_some_and(|(_, port)| {
+        port.is_empty() || !port.bytes().all(|byte| byte.is_ascii_digit())
+    })
 }
 
 /// The scheme written just before the `://` at `separator`.

@@ -22,6 +22,29 @@ fn redacting_drops_the_userinfo_before_the_host() {
 }
 
 #[test]
+fn a_password_with_a_slash_in_it_goes_too_however_soon_the_slash_comes() {
+    for (url, clean) in [
+        (
+            "https://me:p/ss@example.invalid/acme/skills",
+            "https://example.invalid/acme/skills",
+        ),
+        ("https://me:/pass@example.com/x", "https://example.com/x"),
+        (
+            "ssh://git:p/ss@example.com/acme/private.git",
+            "ssh://git@example.com/acme/private.git",
+        ),
+    ] {
+        assert_eq!(redacted(url), clean, "{url}");
+        assert!(carries_credentials(url), "{url}");
+    }
+    // As `gix` quotes it when it cannot parse it: whitespace still ends it.
+    assert_eq!(
+        redacted("URL \"https://me:p/ss@example.invalid/x\" can not be parsed as valid URL"),
+        "URL \"https://example.invalid/x\" can not be parsed as valid URL"
+    );
+}
+
+#[test]
 fn a_user_name_alone_goes_too_where_a_token_can_stand_in_for_one() {
     // GitHub takes a token as the user name of an https URL.
     assert_eq!(
@@ -62,6 +85,14 @@ fn redacting_leaves_a_url_without_userinfo_as_typed() {
         // An `@` after the host is part of the path, not a user.
         "file:///srv/git/team@work/skills",
         "https://example.com/acme/skills?ref=a@b",
+        // A port, an IPv6 host and a drive letter are not the start of a
+        // password, so an `@` after them is still in the path.
+        "https://example.com:8080/team@work/skills",
+        "https://[::1]/team@work/skills",
+        "https://[::1]:8080/team@work/skills",
+        "file://C:/Users/me@corp/skills",
+        // Nor is a `:` with no `@` anywhere after it.
+        "https://example.com:x/acme/skills",
         // The scp-like form has no room for a password.
         "git@github.com:acme/skills.git",
         "/srv/git/skills",

@@ -424,6 +424,30 @@ fn a_url_with_a_token_in_it_is_refused_and_the_token_is_kept_nowhere() {
     assert!(!stored.windows(9).any(|bytes| bytes == b"ghp_t0ken"));
 }
 
+#[test]
+fn a_password_cut_by_a_slash_is_refused_too_and_kept_nowhere() {
+    let (_dir, workspace) = workspace();
+    let ledger = workspace.ledger().unwrap();
+
+    // No parser reads this as a URL with a password in it, which is why it
+    // has to be caught before anything parses it.
+    let error = gather::gather(
+        &workspace,
+        &ledger,
+        &Request::git("https://me:p/t0ken@example.invalid/acme/skills"),
+    )
+    .unwrap_err();
+
+    assert!(
+        matches!(error, GatherError::CredentialsInUrl { .. }),
+        "{error}"
+    );
+    assert!(!error.to_string().contains("t0ken"), "{error}");
+    let stored = fs::read(workspace.ledger_path()).unwrap();
+    assert!(!stored.windows(5).any(|bytes| bytes == b"t0ken"));
+    assert!(!workspace.cache_dir().exists());
+}
+
 /// Leave in `workspace` what a Mindflayer from before the refusal left after
 /// gathering from `url` with a token in it: the URL in the source the clone
 /// in `directory` belongs to, in the log, and in that clone's config and
