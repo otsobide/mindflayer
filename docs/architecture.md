@@ -1333,7 +1333,10 @@ overview; the views come with the snapshot (#72 onward).
 Every request the panel makes goes through a `Transport`
 (`src/api/transport.ts`): `query` for a read, `send` for a task to preview or
 run, and `subscribe` for the events #74 will stream. Views get it from
-`useTransport`. The HTTP one (`src/api/http.ts`) is the only file allowed
+`useTransport`. The server's fourth endpoint, the transcript, has no call
+yet, because nothing shows it: the transcript drawer (#76) adds one, so that
+it too reaches the server through the transport, and a desktop shell can
+answer it. The HTTP transport (`src/api/http.ts`) is the only file allowed
 `fetch`, `EventSource`, `WebSocket` or `XMLHttpRequest`: an ESLint rule
 refuses them in every other file, and a test runs the rule.
 
