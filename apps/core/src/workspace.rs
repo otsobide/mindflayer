@@ -420,8 +420,9 @@ impl FlayerWorkspace {
     /// projects, nothing loaded, an empty ledger — and coming first changes
     /// nothing about what it says. Nothing is written through it: an edit of
     /// its marker is refused as it is for any directory that is not a
-    /// workspace, and so is its ledger. What writes makes the real one, with
-    /// [`locate_or_default`](Self::locate_or_default).
+    /// workspace, and so is its ledger. What writes makes the real one:
+    /// [`resolve`](crate::resolve::resolve) does, for a command that means to
+    /// write.
     pub fn unmade(root: impl AsRef<Path>) -> Result<Self, WorkspaceError> {
         let root = absolute(root.as_ref())?;
         let marker = flayer_template(&directory_name(&root), &Directories::default());
@@ -448,123 +449,6 @@ impl FlayerWorkspace {
             Some(root) => Self::open(root).map(Some),
             None => Ok(None),
         }
-    }
-
-    /// The workspace at or above `start`, or else the default one at `home`,
-    /// made there the first time it is needed.
-    ///
-    /// A workspace somewhere up the tree always wins: one made on purpose with
-    /// `flayer init` says more about where you are than a default does. With
-    /// none, the default means there is always a workspace to link projects
-    /// into, the way there is always a global git config to write to. `home`
-    /// is `None` when there is no default, and then neither is there a
-    /// workspace.
-    pub fn locate_or_default(
-        start: impl AsRef<Path>,
-        home: Option<&Path>,
-    ) -> Result<Option<Self>, WorkspaceError> {
-        if let Some(workspace) = Self::locate(start)? {
-            return Ok(Some(workspace));
-        }
-        match home {
-            Some(home) => Self::init(home).map(|(workspace, _)| Some(workspace)),
-            None => Ok(None),
-        }
-    }
-
-    /// Like [`locate_or_default`](Self::locate_or_default), passing over the
-    /// workspaces rooted at any of `excluded`.
-    ///
-    /// For `flayer load`: run from inside the workspace being loaded, the one
-    /// found first is that workspace, and a workspace cannot load itself, so
-    /// the walk carries on above it — and ends at the default in `home` when
-    /// nothing up there is left. That default is never one of `excluded`
-    /// either: loading your home workspace from inside it is refused rather
-    /// than answered with the workspace itself.
-    pub fn locate_or_default_except(
-        start: impl AsRef<Path>,
-        excluded: &[PathBuf],
-        home: Option<&Path>,
-    ) -> Result<Option<Self>, WorkspaceError> {
-        let start = absolute(start.as_ref())?;
-        let skipped = |root: &Path| excluded.iter().any(|path| same_directory(root, path));
-        let found = start.ancestors().find(|candidate| {
-            candidate.join(FLAYER_DIR).join(FLAYER_CONFIG).is_file() && !skipped(candidate)
-        });
-        if let Some(root) = found {
-            return Self::open(root).map(Some);
-        }
-        match home {
-            Some(home) if skipped(home) => Err(WorkspaceError::LoadsItself {
-                path: absolute(home)?,
-            }),
-            Some(home) => Self::init(home).map(|(workspace, _)| Some(workspace)),
-            None => Ok(None),
-        }
-    }
-
-    /// Like [`locate_or_default_except`](Self::locate_or_default_except),
-    /// but never making the default: for a command that can only read or
-    /// take away, which is no reason to write a marker into somebody's home.
-    pub fn locate_except(
-        start: impl AsRef<Path>,
-        excluded: &[PathBuf],
-        home: Option<&Path>,
-    ) -> Result<Option<Self>, WorkspaceError> {
-        let start = absolute(start.as_ref())?;
-        let skipped = |root: &Path| excluded.iter().any(|path| same_directory(root, path));
-        let found = start.ancestors().find(|candidate| {
-            candidate.join(FLAYER_DIR).join(FLAYER_CONFIG).is_file() && !skipped(candidate)
-        });
-        if let Some(root) = found {
-            return Self::open(root).map(Some);
-        }
-        match home {
-            Some(home) if skipped(home) => Ok(None),
-            _ => Self::default_at(home),
-        }
-    }
-
-    /// The default workspace at `home`, if it has been made.
-    ///
-    /// For a question that must not make it: whether a project is managed by
-    /// it, say, which is no reason to write a marker into somebody's home.
-    pub fn default_at(home: Option<&Path>) -> Result<Option<Self>, WorkspaceError> {
-        match home {
-            Some(home) if home.join(FLAYER_DIR).join(FLAYER_CONFIG).is_file() => {
-                Self::open(home).map(Some)
-            }
-            _ => Ok(None),
-        }
-    }
-
-    /// The default workspace at `home` as a command that only reads sees it:
-    /// the one made there, or else the one that would be, [`unmade`]. `None`
-    /// only when there is no default at all.
-    ///
-    /// [`unmade`]: Self::unmade
-    pub fn default_or_unmade(home: Option<&Path>) -> Result<Option<Self>, WorkspaceError> {
-        let Some(home) = home else {
-            return Ok(None);
-        };
-        match Self::default_at(Some(home))? {
-            Some(workspace) => Ok(Some(workspace)),
-            None => Self::unmade(home).map(Some),
-        }
-    }
-
-    /// Like [`locate_or_default`](Self::locate_or_default), for a command that
-    /// only reads: with nothing up the tree, the default it falls back to is
-    /// the one made in `home` or, until something makes it, the one that would
-    /// be — the same answer, without the marker.
-    pub fn locate_or_unmade(
-        start: impl AsRef<Path>,
-        home: Option<&Path>,
-    ) -> Result<Option<Self>, WorkspaceError> {
-        if let Some(workspace) = Self::locate(start)? {
-            return Ok(Some(workspace));
-        }
-        Self::default_or_unmade(home)
     }
 
     /// Whether this is the default workspace at `home` rather than one found

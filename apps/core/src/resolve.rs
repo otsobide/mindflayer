@@ -40,7 +40,8 @@ pub enum Intent {
     /// into somebody's home.
     Read,
     /// Change it. The default workspace is made in home the first time one
-    /// is needed, so there is always somewhere to link a project into.
+    /// is needed, so there is always somewhere to link a project into, the
+    /// way there is always a global git config to write to.
     Write,
 }
 
