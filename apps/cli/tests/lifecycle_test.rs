@@ -5,7 +5,7 @@ mod common;
 use common::*;
 
 // ---------------------------------------------------------------------------
-// Changing an artifact: edit, rename, remove — and templates to start from
+// Changing an artifact: edit, rename, remove, and templates to start from
 // ---------------------------------------------------------------------------
 
 #[test]

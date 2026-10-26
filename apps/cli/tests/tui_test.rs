@@ -1125,7 +1125,7 @@ fn reading_from_the_tui_leaves_the_default_workspace_unmade() {
 
     assert_eq!(
         app.message.as_ref().map(|message| message.text.as_str()),
-        Some("no projects to install into yet — l links one")
+        Some("no projects to install into yet; l links one")
     );
     assert!(!home.path().join(FLAYER_DIR).exists());
     assert_eq!(app.transcript(), "");
@@ -1216,7 +1216,7 @@ fn the_install_screen_opens_on_the_default_workspace_not_on_one_above_its_home()
     assert!(!matches!(app.mode, Mode::Installing(_)), "{:?}", app.mode);
     assert_eq!(
         app.message.as_ref().map(|message| message.text.as_str()),
-        Some("no projects to install into yet — l links one")
+        Some("no projects to install into yet; l links one")
     );
     assert!(!home.join(FLAYER_DIR).exists());
 }

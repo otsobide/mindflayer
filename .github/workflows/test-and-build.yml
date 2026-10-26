@@ -47,7 +47,7 @@ jobs:
       - name: Check formatting
         run: make fmt/check
 
-      - name: Run clippy
+      - name: Run lint (no em dash, then clippy)
         run: make lint
 
   # -------------------------------------------------------------------------

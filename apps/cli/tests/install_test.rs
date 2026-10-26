@@ -7,8 +7,8 @@ use common::*;
 // ---------------------------------------------------------------------------
 // install
 //
-// The screen is driven the way a person drives it — a sequence of key presses
-// — and drawn into an in-memory terminal, so the two things a user actually
+// The screen is driven the way a person drives it (a sequence of key presses)
+// and drawn into an in-memory terminal, so the two things a user actually
 // meets, what a key does and what they see, are both under test. Only the
 // event loop that reads a real keyboard is not, and it holds nothing else.
 // ---------------------------------------------------------------------------

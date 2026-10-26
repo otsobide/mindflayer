@@ -46,7 +46,7 @@ pub enum View {
     /// Nothing yet where the TUI was opened: no workspace for `flayer`, no
     /// project for `mind`.
     Nowhere,
-    /// A workspace and everything it holds — or one project on its own.
+    /// A workspace and everything it holds, or one project on its own.
     Workspace(Workspace),
 }
 
@@ -316,8 +316,8 @@ impl Task {
     /// Not a description of the task: the task. The caller parses these with
     /// the real parsers and runs what comes out, so a line here that does not
     /// parse is a task that cannot happen. The two install tasks are the
-    /// exception — the screen does that work, and `flayer install` is the
-    /// command that opens the same screen — and a refresh changes nothing.
+    /// exception (the screen does that work, and `flayer install` is the
+    /// command that opens the same screen), and a refresh changes nothing.
     pub fn commands(&self) -> Vec<Vec<String>> {
         match self {
             Task::InitWorkspace => vec![words(&["flayer", "init"], &[])],
@@ -463,7 +463,7 @@ impl Task {
 }
 
 /// One command line, at the level a holder is at: `flayer <command>` for the
-/// workspace's own, `mind -C <entry> <command>` for a project — and plain
+/// workspace's own, `mind -C <entry> <command>` for a project, and plain
 /// `mind <command>` for the one at the root, where `-C .` says nothing.
 ///
 /// A `-W .` is typed from the root, as the `-C` is, so it names the
@@ -490,7 +490,7 @@ fn qualified(kind: Kind, name: &str) -> String {
 }
 
 /// A command line's words: `head`, then the positionals, behind a `--` when
-/// one of them would otherwise be read as a flag — a description is free
+/// one of them would otherwise be read as a flag; a description is free
 /// text, and `- the fast way` is a fine one.
 fn words(head: &[&str], positionals: &[&str]) -> Vec<String> {
     let mut line: Vec<String> = head.iter().map(|word| (*word).to_owned()).collect();
@@ -855,19 +855,19 @@ impl App {
         let default = workspace.reason == Some(Reason::Home);
         let message = match (&workspace.above, workspace.scope) {
             _ if default && !workspace.made => Some(format!(
-                "no workspace here or above — your default one, in {}, is made by the first change; `flayer init` makes one here",
+                "no workspace here or above: your default one, in {}, is made by the first change; `flayer init` makes one here",
                 workspace.root.display()
             )),
             _ if default => Some(format!(
-                "no workspace here or above — this is your default one, in {}; `flayer init` makes one here",
+                "no workspace here or above: this is your default one, in {}; `flayer init` makes one here",
                 workspace.root.display()
             )),
             _ if lonely => Some(format!(
-                "{} manages no projects yet — l links one",
+                "{} manages no projects yet; l links one",
                 workspace.name
             )),
             (Some(above), Scope::Project) => Some(format!(
-                "no workspace manages this project; the one at {} would — l links it",
+                "no workspace manages this project, but the one at {} would; l links it",
                 above.display()
             )),
             _ => None,
@@ -1090,13 +1090,13 @@ impl App {
             ('L', Some(_)) => (Mode::Loading(LoadForm::default()), Step::Stay),
             ('l' | 'L', None) => {
                 self.message = Some(Message::info(
-                    "no workspace above this project — `flayer init` in the folder that holds your projects makes one",
+                    "no workspace above this project; `flayer init` in the folder that holds your projects makes one",
                 ));
                 (Mode::Browse, Step::Stay)
             }
             _ => {
                 self.message = Some(Message::info(
-                    "that is a workspace's, and no workspace manages this project — l links it to one",
+                    "that is a workspace's, and no workspace manages this project; l links it to one",
                 ));
                 (Mode::Browse, Step::Stay)
             }
@@ -1124,7 +1124,7 @@ impl App {
                     Some((false, _)) => self.focus = Focus::Items,
                     Some((true, name)) => {
                         self.message = Some(Message::info(format!(
-                            "nothing in {name} yet — a adds a skill or a rule"
+                            "nothing in {name} yet; a adds a skill or a rule"
                         )));
                     }
                     None => {}
@@ -1171,7 +1171,7 @@ impl App {
         };
         let Some((holder, kind, name)) = picked else {
             self.message = Some(Message::info(
-                "pick an artifact first — → moves over to them",
+                "pick an artifact first; → moves over to them",
             ));
             return (Mode::Browse, Step::Stay);
         };
@@ -1250,7 +1250,7 @@ impl App {
                 "{} cannot be opened, so nothing can be added to it",
                 member.name
             )),
-            None => Some(String::from("link a project first — l")),
+            None => Some(String::from("link a project first; l links one")),
         };
         match refusal {
             None => (Mode::Adding(AddForm::new(self.cursor)), Step::Stay),
@@ -1268,7 +1268,7 @@ impl App {
         };
         if member.own {
             self.message = Some(Message::info(
-                "these are the workspace's own, not a project it links — there is nothing to unlink",
+                "these are the workspace's own, not a project it links, so there is nothing to unlink",
             ));
             return (Mode::Browse, Step::Stay);
         }
@@ -1413,10 +1413,10 @@ impl App {
                 if let Some(task) = self.load_task(&form) {
                     // The workspace a load goes into skips the one being
                     // loaded, so loading the one on screen would quietly go
-                    // somewhere else — into the one above, or your home's.
+                    // somewhere else: into the one above, or your home's.
                     if self.loads_itself(&form) {
                         form.error = Some(String::from(
-                            "that is the workspace this would load into — a workspace cannot load itself",
+                            "that is the workspace this would load into, and a workspace cannot load itself",
                         ));
                         return (Mode::Loading(form), Step::Stay);
                     }
@@ -1489,7 +1489,7 @@ impl App {
 
     /// What the load form would run, if it were submitted now: `flayer load`
     /// on a workspace, `mind load` on a project on its own. Nothing without a
-    /// path — picking a loaded one is for unloading it.
+    /// path: picking a loaded one is for unloading it.
     pub fn load_task(&self, form: &LoadForm) -> Option<Task> {
         let path = form.path.text().trim();
         if path.is_empty() {
@@ -1586,7 +1586,7 @@ impl App {
             Performed::Install(screen) => {
                 if screen.targets.is_empty() {
                     self.message = Some(Message::info(
-                        "no projects to install into yet — l links one",
+                        "no projects to install into yet; l links one",
                     ));
                 } else {
                     self.mode = Mode::Installing(screen);
@@ -1665,7 +1665,7 @@ impl App {
                 self.mode = Mode::Browse;
                 self.select_item(*kind, name);
             }
-            // The project the TUI was opened on, now a project — or now one a
+            // The project the TUI was opened on, now a project, or now one a
             // workspace manages, which is what the screen shows from here on.
             Task::InitProject | Task::LinkHere => {
                 self.mode = Mode::Browse;
@@ -2108,7 +2108,7 @@ impl Confirm {
                 format!("{path} is not a mind project yet."),
                 String::new(),
                 String::from(
-                    "Make it one — a .mind marker and empty skills/ and rules/ folders — and link it?",
+                    "Make it one (a .mind marker and empty skills/ and rules/ folders) and link it?",
                 ),
             ],
             task: Task::InitAndLink { path },
