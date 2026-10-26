@@ -43,6 +43,19 @@ fn a_tool_pattern_is_not_split_inside_its_parentheses() {
 }
 
 #[test]
+fn reads_compatibility_when_it_is_there() {
+    let manifest =
+        SkillManifest::parse("name: a\ndescription: d\ncompatibility: Requires git and jq\n")
+            .unwrap();
+    assert_eq!(
+        manifest.compatibility.as_deref(),
+        Some("Requires git and jq")
+    );
+    let manifest = SkillManifest::parse("name: a\ndescription: d\n").unwrap();
+    assert_eq!(manifest.compatibility, None);
+}
+
+#[test]
 fn rejects_front_matter_missing_a_required_key() {
     assert!(SkillManifest::parse("name: a\n").is_err());
     assert!(SkillManifest::parse("description: d\n").is_err());

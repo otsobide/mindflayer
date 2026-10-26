@@ -14,9 +14,19 @@ fn skill(name: &str, description: &str, directory: &str) -> Artifact {
             description: description.to_owned(),
             allowed_tools: None,
             license: None,
+            compatibility: None,
         }),
         summary: first_line(description),
     }
+}
+
+/// `skill`, declaring a `compatibility` too.
+fn compatible(compatibility: &str) -> Artifact {
+    let mut artifact = skill("a", "d", "/s/a");
+    if let Declared::Skill(manifest) = &mut artifact.declared {
+        manifest.compatibility = Some(compatibility.to_owned());
+    }
+    artifact
 }
 
 fn rule(name: &str, summary: Option<&str>) -> Artifact {
@@ -93,6 +103,22 @@ fn flags_limits_by_characters_not_bytes() {
     assert!(issues.contains(&ValidationIssue::DescriptionTooLong {
         length: MAX_DESCRIPTION_LEN + 1
     }));
+}
+
+#[test]
+fn a_compatibility_once_written_has_to_say_something_and_fit() {
+    assert_eq!(compatible("Requires git").validate(), vec![]);
+    assert_eq!(
+        compatible("  ").validate(),
+        vec![ValidationIssue::CompatibilityEmpty]
+    );
+    let long = "\u{00df}".repeat(MAX_COMPATIBILITY_LEN + 1);
+    assert_eq!(
+        compatible(&long).validate(),
+        vec![ValidationIssue::CompatibilityTooLong {
+            length: MAX_COMPATIBILITY_LEN + 1
+        }]
+    );
 }
 
 #[test]

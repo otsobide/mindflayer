@@ -10,7 +10,9 @@ use thiserror::Error;
 
 use crate::frontmatter::{self, FrontMatterError};
 use crate::kind::{Kind, Layout};
-use crate::skill::{SkillManifest, MAX_DESCRIPTION_LEN, MAX_NAME_SEGMENT_LEN};
+use crate::skill::{
+    SkillManifest, MAX_COMPATIBILITY_LEN, MAX_DESCRIPTION_LEN, MAX_NAME_SEGMENT_LEN,
+};
 
 /// What an artifact declared about itself.
 ///
@@ -226,6 +228,17 @@ impl Artifact {
                 } else if length > MAX_DESCRIPTION_LEN {
                     issues.push(ValidationIssue::DescriptionTooLong { length });
                 }
+                // Optional, but once written it has to say something and fit:
+                // an agent may show it to the model when the skill is loaded.
+                if let Some(compatibility) = &manifest.compatibility {
+                    let compatibility = compatibility.trim();
+                    let length = compatibility.chars().count();
+                    if compatibility.is_empty() {
+                        issues.push(ValidationIssue::CompatibilityEmpty);
+                    } else if length > MAX_COMPATIBILITY_LEN {
+                        issues.push(ValidationIssue::CompatibilityTooLong { length });
+                    }
+                }
             }
             Declared::Rule => {
                 // A rule declares nothing, so there is exactly one thing left
@@ -342,6 +355,8 @@ pub enum ValidationIssue {
     NameDirectoryMismatch { name: String, directory: String },
     DescriptionEmpty,
     DescriptionTooLong { length: usize },
+    CompatibilityEmpty,
+    CompatibilityTooLong { length: usize },
     Empty,
 }
 
@@ -365,6 +380,14 @@ impl fmt::Display for ValidationIssue {
             ValidationIssue::DescriptionTooLong { length } => write!(
                 f,
                 "`description` is {length} characters, over the {MAX_DESCRIPTION_LEN} character limit"
+            ),
+            ValidationIssue::CompatibilityEmpty => write!(
+                f,
+                "`compatibility` is empty; leave it out when the skill needs nothing in particular"
+            ),
+            ValidationIssue::CompatibilityTooLong { length } => write!(
+                f,
+                "`compatibility` is {length} characters, over the {MAX_COMPATIBILITY_LEN} character limit"
             ),
             ValidationIssue::Empty => write!(f, "the file has no content"),
         }

@@ -14,12 +14,17 @@ use serde::Deserialize;
 pub const MAX_NAME_SEGMENT_LEN: usize = 64;
 /// The longest description an agent will load.
 pub const MAX_DESCRIPTION_LEN: usize = 1024;
+/// The longest `compatibility` the specification allows.
+pub const MAX_COMPATIBILITY_LEN: usize = 500;
 
 /// The front matter of a `SKILL.md`, as written.
 ///
-/// Unknown keys are kept out of the struct rather than rejected: the format
-/// grows, and a skill carrying a key this version has never heard of is still
-/// a skill worth listing.
+/// The fields are the ones the Agent Skills specification defines
+/// (<https://agentskills.io/specification>), which is what Claude Code, Codex
+/// and OpenCode all read. Unknown keys are kept out of the struct rather than
+/// rejected: the format grows, every agent adds keys of its own, and a skill
+/// carrying a key this version has never heard of is still a skill worth
+/// listing.
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 pub struct SkillManifest {
     /// The name the agent invokes the skill by.
@@ -30,9 +35,13 @@ pub struct SkillManifest {
     /// The tools the skill is allowed to use, if it narrows them.
     #[serde(default, rename = "allowed-tools", deserialize_with = "tool_list")]
     pub allowed_tools: Option<Vec<String>>,
-    /// An SPDX identifier, when the skill declares one.
+    /// The license, by name or as a reference to a file the skill bundles.
     #[serde(default)]
     pub license: Option<String>,
+    /// What the skill needs from where it runs — the product it was made for,
+    /// system packages, network access — in prose, when it needs anything.
+    #[serde(default)]
+    pub compatibility: Option<String>,
 }
 
 impl SkillManifest {
