@@ -16,9 +16,9 @@ use std::path::{Path, PathBuf};
 
 use thiserror::Error;
 
-use crate::artifact;
+use crate::install;
 use crate::kind::{Kind, Layout};
-use crate::workspace::{FlayerWorkspace, MindProject, WorkspaceError};
+use crate::workspace::{FlayerWorkspace, MindProject};
 
 /// The folder inside `.mind` or `.mindflayer` that holds templates.
 pub const TEMPLATES_DIR: &str = "templates";
@@ -95,10 +95,13 @@ impl Template {
     }
 }
 
-/// Every template `project` can use: its own, its workspace's, and the ones
-/// built in, with a closer one hiding a further one of the same kind and
-/// name. Ordered by kind, then by name.
-pub fn templates(project: &MindProject) -> Result<Vec<Template>, TemplateError> {
+/// Every template `project` can use: its own, `workspace`'s when that
+/// manages it, and the ones built in, with a closer one hiding a further one
+/// of the same kind and name. Ordered by kind, then by name.
+pub fn templates(
+    workspace: Option<&FlayerWorkspace>,
+    project: &MindProject,
+) -> Result<Vec<Template>, TemplateError> {
     let mut found: Vec<Template> = Vec::new();
     let mut offer = |template: Template| {
         let hidden = found
@@ -109,7 +112,7 @@ pub fn templates(project: &MindProject) -> Result<Vec<Template>, TemplateError> 
         }
     };
 
-    for directory in search_path(project)? {
+    for directory in search_path(workspace, project) {
         for template in on_disk(&directory)? {
             offer(template);
         }
@@ -127,15 +130,22 @@ pub fn templates(project: &MindProject) -> Result<Vec<Template>, TemplateError> 
 }
 
 /// The template of `kind` called `name`, from wherever is closest.
-pub fn find(project: &MindProject, kind: Kind, name: &str) -> Result<Template, TemplateError> {
+pub fn find(
+    workspace: Option<&FlayerWorkspace>,
+    project: &MindProject,
+    kind: Kind,
+    name: &str,
+) -> Result<Template, TemplateError> {
     // A name, not a path: it is looked up in known places and must not be
-    // able to reach out of them.
-    if name.contains('/') || !artifact::name_issues(name).is_empty() {
+    // able to reach out of them. One folder name is all that takes; the
+    // naming rules are for what is created from it, and a template `mind
+    // templates` lists has to be one `--template` can use.
+    if !install::is_folder_name(name) {
         return Err(TemplateError::BadName {
             name: name.to_owned(),
         });
     }
-    let all = templates(project)?;
+    let all = templates(workspace, project)?;
     if let Some(found) = all.iter().find(|t| t.kind == kind && t.name == name) {
         return Ok(found.clone());
     }
@@ -161,17 +171,20 @@ pub fn find(project: &MindProject, kind: Kind, name: &str) -> Result<Template, T
 
 /// Where templates are looked for, closest first.
 ///
-/// A workspace's templates count for a project it manages, found by walking
-/// up — the same rule every other workspace-wide thing follows — and for the
-/// workspace's own artifacts, whose holder sits at the workspace's root.
-fn search_path(project: &MindProject) -> Result<Vec<PathBuf>, TemplateError> {
+/// `workspace` is the one the front end resolved for the command, given
+/// rather than found by walking up from the project, which would miss one
+/// that manages the project from somewhere that is not above it. Its
+/// templates count for a project it manages and for its own artifacts, whose
+/// holder sits at its root; a workspace that does neither is not the
+/// project's, and neither are its templates.
+fn search_path(workspace: Option<&FlayerWorkspace>, project: &MindProject) -> Vec<PathBuf> {
     let mut directories = vec![project.mind_dir().join(TEMPLATES_DIR)];
-    if let Some(workspace) = FlayerWorkspace::locate(project.root())? {
-        if workspace.root() == project.root() || workspace.is_linked(project.root()) {
-            directories.push(workspace.flayer_dir().join(TEMPLATES_DIR));
-        }
+    if let Some(workspace) = workspace.filter(|workspace| {
+        workspace.root() == project.root() || workspace.is_linked(project.root())
+    }) {
+        directories.push(workspace.flayer_dir().join(TEMPLATES_DIR));
     }
-    Ok(directories)
+    directories
 }
 
 /// The templates in one folder: each folder holding a manifest is a skill
@@ -268,7 +281,7 @@ fn built_in(name: &str) -> &'static [File] {
 /// Why a template could not be found or read.
 #[derive(Debug, Error)]
 pub enum TemplateError {
-    #[error("`{name}` is not a template name: templates are named like artifacts, with no `/`")]
+    #[error("`{name}` is not a template name: a template is one folder, named with no `/`")]
     BadName { name: String },
     #[error("no {kind} template called `{name}`{}", there_are(.available))]
     Unknown {
@@ -288,8 +301,6 @@ pub enum TemplateError {
         #[source]
         source: io::Error,
     },
-    #[error(transparent)]
-    Workspace(#[from] WorkspaceError),
 }
 
 /// "; there are full, runbook", or nothing when there are none.

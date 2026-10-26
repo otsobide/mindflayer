@@ -11,6 +11,7 @@
 //! and whatever front end comes after it, decides how to render what these
 //! types return, so the two can never disagree about what a skill is.
 
+pub mod agent;
 pub mod artifact;
 pub mod catalog;
 pub mod copy;
@@ -28,6 +29,7 @@ pub mod skill;
 pub mod template;
 pub mod workspace;
 
+pub use agent::AgentHomes;
 pub use artifact::{Artifact, ArtifactError, Declared, ValidationIssue};
 pub use catalog::{Catalog, DiscoveryFailure, Reference, QUALIFIER};
 pub use create::{create, create_from, CreateError};
@@ -39,7 +41,10 @@ pub use kind::{Kind, Layout, UnknownKind};
 pub use ledger::{Ledger, LedgerError, SourceKind, LEDGER_FILE};
 pub use lifecycle::{LifecycleError, Target};
 pub use scan::{scan, Found, Scan, ScanFailure};
-pub use skill::{SkillManifest, MAX_DESCRIPTION_LEN, MAX_NAME_SEGMENT_LEN};
+pub use skill::{
+    Compatibility, Metadata, SkillManifest, MAX_COMPATIBILITY_LEN, MAX_DESCRIPTION_LEN,
+    MAX_NAME_SEGMENT_LEN,
+};
 pub use template::{Template, TemplateError, TEMPLATES_DIR};
 pub use workspace::{
     Directories, FlayerConfig, FlayerWorkspace, Initialization, Loaded, Marker, Member, MindConfig,

@@ -58,7 +58,8 @@ Two consequences worth stating, because they are what the split buys:
 The grammar is in `parse.rs`, the work in `commands.rs` and a module per
 family of commands under `commands/`, and what a command produced, with the
 helpers every report is laid out with, in `render.rs`. `CliError` has
-`error.rs` to itself, and `lib.rs` only says what is public.
+`error.rs` to itself, `homes.rs` decides where the default workspace's home and
+each agent's own folder are, and `lib.rs` only says what is public.
 
 The split is by family. One file holding the parser, every command and the
 rendering was where every change to a command met every other, so pieces of
@@ -140,13 +141,90 @@ no line of text has nothing to offer an agent. Storing the fact rather than the
 verdict is what keeps `validate` pure — every check it makes was decided when
 the file was read, so asking whether something is valid cannot itself fail.
 
+### What a skill declares
+
+A skill's front matter is the Agent Skills format
+([agentskills.io/specification](https://agentskills.io/specification)), the
+one Claude Code, Codex and OpenCode all read, and `SkillManifest` holds the
+fields it defines and no others:
+
+| Key | | Held to |
+|---|---|---|
+| `name` | required | lowercase letters and digits joined by single hyphens (`^[a-z0-9]+(-[a-z0-9]+)*$`), at most 64 characters, and the same as its folder |
+| `description` | required | 1 to 1024 characters |
+| `license` | optional | |
+| `compatibility` | optional | 1 to 500 characters |
+| `metadata` | optional | a map from strings to strings |
+| `allowed-tools` | optional | tools separated by spaces |
+
+Every other key — Claude Code's `paths` and `disable-model-invocation`, say —
+belongs to an agent, and passes through: not modelled, not rejected, and kept
+byte for byte by everything that writes a manifest, since `rename` rewrites one
+line and gathering and installing copy files. Modelling them would make this
+crate the place where three agents' formats are reconciled, which is not a job
+anybody asked it to take on.
+
+`allowed-tools` is split on spaces, as the specification writes it, and on
+commas, as Claude Code first wrote it and older skills still do — never inside
+parentheses, so a permission pattern such as `Bash(git add *)` stays one tool.
+A YAML list is read too.
+
+`metadata` is read leniently. The specification makes it a map of strings, but
+a shipping agent writes nested maps and booleans in it
+([agentskills#514](https://github.com/agentskills/agentskills/issues/514)),
+and failing the whole manifest over one entry would leave the skill out of
+every listing. So the string entries are read, the others are named for
+`validate` to report, and nothing is rewritten: what is ignored here is still
+in the file for whichever agent wrote it. `compatibility` is read the same way,
+since a list of the agents a skill was made for is the obvious thing to write
+in place of the specification's sentence: a value that is not a string is
+ignored and reported. Neither builds what it ignores, only skips it, and
+`metadata` is read an entry at a time rather than into a map, so a key written
+twice is reported (the first is read) instead of failing the manifest, as a map
+would.
+
+The name rule is held to every name, a rule's route segment by segment
+included. A looser one for rules was the alternative, and it would only have
+been a second rule to keep in step with the first.
+
+### Strict when writing, lenient when reading
+
+`Artifact::validate` gives one list of problems, and it is treated three ways:
+
+- **Refused** when Mindflayer writes a skill into a project, if the name or
+  the description breaks the rules. `mind add`, `rename` and `install` all
+  ask `artifact::strict_issues`, which keeps what `ValidationIssue::is_strict`
+  picks out of that list, for the skill as it is about to be written — so one
+  change to the set reaches all three. `rename` asks too, although the name is
+  all it writes, because what it leaves behind is a skill Mindflayer wrote;
+  `mind add` checks the name and the description before building anything as
+  well, only for messages of its own. Those are what agents refuse: Codex skips a skill whose name is over 64
+  characters or whose description is empty, so writing one would put a skill
+  in the project that never loads. So is a name that is not the folder the
+  skill is filed in, since an agent finds a skill by one or the other — asked
+  of the folder Mindflayer is about to write, not the one the files were read
+  from. `compatibility` and `metadata` are not refused, because an agent reads
+  past them.
+- **Warned about** when gathering, which takes the skill anyway, as the
+  agentskills.io client guide advises for skills written for other agents. The
+  shelf is a record of what a source holds, and leaving a skill off it would
+  hide the problem along with the skill.
+- **Reported** by `validate`, in full, and at the workspace level for the shelf
+  too, so what gathering warned about can be found again later. Only a
+  problem makes an artifact invalid and the exit non-zero; what an agent reads
+  past (`ValidationIssue::is_warning`, the same `compatibility` and `metadata`
+  that are not refused) is listed as a warning and leaves the verdict at `ok`.
+  Counted as invalid, a skill installed with nested metadata would fail its
+  project's `validate` from then on, and the only way to clear it would be to
+  edit the copy, which disowns it. The TUI's `✗` follows the same line.
+
 ### Adding a third kind
 
 A variant on `Kind`, its folder and layout, a variant on `Declared`, a
-constructor on `Artifact`, and an arm in every match on the kind — discovery,
-`create`, `lifecycle::load` and `lifecycle::rename`, and the refusal in
-`gather` — which the compiler lists, since the matches are exhaustive. Reports
-need nothing:
+constructor on `Artifact`, and an arm in every match on the kind — discovery
+and discovering the shelf, `create`, `lifecycle::load` and `lifecycle::rename`,
+the refusal in `gather`, and what `install` holds a copy to — which the
+compiler lists, since the matches are exhaustive. Reports need nothing:
 columns, labels and counts are all driven from `Kind::ALL` and from what the
 catalog actually found.
 
@@ -183,7 +261,8 @@ things that used to be guesses:
   command tried to be both and its answer changed depending on which directory
   it was run from.
 - **How an artifact is labelled.** Only the workspace level qualifies one by
-  what holds it — a project, or `workspace` for its own — because inside a
+  what holds it — a project, `workspace` for its own, or `shelf/<source
+  folder>` for what `flayer validate` finds on the shelf — because inside a
   single project that says nothing.
   The same rule governs the kind: `mind list` grows a kind column, and
   `validate` starts printing `rule:x` instead of `x`, only once more than one
@@ -203,8 +282,9 @@ way round where it means anything. `flayer add`, `edit`, `rename`, `remove` and
 with `-p`; `mind link`, `unlink`, `install` and `uninstall` act on the project
 you are in, against the workspace above it. `flayer list`, `show` and
 `validate` read everything — the workspace's own and every project's — or one
-project with `-p`. Reads look everywhere; a change needs one place, and
-without `-p` that place is the workspace.
+project with `-p`; `flayer validate` reads the shelf as well, labelling what it
+finds there `shelf/<source folder>`. Reads look everywhere; a change needs one
+place, and without `-p` that place is the workspace.
 
 There is one implementation of each. `mind add` and `flayer add -p alpha` are
 the same function given the same project, and `flayer add` is that function
@@ -408,8 +488,9 @@ answer `Catalog::find` gives inside a project — return both, decide nothing �
 one level up.
 
 The folder a skill lands in keeps the name the **source** gave it, not the name
-the skill declares. When those disagree that is something `validate` reports;
-renaming the folder on the way in would repair the symptom and hide it.
+the skill declares. When those disagree that is something gathering warns about
+and `flayer validate` reports; renaming the folder on the way in would repair
+the symptom and hide it.
 
 ### The clone is kept, and re-made
 
@@ -429,16 +510,41 @@ worth asking the second time: what moved.
 
 Failures are collected, as everywhere else: one skill with broken front matter
 is a warning beside the forty that came through, not a reason to be told
-nothing.
+nothing. One that reads but breaks a rule is taken, with a warning for each
+problem ([Strict when writing, lenient when
+reading](#strict-when-writing-lenient-when-reading)).
 
 ### Why `gix` rather than running `git`
 
 Nothing depends on a `git` being installed, or on which `git` is first on the
 PATH, and core keeps doing its own I/O rather than supervising a process. The
 cost is that authentication for private repositories is ours to solve rather
-than inherited whole from `git`, and it is not solved yet:
-[D-16](#d-16-credentials-come-from-the-front-end-never-from-a-prompt) decides
-how.
+than inherited whole from `git`.
+
+Half of it is solved: a fetch **never prompts** for a credential. When a server
+asks who is fetching, `gix`'s own answer runs the credential helpers git config
+names and, when none of them has a credential, asks a person: an askpass
+program, then the terminal. The TUI owns the terminal while a gather runs, so
+that prompt is a screen that stops answering, and the server that comes next
+has no terminal at all. So every connection `gix` lets a clone configure is
+given a credentials callback (`gather::credentials`) that runs the same helper
+cascade with the prompt and askpass turned off. A credential no helper has is
+`GitError::Credentials`: the URL without its userinfo, and the two ways to
+provide one, a git credential helper or, for an ssh URL, ssh-agent. Over ssh,
+`gix` runs the system `ssh`, which authenticates with keys of its own and asks
+the helpers only for a user name, so a login ssh refuses is reported the same
+way. Whether a fetch went over ssh is read from the URL `gix` connected to, not
+the one typed: git config's `url.<base>.insteadOf` can turn a typed https URL
+into an ssh one, or the reverse. What ssh itself asks on the terminal is
+outside the callback's reach, and so is the one connection `gix` opens without
+letting the clone configure it; both are [open questions](#open-questions).
+
+The callback is set on the connection rather than asked for through git
+config (`gitoxide.credentials.terminalPrompt=false`), which would also stop
+the prompt: the guarantee then lives in code a test reaches, not in a string
+among the user's own settings, and the credential a front end supplies needs
+the callback to arrive through anyway. That other half is
+[D-16](#d-16-credentials-come-from-the-front-end-never-from-a-prompt)'s.
 
 `gix`'s error types are large and would become part of this crate's public API
 if they were carried, tying its version to gix's, so `GitError` keeps what they
@@ -488,6 +594,20 @@ project the same mismatch is not a report, it is a skill that lists fine and
 never loads — the directory name is how an agent finds what it was told to
 invoke. So the copy is filed under the declared name, and the disagreement
 stays where it belongs, upstream.
+
+### Held to the rules on the way in
+
+What gathering took leniently, installing takes strictly: a skill whose name
+or description breaks the rules is offered, so nothing gathered is hidden, and
+refused, so nothing an agent would skip lands in a project. The check reads the
+files about to be copied rather than what the ledger noted when they were
+gathered, because the shelf is a folder anybody can edit and the workspace's own
+are edited as a matter of course. For the same reason it compares what they
+declare with the folder the copy is about to be filed in, the name the ledger
+recorded: a shelf copy edited to declare another name, or a skill its source
+renamed while the record of its old name stayed, would otherwise land under one
+name declaring another. A refused skill is fixed upstream and gathered again,
+or, if it is the workspace's own, fixed where it is.
 
 ### It only manages what it installed
 
@@ -793,14 +913,62 @@ included: `flayer list`, `flayer scan`, `mind install` and opening `flayer`'s
 TUI all go through `locate_or_default`, so the first of them run outside every
 workspace leaves a `~/.mindflayer` behind. The exceptions are the commands
 that only list or take away a load — `flayer load` on its own, `unload` — which
-use `locate_except`, and `mind` opening its TUI, which uses `default_at`: both
-open the home workspace if it exists and never create it. Whether reading
-should create it at all is an [open question](#open-questions).
+use `locate_except`, and the `mind` commands that only consult a workspace —
+opening its TUI, `add`, `edit`, `rename`, `remove`, `templates` — which use
+`default_at`: both open the home workspace if it exists and never create it.
+Whether reading should create it at all is an [open question](#open-questions).
 
 Where home is comes from the front end, not from core: `--home`, then
 `$MINDFLAYER_HOME`, then the user's home directory, and empty means there is
 none. Core takes it as a parameter, which keeps it free of the environment and
 is what lets the tests run every command with the fallback switched off.
+
+## The agents' own folders
+
+Checks to come read what an agent reads for every project, not only what a
+project holds: Claude's user memory, Codex's config, OpenCode's configuration
+folder and the skills in `~/.agents` (#44, #91, #96). Those folders come in
+the way home does. `--claude-config-dir`, `--codex-home`,
+`--opencode-config-dir` and `--agents-dir` are global options on both parsers,
+and `homes::agent_homes` takes each from its option, then from the variable
+the agent itself reads (`$CLAUDE_CONFIG_DIR`, `$CODEX_HOME`,
+`$OPENCODE_CONFIG_DIR`), then from its folder in the user's home (`~/.claude`,
+`~/.codex`, `~/.config/opencode`, `~/.agents`). `~/.agents` has no variable:
+it belongs to no one agent, so none of their variables moves it. Core takes
+the answer as an `AgentHomes` and never resolves one.
+
+For OpenCode that order is a simplification: its documentation reads
+`$OPENCODE_CONFIG_DIR` as a folder loaded on top of `~/.config/opencode`, not
+one that replaces it. Nothing reads either yet, so the simpler shape stands
+until #17 checks the binary; the [open questions](#open-questions) say what
+changes if it is confirmed.
+
+Those folder names are core's all the same (`AgentHomes::defaults_under`),
+the way `.mindflayer` is: the CLI finds the user's home and core says which
+folder in it each agent reads. Which folder an agent reads is a fact about
+the agent, and spelling it in the CLI would leave a second front end to copy
+it and, one day, to disagree. The variable names stay in the CLI, the only
+one that reads them.
+
+They are options rather than variables read where a check needs them, for the
+reasons `--home` is one: core reads no environment, and a test cannot safely
+set a variable, because every other test in the process would see it. An
+option is pinned per command line, so `common::mind` and `common::flayer` give
+all four empty and no test can read a developer's real `~/.claude`. A test that
+spawns a binary has no parser to pin through, so it clears the variables and
+points `HOME` at a temp dir instead.
+
+Empty means none, not "unset, so use the default", because that is what makes
+pinning work: an empty option has to switch the lookup off rather than fall
+through to the environment running the tests. An empty variable means none
+too, as an empty `$MINDFLAYER_HOME` does; whether the agents agree is an [open
+question](#open-questions).
+
+No command reads them yet, so none takes them, and `agent_homes` is first
+called by the first one that does. That one also has to make the TUI pass its
+own to every command it runs, as `tui::execute` passes `--home`. Otherwise a
+command run from the TUI decides them again from the environment, and a test
+that drives the TUI reaches the real folders.
 
 ## Creating and changing artifacts
 
@@ -825,8 +993,25 @@ name, never removed by unticking one.
 `.mind/templates/` and `.mindflayer/templates/`, not beside the code: the
 artifacts are beside the code because agents read them, and nothing but
 Mindflayer reads a template. A workspace's templates count for the projects it
-manages, found by walking up, the rule every workspace-wide thing follows; of
-two templates of one kind and name, the closer wins.
+manages and for its own artifacts; of two templates of one kind and name, the
+closer wins.
+
+Which workspace that is, the command says. Core takes it as a parameter
+(`template::templates`, `template::find`) rather than walking up from the
+project, because a walk misses a workspace that links the project from beside
+it, and `flayer add -p` run there would not find the workspace's own
+templates. `flayer` passes the workspace it runs in. `mind` passes the one above
+the project, or else the default one in your home if it has been made — the
+order `mind link` looks in, without making anything (`commands::consulted`) —
+and the TUI offers in its add form what that finds, since the form runs a
+`mind` line. Core still checks that the workspace manages the project, so one
+that does not lends it nothing.
+
+A workspace `mind` cannot read refuses `mind add --template`, since passing it
+over would let a farther template of the same name, a built-in one say, stand
+in for its own. `edit`, `rename`, `remove` and an add from nothing only warn,
+after the change: there the workspace is only told. `mind templates` lists what
+it could read, with the same warning.
 
 A template's front matter keeps whatever it says except `name` and
 `description`, which `mind add` always sets: the template's lines for those
@@ -841,8 +1026,12 @@ a template with broken front matter costs nothing but the error.
 where its name would put it on disk (`lifecycle::find`). The second is what
 lets a skill whose front matter does not parse be opened and fixed: it is left
 out of every listing, and it is the one most in need of opening. Only a name
-that passes the name check is turned into a place, so `../x` cannot reach out
-of the project. More than one match is an error: changing the wrong artifact is
+made of plain folder names (`install::is_folder_name`, segment by segment) is
+turned into a place, so `../x` cannot reach out of the project. Not the naming
+rules: they are for what Mindflayer writes, and a folder from before they were
+tightened — `a--b` — or one made by hand is exactly what has to be found to be
+fixed. A template is looked up by one folder name for the same reason, since
+`mind templates` lists whatever is there. More than one match is an error: changing the wrong artifact is
 not something to guess about. The TUI lists unreadable files in the same way,
 by the name their place gives them (`lifecycle::identify`), so they can be
 reached with a key rather than only read about in a warning.
@@ -875,6 +1064,12 @@ would be inherited by whatever is written there next, and the install screen
 would then delete somebody's work because a box looked untidy. So each of them
 drops the record (`install::disown`), and `mind add` drops any stale one under
 the name it writes. An installed skill that is edited becomes its author's.
+
+The record dropped is the one held by the workspace the command resolved, the
+one its templates come from, and it is given to `install::disown` for the same
+reason: a workspace beside the project, which a walk up from the project never
+reaches, would keep a record of a copy that has changed. Another workspace that
+links the same project keeps its own, an [open question](#open-questions).
 
 ## Scanning
 
@@ -1274,11 +1469,23 @@ leak into the lifecycle code. Unblocks #33, #45, #62, #93, #94 and #95.
   update the first while leaving the second alone.
   [D-04](#d-04-an-edited-copy-is-detected-not-disowned) chose that hash, one
   per target, and #47 carries it out.
-- **Disowning from elsewhere.** `install::disown` finds the workspace by
-  walking up from the project, so a workspace that links the project from
-  somewhere that is not above it keeps its stale record. Every workspace
-  linking a project would have to be findable from the project for that to
-  change.
+- **Disowning from elsewhere.** A change drops the record of the workspace
+  its command resolved, wherever that sits, but not of any other workspace
+  that links the same project: nothing in the project says which workspaces
+  link it, so each of them keeps its stale record. Every workspace linking a
+  project would have to be findable from the project for that to change. The
+  TUI runs into it from inside: a project's row runs `mind -C <entry>`, the
+  line somebody in the project would type, and that consults the project's
+  workspace (the one above it, or the default) rather than the one on
+  screen. A screen on a workspace beside the project therefore leaves that
+  workspace's record behind, and its add form offers the other one's
+  templates. Nothing has to wait for that to change: `flayer <cmd> -p
+  <entry>`, run where the screen's lines run, already consults the workspace
+  on screen. The rows keep the `mind` line because the screen is at both
+  levels, as the CLI is, and a project's row teaches the project's command.
+  `-W` ([D-08](#d-08-an-explicit-or-activated-workspace-wins)) would let that
+  line name the screen's workspace as well, so which of the two a project's
+  row runs is still to choose.
 - **Reading commands create the home workspace.** `flayer list`, `show`,
   `validate`, `scan`, `templates`, `gather list`, `minds`, the `flayer` TUI and
   `mind install`/`uninstall` all make `~/.mindflayer` when nothing up the tree
@@ -1313,12 +1520,48 @@ leak into the lifecycle code. Unblocks #33, #45, #62, #93, #94 and #95.
   folder that is not one.
 - **Private repositories.** Mindflayer gives `gix` no credentials of its own,
   so a private source gets through only when a git-config helper (or, for an
-  ssh URL, ssh itself) has them, and otherwise the fetch can stop at a terminal
-  prompt. What it should be given is decided in
+  ssh URL, ssh itself) has them, and otherwise the gather fails and says how to
+  provide one, never at a prompt (see
+  [Why `gix`](#why-gix-rather-than-running-git)). What else it should be given
+  is decided in
   [D-16](#d-16-credentials-come-from-the-front-end-never-from-a-prompt): a
-  provider the front end supplies, through a callback that never prompts, then
-  the git-config helpers `gix` runs itself, then the system ssh binary. #26 and
-  #110 carry it out.
+  provider the front end supplies, through that same callback. #110 carries it
+  out, and #109 checks the helpers and ssh-agent against a real private
+  repository. ssh's own questions are still open: a passphrase for a key the
+  agent does not hold, a password when the server accepts password
+  authentication, or whether to trust a host seen for the first time, is asked
+  by ssh on the terminal, out of the callback's reach. `BatchMode=yes` in
+  the ssh command would make those failures too. One connection never sees
+  the callback either: when the remote has a branch named `HEAD`, which
+  clashes with the `HEAD` a clone fetches to know what to check out, `gix`
+  0.87 retries on a new connection without calling `configure_connection`, and
+  that one runs the helpers and then prompts, as `gix` does by default. While
+  the helpers are the only source, it asks them what the first connections
+  already got answered; once #110 supplies a token through the callback, that
+  connection will not have it. An in-memory `gitoxide.credentials.terminalPrompt=false`
+  on the clone would keep that prompt off the terminal, though not an askpass
+  named by `GIT_ASKPASS` or `SSH_ASKPASS`; a `gix` that configures the retry
+  too would close it.
+- **OpenCode's folder and `$XDG_CONFIG_HOME`.** Without
+  `$OPENCODE_CONFIG_DIR`, OpenCode's folder is taken to be
+  `~/.config/opencode`. Whether OpenCode moves it with `$XDG_CONFIG_HOME`, as
+  programs that follow the XDG base directories do, is unverified. If #17 finds
+  that it does, that variable becomes the step before the default for
+  `--opencode-config-dir`, and tests that spawn a binary clear it too.
+- **`$OPENCODE_CONFIG_DIR` beside OpenCode's folder, not instead of it.**
+  `--opencode-config-dir` takes the variable in place of `~/.config/opencode`,
+  as `--codex-home` takes `$CODEX_HOME` in place of `~/.codex`. OpenCode's
+  documentation says otherwise: the folder the variable names is loaded after
+  the global one and the project's `.opencode`, so it can override their
+  settings, and the global folder is still read. If #17 confirms that on the
+  real binary, a check that reads only one folder misses what OpenCode reads
+  from the other whenever the variable is set, and `AgentHomes` needs both
+  for OpenCode: `~/.config/opencode`, and the variable's folder on top.
+- **An empty agent variable.** An empty `$CLAUDE_CONFIG_DIR`, `$CODEX_HOME` or
+  `$OPENCODE_CONFIG_DIR` means no folder at all here, following
+  `$MINDFLAYER_HOME`. An agent that reads an empty one as unset uses its
+  default instead, and a check would then leave out a folder that agent does
+  read. How each agent reads it is for #17 to record.
 - **Rules that want to declare something.** Today a rule has no front matter,
   so a leading `---` in one is content. If rules later want metadata, that
   becomes a breaking reading of files written now. The escape hatch is cheap
@@ -1326,3 +1569,12 @@ leak into the lifecycle code. Unblocks #33, #45, #62, #93, #94 and #95.
   local change. [D-03](#d-03-rules-reach-every-agent-through-agentsmd) settles
   the if: a rule that declares `paths:` goes only to `.claude/rules/mindflayer`,
   so rules will carry front matter, and #41 gives `Declared::Rule` that payload.
+- **Names outside ASCII.** The specification allows "unicode lowercase
+  alphanumeric characters" in a name, while listing `a-z` and `0-9`, and its
+  reference validator accepts more than ASCII. Mindflayer holds names to ASCII,
+  the narrower reading and the one every agent accepts, so a gathered `café` is
+  warned about and not installed. If the agents settle on the wider one, the
+  name rule is one function (`is_kebab_case`).
+- **The shelf in other reports.** `flayer validate` reads the shelf; `flayer
+  list` and `show` do not, because `gather list` is the shelf's listing. Seeing
+  a gathered skill's contents before installing it means reading its folder.

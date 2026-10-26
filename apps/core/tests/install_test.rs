@@ -8,7 +8,7 @@ use common::{repository, skill, url};
 use mindflayer_core::gather::{self, Request};
 use mindflayer_core::install::{self, Installed, Removed, Standing};
 use mindflayer_core::ledger::Ledger;
-use mindflayer_core::{Directories, FlayerWorkspace, Kind, MindProject};
+use mindflayer_core::{create, Directories, FlayerWorkspace, Kind, MindProject};
 use tempfile::TempDir;
 
 /// A workspace with one project in it, and a shelf holding `names`.
@@ -66,7 +66,7 @@ fn a_disowned_copy_is_left_to_whoever_has_it_now() {
     )
     .unwrap();
 
-    assert!(install::disown(&project, Kind::Skill, "deploy").unwrap());
+    assert!(install::disown(&workspace, &project, Kind::Skill, "deploy").unwrap());
 
     // Still there, and now it is somebody's: shown, never overwritten or
     // deleted by unticking it.
@@ -80,7 +80,7 @@ fn a_disowned_copy_is_left_to_whoever_has_it_now() {
     );
     assert!(installed_at(&project, "deploy").is_dir());
     assert!(
-        !install::disown(&project, Kind::Skill, "deploy").unwrap(),
+        !install::disown(&workspace, &project, Kind::Skill, "deploy").unwrap(),
         "nothing left to drop"
     );
 }
@@ -93,13 +93,43 @@ fn disowning_asks_only_a_workspace_that_manages_the_project_and_creates_nothing(
     fs::create_dir(&root).unwrap();
     let (project, _) = MindProject::init(&root).unwrap();
 
-    assert!(!install::disown(&project, Kind::Skill, "deploy").unwrap());
+    assert!(!install::disown(&workspace, &project, Kind::Skill, "deploy").unwrap());
     workspace.link(&project).unwrap();
-    assert!(!install::disown(&project, Kind::Skill, "deploy").unwrap());
+    assert!(!install::disown(&workspace, &project, Kind::Skill, "deploy").unwrap());
 
     // A workspace that never installed anything has no ledger, and looking
     // must not give it one.
     assert!(!workspace.ledger_path().exists());
+}
+
+#[test]
+fn disowning_asks_the_workspace_it_is_given_wherever_that_sits() {
+    // Beside the project rather than above it, the way the one in your home
+    // is for a project anywhere else: walking up from the project never
+    // reaches it.
+    let dir = TempDir::new().unwrap();
+    let hub = dir.path().join("hub");
+    fs::create_dir(&hub).unwrap();
+    let (mut workspace, _) = FlayerWorkspace::init(&hub).unwrap();
+    let root = dir.path().join("collapse");
+    fs::create_dir(&root).unwrap();
+    let (project, _) = MindProject::init(&root).unwrap();
+    workspace.link(&project).unwrap();
+    create(&workspace.own(), Kind::Skill, "deploy", "Ship it").unwrap();
+    let ledger = workspace.ledger().unwrap();
+    let candidates = install::survey(&workspace, &ledger, &project, Kind::Skill).unwrap();
+    install::install(
+        &workspace,
+        &ledger,
+        &project,
+        candidate(&candidates, "deploy"),
+    )
+    .unwrap();
+
+    assert!(install::disown(&workspace, &project, Kind::Skill, "deploy").unwrap());
+
+    let after = install::survey(&workspace, &ledger, &project, Kind::Skill).unwrap();
+    assert_eq!(candidate(&after, "deploy").standing, Standing::Foreign);
 }
 
 #[test]
@@ -353,6 +383,116 @@ fn the_folder_is_named_after_the_skill_rather_than_after_its_shelf_folder() {
     // copy is filed under `deploy`, and the mismatch does not travel.
     assert!(installed_at(&project, "deploy").join("SKILL.md").is_file());
     assert!(!installed_at(&project, "a-different-folder").exists());
+}
+
+// ---------------------------------------------------------------------------
+// Strict on the way in
+// ---------------------------------------------------------------------------
+
+/// A workspace with one project, and a shelf gathered from these files.
+fn gathered(files: &[(&str, &str)]) -> (TempDir, FlayerWorkspace, MindProject, Ledger) {
+    let dir = TempDir::new().unwrap();
+    let (workspace, _) = FlayerWorkspace::init(dir.path()).unwrap();
+    let root = dir.path().join("collapse");
+    fs::create_dir(&root).unwrap();
+    let (project, _) = MindProject::init(&root).unwrap();
+    let source = repository(files);
+    let ledger = workspace.ledger().unwrap();
+    gather::gather(&workspace, &ledger, &Request::git(url(&source))).unwrap();
+    (dir, workspace, project, ledger)
+}
+
+#[test]
+fn a_gathered_skill_whose_name_breaks_the_rules_is_offered_but_not_installed() {
+    let (_dir, workspace, project, ledger) = ready(&["a--b"]);
+
+    // Offered, so nothing gathered is hidden; refused, so nothing an agent
+    // would skip lands in the project.
+    let candidates = install::survey(&workspace, &ledger, &project, Kind::Skill).unwrap();
+    let error = install::install(
+        &workspace,
+        &ledger,
+        &project,
+        candidate(&candidates, "a--b"),
+    )
+    .unwrap_err();
+
+    assert!(
+        matches!(&error, install::InstallError::Unfit { name, .. } if name == "a--b"),
+        "{error}"
+    );
+    assert!(
+        error.to_string().contains("joined by single hyphens"),
+        "{error}"
+    );
+    assert!(!installed_at(&project, "a--b").exists());
+    assert!(ledger
+        .installations("collapse", Kind::Skill)
+        .unwrap()
+        .is_empty());
+}
+
+#[test]
+fn a_skill_with_an_empty_description_is_not_installed() {
+    let (_dir, workspace, project, ledger) = gathered(&[(
+        "skills/quiet/SKILL.md",
+        "---\nname: quiet\ndescription: ''\n---\n",
+    )]);
+
+    let candidates = install::survey(&workspace, &ledger, &project, Kind::Skill).unwrap();
+    let error = install::install(&workspace, &ledger, &project, &candidates[0]).unwrap_err();
+
+    assert_eq!(
+        error.to_string(),
+        "`quiet` cannot be installed: `description` is empty"
+    );
+    assert!(!installed_at(&project, "quiet").exists());
+}
+
+#[test]
+fn a_shelf_copy_that_now_declares_another_name_is_not_installed() {
+    let (_dir, workspace, project, ledger) = ready(&["deploy"]);
+    // The shelf is a folder anybody can edit, and a source can rename a skill
+    // while the record of its old name stays: either way the record says
+    // `deploy`, the copy would be filed under `deploy`, and it declares `ship`.
+    let shelved = workspace.root().join(&ledger.gathered().unwrap()[0].path);
+    fs::write(shelved.join("SKILL.md"), skill("ship", "Ship it")).unwrap();
+
+    let candidates = install::survey(&workspace, &ledger, &project, Kind::Skill).unwrap();
+    let error = install::install(
+        &workspace,
+        &ledger,
+        &project,
+        candidate(&candidates, "deploy"),
+    )
+    .unwrap_err();
+
+    assert_eq!(
+        error.to_string(),
+        "`deploy` cannot be installed: `name` is `ship` but the directory is `deploy`; they have to match"
+    );
+    assert!(!installed_at(&project, "deploy").exists());
+}
+
+#[test]
+fn what_agents_read_past_does_not_stop_an_install() {
+    // Nested metadata and an over-long compatibility are reported by
+    // `validate`, and are no reason for an agent to skip the skill.
+    let long = "x".repeat(501);
+    let manifest = format!(
+        "---\nname: deploy\ndescription: Ship it\ncompatibility: {long}\nmetadata:\n  owner:\n    team: ops\n---\n"
+    );
+    let (_dir, workspace, project, ledger) =
+        gathered(&[("skills/deploy/SKILL.md", manifest.as_str())]);
+
+    let candidates = install::survey(&workspace, &ledger, &project, Kind::Skill).unwrap();
+    let outcome = install::install(&workspace, &ledger, &project, &candidates[0]).unwrap();
+
+    assert!(matches!(outcome, Installed::Added { .. }), "{outcome:?}");
+    // Line endings are the gathering checkout's (CRLF under autocrlf on
+    // Windows), not Mindflayer's, so they are left out of the comparison.
+    let copied = fs::read_to_string(installed_at(&project, "deploy").join("SKILL.md")).unwrap();
+    assert_eq!(copied.replace("\r\n", "\n"), manifest, "copied as written");
 }
 
 // ---------------------------------------------------------------------------

@@ -293,6 +293,15 @@ fn skill_manifest(
             "its front matter sets `name` or `description` in a way that cannot be replaced",
         ));
     }
+    // Held to the strict rules `rename` and `install` hold a skill to, so
+    // that a rule added there reaches what `add` writes too. The name and the
+    // description were checked before anything was built, with messages of
+    // their own; this is what keeps those checks from being a second
+    // definition of the same rules.
+    let issues = artifact::strict_issues(&parsed, name);
+    if !issues.is_empty() {
+        return Err(format!("it would break a rule: {}", issue_list(&issues)));
+    }
     // A body with nothing in it gets the heading a skill without a template
     // opens with, so a manifest is never front matter alone.
     let body = if body.trim().is_empty() {

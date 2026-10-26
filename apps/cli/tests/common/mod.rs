@@ -11,10 +11,13 @@ pub use mindflayer_cli::install::state::{Focus, Screen, Step};
 pub use mindflayer_cli::install::{self as install_screen, ui};
 pub use mindflayer_cli::tui;
 pub use mindflayer_cli::tui::state::{App, Holder, Mode, Scope, Task, View};
-pub use mindflayer_cli::{run, run_flayer_cli, Cli, CliError, Failure, FlayerCli, Outcome};
+pub use mindflayer_cli::{
+    agent_homes, default_home, run, run_flayer_cli, AgentHomeOptions, Cli, CliError, Failure,
+    FlayerCli, Outcome,
+};
 pub use mindflayer_core::install::Standing;
 pub use mindflayer_core::ledger::Ledger;
-pub use mindflayer_core::FlayerWorkspace;
+pub use mindflayer_core::{AgentHomes, FlayerWorkspace};
 pub use mindflayer_core::{Kind, MindProject, FLAYER_CONFIG, FLAYER_DIR, MIND_CONFIG, MIND_DIR};
 pub use ratatui::backend::TestBackend;
 pub use ratatui::crossterm::event::KeyCode;
@@ -24,35 +27,66 @@ pub use std::fs;
 pub use std::path::{Path, PathBuf};
 pub use tempfile::TempDir;
 
-/// Build an argument line with `-C dir` appended, and `--home ""` so no test
-/// ever falls back to, or creates, the workspace in the real home.
+/// Every option that would otherwise send a command looking outside the
+/// fixture, which `line` pins empty unless a test gives its own: `--home`, so
+/// no test falls back to, or creates, the workspace in the real home, and each
+/// agent home, so none reads the developer's real agent folders.
+pub const PINNED: [&str; 5] = [
+    "--home",
+    "--claude-config-dir",
+    "--codex-home",
+    "--opencode-config-dir",
+    "--agents-dir",
+];
+
+/// Build an argument line with `-C dir` appended, and every option in
+/// [`PINNED`] set to empty.
 pub fn line(binary: &str, args: &[&str], dir: &Path) -> Vec<String> {
     let mut line: Vec<String> = vec![binary.to_owned()];
     line.extend(args.iter().map(|arg| (*arg).to_owned()));
     line.push("-C".to_owned());
     line.push(dir.to_string_lossy().into_owned());
-    if !args.contains(&"--home") {
-        line.push("--home=".to_owned());
+    for option in PINNED {
+        if !gives(args, option) {
+            line.push(format!("{option}="));
+        }
     }
     line
 }
 
-/// Run `mind ...`.
+/// Whether a test gave `option` itself, in either spelling clap takes:
+/// pinning it as well would be an option given twice, which clap refuses.
+fn gives(args: &[&str], option: &str) -> bool {
+    args.iter().any(|arg| {
+        arg.strip_prefix(option)
+            .is_some_and(|rest| rest.is_empty() || rest.starts_with('='))
+    })
+}
+
+/// What `mind ...` parses into, pinned as [`mind`] runs it.
 ///
 /// `try_parse_from` rather than `parse_from`: the latter exits the process on a
 /// parse error, which in a test harness kills the whole run and hides which
 /// argument line was at fault.
-pub fn mind(dir: &Path, args: &[&str]) -> Result<Outcome, Failure> {
+pub fn parsed_mind(dir: &Path, args: &[&str]) -> Cli {
     let line = line("mind", args, dir);
-    let cli = Cli::try_parse_from(&line).unwrap_or_else(|error| panic!("{line:?}: {error}"));
-    run(&cli)
+    Cli::try_parse_from(&line).unwrap_or_else(|error| panic!("{line:?}: {error}"))
 }
 
-/// Run `flayer ...`, through the second binary's parser.
-pub fn flayer(dir: &Path, args: &[&str]) -> Result<Outcome, Failure> {
+/// What `flayer ...` parses into, through the second binary's parser.
+pub fn parsed_flayer(dir: &Path, args: &[&str]) -> FlayerCli {
     let line = line("flayer", args, dir);
-    let cli = FlayerCli::try_parse_from(&line).unwrap_or_else(|error| panic!("{line:?}: {error}"));
-    run_flayer_cli(&cli)
+    FlayerCli::try_parse_from(&line).unwrap_or_else(|error| panic!("{line:?}: {error}"))
+}
+
+/// Run `mind ...`.
+pub fn mind(dir: &Path, args: &[&str]) -> Result<Outcome, Failure> {
+    run(&parsed_mind(dir, args))
+}
+
+/// Run `flayer ...`.
+pub fn flayer(dir: &Path, args: &[&str]) -> Result<Outcome, Failure> {
+    run_flayer_cli(&parsed_flayer(dir, args))
 }
 
 /// Write a skill into an already initialized mind project.
@@ -108,6 +142,15 @@ pub fn flayer_at_home(dir: &Path, home: &Path, args: &[&str]) -> Result<Outcome,
     args.push("--home");
     args.push(&home);
     flayer(dir, &args)
+}
+
+/// Run `mind ...` with `home` as the home directory.
+pub fn mind_at_home(dir: &Path, home: &Path, args: &[&str]) -> Result<Outcome, Failure> {
+    let mut args: Vec<&str> = args.to_vec();
+    let home = home.to_string_lossy().into_owned();
+    args.push("--home");
+    args.push(&home);
+    mind(dir, &args)
 }
 
 /// Write a rule into an already initialized mind project.

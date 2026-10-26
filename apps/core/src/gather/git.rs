@@ -2,13 +2,16 @@
 //!
 //! `gix` rather than shelling out to `git`: nothing here depends on a `git`
 //! being installed or on which one is first on the PATH, and core keeps doing
-//! its own I/O rather than supervising a process.
+//! its own I/O rather than supervising a process. A clone never prompts for a
+//! credential; [`super::credentials`] says why.
 
 use std::num::NonZeroU32;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::AtomicBool;
 
 use thiserror::Error;
+
+use super::credentials::{self, Shortfall, Shortfalls};
 
 /// A clone that is on disk and ready to be read.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -40,6 +43,7 @@ pub fn clone(url: &str, reference: Option<&str>, into: &Path) -> Result<Clone, G
         })?;
     }
 
+    let shortfalls = Shortfalls::default();
     let mut prepare = gix::prepare_clone(url, into)
         .map_err(|error| GitError::Url {
             url: url.to_owned(),
@@ -48,7 +52,24 @@ pub fn clone(url: &str, reference: Option<&str>, into: &Path) -> Result<Clone, G
         // Depth 1: the history is not what is being gathered, the files are.
         .with_shallow(gix::remote::fetch::Shallow::DepthAtRemote(
             NonZeroU32::new(1).expect("1 is not zero"),
-        ));
+        ))
+        // Every connection `gix` lets the clone configure, not only the
+        // first: a shallow clone connects once to find the branch and again
+        // to fetch it, and either one may be asked for a credential. The one
+        // it does not is a retry made when the remote has a branch named
+        // `HEAD`, which asks the way `gix` does by default, prompt included;
+        // docs/architecture.md keeps it among the open questions.
+        .configure_connection({
+            let shortfalls = shortfalls.clone();
+            move |connection| {
+                let repository = connection.remote().repo().clone();
+                connection.set_credentials(credentials::never_prompting(
+                    credentials::configured(repository),
+                    shortfalls.clone(),
+                ));
+                Ok(())
+            }
+        });
 
     if let Some(reference) = reference {
         prepare = prepare
@@ -65,10 +86,7 @@ pub fn clone(url: &str, reference: Option<&str>, into: &Path) -> Result<Clone, G
     let interrupt = AtomicBool::new(false);
     let (mut checkout, _) = prepare
         .fetch_then_checkout(gix::progress::Discard, &interrupt)
-        .map_err(|error| GitError::Fetch {
-            url: url.to_owned(),
-            detail: error.to_string(),
-        })?;
+        .map_err(|error| fetch_failed(url, shortfalls.last(), error.to_string()))?;
     let (repository, _) = checkout
         .main_worktree(gix::progress::Discard, &interrupt)
         .map_err(|error| GitError::Checkout {
@@ -85,6 +103,43 @@ pub fn clone(url: &str, reference: Option<&str>, into: &Path) -> Result<Clone, G
         // having nothing in it.
         revision: repository.head_id().ok().map(|id| id.to_string()),
     })
+}
+
+/// What a failed fetch is reported as: the credential it lacked, when that is
+/// what stopped it, and otherwise what `gix` said.
+fn fetch_failed(url: &str, shortfall: Option<Shortfall>, detail: String) -> GitError {
+    match shortfall {
+        Some(Shortfall::Missing) => GitError::Credentials { url: redacted(url) },
+        // Whether a refusal over ssh is a missing key is the callback's to
+        // say, not `url`'s: a rewrite in git config may have sent the fetch
+        // over another transport than the one `url` names.
+        Some(Shortfall::Refused) | None => GitError::Fetch {
+            url: url.to_owned(),
+            detail,
+        },
+    }
+}
+
+/// `url` without the user name and password a `scheme://` URL can carry before
+/// its host, so an error can name a source without repeating a token somebody
+/// typed into it.
+///
+/// The scp-like form (`git@host:path`) is left alone: what it carries before
+/// the `@` can only be a user name. Parsing with `gix::url` and dropping the
+/// user was the other way, and is rejected because the parser also rewrites
+/// what it keeps (a default port dropped, a scheme lowercased), so the error
+/// would name a URL nobody typed.
+fn redacted(url: &str) -> String {
+    let Some(scheme) = url.find("://") else {
+        return url.to_owned();
+    };
+    let host = scheme + "://".len();
+    let rest = &url[host..];
+    let authority = rest.find(['/', '?', '#']).map_or(rest, |end| &rest[..end]);
+    match authority.rfind('@') {
+        Some(at) => format!("{}{}", &url[..host], &rest[at + 1..]),
+        None => url.to_owned(),
+    }
 }
 
 /// Why a repository could not be cloned.
@@ -107,6 +162,17 @@ pub enum GitError {
     },
     #[error("{url}: cannot be fetched: {detail}")]
     Fetch { url: String, detail: String },
+    /// The server asked who is fetching, and nothing that may answer had a
+    /// credential it would take. `url` is shown without its userinfo.
+    #[error(
+        "{url}: needs credentials, and gathering never prompts for them: \
+         configure a git credential helper, or use ssh-agent for an ssh URL"
+    )]
+    Credentials { url: String },
     #[error("{url}: cloned, but its files could not be checked out: {detail}")]
     Checkout { url: String, detail: String },
 }
+
+#[cfg(test)]
+#[path = "git_test.rs"]
+mod tests;

@@ -251,3 +251,155 @@ fn an_installed_skill_that_is_edited_is_yours_from_then_on() {
         Standing::Foreign
     );
 }
+
+/// `hub`, a workspace, and `collapse`, a project it links from beside it
+/// rather than from above: walking up from the project never reaches it.
+fn linked_from_beside() -> (TempDir, PathBuf, PathBuf) {
+    let dir = TempDir::new().unwrap();
+    let hub = dir.path().join("hub");
+    let project = dir.path().join("collapse");
+    for root in [&hub, &project] {
+        fs::create_dir(root).unwrap();
+    }
+    flayer(&hub, &["init"]).unwrap();
+    mind(&project, &["init"]).unwrap();
+    flayer(&hub, &["link", "../collapse"]).unwrap();
+    (dir, hub, project)
+}
+
+/// `linked_from_beside`, with the workspace's own `deploy` installed into
+/// the project.
+fn installed_from_beside() -> (TempDir, PathBuf, PathBuf) {
+    let (dir, hub, project) = linked_from_beside();
+    flayer(&hub, &["add", "skill", "deploy", "Ship it"]).unwrap();
+    flayer(&hub, &["install", "-p", "collapse", "deploy"]).unwrap();
+    (dir, hub, project)
+}
+
+#[cfg(unix)]
+#[test]
+fn a_workspace_beside_a_project_drops_its_record_when_flayer_edits_the_copy() {
+    let (_dir, hub, project) = installed_from_beside();
+
+    let outcome = flayer(
+        &hub,
+        &[
+            "edit",
+            "-p",
+            "collapse",
+            "deploy",
+            "--editor",
+            "printf 'Mine.\\n' >>",
+        ],
+    )
+    .unwrap();
+
+    // Walking up from the project never reaches the workspace; the one the
+    // command runs in is the one asked.
+    assert!(outcome.stdout.contains("it is yours"), "{}", outcome.stdout);
+    let left = flayer(&hub, &["uninstall", "-p", "collapse", "deploy"]).unwrap();
+    assert_eq!(
+        left.stderr,
+        vec!["warning: deploy in collapse was not installed by Mindflayer, so it was left alone"]
+    );
+    assert!(project.join("skills/deploy/SKILL.md").is_file());
+}
+
+#[cfg(unix)]
+#[test]
+fn mind_drops_the_record_of_the_workspace_in_your_home_when_that_manages_the_project() {
+    let home = TempDir::new().unwrap();
+    let elsewhere = TempDir::new().unwrap();
+    let project = elsewhere.path().join("collapse");
+    fs::create_dir(&project).unwrap();
+    mind(&project, &["init"]).unwrap();
+    flayer_at_home(elsewhere.path(), home.path(), &["link", "collapse"]).unwrap();
+    flayer_at_home(
+        elsewhere.path(),
+        home.path(),
+        &["add", "skill", "deploy", "Ship it"],
+    )
+    .unwrap();
+    mind_at_home(&project, home.path(), &["install", "deploy"]).unwrap();
+
+    let outcome = mind_at_home(
+        &project,
+        home.path(),
+        &["edit", "deploy", "--editor", "printf 'Mine.\\n' >>"],
+    )
+    .unwrap();
+
+    assert!(outcome.stdout.contains("it is yours"), "{}", outcome.stdout);
+    let left = mind_at_home(&project, home.path(), &["uninstall", "deploy"]).unwrap();
+    assert!(!left.ok);
+    assert!(project.join("skills/deploy/SKILL.md").is_file());
+}
+
+#[test]
+fn a_workspace_beside_a_project_offers_it_the_workspaces_templates() {
+    let (_dir, hub, project) = linked_from_beside();
+    let template = hub.join(".mindflayer/templates/runbook/SKILL.md");
+    fs::create_dir_all(template.parent().unwrap()).unwrap();
+    fs::write(&template, "---\n---\n\n# {{name}}\n\nThe hub's runbook.\n").unwrap();
+
+    flayer(
+        &hub,
+        &[
+            "add",
+            "-p",
+            "collapse",
+            "skill",
+            "deploy",
+            "Ship it",
+            "--template",
+            "runbook",
+        ],
+    )
+    .unwrap();
+
+    let manifest = fs::read_to_string(project.join("skills/deploy/SKILL.md")).unwrap();
+    assert!(
+        manifest.ends_with("\n# deploy\n\nThe hub's runbook.\n"),
+        "{manifest}"
+    );
+    assert_eq!(
+        flayer(&hub, &["templates", "-p", "collapse"])
+            .unwrap()
+            .stdout,
+        "full     skill  built in\n\
+         runbook  skill  ../hub/.mindflayer/templates/runbook\n"
+    );
+}
+
+#[test]
+fn mind_add_from_a_template_refuses_when_the_workspace_that_lends_it_cannot_be_read() {
+    let dir = workspace_with_two();
+    let template = dir.path().join(".mindflayer/templates/full/SKILL.md");
+    fs::create_dir_all(template.parent().unwrap()).unwrap();
+    fs::write(&template, "---\n---\n\n# {{name}}\n\nThe team's full.\n").unwrap();
+    let marker = dir.path().join(FLAYER_DIR).join(FLAYER_CONFIG);
+    let newer: String = fs::read_to_string(&marker)
+        .unwrap()
+        .lines()
+        .map(|line| {
+            if line.starts_with("version = ") {
+                String::from("version = 99\n")
+            } else {
+                format!("{line}\n")
+            }
+        })
+        .collect();
+    fs::write(&marker, newer).unwrap();
+    let alpha = dir.path().join("alpha");
+
+    let failure = mind(
+        &alpha,
+        &["add", "skill", "deploy", "Ship it", "--template", "full"],
+    )
+    .unwrap_err();
+
+    // Passed over, the workspace's `full` would leave the built-in one to
+    // stand in for it.
+    assert!(matches!(*failure.error, CliError::Workspace(_)));
+    assert!(!alpha.join("skills/deploy").exists());
+}

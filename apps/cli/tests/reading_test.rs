@@ -30,6 +30,37 @@ fn show_prints_the_metadata_and_the_instructions() {
 }
 
 #[test]
+fn show_prints_compatibility_and_the_metadata_that_is_strings() {
+    let dir = TempDir::new().unwrap();
+    mind(dir.path(), &["init"]).unwrap();
+    write_skill(
+        dir.path(),
+        "deploy",
+        "---\nname: deploy\ndescription: Ship it\nlicense: MIT\ncompatibility: Requires git and jq\nmetadata:\n  author: acme\n  owner:\n    team: ops\n  version: \"1.0\"\n---\n\nRun the pipeline.\n",
+    );
+
+    let outcome = mind(dir.path(), &["show", "deploy"]).unwrap();
+
+    let file = dir.path().join("skills").join("deploy").join("SKILL.md");
+    assert_eq!(
+        outcome.stdout,
+        format!(
+            "deploy\n{}\n\nShip it\n\nlicense: MIT\ncompatibility: Requires git and jq\nmetadata:\n  author: acme\n  version: 1.0\n\nRun the pipeline.\n",
+            file.display()
+        )
+    );
+    // The nested entry is `validate`'s to report.
+    let checked = mind(dir.path(), &["validate"]).unwrap();
+    assert!(
+        checked
+            .stdout
+            .contains("`metadata` entry `owner` is not a string"),
+        "{}",
+        checked.stdout
+    );
+}
+
+#[test]
 fn show_names_the_skill_it_could_not_find() {
     let dir = TempDir::new().unwrap();
     mind(dir.path(), &["init"]).unwrap();
@@ -68,6 +99,41 @@ fn validate_fails_and_explains_a_broken_skill() {
     assert!(outcome.stdout.contains("2 problems"), "{}", outcome.stdout);
     assert!(outcome.stdout.contains("the directory is `deploy`"));
     assert!(outcome.stdout.contains("1 skill checked, 1 invalid"));
+}
+
+#[test]
+fn validate_warns_about_what_an_agent_reads_past_without_failing() {
+    // Nested metadata is what a shipping agent writes; a project holding such
+    // a skill, installed or its own, still passes.
+    let dir = TempDir::new().unwrap();
+    mind(dir.path(), &["init"]).unwrap();
+    write_skill(
+        dir.path(),
+        "nested",
+        "---\nname: nested\ndescription: Nested metadata\ncompatibility: [claude-code]\nmetadata:\n  owner:\n    team: ops\n---\n",
+    );
+    write_skill(
+        dir.path(),
+        "worse",
+        "---\nname: worse\ndescription: ''\nmetadata:\n  pinned: true\n---\n",
+    );
+
+    let outcome = mind(dir.path(), &["validate"]).unwrap();
+
+    assert_eq!(
+        outcome.stdout,
+        "nested: ok, 2 warnings\n  \
+         - warning: `compatibility` is not a string, so it is ignored, and left in the file as written\n  \
+         - warning: `metadata` entry `owner` is not a string, so it is ignored, and left in the file as written\n\
+         worse: 1 problem, 1 warning\n  \
+         - `description` is empty\n  \
+         - warning: `metadata` entry `pinned` is not a string, so it is ignored, and left in the file as written\n\
+         \n\
+         2 skills checked, 1 invalid\n"
+    );
+    assert!(!outcome.ok, "`worse` is invalid");
+    let nested = mind(dir.path(), &["validate", "nested"]).unwrap();
+    assert!(nested.ok, "{}", nested.stdout);
 }
 
 #[test]
