@@ -1072,6 +1072,19 @@ screen of the #69 scaffold during M1 to M3; PrimeVue 5, whose proprietary,
 keyed licence is incompatible with GPL-3.0-only; and Naive UI, with
 accessibility gaps open since 2021. Unblocks #69.
 
+### D-20: OpenCode subagents (pending)
+
+Not decided. Whether "agentes de OpenCode" means the OpenCode tool or also its
+subagent definitions is open, and the owner, who mainly uses Claude Code, has
+not chosen. Until then OpenCode is supported as a tool, receiving skills, rules
+and MCP servers as Codex does, and no subagent-definition work is planned. The
+other option would manage subagents as one kind per agent
+(`.claude/agents/*.md`, `.opencode/agents/*.md`, `.codex/agents/*.toml`),
+because the three formats are incompatible and share no location; skills
+already act as slash commands in all three agents. Unblocks nothing yet;
+choosing subagents would add kinds, through [Adding a third
+kind](#adding-a-third-kind).
+
 ### D-21: The panel's views follow the capabilities they show
 
 The views are built after the core capabilities they reuse: agents (M1), rules
