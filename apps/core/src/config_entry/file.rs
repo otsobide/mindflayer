@@ -37,8 +37,8 @@ pub enum Written {
     /// The file was not there, and now holds the entry. Made with
     /// `create_new`, so a file somebody made meanwhile is not written over.
     Created,
-    /// The file was replaced whole, through a temporary and a rename, with
-    /// its permissions kept.
+    /// The file was replaced whole, through a temporary and a rename onto
+    /// its path as spelled, with its permissions kept.
     Changed,
     /// The entry already held what was asked, so the file was left alone, its
     /// modification time included.
@@ -140,7 +140,12 @@ impl ConfigFile {
         match text {
             Some(text) if text == edited => Ok(Written::Unchanged),
             Some(_) => {
-                crate::workspace::replace_bytes(&path, edited.as_bytes())
+                // Looked at again, as the folders are before a new file is
+                // made: a folder on the route may have become a link since
+                // the read. The rename is then onto the path as spelled, so
+                // nothing is resolved between this look and it.
+                self.walk()?;
+                crate::workspace::replace_bytes_unresolved(&path, edited.as_bytes())
                     .map_err(|(path, source)| FileError::Write { path, source })?;
                 Ok(Written::Changed)
             }
@@ -152,9 +157,23 @@ impl ConfigFile {
         }
     }
 
-    /// The file's text, `None` when it is not there, after looking at every
-    /// step of its route for a link.
+    /// The file's text, `None` when it is not there.
     fn read(&self) -> Result<Option<String>, FileError> {
+        let Some(path) = self.walk()? else {
+            return Ok(None);
+        };
+        let bytes = fs::read(&path).map_err(|source| FileError::Read {
+            path: path.clone(),
+            source,
+        })?;
+        String::from_utf8(bytes)
+            .map(Some)
+            .map_err(|_| FileError::NotText { path })
+    }
+
+    /// The file's path, after looking at every step of its route for a link;
+    /// `None` when a step is not there.
+    fn walk(&self) -> Result<Option<PathBuf>, FileError> {
         let mut path = self.root.clone();
         let mut steps = self.route.components().peekable();
         while let Some(step) = steps.next() {
@@ -175,13 +194,7 @@ impl ConfigFile {
                 return Err(FileError::NotAFile { path });
             }
         }
-        let bytes = fs::read(&path).map_err(|source| FileError::Read {
-            path: path.clone(),
-            source,
-        })?;
-        String::from_utf8(bytes)
-            .map(Some)
-            .map_err(|_| FileError::NotText { path })
+        Ok(Some(path))
     }
 
     /// Make the folders on the route that are missing, each with

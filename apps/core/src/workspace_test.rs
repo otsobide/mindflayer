@@ -204,6 +204,22 @@ fn a_replacement_builds_in_a_temporary_of_its_own() {
     assert_eq!(names_in(dir.path()), ["flayer.toml", "flayer.toml.tmp"]);
 }
 
+#[cfg(unix)]
+#[test]
+fn an_unresolved_replacement_puts_a_file_where_a_link_was_and_leaves_its_target() {
+    let dir = tempfile::TempDir::new().unwrap();
+    let target = dir.path().join("elsewhere.json");
+    fs::write(&target, "theirs").unwrap();
+    let link = dir.path().join("settings.json");
+    std::os::unix::fs::symlink(&target, &link).unwrap();
+
+    replace_bytes_unresolved(&link, b"new").unwrap();
+
+    assert!(fs::symlink_metadata(&link).unwrap().is_file());
+    assert_eq!(fs::read_to_string(&link).unwrap(), "new");
+    assert_eq!(fs::read_to_string(&target).unwrap(), "theirs");
+}
+
 #[test]
 fn a_replacement_that_cannot_be_put_in_place_leaves_no_temporary_behind() {
     let dir = tempfile::TempDir::new().unwrap();
