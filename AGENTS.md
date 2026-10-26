@@ -32,6 +32,7 @@ One suite, one module or one test:
 cargo test -p mindflayer-cli --test tui_test                 # apps/cli/tests/tui_test.rs
 cargo test -p mindflayer-core --test install_test <substring>
 cargo test -p mindflayer-core --lib workspace                # src/workspace_test.rs
+cargo test -p mindflayer-server --test commands_test         # apps/server/tests/commands_test.rs
 ```
 
 `make dev/link`, `make dev/unlink` and `make install` write into `~/.cargo/bin`
@@ -39,7 +40,7 @@ cargo test -p mindflayer-core --lib workspace                # src/workspace_tes
 
 ## Layout
 
-Two crates in one Cargo workspace, each an app under `apps/` with its own
+Three crates in one Cargo workspace, each an app under `apps/` with its own
 `Makefile`:
 
 - `apps/core` (`mindflayer-core`): the engine. Projects, workspaces, kinds,
@@ -57,6 +58,13 @@ Two crates in one Cargo workspace, each an app under `apps/` with its own
   `src/error.rs` holds `CliError`, and `src/homes.rs` decides the default
   home and the agent homes. `src/tui/` and `src/install/` are the two
   screens.
+- `apps/server` (`mindflayer-server`): the local server behind the web
+  panel, a library no binary runs yet. `src/backend.rs` is the `Backend`
+  trait, `src/server.rs` binds and routes, `src/auth.rs` holds the token's
+  cookie and Bearer checks, `src/api.rs` the JSON endpoints, `src/writer.rs`
+  the thread every run goes through, `src/transcript.rs` what the session
+  ran, `src/log.rs` the redacting request log and `src/panel.rs` the embedded
+  panel (`apps/web/dist`).
 
 ## Invariants that hold the design together
 
@@ -141,6 +149,16 @@ These are easy to break from a single file without noticing.
   `tui::execute` hand each command the TUI's own, as it hands them `--home`:
   a command the TUI runs carries none of the four options, so it would decide
   them again from the environment.
+- **The server holds no rules.** `apps/server` carries JSON between the
+  browser and a `Backend`, whose `Query`, `Task` and `Outcome` are associated
+  types, and depends on no mindflayer crate (`tests/crate_test.rs` checks it
+  with `cargo metadata`); the CLI depends on it, never the other way. A check,
+  path rule or naming rule written there is one the panel could disagree with
+  the CLI about: it belongs in core, reached through the backend. Queries and
+  previews run on tokio's blocking pool, and every run on the one writer
+  thread, in the order it arrived. It binds 127.0.0.1 only, answers under
+  `/api` only a request that carries the launch token (in the cookie
+  `mf_<port>`, or as Bearer), and never logs the token.
 - **`Kind` is a closed enum.** To add a kind, follow "Adding a third kind" in
   the architecture doc; the compiler's exhaustive matches are the checklist.
 
@@ -164,6 +182,10 @@ These are easy to break from a single file without noticing.
   account's real home. Keep it that way.
 - Git sources are built in-process with `gix` (`common::repository`): no
   network and no `git` binary.
+- The server's suites run against a fake backend with types of its own
+  (`common::Fake`), never the CLI's. They bind 127.0.0.1 on port 0 and send
+  requests through the router in process (`common::send`), or over loopback,
+  and serve a fixture panel (`tests/panel`), so they need no Node.
 - Screens are tested without a terminal. Drive `state` with key events, or
   call `tui::step`, and render `ui` into `ratatui::backend::TestBackend`. Only
   the event loops in `tui.rs` and `install.rs` go untested, so keep logic out
@@ -176,13 +198,13 @@ These are easy to break from a single file without noticing.
 - Gitflow is enforced by required checks. PRs into `dev` come from
   `feature/*`, `hotfix/*` or `release/*` (or `main`, for a back-merge). PRs
   into `main` come only from `dev`. PRs are merged with merge commits.
-- CI runs `fmt and clippy`, then `test (core)`, then `test (cli)`, and builds
-  each app after its tests pass. macOS and Windows run on pushes to
-  `dev`/`main`, on PRs from `dev`, `main` or `release/*`, and on PRs labelled
-  `full-matrix`.
+- CI runs `fmt and clippy`, then `test (core)`, then `test (cli)` and
+  `test (server)`, and builds each app after its tests pass. macOS and
+  Windows run on pushes to `dev`/`main`, on PRs from `dev`, `main` or
+  `release/*`, and on PRs labelled `full-matrix`.
 - Commit messages: `<area>: <imperative summary>`, where area is `core`,
-  `cli`, `docs`, `build`, `ci` or `chore` (`core, cli:` when a change spans
-  both crates).
+  `cli`, `server`, `docs`, `build`, `ci` or `chore` (`core, cli:` when a
+  change spans two crates).
 - When behaviour changes, update the README (its examples are literal output,
   so re-run them) and `docs/architecture.md`, including its "Open questions".
 
