@@ -66,14 +66,18 @@ The grammar is in `parse.rs`, the work in `commands.rs` and a module per
 family of commands under `commands/`, and what a command produced, with the
 helpers every report is laid out with, in `render.rs`. `CliError` has
 `error.rs` to itself, `homes.rs` decides where the default workspace's home and
-each agent's own folder are, and `lib.rs` only says what is public.
+each agent's own folder are, and gathers what `-W` and `$MINDFLAYER_WORKSPACE`
+say (`Lookup`), and `lib.rs` only says what is public.
 
 The split is by family. One file holding the parser, every command and the
 rendering was where every change to a command met every other, so pieces of
 work on different commands collided in it. One module per command would
 scatter what a family shares instead: `load` and `unload` report the same way,
 and `list`, `show` and `validate` read one catalog. `commands.rs` dispatches,
-and finds what a command acts on, the one thing every family needs.
+and asks core what a command acts on, the one thing every family needs: which
+workspace is core's `resolve` to decide (see [which workspace a command
+uses](#which-workspace-a-command-uses)), and which of its projects `-p` names
+is `FlayerWorkspace::pick`.
 
 ## The kinds, and how a kind is described
 
@@ -252,15 +256,18 @@ the directory alone. An empty `.mind` left behind by a failed copy is not a
 project, and saying so costs one `is_file()`.
 
 Both are found by walking up from a starting directory, so `mind list` works from
-anywhere inside a project, like every git command.
+anywhere inside a project, like every git command. A workspace can also be
+named, with `-W` or by activating one, and then it wins over the walk: see
+[which workspace a command uses](#which-workspace-a-command-uses).
 
 Nothing stops one directory from being both.
 
 ### The command surface is split the same way
 
 `mind <cmd>` acts on the project you are standing in; `mind flayer <cmd>`, and
-therefore `flayer <cmd>`, acts on the workspace above it. The split decides two
-things that used to be guesses:
+therefore `flayer <cmd>`, acts on the workspace above it, or the one `-W` names
+or an activation chooses. The split decides two things that used to be
+guesses:
 
 - **What is in scope.** `mind list` is the project's own artifacts, never its
   neighbours'. `flayer list` is the workspace's own and every registered
@@ -287,7 +294,8 @@ What can be done to a project can be done from the workspace, and the other
 way round where it means anything. `flayer add`, `edit`, `rename`, `remove` and
 `templates` act on the workspace's own artifacts, or on one of its projects
 with `-p`; `mind link`, `unlink`, `install` and `uninstall` act on the project
-you are in, against the workspace above it. `flayer list`, `show` and
+you are in, against its workspace: the one named or activated, or else the one
+above it. `flayer list`, `show` and
 `validate` read everything — the workspace's own and every project's — or one
 project with `-p`; `flayer validate` reads the shelf as well, labelling what it
 finds there `shelf/<source folder>`. Reads look everywhere; a change needs one
@@ -671,9 +679,11 @@ Three decisions shape it:
   what a workspace offers is what its marker names, not a graph.
 - **Into the workspace that is not the source.** Run from inside the workspace
   being loaded, the first workspace found walking up is that one, and a
-  workspace cannot load itself. `FlayerWorkspace::locate_or_default_except`
-  walks on past it — and past every path given — to the next one, or the
-  default in your home; loading the home workspace from inside it is refused.
+  workspace cannot load itself. `resolve_except` walks on past it — and past
+  every path given — to the next one, or the default in your home; loading the
+  home workspace from inside it is refused. One named with `-W` or activated
+  is taken as it is, since it was chosen, and loading it into itself is
+  refused by the load.
 
 A loaded entry's origin is `load:<entry>`: disjoint by construction from
 `workspace` and from any shelf source's address — even a repository gathered
@@ -820,7 +830,9 @@ everything by running CLI commands**.
 
 It is at both levels too. The workspace's own artifacts are its first row,
 marked `◆`, and a key on that row runs the `flayer` command where a key on a
-project's row runs `mind -C <project>`: a task carries its holder, and the
+project's row runs `mind -C <project>` (`mind -W . -C <project>` for one the
+workspace manages from outside its own tree; see [the TUI looks where it was
+told](#the-tui-looks-where-it-was-told)): a task carries its holder, and the
 holder decides the level of the line it becomes. `mind` on its own opens the
 same screen on the project it was run in — inside the workspace that manages
 it, where its neighbours and its installs are, or on the project alone when
@@ -851,9 +863,12 @@ Two things follow, and both are deliberate:
   repeated in a script. Commands that only read — show, validate, the shelf —
   are left out, because they changed nothing.
 
-A `-C` in those words is relative to the workspace root, which is how someone
-reading the transcript takes it, so it is resolved against the root rather than
-against wherever the process started. A command that opens a screen of its own
+A `-C` or a `-W` in those words is relative to the workspace root, which is
+how someone reading the transcript takes it, so it is resolved against the
+root rather than against wherever the process started. What the screen was
+opened with is passed along rather than spelled: its home, and the `-W` or
+activation that chose its workspace (`tui::execute`), as they were given to
+`flayer` itself. A command that opens a screen of its own
 — `flayer`, `flayer tui`, `flayer minds`, `flayer install` with no skill named,
 `mind`, `mind tui` — is refused if it ever reaches that path, rather than drawn
 inside this one.
@@ -1055,21 +1070,61 @@ segment is never looked up and gets `index.html`, as one of the panel's routes
 may. A release build only looks names up in a table, and the check keeps the
 two answering alike.
 
-## The default workspace
+## Which workspace a command uses
 
-A workspace is found by walking up, and when nothing up there has one, the
-workspace-level commands fall back to the one at the default home. Home sits
-above most of what a person works on, so it is the one directory where a
-workspace can manage projects anywhere, and making it on demand means `flayer
-link ~/code/x` works before anyone has chosen a directory.
+One function in core decides, `resolve`
+([D-08](#d-08-an-explicit-or-activated-workspace-wins)), and every front end
+feeds it: each command, and the TUI's screens. In order:
+
+1. the workspace `-W DIR` names, by its root or by its `.mindflayer`;
+2. the one `$MINDFLAYER_WORKSPACE` activates, which `flayer activate` is to
+   set (#55);
+3. the first one found walking up from where the command starts: the
+   directory for a `flayer` command, the project's root for a `mind` one;
+4. the default one, in home.
+
+It hands back the workspace with the `Reason` that chose it (`Explicit`,
+`Activated`, `Above`, `Home`), so a front end that says which workspace it
+showed, as the TUI's header does when it is the default one, asks the answer
+rather than comparing paths, which stopped answering once `-W` could name the
+directory home is.
+
+The first two are choices somebody made on purpose, so they win over where
+somebody happens to stand. Activating a workspace is meant to override
+location, as activating a Python virtualenv does; with the walk up first, an
+activated workspace would lose, silently, to any workspace above the current
+directory. A choice that does not open as a workspace is an error and never a
+reason to carry on down the list, which would act on a workspace nobody chose
+and say nothing about it. Nor is a chosen directory made into a workspace for
+the occasion, a write included: `flayer init` makes workspaces, where it runs.
+
+`-W` given at all is the whole explicit answer. Given empty, it names none and
+also keeps the activated one out, as `--home=` keeps the default out; that is
+what lets the test helpers pin `--workspace=`, so no test picks up what the
+developer's shell activated. An empty `$MINDFLAYER_WORKSPACE` names none, as
+an empty `$MINDFLAYER_HOME` does. Both are read by the front end, as home is
+(`Lookup::given` in the CLI), and handed to core in `Inputs`, so core never
+reads the environment. `--home` and `$MINDFLAYER_HOME` keep meaning only
+where the default lives: reusing them to choose a workspace would confuse
+where the default is with which workspace to use. A relative `-W` is taken
+from where the command was run, as `--home` is, rather than from `-C`, which
+moves where a command works and not what it was told.
+
+### The default, made only by a write
+
+When nothing chooses a workspace and nothing up the tree has one, a command
+falls back to the one at the default home. Home sits above most of what a
+person works on, so it is the one directory where a workspace can manage
+projects anywhere, and making it on demand means `flayer link ~/code/x` works
+before anyone has chosen a directory.
 
 It is made by the first command that **writes** to it, and by nothing that
-only reads. `flayer link`, `add`, `gather git`, `load`, `install` and
-`uninstall` go through `FlayerWorkspace::locate_or_default`, which makes
-`~/.mindflayer` when nothing up the tree has one. A read goes through
-`locate_or_unmade`, which falls back instead to `FlayerWorkspace::unmade`: the
-workspace `init` would make there, parsed from the same template rather than
-written. That is `flayer list`, `show`, `validate`, `scan`, `templates`,
+only reads, and the caller says which with an `Intent`. `flayer link`, `add`,
+`gather git`, `load`, `install` and `uninstall` resolve with `Intent::Write`,
+which makes `~/.mindflayer` when nothing up the tree has one. A read resolves
+with `Intent::Read`, which falls back instead to `FlayerWorkspace::unmade`:
+the workspace `init` would make there, parsed from the same template rather
+than written. That is `flayer list`, `show`, `validate`, `scan`, `templates`,
 `gather list`, and `load` and `install` on their own.
 
 A read of the unmade workspace answers as a read of one made a moment before
@@ -1090,7 +1145,8 @@ screen shows it and the transcript says so. Left to the change, the command
 that writes would make it, as it does from the shell; but the screen's lines
 run from the workspace root and walk up from there, and before it is made no
 marker at the root stops them, so with a workspace above home the change would
-land in that one. For the same reason the minds screen is built from where
+land in that one. `-W` cannot name it instead: a directory with no marker is
+refused, not made. For the same reason the minds screen is built from where
 `flayer minds` was run, as the TUI is, and the TUI opens its install screen on
 the root it shows rather than walking up from it. The install screen itself
 does not open on an unmade workspace: like any workspace with no projects, it
@@ -1101,15 +1157,54 @@ refused as it is for any directory that is not a workspace, and so is opening
 its ledger to write to, which would otherwise leave a `.mindflayer` holding a
 database and no marker. A command that writes asks for the real one.
 
-Two older routes also never make it: the `mind` commands that only consult a
-workspace (opening its TUI, `add`, `edit`, `rename`, `remove`, `templates`)
-use `default_at`, and `unload`, which only takes away, uses `locate_except`.
-Both open the home workspace if it exists.
+`unload`, which only takes away, resolves as a read and wants a made
+workspace, since an unmade one has loaded nothing.
 
-Where home is comes from the front end, not from core: `--home`, then
-`$MINDFLAYER_HOME`, then the user's home directory, and empty means there is
-none. Core takes it as a parameter, which keeps it free of the environment and
-is what lets the tests run every command with the fallback switched off.
+### A project's workspace
+
+A `mind` command resolves from the project's root, not from the directory it
+was run in, because a project's workspace is the one above the project: core
+moves the start there itself (`resolve::managing` and `resolve::consulted`).
+`mind link` and `unlink` register the project with the workspace resolved;
+`install` and `uninstall` need that workspace to link the project, and are
+refused (`NotManaged`) when it does not (`managing`); `add`, `edit`, `rename`,
+`remove` and `templates` consult it, to drop the record of what they change
+and to lend templates, and only if it is made (`consulted`): a change to a
+project is no reason to write a marker into somebody's home, and a workspace
+made just now would hold nothing to drop or lend.
+
+With `-W` or an activation, that is the chosen workspace wherever it sits,
+which is how a project linked from beside its workspace is managed from
+inside the project: walking up never reaches such a workspace. Which of a
+workspace's projects `-p` names is core's too (`FlayerWorkspace::pick`, and
+`holder` for the workspace's own when nothing is named).
+
+`load` resolves with `resolve_except`, which passes over the workspaces being
+loaded on the walk up and at home (see
+[Loading](#loading-a-third-place-read-live)). A workspace named or activated
+is never passed over: it was chosen, and a workspace loading itself is
+refused where loads are.
+
+### The TUI looks where it was told
+
+The TUI resolves through the same function. `tui::load` and `load_project`
+ask `resolve` and `consulted` with the `Lookup` the screen was opened with,
+and `tui::execute` hands that lookup to every line the screen runs, as it
+hands them home, rather than letting each line read the environment again: a
+screen opened with `-W` or an activation runs every line against that
+workspace. A `-W` among a line's own words wins, and is typed from the root
+the lines run from, as a `-C` is.
+
+A project's row runs `mind -C <entry>`, the line somebody in the project would
+type, which consults the project's own workspace. Where that is not the
+workspace on screen, because the project is linked from outside its tree or
+from above a nearer workspace, the row runs `mind -W . -C <entry>` instead
+(`Holder::Elsewhere`), so a change drops the record of the workspace on screen
+and the add form offers that workspace's templates, which are the ones its
+line finds. The `-W` is there only where leaving it out would consult another
+workspace, so every other row still teaches the plain project command; a
+`flayer <cmd> -p <entry>` line would have consulted the same workspace, at the
+price of a project's row no longer teaching a project's command.
 
 ### A read leaves the ledger as it finds it
 
@@ -1468,7 +1563,9 @@ virtualenv does. Rejected: walking up first, under which an activated flayer
 silently loses to any workspace above the current directory; reusing `--home`,
 which confuses where the default lives with which workspace to use; and a
 direnv-style activation file, hidden state in repositories meant to stay
-minimal. Unblocks #54, #55 and #56.
+minimal. Unblocks #54, #55 and #56. #54 carried it out: core's `resolve`,
+with `-W/--workspace` on both binaries (see [which workspace a command
+uses](#which-workspace-a-command-uses)).
 
 ### D-09: Project settings live in the project
 
@@ -1717,18 +1814,10 @@ leak into the lifecycle code. Unblocks #33, #45, #62, #93, #94 and #95.
   that links the same project: nothing in the project says which workspaces
   link it, so each of them keeps its stale record. Every workspace linking a
   project would have to be findable from the project for that to change. The
-  TUI runs into it from inside: a project's row runs `mind -C <entry>`, the
-  line somebody in the project would type, and that consults the project's
-  workspace (the one above it, or the default) rather than the one on
-  screen. A screen on a workspace beside the project therefore leaves that
-  workspace's record behind, and its add form offers the other one's
-  templates. Nothing has to wait for that to change: `flayer <cmd> -p
-  <entry>`, run where the screen's lines run, already consults the workspace
-  on screen. The rows keep the `mind` line because the screen is at both
-  levels, as the CLI is, and a project's row teaches the project's command.
-  `-W` ([D-08](#d-08-an-explicit-or-activated-workspace-wins)) would let that
-  line name the screen's workspace as well, so which of the two a project's
-  row runs is still to choose.
+  TUI no longer runs into it from inside: a project's row whose own workspace
+  is not the one on screen runs `mind -W . -C <entry>`, which consults the
+  one on screen (see [the TUI looks where it was
+  told](#the-tui-looks-where-it-was-told)).
 - **Writes that refuse after making the home workspace.** A command that
   writes makes the default workspace before it finds out whether there is
   anything to do in it. Outside every workspace, `mind install` and `mind
@@ -1736,16 +1825,25 @@ leak into the lifecycle code. Unblocks #33, #45, #62, #93, #94 and #95.
   uninstall -p`, and `unlink` at either level leave a `~/.mindflayer` behind
   and then refuse, since a workspace just made manages nothing. `flayer edit`,
   `rename` and `remove` make it to change its own artifacts, `remove`'s dry
-  run included. Each could look with `locate_or_unmade` first and make it only
+  run included. Each could resolve with `Intent::Read` first and make it only
   when it is about to write; whether each should is a choice per command, and
   they were left as writes when the reads stopped making it.
 - **Reads from a screen on the unmade default.** The TUI's reads (`v`, `s`,
   and showing an artifact) run from the default workspace's root, as its
   changes do. Before the default is made, with a workspace above home, they
   walk up to that one and read it instead. A change makes the default first;
-  a read cannot without making the home workspace to read it. `-W`
-  ([D-08](#d-08-an-explicit-or-activated-workspace-wins)) would let those
-  lines name the screen's workspace.
+  a read cannot without making the home workspace to read it. Nor can `-W`
+  name it ([D-08](#d-08-an-explicit-or-activated-workspace-wins)): a named
+  directory with no marker is refused. A way to say "no walk, only the
+  default", or a `-W` that takes the unmade default for a read, would settle
+  it.
+- **A transcript from a screen opened on a named workspace.** A screen
+  opened with `-W` runs every line against that workspace, but its
+  transcript does not spell the `-W`, as it does not spell `--home`: the
+  lines read as somebody would type them at the root, and replayed in a
+  shell without the same `-W` or activation they walk up instead. Writing it
+  into every line would make the transcript replayable anywhere, at the
+  price of lines nobody would type from inside the workspace.
 - **Worktrees share one exclude file.** Every linked worktree of a repository
   reads the same `info/exclude`, and an entry is anchored at whichever work
   tree reads it. A project checked out in two worktrees under one key has one
