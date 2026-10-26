@@ -26,5 +26,5 @@ pub use commands::read::WORKSPACE;
 pub use commands::{run, run_flayer_cli};
 pub use error::CliError;
 pub use homes::default_home;
-pub use parse::{Cli, Command, FlayerCli, FlayerCommand, GatherCommand};
+pub use parse::{AgentHomeOptions, Cli, Command, FlayerCli, FlayerCommand, GatherCommand};
 pub use render::{Failure, Outcome};
