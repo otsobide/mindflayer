@@ -503,13 +503,20 @@ pub fn install(
     let mut stage = copy::Stage::open(&scratch).map_err(|source| InstallError::Write {
         path: scratch,
         source,
+        swept: Vec::new(),
     })?;
-    let change = stage
-        .replace(&from, &to, &within)
-        .map_err(|source| InstallError::Write {
-            path: to.clone(),
-            source,
-        })?;
+    let change = match stage.replace(&from, &to, &within) {
+        Ok(change) => change,
+        // What was cleared on the way goes out with the error rather than
+        // with the stage: it was cleared whether or not this copy lands.
+        Err(source) => {
+            return Err(InstallError::Write {
+                path: to,
+                source,
+                swept: stage.swept().to_vec(),
+            })
+        }
+    };
     let swept = stage.swept().to_vec();
     // Cleared before the ledger is written rather than after, so the scratch
     // folder is held for no longer than the copy takes.
@@ -597,6 +604,7 @@ pub fn uninstall(
         std::fs::remove_dir_all(&path).map_err(|source| InstallError::Write {
             path: path.clone(),
             source,
+            swept: Vec::new(),
         })?;
     }
     ledger.uninstalled(&entry, kind, name)?;
@@ -841,9 +849,29 @@ pub enum InstallError {
         path: PathBuf,
         #[source]
         source: io::Error,
+        /// What interrupted installs had left that this one cleared before
+        /// the write failed ([`InstallError::swept`]).
+        swept: Vec<PathBuf>,
     },
     #[error("nothing called `{name}` can be installed{}: gather it, load a workspace that has it with `flayer load`, or add it to the workspace with `flayer add`", from.as_deref().map(|from| format!(" from {from}")).unwrap_or_default())]
     NotOffered { name: String, from: Option<String> },
     #[error("`{name}` is offered by more than one place — {} — so say which with --from", .origins.join(", "))]
     OfferedTwice { name: String, origins: Vec<String> },
+}
+
+impl InstallError {
+    /// What an install that failed had cleared first, as
+    /// [`Installation::swept`] says for one that did not: for a front end to
+    /// say with the error, because each is an install that did not finish,
+    /// whether or not this one did.
+    ///
+    /// Only a copy that fails carries any. A ledger that fails after the copy
+    /// stops everything, as it does wherever it fails, and what was swept
+    /// goes unsaid with the rest.
+    pub fn swept(&self) -> &[PathBuf] {
+        match self {
+            InstallError::Write { swept, .. } => swept,
+            _ => &[],
+        }
+    }
 }

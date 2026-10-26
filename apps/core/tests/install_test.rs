@@ -792,6 +792,29 @@ fn what_an_interrupted_install_left_is_cleared_and_said_by_the_next() {
 }
 
 #[test]
+fn an_install_that_fails_still_says_what_an_interrupted_one_left_and_it_cleared() {
+    let (_dir, workspace, project) = own_skills(&["deploy"], 0);
+    let ledger = workspace.ledger().unwrap();
+    let left = project.scratch_dir().join("4242-00000000deadbeef");
+    fs::create_dir_all(left.join("new").join("deploy")).unwrap();
+    // A file where the skills folder goes, so the copy is built and swept
+    // for, but cannot be put in place.
+    let skills = project.directory_for(Kind::Skill);
+    fs::remove_dir(&skills).unwrap();
+    fs::write(&skills, "not a folder").unwrap();
+
+    let error = install_named(&workspace, &ledger, &project, "deploy").unwrap_err();
+
+    assert!(
+        matches!(error, install::InstallError::Write { .. }),
+        "{error}"
+    );
+    assert!(!left.exists());
+    assert_eq!(error.swept(), [left]);
+    assert!(staged(&project).is_empty(), "{:?}", staged(&project));
+}
+
+#[test]
 fn what_an_earlier_version_left_beside_the_copy_is_cleared_and_said_by_the_next_install() {
     let (_dir, workspace, project) = own_skills(&["deploy"], 0);
     let ledger = workspace.ledger().unwrap();

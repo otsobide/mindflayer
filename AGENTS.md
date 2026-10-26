@@ -123,7 +123,7 @@ These are easy to break from a single file without noticing.
   write one there. The next install sweeps what an interrupted one left in
   `.mind/tmp`, only when the stage lock says no other run is going, clears the
   `.<name>.mindflayer-new` and `-old` older versions left beside the copy, and
-  reports both.
+  reports both, even when its own copy then fails.
 - **Paths are lexical and portable.** Route arithmetic lives in
   `apps/core/src/paths.rs`. Registry entries are stored relative to the
   workspace with forward slashes, and `link` verifies a route before storing

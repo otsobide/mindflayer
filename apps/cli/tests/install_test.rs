@@ -294,6 +294,31 @@ fn an_install_clears_what_an_interrupted_one_left_and_says_so_once() {
 }
 
 #[test]
+fn an_install_that_fails_still_says_what_it_cleared_before_the_error() {
+    let dir = workspace_with_own();
+    let alpha = dir.path().join("alpha");
+    let left = interrupted(&alpha);
+    // A file where the skills folder goes: the copy is built, but cannot be
+    // put in place.
+    let skills = directory_for(&alpha, Kind::Skill);
+    fs::remove_dir_all(&skills).unwrap();
+    fs::write(&skills, "not a folder").unwrap();
+
+    let failure = mind(&alpha, &["install", "commit-style"]).unwrap_err();
+
+    assert_eq!(
+        failure.warnings,
+        ["cleared .mind/tmp/4242-00000000deadbeef, left by an install that did not finish"]
+    );
+    assert!(
+        failure.error.to_string().contains("cannot be written"),
+        "{}",
+        failure.error
+    );
+    assert!(!left.exists());
+}
+
+#[test]
 fn applying_says_what_an_interrupted_install_left_in_a_project() {
     let (dir, workspace, ledger) = shelved(&["collapse"], &["deploy"]);
     interrupted(&dir.path().join("collapse"));
@@ -310,6 +335,38 @@ fn applying_says_what_an_interrupted_install_left_in_a_project() {
         ),
         "{}",
         outcome.stdout
+    );
+}
+
+#[test]
+fn applying_says_what_an_install_that_failed_had_cleared() {
+    let (dir, workspace, ledger) = shelved(&["collapse"], &["deploy"]);
+    let collapse = dir.path().join("collapse");
+    interrupted(&collapse);
+    let mut screen = screen_for(&workspace, &ledger);
+    press(&mut screen, &[KeyCode::Right, KeyCode::Char(' ')]);
+    // A file where the skills folder goes, once the screen is open: the copy
+    // is built, but cannot be put in place.
+    let skills = directory_for(&collapse, Kind::Skill);
+    fs::remove_dir_all(&skills).unwrap();
+    fs::write(&skills, "not a folder").unwrap();
+
+    let outcome = install_screen::apply(&workspace, &ledger, &screen).unwrap();
+
+    assert!(!outcome.ok);
+    assert_eq!(
+        outcome.stdout,
+        "collapse: cleared .mind/tmp/4242-00000000deadbeef, left by an install that did not finish\n\
+         \n0 installed, 0 removed\n"
+    );
+    assert!(
+        outcome
+            .stderr
+            .iter()
+            .any(|line| line.starts_with("warning: collapse: ")
+                && line.contains("cannot be written")),
+        "{:?}",
+        outcome.stderr
     );
 }
 

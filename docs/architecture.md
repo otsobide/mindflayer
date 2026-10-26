@@ -655,12 +655,16 @@ installing that skill at once, each deleting what the other was building.
   holds a shared lock on `.mind/tmp/.lock` while its stage lives. A run that
   can take the lock exclusively is alone, so every stage it finds was left by
   a run that stopped halfway: it removes them, and `Installation::swept` names
-  them for the CLI to print under what the install did. A run that cannot take
-  it sweeps nothing, because what it finds may be in use. A lock rather than
-  the process ids in the names, because whether a process still runs is a
-  question each platform answers differently, and a lock the system drops when
-  its process dies answers it on all of them. Only folders named the way a
-  stage is are swept; anything else in there, somebody else put there.
+  them for the CLI to print under what the install did. When the copy then
+  fails, `InstallError::swept` names them instead, printed before the error:
+  they were cleared all the same. A ledger that fails after the copy stops
+  everything, as it does wherever it fails, and they go unsaid with the rest.
+  A run that cannot take the lock exclusively sweeps nothing, because what it
+  finds may be in use. A lock rather than the process ids in the names,
+  because whether a process still runs is a question each platform answers
+  differently, and a lock the system drops when its process dies answers it on
+  all of them. Only folders named the way a stage is are swept; anything else
+  in there, somebody else put there.
 - **What earlier versions left beside is cleared too.** A project that
   upgraded can still hold the `.deploy.mindflayer-new` or `-old` of an install
   an earlier version did not finish, and no sweep of `.mind/tmp` would find

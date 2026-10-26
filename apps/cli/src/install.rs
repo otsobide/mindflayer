@@ -148,6 +148,10 @@ pub fn apply(
                 let done = match result {
                     Ok(done) => done,
                     Err(error) => {
+                        // What it cleared first is still something it did.
+                        for line in crate::commands::install::cleared(project, error.swept()) {
+                            let _ = writeln!(stdout, "{}: {line}", project.name());
+                        }
                         stderr.push(format!("warning: {}: {error}", project.name()));
                         continue;
                     }
