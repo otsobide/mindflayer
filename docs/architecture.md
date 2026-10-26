@@ -713,27 +713,30 @@ went had gathered is a warning and is not carried out. Scrubbing as the screen
 opened would have spared that, and is rejected: opening it is a read.
 
 The scrub rewrites the sources whose URL carries a credential, each clone made
-from one, and the action log. A clone is rewritten before its row, so a clone
-that cannot be rewritten keeps its row tainted and is tried again next time,
-as a warning; what was taken out is a note, said once, since the command did
-what it was asked and an exit code that failed because of a fix would break a
-script for nothing it did. When the URL without credentials is already
-another source's, with the same branch and folder, the two are one
-place gathered twice and become one row: two rows would offer each skill twice
-under one origin, and SQLite's UNIQUE would refuse the rewrite outright when a
-branch is set. The row kept is the one whose shelf was filled most recently,
-since its folder holds the newer files, and a row whose gather failed before
-it took anything loses however recently it was tried. What the other row
-gathered goes with it, and its clone and shelf folder are removed (a folder
-that will not go is a warning), rather than its records moving to the kept
-row: they would point into a folder the ledger no longer reserves, which the
-next source with the same readable name would be given and gather over. The
-ledger turns on SQLite's `secure_delete`, so a rewritten row leaves no copy of
-its old text in the file's free space.
+from one, the origin of every installation from one, which schema 3 copied
+from the URL as it was stored, and the action log. A clone is rewritten before
+its row, so a clone that cannot be rewritten keeps its row tainted and is
+tried again next time, as a warning; what was taken out is a note, said once,
+since the command did what it was asked and an exit code that failed because
+of a fix would break a script for nothing it did. When the URL without
+credentials is already another source's, with the same branch and folder, the
+two are one place gathered twice and become one row: two rows would offer each
+skill twice under one origin, and SQLite's UNIQUE would refuse the rewrite
+outright when a branch is set. The row kept is the one whose shelf was filled
+most recently, since its folder holds the newer files, and a row whose gather
+failed before it took anything loses however recently it was tried. What the
+other row gathered goes with it, and its clone and shelf folder are removed (a
+folder that will not go is a warning), rather than its records moving to the
+kept row: they would point into a folder the ledger no longer reserves, which
+the next source with the same readable name would be given and gather over.
+The ledger turns on SQLite's `secure_delete`, so a rewritten row leaves no
+copy of its old text in the file's free space.
 
 It runs every time rather than once, as a schema step would, because an older
-build can keep writing to the same file after a newer one has scrubbed it, and
-the schema steps are spoken for by the changes that need a new version. With
+build could keep writing to the same file after a newer one had scrubbed it,
+and the schema steps are spoken for by the changes that need a new version.
+Schema 3 is a file such a build refuses, so the scrub could now be part of
+that step; whether it should is open (see the open questions). With
 nothing to do it still reads, every time a command writes: a scan of the
 sources and one of the action log, in a transaction. Neither can use an index,
 so the log's grows with the log, and every entry naming an ssh URL, which
@@ -776,7 +779,9 @@ renders with `datetime(at, 'unixepoch')`.
 
 No URL this build writes into it, or reads back out of it, carries a
 credential. One an older build stored stays in the file until the next command
-that writes scrubs it, and an older build can store one again after that
+that writes scrubs it, and for good in the copy a schema step took before that
+(see the open questions). An older build could store one again after a scrub
+until schema 3, which it refuses
 ([A URL is kept without its credentials](#a-url-is-kept-without-its-credentials)).
 
 A source's shelf folder is stored rather than derived: two URLs can reduce to
@@ -2220,9 +2225,12 @@ leak into the lifecycle code. Unblocks #33, #45, #62, #93, #94 and #95.
   remove them, or a doctor check (#96) that mentions them, would make them
   something seen rather than found by browsing `.mindflayer`.
 - **What a copy keeps.** A copy is the ledger as it was, so a URL an older
-  Mindflayer stored with its credentials in it stays in the copy once #25
-  rewrites the ledger itself without them. Rewriting the copy too, or taking
-  it without them, would close that.
+  Mindflayer stored with its credentials in it stays in the copy once the
+  scrub has rewritten the ledger itself without them, and the copy is taken
+  as the file is opened, before any scrub. Rewriting the copy too, or taking
+  it without them, would close that, at the cost of a way back that is no
+  longer the file as it was: two of its sources the rewrite makes one would
+  have to be merged in the copy, as the scrub merges them in the ledger.
 - **Disowning from elsewhere.** A change drops the record of the workspace
   its command resolved, wherever that sits, but not of any other workspace
   that links the same project: nothing in the project says which workspaces
@@ -2312,10 +2320,10 @@ leak into the lifecycle code. Unblocks #33, #45, #62, #93, #94 and #95.
   too would close it.
 - **When the scrub can stop.** `gather::scrub` runs whenever a command
   opens the ledger to write (`FlayerWorkspace::ledger_to_write`), because an
-  older build can still write a token into the same file. The next ledger
-  schema step (the first planned is #30's) changes that, since a build older
-  than it refuses the file: the scrub can then run once, as part of that
-  migration, and stop. A read migrates too ([A read leaves the ledger as it
+  older build could write a token into the same file. Schema 3 (#30) changes
+  that, since a build older than it refuses the file: the scrub could run
+  once, as part of that migration, and stop. It has not moved there, because
+  a read migrates too ([A read leaves the ledger as it
   finds it](#a-read-leaves-the-ledger-as-it-finds-it)), so a scrub folded into
   that step would run on a read as well, rewriting clones as well as the file,
   and a read would then have to say what it took out, as only a command that

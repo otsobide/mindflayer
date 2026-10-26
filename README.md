@@ -428,7 +428,9 @@ When a new version of Mindflayer changes how the database is laid out, the
 first command to open it updates it, after copying it aside as
 `mindflayer.db.v<old version>.bak`. The copy is never removed for you, and it
 is the way back: an older Mindflayer refuses the updated database, and reads
-the copy put back in its place.
+the copy put back in its place. It is the database as it was, so a token an
+older Mindflayer stored in a URL stays in the copy after the next command that
+writes takes it out of `mindflayer.db`.
 Timestamps are Unix seconds, so `datetime(at, 'unixepoch')` renders them:
 
 ```sql
