@@ -185,6 +185,31 @@ fn a_route_with_glob_characters_is_matched_literally() {
     assert!(!ignored(repo.path(), "apps/l app/.agents/skills/review/"));
 }
 
+#[cfg(unix)]
+#[test]
+fn a_project_reached_through_a_symlink_is_excluded_where_it_is() {
+    // Git never follows a symlinked directory: what is installed through
+    // `current` is untracked under `packages/app-v2`, and a line naming
+    // `current` would keep none of it out.
+    let repo = repository();
+    project(repo.path(), "packages/app-v2");
+    let current = repo.path().join("current");
+    std::os::unix::fs::symlink("packages/app-v2", &current).unwrap();
+
+    exclude::add(&current, "current", &[skill("review")]).unwrap();
+    assert_eq!(
+        group(&exclude_file(repo.path()), "current"),
+        [
+            "# project current",
+            "/packages/app-v2/.agents/skills/review/"
+        ]
+    );
+    assert!(ignored(
+        repo.path(),
+        "packages/app-v2/.agents/skills/review/"
+    ));
+}
+
 #[test]
 fn two_projects_install_and_uninstall_independently() {
     let repo = repository();

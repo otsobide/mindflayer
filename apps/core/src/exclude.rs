@@ -145,28 +145,31 @@ pub fn locate(project: &Path) -> Result<Option<Location>, ExcludeError> {
 
 /// Where `project` sits below `worktree`, or `None` when it is not below it.
 ///
-/// Lexically first, as everywhere else. Discovery may hand back the work tree
-/// spelled the way the filesystem resolves it (`/private/tmp` for `/tmp` on a
-/// Mac), and then only resolving both says where the project is.
+/// From both paths resolved, not lexically as everywhere else: git matches a
+/// pattern against the tree as it is on disk and never follows a symlinked
+/// directory, so what is installed into a project reached through `current ->
+/// packages/app-v2` is untracked under `packages/app-v2`, and a line naming
+/// `current` would keep none of it out. Discovery climbs the resolved path for
+/// the same reason. Resolving also spells both sides alike when discovery
+/// hands back the work tree as the filesystem has it (`/private/tmp` for
+/// `/tmp` on a Mac). Lexically only when a path cannot be resolved.
 fn route(worktree: &Path, project: &Path) -> Option<PathBuf> {
-    let below = |route: &Path| {
-        route
-            .components()
-            .all(|component| matches!(component, Component::Normal(_) | Component::CurDir))
-    };
     let project = std::path::absolute(project).ok()?;
-    paths::relative_to(&project, worktree)
-        .filter(|route| below(route))
-        .or_else(|| {
-            let worktree = fs::canonicalize(worktree).ok()?;
-            let project = fs::canonicalize(&project).ok()?;
-            let route = project.strip_prefix(&worktree).ok()?.to_path_buf();
+    match (fs::canonicalize(worktree), fs::canonicalize(&project)) {
+        (Ok(worktree), Ok(project)) => {
+            let route = project.strip_prefix(&worktree).ok()?;
             Some(if route.as_os_str().is_empty() {
                 PathBuf::from(".")
             } else {
-                route
+                route.to_path_buf()
             })
-        })
+        }
+        _ => paths::relative_to(&project, worktree).filter(|route| {
+            route
+                .components()
+                .all(|component| matches!(component, Component::Normal(_) | Component::CurDir))
+        }),
+    }
 }
 
 /// One edit of the block, read, made and written back whole.

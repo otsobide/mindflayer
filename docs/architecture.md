@@ -616,7 +616,10 @@ Why that file, and why written that way:
   would catch a folder of that name anywhere in the tree, a teammate's
   committed one in another project included. A directory ends in `/`, and a
   route's glob characters are escaped, so `apps/[legacy]` is that folder
-  rather than a class of letters.
+  rather than a class of letters. The route is worked out from resolved paths,
+  not lexically as elsewhere: git matches the tree as it is on disk and never
+  follows a symlinked directory, so a project reached through `current ->
+  packages/app-v2` is excluded under `packages/app-v2`.
 - **One group per project.** Several projects can share a repository, so each
   owns the lines under its `# project <key>` header and an edit rewrites only
   those. The key is whatever the caller names the project by, its id once
