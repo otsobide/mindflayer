@@ -1,12 +1,14 @@
 //! The two levels Mindflayer works at.
 //!
 //! A **mind project** is a directory carrying a `.mind`, the way a repository
-//! carries a `.git`: it holds skills, in `.mind/skills/<name>/SKILL.md`, and
-//! it travels with the code it belongs to.
+//! carries a `.git`: it holds skills and rules beside the code, in the
+//! directories its marker names (`skills/<name>/SKILL.md` and `rules/` by
+//! default), and it travels with the code it belongs to.
 //!
 //! A **flayer workspace** sits above them, carrying a `.mindflayer` that
-//! references the mind projects it manages, so skills can be listed and moved
-//! across several projects at once.
+//! references the mind projects it manages, so their artifacts can be listed
+//! and moved across several projects at once, and holds artifacts of its own
+//! to share with them.
 //!
 //! Both are found the way git finds a repository: by walking up from a
 //! starting directory until the marker file appears. Both are described by a
