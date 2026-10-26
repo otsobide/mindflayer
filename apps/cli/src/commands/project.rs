@@ -7,7 +7,7 @@ use std::path::{Path, PathBuf};
 
 use mindflayer_core::scan::MAX_LISTED;
 use mindflayer_core::{
-    Directories, FlayerWorkspace, Initialization, Kind, MindProject, Registration, Scan,
+    scan, Directories, FlayerWorkspace, Initialization, Kind, MindProject, Registration, Scan,
     WorkspaceError,
 };
 
@@ -167,8 +167,14 @@ fn unlinked(removed: &[PathBuf]) -> String {
     })
 }
 
+/// `flayer scan`: every repository under the workspace here.
+pub(crate) fn scan_workspace(directory: &Path, home: Option<&Path>) -> Result<Outcome, Failure> {
+    let workspace = workspace_here(directory, home)?;
+    Ok(scanned(&workspace, &scan(&workspace)))
+}
+
 /// Every repository under a workspace, and whether it is linked yet.
-pub(crate) fn scanned(workspace: &FlayerWorkspace, scan: &Scan) -> Outcome {
+fn scanned(workspace: &FlayerWorkspace, scan: &Scan) -> Outcome {
     let mut stdout = String::new();
     if scan.found.is_empty() {
         let _ = writeln!(

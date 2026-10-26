@@ -13,7 +13,7 @@ pub(crate) mod workspace;
 
 use std::path::{Path, PathBuf};
 
-use mindflayer_core::{paths, scan, Catalog, FlayerWorkspace, MindProject, Reference};
+use mindflayer_core::{paths, Catalog, FlayerWorkspace, MindProject, Reference};
 
 use crate::render::as_stored;
 use crate::{tui, Cli, CliError, Command, Failure, FlayerCli, FlayerCommand, Outcome};
@@ -21,7 +21,8 @@ use artifact::{add_to, edit_in, remove_from, rename_in, templates_of};
 use gather::run_gather;
 use install::{install_named, uninstall_named};
 use project::{
-    init_project, init_workspace, link_here, link_projects, scanned, unlink_here, unlink_projects,
+    init_project, init_workspace, link_here, link_projects, scan_workspace, unlink_here,
+    unlink_projects,
 };
 use read::{
     everywhere, list, list_workspace, one_project, show, validate, wanted, Level, Selector,
@@ -210,10 +211,7 @@ fn run_flayer(
             tui::run_minds(workspace.root(), home)
         }
 
-        FlayerCommand::Scan => {
-            let workspace = workspace_here(directory, home)?;
-            Ok(scanned(&workspace, &scan(&workspace)))
-        }
+        FlayerCommand::Scan => scan_workspace(directory, home),
 
         FlayerCommand::Gather(command) => run_gather(command, directory, home),
 
