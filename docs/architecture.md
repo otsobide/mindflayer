@@ -1149,11 +1149,16 @@ leak into the lifecycle code. Unblocks #33, #45, #62, #93, #94 and #95.
   installed — from the shelf, and now from the workspace's own. The workspace's
   own rules have no way into a project yet; a rule is one file, filed by its
   route, and copying one means answering where its folders go.
+  [D-03](#d-03-rules-reach-every-agent-through-agentsmd) answers it: a rule
+  reaches a project as its section of a managed block in `AGENTS.md`, with
+  `.claude/rules/mindflayer` as Claude's fallback, and #45 carries it out.
 - **An edited copy that stays managed.** Editing an installed skill makes it
   its author's, so updates from the shelf stop reaching it — the safe answer,
   not the best one. A hash of what was installed, kept in the ledger, would let
   the install screen tell an untouched copy from an edited one, and offer to
   update the first while leaving the second alone.
+  [D-04](#d-04-an-edited-copy-is-detected-not-disowned) chose that hash, one
+  per target, and #47 carries it out.
 - **Disowning from elsewhere.** `install::disown` finds the workspace by
   walking up from the project, so a workspace that links the project from
   somewhere that is not above it keeps its stale record. Every workspace
@@ -1174,10 +1179,15 @@ leak into the lifecycle code. Unblocks #33, #45, #62, #93, #94 and #95.
   same question `Catalog::take_files` answers inside a project, asked of a
   folder that is not one.
 - **Private repositories.** `gix` is given no credentials, so a private source
-  fails at the fetch. What it should be given — an ssh agent, a token from the
-  environment, the platform keychain — is undecided.
+  fails at the fetch. What it should be given is decided in
+  [D-16](#d-16-credentials-come-from-the-front-end-never-from-a-prompt): a
+  provider the front end supplies, through a callback that never prompts, then
+  the git-config helpers `gix` runs itself, then the system ssh binary. #26 and
+  #110 carry it out.
 - **Rules that want to declare something.** Today a rule has no front matter,
   so a leading `---` in one is content. If rules later want metadata, that
   becomes a breaking reading of files written now. The escape hatch is cheap
   and deliberate: `Declared::Rule` is a variant, so giving it a payload is a
-  local change.
+  local change. [D-03](#d-03-rules-reach-every-agent-through-agentsmd) settles
+  the if: a rule that declares `paths:` goes only to `.claude/rules/mindflayer`,
+  so rules will carry front matter, and #41 gives `Declared::Rule` that payload.
