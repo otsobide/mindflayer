@@ -154,6 +154,7 @@ fn a_writer_kept_waiting_goes_ahead_as_soon_as_the_holder_lets_go() {
 #[test]
 fn readers_never_wait_for_a_writer() {
     let (_dir, workspace) = workspace();
+    drop(workspace.ledger().unwrap());
     let _held = workspace.lock().unwrap();
 
     let started = Instant::now();
@@ -343,4 +344,17 @@ fn a_gather_waits_for_the_writer_before_it() {
         let report = gather::gather(&gathering, &ledger, &request).unwrap();
         assert_eq!(report.added.len(), 1);
     });
+}
+
+#[test]
+fn opening_the_ledger_to_write_waits_for_the_writer_before_it() {
+    let (_dir, workspace) = workspace();
+    let opening = workspace.clone();
+
+    // Opening is where a ledger is made, or migrated from an older build's.
+    waits_for_the_writer_before_it(&workspace, move || {
+        drop(opening.ledger().unwrap());
+    });
+
+    assert!(workspace.ledger_path().is_file());
 }

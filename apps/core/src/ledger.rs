@@ -678,6 +678,10 @@ fn now() -> i64 {
 /// Why the ledger could not be opened, read or written.
 #[derive(Debug, Error)]
 pub enum LedgerError {
+    /// The workspace could not be had to open its ledger to write in
+    /// ([`crate::workspace::FlayerWorkspace::ledger`]).
+    #[error(transparent)]
+    Lock(#[from] crate::lock::LockError),
     #[error("{path}: cannot be created: {source}")]
     Create {
         path: PathBuf,
@@ -707,6 +711,7 @@ impl LedgerError {
     /// The file the failure is about.
     pub fn path(&self) -> &Path {
         match self {
+            LedgerError::Lock(error) => error.path(),
             LedgerError::Create { path, .. }
             | LedgerError::Open { path, .. }
             | LedgerError::Version { path, .. }

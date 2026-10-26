@@ -661,12 +661,19 @@ impl FlayerWorkspace {
     /// Refused for an [`unmade`](Self::unmade) workspace, which has nowhere to
     /// keep one: creating it would leave half a workspace behind, a
     /// `.mindflayer` holding a database and no marker.
+    ///
+    /// Opened with the workspace held ([`lock`](Self::lock)), because opening
+    /// is when a ledger is made or migrated: two writers opening one an older
+    /// build left would both step it forward, and the second would fail on
+    /// what the first had already made. Let go once it is open, since what
+    /// writes to it next takes the lock itself.
     pub fn ledger(&self) -> Result<Ledger, LedgerError> {
         if !self.made {
             return Err(LedgerError::Unmade {
                 path: self.ledger_path(),
             });
         }
+        let _lock = self.lock()?;
         Ledger::open(self.ledger_path())
     }
 
@@ -678,6 +685,11 @@ impl FlayerWorkspace {
     /// Never for a write. What is recorded in the stand-in is gone when it is
     /// dropped, and a copy installed without its record is one Mindflayer
     /// would afterwards refuse to touch; a write opens [`ledger`](Self::ledger).
+    ///
+    /// Never waits for a writer either, though an older ledger is migrated
+    /// here as it is there: readers do not wait, so a read's migration is
+    /// kept apart from a writer's by SQLite's own locking, not by the
+    /// workspace's.
     pub fn ledger_for_reading(&self) -> Result<Ledger, LedgerError> {
         // An unmade workspace has no ledger, whatever a stray file says.
         if !self.made {
