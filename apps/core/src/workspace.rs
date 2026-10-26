@@ -528,7 +528,7 @@ impl FlayerWorkspace {
     /// names that writer's process.
     ///
     /// Core's writers take it themselves — an edit of the marker, an install
-    /// or an uninstall, a gather, opening the ledger to write — so a front end
+    /// or an uninstall, a gather — so a front end
     /// has no need to, and must not while it asks core to write: the lock is
     /// not re-entrant, and a writer that asks for it twice waits for itself.
     /// Readers never take it.
@@ -555,18 +555,22 @@ impl FlayerWorkspace {
     /// [`FlayerWorkspace::ledger_for_reading`], which neither makes it nor
     /// scrubs it.
     ///
-    /// Opened with the workspace held ([`lock`](Self::lock)), because opening
-    /// is when a ledger is made or migrated: two writers opening one an older
-    /// build left would both step it forward, and the second would fail on
-    /// what the first had already made. Let go once it is open, since what
-    /// writes to it next takes the lock itself.
+    /// Opened without the workspace's [`lock`](Self::lock), though opening is
+    /// when a ledger is made or migrated: a migration is one transaction that
+    /// reads the version again once it holds SQLite's write lock
+    /// ([`Ledger::open`]), so two processes opening one an older build left
+    /// take turns there, and the second finds nothing to do. That keeps a
+    /// read's migration apart from a writer's too, which the workspace's lock
+    /// could not, since readers never take it. Taking it here as well would
+    /// only keep every change to an artifact waiting behind a gather to drop
+    /// its record, after the change was made, and failing as busy when the
+    /// gather ran long, with the record left behind.
     pub fn ledger(&self) -> Result<Ledger, LedgerError> {
         if !self.made {
             return Err(LedgerError::Unmade {
                 path: self.ledger_path(),
             });
         }
-        let _lock = self.lock()?;
         Ledger::open(self.ledger_path())
     }
 
@@ -602,10 +606,10 @@ impl FlayerWorkspace {
     /// anyway, and reading is no reason to write. It is left for the next
     /// command that writes.
     ///
-    /// Never waits for a writer either, though an older ledger is migrated
-    /// here as it is there: readers do not wait, so a read's migration is
-    /// kept apart from a writer's by SQLite's own locking, not by the
-    /// workspace's.
+    /// Never waits for the workspace's lock either, though an older ledger is
+    /// migrated here as it is there: the migration's own transaction keeps it
+    /// apart from a writer's ([`ledger`](Self::ledger)), so the most a read
+    /// waits for is another process's migration, once after an upgrade.
     pub fn ledger_for_reading(&self) -> Result<Ledger, LedgerError> {
         // An unmade workspace has no ledger, whatever a stray file says.
         if !self.made {

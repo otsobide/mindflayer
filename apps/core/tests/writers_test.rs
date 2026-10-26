@@ -16,8 +16,11 @@ use common::{repository, skill, url, workspace};
 use mindflayer_core::gather::{self, Request};
 use mindflayer_core::install::{self, Removed};
 use mindflayer_core::ledger::{Action, Outcome};
+use mindflayer_core::lifecycle::{self, Record};
 use mindflayer_core::lock::{HOLDER_FILE, WAIT};
-use mindflayer_core::{FlayerWorkspace, Kind, Ledger, LockError, MindProject, LEDGER_FILE};
+use mindflayer_core::{
+    FlayerWorkspace, Kind, Ledger, LockError, MindProject, Reference, LEDGER_FILE,
+};
 use tempfile::TempDir;
 
 /// Run `write` while `workspace` is held, let go after a moment, and fail
@@ -374,14 +377,48 @@ fn a_gather_waits_for_the_writer_before_it() {
 }
 
 #[test]
-fn opening_the_ledger_to_write_waits_for_the_writer_before_it() {
+fn opening_the_ledger_does_not_wait_for_the_workspace() {
     let (_dir, workspace) = workspace();
-    let opening = workspace.clone();
+    let _held = workspace.lock().unwrap();
 
-    // Opening is where a ledger is made, or migrated from an older build's.
-    waits_for_the_writer_before_it(&workspace, move || {
-        drop(opening.ledger().unwrap());
-    });
+    // Made here, as it is migrated here when an older build left it: the
+    // migration's own transaction keeps two of those apart, and a lock taken
+    // as well would have waited all of it and failed.
+    let started = Instant::now();
+    drop(workspace.ledger_to_write().unwrap());
 
     assert!(workspace.ledger_path().is_file());
+    assert!(started.elapsed() < WAIT, "waited for the workspace");
+}
+
+#[test]
+fn a_change_made_while_the_workspace_is_held_still_drops_its_record() {
+    let (_dir, mut workspace, project) = offering_deploy();
+    workspace.link(&project).unwrap();
+    let entry = workspace.entry_for(project.root());
+    let entry = entry.to_str().unwrap();
+    let (ledger, _) = workspace.ledger_to_write().unwrap();
+    let candidate =
+        install::offered(&workspace, &ledger, &project, Kind::Skill, "deploy", None).unwrap();
+    install::install(&workspace, &ledger, &project, &candidate).unwrap();
+    assert_eq!(
+        ledger.installations(entry, Kind::Skill).unwrap(),
+        ["deploy"]
+    );
+
+    // As a gather holds it, clone and all, for as long as the network takes.
+    let _held = workspace.lock().unwrap();
+    let target = lifecycle::find(&project, &Reference::parse("deploy")).unwrap();
+    let edit = lifecycle::start_edit(&target);
+    let mut text = fs::read_to_string(edit.file()).unwrap();
+    text.push_str("Mine.\n");
+    fs::write(edit.file(), text).unwrap();
+    let edited = lifecycle::finish_edit(Some(&workspace), &project, edit);
+
+    // The edit is made whatever the lock says, so a record drop that waited
+    // for it and gave up would leave the edited copy looking like
+    // Mindflayer's to overwrite.
+    assert!(edited.changed);
+    assert_eq!(edited.copy.unwrap(), Record::Dropped);
+    assert!(ledger.installations(entry, Kind::Skill).unwrap().is_empty());
 }
