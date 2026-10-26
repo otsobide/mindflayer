@@ -2940,10 +2940,10 @@ leak into the lifecycle code. Unblocks #33, #45, #62, #93, #94 and #95.
   `$OPENCODE_CONFIG_DIR`, OpenCode's folder is taken to be
   `~/.config/opencode`. Whether OpenCode moves it with `$XDG_CONFIG_HOME`, as
   programs that follow the XDG base directories do, is unverified: #17 ran
-  only Claude Code, and [docs/agents.md](agents.md) lists it as unknown. If a
-  check on the binary finds that it does, that variable becomes the step
-  before the default for `--opencode-config-dir`, and tests that spawn a
-  binary clear it too.
+  only Claude Code, and [docs/agents.md](agents.md) marks it docs-only, the
+  docs being silent. If a check on the binary finds that it does, that
+  variable becomes the step before the default for `--opencode-config-dir`,
+  and tests that spawn a binary clear it too.
 - **`$OPENCODE_CONFIG_DIR` beside OpenCode's folder, not instead of it.**
   `--opencode-config-dir` takes the variable in place of `~/.config/opencode`,
   as `--codex-home` takes `$CODEX_HOME` in place of `~/.codex`. OpenCode's
