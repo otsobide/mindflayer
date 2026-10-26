@@ -260,6 +260,14 @@ fn two_projects_install_and_uninstall_independently() {
 fn a_project_outside_any_repository_gets_a_warning_and_nothing_is_written() {
     let dir = TempDir::new().unwrap();
     let alone = project(dir.path(), "alone");
+    // Were the temp dir inside a repository, the add below would write into
+    // that repository's exclude file, so the test stops before it does.
+    assert_eq!(
+        exclude::locate(&alone).unwrap(),
+        None,
+        "a git repository holds {}",
+        dir.path().display()
+    );
 
     let outcome = exclude::add(&alone, "alone", &[skill("one")]).unwrap();
     assert_eq!(
