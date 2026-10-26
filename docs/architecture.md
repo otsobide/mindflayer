@@ -715,9 +715,10 @@ included: `flayer list`, `flayer scan`, `mind install` and opening `flayer`'s
 TUI all go through `locate_or_default`, so the first of them run outside every
 workspace leaves a `~/.mindflayer` behind. The exceptions are the commands
 that only list or take away a load — `flayer load` on its own, `unload` — which
-use `locate_except`, and `mind` opening its TUI, which uses `default_at`: both
-open the home workspace if it exists and never create it. Whether reading
-should create it at all is an [open question](#open-questions).
+use `locate_except`, and the `mind` commands that only consult a workspace —
+opening its TUI, `add`, `edit`, `rename`, `remove`, `templates` — which use
+`default_at`: both open the home workspace if it exists and never create it.
+Whether reading should create it at all is an [open question](#open-questions).
 
 Where home is comes from the front end, not from core: `--home`, then
 `$MINDFLAYER_HOME`, then the user's home directory, and empty means there is
@@ -747,8 +748,19 @@ name, never removed by unticking one.
 `.mind/templates/` and `.mindflayer/templates/`, not beside the code: the
 artifacts are beside the code because agents read them, and nothing but
 Mindflayer reads a template. A workspace's templates count for the projects it
-manages, found by walking up, the rule every workspace-wide thing follows; of
-two templates of one kind and name, the closer wins.
+manages and for its own artifacts; of two templates of one kind and name, the
+closer wins.
+
+Which workspace that is, the command says. Core takes it as a parameter
+(`template::templates`, `template::find`) rather than walking up from the
+project, because a walk misses a workspace that links the project from beside
+it, and `flayer add -p` run there would not find the workspace's own
+templates. `flayer` passes the workspace it runs in. `mind` passes the one above
+the project, or else the default one in your home if it has been made — the
+order `mind link` looks in, without making anything (`commands::consulted`) —
+and the TUI offers in its add form what that finds, since the form runs a
+`mind` line. Core still checks that the workspace manages the project, so one
+that does not lends it nothing.
 
 A template's front matter keeps whatever it says except `name` and
 `description`, which `mind add` always sets: the template's lines for those
@@ -797,6 +809,12 @@ would be inherited by whatever is written there next, and the install screen
 would then delete somebody's work because a box looked untidy. So each of them
 drops the record (`install::disown`), and `mind add` drops any stale one under
 the name it writes. An installed skill that is edited becomes its author's.
+
+The record dropped is the one held by the workspace the command resolved, the
+one its templates come from, and it is given to `install::disown` for the same
+reason: a workspace beside the project, which a walk up from the project never
+reaches, would keep a record of a copy that has changed. Another workspace that
+links the same project keeps its own, an [open question](#open-questions).
 
 ## Scanning
 
@@ -1196,11 +1214,17 @@ leak into the lifecycle code. Unblocks #33, #45, #62, #93, #94 and #95.
   update the first while leaving the second alone.
   [D-04](#d-04-an-edited-copy-is-detected-not-disowned) chose that hash, one
   per target, and #47 carries it out.
-- **Disowning from elsewhere.** `install::disown` finds the workspace by
-  walking up from the project, so a workspace that links the project from
-  somewhere that is not above it keeps its stale record. Every workspace
-  linking a project would have to be findable from the project for that to
-  change.
+- **Disowning from elsewhere.** A change drops the record of the workspace
+  its command resolved, wherever that sits, but not of any other workspace
+  that links the same project: nothing in the project says which workspaces
+  link it, so each of them keeps its stale record. Every workspace linking a
+  project would have to be findable from the project for that to change. The
+  TUI runs into it from inside: it runs a project's changes as `mind -C
+  <entry>`, which consults the project's workspace (the one above it, or the
+  default) rather than the one on screen, so a screen on a workspace beside
+  the project leaves that workspace's record behind. Once a line can name its
+  workspace (`-W`, [D-08](#d-08-an-explicit-or-activated-workspace-wins)), the
+  TUI can say which.
 - **Reading commands create the home workspace.** `flayer list`, `show`,
   `validate`, `scan`, `templates`, `gather list`, `minds`, the `flayer` TUI and
   `mind install`/`uninstall` all make `~/.mindflayer` when nothing up the tree
