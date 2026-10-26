@@ -272,10 +272,10 @@ https://github.com/acme/skills at a1b2c3d
 The repository's `skills` folder is what gets harvested; `--path agents` takes
 another one, and `--ref v2` takes a branch or a tag instead of the default.
 
-On a terminal it says what it is doing while it does it (`connecting`,
-`receiving objects 120/340`, `reading folders 3/40`) on one line of stderr,
-which it wipes before the report, so the report reads as above. Piped or
-redirected, it says nothing until the report.
+With stderr on a terminal it says what it is doing while it does it
+(`connecting`, `receiving objects 120/340`, `reading folders 3/40`) on one line
+there, which it wipes before the report, so the report reads as above. With
+stderr piped or redirected, it says nothing until the report.
 
 Gathering fills the shelf and stops there. **Nothing is written into a mind
 project**: which of these a project should carry is a separate decision, and a
