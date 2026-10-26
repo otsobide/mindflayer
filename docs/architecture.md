@@ -660,7 +660,13 @@ made; what needs the folder (adding an artifact, renaming one, installing a
 copy) asks `required_directory`, which refuses with `NoDirectory`. Until #34
 installs into the folders the project's agents read, a project marked by its
 settings is installed into its authored folder, as a `mind.toml`'s is, and one
-naming none for skills refuses the install. Answering with a default instead
+naming none for skills can take no install. `install::survey` offers it
+nothing rather than refusing it: the install screen surveys every project the
+workspace links, so a refusal for one would hide all the others, and the
+screen shows that project with a line saying why it can take nothing, rather
+than sending somebody to gather for it. Naming one skill for it
+(`install::offered`), installing one or uninstalling one is refused with
+`NoDirectory`, since a project was named. Answering with a default instead
 was turned down: an `Option` costs every caller a line, and a default would
 have put the next kind beside every project's code.
 
