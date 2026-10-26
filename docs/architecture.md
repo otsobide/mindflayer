@@ -597,8 +597,10 @@ printed on the way out both leave the token out.
 
 What a Mindflayer from before the refusal stored is **scrubbed** by
 `gather::scrub`, which every command that writes to the ledger runs first:
-`gather git`, `install` and `uninstall`, and the install screen's apply, in
-both screens. It rewrites the sources whose URL carries a credential, each
+`gather git`, `install` and `uninstall`, and the install screen as it opens,
+in both screens, rather than when what it marked is applied: a scrub can make
+two sources one row, and a screen built before it would install from the row
+that went, copying the files and then failing to record them. It rewrites the sources whose URL carries a credential, each
 clone made from one, and the action log. A clone is rewritten before its row,
 so a clone that cannot be rewritten keeps its row tainted and is tried again
 next time, as a warning; what was taken out is a note, said once, since the

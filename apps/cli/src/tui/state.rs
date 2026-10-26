@@ -555,8 +555,12 @@ impl Done {
 pub enum Performed {
     /// Commands ran; what each said, in order.
     Ran(Vec<Done>),
-    /// The install screen, built and ready to be shown.
-    Install(InstallScreen),
+    /// The install screen, built and ready to be shown, and what opening it
+    /// said, when it said anything: what a scrub of the ledger took out.
+    Install {
+        screen: InstallScreen,
+        said: Option<Done>,
+    },
     /// A directory that exists but is not a mind project. Linking it needs
     /// `mind init` first, and whether to run that is asked, not assumed.
     NeedsInit { path: String },
@@ -1379,7 +1383,8 @@ impl App {
         }
 
         let dones = match performed {
-            Performed::Install(screen) => {
+            Performed::Install { screen, said } => {
+                self.done.extend(said);
                 if screen.targets.is_empty() {
                     self.message = Some(Message::info(
                         "no projects to install into yet — l links one",

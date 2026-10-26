@@ -314,20 +314,57 @@ const SCRUBBED: &str = "note: https://example.com/acme/skills: the user name, pa
      credential helper that has it";
 
 #[test]
-fn applying_the_screen_scrubs_the_ledger_first_and_says_so_without_failing() {
-    let (_dir, workspace, ledger) = shelved(&["collapse"], &["deploy"]);
+fn opening_the_screen_scrubs_the_ledger_first_and_applying_says_so_without_failing() {
+    let (_dir, workspace, _ledger) = shelved(&["collapse"], &["deploy"]);
     token_in_the_shelf(&workspace);
-    let mut screen = screen_for(&workspace, &ledger);
-    press(&mut screen, &[KeyCode::Right, KeyCode::Char(' ')]);
+    let (projects, _) = install_screen::registered(&workspace);
 
-    let outcome = install_screen::apply(&workspace, &ledger, &screen).unwrap();
+    let (ledger, mut screen, scrub) = install_screen::open(&workspace, projects).unwrap();
 
-    assert!(outcome.ok, "{:?}", outcome.stderr);
-    assert_eq!(outcome.stderr, [SCRUBBED]);
+    assert_eq!(scrub.sources.len(), 1, "{:?}", scrub.sources);
     assert_eq!(
         ledger.tainted_sources().unwrap(),
         [],
-        "the scrub rewrote the row"
+        "the scrub rewrote the row before the screen read it"
+    );
+    press(&mut screen, &[KeyCode::Right, KeyCode::Char(' ')]);
+    let outcome = install_screen::apply(&workspace, &ledger, &screen).unwrap();
+    assert!(outcome.ok, "{:?}", outcome.stderr);
+}
+
+#[test]
+fn a_source_the_scrub_makes_one_with_another_is_offered_once_and_installs_on_record() {
+    let (dir, workspace, _ledger) = shelved(&["collapse"], &["deploy"]);
+    // What an older build could leave: the same place gathered twice, once
+    // with a token in its URL and once, later, without.
+    let database = rusqlite::Connection::open(workspace.ledger_path()).unwrap();
+    database
+        .execute_batch(
+            "UPDATE sources SET url = 'https://example.com/acme/skills', last_seen = 20;
+             INSERT INTO sources (kind, url, reference, subdirectory, directory, first_seen, last_seen)
+                 SELECT kind, 'https://me:ghp_t0ken@example.com/acme/skills', reference,
+                        subdirectory, 'older', 0, 0 FROM sources;
+             INSERT INTO artifacts (kind, name, source_id, path, summary, revision, gathered_at)
+                 SELECT kind, name, (SELECT id FROM sources WHERE directory = 'older'), path,
+                        summary, revision, 0 FROM artifacts;",
+        )
+        .unwrap();
+    let (projects, _) = install_screen::registered(&workspace);
+
+    let (ledger, mut screen, _) = install_screen::open(&workspace, projects).unwrap();
+
+    // Once, from the row that stayed: a screen built before the scrub would
+    // offer it twice, once from the row the scrub drops.
+    assert_eq!(screen.targets[0].rows.len(), 1, "{}", rendered(&screen));
+    press(&mut screen, &[KeyCode::Right, KeyCode::Char(' ')]);
+    let outcome = install_screen::apply(&workspace, &ledger, &screen).unwrap();
+
+    assert!(outcome.ok, "{:?}", outcome.stderr);
+    assert!(dir.path().join("collapse/skills/deploy/SKILL.md").is_file());
+    assert_eq!(
+        ledger.installations("collapse", Kind::Skill).unwrap(),
+        ["deploy"],
+        "recorded, so Mindflayer still counts the copy as its own"
     );
 }
 

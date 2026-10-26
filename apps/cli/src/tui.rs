@@ -31,6 +31,7 @@ use ratatui::crossterm::terminal::{self, EnterAlternateScreen};
 use ratatui::DefaultTerminal;
 
 use crate::commands::consulted;
+use crate::commands::gather::scrubbed;
 use crate::commands::workspace::{load_warnings, same_directory};
 use crate::install::state::Screen as InstallScreen;
 use crate::render::as_stored;
@@ -303,22 +304,35 @@ fn draws_mind(command: Option<&Command>) -> bool {
     }
 }
 
-/// Build the install screen for the workspace at `base`.
+/// Build the install screen for the workspace at `base`, as `flayer install`
+/// does, scrub first included.
 fn open_install(base: &Path) -> Performed {
-    let screen = FlayerWorkspace::open(base)
-        .map_err(CliError::from)
+    let command = String::from("flayer install");
+    let opened = FlayerWorkspace::open(base)
+        .map_err(Failure::from)
         .and_then(|workspace| {
-            let ledger = workspace.ledger().map_err(CliError::from)?;
             // What would not open is already on screen, beside what did.
             let (projects, _) = install::registered(&workspace);
-            install::build(&workspace, &ledger, projects).map_err(CliError::from)
+            install::open(&workspace, projects)
         });
-    match screen {
-        Ok(screen) => Performed::Install(screen),
-        Err(error) => Performed::Ran(vec![Done::failed(
-            String::from("flayer install"),
-            error.to_string(),
-        )]),
+    match opened {
+        Ok((_, screen, scrub)) => {
+            // Said in the transcript, the one place the TUI keeps what a
+            // command said, since the screen it opens has no room for it.
+            let told = scrubbed(&scrub).before(Outcome::plain(String::new()));
+            let said = (!told.stderr.is_empty()).then(|| Done {
+                command,
+                stdout: told.stdout,
+                stderr: told.stderr,
+                error: None,
+                ok: told.ok,
+            });
+            Performed::Install { screen, said }
+        }
+        Err(failure) => Performed::Ran(vec![Done {
+            stderr: failure.warnings,
+            ..Done::failed(command, failure.error.to_string())
+        }]),
     }
 }
 
@@ -328,6 +342,9 @@ fn apply_install(base: &Path, screen: &InstallScreen) -> Done {
     let applied = FlayerWorkspace::open(base)
         .map_err(CliError::from)
         .and_then(|workspace| {
+            // Opened without a scrub: the one this command starts with ran
+            // when its screen was opened, and another here could make a row
+            // the screen holds go.
             let ledger = workspace.ledger().map_err(CliError::from)?;
             let mut outcome =
                 install::apply(&workspace, &ledger, screen).map_err(CliError::from)?;

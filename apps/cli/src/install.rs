@@ -14,7 +14,8 @@ use std::time::Duration;
 
 use mindflayer_core::install::{self, Installed, Removed};
 use mindflayer_core::ledger::Ledger;
-use mindflayer_core::{gather, FlayerWorkspace, Kind, MindProject};
+use mindflayer_core::gather::{self, Scrub};
+use mindflayer_core::{FlayerWorkspace, Kind, MindProject};
 use ratatui::crossterm::event::{self, Event, KeyEventKind};
 use ratatui::DefaultTerminal;
 
@@ -24,20 +25,23 @@ use crate::{CliError, Failure, Outcome};
 use state::{Pending, Screen, Step, Target};
 
 /// Build the screen for a workspace, run it, and carry out what it asked for.
-pub fn run(workspace: &FlayerWorkspace, ledger: &Ledger) -> Result<Outcome, Failure> {
+pub fn run(workspace: &FlayerWorkspace) -> Result<Outcome, Failure> {
     let (projects, mut warnings) = registered(workspace);
     warnings.extend(load_warnings(workspace));
-    let screen = build(workspace, ledger, projects).map_err(CliError::from)?;
+    let (ledger, screen, scrub) = open(workspace, projects)?;
+    let said = scrubbed(&scrub);
 
     if screen.targets.is_empty() {
-        return Ok(Outcome {
+        let mut outcome = said.before(Outcome {
             stdout: format!(
                 "{} manages no projects yet\n  link one with `flayer link <path>`\n",
                 workspace.name()
             ),
-            stderr: warnings,
+            stderr: Vec::new(),
             ok: true,
         });
+        outcome.stderr.splice(0..0, warnings);
+        return Ok(outcome);
     }
 
     // `try_init` rather than `init`, which panics: this command is the one
@@ -50,20 +54,53 @@ pub fn run(workspace: &FlayerWorkspace, ledger: &Ledger) -> Result<Outcome, Fail
     let outcome = drive(&mut terminal, screen);
     ratatui::restore();
 
-    let (screen, step) = outcome.map_err(|source| CliError::Screen { source })?;
-    let mut outcome = match step {
-        Step::Apply => apply(workspace, ledger, &screen).map_err(CliError::from)?,
+    let (screen, step) = outcome.map_err(|source| Failure {
+        error: Box::new(CliError::Screen { source }),
+        warnings: said.clone().lines(),
+    })?;
+    let outcome = match step {
+        Step::Apply => apply(workspace, &ledger, &screen).map_err(|error| Failure {
+            error: Box::new(error.into()),
+            warnings: said.clone().lines(),
+        })?,
         _ => Outcome {
             stdout: String::from("nothing applied\n"),
             stderr: Vec::new(),
             ok: true,
         },
     };
+    let mut outcome = said.before(outcome);
     // Judged by the warnings rather than by stderr, which may also hold the
     // notes a scrub leaves, and those are not a failure.
     outcome.ok = outcome.ok && warnings.is_empty();
     outcome.stderr.splice(0..0, warnings);
     Ok(outcome)
+}
+
+/// Open the ledger as a command that writes does, and build the screen from
+/// it: the screen `flayer install` opens and the one inside the TUI both
+/// start here, so they cannot differ about it.
+///
+/// The scrub comes before the screen reads the shelf rather than when what
+/// it marked is applied. A scrub can make two sources one row, and a screen
+/// built before it would hold the row that went: its install would copy the
+/// files and then fail to record them, leaving a copy in the project that
+/// Mindflayer no longer counts as its own. What the scrub took out is handed
+/// back for the caller to say, and goes with an error as warnings, since it
+/// happened all the same.
+pub fn open(
+    workspace: &FlayerWorkspace,
+    projects: Vec<MindProject>,
+) -> Result<(Ledger, Screen, Scrub), Failure> {
+    let ledger = workspace.ledger().map_err(CliError::from)?;
+    let scrub = gather::scrub(workspace, &ledger).map_err(CliError::from)?;
+    match build(workspace, &ledger, projects) {
+        Ok(screen) => Ok((ledger, screen, scrub)),
+        Err(error) => Err(Failure {
+            error: Box::new(error.into()),
+            warnings: scrubbed(&scrub).lines(),
+        }),
+    }
 }
 
 /// The projects a workspace manages, and what could not be opened.
@@ -126,15 +163,13 @@ fn drive(terminal: &mut DefaultTerminal, mut screen: Screen) -> Result<(Screen, 
 
 /// Carry out everything the screen marked, and say what happened.
 ///
-/// The ledger is scrubbed first, as by every command that writes to it; here
-/// rather than in the two callers, so the screen `flayer install` opens and
-/// the one inside the TUI cannot differ about it.
+/// With the ledger the screen was built from, scrubbed when [`open`] opened
+/// it.
 pub fn apply(
     workspace: &FlayerWorkspace,
     ledger: &Ledger,
     screen: &Screen,
 ) -> Result<Outcome, install::InstallError> {
-    let said = scrubbed(&gather::scrub(workspace, ledger)?);
     let mut stdout = String::new();
     let mut stderr = Vec::new();
     let (mut installed, mut removed) = (0usize, 0usize);
@@ -205,5 +240,5 @@ pub fn apply(
 
     let _ = writeln!(stdout, "\n{} installed, {} removed", installed, removed);
     let ok = stderr.is_empty();
-    Ok(said.before(Outcome { stdout, stderr, ok }))
+    Ok(Outcome { stdout, stderr, ok })
 }

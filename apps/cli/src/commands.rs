@@ -252,10 +252,7 @@ fn run_flayer(
         } => {
             let workspace = workspace_here(directory, home)?;
             match (name, project) {
-                (None, None) => {
-                    let ledger = workspace.ledger().map_err(CliError::from)?;
-                    crate::install::run(&workspace, &ledger)
-                }
+                (None, None) => crate::install::run(&workspace),
                 (Some(name), Some(project)) => install_named(
                     &workspace,
                     &pick(&workspace, project)?,
