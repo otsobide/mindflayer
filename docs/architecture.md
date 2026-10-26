@@ -856,6 +856,53 @@ stops updates at the first edit; overwriting on update, which loses the edit;
 and a three-way merge, too complex for skills that ship scripts. Unblocks #23,
 #30, #47, #48, #50 and #93.
 
+### D-05: A workspace's library lives in `.mindflayer`
+
+New workspaces keep their own artifacts in `.mindflayer/library/<kind>`.
+Existing ones keep the explicit `[directories]` in their `flayer.toml` until
+`flayer migrate --library` moves them, and a kind added later (MCP) defaults to
+`.mindflayer/library/<kind>` in every workspace, whatever its `flayer.toml`
+says. `flayer.toml` already spells its directories out, so the new default
+needs no format bump; no agent scans `.mindflayer`, which keeps
+instruction-shaped files out of the directories above projects; and a
+venv-style flayer becomes one folder. Rejected: beside the projects, as today,
+which puts `~/skills` and `~/rules` in the home directory; and moving only the
+home workspace's library, which leaves two layouts to explain. Unblocks #52,
+#53 and #86.
+
+### D-06: Projects keep authoring beside the code
+
+Amended by the owner. Projects keep authoring their own skills and rules beside
+the code, and `mind init` still creates `skills/` and `rules/` by default. The
+v3 project marker is a JSON file, `.mind/settings.json`, which names those
+folders (`directories`) beside the project's agents, share mode and id, so any
+tool or editor can read and change it; `flayer.toml`, and v2 projects, keep the
+TOML of [the markers](#why-the-markers-are-toml-written-from-a-template).
+Installs go to the agent folders the project targets (D-07), not to the
+authored ones. That keeps every existing workflow, makes the workspace the
+default source, and keeps the marker minimal. Rejected: receiving only, which
+would strand what v2 projects authored; and today's model unchanged, against
+vision points 2 and 8 (the flayer as the source, a minimal `.mind`). The plan
+made the folders opt-in (`--skills`, `--rules`); the owner prefers them to
+exist from the start. Unblocks #29, #33, #35 and #59.
+
+### D-07: One copy per agent folder
+
+Amended by the owner. An installed skill is a real copy in
+`.agents/skills/<name>`, which Codex and OpenCode read, and an identical one in
+`.claude/skills/<name>` for Claude, staged and written in one step; the ledger
+records one installation with several targets. That layout is the default, and
+a project's `.mind/settings.json` may override it per kind, for example with
+one `.skills` folder for every agent (#40). Copies fit today's install model
+and the Windows CI, survive the hub moving, and keep gathered content
+contained. OpenCode sees the skill twice, which is harmless only while the
+copies are identical, so an install is refused if either target holds foreign
+content. Rejected for now: a relative symlink in `.claude/skills`, which may
+come later as a Unix opt-in if #17 shows Claude loads a symlinked skill once;
+and symlinks into the hub, which break projects when `~/.mindflayer` moves and
+leak its path into repositories. `.codex/skills` and `~/.codex/skills`,
+deprecated or undocumented, are never targeted. Unblocks #17, #28, #34 and #40.
+
 ## Open questions
 
 - **Precedence between projects.** Two projects in one workspace can declare
