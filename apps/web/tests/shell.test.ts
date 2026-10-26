@@ -26,4 +26,17 @@ describe('the shell', () => {
 
     expect(page.get('h2').text()).toBe('Mindflayer')
   })
+
+  it('draws every icon it names from the bundle', async () => {
+    const page = await render('/')
+
+    // Iconify draws an icon it holds as an <svg>, and nothing at all for one
+    // it would have had to fetch.
+    const icons = page.findAllComponents({ name: 'Icon' })
+    expect(icons.length).toBeGreaterThan(0)
+    for (const icon of icons) {
+      expect(icon.element).toBeInstanceOf(SVGElement)
+      expect((icon.element as SVGElement).innerHTML).not.toBe('')
+    }
+  })
 })

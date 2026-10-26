@@ -172,6 +172,12 @@ importers:
       '@fontsource-variable/geist-mono':
         specifier: ^5.3.0
         version: 5.3.0
+      '@iconify-json/lucide':
+        specifier: ^1.2.147
+        version: 1.2.147
+      '@iconify/vue':
+        specifier: ^5.0.4
+        version: 5.0.4(vue@3.5.44(typescript@6.0.3))
       '@nuxt/ui':
         specifier: ^4.12.0
         version: 4.12.0(e85c15649f14e1fe82b3b91186e361aa)
@@ -503,6 +509,9 @@ packages:
   '@humanwhocodes/retry@0.4.3':
     resolution: {integrity: sha512-bV0Tgo9K4hfPCek+aMAn81RppFKv2ySDQeMoSZuvTASywNTnVJCArCZE2FWqpvIatKu7VMRLWlR1EazvVhDyhQ==}
     engines: {node: '>=18.18'}
+
+  '@iconify-json/lucide@1.2.147':
+    resolution: {integrity: sha512-7Qqa/joSBeUxihWsQJx5nKcqMWtV3YrH90Jldxcx4J9ciTLavRUlpexQwRTcx9dcb7CJpISfjZTj42zD/30sqA==}
 
   '@iconify/collections@1.0.755':
     resolution: {integrity: sha512-X5ek7eriIl25N6LQ1fNOsAJdNtlnQOaxpb4/NOW0d4qiif4K5ppr7j0Ow7+eiTuQcKK4YXBNHlw82t7DPcwhPg==}
@@ -3115,6 +3124,10 @@ snapshots:
   '@humanwhocodes/module-importer@1.0.1': {}
 
   '@humanwhocodes/retry@0.4.3': {}
+
+  '@iconify-json/lucide@1.2.147':
+    dependencies:
+      '@iconify/types': 2.0.0
 
   '@iconify/collections@1.0.755':
     dependencies:

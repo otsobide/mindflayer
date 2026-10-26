@@ -13,6 +13,10 @@ export default defineConfig({
     router({ dts: 'src/route-map.d.ts' }),
     vue(),
     ui({
+      // Every Lucide icon a component names, and Nuxt UI's own, go into the
+      // bundle: the server's CSP refuses the Iconify API, so an icon that is
+      // not bundled is one that never shows.
+      icon: { clientBundle: { scan: true } },
       // Committed, so vue-tsc knows Nuxt UI's components on a fresh clone.
       // Not written by a test run, which only meets the components its
       // tests import and would leave out the rest.
@@ -22,7 +26,12 @@ export default defineConfig({
   ],
   resolve: {
     alias: [
-      { find: '@', replacement: here('./src') }
+      { find: '@', replacement: here('./src') },
+      // Iconify's online build asks its API for any icon it was not given,
+      // so its code holds the API's hosts; the offline build only draws what
+      // it was handed. Swapping one for the other keeps that code out of the
+      // bundle, rather than trusting the CSP to stop a request it makes.
+      { find: /^@iconify\/vue$/, replacement: here('./src/overrides/iconify.ts') }
     ]
   },
   test: {
