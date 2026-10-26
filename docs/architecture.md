@@ -13,9 +13,10 @@ apps/core   mindflayer-core — the engine
 apps/cli    mindflayer-cli  — the `mind` and `flayer` binaries
 ```
 
-Only two today. The layout exists because there will be more: a desktop app is
-the expected next front end, and it has to sit beside the CLI rather than
-around it.
+Only two today. The layout exists because there will be more: the next is a
+local server and the web panel it serves
+([D-17](#d-17-the-next-front-end-is-a-local-web-panel)), and they have to sit
+beside the CLI rather than around it.
 
 ## Where the line between core and a front end falls
 
@@ -403,7 +404,9 @@ nothing.
 Nothing depends on a `git` being installed, or on which `git` is first on the
 PATH, and core keeps doing its own I/O rather than supervising a process. The
 cost is that authentication for private repositories is ours to solve rather
-than inherited from a credential helper, and it is not solved yet.
+than inherited whole from `git`, and it is not solved yet:
+[D-16](#d-16-credentials-come-from-the-front-end-never-from-a-prompt) decides
+how.
 
 `gix`'s error types are large and would become part of this crate's public API
 if they were carried, tying its version to gix's, so `GitError` keeps what they
@@ -779,6 +782,362 @@ folders are its own — except the workspace root, which is also where the other
 are kept. A scan that runs out of budget says so rather than passing for
 complete.
 
+## Decisions
+
+The roadmap in [#15](https://github.com/otsobide/mindflayer/issues/15) rests on
+twenty-three decisions: twenty-two validated by the owner on 2026-10-26, and
+[D-20](#d-20-opencode-subagents-pending), still pending. They are written down
+here so that the PRs carrying them out do not reopen them: a change that
+disagrees with one starts by changing the decision, here, with the owner. Each
+says what was chosen, why, what was turned down, and which issues it unblocks;
+the pending one says instead what holds until the owner chooses.
+
+They describe what is to be built, not what is. Until the issues a decision
+unblocks have landed, the sections above still describe the code as it stands,
+and each of those issues rewrites the sections it changes.
+
+### D-01: A project's `.mind` ignores itself
+
+`mind init` writes a `.mind/.gitignore` holding `*`, as Python's venv does, and
+`mind init --shared` leaves it out for a team that wants its marker committed.
+The rule lives inside the folder Mindflayer owns, so it needs no git repository
+at init time, survives a copy and goes when `.mind` does. Rejected: keeping
+`.mind` committed, as today, against the owner's ask for an ignored one; an
+anchored `/.mind/` line in `$GIT_COMMON_DIR/info/exclude`, which stays the
+mechanism for installed copies (D-02) because they have no Mindflayer folder to
+hold a `.gitignore`; and a line in the repository's `.gitignore`, which edits a
+team file. A fresh clone has no `.mind`, and `scan` already offers plain
+repositories. Unblocks #29, #35 and #38.
+
+### D-02: Installs stay local unless a project shares them
+
+A project's settings name a share mode, `local` or `shared`. New projects are
+local; projects upgraded from v2 are shared, because they were committed by
+design. Local mode keeps installed copies and entries out of git through
+anchored entries in a Mindflayer block of `info/exclude`, and edits a tracked
+`AGENTS.md`, `CLAUDE.md` or MCP config only when the project sets
+`edit_tracked`; otherwise Claude gets its rules through ignored
+`.claude/rules/mindflayer` files, and the agents left unreached are reported.
+That gives quiet projects, keeps the team case one flag away, and changes no
+committed team file behind anyone's back. Rejected: always shared, which leaves
+every install for the team to commit; and always local with marked edits to
+tracked files, which puts Mindflayer's block in a team's diffs. It rests on
+agents reading git-ignored files, which none documents and #17 confirms on real
+binaries. Local copies never reach teammates or cloud runs, and reach another
+worktree only for Claude, and only when that worktree has no `.claude/skills`
+of its own. Unblocks #17, #32, #34, #37, #38, #43, #44, #45 and #94.
+
+### D-03: Rules reach every agent through `AGENTS.md`
+
+Assigned rules are rendered between `<!-- mindflayer:begin -->` and
+`<!-- mindflayer:end -->` in the project's root `AGENTS.md`, one section per
+route. Where Claude would not read that file, a managed `@AGENTS.md` import
+goes into the project's own `CLAUDE.md`, or
+`.claude/rules/mindflayer/<route>.md` when no file may be edited (D-02); a rule
+that declares `paths:` goes only there. One core predicate (#44) decides,
+walking every ancestor directory and ignoring the user memory file. The root
+`AGENTS.md` is the only per-project file all three agents read, and Codex has
+no include mechanism. Claude 2.1.277+ reads it natively only when no
+`CLAUDE.md`, `.claude/CLAUDE.md` or `CLAUDE.local.md` sits in the start
+directory or above it; the import covers the other case, and Claude before
+2.1.277. Rejected: per-agent files, under which Claude reads every rule twice
+when there is no `CLAUDE.md`; and OpenCode's `instructions` globs with Codex's
+`developer_instructions`, unverified and honoured only in trusted projects.
+Mindflayer never creates a `CLAUDE.local.md`, which silently disables
+`AGENTS.md`, and warns when an `AGENTS.override.md` hides the file from Codex
+or the chain nears Codex's 32 KiB budget. Unblocks #17, #42, #43, #44 and #45.
+
+### D-04: An edited copy is detected, not disowned
+
+The ledger keeps a content hash per target. An untouched copy stays managed and
+can be updated; one whose hash differs is Edited, reported, and never
+overwritten or deleted without `--force`. `edit` and `rename` keep the record,
+and removing an installed copy uninstalls it. A record from before hashes
+counts as current only when the copy matches its offer byte for byte, and as
+Edited otherwise. This keeps "never overwrite what somebody wrote" while
+updates still reach the copies nobody touched, and it catches a hand edit made
+outside Mindflayer, which today goes unseen. Rejected: today's rule, which
+stops updates at the first edit; overwriting on update, which loses the edit;
+and a three-way merge, too complex for skills that ship scripts. Unblocks #23,
+#30, #47, #48, #50 and #93.
+
+### D-05: A workspace's library lives in `.mindflayer`
+
+New workspaces keep their own artifacts in `.mindflayer/library/<kind>`.
+Existing ones keep the explicit `[directories]` in their `flayer.toml` until
+`flayer migrate --library` moves them, and a kind added later (MCP) defaults to
+`.mindflayer/library/<kind>` in every workspace, whatever its `flayer.toml`
+says. `flayer.toml` already spells its directories out, so the new default
+needs no format bump; no agent scans `.mindflayer`, which keeps
+instruction-shaped files out of the directories above projects; and a
+venv-style flayer becomes one folder. Rejected: beside the projects, as today,
+which puts `~/skills` and `~/rules` in the home directory; and moving only the
+home workspace's library, which leaves two layouts to explain. Unblocks #52,
+#53 and #86.
+
+### D-06: Projects keep authoring beside the code
+
+Amended by the owner. Projects keep authoring their own skills and rules beside
+the code, and `mind init` still creates `skills/` and `rules/` by default. The
+v3 project marker is a JSON file, `.mind/settings.json`, which names those
+folders (`directories`) beside the project's agents, share mode and id, so any
+tool or editor can read and change it; `flayer.toml`, and v2 projects, keep the
+TOML of [the markers](#why-the-markers-are-toml-written-from-a-template).
+Installs go to the agent folders the project targets (D-07), not to the
+authored ones. That keeps every existing workflow, makes the workspace the
+default source, and keeps the marker minimal. Rejected: receiving only, which
+would strand what v2 projects authored; and today's model unchanged, against
+vision points 2 and 8 (the flayer as the source, a minimal `.mind`). The plan
+made the folders opt-in (`--skills`, `--rules`); the owner prefers them to
+exist from the start. Unblocks #29, #33, #35 and #59.
+
+### D-07: One copy per agent folder
+
+Amended by the owner. An installed skill is a real copy in
+`.agents/skills/<name>`, which Codex and OpenCode read, and an identical one in
+`.claude/skills/<name>` for Claude, staged and written in one step; the ledger
+records one installation with several targets. That layout is the default, and
+a project's `.mind/settings.json` may override it per kind, for example with
+one `.skills` folder for every agent (#40). Copies fit today's install model
+and the Windows CI, survive the hub moving, and keep gathered content
+contained. OpenCode sees the skill twice, which is harmless only while the
+copies are identical, so an install is refused if either target holds foreign
+content. Rejected for now: a relative symlink in `.claude/skills`, which may
+come later as a Unix opt-in if #17 shows Claude loads a symlinked skill once;
+and symlinks into the hub, which break projects when `~/.mindflayer` moves and
+leak its path into repositories. `.codex/skills` and `~/.codex/skills`,
+deprecated or undocumented, are never targeted. Unblocks #17, #28, #34 and #40.
+
+### D-08: An explicit or activated workspace wins
+
+The workspace is `-W/--workspace DIR`, then `$MINDFLAYER_WORKSPACE` (set by
+`flayer activate`), then the first one walking up, then the home default. An
+explicit `-W` wins even when empty, and empty means none, following the
+`--home=` pattern so test helpers can pin it; `--home` and `$MINDFLAYER_HOME`
+keep meaning where the default lives. One core function decides, fed by the
+front ends, and an explicit or activated path that is not a workspace is an
+error, never a silent fallback. Activation exists to override location, as a
+virtualenv does. Rejected: walking up first, under which an activated flayer
+silently loses to any workspace above the current directory; reusing `--home`,
+which confuses where the default lives with which workspace to use; and a
+direnv-style activation file, hidden state in repositories meant to stay
+minimal. Unblocks #54, #55 and #56.
+
+### D-09: Project settings live in the project
+
+A project's agents, share mode and `edit_tracked` live in its own v3 marker,
+`.mind/settings.json` (D-06), ignored by default (D-01). They describe the
+files physically in the project, and several workspaces may link one project,
+so keeping them beside it means every workspace sees the same targets.
+Rejected: `[[project]]` tables in `flayer.toml`, which let two workspaces
+disagree about one project's files; and the ledger, which hides editable
+configuration in a database. Unblocks #29 and #37.
+
+### D-10: An MCP server is one owned entry per agent
+
+Each server is one versioned, neutral definition in the library,
+`mcp/<name>.toml`, shaped as a subset of the registry's `server.json` with
+typed inputs. Installing renders it as exactly one entry in each target agent's
+project config, and ownership is a ledger row holding a semantic fingerprint of
+that entry; project scope only, for now. This reuses the catalog and the
+create, rename, remove and validate lifecycle, maps registry entries easily,
+and touches one key per agent file. A marker key inside the entry cannot work,
+since OpenCode rejects unknown keys, `codex --strict-config` fails on them and
+`.mcp.json` allows no comments, so the fingerprint is the only ownership
+signal. Rejected: storing `server.json` verbatim; copying whole config files,
+which overwrites the user's other servers; and delegating to the agents' CLIs,
+since `codex mcp add` writes only Codex's user config, never a project's, and
+re-serializes every entry there, though they may return for user scope (D-22).
+Unblocks #18, #86, #89, #93 and #94.
+
+### D-11: MCP secrets are environment references
+
+A secret is written as a reference in each agent's own syntax (Claude `${VAR}`;
+Codex `env_vars`, `env_http_headers` and `bearer_token_env_var`; OpenCode
+`{env:VAR}`), and its value is never stored. A literal in a secret input is
+refused, and so, for that agent, is a shape it cannot express: in Codex, secret
+arguments, a secret inside a URL, and composite secret headers other than
+`Authorization: Bearer`. References work in all three agents without Mindflayer
+running and keep committed files safe, and refusing rather than writing a
+literal keeps the guarantee where Codex has no interpolation. Rejected: values
+under `~/.mindflayer/secrets` read through OpenCode's `{file:...}`, which
+Claude and Codex cannot match; and, for now, a `mind mcp run` wrapper reading
+the OS keychain, which may come later as an opt-in but makes every teammate
+depend on the binary and does not cover remote headers. Unblocks #18, #86, #87,
+#90, #91 and #92.
+
+### D-12: OpenCode gets the V2 MCP shape
+
+The owner runs OpenCode 2.1.3, so Mindflayer writes a minimal V2
+`mcp.servers.<name>` entry, which V1 also reads since 1.18.24, and the V1
+`mcp.<name>` shape only when the target file already uses it. `codemode`,
+`protocol` and `timeout.startup` are left out unless asked for, because V1
+warns on them. Following a file's existing shape avoids mixing two in one file.
+Rejected: always the V1 shape; and running `opencode --version` on every write,
+which would tie core to a binary. Unblocks #92.
+
+### D-13: Sources have names, and a marketplace is a parent
+
+Every gathered source (closed issue #7) gets a unique, editable name in
+`[A-Za-z0-9._-]`, `owner-repo` for git and the catalog's own name for a
+marketplace by default, and `--from <name>` takes it. Its identity is a
+canonical, credential-free URL plus a non-null reference key. A marketplace is
+a parent source with one pinned child per plugin entry, gathered only when
+selected (`--plugin`, or a confirmed `--all`), and refreshing or removing the
+parent cascades. What a listing shows is then exactly what a command takes;
+each child keeps its own revision and its own failure, since entries point at
+different repositories and pins; a token in a URL never reaches
+`mindflayer.db`; and the duplicate hole where SQLite's UNIQUE ignores a NULL
+reference closes. Rejected: a `name@source` spelling, when `@` already means
+plugin@marketplace in Claude and skill@version in `gh`; and keeping URL
+strings. claude-community lists 2283 entries, so gathering a marketplace whole
+by default would clone thousands of repositories. Unblocks #98, #100 and #103.
+
+### D-14: Core owns HTTP, behind a seam
+
+Core owns catalog URLs, paging, caching and parsing behind an injectable `Http`
+trait. The default is a blocking client reusing `reqwest` with rustls, already
+in `Cargo.lock`, and tests pass a fake. Paging, retries and mapping are rules,
+so they belong where the CLI, the TUI and the server cannot disagree about
+them, and a synchronous client fits a synchronous core. Rejected: front ends
+fetching the bytes for core, which spreads those rules across them; and calling
+HTTP with no seam, which takes the tests online. Carrying it out amends [the
+line between core and a front
+end](#where-the-line-between-core-and-a-front-end-falls) and AGENTS.md's "only
+I/O is files". Unblocks #105, #106 and #108.
+
+### D-15: Skill search is GitHub plus opt-in finders
+
+`flayer gather search` queries GitHub code search when a token is supplied,
+plus opt-in finders, marked unstable, for skills.sh's `/api/search` and
+api.claude-plugins.dev; the owner reads those two services' terms first.
+Services that need a key or attribution (SkillsMP, Glama, PulseMCP, skills.sh
+v1) are excluded, because they bring terms and attribution obligations. A
+finder only returns addresses that resolve to git sources, so an endpoint that
+changes breaks nothing already gathered, and its failure is a warning.
+Rejected: GitHub alone, and no finders at all, both of which leave the skill
+directories out (vision point 5). Unblocks #108.
+
+### D-16: Credentials come from the front end, never from a prompt
+
+The front end supplies a credential provider, `--token-env VAR` or
+`gh auth token`, handed to `gix` through a credentials callback that never
+prompts. Failing that, the git-config helpers that `gix` runs itself are tried,
+then the system ssh binary for ssh URLs. A token is never persisted. This
+copies Claude Code's own non-interactive model, and a prompt would hang the TUI
+and the server, so the never-prompting callback lands early (#26) and the
+providers later (#110), which also documents the ssh-binary and git-helper
+dependencies in [Why `gix`](#why-gix-rather-than-running-git). Rejected: HTTPS
+tokens only, which leaves ssh remotes out; and shelling out to `git`, which
+gives up what `gix` was chosen for. Unblocks #26 and #110.
+
+### D-17: The next front end is a local web panel
+
+`flayer ui` and `mind ui` serve a Vue single-page app embedded in the same
+binary, behind a default-on cargo feature, `ui`. A library crate,
+`apps/server`, runs axum on 127.0.0.1 and handles transport only: it is generic
+over a `Backend` trait with associated `Query`, `Task` and `Outcome` types, so
+it only moves JSON, and the CLI implements the trait. There is one binary to
+install, it works in any browser, the associated types keep the Cargo graph
+free of a cli/server cycle without an extra crate, and the server's tests use a
+fake `Backend`. Rejected: a separate protocol crate for `Task` and the outcome
+types, which the associated types make unnecessary; a Tauri desktop app first,
+while Tauri 3 is alpha, though a `Transport` interface in the frontend keeps a
+later Tauri shell cheap; and a separate server binary or daemon, the re-exec
+wrapper [the line between core and a front
+end](#where-the-line-between-core-and-a-front-end-falls) already rejects. #68
+measures the feature's binary size and compile time, and makes it opt-in if the
+cost is too high. Unblocks #65, #68 and #69.
+
+### D-18: The panel writes by running commands
+
+As in the TUI, the panel's reads are typed queries that core answers, and its
+writes are typed Tasks turned into CLI command lines and run through the same
+parser on one worker thread, each line shown before it runs. That extends
+[every change is a command line](#every-change-is-a-command-line) to a second
+front end, so the three cannot disagree, and gives the panel a transcript the
+user can replay. Four things come first: the remaining CLI-side orchestration
+moves into core (#23, #54), CLI warnings carry core error codes (#63), batch
+rules for assignment are planned in core (#78) rather than reimplemented in
+TypeScript, and every Task from the browser passes a path policy (#67).
+Rejected: a core service layer the server calls directly, which duplicates
+every command's entry point; and shelling out to the `flayer` binary, which
+needs the argument forwarding already rejected for the two binaries. Unblocks
+#63, #67, #76 and #78.
+
+### D-19: The panel is built on Nuxt UI
+
+The panel uses Nuxt UI 4: MIT, built on Reka UI and Tailwind v4, with a
+dashboard layout, a command palette, a virtualized data table and colour mode,
+and an official dashboard-vue template on Vue 3.5, Vite 8 and TypeScript 6. It
+covers the control-panel pieces out of the box under a GPL-compatible licence,
+so it needs the least custom code. Rejected: shadcn-vue, the same base with
+component source copied into the repository, which can still be compared on one
+screen of the #69 scaffold during M1 to M3; PrimeVue 5, whose proprietary,
+keyed licence is incompatible with GPL-3.0-only; and Naive UI, with
+accessibility gaps open since 2021. Unblocks #69.
+
+### D-20: OpenCode subagents (pending)
+
+Not decided. Whether "agentes de OpenCode" means the OpenCode tool or also its
+subagent definitions is open, and the owner, who mainly uses Claude Code, has
+not chosen. Until then OpenCode is supported as a tool, receiving skills, rules
+and MCP servers as Codex does, and no subagent-definition work is planned. The
+other option would manage subagents as one kind per agent
+(`.claude/agents/*.md`, `.opencode/agents/*.md`, `.codex/agents/*.toml`),
+because the three formats are incompatible and share no location; skills
+already act as slash commands in all three agents. Unblocks nothing yet;
+choosing subagents would add kinds, through [Adding a third
+kind](#adding-a-third-kind).
+
+### D-21: The panel's views follow the capabilities they show
+
+The views are built after the core capabilities they reuse: agents (M1), rules
+and updates (M2) and the hub (M3), so they sit on the final data model and need
+no rework. The server shell, its guards and the scaffold can be built in
+parallel during M1 to M3, so the owner can review the look (D-19) early, and
+MCP and connectors then ship in core, CLI, TUI and web together. The snapshot
+lists kinds from `Kind::ALL`, so MCP reaches the panel without frontend rework.
+Rejected: views right after M0, on today's data model, which are reworked when
+the hub and the agent targets land; and the panel last, after MCP and
+connectors, which leaves the owner's top wish to the end. Unblocks #65, #66 and
+#69, which need nothing from M1 to M3, and #61, which needs only #36; the views
+wait for the snapshot (#62).
+
+### D-22: User-scope installs come later
+
+Installing into user scope (`~/.agents/skills`, `~/.claude/skills`, user MCP
+config) comes after M7, as a follow-up milestone, behind an explicit `--user`.
+It writes `~/.agents/skills/<name>` and `~/.claude/skills/<name>`, never a
+`manifest.json` in `~/.claude/skills`, and never anything under
+`~/.claude/skills/synced` or `.trash`. Meanwhile `flayer doctor` (#96) reports
+project skills that shadow user-scope skills, or are shadowed by them, with
+different contents. One name at both scopes resolves differently in each agent
+(Claude prefers the personal one, OpenCode V2 lets `~/.agents` beat a project's
+`.claude`, Codex shows both), `~/.agents/skills` already holds other tools'
+skills, and Claude before 2.1.280 moved skills listed in
+`~/.claude/skills/manifest.json` to `.trash`. Project scope keeps ownership per
+project, where the ledger can track it. Rejected: project scope forever, which
+gives up the hub's promise of skills for every project; and user scope now, as
+the home workspace's default. Unblocks #17, #28, #94 and #96.
+
+### D-23: What a project received is an installed view
+
+The catalog stays about authored payloads: the library's and a project's own
+files and folders, MCP definition files included. What a project has received
+through an `AGENTS.md` block or an agent config entry is an installed view,
+built from the ledger plus the target files, which status and the snapshot
+show. `edit`, `rename` and `remove` aimed at an installed section or entry are
+refused, with a hint to uninstall, or to change the library copy and update,
+and foreign entries found in agent configs are listed as foreign. "Discovery
+matches on `Layout` and nothing else has to know" then stays true for authored
+files: a section or an entry is never authored in place but rendered from a
+library artifact, and editing one in place is exactly what the Edited state
+(D-04) detects. Rejected: new `Layout` variants, which would make discovery
+parse `AGENTS.md` blocks and agent configs; and treating installed sections and
+entries as artifacts editable in place, which lets three agents' config formats
+leak into the lifecycle code. Unblocks #33, #45, #62, #93, #94 and #95.
+
 ## Open questions
 
 - **Precedence between projects.** Two projects in one workspace can declare
@@ -795,11 +1154,16 @@ complete.
   installed — from the shelf, and now from the workspace's own. The workspace's
   own rules have no way into a project yet; a rule is one file, filed by its
   route, and copying one means answering where its folders go.
+  [D-03](#d-03-rules-reach-every-agent-through-agentsmd) answers it: a rule
+  reaches a project as its section of a managed block in `AGENTS.md`, with
+  `.claude/rules/mindflayer` as Claude's fallback, and #45 carries it out.
 - **An edited copy that stays managed.** Editing an installed skill makes it
   its author's, so updates from the shelf stop reaching it — the safe answer,
   not the best one. A hash of what was installed, kept in the ledger, would let
   the install screen tell an untouched copy from an edited one, and offer to
   update the first while leaving the second alone.
+  [D-04](#d-04-an-edited-copy-is-detected-not-disowned) chose that hash, one
+  per target, and #47 carries it out.
 - **Disowning from elsewhere.** `install::disown` finds the workspace by
   walking up from the project, so a workspace that links the project from
   somewhere that is not above it keeps its stale record. Every workspace
@@ -819,11 +1183,18 @@ complete.
   depth, so harvesting one means deciding what its name is relative to — the
   same question `Catalog::take_files` answers inside a project, asked of a
   folder that is not one.
-- **Private repositories.** `gix` is given no credentials, so a private source
-  fails at the fetch. What it should be given — an ssh agent, a token from the
-  environment, the platform keychain — is undecided.
+- **Private repositories.** Mindflayer gives `gix` no credentials of its own,
+  so a private source gets through only when a git-config helper (or, for an
+  ssh URL, ssh itself) has them, and otherwise the fetch can stop at a terminal
+  prompt. What it should be given is decided in
+  [D-16](#d-16-credentials-come-from-the-front-end-never-from-a-prompt): a
+  provider the front end supplies, through a callback that never prompts, then
+  the git-config helpers `gix` runs itself, then the system ssh binary. #26 and
+  #110 carry it out.
 - **Rules that want to declare something.** Today a rule has no front matter,
   so a leading `---` in one is content. If rules later want metadata, that
   becomes a breaking reading of files written now. The escape hatch is cheap
   and deliberate: `Declared::Rule` is a variant, so giving it a payload is a
-  local change.
+  local change. [D-03](#d-03-rules-reach-every-agent-through-agentsmd) settles
+  the if: a rule that declares `paths:` goes only to `.claude/rules/mindflayer`,
+  so rules will carry front matter, and #41 gives `Declared::Rule` that payload.
