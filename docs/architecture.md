@@ -654,7 +654,11 @@ installing that skill at once, each deleting what the other was building.
   a second copy would be the half-made state all over again. A move across
   filesystems is not attempted: a rename that fails is an error naming both
   paths. The folder holds a `.gitignore` of `*`, written with `create_new`, so
-  nothing staged is committed even while `.mind` is.
+  nothing staged is committed even while `.mind` is. A rule of its own rather
+  than an entry in [the exclude block](#what-keeps-an-install-out-of-git), for
+  the reason [D-01](#d-01-a-projects-mind-ignores-itself) gives `.mind` one:
+  a folder Mindflayer owns can carry it, so it needs no repository and goes
+  with the folder. It is not the team's `.gitignore`, which is never edited.
 - **A stage per run.** Named after the run's process id and a random suffix,
   and made with `create_dir`, which refuses a name that is there rather than
   sharing it: two installs at once, from two terminals or two workspaces that

@@ -97,8 +97,9 @@ These are easy to break from a single file without noticing.
     blocks, every byte outside them kept, and a malformed block is refused,
     not repaired. The blocks: `# mindflayer:begin`/`# mindflayer:end` in
     `$GIT_COMMON_DIR/info/exclude` (`exclude`), where an edit rewrites only its
-    own project's `# project <key>` group. `.gitignore` and
-    `core.excludesFile` are never edited.
+    own project's `# project <key>` group. A team's `.gitignore` and
+    `core.excludesFile` are never edited; the one `.gitignore` Mindflayer
+    writes is `.mind/tmp`'s, inside a folder it owns, made with `create_new`.
 - **Mindflayer only manages what it installed.** The ledger's record of an
   install is what allows overwriting and deleting. An unrecorded artifact is
   `Standing::Foreign` and is never touched. Core's lifecycle changes
