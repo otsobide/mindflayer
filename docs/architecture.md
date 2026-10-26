@@ -843,17 +843,19 @@ record, and `lifecycle::add` drops any stale one under the name it writes, as
 becomes its author's.
 
 Core applies that rule inside each change. Dropping the record in the CLI
-after the change, as it once did, put a rule outside core: the web panel, and
-installed rules and MCP entries when they come, would each have had to repeat
-it and could each have got it wrong. Each change returns what it did to the
-record (`lifecycle::Record`), and the CLI only says so; `install::disown`, which
-does the dropping, is private to core so that nothing else can. That keeps a
-front end from applying the rule differently, not from skipping it: `create`
-and `create_from`, the writers `lifecycle::add` is built on, see to no record
-and stay public for core's tests, so a front end adds through `add`. A record
-that cannot be dropped is reported beside the change rather than instead of
-it, and the CLI prints it as a warning: the change has been made, and saying
-it was not would be false.
+after the change, as it once did, put a rule outside core, and
+[D-18](#d-18-the-panel-writes-by-running-commands) asks for the orchestration
+left in the CLI to move into core before the panel runs its writes through
+the CLI. Installed rules and MCP entries, when they come, would each have
+needed calls of their own there, and each could have got them wrong. Each
+change returns what it did to the record (`lifecycle::Record`), and the CLI
+only says so; `install::disown`, which does the dropping, is private to core
+so that nothing else can. That keeps a front end from applying the rule
+differently, not from skipping it: `create` and `create_from`, the writers
+`lifecycle::add` is built on, see to no record and stay public for core's
+tests, so a front end adds through `add`. A record that cannot be dropped is
+reported beside the change rather than instead of it, and the CLI prints it
+as a warning: the change has been made, and saying it was not would be false.
 
 Editing is split in two, because the editor is not core's to run: which one
 comes from `$VISUAL` or `$EDITOR`, and core never reads the environment.
