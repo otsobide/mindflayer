@@ -22,6 +22,7 @@ use crate::copy;
 use crate::kind::{Kind, Layout};
 use crate::ledger::{Action, Gathered, Ledger, LedgerError, Outcome};
 use crate::paths;
+use crate::url::redacted;
 use crate::workspace::{FlayerWorkspace, MindProject, WorkspaceError};
 
 /// How one shelf entry stands with respect to one project.
@@ -111,7 +112,8 @@ impl Offer {
     /// that same directory.
     ///
     /// One string for every front end: what a listing prints is what
-    /// `--from` accepts.
+    /// `--from` accepts. A source's address carries no credential, because
+    /// the ledger hands none back.
     pub fn origin(&self) -> String {
         match self {
             Offer::Shelf(gathered) => match &gathered.source.reference {
@@ -128,8 +130,11 @@ impl Offer {
     /// workspace's name, unless that is the word the workspace's own go by.
     /// A path to a loaded workspace is [`resolve_from`]'s to turn into its
     /// origin — only when nothing matches it as typed, so a path never takes
-    /// a shelf source's address or the workspace's own away.
+    /// a shelf source's address or the workspace's own away. An address typed
+    /// with credentials names the source they were taken out of.
     pub fn comes_from(&self, from: &str) -> bool {
+        let from = redacted(from);
+        let from = from.as_ref();
         self.origin() == from
             || match self {
                 Offer::Shelf(gathered) => gathered.source.url == from,
@@ -407,7 +412,7 @@ pub fn offered(
     match matching.len() {
         0 => Err(InstallError::NotOffered {
             name: name.to_owned(),
-            from: from.map(str::to_owned),
+            from: from.map(|from| redacted(from).into_owned()),
         }),
         1 => Ok(matching.remove(0)),
         _ => Err(InstallError::OfferedTwice {

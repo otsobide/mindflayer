@@ -560,3 +560,29 @@ fn one_name_offered_twice_is_installed_only_from_where_it_is_asked_for() {
         "{nothing}"
     );
 }
+
+#[test]
+fn from_typed_with_credentials_names_the_source_they_were_taken_out_of_and_repeats_none() {
+    let (_dir, workspace, project, ledger) = ready(&["deploy"]);
+    // As if gathered from an https address rather than from a path.
+    rusqlite::Connection::open(workspace.ledger_path())
+        .unwrap()
+        .execute(
+            "UPDATE sources SET url = 'https://example.com/acme/skills'",
+            [],
+        )
+        .unwrap();
+    let typed = Some("https://me:ghp_t0ken@example.com/acme/skills");
+
+    let deploy =
+        install::offered(&workspace, &ledger, &project, Kind::Skill, "deploy", typed).unwrap();
+    let nothing =
+        install::offered(&workspace, &ledger, &project, Kind::Skill, "absent", typed).unwrap_err();
+
+    assert_eq!(deploy.origin(), "https://example.com/acme/skills");
+    assert!(
+        matches!(nothing, install::InstallError::NotOffered { .. }),
+        "{nothing}"
+    );
+    assert!(!nothing.to_string().contains("ghp_t0ken"), "{nothing}");
+}
