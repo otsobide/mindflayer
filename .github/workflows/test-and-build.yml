@@ -103,6 +103,12 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-cargo-
 
+      # The activation code is written for bash and zsh, and the runner image
+      # has only bash. Without zsh, its half of tests/shells_test.rs, the
+      # checks beside a virtualenv included, would run nowhere.
+      - name: Install zsh
+        run: sudo apt-get update && sudo apt-get install -y zsh
+
       - name: Test mindflayer-cli
         run: make cli/test
 
