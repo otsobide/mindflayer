@@ -123,6 +123,25 @@ fn flayer_scan_reads_the_default_workspace_without_making_it() {
 }
 
 #[test]
+fn flayer_scan_reads_a_default_workspace_whose_home_is_not_there_yet() {
+    let (scratch, elsewhere) = unmade_home();
+    let home = scratch.path().join("nobody-made-this");
+
+    let outcome = flayer_at_home(elsewhere.path(), &home, &["scan"]).unwrap();
+
+    assert_eq!(
+        outcome.stdout,
+        format!(
+            "no mind projects or git repositories under {}\n",
+            home.display()
+        )
+    );
+    assert_eq!(outcome.stderr, vec![hint(&home)]);
+    assert!(outcome.ok);
+    assert!(!home.exists());
+}
+
+#[test]
 fn flayer_templates_reads_the_default_workspace_without_making_it() {
     let (home, elsewhere) = unmade_home();
 
