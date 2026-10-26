@@ -123,18 +123,37 @@ fn the_log_keeps_failures_too_and_reads_back_newest_first() {
 }
 
 #[test]
-fn a_database_from_the_future_is_refused() {
+fn a_database_from_the_future_is_refused_by_its_version() {
     let dir = tempfile::TempDir::new().unwrap();
     let path = dir.path().join(LEDGER_FILE);
+    let future = SCHEMA_VERSION + 1;
     {
         let ledger = Ledger::open(&path).unwrap();
         ledger
             .connection
-            .pragma_update(None, "user_version", SCHEMA_VERSION + 1)
+            .pragma_update(None, "user_version", future)
             .unwrap();
     }
-    let error = Ledger::open(&path).unwrap_err();
-    assert!(matches!(error, LedgerError::Version { .. }), "{error}");
+
+    for error in [
+        Ledger::open(&path).unwrap_err(),
+        Ledger::open_existing(&path).unwrap_err(),
+    ] {
+        assert!(
+            matches!(error, LedgerError::Version { found, .. } if found == future),
+            "{error}"
+        );
+        assert!(
+            error.to_string().contains(&format!(
+                "schema version {future}, this one reads {SCHEMA_VERSION}"
+            )),
+            "{error}"
+        );
+    }
+    // Left exactly as it is, and nothing copied for a step this build
+    // cannot take.
+    assert_eq!(version_of(&path), future);
+    assert!(!backup_path(&path, future).exists());
 }
 
 #[test]
