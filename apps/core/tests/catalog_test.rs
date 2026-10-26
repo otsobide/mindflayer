@@ -398,7 +398,7 @@ fn a_bare_name_finds_it_in_any_kind() {
 #[test]
 fn a_qualifier_is_separated_by_a_colon_so_a_route_is_never_one() {
     // A rule's name IS a route, so `/` cannot also mean "kind". With `:`,
-    // `skills/naming` is a rule filed under `skills/` and nothing else — and
+    // `skills/naming` is a rule filed under `skills/` and nothing else, and
     // a rules folder holding rules about writing skills is not exotic.
     for typed in ["git/no-force-push", "skills/naming", "rule/x"] {
         let bare = Reference::parse(typed);

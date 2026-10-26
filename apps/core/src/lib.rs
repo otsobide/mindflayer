@@ -15,6 +15,7 @@ pub mod activate;
 pub mod agent;
 pub mod artifact;
 pub mod catalog;
+pub mod config_entry;
 pub mod copy;
 pub mod create;
 pub mod exclude;

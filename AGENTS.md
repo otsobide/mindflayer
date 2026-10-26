@@ -24,7 +24,7 @@ lists everything.
 ```bash
 make test                 # every Rust suite; the panel's is make web/test
 make fmt/check            # CI runs this first
-make lint                 # clippy --workspace --all-targets
+make lint                 # no em dash in a tracked file, then clippy --workspace --all-targets
 make run ARGS="flayer list"
 make core/test            # one app: make <app>/<target>
 ```
@@ -54,7 +54,9 @@ pnpm --dir apps/web exec vitest run tests/shell.test.ts      # one suite
 
 `make test`, `make build`, `make fmt` and `make lint` are Rust only: `web` is
 in the root Makefile's `NODE_APPS`, outside the aggregates, until CI installs
-Node (#71). A change to the panel runs its own targets.
+Node (#71). A change to the panel runs its own targets. The one exception is
+`make lint`'s em dash check (`make lint/em-dash`), which reads every tracked
+file, the panel's included.
 
 `make dev/link`, `make dev/unlink` and `make install` write into `~/.cargo/bin`
 (or `BINDIR`), outside the repository. Don't run them unless asked.
@@ -162,12 +164,24 @@ These are easy to break from a single file without noticing.
     A migration moves nothing a project holds, refuses as a whole, and keeps
     the marker it rewrites as `flayer.toml.v<version>` (`create_new`).
   - A file somebody else owns is edited only inside Mindflayer's marked
-    blocks, every byte outside them kept, and a malformed block is refused,
-    not repaired. The blocks: `# mindflayer:begin`/`# mindflayer:end` in
+    blocks or, in an agent's config file, which can carry no marks, one entry
+    at a time (next bullet). Every byte outside them is kept, and a malformed
+    block is refused, not repaired. The blocks:
+    `# mindflayer:begin`/`# mindflayer:end` in
     `$GIT_COMMON_DIR/info/exclude` (`exclude`), where an edit rewrites only its
     own project's `# project <key>` group. A team's `.gitignore` and
     `core.excludesFile` are never edited; the one `.gitignore` Mindflayer
     writes is `.mind/tmp`'s, inside a folder it owns, made with `create_new`.
+  - An entry in a config file somebody else owns (`.mcp.json`,
+    `opencode.json`, `.codex/config.toml`) is changed one at a time through
+    `config_entry`: JSON and JSONC entries are edited through jsonc-parser's
+    CST (an insert spliced into the text where it says) and TOML through
+    `toml_edit`, never parsed and serialized again, so every byte outside the
+    entry is kept. What an edit wrote is read back and refused unless only
+    the entry changed, and a file that does not parse is refused, never
+    rewritten. A changed file goes through `replace_bytes_unresolved`,
+    keeping its permissions; a new one is made with `create_new`. The module
+    knows no agent: the file, the key path and the entry are the caller's.
   - `flayer init` refuses a directory for the workspace's own that overlaps
     the shelf or the cache, which are reserved for gathering
     (`gathered_overlap`). `flayer init` and the workspace's own artifacts
@@ -175,8 +189,8 @@ These are easy to break from a single file without noticing.
     workspace's directory; they live in `.mindflayer`. An install into a
     project at the workspace's root is that project's (D-03).
 - **Mindflayer only manages what it installed.** The ledger's record of an
-  install — one installation, a target for each copy it wrote, its origin and
-  the `hash::tree` of what it wrote, that hash's one definition — is what
+  install (one installation, a target for each copy it wrote, its origin and
+  the `hash::tree` of what it wrote, that hash's one definition) is what
   allows overwriting and deleting. An unrecorded artifact is
   `Standing::Foreign` and is never touched. Core's lifecycle changes
   (`lifecycle::add`, `finish_edit`, `rename` and `remove`) drop any record
@@ -191,7 +205,7 @@ These are easy to break from a single file without noticing.
   (what `ValidationIssue::is_strict` picks out), so change the rules there and
   nowhere else; gathering
   takes such a skill with a `warning:` per problem, and `validate` reports
-  everything — `flayer validate` without `-p` reads the shelf too — but calls
+  everything (`flayer validate` without `-p` reads the shelf too) but calls
   an artifact invalid only for what is not `ValidationIssue::is_warning`. Keys the format does not define pass through
   untouched. A rule's front matter is optional (`rule::RuleManifest`): read
   only when its fences hold a YAML mapping, and whatever it leaves unread is a
@@ -201,6 +215,12 @@ These are easy to break from a single file without noticing.
   - An installed name must be one folder name (`install::is_folder_name`).
   - Symlinks are followed only inside the source (`copy::tree`'s `within`).
   - A project's artifact directories must stay inside the project.
+  - A config file is named by a route of folder names from the project, and
+    a symlink anywhere on it, the file included, is refused, never followed
+    (`config_entry::ConfigFile`): the route is looked at when the file is
+    read and again just before it is written, and the write is never
+    resolved. A folder made a link between that last look and the rename is
+    the one window left (architecture.md, open questions).
   - URLs are stored, logged and shown without credentials. `url::redacted`
     is the one function that takes them out: the ledger applies it to every
     URL it writes and reads, `GitError` to what it says, `git::scrub` to a
@@ -217,13 +237,15 @@ These are easy to break from a single file without noticing.
   it: `edit_array`, `install::install` and `uninstall`, `gather::gather`,
   `gather::scrub`, which `FlayerWorkspace::ledger_to_write` runs, when it has
   clones to rewrite, and `migrate::library`, from its plan to its rewrite of
-  the marker. A new writer takes it the same way, inside core. Opening the
-  ledger takes no lock: a schema migration keeps itself apart in its own
-  transaction. The lock is not re-entrant: a writer never calls another while
-  it holds it, and a front end never takes it. Reads (`FlayerWorkspace::open`,
-  `ledger_for_reading`) never take it. A wait is bounded (`lock::WAIT`),
-  ending in a `LockError::Busy` that names the holder's pid, except a record
-  drop's (`install::disown`), which follows a change already made.
+  the marker. A new writer takes it the same way, inside core;
+  `config_entry::ConfigFile` takes none, since the writers that call it hold
+  it. Opening the ledger takes no lock: a schema migration keeps itself apart
+  in its own transaction. The lock is not re-entrant: a writer never calls
+  another while it holds it, and a front end never takes it. Reads
+  (`FlayerWorkspace::open`, `ledger_for_reading`) never take it. A wait is
+  bounded (`lock::WAIT`), ending in a `LockError::Busy` that names the
+  holder's pid, except a record drop's (`install::disown`), which follows a
+  change already made.
 - **A gather never prompts for a credential itself.** Every connection `gix`
   lets a clone configure gets the callback in `gather/credentials.rs`, which
   runs the git-config credential helpers with `gix`'s prompt and askpass
@@ -405,3 +427,9 @@ These are easy to break from a single file without noticing.
 Comments and doc comments explain *why* a choice was made, often naming the
 alternative that was rejected. They rarely narrate what the code does. Match
 that density and voice in code and docs alike.
+
+No em dash (U+2014), in docs, comments, messages or commit messages: the owner
+finds it reads as machine-written. Write a comma, a colon, parentheses or a
+new sentence instead, never a hyphen or a spaced en dash in its place.
+`make lint` fails on one in any tracked file; a commit message is yours to
+check.

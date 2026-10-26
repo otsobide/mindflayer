@@ -21,6 +21,12 @@ toml = "0.9"
 # toml_edit, which rewrites one array and leaves the rest of the bytes alone.
 # This is the crate cargo itself edits Cargo.toml with.
 toml_edit = "0.25"
+# JSON and JSONC config files that agents and people share (`.mcp.json`,
+# `opencode.json`) are edited the way toml_edit edits TOML: one entry changed
+# in a tree that holds every byte, comments and whitespace included. `cst` is
+# that tree; serde_json would rewrite the whole file in its own layout and
+# drop every comment. dprint's own crate, which Deno edits deno.json with.
+jsonc-parser = { version = "0.34", features = ["cst"] }
 # `progress-tree` for the tree a gather reads gix's counts off while it fetches
 # (`gather::git`). It builds no new crate: the tree is prodash's, which
 # gix-features already builds with the tree in.

@@ -62,7 +62,7 @@ pub struct Scan {
 ///
 /// A repository is a leaf: the scan does not look inside one, because its
 /// folders are its own and a repository nested in another is its submodule,
-/// managed with it. Hidden folders and symlinked ones are not entered either —
+/// managed with it. Hidden folders and symlinked ones are not entered either:
 /// the first are tooling, and the second can loop.
 pub fn scan(workspace: &FlayerWorkspace) -> Scan {
     let root = workspace.root();

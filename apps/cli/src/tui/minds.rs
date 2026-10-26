@@ -3,8 +3,8 @@
 //!
 //! What the link form and `u` do one project at a time, for everything under
 //! the workspace at once. Ticking only marks. Applying runs the commands the
-//! marks amount to — `mind -C <path> init` for a repository that is not a
-//! project yet, then one `flayer link` and one `flayer unlink` — so, as
+//! marks amount to (`mind -C <path> init` for a repository that is not a
+//! project yet, then one `flayer link` and one `flayer unlink`), so, as
 //! everywhere in the TUI, the screen does nothing a command could not.
 
 use ratatui::crossterm::event::KeyCode;
@@ -15,7 +15,7 @@ use super::state::{Task, Workspace};
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Standing {
     /// Registered. `opens` is false for an entry whose directory no longer
-    /// holds a project — exactly the one worth unticking.
+    /// holds a project: exactly the one worth unticking.
     Linked { opens: bool },
     /// Under the workspace and not registered. `mind` is false for a git
     /// repository that is not a mind project yet, which linking makes one
@@ -73,7 +73,7 @@ pub struct Minds {
 
 impl Minds {
     /// Every registered project, ticked, and every one found under the
-    /// workspace that is not, unticked — in one list by path, because the
+    /// workspace that is not, unticked, all in one list by path, because the
     /// question it answers is "which of these", not "which kind".
     pub fn of(workspace: &Workspace) -> Self {
         let mut rows: Vec<Row> = workspace
@@ -177,7 +177,7 @@ impl Minds {
                 ("are", "each")
             };
             asked.push(format!(
-                "{} {is} not a mind project yet: `mind init` makes {it} one — a .mind, and empty skills/ and rules/.",
+                "{} {is} not a mind project yet: `mind init` makes {it} one (a .mind, and empty skills/ and rules/).",
                 names.join(", "),
             ));
         }

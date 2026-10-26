@@ -159,7 +159,7 @@ pub struct MindConfig {
 
 /// Where a project keeps each kind of artifact.
 ///
-/// Keyed by the kind's folder name — `skills`, `rules` — which is the plural
+/// Keyed by the kind's folder name (`skills`, `rules`), which is the plural
 /// spelling the CLI already accepts, so there is no second table to keep in
 /// step. A key this build does not recognise is carried along rather than
 /// rejected, for the reason unknown front matter keys are: the format grows,
@@ -342,7 +342,7 @@ impl MindProject {
 
     /// The folder holding one kind, whether or not it exists yet.
     ///
-    /// What the marker says, or the default when it says nothing — except for
+    /// What the marker says, or the default when it says nothing, except for
     /// a marker written before [`DIRECTORIES_VERSION`], which described a
     /// layout where every kind lived inside `.mind`. Such a project is read
     /// the way it was written.
@@ -385,8 +385,8 @@ pub struct FlayerConfig {
     /// projects, read live from where they are; relative to its root.
     #[serde(default)]
     pub loaded: Vec<PathBuf>,
-    /// Where the workspace keeps its own artifacts — the ones it shares with
-    /// every project it manages — relative to its root. A kind it does not
+    /// Where the workspace keeps its own artifacts (the ones it shares with
+    /// every project it manages), relative to its root. A kind it does not
     /// name is kept in its library ([`Directories::library_for`]).
     #[serde(default)]
     pub directories: Directories,
@@ -474,8 +474,8 @@ impl FlayerWorkspace {
     /// make it.
     ///
     /// Its marker is the one `init` would write, parsed instead of written, so
-    /// a read answers as it would of a workspace made a moment before — no
-    /// projects, nothing loaded, an empty ledger — and coming first changes
+    /// a read answers as it would of a workspace made a moment before (no
+    /// projects, nothing loaded, an empty ledger), and coming first changes
     /// nothing about what it says. Nothing is written through it: an edit of
     /// its marker is refused as it is for any directory that is not a
     /// workspace, and so is its ledger. What writes makes the real one:
@@ -569,9 +569,9 @@ impl FlayerWorkspace {
     /// writer that holds it, then failing with [`LockError::Busy`], which
     /// names that writer's process.
     ///
-    /// Core's writers take it themselves — an edit of the marker, an install
+    /// Core's writers take it themselves (an edit of the marker, an install
     /// or an uninstall, a gather, the scrub that opening the ledger to write
-    /// runs when it has clones to rewrite — so a front end
+    /// runs when it has clones to rewrite), so a front end
     /// has no need to, and must not while it asks core to write: the lock is
     /// not re-entrant, and a writer that asks for it twice waits for itself.
     /// Moving the workspace's own into its library
@@ -776,8 +776,8 @@ impl FlayerWorkspace {
     }
 
     /// Remove every entry of the array `key` pointing at any of `roots`, in
-    /// one edit — or, when one of them has no entry, nothing, returning that
-    /// one.
+    /// one edit. When one of them has no entry, remove nothing and return
+    /// that one.
     fn drop_entries(
         &mut self,
         key: &str,
@@ -884,7 +884,7 @@ impl FlayerWorkspace {
     }
 
     /// Every loaded entry, in marker order, with the workspace it opens or the
-    /// reason it does not — the same shape as [`members`](Self::members), so
+    /// reason it does not: the same shape as [`members`](Self::members), so
     /// a source that has gone away is shown where it can be unloaded.
     ///
     /// Only one level deep: what a loaded workspace loads itself is not
@@ -1052,7 +1052,7 @@ impl FlayerWorkspace {
     ///
     /// A `MindProject` rather than a type of its own, because everything that
     /// reads, creates, renames or removes an artifact asks its holder the same
-    /// three things — where it is, what it is called, where each kind lives —
+    /// three things (where it is, what it is called, where each kind lives),
     /// and a workspace answers them exactly as a project does. So the rules
     /// for the workspace's artifacts are the rules for everybody's, with no
     /// second copy of them to drift.
@@ -1107,8 +1107,8 @@ impl FlayerWorkspace {
 
     /// Whether some registered entry points at the directory `root`.
     ///
-    /// By where entries point, not how they are spelled — the same matching
-    /// `link` uses — so a project registered as `./collapse` is linked when
+    /// By where entries point, not how they are spelled (the same matching
+    /// `link` uses), so a project registered as `./collapse` is linked when
     /// asked about as `collapse`.
     pub fn is_linked(&self, root: &Path) -> bool {
         let target = paths::normalize(root);
@@ -1361,7 +1361,7 @@ fn entries(array: &toml_edit::Array) -> Vec<PathBuf> {
 ///
 /// By where they point, not how they are spelled, so `collapse` and
 /// `./collapse` are one entry. Arithmetic settles most of it; two spellings
-/// that only the filesystem can equate — a symlinked parent, `/tmp` on a Mac —
+/// that only the filesystem can equate (a symlinked parent, `/tmp` on a Mac)
 /// need canonicalising, and a path that does not exist cannot be equated that
 /// way at all.
 fn points_at(root: &Path, entry: &Path, target: &Path) -> bool {
@@ -1399,13 +1399,24 @@ pub(crate) fn replace_file(path: &Path, contents: &str) -> Result<(), WorkspaceE
 /// local exclude file is bytes, and its failures belong to its own module's
 /// error, not to a workspace's.
 pub(crate) fn replace_bytes(path: &Path, contents: &[u8]) -> Result<(), (PathBuf, io::Error)> {
-    use std::io::Write as _;
-
     // Follow a symlinked config to the file it names. Replacing the link
     // itself would silently detach a workspace from a config someone chose to
     // share, and leave the original holding stale contents.
     let resolved = fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf());
-    let path = resolved.as_path();
+    replace_bytes_unresolved(&resolved, contents)
+}
+
+/// [`replace_bytes`] at `path` as it is spelled, never resolved: the
+/// temporary is made beside it and renamed onto it.
+///
+/// For a file whose route its caller refuses to follow a link on
+/// (`config_entry::ConfigFile`), where resolving one would carry the write
+/// out of the folder it was meant for.
+pub(crate) fn replace_bytes_unresolved(
+    path: &Path,
+    contents: &[u8],
+) -> Result<(), (PathBuf, io::Error)> {
+    use std::io::Write as _;
 
     let (temporary, mut file) = temporary_beside(path)?;
     let written = file.write_all(contents);
@@ -1419,7 +1430,7 @@ pub(crate) fn replace_bytes(path: &Path, contents: &[u8]) -> Result<(), (PathBuf
 
     // A rename carries the temporary file's permissions with it, so the
     // original's are copied across first: a config chmodded to 600 must not
-    // come back world readable. Best effort — a filesystem that cannot say is
+    // come back world readable. Best effort: a filesystem that cannot say is
     // not a reason to refuse the edit.
     if let Ok(metadata) = fs::metadata(path) {
         let _ = fs::set_permissions(&temporary, metadata.permissions());
@@ -1464,7 +1475,7 @@ fn temporary_beside(path: &Path) -> Result<(PathBuf, fs::File), (PathBuf, io::Er
 /// joining it onto its own root, so a project registered as `../collapse`
 /// arrives here as `<workspace>/../collapse`; `std::path::absolute` leaves
 /// that `..` in place. Every root would then carry it, and two paths naming
-/// one directory would stop comparing equal — which is what `in_project` and
+/// one directory would stop comparing equal, which is what `in_project` and
 /// the link deduplication are built on.
 pub(crate) fn absolute(path: &Path) -> Result<PathBuf, WorkspaceError> {
     let absolute = std::path::absolute(path).map_err(|source| WorkspaceError::Read {
@@ -1502,7 +1513,7 @@ fn mind_template(name: &str, directories: &Directories) -> String {
          #\n\
          # `directories` says where each kind lives, relative to the directory\n\
          # holding this {MIND_DIR}. Point them wherever the agents that read them\n\
-         # already look — .claude/skills, docs/rules — and Mindflayer follows.\n\
+         # already look (.claude/skills, docs/rules) and Mindflayer follows.\n\
          # They are meant to be committed: they travel with the project.\n\
          version = {MIND_FORMAT_VERSION}\n\
          name = {}\n\

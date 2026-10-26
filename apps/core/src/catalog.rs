@@ -103,8 +103,8 @@ impl Catalog {
 
     /// Two catalogs as one, in the same order and with each file once.
     ///
-    /// For a report over holders that are found differently — a workspace's
-    /// own artifacts beside its projects' — which still has to read as one
+    /// For a report over holders that are found differently (a workspace's
+    /// own artifacts beside its projects'), which still has to read as one
     /// listing.
     pub fn merge(mut self, other: Catalog) -> Catalog {
         self.artifacts.extend(other.artifacts);
@@ -206,7 +206,7 @@ impl Catalog {
                 if is_hidden(&path) {
                     continue;
                 }
-                // Followed, so a rule shared by symlink is still a rule — but
+                // Followed, so a rule shared by symlink is still a rule, but
                 // only to decide file-or-directory. A symlinked directory is
                 // not descended into, because a loop would hang discovery and
                 // nothing about a rule needs one.
@@ -310,11 +310,12 @@ impl Catalog {
 /// What a user typed to name one artifact.
 ///
 /// A qualifier is separated by `:`, not `/`, and that is the whole reason the
-/// two namespaces do not collide. A rule's name IS a route — `git/no-force-push`
-/// — so a `/` qualifier would make `skills/naming` mean "the skill `naming`"
-/// rather than "the rule filed under `skills/`", and a rules folder grouping
-/// rules *about skills* is not an exotic thing to have. With `:` a name is
-/// always a name: `rule:skills/naming` qualifies, `skills/naming` does not.
+/// two namespaces do not collide. A rule's name IS a route, as in
+/// `git/no-force-push`, so a `/` qualifier would make `skills/naming` mean
+/// "the skill `naming`" rather than "the rule filed under `skills/`", and a
+/// rules folder grouping rules *about skills* is not an exotic thing to have.
+/// With `:` a name is always a name: `rule:skills/naming` qualifies,
+/// `skills/naming` does not.
 ///
 /// It also removes the shape from Windows entirely, where a filename cannot
 /// contain `:` at all.

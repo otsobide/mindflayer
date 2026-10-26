@@ -1,7 +1,7 @@
 //! Drawing the install screen.
 //!
-//! Two columns: the projects a workspace manages, and — for whichever project
-//! the cursor is on — every shelf entry, ticked when that project already
+//! Two columns: the projects a workspace manages, and, for whichever project
+//! the cursor is on, every shelf entry, ticked when that project already
 //! holds it. Nothing here decides anything; [`super::state`] does.
 
 use ratatui::layout::{Constraint, Direction, Layout, Rect};
@@ -74,7 +74,7 @@ fn skills(screen: &Screen, frame: &mut Frame, area: Rect) {
     let heading = title(target);
     if target.rows.is_empty() {
         let empty = Paragraph::new(
-            "nothing on the shelf — `flayer gather git <url>`, `flayer load <path>` or `flayer add skill` first",
+            "nothing on the shelf; `flayer gather git <url>`, `flayer load <path>` or `flayer add skill` first",
         )
             .block(pane(&heading, focused));
         frame.render_widget(empty, area);
