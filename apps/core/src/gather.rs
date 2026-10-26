@@ -241,12 +241,9 @@ pub fn scrub(workspace: &FlayerWorkspace, ledger: &Ledger) -> Result<Scrub, Ledg
             continue;
         }
         ledger.scrub_source(source.id)?;
-        // Two folders of one place are one thing to tell somebody about.
-        if !scrub
-            .sources
-            .iter()
-            .any(|seen| seen.url == source.url && seen.reference == source.reference)
-        {
+        // Two branches or folders of one URL are one credential to tell
+        // somebody about.
+        if !scrub.sources.iter().any(|seen| seen.url == source.url) {
             scrub.sources.push(source);
         }
     }
