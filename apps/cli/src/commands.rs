@@ -3,3 +3,4 @@
 pub(crate) mod artifact;
 pub(crate) mod project;
 pub(crate) mod read;
+pub(crate) mod workspace;
