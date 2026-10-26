@@ -170,6 +170,20 @@ fn a_workspace_can_be_told_where_to_keep_its_own() {
 }
 
 #[test]
+fn a_workspace_cannot_keep_its_own_on_the_shelf() {
+    let dir = TempDir::new().unwrap();
+
+    let failure = flayer(dir.path(), &["init", "--skills", ".mindflayer/skills"]).unwrap_err();
+
+    assert_eq!(
+        failure.error.to_string(),
+        ".mindflayer/skills: cannot hold the workspace's skills, \
+         because gathering writes to .mindflayer/skills"
+    );
+    assert!(!dir.path().join(FLAYER_DIR).exists());
+}
+
+#[test]
 fn every_change_at_the_workspace_level_acts_on_its_own_unless_p_names_a_project() {
     let dir = workspace_with_own();
 
