@@ -155,8 +155,9 @@ impl fmt::Display for UnknownAgent {
 /// standard layout is only the default: a project's settings may put a kind
 /// somewhere else for every agent (#40), and a caller handed the table then
 /// follows that without changing. The project hands it on, in core: which
-/// table applies is its settings' to say, so an install takes the table from
-/// the project it installs into (#34), and no front end calls
+/// table applies is its settings' to say, so a caller asks the project
+/// ([`MindProject::targets`](crate::MindProject::targets)), as an install
+/// will (#34), and no front end calls
 /// [`standard`](TargetTable::standard) and picks one those settings would
 /// contradict.
 ///

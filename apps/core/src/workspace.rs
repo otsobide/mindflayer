@@ -25,7 +25,7 @@ use std::time::Duration;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
-use crate::agent::Agent;
+use crate::agent::{Agent, AgentTarget, TargetTable};
 use crate::gather::{self, Scrub};
 use crate::kind::Kind;
 use crate::ledger::{Ledger, LedgerError, LEDGER_FILE};
@@ -623,6 +623,20 @@ impl MindProject {
                 path: self.root.clone(),
                 kind,
             })
+    }
+
+    /// Where `kind` goes in the project for each agent its settings name
+    /// ([`TargetTable::targets`]), whether or not a folder is there yet;
+    /// none for a project a `mind.toml` marks, which names no agents.
+    ///
+    /// The project hands its table on, rather than a caller reaching for
+    /// [`TargetTable::standard`]: which table applies is the settings' to
+    /// say, so a caller asking here follows an override once #40 reads one
+    /// from them, without changing. Until then they say the standard one.
+    pub fn targets(&self, kind: Kind) -> Vec<AgentTarget> {
+        self.settings().map_or_else(Vec::new, |settings| {
+            TargetTable::standard().targets(kind, &settings.agents)
+        })
     }
 
     /// The project's declared name.
