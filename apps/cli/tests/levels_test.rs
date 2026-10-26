@@ -34,6 +34,44 @@ fn mind_init_creates_a_project_and_flayer_init_a_workspace() {
 }
 
 #[test]
+fn flayer_init_says_in_the_marker_that_its_own_go_in_its_library() {
+    let dir = TempDir::new().unwrap();
+
+    flayer(dir.path(), &["init"]).unwrap();
+
+    let name = dir.path().file_name().unwrap().to_string_lossy();
+    assert_eq!(
+        registry(dir.path()),
+        format!(
+            "# Mindflayer workspace.\n\
+             #\n\
+             # It orchestrates the mind projects listed below, so their skills can be\n\
+             # managed together. Paths are relative to this file's grandparent, the\n\
+             # directory holding .mindflayer.\n\
+             #\n\
+             # `directories` says where the workspace keeps its own skills and rules,\n\
+             # the ones every project it manages can install. By default that is its\n\
+             # library, inside .mindflayer where no agent looks, and a kind not named\n\
+             # here is kept there too. Each folder is made the first time something\n\
+             # is added to it.\n\
+             #\n\
+             # `loaded` lists other flayer workspaces whose own skills its projects\n\
+             # can install too, read from there each time: `flayer load <path>`.\n\
+             version = 2\n\
+             name = \"{name}\"\n\
+             projects = []\n\
+             loaded = []\n\
+             \n\
+             [directories]\n\
+             skills = \".mindflayer/library/skills\"\n\
+             rules = \".mindflayer/library/rules\"\n"
+        )
+    );
+    // Made by the first artifact added, as before.
+    assert!(!dir.path().join(FLAYER_DIR).join("library").exists());
+}
+
+#[test]
 fn flayer_is_a_shortcut_for_mind_flayer() {
     let dir = workspace_with_two();
 
