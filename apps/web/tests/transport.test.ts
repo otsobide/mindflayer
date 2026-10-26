@@ -101,6 +101,33 @@ describe('the HTTP transport', () => {
     expect(refused).toMatchObject({ status: 0 })
   })
 
+  it('reports an answer cut off before its end as status 0', async () => {
+    // What `fetch` resolves to when the headers arrived and the body never did.
+    serve(() => ({
+      ok: true,
+      status: 200,
+      statusText: 'OK',
+      text: () => Promise.reject(new TypeError('terminated'))
+    }) as unknown as Response)
+
+    const refused = await httpTransport().query({}).catch((error: unknown) => error)
+
+    expect(refused).toBeInstanceOf(TransportError)
+    expect(refused).toMatchObject({
+      status: 0,
+      message: 'the server stopped before it finished answering: is `flayer ui` still running?'
+    })
+  })
+
+  it('refuses a success that is not JSON rather than answer nothing', async () => {
+    serve(() => new Response('<!doctype html><title>Mindflayer</title>', { status: 200 }))
+
+    const refused = await httpTransport().send({ install: 'demo' }, 'run').catch((error: unknown) => error)
+
+    expect(refused).toBeInstanceOf(TransportError)
+    expect(refused).toMatchObject({ status: 200, message: 'the server answered 200 with something that is not JSON' })
+  })
+
   it('listens to the event stream until told to stop', () => {
     const sources: FakeEventSource[] = []
     class FakeEventSource {

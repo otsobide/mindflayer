@@ -55,8 +55,9 @@ export interface Transport {
 }
 
 /**
- * A request that did not get its answer: the server refused it, or could
- * not be reached at all (status 0).
+ * A request that did not get its answer: the server refused it, answered
+ * with something that is not JSON, or could not be reached or stopped
+ * before its answer was whole (status 0).
  */
 export class TransportError extends Error {
   readonly status: number

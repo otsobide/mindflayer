@@ -68,9 +68,23 @@ async function post<Answer>(path: string, body: unknown): Promise<Answer> {
   } catch {
     throw new TransportError(0, 'the server cannot be reached: is `flayer ui` still running?')
   }
-  const reply = parse(await response.text())
+  // The status came first, so the body can still be lost to a server that
+  // stops halfway through it: that is no answer either.
+  let text: string
+  try {
+    text = await response.text()
+  } catch {
+    throw new TransportError(0, 'the server stopped before it finished answering: is `flayer ui` still running?')
+  }
+  const reply = parse(text)
   if (!response.ok) {
     throw new TransportError(response.status, refusal(response, reply))
+  }
+  // Every answer the server gives is JSON, so one that is not came from
+  // something else on the way, and passing it on as `undefined` would read
+  // as an empty answer rather than a broken one.
+  if (reply === undefined) {
+    throw new TransportError(response.status, `the server answered ${response.status} with something that is not JSON`)
   }
   return reply as Answer
 }
