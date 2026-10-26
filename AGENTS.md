@@ -253,7 +253,10 @@ These are easy to break from a single file without noticing.
   clones to rewrite, and `migrate::library`, from its plan to its rewrite of
   the marker. A new writer takes it the same way, inside core;
   `config_entry::ConfigFile` takes none, since the writers that call it hold
-  it. Opening the ledger takes no lock: a schema migration keeps itself apart
+  it. `MindProject::change_settings` takes none yet: a project's settings are
+  not the workspace's, and which lock keeps their writers apart is an open
+  question in `docs/architecture.md` for its first caller (#37) to settle.
+  Opening the ledger takes no lock: a schema migration keeps itself apart
   in its own transaction. The lock is not re-entrant: a writer never calls
   another while it holds it, and a front end never takes it. Reads
   (`FlayerWorkspace::open`, `ledger_for_reading`) never take it. A wait is
