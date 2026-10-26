@@ -13,6 +13,11 @@
 //! these functions gets it, though: [`create`] and [`create_from`], the
 //! writers [`add`] is built on, see to no record, and a front end that added
 //! with them would leave a stale one in place.
+//!
+//! Seeing to a record opens the ledger to write, which scrubs it first
+//! ([`FlayerWorkspace::ledger_to_write`]), so each result also hands back what
+//! that took out ([`Scrub`]) for the front end to say. Said nowhere, it would
+//! go unsaid for good: a scrub says what it found only the first time.
 
 use std::fs;
 use std::io;
@@ -24,6 +29,7 @@ use crate::artifact::{self, issue_list, Artifact, ArtifactError, ValidationIssue
 use crate::catalog::{Catalog, Reference, QUALIFIER};
 use crate::create::{create, create_from, CreateError};
 use crate::frontmatter;
+use crate::gather::Scrub;
 use crate::install::{self, InstallError};
 use crate::kind::{Kind, Layout};
 use crate::paths;
@@ -85,6 +91,8 @@ pub struct Added {
     /// and left in place the record would make somebody's new work look like
     /// something Mindflayer put there.
     pub stale: Result<Record, InstallError>,
+    /// What opening the ledger to see to that record scrubbed out of it.
+    pub scrub: Scrub,
 }
 
 /// Write a new artifact into `project`, from `template` when one is given
@@ -107,8 +115,13 @@ pub fn add(
         None => create(project, kind, name, description),
         Some(template) => create_from(project, kind, name, description, template),
     }?;
-    let stale = disowned(workspace, project, kind, name);
-    Ok(Added { artifact, stale })
+    let mut scrub = Scrub::default();
+    let stale = disowned(workspace, project, kind, name, &mut scrub);
+    Ok(Added {
+        artifact,
+        stale,
+        scrub,
+    })
 }
 
 /// The one artifact in `project` a reference names.
@@ -255,6 +268,9 @@ pub struct Edited {
     /// what was installed, so the install screen must not take it for its
     /// own to overwrite.
     pub copy: Result<Record, InstallError>,
+    /// What opening the ledger to drop that record scrubbed out of it;
+    /// nothing when the file did not change, since the ledger was not opened.
+    pub scrub: Scrub,
 }
 
 /// Start editing `target`, noting what its file holds now.
@@ -280,12 +296,17 @@ pub fn finish_edit(
     edit: Edit,
 ) -> Edited {
     let changed = fs::read(&edit.file).ok() != edit.before;
+    let mut scrub = Scrub::default();
     let copy = if changed {
-        disowned(workspace, project, edit.kind, &edit.name)
+        disowned(workspace, project, edit.kind, &edit.name, &mut scrub)
     } else {
         Ok(Record::Untouched)
     };
-    Edited { changed, copy }
+    Edited {
+        changed,
+        copy,
+        scrub,
+    }
 }
 
 /// How many files removing it would delete.
@@ -314,6 +335,8 @@ pub struct Removed {
     /// Dropped when the copy had been installed: it is gone, and the record
     /// would be inherited by whatever is written under its name next.
     pub copy: Result<Record, InstallError>,
+    /// What opening the ledger to see to that record scrubbed out of it.
+    pub scrub: Scrub,
 }
 
 /// Delete an artifact: a skill's whole directory, or a rule's file and any
@@ -340,9 +363,9 @@ pub fn remove(
             prune(&directory, target.path.parent());
         }
     }
-    Ok(Removed {
-        copy: disowned(workspace, project, target.kind, &target.name),
-    })
+    let mut scrub = Scrub::default();
+    let copy = disowned(workspace, project, target.kind, &target.name, &mut scrub);
+    Ok(Removed { copy, scrub })
 }
 
 /// What renaming an artifact made, and what it did to the records under its
@@ -358,6 +381,10 @@ pub struct Renamed {
     /// stale, and left in place it would make what was just renamed look like
     /// something Mindflayer put there.
     pub stale: Result<Record, InstallError>,
+    /// What opening the ledger to see to both records scrubbed out of it,
+    /// once: the second opening finds only what the first could not take out,
+    /// which is the same thing to tell.
+    pub scrub: Scrub,
 }
 
 /// Give an artifact a new name: a skill's folder and the `name` it declares
@@ -390,12 +417,14 @@ pub fn rename(
         Kind::Skill => rename_skill(project, target, &directory, to),
         Kind::Rule => rename_rule(project, target, &directory, to),
     }?;
-    let copy = disowned(workspace, project, target.kind, &target.name);
-    let stale = disowned(workspace, project, target.kind, &renamed.name);
+    let mut scrub = Scrub::default();
+    let copy = disowned(workspace, project, target.kind, &target.name, &mut scrub);
+    let stale = disowned(workspace, project, target.kind, &renamed.name, &mut scrub);
     Ok(Renamed {
         target: renamed,
         copy,
         stale,
+        scrub,
     })
 }
 
@@ -516,8 +545,9 @@ fn rename_rule(
     })?;
     prune(directory, target.path.parent());
 
-    // A rule declares nothing, so there is nothing inside it to rewrite, and
-    // one that did not read before a move does not read after it either.
+    // A rule's front matter holds no name, so there is nothing inside it to
+    // rewrite, and one that did not read before a move does not read after it
+    // either.
     Ok(Target {
         kind: Kind::Rule,
         name: to.to_owned(),
@@ -604,17 +634,21 @@ fn holds(kind: Kind, path: &Path) -> bool {
     file_of(kind, path).is_file()
 }
 
-/// Drop the record `workspace` keeps of an install of `name` into `project`.
+/// Drop the record `workspace` keeps of an install of `name` into `project`,
+/// adding what opening the ledger to do it scrubbed out of it to `scrub`.
 fn disowned(
     workspace: Option<&FlayerWorkspace>,
     project: &MindProject,
     kind: Kind,
     name: &str,
+    scrub: &mut Scrub,
 ) -> Result<Record, InstallError> {
     let Some(workspace) = workspace else {
         return Ok(Record::Untouched);
     };
-    Ok(if install::disown(workspace, project, kind, name)? {
+    let disowned = install::disown(workspace, project, kind, name)?;
+    scrub.absorb(disowned.scrub);
+    Ok(if disowned.dropped {
         Record::Dropped
     } else {
         Record::Untouched

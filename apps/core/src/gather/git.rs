@@ -5,6 +5,10 @@
 //! its own I/O rather than supervising a process. A clone never prompts for a
 //! credential; [`super::credentials`] says why.
 
+use std::borrow::Cow;
+use std::fmt::Display;
+use std::fs;
+use std::io;
 use std::num::NonZeroU32;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::Ordering;
@@ -17,6 +21,8 @@ use thiserror::Error;
 
 use super::credentials::{self, Shortfall, Shortfalls};
 use super::{Progress, Watch};
+use crate::url::redacted;
+use crate::workspace::{replace_file, WorkspaceError};
 
 /// How often `gix`'s counts are read while it fetches: ten times a second,
 /// about as often as a person can read a number that changes.
@@ -66,8 +72,8 @@ pub fn clone(
     let shortfalls = Shortfalls::default();
     let mut prepare = gix::prepare_clone(url, into)
         .map_err(|error| GitError::Url {
-            url: url.to_owned(),
-            detail: error.to_string(),
+            url: redacted(url).into_owned(),
+            detail: said(error),
         })?
         // Depth 1: the history is not what is being gathered, the files are.
         .with_shallow(gix::remote::fetch::Shallow::DepthAtRemote(
@@ -96,7 +102,7 @@ pub fn clone(
             .with_ref_name(Some(reference))
             .map_err(|error| GitError::Reference {
                 reference: reference.to_owned(),
-                detail: error.to_string(),
+                detail: said(error),
             })?;
     }
 
@@ -111,7 +117,7 @@ pub fn clone(
                 if interrupt.load(Ordering::Relaxed) {
                     GitError::Cancelled
                 } else {
-                    fetch_failed(url, shortfalls.last(), error.to_string())
+                    fetch_failed(url, shortfalls.last(), &error)
                 }
             })
     })?;
@@ -125,8 +131,8 @@ pub fn clone(
         checkout
             .main_worktree(progress, interrupt)
             .map_err(|error| GitError::Checkout {
-                url: url.to_owned(),
-                detail: error.to_string(),
+                url: redacted(url).into_owned(),
+                detail: said(error),
             })
     });
     // A checkout `gix` stops partway still succeeds, with some of the files
@@ -138,6 +144,10 @@ pub fn clone(
         return Err(GitError::Cancelled);
     }
     let (repository, _) = checked_out?;
+    // Nothing to do for a URL `gather` let through, which carries no
+    // credential. Done here anyway, so that a clone keeps none on disk
+    // whoever asks for one, rather than because every caller remembered.
+    scrub(into)?;
 
     Ok(Clone {
         root: repository
@@ -217,41 +227,97 @@ fn reading(
     }
 }
 
+/// Rewrite what a clone keeps of the URL it was made from without the
+/// credentials in it, returning whether there were any.
+///
+/// `gix` writes that URL as typed into the remote's entry in `.git/config`,
+/// and again into every reflog, as `clone: from <url>`; `FETCH_HEAD` would
+/// hold it too. Those files are text and the URL is in them whole, so they
+/// are rewritten through [`redacted`] rather than through `gix`'s config
+/// editor, which would reach the config and not the logs. Deleting the clone
+/// was the other way to be rid of them, and is rejected: the clone is kept so
+/// a gather can be looked at afterwards, and a scrub has no reason to take
+/// that away. What is missing is an absence, not a failure, and a symlink is
+/// not followed out of the clone.
+pub fn scrub(clone: &Path) -> Result<bool, GitError> {
+    let git = clone.join(".git");
+    let mut files = vec![git.join("config"), git.join("FETCH_HEAD")];
+    files_under(&git.join("logs"), &mut files)?;
+
+    let mut scrubbed = false;
+    for file in files {
+        if !fs::symlink_metadata(&file).is_ok_and(|metadata| metadata.is_file()) {
+            continue;
+        }
+        let bytes = fs::read(&file).map_err(|source| WorkspaceError::Read {
+            path: file.clone(),
+            source,
+        })?;
+        // What `gix` writes there is UTF-8, URLs included. A file that is
+        // not was written by something else, and is left as it was.
+        let Ok(text) = String::from_utf8(bytes) else {
+            continue;
+        };
+        if let Cow::Owned(clean) = redacted(&text) {
+            replace_file(&file, &clean)?;
+            scrubbed = true;
+        }
+    }
+    Ok(scrubbed)
+}
+
+/// Every plain file under `directory`, at any depth, without following a
+/// symlink.
+fn files_under(directory: &Path, found: &mut Vec<PathBuf>) -> Result<(), GitError> {
+    let entries = match fs::read_dir(directory) {
+        Ok(entries) => entries,
+        Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(()),
+        Err(source) => {
+            return Err(WorkspaceError::Read {
+                path: directory.to_path_buf(),
+                source,
+            }
+            .into())
+        }
+    };
+    for entry in entries {
+        let entry = entry.map_err(|source| WorkspaceError::Read {
+            path: directory.to_path_buf(),
+            source,
+        })?;
+        let path = entry.path();
+        match entry.file_type() {
+            Ok(kind) if kind.is_dir() => files_under(&path, found)?,
+            Ok(kind) if kind.is_file() => found.push(path),
+            _ => {}
+        }
+    }
+    Ok(())
+}
+
 /// What a failed fetch is reported as: the credential it lacked, when that is
 /// what stopped it, and otherwise what `gix` said.
-fn fetch_failed(url: &str, shortfall: Option<Shortfall>, detail: String) -> GitError {
+fn fetch_failed(url: &str, shortfall: Option<Shortfall>, detail: &dyn Display) -> GitError {
+    let url = redacted(url).into_owned();
     match shortfall {
-        Some(Shortfall::Missing) => GitError::Credentials { url: redacted(url) },
+        Some(Shortfall::Missing) => GitError::Credentials { url },
         // Whether a refusal over ssh is a missing key is the callback's to
         // say, not `url`'s: a rewrite in git config may have sent the fetch
         // over another transport than the one `url` names.
         Some(Shortfall::Refused) | None => GitError::Fetch {
-            url: url.to_owned(),
-            detail,
+            url,
+            detail: said(detail),
         },
     }
 }
 
-/// `url` without the user name and password a `scheme://` URL can carry before
-/// its host, so an error can name a source without repeating a token somebody
-/// typed into it.
+/// What `gix` said, without the credentials of any URL it repeats.
 ///
-/// The scp-like form (`git@host:path`) is left alone: what it carries before
-/// the `@` can only be a user name. Parsing with `gix::url` and dropping the
-/// user was the other way, and is rejected because the parser also rewrites
-/// what it keeps (a default port dropped, a scheme lowercased), so the error
-/// would name a URL nobody typed.
-fn redacted(url: &str) -> String {
-    let Some(scheme) = url.find("://") else {
-        return url.to_owned();
-    };
-    let host = scheme + "://".len();
-    let rest = &url[host..];
-    let authority = rest.find(['/', '?', '#']).map_or(rest, |end| &rest[..end]);
-    match authority.rfind('@') {
-        Some(at) => format!("{}{}", &url[..host], &rest[at + 1..]),
-        None => url.to_owned(),
-    }
+/// Redacting the URL that was typed is not enough: `gix` names the URL it
+/// connected to, which `url.<base>.insteadOf` in git config may have given a
+/// token the typed one never had.
+fn said(error: impl Display) -> String {
+    redacted(&error.to_string()).into_owned()
 }
 
 /// Why a repository could not be cloned.
@@ -259,7 +325,8 @@ fn redacted(url: &str) -> String {
 /// Every variant carries the failure as text rather than as the `gix` error it
 /// came from. Those types are large and would become part of this crate's
 /// public API, tying its version to gix's; what a caller does with them is
-/// print them.
+/// print them. Every URL in that text, the one typed included, is
+/// [`redacted`]: this is what the gather log and the screen are given.
 #[derive(Debug, Error)]
 pub enum GitError {
     #[error("{url}: not a URL git understands: {detail}")]
@@ -275,7 +342,7 @@ pub enum GitError {
     #[error("{url}: cannot be fetched: {detail}")]
     Fetch { url: String, detail: String },
     /// The server asked who is fetching, and nothing that may answer had a
-    /// credential it would take. `url` is shown without its userinfo.
+    /// credential it would take. `url` is shown without its credentials.
     #[error(
         "{url}: needs credentials, and gathering never prompts for them: \
          configure a git credential helper, or use ssh-agent for an ssh URL"
@@ -287,6 +354,10 @@ pub enum GitError {
     /// was of it is gone.
     #[error("the clone was cancelled before it was finished")]
     Cancelled,
+    /// A file in the clone that names the URL it was made from could not be
+    /// read, or rewritten without the credentials in it.
+    #[error(transparent)]
+    Scrub(#[from] WorkspaceError),
 }
 
 #[cfg(test)]

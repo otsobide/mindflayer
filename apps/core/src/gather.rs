@@ -27,6 +27,7 @@ use crate::copy::{self, Change};
 use crate::kind::{Kind, Layout};
 use crate::ledger::{self, Action, Ledger, LedgerError, Outcome, SourceKind};
 use crate::paths;
+use crate::url::{carries_credentials, redacted};
 use crate::workspace::FlayerWorkspace;
 
 pub use watch::{Progress, Watch};
@@ -52,7 +53,8 @@ impl Source {
         }
     }
 
-    /// The address, as the user typed it.
+    /// The address, as the user typed it: credentials included, which is why
+    /// [`gather`] refuses one that carries any before it is stored or shown.
     pub fn url(&self) -> &str {
         match self {
             Source::Git { url, .. } => url,
@@ -211,12 +213,162 @@ pub fn gather(
     outcome
 }
 
+/// What the scrub [`FlayerWorkspace::ledger_to_write`] runs took out.
+#[derive(Debug, Default)]
+pub struct Scrub {
+    /// The sources whose URL carried credentials, as they are stored now.
+    /// Gathering one again needs the credential from somewhere else.
+    pub sources: Vec<ledger::Source>,
+    /// How many action log entries named a URL with credentials.
+    pub actions: usize,
+    /// Clones that still hold them, because they could not be rewritten.
+    /// Their source keeps its URL until they can, so the next scrub tries
+    /// again rather than forgetting the clone needs it.
+    pub failures: Vec<ScrubFailure>,
+    /// Folders of a source that became one with another, which nothing
+    /// points into any more and which could not be removed.
+    pub leftovers: Vec<Leftover>,
+}
+
+impl Scrub {
+    /// Whether there was nothing to take out, which is every time but the
+    /// first after an older build stored a credential.
+    pub fn is_empty(&self) -> bool {
+        self.sources.is_empty()
+            && self.actions == 0
+            && self.failures.is_empty()
+            && self.leftovers.is_empty()
+    }
+
+    /// Add what a later scrub took out, for a change that opened the ledger
+    /// to write more than once ([`crate::lifecycle::rename`]).
+    ///
+    /// A clone that could not be rewritten keeps its source's URL, so every
+    /// scrub tries it again and fails again: one thing to tell, as two
+    /// branches of one URL are one credential.
+    pub(crate) fn absorb(&mut self, later: Scrub) {
+        for source in later.sources {
+            if !self.sources.iter().any(|seen| seen.url == source.url) {
+                self.sources.push(source);
+            }
+        }
+        self.actions += later.actions;
+        for failure in later.failures {
+            if !self.failures.iter().any(|seen| seen.url == failure.url) {
+                self.failures.push(failure);
+            }
+        }
+        self.leftovers.extend(later.leftovers);
+    }
+}
+
+/// Take out the credentials a Mindflayer from before they were refused
+/// stored: in the URLs of sources, in the action log, and in the clones it
+/// made from those URLs.
+///
+/// Run by [`FlayerWorkspace::ledger_to_write`], which is how a command that
+/// writes opens the ledger, so it comes before anything is written. Every
+/// time rather than once, as a schema migration would, because an older build
+/// can keep writing to the same file after this one has scrubbed it, and the
+/// schema steps are spoken for by the changes that need a new version. With
+/// nothing to do it still scans the sources and the action log, and the first
+/// time it finds something is the only time it says so. A read is left alone:
+/// what it shows is redacted on the way out anyway, and reading should not
+/// write.
+pub(crate) fn scrub(workspace: &FlayerWorkspace, ledger: &Ledger) -> Result<Scrub, LedgerError> {
+    let mut scrub = Scrub::default();
+    for source in ledger.tainted_sources()? {
+        // The clone first and the row after it: a row rewritten first would
+        // no longer say that its clone still needs the same.
+        if let Err(error) = git::scrub(&workspace.cache_dir().join(&source.directory)) {
+            scrub.failures.push(ScrubFailure {
+                url: source.url.clone(),
+                source: error,
+            });
+            continue;
+        }
+        if let Some(gone) = ledger.scrub_source(source.id)? {
+            remove_folders_of(workspace, &gone, &mut scrub.leftovers);
+        }
+        // Two branches or folders of one URL are one credential to tell
+        // somebody about.
+        if !scrub.sources.iter().any(|seen| seen.url == source.url) {
+            scrub.sources.push(source);
+        }
+    }
+    scrub.actions = ledger.scrub_log()?;
+    Ok(scrub)
+}
+
+/// Remove the clone and the shelf folders of a source the ledger no longer
+/// has, noting each that will not go.
+///
+/// Removed rather than left, because the shelf is read from its folders
+/// ([`crate::Catalog::discover_gathered`]): one left behind would be listed
+/// as skills no source owns. A directory that is not one folder name was not
+/// named by this ledger, and is left alone rather than followed out of the
+/// workspace.
+fn remove_folders_of(
+    workspace: &FlayerWorkspace,
+    gone: &ledger::Source,
+    leftovers: &mut Vec<Leftover>,
+) {
+    if !crate::install::is_folder_name(&gone.directory) {
+        return;
+    }
+    let shelves = Kind::ALL
+        .iter()
+        .map(|kind| workspace.gathered_dir(*kind).join(&gone.directory));
+    for path in std::iter::once(workspace.cache_dir().join(&gone.directory)).chain(shelves) {
+        match fs::remove_dir_all(&path) {
+            Ok(()) => {}
+            Err(error) if error.kind() == io::ErrorKind::NotFound => {}
+            Err(source) => leftovers.push(Leftover { path, source }),
+        }
+    }
+}
+
+/// A folder of a source that became one with another, which could not be
+/// removed.
+#[derive(Debug, Error)]
+#[error(
+    "{path}: left by a source that is now one with another at the same URL, and cannot be \
+     removed: {source}"
+)]
+pub struct Leftover {
+    pub path: PathBuf,
+    #[source]
+    pub source: io::Error,
+}
+
+/// A clone made from a URL with credentials that could not be rewritten
+/// without them.
+#[derive(Debug, Error)]
+#[error("{url}: its clone still holds the credentials it was gathered with: {source}")]
+pub struct ScrubFailure {
+    /// The source's URL, without them.
+    pub url: String,
+    #[source]
+    pub source: git::GitError,
+}
+
 /// The work itself, with the logging left to [`gather`].
 fn harvest(
     workspace: &FlayerWorkspace,
     ledger: &Ledger,
     request: &Request,
 ) -> Result<Report, GatherError> {
+    // Refused before anything is registered or fetched, rather than used for
+    // this one fetch and dropped from what is stored: a token on the command
+    // line is already where `ps` and the shell history show it, and every
+    // report names the URL. A git credential helper, or the front end once
+    // #110 lands, keeps it off the command line altogether.
+    if carries_credentials(request.source.url()) {
+        return Err(GatherError::CredentialsInUrl {
+            url: redacted(request.source.url()).into_owned(),
+        });
+    }
+
     // Only directory-shaped kinds are gatherable today. Matching on the kind
     // rather than on its layout keeps the compiler asking: a third kind has to
     // answer this question before it can be added.
@@ -508,6 +660,17 @@ pub enum GatherError {
     /// which is as it was, and so is the ledger.
     #[error("cancelled, with nothing put on the shelf")]
     Cancelled,
+    /// The URL carries a password or token, or a user name where a token can
+    /// stand in for one, which the message names as a user name: calling it a
+    /// password would send somebody looking for one that is not there. `url` is shown without it, which is the URL to
+    /// gather instead. A provider the front end supplies (#110) will be a
+    /// second way to give the credential.
+    #[error(
+        "{url}: a password, a token or, over http(s), a user name in the URL is refused, because \
+         gathering stores and shows the URL: gather it without one, and configure a git \
+         credential helper that has it"
+    )]
+    CredentialsInUrl { url: String },
     #[error("{url}: has no `{subdirectory}` folder to gather from")]
     NoSuchFolder { subdirectory: String, url: String },
     #[error("{kind}s cannot be gathered yet")]

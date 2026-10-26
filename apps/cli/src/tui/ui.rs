@@ -149,11 +149,12 @@ fn header(workspace: &Workspace, frame: &mut Frame, area: Rect) {
         count => format!("{shelf} · {count} loaded"),
     };
     // Said, because it is not where you are: nothing at or above here was a
-    // workspace, so this is the one in your home.
-    let shelf = if workspace.default {
-        format!("default workspace · {shelf}")
-    } else {
-        shelf
+    // workspace, so this is the one in your home — and, until the first
+    // change makes it, one that is not there yet.
+    let shelf = match (workspace.default, workspace.made) {
+        (true, false) => format!("default workspace, not made yet · {shelf}"),
+        (true, true) => format!("default workspace · {shelf}"),
+        (false, _) => shelf,
     };
     let line = Line::from(vec![
         Span::styled(

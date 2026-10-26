@@ -40,10 +40,22 @@ from inside a project.
 
 A workspace is found the way `.git` is, by walking up from where you are. When
 nothing up there has a `.mindflayer`, `flayer` uses **the one in your home**,
-`~/.mindflayer`, making it the first time it is needed — so projects scattered
-anywhere can still be managed together without choosing a directory first.
-`flayer init` somewhere else makes a workspace there, and from inside it that
-one wins. The TUI says when it is showing the default one.
+`~/.mindflayer` — so projects scattered anywhere can still be managed together
+without choosing a directory first. `flayer init` somewhere else makes a
+workspace there, and from inside it that one wins. The TUI says when it is
+showing the default one.
+
+The first command that writes to it makes it: `flayer link`, `add`, `gather
+git`, `load <path>`, `install -p PROJECT <SKILL>`. One that only reads — `load`
+and `install` on their own among them — leaves your home alone, answers as an
+empty workspace would, and says where the workspace will be:
+
+```
+$ flayer list
+you manages no projects yet
+  link one with `flayer link <path>`
+hint: no workspace here or above, and the default one is not made yet; the first command that writes to it, such as `flayer link <path>`, makes it in /home/you/.mindflayer
+```
 
 `--home DIR`, or `$MINDFLAYER_HOME`, puts the default somewhere other than your
 home; set to empty (`--home ""`) there is no default, and a command outside
@@ -54,7 +66,7 @@ every workspace says so instead.
 | | Lives in | Shape | Declares |
 |---|---|---|---|
 | **Skill** | `skills/<name>/SKILL.md` | a directory each, so it can carry scripts and references beside its instructions | front matter in the [Agent Skills](https://agentskills.io/specification) format: `name`, `description`, and optionally `license`, `compatibility`, `metadata` and `allowed-tools` |
-| **Rule** | `rules/<name>.md` | one markdown file each | nothing — it is context, and its name is its filename |
+| **Rule** | `rules/<name>.md` | one markdown file each | usually nothing — it is context, and its name is its filename — though it may open with front matter: `paths` and `description`, both optional |
 
 Folders under `rules/` group and mean nothing else, so
 `rules/git/no-force-push.md` is the rule `git/no-force-push`. Skills are flat,
@@ -221,16 +233,16 @@ rule:git/no-force-push: ok
 
 Each kind is checked against what it actually declares. A skill is held to the
 [Agent Skills rules](#what-a-skill-looks-like) — its name has to match its
-directory, its description has to fit, and so on; a rule declares nothing, so
-the only things left to check are that its name is usable and that the file is
-not empty. `flayer validate` checks what is on the
-[shelf](#gathering-skills-from-elsewhere) too.
+directory, its description has to fit, and so on; a rule's front matter is
+optional, so the only things left to check are that its name is usable and that
+the file says something beyond its front matter. `flayer validate` checks what
+is on the [shelf](#gathering-skills-from-elsewhere) too.
 
 `validate` exits non-zero when anything is wrong, so it works in CI. What an
 agent reads past — a `metadata` entry that is not a string, a `compatibility`
-over 500 characters — is listed as a warning instead, under an artifact that is
-still `ok`. An artifact that cannot be read at all is a warning on stderr and
-does not hide the ones next to it.
+over 500 characters, a rule's front matter that does not parse — is listed as a
+warning instead, under an artifact that is still `ok`. An artifact that cannot
+be read at all is a warning on stderr and does not hide the ones next to it.
 
 ### The agents' own folders
 
@@ -359,13 +371,51 @@ ssh is a program of its own and can still ask on the terminal: for the
 passphrase of a key your ssh-agent does not hold, for a password when the
 server accepts one, or whether to trust a host it has not seen before.
 
+A URL with a password or a token in it is refused before anything is fetched.
+What is gathered is stored, listed and reported by its URL, and a token typed
+into a command line is already where `ps` and your shell history show it. Give
+the token to a git credential helper, and gather the URL without it:
+
+```
+$ flayer gather git https://me:ghp_t0ken@github.com/acme/private-skills
+error: https://github.com/acme/private-skills: a password, a token or, over http(s), a user name in the URL is refused, because gathering stores and shows the URL: gather it without one, and configure a git credential helper that has it
+```
+
+The user ssh logs in as is not a credential, and is kept
+(`git@github.com:acme/skills`, `ssh://git@github.com/acme/skills`). Over https
+a user name on its own is refused too, because a token can stand in for one:
+GitHub takes `https://<token>@github.com/...`, and nothing in the URL tells the
+two apart. That includes the https URLs Bitbucket and Azure DevOps hand out
+(`https://<user>@bitbucket.org/...`); gather those without the user name, and
+let the credential helper supply it.
+
+A workspace an older Mindflayer gathered into with a token in a URL is cleaned
+up by the next command that writes to it — a gather, an install or an
+uninstall, or an `add`, `edit`, `rename` or `remove` in a project it manages.
+The token is taken out of `mindflayer.db` and out of the clone in
+`cache/`, and the command says so once, on stderr, without failing because of
+it:
+
+```
+$ flayer install -p collapse deploy
+installed deploy into collapse, from https://github.com/acme/private-skills
+note: https://github.com/acme/private-skills: the user name, password or token an older Mindflayer stored in this URL is taken out; gathering it again needs a git credential helper that has it
+note: 2 action log entries: the user names, passwords or tokens an older Mindflayer stored in URLs in them are taken out
+```
+
+The install screen does it when you apply what you marked, not when it opens.
+A command that only reads, such as `flayer gather list`, shows the URL without
+the token and leaves the file as it is.
+
 ### What a workspace keeps
 
 ```
 .mindflayer/
   flayer.toml     the projects it manages, and the workspaces it loads
   mindflayer.db   what was gathered and from where, what was installed where,
-                  and every action taken
+                  and every action taken; a URL goes in without credentials,
+                  and one an older Mindflayer stored is taken out by the next
+                  command that writes
   cache/<source>/ the clone, kept so a gather can be looked at afterwards
   skills/<source>/<name>/SKILL.md
   templates/      templates for every project it manages, if you add any
@@ -374,6 +424,8 @@ server accepts one, or whether to trust a host it has not seen before.
 `mindflayer.db` is SQLite, and it is the one thing Mindflayer writes that is
 not meant to be read by hand — it answers questions a file cannot, like which
 of two identically named skills came from which repository, at which revision.
+The first gather, install or uninstall makes it; a command that only reads
+never does.
 Timestamps are Unix seconds, so `datetime(at, 'unixepoch')` renders them:
 
 ```sql
@@ -438,6 +490,23 @@ and says so. `--from` takes `workspace`, a shelf source's URL, or a loaded works
 or name, and is only
 needed when two places offer the same name — which of the two lands in the
 project's one folder of that name is not something to guess.
+
+### Built out of sight
+
+An install never writes beside the copy it replaces, where an agent reading the
+skills folder would find it. It builds the copy in `.mind/tmp`, a folder that
+ignores itself, and moves it into place once it is whole, so the skills folder
+holds the old copy, the new one or, for the instant between two renames of an
+update, neither, and never part of either. Two installs at once each build in a
+folder of their own there. One that is stopped halfway leaves its work there
+too, and the next install clears it and says so, as it does the hidden
+`.<name>.mindflayer-new` an older version left beside a skill:
+
+```
+$ mind install commit-style
+installed commit-style into alpha, from workspace
+  cleared .mind/tmp/1901387-eb475fb4b6b73a14, left by an install that did not finish
+```
 
 ## Loading another workspace
 
@@ -576,12 +645,13 @@ created skill deploy at /home/you/Projects/tanukeys/skills/deploy/SKILL.md
 
 Opened where there is no workspace and no default one either (`--home ""`), it
 offers to create one there, then goes straight to linking; with a default, it
-opens that one and says so. The link form lists what `flayer scan` finds under the
-workspace — mind projects, and git repositories that are not one yet — and
-picking a repository asks before running `mind init` in it, because that
-writes into it. A project whose directory has gone is listed with a `!`, where
-`u` drops it; an artifact `validate` would reject is marked `✗`, with the
-reason underneath.
+opens that one and says so — empty, and marked not made yet, until the first
+change you make from it, which runs `flayer init` there first. The link form
+lists what `flayer scan` finds under the workspace — mind projects, and git
+repositories that are not one yet — and picking a repository asks before
+running `mind init` in it, because that writes into it. A project whose
+directory has gone is listed with a `!`, where `u` drops it; an artifact
+`validate` would reject is marked `✗`, with the reason underneath.
 
 ## Where a project keeps its artifacts
 
@@ -674,7 +744,7 @@ metadata:
 Use `<area>: <imperative summary>`, imperative and in English.
 ```
 
-A rule is simpler, because it declares nothing at all. `rules/git/no-force-push.md`:
+A rule is simpler, because it usually declares nothing at all. `rules/git/no-force-push.md`:
 
 ```markdown
 # Never force-push a shared branch
@@ -687,6 +757,56 @@ opening line, which is why leading with a heading or a one-line summary is
 worth doing. Every name, declared or derived, is checked segment by segment:
 lowercase letters and digits joined by single hyphens, each segment at most 64
 characters.
+
+A rule may open with front matter, as Claude Code's rules do to say which files
+they are about. `rules/api/errors.md`:
+
+```markdown
+---
+description: How errors leave the API layer
+paths:
+  - "src/api/**/*.{ts,tsx}"
+---
+
+# Return errors as values
+
+Never throw across a handler boundary; return a `Result`.
+```
+
+| Key | | Rule |
+|---|---|---|
+| `paths` | optional | glob patterns, as a list or one on its own; quote a pattern that opens with `*`, which YAML reads as an alias |
+| `description` | optional | a string |
+
+The fences only open front matter when what they hold is a YAML mapping, so a
+rule that opens with a `---` horizontal rule and a plain sentence reads as it
+always did. A line shaped like `key: value` is a mapping, though, even when it
+is prose such as `Note: ...`, so it is front matter and left out of what an
+agent is given. Front matter that does not parse — prose opening with `**`
+does not either — is read as content, fences and all, and `validate` warns
+about it. It warns too about a `paths` or a `description` it cannot read,
+which is ignored and left in the file; any other key passes through untouched.
+Listings show the opening line below the front matter, and `show` prints what
+it declares above that:
+
+```
+$ mind list rules
+api/errors         Return errors as values
+git/no-force-push  Never force-push a shared branch
+
+$ mind show api/errors
+api/errors
+/home/you/Projects/collapse/rules/api/errors.md
+
+How errors leave the API layer
+
+paths:
+  - src/api/**/*.{ts,tsx}
+
+# Return errors as values
+
+Never throw across a handler boundary; return a `Result`.
+```
 
 ### Creating one
 
@@ -721,9 +841,14 @@ is available and where each comes from; of two with one name, the closer wins.
 `flayer add -p` finds the workspace's wherever the project sits; `mind add`
 finds those of the workspace above the project, or else the one in your home.
 
-A template is copied whole. In its manifest, `name` and `description` are set by
-`mind add`, whatever the template had for them, and `{{name}}` and
+A template is copied whole. In a skill's manifest, `name` and `description` are
+set by `mind add`, whatever the template had for them, and `{{name}}` and
 `{{description}}` in the body are filled in. Other files are copied as they are.
+A rule template is filled in throughout, front matter included, and a
+`description` its front matter declares is set by `mind add` in the same way.
+One without `{{description}}` gets the description as a heading on top of its
+body, below any front matter, which stays front matter. Front matter that
+`validate` would warn about is refused, and nothing is written.
 
 ### Changing one
 
@@ -767,11 +892,15 @@ Every unit of the product is an app under `apps/`, so adding a front end means
 adding a directory rather than reshaping the tree:
 
 ```
-apps/core   mindflayer-core — projects, workspaces, artifacts.
-                              No I/O beyond files, and git when gathering.
-apps/cli    mindflayer-cli  — the `mind` and `flayer` binaries, and the TUI.
-                              Parsing and rendering only; all of it goes
-                              through one parser.
+apps/core    mindflayer-core   — projects, workspaces, artifacts.
+                                 No I/O beyond files, and git when gathering.
+apps/cli     mindflayer-cli    — the `mind` and `flayer` binaries, and the TUI.
+                                 Parsing and rendering only; all of it goes
+                                 through one parser.
+apps/server  mindflayer-server — the local server behind the web panel, still
+                                 unused by the binaries. Transport only: it
+                                 moves JSON between the browser and a front
+                                 end, and holds no rules.
 ```
 
 See [docs/architecture.md](docs/architecture.md) for why the split is where it
@@ -800,7 +929,8 @@ surface, with what they share in `tests/common/`, and a module's unit tests in
 `src/<module>_test.rs` beside it. No test touches your home: the CLI suites
 run every command with `--home ""`. Nor do they touch your agents' folders,
 which no command reads yet, and the commands they run themselves give every
-agent-home option empty.
+agent-home option empty. The server's suites never leave 127.0.0.1, and run
+against a fake front end rather than the CLI.
 
 ```bash
 cargo test -p mindflayer-cli --test tui_test          # one area

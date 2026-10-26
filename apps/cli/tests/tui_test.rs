@@ -648,6 +648,30 @@ fn the_working_boxes_are_drawn_on_a_terminal_narrower_than_they_are() {
 }
 
 #[test]
+fn a_gather_refused_for_a_token_in_its_url_shows_the_token_neither_while_it_runs_nor_after() {
+    let dir = TempDir::new().unwrap();
+    flayer(dir.path(), &["init"]).unwrap();
+    let mut app = tui_in(dir.path());
+
+    press_key(&mut app, KeyCode::Char('g'));
+    type_text(&mut app, "https://me:ghp_t0ken@example.com/acme/skills");
+    let task = press_and_run(&mut app, KeyCode::Enter).unwrap();
+
+    // What the box drawn over the screen says while it runs.
+    assert_eq!(
+        task.describe(),
+        "flayer gather git https://example.com/acme/skills"
+    );
+    let transcript = app.transcript();
+    assert!(
+        transcript.starts_with("$ flayer gather git https://example.com/acme/skills\n"),
+        "{transcript}"
+    );
+    assert!(transcript.contains("is refused"), "{transcript}");
+    assert!(!transcript.contains("ghp_t0ken"), "{transcript}");
+}
+
+#[test]
 fn the_install_screen_opens_inside_the_tui_and_applies_from_there() {
     let (dir, _workspace, _ledger) = shelved(&["collapse"], &["deploy"]);
     let mut app = tui_in(dir.path());
@@ -673,6 +697,52 @@ fn the_install_screen_opens_inside_the_tui_and_applies_from_there() {
     assert!(app
         .transcript()
         .contains("$ flayer install\ncollapse: installed deploy"));
+}
+
+#[test]
+fn the_install_screen_scrubs_the_ledger_when_it_applies_and_not_when_it_opens() {
+    let (dir, workspace, _ledger) = shelved(&["collapse"], &["deploy"]);
+    let database = rusqlite::Connection::open(workspace.ledger_path()).unwrap();
+    database
+        .execute(
+            "UPDATE sources SET url = 'https://me:ghp_t0ken@example.com/acme/skills'",
+            [],
+        )
+        .unwrap();
+    let stored = || -> String {
+        database
+            .query_row("SELECT url FROM sources", [], |row| row.get(0))
+            .unwrap()
+    };
+    let mut app = tui_in(dir.path());
+
+    // Opened and left: a read, which writes nothing and so has nothing to say.
+    press_and_run(&mut app, KeyCode::Char('i'));
+    assert!(matches!(app.mode, Mode::Installing(_)), "{:?}", app.mode);
+    press_key(&mut app, KeyCode::Char('q'));
+    assert_eq!(app.transcript(), "");
+    assert!(stored().contains("ghp_t0ken"));
+
+    press_and_run(&mut app, KeyCode::Char('i'));
+    press_key(&mut app, KeyCode::Right);
+    press_key(&mut app, KeyCode::Char(' '));
+    press_key(&mut app, KeyCode::Char('a'));
+    press_and_run(&mut app, KeyCode::Char('y'));
+
+    let transcript = app.transcript();
+    assert!(
+        transcript.starts_with("$ flayer install\ncollapse: installed deploy\n"),
+        "{transcript}"
+    );
+    assert!(
+        transcript.contains(
+            "note: https://example.com/acme/skills: the user name, password or token an older \
+             Mindflayer stored in this URL is taken out"
+        ),
+        "{transcript}"
+    );
+    assert!(!transcript.contains("ghp_t0ken"), "{transcript}");
+    assert_eq!(stored(), "https://example.com/acme/skills");
 }
 
 #[test]
@@ -992,6 +1062,211 @@ fn mind_calls_the_workspace_in_your_home_the_default_only_when_it_is_not_above()
     // Above `near`, the walk up finds it as it would any other workspace.
     assert!(default(&far));
     assert!(!default(&near));
+}
+
+/// The TUI `flayer` opens in `dir`, with nothing above it, where the default
+/// workspace lives in `home`.
+fn tui_at_home(dir: &Path, home: &Path) -> App {
+    App::new(dir.to_path_buf(), tui::load(dir, Some(home)).unwrap()).at_home(Some(home))
+}
+
+#[test]
+fn with_the_default_workspace_not_made_the_tui_opens_on_it_empty() {
+    let home = TempDir::new().unwrap();
+    let elsewhere = TempDir::new().unwrap();
+
+    let app = tui_at_home(elsewhere.path(), home.path());
+
+    let drawn = tui_drawn(&app);
+    assert!(drawn.contains("default workspace, not made yet"), "{drawn}");
+    assert!(drawn.contains("nothing on the shelf"), "{drawn}");
+    assert!(drawn.contains("Projects (0)"), "{drawn}");
+    assert!(drawn.contains("nothing here yet"), "{drawn}");
+    assert!(app
+        .message
+        .as_ref()
+        .is_some_and(|message| message.text.contains("is made by the first change")));
+    assert!(!home.path().join(FLAYER_DIR).exists());
+}
+
+#[test]
+fn reading_from_the_tui_leaves_the_default_workspace_unmade() {
+    let home = TempDir::new().unwrap();
+    let elsewhere = TempDir::new().unwrap();
+    let mut app = tui_at_home(elsewhere.path(), home.path());
+
+    assert_eq!(
+        press_and_run(&mut app, KeyCode::Char('s')),
+        Some(Task::Shelf)
+    );
+    press_key(&mut app, KeyCode::Esc);
+    press_and_run(&mut app, KeyCode::Char('v'));
+    press_key(&mut app, KeyCode::Esc);
+    assert_eq!(
+        press_and_run(&mut app, KeyCode::Char('i')),
+        Some(Task::OpenInstall)
+    );
+
+    assert_eq!(
+        app.message.as_ref().map(|message| message.text.as_str()),
+        Some("no projects to install into yet — l links one")
+    );
+    assert!(!home.path().join(FLAYER_DIR).exists());
+    assert_eq!(app.transcript(), "");
+}
+
+#[test]
+fn the_minds_screen_lists_what_is_under_the_default_workspace_before_it_is_made() {
+    let home = TempDir::new().unwrap();
+    let elsewhere = TempDir::new().unwrap();
+    let alpha = home.path().join("alpha");
+    fs::create_dir(&alpha).unwrap();
+    mind(&alpha, &["init"]).unwrap();
+    let mut app = tui_at_home(elsewhere.path(), home.path());
+
+    press_key(&mut app, KeyCode::Char('m'));
+
+    assert!(matches!(app.mode, Mode::Minds(_)), "{:?}", app.mode);
+    assert!(tui_drawn(&app).contains("alpha"));
+    assert!(!home.path().join(FLAYER_DIR).exists());
+}
+
+/// The paths the minds screen lists, in its order.
+fn minds_rows(app: &App) -> Vec<&str> {
+    let Mode::Minds(screen) = &app.mode else {
+        panic!("{:?}", app.mode)
+    };
+    screen.rows.iter().map(|row| row.path.as_str()).collect()
+}
+
+/// A home whose default workspace is not made yet, sitting inside a
+/// workspace that is: `workspace_with_two`, with `h/gamma`, a mind project,
+/// under it, and `h` the home.
+fn home_inside_a_workspace() -> (TempDir, PathBuf) {
+    let outer = workspace_with_two();
+    let home = outer.path().join("h");
+    let gamma = home.join("gamma");
+    fs::create_dir_all(&gamma).unwrap();
+    mind(&gamma, &["init"]).unwrap();
+    (outer, home)
+}
+
+#[test]
+fn flayer_minds_opens_on_the_default_workspace_without_making_it() {
+    let home = TempDir::new().unwrap();
+    let elsewhere = TempDir::new().unwrap();
+    let alpha = home.path().join("alpha");
+    fs::create_dir(&alpha).unwrap();
+    mind(&alpha, &["init"]).unwrap();
+
+    let app = tui::minds(elsewhere.path(), Some(home.path())).unwrap();
+
+    assert_eq!(minds_rows(&app), vec!["alpha"]);
+    assert!(!home.path().join(FLAYER_DIR).exists());
+}
+
+#[test]
+fn flayer_minds_with_no_workspace_and_no_default_says_so() {
+    let elsewhere = TempDir::new().unwrap();
+
+    let error = tui::minds(elsewhere.path(), None).unwrap_err();
+
+    assert!(matches!(error, CliError::NotInWorkspace(_)), "{error}");
+}
+
+#[test]
+fn flayer_minds_opens_on_the_default_workspace_not_on_one_above_its_home() {
+    let (_outer, home) = home_inside_a_workspace();
+    let elsewhere = TempDir::new().unwrap();
+
+    let app = tui::minds(elsewhere.path(), Some(&home)).unwrap();
+
+    // Not `alpha`, `beta` and `h/gamma`: those are the workspace above.
+    assert_eq!(minds_rows(&app), vec!["gamma"]);
+    assert_eq!(app.base(), home);
+    assert!(!home.join(FLAYER_DIR).exists());
+}
+
+#[test]
+fn the_install_screen_opens_on_the_default_workspace_not_on_one_above_its_home() {
+    let (_outer, home) = home_inside_a_workspace();
+    let elsewhere = TempDir::new().unwrap();
+    let mut app = tui_at_home(elsewhere.path(), &home);
+
+    press_and_run(&mut app, KeyCode::Char('i'));
+
+    // The workspace above has `alpha` and `beta` to install into; the one on
+    // screen has nothing yet.
+    assert!(!matches!(app.mode, Mode::Installing(_)), "{:?}", app.mode);
+    assert_eq!(
+        app.message.as_ref().map(|message| message.text.as_str()),
+        Some("no projects to install into yet — l links one")
+    );
+    assert!(!home.join(FLAYER_DIR).exists());
+}
+
+#[test]
+fn the_first_change_from_the_tui_makes_the_default_workspace() {
+    let home = TempDir::new().unwrap();
+    let elsewhere = TempDir::new().unwrap();
+    let alpha = home.path().join("alpha");
+    fs::create_dir(&alpha).unwrap();
+    mind(&alpha, &["init"]).unwrap();
+    let mut app = tui_at_home(elsewhere.path(), home.path());
+
+    press_key(&mut app, KeyCode::Char('l'));
+    let task = press_and_run(&mut app, KeyCode::Enter);
+
+    assert_eq!(
+        task,
+        Some(Task::Link {
+            path: String::from("alpha")
+        })
+    );
+    assert!(registry(home.path()).contains("\"alpha\""));
+    let View::Workspace(workspace) = &app.view else {
+        panic!("{:?}", app.view)
+    };
+    assert!(workspace.made);
+    assert!(workspace.default);
+    let drawn = tui_drawn(&app);
+    assert!(drawn.contains("default workspace · "), "{drawn}");
+    // Made by a line of its own, where the screen showed it.
+    assert_eq!(
+        app.transcript(),
+        format!(
+            "$ flayer init\ninitialized flayer workspace `{}` in {}\n\
+             $ flayer link alpha\nlinked alpha as alpha\n",
+            home.path().file_name().unwrap().to_string_lossy(),
+            home.path().join(FLAYER_DIR).display()
+        )
+    );
+}
+
+#[test]
+fn the_first_change_from_the_tui_lands_in_the_default_workspace_not_in_one_above_its_home() {
+    let (outer, home) = home_inside_a_workspace();
+    let before = registry(outer.path());
+    let elsewhere = TempDir::new().unwrap();
+    let mut app = tui_at_home(elsewhere.path(), &home);
+
+    press_key(&mut app, KeyCode::Char('l'));
+    let task = press_and_run(&mut app, KeyCode::Enter);
+
+    assert_eq!(
+        task,
+        Some(Task::Link {
+            path: String::from("gamma")
+        })
+    );
+    assert!(registry(&home).contains("\"gamma\""));
+    assert_eq!(registry(outer.path()), before);
+    let View::Workspace(workspace) = &app.view else {
+        panic!("{:?}", app.view)
+    };
+    assert!(workspace.made);
+    assert!(workspace.default);
+    assert_eq!(workspace.root, home);
 }
 
 #[test]

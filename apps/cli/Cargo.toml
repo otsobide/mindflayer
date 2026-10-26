@@ -38,4 +38,8 @@ ratatui = "0.30.2"
 [dev-dependencies]
 gix = { version = "0.87", default-features = false }
 mindflayer-core = { path = "../core" }
+# To leave in a workspace's database what an older Mindflayer would have, which
+# nothing this one writes can, for the suites that check it is scrubbed. The
+# same version and features as core's, so it is one build of SQLite.
+rusqlite = { version = "0.40", default-features = false, features = ["bundled"] }
 tempfile = "3"

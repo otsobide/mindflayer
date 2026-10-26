@@ -13,6 +13,7 @@ use std::sync::mpsc::{Receiver, TryRecvError};
 use std::sync::Arc;
 
 use mindflayer_core::gather::{Progress, Watch};
+use mindflayer_core::url::redacted;
 use mindflayer_core::{paths, Kind, Layout, DEFAULT_SUBDIRECTORY, QUALIFIER};
 use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
@@ -69,6 +70,10 @@ pub struct Workspace {
     /// The default workspace in the home directory, opened because there was
     /// none at or above where the TUI was opened.
     pub default: bool,
+    /// Whether it is on disk. Only the default workspace is ever shown
+    /// otherwise: before anything has made it, as it will be once the first
+    /// change made from here does.
+    pub made: bool,
 }
 
 impl Workspace {
@@ -489,13 +494,20 @@ fn directory(path: &str) -> String {
     }
 }
 
-/// A command line as it would be typed into a shell.
+/// A command line as it would be typed into a shell, for showing.
+///
+/// Without the credentials of any URL in it, here rather than where it is
+/// shown, because it is shown in more than one place: the box that says what
+/// is running, and the transcript printed when the TUI closes. The words run
+/// as typed, so a URL with a token in it is refused rather than fetched
+/// without one; only the line that names them leaves it out.
 pub fn shell(words: &[String]) -> String {
-    words
+    let line = words
         .iter()
         .map(|word| quote(word))
         .collect::<Vec<_>>()
-        .join(" ")
+        .join(" ");
+    redacted(&line).into_owned()
 }
 
 /// A word, quoted only when a shell would otherwise split or expand it.
@@ -816,6 +828,10 @@ impl App {
         let first = workspace.members.iter().position(|member| !member.own);
         let lonely = workspace.scope == Scope::Workspace && workspace.projects() == 0;
         let message = match (&workspace.above, workspace.scope) {
+            _ if workspace.default && !workspace.made => Some(format!(
+                "no workspace here or above — your default one, in {}, is made by the first change; `flayer init` makes one here",
+                workspace.root.display()
+            )),
             _ if workspace.default => Some(format!(
                 "no workspace here or above — this is your default one, in {}; `flayer init` makes one here",
                 workspace.root.display()
@@ -894,6 +910,25 @@ impl App {
     pub fn base(&self) -> &Path {
         self.workspace()
             .map_or(self.directory.as_path(), |workspace| &workspace.root)
+    }
+
+    /// The command lines a task runs from [`base`](Self::base): its
+    /// [`commands`](Task::commands), after a `flayer init` when it changes
+    /// the default workspace before anything has made it.
+    ///
+    /// Made by a line of its own rather than left to the change, which would
+    /// make it as well from the shell. The lines run from the workspace root
+    /// and walk up from there like any command, and before it is made there
+    /// is no marker at the root to stop them: with a workspace above home,
+    /// the change would land in that one. `flayer init` makes the workspace
+    /// where it is run, and the transcript says so.
+    pub fn lines(&self, task: &Task) -> Vec<Vec<String>> {
+        let mut lines = task.commands();
+        let unmade = self.workspace().is_some_and(|workspace| !workspace.made);
+        if unmade && task.writes() && !lines.is_empty() {
+            lines.insert(0, words(&["flayer", "init"], &[]));
+        }
+        lines
     }
 
     /// Every command that changed something, as a shell session would show

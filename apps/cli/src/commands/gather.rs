@@ -4,10 +4,11 @@
 use std::fmt::Write as _;
 use std::path::Path;
 
-use mindflayer_core::gather::{self, Report, Request, Watch};
-use mindflayer_core::Kind;
+use mindflayer_core::gather::{self, Report, Request, Scrub, Watch};
+use mindflayer_core::url::redacted;
+use mindflayer_core::{FlayerWorkspace, Kind};
 
-use super::workspace_here;
+use super::{reading_workspace, workspace_here};
 use crate::render::{indent, plural, printable, table};
 use crate::{CliError, Failure, GatherCommand, Outcome};
 
@@ -22,60 +23,149 @@ pub(crate) fn run_gather(
     home: Option<&Path>,
     watch: &Watch,
 ) -> Result<Outcome, Failure> {
-    let workspace = workspace_here(directory, home)?;
-    let ledger = workspace.ledger().map_err(CliError::from)?;
-
     match command {
         GatherCommand::Git {
             url,
             path,
             reference,
         } => {
+            let workspace = workspace_here(directory, home)?;
+            let (ledger, scrub) = workspace.ledger_to_write().map_err(CliError::from)?;
+            let said = scrubbed(&scrub);
             let request = Request::git(url.clone())
                 .from_subdirectory(path.clone())
                 .at(reference.clone())
                 .watched_by(watch.clone());
-            let report = gather::gather(&workspace, &ledger, &request).map_err(CliError::from)?;
-            Ok(gathered(url, &report))
-        }
-        GatherCommand::List => {
-            use mindflayer_core::install::{offered_by_loads, Offer};
-            // What the workspaces it loads offer first, as the install screen
-            // orders them; what they cannot offer is a warning beside the
-            // rest, not a reason to show nothing.
-            let loads = offered_by_loads(&workspace);
-            let stderr: Vec<String> = loads
-                .failures
-                .iter()
-                .map(|failure| format!("warning: {failure}"))
-                .collect();
-            let mut offers: Vec<Offer> = loads.offers;
-            let mut stderr = stderr;
-            for gathered in ledger.gathered().map_err(CliError::from)? {
-                // Listed only if it could be installed: a name that is not one
-                // folder name never can be, wherever it came from.
-                if mindflayer_core::install::is_folder_name(&gathered.name) {
-                    offers.push(Offer::Shelf(gathered));
-                } else {
-                    stderr.push(format!(
-                        "warning: {}: declares the name `{}`, which is not one folder name, so it is not offered",
-                        gathered.path, gathered.name
-                    ));
-                }
+            match gather::gather(&workspace, &ledger, &request) {
+                Ok(report) => Ok(said.before(gathered(url, &report))),
+                Err(error) => Err(Failure {
+                    error: Box::new(error.into()),
+                    warnings: said.lines(),
+                }),
             }
-            let ok = stderr.is_empty();
-            Ok(Outcome {
-                stdout: shelf_listing(&offers, workspace.loads().is_empty()),
-                stderr,
-                ok,
-            })
         }
+        GatherCommand::List => reading_workspace(directory, home, shelf),
+    }
+}
+
+/// `flayer gather list`: what can be installed from elsewhere, from a
+/// ledger read without being made — a workspace that has gathered nothing
+/// has no database, and listing that is no reason to create one.
+fn shelf(workspace: &FlayerWorkspace) -> Result<Outcome, Failure> {
+    use mindflayer_core::install::{offered_by_loads, Offer};
+    let ledger = workspace.ledger_for_reading().map_err(CliError::from)?;
+    // What the workspaces it loads offer first, as the install screen
+    // orders them; what they cannot offer is a warning beside the rest, not
+    // a reason to show nothing.
+    let loads = offered_by_loads(workspace);
+    let stderr: Vec<String> = loads
+        .failures
+        .iter()
+        .map(|failure| format!("warning: {failure}"))
+        .collect();
+    let mut offers: Vec<Offer> = loads.offers;
+    let mut stderr = stderr;
+    for gathered in ledger.gathered().map_err(CliError::from)? {
+        // Listed only if it could be installed: a name that is not one folder
+        // name never can be, wherever it came from.
+        if mindflayer_core::install::is_folder_name(&gathered.name) {
+            offers.push(Offer::Shelf(gathered));
+        } else {
+            stderr.push(format!(
+                "warning: {}: declares the name `{}`, which is not one folder name, so it is not offered",
+                gathered.path, gathered.name
+            ));
+        }
+    }
+    let ok = stderr.is_empty();
+    Ok(Outcome {
+        stdout: shelf_listing(&offers, workspace.loads().is_empty()),
+        stderr,
+        ok,
+    })
+}
+
+/// What a scrub of the ledger has to tell, for a command that writes to it.
+///
+/// Notes rather than warnings, for what it took out: the command did what it
+/// was asked, and an exit code that failed once because of a fix would be a
+/// script broken by nothing it did. What it could not take out is a warning,
+/// since the credential is still on disk.
+#[derive(Debug, Default, Clone)]
+pub(crate) struct Scrubbed {
+    notes: Vec<String>,
+    warnings: Vec<String>,
+}
+
+impl Scrubbed {
+    /// Every line, notes first, for a command that stopped before it had
+    /// anything else to say: the scrub happened all the same, and says so
+    /// only this once.
+    pub(crate) fn lines(self) -> Vec<String> {
+        let mut lines = self.notes;
+        lines.extend(self.warnings);
+        lines
+    }
+
+    /// Put in front of what the command went on to say.
+    pub(crate) fn before(self, mut outcome: Outcome) -> Outcome {
+        outcome.ok = outcome.ok && self.warnings.is_empty();
+        outcome.stderr.splice(0..0, self.lines());
+        outcome
+    }
+}
+
+/// What the scrub that opening the ledger to write runs took out
+/// ([`mindflayer_core::FlayerWorkspace::ledger_to_write`]), said the way a
+/// person can act on: every source it scrubbed now needs its credential from
+/// a git credential helper.
+pub(crate) fn scrubbed(scrub: &Scrub) -> Scrubbed {
+    let mut notes: Vec<String> = scrub
+        .sources
+        .iter()
+        .map(|source| {
+            format!(
+                "note: {}: the user name, password or token an older Mindflayer stored in this \
+                 URL is taken out; gathering it again needs a git credential helper that has it",
+                source.url
+            )
+        })
+        .collect();
+    match scrub.actions {
+        0 => {}
+        1 => notes.push(String::from(
+            "note: 1 action log entry: the user name, password or token an older Mindflayer \
+             stored in a URL in it is taken out",
+        )),
+        entries => notes.push(format!(
+            "note: {entries} action log entries: the user names, passwords or tokens an older \
+             Mindflayer stored in URLs in them are taken out"
+        )),
+    }
+    Scrubbed {
+        notes,
+        warnings: scrub
+            .failures
+            .iter()
+            .map(|failure| format!("warning: {failure}"))
+            .chain(
+                scrub
+                    .leftovers
+                    .iter()
+                    .map(|leftover| format!("warning: {leftover}")),
+            )
+            .collect(),
     }
 }
 
 /// What one gather did, in the order it is worth reading: the source, then
 /// every artifact and what happened to it, then the count.
+///
+/// The source is named without credentials, as everywhere a URL is shown.
+/// A gather that got this far was given none, since core refuses them, so
+/// this costs nothing today and still holds if that ever changes.
 fn gathered(url: &str, report: &Report) -> Outcome {
+    let url = redacted(url);
     let mut stdout = String::new();
     let at = report
         .revision

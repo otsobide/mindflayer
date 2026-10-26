@@ -221,6 +221,18 @@ fn an_empty_shelf_says_how_to_fill_it() {
 }
 
 #[test]
+fn listing_a_shelf_that_has_no_ledger_makes_none() {
+    let dir = TempDir::new().unwrap();
+    flayer(dir.path(), &["init"]).unwrap();
+    let ledger = dir.path().join(FLAYER_DIR).join("mindflayer.db");
+
+    let outcome = flayer(dir.path(), &["gather", "list"]).unwrap();
+
+    assert!(outcome.stdout.starts_with("nothing gathered yet"));
+    assert!(!ledger.exists());
+}
+
+#[test]
 fn gathering_outside_a_workspace_says_what_to_run() {
     let dir = TempDir::new().unwrap();
 
@@ -322,5 +334,159 @@ fn a_cancelled_gather_says_so_and_leaves_the_shelf_as_it_was() {
         shelf.stdout.starts_with("nothing gathered yet"),
         "{}",
         shelf.stdout
+    );
+}
+
+// ---------------------------------------------------------------------------
+// credentials an older build stored
+// ---------------------------------------------------------------------------
+
+/// Leave in the workspace at `dir` what a Mindflayer from before the refusal
+/// left after gathering its one source from `url`: the URL in the source, in
+/// the log, and in the clone's config and reflog.
+fn left_by_an_older_build(dir: &Path, url: &str) {
+    let workspace = FlayerWorkspace::open(dir).unwrap();
+    let database = rusqlite::Connection::open(workspace.ledger_path()).unwrap();
+    database
+        .execute("UPDATE sources SET url = ?1", [url])
+        .unwrap();
+    database
+        .execute(
+            "INSERT INTO actions (at, action, target, outcome, detail)
+             VALUES (0, 'gather', ?1, 'ok', '1 added, 0 updated, 0 unchanged, 0 failed')",
+            [url],
+        )
+        .unwrap();
+
+    for clone in fs::read_dir(workspace.cache_dir()).unwrap() {
+        let git = clone.unwrap().path().join(".git");
+        let config: String = fs::read_to_string(git.join("config"))
+            .unwrap()
+            .lines()
+            .map(|line| match line.trim_start().strip_prefix("url = ") {
+                Some(_) => format!("\turl = {url}\n"),
+                None => format!("{line}\n"),
+            })
+            .collect();
+        fs::write(git.join("config"), config).unwrap();
+        let mut reflog = fs::read_to_string(git.join("logs").join("HEAD")).unwrap();
+        reflog.push_str(&format!(
+            "0000 1111 Fixture <fixture@example.com> 0 +0000\tclone: from {url}\n"
+        ));
+        fs::write(git.join("logs").join("HEAD"), reflog).unwrap();
+    }
+}
+
+/// Everything the workspace at `dir` keeps that could hold a URL: its
+/// database, byte for byte, and every text file in its cache.
+fn kept_by(dir: &Path) -> String {
+    fn text_under(root: &Path, into: &mut String) {
+        // No cache yet is nothing kept in one.
+        let Ok(entries) = fs::read_dir(root) else {
+            return;
+        };
+        for entry in entries {
+            let path = entry.unwrap().path();
+            if path.is_dir() {
+                text_under(&path, into);
+            } else if let Ok(text) = fs::read_to_string(&path) {
+                into.push_str(&text);
+            }
+        }
+    }
+    let workspace = FlayerWorkspace::open(dir).unwrap();
+    let mut kept =
+        String::from_utf8_lossy(&fs::read(workspace.ledger_path()).unwrap()).into_owned();
+    text_under(&workspace.cache_dir(), &mut kept);
+    kept
+}
+
+#[test]
+fn a_token_an_older_build_stored_is_never_listed_and_a_command_that_writes_takes_it_out_once() {
+    let first = repository(&[("skills/deploy/SKILL.md", &skill_file("deploy", "Ship it"))]);
+    let second = repository(&[(
+        "skills/review/SKILL.md",
+        &skill_file("review", "Look again"),
+    )]);
+    let dir = TempDir::new().unwrap();
+    flayer(dir.path(), &["init"]).unwrap();
+    flayer(
+        dir.path(),
+        &["gather", "git", &first.path().to_string_lossy()],
+    )
+    .unwrap();
+    left_by_an_older_build(dir.path(), "https://me:ghp_t0ken@example.com/acme/skills");
+
+    // Listing reads, so it rewrites nothing, and it shows nothing it should
+    // not.
+    let listed = flayer(dir.path(), &["gather", "list"]).unwrap();
+    assert_eq!(
+        listed.stdout,
+        "deploy  https://example.com/acme/skills  Ship it\n"
+    );
+    assert!(listed.stderr.is_empty(), "{:?}", listed.stderr);
+    assert!(kept_by(dir.path()).contains("ghp_t0ken"));
+
+    // The next command that writes takes it out of the ledger and the clone,
+    // and says so.
+    let second = second.path().to_string_lossy().into_owned();
+    let gathered = flayer(dir.path(), &["gather", "git", &second]).unwrap();
+    assert!(gathered.ok, "{:?}", gathered.stderr);
+    assert_eq!(
+        gathered.stderr,
+        [
+            "note: https://example.com/acme/skills: the user name, password or token an older \
+             Mindflayer stored in this URL is taken out; gathering it again needs a git \
+             credential helper that has it",
+            "note: 1 action log entry: the user name, password or token an older Mindflayer \
+             stored in a URL in it is taken out",
+        ]
+    );
+    assert!(!kept_by(dir.path()).contains("ghp_t0ken"));
+    // Compared word by word: the second source is a temp dir, whose length
+    // (long on macOS and Windows) sets how wide the URL column is padded.
+    let listed = flayer(dir.path(), &["gather", "list"]).unwrap();
+    assert!(
+        listed.stdout.lines().any(|line| {
+            line.split_whitespace().collect::<Vec<_>>()
+                == ["deploy", "https://example.com/acme/skills", "Ship", "it"]
+        }),
+        "{}",
+        listed.stdout
+    );
+
+    // Said once: there is nothing left to say the second time.
+    let again = flayer(dir.path(), &["gather", "git", &second]).unwrap();
+    assert!(again.stderr.is_empty(), "{:?}", again.stderr);
+}
+
+#[test]
+fn a_url_with_a_token_in_it_is_refused_and_nothing_kept_or_said_repeats_the_token() {
+    let dir = TempDir::new().unwrap();
+    flayer(dir.path(), &["init"]).unwrap();
+
+    let failure = flayer(
+        dir.path(),
+        &[
+            "gather",
+            "git",
+            "https://me:ghp_t0ken@example.com/acme/skills",
+        ],
+    )
+    .unwrap_err();
+
+    assert_eq!(
+        failure.error.to_string(),
+        "https://example.com/acme/skills: a password, a token or, over http(s), a user name in \
+         the URL is refused, because gathering stores and shows the URL: gather it without one, \
+         and configure a git credential helper that has it"
+    );
+    assert!(failure.warnings.is_empty(), "{:?}", failure.warnings);
+    assert!(!kept_by(dir.path()).contains("ghp_t0ken"));
+    let listed = flayer(dir.path(), &["gather", "list"]).unwrap();
+    assert!(
+        listed.stdout.starts_with("nothing gathered yet"),
+        "{}",
+        listed.stdout
     );
 }
