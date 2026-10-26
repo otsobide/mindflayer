@@ -18,9 +18,14 @@ fn templates_round_trip_through_the_parser() {
     assert_eq!(flayer.version, FLAYER_FORMAT_VERSION);
     assert_eq!(flayer.name, "projects");
     assert!(flayer.projects.is_empty());
+    // A workspace's own default is its library, not a project's.
     assert_eq!(
         flayer.directories.get(Kind::Skill),
-        Some(Path::new("skills"))
+        Some(Path::new(".mindflayer/library/skills"))
+    );
+    assert_eq!(
+        flayer.directories.get(Kind::Rule),
+        Some(Path::new(".mindflayer/library/rules"))
     );
 }
 

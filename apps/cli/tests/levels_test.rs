@@ -34,6 +34,44 @@ fn mind_init_creates_a_project_and_flayer_init_a_workspace() {
 }
 
 #[test]
+fn flayer_init_says_in_the_marker_that_its_own_go_in_its_library() {
+    let dir = TempDir::new().unwrap();
+
+    flayer(dir.path(), &["init"]).unwrap();
+
+    let name = dir.path().file_name().unwrap().to_string_lossy();
+    assert_eq!(
+        registry(dir.path()),
+        format!(
+            "# Mindflayer workspace.\n\
+             #\n\
+             # It orchestrates the mind projects listed below, so their skills can be\n\
+             # managed together. Paths are relative to this file's grandparent, the\n\
+             # directory holding .mindflayer.\n\
+             #\n\
+             # `directories` says where the workspace keeps its own skills and rules,\n\
+             # the ones every project it manages can install. By default that is its\n\
+             # library, inside .mindflayer where no agent looks, and a kind not named\n\
+             # here is kept there too. Each folder is made the first time something\n\
+             # is added to it.\n\
+             #\n\
+             # `loaded` lists other flayer workspaces whose own skills its projects\n\
+             # can install too, read from there each time: `flayer load <path>`.\n\
+             version = 2\n\
+             name = \"{name}\"\n\
+             projects = []\n\
+             loaded = []\n\
+             \n\
+             [directories]\n\
+             skills = \".mindflayer/library/skills\"\n\
+             rules = \".mindflayer/library/rules\"\n"
+        )
+    );
+    // Made by the first artifact added, as before.
+    assert!(!dir.path().join(FLAYER_DIR).join("library").exists());
+}
+
+#[test]
 fn flayer_is_a_shortcut_for_mind_flayer() {
     let dir = workspace_with_two();
 
@@ -137,7 +175,9 @@ fn ls_is_an_alias_at_both_levels() {
 fn flayer_add_writes_into_the_workspace_and_listings_name_it_so() {
     let dir = workspace_with_own();
 
-    assert!(dir.path().join("skills/commit-style/SKILL.md").is_file());
+    assert!(own_directory_for(dir.path(), Kind::Skill)
+        .join("commit-style/SKILL.md")
+        .is_file());
     let listed = flayer(dir.path(), &["list"]).unwrap().stdout;
     assert!(
         listed.contains("workspace  commit-style  How every repo here writes commits"),
@@ -170,6 +210,88 @@ fn a_workspace_can_be_told_where_to_keep_its_own() {
 }
 
 #[test]
+fn a_workspace_that_keeps_its_own_beside_its_projects_still_does() {
+    // The marker as `flayer init` wrote it before the library, word for word.
+    let dir = TempDir::new().unwrap();
+    let marker = "# Mindflayer workspace.\n\
+         #\n\
+         # It orchestrates the mind projects listed below, so their skills can be\n\
+         # managed together. Paths are relative to this file's grandparent, the\n\
+         # directory holding .mindflayer.\n\
+         #\n\
+         # `directories` says where the workspace keeps its own skills and rules:\n\
+         # the ones every project it manages can install, beside the projects'\n\
+         # own. They are made the first time something is added to them.\n\
+         #\n\
+         # `loaded` lists other flayer workspaces whose own skills its projects\n\
+         # can install too, read from there each time: `flayer load <path>`.\n\
+         version = 2\n\
+         name = \"projects\"\n\
+         projects = []\n\
+         loaded = []\n\
+         \n\
+         [directories]\n\
+         skills = \"skills\"\n\
+         rules = \"rules\"\n";
+    fs::create_dir(dir.path().join(FLAYER_DIR)).unwrap();
+    fs::write(dir.path().join(FLAYER_DIR).join(FLAYER_CONFIG), marker).unwrap();
+
+    let skill = flayer(dir.path(), &["add", "skill", "commit-style", "Shared"]).unwrap();
+    let rule = flayer(
+        dir.path(),
+        &["add", "rule", "git/no-force-push", "Never force-push"],
+    )
+    .unwrap();
+    let listed = flayer(dir.path(), &["list"]).unwrap();
+    let renamed = flayer(dir.path(), &["rename", "commit-style", "commits"]).unwrap();
+    flayer(dir.path(), &["remove", "git/no-force-push", "--yes"]).unwrap();
+
+    assert_eq!(
+        created(&skill, "skill commit-style"),
+        dir.path().join("skills/commit-style/SKILL.md")
+    );
+    assert_eq!(
+        created(&rule, "rule git/no-force-push"),
+        dir.path().join("rules/git/no-force-push.md")
+    );
+    assert_eq!(
+        listed.stdout,
+        "skill  commit-style       Shared\nrule   git/no-force-push  Never force-push\n"
+    );
+    assert!(renamed.ok, "{:?}", renamed.stderr);
+    assert!(dir.path().join("skills/commits/SKILL.md").is_file());
+    assert!(!dir.path().join("rules/git/no-force-push.md").exists());
+    assert!(!dir.path().join(FLAYER_DIR).join("library").exists());
+    assert_eq!(
+        registry(dir.path()),
+        marker,
+        "the marker is read, not rewritten"
+    );
+}
+
+#[test]
+fn a_workspace_cannot_keep_its_own_on_the_shelf() {
+    let dir = TempDir::new().unwrap();
+
+    let failure = flayer(dir.path(), &["init", "--skills", ".mindflayer/skills"]).unwrap_err();
+    // A folder holding the shelf overlaps it too, which the words say rather
+    // than leaving a folder nobody typed to explain itself.
+    let holding = flayer(dir.path(), &["init", "--rules", ".mindflayer"]).unwrap_err();
+
+    assert_eq!(
+        failure.error.to_string(),
+        ".mindflayer/skills: cannot hold the workspace's skills, \
+         because it overlaps .mindflayer/skills, which is reserved for gathering"
+    );
+    assert_eq!(
+        holding.error.to_string(),
+        ".mindflayer: cannot hold the workspace's rules, \
+         because it overlaps .mindflayer/skills, which is reserved for gathering"
+    );
+    assert!(!dir.path().join(FLAYER_DIR).exists());
+}
+
+#[test]
 fn every_change_at_the_workspace_level_acts_on_its_own_unless_p_names_a_project() {
     let dir = workspace_with_own();
 
@@ -181,7 +303,9 @@ fn every_change_at_the_workspace_level_acts_on_its_own_unless_p_names_a_project(
     .unwrap();
     flayer(dir.path(), &["remove", "alpha", "-p", "alpha", "--yes"]).unwrap();
 
-    assert!(dir.path().join("skills/commits/SKILL.md").is_file());
+    assert!(own_directory_for(dir.path(), Kind::Skill)
+        .join("commits/SKILL.md")
+        .is_file());
     assert!(dir.path().join("alpha/rules/style.md").is_file());
     assert!(!dir.path().join("alpha/skills/alpha").exists());
     // `-p` at the workspace level is `mind` in that project: the same

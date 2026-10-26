@@ -57,6 +57,15 @@ you manages no projects yet
 hint: no workspace here or above, and the default one is not made yet; the first command that writes to it, such as `flayer link <path>`, makes it in /home/you/.mindflayer
 ```
 
+Made, it puts nothing in your home but `.mindflayer`. Its own skills and rules
+go in its library inside it, where no agent looks, rather than in a `~/skills`
+and `~/rules` above every project you have:
+
+```
+$ flayer add skill commit-style "How every repo here writes commits"
+created skill commit-style at /home/you/.mindflayer/library/skills/commit-style/SKILL.md
+```
+
 `--home DIR`, or `$MINDFLAYER_HOME`, puts the default somewhere other than your
 home; set to empty (`--home ""`) there is no default, and a command outside
 every workspace says so instead.
@@ -358,7 +367,11 @@ https://github.com/acme/skills at a1b2c3d
 ```
 
 The repository's `skills` folder is what gets harvested; `--path agents` takes
-another one, and `--ref v2` takes a branch or a tag instead of the default.
+another one, and `--ref v2` takes a branch or a tag instead of the default. A
+repository that is a flayer workspace made by `flayer init` keeps its own in
+[its library](#the-workspaces-own-skills-and-rules), so it is gathered with
+`--path .mindflayer/library/skills`, or [loaded](#loading-another-workspace)
+from a clone instead.
 
 With stderr on a terminal it says what it is doing while it does it
 (`connecting`, `receiving objects 120/340`, `reading folders 3/40`) on one line
@@ -487,7 +500,11 @@ the token and leaves the file as it is.
 
 ```
 .mindflayer/
-  flayer.toml     the projects it manages, and the workspaces it loads
+  flayer.toml     the projects it manages, the workspaces it loads, and where
+                  its own skills and rules are
+  library/skills/<name>/SKILL.md
+  library/rules/<name>.md
+                  its own, unless flayer.toml says otherwise
   mindflayer.db   what was gathered and from where, what was installed where,
                   and every action taken; a URL goes in without credentials,
                   and one an older Mindflayer stored is taken out by the next
@@ -662,7 +679,7 @@ has gone.
 
 ## The workspace's own skills and rules
 
-A workspace keeps skills and rules of its own, beside the projects it manages:
+A workspace keeps skills and rules of its own, for the projects it manages:
 
 ```bash
 cd ~/Projects
@@ -677,10 +694,24 @@ collapse   skill  deploy             Ship the service to staging
 workspace  rule   git/no-force-push  Never force-push a shared branch
 ```
 
-They live in `skills/` and `rules/` in the workspace's directory by default,
-and `flayer init --skills DIR --rules DIR` says otherwise, as `mind init` does
-for a project. Nothing is made there until the first one is added: a workspace
-sits among your repositories and puts nothing beside them unasked.
+They live in the workspace's library, `.mindflayer/library/skills` and
+`.mindflayer/library/rules`, inside `.mindflayer` where no agent looks: they
+reach an agent by being installed into its project, never by sitting in a
+directory above it. `flayer init` writes both into `flayer.toml`:
+
+```toml
+[directories]
+skills = ".mindflayer/library/skills"
+rules = ".mindflayer/library/rules"
+```
+
+`flayer init --skills DIR --rules DIR` says otherwise, as `mind init` does for
+a project. Any folder inside the workspace will do except the shelf and the
+cache, which are reserved for gathering, a folder inside them, or one holding
+them, so `--skills .mindflayer/skills` and `--rules .mindflayer` are refused. A
+workspace made before the library keeps them in `skills/` and `rules/` beside
+its projects, because that is what its `flayer.toml` says. Either way nothing
+is made until the first one is added.
 
 A project holds what is in its own folders, because that is what its agents
 read, so the workspace's skills reach a project by being installed into it —
