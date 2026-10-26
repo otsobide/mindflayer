@@ -529,7 +529,7 @@ that prompt is a screen that stops answering, and the server that comes next
 has no terminal at all. So every connection `gix` lets a clone configure is
 given a credentials callback (`gather::credentials`) that runs the same helper
 cascade with the prompt and askpass turned off. A credential no helper has is
-`GitError::Credentials`: the URL without its userinfo, and the two ways to
+`GitError::Credentials`: the URL without its credentials, and the two ways to
 provide one, a git credential helper or, for an ssh URL, ssh-agent. Over ssh,
 `gix` runs the system `ssh`, which authenticates with keys of its own and asks
 the helpers only for a user name, so a login ssh refuses is reported the same
@@ -549,6 +549,70 @@ the callback to arrive through anyway. That other half is
 `gix`'s error types are large and would become part of this crate's public API
 if they were carried, tying its version to gix's, so `GitError` keeps what they
 said and not what they were.
+
+### A URL is kept without its credentials
+
+A source is stored, logged, listed and named in errors by its URL, so a token
+typed into one would be repeated everywhere: in `mindflayer.db`, in the
+clone's `.git/config`, in every report, and soon in a snapshot, `--json`
+output and the panel. One function takes it out, `url::redacted`, and
+everything that keeps or shows a URL goes through it.
+
+What it takes out is everything before the `@` of a `scheme://` URL, except
+the user name of an ssh URL: that is who ssh logs in as, part of where the
+repository is rather than a secret, and a later gather from the stored URL
+needs it. Over http(s) a user name goes as well, because GitHub takes a token
+in that place and a credential helper is what names the user. The scp-like
+form (`git@host:path`) is left alone, since `gix` reads everything before its
+first `:` as user and host, which leaves no room for a password. It works on
+text rather than on one URL, because the other place a credential turns up is
+`gix`'s own error messages, which quote the URL they failed on, and the URL a
+fetch connected to may carry a token the typed one did not when git config
+rewrites it with `url.<base>.insteadOf`. Parsing with `gix::url` and dropping
+the user was rejected: the parser also rewrites what it keeps, a default port
+dropped or a scheme lowercased, and cannot find a URL inside a sentence.
+
+A gather URL that carries a credential is **refused** before anything is
+registered or fetched, rather than used for that one fetch and stored without
+it: a token on the command line is already where `ps` and the shell history
+show it, and refusing is what points at a git credential helper, which keeps
+it off the command line altogether, as the front-end provider of
+[D-16](#d-16-credentials-come-from-the-front-end-never-from-a-prompt) will.
+Behind that refusal the rest holds whoever is writing. The ledger redacts
+every URL on the way in and again on the way out, so nothing it hands back
+carries a credential, scrubbed yet or not. Every `GitError` redacts the URL
+and what `gix` said. A clone is scrubbed as soon as it is made
+(`git::scrub`): `gix` writes the URL into the remote's entry in `.git/config`
+and into every reflog as `clone: from <url>`, and those files are rewritten
+through the same function. A clone a gather makes now has nothing to take out,
+and finding that costs a few small reads. A `--from` typed with credentials
+names the source they were taken out of, and the CLI's report and the TUI's
+transcript print command lines and URLs redacted.
+
+What a Mindflayer from before the refusal stored is **scrubbed** by
+`gather::scrub`, which every command that writes to the ledger runs first:
+`gather git`, `install` and `uninstall`, and the install screen's apply, in
+both screens. It rewrites the sources whose URL carries a credential, each
+clone made from one, and the action log. A clone is rewritten before its row,
+so a clone that cannot be rewritten keeps its row tainted and is tried again
+next time, as a warning; what was taken out is a note, said once, since the
+command did what it was asked and an exit code that failed because of a fix
+would break a script for nothing it did. When the URL without credentials is
+already another source's, with the same branch and folder, the two are one
+place gathered twice and become one row, keeping the one gathered from most
+recently, whose folder holds the newer files: two rows would offer each skill
+twice under one origin, and SQLite's UNIQUE would refuse the rewrite outright
+when a branch is set. The ledger turns on SQLite's `secure_delete`, so a
+rewritten row leaves no copy of its old text in the file's free space.
+
+It runs every time rather than once, as a schema step would, because an older
+build can keep writing to the same file after a newer one has scrubbed it, and
+the schema steps are spoken for by the changes that need a new version. With
+nothing to do it costs one query. A read is left alone: what it shows is
+redacted on the way out anyway, and a read should not write. Deleting the old
+clones instead of rewriting them would have been simpler and was rejected:
+the clone is kept so a gather can be looked at afterwards, and a scrub has no
+reason to take that away.
 
 ### Why the ledger is SQLite
 
@@ -570,6 +634,9 @@ Mindflayer put into which project — and an **action log**. The log keeps
 failures too — a log of only what worked cannot answer the question anybody
 opens it with. Timestamps are Unix seconds, which needs no date library and
 which SQLite renders with `datetime(at, 'unixepoch')`.
+
+No URL in it carries a credential, whoever wrote it
+([A URL is kept without its credentials](#a-url-is-kept-without-its-credentials)).
 
 A source's shelf folder is stored rather than derived: two URLs can reduce to
 the same readable name, and where a source's files went is a fact about the
@@ -1426,8 +1493,12 @@ leak into the lifecycle code. Unblocks #33, #45, #62, #93, #94 and #95.
   so a private source gets through only when a git-config helper (or, for an
   ssh URL, ssh itself) has them, and otherwise the gather fails and says how to
   provide one, never at a prompt (see
-  [Why `gix`](#why-gix-rather-than-running-git)). What else it should be given
-  is decided in
+  [Why `gix`](#why-gix-rather-than-running-git)). A URL is stored, logged and
+  shown without credentials, and a gather URL that carries one is refused, so
+  a helper is also the only place a token typed into a URL can go (see
+  [A URL is kept without its
+  credentials](#a-url-is-kept-without-its-credentials)). What else it should
+  be given is decided in
   [D-16](#d-16-credentials-come-from-the-front-end-never-from-a-prompt): a
   provider the front end supplies, through that same callback. #110 carries it
   out, and #109 checks the helpers and ssh-agent against a real private
@@ -1446,6 +1517,15 @@ leak into the lifecycle code. Unblocks #33, #45, #62, #93, #94 and #95.
   on the clone would keep that prompt off the terminal, though not an askpass
   named by `GIT_ASKPASS` or `SSH_ASKPASS`; a `gix` that configures the retry
   too would close it.
+- **When the scrub can stop.** `gather::scrub` runs whenever `gather git`,
+  `install` or `uninstall` opens the ledger, because an older build can still
+  write a token into the same file. `edit`, `rename` and `remove` open it too,
+  to drop a record, and do not scrub: what they log carries no URL, and
+  `install::disown`, which opens it for them, says only whether it dropped a
+  record, so what a scrub took out would go unsaid. The next ledger schema step
+  (the first planned is #30's) changes that, since a build older than it
+  refuses the file: the scrub can then run once, as part of that migration,
+  and stop.
 - **OpenCode's folder and `$XDG_CONFIG_HOME`.** Without
   `$OPENCODE_CONFIG_DIR`, OpenCode's folder is taken to be
   `~/.config/opencode`. Whether OpenCode moves it with `$XDG_CONFIG_HOME`, as
