@@ -602,6 +602,8 @@ pub struct Running {
     pub task: Task,
     /// The last step it reported, once it has reported one.
     pub progress: Option<Progress>,
+    /// Whether it has been asked to stop.
+    pub cancelling: bool,
     /// Shares its flag with the watch the task reports to, without its
     /// sink: holding a sender here would keep the channel open after the
     /// thread is gone, and a thread that died would never be heard of.
@@ -614,9 +616,17 @@ impl Running {
         Self {
             task,
             progress: None,
+            cancelling: false,
             watch,
             updates,
         }
+    }
+
+    /// Ask it to stop. A gather stops before it places anything, and one
+    /// already placing finishes, as it would from the command line.
+    pub fn cancel(&mut self) {
+        self.watch.cancel();
+        self.cancelling = true;
     }
 
     /// Take in what it has sent: each step, and what came of it once it is
@@ -912,13 +922,18 @@ impl App {
     pub fn press(&mut self, key: KeyEvent) -> Step {
         // From anywhere, typing included: raw mode swallows the signal, and a
         // screen that cannot be left that way feels broken.
-        if key.modifiers.contains(KeyModifiers::CONTROL) && key.code == KeyCode::Char('c') {
-            return Step::Quit;
+        let quit = key.modifiers.contains(KeyModifiers::CONTROL) && key.code == KeyCode::Char('c');
+        // The screen is the running task's until it is over. Esc stops it,
+        // and so does leaving, which waits for it to stop; a key for anything
+        // else was aimed at a screen that is about to change.
+        if let Some(running) = &mut self.running {
+            if quit || key.code == KeyCode::Esc {
+                running.cancel();
+            }
+            return if quit { Step::Quit } else { Step::Stay };
         }
-        // The screen is the running task's until it is over: a key for
-        // anything else was aimed at a screen that is about to change.
-        if self.running.is_some() {
-            return Step::Stay;
+        if quit {
+            return Step::Quit;
         }
         // A message explains the key before this one, so it goes as soon as
         // another is pressed rather than sitting there being about nothing.
@@ -2082,7 +2097,7 @@ impl Reader {
 
     /// Every key, and the command it runs.
     pub fn help() -> Self {
-        let rows: [(&str, &str, &[&str]); 15] = [
+        let rows: [(&str, &str, &[&str]); 16] = [
             (
                 "a",
                 "add a skill or a rule",
@@ -2131,6 +2146,11 @@ impl Reader {
                 "g",
                 "gather from a git repository",
                 &["flayer gather git <url>"],
+            ),
+            (
+                "esc",
+                "while a gather runs: stop it, before it places anything",
+                &[],
             ),
             ("s", "what is on the shelf", &["flayer gather list"]),
             ("i", "install from the shelf", &["flayer install"]),

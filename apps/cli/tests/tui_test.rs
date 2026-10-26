@@ -550,6 +550,56 @@ fn a_gather_runs_apart_with_its_progress_drawn_until_it_is_over() {
 }
 
 #[test]
+fn esc_cancels_a_running_gather_and_the_form_says_so() {
+    let dir = TempDir::new().unwrap();
+    flayer(dir.path(), &["init"]).unwrap();
+    let mut app = tui_in(dir.path());
+    let (_go, gate) = mpsc::channel();
+    app.runner = Some(slow_gather(gate));
+    start_slow_gather(&mut app);
+    assert!(tui_drawn(&app).contains("esc cancels"));
+
+    assert_eq!(press_key(&mut app, KeyCode::Esc), TuiStep::Stay);
+
+    // Asked, and said to be asked, until the gather has heard it.
+    assert!(app.running.as_ref().unwrap().cancelling);
+    assert!(tui_drawn(&app).contains("cancelling, before anything is placed"));
+    settle_until(&mut app, |app| app.running.is_none());
+    // Back in the form it was started from, with why it stopped, as for any
+    // gather that did not get as far as a report.
+    let Mode::Gathering(form) = &app.mode else {
+        panic!("{:?}", app.mode);
+    };
+    assert_eq!(
+        form.error.as_deref(),
+        Some("cancelled, with nothing put on the shelf")
+    );
+    assert!(app.transcript().contains(&format!(
+        "$ flayer gather git {SLOW}\nerror: cancelled, with nothing put on the shelf\n"
+    )));
+}
+
+#[test]
+fn leaving_while_a_gather_runs_cancels_it_and_waits_for_it() {
+    let dir = TempDir::new().unwrap();
+    flayer(dir.path(), &["init"]).unwrap();
+    let mut app = tui_in(dir.path());
+    let (_go, gate) = mpsc::channel();
+    app.runner = Some(slow_gather(gate));
+    start_slow_gather(&mut app);
+
+    let step = app.press(KeyEvent::new(KeyCode::Char('c'), KeyModifiers::CONTROL));
+
+    assert_eq!(step, TuiStep::Quit);
+    // What the loop does before it returns.
+    tui::wait(&mut app);
+    assert!(app.running.is_none());
+    assert!(app
+        .transcript()
+        .contains("error: cancelled, with nothing put on the shelf"));
+}
+
+#[test]
 fn the_install_screen_opens_inside_the_tui_and_applies_from_there() {
     let (dir, _workspace, _ledger) = shelved(&["collapse"], &["deploy"]);
     let mut app = tui_in(dir.path());
@@ -1110,6 +1160,20 @@ fn slow_gather(go: mpsc::Receiver<()>) -> Runner {
             ok: true,
         }
     })
+}
+
+/// Ask for the slow gather from the gather form, and let it get as far as
+/// reading its first folder.
+fn start_slow_gather(app: &mut App) {
+    press_key(app, KeyCode::Char('g'));
+    type_text(app, SLOW);
+    let TuiStep::Run(task) = press_key(app, KeyCode::Enter) else {
+        panic!("{:?}", app.mode);
+    };
+    tui::step(app, task);
+    settle_until(app, |app| {
+        reported(app) == Some(Progress::Harvesting { done: 0, total: 3 })
+    });
 }
 
 /// The step the task running apart last reported, as the screen has it.

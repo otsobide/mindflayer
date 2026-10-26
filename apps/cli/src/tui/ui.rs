@@ -983,24 +983,36 @@ fn working(busy: &str, frame: &mut Frame, area: Rect) {
     frame.render_widget(Paragraph::new(text).block(block), box_);
 }
 
-/// Drawn while a task runs apart: the command it is, and the last step it
-/// reported, redrawn as it reports more.
+/// Drawn while a task runs apart: the command it is, the last step it
+/// reported, redrawn as it reports more, and how to stop it.
 fn watching(running: &Running, frame: &mut Frame, area: Rect) {
     let command = printable(&running.task.describe());
     let step = running
         .progress
         .map_or_else(|| String::from("starting"), said);
-    let longest = command.chars().count().max(step.chars().count());
+    let (stop, style) = if running.cancelling {
+        ("cancelling, before anything is placed", warn())
+    } else {
+        ("esc cancels", dim())
+    };
+    let longest = [command.chars().count(), step.chars().count(), stop.len()]
+        .into_iter()
+        .max()
+        .unwrap_or(0);
     let width = u16::try_from(longest + 4)
         .unwrap_or(u16::MAX)
         .clamp(30, area.width.max(1));
-    let box_ = centred(area, width, 4);
+    let box_ = centred(area, width, 5);
     frame.render_widget(Clear, box_);
     let block = Block::bordered()
         .border_type(BorderType::Thick)
         .border_style(Style::default().fg(Color::Yellow))
         .title(" working ");
-    let text = vec![Line::from(command), Line::from(Span::styled(step, dim()))];
+    let text = vec![
+        Line::from(command),
+        Line::from(step),
+        Line::from(Span::styled(stop, style)),
+    ];
     frame.render_widget(Paragraph::new(text).block(block), box_);
 }
 

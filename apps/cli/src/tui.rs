@@ -146,8 +146,10 @@ fn drive(terminal: &mut DefaultTerminal, app: &mut App) -> Result<(), io::Error>
 
         match app.press(key) {
             Step::Stay => {}
-            // Waited for rather than left behind, so what it did is in the
-            // transcript and nothing is half done when the process ends.
+            // A task still running is stopped by the key that asked to
+            // leave, and waited for rather than left behind, so what it did
+            // is in the transcript and nothing is half done when the process
+            // ends.
             Step::Quit => {
                 wait(app);
                 return Ok(());
@@ -219,8 +221,8 @@ pub fn wait(app: &mut App) {
 /// Run a task's lines on a thread of their own, reporting each step back.
 ///
 /// A thread rather than the loop's own, so the screen goes on drawing while
-/// the network takes its time. The lines are the ones [`perform`] would run,
-/// through the same runner.
+/// the network takes its time, and answers the key that stops it. The lines
+/// are the ones [`perform`] would run, through the same runner.
 fn start(app: &mut App, task: Task) {
     let (send, updates) = mpsc::channel();
     let watch = Watch::new();
