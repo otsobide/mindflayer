@@ -61,10 +61,11 @@ Three crates in one Cargo workspace, each an app under `apps/` with its own
 - `apps/server` (`mindflayer-server`): the local server behind the web
   panel, a library no binary runs yet. `src/backend.rs` is the `Backend`
   trait, `src/server.rs` binds and routes, `src/auth.rs` holds the token's
-  cookie and Bearer checks, `src/api.rs` the JSON endpoints, `src/writer.rs`
-  the thread every run goes through, `src/transcript.rs` what the session
-  ran, `src/log.rs` the redacting request log and `src/panel.rs` the embedded
-  panel (`apps/web/dist`).
+  cookie and Bearer checks, `src/guard.rs` the Host, Origin and Fetch
+  Metadata checks and the CSP, `src/api.rs` the JSON endpoints,
+  `src/writer.rs` the thread every run goes through, `src/transcript.rs` what
+  the session ran, `src/log.rs` the redacting request log and `src/panel.rs`
+  the embedded panel (`apps/web/dist`).
 
 ## Invariants that hold the design together
 
@@ -170,8 +171,13 @@ These are easy to break from a single file without noticing.
   the panel could disagree with the CLI about: it belongs in core, reached
   through the backend. Queries and previews run on tokio's blocking pool, and
   every run on the one writer thread, in the order it arrived. It binds
-  127.0.0.1 only, answers under `/api` only a request that carries the launch
-  token (in the cookie `mf_<port>`, or as Bearer), and never logs the token.
+  127.0.0.1 only, answers only a Host naming it on its port as `127.0.0.1`,
+  `localhost` or `[::1]`, refuses an Origin other than its own, answers under
+  `/api` only a request that carries the launch token (in the cookie
+  `mf_<port>`, or as Bearer), and takes a change by cookie only with
+  `Sec-Fetch-Site: same-origin`, `X-Mindflayer: 1` and `application/json`.
+  Every answer carries the CSP and `nosniff`; there is no CORS layer, and the
+  token is never logged.
 - **`Kind` is a closed enum.** To add a kind, follow "Adding a third kind" in
   the architecture doc; the compiler's exhaustive matches are the checklist.
 
@@ -198,7 +204,10 @@ These are easy to break from a single file without noticing.
 - The server's suites run against a fake backend with types of its own
   (`common::Fake`), never the CLI's. They bind 127.0.0.1 on port 0 and send
   requests through the router in process (`common::send`), or over loopback,
-  and serve a fixture panel (`tests/panel`), so they need no Node.
+  and serve a fixture panel (`tests/panel`), so they need no Node. Every
+  request names the server in Host, and `Auth::Cookie` sends what the panel's
+  page would; a test of a guard changes one header of that
+  (`common::request`, then `common::deliver`).
 - Screens are tested without a terminal. Drive `state` with key events, or
   call `tui::step`, and render `ui` into `ratatui::backend::TestBackend`. Only
   the event loops in `tui.rs` and `install.rs` go untested, so keep logic out
