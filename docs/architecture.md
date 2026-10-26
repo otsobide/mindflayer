@@ -626,6 +626,51 @@ A project has one directory per artifact name, so two shelf entries offering
 other rather than letting both apply and the second win — a conflict resolved
 where somebody can see it happening.
 
+### Built where no agent looks
+
+An install never writes beside the copy it replaces. It builds the new copy in
+a stage of its own under the project's `.mind/tmp` (`copy::Stage`), and renames
+it into place once it is whole. Beside is where the agents look: OpenCode's
+first line globs hidden folders in a skills folder too, so the
+`.deploy.mindflayer-new` that staging used to put next to `deploy` was a skill
+it could load half made, and one an interrupted run left there it would load
+every time after. A name taken from the skill was also shared by every run
+installing that skill at once, each deleting what the other was building.
+
+- **`.mind/tmp`, made by the first install.** Inside `.mind`, a folder
+  Mindflayer owns and no agent reads, and inside the project, so putting the
+  copy in place is a rename on one filesystem. The system's temporary folder was
+  the alternative, and it is often another filesystem, where a rename fails and
+  a second copy would be the half-made state all over again. A move across
+  filesystems is not attempted: a rename that fails is an error naming both
+  paths. The folder holds a `.gitignore` of `*`, written with `create_new`, so
+  nothing staged is committed even while `.mind` is.
+- **A stage per run.** Named after the run's process id and a random suffix,
+  and made with `create_dir`, which refuses a name that is there rather than
+  sharing it: two installs at once, from two terminals or two workspaces that
+  link one project, never build in one folder. The copy is built in the
+  stage's `new`, the one it replaces moves aside to its `old`, and the stage
+  goes when the install is done.
+- **What an interrupted run left is swept by the next, and said.** Every run
+  holds a shared lock on `.mind/tmp/.lock` while its stage lives. A run that
+  can take the lock exclusively is alone, so every stage it finds was left by
+  a run that stopped halfway: it removes them, and `Installation::swept` names
+  them for the CLI to print under what the install did. A run that cannot take
+  it sweeps nothing, because what it finds may be in use. A lock rather than
+  the process ids in the names, because whether a process still runs is a
+  question each platform answers differently, and a lock the system drops when
+  its process dies answers it on all of them. Only folders named the way a
+  stage is are swept; anything else in there, somebody else put there.
+- **The folder the copy goes in is made when it is missing.** Staging beside
+  made it on the way. A fresh clone has no empty folders, so a project's
+  `skills/` can be missing although its marker names it.
+
+So an agent reading a skills folder finds the old copy, the new one, or, for
+the moment between the two renames of an update, neither, but never part of
+one and never anything beside it. Gathering still stages beside the shelf copy
+(`copy::replace`), because no agent reads `.mindflayer`; see the open
+questions.
+
 ### Two places offer, one command takes
 
 What can be installed comes from the workspace's own skills, offered first,
@@ -1377,6 +1422,16 @@ leak into the lifecycle code. Unblocks #33, #45, #62, #93, #94 and #95.
   `flayer install` rather than the `install` and `uninstall` lines it amounts
   to. Printing the batch as those lines would make a session with the screen in
   it as repeatable as one without.
+- **Gathering still stages beside.** `copy::replace` builds a shelf copy as a
+  hidden sibling, `.<name>.mindflayer-new`, under names taken from the skill:
+  two gathers of one source at once collide as two installs did, and a gather
+  stopped halfway leaves its staging on the shelf. No agent reads the shelf,
+  which is why installs moved first. A `copy::Stage` in a scratch folder of the
+  workspace's own would do for gathering what `.mind/tmp` does for installs.
+- **Removing is not staged.** `uninstall` deletes a copy where it is, so one
+  stopped halfway leaves part of a skill in a folder agents read. Renaming the
+  copy into a stage first, and deleting it there, would make a removal as all
+  or nothing as an install.
 - **Installing rules.** Installing copies a directory, so only skills can be
   installed — from the shelf, and now from the workspace's own. The workspace's
   own rules have no way into a project yet; a rule is one file, filed by its
