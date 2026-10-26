@@ -101,6 +101,31 @@ async fn a_request_the_panel_would_not_send_is_refused() {
             StatusCode::FORBIDDEN,
         ),
         ("no token", vec![unset("cookie")], StatusCode::UNAUTHORIZED),
+        (
+            "a text body, which a page may send anywhere unasked",
+            vec![set("content-type", "text/plain")],
+            StatusCode::UNSUPPORTED_MEDIA_TYPE,
+        ),
+        (
+            "a form",
+            vec![set("content-type", "application/x-www-form-urlencoded")],
+            StatusCode::UNSUPPORTED_MEDIA_TYPE,
+        ),
+        (
+            "no content type",
+            vec![unset("content-type")],
+            StatusCode::UNSUPPORTED_MEDIA_TYPE,
+        ),
+        (
+            "no X-Mindflayer",
+            vec![unset("x-mindflayer")],
+            StatusCode::FORBIDDEN,
+        ),
+        (
+            "X-Mindflayer other than 1",
+            vec![set("x-mindflayer", "yes")],
+            StatusCode::FORBIDDEN,
+        ),
     ];
     for (case, changes, status) in cases {
         let reply = deliver(&server, from_the_panel(&server, &changes)).await;
@@ -135,6 +160,10 @@ async fn a_request_the_panel_would_send_gets_through() {
                 set("host", format!("[::1]:{port}")),
                 set("origin", format!("http://[::1]:{port}")),
             ],
+        ),
+        (
+            "JSON with its charset",
+            vec![set("content-type", "application/json; charset=utf-8")],
         ),
         (
             "forwarded from anywhere, which is not looked at",

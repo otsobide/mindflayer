@@ -148,7 +148,32 @@ pub(crate) fn from_the_panel(
              (Sec-Fetch-Site: same-origin); a script sends the token as Bearer instead",
         ));
     }
+    // A header of the panel's own and a JSON body. A page may send another
+    // origin text/plain, a form or multipart without asking first; anything
+    // else, a header of its own included, makes the browser ask with a
+    // preflight, which no CORS here ever answers, so the request never
+    // leaves. Fetch Metadata already says where the request came from, and
+    // these say it again by other means, in case a browser gets one wrong.
+    if single(headers, "x-mindflayer") != Some("1") {
+        return Err((
+            StatusCode::FORBIDDEN,
+            "a change sent with the cookie must carry X-Mindflayer: 1, as the panel's do",
+        ));
+    }
+    if !single(headers, CONTENT_TYPE).is_some_and(is_json) {
+        return Err((
+            StatusCode::UNSUPPORTED_MEDIA_TYPE,
+            "a change sent with the cookie must be JSON, sent as application/json",
+        ));
+    }
     Ok(())
+}
+
+/// Whether a Content-Type is `application/json`, whatever parameters follow
+/// it, as `; charset=utf-8` may.
+fn is_json(content_type: &str) -> bool {
+    let essence = content_type.split(';').next().unwrap_or_default();
+    essence.trim().eq_ignore_ascii_case("application/json")
 }
 
 /// A header's value when a request sends it exactly once. Twice is as good

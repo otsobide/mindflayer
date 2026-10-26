@@ -120,18 +120,27 @@ fn a_request_with_two_origins_is_from_neither() {
     assert!(!from_itself("127.0.0.1:4000", &both));
 }
 
-/// Headers holding one Sec-Fetch-Site, or none for `None`.
-fn fetched_from(site: Option<&str>) -> HeaderMap {
+/// The headers the panel's page sends with a change, each of `changes` set
+/// to its value or, for `None`, taken out.
+fn panel(changes: &[(&'static str, Option<&str>)]) -> HeaderMap {
     let mut headers = HeaderMap::new();
-    if let Some(site) = site {
-        headers.insert("sec-fetch-site", HeaderValue::from_str(site).unwrap());
+    headers.insert("sec-fetch-site", HeaderValue::from_static("same-origin"));
+    headers.insert("x-mindflayer", HeaderValue::from_static("1"));
+    headers.insert(CONTENT_TYPE, HeaderValue::from_static("application/json"));
+    for (name, value) in changes {
+        match value {
+            Some(value) => headers.insert(*name, HeaderValue::from_str(value).unwrap()),
+            None => headers.remove(*name),
+        };
     }
     headers
 }
 
 #[test]
 fn a_change_from_the_panels_own_page_is_taken() {
-    assert!(from_the_panel(&Method::POST, &fetched_from(Some("same-origin"))).is_ok());
+    assert!(from_the_panel(&Method::POST, &panel(&[])).is_ok());
+    let charset = panel(&[("content-type", Some("application/json; charset=utf-8"))]);
+    assert!(from_the_panel(&Method::POST, &charset).is_ok());
 }
 
 #[test]
@@ -144,20 +153,47 @@ fn a_change_from_any_other_page_or_from_no_browser_is_not() {
         None,
     ] {
         for method in [Method::POST, Method::PUT, Method::DELETE, Method::PATCH] {
-            let (status, _) = from_the_panel(&method, &fetched_from(site)).unwrap_err();
+            let headers = panel(&[("sec-fetch-site", site)]);
+            let (status, _) = from_the_panel(&method, &headers).unwrap_err();
             assert_eq!(status, StatusCode::FORBIDDEN, "{method} {site:?}");
         }
     }
 
-    let mut twice = fetched_from(Some("same-origin"));
+    let mut twice = panel(&[]);
     twice.append("sec-fetch-site", HeaderValue::from_static("same-origin"));
     assert!(from_the_panel(&Method::POST, &twice).is_err());
 }
 
 #[test]
+fn a_change_without_the_panels_own_header_is_refused() {
+    for value in [None, Some("0"), Some("true"), Some("")] {
+        let headers = panel(&[("x-mindflayer", value)]);
+        let (status, message) = from_the_panel(&Method::POST, &headers).unwrap_err();
+        assert_eq!(status, StatusCode::FORBIDDEN, "{value:?}");
+        assert!(message.contains("X-Mindflayer: 1"), "{message}");
+    }
+}
+
+#[test]
+fn a_change_that_is_not_sent_as_json_is_refused() {
+    for value in [
+        Some("text/plain"),
+        Some("application/x-www-form-urlencoded"),
+        Some("multipart/form-data; boundary=x"),
+        Some("application/jsonp"),
+        None,
+    ] {
+        let headers = panel(&[("content-type", value)]);
+        let (status, _) = from_the_panel(&Method::POST, &headers).unwrap_err();
+        assert_eq!(status, StatusCode::UNSUPPORTED_MEDIA_TYPE, "{value:?}");
+    }
+}
+
+#[test]
 fn a_read_is_not_held_to_where_it_came_from() {
     for method in [Method::GET, Method::HEAD] {
-        assert!(from_the_panel(&method, &fetched_from(Some("same-site"))).is_ok());
-        assert!(from_the_panel(&method, &fetched_from(None)).is_ok());
+        assert!(from_the_panel(&method, &HeaderMap::new()).is_ok());
+        let elsewhere = panel(&[("sec-fetch-site", Some("same-site"))]);
+        assert!(from_the_panel(&method, &elsewhere).is_ok());
     }
 }

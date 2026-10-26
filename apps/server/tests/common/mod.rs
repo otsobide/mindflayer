@@ -179,7 +179,8 @@ pub enum Auth<'a> {
     Nothing,
     Bearer(&'a str),
     /// A whole `name=value` pair, sent as the panel's page sends it: with the
-    /// headers the browser adds to every request the page makes.
+    /// headers the browser adds to every request the page makes, and the one
+    /// the panel adds itself.
     Cookie(&'a str),
 }
 
@@ -230,6 +231,7 @@ pub fn request(
                 .header(header::COOKIE, pair)
                 .header(header::ORIGIN, format!("http://{}", server.address()))
                 .header("sec-fetch-site", "same-origin")
+                .header("x-mindflayer", "1")
         }
     }
     match body {
