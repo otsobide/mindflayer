@@ -4,8 +4,9 @@
 
 Every unit of the product is an app under `apps/`, with its own `Cargo.toml`
 and its own `Makefile`. The root `Makefile` delegates (`make <app>/<target>`)
-and CI invokes those targets, so adding a front end is adding a directory and
-one line to `APPS`, never reshaping the tree.
+and CI invokes those targets, so adding a front end is adding a directory, a
+line in `APPS` and the workspace `members`, and its test and build jobs in
+CI — never reshaping the tree.
 
 ```
 apps/core   mindflayer-core — the engine
@@ -19,8 +20,9 @@ around it.
 ## Where the line between core and a front end falls
 
 `mindflayer-core` knows what a mind project is, what a flayer workspace is, and
-what each kind of artifact is. It reads and writes files, and that is the only I/O it does.
-It has no idea a terminal exists.
+what each kind of artifact is. It reads and writes files, and the only other
+I/O it does is fetching a repository through `gix` when asked to gather. It has
+no idea a terminal exists.
 
 `mindflayer-cli` parses a command line, asks core for values, and renders them.
 It holds no rules about artifacts: not the name limits, not the front matter
@@ -126,7 +128,10 @@ the file was read, so asking whether something is valid cannot itself fail.
 ### Adding a third kind
 
 A variant on `Kind`, its folder and layout, a variant on `Declared`, a
-constructor on `Artifact`, and a match arm in discovery. Reports need nothing:
+constructor on `Artifact`, and an arm in every match on the kind — discovery,
+`create`, `lifecycle::load` and `lifecycle::rename`, and the refusal in
+`gather` — which the compiler lists, since the matches are exhaustive. Reports
+need nothing:
 columns, labels and counts are all driven from `Kind::ALL` and from what the
 catalog actually found.
 
@@ -158,13 +163,15 @@ therefore `flayer <cmd>`, acts on the workspace above it. The split decides two
 things that used to be guesses:
 
 - **What is in scope.** `mind list` is the project's own artifacts, never its
-  neighbours'. `flayer list` is every registered project. Before the split one
+  neighbours'. `flayer list` is the workspace's own and every registered
+  project's. Before the split one
   command tried to be both and its answer changed depending on which directory
   it was run from.
 - **How an artifact is labelled.** Only the workspace level qualifies one by
-  the project it came from, because inside a single project that says nothing.
+  what holds it — a project, or `workspace` for its own — because inside a
+  single project that says nothing.
   The same rule governs the kind: `mind list` grows a kind column, and
-  `validate` starts printing `rule/x` instead of `x`, only once more than one
+  `validate` starts printing `rule:x` instead of `x`, only once more than one
   kind is in play. One rule, applied twice, so a report never spends a column
   on something the reader could not have been confused about.
 
@@ -283,8 +290,8 @@ The CLI prints those on stderr as warnings and exits non-zero: visible, but not
 in the way of the answer.
 
 The distinction the code draws is between a problem and an absence. A project
-with no `.mind/skills` directory yet is not a failure, it is a project nobody
-has added a skill to. A `.mind/skills` that exists and cannot be listed is a
+with no skills folder yet is not a failure, it is a project nobody has added a
+skill to. A skills folder that exists and cannot be listed is a
 failure.
 
 ## How entries are stored
@@ -416,8 +423,9 @@ the workspace and two workspaces never share a history. It carries its schema
 version in SQLite's own `user_version` header field, and a database from the
 future is refused exactly as a marker file from the future is.
 
-Three things are recorded: the **sources** gathered from, the **artifacts** on
-the shelf and which source each came from, and an **action log**. The log keeps
+Four things are recorded: the **sources** gathered from, the **artifacts** on
+the shelf and which source each came from, the **installations** — which skill
+Mindflayer put into which project — and an **action log**. The log keeps
 failures too — a log of only what worked cannot answer the question anybody
 opens it with. Timestamps are Unix seconds, which needs no date library and
 which SQLite renders with `datetime(at, 'unixepoch')`.
@@ -557,8 +565,9 @@ afterwards as an ordinary `Outcome` — so a report from the screen reads like a
 report from any other command, warnings on stderr and a non-zero exit when
 something was left alone.
 
-`try_init` rather than `init`: this is the one command that needs a terminal,
-and being run without one deserves a sentence rather than a panic.
+`try_init` rather than `init`, here and in the TUI: these are the commands that
+need a terminal, and being run without one deserves a sentence rather than a
+panic.
 
 ## The TUI
 
@@ -602,8 +611,9 @@ Two things follow, and both are deliberate:
 A `-C` in those words is relative to the workspace root, which is how someone
 reading the transcript takes it, so it is resolved against the root rather than
 against wherever the process started. A command that opens a screen of its own
-— `flayer`, `flayer tui`, `flayer install` — is refused if it ever reaches that
-path, rather than drawn inside this one.
+— `flayer`, `flayer tui`, `flayer minds`, `flayer install` with no skill named,
+`mind`, `mind tui` — is refused if it ever reaches that path, rather than drawn
+inside this one.
 
 The exceptions are named, not hidden: the install screen is embedded as it is,
 and applying it is the batch `flayer install` applies; re-reading the disk is
@@ -616,6 +626,8 @@ not a command, because it changes nothing.
   person presses.
 - `tui/ui.rs` — what the screen looks like, rendered into an in-memory
   terminal by the tests.
+- `tui/minds.rs` — the minds screen's rows and ticks, and the task they amount
+  to; like `state.rs`, it touches nothing.
 - `tui.rs` — the loop, reading the disk into what the screen shows, and running
   tasks. `step` is everything the loop does between a key and the next frame,
   and it is public so a test can do exactly that without a terminal.
@@ -663,10 +675,14 @@ is needed. Home sits above most of what a person works on, so it is the one
 directory where a workspace can manage projects anywhere, and making it on
 demand means `flayer link ~/code/x` works before anyone has chosen a directory.
 
-It is only ever made by something that writes. Asking whether a project is
-managed — `mind` opening its TUI, `mind install` — uses `default_at`, which
-opens the home workspace if it exists and never creates it: reading is no
-reason to put a marker in somebody's home.
+It is made by any workspace command that finds none up the tree, reading ones
+included: `flayer list`, `flayer scan`, `mind install` and opening `flayer`'s
+TUI all go through `locate_or_default`, so the first of them run outside every
+workspace leaves a `~/.mindflayer` behind. The exceptions are the commands
+that only list or take away a load — `flayer load` on its own, `unload` — which
+use `locate_except`, and `mind` opening its TUI, which uses `default_at`: both
+open the home workspace if it exists and never create it. Whether reading
+should create it at all is an [open question](#open-questions).
 
 Where home is comes from the front end, not from core: `--home`, then
 `$MINDFLAYER_HOME`, then the user's home directory, and empty means there is
@@ -789,6 +805,13 @@ complete.
   somewhere that is not above it keeps its stale record. Every workspace
   linking a project would have to be findable from the project for that to
   change.
+- **Reading commands create the home workspace.** `flayer list`, `show`,
+  `validate`, `scan`, `templates`, `gather list`, `minds`, the `flayer` TUI and
+  `mind install`/`uninstall` all make `~/.mindflayer` when nothing up the tree
+  has one, though only something that writes needs it to exist. `default_at`
+  already opens without creating; moving the reads onto it, and leaving
+  `locate_or_default` to the commands that write, would mean a first `flayer
+  list` outside every workspace no longer puts a marker in somebody's home.
 - **Long work in the TUI.** A gather holds the screen until it finishes, with a
   box saying what is running, and cannot be cancelled. A background thread
   would change that; it has not been needed yet.
