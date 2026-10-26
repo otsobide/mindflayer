@@ -1,0 +1,130 @@
+import { afterEach, describe, expect, it, vi } from 'vitest'
+import { httpTransport } from '@/api/http'
+import { TransportError } from '@/api/transport'
+
+/** A request as `fetch` was handed it. */
+interface Sent {
+  url: string
+  init: RequestInit
+}
+
+/** Stand in for `fetch`, answering every request with `reply`. */
+function serve(reply: () => Response | Promise<Response>): Sent[] {
+  const sent: Sent[] = []
+  vi.stubGlobal('fetch', async (url: string, init: RequestInit) => {
+    sent.push({ url, init })
+    return reply()
+  })
+  return sent
+}
+
+function json(status: number, body: unknown): Response {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { 'Content-Type': 'application/json' }
+  })
+}
+
+afterEach(() => {
+  vi.unstubAllGlobals()
+})
+
+describe('the HTTP transport', () => {
+  it('posts a query as JSON to a relative URL, with the cookie and the header', async () => {
+    const sent = serve(() => json(200, { projects: [] }))
+
+    const answer = await httpTransport().query({ kind: 'snapshot' })
+
+    expect(answer).toEqual({ projects: [] })
+    expect(sent).toHaveLength(1)
+    const [{ url, init }] = sent as [Sent]
+    expect(url).toBe('/api/query')
+    expect(init.method).toBe('POST')
+    expect(init.credentials).toBe('same-origin')
+    expect(init.headers).toMatchObject({
+      'Content-Type': 'application/json',
+      'X-Mindflayer': '1'
+    })
+    expect(JSON.parse(init.body as string)).toEqual({ kind: 'snapshot' })
+  })
+
+  it('previews a task without running it', async () => {
+    const sent = serve(() => json(200, { lines: ['flayer install demo -p app'] }))
+
+    const preview = await httpTransport().send({ install: 'demo' }, 'preview')
+
+    expect(sent.map(request => request.url)).toEqual(['/api/commands/preview'])
+    expect(preview.lines).toEqual(['flayer install demo -p app'])
+  })
+
+  it('runs a task and answers with its lines and outcome', async () => {
+    const sent = serve(() => json(200, { lines: ['flayer install demo -p app'], outcome: { ok: true } }))
+
+    const run = await httpTransport().send({ install: 'demo' }, 'run')
+
+    expect(sent.map(request => request.url)).toEqual(['/api/commands'])
+    expect(run).toEqual({ lines: ['flayer install demo -p app'], outcome: { ok: true } })
+  })
+
+  it('says what the server refused, from its error body', async () => {
+    serve(() => json(404, { error: 'no such endpoint: POST /api/nothing' }))
+
+    const refused = await httpTransport().query({}).catch((error: unknown) => error)
+
+    expect(refused).toBeInstanceOf(TransportError)
+    expect(refused).toMatchObject({ status: 404, message: 'no such endpoint: POST /api/nothing' })
+  })
+
+  it('says how to get the token when the server asks for it', async () => {
+    serve(() => json(401, { error: 'this needs the launch token' }))
+
+    const refused = await httpTransport().query({}).catch((error: unknown) => error) as TransportError
+
+    expect(refused.unauthorized).toBe(true)
+    expect(refused.message).toBe('this browser does not hold the launch token: open the link `flayer ui` printed')
+  })
+
+  it('names the status when a refusal is not JSON', async () => {
+    serve(() => new Response('Bad Gateway', { status: 502, statusText: 'Bad Gateway' }))
+
+    const refused = await httpTransport().query({}).catch((error: unknown) => error)
+
+    expect(refused).toMatchObject({ status: 502, message: 'the server answered 502 Bad Gateway' })
+  })
+
+  it('reports a server it cannot reach as status 0', async () => {
+    serve(() => Promise.reject(new TypeError('Failed to fetch')))
+
+    const refused = await httpTransport().query({}).catch((error: unknown) => error)
+
+    expect(refused).toBeInstanceOf(TransportError)
+    expect(refused).toMatchObject({ status: 0 })
+  })
+
+  it('listens to the event stream until told to stop', () => {
+    const sources: FakeEventSource[] = []
+    class FakeEventSource {
+      onmessage: ((message: MessageEvent<string>) => void) | null = null
+      closed = false
+      constructor(readonly url: string) {
+        sources.push(this)
+      }
+
+      close() {
+        this.closed = true
+      }
+    }
+    vi.stubGlobal('EventSource', FakeEventSource)
+    const events: unknown[] = []
+
+    const stop = httpTransport().subscribe(event => events.push(event))
+    const [source] = sources as [FakeEventSource]
+    source.onmessage?.(new MessageEvent('message', { data: '{"changed":"snapshot"}' }))
+    source.onmessage?.(new MessageEvent('message', { data: 'not json' }))
+    stop()
+
+    expect(source.url).toBe('/api/events')
+    expect(events).toEqual([{ changed: 'snapshot' }])
+    expect(source.closed).toBe(true)
+  })
+})

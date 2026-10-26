@@ -4,13 +4,34 @@ import { createMemoryHistory } from 'vue-router'
 import App from '@/App.vue'
 import { createPanel } from '@/panel'
 import { useShell } from '@/stores/shell'
+import type { Transport } from '@/api/transport'
+
+/** A transport that writes down every call, and answers none of them. */
+function recording() {
+  const calls: string[] = []
+  const transport: Transport = {
+    query: () => {
+      calls.push('query')
+      return new Promise(() => {})
+    },
+    send: () => {
+      calls.push('send')
+      return new Promise(() => {})
+    },
+    subscribe: () => {
+      calls.push('subscribe')
+      return () => {}
+    }
+  } as Transport
+  return { calls, transport }
+}
 
 let wrapper: VueWrapper | undefined
 let styles: Element[]
 let watching: MutationObserver
 
-async function render(path: string) {
-  const panel = createPanel({ history: createMemoryHistory() })
+async function render(path: string, transport: Transport = recording().transport) {
+  const panel = createPanel({ transport, history: createMemoryHistory() })
   await panel.router.push(path)
   wrapper = mount(App, { global: { plugins: [panel] }, attachTo: document.body })
   await flushPromises()
@@ -80,6 +101,14 @@ describe('the shell', () => {
     // Not the palette, which Nuxt UI writes into one at run time, and not
     // the colour mode, which adds one for each switch.
     expect(styles).toEqual([])
+  })
+
+  it('asks the server nothing while it has no views', async () => {
+    const { calls, transport } = recording()
+
+    await render('/', transport)
+
+    expect(calls).toEqual([])
   })
 
   it('draws every icon it names from the bundle', async () => {
