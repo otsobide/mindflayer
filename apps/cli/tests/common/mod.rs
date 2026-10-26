@@ -18,7 +18,7 @@ pub use mindflayer_cli::{
 pub use mindflayer_core::gather::{Progress, Watch};
 pub use mindflayer_core::install::Standing;
 pub use mindflayer_core::ledger::Ledger;
-pub use mindflayer_core::{AgentHomes, FlayerWorkspace};
+pub use mindflayer_core::{AgentHomes, FlayerWorkspace, Reason};
 pub use mindflayer_core::{Kind, MindProject, FLAYER_CONFIG, FLAYER_DIR, MIND_CONFIG, MIND_DIR};
 pub use ratatui::backend::TestBackend;
 pub use ratatui::crossterm::event::KeyCode;
