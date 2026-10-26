@@ -2,9 +2,12 @@
 
 mod common;
 
+use std::collections::BTreeSet;
 use std::fs;
+use std::sync::atomic::{AtomicBool, Ordering};
 
 use common::{repository, skill, url};
+use mindflayer_core::copy;
 use mindflayer_core::gather::{self, Request};
 use mindflayer_core::install::{self, Installed, Removed, Standing};
 use mindflayer_core::ledger::Ledger;
@@ -491,6 +494,255 @@ fn what_agents_read_past_does_not_stop_an_install() {
     assert!(matches!(outcome, Installed::Added { .. }), "{outcome:?}");
     let copied = fs::read_to_string(installed_at(&project, "deploy").join("SKILL.md")).unwrap();
     assert_eq!(copied, manifest, "copied as written");
+}
+
+// ---------------------------------------------------------------------------
+// Staged outside the folders agents read
+// ---------------------------------------------------------------------------
+
+/// A workspace managing one project and offering skills of its own, each with
+/// `files` references besides its `SKILL.md`, so that copying one takes long
+/// enough for somebody looking at the project to see it happen.
+fn own_skills(names: &[&str], files: usize) -> (TempDir, FlayerWorkspace, MindProject) {
+    let dir = TempDir::new().unwrap();
+    let (mut workspace, _) = FlayerWorkspace::init(dir.path()).unwrap();
+    let root = dir.path().join("collapse");
+    fs::create_dir(&root).unwrap();
+    let (project, _) = MindProject::init(&root).unwrap();
+    workspace.link(&project).unwrap();
+    for name in names {
+        let skill =
+            mindflayer_core::create(&workspace.own(), Kind::Skill, name, &format!("Our {name}"))
+                .unwrap();
+        for file in 0..files {
+            fs::write(
+                skill.path().join(format!("reference-{file}.md")),
+                "Read this first.\n",
+            )
+            .unwrap();
+        }
+    }
+    (dir, workspace, project)
+}
+
+/// Change one of the workspace's own skills, so installing it again updates.
+fn edit_own(workspace: &FlayerWorkspace, name: &str, round: usize) {
+    let skill = workspace.own().directory_for(Kind::Skill).join(name);
+    fs::write(skill.join("reference-0.md"), format!("Round {round}.\n")).unwrap();
+}
+
+fn install_named(
+    workspace: &FlayerWorkspace,
+    ledger: &Ledger,
+    project: &MindProject,
+    name: &str,
+) -> Result<Installed, install::InstallError> {
+    let candidate = install::offered(
+        workspace,
+        ledger,
+        project,
+        Kind::Skill,
+        name,
+        Some("workspace"),
+    )?;
+    install::install(workspace, ledger, project, &candidate)
+}
+
+/// The names directly inside `dir`, sorted.
+fn listing(dir: &std::path::Path) -> Vec<String> {
+    let mut names: Vec<String> = fs::read_dir(dir)
+        .unwrap()
+        .map(|entry| entry.unwrap().file_name().to_string_lossy().into_owned())
+        .collect();
+    names.sort();
+    names
+}
+
+/// What is left in a project's scratch folder besides the folder's own files.
+fn staged(project: &MindProject) -> Vec<String> {
+    listing(&project.scratch_dir())
+        .into_iter()
+        .filter(|name| !name.starts_with('.'))
+        .collect()
+}
+
+#[test]
+fn while_an_install_runs_and_after_it_the_skills_folder_holds_only_the_skill() {
+    let (_dir, workspace, project) = own_skills(&["deploy"], 200);
+    let ledger = workspace.ledger().unwrap();
+    let skills = project.directory_for(Kind::Skill);
+    let done = AtomicBool::new(false);
+
+    // Somebody listing the folder the whole time, as an agent globbing it
+    // for skills would.
+    let seen = std::thread::scope(|scope| {
+        let watcher = scope.spawn(|| {
+            let mut seen = BTreeSet::new();
+            while !done.load(Ordering::Relaxed) {
+                if let Ok(entries) = fs::read_dir(&skills) {
+                    seen.extend(
+                        entries
+                            .flatten()
+                            .map(|entry| entry.file_name().to_string_lossy().into_owned()),
+                    );
+                }
+            }
+            seen
+        });
+        for round in 0..10 {
+            edit_own(&workspace, "deploy", round);
+            let outcome = install_named(&workspace, &ledger, &project, "deploy");
+            assert!(
+                matches!(
+                    outcome,
+                    Ok(Installed::Added { .. } | Installed::Updated { .. })
+                ),
+                "{outcome:?}"
+            );
+        }
+        done.store(true, Ordering::Relaxed);
+        watcher.join().unwrap()
+    });
+
+    assert_eq!(seen, BTreeSet::from([String::from("deploy")]));
+    assert_eq!(listing(&skills), ["deploy"]);
+    assert!(staged(&project).is_empty(), "{:?}", staged(&project));
+}
+
+#[test]
+fn the_copy_is_built_in_the_projects_own_scratch_folder_which_ignores_itself() {
+    let (_dir, workspace, project) = own_skills(&["deploy"], 0);
+    let ledger = workspace.ledger().unwrap();
+    assert!(
+        !project.scratch_dir().exists(),
+        "made only when first needed"
+    );
+
+    install_named(&workspace, &ledger, &project, "deploy").unwrap();
+
+    assert_eq!(
+        project.scratch_dir(),
+        project.root().join(".mind").join("tmp")
+    );
+    let ignore = fs::read_to_string(project.scratch_dir().join(".gitignore")).unwrap();
+    assert!(ignore.lines().any(|line| line == "*"), "{ignore}");
+    assert!(staged(&project).is_empty(), "{:?}", staged(&project));
+}
+
+#[test]
+fn an_install_never_builds_in_a_stage_another_install_is_using() {
+    let (_dir, workspace, project) = own_skills(&["deploy"], 0);
+    let ledger = workspace.ledger().unwrap();
+    // Another install into the same project, halfway through its copy.
+    let other = copy::Stage::open(&project.scratch_dir()).unwrap();
+    fs::create_dir(other.path().join("new")).unwrap();
+    fs::write(other.path().join("new").join("SKILL.md"), "theirs").unwrap();
+
+    let outcome = install_named(&workspace, &ledger, &project, "deploy").unwrap();
+
+    assert!(matches!(outcome, Installed::Added { .. }), "{outcome:?}");
+    assert_eq!(
+        fs::read_to_string(other.path().join("new").join("SKILL.md")).unwrap(),
+        "theirs"
+    );
+    assert_eq!(staged(&project).len(), 1, "only the other one's is left");
+    drop(other);
+    assert!(staged(&project).is_empty(), "{:?}", staged(&project));
+}
+
+#[test]
+fn two_installs_at_once_into_one_project_never_share_a_staging_path() {
+    let (_dir, workspace, project) = own_skills(&["deploy", "review"], 100);
+    workspace.ledger().unwrap();
+
+    std::thread::scope(|scope| {
+        for name in ["deploy", "review"] {
+            let (workspace, project) = (&workspace, &project);
+            scope.spawn(move || {
+                let ledger = workspace.ledger().unwrap();
+                for round in 0..10 {
+                    edit_own(workspace, name, round);
+                    let outcome = install_named(workspace, &ledger, project, name);
+                    assert!(
+                        matches!(
+                            outcome,
+                            Ok(Installed::Added { .. } | Installed::Updated { .. })
+                        ),
+                        "{name}, round {round}: {outcome:?}"
+                    );
+                }
+            });
+        }
+    });
+
+    assert_eq!(
+        listing(&project.directory_for(Kind::Skill)),
+        ["deploy", "review"]
+    );
+    for name in ["deploy", "review"] {
+        let own = workspace.own().directory_for(Kind::Skill).join(name);
+        assert!(
+            copy::same(&own, &installed_at(&project, name)).unwrap(),
+            "{name}"
+        );
+    }
+    assert!(staged(&project).is_empty(), "{:?}", staged(&project));
+}
+
+/// The same skill, twice at once: what two terminals, or two workspaces
+/// linking one project, can do, and where a staging path named after the
+/// skill was shared. Unix only, because there one of the two always gets its
+/// copy in place; on Windows a rename fails while anybody has a file inside
+/// open, so both can lose a round and leave the copy before it.
+#[cfg(unix)]
+#[test]
+fn two_installs_of_one_skill_at_once_leave_one_whole_copy_and_nothing_beside_it() {
+    let (_dir, workspace, project) = own_skills(&["deploy"], 100);
+    workspace.ledger().unwrap();
+    let own = workspace.own().directory_for(Kind::Skill).join("deploy");
+    let rounds = 10;
+    let start = std::sync::Barrier::new(2);
+    let edited = std::sync::Barrier::new(2);
+
+    std::thread::scope(|scope| {
+        for first in [true, false] {
+            let (workspace, project, start, edited) = (&workspace, &project, &start, &edited);
+            scope.spawn(move || {
+                let ledger = workspace.ledger().unwrap();
+                for round in 0..rounds {
+                    start.wait();
+                    if first {
+                        edit_own(workspace, "deploy", round);
+                    }
+                    edited.wait();
+                    // One of the two may find the other's copy arriving under
+                    // it and fail to put its own in place: said, and harmless.
+                    match install_named(workspace, &ledger, project, "deploy") {
+                        Ok(_) | Err(install::InstallError::Write { .. }) => {}
+                        Err(error) => panic!("round {round}: {error}"),
+                    }
+                }
+            });
+        }
+    });
+
+    assert!(copy::same(&own, &installed_at(&project, "deploy")).unwrap());
+    assert_eq!(listing(&project.directory_for(Kind::Skill)), ["deploy"]);
+    assert!(staged(&project).is_empty(), "{:?}", staged(&project));
+}
+
+#[test]
+fn a_skills_folder_that_is_not_there_yet_is_made() {
+    // A fresh clone has no empty folders, so a project's skills folder can be
+    // missing although its marker names it.
+    let (_dir, workspace, project) = own_skills(&["deploy"], 0);
+    let ledger = workspace.ledger().unwrap();
+    fs::remove_dir(project.directory_for(Kind::Skill)).unwrap();
+
+    let outcome = install_named(&workspace, &ledger, &project, "deploy").unwrap();
+
+    assert!(matches!(outcome, Installed::Added { .. }), "{outcome:?}");
+    assert!(installed_at(&project, "deploy").join("SKILL.md").is_file());
 }
 
 // ---------------------------------------------------------------------------

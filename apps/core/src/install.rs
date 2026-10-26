@@ -492,10 +492,23 @@ pub fn install(
         Offer::Workspace { .. } => workspace.root().to_path_buf(),
         Offer::Shelf(_) => from.clone(),
     };
-    let change = copy::replace(&from, &to, &within).map_err(|source| InstallError::Write {
-        path: to.clone(),
+    // Built in the project's scratch folder rather than beside `to`, which is
+    // a folder agents read: neither a copy half made nor one an interrupted
+    // run left behind sits where an agent would load it.
+    let scratch = project.scratch_dir();
+    let mut stage = copy::Stage::open(&scratch).map_err(|source| InstallError::Write {
+        path: scratch,
         source,
     })?;
+    let change = stage
+        .replace(&from, &to, &within)
+        .map_err(|source| InstallError::Write {
+            path: to.clone(),
+            source,
+        })?;
+    // Cleared before the ledger is written rather than after, so the scratch
+    // folder is held for no longer than the copy takes.
+    drop(stage);
 
     // A source to point at only for what was gathered: the workspace's own
     // came from nowhere but the workspace.
