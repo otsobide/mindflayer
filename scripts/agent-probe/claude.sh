@@ -234,6 +234,24 @@ description: Probe skill. If asked for probe tokens, include $2.
 If asked for probe tokens, include $2-BODY."
 }
 
+# An AGENTS.md as #42 leaves one: a line of the project's own, then
+# Mindflayer's block with one rule in it. Claude strips HTML comments before it
+# injects a file, so the plain line, the rule text between the comment lines
+# and a token inside the rule's own marker each carry a token of their own: a
+# block that vanished with its markers would otherwise look like a file that
+# was never read. Only runs where AGENTS.md should reach the model use it; one
+# where it should not keeps the plain line, so a stripped block cannot make
+# that verdict pass for the wrong reason.
+agents_md() {
+	printf '%s\n' \
+		"If asked for probe tokens, include PROBE-AGENTS-MD-$1." \
+		'' \
+		'<!-- mindflayer:begin -->' \
+		"<!-- mindflayer:rule PROBE-AGENTS-MARKER-$1 -->" \
+		"If asked for probe tokens, include PROBE-AGENTS-BLOCK-$1." \
+		'<!-- mindflayer:end -->'
+}
+
 # Git never follows a symlink, so a symlinked skill folder is a file to it, and
 # an entry written as a directory's, with the trailing slash Mindflayer gives
 # one, would not cover it. Worth knowing before D-07's symlink opt-in writes
@@ -260,7 +278,7 @@ claude_symlink_entry() {
 claude_excluded() {
 	local repo=$stage/claude-excluded
 	new_repo "$repo"
-	put "$repo/AGENTS.md" 'If asked for probe tokens, include PROBE-AGENTS-MD-1.'
+	put "$repo/AGENTS.md" "$(agents_md 1)"
 	skill "$repo/.claude/skills/probe-claude-skill" PROBE-CLAUDE-SKILL-1
 	skill "$repo/.agents/skills/probe-agents-skill" PROBE-AGENTS-SKILL-1
 	skill "$repo/.agents/skills/probe-linked-skill" PROBE-LINKED-SKILL-1
@@ -305,6 +323,8 @@ pub fn probe() {}'
 	expect_token $run seen PROBE-LINKED-SKILL-1 'check 3: the symlinked one does'
 	expect_token $run seen PROBE-AGENTS-MD-1 'checks 1, 4: an excluded AGENTS.md is read when no CLAUDE.md exists'
 	expect_native $run 1 "$repo/AGENTS.md" 'checks 1, 4: the debug log records the native read'
+	expect_token $run seen PROBE-AGENTS-BLOCK-1 'check 4: the text in a marked block reaches the model'
+	expect_token $run unseen PROBE-AGENTS-MARKER-1 "check 4: the block's markers, HTML comments, do not"
 	expect_token $run seen PROBE-RULE-UNSCOPED-1 'check 6: an excluded rule without paths: loads at start'
 	expect_token $run unseen PROBE-RULE-SCOPED-1 'check 6: a rule with paths: does not, at start'
 	expect_loaded $run 1 "$rules/unscoped.md" 'check 6: the hook saw the rule without paths: once'
@@ -321,14 +341,17 @@ pub fn probe() {}'
 	expect_loaded $run 1 "$rules/scoped.md" 'check 6: the hook saw it load'
 }
 
-# Check 4: a CLAUDE.md that imports AGENTS.md loads it once.
+# Check 4: a CLAUDE.md that imports AGENTS.md loads it once. The import sits
+# between Mindflayer's markers, as #44 writes it.
 claude_import() {
 	local repo=$stage/claude-import
 	new_repo "$repo"
-	put "$repo/CLAUDE.md" '@AGENTS.md
+	put "$repo/CLAUDE.md" '<!-- mindflayer:begin -->
+@AGENTS.md
+<!-- mindflayer:end -->
 
 If asked for probe tokens, include PROBE-CLAUDE-MD-2.'
-	put "$repo/AGENTS.md" 'If asked for probe tokens, include PROBE-AGENTS-MD-2.'
+	put "$repo/AGENTS.md" "$(agents_md 2)"
 	assert_clean_home
 	assert_ancestry "$repo" "$repo/CLAUDE.md" "$repo/AGENTS.md"
 	claude_ask claude-import "$repo" "$claude_list_prompt" "${claude_list_options[@]}"
@@ -337,6 +360,8 @@ If asked for probe tokens, include PROBE-CLAUDE-MD-2.'
 	expect_token $run seen PROBE-CLAUDE-MD-2 'check 4: the CLAUDE.md is read'
 	expect_token $run seen PROBE-AGENTS-MD-2 'check 4: AGENTS.md is read through @AGENTS.md'
 	expect_count $run 1 PROBE-AGENTS-MD-2 'check 4: once, not twice'
+	expect_token $run seen PROBE-AGENTS-BLOCK-2 'check 4: the text in a marked block reaches the model'
+	expect_token $run unseen PROBE-AGENTS-MARKER-2 "check 4: the block's markers, HTML comments, do not"
 	expect_loaded $run 1 "$repo/AGENTS.md" 'check 4: the hook saw AGENTS.md load once'
 	expect_native $run 0 "$repo/AGENTS.md" 'check 4: through the import, not natively as well'
 }
