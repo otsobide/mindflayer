@@ -559,7 +559,7 @@ impl fmt::Display for ValidationIssue {
                 f,
                 "`metadata` entry `{key}` is written more than once, so only the first is read"
             ),
-            ValidationIssue::Empty => write!(f, "the file has no content"),
+            ValidationIssue::Empty => write!(f, "the file has no content beyond any front matter"),
             ValidationIssue::FrontMatterUnparsed { reason } => write!(
                 f,
                 "the front matter does not parse, so it is read as content, fences and all: {reason}"

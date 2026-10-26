@@ -480,18 +480,29 @@ fn validate_can_still_be_pointed_at_one_artifact() {
     mind(dir.path(), &["init"]).unwrap();
     write_skill(dir.path(), "good", &skill_file("good", "Fine"));
     write_rule(dir.path(), "empty.md", "\n  \n");
+    write_rule(
+        dir.path(),
+        "scoped.md",
+        "---\npaths:\n  - \"src/**\"\n---\n",
+    );
 
     let one = mind(dir.path(), &["validate", "good"]).unwrap();
     let broken = mind(dir.path(), &["validate", "empty"]).unwrap();
+    let scoped = mind(dir.path(), &["validate", "scoped"]).unwrap();
 
     assert!(one.ok);
     assert!(one.stdout.contains("1 skill checked, 0 invalid"));
-    assert!(!broken.ok);
-    assert!(
-        broken.stdout.contains("the file has no content"),
-        "{}",
-        broken.stdout
-    );
+    // A file of front matter alone has content, just none an agent reads.
+    for broken in [broken, scoped] {
+        assert!(!broken.ok);
+        assert!(
+            broken
+                .stdout
+                .contains("the file has no content beyond any front matter"),
+            "{}",
+            broken.stdout
+        );
+    }
 }
 
 #[test]
