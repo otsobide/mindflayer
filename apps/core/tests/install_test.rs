@@ -791,6 +791,42 @@ fn what_an_interrupted_install_left_is_cleared_and_said_by_the_next() {
     assert!(second.swept.is_empty(), "{second:?}");
 }
 
+#[test]
+fn what_an_earlier_version_left_beside_the_copy_is_cleared_and_said_by_the_next_install() {
+    let (_dir, workspace, project) = own_skills(&["deploy"], 0);
+    let ledger = workspace.ledger().unwrap();
+    install_named(&workspace, &ledger, &project, "deploy").unwrap();
+    // As an install of a version that staged beside leaves it when stopped:
+    // a half-made copy next to the skill, and the one it was replacing.
+    let skills = project.directory_for(Kind::Skill);
+    let left = [
+        skills.join(".deploy.mindflayer-new"),
+        skills.join(".deploy.mindflayer-old"),
+    ];
+    for folder in &left {
+        fs::create_dir(folder).unwrap();
+        fs::write(folder.join("SKILL.md"), "half").unwrap();
+    }
+
+    // Nothing of the skill's own has changed, and that is no reason to leave
+    // a copy an agent loads.
+    let again = install_named(&workspace, &ledger, &project, "deploy").unwrap();
+
+    assert!(
+        matches!(again.installed, Installed::Unchanged { .. }),
+        "{again:?}"
+    );
+    assert_eq!(again.swept, left);
+    assert_eq!(listing(&skills), ["deploy"]);
+    assert!(
+        install_named(&workspace, &ledger, &project, "deploy")
+            .unwrap()
+            .swept
+            .is_empty(),
+        "said once"
+    );
+}
+
 // ---------------------------------------------------------------------------
 // The workspace's own skills, offered beside the shelf
 // ---------------------------------------------------------------------------

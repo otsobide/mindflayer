@@ -661,6 +661,14 @@ installing that skill at once, each deleting what the other was building.
   question each platform answers differently, and a lock the system drops when
   its process dies answers it on all of them. Only folders named the way a
   stage is are swept; anything else in there, somebody else put there.
+- **What earlier versions left beside is cleared too.** A project that
+  upgraded can still hold the `.deploy.mindflayer-new` or `-old` of an install
+  an earlier version did not finish, and no sweep of `.mind/tmp` would find
+  it. The next install of that skill removes both, whether or not it changes
+  anything else, and says so as it says a swept stage. It does so without the
+  lock, because no run of this version stages there, and those versions
+  cleared each other's anyway. One it cannot remove fails the install, as it
+  did when staging there, rather than staying where an agent reads.
 - **The folder the copy goes in is made when it is missing.** Staging beside
   made it on the way. A fresh clone has no empty folders, so a project's
   `skills/` can be missing although its marker names it.

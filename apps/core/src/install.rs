@@ -420,7 +420,8 @@ pub fn offered(
 /// Copy one shelf entry into a project.
 ///
 /// The copy is built in the project's scratch folder, and what an interrupted
-/// install left there is cleared first and said ([`Installation::swept`]).
+/// install left there, or beside the copy, is cleared first and said
+/// ([`Installation::swept`]).
 pub fn install(
     workspace: &FlayerWorkspace,
     ledger: &Ledger,
@@ -674,9 +675,10 @@ pub enum Installed {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Installation {
     pub installed: Installed,
-    /// What installs that were interrupted had left in the project's scratch
-    /// folder, cleared before this one built its copy there. Said rather than
-    /// cleared quietly, because each is an install that did not finish.
+    /// What installs that were interrupted had left, cleared before this one
+    /// built its copy: in the project's scratch folder, and beside the copy,
+    /// where earlier versions staged. Said rather than cleared quietly,
+    /// because each is an install that did not finish.
     pub swept: Vec<PathBuf>,
 }
 

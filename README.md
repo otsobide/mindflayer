@@ -442,7 +442,8 @@ ignores itself, and moves it into place once it is whole, so the skills folder
 holds the old copy, the new one or, for the instant between two renames of an
 update, neither, and never part of either. Two installs at once each build in a
 folder of their own there. One that is stopped halfway leaves its work there
-too, and the next install clears it and says so:
+too, and the next install clears it and says so, as it does the hidden
+`.<name>.mindflayer-new` an older version left beside a skill:
 
 ```
 $ mind install commit-style

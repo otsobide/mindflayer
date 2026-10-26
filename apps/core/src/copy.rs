@@ -230,16 +230,21 @@ impl Stage {
         &self.dir
     }
 
-    /// What interrupted runs had left in the scratch folder, cleared when this
-    /// stage was opened.
+    /// What interrupted runs had left that this stage cleared: the stages in
+    /// the scratch folder when it was opened, then what earlier versions had
+    /// staged beside each target it replaced.
     pub fn swept(&self) -> &[PathBuf] {
         &self.swept
     }
 
     /// [`replace`], building the copy in this stage instead of beside `to`.
     ///
+    /// What an interrupted run of an earlier version left beside `to`, where
+    /// they all staged, is cleared first ([`Stage::swept`]).
+    ///
     /// Mutable, because a stage builds one copy at a time in one place.
     pub fn replace(&mut self, from: &Path, to: &Path, within: &Path) -> Result<Change, io::Error> {
+        self.clear_beside(to)?;
         let old = self.dir.join("old");
         let change = put(from, to, within, &self.dir.join("new"), &old)?;
         // The new copy is in place whatever happens here, so an old one that
@@ -247,6 +252,39 @@ impl Stage {
         // the stage tries again, and the next run sweeps what that leaves.
         let _ = fs::remove_dir_all(&old);
         Ok(change)
+    }
+
+    /// Remove the `.<name>.mindflayer-new` and `-old` that an interrupted run
+    /// of an earlier version left beside `to`: a skill an agent may load, in a
+    /// folder no sweep looks in.
+    ///
+    /// Without the lock a sweep waits for, because no run of this version
+    /// builds there, and runs of those versions cleared each other's anyway.
+    /// One that will not go fails the replacement, as it failed theirs, rather
+    /// than staying where an agent reads; one another run removed first is
+    /// that run's to say.
+    fn clear_beside(&mut self, to: &Path) -> Result<(), io::Error> {
+        for what in ["new", "old"] {
+            let left = beside(to, what);
+            // A folder, not a link: no version ever staged one.
+            if !fs::symlink_metadata(&left).is_ok_and(|meta| meta.is_dir()) {
+                continue;
+            }
+            match fs::remove_dir_all(&left) {
+                Ok(()) => self.swept.push(left),
+                Err(error) if error.kind() == io::ErrorKind::NotFound => {}
+                Err(error) => {
+                    return Err(io::Error::new(
+                        error.kind(),
+                        format!(
+                            "cannot clear {}, left by an install that did not finish: {error}",
+                            left.display()
+                        ),
+                    ))
+                }
+            }
+        }
+        Ok(())
     }
 }
 
@@ -366,7 +404,8 @@ fn random() -> u64 {
     hasher.finish()
 }
 
-/// A hidden sibling of `to`, for staging a replacement.
+/// A hidden sibling of `to`: where [`replace`] stages, and where installs
+/// staged before [`Stage`].
 fn beside(to: &Path, what: &str) -> PathBuf {
     let name = to
         .file_name()
