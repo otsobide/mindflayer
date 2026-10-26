@@ -104,7 +104,7 @@ pub struct Resolved {
     pub reason: Reason,
 }
 
-/// Why no workspace could be decided on.
+/// Why no workspace, or no project of one, could be decided on.
 #[derive(Debug, Error)]
 pub enum ResolveError {
     /// What the command line or the activation names does not open as a
