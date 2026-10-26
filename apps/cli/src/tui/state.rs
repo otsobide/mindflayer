@@ -10,6 +10,7 @@
 use std::fmt::Write as _;
 use std::path::{Path, PathBuf};
 
+use mindflayer_core::url::redacted;
 use mindflayer_core::{paths, Kind, Layout, DEFAULT_SUBDIRECTORY, QUALIFIER};
 use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
@@ -504,13 +505,20 @@ fn directory(path: &str) -> String {
     }
 }
 
-/// A command line as it would be typed into a shell.
+/// A command line as it would be typed into a shell, for showing.
+///
+/// Without the credentials of any URL in it, here rather than where it is
+/// shown, because it is shown in more than one place: the box that says what
+/// is running, and the transcript printed when the TUI closes. The words run
+/// as typed, so a URL with a token in it is refused rather than fetched
+/// without one; only the line that names them leaves it out.
 pub fn shell(words: &[String]) -> String {
-    words
+    let line = words
         .iter()
         .map(|word| quote(word))
         .collect::<Vec<_>>()
-        .join(" ")
+        .join(" ");
+    redacted(&line).into_owned()
 }
 
 /// A word, quoted only when a shell would otherwise split or expand it.

@@ -467,6 +467,30 @@ fn gathering_in_the_tui_is_flayer_gather_git() {
 }
 
 #[test]
+fn a_gather_refused_for_a_token_in_its_url_shows_the_token_neither_while_it_runs_nor_after() {
+    let dir = TempDir::new().unwrap();
+    flayer(dir.path(), &["init"]).unwrap();
+    let mut app = tui_in(dir.path());
+
+    press_key(&mut app, KeyCode::Char('g'));
+    type_text(&mut app, "https://me:ghp_t0ken@example.com/acme/skills");
+    let task = press_and_run(&mut app, KeyCode::Enter).unwrap();
+
+    // What the box drawn over the screen says while it runs.
+    assert_eq!(
+        task.describe(),
+        "flayer gather git https://example.com/acme/skills"
+    );
+    let transcript = app.transcript();
+    assert!(
+        transcript.starts_with("$ flayer gather git https://example.com/acme/skills\n"),
+        "{transcript}"
+    );
+    assert!(transcript.contains("is refused"), "{transcript}");
+    assert!(!transcript.contains("ghp_t0ken"), "{transcript}");
+}
+
+#[test]
 fn the_install_screen_opens_inside_the_tui_and_applies_from_there() {
     let (dir, _workspace, _ledger) = shelved(&["collapse"], &["deploy"]);
     let mut app = tui_in(dir.path());
@@ -492,6 +516,52 @@ fn the_install_screen_opens_inside_the_tui_and_applies_from_there() {
     assert!(app
         .transcript()
         .contains("$ flayer install\ncollapse: installed deploy"));
+}
+
+#[test]
+fn the_install_screen_scrubs_the_ledger_when_it_applies_and_not_when_it_opens() {
+    let (dir, workspace, _ledger) = shelved(&["collapse"], &["deploy"]);
+    let database = rusqlite::Connection::open(workspace.ledger_path()).unwrap();
+    database
+        .execute(
+            "UPDATE sources SET url = 'https://me:ghp_t0ken@example.com/acme/skills'",
+            [],
+        )
+        .unwrap();
+    let stored = || -> String {
+        database
+            .query_row("SELECT url FROM sources", [], |row| row.get(0))
+            .unwrap()
+    };
+    let mut app = tui_in(dir.path());
+
+    // Opened and left: a read, which writes nothing and so has nothing to say.
+    press_and_run(&mut app, KeyCode::Char('i'));
+    assert!(matches!(app.mode, Mode::Installing(_)), "{:?}", app.mode);
+    press_key(&mut app, KeyCode::Char('q'));
+    assert_eq!(app.transcript(), "");
+    assert!(stored().contains("ghp_t0ken"));
+
+    press_and_run(&mut app, KeyCode::Char('i'));
+    press_key(&mut app, KeyCode::Right);
+    press_key(&mut app, KeyCode::Char(' '));
+    press_key(&mut app, KeyCode::Char('a'));
+    press_and_run(&mut app, KeyCode::Char('y'));
+
+    let transcript = app.transcript();
+    assert!(
+        transcript.starts_with("$ flayer install\ncollapse: installed deploy\n"),
+        "{transcript}"
+    );
+    assert!(
+        transcript.contains(
+            "note: https://example.com/acme/skills: the user name, password or token an older \
+             Mindflayer stored in this URL is taken out"
+        ),
+        "{transcript}"
+    );
+    assert!(!transcript.contains("ghp_t0ken"), "{transcript}");
+    assert_eq!(stored(), "https://example.com/acme/skills");
 }
 
 #[test]

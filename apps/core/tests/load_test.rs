@@ -264,7 +264,9 @@ fn installing_a_loaded_skill_copies_it_and_a_later_edit_there_updates_it() {
 
     let candidate =
         install::offered(&target, &ledger, &project, Kind::Skill, "deploy", None).unwrap();
-    let first = install::install(&target, &ledger, &project, &candidate).unwrap();
+    let first = install::install(&target, &ledger, &project, &candidate)
+        .unwrap()
+        .installed;
     assert!(matches!(first, Installed::Added { .. }), "{first:?}");
     assert!(installed_at(&project, "deploy").join("SKILL.md").is_file());
 
@@ -279,7 +281,9 @@ fn installing_a_loaded_skill_copies_it_and_a_later_edit_there_updates_it() {
     let candidate =
         install::offered(&target, &ledger, &project, Kind::Skill, "deploy", None).unwrap();
     assert_eq!(candidate.standing, Standing::Installed);
-    let second = install::install(&target, &ledger, &project, &candidate).unwrap();
+    let second = install::install(&target, &ledger, &project, &candidate)
+        .unwrap()
+        .installed;
 
     assert!(matches!(second, Installed::Updated { .. }), "{second:?}");
     let copied = fs::read_to_string(installed_at(&project, "deploy").join("SKILL.md")).unwrap();
@@ -398,7 +402,9 @@ fn a_loaded_workspace_that_is_the_project_itself_is_never_copied_onto_itself() {
     // the loaded workspace's own files on uninstall.
     candidate.standing = Standing::Installed;
 
-    let outcome = install::install(&target, &ledger, &project, &candidate).unwrap();
+    let outcome = install::install(&target, &ledger, &project, &candidate)
+        .unwrap()
+        .installed;
 
     assert!(
         matches!(outcome, Installed::Unchanged { .. }),
@@ -530,7 +536,9 @@ fn a_folder_started_by_hand_without_a_manifest_is_somebody_elses() {
     let candidate =
         install::offered(&target, &ledger, &project, Kind::Skill, "deploy", None).unwrap();
     assert_eq!(candidate.standing, Standing::Foreign);
-    let outcome = install::install(&target, &ledger, &project, &candidate).unwrap();
+    let outcome = install::install(&target, &ledger, &project, &candidate)
+        .unwrap()
+        .installed;
 
     assert!(matches!(outcome, Installed::Foreign { .. }), "{outcome:?}");
     assert_eq!(fs::read_to_string(&notes).unwrap(), "my draft");

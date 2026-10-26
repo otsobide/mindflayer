@@ -24,6 +24,7 @@ use std::path::{Path, PathBuf};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
+use crate::gather::{self, Scrub};
 use crate::kind::Kind;
 use crate::ledger::{Ledger, LedgerError, LEDGER_FILE};
 use crate::paths;
@@ -66,6 +67,13 @@ pub const FLAYER_CONFIG: &str = "flayer.toml";
 /// Kept rather than discarded so a gather can be inspected after the fact, and
 /// so what a source actually contained is still there when its report is not.
 pub const CACHE_DIR: &str = "cache";
+/// Where an install builds its copy before moving it into place, inside a
+/// project's [`MIND_DIR`].
+///
+/// Not beside the copy, because that is a folder agents read, and not in the
+/// system's temporary folder, which can be another filesystem: inside the
+/// project, a finished copy is moved into place by a rename.
+pub const SCRATCH_DIR: &str = "tmp";
 
 /// Which of the two marker files a version was read from.
 ///
@@ -288,6 +296,12 @@ impl MindProject {
         self.root.join(MIND_DIR)
     }
 
+    /// Where an install into this project builds its copy ([`SCRATCH_DIR`]),
+    /// whether or not one has made it yet.
+    pub fn scratch_dir(&self) -> PathBuf {
+        self.mind_dir().join(SCRATCH_DIR)
+    }
+
     /// The folder holding one kind, whether or not it exists yet.
     ///
     /// What the marker says, or the default when it says nothing — except for
@@ -506,6 +520,12 @@ impl FlayerWorkspace {
     /// Refused for an [`unmade`](Self::unmade) workspace, which has nowhere to
     /// keep one: creating it would leave half a workspace behind, a
     /// `.mindflayer` holding a database and no marker.
+    ///
+    /// What a command opens it through, rather than how: one that writes to it
+    /// opens it with [`FlayerWorkspace::ledger_to_write`], which scrubs it
+    /// first, and one that only reads with
+    /// [`FlayerWorkspace::ledger_for_reading`], which neither makes it nor
+    /// scrubs it.
     pub fn ledger(&self) -> Result<Ledger, LedgerError> {
         if !self.made {
             return Err(LedgerError::Unmade {
@@ -515,6 +535,23 @@ impl FlayerWorkspace {
         Ledger::open(self.ledger_path())
     }
 
+    /// Open that database for a command that writes to it: scrubbed first of
+    /// what an older build stored with a credential ([`gather::scrub`]), with
+    /// what the scrub took out handed back for the front end to say.
+    ///
+    /// The one way to open it for writing, rather than a scrub each front end
+    /// remembers to run: which commands write is the front end's to know, as
+    /// whether one may create a workspace is with the
+    /// [`Intent`](crate::resolve::Intent) it hands
+    /// [`resolve`](crate::resolve::resolve), but what opening to write
+    /// involves is core's, so no front end can write first and scrub after,
+    /// or not at all.
+    pub fn ledger_to_write(&self) -> Result<(Ledger, Scrub), LedgerError> {
+        let ledger = self.ledger()?;
+        let scrub = gather::scrub(self, &ledger)?;
+        Ok((ledger, scrub))
+    }
+
     /// The ledger, for a command that only reads it: the one on disk when
     /// there is one, and otherwise an empty one in memory, which answers every
     /// question the way a ledger nothing was ever written to would, without
@@ -522,7 +559,13 @@ impl FlayerWorkspace {
     ///
     /// Never for a write. What is recorded in the stand-in is gone when it is
     /// dropped, and a copy installed without its record is one Mindflayer
-    /// would afterwards refuse to touch; a write opens [`ledger`](Self::ledger).
+    /// would afterwards refuse to touch; a write opens
+    /// [`ledger_to_write`](Self::ledger_to_write).
+    ///
+    /// Nor is the one on disk scrubbed of what an older build stored with a
+    /// credential: everything the ledger hands back is redacted on the way out
+    /// anyway, and reading is no reason to write. It is left for the next
+    /// command that writes.
     pub fn ledger_for_reading(&self) -> Result<Ledger, LedgerError> {
         // An unmade workspace has no ledger, whatever a stray file says.
         if !self.made {

@@ -342,7 +342,8 @@ fn draws_mind(command: Option<&Command>) -> bool {
 /// Opened there exactly rather than found by walking up from it, as `flayer
 /// install` would: before the default is made there is no marker at `base`
 /// to stop the walk, which would carry on to any workspace above home. Built
-/// from the ledger as it is, so opening the screen makes nothing.
+/// from the ledger as it is, as `flayer install` builds it, so opening the
+/// screen makes nothing and scrubs nothing.
 fn open_install(base: &Path, unmade: bool) -> Performed {
     let workspace = if unmade {
         FlayerWorkspace::unmade(base)
@@ -350,10 +351,9 @@ fn open_install(base: &Path, unmade: bool) -> Performed {
         FlayerWorkspace::open(base)
     };
     let screen = workspace.map_err(CliError::from).and_then(|workspace| {
-        let ledger = workspace.ledger_for_reading().map_err(CliError::from)?;
         // What would not open is already on screen, beside what did.
         let (projects, _) = install::registered(&workspace);
-        install::build(&workspace, &ledger, projects).map_err(CliError::from)
+        install::open(&workspace, projects)
     });
     match screen {
         Ok(screen) => Performed::Install(screen),
@@ -364,15 +364,14 @@ fn open_install(base: &Path, unmade: bool) -> Performed {
     }
 }
 
-/// Carry out what the install screen marked, the way `flayer install` does.
+/// Carry out what the install screen marked, the way `flayer install` does:
+/// through [`install::commit`], which scrubs the ledger first.
 fn apply_install(base: &Path, screen: &InstallScreen) -> Done {
     let command = String::from("flayer install");
     let applied = FlayerWorkspace::open(base)
-        .map_err(CliError::from)
+        .map_err(Failure::from)
         .and_then(|workspace| {
-            let ledger = workspace.ledger().map_err(CliError::from)?;
-            let mut outcome =
-                install::apply(&workspace, &ledger, screen).map_err(CliError::from)?;
+            let mut outcome = install::commit(&workspace, screen)?;
             let warnings = load_warnings(&workspace);
             outcome.ok = outcome.ok && warnings.is_empty();
             outcome.stderr.extend(warnings);
@@ -386,7 +385,12 @@ fn apply_install(base: &Path, screen: &InstallScreen) -> Done {
             error: None,
             ok: outcome.ok,
         },
-        Err(error) => Done::failed(command, error.to_string()),
+        // What the scrub said goes with an error too: it happened all the
+        // same, and says so only this once.
+        Err(failure) => Done {
+            stderr: failure.warnings,
+            ..Done::failed(command, failure.error.to_string())
+        },
     }
 }
 
