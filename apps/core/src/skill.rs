@@ -42,8 +42,8 @@ impl SkillManifest {
     }
 }
 
-/// `allowed-tools` is written both as a YAML list and as one comma separated
-/// string, and both spellings mean the same thing.
+/// `allowed-tools` is written both as a YAML list and as one string, and both
+/// spellings mean the same thing.
 fn tool_list<'de, D>(deserializer: D) -> Result<Option<Vec<String>>, D::Error>
 where
     D: serde::Deserializer<'de>,
@@ -59,14 +59,40 @@ where
     Ok(match written {
         None => None,
         Some(Written::List(tools)) => Some(tools),
-        Some(Written::Inline(line)) => Some(
-            line.split(',')
-                .map(str::trim)
-                .filter(|tool| !tool.is_empty())
-                .map(str::to_owned)
-                .collect(),
-        ),
+        Some(Written::Inline(line)) => Some(split_tools(&line)),
     })
+}
+
+/// The tools in one `allowed-tools` string.
+///
+/// The Agent Skills specification separates them with spaces. Commas are
+/// still accepted, because that is how Claude Code first wrote them and how
+/// skills written before the specification spell them. Neither separates
+/// inside parentheses: a Claude permission pattern such as `Bash(git add *)`
+/// is one tool, and a plain split on whitespace would cut it into three.
+fn split_tools(line: &str) -> Vec<String> {
+    let mut tools = Vec::new();
+    let mut tool = String::new();
+    let mut depth = 0usize;
+    for c in line.chars() {
+        let separates = depth == 0 && (c == ',' || c.is_whitespace());
+        if separates {
+            if !tool.is_empty() {
+                tools.push(std::mem::take(&mut tool));
+            }
+            continue;
+        }
+        match c {
+            '(' => depth += 1,
+            ')' => depth = depth.saturating_sub(1),
+            _ => {}
+        }
+        tool.push(c);
+    }
+    if !tool.is_empty() {
+        tools.push(tool);
+    }
+    tools
 }
 
 #[cfg(test)]
