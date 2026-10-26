@@ -17,6 +17,8 @@ pub mod ui;
 
 use std::io::{self, IsTerminal as _};
 use std::path::{Path, PathBuf};
+use std::sync::mpsc;
+use std::thread;
 use std::time::Duration;
 
 use std::error::Error as _;
@@ -40,9 +42,16 @@ use crate::{
     FlayerCommand, Outcome,
 };
 use state::{
-    App, Choice, Done, Holdings, Item, LoadedSource, Member, Mode, Performed, Runner, Scope, Step,
-    Task, Unlinked, View, Workspace,
+    App, Choice, Done, Holdings, Item, LoadedSource, Member, Mode, Performed, Runner, Running,
+    Scope, Step, Task, Unlinked, Update, View, Workspace,
 };
+
+/// How long the loop waits for a key before drawing again, so a resize
+/// repaints without waiting for one.
+const IDLE: Duration = Duration::from_millis(200);
+/// The same while a task runs apart: oftener, so its count moves as the work
+/// does.
+const WATCHING: Duration = Duration::from_millis(50);
 
 /// Open the TUI on the workspace at or above `directory`, and run it until it
 /// is closed.
@@ -113,11 +122,17 @@ fn open(mut app: App, command: &'static str) -> Result<Outcome, Failure> {
 /// [`step`]'s, and what the screen looks like is [`ui::draw`]'s.
 fn drive(terminal: &mut DefaultTerminal, app: &mut App) -> Result<(), io::Error> {
     loop {
+        settle(app);
         terminal.draw(|frame| ui::draw(app, frame))?;
 
         // A poll rather than a blocking read, so a resize repaints instead of
         // waiting for somebody to press something first.
-        if !event::poll(Duration::from_millis(200))? {
+        let patience = if app.running.is_some() {
+            WATCHING
+        } else {
+            IDLE
+        };
+        if !event::poll(patience)? {
             continue;
         }
         let Event::Key(key) = event::read()? else {
@@ -131,7 +146,12 @@ fn drive(terminal: &mut DefaultTerminal, app: &mut App) -> Result<(), io::Error>
 
         match app.press(key) {
             Step::Stay => {}
-            Step::Quit => return Ok(()),
+            // Waited for rather than left behind, so what it did is in the
+            // transcript and nothing is half done when the process ends.
+            Step::Quit => {
+                wait(app);
+                return Ok(());
+            }
             // An editor draws a screen of its own, so this one steps aside
             // for it — raw mode off, back to the normal screen — and is drawn
             // again from scratch once the editor is closed.
@@ -145,9 +165,11 @@ fn drive(terminal: &mut DefaultTerminal, app: &mut App) -> Result<(), io::Error>
                     let _ = event::read()?;
                 }
             }
+            // Started and left to run: the frames that follow show it.
+            Step::Run(task) if task.runs_apart() => step(app, task),
             Step::Run(task) => {
-                // Said before it starts, because a gather is the network and
-                // a frozen screen reads as a hung one.
+                // Said before it starts, because a frozen screen reads as a
+                // hung one.
                 app.busy = Some(task.describe());
                 terminal.draw(|frame| ui::draw(app, frame))?;
                 step(app, task);
@@ -164,11 +186,64 @@ fn drive(terminal: &mut DefaultTerminal, app: &mut App) -> Result<(), io::Error>
 }
 
 /// Carry out a task and show what came of it: everything the loop does
-/// between the key that asked and the next frame.
+/// between the key that asked and the next frame. A task that runs apart is
+/// started instead, and [`settle`] shows what came of it once it is over.
 ///
 /// Public so a test can do exactly what the loop does, without a terminal.
 pub fn step(app: &mut App, task: Task) {
+    if task.runs_apart() {
+        start(app, task);
+        return;
+    }
     let performed = perform(&task, app);
+    conclude(app, &task, performed);
+}
+
+/// Take in what the task running apart has reported since the last frame,
+/// and show what came of it once it is over: what the loop does before each
+/// frame, and public for a test to do the same between the frames it draws.
+pub fn settle(app: &mut App) {
+    if let Some((task, dones)) = app.heard() {
+        conclude(app, &task, Performed::Ran(dones));
+    }
+}
+
+/// Wait for the task running apart to be over, and show what came of it:
+/// what leaving the TUI does, and how a test runs one to its end.
+pub fn wait(app: &mut App) {
+    if let Some((task, dones)) = app.waited() {
+        conclude(app, &task, Performed::Ran(dones));
+    }
+}
+
+/// Run a task's lines on a thread of their own, reporting each step back.
+///
+/// A thread rather than the loop's own, so the screen goes on drawing while
+/// the network takes its time. The lines are the ones [`perform`] would run,
+/// through the same runner.
+fn start(app: &mut App, task: Task) {
+    let (send, updates) = mpsc::channel();
+    let watch = Watch::new();
+    let reporting = watch.clone().reporting_to({
+        let send = send.clone();
+        move |progress| {
+            let _ = send.send(Update::Progress(progress));
+        }
+    });
+    let runner = runner(app);
+    let lines = task.commands();
+    let base = app.base().to_path_buf();
+    let home = app.home.clone();
+    thread::spawn(move || {
+        let dones = run_all(&runner, &lines, &base, home.as_deref(), &reporting);
+        // Nobody to tell is a screen already closed, which needs no answer.
+        let _ = send.send(Update::Finished(dones));
+    });
+    app.running = Some(Running::new(task, watch, updates));
+}
+
+/// Show what came of a task, with the disk read again when it asked for that.
+fn conclude(app: &mut App, task: &Task, performed: Performed) {
     let view = task.reloads().then(|| {
         let home = app.home.as_deref();
         match app.opened {
@@ -177,7 +252,7 @@ pub fn step(app: &mut App, task: Task) {
         }
         .map_err(|error| error.to_string())
     });
-    app.finish(&task, performed, view);
+    app.finish(task, performed, view);
 }
 
 /// Do the work a task names.

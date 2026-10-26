@@ -16,9 +16,10 @@ use ratatui::Frame;
 use super::minds::{self, Minds};
 use super::state::{
     AddField, AddForm, App, Confirm, Focus, GatherForm, Input, Item, LinkForm, LoadForm, Member,
-    Mode, Reader, RenameForm, Scope, Task, Tone, View, Workspace, GATHER_FIELDS,
+    Mode, Reader, RenameForm, Running, Scope, Task, Tone, View, Workspace, GATHER_FIELDS,
 };
 use crate::install::ui::{centred, pane, selected};
+use crate::progress::said;
 use crate::render::printable;
 
 /// How wide a form's labels are, so the values line up.
@@ -46,7 +47,9 @@ pub fn draw(app: &App, frame: &mut Frame) {
             Mode::Browse | Mode::Installing(_) => {}
         }
     }
-    if let Some(busy) = &app.busy {
+    if let Some(running) = &app.running {
+        watching(running, frame, area);
+    } else if let Some(busy) = &app.busy {
         working(busy, frame, area);
     }
 }
@@ -977,6 +980,27 @@ fn working(busy: &str, frame: &mut Frame, area: Rect) {
         .border_type(BorderType::Thick)
         .border_style(Style::default().fg(Color::Yellow))
         .title(" working ");
+    frame.render_widget(Paragraph::new(text).block(block), box_);
+}
+
+/// Drawn while a task runs apart: the command it is, and the last step it
+/// reported, redrawn as it reports more.
+fn watching(running: &Running, frame: &mut Frame, area: Rect) {
+    let command = printable(&running.task.describe());
+    let step = running
+        .progress
+        .map_or_else(|| String::from("starting"), said);
+    let longest = command.chars().count().max(step.chars().count());
+    let width = u16::try_from(longest + 4)
+        .unwrap_or(u16::MAX)
+        .clamp(30, area.width.max(1));
+    let box_ = centred(area, width, 4);
+    frame.render_widget(Clear, box_);
+    let block = Block::bordered()
+        .border_type(BorderType::Thick)
+        .border_style(Style::default().fg(Color::Yellow))
+        .title(" working ");
+    let text = vec![Line::from(command), Line::from(Span::styled(step, dim()))];
     frame.render_widget(Paragraph::new(text).block(block), box_);
 }
 

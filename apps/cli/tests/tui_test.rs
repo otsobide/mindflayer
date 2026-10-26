@@ -3,9 +3,13 @@
 
 mod common;
 
+use std::sync::mpsc::{self, RecvTimeoutError};
 use std::sync::{Arc, Mutex};
+use std::thread;
+use std::time::{Duration, Instant};
 
 use common::*;
+use tui::state::Step as TuiStep;
 
 // ---------------------------------------------------------------------------
 // The TUI
@@ -494,6 +498,55 @@ fn gathering_in_the_tui_is_flayer_gather_git() {
     assert!(reader.lines.iter().any(|(_, line)| line.contains("added")));
     assert_eq!(app.workspace().unwrap().shelf, 1);
     assert!(app.transcript().contains("$ flayer gather git "));
+}
+
+#[test]
+fn a_gather_runs_apart_with_its_progress_drawn_until_it_is_over() {
+    let dir = TempDir::new().unwrap();
+    flayer(dir.path(), &["init"]).unwrap();
+    let mut app = tui_in(dir.path());
+    let (go, gate) = mpsc::channel();
+    app.runner = Some(slow_gather(gate));
+
+    press_key(&mut app, KeyCode::Char('g'));
+    type_text(&mut app, SLOW);
+    let TuiStep::Run(task) = press_key(&mut app, KeyCode::Enter) else {
+        panic!("{:?}", app.mode);
+    };
+    tui::step(&mut app, task);
+
+    // Back at once, with the gather still going and the screen drawing it.
+    assert!(app.running.is_some());
+    settle_until(&mut app, |app| {
+        reported(app) == Some(Progress::Harvesting { done: 0, total: 3 })
+    });
+    let drawn = tui_drawn(&app);
+    assert!(
+        drawn.contains(&format!("flayer gather git {SLOW}")),
+        "{drawn}"
+    );
+    assert!(drawn.contains("reading folders 0/3"), "{drawn}");
+    // A key for anything else was aimed at a screen about to change.
+    assert_eq!(press_key(&mut app, KeyCode::Char('q')), TuiStep::Stay);
+
+    go.send(()).unwrap();
+    settle_until(&mut app, |app| {
+        reported(app) == Some(Progress::Harvesting { done: 1, total: 3 })
+    });
+    assert!(tui_drawn(&app).contains("reading folders 1/3"));
+
+    for _ in 0..3 {
+        go.send(()).unwrap();
+    }
+    settle_until(&mut app, |app| app.running.is_none());
+
+    let Mode::Reading(reader) = &app.mode else {
+        panic!("{:?}", app.mode);
+    };
+    assert_eq!(reader.lines[0].1, "3 skills: 3 added");
+    assert!(app
+        .transcript()
+        .contains(&format!("$ flayer gather git {SLOW}\n3 skills: 3 added\n")));
 }
 
 #[test]
@@ -1018,4 +1071,59 @@ fn mind_with_no_project_offers_to_make_one() {
     assert_eq!(task, Some(Task::InitProject));
     assert!(dir.path().join(MIND_DIR).join(MIND_CONFIG).is_file());
     assert_eq!(app.scope(), Scope::Project);
+}
+
+// ---------------------------------------------------------------------------
+// A gather that takes its time
+// ---------------------------------------------------------------------------
+
+/// The URL the slow gather is asked for, which it never fetches.
+const SLOW: &str = "https://example.com/skills.git";
+
+/// A stand-in for `flayer gather git` that takes as long as the test wants:
+/// it reports reading each of three folders, and goes on from one to the
+/// next only when `go` says so. A cancel stops it before it says it is done,
+/// as one stops a real gather before anything is placed.
+fn slow_gather(go: mpsc::Receiver<()>) -> Runner {
+    let go = Mutex::new(go);
+    Runner::new(move |words, _, _, watch| {
+        let go = go.lock().unwrap();
+        let command = tui::state::shell(words);
+        for done in 0..=3 {
+            watch.report(Progress::Harvesting { done, total: 3 });
+            loop {
+                if watch.is_cancelled() {
+                    return Done::failed(command, "cancelled, with nothing put on the shelf");
+                }
+                match go.recv_timeout(Duration::from_millis(5)) {
+                    // A test that has gone is not waited for.
+                    Ok(()) | Err(RecvTimeoutError::Disconnected) => break,
+                    Err(RecvTimeoutError::Timeout) => {}
+                }
+            }
+        }
+        Done {
+            command,
+            stdout: String::from("3 skills: 3 added\n"),
+            stderr: Vec::new(),
+            error: None,
+            ok: true,
+        }
+    })
+}
+
+/// The step the task running apart last reported, as the screen has it.
+fn reported(app: &App) -> Option<Progress> {
+    app.running.as_ref().and_then(|running| running.progress)
+}
+
+/// Take in what the task running apart says, as the loop does before each
+/// frame, until `until` holds.
+fn settle_until(app: &mut App, until: impl Fn(&App) -> bool) {
+    let deadline = Instant::now() + Duration::from_secs(10);
+    while !until(app) {
+        assert!(Instant::now() < deadline, "never came: {:?}", app.running);
+        tui::settle(app);
+        thread::sleep(Duration::from_millis(1));
+    }
 }

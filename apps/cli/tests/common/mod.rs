@@ -311,6 +311,9 @@ pub fn press_and_run(app: &mut App, code: KeyCode) -> Option<Task> {
     match press_key(app, code) {
         tui::state::Step::Run(task) => {
             tui::step(app, task.clone());
+            // To its end, as the loop's frames would see it, when it runs
+            // apart.
+            tui::wait(app);
             Some(task)
         }
         _ => None,

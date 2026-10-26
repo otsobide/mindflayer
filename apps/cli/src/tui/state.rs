@@ -9,9 +9,10 @@
 
 use std::fmt::{self, Write as _};
 use std::path::{Path, PathBuf};
+use std::sync::mpsc::{Receiver, TryRecvError};
 use std::sync::Arc;
 
-use mindflayer_core::gather::Watch;
+use mindflayer_core::gather::{Progress, Watch};
 use mindflayer_core::{paths, Kind, Layout, DEFAULT_SUBDIRECTORY, QUALIFIER};
 use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
@@ -415,6 +416,14 @@ impl Task {
         matches!(self, Task::Edit { .. })
     }
 
+    /// Whether it runs on a thread of its own while the screen goes on
+    /// drawing what it reports: a gather, which is the network, and can take
+    /// long enough to want watching. Everything else is the local disk, over
+    /// before anybody could read a count.
+    pub fn runs_apart(&self) -> bool {
+        matches!(self, Task::Gather { .. })
+    }
+
     /// What to say while it runs.
     pub fn describe(&self) -> String {
         match self {
@@ -578,6 +587,65 @@ impl fmt::Debug for Runner {
     }
 }
 
+/// What a task running apart sends back to the screen.
+#[derive(Debug)]
+pub enum Update {
+    /// It reached this step.
+    Progress(Progress),
+    /// It is over, and this is what each of its command lines said.
+    Finished(Vec<Done>),
+}
+
+/// A task running on a thread of its own while the screen goes on drawing.
+#[derive(Debug)]
+pub struct Running {
+    pub task: Task,
+    /// The last step it reported, once it has reported one.
+    pub progress: Option<Progress>,
+    /// Shares its flag with the watch the task reports to, without its
+    /// sink: holding a sender here would keep the channel open after the
+    /// thread is gone, and a thread that died would never be heard of.
+    pub watch: Watch,
+    updates: Receiver<Update>,
+}
+
+impl Running {
+    pub fn new(task: Task, watch: Watch, updates: Receiver<Update>) -> Self {
+        Self {
+            task,
+            progress: None,
+            watch,
+            updates,
+        }
+    }
+
+    /// Take in what it has sent: each step, and what came of it once it is
+    /// over. Without `wait`, only what has arrived; with it, everything until
+    /// it is over.
+    fn hear(&mut self, wait: bool) -> Option<Vec<Done>> {
+        loop {
+            let update = if wait {
+                self.updates.recv().map_err(|_| TryRecvError::Disconnected)
+            } else {
+                self.updates.try_recv()
+            };
+            match update {
+                Ok(Update::Progress(progress)) => self.progress = Some(progress),
+                Ok(Update::Finished(dones)) => return Some(dones),
+                Err(TryRecvError::Empty) => return None,
+                // Gone without a word, which is a thread that panicked: said,
+                // rather than waited for forever.
+                Err(TryRecvError::Disconnected) => {
+                    return Some(vec![Done::failed(
+                        self.task.describe(),
+                        "stopped before it could say how it went",
+                    )])
+                }
+            }
+        }
+    }
+}
+
 /// What carrying out a task produced.
 #[derive(Debug)]
 pub enum Performed {
@@ -688,6 +756,9 @@ pub struct App {
     pub done: Vec<Done>,
     /// What is running, drawn over everything until it finishes.
     pub busy: Option<String>,
+    /// What is running on a thread of its own, drawn over everything with
+    /// the last step it reported until it is over.
+    pub running: Option<Running>,
     /// Where the default workspace lives, for when there is none above: what
     /// every command this TUI runs is told, so none of them guesses.
     pub home: Option<PathBuf>,
@@ -715,6 +786,7 @@ impl App {
             message: None,
             done: Vec::new(),
             busy: None,
+            running: None,
             home: None,
             runner: None,
         };
@@ -842,6 +914,11 @@ impl App {
         // screen that cannot be left that way feels broken.
         if key.modifiers.contains(KeyModifiers::CONTROL) && key.code == KeyCode::Char('c') {
             return Step::Quit;
+        }
+        // The screen is the running task's until it is over: a key for
+        // anything else was aimed at a screen that is about to change.
+        if self.running.is_some() {
+            return Step::Stay;
         }
         // A message explains the key before this one, so it goes as soon as
         // another is pressed rather than sitting there being about nothing.
@@ -1394,6 +1471,24 @@ impl App {
     // -----------------------------------------------------------------------
     // What came back
     // -----------------------------------------------------------------------
+
+    /// Take in what the task running apart has said since this was last
+    /// asked; once it is over, it is no longer running, and here is what came
+    /// of it.
+    pub fn heard(&mut self) -> Option<(Task, Vec<Done>)> {
+        self.hear(false)
+    }
+
+    /// The same, waiting until it is over.
+    pub fn waited(&mut self) -> Option<(Task, Vec<Done>)> {
+        self.hear(true)
+    }
+
+    fn hear(&mut self, wait: bool) -> Option<(Task, Vec<Done>)> {
+        let dones = self.running.as_mut()?.hear(wait)?;
+        let running = self.running.take()?;
+        Some((running.task, dones))
+    }
 
     /// Show what came of a task, with the disk read again when it asked for
     /// that.
