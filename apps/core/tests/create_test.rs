@@ -348,6 +348,23 @@ fn the_closest_template_of_a_name_wins() {
 }
 
 #[test]
+fn a_template_the_listing_shows_can_be_used_whatever_its_name() {
+    // `mind templates` lists what is on disk, so `--template` has to find it:
+    // the naming rules are for what is created from a template, not for it.
+    let (dir, project) = project();
+    write(
+        dir.path(),
+        ".mind/templates/my--tpl/SKILL.md",
+        "---\nname: x\ndescription: y\n---\n\n# {{name}}\n",
+    );
+
+    let found = template::find(&project, Kind::Skill, "my--tpl").unwrap();
+    let skill = create_from(&project, Kind::Skill, "fresh", "Do it", &found).unwrap();
+
+    assert_eq!(skill.validate(), vec![]);
+}
+
+#[test]
 fn a_template_is_asked_for_by_its_name_and_its_kind() {
     let (_dir, project) = project();
 

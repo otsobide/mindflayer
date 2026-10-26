@@ -16,7 +16,7 @@ use std::path::{Path, PathBuf};
 
 use thiserror::Error;
 
-use crate::artifact;
+use crate::install;
 use crate::kind::{Kind, Layout};
 use crate::workspace::{FlayerWorkspace, MindProject, WorkspaceError};
 
@@ -129,8 +129,10 @@ pub fn templates(project: &MindProject) -> Result<Vec<Template>, TemplateError> 
 /// The template of `kind` called `name`, from wherever is closest.
 pub fn find(project: &MindProject, kind: Kind, name: &str) -> Result<Template, TemplateError> {
     // A name, not a path: it is looked up in known places and must not be
-    // able to reach out of them.
-    if name.contains('/') || !artifact::name_issues(name).is_empty() {
+    // able to reach out of them. One folder name is all that takes; the
+    // naming rules are for what is created from it, and a template `mind
+    // templates` lists has to be one `--template` can use.
+    if !install::is_folder_name(name) {
         return Err(TemplateError::BadName {
             name: name.to_owned(),
         });
@@ -268,7 +270,7 @@ fn built_in(name: &str) -> &'static [File] {
 /// Why a template could not be found or read.
 #[derive(Debug, Error)]
 pub enum TemplateError {
-    #[error("`{name}` is not a template name: templates are named like artifacts, with no `/`")]
+    #[error("`{name}` is not a template name: a template is one folder, named with no `/`")]
     BadName { name: String },
     #[error("no {kind} template called `{name}`{}", there_are(.available))]
     Unknown {

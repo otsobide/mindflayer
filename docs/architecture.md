@@ -852,8 +852,12 @@ a template with broken front matter costs nothing but the error.
 where its name would put it on disk (`lifecycle::find`). The second is what
 lets a skill whose front matter does not parse be opened and fixed: it is left
 out of every listing, and it is the one most in need of opening. Only a name
-that passes the name check is turned into a place, so `../x` cannot reach out
-of the project. More than one match is an error: changing the wrong artifact is
+made of plain folder names (`install::is_folder_name`, segment by segment) is
+turned into a place, so `../x` cannot reach out of the project. Not the naming
+rules: they are for what Mindflayer writes, and a folder from before they were
+tightened — `a--b` — or one made by hand is exactly what has to be found to be
+fixed. A template is looked up by one folder name for the same reason, since
+`mind templates` lists whatever is there. More than one match is an error: changing the wrong artifact is
 not something to guess about. The TUI lists unreadable files in the same way,
 by the name their place gives them (`lifecycle::identify`), so they can be
 reached with a key rather than only read about in a warning.

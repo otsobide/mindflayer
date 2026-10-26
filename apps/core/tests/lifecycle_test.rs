@@ -57,6 +57,35 @@ fn a_skill_that_does_not_read_is_still_found_by_its_folder() {
 }
 
 #[test]
+fn a_folder_the_naming_rules_refuse_is_still_found_to_be_fixed() {
+    // `a--b` was a name before the rules took doubled hyphens away, and a
+    // folder of that name has to stay reachable: by its folder when it does
+    // not read, and when what it declares is something else.
+    let (dir, project) = project();
+    write(dir.path(), "skills/a--b/SKILL.md", "no front matter\n");
+    write(
+        dir.path(),
+        "skills/c--d/SKILL.md",
+        "---\nname: cd\ndescription: Declared otherwise\n---\n",
+    );
+
+    let broken = find(&project, "a--b").unwrap();
+    lifecycle::remove(&project, &broken).unwrap();
+    assert!(!dir.path().join("skills/a--b").exists());
+
+    let mismatched = find(&project, "c--d").unwrap();
+    let renamed = lifecycle::rename(&project, &mismatched, "c-d").unwrap();
+    assert_eq!(renamed.artifact.unwrap().validate(), vec![]);
+    assert!(!dir.path().join("skills/c--d").exists());
+
+    // A way out of the project is still not a place.
+    assert!(matches!(
+        find(&project, "../outside"),
+        Err(LifecycleError::NotFound { .. })
+    ));
+}
+
+#[test]
 fn one_name_for_two_kinds_has_to_be_qualified() {
     let (_dir, project) = project();
     create(&project, Kind::Skill, "deploy", "Ship it").unwrap();

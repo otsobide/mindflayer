@@ -19,6 +19,7 @@ use thiserror::Error;
 use crate::artifact::{self, issue_list, Artifact, ArtifactError, ValidationIssue};
 use crate::catalog::{Catalog, Reference, QUALIFIER};
 use crate::frontmatter;
+use crate::install;
 use crate::kind::{Kind, Layout};
 use crate::paths;
 use crate::skill::SkillManifest;
@@ -73,10 +74,13 @@ pub fn find(project: &MindProject, reference: &Reference) -> Result<Target, Life
         })
         .collect();
 
-    // Only a usable name is turned into a place: one with `..` in it would
-    // otherwise be a way out of the project.
+    // Only a name made of plain folder names is turned into a place: one with
+    // `..` in it would otherwise be a way out of the project. Not the naming
+    // rules, which are for what Mindflayer writes: a folder from before they
+    // were tightened, or one somebody made by hand, is exactly what has to be
+    // found to be fixed or removed.
     let name = reference.name();
-    if artifact::name_issues(name).is_empty() {
+    if name.split('/').all(install::is_folder_name) {
         for kind in kinds {
             let path = place(project, kind, name);
             if !holds(kind, &path) || found.iter().any(|target| target.path == path) {
