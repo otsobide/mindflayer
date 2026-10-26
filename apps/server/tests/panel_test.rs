@@ -27,7 +27,6 @@ const INDEX: &str = include_str!("panel/index.html");
 #[tokio::test]
 async fn a_client_route_serves_index_html_without_a_token() {
     let server = serving(Panel::embedded::<Built>());
-    let router = server.router();
 
     for path in [
         "/",
@@ -36,7 +35,7 @@ async fn a_client_route_serves_index_html_without_a_token() {
         "/skills/a:b",
         "/skills?kind=rule",
     ] {
-        let reply = get(&router, path, Auth::Nothing).await;
+        let reply = get(&server, path, Auth::Nothing).await;
         assert_eq!(reply.status, StatusCode::OK, "{path}");
         assert_eq!(reply.header("content-type"), Some("text/html"));
         assert_eq!(reply.header("cache-control"), Some("no-cache"));
@@ -48,7 +47,7 @@ async fn a_client_route_serves_index_html_without_a_token() {
 async fn a_hashed_asset_is_served_as_immutable() {
     let server = serving(Panel::embedded::<Built>());
 
-    let reply = get(&server.router(), "/assets/index-4f2a9c1b.js", Auth::Nothing).await;
+    let reply = get(&server, "/assets/index-4f2a9c1b.js", Auth::Nothing).await;
 
     assert_eq!(reply.status, StatusCode::OK);
     assert_eq!(reply.header("content-type"), Some("text/javascript"));
@@ -63,7 +62,7 @@ async fn a_hashed_asset_is_served_as_immutable() {
 async fn a_file_outside_the_hashed_assets_is_asked_about_again() {
     let server = serving(Panel::embedded::<Built>());
 
-    let reply = get(&server.router(), "/robots.txt", Auth::Nothing).await;
+    let reply = get(&server, "/robots.txt", Auth::Nothing).await;
 
     assert_eq!(reply.status, StatusCode::OK);
     assert_eq!(reply.header("content-type"), Some("text/plain"));
@@ -74,7 +73,7 @@ async fn a_file_outside_the_hashed_assets_is_asked_about_again() {
 async fn a_missing_hashed_asset_is_a_404_rather_than_the_page() {
     let server = serving(Panel::embedded::<Built>());
 
-    let reply = get(&server.router(), "/assets/index-00000000.js", Auth::Nothing).await;
+    let reply = get(&server, "/assets/index-00000000.js", Auth::Nothing).await;
 
     assert_eq!(reply.status, StatusCode::NOT_FOUND);
     assert_ne!(reply.text(), INDEX);
@@ -83,14 +82,13 @@ async fn a_missing_hashed_asset_is_a_404_rather_than_the_page() {
 #[tokio::test]
 async fn a_path_that_climbs_names_nothing() {
     let server = serving(Panel::embedded::<Built>());
-    let router = server.router();
 
     for path in [
         "/assets/../index.html",
         "/assets/..\\index.html",
         "/./robots.txt",
     ] {
-        let reply = get(&router, path, Auth::Nothing).await;
+        let reply = get(&server, path, Auth::Nothing).await;
         assert_eq!(reply.status, StatusCode::NOT_FOUND, "{path}");
     }
 }
@@ -107,13 +105,12 @@ async fn a_symlink_outside_the_panel_is_never_read() {
     std::os::unix::fs::symlink(outside.path().join("secret"), &link).unwrap();
     let link = link.to_str().unwrap().replace('/', "\\");
     let server = serving(Panel::embedded::<Built>());
-    let router = server.router();
 
     for path in [
         format!("/{link}"),
         format!("/assets{}{link}", "\\..".repeat(64)),
     ] {
-        let reply = get(&router, &path, Auth::Nothing).await;
+        let reply = get(&server, &path, Auth::Nothing).await;
         assert_eq!(reply.status, StatusCode::NOT_FOUND, "{path}");
         assert!(!reply.text().contains("not the panel's"), "{path}");
     }
@@ -123,12 +120,7 @@ async fn a_symlink_outside_the_panel_is_never_read() {
 async fn an_unknown_api_path_gets_json_and_not_the_page() {
     let server = serving(Panel::embedded::<Built>());
 
-    let reply = get(
-        &server.router(),
-        "/api/projects",
-        Auth::Bearer(server.token()),
-    )
-    .await;
+    let reply = get(&server, "/api/projects", Auth::Bearer(server.token())).await;
 
     assert_eq!(reply.status, StatusCode::NOT_FOUND);
     assert_eq!(
@@ -141,14 +133,7 @@ async fn an_unknown_api_path_gets_json_and_not_the_page() {
 async fn the_panel_answers_only_get() {
     let server = serving(Panel::embedded::<Built>());
 
-    let reply = send(
-        &server.router(),
-        Method::POST,
-        "/projects",
-        Auth::Nothing,
-        None,
-    )
-    .await;
+    let reply = send(&server, Method::POST, "/projects", Auth::Nothing, None).await;
 
     assert_eq!(reply.status, StatusCode::METHOD_NOT_ALLOWED);
     assert_eq!(reply.header("allow"), Some("GET, HEAD"));
@@ -157,10 +142,9 @@ async fn the_panel_answers_only_get() {
 #[tokio::test]
 async fn a_build_without_the_panel_says_how_to_build_it() {
     let server = serving(Panel::embedded::<Unbuilt>());
-    let router = server.router();
 
     for path in ["/", "/projects/beta"] {
-        let reply = get(&router, path, Auth::Nothing).await;
+        let reply = get(&server, path, Auth::Nothing).await;
         assert_eq!(reply.status, StatusCode::SERVICE_UNAVAILABLE, "{path}");
         assert_eq!(
             reply.header("content-type"),
@@ -172,7 +156,7 @@ async fn a_build_without_the_panel_says_how_to_build_it() {
     }
 
     // The API does not need the panel.
-    let reply = get(&router, "/api/transcript", Auth::Bearer(server.token())).await;
+    let reply = get(&server, "/api/transcript", Auth::Bearer(server.token())).await;
     assert_eq!(reply.status, StatusCode::OK);
 }
 
@@ -181,7 +165,7 @@ async fn the_launch_link_still_trades_its_token_with_a_panel_at_the_root() {
     let server = serving(Panel::embedded::<Built>());
 
     let reply = get(
-        &server.router(),
+        &server,
         &format!("/?token={}", server.token()),
         Auth::Nothing,
     )

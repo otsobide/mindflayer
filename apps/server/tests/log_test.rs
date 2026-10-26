@@ -7,13 +7,12 @@ use common::*;
 #[tokio::test]
 async fn every_request_is_logged_once_answered() {
     let (server, lines) = launch_logged();
-    let router = server.router();
     let token = Auth::Bearer(server.token());
 
-    post(&router, "/api/query", token, json!({ "echo": "x" })).await;
-    post(&router, "/api/commands", token, json!({ "name": "a" })).await;
-    get(&router, "/api/transcript?view=all", Auth::Nothing).await;
-    get(&router, "/api/nowhere", token).await;
+    post(&server, "/api/query", token, json!({ "echo": "x" })).await;
+    post(&server, "/api/commands", token, json!({ "name": "a" })).await;
+    get(&server, "/api/transcript?view=all", Auth::Nothing).await;
+    get(&server, "/api/nowhere", token).await;
 
     assert_eq!(
         *lines.lock().unwrap(),
@@ -29,31 +28,30 @@ async fn every_request_is_logged_once_answered() {
 #[tokio::test]
 async fn the_token_never_appears_in_a_logged_line() {
     let (server, lines) = launch_logged();
-    let router = server.router();
     let secret = server.token().to_owned();
     let cookie = format!("{}={secret}", server.cookie());
 
     // Everywhere a token can travel, and some places it should not.
-    get(&router, &format!("/?token={secret}"), Auth::Nothing).await;
+    get(&server, &format!("/?token={secret}"), Auth::Nothing).await;
     get(
-        &router,
+        &server,
         &format!("/?view=1&%74oken={secret}"),
         Auth::Nothing,
     )
     .await;
-    get(&router, &format!("/?token={secret}x"), Auth::Nothing).await;
-    get(&router, "/api/transcript", Auth::Cookie(&cookie)).await;
-    get(&router, "/api/transcript", Auth::Bearer(&secret)).await;
+    get(&server, &format!("/?token={secret}x"), Auth::Nothing).await;
+    get(&server, "/api/transcript", Auth::Cookie(&cookie)).await;
+    get(&server, "/api/transcript", Auth::Bearer(&secret)).await;
     get(
-        &router,
+        &server,
         &format!("/api/transcript?token={secret}"),
         Auth::Nothing,
     )
     .await;
-    get(&router, &format!("/api/{secret}"), Auth::Bearer(&secret)).await;
+    get(&server, &format!("/api/{secret}"), Auth::Bearer(&secret)).await;
     let shouted = secret.to_ascii_uppercase();
     get(
-        &router,
+        &server,
         &format!("/api/transcript?t={shouted}"),
         Auth::Nothing,
     )
@@ -77,12 +75,7 @@ async fn the_token_never_appears_in_a_logged_line() {
 async fn a_server_given_nowhere_to_log_answers_all_the_same() {
     let (server, _) = launch();
 
-    let reply = get(
-        &server.router(),
-        "/api/transcript",
-        Auth::Bearer(server.token()),
-    )
-    .await;
+    let reply = get(&server, "/api/transcript", Auth::Bearer(server.token())).await;
 
     assert_eq!(reply.status, StatusCode::OK);
 }

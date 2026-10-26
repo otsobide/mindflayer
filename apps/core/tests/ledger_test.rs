@@ -211,7 +211,9 @@ fn a_copy_that_cannot_be_hashed_is_recorded_without_a_hash_and_said() {
 
     let candidate =
         install::offered(&workspace, &ledger, &project, Kind::Skill, "notes", None).unwrap();
-    let done = install::install(&workspace, &ledger, &project, &candidate).unwrap();
+    let done = install::install(&workspace, &ledger, &project, &candidate)
+        .unwrap()
+        .installed;
 
     assert!(matches!(done, Installed::Unchanged { .. }), "{done:?}");
     let reason = done.unhashed().unwrap();

@@ -2,10 +2,10 @@
 //! already does — and what each of those does to the ledger's records.
 
 use std::fs;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use mindflayer_core::install::{self, InstallError, Standing};
-use mindflayer_core::ledger::Ledger;
+use mindflayer_core::ledger::{Ledger, SourceKind};
 use mindflayer_core::lifecycle::{self, Record, Target};
 use mindflayer_core::{create, FlayerWorkspace, Kind, LifecycleError, MindProject, Reference};
 use tempfile::TempDir;
@@ -656,6 +656,97 @@ fn removing_an_installed_copy_drops_its_record() {
 
     assert_eq!(removed.copy.unwrap(), Record::Dropped);
     assert_eq!(records(&ledger), Vec::<String>::new());
+}
+
+/// What an older build could have left in the same ledger: a source whose URL
+/// carries a token. Returns where its clone would be.
+fn tainted(workspace: &FlayerWorkspace, ledger: &Ledger) -> PathBuf {
+    let source = ledger
+        .source_for(
+            SourceKind::Git,
+            "https://example.com/acme/skills",
+            None,
+            "skills",
+        )
+        .unwrap();
+    rusqlite::Connection::open(workspace.ledger_path())
+        .unwrap()
+        .execute(
+            "UPDATE sources SET url = 'https://me:ghp_t0ken@example.com/acme/skills'",
+            [],
+        )
+        .unwrap();
+    workspace.cache_dir().join(source.directory)
+}
+
+#[test]
+fn a_change_that_drops_a_record_hands_back_what_scrubbing_the_ledger_took_out() {
+    let (_dir, workspace, project, ledger) = installed(&["deploy"]);
+    tainted(&workspace, &ledger);
+
+    let removed = lifecycle::remove(
+        Some(&workspace),
+        &project,
+        &find(&project, "deploy").unwrap(),
+    )
+    .unwrap();
+
+    assert_eq!(removed.copy.unwrap(), Record::Dropped);
+    let scrubbed: Vec<&str> = removed
+        .scrub
+        .sources
+        .iter()
+        .map(|source| source.url.as_str())
+        .collect();
+    assert_eq!(scrubbed, ["https://example.com/acme/skills"]);
+    assert_eq!(ledger.tainted_sources().unwrap(), []);
+}
+
+#[test]
+fn an_edit_that_changes_nothing_leaves_the_ledger_unscrubbed() {
+    let (_dir, workspace, project, ledger) = installed(&["deploy"]);
+    tainted(&workspace, &ledger);
+    let edit = lifecycle::start_edit(&find(&project, "deploy").unwrap());
+
+    let edited = lifecycle::finish_edit(Some(&workspace), &project, edit);
+
+    // Nothing changed, so there was no record to drop and no reason to write.
+    assert!(edited.scrub.is_empty(), "{:?}", edited.scrub);
+    assert_eq!(ledger.tainted_sources().unwrap().len(), 1);
+}
+
+// Unix only: what listing a file as a directory fails with is the platform's
+// to say, and only there is it sure not to read as an absence.
+#[cfg(unix)]
+#[test]
+fn a_rename_tells_once_of_a_clone_neither_of_its_scrubs_could_rewrite() {
+    let (_dir, workspace, project, ledger) = installed(&["deploy"]);
+    let clone = tainted(&workspace, &ledger);
+    // A file where the scrub lists the reflogs: the clone keeps its
+    // credential, so its source keeps its URL for every scrub to try again.
+    fs::create_dir_all(clone.join(".git")).unwrap();
+    fs::write(clone.join(".git").join("logs"), "").unwrap();
+
+    let renamed = lifecycle::rename(
+        Some(&workspace),
+        &project,
+        &find(&project, "deploy").unwrap(),
+        "ship",
+    )
+    .unwrap();
+
+    assert_eq!(renamed.copy.unwrap(), Record::Dropped);
+    // The ledger was opened once for each name, and both scrubs failed on the
+    // same clone.
+    let failed: Vec<&str> = renamed
+        .scrub
+        .failures
+        .iter()
+        .map(|failure| failure.url.as_str())
+        .collect();
+    assert_eq!(failed, ["https://example.com/acme/skills"]);
+    assert!(renamed.scrub.sources.is_empty());
+    assert_eq!(ledger.tainted_sources().unwrap().len(), 1);
 }
 
 #[test]
