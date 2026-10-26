@@ -209,6 +209,12 @@ fn a_workspace_holds_its_own_the_way_a_project_does() {
     let target = lifecycle::find(&own, &Reference::parse("commit-style")).unwrap();
     lifecycle::rename(None, &own, &target, "commits").unwrap();
     assert!(library.join("skills/commits/SKILL.md").is_file());
+    // A rule removed takes the group it leaves empty with it, and stops at
+    // the kind's folder in the library, as it stops at a project's.
+    let rule = lifecycle::find(&own, &Reference::parse("git/no-force-push")).unwrap();
+    lifecycle::remove(None, &own, &rule).unwrap();
+    assert!(!library.join("rules/git").exists());
+    assert!(library.join("rules").is_dir());
     // Nothing beside the workspace, and nothing an agent reads above it.
     let mut top: Vec<_> = fs::read_dir(dir.path())
         .unwrap()
