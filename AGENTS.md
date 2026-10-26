@@ -152,13 +152,13 @@ These are easy to break from a single file without noticing.
 - **The server holds no rules.** `apps/server` carries JSON between the
   browser and a `Backend`, whose `Query`, `Task` and `Outcome` are associated
   types, and depends on no mindflayer crate (`tests/crate_test.rs` checks it
-  with `cargo metadata`); the CLI depends on it, never the other way. A check,
-  path rule or naming rule written there is one the panel could disagree with
-  the CLI about: it belongs in core, reached through the backend. Queries and
-  previews run on tokio's blocking pool, and every run on the one writer
-  thread, in the order it arrived. It binds 127.0.0.1 only, answers under
-  `/api` only a request that carries the launch token (in the cookie
-  `mf_<port>`, or as Bearer), and never logs the token.
+  with `cargo metadata`); a front end depends on it, as the CLI will (#67),
+  never the other way. A check, path rule or naming rule written there is one
+  the panel could disagree with the CLI about: it belongs in core, reached
+  through the backend. Queries and previews run on tokio's blocking pool, and
+  every run on the one writer thread, in the order it arrived. It binds
+  127.0.0.1 only, answers under `/api` only a request that carries the launch
+  token (in the cookie `mf_<port>`, or as Bearer), and never logs the token.
 - **`Kind` is a closed enum.** To add a kind, follow "Adding a third kind" in
   the architecture doc; the compiler's exhaustive matches are the checklist.
 
