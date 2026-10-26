@@ -21,6 +21,10 @@ the panel are the apps [D-17](#d-17-the-next-front-end-is-a-local-web-panel)
 adds. Both sit beside the CLI rather than around it. The panel is in
 `NODE_APPS` rather than `APPS` for now (see [the web panel](#the-web-panel)).
 
+`scripts/agent-probe/` is not an app, and nothing builds or tests it. It is
+the probe behind [docs/agents.md](agents.md), run by hand against the real
+agents with the operator's own login, which is why CI never runs it.
+
 ### The examples are a workspace
 
 `examples/` sits beside `apps/` and is content, not an app: a flayer
@@ -440,17 +444,63 @@ command itself rather than a copy of it.
 ### The workspace's own artifacts
 
 They are held the way a project holds its own: in directories the marker
-names (`[directories]` in `flayer.toml`, `skills` and `rules` beside the
-projects by default), found by the same catalog, created, renamed and removed
-by the same functions. `FlayerWorkspace::own` hands the workspace out as a
-`MindProject`-shaped holder for exactly that reason: everything that touches an
-artifact asks its holder where it is, what it is called and where each kind
-lives, and a workspace answers those as a project does, so there is no second
-copy of any rule to drift.
+names (`[directories]` in `flayer.toml`), found by the same catalog, created,
+renamed and removed by the same functions. `FlayerWorkspace::own` hands the
+workspace out as a `MindProject`-shaped holder for exactly that reason:
+everything that touches an artifact asks its holder where it is, what it is
+called and where each kind lives, and a workspace answers those as a project
+does, so there is no second copy of any rule to drift.
 
-Unlike a project's, the folders are not made by `flayer init`. A workspace sits
-among other people's repositories, and puts nothing beside them until there is
-something to put: the first artifact added makes its folder.
+Where a project's default is beside the code, a workspace's is its library,
+inside `.mindflayer`
+([D-05](#d-05-a-workspaces-library-lives-in-mindflayer)):
+
+```toml
+[directories]
+skills = ".mindflayer/library/skills"
+rules = ".mindflayer/library/rules"
+```
+
+A project's folders sit where its agents look, because the agents read them.
+A workspace's are read by nothing but Mindflayer, which installs from them,
+and beside the projects, where they used to be, they put instruction-shaped
+files in the directories above projects: `~/skills` and `~/rules`, for the
+workspace in a home directory. No agent scans `.mindflayer`, and a workspace
+that keeps them there is one folder wherever it is made.
+
+`flayer init` spells both lines out, as `mind init` does. A kind the marker
+does not name is in the library too (`Directories::library_for`), never in a
+folder at the root, which for the default workspace is the home directory;
+that is also what lets a kind added later land in every workspace's library,
+whatever its marker says. `own` names those kinds in the holder it hands out,
+since a `MindProject` asked about a kind nobody named answers with a folder
+beside the code.
+
+A workspace made before the library keeps the folders its marker names,
+`skills` and `rules` beside the projects as `flayer init` used to write them,
+and is read exactly as before: the default changed, the format did not, so no
+version moved. Moving them into the library is for #53's `flayer migrate
+--library`, never for a read.
+
+The folders can be anywhere inside the workspace, `.mindflayer` included, but
+in what is reserved for gathering. A directory that is the shelf of either kind
+or the cache, is inside one, or holds one, as `.mindflayer` itself does, is
+refused by `flayer init` before anything is made
+(`WorkspaceError::OverlapsGathered`). Gathering replaces and deletes folders
+there by names of its own, so an artifact somebody wrote among them could go
+with the next gather; and a rules folder holding the cache would read every
+markdown file in every clone as one of the workspace's rules. The rules shelf
+is reserved too, though nothing gathers rules yet, rather than matched on the
+kind as `gather` is: scrubbing a source already deletes its folder from every
+kind's shelf, and a kind made gatherable later has to find its shelf free. The
+comparison ignores ASCII case, since on macOS and Windows `.Mindflayer/Skills`
+is the shelf.
+
+Unlike a project's, the folders are not made by `flayer init`, wherever they
+are. A workspace told to keep them beside its repositories puts nothing among
+other people's work until there is something to put, and the library follows
+the same rule rather than a second one: the first artifact added makes its
+folder.
 
 A project holds what is in its own folders, because that is what its agents
 read; the workspace's artifacts are not inherited out of sight. They reach a
@@ -461,9 +511,10 @@ Mindflayer installed.
 When the workspace's root is itself a project it manages, a folder both keep a
 kind in is the project's (`own_kinds`), and a catalog counts each file once
 however many holders can see it: otherwise every artifact there would be listed
-twice. Reports name a workspace's own artifact's holder `workspace`, told by
-where the file sits rather than by the root it was found from, since those two
-share a root.
+twice. With the library, the two share a folder only when a marker says so, as
+an older workspace's does. Reports name a workspace's own artifact's holder
+`workspace`, told by where the file sits rather than by the root it was found
+from, since those two share a root.
 
 ### Where a project keeps its artifacts
 
@@ -1876,9 +1927,18 @@ the workspace `init` would make there, parsed from the same template rather
 than written. That is `flayer list`, `show`, `validate`, `scan`, `templates`,
 `gather list`, and `load` and `install` on their own.
 
+Made, it puts one thing in the home directory, `.mindflayer`. Its own
+artifacts go in its library ([The workspace's own
+artifacts](#the-workspaces-own-artifacts)), so no `~/skills` or `~/rules` sits
+above every project under home, and the workspace writes no `AGENTS.md` or
+`CLAUDE.md` there. What an install into a project at home writes there is
+that project's, as for any project
+([D-03](#d-03-rules-reach-every-agent-through-agentsmd)).
+
 A read of the unmade workspace answers as a read of one made a moment before
 would, because it is the same marker: `flayer list` says it manages no
-projects yet, `flayer scan` lists what is under home, all of it unlinked,
+projects yet, `flayer show` looks for its own in the library the made one
+keeps them in, `flayer scan` lists what is under home, all of it unlinked,
 `flayer gather list` says nothing is gathered. Then one `hint:` line on stderr
 says the workspace is not made yet and where the first command that writes
 will make it. A hint, not a `warning:`: nothing is wrong with a workspace
@@ -1987,6 +2047,12 @@ ledger version 2 wrote.
 
 ## The agents' own folders
 
+Which folders each agent reads, for skills and for rules, at project and user
+scope, is recorded in [docs/agents.md](agents.md), each fact either verified
+on the binary by `scripts/agent-probe` or marked docs-only with a fallback.
+A change to an agent path cites it; this section is about how Mindflayer
+finds the agents' own folders, not what the agents do in them.
+
 Checks to come read what an agent reads for every project, not only what a
 project holds: Claude's user memory, Codex's config, OpenCode's configuration
 folder and the skills in `~/.agents` (#44, #91, #96). Those folders come in
@@ -2001,9 +2067,10 @@ the answer as an `AgentHomes` and never resolves one.
 
 For OpenCode that order is a simplification: its documentation reads
 `$OPENCODE_CONFIG_DIR` as a folder loaded on top of `~/.config/opencode`, not
-one that replaces it. Nothing reads either yet, so the simpler shape stands
-until #17 checks the binary; the [open questions](#open-questions) say what
-changes if it is confirmed.
+one that replaces it. Nothing reads either yet, and #17 ran only Claude Code,
+so that reading is still docs-only and the simpler shape stands until a check
+on the binary confirms it; the [open questions](#open-questions) say what
+changes if one does.
 
 Those folder names are core's all the same (`AgentHomes::defaults_under`),
 the way `.mindflayer` is: the CLI finds the user's home and core says which
@@ -2386,10 +2453,12 @@ That gives quiet projects, keeps the team case one flag away, and changes no
 committed team file behind anyone's back. Rejected: always shared, which leaves
 every install for the team to commit; and always local with marked edits to
 tracked files, which puts Mindflayer's block in a team's diffs. It rests on
-agents reading git-ignored files, which none documents and #17 confirms on real
-binaries. Local copies never reach teammates or cloud runs, and reach another
-worktree only for Claude, and only when that worktree has no `.claude/skills`
-of its own. Unblocks #17, #32, #34, #37, #38, #43, #44, #45 and #94.
+agents reading git-ignored files, which none documents. #17 confirmed it on
+Claude Code 2.1.309 for skills, `AGENTS.md`, `.claude/rules` and
+`CLAUDE.local.md`; for Codex and OpenCode it rests on their source, with
+shared mode as the fallback ([docs/agents.md](agents.md)). Local copies never
+reach teammates or cloud runs, and reach another worktree only for Claude, and
+only when that worktree has no `.claude/skills` of its own. Unblocks #17, #32, #34, #37, #38, #43, #44, #45 and #94.
 
 ### D-03: Rules reach every agent through `AGENTS.md`
 
@@ -2409,7 +2478,20 @@ when there is no `CLAUDE.md`; and OpenCode's `instructions` globs with Codex's
 `developer_instructions`, unverified and honoured only in trusted projects.
 Mindflayer never creates a `CLAUDE.local.md`, which silently disables
 `AGENTS.md`, and warns when an `AGENTS.override.md` hides the file from Codex
-or the chain nears Codex's 32 KiB budget. Unblocks #17, #42, #43, #44 and #45.
+or the chain nears Codex's 32 KiB budget. #17 confirmed these Claude behaviours
+on Claude Code 2.1.309: a `CLAUDE.md` above the git root or a `CLAUDE.local.md`
+stops `AGENTS.md` being read, the user memory file and `.claude/rules` do not,
+the block's text reaches Claude without its markers, the import loads it once,
+and a rule with `paths:` loads only when a matching file is read
+([docs/agents.md](agents.md)). Two it did not try: that a `.claude/CLAUDE.md`
+counts as well, seen only among the names in Claude's debug output, and the
+2.1.277 floor, which is docs-only. One corner differs from what this says:
+Claude's check most likely stops below `/`, so a `CLAUDE.md` at `/` alone does
+not stop it reading `AGENTS.md` (read from the directory counts in its debug
+log, not tried). #44's walk up to and including `/` would then choose Fallback
+while Claude still read the block, and give Claude each unscoped rule twice;
+whether #44 stops below `/` too is an [open question](#open-questions).
+Unblocks #17, #42, #43, #44 and #45.
 
 ### D-04: An edited copy is detected, not disowned
 
@@ -2477,7 +2559,9 @@ and the Windows CI, survive the hub moving, and keep gathered content
 contained. OpenCode sees the skill twice, which is harmless only while the
 copies are identical, so an install is refused if either target holds foreign
 content. Rejected for now: a relative symlink in `.claude/skills`, which may
-come later as a Unix opt-in if #17 shows Claude loads a symlinked skill once;
+come later as a Unix opt-in, since #17 showed Claude 2.1.309 loads a symlinked
+skill once (its exclude entry has to drop the trailing `/`, because git never
+follows a symlink and sees a file);
 and symlinks into the hub, which break projects when `~/.mindflayer` moves and
 leak its path into repositories. `.codex/skills` and `~/.codex/skills`,
 deprecated or undocumented, are never targeted. Unblocks #17, #28, #34 and #40.
@@ -2826,6 +2910,31 @@ leak into the lifecycle code. Unblocks #33, #45, #62, #93, #94 and #95.
   run included. Each could resolve with `Intent::Read` first and make it only
   when it is about to write; whether each should is a choice per command, and
   they were left as writes when the reads stopped making it.
+- **A workspace marker older than its directories.** A `flayer.toml` written
+  before workspaces kept artifacts of their own names no folders, so it now
+  reads them from the library. One that had artifacts added by a build in
+  between, which put them in `skills` and `rules` at its root, stops listing
+  them: they stay where they are, untouched, until `[directories]` names them
+  or #53's migration moves them. That migration could look for those folders
+  wherever a marker names none.
+- **Gathering a repository that is a workspace.** A team repository made by
+  `flayer init` and `flayer add` keeps its own skills in
+  `.mindflayer/library/skills`, where a workspace made before the library kept
+  them in `skills`, the folder `flayer gather` harvests by default. So a plain
+  `flayer gather git <url>` of it, which used to work, now says there is no
+  `skills` folder, and `--path .mindflayer/library/skills` is needed. Gather
+  could read a cloned workspace's `flayer.toml` for where its own are when no
+  `--path` is given, as `load` reads a loaded one's, or look in
+  `.mindflayer/library/skills` among the layouts #101 harvests; whether to
+  trust a marker that came from a source is part of that choice.
+- **Directories edited into a marker by hand.** Where a holder's directories
+  may be (inside it and, for a workspace, clear of the shelf and the cache) is
+  checked when `init` writes the marker, not each time it is read, so a marker
+  edited afterwards is read as written. Checking on every open would refuse
+  workspaces configured on purpose: one keeping its own skills at its root
+  (`skills = "."`), from which discovery reads nothing in `.mindflayer`, holds
+  the shelf by the same rule. Whether an open should hold a marker to those
+  rules, and what a refusal then says, is still to choose.
 - **Reads from a screen on the unmade default.** The TUI's reads (`v`, `s`,
   and showing an artifact) run from the default workspace's root, as its
   changes do. Before the default is made, with a workspace above home, they
@@ -2929,23 +3038,43 @@ leak into the lifecycle code. Unblocks #33, #45, #62, #93, #94 and #95.
 - **OpenCode's folder and `$XDG_CONFIG_HOME`.** Without
   `$OPENCODE_CONFIG_DIR`, OpenCode's folder is taken to be
   `~/.config/opencode`. Whether OpenCode moves it with `$XDG_CONFIG_HOME`, as
-  programs that follow the XDG base directories do, is unverified. If #17 finds
-  that it does, that variable becomes the step before the default for
-  `--opencode-config-dir`, and tests that spawn a binary clear it too.
+  programs that follow the XDG base directories do, is unverified: #17 ran
+  only Claude Code, and [docs/agents.md](agents.md) marks it docs-only, the
+  docs being silent. If a check on the binary finds that it does, that
+  variable becomes the step before the default for `--opencode-config-dir`,
+  and tests that spawn a binary clear it too.
 - **`$OPENCODE_CONFIG_DIR` beside OpenCode's folder, not instead of it.**
   `--opencode-config-dir` takes the variable in place of `~/.config/opencode`,
   as `--codex-home` takes `$CODEX_HOME` in place of `~/.codex`. OpenCode's
   documentation says otherwise: the folder the variable names is loaded after
   the global one and the project's `.opencode`, so it can override their
-  settings, and the global folder is still read. If #17 confirms that on the
-  real binary, a check that reads only one folder misses what OpenCode reads
-  from the other whenever the variable is set, and `AgentHomes` needs both
-  for OpenCode: `~/.config/opencode`, and the variable's folder on top.
+  settings, and the global folder is still read. #17 did not run OpenCode, so
+  that stays docs-only. If a check on the real binary confirms it, a check
+  that reads only one folder misses what OpenCode reads from the other
+  whenever the variable is set, and `AgentHomes` needs both for OpenCode:
+  `~/.config/opencode`, and the variable's folder on top.
 - **An empty agent variable.** An empty `$CLAUDE_CONFIG_DIR`, `$CODEX_HOME` or
   `$OPENCODE_CONFIG_DIR` means no folder at all here, following
   `$MINDFLAYER_HOME`. An agent that reads an empty one as unset uses its
   default instead, and a check would then leave out a folder that agent does
-  read. How each agent reads it is for #17 to record.
+  read. #17 did not settle it: it ran only Claude Code and did not try an
+  empty `$CLAUDE_CONFIG_DIR`, so how each agent reads one is for an addition
+  to `scripts/agent-probe` to record.
+- **A `CLAUDE.md` at `/`.** D-03 counts a `CLAUDE.md` in any directory above
+  the project, and #44 walks up to and including `/`. Claude's own check most
+  likely stops below `/` ([docs/agents.md](agents.md)), so with a `CLAUDE.md`
+  at `/` and none nearer, Claude reads `AGENTS.md` natively while #44 would
+  choose Fallback, and Claude reads each unscoped rule twice. Stopping #44's
+  walk below `/` matches Claude, if Claude does stop there; #17 inferred that
+  from the debug log's directory counts and could not put a file at `/` to
+  try it. #44 settles which.
+- **Codex and OpenCode on their binaries.** #17 ran only Claude Code, so
+  every Codex and OpenCode fact in [docs/agents.md](agents.md) is docs-only,
+  each with a fallback. Its checks 2 (OpenCode given the same skill in both
+  folders) and 5 (Codex and project trust), and the Codex and OpenCode halves
+  of 1 and 4, are what a `codex.sh` and an `opencode.sh` beside the probe
+  would run, and the place to run them is before #34 and #42 rely on those
+  facts.
 - **A panel built after the server.** A release build embeds what
   `apps/web/dist` held when `mindflayer-server` last compiled, and a debug
   build reads the folder at run time only if it existed then, because

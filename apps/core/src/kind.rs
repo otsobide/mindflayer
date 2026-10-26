@@ -37,9 +37,11 @@ impl Kind {
 
     /// The name of the folder holding this kind: beside the code by default
     /// ([`Directories::default_for`](crate::workspace::Directories::default_for)),
+    /// in a workspace's library for its own
+    /// ([`Directories::library_for`](crate::workspace::Directories::library_for)),
     /// and inside `.mindflayer` on a workspace's shelf. A marker's
-    /// `[directories]` is keyed by it, which is how a project puts the folder
-    /// somewhere else.
+    /// `[directories]` is keyed by it, which is how a project or a workspace
+    /// puts the folder somewhere else.
     ///
     /// It doubles as the plural spelling, which is what lets `mind list rules`
     /// work without a second table to keep in step.

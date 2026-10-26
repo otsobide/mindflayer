@@ -767,7 +767,7 @@ fn a_read_with_nothing_above_sees_the_default_workspace_without_making_it() {
     assert!(workspace.loads().is_empty());
     assert_eq!(
         workspace.own().directory_for(Kind::Skill),
-        home.join("skills")
+        home.join(FLAYER_DIR).join("library/skills")
     );
     assert!(!home.join(FLAYER_DIR).exists());
     assert!(!elsewhere.path().join(FLAYER_DIR).exists());

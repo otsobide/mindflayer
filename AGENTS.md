@@ -12,6 +12,9 @@ are about to change before changing it, and keep it true afterwards. Its
 "Decisions" section holds what the owner already chose for the roadmap, and the
 one choice still pending: read it before changing a format, installing, MCP,
 credentials or the server, and carry a decision out rather than reopen it.
+`docs/agents.md` records where Claude Code, Codex and OpenCode read skills and
+rules, each fact verified on the binary or docs-only with a fallback: an agent
+path in code cites it, and a change that disagrees with it starts there.
 
 ## Commands
 
@@ -57,6 +60,11 @@ file, the panel's included.
 
 `make dev/link`, `make dev/unlink` and `make install` write into `~/.cargo/bin`
 (or `BINDIR`), outside the repository. Don't run them unless asked.
+
+`scripts/agent-probe/probe.sh` runs the real coding agents against their APIs
+with your own login, in a temp home under `target/`, to check where they read
+skills and rules. It is never run by CI or `make test`; don't run it unless
+asked.
 
 ## Layout
 
@@ -106,6 +114,10 @@ without gathering. `apps/cli/tests/examples_test.rs` holds every example to
 output in what the commands print, so changing an example's summary line
 means changing the README too.
 
+Outside `apps/`, `scripts/agent-probe/` holds the agent probe: `probe.sh`
+isolates a run and checks the real home is left alone, and `<agent>.sh` holds
+one agent's checks (only `claude.sh` so far).
+
 ## Invariants that hold the design together
 
 These are easy to break from a single file without noticing.
@@ -153,6 +165,12 @@ These are easy to break from a single file without noticing.
     own project's `# project <key>` group. A team's `.gitignore` and
     `core.excludesFile` are never edited; the one `.gitignore` Mindflayer
     writes is `.mind/tmp`'s, inside a folder it owns, made with `create_new`.
+  - `flayer init` refuses a directory for the workspace's own that overlaps
+    the shelf or the cache, which are reserved for gathering
+    (`gathered_overlap`). `flayer init` and the workspace's own artifacts
+    never put an `AGENTS.md`, a `CLAUDE.md` or a kind's folder in the
+    workspace's directory; they live in `.mindflayer`. An install into a
+    project at the workspace's root is that project's (D-03).
 - **Mindflayer only manages what it installed.** The ledger's record of an
   install (one installation, a target for each copy it wrote, its origin and
   the `hash::tree` of what it wrote, that hash's one definition) is what
