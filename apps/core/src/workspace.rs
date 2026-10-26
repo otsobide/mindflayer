@@ -28,13 +28,24 @@ use crate::kind::Kind;
 use crate::ledger::{Ledger, LedgerError, LEDGER_FILE};
 use crate::paths;
 
-/// The layout version written into new marker files.
+/// The layout version written into new `mind.toml` markers, and the newest
+/// one this build reads.
 ///
 /// Refusing to read a version from the future is what lets the format change
-/// later without an old binary silently misreading a newer project.
-pub const FORMAT_VERSION: u32 = 2;
+/// later without an old binary silently misreading a newer project. The
+/// project marker has a version of its own rather than one shared with
+/// [`FLAYER_FORMAT_VERSION`]: shared, a change to either format would be a new
+/// version of both, and an older build would refuse a workspace that had not
+/// changed at all.
+pub const MIND_FORMAT_VERSION: u32 = 2;
 
-/// The first version whose markers say where each kind's artifacts live.
+/// The layout version written into new `flayer.toml` markers, and the newest
+/// one this build reads. Its own, for the reason [`MIND_FORMAT_VERSION`] is.
+pub const FLAYER_FORMAT_VERSION: u32 = 2;
+
+/// The first [`MIND_FORMAT_VERSION`] whose markers say where each kind's
+/// artifacts live. Only a project marker's version is held against it: a
+/// workspace marker's number says nothing about where a project keeps things.
 ///
 /// Before it, that was not a question a project could answer: every kind lived
 /// inside `.mind`. Reading such a marker as if it used today's default would
@@ -53,15 +64,27 @@ pub const FLAYER_CONFIG: &str = "flayer.toml";
 
 /// Which of the two marker files a version was read from.
 ///
-/// Named in a refusal because the path alone leaves the reader to know which
-/// file is which level's, and a front end deciding what to say about it should
-/// not have to compare file names.
+/// Each is versioned on its own, so a refusal names the one that is newer: the
+/// path alone leaves the reader to know which file is which level's, and a
+/// front end deciding what to say about it should not have to compare file
+/// names.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Marker {
     /// A mind project's [`MIND_CONFIG`].
     Project,
     /// A flayer workspace's [`FLAYER_CONFIG`].
     Workspace,
+}
+
+impl Marker {
+    /// The newest version of this marker this build reads, which is also the
+    /// one it writes.
+    pub const fn version(self) -> u32 {
+        match self {
+            Marker::Project => MIND_FORMAT_VERSION,
+            Marker::Workspace => FLAYER_FORMAT_VERSION,
+        }
+    }
 }
 
 impl fmt::Display for Marker {
@@ -855,7 +878,11 @@ impl FlayerWorkspace {
         MindProject {
             root: self.root.clone(),
             config: MindConfig {
-                version: FORMAT_VERSION,
+                // The project marker's version rather than the workspace's:
+                // `directory_for` reads it against `DIRECTORIES_VERSION`, a
+                // line drawn in the project format, and a workspace's own
+                // artifacts have never lived inside its marker's directory.
+                version: MIND_FORMAT_VERSION,
                 name: self.config.name.clone(),
                 directories: self.config.directories.clone(),
             },
@@ -979,7 +1006,7 @@ pub enum WorkspaceError {
     NotAProject { path: PathBuf },
     #[error("{path}: not a flayer workspace (no {FLAYER_DIR}/{FLAYER_CONFIG})")]
     NotAWorkspace { path: PathBuf },
-    #[error("{path}: written by a newer Mindflayer ({marker} version {found}, this one reads {FORMAT_VERSION})")]
+    #[error("{path}: written by a newer Mindflayer ({marker} version {found}, this one reads {supported})", supported = .marker.version())]
     Version {
         path: PathBuf,
         marker: Marker,
@@ -1047,7 +1074,7 @@ fn read_config<T: for<'de> Deserialize<'de>>(path: &Path) -> Result<T, Workspace
 
 /// Refuse a marker written by a version that knows more than this one.
 fn check_version(path: &Path, marker: Marker, found: u32) -> Result<(), WorkspaceError> {
-    if found > FORMAT_VERSION {
+    if found > marker.version() {
         return Err(WorkspaceError::Version {
             path: path.to_path_buf(),
             marker,
@@ -1204,7 +1231,7 @@ fn mind_template(name: &str, directories: &Directories) -> String {
          # holding this {MIND_DIR}. Point them wherever the agents that read them\n\
          # already look — .claude/skills, docs/rules — and Mindflayer follows.\n\
          # They are meant to be committed: they travel with the project.\n\
-         version = {FORMAT_VERSION}\n\
+         version = {MIND_FORMAT_VERSION}\n\
          name = {}\n\
          \n\
          [directories]\n\
@@ -1227,7 +1254,7 @@ fn flayer_template(name: &str, directories: &Directories) -> String {
          #\n\
          # `loaded` lists other flayer workspaces whose own skills its projects\n\
          # can install too, read from there each time: `flayer load <path>`.\n\
-         version = {FORMAT_VERSION}\n\
+         version = {FLAYER_FORMAT_VERSION}\n\
          name = {}\n\
          projects = []\n\
          loaded = []\n\
