@@ -685,6 +685,18 @@ fn every_task_the_tui_runs_is_a_line_the_binaries_accept() {
         Task::UnloadHere {
             path: String::from("/somewhere/team"),
         },
+        Task::Remove {
+            holder: Holder::Elsewhere(String::from("../collapse")),
+            kind: Kind::Skill,
+            name: String::from("deploy"),
+        },
+        Task::Add {
+            holder: Holder::Elsewhere(String::from("-odd")),
+            kind: Kind::Skill,
+            name: String::from("deploy"),
+            description: awkward.clone(),
+            template: Some(String::from("-weird")),
+        },
     ];
 
     for task in &tasks {
@@ -839,9 +851,9 @@ fn the_add_form_offers_what_the_workspace_in_your_home_has_to_a_project_elsewher
     let mut app = App::opened_on(
         Scope::Project,
         project.clone(),
-        tui::load_project(&project, Some(home.path())).unwrap(),
+        tui::load_project(&project, &Lookup::at_home(Some(home.path()))).unwrap(),
     )
-    .at_home(Some(home.path()));
+    .with_lookup(Lookup::at_home(Some(home.path())));
     app.focus_on(&project);
 
     // The form runs `mind -C <entry> add`, which consults the workspace in
@@ -873,10 +885,13 @@ fn mind_calls_the_workspace_in_your_home_the_default_only_when_it_is_not_above()
     }
     flayer_at_home(elsewhere.path(), home.path(), &["link", "far"]).unwrap();
     flayer_at_home(home.path(), home.path(), &["link", "near"]).unwrap();
-    let default = |project: &Path| match tui::load_project(project, Some(home.path())).unwrap() {
-        View::Workspace(workspace) => workspace.default,
-        View::Nowhere => panic!("no screen for {}", project.display()),
-    };
+    let default =
+        |project: &Path| match tui::load_project(project, &Lookup::at_home(Some(home.path())))
+            .unwrap()
+        {
+            View::Workspace(workspace) => workspace.default,
+            View::Nowhere => panic!("no screen for {}", project.display()),
+        };
 
     // Above `near`, the walk up finds it as it would any other workspace.
     assert!(default(&far));
@@ -886,7 +901,8 @@ fn mind_calls_the_workspace_in_your_home_the_default_only_when_it_is_not_above()
 /// The TUI `flayer` opens in `dir`, with nothing above it, where the default
 /// workspace lives in `home`.
 fn tui_at_home(dir: &Path, home: &Path) -> App {
-    App::new(dir.to_path_buf(), tui::load(dir, Some(home)).unwrap()).at_home(Some(home))
+    let lookup = Lookup::at_home(Some(home));
+    App::new(dir.to_path_buf(), tui::load(dir, &lookup).unwrap()).with_lookup(lookup)
 }
 
 #[test]
@@ -978,7 +994,7 @@ fn flayer_minds_opens_on_the_default_workspace_without_making_it() {
     fs::create_dir(&alpha).unwrap();
     mind(&alpha, &["init"]).unwrap();
 
-    let app = tui::minds(elsewhere.path(), Some(home.path())).unwrap();
+    let app = tui::minds(elsewhere.path(), &Lookup::at_home(Some(home.path()))).unwrap();
 
     assert_eq!(minds_rows(&app), vec!["alpha"]);
     assert!(!home.path().join(FLAYER_DIR).exists());
@@ -988,7 +1004,7 @@ fn flayer_minds_opens_on_the_default_workspace_without_making_it() {
 fn flayer_minds_with_no_workspace_and_no_default_says_so() {
     let elsewhere = TempDir::new().unwrap();
 
-    let error = tui::minds(elsewhere.path(), None).unwrap_err();
+    let error = tui::minds(elsewhere.path(), &Lookup::default()).unwrap_err();
 
     assert!(matches!(error, CliError::NotInWorkspace(_)), "{error}");
 }
@@ -998,7 +1014,7 @@ fn flayer_minds_opens_on_the_default_workspace_not_on_one_above_its_home() {
     let (_outer, home) = home_inside_a_workspace();
     let elsewhere = TempDir::new().unwrap();
 
-    let app = tui::minds(elsewhere.path(), Some(&home)).unwrap();
+    let app = tui::minds(elsewhere.path(), &Lookup::at_home(Some(&home))).unwrap();
 
     // Not `alpha`, `beta` and `h/gamma`: those are the workspace above.
     assert_eq!(minds_rows(&app), vec!["gamma"]);
@@ -1263,4 +1279,166 @@ fn mind_with_no_project_offers_to_make_one() {
     assert_eq!(task, Some(Task::InitProject));
     assert!(dir.path().join(MIND_DIR).join(MIND_CONFIG).is_file());
     assert_eq!(app.scope(), Scope::Project);
+}
+
+// ---------------------------------------------------------------------------
+// A workspace named for the TUI
+// ---------------------------------------------------------------------------
+
+/// Under one directory: `outer`, a workspace, and `hub` beside it, which
+/// links `collapse`, a project under neither, and has installed its own
+/// `hub-skill` there.
+fn hub_beside_outer() -> (TempDir, PathBuf, PathBuf, PathBuf) {
+    let dir = TempDir::new().unwrap();
+    let (outer, hub, collapse) = (
+        dir.path().join("outer"),
+        dir.path().join("hub"),
+        dir.path().join("collapse"),
+    );
+    for root in [&outer, &hub, &collapse] {
+        fs::create_dir(root).unwrap();
+    }
+    flayer(&outer, &["init"]).unwrap();
+    flayer(&hub, &["init"]).unwrap();
+    mind(&collapse, &["init"]).unwrap();
+    flayer(&hub, &["link", "../collapse"]).unwrap();
+    flayer(&hub, &["add", "skill", "hub-skill", "The hub's"]).unwrap();
+    flayer(&hub, &["install", "-p", "collapse", "hub-skill"]).unwrap();
+    (dir, outer, hub, collapse)
+}
+
+/// What `hub`'s ledger says it installed into `collapse`.
+fn recorded_in_hub(hub: &Path) -> Vec<String> {
+    FlayerWorkspace::open(hub)
+        .unwrap()
+        .ledger()
+        .unwrap()
+        .installations("../collapse", Kind::Skill)
+        .unwrap()
+}
+
+#[test]
+fn opened_on_a_named_workspace_the_tui_runs_every_line_against_it() {
+    let (_dir, outer, hub, collapse) = hub_beside_outer();
+    let lookup = Lookup {
+        flag: Some(hub.clone()),
+        ..Lookup::default()
+    };
+    // Opened inside `outer`, which walking up would find instead.
+    let mut app = App::new(outer.clone(), tui::load(&outer, &lookup).unwrap()).with_lookup(lookup);
+    assert_eq!(app.base(), hub);
+
+    // `collapse`, then its one skill.
+    press_key(&mut app, KeyCode::Right);
+    press_key(&mut app, KeyCode::Char('d'));
+    press_and_run(&mut app, KeyCode::Char('y'));
+
+    // The line consulted the workspace on screen, not whatever is above the
+    // project or in a home, so that workspace's record went with the copy.
+    assert!(
+        app.transcript()
+            .starts_with("$ mind -C ../collapse remove --yes skill:hub-skill\n"),
+        "{}",
+        app.transcript()
+    );
+    assert!(!collapse.join("skills/hub-skill").exists());
+    assert!(recorded_in_hub(&hub).is_empty());
+}
+
+#[test]
+fn a_w_among_a_lines_words_is_typed_from_the_workspace_root() {
+    let (_dir, outer, _hub, _collapse) = hub_beside_outer();
+    let words: Vec<String> = ["flayer", "-W", "../hub", "list"]
+        .iter()
+        .map(|word| (*word).to_owned())
+        .collect();
+
+    let done = tui::execute(&words, &outer, &Lookup::default());
+
+    assert_eq!(done.error, None);
+    assert!(done.stdout.contains("hub-skill"), "{}", done.stdout);
+}
+
+// ---------------------------------------------------------------------------
+// A project the workspace on screen manages from elsewhere
+// ---------------------------------------------------------------------------
+
+#[test]
+fn a_project_linked_from_beside_runs_its_lines_against_the_workspace_on_screen() {
+    let (_dir, _outer, hub, collapse) = hub_beside_outer();
+    // Nothing named: the screen is the workspace found where it was opened.
+    let mut app = tui_in(&hub);
+
+    press_key(&mut app, KeyCode::Right);
+    press_key(&mut app, KeyCode::Char('d'));
+    let drawn = tui_drawn(&app);
+    assert!(
+        drawn.contains("mind -W . -C ../collapse remove --yes skill:hub-skill"),
+        "{drawn}"
+    );
+    press_and_run(&mut app, KeyCode::Char('y'));
+
+    // Without `-W .`, walking up from `collapse` finds no workspace at all,
+    // and the hub would keep a record of a copy that is gone.
+    assert!(!collapse.join("skills/hub-skill").exists());
+    assert!(recorded_in_hub(&hub).is_empty());
+}
+
+#[test]
+fn a_project_linked_from_beside_is_offered_the_screens_templates() {
+    let (_dir, _outer, hub, collapse) = hub_beside_outer();
+    let template = hub.join(".mindflayer/templates/runbook/SKILL.md");
+    fs::create_dir_all(template.parent().unwrap()).unwrap();
+    fs::write(&template, "---\n---\n\n# {{name}}\n\nThe hub's runbook.\n").unwrap();
+    let mut app = tui_in(&hub);
+
+    press_key(&mut app, KeyCode::Char('a'));
+    press_key(&mut app, KeyCode::Up);
+    // none, then full (built in), then runbook.
+    press_key(&mut app, KeyCode::Right);
+    press_key(&mut app, KeyCode::Right);
+    press_key(&mut app, KeyCode::Down);
+    type_text(&mut app, "deploy");
+    press_key(&mut app, KeyCode::Down);
+    type_text(&mut app, "Ship it");
+    assert!(
+        tui_drawn(&app).contains("mind -W . -C ../collapse add --template runbook"),
+        "{}",
+        tui_drawn(&app)
+    );
+    press_and_run(&mut app, KeyCode::Enter);
+
+    let manifest = fs::read_to_string(collapse.join("skills/deploy/SKILL.md")).unwrap();
+    assert!(manifest.contains("The hub's runbook."), "{manifest}");
+}
+
+#[test]
+fn the_keys_help_says_which_rows_run_their_lines_with_w() {
+    let (_dir, _outer, hub, _collapse) = hub_beside_outer();
+    let mut app = tui_in(&hub);
+
+    press_key(&mut app, KeyCode::Char('?'));
+
+    let Mode::Reading(reader) = &app.mode else {
+        panic!("{:?}", app.mode);
+    };
+    assert!(
+        reader
+            .lines
+            .iter()
+            .any(|(_, line)| line.contains("`mind -W . -C <project> <cmd>`")),
+        "{:?}",
+        reader.lines
+    );
+}
+
+#[test]
+fn a_project_under_the_workspace_on_screen_keeps_the_plain_line() {
+    let dir = workspace_with_two();
+    let app = tui_in(dir.path());
+
+    assert_eq!(
+        app.member().map(|member| member.holder()),
+        Some(Holder::Project(String::from("alpha")))
+    );
 }

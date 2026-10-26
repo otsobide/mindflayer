@@ -82,6 +82,29 @@ fn with_nothing_above_the_source_load_goes_into_the_default_workspace() {
 }
 
 #[test]
+fn the_workspace_in_home_is_the_default_one_however_it_was_reached() {
+    // Named with `-W` as much as fallen back to: the line says which
+    // workspace changed, and the one in home is the default whatever chose
+    // it, as it is on every run from below home after the one that makes
+    // it, which finds it walking up.
+    let home = TempDir::new().unwrap();
+    flayer(home.path(), &["init"]).unwrap();
+    let (dir, _target, _team) = target_and_team();
+    let named = home.path().to_string_lossy().into_owned();
+
+    let outcome = flayer_at_home(dir.path(), home.path(), &["-W", &named, "load", "team"]).unwrap();
+
+    assert!(
+        outcome.stdout.ends_with(&format!(
+            "  into the workspace at {}, the default one\n",
+            home.path().display()
+        )),
+        "{}",
+        outcome.stdout
+    );
+}
+
+#[test]
 fn with_no_default_either_there_is_nowhere_to_load_into() {
     let (_dir, _target, team) = target_and_team();
 
@@ -103,6 +126,26 @@ fn load_loads_none_when_one_path_is_not_a_workspace() {
 
     assert!(
         error.error.to_string().contains("not a flayer workspace"),
+        "{}",
+        error.error
+    );
+    assert!(
+        registry(&target).contains("loaded = []"),
+        "half a load happened"
+    );
+}
+
+#[test]
+fn load_loads_none_when_the_named_workspace_is_among_them() {
+    // Named, it is not passed over for being one of the sources, so the
+    // refusal has to come before the source listed ahead of it is written.
+    let (dir, target, _team) = target_and_team();
+    let named = target.to_string_lossy().into_owned();
+
+    let error = flayer(dir.path(), &["-W", &named, "load", "team", "target"]).unwrap_err();
+
+    assert!(
+        error.error.to_string().contains("cannot load itself"),
         "{}",
         error.error
     );
@@ -356,9 +399,9 @@ fn on_a_project_on_its_own_capital_l_is_mind_load() {
     let mut app = App::opened_on(
         Scope::Project,
         project.clone(),
-        tui::load_project(&project, Some(home.path())).unwrap(),
+        tui::load_project(&project, &Lookup::at_home(Some(home.path()))).unwrap(),
     )
-    .at_home(Some(home.path()));
+    .with_lookup(Lookup::at_home(Some(home.path())));
     app.focus_on(&project);
 
     press_key(&mut app, KeyCode::Char('L'));
@@ -487,9 +530,9 @@ fn the_tui_will_not_load_the_workspace_on_screen_into_somewhere_else() {
     let (_dir, target, _team) = target_and_team();
     let mut app = App::new(
         target.clone(),
-        tui::load(&target, Some(home.path())).unwrap(),
+        tui::load(&target, &Lookup::at_home(Some(home.path()))).unwrap(),
     )
-    .at_home(Some(home.path()));
+    .with_lookup(Lookup::at_home(Some(home.path())));
 
     press_key(&mut app, KeyCode::Char('L'));
     type_text(&mut app, ".");
@@ -520,9 +563,9 @@ fn a_project_on_its_own_sees_and_unloads_what_the_workspace_above_loads() {
     let mut app = App::opened_on(
         Scope::Project,
         project.clone(),
-        tui::load_project(&project, Some(home.path())).unwrap(),
+        tui::load_project(&project, &Lookup::at_home(Some(home.path()))).unwrap(),
     )
-    .at_home(Some(home.path()));
+    .with_lookup(Lookup::at_home(Some(home.path())));
     app.focus_on(&project);
 
     press_key(&mut app, KeyCode::Char('L'));
