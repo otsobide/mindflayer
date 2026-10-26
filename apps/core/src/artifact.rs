@@ -257,6 +257,13 @@ impl Artifact {
                         .iter()
                         .map(|key| ValidationIssue::MetadataNotAString { key: key.clone() }),
                 );
+                issues.extend(
+                    manifest
+                        .metadata
+                        .repeated
+                        .iter()
+                        .map(|key| ValidationIssue::MetadataRepeated { key: key.clone() }),
+                );
             }
             Declared::Rule => {
                 // A rule declares nothing, so there is exactly one thing left
@@ -383,6 +390,7 @@ pub enum ValidationIssue {
     CompatibilityNotAString,
     MetadataNotAMap,
     MetadataNotAString { key: String },
+    MetadataRepeated { key: String },
     Empty,
 }
 
@@ -449,6 +457,10 @@ impl fmt::Display for ValidationIssue {
             ValidationIssue::MetadataNotAString { key } => write!(
                 f,
                 "`metadata` entry `{key}` is not a string, so it is ignored, and left in the file as written"
+            ),
+            ValidationIssue::MetadataRepeated { key } => write!(
+                f,
+                "`metadata` entry `{key}` is written more than once, so only the first is read"
             ),
             ValidationIssue::Empty => write!(f, "the file has no content"),
         }

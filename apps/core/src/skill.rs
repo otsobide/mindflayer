@@ -211,30 +211,125 @@ pub struct Metadata {
     pub ignored: Vec<String>,
     /// Whether `metadata` was not a map at all, and so was ignored whole.
     pub not_a_map: bool,
+    /// Every key written more than once after its first time, as written.
+    /// Only the first is read: which one an agent reads is up to its YAML
+    /// parser, and some refuse the file, so neither is a safe guess.
+    pub repeated: Vec<String>,
 }
 
 fn lenient_metadata<'de, D>(deserializer: D) -> Result<Metadata, D::Error>
 where
-    D: serde::Deserializer<'de>,
+    D: Deserializer<'de>,
 {
-    use serde_yaml_ng::Value;
+    deserializer.deserialize_any(MetadataVisitor)
+}
 
-    let mut metadata = Metadata::default();
-    match Option::<Value>::deserialize(deserializer)? {
-        None => {}
-        Some(Value::Mapping(entries)) => {
-            for (key, value) in entries {
-                match (key, value) {
-                    (Value::String(key), Value::String(value)) => {
-                        metadata.entries.push((key, value));
-                    }
-                    (key, _) => metadata.ignored.push(written(&key)),
-                }
+/// `metadata` read entry by entry, rather than into a map first.
+///
+/// A map is built with its keys checked, and one key written twice would fail
+/// it and with it the whole manifest. Read an entry at a time, a repeated key
+/// is one more thing for `validate` to name.
+struct MetadataVisitor;
+
+impl MetadataVisitor {
+    fn not_a_map() -> Metadata {
+        Metadata {
+            not_a_map: true,
+            ..Metadata::default()
+        }
+    }
+}
+
+impl<'de> Visitor<'de> for MetadataVisitor {
+    type Value = Metadata;
+
+    fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+        formatter.write_str("any YAML value")
+    }
+
+    fn visit_map<A>(self, mut map: A) -> Result<Self::Value, A::Error>
+    where
+        A: de::MapAccess<'de>,
+    {
+        use serde_yaml_ng::Value;
+
+        let mut metadata = Metadata::default();
+        let mut seen = std::collections::HashSet::new();
+        while let Some(key) = map.next_key::<Value>()? {
+            let Text(value) = map.next_value()?;
+            let written = written(&key);
+            if !seen.insert(written.clone()) {
+                metadata.repeated.push(written);
+                continue;
+            }
+            match (key, value) {
+                (Value::String(key), Some(value)) => metadata.entries.push((key, value)),
+                _ => metadata.ignored.push(written),
             }
         }
-        Some(_) => metadata.not_a_map = true,
+        Ok(metadata)
     }
-    Ok(metadata)
+
+    fn visit_unit<E: de::Error>(self) -> Result<Self::Value, E> {
+        Ok(Metadata::default())
+    }
+
+    fn visit_none<E: de::Error>(self) -> Result<Self::Value, E> {
+        Ok(Metadata::default())
+    }
+
+    fn visit_some<D>(self, deserializer: D) -> Result<Self::Value, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        deserializer.deserialize_any(self)
+    }
+
+    fn visit_str<E: de::Error>(self, _: &str) -> Result<Self::Value, E> {
+        Ok(Self::not_a_map())
+    }
+
+    fn visit_bool<E: de::Error>(self, _: bool) -> Result<Self::Value, E> {
+        Ok(Self::not_a_map())
+    }
+
+    fn visit_i64<E: de::Error>(self, _: i64) -> Result<Self::Value, E> {
+        Ok(Self::not_a_map())
+    }
+
+    fn visit_i128<E: de::Error>(self, _: i128) -> Result<Self::Value, E> {
+        Ok(Self::not_a_map())
+    }
+
+    fn visit_u64<E: de::Error>(self, _: u64) -> Result<Self::Value, E> {
+        Ok(Self::not_a_map())
+    }
+
+    fn visit_u128<E: de::Error>(self, _: u128) -> Result<Self::Value, E> {
+        Ok(Self::not_a_map())
+    }
+
+    fn visit_f64<E: de::Error>(self, _: f64) -> Result<Self::Value, E> {
+        Ok(Self::not_a_map())
+    }
+
+    fn visit_bytes<E: de::Error>(self, _: &[u8]) -> Result<Self::Value, E> {
+        Ok(Self::not_a_map())
+    }
+
+    fn visit_seq<A>(self, seq: A) -> Result<Self::Value, A::Error>
+    where
+        A: de::SeqAccess<'de>,
+    {
+        IgnoredAny.visit_seq(seq).map(|_| Self::not_a_map())
+    }
+
+    fn visit_enum<A>(self, data: A) -> Result<Self::Value, A::Error>
+    where
+        A: de::EnumAccess<'de>,
+    {
+        IgnoredAny.visit_enum(data).map(|_| Self::not_a_map())
+    }
 }
 
 /// A YAML key as somebody would recognise it in the file: a string as itself,

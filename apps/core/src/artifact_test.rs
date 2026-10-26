@@ -163,6 +163,7 @@ fn metadata_that_is_not_strings_is_reported_entry_by_entry() {
             entries: vec![("author".into(), "acme".into())],
             ignored: vec!["internal".into(), "pinned".into()],
             not_a_map: false,
+            repeated: vec!["author".into()],
         };
     }
     assert_eq!(
@@ -173,6 +174,9 @@ fn metadata_that_is_not_strings_is_reported_entry_by_entry() {
             },
             ValidationIssue::MetadataNotAString {
                 key: "pinned".into()
+            },
+            ValidationIssue::MetadataRepeated {
+                key: "author".into()
             },
         ]
     );
@@ -241,6 +245,7 @@ fn only_the_name_and_the_description_are_strict() {
         ValidationIssue::CompatibilityNotAString,
         ValidationIssue::MetadataNotAMap,
         ValidationIssue::MetadataNotAString { key: "k".into() },
+        ValidationIssue::MetadataRepeated { key: "k".into() },
         ValidationIssue::Empty,
     ];
     assert!(strict.iter().all(ValidationIssue::is_strict));

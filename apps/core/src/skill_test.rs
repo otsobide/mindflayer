@@ -121,6 +121,30 @@ fn metadata_that_is_not_a_map_is_ignored_whole() {
 }
 
 #[test]
+fn a_metadata_key_written_twice_is_named_rather_than_refused() {
+    let manifest = SkillManifest::parse(
+        "name: a\ndescription: d\nmetadata:\n  a: x\n  b: y\n  a: z\n  a: w\n",
+    )
+    .unwrap();
+    assert_eq!(
+        manifest.metadata.entries,
+        vec![
+            ("a".to_owned(), "x".to_owned()),
+            ("b".to_owned(), "y".to_owned()),
+        ]
+    );
+    assert_eq!(manifest.metadata.repeated, vec!["a", "a"]);
+
+    // Nor is one inside an entry that is ignored anyway, or a tag on one.
+    let manifest = SkillManifest::parse(
+        "name: a\ndescription: d\nmetadata:\n  owner:\n    team: ops\n    team: dev\n  kind: !custom thing\n",
+    )
+    .unwrap();
+    assert_eq!(manifest.metadata.ignored, vec!["owner", "kind"]);
+    assert!(manifest.metadata.repeated.is_empty());
+}
+
+#[test]
 fn rejects_front_matter_missing_a_required_key() {
     assert!(SkillManifest::parse("name: a\n").is_err());
     assert!(SkillManifest::parse("description: d\n").is_err());
