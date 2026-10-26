@@ -53,9 +53,12 @@ pub fn clone(url: &str, reference: Option<&str>, into: &Path) -> Result<Clone, G
         .with_shallow(gix::remote::fetch::Shallow::DepthAtRemote(
             NonZeroU32::new(1).expect("1 is not zero"),
         ))
-        // Every connection the clone opens, not only the first: a shallow
-        // clone connects once to find the branch and again to fetch it, and
-        // either one may be asked for a credential.
+        // Every connection `gix` lets the clone configure, not only the
+        // first: a shallow clone connects once to find the branch and again
+        // to fetch it, and either one may be asked for a credential. The one
+        // it does not is a retry made when the remote has a branch named
+        // `HEAD`, which asks the way `gix` does by default, prompt included;
+        // docs/architecture.md keeps it among the open questions.
         .configure_connection({
             let shortfalls = shortfalls.clone();
             move |connection| {
