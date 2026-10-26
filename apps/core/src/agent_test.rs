@@ -53,3 +53,105 @@ fn every_agent_is_listed_once_in_report_order() {
     // it too, or two reports would list them two ways.
     assert!(Agent::ALL.windows(2).all(|pair| pair[0] < pair[1]));
 }
+
+/// Where the standard table puts a skill for Claude, and for Codex and
+/// OpenCode, joined a folder at a time as the table joins them.
+fn claude_skills() -> PathBuf {
+    Path::new(".claude").join("skills")
+}
+
+fn agents_skills() -> PathBuf {
+    Path::new(".agents").join("skills")
+}
+
+#[test]
+fn all_three_agents_take_a_skill_in_two_places() {
+    assert_eq!(
+        TargetTable::standard().targets(Kind::Skill, &Agent::ALL),
+        [
+            AgentTarget {
+                path: agents_skills(),
+                agents: vec![Agent::Codex, Agent::OpenCode],
+            },
+            AgentTarget {
+                path: claude_skills(),
+                agents: vec![Agent::Claude],
+            },
+        ]
+    );
+}
+
+#[test]
+fn codex_and_opencode_share_one_place_for_a_skill() {
+    assert_eq!(
+        TargetTable::standard().targets(Kind::Skill, &[Agent::Codex, Agent::OpenCode]),
+        [AgentTarget {
+            path: agents_skills(),
+            agents: vec![Agent::Codex, Agent::OpenCode],
+        }]
+    );
+}
+
+#[test]
+fn claude_alone_takes_a_skill_in_its_own_place() {
+    assert_eq!(
+        TargetTable::standard().targets(Kind::Skill, &[Agent::Claude]),
+        [AgentTarget {
+            path: claude_skills(),
+            agents: vec![Agent::Claude],
+        }]
+    );
+}
+
+#[test]
+fn no_agents_take_nothing() {
+    let table = TargetTable::standard();
+    for kind in Kind::ALL {
+        assert_eq!(table.targets(kind, &[]), []);
+    }
+}
+
+#[test]
+fn targets_come_sorted_and_once_whatever_order_the_agents_are_named_in() {
+    let table = TargetTable::standard();
+
+    assert_eq!(
+        table.targets(
+            Kind::Skill,
+            &[
+                Agent::OpenCode,
+                Agent::Claude,
+                Agent::Codex,
+                Agent::OpenCode
+            ]
+        ),
+        table.targets(Kind::Skill, &Agent::ALL)
+    );
+}
+
+#[test]
+fn a_rule_reaches_no_agent_through_a_folder_yet() {
+    // D-03 gives rules a section of a block in `AGENTS.md` instead, which is
+    // M2's to add; until then the table has no entry for one.
+    assert_eq!(TargetTable::standard().targets(Kind::Rule, &Agent::ALL), []);
+}
+
+#[test]
+fn agents_sharing_a_location_another_table_names_get_one_target() {
+    // What a project's settings could make of the table (#40): one folder
+    // for every agent is one copy, serving all three.
+    let table = TargetTable {
+        locations: Agent::ALL
+            .into_iter()
+            .map(|agent| ((Kind::Skill, agent), PathBuf::from(".skills")))
+            .collect(),
+    };
+
+    assert_eq!(
+        table.targets(Kind::Skill, &Agent::ALL),
+        [AgentTarget {
+            path: PathBuf::from(".skills"),
+            agents: Agent::ALL.to_vec(),
+        }]
+    );
+}

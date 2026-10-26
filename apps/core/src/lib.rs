@@ -38,7 +38,7 @@ pub mod url;
 pub mod workspace;
 
 pub use activate::{ActivateError, Shell, UnknownShell};
-pub use agent::{Agent, AgentHomes, UnknownAgent};
+pub use agent::{Agent, AgentHomes, AgentTarget, TargetTable, UnknownAgent};
 pub use artifact::{Artifact, ArtifactError, Declared, ValidationIssue};
 pub use catalog::{Catalog, DiscoveryFailure, Reference, QUALIFIER};
 pub use create::{create, create_from, CreateError};
