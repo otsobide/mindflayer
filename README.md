@@ -43,7 +43,8 @@ nothing up there has a `.mindflayer`, `flayer` uses **the one in your home**,
 `~/.mindflayer` — so projects scattered anywhere can still be managed together
 without choosing a directory first. `flayer init` somewhere else makes a
 workspace there, and from inside it that one wins. The TUI says when it is
-showing the default one.
+showing the default one, and `flayer which` says which workspace a command
+would use, and why.
 
 The first command that writes to it makes it: `flayer link`, `add`, `gather
 git`, `load <path>`, `install -p PROJECT <SKILL>`. One that only reads — `load`
@@ -65,8 +66,9 @@ every workspace says so instead.
 
 Walking up is what happens when nothing says otherwise. `-W DIR`
 (`--workspace`) names the workspace a command uses, by its directory or its
-`.mindflayer`, from wherever you are; `$MINDFLAYER_WORKSPACE` does the same
-for every command run in a shell, the way an activated Python virtualenv does.
+`.mindflayer`, from wherever you are; `$MINDFLAYER_WORKSPACE`, which `flayer
+activate` sets ([several flayers](#several-flayers)), does the same for every
+command run in a shell, the way an activated Python virtualenv does.
 Either one wins over a workspace above you, so you can keep several flayers
 for different purposes and pick one:
 
@@ -95,6 +97,57 @@ error: -W names a workspace that cannot be used: /home/you/notes: not a flayer w
 
 `-W ""` names none and leaves `$MINDFLAYER_WORKSPACE` out too, and an empty
 variable counts as unset. `--home` still says only where the default lives.
+
+### Several flayers
+
+A flayer can be made anywhere and switched to for a whole shell, the way a
+Python virtualenv is. `flayer init DIR` makes one in `DIR`, and `flayer
+activate DIR` prints the shell code that activates it, for `eval` to run:
+
+```
+$ flayer init ~/flayers/writing
+initialized flayer workspace `writing` in /home/you/flayers/writing/.mindflayer
+$ cd ~/Projects/collapse
+$ flayer which
+Projects at /home/you/Projects, found walking up from /home/you/Projects/collapse
+$ eval "$(flayer activate ~/flayers/writing)"
+(flayer:writing) $ flayer which
+writing at /home/you/flayers/writing, activated by $MINDFLAYER_WORKSPACE
+(flayer:writing) $ source .venv/bin/activate
+(.venv) (flayer:writing) $ deactivate      # the virtualenv's; the flayer stays
+(flayer:writing) $ flayer-deactivate
+$ flayer which
+Projects at /home/you/Projects, found walking up from /home/you/Projects/collapse
+```
+
+Activating sets `$MINDFLAYER_WORKSPACE` and puts `(flayer:<name>)` in front
+of your prompt; `flayer-deactivate` puts both back as they were, a variable
+you had set yourself included. Activating another flayer swaps one for the
+other, and `flayer activate` on its own activates the one a command run there
+would use. `flayer which` says which workspace that is and why: named by
+`-W`, activated, found walking up, or the default one.
+
+It is `flayer-deactivate` and never `deactivate`, so it gets along with a
+virtualenv activated before it or after it: each one's deactivate takes out
+only what its own activate put in, whichever runs first. In the prompt, the
+name shows each of `` \ $ ` % ! `` as `_`, since a prompt would act on them.
+
+The code is written for the shell `$SHELL` names, or for the one `--shell`
+does (`bash`, `zsh`, `fish` or `pwsh`). fish and PowerShell run it their own
+way:
+
+```
+flayer activate --shell fish ~/flayers/writing | source
+flayer activate --shell pwsh ~/flayers/writing | Out-String | Invoke-Expression
+```
+
+Activating writes nothing anywhere, and what cannot be activated prints no
+code, so `eval` runs nothing and the shell is left as it was:
+
+```
+$ eval "$(flayer activate ~/notes)"
+error: /home/you/notes: not a flayer workspace (no .mindflayer/flayer.toml)
+```
 
 ## The two kinds
 
@@ -216,8 +269,11 @@ mind install <SKILL> [--from ORIGIN]
 mind uninstall <SKILL>     # take one Mindflayer installed back out
 
 flayer                     # the TUI: everything below, a key each
-flayer init [--skills DIR] [--rules DIR]
-                           # create a .mindflayer here
+flayer init [PATH] [--skills DIR] [--rules DIR]
+                           # create a .mindflayer here, or in PATH
+flayer activate [DIR] [--shell SHELL]
+                           # the code that activates a workspace: eval "$(...)"
+flayer which               # the workspace a command here would use, and why
 flayer add|edit|rename|remove|templates [-p PROJECT] ...
                            # the same as mind's: the workspace's own by
                            # default, one of its projects with -p
@@ -693,7 +749,7 @@ on the first row, marked `◆`, then every project it manages, and on the right
 what the one under the cursor holds.
 
 ```
- mindflayer  Projects  · 3 on the shelf  · /home/you/Projects
+ mindflayer  Projects  · found above · 3 on the shelf  · /home/you/Projects
 ┏ Projects (3) ━━━━━━━━━━━━━━━━┓┌ collapse ──────────────────────────────────────────────────────────────┐
 ┃  ◆ Projects  2               ┃│>   skill commit-style       How this repo writes commits               │
 ┃> collapse  2                 ┃│    rule  git/no-force-push  Never force-push a shared branch           │
@@ -732,7 +788,9 @@ A project whose own commands would reach another workspace — linked from
 outside the workspace's tree, or with a nearer workspace above it — runs `mind
 -W . -C <project> …` instead, so the line acts on the workspace on screen
 rather than on the one the project would find by itself. `flayer -W <dir>` opens the screen on the
-workspace it names, and every line it runs uses that one.
+workspace it names, and every line it runs uses that one; so does an
+activated workspace. The header says which it is showing and why: `named
+with -W`, `activated`, `found above`, or `default workspace`.
 
 `m`, or `flayer minds` straight from the shell, opens a list of every
 project the workspace links and every repository under it that it does not,
