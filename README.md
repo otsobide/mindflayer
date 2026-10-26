@@ -46,8 +46,9 @@ workspace there, and from inside it that one wins. The TUI says when it is
 showing the default one.
 
 The first command that writes to it makes it: `flayer link`, `add`, `gather
-git`, `load`, `install`. One that only reads leaves your home alone, answers as
-an empty workspace would, and says where the workspace will be:
+git`, `load <path>`, `install -p PROJECT <SKILL>`. One that only reads — `load`
+and `install` on their own among them — leaves your home alone, answers as an
+empty workspace would, and says where the workspace will be:
 
 ```
 $ flayer list
