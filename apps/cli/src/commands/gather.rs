@@ -4,7 +4,7 @@
 use std::fmt::Write as _;
 use std::path::Path;
 
-use mindflayer_core::gather::{self, Report, Request};
+use mindflayer_core::gather::{self, Report, Request, Watch};
 use mindflayer_core::Kind;
 
 use super::workspace_here;
@@ -12,10 +12,15 @@ use crate::render::{indent, plural, printable, table};
 use crate::{CliError, Failure, GatherCommand, Outcome};
 
 /// Collect artifacts onto the workspace shelf, or say what is already on it.
+///
+/// A gather reports to `watch` and stops when it is cancelled; what it then
+/// prints is the same either way, so a front end that draws the progress
+/// shows the same report afterwards as one that does not.
 pub(crate) fn run_gather(
     command: &GatherCommand,
     directory: &Path,
     home: Option<&Path>,
+    watch: &Watch,
 ) -> Result<Outcome, Failure> {
     let workspace = workspace_here(directory, home)?;
     let ledger = workspace.ledger().map_err(CliError::from)?;
@@ -28,7 +33,8 @@ pub(crate) fn run_gather(
         } => {
             let request = Request::git(url.clone())
                 .from_subdirectory(path.clone())
-                .at(reference.clone());
+                .at(reference.clone())
+                .watched_by(watch.clone());
             let report = gather::gather(&workspace, &ledger, &request).map_err(CliError::from)?;
             Ok(gathered(url, &report))
         }

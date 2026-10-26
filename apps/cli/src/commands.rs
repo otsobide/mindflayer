@@ -13,6 +13,7 @@ pub(crate) mod workspace;
 
 use std::path::{Path, PathBuf};
 
+use mindflayer_core::gather::Watch;
 use mindflayer_core::{paths, Catalog, FlayerWorkspace, MindProject, Reference};
 
 use crate::homes::default_home;
@@ -33,6 +34,16 @@ use workspace::{load_command, unload_command};
 
 /// Run `mind`.
 pub fn run(cli: &Cli) -> Result<Outcome, Failure> {
+    run_watched(cli, &Watch::new())
+}
+
+/// Run `mind`, telling `watch` how a gather goes and stopping one when it is
+/// cancelled: how a front end that shows progress, or can stop what it
+/// started, runs the same line `run` does.
+///
+/// A parameter beside the parsed line rather than a field of it, because it
+/// is not something a person types: the line stays exactly what was typed.
+pub fn run_watched(cli: &Cli, watch: &Watch) -> Result<Outcome, Failure> {
     let directory = working_directory(cli.directory.as_deref())?;
     let home = default_home(cli.home.as_deref());
     let home = home.as_deref();
@@ -41,6 +52,7 @@ pub fn run(cli: &Cli) -> Result<Outcome, Failure> {
             command.as_ref().unwrap_or(&FlayerCommand::Tui),
             &directory,
             home,
+            watch,
         ),
         Command::Init { skills, rules } => {
             init_project(&directory, skills.as_deref(), rules.as_deref())
@@ -143,12 +155,19 @@ pub fn run(cli: &Cli) -> Result<Outcome, Failure> {
 
 /// Run `flayer`, which is the same as running `mind flayer`.
 pub fn run_flayer_cli(cli: &FlayerCli) -> Result<Outcome, Failure> {
+    run_flayer_cli_watched(cli, &Watch::new())
+}
+
+/// Run `flayer` with a gather's progress and cancel going through `watch`,
+/// as [`run_watched`] does for `mind`.
+pub fn run_flayer_cli_watched(cli: &FlayerCli, watch: &Watch) -> Result<Outcome, Failure> {
     let directory = working_directory(cli.directory.as_deref())?;
     let home = default_home(cli.home.as_deref());
     run_flayer(
         cli.command.as_ref().unwrap_or(&FlayerCommand::Tui),
         &directory,
         home.as_deref(),
+        watch,
     )
 }
 
@@ -161,6 +180,7 @@ fn run_flayer(
     command: &FlayerCommand,
     directory: &Path,
     home: Option<&Path>,
+    watch: &Watch,
 ) -> Result<Outcome, Failure> {
     match command {
         FlayerCommand::Init { skills, rules } => {
@@ -243,7 +263,7 @@ fn run_flayer(
 
         FlayerCommand::Scan => scan_workspace(directory, home),
 
-        FlayerCommand::Gather(command) => run_gather(command, directory, home),
+        FlayerCommand::Gather(command) => run_gather(command, directory, home, watch),
 
         FlayerCommand::Install {
             project,

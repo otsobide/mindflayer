@@ -12,9 +12,10 @@ pub use mindflayer_cli::install::{self as install_screen, ui};
 pub use mindflayer_cli::tui;
 pub use mindflayer_cli::tui::state::{App, Holder, Mode, Scope, Task, View};
 pub use mindflayer_cli::{
-    agent_homes, default_home, run, run_flayer_cli, AgentHomeOptions, Cli, CliError, Failure,
-    FlayerCli, Outcome,
+    agent_homes, default_home, run, run_flayer_cli, run_flayer_cli_watched, run_watched,
+    AgentHomeOptions, Cli, CliError, Failure, FlayerCli, Outcome,
 };
+pub use mindflayer_core::gather::{Progress, Watch};
 pub use mindflayer_core::install::Standing;
 pub use mindflayer_core::ledger::Ledger;
 pub use mindflayer_core::{AgentHomes, FlayerWorkspace};
