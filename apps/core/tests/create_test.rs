@@ -5,8 +5,8 @@ use std::path::Path;
 
 use mindflayer_core::template::{self, Origin};
 use mindflayer_core::{
-    create, create_from, Catalog, CreateError, Directories, FlayerWorkspace, Kind, MindProject,
-    TemplateError,
+    create, create_from, Catalog, CreateError, Declared, Directories, FlayerWorkspace, Kind,
+    MindProject, TemplateError,
 };
 use tempfile::TempDir;
 
@@ -297,6 +297,34 @@ fn a_rule_template_opens_with_the_description_unless_it_says_where_it_goes() {
     assert_eq!(
         fs::read_to_string(dir.path().join("rules/style.md")).unwrap(),
         "# Write it plainly\n\nFiled as style.\n"
+    );
+}
+
+#[test]
+fn a_rule_templates_front_matter_stays_above_the_description() {
+    let (dir, project) = project();
+    write(
+        dir.path(),
+        ".mind/templates/scoped.md",
+        "---\npaths:\n  - \"src/api/**\"\n---\n\n## Why\n",
+    );
+    let scoped = template::find(None, &project, Kind::Rule, "scoped").unwrap();
+
+    let rule = create_from(&project, Kind::Rule, "api", "Return errors", &scoped).unwrap();
+
+    // Below the fences, which still open the file, so the rule is scoped as
+    // the template meant it to be.
+    assert_eq!(
+        fs::read_to_string(dir.path().join("rules/api.md")).unwrap(),
+        "---\npaths:\n  - \"src/api/**\"\n---\n\n# Return errors\n\n## Why\n"
+    );
+    assert_eq!(rule.summary(), Some("Return errors"));
+    let Declared::Rule(manifest) = rule.declared() else {
+        panic!("a rule declares a rule's front matter");
+    };
+    assert_eq!(
+        manifest.paths.stated(),
+        Some(&vec![String::from("src/api/**")])
     );
 }
 

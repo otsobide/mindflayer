@@ -22,6 +22,7 @@ use thiserror::Error;
 use crate::artifact::{self, issue_list, Artifact, ArtifactError, ValidationIssue};
 use crate::frontmatter::{self, FrontMatterError};
 use crate::kind::{Kind, Layout};
+use crate::rule::RuleManifest;
 use crate::skill::{SkillManifest, MAX_DESCRIPTION_LEN};
 use crate::template::{Template, TemplateError};
 use crate::workspace::MindProject;
@@ -230,7 +231,20 @@ fn create_rule(
             if text.contains(DESCRIPTION_PLACEHOLDER) {
                 fill(&text, name, description)
             } else {
-                format!("# {description}\n\n{}", fill(&text, name, description))
+                // On top of the body, which starts below any front matter the
+                // template declares: above it, the fences would no longer
+                // open the file, and the front matter would become content.
+                let (_, body) = RuleManifest::read(&text);
+                let front_matter = &text[..text.len() - body.len()];
+                if front_matter.is_empty() {
+                    format!("# {description}\n\n{}", fill(&text, name, description))
+                } else {
+                    format!(
+                        "{}\n# {description}\n\n{}",
+                        fill(front_matter, name, description),
+                        fill(body.trim_start_matches(['\n', '\r']), name, description)
+                    )
+                }
             }
         }
     };
