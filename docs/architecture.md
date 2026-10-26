@@ -2069,7 +2069,7 @@ workspace](#a-projects-workspace)).
 
 A skill template's front matter keeps whatever it says except `name` and
 `description`, which `mind add` always sets: the template's lines for those
-two are dropped, continuation lines and all, before anything parses the rest —
+two are dropped, continuation lines and all, before anything parses the rest,
 so a template may write `name: {{name}}`, which is not YAML anybody could read,
 and still work. The result is parsed back before the first file is written, so
 a template with broken front matter costs nothing but the error.
@@ -2082,7 +2082,7 @@ matter declares is set as a skill's is, dropped and serialized afresh: pasted
 in as text, a description breaks the YAML at its first `: `, and one opening
 with `#` is a comment that declares nothing. The result is read back before
 anything is written and refused for whatever `validate` would warn about
-(`artifact::rule_issues`) — front matter that does not parse, a `paths` or a
+(`artifact::rule_issues`): front matter that does not parse, a `paths` or a
 `description` it cannot read. Reading a rule takes those as content or passes
 over them, because a rule somebody wrote still says what it says; writing one
 is the moment to find out, and a template's `paths:` that became content would
@@ -2102,7 +2102,7 @@ out of every listing, and it is the one most in need of opening. Only a name
 made of plain folder names (`install::is_folder_name`, segment by segment) is
 turned into a place, so `../x` cannot reach out of the project. Not the naming
 rules: they are for what Mindflayer writes, and a folder from before they were
-tightened — `a--b` — or one made by hand is exactly what has to be found to be
+tightened (`a--b`) or one made by hand is exactly what has to be found to be
 fixed. A template is looked up by one folder name for the same reason, since
 `mind templates` lists whatever is there. More than one match is an error: changing the wrong artifact is
 not something to guess about. The TUI lists unreadable files in the same way,
@@ -2116,7 +2116,7 @@ to move together or `validate` fails. The front matter is somebody's writing,
 so it is not re-serialized: the one `name:` line is replaced and every other
 byte kept (`frontmatter::with_key`). A name spread over several lines is not
 touched, and neither is a manifest where the replacement would change anything
-but the name — the result is parsed back and compared, field by field, before
+but the name: the result is parsed back and compared, field by field, before
 anything is written. The folder moves first and the manifest is replaced
 through a temporary file; if the second fails, the folder moves back.
 
@@ -2181,7 +2181,7 @@ question](#open-questions).
 
 `flayer scan` walks down from the workspace root looking for mind projects and
 git repositories, and says which of them the registry already points at. It
-links nothing — a workspace manages what it was told to — it only makes the
+links nothing (a workspace manages what it was told to); it only makes the
 telling easier, which is what the TUI's link form is built on.
 
 The walk is bounded, because a workspace can sit at the top of a home
@@ -2189,7 +2189,7 @@ directory. It goes three levels down (`repo`, `org/repo`,
 `github.com/org/repo`), breadth first, so a budget of listed folders runs out
 on the deepest rather than on a whole neighbouring tree, and never into hidden
 folders, symlinks, `node_modules` or `target`. A repository is a leaf, since its
-folders are its own — except the workspace root, which is also where the others
+folders are its own, except the workspace root, which is also where the others
 are kept. A scan that runs out of budget says so rather than passing for
 complete. A folder that cannot be listed is a failure reported beside what was
 found, except a root that is not there at all: that holds nothing, and only
@@ -2203,8 +2203,8 @@ The TUI runs them while another terminal runs its own, and the server under the
 panel runs them while both do. Three things keep two writers from undoing each
 other, and none of them makes a reader wait for the workspace.
 
-- **A temporary of its own.** A file Mindflayer replaces — a marker, the
-  `SKILL.md` a rename rewrites, git's exclude file — is written whole into a
+- **A temporary of its own.** A file Mindflayer replaces (a marker, the
+  `SKILL.md` a rename rewrites, git's exclude file) is written whole into a
   temporary beside it and renamed into place (`replace_file`). The temporary
   was `flayer.toml.tmp`, one name for every writer: two at once wrote into one
   file, either could rename the other's half into place, and the second rename
@@ -2231,8 +2231,8 @@ other, and none of them makes a reader wait for the workspace.
 
   A ledger that keeps its log needs those two files made beside it even to be
   read, and SQLite takes them away when the last connection closes, so in a
-  folder the reader may read and not write — a sandboxed agent's view of the
-  workspace, a read-only mount, another user's workspace — the first read
+  folder the reader may read and not write (a sandboxed agent's view of the
+  workspace, a read-only mount, another user's workspace), the first read
   fails, where the journal the ledger had before let it be read.
   `open_existing` then opens it as SQLite's `immutable`, which needs neither
   file and takes no lock, but only when there is no log: then everything is
@@ -2245,8 +2245,8 @@ other, and none of them makes a reader wait for the workspace.
   writes each put back a marker with only their own entry, and the second
   rename wins. So a writer holds `.mindflayer/lock` from before it reads what
   it will change until the change is written: an edit of the marker (`link`,
-  `unlink`, `load`, `unload`), an install or an uninstall, a gather — clone and
-  all, since two gathers of one source clone into one folder — and the scrub
+  `unlink`, `load`, `unload`), an install or an uninstall, a gather (clone and
+  all, since two gathers of one source clone into one folder) and the scrub
   that opening the ledger to write runs (`ledger_to_write`), while it rewrites
   clones an older build left a credential in and removes the folders of a
   source made one with another, which a gather beside it would be filling.
@@ -2259,8 +2259,8 @@ other, and none of them makes a reader wait for the workspace.
   migrated. A migration is one transaction that reads the version again once
   it holds SQLite's write lock (`Ledger::migrate`), so two processes opening
   one an older build left take turns there and the second finds nothing to
-  do — a read's migration included, which the workspace's lock could not keep
-  apart, since readers never take it. Taking that lock as well made every
+  do (a read's migration included, which the workspace's lock could not keep
+  apart, since readers never take it). Taking that lock as well made every
   change to an artifact wait behind a gather to drop its record, once the
   change was made, and fail as busy when the gather ran long, leaving the
   record behind. The scrub takes it only when it has clones to rewrite, the
@@ -2321,7 +2321,7 @@ How the lock behaves, and why:
   not take it at all.
 - **A filesystem without locks lets writers through unlocked**, as it lets
   installs through without a sweep: refusing would refuse every change there.
-  Any error taking the lock counts, for the reason a stage gives — NFS
+  Any error taking the lock counts, for the reason a stage gives: NFS
   without its lock daemon says "no locks available". The unique names still
   keep every file whole.
 
