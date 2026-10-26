@@ -272,6 +272,16 @@ fn a_workspace_with_no_projects_says_so_instead_of_opening_a_screen() {
 }
 
 #[test]
+fn opening_the_screen_makes_no_ledger() {
+    let dir = TempDir::new().unwrap();
+    flayer(dir.path(), &["init"]).unwrap();
+
+    flayer(dir.path(), &["install"]).unwrap();
+
+    assert!(!dir.path().join(FLAYER_DIR).join("mindflayer.db").exists());
+}
+
+#[test]
 fn install_outside_a_workspace_says_what_to_run() {
     let dir = TempDir::new().unwrap();
 

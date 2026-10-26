@@ -106,6 +106,35 @@ jobs:
       - name: Test mindflayer-cli
         run: make cli/test
 
+  # The server depends on no mindflayer crate, core included, so nothing here
+  # needs core's tests to pass first. It waits for them anyway: core is the
+  # gate for everything downstream, and a red core stops the run before it
+  # spends a runner on anything else.
+  test-server:
+    name: test (server)
+    needs: test-core
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo
+        uses: actions/cache@v5
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-
+
+      - name: Test mindflayer-server
+        run: make server/test
+
   # The whole suite on the two platforms Linux cannot speak for. Linux runs on
   # every push and every pull request; these two are reserved for the branches
   # that ship, because a macOS or Windows runner costs several times a Linux
@@ -232,3 +261,32 @@ jobs:
 
       - name: Build mindflayer-cli
         run: make cli/build
+
+  build-server:
+    name: build (server)
+    needs: [test-server, test-cross]
+    if: >-
+      always() &&
+      needs.test-server.result == 'success' &&
+      (needs.test-cross.result == 'success' || needs.test-cross.result == 'skipped')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo
+        uses: actions/cache@v5
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-
+
+      - name: Build mindflayer-server
+        run: make server/build

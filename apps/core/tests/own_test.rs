@@ -86,7 +86,7 @@ fn a_workspace_holds_its_own_the_way_a_project_does() {
 
     // And changed the way a project's are.
     let target = lifecycle::find(&own, &Reference::parse("commit-style")).unwrap();
-    lifecycle::rename(&own, &target, "commits").unwrap();
+    lifecycle::rename(None, &own, &target, "commits").unwrap();
     assert!(dir.path().join("skills/commits/SKILL.md").is_file());
 }
 

@@ -4,16 +4,18 @@
 //! Each takes the holder it acts on — a project, or the workspace's own — so
 //! `mind add` and `flayer add -p alpha` are one function given one project,
 //! and `flayer add` is the same function given the workspace. Each also takes
-//! the workspace the command resolved: its templates are among those `add`
-//! starts from, and its record of what it installed must not outlive the copy.
+//! the workspace the command resolved and hands it to core: its templates are
+//! among those `add` starts from, and core's lifecycle drops its record of
+//! what it installed when a change would leave that record outliving the
+//! copy. Here that is only said.
 
 use std::fmt::Write as _;
 use std::path::Path;
 
+use mindflayer_core::install::InstallError;
+use mindflayer_core::lifecycle::{self, Record};
 use mindflayer_core::template::{self, Origin};
-use mindflayer_core::{
-    create, create_from, lifecycle, paths, FlayerWorkspace, Kind, MindProject, Reference, Target,
-};
+use mindflayer_core::{paths, FlayerWorkspace, Kind, MindProject, Reference, Target};
 
 use crate::render::{printable, table, verdict};
 use crate::{CliError, Failure, Outcome};
@@ -26,27 +28,28 @@ pub(crate) fn add_to(
     description: &str,
     template: Option<&str>,
 ) -> Result<Outcome, Failure> {
-    let artifact = match template {
-        None => create(holder, kind, name, description),
-        Some(template) => {
-            let template =
-                template::find(workspace, holder, kind, template).map_err(CliError::from)?;
-            create_from(holder, kind, name, description, &template)
-        }
-    }
-    .map_err(CliError::from)?;
-    let mut outcome = Outcome::plain(format!(
-        "created {} {} at {}\n",
-        artifact.kind(),
-        artifact.name(),
-        artifact.file().display()
-    ));
-    disowned(
-        &mut outcome,
+    let template = template
+        .map(|template| template::find(workspace, holder, kind, template))
+        .transpose()
+        .map_err(CliError::from)?;
+    let added = lifecycle::add(
         workspace,
         holder,
         kind,
         name,
+        description,
+        template.as_ref(),
+    )
+    .map_err(CliError::from)?;
+    let mut outcome = Outcome::plain(format!(
+        "created {} {} at {}\n",
+        added.artifact.kind(),
+        added.artifact.name(),
+        added.artifact.file().display()
+    ));
+    recorded(
+        &mut outcome,
+        added.stale,
         "an old record said `flayer install` had put one of that name here; it is gone",
     );
     Ok(outcome)
@@ -59,23 +62,27 @@ pub(crate) fn edit_in(
     editor: Option<&str>,
 ) -> Result<Outcome, Failure> {
     let target = lifecycle::find(holder, &Reference::parse(reference)).map_err(CliError::from)?;
-    let file = target.file();
-    let before = std::fs::read(&file).ok();
+    let edit = lifecycle::start_edit(&target);
     let editor = editor.map_or_else(default_editor, str::to_owned);
-    open_in_editor(&editor, &file)?;
-    let changed = std::fs::read(&file).ok() != before;
-
-    let mut outcome = edited(holder, &target, changed);
-    if changed {
-        disowned(
-            &mut outcome,
-            workspace,
-            holder,
-            target.kind,
-            &target.name,
-            "it had been installed from the shelf; edited, it is yours, and `flayer install` leaves it alone",
-        );
+    let opened = open_in_editor(&editor, edit.file());
+    // Finished whatever the editor came to. One that writes the file and then
+    // exits non-zero, as vim does on `:cq`, has changed the copy all the same,
+    // and a record left behind would let `flayer uninstall` delete the change.
+    let finished = lifecycle::finish_edit(workspace, holder, edit);
+    if let Err(error) = opened {
+        let mut failure = Failure::from(error);
+        if let Err(error) = finished.copy {
+            failure.warnings.push(format!("warning: {error}"));
+        }
+        return Err(failure);
     }
+
+    let mut outcome = edited(holder, &target, finished.changed);
+    recorded(
+        &mut outcome,
+        finished.copy,
+        "it had been installed from the shelf; edited, it is yours, and `flayer install` leaves it alone",
+    );
     Ok(outcome)
 }
 
@@ -86,30 +93,22 @@ pub(crate) fn rename_in(
     to: &str,
 ) -> Result<Outcome, Failure> {
     let target = lifecycle::find(holder, &Reference::parse(reference)).map_err(CliError::from)?;
-    let renamed = lifecycle::rename(holder, &target, to).map_err(CliError::from)?;
+    let renamed = lifecycle::rename(workspace, holder, &target, to).map_err(CliError::from)?;
     let mut outcome = Outcome::plain(format!(
         "renamed {} {} to {} at {}\n",
         target.kind,
         target.name,
-        renamed.name,
-        renamed.path.display()
+        renamed.target.name,
+        renamed.target.path.display()
     ));
-    disowned(
+    recorded(
         &mut outcome,
-        workspace,
-        holder,
-        target.kind,
-        &target.name,
+        renamed.copy,
         "it had been installed from the shelf; renamed, it is yours, and `flayer install` leaves it alone",
     );
-    // A stale claim on the new name would make what was just renamed look
-    // like something Mindflayer put there.
-    disowned(
+    recorded(
         &mut outcome,
-        workspace,
-        holder,
-        target.kind,
-        &renamed.name,
+        renamed.stale,
         "an old record said `flayer install` had put one of that name here; it is gone",
     );
     Ok(outcome)
@@ -132,19 +131,16 @@ pub(crate) fn remove_from(
         }
         .into());
     }
-    lifecycle::remove(holder, &target).map_err(CliError::from)?;
+    let removed = lifecycle::remove(workspace, holder, &target).map_err(CliError::from)?;
     let mut outcome = Outcome::plain(format!(
         "removed {} {} from {}\n",
         target.kind,
         target.name,
         target.path.display()
     ));
-    disowned(
+    recorded(
         &mut outcome,
-        workspace,
-        holder,
-        target.kind,
-        &target.name,
+        removed.copy,
         "it had been installed from the shelf; `flayer install` can put it back",
     );
     Ok(outcome)
@@ -257,27 +253,18 @@ fn edited(project: &MindProject, target: &Target, changed: bool) -> Outcome {
     }
 }
 
-/// Drop a record saying `flayer install` put `name` into `project`, and say so
-/// when there was one. With no workspace there is no record to drop.
+/// Say what a change did to a record that `flayer install` put something
+/// into the project, when it did anything.
 ///
-/// Failing to is a warning rather than an error: the change the record was
-/// about has already been made, and reporting it as not made would be false.
-fn disowned(
-    outcome: &mut Outcome,
-    workspace: Option<&FlayerWorkspace>,
-    project: &MindProject,
-    kind: Kind,
-    name: &str,
-    why: &str,
-) {
-    let Some(workspace) = workspace else {
-        return;
-    };
-    match mindflayer_core::install::disown(workspace, project, kind, name) {
-        Ok(true) => {
+/// A record that could not be changed is a warning rather than an error, as
+/// core reports it: the change it was about has already been made, and
+/// reporting it as not made would be false.
+fn recorded(outcome: &mut Outcome, record: Result<Record, InstallError>, why: &str) {
+    match record {
+        Ok(Record::Dropped) => {
             let _ = writeln!(outcome.stdout, "  {why}");
         }
-        Ok(false) => {}
+        Ok(Record::Untouched) => {}
         Err(error) => {
             outcome.stderr.push(format!("warning: {error}"));
             outcome.ok = false;

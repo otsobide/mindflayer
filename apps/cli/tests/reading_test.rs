@@ -41,7 +41,7 @@ fn show_prints_compatibility_and_the_metadata_that_is_strings() {
 
     let outcome = mind(dir.path(), &["show", "deploy"]).unwrap();
 
-    let file = dir.path().join("skills/deploy/SKILL.md");
+    let file = dir.path().join("skills").join("deploy").join("SKILL.md");
     assert_eq!(
         outcome.stdout,
         format!(

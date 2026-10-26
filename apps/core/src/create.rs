@@ -10,7 +10,10 @@
 //! Nothing here records anything in the ledger. A created artifact is its
 //! author's work, not something Mindflayer installed, so [`crate::install`]
 //! treats it as foreign: never overwritten by a shelf entry of the same name,
-//! never removed by unticking one.
+//! never removed by unticking one. Nor does anything here drop a record: an
+//! old one under the name written is [`crate::lifecycle::add`]'s to drop, so
+//! a front end adds with that rather than with these. They stay public as the
+//! bare writers, which core's tests build their fixtures with.
 
 use std::fs;
 use std::io::{self, Write as _};
