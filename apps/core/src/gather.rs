@@ -194,6 +194,77 @@ pub fn gather(
     outcome
 }
 
+/// What [`scrub`] took out.
+#[derive(Debug, Default)]
+pub struct Scrub {
+    /// The sources whose URL carried credentials, as they are stored now.
+    /// Gathering one again needs the credential from somewhere else.
+    pub sources: Vec<ledger::Source>,
+    /// How many action log entries named a URL with credentials.
+    pub actions: usize,
+    /// Clones that still hold them, because they could not be rewritten.
+    /// Their source keeps its URL until they can, so the next scrub tries
+    /// again rather than forgetting the clone needs it.
+    pub failures: Vec<ScrubFailure>,
+}
+
+impl Scrub {
+    /// Whether there was nothing to take out, which is every time but the
+    /// first after an older build stored a credential.
+    pub fn is_empty(&self) -> bool {
+        self.sources.is_empty() && self.actions == 0 && self.failures.is_empty()
+    }
+}
+
+/// Take out the credentials a Mindflayer from before they were refused
+/// stored: in the URLs of sources, in the action log, and in the clones it
+/// made from those URLs.
+///
+/// For a front end to run whenever a command that writes opens the ledger,
+/// before it writes. Every time rather than once, as a schema migration
+/// would, because an older build can keep writing to the same file after
+/// this one has scrubbed it, and the schema steps are spoken for by the
+/// changes that need a new version. Doing nothing costs one query, and the
+/// first time it finds something is the only time it says so. A read is left
+/// alone: what it shows is redacted on the way out anyway, and reading
+/// should not write.
+pub fn scrub(workspace: &FlayerWorkspace, ledger: &Ledger) -> Result<Scrub, LedgerError> {
+    let mut scrub = Scrub::default();
+    for source in ledger.tainted_sources()? {
+        // The clone first and the row after it: a row rewritten first would
+        // no longer say that its clone still needs the same.
+        if let Err(error) = git::scrub(&workspace.cache_dir().join(&source.directory)) {
+            scrub.failures.push(ScrubFailure {
+                url: source.url.clone(),
+                source: error,
+            });
+            continue;
+        }
+        ledger.scrub_source(source.id)?;
+        // Two folders of one place are one thing to tell somebody about.
+        if !scrub
+            .sources
+            .iter()
+            .any(|seen| seen.url == source.url && seen.reference == source.reference)
+        {
+            scrub.sources.push(source);
+        }
+    }
+    scrub.actions = ledger.scrub_log()?;
+    Ok(scrub)
+}
+
+/// A clone made from a URL with credentials that could not be rewritten
+/// without them.
+#[derive(Debug, Error)]
+#[error("{url}: its clone still holds the credentials it was gathered with: {source}")]
+pub struct ScrubFailure {
+    /// The source's URL, without them.
+    pub url: String,
+    #[source]
+    pub source: git::GitError,
+}
+
 /// The work itself, with the logging left to [`gather`].
 fn harvest(
     workspace: &FlayerWorkspace,

@@ -423,3 +423,87 @@ fn a_url_with_a_token_in_it_is_refused_and_the_token_is_kept_nowhere() {
     let stored = fs::read(workspace.ledger_path()).unwrap();
     assert!(!stored.windows(9).any(|bytes| bytes == b"ghp_t0ken"));
 }
+
+/// Leave in `workspace` what a Mindflayer from before the refusal left after
+/// gathering from `url` with a token in it: the URL in the source the clone
+/// in `directory` belongs to, in the log, and in that clone's config and
+/// reflog.
+fn left_by_an_older_build(workspace: &FlayerWorkspace, directory: &str, url: &str) {
+    let database = rusqlite::Connection::open(workspace.ledger_path()).unwrap();
+    database
+        .execute("UPDATE sources SET url = ?1", [url])
+        .unwrap();
+    database
+        .execute(
+            "INSERT INTO actions (at, action, target, outcome, detail)
+             VALUES (0, 'gather', ?1, 'failed', ?2)",
+            [url, &format!("{url}: cannot be fetched")],
+        )
+        .unwrap();
+
+    let git = workspace.cache_dir().join(directory).join(".git");
+    let config = fs::read_to_string(git.join("config")).unwrap();
+    let config: String = config
+        .lines()
+        .map(|line| {
+            if line.trim_start().starts_with("url = ") {
+                format!("\turl = {url}\n")
+            } else {
+                format!("{line}\n")
+            }
+        })
+        .collect();
+    fs::write(git.join("config"), config).unwrap();
+    let mut reflog = fs::read_to_string(git.join("logs").join("HEAD")).unwrap();
+    reflog.push_str(&format!(
+        "0000 1111 Fixture <fixture@example.com> 0 +0000\tclone: from {url}\n"
+    ));
+    fs::write(git.join("logs").join("HEAD"), reflog).unwrap();
+}
+
+/// Every file under `root` that reads as text, joined, for asserting on.
+fn text_under(root: &std::path::Path) -> String {
+    let mut text = String::new();
+    for entry in fs::read_dir(root).unwrap() {
+        let path = entry.unwrap().path();
+        if path.is_dir() {
+            text.push_str(&text_under(&path));
+        } else if let Ok(contents) = fs::read_to_string(&path) {
+            text.push_str(&contents);
+        }
+    }
+    text
+}
+
+#[test]
+fn what_an_older_build_stored_with_a_token_is_scrubbed_once_from_the_ledger_and_the_clone() {
+    let source = repository(&[("skills/deploy/SKILL.md", &skill("deploy", "Ship it"))]);
+    let (_dir, workspace) = workspace();
+    let ledger = workspace.ledger().unwrap();
+    let report = gather::gather(&workspace, &ledger, &Request::git(url(&source))).unwrap();
+    left_by_an_older_build(
+        &workspace,
+        &report.directory,
+        "https://me:ghp_t0ken@example.com/acme/skills",
+    );
+
+    let scrub = gather::scrub(&workspace, &ledger).unwrap();
+
+    assert_eq!(scrub.sources.len(), 1, "{:?}", scrub.sources);
+    assert_eq!(scrub.sources[0].url, "https://example.com/acme/skills");
+    assert_eq!(scrub.actions, 1);
+    assert!(scrub.failures.is_empty(), "{:?}", scrub.failures);
+
+    let stored = fs::read(workspace.ledger_path()).unwrap();
+    assert!(!stored.windows(9).any(|bytes| bytes == b"ghp_t0ken"));
+    let clone = text_under(&workspace.cache_dir().join(&report.directory).join(".git"));
+    assert!(!clone.contains("ghp_t0ken"));
+    assert!(clone.contains("url = https://example.com/acme/skills\n"));
+    // What was gathered is still there, under the URL without the token.
+    let gathered = ledger.gathered().unwrap();
+    assert_eq!(gathered.len(), 1);
+    assert_eq!(gathered[0].source.url, "https://example.com/acme/skills");
+
+    // Said once: the second time there is nothing left to say.
+    assert!(gather::scrub(&workspace, &ledger).unwrap().is_empty());
+}
