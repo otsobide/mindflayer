@@ -615,10 +615,15 @@ next time, as a warning; what was taken out is a note, said once, since the
 command did what it was asked and an exit code that failed because of a fix
 would break a script for nothing it did. When the URL without credentials is
 already another source's, with the same branch and folder, the two are one
-place gathered twice and become one row, keeping the one gathered from most
-recently, whose folder holds the newer files: two rows would offer each skill
-twice under one origin, and SQLite's UNIQUE would refuse the rewrite outright
-when a branch is set. The ledger turns on SQLite's `secure_delete`, so a
+place gathered twice and become one row: two rows would offer each skill twice
+under one origin, and SQLite's UNIQUE would refuse the rewrite outright when a
+branch is set. The row kept is the one whose shelf was filled most recently,
+since its folder holds the newer files, and a row whose gather failed before
+it took anything loses however recently it was tried. What the other row
+gathered goes with it, and its clone and shelf folder are removed (a folder
+that will not go is a warning), rather than its records moving to the kept
+row: they would point into a folder the ledger no longer reserves, which the
+next source with the same readable name would be given and gather over. The ledger turns on SQLite's `secure_delete`, so a
 rewritten row leaves no copy of its old text in the file's free space.
 
 It runs every time rather than once, as a schema step would, because an older

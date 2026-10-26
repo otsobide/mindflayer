@@ -138,6 +138,12 @@ pub(crate) fn scrubbed(scrub: &Scrub) -> Scrubbed {
             .failures
             .iter()
             .map(|failure| format!("warning: {failure}"))
+            .chain(
+                scrub
+                    .leftovers
+                    .iter()
+                    .map(|leftover| format!("warning: {leftover}")),
+            )
             .collect(),
     }
 }

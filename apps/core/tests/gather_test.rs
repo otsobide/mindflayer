@@ -532,3 +532,50 @@ fn what_an_older_build_stored_with_a_token_is_scrubbed_once_from_the_ledger_and_
     // Said once: the second time there is nothing left to say.
     assert!(workspace.ledger_to_write().unwrap().1.is_empty());
 }
+
+#[test]
+fn a_source_that_becomes_one_with_another_takes_its_folders_with_it() {
+    let source = repository(&[("skills/deploy/SKILL.md", &skill("deploy", "Ship it"))]);
+    let (_dir, workspace) = workspace();
+    let ledger = workspace.ledger().unwrap();
+    let report = gather::gather(&workspace, &ledger, &Request::git(url(&source))).unwrap();
+    // An older build gathered the same place with a token first, into a
+    // folder of its own, and without it later.
+    let older = "example.com-acme-skills";
+    let shelf = workspace.gathered_dir(Kind::Skill).join(older);
+    fs::create_dir_all(shelf.join("deploy")).unwrap();
+    fs::write(shelf.join("deploy").join("SKILL.md"), skill("deploy", "Old")).unwrap();
+    let clone = workspace.cache_dir().join(older).join(".git");
+    fs::create_dir_all(&clone).unwrap();
+    fs::write(
+        clone.join("config"),
+        "[remote \"origin\"]\n\turl = https://me:ghp_t0ken@example.com/acme/skills\n",
+    )
+    .unwrap();
+    let database = rusqlite::Connection::open(workspace.ledger_path()).unwrap();
+    database
+        .execute_batch(&format!(
+            "UPDATE sources SET url = 'https://example.com/acme/skills';
+             INSERT INTO sources (kind, url, reference, subdirectory, directory, first_seen, last_seen)
+                 SELECT kind, 'https://me:ghp_t0ken@example.com/acme/skills', reference,
+                        subdirectory, '{older}', 0, 0 FROM sources;
+             INSERT INTO artifacts (kind, name, source_id, path, gathered_at)
+                 VALUES ('skill', 'deploy', (SELECT id FROM sources WHERE directory = '{older}'),
+                         '.mindflayer/skills/{older}/deploy', 0);"
+        ))
+        .unwrap();
+
+    let (ledger, scrub) = workspace.ledger_to_write().unwrap();
+
+    assert!(scrub.leftovers.is_empty(), "{:?}", scrub.leftovers);
+    assert!(!shelf.exists(), "the shelf folder nothing points into went");
+    assert!(!workspace.cache_dir().join(older).exists(), "and its clone");
+    let gathered = ledger.gathered().unwrap();
+    assert_eq!(gathered.len(), 1, "{gathered:?}");
+    assert_eq!(gathered[0].source.directory, report.directory);
+    assert!(workspace
+        .gathered_dir(Kind::Skill)
+        .join(&report.directory)
+        .join("deploy")
+        .is_dir());
+}

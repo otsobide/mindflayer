@@ -531,23 +531,30 @@ impl Ledger {
         Ok(tainted)
     }
 
-    /// Store a source's URL without the credentials in it.
+    /// Store a source's URL without the credentials in it, handing back the
+    /// row that went if that made two rows one.
     ///
     /// When another source already holds that URL, with the same branch and
     /// folder, the two are one place gathered twice, so they become one row
     /// rather than two with the same address: two rows would make the shelf
     /// offer each skill twice under one origin, and `--from` could not tell
-    /// them apart. The one gathered from most recently is kept, since its
-    /// folder holds the newer files. What only the other one had moves to it,
-    /// where its files still are; what both had is the kept one's; and an
-    /// installation that pointed at the other points at the kept one.
-    pub fn scrub_source(&self, id: i64) -> Result<(), LedgerError> {
+    /// them apart. The one whose shelf was filled most recently is kept, since
+    /// its folder holds the newer files; a row whose gather failed before it
+    /// filled anything loses to one that did, however recently it was tried.
+    /// What the other one gathered goes with it, rather than moving to the
+    /// kept row: its files are in the other's folder, and a record pointing
+    /// there would outlive the folder's owner, so the next source given that
+    /// folder would gather over files the kept row still claims. An
+    /// installation that pointed at the other points at the kept one, which
+    /// is the same place. The row that went is handed back for its folders to
+    /// go too, which nothing points into any more.
+    pub fn scrub_source(&self, id: i64) -> Result<Option<Source>, LedgerError> {
         let failed = |source| self.failed("rewriting a source without credentials", source);
         let transaction = self.connection.unchecked_transaction().map_err(failed)?;
 
-        let Some((kind, stored, reference, subdirectory, seen)) = transaction
+        let Some((kind, stored, reference, subdirectory)) = transaction
             .query_row(
-                "SELECT kind, url, reference, subdirectory, last_seen FROM sources WHERE id = ?1",
+                "SELECT kind, url, reference, subdirectory FROM sources WHERE id = ?1",
                 [id],
                 |row| {
                     Ok((
@@ -555,49 +562,63 @@ impl Ledger {
                         row.get::<_, String>(1)?,
                         row.get::<_, Option<String>>(2)?,
                         row.get::<_, String>(3)?,
-                        row.get::<_, i64>(4)?,
                     ))
                 },
             )
             .optional()
             .map_err(failed)?
         else {
-            return Ok(());
+            return Ok(None);
         };
         let clean = redacted(&stored);
         if clean == stored {
-            return Ok(());
+            return Ok(None);
         }
 
-        let other: Option<(i64, i64)> = transaction
+        let other: Option<i64> = transaction
             .query_row(
-                "SELECT id, last_seen FROM sources
+                "SELECT id FROM sources
                   WHERE kind = ?1 AND url = ?2 AND subdirectory = ?3 AND reference IS ?4
                     AND id != ?5
                   ORDER BY last_seen DESC, id DESC LIMIT 1",
                 rusqlite::params![kind, clean.as_ref(), subdirectory, reference, id],
-                |row| Ok((row.get(0)?, row.get(1)?)),
+                |row| row.get(0),
             )
             .optional()
             .map_err(failed)?;
 
-        let kept = match other {
-            None => id,
-            Some((other, other_seen)) => {
-                let (kept, dropped) = if seen >= other_seen {
-                    (id, other)
-                } else {
-                    (other, id)
+        let (kept, dropped) = match other {
+            None => (id, None),
+            Some(other) => {
+                // Newest harvest first, `None` for a shelf never filled, then
+                // the last attempt, then the later row.
+                let freshness = |source: i64| {
+                    transaction.query_row(
+                        "SELECT (SELECT MAX(gathered_at) FROM artifacts WHERE source_id = ?1),
+                                last_seen, id
+                           FROM sources WHERE id = ?1",
+                        [source],
+                        |row| {
+                            Ok((
+                                row.get::<_, Option<i64>>(0)?,
+                                row.get::<_, i64>(1)?,
+                                row.get::<_, i64>(2)?,
+                            ))
+                        },
+                    )
                 };
-                transaction
-                    .execute(
-                        "UPDATE artifacts SET source_id = ?1
-                          WHERE source_id = ?2
-                            AND NOT EXISTS (SELECT 1 FROM artifacts AS held
-                                             WHERE held.source_id = ?1
-                                               AND held.kind = artifacts.kind
-                                               AND held.name = artifacts.name)",
-                        [kept, dropped],
+                let (kept, dropped) =
+                    if freshness(id).map_err(failed)? >= freshness(other).map_err(failed)? {
+                        (id, other)
+                    } else {
+                        (other, id)
+                    };
+                let gone = transaction
+                    .query_row(
+                        "SELECT id, kind, url, reference, subdirectory, revision, directory
+                           FROM sources WHERE id = ?1",
+                        [dropped],
+                        read_source,
                     )
                     .map_err(failed)?;
                 transaction
@@ -606,11 +627,11 @@ impl Ledger {
                         [kept, dropped],
                     )
                     .map_err(failed)?;
-                // What both had goes with the row, by the cascade.
+                // What it gathered goes with it, by the cascade.
                 transaction
                     .execute("DELETE FROM sources WHERE id = ?1", [dropped])
                     .map_err(failed)?;
-                kept
+                (kept, Some(gone))
             }
         };
         transaction
@@ -619,7 +640,8 @@ impl Ledger {
                 rusqlite::params![kept, clean.as_ref()],
             )
             .map_err(failed)?;
-        transaction.commit().map_err(failed)
+        transaction.commit().map_err(failed)?;
+        Ok(dropped)
     }
 
     /// Rewrite every action log entry without the credentials of any URL in

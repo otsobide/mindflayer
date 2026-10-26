@@ -206,13 +206,19 @@ pub struct Scrub {
     /// Their source keeps its URL until they can, so the next scrub tries
     /// again rather than forgetting the clone needs it.
     pub failures: Vec<ScrubFailure>,
+    /// Folders of a source that became one with another, which nothing
+    /// points into any more and which could not be removed.
+    pub leftovers: Vec<Leftover>,
 }
 
 impl Scrub {
     /// Whether there was nothing to take out, which is every time but the
     /// first after an older build stored a credential.
     pub fn is_empty(&self) -> bool {
-        self.sources.is_empty() && self.actions == 0 && self.failures.is_empty()
+        self.sources.is_empty()
+            && self.actions == 0
+            && self.failures.is_empty()
+            && self.leftovers.is_empty()
     }
 }
 
@@ -240,7 +246,9 @@ pub(crate) fn scrub(workspace: &FlayerWorkspace, ledger: &Ledger) -> Result<Scru
             });
             continue;
         }
-        ledger.scrub_source(source.id)?;
+        if let Some(gone) = ledger.scrub_source(source.id)? {
+            remove_folders_of(workspace, &gone, &mut scrub.leftovers);
+        }
         // Two branches or folders of one URL are one credential to tell
         // somebody about.
         if !scrub.sources.iter().any(|seen| seen.url == source.url) {
@@ -249,6 +257,47 @@ pub(crate) fn scrub(workspace: &FlayerWorkspace, ledger: &Ledger) -> Result<Scru
     }
     scrub.actions = ledger.scrub_log()?;
     Ok(scrub)
+}
+
+/// Remove the clone and the shelf folders of a source the ledger no longer
+/// has, noting each that will not go.
+///
+/// Removed rather than left, because the shelf is read from its folders
+/// ([`crate::Catalog::discover_gathered`]): one left behind would be listed
+/// as skills no source owns. A directory that is not one folder name was not
+/// named by this ledger, and is left alone rather than followed out of the
+/// workspace.
+fn remove_folders_of(
+    workspace: &FlayerWorkspace,
+    gone: &ledger::Source,
+    leftovers: &mut Vec<Leftover>,
+) {
+    if !crate::install::is_folder_name(&gone.directory) {
+        return;
+    }
+    let shelves = Kind::ALL
+        .iter()
+        .map(|kind| workspace.gathered_dir(*kind).join(&gone.directory));
+    for path in std::iter::once(workspace.cache_dir().join(&gone.directory)).chain(shelves) {
+        match fs::remove_dir_all(&path) {
+            Ok(()) => {}
+            Err(error) if error.kind() == io::ErrorKind::NotFound => {}
+            Err(source) => leftovers.push(Leftover { path, source }),
+        }
+    }
+}
+
+/// A folder of a source that became one with another, which could not be
+/// removed.
+#[derive(Debug, Error)]
+#[error(
+    "{path}: left by a source that is now one with another at the same URL, and cannot be \
+     removed: {source}"
+)]
+pub struct Leftover {
+    pub path: PathBuf,
+    #[source]
+    pub source: io::Error,
 }
 
 /// A clone made from a URL with credentials that could not be rewritten

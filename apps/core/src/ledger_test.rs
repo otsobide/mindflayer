@@ -296,7 +296,7 @@ fn a_source_scrubbed_onto_one_already_at_its_url_becomes_one_row() {
         )
         .unwrap();
 
-    ledger.scrub_source(1).unwrap();
+    let gone = ledger.scrub_source(1).unwrap();
 
     let gathered = ledger.gathered().unwrap();
     assert_eq!(gathered.len(), 1, "{gathered:?}");
@@ -304,10 +304,35 @@ fn a_source_scrubbed_onto_one_already_at_its_url_becomes_one_row() {
     assert_eq!(gathered[0].source.url, "https://h/a");
     assert_eq!(gathered[0].source.directory, "h-a");
     assert_eq!(stored(&ledger, "sources").lines().count(), 1);
+    // Handed back so its folder can go too.
+    assert_eq!(gone.map(|source| source.directory).as_deref(), Some("h-a-2"));
 }
 
 #[test]
-fn merging_keeps_the_newer_rows_artifacts_and_moves_what_only_the_other_had() {
+fn a_row_tried_later_that_filled_no_shelf_loses_to_the_one_that_did() {
+    let (_dir, ledger) = ledger_with_a_token_in_it();
+    // Gathered with the token, which worked, then tried without it, which
+    // failed before it took anything: the later row is the empty one.
+    ledger
+        .connection
+        .execute_batch(
+            "INSERT INTO sources (id, kind, url, reference, subdirectory, directory, first_seen, last_seen)
+                 VALUES (2, 'git', 'https://h/a', NULL, 'skills', 'h-a-2', 30, 30);",
+        )
+        .unwrap();
+
+    let gone = ledger.scrub_source(1).unwrap();
+
+    let gathered = ledger.gathered().unwrap();
+    assert_eq!(gathered.len(), 1, "{gathered:?}");
+    assert_eq!(gathered[0].name, "deploy");
+    assert_eq!(gathered[0].source.id, 1);
+    assert_eq!(gathered[0].source.url, "https://h/a");
+    assert_eq!(gone.map(|source| source.id), Some(2));
+}
+
+#[test]
+fn merging_keeps_the_fresher_rows_artifacts_and_lets_the_others_go_with_its_row() {
     let (_dir, ledger) = ledger_with_a_token_in_it();
     // A branch is part of the coordinate, so this is the case SQLite's UNIQUE
     // would refuse if the URL were rewritten before the other row went.
@@ -326,20 +351,18 @@ fn merging_keeps_the_newer_rows_artifacts_and_moves_what_only_the_other_had() {
         )
         .unwrap();
 
-    ledger.scrub_source(1).unwrap();
+    let gone = ledger.scrub_source(1).unwrap();
 
+    // Nothing points into the folder of the row that went, so the next
+    // source given that folder cannot gather over files a record claims.
     let gathered = ledger.gathered().unwrap();
     let names: Vec<(&str, i64, &str)> = gathered
         .iter()
         .map(|g| (g.name.as_str(), g.source.id, g.path.as_str()))
         .collect();
-    assert_eq!(
-        names,
-        [
-            ("deploy", 2, ".mindflayer/skills/h-a-2/deploy"),
-            ("only-here", 2, ".mindflayer/skills/h-a/only-here"),
-        ]
-    );
+    assert_eq!(names, [("deploy", 2, ".mindflayer/skills/h-a-2/deploy")]);
+    assert_eq!(gone.map(|source| source.directory).as_deref(), Some("h-a"));
+    // An installation is about the place, which is the kept row now.
     assert!(stored(&ledger, "installations").contains("|only-here|2|"));
 }
 
