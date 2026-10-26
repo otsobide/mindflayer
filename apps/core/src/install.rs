@@ -379,14 +379,7 @@ pub fn survey(
                 offer,
                 standing: Standing::Absent,
             };
-            let name = candidate.name();
-            candidate.standing = if !holds(&directory, kind, name) {
-                Standing::Absent
-            } else if ours.iter().any(|installed| installed == name) {
-                Standing::Installed
-            } else {
-                Standing::Foreign
-            };
+            candidate.standing = standing(&directory, kind, candidate.name(), &ours);
             candidate
         })
         .collect();
@@ -505,6 +498,18 @@ pub fn install(
             name,
             issues: refused,
         });
+    }
+
+    // Looked at again under the lock, before anything is written. The
+    // candidate's standing is from a survey made before it was held, minutes
+    // before on the install screen, and since then an edit may have made the
+    // copy its author's and dropped its record, or somebody may have written
+    // a folder of that name by hand. Only a turn to Foreign changes what
+    // happens here, and that one must: it is somebody's work, never written
+    // over.
+    let ours = ledger.installations(&entry, kind)?;
+    if standing(&project.directory_for(kind), kind, &name, &ours) == Standing::Foreign {
+        return Ok(Installed::Foreign { name }.into());
     }
 
     // Links are followed only inside where the artifact comes from: the
@@ -825,6 +830,18 @@ pub enum Removed {
     Absent {
         name: String,
     },
+}
+
+/// How `name` stands in a project's `directory`, given the names the ledger
+/// says Mindflayer installed there (`ours`).
+fn standing(directory: &Path, kind: Kind, name: &str, ours: &[String]) -> Standing {
+    if !holds(directory, kind, name) {
+        Standing::Absent
+    } else if ours.iter().any(|installed| installed == name) {
+        Standing::Installed
+    } else {
+        Standing::Foreign
+    }
 }
 
 /// Whether a project's directory already holds an artifact of that name.

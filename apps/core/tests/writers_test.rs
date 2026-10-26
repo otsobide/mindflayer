@@ -15,7 +15,7 @@ use std::time::{Duration, Instant};
 
 use common::{repository, skill, url, workspace};
 use mindflayer_core::gather::{self, Request};
-use mindflayer_core::install::{self, Removed};
+use mindflayer_core::install::{self, Installed, Removed, Standing};
 use mindflayer_core::ledger::{Action, Outcome, SourceKind};
 use mindflayer_core::lifecycle::{self, Record};
 use mindflayer_core::lock::{HOLDER_FILE, WAIT};
@@ -343,6 +343,40 @@ fn an_install_waits_for_the_writer_before_it() {
 
     let copy = project.directory_for(Kind::Skill).join("deploy");
     assert!(copy.join("SKILL.md").is_file());
+}
+
+#[test]
+fn an_install_looks_again_at_the_copy_once_it_holds_the_workspace() {
+    let (_dir, mut workspace, project) = offering_deploy();
+    workspace.link(&project).unwrap();
+    let (ledger, _) = workspace.ledger_to_write().unwrap();
+    let candidate =
+        install::offered(&workspace, &ledger, &project, Kind::Skill, "deploy", None).unwrap();
+    install::install(&workspace, &ledger, &project, &candidate).unwrap();
+    // Surveyed while the copy was Mindflayer's, as the install screen
+    // surveys when it is built.
+    let stale =
+        install::offered(&workspace, &ledger, &project, Kind::Skill, "deploy", None).unwrap();
+    assert_eq!(stale.standing, Standing::Installed);
+    // Then edited in another terminal, which makes it its author's.
+    let target = lifecycle::find(&project, &Reference::parse("deploy")).unwrap();
+    let edit = lifecycle::start_edit(&target);
+    let file = edit.file().to_path_buf();
+    let mut text = fs::read_to_string(&file).unwrap();
+    text.push_str("Mine.\n");
+    fs::write(&file, text).unwrap();
+    let edited = lifecycle::finish_edit(Some(&workspace), &project, edit);
+    assert_eq!(edited.copy.unwrap(), Record::Dropped);
+
+    let installed = install::install(&workspace, &ledger, &project, &stale)
+        .unwrap()
+        .installed;
+
+    assert!(
+        matches!(installed, Installed::Foreign { .. }),
+        "{installed:?}"
+    );
+    assert!(fs::read_to_string(&file).unwrap().ends_with("Mine.\n"));
 }
 
 #[test]
