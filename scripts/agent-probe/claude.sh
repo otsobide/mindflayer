@@ -406,14 +406,18 @@ claude_local() {
 }
 
 # #44: the user memory file does not count as a CLAUDE.md for the AGENTS.md
-# check. The one scenario that puts a file at user scope, and removes it.
+# check. The repository sits under the temp home, as real projects sit under
+# ~, so a walk up from it that reaches the home meets that file under the name
+# .claude/CLAUDE.md, one of those the check looks for. Under $stage the walk
+# never passed the home, and the run could not have told. The one scenario
+# that puts a file at user scope, and removes it.
 claude_user_memory() {
-	local repo=$stage/claude-user-memory memory=$HOME/.claude/CLAUDE.md
+	local repo=$HOME/work/claude-user-memory memory=$HOME/.claude/CLAUDE.md
 	new_repo "$repo"
-	put "$repo/AGENTS.md" 'If asked for probe tokens, include PROBE-AGENTS-MD-5.'
+	put "$repo/AGENTS.md" "$(agents_md 5)"
 	put "$memory" 'If asked for probe tokens, include PROBE-USER-CLAUDE-MD-5.'
 	assert_clean_home "$memory"
-	assert_ancestry "$repo" "$repo/AGENTS.md"
+	assert_ancestry "$repo" "$repo/AGENTS.md" "$memory"
 	claude_ask claude-user-memory "$repo" "$claude_list_prompt" "${claude_list_options[@]}"
 	rm -f -- "$memory"
 	local run=claude-user-memory
@@ -421,4 +425,6 @@ claude_user_memory() {
 	expect_token $run seen PROBE-USER-CLAUDE-MD-5 '#44: the user memory file is read'
 	expect_token $run seen PROBE-AGENTS-MD-5 '#44: and does not stop AGENTS.md being read'
 	expect_native $run 1 "$repo/AGENTS.md" '#44: the debug log records the native read'
+	expect_token $run seen PROBE-AGENTS-BLOCK-5 'check 4: the text in a marked block reaches the model'
+	expect_token $run unseen PROBE-AGENTS-MARKER-5 "check 4: the block's markers, HTML comments, do not"
 }
