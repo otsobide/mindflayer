@@ -73,7 +73,11 @@ describe('the shell', () => {
 
     expect(page.get('[data-testid="overview"] h1').text()).toBe('Overview')
     expect(page.text()).toContain('Nothing to show yet')
-    expect(page.text()).toContain('$ flayer list')
+    // `flayer list` leaves the shelf out: `gather list` is its listing.
+    expect(page.findAll('[data-testid="commands"] code').map(code => code.text())).toEqual([
+      '$ flayer list',
+      '$ flayer gather list'
+    ])
   })
 
   it('answers a path it has no page for with one that says so', async () => {
