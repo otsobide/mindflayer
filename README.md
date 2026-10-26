@@ -373,6 +373,9 @@ server accepts one, or whether to trust a host it has not seen before.
   flayer.toml     the projects it manages, and the workspaces it loads
   mindflayer.db   what was gathered and from where, what was installed where,
                   and every action taken
+  mindflayer.db.v2.bak
+                  the database as it was before this version of Mindflayer
+                  updated it, if it did
   cache/<source>/ the clone, kept so a gather can be looked at afterwards
   skills/<source>/<name>/SKILL.md
   templates/      templates for every project it manages, if you add any
@@ -383,6 +386,11 @@ not meant to be read by hand — it answers questions a file cannot, like which
 of two identically named skills came from which repository, at which revision.
 The first gather, install or uninstall makes it; a command that only reads
 never does.
+When a new version of Mindflayer changes how the database is laid out, the
+first command to open it updates it, after copying it aside as
+`mindflayer.db.v<old version>.bak`. The copy is never removed for you, and it
+is the way back: an older Mindflayer refuses the updated database, and reads
+the copy put back in its place.
 Timestamps are Unix seconds, so `datetime(at, 'unixepoch')` renders them:
 
 ```sql
