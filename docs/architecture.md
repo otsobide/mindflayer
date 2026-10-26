@@ -2414,11 +2414,11 @@ Carrying it out, #30 keeps the hash once per installation, on
 `installations`, rather than once per target: every copy D-07 writes is
 staged from one tree, so each is compared with the same hash, and an edited
 copy is the one whose own hash no longer matches it. A target whose content
-differs from its installation's in form — a rule's section of the managed
-block in `AGENTS.md` beside its `.claude/rules/mindflayer/<route>.md` file
-(D-03) — shares no one tree with the others, and would need a hash of its
-own on `installation_targets`, added by the schema step that first records
-one.
+differs from its installation's in form (a rule's section of the managed
+block in `AGENTS.md` beside its `.claude/rules/mindflayer/<route>.md` file,
+as D-03 has it) shares no one tree with the others, and would need a hash of
+its own on `installation_targets`, added by the schema step that first
+records one.
 
 ### D-05: A workspace's library lives in `.mindflayer`
 
@@ -2740,12 +2740,12 @@ leak into the lifecycle code. Unblocks #33, #45, #62, #93, #94 and #95.
   no editor to wait for, would close it for `add`, `rename` and `remove`.
 - **Two first writers making one workspace.** `init` makes a marker with
   `create_new` and then fills it, so a second writer making the same
-  workspace at that moment — two first commands in a home with no
-  `.mindflayer` yet — finds a marker it cannot read, or fails to create one.
+  workspace at that moment (two first commands in a home with no
+  `.mindflayer` yet) finds a marker it cannot read, or fails to create one.
   Writing the marker whole under a name of its own and linking it into place
   would let the second find it whole.
 - **Installing rules.** Installing copies a directory, so only skills can be
-  installed — from the shelf, and now from the workspace's own. The workspace's
+  installed: from the shelf, and now from the workspace's own. The workspace's
   own rules have no way into a project yet; a rule is one file, filed by its
   route, and copying one means answering where its folders go.
   [D-03](#d-03-rules-reach-every-agent-through-agentsmd) answers it: a rule
@@ -2762,7 +2762,7 @@ leak into the lifecycle code. Unblocks #33, #45, #62, #93, #94 and #95.
   paused; a gathered or published copy of `examples/` would answer it
   without either.
 - **An edited copy that stays managed.** Editing an installed skill makes it
-  its author's, so updates from the shelf stop reaching it — the safe answer,
+  its author's, so updates from the shelf stop reaching it: the safe answer,
   not the best one. A hash of what was installed, kept in the ledger, would let
   the install screen tell an untouched copy from an edited one, and offer to
   update the first while leaving the second alone.
@@ -2853,7 +2853,7 @@ leak into the lifecycle code. Unblocks #33, #45, #62, #93, #94 and #95.
   handler that cancels the watch would make the command line stop where the
   TUI's `esc` does.
 - **Gathering rules.** Only skills are gatherable. A rule is a loose file at any
-  depth, so harvesting one means deciding what its name is relative to — the
+  depth, so harvesting one means deciding what its name is relative to: the
   same question `Catalog::take_files` answers inside a project, asked of a
   folder that is not one.
 - **Private repositories.** Mindflayer gives `gix` no credentials of its own,
