@@ -2210,7 +2210,7 @@ folder.
 
 `Agent` is `Claude`, `Codex` or `OpenCode`, named on a command line and in a
 project's settings by the agent's binary: `claude`, `codex`, `opencode`. It is
-taken by that exact name, as a kind and a shell are, and anything else is
+taken by that exact name, as a shell is, and anything else is
 refused with every name there is (`UnknownAgent`), so a settings file never
 holds two spellings of one agent. It is a closed enum for the reason `Kind` is:
 what an agent reads, and where, is a fact about that agent, so a new one is a
