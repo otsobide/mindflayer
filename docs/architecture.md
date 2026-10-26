@@ -694,7 +694,9 @@ Three decisions shape it:
   every path given — to the next one, or the default in your home; loading the
   home workspace from inside it is refused. One named with `-W` or activated
   is taken as it is, since it was chosen, and loading it into itself is
-  refused by the load.
+  refused by the load: by `load_all`, before any of the paths given is
+  written, so a source listed ahead of it is not left loaded by a command
+  that failed.
 
 A loaded entry's origin is `load:<entry>`: disjoint by construction from
 `workspace` and from any shelf source's address — even a repository gathered
@@ -727,8 +729,9 @@ What a load cannot offer — a workspace that has gone, an artifact that cannot
 be read, a name that is refused — is collected by `install::offered_by_loads`
 and said as `warning:` lines wherever offers are shown or used, and the
 install screen reports a row it could not apply and carries on with the rest.
-Two spellings of one loaded directory are one source; `unload_all` and
-`unlink_all` rewrite the marker once, for all of the paths or none.
+Two spellings of one loaded directory are one source; `load_all`,
+`unload_all` and `unlink_all` rewrite the marker once, for all of the paths or
+none.
 
 ### What keeps an install out of git
 
