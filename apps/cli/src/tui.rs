@@ -31,9 +31,10 @@ use ratatui::crossterm::terminal::{self, EnterAlternateScreen};
 use ratatui::DefaultTerminal;
 
 use crate::install::state::Screen as InstallScreen;
+use crate::render::as_stored;
 use crate::{
-    as_stored, install, run as run_mind, run_flayer_cli, Cli, CliError, Command, Failure,
-    FlayerCli, FlayerCommand, Outcome,
+    install, run as run_mind, run_flayer_cli, Cli, CliError, Command, Failure, FlayerCli,
+    FlayerCommand, Outcome,
 };
 use state::{
     App, Choice, Done, Holdings, Item, LoadedSource, Member, Mode, Performed, Scope, Step, Task,

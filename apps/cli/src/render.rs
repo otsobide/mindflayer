@@ -1,0 +1,186 @@
+//! What a command produced, and the helpers every report is laid out with.
+//!
+//! Apart from the commands so that a report is built one way: a row is made
+//! `printable` and padded by `table` whichever command or screen it comes
+//! from, and a new command cannot quietly grow a second way of doing either.
+
+use std::fmt::Write as _;
+use std::io;
+use std::path::Path;
+use std::process::ExitCode;
+
+use mindflayer_core::{paths, ArtifactError, WorkspaceError};
+
+use crate::CliError;
+
+/// What a command produced.
+///
+/// The text is built rather than printed as the command runs, which is what
+/// lets a test assert on exactly what a user sees.
+#[derive(Debug, PartialEq, Eq)]
+pub struct Outcome {
+    /// The report itself.
+    pub stdout: String,
+    /// Problems worth reporting that did not stop the command.
+    pub stderr: Vec<String>,
+    /// Whether everything the command looked at was in order.
+    pub ok: bool,
+}
+
+impl Outcome {
+    /// A clean report with nothing to warn about.
+    pub(crate) fn plain(stdout: String) -> Self {
+        Self {
+            stdout,
+            stderr: Vec::new(),
+            ok: true,
+        }
+    }
+
+    /// Print the outcome and return the code the process should exit with.
+    ///
+    /// Written rather than printed, because `print!` panics when the pipe is
+    /// closed and `mind list | head` closes it on purpose. A reader that has
+    /// seen enough is not an error, so that case exits as if all was well.
+    pub fn report(&self) -> ExitCode {
+        use std::io::Write as _;
+
+        if let Err(error) = io::stdout().write_all(self.stdout.as_bytes()) {
+            return if error.kind() == io::ErrorKind::BrokenPipe {
+                ExitCode::SUCCESS
+            } else {
+                ExitCode::FAILURE
+            };
+        }
+        for line in &self.stderr {
+            let _ = writeln!(io::stderr(), "{line}");
+        }
+        if self.ok {
+            ExitCode::SUCCESS
+        } else {
+            ExitCode::FAILURE
+        }
+    }
+}
+
+/// A command that could not run, and whatever it had already found out.
+///
+/// The warnings travel with the error rather than being dropped, because they
+/// usually explain it: `no skill named \`broken\`` is baffling on its own and
+/// obvious next to `broken/SKILL.md: the file does not start with a `---`
+/// front matter fence`.
+#[derive(Debug)]
+pub struct Failure {
+    /// Why the command stopped.
+    ///
+    /// Boxed to keep the error half of every `Result` small: a `CliError`
+    /// carries paths and an io::Error, and the success path should not pay for
+    /// that on every return.
+    pub error: Box<CliError>,
+    /// What it had already noticed before it stopped.
+    pub warnings: Vec<String>,
+}
+
+impl Failure {
+    /// Print the warnings and the error, and return the process exit code.
+    pub fn report(&self) -> ExitCode {
+        for line in &self.warnings {
+            eprintln!("{line}");
+        }
+        eprintln!("error: {}", self.error);
+        ExitCode::FAILURE
+    }
+}
+
+impl From<CliError> for Failure {
+    fn from(error: CliError) -> Self {
+        Self {
+            error: Box::new(error),
+            warnings: Vec::new(),
+        }
+    }
+}
+
+impl From<WorkspaceError> for Failure {
+    fn from(error: WorkspaceError) -> Self {
+        CliError::from(error).into()
+    }
+}
+
+impl From<ArtifactError> for Failure {
+    fn from(error: ArtifactError) -> Self {
+        CliError::from(error).into()
+    }
+}
+
+/// Rows padded into columns, the last one left ragged.
+pub(crate) fn table(rows: &[Vec<String>]) -> String {
+    let columns = rows.first().map_or(0, Vec::len);
+    let widths: Vec<usize> = (0..columns)
+        .map(|column| {
+            rows.iter()
+                .map(|row| row[column].chars().count())
+                .max()
+                .unwrap_or(0)
+        })
+        .collect();
+
+    let mut text = String::new();
+    for row in rows {
+        let mut line = String::new();
+        for (column, cell) in row.iter().enumerate() {
+            if column + 1 == columns {
+                line.push_str(cell);
+            } else {
+                let padding = widths[column].saturating_sub(cell.chars().count());
+                let _ = write!(line, "{cell}{}  ", " ".repeat(padding));
+            }
+        }
+        // An artifact with no summary would otherwise leave the padding of the
+        // column before it hanging off the end of the line.
+        let _ = writeln!(text, "{}", line.trim_end());
+    }
+    text
+}
+
+/// Two spaces in front of every line, so a block reads as belonging to the
+/// line above it.
+pub(crate) fn indent(text: &str) -> String {
+    text.lines().fold(String::new(), |mut out, line| {
+        let _ = writeln!(out, "  {line}");
+        out
+    })
+}
+
+/// Text safe to put in a row.
+///
+/// A name or an opening line comes from a file somebody wrote, and a carriage
+/// return in one would let a row overwrite the row above it on the terminal —
+/// hiding an entry, or fabricating one that looks real.
+pub(crate) fn printable(text: &str) -> String {
+    text.chars()
+        .map(|c| if c.is_control() { ' ' } else { c })
+        .collect::<String>()
+        .trim()
+        .to_owned()
+}
+
+/// "1 skill", "2 skills".
+pub(crate) fn plural(count: usize, noun: &str) -> String {
+    if count == 1 {
+        format!("{count} {noun}")
+    } else {
+        format!("{count} {noun}s")
+    }
+}
+
+/// A registry entry spelled the way the marker file spells it.
+///
+/// Not `Path::display`, which uses the platform separator: entries are stored
+/// with forward slashes so a workspace registered on one platform resolves on
+/// the other, and on Windows `display` would report `..\collapse` for a line
+/// that reads `../collapse`. What a command says it wrote has to be what
+/// someone opening the file will find.
+pub(crate) fn as_stored(entry: &Path) -> String {
+    paths::to_config_string(entry).unwrap_or_else(|| entry.display().to_string())
+}

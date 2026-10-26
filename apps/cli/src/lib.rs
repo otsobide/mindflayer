@@ -12,7 +12,6 @@
 use std::fmt::Write as _;
 use std::io;
 use std::path::{Path, PathBuf};
-use std::process::ExitCode;
 
 use clap::{Parser, Subcommand};
 use mindflayer_core::gather::{self, GatherError, Report, Request};
@@ -28,7 +27,11 @@ use mindflayer_core::{
 use thiserror::Error;
 
 pub mod install;
+pub(crate) mod render;
 pub mod tui;
+
+use render::{as_stored, indent, plural, printable, table};
+pub use render::{Failure, Outcome};
 
 /// Manage the agent skills in a mind project.
 //
@@ -472,106 +475,6 @@ pub enum GatherCommand {
 enum Level<'a> {
     Project,
     Workspace(&'a Holders),
-}
-
-/// What a command produced.
-///
-/// The text is built rather than printed as the command runs, which is what
-/// lets a test assert on exactly what a user sees.
-#[derive(Debug, PartialEq, Eq)]
-pub struct Outcome {
-    /// The report itself.
-    pub stdout: String,
-    /// Problems worth reporting that did not stop the command.
-    pub stderr: Vec<String>,
-    /// Whether everything the command looked at was in order.
-    pub ok: bool,
-}
-
-impl Outcome {
-    /// A clean report with nothing to warn about.
-    fn plain(stdout: String) -> Self {
-        Self {
-            stdout,
-            stderr: Vec::new(),
-            ok: true,
-        }
-    }
-
-    /// Print the outcome and return the code the process should exit with.
-    ///
-    /// Written rather than printed, because `print!` panics when the pipe is
-    /// closed and `mind list | head` closes it on purpose. A reader that has
-    /// seen enough is not an error, so that case exits as if all was well.
-    pub fn report(&self) -> ExitCode {
-        use std::io::Write as _;
-
-        if let Err(error) = io::stdout().write_all(self.stdout.as_bytes()) {
-            return if error.kind() == io::ErrorKind::BrokenPipe {
-                ExitCode::SUCCESS
-            } else {
-                ExitCode::FAILURE
-            };
-        }
-        for line in &self.stderr {
-            let _ = writeln!(io::stderr(), "{line}");
-        }
-        if self.ok {
-            ExitCode::SUCCESS
-        } else {
-            ExitCode::FAILURE
-        }
-    }
-}
-
-/// A command that could not run, and whatever it had already found out.
-///
-/// The warnings travel with the error rather than being dropped, because they
-/// usually explain it: `no skill named \`broken\`` is baffling on its own and
-/// obvious next to `broken/SKILL.md: the file does not start with a `---`
-/// front matter fence`.
-#[derive(Debug)]
-pub struct Failure {
-    /// Why the command stopped.
-    ///
-    /// Boxed to keep the error half of every `Result` small: a `CliError`
-    /// carries paths and an io::Error, and the success path should not pay for
-    /// that on every return.
-    pub error: Box<CliError>,
-    /// What it had already noticed before it stopped.
-    pub warnings: Vec<String>,
-}
-
-impl Failure {
-    /// Print the warnings and the error, and return the process exit code.
-    pub fn report(&self) -> ExitCode {
-        for line in &self.warnings {
-            eprintln!("{line}");
-        }
-        eprintln!("error: {}", self.error);
-        ExitCode::FAILURE
-    }
-}
-
-impl From<CliError> for Failure {
-    fn from(error: CliError) -> Self {
-        Self {
-            error: Box::new(error),
-            warnings: Vec::new(),
-        }
-    }
-}
-
-impl From<WorkspaceError> for Failure {
-    fn from(error: WorkspaceError) -> Self {
-        CliError::from(error).into()
-    }
-}
-
-impl From<ArtifactError> for Failure {
-    fn from(error: ArtifactError) -> Self {
-        CliError::from(error).into()
-    }
 }
 
 /// Run `mind`.
@@ -1575,15 +1478,6 @@ fn shelf_listing(shelf: &[mindflayer_core::install::Offer], nothing_loaded: bool
     table(&rows)
 }
 
-/// Two spaces in front of every line, so a block reads as belonging to the
-/// line above it.
-fn indent(text: &str) -> String {
-    text.lines().fold(String::new(), |mut out, line| {
-        let _ = writeln!(out, "  {line}");
-        out
-    })
-}
-
 /// A revision as a person refers to it.
 fn short(revision: &str) -> &str {
     revision.get(..7).unwrap_or(revision)
@@ -1801,17 +1695,6 @@ fn resolve(directory: &Path, path: &Path) -> Result<PathBuf, CliError> {
         source,
     })?;
     Ok(paths::normalize(&absolute))
-}
-
-/// A registry entry spelled the way the marker file spells it.
-///
-/// Not `Path::display`, which uses the platform separator: entries are stored
-/// with forward slashes so a workspace registered on one platform resolves on
-/// the other, and on Windows `display` would report `..\collapse` for a line
-/// that reads `../collapse`. What a command says it wrote has to be what
-/// someone opening the file will find.
-fn as_stored(entry: &Path) -> String {
-    paths::to_config_string(entry).unwrap_or_else(|| entry.display().to_string())
 }
 
 /// The mind project the caller is standing in.
@@ -2121,36 +2004,6 @@ fn list(catalog: &Catalog, projects: &[MindProject], level: Level) -> (String, b
     (table(&rows), true)
 }
 
-/// Rows padded into columns, the last one left ragged.
-fn table(rows: &[Vec<String>]) -> String {
-    let columns = rows.first().map_or(0, Vec::len);
-    let widths: Vec<usize> = (0..columns)
-        .map(|column| {
-            rows.iter()
-                .map(|row| row[column].chars().count())
-                .max()
-                .unwrap_or(0)
-        })
-        .collect();
-
-    let mut text = String::new();
-    for row in rows {
-        let mut line = String::new();
-        for (column, cell) in row.iter().enumerate() {
-            if column + 1 == columns {
-                line.push_str(cell);
-            } else {
-                let padding = widths[column].saturating_sub(cell.chars().count());
-                let _ = write!(line, "{cell}{}  ", " ".repeat(padding));
-            }
-        }
-        // An artifact with no summary would otherwise leave the padding of the
-        // column before it hanging off the end of the line.
-        let _ = writeln!(text, "{}", line.trim_end());
-    }
-    text
-}
-
 /// `list` at the workspace level, where an empty result has two very
 /// different causes and only one of them is answered by linking something.
 fn list_workspace(
@@ -2271,19 +2124,6 @@ fn label(artifact: &Artifact, qualify: Qualify, level: Level) -> String {
     } else {
         name
     }
-}
-
-/// Text safe to put in a row.
-///
-/// A name or an opening line comes from a file somebody wrote, and a carriage
-/// return in one would let a row overwrite the row above it on the terminal —
-/// hiding an entry, or fabricating one that looks real.
-fn printable(text: &str) -> String {
-    text.chars()
-        .map(|c| if c.is_control() { ' ' } else { c })
-        .collect::<String>()
-        .trim()
-        .to_owned()
 }
 
 /// The first line of a summary, short enough to sit in a column.
@@ -2432,15 +2272,6 @@ fn initialized(kind: &str, name: &str, marker: &Path, outcome: Initialization) -
         Initialization::AlreadyInitialized => {
             format!("{kind} `{name}` already initialized in {marker}\n")
         }
-    }
-}
-
-/// "1 skill", "2 skills".
-fn plural(count: usize, noun: &str) -> String {
-    if count == 1 {
-        format!("{count} {noun}")
-    } else {
-        format!("{count} {noun}s")
     }
 }
 
