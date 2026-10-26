@@ -37,7 +37,7 @@ fn a_missing_credential_names_the_url_without_its_userinfo_and_the_ways_to_provi
     let error = fetch_failed(
         "https://me:hunter2@example.com/acme/private.git",
         Some(Shortfall::Missing),
-        "Failed to obtain credentials".to_owned(),
+        &"Failed to obtain credentials",
     );
 
     assert_eq!(
@@ -54,7 +54,7 @@ fn a_refused_login_is_judged_by_the_url_gix_connected_to_not_the_one_typed() {
     let error = fetch_failed(
         "https://example.com/acme/private.git",
         refused_at("git@example.com:acme/private.git"),
-        "not accepted by the remote".to_owned(),
+        &"not accepted by the remote",
     );
     assert!(matches!(error, GitError::Credentials { .. }), "{error}");
 
@@ -63,7 +63,7 @@ fn a_refused_login_is_judged_by_the_url_gix_connected_to_not_the_one_typed() {
     let error = fetch_failed(
         "git@example.com:acme/private.git",
         refused_at("https://example.com/acme/private.git"),
-        "not accepted by the remote".to_owned(),
+        &"not accepted by the remote",
     );
     assert_eq!(
         error.to_string(),
@@ -76,7 +76,7 @@ fn a_refused_https_credential_keeps_what_gix_said() {
     let error = fetch_failed(
         "https://example.com/acme/private.git",
         Some(Shortfall::Refused),
-        "not accepted by the remote".to_owned(),
+        &"not accepted by the remote",
     );
 
     assert_eq!(
@@ -90,8 +90,40 @@ fn a_fetch_that_needed_no_credential_keeps_what_gix_said() {
     let error = fetch_failed(
         "https://example.com/acme/skills",
         None,
-        "connection refused".to_owned(),
+        &"connection refused",
     );
 
     assert!(matches!(error, GitError::Fetch { .. }), "{error}");
+}
+
+#[test]
+fn a_failed_fetch_names_no_credential_even_where_gix_repeats_one() {
+    // `url."https://me:hunter2@example.com/".insteadOf = https://example.com/`
+    // gave the URL gix connected to a token the typed one never had.
+    let error = fetch_failed(
+        "https://example.com/acme/private.git",
+        None,
+        &"error sending request for url \
+          (https://me:hunter2@example.com/acme/private.git/info/refs?service=git-upload-pack)",
+    );
+
+    assert_eq!(
+        error.to_string(),
+        "https://example.com/acme/private.git: cannot be fetched: error sending request for url \
+         (https://example.com/acme/private.git/info/refs?service=git-upload-pack)"
+    );
+}
+
+#[test]
+fn a_url_gix_cannot_parse_is_named_without_its_credentials_and_so_is_what_gix_said() {
+    let cache = tempfile::TempDir::new().unwrap();
+    let error = clone(
+        "https://me:hunter2@exa mple.com/acme/private.git",
+        None,
+        &cache.path().join("clone"),
+    )
+    .unwrap_err();
+
+    assert!(matches!(error, GitError::Url { .. }), "{error}");
+    assert!(!error.to_string().contains("hunter2"), "{error}");
 }

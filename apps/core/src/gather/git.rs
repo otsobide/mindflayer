@@ -5,6 +5,7 @@
 //! its own I/O rather than supervising a process. A clone never prompts for a
 //! credential; [`super::credentials`] says why.
 
+use std::fmt::Display;
 use std::num::NonZeroU32;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::AtomicBool;
@@ -47,8 +48,8 @@ pub fn clone(url: &str, reference: Option<&str>, into: &Path) -> Result<Clone, G
     let shortfalls = Shortfalls::default();
     let mut prepare = gix::prepare_clone(url, into)
         .map_err(|error| GitError::Url {
-            url: url.to_owned(),
-            detail: error.to_string(),
+            url: redacted(url).into_owned(),
+            detail: said(error),
         })?
         // Depth 1: the history is not what is being gathered, the files are.
         .with_shallow(gix::remote::fetch::Shallow::DepthAtRemote(
@@ -77,7 +78,7 @@ pub fn clone(url: &str, reference: Option<&str>, into: &Path) -> Result<Clone, G
             .with_ref_name(Some(reference))
             .map_err(|error| GitError::Reference {
                 reference: reference.to_owned(),
-                detail: error.to_string(),
+                detail: said(error),
             })?;
     }
 
@@ -87,12 +88,12 @@ pub fn clone(url: &str, reference: Option<&str>, into: &Path) -> Result<Clone, G
     let interrupt = AtomicBool::new(false);
     let (mut checkout, _) = prepare
         .fetch_then_checkout(gix::progress::Discard, &interrupt)
-        .map_err(|error| fetch_failed(url, shortfalls.last(), error.to_string()))?;
+        .map_err(|error| fetch_failed(url, shortfalls.last(), &error))?;
     let (repository, _) = checkout
         .main_worktree(gix::progress::Discard, &interrupt)
         .map_err(|error| GitError::Checkout {
-            url: url.to_owned(),
-            detail: error.to_string(),
+            url: redacted(url).into_owned(),
+            detail: said(error),
         })?;
 
     Ok(Clone {
@@ -108,19 +109,27 @@ pub fn clone(url: &str, reference: Option<&str>, into: &Path) -> Result<Clone, G
 
 /// What a failed fetch is reported as: the credential it lacked, when that is
 /// what stopped it, and otherwise what `gix` said.
-fn fetch_failed(url: &str, shortfall: Option<Shortfall>, detail: String) -> GitError {
+fn fetch_failed(url: &str, shortfall: Option<Shortfall>, detail: &dyn Display) -> GitError {
+    let url = redacted(url).into_owned();
     match shortfall {
-        Some(Shortfall::Missing) => GitError::Credentials {
-            url: redacted(url).into_owned(),
-        },
+        Some(Shortfall::Missing) => GitError::Credentials { url },
         // Whether a refusal over ssh is a missing key is the callback's to
         // say, not `url`'s: a rewrite in git config may have sent the fetch
         // over another transport than the one `url` names.
         Some(Shortfall::Refused) | None => GitError::Fetch {
-            url: url.to_owned(),
-            detail,
+            url,
+            detail: said(detail),
         },
     }
+}
+
+/// What `gix` said, without the credentials of any URL it repeats.
+///
+/// Redacting the URL that was typed is not enough: `gix` names the URL it
+/// connected to, which `url.<base>.insteadOf` in git config may have given a
+/// token the typed one never had.
+fn said(error: impl Display) -> String {
+    redacted(&error.to_string()).into_owned()
 }
 
 /// Why a repository could not be cloned.
@@ -128,7 +137,8 @@ fn fetch_failed(url: &str, shortfall: Option<Shortfall>, detail: String) -> GitE
 /// Every variant carries the failure as text rather than as the `gix` error it
 /// came from. Those types are large and would become part of this crate's
 /// public API, tying its version to gix's; what a caller does with them is
-/// print them.
+/// print them. Every URL in that text, the one typed included, is
+/// [`redacted`]: this is what the gather log and the screen are given.
 #[derive(Debug, Error)]
 pub enum GitError {
     #[error("{url}: not a URL git understands: {detail}")]
