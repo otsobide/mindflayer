@@ -60,7 +60,8 @@ The grammar is in `parse.rs`, the work in `commands.rs` and a module per
 family of commands under `commands/`, and what a command produced, with the
 helpers every report is laid out with, in `render.rs`. `CliError` has
 `error.rs` to itself, `homes.rs` decides where the default workspace's home and
-each agent's own folder are, and `lib.rs` only says what is public.
+each agent's own folder are, `progress.rs` says what a gather's steps read as
+and draws them on stderr, and `lib.rs` only says what is public.
 
 The split is by family. One file holding the parser, every command and the
 rendering was where every change to a command met every other, so pieces of
@@ -514,6 +515,52 @@ is a warning beside the forty that came through, not a reason to be told
 nothing. One that reads but breaks a rule is taken, with a warning for each
 problem ([Strict when writing, lenient when
 reading](#strict-when-writing-lenient-when-reading)).
+
+### Following a gather, and stopping it
+
+A gather is the network, so it can take long enough that somebody wants to
+know how it is going, and to change their mind. A `gather::Request` carries a
+`Watch`: a callback the gather tells each `Progress` to, and a flag that
+cancels it. Both are core's own types. `gix` has a progress tree and an
+interrupt flag of its own, and handing those to the front ends would tie each
+of them, the server that will stream progress (#112) included, to gix's
+version and to the names it gives its steps.
+
+The steps are connecting, receiving objects, resolving deltas, checking out
+files, reading the folders that hold a manifest, `n` of `m`, and placing what
+was read on the shelf, `n` of `m`. The counts during the fetch are gix's: the
+clone hands it a progress tree and reads it from a thread of its own ten times
+a second, because gix counts most of its work on shared atomics, from threads
+of its own, without telling the progress anything. The counts are picked out
+by the identifiers gix gives them, not the names it shows, which it is free to
+reword. That thread is joined before the clone says its next step, so a front
+end never hears a count after the step that follows it. The callback is a
+plain `Fn` that is `Send` and `Sync`, rather than a channel, so each front end
+chooses how the news travels: the CLI writes a line, the TUI sends it to the
+thread that draws, and a server can stream it.
+
+The flag is gix's interrupt, so a cancel stops the fetch or the checkout where
+gix checks, and the clone it had begun is removed. The harvest checks it once
+more after every folder is read and before anything is placed, which is why
+it reads them all first rather than reading and placing each in turn. That is
+the last moment a cancel is honoured: past it the shelf and the ledger change,
+and a gather stopped halfway through that would leave them neither as they
+were nor as the source has them. A cancel that comes later is too late, and
+the gather finishes. Cancelled in time, the shelf and the ledger are as they
+were: the gather is not logged, and a source it registered is forgotten again.
+It is registered before the fetch because the clone needs the folder name
+registering gives it; holding the registration in a transaction until the
+gather ends was the other way, and is rejected, because every other write to
+the ledger would wait as long as the network does. The clone is not part of
+the promise: every gather re-makes it, so a cancelled one can leave a known
+source with the new clone, or with none.
+
+`flayer gather` on a terminal draws each step over the last on one line of
+stderr, and wipes it before the report. Piped or captured it draws nothing,
+so what it prints there is what it always printed. The binaries run every
+line with that line's watch (`run_watched`, `run_flayer_cli_watched`), and
+`run` and `run_flayer_cli`, which the tests call, with one nobody follows. The
+TUI runs a gather on a thread of its own, and `esc` cancels it.
 
 ### Why `gix` rather than running `git`
 
