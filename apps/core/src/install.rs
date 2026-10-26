@@ -438,6 +438,11 @@ pub fn install(
     if candidate.standing == Standing::Foreign {
         return Ok(Installed::Foreign { name }.into());
     }
+    // Held until the record is written, so that what the ledger says was
+    // installed is the copy that is there: two installs of one name at once
+    // would otherwise each record theirs, and the copy left would be
+    // whichever moved into place last.
+    let _lock = workspace.lock().map_err(WorkspaceError::from)?;
 
     let from = candidate.source(workspace);
     if !from.is_dir() {
@@ -581,6 +586,12 @@ pub fn uninstall(
             name: name.to_owned(),
         });
     }
+    // Held from before the record is read until it is dropped, for the
+    // reason `install` holds it: an install of the same name at the same
+    // moment comes wholly before this or wholly after it. Between the copy
+    // going and its record going, it would leave a copy with no record, which
+    // Mindflayer would never touch again.
+    let _lock = workspace.lock().map_err(WorkspaceError::from)?;
     let entry = project_entry(workspace, project);
     let ours = ledger.installations(&entry, kind)?;
     if !ours.iter().any(|installed| installed == name) {

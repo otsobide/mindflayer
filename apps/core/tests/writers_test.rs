@@ -10,9 +10,10 @@ use std::sync::{mpsc, Arc, Barrier};
 use std::thread;
 use std::time::{Duration, Instant};
 
+use mindflayer_core::install::{self, Removed};
 use mindflayer_core::ledger::{Action, Outcome};
 use mindflayer_core::lock::{HOLDER_FILE, WAIT};
-use mindflayer_core::{FlayerWorkspace, Ledger, LockError, MindProject, LEDGER_FILE};
+use mindflayer_core::{FlayerWorkspace, Kind, Ledger, LockError, MindProject, LEDGER_FILE};
 use tempfile::TempDir;
 
 fn workspace() -> (TempDir, FlayerWorkspace) {
@@ -285,4 +286,53 @@ fn a_link_waits_for_the_writer_before_it() {
 
     let workspace = FlayerWorkspace::open(workspace.root()).unwrap();
     assert_eq!(workspace.config().projects.len(), 1);
+}
+
+/// A workspace keeping a `deploy` skill of its own, and a project beside it
+/// to install it into.
+fn offering_deploy() -> (TempDir, FlayerWorkspace, MindProject) {
+    let (dir, workspace) = workspace();
+    let skill = dir.path().join("skills").join("deploy");
+    fs::create_dir_all(&skill).unwrap();
+    fs::write(
+        skill.join("SKILL.md"),
+        "---\nname: deploy\ndescription: Ship it\n---\n# deploy\n",
+    )
+    .unwrap();
+    let project = projects(dir.path(), "alpha", 1).remove(0);
+    (dir, workspace, project)
+}
+
+#[test]
+fn an_install_waits_for_the_writer_before_it() {
+    let (_dir, workspace, project) = offering_deploy();
+    let ledger = Ledger::in_memory().unwrap();
+    let candidate =
+        install::offered(&workspace, &ledger, &project, Kind::Skill, "deploy", None).unwrap();
+    let (installing, into) = (workspace.clone(), project.clone());
+
+    waits_for_the_writer_before_it(&workspace, move || {
+        install::install(&installing, &ledger, &into, &candidate).unwrap();
+    });
+
+    let copy = project.directory_for(Kind::Skill).join("deploy");
+    assert!(copy.join("SKILL.md").is_file());
+}
+
+#[test]
+fn an_uninstall_waits_for_the_writer_before_it() {
+    let (_dir, workspace, project) = offering_deploy();
+    let ledger = Ledger::in_memory().unwrap();
+    let candidate =
+        install::offered(&workspace, &ledger, &project, Kind::Skill, "deploy", None).unwrap();
+    install::install(&workspace, &ledger, &project, &candidate).unwrap();
+    let (uninstalling, from) = (workspace.clone(), project.clone());
+
+    waits_for_the_writer_before_it(&workspace, move || {
+        let removed =
+            install::uninstall(&uninstalling, &ledger, &from, Kind::Skill, "deploy").unwrap();
+        assert!(matches!(removed, Removed::Removed { .. }), "{removed:?}");
+    });
+
+    assert!(!project.directory_for(Kind::Skill).join("deploy").exists());
 }
