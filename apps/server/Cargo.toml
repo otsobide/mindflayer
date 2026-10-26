@@ -9,5 +9,17 @@ description = "The local server that carries the web panel's requests to a mindf
 # The front end that runs this server implements `Backend` for its own types,
 # so the dependency points from it to here and never back.
 [dependencies]
+# Without default features: no `tracing`, so nothing inside axum logs on the
+# server's behalf, and no form or query extractors, which nothing here takes.
+axum = { version = "0.8", default-features = false, features = ["http1", "json", "tokio"] }
+tokio = { version = "1", features = ["net", "rt", "sync"] }
 serde = "1"
 serde_json = "1"
+# The launch token. 0.10, the version already in the tree.
+rand = "0.10"
+
+[dev-dependencies]
+serde = { version = "1", features = ["derive"] }
+tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
+# `oneshot`, to send a request through the router without a socket.
+tower = { version = "0.5", features = ["util"] }
