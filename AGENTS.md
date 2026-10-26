@@ -97,7 +97,9 @@ These are easy to break from a single file without noticing.
   takes such a skill with a `warning:` per problem, and `validate` reports
   everything — `flayer validate` without `-p` reads the shelf too — but calls
   an artifact invalid only for what is not `ValidationIssue::is_warning`. Keys the format does not define pass through
-  untouched.
+  untouched. A rule's front matter is optional (`rule::RuleManifest`): read
+  only when its fences hold a YAML mapping, and whatever it leaves unread is a
+  warning, never a reason to hide the rule.
 - **Loaded and gathered content is untrusted.**
   - An installed name must be one folder name (`install::is_folder_name`).
   - Symlinks are followed only inside the source (`copy::tree`'s `within`).

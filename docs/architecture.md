@@ -76,14 +76,15 @@ field:
 ```rust
 pub enum Declared {
     Skill(SkillManifest),
-    Rule,
+    Rule(RuleManifest),
 }
 ```
 
 `Declared` *is* the kind, so an artifact cannot carry a discriminant that
-disagrees with what was parsed — there is only one. A rule that declares a
-description is not a state the type can hold, and no `Option` field sits
-permanently `None` for one of them.
+disagrees with what was parsed — there is only one. Each payload says what its
+kind requires: a skill without a description is not a state the type can hold,
+a rule's front matter is optional all through, and no `Option` field on
+`Artifact` sits permanently `None` for one kind because only the other has it.
 
 Where a kind lives and what shape it has is a second, smaller thing:
 
@@ -125,21 +126,30 @@ contain one at all, so the collision is gone rather than narrowed.
 
 From wherever it is declared. A skill declares one in its front matter, so that
 is its name and disagreeing with its directory is a problem `validate` reports.
-A rule declares nowhere, so its name is its route. This is why the two are not
-symmetric, and the asymmetry is the honest one.
+A rule's front matter has no name in it — a `name:` there passes through like
+any key Mindflayer does not read — so its name is its route. This is why the
+two are not symmetric, and the asymmetry is the honest one.
 
-### What a listing shows for something that declares nothing
+### What a listing shows for a rule
 
-A skill has a `description`. A rule has the file. Its **opening line** — the
-first line carrying any text, with leading `#` stripped — is the closest thing
-to a description it has, and it is captured when the file is loaded, because
-the file was read anyway.
+A skill has a `description`. A rule has its body: the file, less any front
+matter. The body's **opening line** — the first line carrying any text, with
+leading `#` stripped — is what a listing shows, and it is captured when the file
+is loaded, because the file was read anyway. A rule without front matter is
+summarised exactly as it always was.
+
+Not the file's opening line, which for a rule with front matter is a fence, so
+every scoped rule would be listed as `---`. And not a `description` the rule
+declares either: the body is what an agent is given once the front matter is
+taken off, which is how a rule reaches the `AGENTS.md` block (#42), so its
+opening line is what the agent meets first, and a listing that shows something
+else would describe the rule by a line no agent reads.
 
 That one value does double duty: it is the summary a listing prints, and its
-absence is the single thing `validate` can say about a rule, since a file with
-no line of text has nothing to offer an agent. Storing the fact rather than the
-verdict is what keeps `validate` pure — every check it makes was decided when
-the file was read, so asking whether something is valid cannot itself fail.
+absence is the one thing that makes a rule invalid, since a body with no line of
+text has nothing to offer an agent. Storing the fact rather than the verdict is
+what keeps `validate` pure — every check it makes was decided when the file was
+read, so asking whether something is valid cannot itself fail.
 
 ### What a skill declares
 
@@ -187,6 +197,52 @@ The name rule is held to every name, a rule's route segment by segment
 included. A looser one for rules was the alternative, and it would only have
 been a second rule to keep in step with the first.
 
+### What a rule declares
+
+Most rules declare nothing: a rule is a markdown file that gives context.
+Claude Code's rules can open with front matter saying which files they are
+about, and [D-03](#d-03-rules-reach-every-agent-through-agentsmd) sends a rule
+that does to `.claude/rules/mindflayer` only, so a rule may carry some.
+`RuleManifest` holds the two keys Mindflayer reads, both optional:
+
+| Key | | Read as |
+|---|---|---|
+| `paths` | optional | glob patterns: a list of them, or one on its own |
+| `description` | optional | a string |
+
+Rules were written long before any of them was read this way, and markdown is
+free to open with a `---` horizontal rule. So a fenced block at the top is
+front matter only when it holds a YAML mapping, or nothing at all, which is
+front matter that declares nothing. Anything else is content, as it always
+was: an opening fence that never closes, prose between two horizontal rules, a
+list, and a block of nothing but comments too, since what YAML reads past as a
+comment is a heading to markdown. The block is parsed as a YAML value before
+anything is read from it, so that what it *is* decides whether it is front
+matter; deserializing straight into a struct would have to tell a sentence from
+a broken mapping by the wording of its error.
+
+A block that does not parse at all is content too, and `validate` warns about
+it, since it is most likely front matter written wrong: a glob opening with `*`
+is a YAML alias unless it is quoted. Refusing the rule, as a skill whose front
+matter does not parse is refused, was the alternative. It would hide from every
+listing a rule that still works as text, over how its first lines are written;
+a skill without its front matter has no name to be found by, and a rule never
+needed one.
+
+The keys are read leniently, as a skill's `metadata` and `compatibility` are: a
+`paths` that is not a pattern or a list of them, or a `description` that is not
+a string, is ignored, reported as a warning and left in the file. A list
+holding anything but strings is ignored whole, since keeping its strings would
+scope the rule to fewer files than its author wrote. One pattern is never split
+on commas, because a brace expansion such as `src/**/*.{ts,tsx}` has one inside
+it. Every other key — Cursor's `globs`, a `name` — passes through, as it does on
+a skill.
+
+`Artifact::contents` is the body without the front matter, for a rule as for a
+skill. It is what a renderer puts in front of an agent, so the fences are never
+pasted into `AGENTS.md`, and what `show` prints below the description and the
+`paths` a rule declares.
+
 ### Strict when writing, lenient when reading
 
 `Artifact::validate` gives one list of problems, and it is treated three ways:
@@ -213,7 +269,8 @@ been a second rule to keep in step with the first.
   too, so what gathering warned about can be found again later. Only a
   problem makes an artifact invalid and the exit non-zero; what an agent reads
   past (`ValidationIssue::is_warning`, the same `compatibility` and `metadata`
-  that are not refused) is listed as a warning and leaves the verdict at `ok`.
+  that are not refused, and whatever a rule's front matter leaves unread) is
+  listed as a warning and leaves the verdict at `ok`.
   Counted as invalid, a skill installed with nested metadata would fail its
   project's `validate` from then on, and the only way to clear it would be to
   edit the copy, which disowns it. The TUI's `✗` follows the same line.
@@ -942,6 +999,11 @@ so a template may write `name: {{name}}`, which is not YAML anybody could read,
 and still work. The result is parsed back before the first file is written, so
 a template with broken front matter costs nothing but the error.
 
+A rule template that does not say where `{{description}}` goes gets it as a
+heading on top of its body, below any front matter it declares. On top of the
+file, the heading would push the fences down a line, where they stop being
+front matter, and a template's `paths:` would quietly become content.
+
 ### Finding what to change
 
 `edit`, `rename` and `remove` find an artifact by what it declares, and then by
@@ -1466,13 +1528,6 @@ leak into the lifecycle code. Unblocks #33, #45, #62, #93, #94 and #95.
   `$MINDFLAYER_HOME`. An agent that reads an empty one as unset uses its
   default instead, and a check would then leave out a folder that agent does
   read. How each agent reads it is for #17 to record.
-- **Rules that want to declare something.** Today a rule has no front matter,
-  so a leading `---` in one is content. If rules later want metadata, that
-  becomes a breaking reading of files written now. The escape hatch is cheap
-  and deliberate: `Declared::Rule` is a variant, so giving it a payload is a
-  local change. [D-03](#d-03-rules-reach-every-agent-through-agentsmd) settles
-  the if: a rule that declares `paths:` goes only to `.claude/rules/mindflayer`,
-  so rules will carry front matter, and #41 gives `Declared::Rule` that payload.
 - **Names outside ASCII.** The specification allows "unicode lowercase
   alphanumeric characters" in a name, while listing `a-z` and `0-9`, and its
   reference validator accepts more than ASCII. Mindflayer holds names to ASCII,
