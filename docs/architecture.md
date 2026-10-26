@@ -47,6 +47,21 @@ the reference it carries, checks that nothing it ran wrote into the folder,
 and finds the README's walk-through in the output of the commands it shows.
 An example whose summary changes changes the README with it.
 
+### No em dash in what the repository says
+
+The owner finds the em dash reads as machine-written, so none is written:
+not in docs, comments, messages, test expectations or commit messages. A
+comma, a colon, parentheses or a new sentence takes its place, rather than a
+hyphen or a spaced en dash, which would keep the tic under another glyph.
+`make lint` runs `lint/em-dash` before clippy, and it fails on one in any
+tracked file. A Makefile target rather than a clippy lint, because the
+character turns up in Markdown and in the panel as readily as in Rust. Only
+tracked files are searched, since an untracked folder (an agent's worktree,
+a scratch clone) is not the repository's text, and git failing is a failure
+rather than a clean tree. Commit messages are not checked: the check reads
+the tree, the history from before the rule holds some that cannot be
+rewritten, and a new one is its author's to watch.
+
 ## Where the line between core and a front end falls
 
 `mindflayer-core` knows what a mind project is, what a flayer workspace is, and
@@ -3009,3 +3024,8 @@ leak into the lifecycle code. Unblocks #33, #45, #62, #93, #94 and #95.
 - **The shelf in other reports.** `flayer validate` reads the shelf; `flayer
   list` and `show` do not, because `gather list` is the shelf's listing. Seeing
   a gathered skill's contents before installing it means reading its folder.
+- **An em dash in a commit message.** `make lint/em-dash` reads the tree, so a
+  commit message is checked by nobody but its author ([No em dash in what the
+  repository says](#no-em-dash-in-what-the-repository-says)). A step in CI
+  over a pull request's own commits would catch one before the merge without
+  tripping on the history from before the rule.

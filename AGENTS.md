@@ -21,7 +21,7 @@ lists everything.
 ```bash
 make test                 # every Rust suite; the panel's is make web/test
 make fmt/check            # CI runs this first
-make lint                 # clippy --workspace --all-targets
+make lint                 # no em dash in a tracked file, then clippy --workspace --all-targets
 make run ARGS="flayer list"
 make core/test            # one app: make <app>/<target>
 ```
@@ -51,7 +51,9 @@ pnpm --dir apps/web exec vitest run tests/shell.test.ts      # one suite
 
 `make test`, `make build`, `make fmt` and `make lint` are Rust only: `web` is
 in the root Makefile's `NODE_APPS`, outside the aggregates, until CI installs
-Node (#71). A change to the panel runs its own targets.
+Node (#71). A change to the panel runs its own targets. The one exception is
+`make lint`'s em dash check (`make lint/em-dash`), which reads every tracked
+file, the panel's included.
 
 `make dev/link`, `make dev/unlink` and `make install` write into `~/.cargo/bin`
 (or `BINDIR`), outside the repository. Don't run them unless asked.
@@ -368,3 +370,9 @@ These are easy to break from a single file without noticing.
 Comments and doc comments explain *why* a choice was made, often naming the
 alternative that was rejected. They rarely narrate what the code does. Match
 that density and voice in code and docs alike.
+
+No em dash (U+2014), in docs, comments, messages or commit messages: the owner
+finds it reads as machine-written. Write a comma, a colon, parentheses or a
+new sentence instead, never a hyphen or a spaced en dash in its place.
+`make lint` fails on one in any tracked file; a commit message is yours to
+check.
