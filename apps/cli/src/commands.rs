@@ -237,10 +237,7 @@ fn run_flayer(
 
         // A screen, so it opens as one: on the default workspace before it
         // is made too, which its first change makes.
-        FlayerCommand::Minds => {
-            let workspace = workspace_to_read(directory, home)?;
-            tui::run_minds(workspace.root(), home)
-        }
+        FlayerCommand::Minds => tui::run_minds(directory, home),
 
         FlayerCommand::Scan => {
             reading_workspace(directory, home, |workspace| Ok(scan_workspace(workspace)))

@@ -880,6 +880,62 @@ fn the_minds_screen_lists_what_is_under_the_default_workspace_before_it_is_made(
     assert!(!home.path().join(FLAYER_DIR).exists());
 }
 
+/// The paths the minds screen lists, in its order.
+fn minds_rows(app: &App) -> Vec<&str> {
+    let Mode::Minds(screen) = &app.mode else {
+        panic!("{:?}", app.mode)
+    };
+    screen.rows.iter().map(|row| row.path.as_str()).collect()
+}
+
+/// A home whose default workspace is not made yet, sitting inside a
+/// workspace that is: `workspace_with_two`, with `h/gamma`, a mind project,
+/// under it, and `h` the home.
+fn home_inside_a_workspace() -> (TempDir, PathBuf) {
+    let outer = workspace_with_two();
+    let home = outer.path().join("h");
+    let gamma = home.join("gamma");
+    fs::create_dir_all(&gamma).unwrap();
+    mind(&gamma, &["init"]).unwrap();
+    (outer, home)
+}
+
+#[test]
+fn flayer_minds_opens_on_the_default_workspace_without_making_it() {
+    let home = TempDir::new().unwrap();
+    let elsewhere = TempDir::new().unwrap();
+    let alpha = home.path().join("alpha");
+    fs::create_dir(&alpha).unwrap();
+    mind(&alpha, &["init"]).unwrap();
+
+    let app = tui::minds(elsewhere.path(), Some(home.path())).unwrap();
+
+    assert_eq!(minds_rows(&app), vec!["alpha"]);
+    assert!(!home.path().join(FLAYER_DIR).exists());
+}
+
+#[test]
+fn flayer_minds_with_no_workspace_and_no_default_says_so() {
+    let elsewhere = TempDir::new().unwrap();
+
+    let error = tui::minds(elsewhere.path(), None).unwrap_err();
+
+    assert!(matches!(error, CliError::NotInWorkspace(_)), "{error}");
+}
+
+#[test]
+fn flayer_minds_opens_on_the_default_workspace_not_on_one_above_its_home() {
+    let (_outer, home) = home_inside_a_workspace();
+    let elsewhere = TempDir::new().unwrap();
+
+    let app = tui::minds(elsewhere.path(), Some(&home)).unwrap();
+
+    // Not `alpha`, `beta` and `h/gamma`: those are the workspace above.
+    assert_eq!(minds_rows(&app), vec!["gamma"]);
+    assert_eq!(app.base(), home);
+    assert!(!home.join(FLAYER_DIR).exists());
+}
+
 #[test]
 fn the_first_change_from_the_tui_makes_the_default_workspace() {
     let home = TempDir::new().unwrap();

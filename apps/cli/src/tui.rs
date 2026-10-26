@@ -63,11 +63,25 @@ pub fn run_minds(directory: &Path, home: Option<&Path>) -> Result<Outcome, Failu
     if !io::stdout().is_terminal() {
         return Err(CliError::NotATerminal.into());
     }
-    let mut app = App::new(directory.to_path_buf(), load(directory, home)?).at_home(home);
+    open(minds(directory, home)?, "flayer minds")
+}
+
+/// The TUI `flayer minds` opens from `directory`: on the minds screen of the
+/// workspace the TUI itself would open there.
+///
+/// Read from `directory` rather than from the root of a workspace found
+/// first: the default workspace before it is made has no marker to stop a
+/// walk up from its root, which would carry on to any workspace above it.
+pub fn minds(directory: &Path, home: Option<&Path>) -> Result<App, CliError> {
+    let view = load(directory, home)?;
+    if matches!(view, View::Nowhere) {
+        return Err(CliError::NotInWorkspace(directory.to_path_buf()));
+    }
+    let mut app = App::new(directory.to_path_buf(), view).at_home(home);
     if let Some(workspace) = app.workspace() {
         app.mode = Mode::Minds(minds::Minds::of(workspace));
     }
-    open(app, "flayer minds")
+    Ok(app)
 }
 
 /// Open the TUI on the project at or above `directory`: what `mind` does on
