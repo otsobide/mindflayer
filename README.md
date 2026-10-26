@@ -160,6 +160,8 @@ mind flayer <cmd>          # the long way round; `flayer <cmd>` is the shortcut
 mind ls / flayer ls        # alias for list; `flayer gather ls` for gather list
 mind -C <dir> ...          # work in <dir> instead of the current directory
 mind --home <dir> ...      # where the default workspace lives; "" for none
+mind --claude-config-dir|--codex-home|--opencode-config-dir|--agents-dir <dir> ...
+                           # where each agent's own folder is; "" for none
 mind tui / flayer tui      # the TUIs, spelled out
 ```
 
@@ -224,6 +226,24 @@ not empty.
 `validate` exits non-zero when anything is wrong, so it works in CI. An
 artifact that cannot be read at all is a warning on stderr and does not hide
 the ones next to it.
+
+### The agents' own folders
+
+Each agent also reads a folder that belongs to no project: Claude Code its
+configuration folder, Codex its home, OpenCode its configuration folder, and
+more than one of them the skills in `~/.agents`. Checks to come will look
+there; no command reads them yet. Each is taken from its option, then from the
+variable the agent itself reads, then from its folder in your home:
+
+| Option | Then | Then |
+|---|---|---|
+| `--claude-config-dir` | `$CLAUDE_CONFIG_DIR` | `~/.claude` |
+| `--codex-home` | `$CODEX_HOME` | `~/.codex` |
+| `--opencode-config-dir` | `$OPENCODE_CONFIG_DIR` | `~/.config/opencode` |
+| `--agents-dir` | | `~/.agents` |
+
+As with `--home`, set to empty (`--codex-home ""`) there is none, and that
+agent's folder is left alone.
 
 ## Gathering skills from elsewhere
 
@@ -687,8 +707,9 @@ make cli/run ARGS="flayer list"
 Tests live in their own files, named for what they test and ending in
 `_test.rs`: `apps/<app>/tests/<area>_test.rs` for each area of the command
 surface, with what they share in `tests/common/`, and a module's unit tests in
-`src/<module>_test.rs` beside it. No test touches your home: the CLI suites run
-every command with `--home ""`.
+`src/<module>_test.rs` beside it. No test touches your home or your agents'
+folders: the CLI suites run every command with `--home ""` and every
+agent-home option empty.
 
 ```bash
 cargo test -p mindflayer-cli --test tui_test          # one area
