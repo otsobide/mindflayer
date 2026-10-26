@@ -367,8 +367,9 @@ pasted into `AGENTS.md`, and what `show` prints below the description and the
 A variant on `Kind`, its folder and layout, a variant on `Declared`, a
 constructor on `Artifact`, and an arm in every match on the kind (discovery
 and discovering the shelf, `create`, `lifecycle::load` and `lifecycle::rename`,
-the refusal in `gather`, and what `install` holds a copy to), which the
-compiler lists, since the matches are exhaustive. Reports need nothing:
+the refusal in `gather`, what `install` holds a copy to, and where the
+[target table](#agents-and-where-each-kind-reaches-them) puts it for each
+agent), which the compiler lists, since the matches are exhaustive. Reports need nothing:
 columns, labels and counts are all driven from `Kind::ALL` and from what the
 catalog actually found.
 
@@ -2198,6 +2199,87 @@ through the same `Ledger::migrate`, so it leaves that copy too: the first
 `flayer gather list` after an upgrade puts `mindflayer.db.v2.bak` beside a
 ledger version 2 wrote.
 
+## Agents, and where each kind reaches them
+
+Mindflayer puts what it manages where Claude Code, Codex and OpenCode read
+it, and which folder each one reads is recorded in
+[docs/agents.md](agents.md): each fact verified on the binary by
+`scripts/agent-probe`, or marked docs-only with a fallback. Core turns those
+facts into two things in `agent.rs`, so no front end ever spells an agent's
+folder.
+
+`Agent` is `Claude`, `Codex` or `OpenCode`, named on a command line and in a
+project's settings by the agent's binary: `claude`, `codex`, `opencode`. It is
+taken by that exact name, as a kind and a shell are, and anything else is
+refused with every name there is (`UnknownAgent`), so a settings file never
+holds two spellings of one agent. It is a closed enum for the reason `Kind` is:
+what an agent reads, and where, is a fact about that agent, so a new one is a
+new arm in every match. An agent named at runtime would meet a table with no
+entry for it and quietly reach nothing.
+
+`TargetTable` says where each kind goes in a project for each agent, one entry
+per kind and agent, every location relative to the project's root.
+`TargetTable::standard` is
+[D-07](#d-07-one-copy-per-agent-folder)'s layout, and the facts under it are
+the ones docs/agents.md lists for #28:
+
+| Kind | Claude | Codex | OpenCode |
+|---|---|---|---|
+| skill | `.claude/skills` | `.agents/skills` | `.agents/skills` |
+| rule | none yet | none yet | none yet |
+
+- **Claude needs a copy of its own.** It reads `.claude/skills` and not
+  `.agents/skills`, verified on Claude Code 2.1.309.
+- **Codex reads `.agents/skills`**, docs-only. Its `.codex/skills` is read only
+  in trusted projects and `$CODEX_HOME/skills` is deprecated, so neither is
+  ever targeted.
+- **OpenCode reads both**, docs-only, and is given `.agents/skills` rather than
+  leaning on Claude's copy. V1 can switch its `.claude/skills` off
+  (`OPENCODE_DISABLE_CLAUDE_CODE`), and a project that targets OpenCode alone
+  should not need a Claude folder for it.
+- **Nothing at user scope.** `~/.claude/skills`, `~/.codex/skills` and
+  `~/.agents/skills` are [D-22](#d-22-user-scope-installs-come-later)'s, later.
+  A test pins the table: every location it gives stays inside the project,
+  and none is `.codex/skills`.
+
+Rules have no entry yet, by design rather than by omission.
+[D-03](#d-03-rules-reach-every-agent-through-agentsmd) gives a rule a section
+of a block in the project's `AGENTS.md`, with Claude's fallback in
+`.claude/rules/mindflayer` chosen by #44's predicate, and M2 decides how the
+table carries that. MCP servers, entries in each agent's own config file, come
+in M6.
+
+`TargetTable::targets(kind, agents)` gives one target (`AgentTarget`) per
+location, each with the agents it serves: all three agents take a skill in two
+places, Codex and OpenCode share one copy, and an empty list takes none. An agent named twice is served once,
+and an agent the kind does not reach adds nothing. The targets are sorted by
+location and their agents in report order, in core, so two front ends list
+them alike. Installing a copy into each (#34) starts from this list.
+
+The table is a value a caller is handed, not a function it reaches for,
+because the standard layout is only the default: the owner's amendment to
+D-07 lets a project's `.mind/settings.json` put a kind somewhere else, one
+`.skills` folder for every agent for instance (#40). A caller that takes the
+table then follows the project's without changing, and two agents the
+override sends to one folder get one target, as Codex and OpenCode do now.
+Rejected: a free `targets` over the standard layout, which every caller would
+hard-wire and #40 would have to find again; and a folder per agent alone,
+which cannot say that a skill and a rule reach Claude in different places.
+Checking what an override names, that it stays inside the project, is #40's,
+where the override is read.
+
+It is pure: nothing is looked for on disk, and locations are joined a folder
+at a time, so each has one kind of separator on Windows too. Whether a folder
+exists, holds foreign content or is tracked is the install's to find out.
+
+### Adding an agent
+
+Record what it reads first, in docs/agents.md, verified or docs-only with a
+fallback. Then a variant on `Agent` and its name, and its arm for each kind in
+the table's `standard`, which matches every pair with no wildcard: neither a
+new agent nor a new kind compiles until somebody has said where it goes. The
+compiler lists the rest, since every match on `Agent` is exhaustive.
+
 ## The agents' own folders
 
 Which folders each agent reads, for skills and for rules, at project and user
@@ -2865,6 +2947,11 @@ and symlinks into the hub, which break projects when `~/.mindflayer` moves and
 leak its path into repositories. `.codex/skills` and `~/.codex/skills`,
 deprecated or undocumented, are never targeted. Unblocks #17, #28, #34 and #40.
 
+Carrying it out, #28 puts the layout in core's target table
+(`TargetTable::standard`, see [Agents, and where each kind reaches
+them](#agents-and-where-each-kind-reaches-them)), a value every caller is
+handed so the override #40 reads can take its place.
+
 ### D-08: An explicit or activated workspace wins
 
 The workspace is `-W/--workspace DIR`, then `$MINDFLAYER_WORKSPACE` (set by
@@ -3413,7 +3500,18 @@ leak into the lifecycle code. Unblocks #33, #45, #62, #93, #94 and #95.
   folders) and 5 (Codex and project trust), and the Codex and OpenCode halves
   of 1 and 4, are what a `codex.sh` and an `opencode.sh` beside the probe
   would run, and the place to run them is before #34 and #42 rely on those
-  facts.
+  facts. The [target table](#agents-and-where-each-kind-reaches-them)'s
+  `.agents/skills` for Codex and OpenCode rests on them too; were one to read
+  elsewhere, its arm in `standard` is the one line to change.
+- **A project at the home directory.** The target table's locations are
+  relative to the project, so in a project whose root is the user's home,
+  `.claude/skills` is Claude's user skills folder and `.agents/skills` is the
+  `~/.agents/skills` that Codex and OpenCode read for every project. An
+  install there would be the user-scope install
+  [D-22](#d-22-user-scope-installs-come-later) leaves for later, behind
+  `--user`, and nothing stops `mind init` in a home. The table cannot tell,
+  having no home to compare with; #34 can, by refusing a target inside one of
+  the folders `AgentHomes` names, which a front end hands it.
 - **An agent's CLI writing the same config file.** The workspace's lock keeps
   Mindflayer's writers apart, not the agents': `claude mcp add` rewriting
   `.mcp.json` between `ConfigFile::edit`'s read and its rename is undone by the

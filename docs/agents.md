@@ -505,7 +505,7 @@ developers.openai.com/codex to learn.chatgpt.com.
 
 | Fact | Mark | Source, and the fallback |
 |---|---|---|
-| Project skills are `.agents/skills/<name>/SKILL.md` in every folder from the start directory up to the repository root. | docs-only | [build-skills](https://learn.chatgpt.com/docs/build-skills). Fallback: the target table (#28) is one table in core, so moving Codex's target is a one-line change; a `codex.sh` check before #34 ships settles it. |
+| Project skills are `.agents/skills/<name>/SKILL.md` in every folder from the start directory up to the repository root. | docs-only | [build-skills](https://learn.chatgpt.com/docs/build-skills). Fallback: the target table (#28, `TargetTable::standard` in `apps/core/src/agent.rs`) is one table in core, so moving Codex's target is a one-line change; a `codex.sh` check before #34 ships settles it. |
 | User skills are `$HOME/.agents/skills`, taken from the OS home, not from `CODEX_HOME`. | docs-only | [build-skills](https://learn.chatgpt.com/docs/build-skills); source, [host_roots.rs](https://github.com/openai/codex/blob/main/codex-rs/ext/skills/src/host_roots.rs). Fallback: Mindflayer does not install at user scope (D-22); `--agents-dir` points checks at it. |
 | `/etc/codex/skills` (admin) and bundled system skills are read too. | docs-only | [build-skills](https://learn.chatgpt.com/docs/build-skills). Not used. |
 | `<project>/.codex/skills` (trusted projects only) and `$CODEX_HOME/skills` (deprecated) are still read. | docs-only | Source, [host_roots.rs](https://github.com/openai/codex/blob/main/codex-rs/ext/skills/src/host_roots.rs). Never targeted ([D-07](architecture.md#d-07-one-copy-per-agent-folder)). |
