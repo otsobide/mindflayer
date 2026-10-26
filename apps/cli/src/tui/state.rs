@@ -91,6 +91,10 @@ pub struct Member {
     pub name: String,
     /// The workspace's own artifacts rather than a project's.
     pub own: bool,
+    /// A project whose own lines would consult some other workspace than
+    /// the one on screen: one linked from outside its tree, or from above a
+    /// nearer workspace. Its lines name the one on screen instead.
+    pub elsewhere: bool,
     /// What it holds, or why it could not be opened.
     pub holdings: Result<Holdings, String>,
 }
@@ -98,10 +102,10 @@ pub struct Member {
 impl Member {
     /// The level its commands run at.
     pub fn holder(&self) -> Holder {
-        if self.own {
-            Holder::Workspace
-        } else {
-            Holder::Project(self.entry.clone())
+        match (self.own, self.elsewhere) {
+            (true, _) => Holder::Workspace,
+            (false, true) => Holder::Elsewhere(self.entry.clone()),
+            (false, false) => Holder::Project(self.entry.clone()),
         }
     }
 
@@ -205,6 +209,15 @@ pub enum Holder {
     /// A project, by its entry: `mind -C <entry> <cmd>`, or `mind <cmd>` for
     /// the one at the root the commands run from.
     Project(String),
+    /// A project whose own workspace is not the one on screen, by its entry:
+    /// `mind -W . -C <entry> <cmd>`, which names the one on screen, so a
+    /// change drops that workspace's record and an add takes its templates.
+    ///
+    /// Still the project's command rather than `flayer <cmd> -p <entry>`,
+    /// which would consult the same workspace: a project's row teaches the
+    /// project's command, at every row alike, and `-W` only where leaving
+    /// it out would consult another.
+    Elsewhere(String),
 }
 
 /// Work a key asked for, as the command it is.
@@ -437,11 +450,19 @@ impl Task {
 /// One command line, at the level a holder is at: `flayer <command>` for the
 /// workspace's own, `mind -C <entry> <command>` for a project — and plain
 /// `mind <command>` for the one at the root, where `-C .` says nothing.
+///
+/// A `-W .` is typed from the root, as the `-C` is, so it names the
+/// workspace on screen.
 fn at(holder: &Holder, command: &[&str], positionals: &[&str]) -> Vec<String> {
     let start: Vec<String> = match holder {
         Holder::Workspace => vec![String::from("flayer")],
         Holder::Project(entry) if entry == "." => vec![String::from("mind")],
         Holder::Project(entry) => vec![String::from("mind"), String::from("-C"), directory(entry)],
+        Holder::Elsewhere(entry) => ["mind", "-W", ".", "-C"]
+            .into_iter()
+            .map(String::from)
+            .chain([directory(entry)])
+            .collect(),
     };
     let mut head: Vec<&str> = start.iter().map(String::as_str).collect();
     head.extend_from_slice(command);

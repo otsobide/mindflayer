@@ -480,7 +480,7 @@ fn workspace_view(workspace: &FlayerWorkspace, default: bool, lookup: &Lookup) -
         workspace
             .members()
             .into_iter()
-            .map(|registered| member(registered, lookup)),
+            .map(|registered| member(registered, workspace, lookup)),
     );
     let unlinked = scan(workspace)
         .found
@@ -543,35 +543,39 @@ fn loaded(workspace: &FlayerWorkspace) -> Vec<LoadedSource> {
     shown
 }
 
-/// One registry entry, opened and read.
+/// One entry in `screen`'s registry, opened and read.
 ///
-/// Its templates are those of the workspace `mind` consults about the
-/// project, which need not be the one on screen: the add form runs `mind -C
-/// <entry> add`, and what it offers must be what that line finds.
-fn member(registered: Registered, lookup: &Lookup) -> Member {
+/// Its lines consult the workspace on screen, whatever `mind` would consult
+/// about the project from the shell: where that is another, or cannot be
+/// read, the row is [`elsewhere`](Member::elsewhere) and its lines say `-W
+/// .`. So its templates are the screen's too, the ones the add form's line
+/// will find.
+fn member(registered: Registered, screen: &FlayerWorkspace, lookup: &Lookup) -> Member {
     let entry = as_stored(&registered.entry);
     match registered.project {
         Ok(project) => {
-            let consulted = consulted(&project, lookup);
-            let workspace = consulted.as_ref().ok().and_then(Option::as_ref);
-            let mut member = held(
-                entry,
-                registered.root,
-                false,
-                &project,
-                &Kind::ALL,
-                workspace,
+            let elsewhere = !matches!(
+                consulted(&project, lookup),
+                Ok(Some(workspace)) if same_directory(workspace.root(), screen.root())
             );
-            if let (Err(error), Ok(holdings)) = (&consulted, &mut member.holdings) {
-                holdings.warnings.push(error.to_string());
+            Member {
+                elsewhere,
+                ..held(
+                    entry,
+                    registered.root,
+                    false,
+                    &project,
+                    &Kind::ALL,
+                    Some(screen),
+                )
             }
-            member
         }
         Err(error) => Member {
             name: entry.clone(),
             entry,
             root: registered.root,
             own: false,
+            elsewhere: false,
             holdings: Err(error.to_string()),
         },
     }
@@ -655,6 +659,7 @@ fn held(
         root,
         name: project.name().to_owned(),
         own,
+        elsewhere: false,
         holdings: Ok(Holdings {
             items,
             warnings,

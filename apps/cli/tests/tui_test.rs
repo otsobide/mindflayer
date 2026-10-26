@@ -615,6 +615,18 @@ fn every_task_the_tui_runs_is_a_line_the_binaries_accept() {
         Task::UnloadHere {
             path: String::from("/somewhere/team"),
         },
+        Task::Remove {
+            holder: Holder::Elsewhere(String::from("../collapse")),
+            kind: Kind::Skill,
+            name: String::from("deploy"),
+        },
+        Task::Add {
+            holder: Holder::Elsewhere(String::from("-odd")),
+            kind: Kind::Skill,
+            name: String::from("deploy"),
+            description: awkward.clone(),
+            template: Some(String::from("-weird")),
+        },
     ];
 
     for task in &tasks {
@@ -1275,4 +1287,68 @@ fn a_w_among_a_lines_words_is_typed_from_the_workspace_root() {
 
     assert_eq!(done.error, None);
     assert!(done.stdout.contains("hub-skill"), "{}", done.stdout);
+}
+
+// ---------------------------------------------------------------------------
+// A project the workspace on screen manages from elsewhere
+// ---------------------------------------------------------------------------
+
+#[test]
+fn a_project_linked_from_beside_runs_its_lines_against_the_workspace_on_screen() {
+    let (_dir, _outer, hub, collapse) = hub_beside_outer();
+    // Nothing named: the screen is the workspace found where it was opened.
+    let mut app = tui_in(&hub);
+
+    press_key(&mut app, KeyCode::Right);
+    press_key(&mut app, KeyCode::Char('d'));
+    let drawn = tui_drawn(&app);
+    assert!(
+        drawn.contains("mind -W . -C ../collapse remove --yes skill:hub-skill"),
+        "{drawn}"
+    );
+    press_and_run(&mut app, KeyCode::Char('y'));
+
+    // Without `-W .`, walking up from `collapse` finds no workspace at all,
+    // and the hub would keep a record of a copy that is gone.
+    assert!(!collapse.join("skills/hub-skill").exists());
+    assert!(recorded_in_hub(&hub).is_empty());
+}
+
+#[test]
+fn a_project_linked_from_beside_is_offered_the_screens_templates() {
+    let (_dir, _outer, hub, collapse) = hub_beside_outer();
+    let template = hub.join(".mindflayer/templates/runbook/SKILL.md");
+    fs::create_dir_all(template.parent().unwrap()).unwrap();
+    fs::write(&template, "---\n---\n\n# {{name}}\n\nThe hub's runbook.\n").unwrap();
+    let mut app = tui_in(&hub);
+
+    press_key(&mut app, KeyCode::Char('a'));
+    press_key(&mut app, KeyCode::Up);
+    // none, then full (built in), then runbook.
+    press_key(&mut app, KeyCode::Right);
+    press_key(&mut app, KeyCode::Right);
+    press_key(&mut app, KeyCode::Down);
+    type_text(&mut app, "deploy");
+    press_key(&mut app, KeyCode::Down);
+    type_text(&mut app, "Ship it");
+    assert!(
+        tui_drawn(&app).contains("mind -W . -C ../collapse add --template runbook"),
+        "{}",
+        tui_drawn(&app)
+    );
+    press_and_run(&mut app, KeyCode::Enter);
+
+    let manifest = fs::read_to_string(collapse.join("skills/deploy/SKILL.md")).unwrap();
+    assert!(manifest.contains("The hub's runbook."), "{manifest}");
+}
+
+#[test]
+fn a_project_under_the_workspace_on_screen_keeps_the_plain_line() {
+    let dir = workspace_with_two();
+    let app = tui_in(dir.path());
+
+    assert_eq!(
+        app.member().map(|member| member.holder()),
+        Some(Holder::Project(String::from("alpha")))
+    );
 }
