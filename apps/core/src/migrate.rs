@@ -27,7 +27,8 @@ use crate::catalog::{Catalog, DiscoveryFailure};
 use crate::kind::Kind;
 use crate::paths;
 use crate::workspace::{
-    Directories, FlayerWorkspace, MindProject, WorkspaceError, FLAYER_CONFIG, MIND_CONFIG, MIND_DIR,
+    misplaced_own, Directories, FlayerWorkspace, MindProject, WorkspaceError, FLAYER_CONFIG,
+    MIND_CONFIG, MIND_DIR,
 };
 
 /// What moving the workspace's own into its library would do, and what would
@@ -101,6 +102,10 @@ pub enum Refusal {
         folder: PathBuf,
         with: PathBuf,
     },
+    /// A folder the marker names that `flayer init` would have refused:
+    /// outside the workspace, or on the shelf or the cache.
+    #[error("{0}, so what is in it is not the workspace's to move")]
+    Misplaced(WorkspaceError),
     #[error("{0}, so what is in it cannot be moved")]
     Unlisted(DiscoveryFailure),
     #[error("{0}, so which of the workspace's own are that project's cannot be told")]
@@ -178,6 +183,11 @@ impl MigrateError {
 /// when both say `skills`. That is left where it is, and the marker's line is
 /// still pointed at the library, where the workspace's own of that kind then
 /// starts empty.
+///
+/// A folder the marker names outside the workspace, or on the shelf or the
+/// cache, is refused rather than emptied: `flayer init` refuses to name one,
+/// but `open` reads a marker edited by hand to, and what is there is somebody
+/// else's, or gathering's.
 pub fn library_plan(workspace: &FlayerWorkspace) -> Plan {
     let mut plan = Plan {
         backup: backup_path(workspace),
@@ -212,6 +222,15 @@ pub fn library_plan(workspace: &FlayerWorkspace) -> Plan {
     let theirs = held_by(&projects, &plan.kinds, &mut plan.refusals);
 
     for repoint in &plan.kinds {
+        let route = workspace
+            .config()
+            .directories
+            .get(repoint.kind)
+            .map_or_else(|| Directories::library_for(repoint.kind), Path::to_path_buf);
+        if let Some(error) = misplaced_own(repoint.kind, &route) {
+            plan.refusals.push(Refusal::Misplaced(error));
+            continue;
+        }
         if let Some(with) = tangle(repoint, &plan.kinds, &projects) {
             plan.refusals.push(Refusal::Tangled {
                 kind: repoint.kind,

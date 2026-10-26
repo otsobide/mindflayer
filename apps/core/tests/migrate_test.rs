@@ -179,20 +179,97 @@ fn a_project_that_cannot_be_read_refuses_the_plan_only_where_it_could_hold_them(
 #[test]
 fn a_folder_holding_the_library_is_refused_by_the_plan() {
     let (dir, workspace) = beside();
-    let text = marker(&workspace).replace("skills = \"skills\"", "skills = \".\"");
+    // Allowed by `flayer init`, unlike the root, which is not inside the
+    // workspace, or `.mindflayer`, which holds the shelf.
+    let text =
+        marker(&workspace).replace("skills = \"skills\"", "skills = \".mindflayer/library\"");
     fs::write(workspace.config_path(), text).unwrap();
     let workspace = FlayerWorkspace::open(dir.path()).unwrap();
 
     let plan = migrate::library_plan(&workspace);
 
+    let holding = dir.path().join(".mindflayer/library");
     assert!(
-        plan.refusals.iter().any(|refusal| matches!(
-            refusal,
-            Refusal::Tangled { kind: Kind::Skill, folder, .. } if folder == dir.path()
-        )),
+        matches!(
+            plan.refusals.as_slice(),
+            [Refusal::Tangled { kind: Kind::Skill, folder, .. }] if *folder == holding
+        ),
         "{:?}",
         plan.refusals
     );
+}
+
+#[test]
+fn a_folder_outside_the_workspace_is_refused_and_left_as_it_is() {
+    let dir = TempDir::new().unwrap();
+    let root = dir.path().join("ws");
+    let (workspace, _) = FlayerWorkspace::init_with(&root, &common::beside()).unwrap();
+    // Named by hand, as `flayer init` would refuse to.
+    let text = marker(&workspace).replace("skills = \"skills\"", "skills = \"../team/skills\"");
+    fs::write(workspace.config_path(), text).unwrap();
+    let theirs = dir.path().join("team/skills/shared");
+    fs::create_dir_all(&theirs).unwrap();
+    fs::write(
+        theirs.join("SKILL.md"),
+        "---\nname: shared\ndescription: Team\n---\n",
+    )
+    .unwrap();
+    let mut workspace = FlayerWorkspace::open(&root).unwrap();
+
+    let plan = migrate::library_plan(&workspace);
+    let error = migrate::library(&mut workspace).unwrap_err();
+
+    assert!(
+        matches!(
+            plan.refusals.as_slice(),
+            [Refusal::Misplaced(
+                mindflayer_core::WorkspaceError::OutsideWorkspace {
+                    kind: Kind::Skill,
+                    ..
+                }
+            )]
+        ),
+        "{:?}",
+        plan.refusals
+    );
+    assert!(plan.moves.is_empty(), "{:?}", plan.moves);
+    assert!(
+        matches!(error, migrate::MigrateError::Refused(_)),
+        "{error}"
+    );
+    assert!(theirs.join("SKILL.md").is_file());
+}
+
+#[test]
+fn a_folder_on_the_shelf_is_refused_by_the_plan() {
+    let (dir, workspace) = beside();
+    let text = marker(&workspace).replace("skills = \"skills\"", "skills = \".mindflayer/skills\"");
+    fs::write(workspace.config_path(), text).unwrap();
+    let gathered = dir.path().join(".mindflayer/skills/gathered");
+    fs::create_dir_all(&gathered).unwrap();
+    fs::write(
+        gathered.join("SKILL.md"),
+        "---\nname: gathered\ndescription: From a source\n---\n",
+    )
+    .unwrap();
+    let workspace = FlayerWorkspace::open(dir.path()).unwrap();
+
+    let plan = migrate::library_plan(&workspace);
+
+    assert!(
+        matches!(
+            plan.refusals.as_slice(),
+            [Refusal::Misplaced(
+                mindflayer_core::WorkspaceError::OverlapsGathered {
+                    kind: Kind::Skill,
+                    ..
+                }
+            )]
+        ),
+        "{:?}",
+        plan.refusals
+    );
+    assert!(plan.moves.iter().all(|one| one.kind == Kind::Rule));
 }
 
 #[cfg(unix)]

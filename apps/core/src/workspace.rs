@@ -437,18 +437,8 @@ impl FlayerWorkspace {
         let config_path = dir.join(FLAYER_CONFIG);
 
         for (kind, directory) in directories.resolved_with(Directories::library_for) {
-            if !stays_inside(&directory) {
-                return Err(WorkspaceError::OutsideWorkspace {
-                    path: directory,
-                    kind,
-                });
-            }
-            if let Some(gathered) = gathered_overlap(&directory) {
-                return Err(WorkspaceError::OverlapsGathered {
-                    path: directory,
-                    kind,
-                    gathered,
-                });
+            if let Some(error) = misplaced_own(kind, &directory) {
+                return Err(error);
             }
         }
         create_dir(&dir)?;
@@ -1584,6 +1574,29 @@ fn stays_inside(directory: &Path) -> bool {
         paths::normalize(directory).components().next(),
         Some(std::path::Component::Normal(_))
     )
+}
+
+/// Why `directory`, a route from a workspace's root, cannot hold the
+/// workspace's own `kind`s: it leads out of the workspace, or it overlaps
+/// what is reserved for gathering ([`gathered_overlap`]).
+///
+/// What [`FlayerWorkspace::init_with`] refuses before it makes anything, and
+/// what a migration refuses to move out of
+/// ([`crate::migrate::library_plan`]). `open` still reads a marker edited by
+/// hand to name such a folder, since reading one changes nothing; moving out
+/// of it would empty another directory, or gathering's, into this one.
+pub(crate) fn misplaced_own(kind: Kind, directory: &Path) -> Option<WorkspaceError> {
+    if !stays_inside(directory) {
+        return Some(WorkspaceError::OutsideWorkspace {
+            path: directory.to_path_buf(),
+            kind,
+        });
+    }
+    gathered_overlap(directory).map(|gathered| WorkspaceError::OverlapsGathered {
+        path: directory.to_path_buf(),
+        kind,
+        gathered,
+    })
 }
 
 /// The folder reserved for gathering that a workspace's own `directory` would
