@@ -5,9 +5,14 @@
 //! the same tree reached directly, so `flayer link x` and `mind flayer link x`
 //! are one command with two spellings.
 //!
-//! The parser, the work and the rendering all live here rather than in the
-//! binaries so the tests drive the real command surface instead of shelling
-//! out, and so both binaries cannot drift apart.
+//! The parser, the work and the rendering all live in this library rather
+//! than in the binaries so the tests drive the real command surface instead of
+//! shelling out, and so both binaries cannot drift apart.
+//!
+//! Each has a module of its own — `parse`, `commands` with a module per family
+//! of commands, and `render` — so that work on one command does not collide
+//! with work on another in one long file. What the binaries, the screens and
+//! the tests use is re-exported here.
 
 pub(crate) mod commands;
 pub(crate) mod error;
