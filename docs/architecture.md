@@ -1063,7 +1063,10 @@ on the deepest rather than on a whole neighbouring tree, and never into hidden
 folders, symlinks, `node_modules` or `target`. A repository is a leaf, since its
 folders are its own — except the workspace root, which is also where the others
 are kept. A scan that runs out of budget says so rather than passing for
-complete.
+complete. A folder that cannot be listed is a failure reported beside what was
+found, except a root that is not there at all: that holds nothing, and only
+the default workspace before it is made can have one, in a home nobody has
+created yet.
 
 ## Decisions
 
