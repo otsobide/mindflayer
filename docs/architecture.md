@@ -874,9 +874,11 @@ running, and `l` is `mind link`, after which the screen is the workspace's.
 A key that asks for work produces a `Task`, and `Task::commands` turns it into
 the words a person would type — `flayer link beta`, `mind -C beta add skill
 deploy 'Ship it'`. Those words are parsed by `Cli` and `FlayerCli`, the parsers
-the binaries use, and run through `run` and `run_flayer_cli`, the functions the
-binaries call. The TUI has no code path of its own for linking, adding or
-gathering, and it cannot grow one, because there is nowhere in it to put one.
+the binaries use, and run through `run_watched` and `run_flayer_cli_watched`,
+the functions the binaries call (`run` and `run_flayer_cli` are the same with a
+watch nobody follows). The TUI has no code path of its own for linking, adding
+or gathering, and it cannot grow one, because there is nowhere in it to put
+one.
 
 That is what turns "every feature has a command and a place in the TUI" from a
 promise into a property. A feature is written once, as a command, and the TUI

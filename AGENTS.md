@@ -70,12 +70,14 @@ These are easy to break from a single file without noticing.
   `-p`) are one implementation given a different holder
   (`FlayerWorkspace::own` makes the workspace look like a `MindProject`).
 - **The TUI only runs commands.** A key produces a `Task`, and
-  `Task::commands` turns it into argument lines that are parsed by
-  `Cli`/`FlayerCli` and run through `run`/`run_flayer_cli`. A new feature is
-  written as a command first; the TUI gains it by producing that command's
-  words. Never add a TUI-only code path. A gather's lines run on a thread of
-  their own (`Task::runs_apart`), still through the same parsers: the thread
-  changes where they run, not what they are.
+  `Task::commands` turns it into argument lines that a `Runner` hands to
+  `execute`, which parses them with `Cli`/`FlayerCli` and runs them through
+  `run_watched`/`run_flayer_cli_watched`, as the binaries do. A test's
+  stand-in `Runner` is handed the same words. A new feature is written as a
+  command first; the TUI gains it by producing that command's words. Never
+  add a TUI-only code path. A gather's lines run on a thread of their own
+  (`Task::runs_apart`), still through the same parsers: the thread changes
+  where they run, not what they are.
 - **A gather is watched, and stops only before it places.** Its `Request`
   carries a `gather::Watch`, core's progress callback and cancel flag; no gix
   type reaches a front end. A cancel is honoured until the shelf starts to
