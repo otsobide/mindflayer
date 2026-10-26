@@ -35,13 +35,30 @@ cargo test -p mindflayer-core --lib workspace                # src/workspace_tes
 cargo test -p mindflayer-server --test commands_test         # apps/server/tests/commands_test.rs
 ```
 
+The panel (`apps/web`) needs Node 24 and pnpm at the version `package.json`
+pins in `packageManager`. Its targets install from the lockfile first, and
+`PNPM` names pnpm where corepack has not put it on the PATH:
+
+```bash
+make web/test             # vitest: apps/web/tests/<area>.test.ts
+make web/lint             # ESLint, its style included; make web/fmt fixes that
+make web/build            # vue-tsc, then apps/web/dist, which the server embeds
+make web/types            # vue-tsc alone
+make web/test PNPM='npx --yes pnpm@12.15.0'
+pnpm --dir apps/web exec vitest run tests/shell.test.ts      # one suite
+```
+
+`make test`, `make build`, `make fmt` and `make lint` are Rust only: `web` is
+in the root Makefile's `NODE_APPS`, outside the aggregates, until CI installs
+Node (#71). A change to the panel runs its own targets.
+
 `make dev/link`, `make dev/unlink` and `make install` write into `~/.cargo/bin`
 (or `BINDIR`), outside the repository. Don't run them unless asked.
 
 ## Layout
 
-Three crates in one Cargo workspace, each an app under `apps/` with its own
-`Makefile`:
+Three crates in one Cargo workspace, and the panel they serve, each an app
+under `apps/` with its own `Makefile`:
 
 - `apps/core` (`mindflayer-core`): the engine. Projects, workspaces, kinds,
   the catalog, gathering (`gix`), the SQLite ledger, installing, keeping
@@ -65,6 +82,17 @@ Three crates in one Cargo workspace, each an app under `apps/` with its own
   the thread every run goes through, `src/transcript.rs` what the session
   ran, `src/log.rs` the redacting request log and `src/panel.rs` the embedded
   panel (`apps/web/dist`).
+- `apps/web` (`mindflayer-web`): the web panel, in Vue and Nuxt UI on Vite,
+  with pnpm. `src/main.ts` mounts what `src/panel.ts` installs (router,
+  Pinia, Vue Query, Nuxt UI, the transport), which the shell test installs
+  too. `src/api/transport.ts` is the `Transport` interface and `useTransport`,
+  and `src/api/http.ts` its HTTP implementation. `src/pages/` holds one page
+  per route (file routes), `src/components/` the frame (`AppSidebar`,
+  `AppHeader`, `AppLogo`), `src/stores/` Pinia's UI state, `src/query.ts`
+  the Vue Query client, `src/theme.ts` the palette, `src/color-mode.ts` the
+  colour mode, and `src/overrides/` what replaces two pieces of the
+  libraries for the CSP. `src/*.d.ts` are written by the Vite plugins and
+  committed.
 
 ## Invariants that hold the design together
 
@@ -170,6 +198,22 @@ These are easy to break from a single file without noticing.
   every run on the one writer thread, in the order it arrived. It binds
   127.0.0.1 only, answers under `/api` only a request that carries the launch
   token (in the cookie `mf_<port>`, or as Bearer), and never logs the token.
+- **The panel holds no rules either, and talks only through its
+  transport.** It asks and draws: nothing a query answers is worked out in
+  TypeScript. Every request goes through the `Transport` from
+  `useTransport()`, and only `src/api/http.ts` may use `fetch`,
+  `EventSource`, `WebSocket` or `XMLHttpRequest` (an ESLint rule, tested in
+  `tests/lint.test.ts`). Authentication is the transport's: relative URLs,
+  the `HttpOnly` cookie, the `X-Mindflayer: 1` header. What the server
+  answers belongs in Vue Query; Pinia holds UI state only.
+- **The panel needs nothing the CSP refuses.** No URL naming another host,
+  no inline `<script>` or `<style>`, no `data:` URL: fonts are Fontsource
+  files, icons are bundled Lucide (`i-lucide-<name>` in a `.vue` file) drawn
+  by Iconify's offline build (`src/overrides/iconify.ts`), the palette is
+  declared in `main.css` while Nuxt UI's colours plugin is a stub
+  (`src/overrides/colors.ts`), and the colour mode switches by class
+  (`src/color-mode.ts`). `tests/dist.test.ts` builds the panel and checks
+  it; `tests/shell.test.ts` fails on any `<style>` element added at run time.
 - **`Kind` is a closed enum.** To add a kind, follow "Adding a third kind" in
   the architecture doc; the compiler's exhaustive matches are the checklist.
 
@@ -197,6 +241,13 @@ These are easy to break from a single file without noticing.
   (`common::Fake`), never the CLI's. They bind 127.0.0.1 on port 0 and send
   requests through the router in process (`common::send`), or over loopback,
   and serve a fixture panel (`tests/panel`), so they need no Node.
+- The panel's suites are `apps/web/tests/<area>.test.ts`, in Vitest. The
+  components run in happy-dom, mounted through `createPanel` with a fake
+  `Transport` and a memory history, so they never reach a server.
+  `dist.test.ts` builds the panel in a process of its own, into a temporary
+  folder under `node_modules`, and leaves `dist/` alone. `licences.test.ts`
+  reads every installed package's licence: a new one outside its list of
+  GPL-3.0-compatible licences fails it.
 - Screens are tested without a terminal. Drive `state` with key events, or
   call `tui::step`, and render `ui` into `ratatui::backend::TestBackend`. Only
   the event loops in `tui.rs` and `install.rs` go untested, so keep logic out
@@ -214,8 +265,8 @@ These are easy to break from a single file without noticing.
   Windows run on pushes to `dev`/`main`, on PRs from `dev`, `main` or
   `release/*`, and on PRs labelled `full-matrix`.
 - Commit messages: `<area>: <imperative summary>`, where area is `core`,
-  `cli`, `server`, `docs`, `build`, `ci` or `chore` (`core, cli:` when a
-  change spans two crates).
+  `cli`, `server`, `web`, `docs`, `build`, `ci` or `chore` (`core, cli:` when
+  a change spans two apps).
 - When behaviour changes, update the README (its examples are literal output,
   so re-run them) and `docs/architecture.md`, including its "Open questions".
 
