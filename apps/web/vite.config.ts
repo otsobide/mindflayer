@@ -5,6 +5,9 @@ import router from 'vue-router/vite'
 import ui from '@nuxt/ui/vite'
 import { colors } from './src/theme.ts'
 
+/** Where `flayer ui --dev --port 7878` listens while the panel is worked on. */
+const SERVER = 'http://127.0.0.1:7878'
+
 const here = (path: string) => fileURLToPath(new URL(path, import.meta.url))
 
 export default defineConfig({
@@ -50,6 +53,19 @@ export default defineConfig({
     // Nothing inlined as a data: URL: the CSP's default-src 'self' refuses
     // those for fonts and images alike, so every asset is a file of its own.
     assetsInlineLimit: 0
+  },
+  server: {
+    host: '127.0.0.1',
+    port: 5173,
+    strictPort: true,
+    proxy: {
+      // changeOrigin, so the Host the server checks is its own address and
+      // not this one's; the Origin stays the browser's, which --dev accepts.
+      '/api': { target: SERVER, changeOrigin: true },
+      // The launch link, so the token is traded for the cookie here, where
+      // the panel runs, and the redirect lands on this server's `/`.
+      '^/\\?token=': { target: SERVER, changeOrigin: true }
+    }
   },
   test: {
     environment: 'happy-dom',
