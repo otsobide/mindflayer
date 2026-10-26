@@ -197,7 +197,10 @@ pub fn step(app: &mut App, task: Task) {
 pub fn perform(task: &Task, app: &App) -> Performed {
     let base = app.base().to_path_buf();
     match task {
-        Task::OpenInstall => open_install(&base, app.home.as_deref()),
+        Task::OpenInstall => open_install(
+            &base,
+            app.workspace().is_some_and(|workspace| !workspace.made),
+        ),
         Task::ApplyInstall => match &app.mode {
             Mode::Installing(screen) => Performed::Ran(vec![apply_install(&base, screen)]),
             _ => Performed::Ran(Vec::new()),
@@ -317,20 +320,26 @@ fn draws_mind(command: Option<&Command>) -> bool {
     }
 }
 
-/// Build the install screen for the workspace at `base`: the one `flayer
-/// install` finds from there, so the default workspace before it is made too,
-/// with nothing to install into. Built as that command builds it, from the
-/// ledger as it is: opening the screen makes nothing.
-fn open_install(base: &Path, home: Option<&Path>) -> Performed {
-    let screen = FlayerWorkspace::locate_or_unmade(base, home)
-        .map_err(CliError::from)
-        .and_then(|workspace| workspace.ok_or_else(|| CliError::NotInWorkspace(base.to_path_buf())))
-        .and_then(|workspace| {
-            let ledger = workspace.ledger_for_reading().map_err(CliError::from)?;
-            // What would not open is already on screen, beside what did.
-            let (projects, _) = install::registered(&workspace);
-            install::build(&workspace, &ledger, projects).map_err(CliError::from)
-        });
+/// Build the install screen for the workspace at `base`, which is the one on
+/// screen and the one applying opens: the default workspace too when nothing
+/// has made it yet (`unmade`), with nothing to install into.
+///
+/// Opened there exactly rather than found by walking up from it, as `flayer
+/// install` would: before the default is made there is no marker at `base`
+/// to stop the walk, which would carry on to any workspace above home. Built
+/// from the ledger as it is, so opening the screen makes nothing.
+fn open_install(base: &Path, unmade: bool) -> Performed {
+    let workspace = if unmade {
+        FlayerWorkspace::unmade(base)
+    } else {
+        FlayerWorkspace::open(base)
+    };
+    let screen = workspace.map_err(CliError::from).and_then(|workspace| {
+        let ledger = workspace.ledger_for_reading().map_err(CliError::from)?;
+        // What would not open is already on screen, beside what did.
+        let (projects, _) = install::registered(&workspace);
+        install::build(&workspace, &ledger, projects).map_err(CliError::from)
+    });
     match screen {
         Ok(screen) => Performed::Install(screen),
         Err(error) => Performed::Ran(vec![Done::failed(

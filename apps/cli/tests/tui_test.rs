@@ -937,6 +937,24 @@ fn flayer_minds_opens_on_the_default_workspace_not_on_one_above_its_home() {
 }
 
 #[test]
+fn the_install_screen_opens_on_the_default_workspace_not_on_one_above_its_home() {
+    let (_outer, home) = home_inside_a_workspace();
+    let elsewhere = TempDir::new().unwrap();
+    let mut app = tui_at_home(elsewhere.path(), &home);
+
+    press_and_run(&mut app, KeyCode::Char('i'));
+
+    // The workspace above has `alpha` and `beta` to install into; the one on
+    // screen has nothing yet.
+    assert!(!matches!(app.mode, Mode::Installing(_)), "{:?}", app.mode);
+    assert_eq!(
+        app.message.as_ref().map(|message| message.text.as_str()),
+        Some("no projects to install into yet — l links one")
+    );
+    assert!(!home.join(FLAYER_DIR).exists());
+}
+
+#[test]
 fn the_first_change_from_the_tui_makes_the_default_workspace() {
     let home = TempDir::new().unwrap();
     let elsewhere = TempDir::new().unwrap();
