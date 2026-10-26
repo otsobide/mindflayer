@@ -214,7 +214,8 @@ Rules were written long before any of them was read this way, and markdown is
 free to open with a `---` horizontal rule. So a fenced block at the top is
 front matter only when it holds a YAML mapping. Anything else is content, as
 it always was: an opening fence that never closes, prose between two
-horizontal rules, a list, two horizontal rules with nothing between them, and a
+horizontal rules that YAML reads as a plain string, a list, two horizontal
+rules with nothing between them, and a
 block of nothing but comments too, since what YAML reads past as a comment is a
 heading to markdown. An empty block could have been front matter that declares
 nothing, but taking its fences off would drop two lines that read today and
@@ -230,6 +231,16 @@ matter does not parse is refused, was the alternative. It would hide from every
 listing a rule that still works as text, over how its first lines are written;
 a skill without its front matter has no name to be found by, and a rule never
 needed one.
+
+The line is YAML's, not the author's intent, so prose between two horizontal
+rules can land on either side of it. A sentence shaped like `Note: never
+force-push` is a mapping with one key nothing reads, so it is front matter and
+left out of the body an agent is given, without a word. One opening with `**`,
+a backtick or a link does not parse, so it is content, with the warning above.
+Both are rare at the top of a rule. Warning about a mapping that declares
+neither `paths` nor `description` would catch the first, and was turned down:
+it would warn just as loudly about every rule carrying only another agent's
+keys, such as Cursor's `globs`, which pass through by design.
 
 The keys are read leniently, as a skill's `metadata` and `compatibility` are: a
 `paths` that is not a pattern or a list of them, or a `description` that is not

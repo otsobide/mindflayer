@@ -704,9 +704,12 @@ Never throw across a handler boundary; return a `Result`.
 | `description` | optional | a string |
 
 The fences only open front matter when what they hold is a YAML mapping, so a
-rule that opens with a `---` horizontal rule reads as it always did. Front
-matter that does not parse is read as content, fences and all, and `validate`
-warns about it. It warns too about a `paths` or a `description` it cannot read,
+rule that opens with a `---` horizontal rule and a plain sentence reads as it
+always did. A line shaped like `key: value` is a mapping, though, even when it
+is prose such as `Note: ...`, so it is front matter and left out of what an
+agent is given. Front matter that does not parse — prose opening with `**`
+does not either — is read as content, fences and all, and `validate` warns
+about it. It warns too about a `paths` or a `description` it cannot read,
 which is ignored and left in the file; any other key passes through untouched.
 Listings show the opening line below the front matter, and `show` prints what
 it declares above that:

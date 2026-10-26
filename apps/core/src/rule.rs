@@ -6,6 +6,12 @@
 //! them was read, though, and markdown is free to open with a `---` horizontal
 //! rule, so a fenced block at the top is front matter only when it holds a
 //! YAML mapping. Anything else is content, as it always was.
+//!
+//! The line is YAML's, not the author's intent, so prose can fall on either
+//! side of it: a sentence shaped like `Note: never force-push` is a mapping,
+//! and read as front matter, while one opening with `**` or a backtick does
+//! not parse, and is content with a warning, since it cannot be told apart
+//! from front matter written wrong.
 
 use serde_yaml_ng::Value;
 
@@ -25,8 +31,10 @@ pub struct RuleManifest {
     /// Why a fenced block at the top was read as content rather than as front
     /// matter, when that is because it does not parse.
     ///
-    /// Kept for `validate` to say so. Fences around prose are not noted: a
-    /// horizontal rule is a thing markdown is for, and nothing to warn about.
+    /// Kept for `validate` to say so. Fences around prose that YAML reads as
+    /// a plain string are not noted: a horizontal rule is a thing markdown is
+    /// for, and nothing to warn about. Prose YAML cannot parse is noted like
+    /// broken front matter, which is what it looks like.
     pub unparsed: Option<String>,
 }
 

@@ -50,6 +50,34 @@ fn a_horizontal_rule_followed_by_prose_stays_content() {
 }
 
 #[test]
+fn a_sentence_shaped_like_a_key_is_read_as_front_matter() {
+    // YAML draws the line, not the author: `Note: ...` is a mapping with one
+    // key nothing reads, so the sentence leaves the body, as any key does.
+    let source = "---\nNote: never force-push to main.\n---\n\n# Git\n";
+
+    assert_eq!(
+        RuleManifest::read(source),
+        (RuleManifest::default(), "\n# Git\n")
+    );
+}
+
+#[test]
+fn prose_yaml_cannot_parse_stays_content_and_says_why() {
+    // To YAML these open an alias, a reserved character and a flow sequence
+    // with text after it, so they read as front matter written wrong.
+    for source in [
+        "---\n**Never** force-push.\n---\nBody\n",
+        "---\n`make test` before you push.\n---\nBody\n",
+        "---\n[Docs](https://example.com) say so.\n---\nBody\n",
+    ] {
+        let (manifest, body) = RuleManifest::read(source);
+
+        assert_eq!(body, source);
+        assert!(manifest.unparsed.is_some(), "{source:?}");
+    }
+}
+
+#[test]
 fn unparseable_yaml_stays_content_and_says_why() {
     // A glob that opens with `*` is a YAML alias unless it is quoted, which is
     // the easiest way to write front matter that does not parse.
