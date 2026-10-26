@@ -49,9 +49,8 @@ pub const MIND_FORMAT_VERSION: u32 = 3;
 ///
 /// Not [`MIND_FORMAT_VERSION`], which is the newest a project's marker holds
 /// in either file. A new project is written as version 2 until `mind init`
-/// writes settings (#35), so this build reads a version it does not yet
-/// make, and an older build, which refuses settings it cannot find, never
-/// meets a project this one made.
+/// writes settings (#35): this build reads a version it does not make yet,
+/// so no project a command of its makes is one an older build cannot read.
 pub const MIND_TOML_VERSION: u32 = 2;
 
 /// The layout version written into new `flayer.toml` markers, and the newest

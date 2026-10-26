@@ -155,8 +155,9 @@ impl Settings {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Share {
     /// Installed copies and entries stay out of git, through a block of
-    /// `info/exclude`, and so does `.mind` itself, through a `.gitignore` of
-    /// its own (D-01). What a new project is.
+    /// `info/exclude`, once installs read the share mode (#34), and `.mind`
+    /// itself does through a `.gitignore` of its own (D-01). What a new
+    /// project is.
     Local,
     /// Written for the team to commit: nothing is kept out of git, the
     /// project's settings included.
