@@ -93,7 +93,7 @@ pub fn open(workspace: &FlayerWorkspace, projects: Vec<MindProject>) -> Result<S
 /// taken out a source, what was marked is found again on the shelf it left
 /// ([`rebuilt`]) before anything is carried out. Scrubbing when the screen
 /// opened was the other way, and is rejected: opening it is a read, and a
-/// read writes nothing.
+/// read leaves the ledger as it finds it.
 pub fn commit(workspace: &FlayerWorkspace, screen: &Screen) -> Result<Outcome, Failure> {
     let (ledger, scrub) = workspace.ledger_to_write().map_err(CliError::from)?;
     let said = scrubbed(&scrub);
