@@ -292,6 +292,55 @@ fn a_ledger_opened_to_read_keeps_the_journal_it_had() {
     assert_eq!(journal_mode(&path), "delete");
 }
 
+/// Takes write permission away from a folder, and gives it back when
+/// dropped, so that a failed assertion does not leave a temporary folder
+/// that cannot be cleaned up.
+#[cfg(unix)]
+struct ReadOnly(PathBuf);
+
+#[cfg(unix)]
+impl ReadOnly {
+    fn new(folder: &std::path::Path) -> Self {
+        use std::os::unix::fs::PermissionsExt;
+        fs::set_permissions(folder, fs::Permissions::from_mode(0o555)).unwrap();
+        ReadOnly(folder.to_path_buf())
+    }
+}
+
+#[cfg(unix)]
+impl Drop for ReadOnly {
+    fn drop(&mut self) {
+        use std::os::unix::fs::PermissionsExt;
+        let _ = fs::set_permissions(&self.0, fs::Permissions::from_mode(0o755));
+    }
+}
+
+// Unix only: a folder's write permission is what is taken away, and
+// Windows keeps none on a folder.
+#[cfg(unix)]
+#[test]
+fn a_ledger_keeping_a_log_is_read_where_its_folder_cannot_be_written() {
+    let dir = TempDir::new().unwrap();
+    // Named with what SQLite would read as part of a URI's syntax.
+    let folder = dir.path().join("odd #1, 50%?").join(".mindflayer");
+    let path = folder.join(LEDGER_FILE);
+    {
+        let ledger = Ledger::open(&path).unwrap();
+        ledger
+            .log(Action::Gather, Some("https://h/a"), Outcome::Ok, None)
+            .unwrap();
+    }
+    assert_eq!(journal_mode(&path), "wal");
+    // As a sandboxed agent sees a workspace it may read and not write. SQLite
+    // took the log's files away when the last connection closed, and cannot
+    // make them again here.
+    let _read_only = ReadOnly::new(&folder);
+
+    let ledger = Ledger::open_existing(&path).unwrap().unwrap();
+
+    assert_eq!(ledger.history(10).unwrap().len(), 1);
+}
+
 #[test]
 fn two_threads_linking_different_projects_at_once_leave_every_entry_in_the_marker() {
     let (dir, workspace) = workspace();

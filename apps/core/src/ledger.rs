@@ -278,8 +278,44 @@ impl Ledger {
                 source,
             })?;
         let ledger = Self { connection, path };
-        ledger.migrate()?;
-        Ok(Some(ledger))
+        match ledger.migrate() {
+            Ok(()) => Ok(Some(ledger)),
+            Err(error) if cannot_make_the_log(&ledger.path, &error) => {
+                Self::open_immutable(&ledger.path).map(Some).ok_or(error)
+            }
+            Err(error) => Err(error),
+        }
+    }
+
+    /// A ledger that keeps a write-ahead log, read where the log's files
+    /// cannot be made, as a file nobody is changing.
+    ///
+    /// SQLite makes `mindflayer.db-wal` and `mindflayer.db-shm` to read a
+    /// ledger that keeps its log, and takes them away when the last
+    /// connection closes. So in a folder this process may read and not write
+    /// — a sandboxed agent's view of the workspace, a read-only mount,
+    /// somebody else's workspace — reading fails though nothing is to be
+    /// written, where the journal the ledger had before let it be read.
+    /// Called only when there is no log, which is when everything is in the
+    /// file itself, and SQLite's `immutable` then reads it without the log or
+    /// any lock. What somebody who can write there writes goes into a log
+    /// this does not see, so this reads the ledger as their last checkpoint
+    /// left it; a checkpoint made between two of its reads is the one thing
+    /// that could change the file under it.
+    ///
+    /// `None` when it cannot be opened that way either, or migrating it would
+    /// need a write, and the error that sent it here is the one to tell.
+    fn open_immutable(path: &Path) -> Option<Self> {
+        let flags = OpenFlags::SQLITE_OPEN_READ_ONLY
+            | OpenFlags::SQLITE_OPEN_URI
+            | OpenFlags::SQLITE_OPEN_NO_MUTEX;
+        let connection = Connection::open_with_flags(immutable_uri(path)?, flags).ok()?;
+        let ledger = Self {
+            connection,
+            path: path.to_path_buf(),
+        };
+        ledger.migrate().ok()?;
+        Some(ledger)
     }
 
     /// An in-memory ledger, for tests and for anything that must not persist.
@@ -1173,6 +1209,52 @@ fn create_like(path: &Path, like: &Path) -> Result<(), io::Error> {
 }
 
 /// The rollback journal SQLite keeps beside a database while writing it.
+/// Whether `error` is SQLite failing to make the files a write-ahead log
+/// needs beside the ledger at `path`, with no log there to read.
+fn cannot_make_the_log(path: &Path, error: &LedgerError) -> bool {
+    let LedgerError::Query {
+        source: rusqlite::Error::SqliteFailure(failure, _),
+        ..
+    } = error
+    else {
+        return false;
+    };
+    let mut log = path.file_name().unwrap_or_default().to_os_string();
+    log.push("-wal");
+    matches!(
+        failure.code,
+        rusqlite::ErrorCode::ReadOnly | rusqlite::ErrorCode::CannotOpen
+    ) && !path.with_file_name(log).exists()
+}
+
+/// `path` as the URI SQLite opens as [`immutable`](Ledger::open_immutable):
+/// `None` for one that is not UTF-8, which a URI cannot spell.
+///
+/// Only what SQLite reads as part of the URI's syntax is escaped — `%`, and
+/// `?` and `#`, which would end the path — since it takes everything else
+/// as it is. An absolute path goes after an empty authority, `file:///`, so
+/// one that starts with two slashes is not read as naming a host; on Windows
+/// a slash goes before it too (`file:///C:/...`), which SQLite drops again.
+fn immutable_uri(path: &Path) -> Option<String> {
+    let mut uri = String::from("file:");
+    if path.is_absolute() {
+        uri.push_str("//");
+        if cfg!(windows) {
+            uri.push('/');
+        }
+    }
+    for character in path.to_str()?.chars() {
+        match character {
+            '%' => uri.push_str("%25"),
+            '?' => uri.push_str("%3F"),
+            '#' => uri.push_str("%23"),
+            other => uri.push(other),
+        }
+    }
+    uri.push_str("?immutable=1");
+    Some(uri)
+}
+
 fn journal_of(path: &Path) -> PathBuf {
     let mut name = path.file_name().unwrap_or_default().to_os_string();
     name.push("-journal");
