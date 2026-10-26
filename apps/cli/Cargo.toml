@@ -3,12 +3,25 @@ name = "mindflayer-cli"
 version = "0.1.0"
 edition = "2021"
 license = "GPL-3.0-only"
-description = "Command-line interface for Mindflayer"
+# clap shows this as the tool's one-line `--help` summary, so it says what the
+# tool does rather than what kind of crate it is.
+description = "Manage agent skills across mind projects"
+# Two binaries leave `cargo run` unable to choose, which breaks `make run`.
+# `mind` is the one that reaches both levels (`mind flayer <cmd>`).
+default-run = "mind"
 
-# Short on purpose: this is typed all day, the way `git` is.
+# Not `mf`: that is METAFONT, which ships with every TeX distribution and is
+# already on the PATH of anyone who writes LaTeX.
 [[bin]]
-name = "mf"
+name = "mind"
 path = "src/main.rs"
+
+# `flayer <cmd>` is `mind flayer <cmd>`. A second entry point into the same
+# parser, not a wrapper that re-executes `mind`, so the two spellings share one
+# implementation and cannot drift apart.
+[[bin]]
+name = "flayer"
+path = "src/bin/flayer.rs"
 
 # The command surface is a library so integration tests (and, later, other
 # front ends) can drive the real parser instead of shelling out to the binary.
@@ -20,7 +33,9 @@ path = "src/lib.rs"
 mindflayer-core = { path = "../core" }
 clap = { version = "4", features = ["derive"] }
 thiserror = "2"
+ratatui = "0.30.2"
 
 [dev-dependencies]
+gix = { version = "0.87", default-features = false }
 mindflayer-core = { path = "../core" }
 tempfile = "3"
