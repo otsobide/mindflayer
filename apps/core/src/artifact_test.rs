@@ -1,6 +1,7 @@
 //! Unit tests for `artifact.rs`, kept beside it rather than inside it.
 
 use super::*;
+use crate::skill::{Compatibility, Metadata};
 
 /// A skill built without touching the disk, to check the rules rather
 /// than the loading.
@@ -14,9 +15,20 @@ fn skill(name: &str, description: &str, directory: &str) -> Artifact {
             description: description.to_owned(),
             allowed_tools: None,
             license: None,
+            compatibility: Compatibility::Unstated,
+            metadata: Metadata::default(),
         }),
         summary: first_line(description),
     }
+}
+
+/// `skill`, declaring a `compatibility` too.
+fn compatible(compatibility: &str) -> Artifact {
+    let mut artifact = skill("a", "d", "/s/a");
+    if let Declared::Skill(manifest) = &mut artifact.declared {
+        manifest.compatibility = Compatibility::Stated(compatibility.to_owned());
+    }
+    artifact
 }
 
 fn rule(name: &str, summary: Option<&str>) -> Artifact {
@@ -70,6 +82,29 @@ fn flags_names_hyphenated_at_the_edges() {
 }
 
 #[test]
+fn flags_a_doubled_hyphen_and_says_what_a_name_has_to_be() {
+    let issues = skill("a--b", "Fill forms", "/s/a--b").validate();
+    assert_eq!(
+        issues,
+        vec![ValidationIssue::NameNotKebabCase {
+            segment: "a--b".into()
+        }]
+    );
+    assert!(
+        issues[0].to_string().contains("joined by single hyphens"),
+        "{}",
+        issues[0]
+    );
+    // A rule's route is held to it segment by segment, the same rule.
+    assert_eq!(
+        rule("git/no--force", Some("Never")).validate(),
+        vec![ValidationIssue::NameNotKebabCase {
+            segment: "no--force".into()
+        }]
+    );
+}
+
+#[test]
 fn flags_an_empty_or_whitespace_description() {
     assert_eq!(
         skill("a", "   ", "/s/a").validate(),
@@ -93,6 +128,66 @@ fn flags_limits_by_characters_not_bytes() {
     assert!(issues.contains(&ValidationIssue::DescriptionTooLong {
         length: MAX_DESCRIPTION_LEN + 1
     }));
+}
+
+#[test]
+fn a_compatibility_once_written_has_to_say_something_and_fit() {
+    assert_eq!(compatible("Requires git").validate(), vec![]);
+    assert_eq!(
+        compatible("  ").validate(),
+        vec![ValidationIssue::CompatibilityEmpty]
+    );
+    let long = "\u{00df}".repeat(MAX_COMPATIBILITY_LEN + 1);
+    assert_eq!(
+        compatible(&long).validate(),
+        vec![ValidationIssue::CompatibilityTooLong {
+            length: MAX_COMPATIBILITY_LEN + 1
+        }]
+    );
+
+    let mut artifact = skill("a", "d", "/s/a");
+    if let Declared::Skill(manifest) = &mut artifact.declared {
+        manifest.compatibility = Compatibility::NotAString;
+    }
+    assert_eq!(
+        artifact.validate(),
+        vec![ValidationIssue::CompatibilityNotAString]
+    );
+}
+
+#[test]
+fn metadata_that_is_not_strings_is_reported_entry_by_entry() {
+    let mut artifact = skill("a", "d", "/s/a");
+    if let Declared::Skill(manifest) = &mut artifact.declared {
+        manifest.metadata = Metadata {
+            entries: vec![("author".into(), "acme".into())],
+            ignored: vec!["internal".into(), "pinned".into()],
+            not_a_map: false,
+            repeated: vec!["author".into()],
+        };
+    }
+    assert_eq!(
+        artifact.validate(),
+        vec![
+            ValidationIssue::MetadataNotAString {
+                key: "internal".into()
+            },
+            ValidationIssue::MetadataNotAString {
+                key: "pinned".into()
+            },
+            ValidationIssue::MetadataRepeated {
+                key: "author".into()
+            },
+        ]
+    );
+
+    if let Declared::Skill(manifest) = &mut artifact.declared {
+        manifest.metadata = Metadata {
+            not_a_map: true,
+            ..Metadata::default()
+        };
+    }
+    assert_eq!(artifact.validate(), vec![ValidationIssue::MetadataNotAMap]);
 }
 
 #[test]
@@ -124,4 +219,83 @@ fn an_opening_line_is_the_first_that_carries_text() {
     assert_eq!(opening_line("\n\n  prose\n").as_deref(), Some("prose"));
     assert_eq!(opening_line("###\n\n# Real\n").as_deref(), Some("Real"));
     assert_eq!(opening_line("\n   \n"), None);
+}
+
+#[test]
+fn only_the_name_its_folder_and_the_description_are_strict() {
+    let strict = [
+        ValidationIssue::NameEmpty,
+        ValidationIssue::NameNotKebabCase {
+            segment: "a--b".into(),
+        },
+        ValidationIssue::NameSegmentTooLong {
+            segment: "a".into(),
+            length: 65,
+        },
+        ValidationIssue::NameDirectoryMismatch {
+            name: "a".into(),
+            directory: "b".into(),
+        },
+        ValidationIssue::DescriptionEmpty,
+        ValidationIssue::DescriptionTooLong { length: 1025 },
+    ];
+    let lenient = [
+        ValidationIssue::CompatibilityEmpty,
+        ValidationIssue::CompatibilityTooLong { length: 501 },
+        ValidationIssue::CompatibilityNotAString,
+        ValidationIssue::MetadataNotAMap,
+        ValidationIssue::MetadataNotAString { key: "k".into() },
+        ValidationIssue::MetadataRepeated { key: "k".into() },
+        ValidationIssue::Empty,
+    ];
+    assert!(strict.iter().all(ValidationIssue::is_strict));
+    assert!(!lenient.iter().any(ValidationIssue::is_strict));
+}
+
+#[test]
+fn only_what_an_agent_reads_past_is_a_warning() {
+    let warnings = [
+        ValidationIssue::CompatibilityEmpty,
+        ValidationIssue::CompatibilityTooLong { length: 501 },
+        ValidationIssue::CompatibilityNotAString,
+        ValidationIssue::MetadataNotAMap,
+        ValidationIssue::MetadataNotAString { key: "k".into() },
+        ValidationIssue::MetadataRepeated { key: "k".into() },
+    ];
+    let problems = [
+        ValidationIssue::NameEmpty,
+        ValidationIssue::NameNotKebabCase {
+            segment: "a--b".into(),
+        },
+        ValidationIssue::NameSegmentTooLong {
+            segment: "a".into(),
+            length: 65,
+        },
+        ValidationIssue::NameDirectoryMismatch {
+            name: "a".into(),
+            directory: "b".into(),
+        },
+        ValidationIssue::DescriptionEmpty,
+        ValidationIssue::DescriptionTooLong { length: 1025 },
+        ValidationIssue::Empty,
+    ];
+    assert!(warnings.iter().all(ValidationIssue::is_warning));
+    assert!(!problems.iter().any(ValidationIssue::is_warning));
+    // What install refuses is never only a warning.
+    assert!(!warnings.iter().any(ValidationIssue::is_strict));
+}
+
+#[test]
+fn the_strict_rules_are_asked_of_the_folder_a_skill_is_about_to_be_filed_in() {
+    let artifact = skill("ship", "Ship it", "/shelf/source/deploy");
+    let manifest = artifact.manifest().unwrap();
+    // Wherever it was read from, filed under its own name it is fine.
+    assert_eq!(strict_issues(manifest, "ship"), vec![]);
+    assert_eq!(
+        strict_issues(manifest, "deploy"),
+        vec![ValidationIssue::NameDirectoryMismatch {
+            name: "ship".into(),
+            directory: "deploy".into(),
+        }]
+    );
 }

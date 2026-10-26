@@ -37,7 +37,10 @@ pub use kind::{Kind, Layout, UnknownKind};
 pub use ledger::{Ledger, LedgerError, SourceKind, LEDGER_FILE};
 pub use lifecycle::{LifecycleError, Target};
 pub use scan::{scan, Found, Scan, ScanFailure};
-pub use skill::{SkillManifest, MAX_DESCRIPTION_LEN, MAX_NAME_SEGMENT_LEN};
+pub use skill::{
+    Compatibility, Metadata, SkillManifest, MAX_COMPATIBILITY_LEN, MAX_DESCRIPTION_LEN,
+    MAX_NAME_SEGMENT_LEN,
+};
 pub use template::{Template, TemplateError, TEMPLATES_DIR};
 pub use workspace::{
     Directories, FlayerConfig, FlayerWorkspace, Initialization, Loaded, Marker, Member, MindConfig,

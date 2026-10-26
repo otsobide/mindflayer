@@ -5,9 +5,9 @@ mod common;
 use std::fs;
 
 use common::{commit, repository, skill, url, workspace, write_files};
-use mindflayer_core::gather::{self, GatherError, Request};
+use mindflayer_core::gather::{self, GatherError, Request, Warning};
 use mindflayer_core::ledger::{Action, Ledger, SourceKind};
-use mindflayer_core::{FlayerWorkspace, Kind, MindProject};
+use mindflayer_core::{FlayerWorkspace, Kind, MindProject, ValidationIssue};
 use tempfile::TempDir;
 
 // ---------------------------------------------------------------------------
@@ -166,6 +166,75 @@ fn one_unreadable_skill_does_not_cost_the_ones_beside_it() {
     assert_eq!(report.added[0].name, "good");
     assert_eq!(report.failures.len(), 1);
     assert!(report.failures[0].to_string().contains("front matter"));
+}
+
+#[test]
+fn a_skill_that_breaks_the_rules_is_gathered_with_a_warning() {
+    // Lenient, as the Agent Skills client guide advises for skills written
+    // for other agents: each problem is said, and nothing is left behind.
+    let source = repository(&[
+        ("skills/a--b/SKILL.md", &skill("a--b", "Doubled")),
+        (
+            "skills/nested/SKILL.md",
+            "---\nname: nested\ndescription: Nested metadata\nmetadata:\n  owner:\n    team: ops\n---\n",
+        ),
+        ("skills/fine/SKILL.md", &skill("fine", "Nothing wrong")),
+    ]);
+    let (_dir, workspace) = workspace();
+    let ledger = workspace.ledger().unwrap();
+
+    let report = gather::gather(&workspace, &ledger, &Request::git(url(&source))).unwrap();
+
+    let names: Vec<&str> = report.added.iter().map(|h| h.name.as_str()).collect();
+    assert_eq!(names, ["a--b", "fine", "nested"]);
+    assert!(report.failures.is_empty(), "{:?}", report.failures);
+    let shelf = workspace.gathered_dir(Kind::Skill).join(&report.directory);
+    assert_eq!(
+        report.warnings,
+        vec![
+            Warning {
+                path: shelf.join("a--b").join("SKILL.md"),
+                issue: ValidationIssue::NameNotKebabCase {
+                    segment: "a--b".into()
+                },
+            },
+            Warning {
+                path: shelf.join("nested").join("SKILL.md"),
+                issue: ValidationIssue::MetadataNotAString {
+                    key: "owner".into()
+                },
+            },
+        ]
+    );
+    // What is ignored is not rewritten: the shelf holds the file as written.
+    let copied = fs::read_to_string(shelf.join("nested").join("SKILL.md")).unwrap();
+    assert!(copied.contains("  owner:\n    team: ops\n"), "{copied}");
+}
+
+#[test]
+fn a_compatibility_written_as_a_list_is_gathered_with_a_warning() {
+    // A list of agents is what an author writes when the specification's
+    // prose string does not occur to them; the skill is still a skill.
+    let source = repository(&[(
+        "skills/deploy/SKILL.md",
+        "---\nname: deploy\ndescription: Ship it\ncompatibility: [claude-code, codex]\n---\n",
+    )]);
+    let (_dir, workspace) = workspace();
+    let ledger = workspace.ledger().unwrap();
+
+    let report = gather::gather(&workspace, &ledger, &Request::git(url(&source))).unwrap();
+
+    let names: Vec<&str> = report.added.iter().map(|h| h.name.as_str()).collect();
+    assert_eq!(names, ["deploy"]);
+    assert!(report.failures.is_empty(), "{:?}", report.failures);
+    let shelf = workspace.gathered_dir(Kind::Skill).join(&report.directory);
+    assert_eq!(
+        report.warnings,
+        vec![Warning {
+            path: shelf.join("deploy").join("SKILL.md"),
+            issue: ValidationIssue::CompatibilityNotAString,
+        }]
+    );
 }
 
 #[test]

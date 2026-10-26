@@ -19,6 +19,7 @@ use thiserror::Error;
 use crate::artifact::{self, issue_list, Artifact, ArtifactError, ValidationIssue};
 use crate::catalog::{Catalog, Reference, QUALIFIER};
 use crate::frontmatter;
+use crate::install;
 use crate::kind::{Kind, Layout};
 use crate::paths;
 use crate::skill::SkillManifest;
@@ -73,10 +74,13 @@ pub fn find(project: &MindProject, reference: &Reference) -> Result<Target, Life
         })
         .collect();
 
-    // Only a usable name is turned into a place: one with `..` in it would
-    // otherwise be a way out of the project.
+    // Only a name made of plain folder names is turned into a place: one with
+    // `..` in it would otherwise be a way out of the project. Not the naming
+    // rules, which are for what Mindflayer writes: a folder from before they
+    // were tightened, or one somebody made by hand, is exactly what has to be
+    // found to be fixed or removed.
     let name = reference.name();
-    if artifact::name_issues(name).is_empty() {
+    if name.split('/').all(install::is_folder_name) {
         for kind in kinds {
             let path = place(project, kind, name);
             if !holds(kind, &path) || found.iter().any(|target| target.path == path) {
@@ -244,6 +248,23 @@ fn rename_skill(
             path: target.file(),
         });
     };
+    // Held to the strict rules as it will be, the rules `add` and `install`
+    // hold a skill to: what is left behind is a skill Mindflayer wrote, if
+    // only its name, and one an agent would skip is not left behind. Judged as
+    // renamed, because its name and folder are what a rename fixes.
+    if let Some(manifest) = artifact.manifest() {
+        let renamed = SkillManifest {
+            name: to.to_owned(),
+            ..manifest.clone()
+        };
+        let issues = artifact::strict_issues(&renamed, to);
+        if !issues.is_empty() {
+            return Err(LifecycleError::Unfit {
+                name: artifact.name().to_owned(),
+                issues,
+            });
+        }
+    }
 
     let folder = directory.join(to);
     let moves = folder != target.path;
@@ -428,6 +449,11 @@ pub enum LifecycleError {
     },
     #[error("`{name}`: a skill's name cannot contain `/`; skills are flat, and only rules are filed in folders")]
     Nested { name: String },
+    #[error("`{name}` cannot be renamed until it is fixed: {}", issue_list(.issues))]
+    Unfit {
+        name: String,
+        issues: Vec<ValidationIssue>,
+    },
     #[error("it is already called `{name}`")]
     Unchanged { name: String },
     #[error("{path}: already exists, and is left alone")]

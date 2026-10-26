@@ -386,6 +386,114 @@ fn the_folder_is_named_after_the_skill_rather_than_after_its_shelf_folder() {
 }
 
 // ---------------------------------------------------------------------------
+// Strict on the way in
+// ---------------------------------------------------------------------------
+
+/// A workspace with one project, and a shelf gathered from these files.
+fn gathered(files: &[(&str, &str)]) -> (TempDir, FlayerWorkspace, MindProject, Ledger) {
+    let dir = TempDir::new().unwrap();
+    let (workspace, _) = FlayerWorkspace::init(dir.path()).unwrap();
+    let root = dir.path().join("collapse");
+    fs::create_dir(&root).unwrap();
+    let (project, _) = MindProject::init(&root).unwrap();
+    let source = repository(files);
+    let ledger = workspace.ledger().unwrap();
+    gather::gather(&workspace, &ledger, &Request::git(url(&source))).unwrap();
+    (dir, workspace, project, ledger)
+}
+
+#[test]
+fn a_gathered_skill_whose_name_breaks_the_rules_is_offered_but_not_installed() {
+    let (_dir, workspace, project, ledger) = ready(&["a--b"]);
+
+    // Offered, so nothing gathered is hidden; refused, so nothing an agent
+    // would skip lands in the project.
+    let candidates = install::survey(&workspace, &ledger, &project, Kind::Skill).unwrap();
+    let error = install::install(
+        &workspace,
+        &ledger,
+        &project,
+        candidate(&candidates, "a--b"),
+    )
+    .unwrap_err();
+
+    assert!(
+        matches!(&error, install::InstallError::Unfit { name, .. } if name == "a--b"),
+        "{error}"
+    );
+    assert!(
+        error.to_string().contains("joined by single hyphens"),
+        "{error}"
+    );
+    assert!(!installed_at(&project, "a--b").exists());
+    assert!(ledger
+        .installations("collapse", Kind::Skill)
+        .unwrap()
+        .is_empty());
+}
+
+#[test]
+fn a_skill_with_an_empty_description_is_not_installed() {
+    let (_dir, workspace, project, ledger) = gathered(&[(
+        "skills/quiet/SKILL.md",
+        "---\nname: quiet\ndescription: ''\n---\n",
+    )]);
+
+    let candidates = install::survey(&workspace, &ledger, &project, Kind::Skill).unwrap();
+    let error = install::install(&workspace, &ledger, &project, &candidates[0]).unwrap_err();
+
+    assert_eq!(
+        error.to_string(),
+        "`quiet` cannot be installed: `description` is empty"
+    );
+    assert!(!installed_at(&project, "quiet").exists());
+}
+
+#[test]
+fn a_shelf_copy_that_now_declares_another_name_is_not_installed() {
+    let (_dir, workspace, project, ledger) = ready(&["deploy"]);
+    // The shelf is a folder anybody can edit, and a source can rename a skill
+    // while the record of its old name stays: either way the record says
+    // `deploy`, the copy would be filed under `deploy`, and it declares `ship`.
+    let shelved = workspace.root().join(&ledger.gathered().unwrap()[0].path);
+    fs::write(shelved.join("SKILL.md"), skill("ship", "Ship it")).unwrap();
+
+    let candidates = install::survey(&workspace, &ledger, &project, Kind::Skill).unwrap();
+    let error = install::install(
+        &workspace,
+        &ledger,
+        &project,
+        candidate(&candidates, "deploy"),
+    )
+    .unwrap_err();
+
+    assert_eq!(
+        error.to_string(),
+        "`deploy` cannot be installed: `name` is `ship` but the directory is `deploy`; they have to match"
+    );
+    assert!(!installed_at(&project, "deploy").exists());
+}
+
+#[test]
+fn what_agents_read_past_does_not_stop_an_install() {
+    // Nested metadata and an over-long compatibility are reported by
+    // `validate`, and are no reason for an agent to skip the skill.
+    let long = "x".repeat(501);
+    let manifest = format!(
+        "---\nname: deploy\ndescription: Ship it\ncompatibility: {long}\nmetadata:\n  owner:\n    team: ops\n---\n"
+    );
+    let (_dir, workspace, project, ledger) =
+        gathered(&[("skills/deploy/SKILL.md", manifest.as_str())]);
+
+    let candidates = install::survey(&workspace, &ledger, &project, Kind::Skill).unwrap();
+    let outcome = install::install(&workspace, &ledger, &project, &candidates[0]).unwrap();
+
+    assert!(matches!(outcome, Installed::Added { .. }), "{outcome:?}");
+    let copied = fs::read_to_string(installed_at(&project, "deploy").join("SKILL.md")).unwrap();
+    assert_eq!(copied, manifest, "copied as written");
+}
+
+// ---------------------------------------------------------------------------
 // The workspace's own skills, offered beside the shelf
 // ---------------------------------------------------------------------------
 

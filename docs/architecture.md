@@ -140,13 +140,90 @@ no line of text has nothing to offer an agent. Storing the fact rather than the
 verdict is what keeps `validate` pure — every check it makes was decided when
 the file was read, so asking whether something is valid cannot itself fail.
 
+### What a skill declares
+
+A skill's front matter is the Agent Skills format
+([agentskills.io/specification](https://agentskills.io/specification)), the
+one Claude Code, Codex and OpenCode all read, and `SkillManifest` holds the
+fields it defines and no others:
+
+| Key | | Held to |
+|---|---|---|
+| `name` | required | lowercase letters and digits joined by single hyphens (`^[a-z0-9]+(-[a-z0-9]+)*$`), at most 64 characters, and the same as its folder |
+| `description` | required | 1 to 1024 characters |
+| `license` | optional | |
+| `compatibility` | optional | 1 to 500 characters |
+| `metadata` | optional | a map from strings to strings |
+| `allowed-tools` | optional | tools separated by spaces |
+
+Every other key — Claude Code's `paths` and `disable-model-invocation`, say —
+belongs to an agent, and passes through: not modelled, not rejected, and kept
+byte for byte by everything that writes a manifest, since `rename` rewrites one
+line and gathering and installing copy files. Modelling them would make this
+crate the place where three agents' formats are reconciled, which is not a job
+anybody asked it to take on.
+
+`allowed-tools` is split on spaces, as the specification writes it, and on
+commas, as Claude Code first wrote it and older skills still do — never inside
+parentheses, so a permission pattern such as `Bash(git add *)` stays one tool.
+A YAML list is read too.
+
+`metadata` is read leniently. The specification makes it a map of strings, but
+a shipping agent writes nested maps and booleans in it
+([agentskills#514](https://github.com/agentskills/agentskills/issues/514)),
+and failing the whole manifest over one entry would leave the skill out of
+every listing. So the string entries are read, the others are named for
+`validate` to report, and nothing is rewritten: what is ignored here is still
+in the file for whichever agent wrote it. `compatibility` is read the same way,
+since a list of the agents a skill was made for is the obvious thing to write
+in place of the specification's sentence: a value that is not a string is
+ignored and reported. Neither builds what it ignores, only skips it, and
+`metadata` is read an entry at a time rather than into a map, so a key written
+twice is reported (the first is read) instead of failing the manifest, as a map
+would.
+
+The name rule is held to every name, a rule's route segment by segment
+included. A looser one for rules was the alternative, and it would only have
+been a second rule to keep in step with the first.
+
+### Strict when writing, lenient when reading
+
+`Artifact::validate` gives one list of problems, and it is treated three ways:
+
+- **Refused** when Mindflayer writes a skill into a project, if the name or
+  the description breaks the rules. `mind add`, `rename` and `install` all
+  ask `artifact::strict_issues`, which keeps what `ValidationIssue::is_strict`
+  picks out of that list, for the skill as it is about to be written — so one
+  change to the set reaches all three. `rename` asks too, although the name is
+  all it writes, because what it leaves behind is a skill Mindflayer wrote;
+  `mind add` checks the name and the description before building anything as
+  well, only for messages of its own. Those are what agents refuse: Codex skips a skill whose name is over 64
+  characters or whose description is empty, so writing one would put a skill
+  in the project that never loads. So is a name that is not the folder the
+  skill is filed in, since an agent finds a skill by one or the other — asked
+  of the folder Mindflayer is about to write, not the one the files were read
+  from. `compatibility` and `metadata` are not refused, because an agent reads
+  past them.
+- **Warned about** when gathering, which takes the skill anyway, as the
+  agentskills.io client guide advises for skills written for other agents. The
+  shelf is a record of what a source holds, and leaving a skill off it would
+  hide the problem along with the skill.
+- **Reported** by `validate`, in full, and at the workspace level for the shelf
+  too, so what gathering warned about can be found again later. Only a
+  problem makes an artifact invalid and the exit non-zero; what an agent reads
+  past (`ValidationIssue::is_warning`, the same `compatibility` and `metadata`
+  that are not refused) is listed as a warning and leaves the verdict at `ok`.
+  Counted as invalid, a skill installed with nested metadata would fail its
+  project's `validate` from then on, and the only way to clear it would be to
+  edit the copy, which disowns it. The TUI's `✗` follows the same line.
+
 ### Adding a third kind
 
 A variant on `Kind`, its folder and layout, a variant on `Declared`, a
-constructor on `Artifact`, and an arm in every match on the kind — discovery,
-`create`, `lifecycle::load` and `lifecycle::rename`, and the refusal in
-`gather` — which the compiler lists, since the matches are exhaustive. Reports
-need nothing:
+constructor on `Artifact`, and an arm in every match on the kind — discovery
+and discovering the shelf, `create`, `lifecycle::load` and `lifecycle::rename`,
+the refusal in `gather`, and what `install` holds a copy to — which the
+compiler lists, since the matches are exhaustive. Reports need nothing:
 columns, labels and counts are all driven from `Kind::ALL` and from what the
 catalog actually found.
 
@@ -183,7 +260,8 @@ things that used to be guesses:
   command tried to be both and its answer changed depending on which directory
   it was run from.
 - **How an artifact is labelled.** Only the workspace level qualifies one by
-  what holds it — a project, or `workspace` for its own — because inside a
+  what holds it — a project, `workspace` for its own, or `shelf/<source
+  folder>` for what `flayer validate` finds on the shelf — because inside a
   single project that says nothing.
   The same rule governs the kind: `mind list` grows a kind column, and
   `validate` starts printing `rule:x` instead of `x`, only once more than one
@@ -203,8 +281,9 @@ way round where it means anything. `flayer add`, `edit`, `rename`, `remove` and
 with `-p`; `mind link`, `unlink`, `install` and `uninstall` act on the project
 you are in, against the workspace above it. `flayer list`, `show` and
 `validate` read everything — the workspace's own and every project's — or one
-project with `-p`. Reads look everywhere; a change needs one place, and
-without `-p` that place is the workspace.
+project with `-p`; `flayer validate` reads the shelf as well, labelling what it
+finds there `shelf/<source folder>`. Reads look everywhere; a change needs one
+place, and without `-p` that place is the workspace.
 
 There is one implementation of each. `mind add` and `flayer add -p alpha` are
 the same function given the same project, and `flayer add` is that function
@@ -408,8 +487,9 @@ answer `Catalog::find` gives inside a project — return both, decide nothing �
 one level up.
 
 The folder a skill lands in keeps the name the **source** gave it, not the name
-the skill declares. When those disagree that is something `validate` reports;
-renaming the folder on the way in would repair the symptom and hide it.
+the skill declares. When those disagree that is something gathering warns about
+and `flayer validate` reports; renaming the folder on the way in would repair
+the symptom and hide it.
 
 ### The clone is kept, and re-made
 
@@ -429,7 +509,9 @@ worth asking the second time: what moved.
 
 Failures are collected, as everywhere else: one skill with broken front matter
 is a warning beside the forty that came through, not a reason to be told
-nothing.
+nothing. One that reads but breaks a rule is taken, with a warning for each
+problem ([Strict when writing, lenient when
+reading](#strict-when-writing-lenient-when-reading)).
 
 ### Why `gix` rather than running `git`
 
@@ -511,6 +593,20 @@ project the same mismatch is not a report, it is a skill that lists fine and
 never loads — the directory name is how an agent finds what it was told to
 invoke. So the copy is filed under the declared name, and the disagreement
 stays where it belongs, upstream.
+
+### Held to the rules on the way in
+
+What gathering took leniently, installing takes strictly: a skill whose name
+or description breaks the rules is offered, so nothing gathered is hidden, and
+refused, so nothing an agent would skip lands in a project. The check reads the
+files about to be copied rather than what the ledger noted when they were
+gathered, because the shelf is a folder anybody can edit and the workspace's own
+are edited as a matter of course. For the same reason it compares what they
+declare with the folder the copy is about to be filed in, the name the ledger
+recorded: a shelf copy edited to declare another name, or a skill its source
+renamed while the record of its old name stayed, would otherwise land under one
+name declaring another. A refused skill is fixed upstream and gathered again,
+or, if it is the workspace's own, fixed where it is.
 
 ### It only manages what it installed
 
@@ -804,8 +900,12 @@ a template with broken front matter costs nothing but the error.
 where its name would put it on disk (`lifecycle::find`). The second is what
 lets a skill whose front matter does not parse be opened and fixed: it is left
 out of every listing, and it is the one most in need of opening. Only a name
-that passes the name check is turned into a place, so `../x` cannot reach out
-of the project. More than one match is an error: changing the wrong artifact is
+made of plain folder names (`install::is_folder_name`, segment by segment) is
+turned into a place, so `../x` cannot reach out of the project. Not the naming
+rules: they are for what Mindflayer writes, and a folder from before they were
+tightened — `a--b` — or one made by hand is exactly what has to be found to be
+fixed. A template is looked up by one folder name for the same reason, since
+`mind templates` lists whatever is there. More than one match is an error: changing the wrong artifact is
 not something to guess about. The TUI lists unreadable files in the same way,
 by the name their place gives them (`lifecycle::identify`), so they can be
 reached with a key rather than only read about in a warning.
@@ -1305,3 +1405,12 @@ leak into the lifecycle code. Unblocks #33, #45, #62, #93, #94 and #95.
   local change. [D-03](#d-03-rules-reach-every-agent-through-agentsmd) settles
   the if: a rule that declares `paths:` goes only to `.claude/rules/mindflayer`,
   so rules will carry front matter, and #41 gives `Declared::Rule` that payload.
+- **Names outside ASCII.** The specification allows "unicode lowercase
+  alphanumeric characters" in a name, while listing `a-z` and `0-9`, and its
+  reference validator accepts more than ASCII. Mindflayer holds names to ASCII,
+  the narrower reading and the one every agent accepts, so a gathered `café` is
+  warned about and not installed. If the agents settle on the wider one, the
+  name rule is one function (`is_kebab_case`).
+- **The shelf in other reports.** `flayer validate` reads the shelf; `flayer
+  list` and `show` do not, because `gather list` is the shelf's listing. Seeing
+  a gathered skill's contents before installing it means reading its folder.

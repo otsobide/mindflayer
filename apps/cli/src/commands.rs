@@ -25,7 +25,8 @@ use project::{
     unlink_projects,
 };
 use read::{
-    everywhere, list, list_workspace, one_project, show, validate, wanted, Level, Selector,
+    everywhere, everywhere_and_the_shelf, list, list_workspace, one_project, show, validate,
+    wanted, Level, Selector,
 };
 use workspace::{load_command, unload_command};
 
@@ -342,7 +343,7 @@ fn run_flayer(
                 }
                 None => {
                     let (workspace, projects, warnings) = managed(directory, home)?;
-                    everywhere(&workspace, warnings, &projects, kinds, read)
+                    everywhere_and_the_shelf(&workspace, warnings, &projects, kinds, read)
                 }
             }
         }

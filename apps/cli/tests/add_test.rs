@@ -66,6 +66,20 @@ fn add_refuses_a_name_validate_would_reject() {
 }
 
 #[test]
+fn add_refuses_a_doubled_hyphen_and_names_the_rule() {
+    let dir = TempDir::new().unwrap();
+    mind(dir.path(), &["init"]).unwrap();
+
+    let failure = mind(dir.path(), &["add", "skill", "a--b", "Ship it"]).unwrap_err();
+
+    assert_eq!(
+        failure.error.to_string(),
+        "`a--b` is not usable as a name: it has to be lowercase letters and digits, joined by single hyphens"
+    );
+    assert!(!dir.path().join("skills/a--b").exists());
+}
+
+#[test]
 fn add_never_writes_over_what_is_there() {
     let dir = TempDir::new().unwrap();
     mind(dir.path(), &["init"]).unwrap();
