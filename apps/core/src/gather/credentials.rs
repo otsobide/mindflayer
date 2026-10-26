@@ -25,9 +25,10 @@ use gix::prompt;
 /// Why a fetch got no credential it could use.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(super) enum Shortfall {
-    /// The server asked, and no helper had one to give.
+    /// The server asked, and nothing that may answer had one it would take:
+    /// no helper had one to give, or, over ssh, ssh had no key it accepted.
     Missing,
-    /// One was given, and the server turned it down.
+    /// A helper gave one over http(s), and the server turned it down.
     Refused,
 }
 
@@ -61,7 +62,11 @@ pub(super) fn never_prompting(
     mut helpers: impl FnMut(Action, prompt::Options) -> protocol::Result,
     shortfalls: Shortfalls,
 ) -> impl FnMut(Action) -> protocol::Result {
+    let mut over_ssh = false;
     move |action| {
+        if let Action::Get(context) = &action {
+            over_ssh = is_ssh(context);
+        }
         // `gix` sends an `Erase` only once the server has refused what the
         // `Get` before it answered.
         let refused = matches!(action, Action::Erase(_));
@@ -73,12 +78,36 @@ pub(super) fn never_prompting(
             },
         );
         if refused {
-            shortfalls.0.set(Some(Shortfall::Refused));
+            // ssh authenticates with keys of its own, and `gix` asks the
+            // helpers only for a user name to hand it. A refusal there means
+            // ssh had no key the server takes, which is as missing as a
+            // credential gets. Over http(s) it is of a credential a helper did
+            // give, and `gix` already says so.
+            shortfalls.0.set(Some(if over_ssh {
+                Shortfall::Missing
+            } else {
+                Shortfall::Refused
+            }));
         } else if let Err(protocol::Error::IdentityMissing { .. }) = answer {
             shortfalls.0.set(Some(Shortfall::Missing));
         }
         answer
     }
+}
+
+/// Whether `context` asks about a URL that is fetched by running ssh, the
+/// scp-like `host:path` included.
+///
+/// The `Get`'s URL rather than the one the gather was given, because it is
+/// the one `gix` connected to: git config's `url.<base>.insteadOf` rewrites a
+/// typed https URL to ssh, or the reverse, before the transport is chosen.
+fn is_ssh(context: &protocol::Context) -> bool {
+    context
+        .url
+        .clone()
+        .or_else(|| context.to_url())
+        .and_then(|url| gix::url::parse(url.as_bstr()).ok())
+        .is_some_and(|url| url.scheme == gix::url::Scheme::Ssh)
 }
 
 /// The credential helpers git config names, run the way `gix` runs them when

@@ -91,6 +91,24 @@ fn a_credential_the_server_refuses_is_a_shortfall() {
 }
 
 #[test]
+fn a_login_ssh_refuses_is_a_missing_credential() {
+    for url in [
+        "git@example.com:acme/private.git",
+        "ssh://git@example.com/acme/private.git",
+    ] {
+        let shortfalls = Shortfalls::default();
+        let mut credentials = never_prompting(a_helper_that_answers(), shortfalls.clone());
+
+        let Ok(Some(answer)) = credentials(Action::get_for_url(url)) else {
+            panic!("{url}: the helper's user name was not passed on");
+        };
+        credentials(answer.next.erase()).unwrap();
+
+        assert_eq!(shortfalls.last(), Some(Shortfall::Missing), "{url}");
+    }
+}
+
+#[test]
 fn the_configured_helpers_have_nothing_when_git_config_names_none() {
     let dir = TempDir::new().unwrap();
     let shortfalls = Shortfalls::default();

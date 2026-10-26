@@ -107,22 +107,14 @@ pub fn clone(url: &str, reference: Option<&str>, into: &Path) -> Result<Clone, G
 fn fetch_failed(url: &str, shortfall: Option<Shortfall>, detail: String) -> GitError {
     match shortfall {
         Some(Shortfall::Missing) => GitError::Credentials { url: redacted(url) },
-        // ssh authenticates with keys of its own, and `gix` asks the helpers
-        // only for a user name to hand it. A refusal there means ssh had no
-        // key the server takes, which is as missing as a credential gets.
-        Some(Shortfall::Refused) if is_ssh(url) => GitError::Credentials { url: redacted(url) },
-        // Over https a refusal is of a credential a helper did give, and
-        // `gix` already says so.
+        // Whether a refusal over ssh is a missing key is the callback's to
+        // say, not `url`'s: a rewrite in git config may have sent the fetch
+        // over another transport than the one `url` names.
         Some(Shortfall::Refused) | None => GitError::Fetch {
             url: url.to_owned(),
             detail,
         },
     }
-}
-
-/// Whether `url` is fetched by running ssh, the scp-like `host:path` included.
-fn is_ssh(url: &str) -> bool {
-    gix::url::parse(url).is_ok_and(|url| url.scheme == gix::url::Scheme::Ssh)
 }
 
 /// `url` without the user name and password a `scheme://` URL can carry before
