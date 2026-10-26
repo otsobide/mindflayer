@@ -79,7 +79,12 @@ pub fn run(cli: &Cli) -> Result<Outcome, Failure> {
                 remove_from(workspace, &project, reference, *yes)
             })
         }
-        Command::Templates => templates_of(&project_here(&directory)?),
+        Command::Templates => {
+            let project = project_here(&directory)?;
+            consulting(&project, home, |workspace| {
+                templates_of(workspace, &project)
+            })
+        }
         Command::List { kind } => {
             let project = project_here(&directory)?;
             one_project(project, wanted(*kind), |catalog, projects, level| {
@@ -224,7 +229,7 @@ fn run_flayer(
         }
         FlayerCommand::Templates { project } => {
             let workspace = workspace_here(directory, home)?;
-            templates_of(&holder(&workspace, project.as_deref())?)
+            templates_of(Some(&workspace), &holder(&workspace, project.as_deref())?)
         }
 
         FlayerCommand::Link { projects } => link_projects(directory, projects, home),
@@ -446,8 +451,11 @@ fn managing(project: &MindProject, home: Option<&Path>) -> Result<FlayerWorkspac
 ///
 /// The default only if it has been made: a change to a project is no reason
 /// to write a marker into somebody's home, and a workspace made just now
-/// holds no record to drop.
-fn consulted(
+/// holds no record to drop and no template to offer.
+///
+/// The TUI asks it too, so the templates its add form offers for a project
+/// are the ones the `mind` line it runs will find.
+pub(crate) fn consulted(
     project: &MindProject,
     home: Option<&Path>,
 ) -> Result<Option<FlayerWorkspace>, CliError> {

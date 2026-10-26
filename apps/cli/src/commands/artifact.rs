@@ -4,8 +4,8 @@
 //! Each takes the holder it acts on — a project, or the workspace's own — so
 //! `mind add` and `flayer add -p alpha` are one function given one project,
 //! and `flayer add` is the same function given the workspace. Each also takes
-//! the workspace the command resolved, which the change is told about: its
-//! record of what it installed there must not outlive the copy.
+//! the workspace the command resolved: its templates are among those `add`
+//! starts from, and its record of what it installed must not outlive the copy.
 
 use std::fmt::Write as _;
 use std::path::Path;
@@ -29,7 +29,8 @@ pub(crate) fn add_to(
     let artifact = match template {
         None => create(holder, kind, name, description),
         Some(template) => {
-            let template = template::find(holder, kind, template).map_err(CliError::from)?;
+            let template =
+                template::find(workspace, holder, kind, template).map_err(CliError::from)?;
             create_from(holder, kind, name, description, &template)
         }
     }
@@ -149,8 +150,11 @@ pub(crate) fn remove_from(
     Ok(outcome)
 }
 
-pub(crate) fn templates_of(holder: &MindProject) -> Result<Outcome, Failure> {
-    let templates = template::templates(holder).map_err(CliError::from)?;
+pub(crate) fn templates_of(
+    workspace: Option<&FlayerWorkspace>,
+    holder: &MindProject,
+) -> Result<Outcome, Failure> {
+    let templates = template::templates(workspace, holder).map_err(CliError::from)?;
     let rows: Vec<Vec<String>> = templates
         .iter()
         .map(|template| {

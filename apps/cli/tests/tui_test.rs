@@ -756,6 +756,42 @@ fn the_add_form_offers_the_templates_the_project_can_use() {
 }
 
 #[test]
+fn the_add_form_offers_what_the_workspace_in_your_home_has_to_a_project_elsewhere() {
+    let home = TempDir::new().unwrap();
+    let elsewhere = TempDir::new().unwrap();
+    let project = elsewhere.path().join("collapse");
+    fs::create_dir(&project).unwrap();
+    mind(&project, &["init"]).unwrap();
+    flayer_at_home(elsewhere.path(), home.path(), &["link", "collapse"]).unwrap();
+    let template = home.path().join(".mindflayer/templates/runbook/SKILL.md");
+    fs::create_dir_all(template.parent().unwrap()).unwrap();
+    fs::write(&template, "---\n---\n\n# {{name}}\n\nFrom home.\n").unwrap();
+    let mut app = App::opened_on(
+        Scope::Project,
+        project.clone(),
+        tui::load_project(&project, Some(home.path())).unwrap(),
+    )
+    .at_home(Some(home.path()));
+    app.focus_on(&project);
+
+    // The form runs `mind -C <entry> add`, which consults the workspace in
+    // your home about a project nothing above manages; it offers the same.
+    press_key(&mut app, KeyCode::Char('a'));
+    press_key(&mut app, KeyCode::Up);
+    press_key(&mut app, KeyCode::Right);
+    press_key(&mut app, KeyCode::Right);
+    press_key(&mut app, KeyCode::Down);
+    type_text(&mut app, "deploy");
+    press_key(&mut app, KeyCode::Down);
+    type_text(&mut app, "Ship it");
+    assert!(tui_drawn(&app).contains("--template runbook"));
+    press_and_run(&mut app, KeyCode::Enter);
+
+    let manifest = fs::read_to_string(project.join("skills/deploy/SKILL.md")).unwrap();
+    assert!(manifest.contains("From home."), "{manifest}");
+}
+
+#[test]
 fn a_skill_that_cannot_be_read_is_listed_where_it_can_be_dealt_with() {
     let dir = workspace_with_two();
     write_skill(

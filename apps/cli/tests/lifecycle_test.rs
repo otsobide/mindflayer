@@ -253,8 +253,8 @@ fn an_installed_skill_that_is_edited_is_yours_from_then_on() {
 }
 
 /// `hub`, a workspace, and `collapse`, a project it links from beside it
-/// rather than from above, with the workspace's own `deploy` installed there.
-fn installed_from_beside() -> (TempDir, PathBuf, PathBuf) {
+/// rather than from above: walking up from the project never reaches it.
+fn linked_from_beside() -> (TempDir, PathBuf, PathBuf) {
     let dir = TempDir::new().unwrap();
     let hub = dir.path().join("hub");
     let project = dir.path().join("collapse");
@@ -264,6 +264,13 @@ fn installed_from_beside() -> (TempDir, PathBuf, PathBuf) {
     flayer(&hub, &["init"]).unwrap();
     mind(&project, &["init"]).unwrap();
     flayer(&hub, &["link", "../collapse"]).unwrap();
+    (dir, hub, project)
+}
+
+/// `linked_from_beside`, with the workspace's own `deploy` installed into
+/// the project.
+fn installed_from_beside() -> (TempDir, PathBuf, PathBuf) {
+    let (dir, hub, project) = linked_from_beside();
     flayer(&hub, &["add", "skill", "deploy", "Ship it"]).unwrap();
     flayer(&hub, &["install", "-p", "collapse", "deploy"]).unwrap();
     (dir, hub, project)
@@ -326,4 +333,40 @@ fn mind_drops_the_record_of_the_workspace_in_your_home_when_that_manages_the_pro
     let left = mind_at_home(&project, home.path(), &["uninstall", "deploy"]).unwrap();
     assert!(!left.ok);
     assert!(project.join("skills/deploy/SKILL.md").is_file());
+}
+
+#[test]
+fn a_workspace_beside_a_project_offers_it_the_workspaces_templates() {
+    let (_dir, hub, project) = linked_from_beside();
+    let template = hub.join(".mindflayer/templates/runbook/SKILL.md");
+    fs::create_dir_all(template.parent().unwrap()).unwrap();
+    fs::write(&template, "---\n---\n\n# {{name}}\n\nThe hub's runbook.\n").unwrap();
+
+    flayer(
+        &hub,
+        &[
+            "add",
+            "-p",
+            "collapse",
+            "skill",
+            "deploy",
+            "Ship it",
+            "--template",
+            "runbook",
+        ],
+    )
+    .unwrap();
+
+    let manifest = fs::read_to_string(project.join("skills/deploy/SKILL.md")).unwrap();
+    assert!(
+        manifest.ends_with("\n# deploy\n\nThe hub's runbook.\n"),
+        "{manifest}"
+    );
+    assert_eq!(
+        flayer(&hub, &["templates", "-p", "collapse"])
+            .unwrap()
+            .stdout,
+        "full     skill  built in\n\
+         runbook  skill  ../hub/.mindflayer/templates/runbook\n"
+    );
 }
