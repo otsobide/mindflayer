@@ -270,8 +270,16 @@ pub struct FlayerCli {
 
 #[derive(Debug, Subcommand)]
 pub enum FlayerCommand {
-    /// Create a flayer workspace here.
+    /// Create a flayer workspace here, or in the directory given.
     Init {
+        /// The directory to make it in, made as well when it is not there
+        /// [default: the directory the command works in].
+        ///
+        /// So a workspace kept for one purpose can be made from anywhere, the
+        /// way `python -m venv DIR` makes a virtualenv, and then activated.
+        #[arg(value_name = "PATH")]
+        path: Option<PathBuf>,
+
         /// Where the workspace keeps its own skills [default: `skills`].
         ///
         /// Relative to the workspace. They are the ones it shares with every

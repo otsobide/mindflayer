@@ -205,8 +205,18 @@ fn run_flayer(
     watch: &Watch,
 ) -> Result<Outcome, Failure> {
     match command {
-        FlayerCommand::Init { skills, rules } => {
-            init_workspace(directory, skills.as_deref(), rules.as_deref())
+        // Typed from the directory the command works in, as `link`'s paths
+        // are, rather than from where it was run.
+        FlayerCommand::Init {
+            path,
+            skills,
+            rules,
+        } => {
+            let root = match path {
+                Some(path) => typed(directory, path)?,
+                None => directory.to_path_buf(),
+            };
+            init_workspace(&root, skills.as_deref(), rules.as_deref())
         }
 
         FlayerCommand::Add {
