@@ -158,8 +158,10 @@ These are easy to break from a single file without noticing.
   - `rename` rewrites only the `name:` line (`frontmatter::with_key`).
   - `remove` is a dry run without `--yes`.
   - A file somebody else owns is edited only inside Mindflayer's marked
-    blocks, every byte outside them kept, and a malformed block is refused,
-    not repaired. The blocks: `# mindflayer:begin`/`# mindflayer:end` in
+    blocks or, in an agent's config file, which can carry no marks, one entry
+    at a time (next bullet). Every byte outside them is kept, and a malformed
+    block is refused, not repaired. The blocks:
+    `# mindflayer:begin`/`# mindflayer:end` in
     `$GIT_COMMON_DIR/info/exclude` (`exclude`), where an edit rewrites only its
     own project's `# project <key>` group. A team's `.gitignore` and
     `core.excludesFile` are never edited; the one `.gitignore` Mindflayer
