@@ -11,6 +11,8 @@ use mindflayer_core::{
 };
 use tempfile::TempDir;
 
+mod common;
+
 fn workspace() -> (TempDir, FlayerWorkspace) {
     let dir = TempDir::new().unwrap();
     let (workspace, _) = FlayerWorkspace::init(dir.path()).unwrap();
@@ -165,7 +167,7 @@ fn workspace_at_a_project(directories: &Directories) -> (TempDir, FlayerWorkspac
 
 #[test]
 fn a_folder_the_project_at_the_root_uses_is_the_projects_not_the_workspaces() {
-    let (_dir, both, _project) = workspace_at_a_project(&Directories::default());
+    let (_dir, both, _project) = workspace_at_a_project(&common::beside());
     assert_eq!(
         both.own_kinds(),
         vec![],
@@ -173,13 +175,13 @@ fn a_folder_the_project_at_the_root_uses_is_the_projects_not_the_workspaces() {
     );
 
     let (_dir, apart, _project) =
-        workspace_at_a_project(&Directories::default().with(Kind::Skill, "shared/skills"));
+        workspace_at_a_project(&common::beside().with(Kind::Skill, "shared/skills"));
     assert_eq!(apart.own_kinds(), vec![Kind::Skill]);
 }
 
 #[test]
 fn a_file_two_holders_can_see_is_one_artifact() {
-    let (_dir, workspace, project) = workspace_at_a_project(&Directories::default());
+    let (_dir, workspace, project) = workspace_at_a_project(&common::beside());
     create(&project, Kind::Skill, "deploy", "Ship it").unwrap();
 
     let catalog = Catalog::discover(&[workspace.own(), project]);
