@@ -1171,7 +1171,11 @@ refused (`NotManaged`) when it does not (`managing`); `add`, `edit`, `rename`,
 `remove` and `templates` consult it, to drop the record of what they change
 and to lend templates, and only if it is made (`consulted`): a change to a
 project is no reason to write a marker into somebody's home, and a workspace
-made just now would hold nothing to drop or lend.
+made just now would hold nothing to drop or lend. One found above that
+cannot be read is a `warning:` after the change, since the change is the
+project's and the workspace was only to be told; one named or activated
+that will not open refuses it, as it refuses every other command, because
+whoever chose it meant that one to be told.
 
 With `-W` or an activation, that is the chosen workspace wherever it sits,
 which is how a project linked from beside its workspace is managed from
