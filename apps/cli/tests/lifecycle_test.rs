@@ -232,6 +232,38 @@ fn a_removed_install_leaves_no_record_for_what_is_written_there_next() {
     );
 }
 
+#[test]
+fn removing_an_install_scrubs_the_ledger_it_drops_the_record_from_and_says_so() {
+    let (dir, workspace, ledger) = shelved(&["collapse"], &["deploy"]);
+    installed(dir.path(), &workspace, &ledger);
+    // What an older build could have left in the same file.
+    rusqlite::Connection::open(workspace.ledger_path())
+        .unwrap()
+        .execute(
+            "UPDATE sources SET url = 'https://me:ghp_t0ken@example.com/acme/skills'",
+            [],
+        )
+        .unwrap();
+
+    let outcome = mind(&dir.path().join("collapse"), &["remove", "deploy", "--yes"]).unwrap();
+
+    assert!(outcome.ok, "{:?}", outcome.stderr);
+    assert!(
+        outcome.stdout.contains("`flayer install` can put it back"),
+        "{}",
+        outcome.stdout
+    );
+    assert_eq!(
+        outcome.stderr,
+        [
+            "note: https://example.com/acme/skills: the user name, password or token an older \
+             Mindflayer stored in this URL is taken out; gathering it again needs a git \
+             credential helper that has it"
+        ]
+    );
+    assert_eq!(ledger.tainted_sources().unwrap(), []);
+}
+
 #[cfg(unix)]
 #[test]
 fn an_installed_skill_that_is_edited_is_yours_from_then_on() {

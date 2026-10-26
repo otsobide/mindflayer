@@ -66,7 +66,11 @@ fn a_disowned_copy_is_left_to_whoever_has_it_now() {
     )
     .unwrap();
 
-    assert!(install::disown(&workspace, &project, Kind::Skill, "deploy").unwrap());
+    assert!(
+        install::disown(&workspace, &project, Kind::Skill, "deploy")
+            .unwrap()
+            .dropped
+    );
 
     // Still there, and now it is somebody's: shown, never overwritten or
     // deleted by unticking it.
@@ -80,9 +84,46 @@ fn a_disowned_copy_is_left_to_whoever_has_it_now() {
     );
     assert!(installed_at(&project, "deploy").is_dir());
     assert!(
-        !install::disown(&workspace, &project, Kind::Skill, "deploy").unwrap(),
+        !install::disown(&workspace, &project, Kind::Skill, "deploy")
+            .unwrap()
+            .dropped,
         "nothing left to drop"
     );
+}
+
+#[test]
+fn disowning_opens_the_ledger_to_write_and_hands_back_what_that_scrubbed() {
+    let (dir, _workspace, project, ledger) = ready(&["deploy"]);
+    let mut workspace = FlayerWorkspace::open(dir.path()).unwrap();
+    workspace.link(&project).unwrap();
+    let candidates = install::survey(&workspace, &ledger, &project, Kind::Skill).unwrap();
+    install::install(
+        &workspace,
+        &ledger,
+        &project,
+        candidate(&candidates, "deploy"),
+    )
+    .unwrap();
+    // What an older build could have left in the same file.
+    rusqlite::Connection::open(workspace.ledger_path())
+        .unwrap()
+        .execute(
+            "UPDATE sources SET url = 'https://me:ghp_t0ken@example.com/acme/skills'",
+            [],
+        )
+        .unwrap();
+
+    let disowned = install::disown(&workspace, &project, Kind::Skill, "deploy").unwrap();
+
+    assert!(disowned.dropped);
+    let scrubbed: Vec<&str> = disowned
+        .scrub
+        .sources
+        .iter()
+        .map(|source| source.url.as_str())
+        .collect();
+    assert_eq!(scrubbed, ["https://example.com/acme/skills"]);
+    assert_eq!(ledger.tainted_sources().unwrap(), []);
 }
 
 #[test]
@@ -93,9 +134,17 @@ fn disowning_asks_only_a_workspace_that_manages_the_project_and_creates_nothing(
     fs::create_dir(&root).unwrap();
     let (project, _) = MindProject::init(&root).unwrap();
 
-    assert!(!install::disown(&workspace, &project, Kind::Skill, "deploy").unwrap());
+    assert!(
+        !install::disown(&workspace, &project, Kind::Skill, "deploy")
+            .unwrap()
+            .dropped
+    );
     workspace.link(&project).unwrap();
-    assert!(!install::disown(&workspace, &project, Kind::Skill, "deploy").unwrap());
+    assert!(
+        !install::disown(&workspace, &project, Kind::Skill, "deploy")
+            .unwrap()
+            .dropped
+    );
 
     // A workspace that never installed anything has no ledger, and looking
     // must not give it one.
@@ -126,7 +175,11 @@ fn disowning_asks_the_workspace_it_is_given_wherever_that_sits() {
     )
     .unwrap();
 
-    assert!(install::disown(&workspace, &project, Kind::Skill, "deploy").unwrap());
+    assert!(
+        install::disown(&workspace, &project, Kind::Skill, "deploy")
+            .unwrap()
+            .dropped
+    );
 
     let after = install::survey(&workspace, &ledger, &project, Kind::Skill).unwrap();
     assert_eq!(candidate(&after, "deploy").standing, Standing::Foreign);

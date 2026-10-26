@@ -374,7 +374,8 @@ let the credential helper supply it.
 
 A workspace an older Mindflayer gathered into with a token in a URL is cleaned
 up by the next command that writes to it — a gather, an install or an
-uninstall. The token is taken out of `mindflayer.db` and out of the clone in
+uninstall, or an `add`, `edit`, `rename` or `remove` in a project it manages.
+The token is taken out of `mindflayer.db` and out of the clone in
 `cache/`, and the command says so once, on stderr, without failing because of
 it:
 

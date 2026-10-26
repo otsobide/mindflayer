@@ -602,8 +602,10 @@ can call, and hands back what that took out for the front end to say, the way
 `locate_or_default` is the one way to find a workspace that may be created.
 Which commands write is the front end's to know, but what opening to write
 involves is core's, so no front end can write first and scrub after. `gather
-git`, `install` and `uninstall` open it that way, and so does the install
-screen as it opens, in both screens, rather than when what it marked is
+git`, `install` and `uninstall` open it that way, as does `install::disown`,
+through which `add`, `edit`, `rename` and `remove` drop a record and so hand
+back what the scrub took out with whether they dropped one. So does the
+install screen as it opens, in both screens, rather than when what it marked is
 applied: a scrub can make two sources one row, and a screen built before it
 would install from the row that went, copying the files and then failing to
 record them. It rewrites the sources whose URL carries a credential, each
@@ -1531,15 +1533,12 @@ leak into the lifecycle code. Unblocks #33, #45, #62, #93, #94 and #95.
   on the clone would keep that prompt off the terminal, though not an askpass
   named by `GIT_ASKPASS` or `SSH_ASKPASS`; a `gix` that configures the retry
   too would close it.
-- **When the scrub can stop.** `gather::scrub` runs whenever `gather git`,
-  `install` or `uninstall` opens the ledger, because an older build can still
-  write a token into the same file. `edit`, `rename` and `remove` open it too,
-  to drop a record, and do not scrub: what they log carries no URL, and
-  `install::disown`, which opens it for them, says only whether it dropped a
-  record, so what a scrub took out would go unsaid. The next ledger schema step
-  (the first planned is #30's) changes that, since a build older than it
-  refuses the file: the scrub can then run once, as part of that migration,
-  and stop.
+- **When the scrub can stop.** `gather::scrub` runs whenever a command
+  opens the ledger to write (`FlayerWorkspace::ledger_to_write`), because an
+  older build can still write a token into the same file. The next ledger
+  schema step (the first planned is #30's) changes that, since a build older
+  than it refuses the file: the scrub can then run once, as part of that
+  migration, and stop.
 - **A user name on its own in an https URL.** #25 allows a bare user name,
   and its examples are ssh's (`git@host:...`, `ssh://git@host/...`). Only ssh
   keeps one here: over http(s) a user name is refused at gather and taken out

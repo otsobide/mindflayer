@@ -15,6 +15,7 @@ use mindflayer_core::{
     create, create_from, lifecycle, paths, FlayerWorkspace, Kind, MindProject, Reference, Target,
 };
 
+use crate::commands::gather::scrubbed;
 use crate::render::{printable, table, verdict};
 use crate::{CliError, Failure, Outcome};
 
@@ -258,7 +259,8 @@ fn edited(project: &MindProject, target: &Target, changed: bool) -> Outcome {
 }
 
 /// Drop a record saying `flayer install` put `name` into `project`, and say so
-/// when there was one. With no workspace there is no record to drop.
+/// when there was one, along with what opening the ledger to write scrubbed
+/// out of it. With no workspace there is no record to drop.
 ///
 /// Failing to is a warning rather than an error: the change the record was
 /// about has already been made, and reporting it as not made would be false.
@@ -274,10 +276,13 @@ fn disowned(
         return;
     };
     match mindflayer_core::install::disown(workspace, project, kind, name) {
-        Ok(true) => {
-            let _ = writeln!(outcome.stdout, "  {why}");
+        Ok(disowned) => {
+            if disowned.dropped {
+                let _ = writeln!(outcome.stdout, "  {why}");
+            }
+            let told = std::mem::replace(outcome, Outcome::plain(String::new()));
+            *outcome = scrubbed(&disowned.scrub).before(told);
         }
-        Ok(false) => {}
         Err(error) => {
             outcome.stderr.push(format!("warning: {error}"));
             outcome.ok = false;
