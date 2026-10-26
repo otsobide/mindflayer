@@ -2,6 +2,19 @@ import pluginVue from 'eslint-plugin-vue'
 import stylistic from '@stylistic/eslint-plugin'
 import { vueTsConfigs, withVueTs } from '@vue/eslint-config-typescript'
 
+/**
+ * The one file that talks to the server.
+ *
+ * Everything else asks the transport, so authentication lives in one place
+ * and a desktop shell can swap HTTP out without touching a view (D-17).
+ */
+const TRANSPORT = 'src/api/http.ts'
+
+const message = `Ask the transport (useTransport) instead: only ${TRANSPORT} talks to the server`
+
+/** What a browser reaches another machine, or this one, with. */
+const NETWORK = ['fetch', 'XMLHttpRequest', 'EventSource', 'WebSocket']
+
 export default withVueTs(
   {
     ignores: [
@@ -23,6 +36,25 @@ export default withVueTs(
     braceStyle: '1tbs',
     arrowParens: false
   }),
+  {
+    rules: {
+      'no-restricted-globals': ['error', ...NETWORK.map(name => ({ name, message }))],
+      'no-restricted-properties': [
+        'error',
+        ...['window', 'globalThis', 'self'].flatMap(object =>
+          NETWORK.map(property => ({ object, property, message }))
+        ),
+        { object: 'navigator', property: 'sendBeacon', message }
+      ]
+    }
+  },
+  {
+    files: [TRANSPORT],
+    rules: {
+      'no-restricted-globals': 'off',
+      'no-restricted-properties': 'off'
+    }
+  },
   {
     // A page is named for its route: `index`, `[...path]`.
     files: ['src/pages/**/*.vue'],

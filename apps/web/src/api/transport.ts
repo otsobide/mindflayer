@@ -29,7 +29,8 @@ export type Unsubscribe = () => void
  * An interface rather than the HTTP calls themselves, so a desktop shell can
  * answer the same three calls without a server (D-17), and so authentication
  * lives in exactly one place: the implementation. Every request the panel
- * makes goes through one of these.
+ * makes goes through one of these; a lint rule keeps `fetch` out of every
+ * other file.
  */
 export interface Transport {
   /** Ask for a read. It changes nothing, so it may be asked again freely. */

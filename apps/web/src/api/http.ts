@@ -1,3 +1,6 @@
+/*
+ * The one file allowed to use `fetch` and `EventSource` (see eslint.config.ts).
+ */
 import { TransportError, type Preview, type Query, type Run, type Task, type Transport } from './transport'
 
 /**
