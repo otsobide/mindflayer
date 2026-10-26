@@ -176,6 +176,36 @@ fn renaming_a_skill_moves_its_folder_and_rewrites_nothing_but_its_name() {
 }
 
 #[test]
+fn renaming_keeps_every_key_it_does_not_model_byte_for_byte() {
+    // Claude Code's own keys, and metadata no agent should have written
+    // nested, all pass through: they are somebody's, not Mindflayer's.
+    const AGENT_KEYS: &str = "---\nname: deploy\ndescription: Ship it\ndisable-model-invocation: true\npaths:\n  - 'src/**'\nallowed-tools: Bash(git add *) Read\ncompatibility: Requires git\nmetadata:\n  author: acme\n  owner:\n    team: ops\n---\n\nRun the pipeline.\n";
+    let (dir, project) = project();
+    write(dir.path(), "skills/deploy/SKILL.md", AGENT_KEYS);
+
+    lifecycle::rename(&project, &find(&project, "deploy").unwrap(), "ship").unwrap();
+
+    let manifest = fs::read_to_string(dir.path().join("skills/ship/SKILL.md")).unwrap();
+    assert_eq!(
+        manifest,
+        AGENT_KEYS.replace("name: deploy\n", "name: ship\n")
+    );
+}
+
+#[test]
+fn renaming_refuses_a_name_that_breaks_the_rules() {
+    let (dir, project) = project();
+    create(&project, Kind::Skill, "deploy", "Ship it").unwrap();
+
+    let error =
+        lifecycle::rename(&project, &find(&project, "deploy").unwrap(), "a--b").unwrap_err();
+
+    assert!(matches!(error, LifecycleError::Name { .. }), "{error}");
+    assert!(dir.path().join("skills/deploy/SKILL.md").is_file());
+    assert!(!dir.path().join("skills/a--b").exists());
+}
+
+#[test]
 fn a_name_yaml_would_read_as_something_else_is_quoted() {
     let (dir, project) = project();
     create(&project, Kind::Skill, "deploy", "Ship it").unwrap();
