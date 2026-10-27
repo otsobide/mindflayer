@@ -7,7 +7,7 @@
 use std::path::PathBuf;
 
 use clap::builder::{PossibleValuesParser, TypedValueParser};
-use clap::{Args, Parser, Subcommand};
+use clap::{ArgGroup, Args, Parser, Subcommand};
 use mindflayer_core::{Agent, Kind, Share, Shell, DEFAULT_SUBDIRECTORY};
 
 /// Manage the agent skills in a mind project.
@@ -281,6 +281,21 @@ pub enum Command {
     Share {
         #[command(flatten)]
         mode: ShareMode,
+    },
+
+    /// Bring this project, made by an older Mindflayer and marked by a
+    /// mind.toml, to settings, and what is installed into it to where its
+    /// agents read.
+    ///
+    /// Without --yes nothing changes, and the command says what would.
+    Migrate {
+        #[command(flatten)]
+        settings: Migrated,
+
+        /// Make the change. Without this nothing changes, and the command
+        /// says what would.
+        #[arg(short, long)]
+        yes: bool,
     },
 
     /// Open the TUI on this project. What `mind` does on its own.
@@ -615,20 +630,39 @@ pub enum FlayerCommand {
         mode: ShareMode,
     },
 
-    /// Bring a workspace made by an older Mindflayer into the layout a new
-    /// one has.
+    /// Bring a workspace made by an older Mindflayer, or the projects it
+    /// links, into the layout a new one has.
     ///
     /// Without --yes nothing changes, and the command says what would.
+    //
+    // A flag per migration rather than a bare `migrate` that does all of
+    // them, so the next one is asked for by name and never run by a line
+    // typed for this one; and one at a time, so a line says which it runs.
+    // Not required as a group, so a line naming none is told what there is
+    // to migrate rather than shown clap's usage.
+    #[command(group(
+        ArgGroup::new("what")
+            .args(["library", "project", "all_projects"])
+            .multiple(false)
+    ))]
     Migrate {
         /// Move the workspace's own skills and rules from the folders its
         /// flayer.toml names into its library, `.mindflayer/library`, and
         /// point flayer.toml there, keeping it as it was beside it.
-        //
-        // Required, and the only one so far: a flag per migration rather than
-        // a bare `migrate` that does all of them, so the next one is asked for
-        // by name and never run by a line typed for this one.
-        #[arg(long, required = true)]
+        #[arg(long, conflicts_with_all = ["agents", "local", "shared"])]
         library: bool,
+
+        /// Move one project the workspace links, by name or path, from its
+        /// mind.toml to settings, as `mind migrate` does there.
+        #[arg(short, long, value_name = "PROJECT")]
+        project: Option<String>,
+
+        /// Move every project the workspace links that a mind.toml marks.
+        #[arg(long)]
+        all_projects: bool,
+
+        #[command(flatten)]
+        settings: Migrated,
 
         /// Make the change. Without this nothing changes, and the command
         /// says what would.
@@ -670,6 +704,50 @@ pub struct AgentNames {
     /// what would.
     #[arg(short, long)]
     pub yes: bool,
+}
+
+/// What a project's settings are to say once it is moved from its
+/// `mind.toml`, which says neither: the agents that work in it, and whether
+/// what is installed into it is the team's.
+#[derive(Debug, Args)]
+pub struct Migrated {
+    /// The agents that work in the project, comma-separated [default:
+    /// claude,codex,opencode].
+    ///
+    /// What is installed into it is copied where each of them reads it.
+    #[arg(
+        long,
+        value_name = "AGENTS",
+        value_delimiter = ',',
+        value_parser = agents(),
+        default_values_t = Agent::ALL,
+        hide_default_value = true
+    )]
+    pub agents: Vec<Agent>,
+
+    /// Keep `.mind`, and what is installed into the project, out of git for
+    /// this checkout.
+    #[arg(long, conflicts_with = "shared")]
+    pub local: bool,
+
+    /// Leave `.mind`, and what is installed into the project, for the team
+    /// to commit, as a project from before settings was [default].
+    //
+    // The default spelled out as a flag too, so a line can say it.
+    #[arg(long)]
+    pub shared: bool,
+}
+
+impl Migrated {
+    /// The share mode asked for: shared unless `--local`, since a project
+    /// from before settings was committed by design (D-02).
+    pub fn share(&self) -> Share {
+        if self.local {
+            Share::Local
+        } else {
+            Share::Shared
+        }
+    }
 }
 
 /// What `share` sets: the share mode, and whether a tracked file may be

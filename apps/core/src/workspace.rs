@@ -1808,7 +1808,7 @@ pub(crate) fn ignore_itself(dir: &Path) -> Result<(), WorkspaceError> {
 ///
 /// `create_new` rather than a prior `exists()` check: the check and the write
 /// are one operation, so nothing that appears in between is overwritten.
-fn write_new(path: &Path, contents: &str) -> Result<(), WorkspaceError> {
+pub(crate) fn write_new(path: &Path, contents: &str) -> Result<(), WorkspaceError> {
     use std::io::Write as _;
 
     let mut file = fs::OpenOptions::new()
@@ -2076,7 +2076,7 @@ fn stays_inside(directory: &Path) -> bool {
 /// Refused in a shared project too, whose share a change may later make
 /// local. Only when writing settings: a `mind.toml` of version 1 kept every
 /// kind inside `.mind`, and is still read that way.
-fn misplaced_authored(kind: Kind, directory: &Path) -> Option<WorkspaceError> {
+pub(crate) fn misplaced_authored(kind: Kind, directory: &Path) -> Option<WorkspaceError> {
     let path = directory.to_path_buf();
     if !stays_inside(directory) {
         return Some(WorkspaceError::OutsideProject { path, kind });

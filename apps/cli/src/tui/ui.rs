@@ -21,7 +21,7 @@ use super::state::{
 };
 use crate::install::ui::{centred, pane, selected};
 use crate::progress::said;
-use crate::render::printable;
+use crate::render::{plural, printable};
 
 /// How wide a form's labels are, so the values line up.
 const LABEL: u16 = 13;
@@ -166,7 +166,7 @@ fn header(workspace: &Workspace, frame: &mut Frame, area: Rect) {
         Some(why) => format!("{why} · {shelf}"),
         None => shelf,
     };
-    let line = Line::from(vec![
+    let mut spans = vec![
         Span::styled(
             " mindflayer ",
             Style::default()
@@ -176,12 +176,45 @@ fn header(workspace: &Workspace, frame: &mut Frame, area: Rect) {
         ),
         Span::raw(" "),
         Span::styled(printable(&workspace.name), bold()),
+    ];
+    if let Some(older) = older(workspace) {
+        spans.push(Span::styled("  · ", dim()));
+        spans.push(Span::styled(older, Style::default().fg(Color::Yellow)));
+    }
+    spans.extend([
         Span::styled(format!("  · {shelf}  · "), dim()),
         // Last, because it is the one thing that can be long, and what a
         // narrow terminal cuts off the end of should be the least needed.
         Span::styled(printable(&workspace.root.display().to_string()), dim()),
     ]);
-    frame.render_widget(Paragraph::new(line), area);
+    frame.render_widget(Paragraph::new(Line::from(spans)), area);
+}
+
+/// What the header says of projects an older Mindflayer made, marked by a
+/// `mind.toml`, with the command that moves them to settings: until then
+/// their installs reach only the folder that marker names, and nothing else
+/// on screen tells them apart before a toggle refuses one. Early in the
+/// line, so a narrow terminal keeps it. None when there are none.
+fn older(workspace: &Workspace) -> Option<String> {
+    let count = workspace
+        .members
+        .iter()
+        .filter(|member| {
+            !member.own
+                && member
+                    .holdings
+                    .as_ref()
+                    .is_ok_and(|holdings| holdings.share.is_none())
+        })
+        .count();
+    match (workspace.scope, count) {
+        (_, 0) => None,
+        (Scope::Project, _) => Some(String::from("marked by mind.toml: `mind migrate`")),
+        (Scope::Workspace, count) => Some(format!(
+            "{} marked by mind.toml: `flayer migrate --all-projects`",
+            plural(count, "project")
+        )),
+    }
 }
 
 /// The left column: every registered entry, with how many artifacts it holds

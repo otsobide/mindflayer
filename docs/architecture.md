@@ -444,6 +444,10 @@ which nothing is installed into ([what each project
 has](#what-each-project-has)). `mind agents` and `share` change the project
 you are in, and `flayer agents` and `share` the one `-p` names, which they
 need: the workspace's own have no agents, and reach one by being installed.
+`mind migrate` moves the project you are in from its `mind.toml` to
+settings, and `flayer migrate -p` one the workspace links, or
+`--all-projects` every one ([moving a project to its
+settings](#moving-a-project-to-its-settings)).
 Reads look everywhere; a change needs one place, and without `-p` that place
 is the workspace.
 
@@ -755,8 +759,9 @@ project gets none, and its settings are the team's to commit. A test asks gix,
 in process, whether a local project's settings are ignored. A second run, as
 for `init`, rewrites nothing and only makes what the marker asks for and is
 missing, a deleted `.gitignore` of a local project included; a project a
-`mind.toml` marks is not given settings, since moving it is a migration's
-(#38).
+`mind.toml` marks is not given settings, since moving it is `mind
+migrate`'s ([moving a project to its
+settings](#moving-a-project-to-its-settings)).
 
 `mind init` writes them (#35): every agent unless `--agents` names fewer,
 local unless `--shared`, and `skills/` and `rules/` unless `--skills` or
@@ -909,6 +914,134 @@ an installed copy where a change reaches it, and that change drops the
 record of that copy alone ([A record must not outlive the copy it is
 about](#a-record-must-not-outlive-the-copy-it-is-about)).
 
+### Moving a project to its settings
+
+`mind migrate` (#38), or `flayer migrate -p` for a project the workspace
+links and `flayer migrate --all-projects` for every one a `mind.toml` marks,
+moves a project an older Mindflayer made to settings (`migrate::project`),
+and what is installed into it to where its agents read. Without `--yes` it
+plans, says what would happen and changes nothing
+(`migrate::project_plan`), a report as `flayer migrate --library`'s dry run
+is.
+
+- **Explicit, never on a read.** Every format here is read the way it was
+  written, and moved forward only when somebody asks: a workspace's own by
+  `flayer migrate --library`, a ledger only after it is copied aside. A
+  project has three reasons more. The move changes what a team committed,
+  the `mind.toml` and the installs in `skills/`, which is theirs to see in a
+  diff and commit, not something to find after a `mind list`. It needs
+  choices only whoever owns the project can make, which agents and whether
+  it is shared, and a read would have to guess them. And a build from before
+  settings, on a teammate's machine or beside this one, finds no project
+  once the `mind.toml` has gone, so moving it is a step a team takes on
+  purpose. A read that rewrote a marker would also break what `Intent::Read`
+  promises: that a read leaves things as it found them.
+- **What the settings say.** The `mind.toml`'s name, and its folders
+  written out (`Directories::with_defaults`): a kind it left out had the
+  default beside the code, where one settings leave out has none. An id of
+  their own. Every agent unless `--agents` names fewer, as `mind init`. And
+  shared unless `--local`, as [D-02](#d-02-installs-stay-local-unless-a-project-shares-them)
+  has it, because such a project was committed by design; `--shared` says
+  it out loud. Serialized as `mind init` writes them, with `create_new`.
+- **The marker is kept, in `.mind/tmp`.** Moved to
+  `.mind/tmp/mind.toml.v<version>`, named after its version as
+  `flayer.toml.v2` is. Not beside the settings, where it would be a
+  leftover the project warns about and an older build reads instead; and
+  `.mind/tmp` carries its own `.gitignore`, so the kept copy is out of git
+  in a shared project too. One already there, kept by an earlier migration,
+  refuses the move. Put back in place of `settings.json`, it is the project
+  as it was, though its installs have moved.
+- **The installs move as for a change of agents.** It is one, from none to
+  the ones asked for, so each recorded installation is brought to the
+  targets the settings give through `reapply::retarget`, as `mind agents`
+  brings it ([when a project's agents or share mode
+  change](#when-a-projects-agents-or-share-mode-change)): a new copy is made
+  from a copy that still holds what was installed, never from the offer,
+  which may have changed since; an untouched copy in a folder no agent is
+  sent copies to, which for such a project is the folder it authors in, is
+  taken out; one changed since is left, and its record dropped, its
+  author's. A project whose `mind.toml` kept its skills in `.claude/skills`
+  keeps its copy there and gains one in `.agents/skills`. Somebody's where a
+  copy would go is left, and said.
+- **A record from before hashes is held to its offer.** Most of such a
+  project's records were written before schema 3, with no hash, and
+  [D-04](#d-04-an-edited-copy-is-detected-not-disowned) reads one as current
+  only while its copy matches its offer byte for byte. So the migration
+  finds the offers (`install::survey`) and hands `retarget` those a record
+  may have come from: by the origin it records, or for a record from before
+  origins by its shelf source's id, or else among the workspace's own and
+  the loaded ones, any of which may be it. A copy matching one is compared
+  as `install::is_current` compares (`copy::same_leaving`), moved, and its
+  record given the hash every copy now holds (`Ledger::migrated`), so the
+  next change of agents compares it as any other; one matching none is
+  edited; with no offer left, it cannot be told, and is left. A change of
+  agents does not look for offers, and reads such a record as one it cannot
+  compare.
+- **What the project wrote stays.** Every artifact in a folder the settings
+  keep naming that no installation records, rules included, is left where
+  it is and said, as what sits unrecorded in a folder its agents are now
+  sent copies to is said to be somebody's: the project is listed from there
+  from now on.
+- **Local when asked.** `--local` writes `.mind/.gitignore` and keeps each
+  copy out of git in the project's new group of the exclude block, before
+  the copies land, as `mind init` and an install do. A `.gitignore` keeps
+  out only what git does not track yet, and such a `.mind` was committed, so
+  when gix's index says git tracks something there (`exclude::tracks`), the
+  command says `git rm -r --cached .mind` stops it. Said and never run:
+  Mindflayer runs no git command, and taking files out of a team's index is
+  not its to do.
+- **All or nothing, for the project.** Held by the lock of the workspace
+  that links it, and planned again once held. Then, in an order that shows
+  nothing in `git status` for a moment: a local project's exclude entries
+  and `.gitignore`; the new copies, each installation's from one stage
+  (`copy::Stage::place`); the copies taken out, moved into that stage rather
+  than deleted; the settings; the marker; and last the ledger, every
+  installation and the log in one transaction (`Ledger::migrated`), so that
+  each step before it can still be undone. A step that fails puts back every
+  one before it, the last first, so the `mind.toml` marks the project again
+  and the ledger names what it named, and what cannot be put back is said
+  (`MigrateError::left_behind`). Only once the ledger holds the move are the
+  copies taken out deleted, with the stage. A process killed part way is not
+  a failure, and nothing puts it back ([open questions](#open-questions)).
+- **Refused before anything is written**, every reason at once: a folder
+  the `mind.toml` keeps a kind in that settings cannot name, inside `.mind`
+  as a version 1 project kept every kind it named no folder for, or outside
+  the project; no agent; a kept marker; and a copy that would land in an
+  agent's own folder or where a loaded workspace keeps its own, as an
+  install refuses one. A folder a version 1 `mind.toml` does name is kept,
+  as every other command reads it (`MindProject::directory_for`), so
+  naming one outside `.mind`, as the refusal asks, gets such a project
+  past it.
+- **A second run is a no-op.** A project its settings mark has nothing to
+  migrate, and nothing is written for it, not even its ledger opened.
+- **Each project on its own.** `--all-projects` moves every project the
+  workspace links that a `mind.toml` marks, one at a time, each all or
+  nothing: one refused or failed is an `error:` naming it, the rest go
+  ahead, and the command exits non-zero. Without `--yes` it lists every one.
+- **A project nothing links still moves.** Its marker is its own
+  ([D-09](#d-09-project-settings-live-in-the-project)), so in a project no
+  workspace `mind` consults links, `mind migrate` writes its settings and
+  moves no copy, and says with a `hint:` that nothing installed was carried
+  along. The hint never says that no workspace links it, which walking up
+  cannot know: it names `-W`, which reaches a workspace that links it from
+  beside it, and without which that one's records are lost to the move all
+  the same. A project whose workspace cannot be read is refused instead,
+  in a dry run too, where a change of agents goes ahead beside a
+  `warning:`. That change can be run again; the move is made once, and
+  what the workspace records decides which copies it carries. Made without
+  them, nothing carries those copies once settings mark the project, and
+  one recorded without a hash, which only the move holds to its offer, is
+  dropped the next time its agents change.
+- **One migration a line.** `flayer migrate` takes `--library`, `-p` or
+  `--all-projects`, one at a time, for the reason `--library` is a flag of
+  its own ([above](#moving-them-into-the-library)), and a line naming none is
+  told which there are, rather than shown clap's usage.
+- **The TUI points at it.** Its header counts the projects a `mind.toml`
+  marks, in yellow after the workspace's name, where a narrow terminal keeps
+  it, and names the command: `flayer migrate --all-projects`, or `mind
+  migrate` for a project on its own. It has no key for the move ([open
+  questions](#open-questions)).
+
 ### Why the markers are TOML written from a template
 
 New markers are written from a string template, not serialized. Serializing
@@ -973,7 +1106,10 @@ one from then on, while this build reads the settings and passes the
 `MIND_TOML_VERSION` is the newest a `mind.toml` holds, which only
 `MindProject::init` still writes.
 
-An older marker is read the way it was written, never refused. Two lines are
+An older marker is read the way it was written, never refused, and moved
+forward only when somebody asks: a workspace's own folders by `flayer migrate
+--library`, a project's `mind.toml` by `mind migrate` ([moving a project to
+its settings](#moving-a-project-to-its-settings)). Two lines are
 drawn so far, both project-marker versions, since a workspace's number says
 nothing about how a project keeps its artifacts: `DIRECTORIES_VERSION`, before
 which every kind lived inside `.mind`, and `SETTINGS_VERSION`, from which the
@@ -1961,7 +2097,8 @@ same.
   written with the share mode every time, off unless `--edit-tracked` is
   given, so one command line says the whole of how the project shares.
 - **Refused before anything is written**: a project a `mind.toml` marks,
-  which has no settings until `mind migrate` (#38) moves it to them, and is
+  which has no settings until `mind migrate` moves it to them ([moving a
+  project to its settings](#moving-a-project-to-its-settings)), and is
   pointed there; a change that leaves it naming no agent, which would take
   every copy out, an uninstall's to do by name; and a copy that would land
   in an agent's own folder, or in one a loaded workspace keeps as its own,
@@ -3495,7 +3632,9 @@ other, and none of them makes a reader wait for the workspace.
   clones an older build left a credential in and removes the folders of a
   source made one with another, which a gather beside it would be filling.
   A migration of the workspace's own into its library holds it from its plan
-  to its rewrite of the marker.
+  to its rewrite of the marker, and a project's move to its settings from
+  before it reads the project again until its ledger is written
+  (`migrate::project`).
   Core takes it inside each of them (`FlayerWorkspace::lock`), so no front end
   has to remember to. An install looks again at what the project holds once
   it has the lock: the standing it is handed comes from a survey made before,
@@ -3614,7 +3753,10 @@ repositories. Unblocks #29, #35 and #38.
 
 Carrying it out, #29 writes the `.gitignore` (`MindProject::init_settings`),
 and #35 makes it what `mind init` does, with `--shared` to leave it out (see
-[a project's settings](#a-projects-settings)).
+[a project's settings](#a-projects-settings)). #38 writes it for a project
+moved from its `mind.toml` with `--local`, and says how to stop git tracking
+a `.mind` committed before, which the `.gitignore` does not ([moving a
+project to its settings](#moving-a-project-to-its-settings)).
 
 ### D-02: Installs stay local unless a project shares them
 
@@ -3643,7 +3785,9 @@ a shared project's exclude file is left alone ([What keeps an install out of
 git](#what-keeps-an-install-out-of-git)). #37 lets the share mode change,
 with `mind share`: a project turning shared loses its `.gitignore` and its
 whole group, one turning local gains both ([when a project's agents or
-share mode change](#when-a-projects-agents-or-share-mode-change)).
+share mode change](#when-a-projects-agents-or-share-mode-change)). #38 moves
+a v2 project to settings shared unless `--local` ([moving a project to its
+settings](#moving-a-project-to-its-settings)).
 
 ### D-03: Rules reach every agent through `AGENTS.md`
 
@@ -3700,7 +3844,10 @@ differs from its installation's in form (a rule's section of the managed
 block in `AGENTS.md` beside its `.claude/rules/mindflayer/<route>.md` file,
 as D-03 has it) shares no one tree with the others, and would need a hash of
 its own on `installation_targets`, added by the schema step that first
-records one.
+records one. #38 holds a v2 project's records from before hashes to their
+offers when it moves the project to settings, and gives a record whose copy
+matches the hash every copy then holds ([moving a project to its
+settings](#moving-a-project-to-its-settings)).
 
 ### D-05: A workspace's library lives in `.mindflayer`
 
@@ -4150,9 +4297,25 @@ leak into the lifecycle code. Unblocks #33, #45, #62, #93, #94 and #95.
   one. Re-aiming every such link would let a migration through where it now
   refuses, at the price of rewriting links somebody made.
 - **Migrating from a screen.** The TUI has no key for `flayer migrate
-  --library`, which runs only from the command line. A key producing its two
-  lines, the dry run and then `--yes`, would bring it to the TUI the way every
-  other change gets there.
+  --library`, nor for moving a project to its settings, which run only from
+  the command line; its header names the second's command where a project
+  needs it. A key producing a migration's two lines, the dry run and then
+  `--yes`, would bring each to the TUI the way every other change gets there.
+- **A project's move stopped by a crash.** A migration that fails puts back
+  what it had done, but one whose process is killed part way puts nothing
+  back: copies it placed are recorded nowhere, and read as somebody's, and
+  copies it moved into its stage go with the next install's sweep while the
+  `mind.toml` may still name them. Writing down each step before it is
+  taken, for the next run to undo or finish, would close it, at the price
+  of a journal in `.mind`.
+- **An edited install left in the folder a project authors in.** Moving a
+  project to settings leaves a copy edited since it was installed where it
+  is, and drops its record, as a change of agents does. In a project marked
+  by its settings, that folder is read by no agent unless it is one of
+  theirs, so the edit stops reaching any until somebody moves it where one
+  reads, or installs the skill again. Offering to move it into the agents'
+  folders would keep the edit reaching them, at the price of a copy
+  Mindflayer would then write without a record.
 - **Gathering a repository that is a workspace.** A team repository made by
   `flayer init` and `flayer add` keeps its own skills in
   `.mindflayer/library/skills`, where a workspace made before the library kept

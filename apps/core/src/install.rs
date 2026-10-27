@@ -156,7 +156,7 @@ impl Offer {
     }
 
     /// The directory it is copied from.
-    fn source(&self, workspace: &FlayerWorkspace) -> PathBuf {
+    pub(crate) fn source(&self, workspace: &FlayerWorkspace) -> PathBuf {
         match self {
             Offer::Shelf(gathered) => workspace.root().join(&gathered.path),
             Offer::Workspace { path, .. } | Offer::Loaded { path, .. } => path.clone(),
@@ -889,7 +889,7 @@ pub(crate) fn entries(project: &MindProject, copies: &[PathBuf]) -> Vec<exclude:
 /// The one hash every copy holds ([`hash::tree`]), or why there is none:
 /// a copy that cannot be hashed, or, should one change while the others are
 /// read, copies that do not hold the same.
-fn one_hash(copies: &[PathBuf]) -> Result<String, String> {
+pub(crate) fn one_hash(copies: &[PathBuf]) -> Result<String, String> {
     let mut found: Option<(String, &Path)> = None;
     for copy in copies {
         let hash = hash::tree(copy).map_err(|error| error.to_string())?;

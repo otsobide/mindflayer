@@ -1,14 +1,20 @@
-//! `flayer migrate`: bringing a workspace an older Mindflayer made into the
-//! layout a new one has. `--library` is the one migration so far, and core's
-//! [`migrate`] decides everything about it; here it is said.
+//! `flayer migrate` and `mind migrate`: bringing what an older Mindflayer
+//! made into the layout a new one has. `--library` moves a workspace's own
+//! into its library; `mind migrate`, `-p` and `--all-projects` move a
+//! project from its `mind.toml` to settings. Core's [`migrate`] decides
+//! everything about each; here it is said.
 
 use std::fmt::Write as _;
 
-use mindflayer_core::migrate::{self, MigrateError, Plan};
-use mindflayer_core::FlayerWorkspace;
+use mindflayer_core::migrate::{self, MigrateError, Plan, ProjectPlan, Stranded};
+use mindflayer_core::{Agent, AgentHomes, FlayerWorkspace, MindProject, Share};
 
 use super::all_or_nothing;
-use crate::{CliError, Failure, Outcome};
+use super::consulted;
+use super::gather::scrubbed;
+use super::install::{cleared, shown};
+use super::settings::{agents, moved, not_copied, outside_note};
+use crate::{CliError, Failure, Lookup, Outcome};
 
 /// `flayer migrate --library`: what moving the workspace's own into its
 /// library would do, or, with `yes`, doing it.
@@ -131,5 +137,372 @@ fn listed(words: &[&str]) -> String {
         [] => String::new(),
         [one] => (*one).to_owned(),
         [rest @ .., last] => format!("{} and {last}", rest.join(", ")),
+    }
+}
+
+/// What a project's settings are to say once it is moved, and whether to
+/// move it or only say what moving it would do.
+pub(crate) struct Asked<'a> {
+    pub agents: &'a [Agent],
+    pub share: Share,
+    pub yes: bool,
+}
+
+/// `mind migrate`: the project at or above here moved to settings, carrying
+/// what the workspace `mind` consults about it records, when that one links
+/// it.
+///
+/// A project nothing links is moved all the same, since its marker is its
+/// own, with a hint saying nothing installed was carried along, as `mind
+/// agents` says it. One `-W` or the activation names that is no workspace
+/// refuses it, as it refuses every command.
+///
+/// So does a workspace found that cannot be read, in a dry run too, where
+/// `mind agents` goes ahead beside a warning and can be run again. What it
+/// records decides which copies move, and the move is made once: made
+/// without it, nothing is left to carry them once settings mark the
+/// project, and a copy recorded without a hash, which only the move holds
+/// to its offer (D-04), is dropped the next time the agents change, as one
+/// nothing can compare. A project its settings mark has nothing to move, so
+/// for that one it is still a warning.
+pub(crate) fn migrate_here(
+    project: &MindProject,
+    asked: &Asked,
+    lookup: &Lookup,
+) -> Result<Outcome, Failure> {
+    let workspace = match consulted(project, lookup) {
+        Ok(workspace) => workspace,
+        Err(error @ CliError::Chosen { .. }) => return Err(error.into()),
+        Err(error) if project.settings().is_some() => {
+            let mut outcome = finished(None, project, asked);
+            outcome.stderr.push(format!("warning: {error}"));
+            outcome.ok = false;
+            return Ok(outcome);
+        }
+        Err(error) => return Err(CliError::MigrateUnrecorded(Box::new(error)).into()),
+    };
+    let result = laid_out(workspace.as_ref(), project, asked, &lookup.agents);
+    let carried = if asked.yes {
+        "was carried along"
+    } else {
+        "would be carried along"
+    };
+    // Only beside a move made or laid out. Never that no workspace links the
+    // project, which the walk up cannot know: one that links it from beside
+    // it is never reached that way, and its records are lost to the move
+    // just the same, so the hint names `-W`, which reaches it.
+    let hint = match (&result, &workspace) {
+        (Ok(Some(_)), Some(workspace)) if !workspace.is_linked(project.root()) => Some(format!(
+            "hint: the workspace at {} does not link this project, so nothing installed in \
+                 it {carried}; `mind link` links it, and -W names one that links it from \
+                 elsewhere",
+            workspace.root().display()
+        )),
+        (Ok(Some(_)), None) => Some(format!(
+            "hint: no workspace here or above links this project, so nothing installed in it \
+             {carried}; -W names one that links it from elsewhere"
+        )),
+        _ => None,
+    };
+    match result {
+        Ok(outcome) => {
+            let mut outcome = finished(outcome, project, asked);
+            outcome.stderr.extend(hint);
+            Ok(outcome)
+        }
+        Err(stopped) => Err(stopped.failure()),
+    }
+}
+
+/// `flayer migrate -p`: one project the workspace links moved to settings,
+/// carrying what its ledger records along.
+pub(crate) fn migrate_one(
+    workspace: &FlayerWorkspace,
+    project: &MindProject,
+    asked: &Asked,
+    homes: &AgentHomes,
+) -> Result<Outcome, Failure> {
+    match laid_out(Some(workspace), project, asked, homes) {
+        Ok(outcome) => Ok(finished(outcome, project, asked)),
+        Err(stopped) => Err(stopped.failure()),
+    }
+}
+
+/// `flayer migrate --all-projects`: every project the workspace links that
+/// a `mind.toml` marks, moved to settings one at a time.
+///
+/// Each is all or nothing on its own, so one that is refused, or fails, is
+/// said with `error:` beside what the others did, naming it, and the command
+/// exits non-zero; the others go ahead, as a stale entry is a warning beside
+/// them. Without `--yes`, each one's lines, a blank line between two, and
+/// nothing written. Those their settings mark already are not listed, there
+/// being nothing to say of them.
+pub(crate) fn migrate_all(
+    workspace: &FlayerWorkspace,
+    asked: &Asked,
+    homes: &AgentHomes,
+) -> Result<Outcome, Failure> {
+    let mut outcome = Outcome::plain(String::new());
+    let mut laid = false;
+    for member in workspace.members() {
+        let project = match member.project {
+            Ok(project) => project,
+            Err(error) => {
+                outcome.stderr.push(format!("warning: {error}"));
+                outcome.ok = false;
+                continue;
+            }
+        };
+        match laid_out(Some(workspace), &project, asked, homes) {
+            Ok(None) => {}
+            Ok(Some(one)) => {
+                if laid {
+                    outcome.stdout.push('\n');
+                }
+                laid = true;
+                outcome.stdout.push_str(&one.stdout);
+                outcome.stderr.extend(one.stderr);
+                outcome.ok &= one.ok;
+            }
+            Err(stopped) => {
+                outcome.stderr.extend(stopped.lines(&project));
+                outcome.ok = false;
+            }
+        }
+    }
+    if laid && !asked.yes {
+        outcome.stdout.push_str(UNCHANGED);
+    } else if !laid && outcome.ok {
+        outcome.stdout = String::from(
+            "nothing to migrate: every project the workspace links is marked by its settings already\n",
+        );
+    }
+    Ok(outcome)
+}
+
+/// What a dry run of a project's move ends with.
+const UNCHANGED: &str = "nothing changed: add --yes to go ahead\n";
+
+/// One project's move as a single command says it: [`laid_out`], ended as a
+/// dry run is, or what a project with nothing to move says.
+fn finished(outcome: Option<Outcome>, project: &MindProject, asked: &Asked) -> Outcome {
+    match outcome {
+        Some(mut outcome) => {
+            if !asked.yes {
+                outcome.stdout.push_str(UNCHANGED);
+            }
+            outcome
+        }
+        None => Outcome::plain(format!(
+            "nothing to migrate: {} is marked by its settings already\n",
+            project.name()
+        )),
+    }
+}
+
+/// Why one project's move did not happen: refused before anything was
+/// written, or stopped by a failure, which may have put back less than all.
+enum Stopped {
+    Refused(Vec<migrate::Refusal>),
+    Failed(Failure),
+}
+
+impl Stopped {
+    /// As a command given one project fails: every refusal at once, the
+    /// first as the error, as `flayer migrate --library` says them.
+    fn failure(self) -> Failure {
+        match self {
+            // Never without a reason, so the second is not reached.
+            Stopped::Refused(refusals) => refused(refusals)
+                .err()
+                .unwrap_or_else(|| CliError::Migrate(MigrateError::Refused(Vec::new())).into()),
+            Stopped::Failed(failure) => failure,
+        }
+    }
+
+    /// As lines beside what other projects did, each error naming the
+    /// project it is about.
+    fn lines(self, project: &MindProject) -> Vec<String> {
+        let at = project.root().display();
+        match self {
+            Stopped::Refused(refusals) => refusals
+                .into_iter()
+                .map(|refusal| format!("error: {at}: {}", CliError::Refused(refusal)))
+                .collect(),
+            Stopped::Failed(failure) => {
+                let mut lines = failure.warnings;
+                lines.push(format!("error: {at}: {}", failure.error));
+                lines
+            }
+        }
+    }
+}
+
+/// One project's move, planned without `yes` and made with it, laid out;
+/// `None` when its settings mark it already.
+///
+/// The dry run is a report, as `flayer migrate --library`'s is: a line for
+/// each thing that would change, to read before saying yes. Made, a copy
+/// left out of a folder an agent the project names reads is a warning, as
+/// it is for `mind agents`.
+fn laid_out(
+    workspace: Option<&FlayerWorkspace>,
+    project: &MindProject,
+    asked: &Asked,
+    homes: &AgentHomes,
+) -> Result<Option<Outcome>, Stopped> {
+    let failed = |error: MigrateError| Stopped::Failed(CliError::Migrate(error).into());
+    if !asked.yes {
+        let Some(mut plan) =
+            migrate::project_plan(workspace, project, asked.agents, asked.share, homes)
+                .map_err(failed)?
+        else {
+            return Ok(None);
+        };
+        if !plan.refusals.is_empty() {
+            return Err(Stopped::Refused(std::mem::take(&mut plan.refusals)));
+        }
+        let mut outcome = Outcome::plain(project_report(project, &plan, false));
+        outcome.stderr.extend(beside(project, &plan));
+        return Ok(Some(outcome));
+    }
+
+    let migrated = match migrate::project(workspace, project, asked.agents, asked.share, homes) {
+        Ok(Some(migrated)) => migrated,
+        Ok(None) => return Ok(None),
+        Err(MigrateError::Refused(refusals)) => return Err(Stopped::Refused(refusals)),
+        Err(error) => {
+            // Said with the error, being what the move left that it could
+            // not put back.
+            let warnings = error.left_behind().iter().map(stranded).collect();
+            return Err(Stopped::Failed(Failure {
+                error: Box::new(CliError::Migrate(error)),
+                warnings,
+            }));
+        }
+    };
+    let said = scrubbed(&migrated.scrub);
+    let plan = &migrated.plan;
+    let mut outcome = Outcome::plain(project_report(project, plan, true));
+    for line in cleared(project, &migrated.swept) {
+        let _ = writeln!(outcome.stdout, "  {line}");
+    }
+    for retarget in &plan.installations {
+        let warnings = not_copied(project, retarget);
+        outcome.ok &= warnings.is_empty();
+        outcome.stderr.extend(warnings);
+    }
+    outcome.stderr.extend(beside(project, plan));
+    Ok(Some(said.before(outcome)))
+}
+
+/// A line for each thing a project's move does, as what would happen in a
+/// dry run, and as what did once it is made: the settings and the marker
+/// first, then what keeps `.mind` out of git, each installation's copies,
+/// what is left where it is, and what is kept out of git.
+fn project_report(project: &MindProject, plan: &ProjectPlan, done: bool) -> String {
+    let would = |now: &'static str, then: &'static str| if done { now } else { then };
+    let mut text = String::new();
+    let _ = writeln!(
+        text,
+        "{} {} for {}: agents {}, share {}",
+        would("wrote", "would write"),
+        shown(project, &plan.settings_file),
+        project.name(),
+        agents(&plan.settings.agents),
+        plan.settings.share
+    );
+    let _ = writeln!(
+        text,
+        "{} {} to {}, as it {}",
+        would("moved", "would move"),
+        shown(project, &plan.marker),
+        shown(project, &plan.backup),
+        would("was", "is")
+    );
+    if let Some(path) = &plan.ignore {
+        let _ = writeln!(
+            text,
+            "{} {}, keeping .mind out of git",
+            would("wrote", "would write"),
+            shown(project, path)
+        );
+    }
+    let local = plan.settings.share == Share::Local;
+    for retarget in &plan.installations {
+        moved(&mut text, project, retarget, done, local);
+    }
+    for path in &plan.authored {
+        let _ = writeln!(
+            text,
+            "{} {} where it is: the project's own",
+            would("left", "would leave"),
+            shown(project, path)
+        );
+    }
+    for path in &plan.foreign {
+        let _ = writeln!(
+            text,
+            "{} {} where it is: Mindflayer did not install it",
+            would("left", "would leave"),
+            shown(project, path)
+        );
+    }
+    for path in &plan.excluded {
+        let _ = writeln!(
+            text,
+            "{} {} out of git",
+            would("kept", "would keep"),
+            shown(project, path)
+        );
+    }
+    text
+}
+
+/// What a project's move says on stderr beside its lines: that nothing
+/// keeps a local project's copies out of git outside a work tree, and how
+/// to stop git tracking a `.mind` that a local project's `.gitignore` keeps
+/// none of out, which no ignore rule does and Mindflayer runs no git to do.
+fn beside(project: &MindProject, plan: &ProjectPlan) -> Vec<String> {
+    let mut said: Vec<String> = outside_note(project, plan.outside).into_iter().collect();
+    if plan.tracked {
+        said.push(format!(
+            "hint: git tracks {}, and a .gitignore keeps out only what git does not track; \
+             `git rm -r --cached .mind` in {} stops that, and leaves the files where they are",
+            project.mind_dir().display(),
+            project.root().display()
+        ));
+    }
+    said
+}
+
+/// What a project's move that failed says of something it could not put
+/// back.
+fn stranded(left: &Stranded) -> String {
+    match left {
+        Stranded::Copy(path) => format!(
+            "warning: {} was copied and could not be taken back out; remove it yourself",
+            path.display()
+        ),
+        Stranded::Retired { name, path } => format!(
+            "warning: {} was moved out of the way and could not be put back; `mind install \
+             {name}` puts it back",
+            path.display()
+        ),
+        Stranded::Settings(path) => format!(
+            "warning: {} was written and could not be removed, so the project is read from it; \
+             remove it to read the project from its mind.toml again",
+            path.display()
+        ),
+        Stranded::Marker { marker, backup } => format!(
+            "warning: {} could not be moved back to {}; move it yourself",
+            backup.display(),
+            marker.display()
+        ),
+        Stranded::Ignore(path) => format!(
+            "warning: {} was written and could not be removed, so .mind is kept out of git; \
+             remove it yourself",
+            path.display()
+        ),
     }
 }

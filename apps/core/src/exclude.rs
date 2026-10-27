@@ -157,6 +157,61 @@ pub struct Location {
 /// pointing somewhere else must not send one project's entries into another
 /// repository's file.
 pub fn locate(project: &Path) -> Result<Option<Location>, ExcludeError> {
+    let Some((repository, route)) = discover(project)? else {
+        return Ok(None);
+    };
+    // A linked worktree names its common dir from its own git dir, as
+    // `../..`, and that is how gix hands it back. Normalized, so what a
+    // front end reports is the file a person would go and open.
+    Ok(Some(Location {
+        file: paths::normalize(&repository.common_dir().join("info").join("exclude")),
+        route,
+    }))
+}
+
+/// Whether git tracks anything inside `folder`, a route from the project at
+/// `project`: whether the index of the work tree holding the project names
+/// a file there. Never, outside a git work tree.
+///
+/// For a front end to say what no ignore rule does: a rule keeps out of git
+/// only what git does not track yet, so a `.mind` committed by design, as a
+/// `mind.toml` project's was, stays in the index once a `.gitignore` asks
+/// for it to be left out, until somebody runs `git rm --cached` on it. Read
+/// from the index with gix, the repository opened as [`locate`] opens it,
+/// and never written: Mindflayer runs no git command, and taking a team's
+/// files out of the index is not its to do.
+pub fn tracks(project: &Path, folder: &Path) -> Result<bool, ExcludeError> {
+    let Some((repository, route)) = discover(project)? else {
+        return Ok(false);
+    };
+    let unreadable = |detail: String| ExcludeError::Repository {
+        project: project.to_path_buf(),
+        detail,
+    };
+    let index = repository
+        .index_or_empty()
+        .map_err(|error| unreadable(error.to_string()))?;
+    // Slash separated and ending in one, as the index spells a folder's
+    // files, so `.mind` does not take in a `.mindflayer` beside it.
+    let inside = paths::normalize(&route.join(folder));
+    let Some(mut prefix) = paths::to_config_string(&inside) else {
+        return Err(unreadable(format!(
+            "{} is not valid UTF-8, so the index cannot be searched for it",
+            inside.display()
+        )));
+    };
+    prefix.push('/');
+    Ok(index
+        .prefixed_entries(prefix.as_bytes().into())
+        .is_some_and(|entries| !entries.is_empty()))
+}
+
+/// The repository whose work tree holds `project`, and where in that work
+/// tree the project is: `None` when no work tree holds it.
+///
+/// Opened isolated, reading neither the environment nor the user's git
+/// config, for the reason [`locate`] gives.
+fn discover(project: &Path) -> Result<Option<(gix::Repository, PathBuf)>, ExcludeError> {
     let repository =
         match gix::discover_opts(project, Default::default(), gix::open::Options::isolated()) {
             Ok(repository) => repository,
@@ -180,13 +235,7 @@ pub fn locate(project: &Path) -> Result<Option<Location>, ExcludeError> {
         project: project.to_path_buf(),
         worktree: worktree.to_path_buf(),
     })?;
-    // A linked worktree names its common dir from its own git dir, as
-    // `../..`, and that is how gix hands it back. Normalized, so what a
-    // front end reports is the file a person would go and open.
-    Ok(Some(Location {
-        file: paths::normalize(&repository.common_dir().join("info").join("exclude")),
-        route,
-    }))
+    Ok(Some((repository, route)))
 }
 
 /// Where `project` sits below `worktree`, or `None` when it is not below it.
