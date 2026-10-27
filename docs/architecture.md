@@ -396,9 +396,9 @@ sit in is the usual case. It also holds skills and rules of its own: the ones
 that belong to all of its projects, written once.
 
 Both are identified by a **marker file**, not by the directory alone: a
-project by its `settings.json` or its `mind.toml`, a workspace by its
-`flayer.toml`. An empty `.mind` left behind by a failed copy is not a
-project, and saying so costs an `is_file()` or two
+project by its `settings.toml`, or the `settings.json` or `mind.toml` an older
+build wrote, a workspace by its `flayer.toml`. An empty `.mind` left behind by
+a failed copy is not a project, and saying so costs an `is_file()` or two
 (`MindProject::is_marked`, which everything that looks for a project asks).
 
 Both are found by walking up from a starting directory, so `mind list` works from
@@ -626,24 +626,19 @@ happen.
 
 `.mind` is the marker and the configuration. The artifacts themselves sit
 beside the code, in directories the marker names. A project's settings, the
-version 3 marker `mind init` writes ([a project's
-settings](#a-projects-settings)), name them in an object:
-
-```json
-"directories": {
-  "skills": "skills",
-  "rules": "rules"
-}
-```
-
-and a `mind.toml`, the marker of a project an older Mindflayer made, in a
-table:
+`settings.toml` `mind init` writes ([a project's
+settings](#a-projects-settings)), name them in a table, as a `mind.toml`, the
+marker of a project an older Mindflayer made, does:
 
 ```toml
 [directories]
 skills = "skills"
 rules = "rules"
 ```
+
+The `settings.json` between the two named them in an object,
+`"directories": {"skills": "skills", "rules": "rules"}`, and is read the way
+it was written.
 
 Beside the code rather than inside `.mind`, because these are files the
 **agents** read, and an agent looking for skills does not know what a `.mind`
@@ -717,25 +712,39 @@ keeping no folder of its own is no reason to hide what its agents load.
 
 ### A project's settings
 
-From version 3 (`SETTINGS_VERSION`) a project is marked by
-`.mind/settings.json`, which holds what the hub needs to know about it and
+From version 5 (`SETTINGS_TOML_VERSION`) a project is marked by
+`.mind/settings.toml`, which holds what the hub needs to know about it and
 nothing else ([D-06](#d-06-projects-keep-authoring-beside-the-code),
-[D-09](#d-09-project-settings-live-in-the-project)):
+[D-09](#d-09-project-settings-live-in-the-project)), written from a template
+whose comments say what each key does (`Settings::text`, [why the markers are
+TOML written from a
+template](#why-the-markers-are-toml-written-from-a-template)):
 
-```json
-{
-  "version": 3,
-  "id": "4f9c2a7e1b3d5f60a8c4e2b6d0f1a3c5",
-  "name": "collapse",
-  "agents": ["claude", "codex", "opencode"],
-  "share": "local",
-  "edit_tracked": false,
-  "directories": {
-    "skills": "skills",
-    "rules": "rules"
-  }
-}
+```toml
+# Mindflayer mind project: what Mindflayer needs to know about the project
+# this .mind is in, and nothing else. No agent reads it.
+#
+# `name` is what the project is shown as, and `agents` the agents that work
+# in it (claude, codex, opencode): what is installed into the project is
+# copied where each of them reads. `mind agents` changes them.
+# ...
+version = 5
+id = "4f9c2a7e1b3d5f60a8c4e2b6d0f1a3c5"
+name = "collapse"
+agents = ["claude", "codex", "opencode"]
+share = "local"
+edit_tracked = false
+
+[directories]
+skills = "skills"
+rules = "rules"
 ```
+
+Versions 3 and 4 (`SETTINGS_VERSION`, `TARGETS_VERSION`) held the same keys
+as `.mind/settings.json`, in strict JSON, the owner's first choice for
+D-06. Such a file is read the way it was written, through the same reader,
+and changed by nothing but its move to a `settings.toml` ([moving a project
+to its settings](#moving-a-project-to-its-settings)).
 
 The agents that work in the project, by the names `Agent` takes; whether what
 is installed into it is the team's or this checkout's
@@ -743,8 +752,8 @@ is installed into it is the team's or this checkout's
 team file git tracks may be edited to reach an agent, off unless the file says
 so; the folders it authors in; a name; and an id. A project that installs a
 kind somewhere other than where its agents read names where in `targets` too,
-which a new project leaves out, and which comes with version 4 ([a project's
-own targets](#a-projects-own-targets)). They describe the files
+which a new project leaves out ([a project's own
+targets](#a-projects-own-targets)). They describe the files
 physically in the project, and several workspaces may link it, so they live
 in the project, where every workspace reads the same ones. The id is 128 bits
 drawn from the operating system through `std`'s hasher keys, as a stage's name
@@ -754,7 +763,8 @@ shares one.
 
 Minimal, because `.mind` is meant to stay out of the way (vision point 8). No
 agent reads it, so nothing instruction-shaped sits where an agent looks, and
-a file of seven keys is one a person reads at a glance and edits by hand.
+a file of seven keys is one a person reads at a glance and edits by hand,
+its comments telling them what each one does.
 Anything that is not about the project's own files stays out of it: what was
 installed is the ledger's, and which workspaces link the project is theirs.
 
@@ -768,14 +778,14 @@ project and goes when `.mind` does, and no team file is edited for it. A shared
 project gets none, and its settings are the team's to commit. A test asks gix,
 in process, whether a local project's settings are ignored. A second run, as
 for `init`, rewrites nothing and only makes what the marker asks for and is
-missing, a deleted `.gitignore` of a local project included; a project a
-`mind.toml` marks is not given settings, since moving it is `mind
+missing, a deleted `.gitignore` of a local project included; a project an
+older marker marks is not given a `settings.toml`, since moving it is `mind
 migrate`'s ([moving a project to its
 settings](#moving-a-project-to-its-settings)).
 
-`mind init` writes them (#35): every agent unless `--agents` names fewer,
-local unless `--shared`, and `skills/` and `rules/` unless `--skills` or
-`--rules` says otherwise. Every agent, so a project made without a thought
+`mind init` writes them (#35, a `settings.toml` since #166): every agent
+unless `--agents` names fewer, local unless `--shared`, and `skills/` and
+`rules/` unless `--skills` or `--rules` says otherwise. Every agent, so a project made without a thought
 for it reaches whichever agent is opened there; local, because that is what a
 new project is (D-02). The TUI's offer to make a project and the minds
 screen run that same `mind init`, so they write the same marker. The CLI's
@@ -786,42 +796,62 @@ there for the team to commit. `MindProject::init`, which writes a `mind.toml`,
 is no front end's any more; it stays for the tests that start from a project
 an older build made, which is still read the way it was written.
 
-Either file makes a directory a project, and when both are there the settings
-win: they are the newer marker, and a `mind.toml` beside them is one an
-upgrade left or a copy brought back. Refusing the project would hide every
-artifact in it over a stray file, so it is read, and `MindProject::warnings`
-names the `mind.toml` ignored ([open questions](#open-questions)). A
-`mind.toml` claiming version 3, and a settings file claiming 1 or 2, are
-refused as malformed: what either would mean is nobody's to say.
+Any of the three files makes a directory a project, and when more than one
+is there the newest wins, `settings.toml`, then `settings.json`, then
+`mind.toml` (`MindProject::open`): an older one beside it is one an upgrade
+left or a copy brought back. Refusing the project would hide every artifact
+in it over a stray file, so it is read, and `MindProject::warnings` names
+each one ignored ([open questions](#open-questions)). Each file holds
+versions of its own, and `MarkerFile::of_version` says which: a `mind.toml`
+up to 2, a `settings.json` 3 or 4, a `settings.toml` 5. A version found in
+another file, a `mind.toml` claiming 3 or a `settings.toml` claiming 4, is
+refused as malformed: what it would mean is nobody's to say. Both settings
+files are read into one tree (`config_entry::document`) and held to the keys
+by one reader, a key at a time, so the same key is refused the same way in
+either.
 
 A key the format does not define is read past and kept, as unknown front
-matter is: the format grows, and a project a newer build configured is still
-a project. A key that changes what an older build would do with the project
-is the exception, and comes with a version of its own, as `targets` comes
-with 4. Every key it does define is held to what it holds: a missing `id`, an
-agent no `Agent` names, a `share` other than `local` and `shared`, a
-`targets` entry that is not a list of folders or names none, are refused,
-each named, rather than guessed at. `edit_tracked`, `directories` and
-`targets` may be left out, and read as off, as no folders and as where the
-agents read. A folder `targets` names that no install may use is read and
-said, not refused, since everything else the file says still stands.
+matter is: the format grows, and a project a newer build configured is still a
+project. A key that changes what an older build would do with the project is
+the exception, and comes with a version of its own, as `targets` came with 4
+in a `settings.json`; a `settings.toml` is 5 whatever it sets, since every
+build that reads one reads `targets` too. Every key it does define is held to
+what it holds: a missing `id`, an agent no `Agent` names, a `share` other than
+`local` and `shared`, a `targets` entry that is not a list of folders or names
+none, are refused, each named, rather than guessed at. `edit_tracked`,
+`directories` and `targets` may be left out, and read as off, as no folders
+and as where the agents read. A folder `targets` names that no install may use
+is read and said, not refused, since everything else the file says still
+stands.
 
-`MindProject::change_settings` changes them. It reads the file again rather
-than trusting what was read when the project was opened, lets its caller
-change a copy, and edits only the keys whose values changed, each where it
-stands, `directories` an entry at a time, through `config_entry` ([edited in
-a tree that holds every byte](#edited-in-a-tree-that-holds-every-byte)). A key
-this build does not know, the order of the keys and a layout made by hand all
-survive, and a key the file left out goes in only when it says something its
-absence does not, so turning nothing on writes no `"edit_tracked": false`. A
-changed file goes through a temporary and a rename; an unchanged one is not
-written, its modification time included. The version and the id are refused:
-a version moves with a migration, which writes the file its version describes,
-and an id names the project for good. The one version an edit writes is the
-one a change of `targets` brings with it, up to 4 when a kind is named and
-back to 3 when none is. So is a folder the change moves out of the project,
-as `init` refuses one, or a target no install may use, while one written
-there by hand is still read and stops no change to something else.
+`MindProject::change_settings` changes them, the way `flayer.toml` is
+changed: through the same `rewrite`, which reads the file again rather than
+trusting what was read when the project was opened, and writes back only
+what changed, and through toml_edit (`settings::edited`). Its caller changes
+a copy, and only the keys whose values changed are edited, each value written
+where the old one stood, keeping the spacing around it and a comment after it
+on its line, `directories` and `targets` an entry at a time. The template's
+comments, a comment somebody added, a key this build does not know, the
+order of the keys and a layout made by hand all survive, and a key the file
+left out goes in after the others only when it says something its absence
+does not, so turning nothing on writes no `edit_tracked = false`. `targets`
+emptied takes its `[targets]` table out, so setting and resetting them gives
+the file back byte for byte, unless somebody wrote a comment above the
+header, which keeps the header, empty. A changed file goes through a
+temporary and a rename; an unchanged one is not written, its modification
+time included. The version and the id are refused: a version moves with a
+migration, which writes the file its version describes, and an id names the
+project for good. So is a folder the change moves out of the project, as
+`init` refuses one, or a target no install may use, while one written there
+by hand is still read and stops no change to something else.
+
+Only a `settings.toml` is changed (`MindProject::changeable`). A project a
+`settings.json` marks is refused as one a `mind.toml` marks is, naming the
+file and pointing at `mind migrate`: the settings are edited one way, in
+the grammar this build writes, rather than a third way through
+`config_entry`, which is for the agents' own files, and the JSON editor and
+its rule for the version a change of `targets` brought with it went with
+the grammar.
 
 What changes them from a command line is `mind agents` and `mind share`
 (#37), and `mind targets` (#40), at either level, and since a project's
@@ -934,12 +964,13 @@ about](#a-record-must-not-outlive-the-copy-it-is-about)).
 ### Moving a project to its settings
 
 `mind migrate` (#38), or `flayer migrate -p` for a project the workspace
-links and `flayer migrate --all-projects` for every one a `mind.toml` marks,
-moves a project an older Mindflayer made to settings (`migrate::project`),
-and what is installed into it to where its agents read. Without `--yes` it
-plans, says what would happen and changes nothing
-(`migrate::project_plan`), a report as `flayer migrate --library`'s dry run
-is.
+links and `flayer migrate --all-projects` for every one an older marker
+marks, moves a project an older Mindflayer made to a `settings.toml`
+(`migrate::project`): from a `mind.toml`, with what is installed into it
+moved to where its agents read; from a `settings.json`, the same settings in
+TOML (below). Without `--yes` it plans, says what would happen and changes
+nothing (`migrate::project_plan`), a report as `flayer migrate --library`'s
+dry run is.
 
 - **Explicit, never on a read.** Every format here is read the way it was
   written, and moved forward only when somebody asks: a workspace's own by
@@ -959,14 +990,16 @@ is.
   their own. Every agent unless `--agents` names fewer, as `mind init`. And
   shared unless `--local`, as [D-02](#d-02-installs-stay-local-unless-a-project-shares-them)
   has it, because such a project was committed by design; `--shared` says
-  it out loud. Serialized as `mind init` writes them, with `create_new`.
+  it out loud. Written from the template as `mind init` writes them, a
+  `settings.toml` straight from a `mind.toml`, with `create_new`. What else
+  the `mind.toml` held stays in the copy kept.
 - **The marker is kept, in `.mind/tmp`.** Moved to
   `.mind/tmp/mind.toml.v<version>`, named after its version as
   `flayer.toml.v2` is. Not beside the settings, where it would be a
   leftover the project warns about and an older build reads instead; and
   `.mind/tmp` carries its own `.gitignore`, so the kept copy is out of git
   in a shared project too. One already there, kept by an earlier migration,
-  refuses the move. Put back in place of `settings.json`, it is the project
+  refuses the move. Put back in place of `settings.toml`, it is the project
   as it was, though its installs have moved.
 - **The installs move as for a change of agents.** It is one, from none to
   the ones asked for, so each recorded installation is brought to the
@@ -1033,12 +1066,14 @@ is.
   as every other command reads it (`MindProject::directory_for`), so
   naming one outside `.mind`, as the refusal asks, gets such a project
   past it.
-- **A second run is a no-op.** A project its settings mark has nothing to
-  migrate, and nothing is written for it, not even its ledger opened.
+- **A second run is a no-op.** A project its `settings.toml` marks has
+  nothing to migrate, and nothing is written for it, not even its ledger
+  opened.
 - **Each project on its own.** `--all-projects` moves every project the
-  workspace links that a `mind.toml` marks, one at a time, each all or
-  nothing: one refused or failed is an `error:` naming it, the rest go
-  ahead, and the command exits non-zero. Without `--yes` it lists every one.
+  workspace links that a `mind.toml` or a `settings.json` marks, one at a
+  time, each all or nothing: one refused or failed is an `error:` naming it,
+  the rest go ahead, and the command exits non-zero. Without `--yes` it
+  lists every one.
 - **A project nothing links still moves.** Its marker is its own
   ([D-09](#d-09-project-settings-live-in-the-project)), so in a project no
   workspace `mind` consults links, `mind migrate` writes its settings and
@@ -1057,47 +1092,79 @@ is.
   `--all-projects`, one at a time, for the reason `--library` is a flag of
   its own ([above](#moving-them-into-the-library)), and a line naming none is
   told which there are, rather than shown clap's usage.
-- **The TUI points at it.** Its header counts the projects a `mind.toml`
+- **From a `settings.json`, the same settings in TOML.** A project a
+  `settings.json` marks has its agents, share mode and folders already, so
+  its move writes what the file holds as a `settings.toml`, at version 5,
+  and keeps the `settings.json` as `.mind/tmp/settings.json.v<version>`,
+  with `create_new`, as a `mind.toml` is kept; one an earlier migration kept
+  refuses it. A folder written there by hand that a change would refuse is
+  carried as it is: the move changes the grammar, not what the settings
+  say, so the project reads the same before and after. Asked for, never
+  made on a read, as a move from a `mind.toml` is: a build from before #166
+  finds no project in a `settings.toml`, so the move is a step a team takes
+  on purpose, and a read leaves things as it found them. No copy moves, since
+  every one is where the agents send it already, so no workspace is read
+  (`migrate::carries_installs`): no lock, no ledger, and a workspace that
+  cannot be read is a `warning:` beside the move, where it refuses a move
+  from a `mind.toml`. `--agents`, `--local` and `--shared` are what a
+  `mind.toml` is given, and the report's first line says the agents and
+  share mode the file keeps. A key this build does not know stays in the
+  copy kept. Nothing else writes a `settings.json` any more, and a second
+  move at once finds the `settings.toml` there, which `create_new` refuses,
+  so the move needs no lock of its own.
+- **The TUI points at it.** Its header counts the projects an older marker
   marks, in yellow after the workspace's name, where a narrow terminal keeps
-  it, and names the command: `flayer migrate --all-projects`, or `mind
-  migrate` for a project on its own. It has no key for the move ([open
-  questions](#open-questions)).
+  it, naming each file once (`2 projects marked by mind.toml or
+  settings.json`), and names the command: `flayer migrate --all-projects`,
+  or `mind migrate` for a project on its own. `t` and `T` on a project a
+  `settings.json` marks say it is changed by nothing but the move before a
+  form opens, as they say of a `mind.toml`. It has no key for the move
+  ([open questions](#open-questions)). `flayer status` and `mind status`
+  say it too, a hint for each such project ([what each project
+  has](#what-each-project-has)).
 
 ### Why the markers are TOML written from a template
 
 New markers are written from a string template, not serialized. Serializing
-would drop the comments, and the comment in `mind.toml` explaining where skills
-go is the first documentation anyone opening the file will read.
+would drop the comments, and the comment at the top of a marker, saying what
+each key does, is the first documentation anyone opening the file will read.
 
-A project's marker is TOML no longer from version 3, the owner's choice
-([D-06](#d-06-projects-keep-authoring-beside-the-code)): a minimal file needs
-no comments, and any tool can edit JSON. The template was there for the
-comments, and seven keys that name what they hold explain themselves; what
-`mind.toml`'s comment said about where skills go is in this document and the
-README instead. JSON is what every editor, `jq`, Python's standard library
-and a browser read and write, so a person or a script can change a project's
-agents without Mindflayer. Strict JSON rather than JSONC, for the same reason:
-a comment would make the file one those tools refuse, and `config_entry`'s
-JSON, which reads and edits it, refuses what they refuse. So a settings file
-is serialized (`Settings::text`), pretty-printed as `config_entry` lays out
-an insert, two spaces a level and a final newline, and a file written new
-reads like one an edit has changed since. `flayer.toml` keeps its template:
-a workspace's marker has comments worth keeping.
+A project's marker is TOML again from version 5, the owner's amendment to
+[D-06](#d-06-projects-keep-authoring-beside-the-code): `.mind/settings.toml`,
+like `flayer.toml`, so both markers are written and edited the same way.
+Versions 3 and 4 were JSON, `.mind/settings.json`, the owner's first choice:
+any tool can edit JSON, and seven keys that name what they hold seemed to
+explain themselves. JSON has nowhere to put a comment, though, so what each
+key did was in this document and the README rather than in the file
+somebody opens to change one, and the settings needed an editor of their
+own, a third way beside `flayer.toml`'s and `mind.toml`'s, which was
+`config_entry`'s JSON (held to RFC 8259 so `jq` and `JSON.parse` took what it
+wrote). Now `Settings::text` fills a template as `flayer.toml`'s is filled,
+its comments saying what each key does and which command changes it, every
+folder spelled out and a `[targets]` table only when it names a kind; and
+`config_entry` is for the agents' own config files, whose formats are
+theirs. A `settings.json` is still read, the way it was written, and moved
+forward only by `mind migrate`.
 
 Editing an existing marker has the same constraint and a harder job, which is
 why `toml_edit` is a dependency: `flayer link` rewrites the one `projects`
-array and leaves every other byte alone. A project's settings are edited the
-same way, a key at a time through jsonc-parser's CST ([a project's
-settings](#a-projects-settings)), for a file somebody may have laid out by
-hand. Reading a TOML marker stays serde's job. The two halves agree because
-an edit re-reads the file afterwards rather than trusting what it believes it
-wrote, and the write itself goes through a temporary file and a rename, so a
-crash leaves either the old config or the new one. An edit of `flayer.toml`
-holds the workspace's lock from its read to that re-read, so a second writer
-edits what the first one wrote ([Writers at the same
-time](#writers-at-the-same-time)); an edit of a project's settings takes none
-of its own, and the one change that makes it (`reapply::apply`) holds the lock
-of the workspace that links the project around it.
+array and leaves every other byte alone, and a change of a project's settings
+rewrites the keys whose values changed, each where it stands, keeping the
+comment on its line ([a project's settings](#a-projects-settings)). Both go
+through one `rewrite`, which reads the file, hands its text to the edit and
+writes back only what changed. Reading `flayer.toml` and a `mind.toml` stays
+serde's job; a project's settings, in either grammar, are read a key at a
+time (`config_entry::document` and `settings::parse`), so a newer version is
+refused before any key it may have given a new meaning, and a key this build
+does not know is read past rather than refused. The two halves agree because
+an edit re-reads the file afterwards rather than trusting what it believes
+it wrote, and the write itself goes through a temporary file and a rename,
+so a crash leaves either the old config or the new one. An edit of
+`flayer.toml` holds the workspace's lock from its read to that re-read, so a
+second writer edits what the first one wrote ([Writers at the same
+time](#writers-at-the-same-time)); an edit of a project's settings takes
+none of its own, and the one change that makes it (`reapply::apply`) holds
+the lock of the workspace that links the project around it.
 
 ### Formats are versioned
 
@@ -1111,15 +1178,21 @@ workspace.
 Two constants rather than one, because the files change for different reasons.
 Shared, the project marker going to 3 would have written every new
 `flayer.toml` as a 3 too, and an older build would refuse a workspace that had
-not changed at all. A project's marker reads up to 4 today, a settings file
-that may say where installs land, and a workspace's up to 2, and neither
-moved when the other did.
+not changed at all. A project's marker reads up to 5 today, a
+`settings.toml`, and a workspace's up to 2, and neither moved when the other
+did.
 
-A project's newest version is the one `mind init` writes, a settings file,
-and `mind init` waited to write it (#35) until this build read such a project
-(#29), listed it (#33) and installed into it (#34). An older build finds no
-project without a `mind.toml`, so it says a new one is not a project, or that
-a workspace's entry for it is stale, rather than misreading it. Except where
+A project's newest version is the one `mind init` writes, a `settings.toml`
+(#166), as it waited to write a `settings.json` (#35) until this build read
+such a project (#29), listed it (#33) and installed into it (#34). 5 for a
+`settings.toml` whatever it sets, though it holds the keys a version 4
+`settings.json` does, because a version names the file it is written in as
+well as what the file holds, as 3 did between `mind.toml` and
+`settings.json` (`MarkerFile::of_version`): one found in another file is
+refused rather than guessed at. An older build finds no project without the
+file it looks for, so a build from before #29 says a new one is not a
+project, and one from before #166 the same of a `settings.toml`, or that a
+workspace's entry for it is stale, rather than misreading it. Except where
 that answer leads it to make one: a build from before #29 asks only whether a
 `mind.toml` is there, so its `mind init`, or its TUI's making a repository a
 project, writes one beside the settings and reads the project as a `mind.toml`
@@ -1130,18 +1203,19 @@ one from then on, while this build reads the settings and passes the
 
 An older marker is read the way it was written, never refused, and moved
 forward only when somebody asks: a workspace's own folders by `flayer migrate
---library`, a project's `mind.toml` by `mind migrate` ([moving a project to
-its settings](#moving-a-project-to-its-settings)). Three lines are
-drawn so far, all project-marker versions, since a workspace's number says
-nothing about how a project keeps its artifacts: `DIRECTORIES_VERSION`, before
-which every kind lived inside `.mind`; `SETTINGS_VERSION`, from which the
-marker is `settings.json` and a kind it does not name has no folder; and
-`TARGETS_VERSION`, from which the settings may say where installs land. The
-last is written only by a file that needs it, so a settings file is a 3 or a
-4 by what it says rather than by which build wrote it: one that never sets
-`targets` is read by every build since settings, and one that does is
-refused by the builds that would read past them ([a project's own
-targets](#a-projects-own-targets)). The
+--library`, a project's `mind.toml` or `settings.json` by `mind migrate`
+([moving a project to its settings](#moving-a-project-to-its-settings)).
+Four lines are drawn so far, all project-marker versions, since a
+workspace's number says nothing about how a project keeps its artifacts:
+`DIRECTORIES_VERSION`, before which every kind lived inside `.mind`;
+`SETTINGS_VERSION`, from which the marker is a settings file and a kind it
+does not name has no folder; `TARGETS_VERSION`, from which the settings may
+say where installs land; and `SETTINGS_TOML_VERSION`, from which the
+settings are `settings.toml`. A `settings.json` was written at 4 only while
+it set `targets`, so one is a 3 or a 4 by what it says rather than by which
+build wrote it: one that never set them is read by every build since
+settings, and one that did is refused by the builds that would read past
+them ([a project's own targets](#a-projects-own-targets)). The
 ledger carries its version in SQLite's `user_version` and is refused from the
 future the same way, but an older one is migrated forward rather than read as
 written, after a copy of it is set aside ([Why the ledger is
@@ -2198,15 +2272,16 @@ unrecorded in a folder it drops; `targets reset` is the same the other way.
   `mind init` writes the `.gitignore` before the settings. `edit_tracked` is
   written with the share mode every time, off unless `--edit-tracked` is
   given, so one command line says the whole of how the project shares.
-- **Refused before anything is written**: a project a `mind.toml` marks,
-  which has no settings until `mind migrate` moves it to them ([moving a
-  project to its settings](#moving-a-project-to-its-settings)), and is
-  pointed there; a change that leaves it naming no agent, which would take
-  every copy out, an uninstall's to do by name, or that installs a kind in
-  no folder, for the same reason; a target no install may use ([a project's
-  own targets](#a-projects-own-targets)); and a copy that would land in an
-  agent's own folder, or in one a loaded workspace keeps as its own, as an
-  install refuses one.
+- **Refused before anything is written**: a project a `mind.toml` or a
+  `settings.json` marks, which has no `settings.toml` to change until `mind
+  migrate` moves it to one ([moving a project to its
+  settings](#moving-a-project-to-its-settings)), and is pointed there
+  (`MindProject::changeable`); a change that leaves it naming no agent, which
+  would take every copy out, an uninstall's to do by name, or that installs a
+  kind in no folder, for the same reason; a target no install may use ([a
+  project's own targets](#a-projects-own-targets)); and a copy that would land
+  in an agent's own folder, or in one a loaded workspace keeps as its own, as
+  an install refuses one.
 - **Held by the workspace's lock.** `apply` takes the lock of the workspace
   that links the project from before it reads the settings again until
   every copy, record and exclude entry is written, so an install in that
@@ -2379,6 +2454,17 @@ installs skills](#where-a-project-installs-skills)).
 - **A stale entry is listed, not left out**, with why it would not open, and
   said as a failure beside the rest, as `flayer list` says one: it is the
   entry somebody has to find to unlink it.
+- **An older marker is a hint.** Each project names the file its marker is
+  read from (`ProjectStatus::marker`, `marker` in the JSON), and one an
+  older Mindflayer wrote, a `mind.toml` or a `settings.json`, is a `hint:`
+  after the report naming `mind migrate`, as the TUI's header points at the
+  move ([moving a project to its
+  settings](#moving-a-project-to-its-settings)). Nothing else in a report
+  tells a `settings.json` from a `settings.toml`, which name the same
+  agents, though only the second can be changed. A hint, not a warning: the
+  project is read whole and the report is true of it, so the exit status is
+  the report's. On stderr under `--json` too, as `mind status`'s hint about
+  its workspace is, since the data says it in `marker`.
 - **Read, not made.** The ledger is opened with `ledger_for_reading`, so a
   workspace that never installed anything is left without one, and a default
   workspace nothing has made is reported as one with nothing linked, as
@@ -3305,7 +3391,7 @@ starts from this list (`install::targets`).
 
 The table is a value a caller is handed, not a function it reaches for,
 because the standard layout is only the default: the owner's amendment to
-D-07 lets a project's `.mind/settings.json` put a kind somewhere else, one
+D-07 lets a project's `.mind/settings.toml` put a kind somewhere else, one
 `.skills` folder for every agent for instance ([a project's own
 targets](#a-projects-own-targets)). A caller that takes the table follows
 the project's without changing, and two agents the override sends to one
@@ -3334,9 +3420,9 @@ exists, holds foreign content or is tracked is the install's to find out.
 ### A project's own targets
 
 A project's settings may name, per kind, the folders what is installed into
-it lands in, in place of the ones its agents read: `"targets": {"skills":
-[".skills"]}` sends every skill installed into the project to `.skills`, one
-copy for every agent it names (the owner's amendment to
+it lands in, in place of the ones its agents read: a `[targets]` table
+holding `skills = [".skills"]` sends every skill installed into the project
+to `.skills`, one copy for every agent it names (the owner's amendment to
 [D-07](#d-07-one-copy-per-agent-folder)). `MindProject::targets` overrides
 the standard table for each kind the settings name with the folders they
 give (`TargetTable::overriding`), so discovery reads there, an install writes
@@ -3390,22 +3476,24 @@ and from there, none of them knowing an override was read.
   <dir>...` and `mind targets reset <kind>`, and `flayer targets -p`, a dry
   run without `--yes` ([when a project's agents, targets or share mode
   change](#when-a-projects-agents-targets-or-share-mode-change)).
-- **With version 4 of the settings** (`TARGETS_VERSION`). A key the format
-  does not define is otherwise read past, and a build from before this one
-  would read past `targets` too and install into the standard folders
-  without a word, recording copies the newer build does not read. So a file
-  that sets them is written at version 4, which such a build refuses, and
-  one that does not stays at 3, which every build since settings reads: the
-  version a file is written with is the lowest that reads it as it means
-  (`Settings::version_needed`). A change of `targets` brings it along, back
-  down once no kind is named, the one version an edit changes. A version 3
-  file given `targets` by hand is read with them all the same: somebody
-  wrote them to be used, and only an older build could miss them ([an open
-  question](#open-questions)). One whose `targets` do not read as them is
-  read past, as before them, so that no project an older build opened stops
-  opening. Bumping every file to 4 was turned down: a
-  project that never sets an override would be refused by every older build
-  for nothing.
+- **With a version a build from before them refuses** (`TARGETS_VERSION`).
+  A key the format does not define is otherwise read past, and a build from
+  before this one would read past `targets` too and install into the
+  standard folders without a word, recording copies the newer build does not
+  read. A `settings.json` that set them was written at version 4, which such
+  a build refuses, and one that did not stayed at 3, which every build since
+  settings reads: the version such a file was written with was the lowest
+  that read it as it meant, and a change of `targets` brought it along,
+  back down once no kind was named. Bumping every file to 4 was turned down:
+  a project that never set an override would have been refused by every
+  older build for nothing. A `settings.toml` is 5 whatever it sets, since
+  every build that reads one reads `targets`, and one from before it finds no
+  project there at all, so setting or resetting them moves no version. A
+  version 3 `settings.json` given `targets` by hand is read with them all the
+  same: somebody wrote them to be used, and only an older build could miss
+  them ([an open question](#open-questions)). One whose `targets` do not
+  read as them is read past, as before them, so that no project an older
+  build opened stops opening.
 
 ### Adding an agent
 
@@ -4453,9 +4541,10 @@ other, and none of them makes a reader wait for the workspace.
   clones an older build left a credential in and removes the folders of a
   source made one with another, which a gather beside it would be filling.
   A migration of the workspace's own into its library holds it from its plan
-  to its rewrite of the marker, and a project's move to its settings from
-  before it reads the project again until its ledger is written
-  (`migrate::project`).
+  to its rewrite of the marker, and a project's move from its `mind.toml`
+  from before it reads the project again until its ledger is written
+  (`migrate::project`); a move from a `settings.json` changes nothing of the
+  workspace's, and takes none.
   Core takes it inside each of them (`FlayerWorkspace::lock`), so no front end
   has to remember to. An install looks again at what the project holds once
   it has the lock: the standing it is handed comes from a survey made before,
@@ -4743,10 +4832,14 @@ home workspace's library, which leaves two layouts to explain. Unblocks #52,
 
 Amended by the owner. Projects keep authoring their own skills and rules beside
 the code, and `mind init` still creates `skills/` and `rules/` by default. The
-v3 project marker is a JSON file, `.mind/settings.json`, which names those
+v3 project marker was a JSON file, `.mind/settings.json`, which names those
 folders (`directories`) beside the project's agents, share mode and id, so any
-tool or editor can read and change it; `flayer.toml`, and v2 projects, keep the
-TOML of [the markers](#why-the-markers-are-toml-written-from-a-template).
+tool or editor can read and change it. Amended again by the owner
+(2026-10-27): the settings are TOML, `.mind/settings.toml` at version 5, like
+`flayer.toml`, so both markers are written from a template whose comments say
+what each key does and edited through toml_edit alike ([the
+markers](#why-the-markers-are-toml-written-from-a-template)); a
+`settings.json` is still read as written, and migrated.
 Installs go to the agent folders the project targets (D-07), not to the
 authored ones. That keeps every existing workflow, makes the workspace the
 default source, and keeps the marker minimal. Rejected: receiving only, which
@@ -4756,7 +4849,13 @@ made the folders opt-in (`--skills`, `--rules`); the owner prefers them to
 exist from the start. Unblocks #29, #33, #35 and #59.
 
 Carrying it out, #35 makes `mind init` write settings that name `skills/` and
-`rules/`, or the folders `--skills` and `--rules` give, and make them.
+`rules/`, or the folders `--skills` and `--rules` give, and make them. #166
+carries out the second amendment: `mind init` writes a `settings.toml`, a
+change edits it a key at a time through toml_edit, a `settings.json` is read
+as written and changed by nothing but `mind migrate`, which moves it, and a
+`mind.toml` straight, to a `settings.toml` ([a project's
+settings](#a-projects-settings), [moving a project to its
+settings](#moving-a-project-to-its-settings)).
 
 ### D-07: One copy per agent folder
 
@@ -4764,8 +4863,9 @@ Amended by the owner. An installed skill is a real copy in
 `.agents/skills/<name>`, which Codex and OpenCode read, and an identical one in
 `.claude/skills/<name>` for Claude, staged and written in one step; the ledger
 records one installation with several targets. That layout is the default, and
-a project's `.mind/settings.json` may override it per kind, for example with
-one `.skills` folder for every agent (#40). Copies fit today's install model
+a project's settings (`.mind/settings.toml` since D-06's second amendment)
+may override it per kind, for example with one `.skills` folder for every
+agent (#40). Copies fit today's install model
 and the Windows CI, survive the hub moving, and keep gathered content
 contained. OpenCode sees the skill twice, which is harmless only while the
 copies are identical, so an install is refused if either target holds foreign
@@ -4786,8 +4886,9 @@ with the others or not at all, the installation is recorded once with a
 target for each, and somebody's work in either folder refuses it, in both
 ([Installing](#installing)). #40 reads the override from a project's
 settings, `targets`, which sends a kind to the folders it names for every
-agent, at version 4 of the settings, and warns of agents that read none of
-them ([a project's own targets](#a-projects-own-targets)).
+agent, at version 4 of a `settings.json` and in any `settings.toml`, and warns
+of agents that read none of them ([a project's own
+targets](#a-projects-own-targets)).
 
 ### D-08: An explicit or activated workspace wins
 
@@ -4810,8 +4911,9 @@ reason (see [activating a workspace](#activating-a-workspace)).
 
 ### D-09: Project settings live in the project
 
-A project's agents, share mode and `edit_tracked` live in its own v3 marker,
-`.mind/settings.json` (D-06), ignored by default (D-01). They describe the
+A project's agents, share mode and `edit_tracked` live in its own settings,
+the v3 marker `.mind/settings.json` and from version 5 `.mind/settings.toml`
+(D-06), ignored by default (D-01). They describe the
 files physically in the project, and several workspaces may link one project,
 so keeping them beside it means every workspace sees the same targets.
 Rejected: `[[project]]` tables in `flayer.toml`, which let two workspaces
@@ -5226,32 +5328,44 @@ just listed.
   keep the settings whole, at the price of a file a shared project would have
   to ignore, and still not the installs, which each workspace records apart:
   the wall disowning from elsewhere meets too.
-- **A leftover `mind.toml` nobody is told about.** A project holding both
-  markers is read from its settings, and `MindProject::warnings` names the
-  `mind.toml` ignored, but no front end prints it yet. This build leaves
-  none: `mind init` gives a project a `mind.toml` marks no settings, and
-  #38's migration moves the old marker out of the way. One is still left by
-  hand, by a copy, and by an older build: one from before #29 asks only
-  whether a `mind.toml` is there, so its `mind init`, or its TUI's making a
-  repository a project, writes one beside the settings and reads the project
-  from it from then on. With `mind init` making a settings project by
-  default, two builds on one machine are enough. A `warning:` line wherever a
-  project is opened, or a doctor check (#96), would make it seen.
-- **`targets` written by hand into a version 3 file.** `targets` comes with
-  version 4, which a build from before it refuses, and a file that sets them
-  through Mindflayer is written at 4 ([a project's own
+- **A leftover older marker nobody is told about.** A project holding more
+  than one marker is read from the newest, and `MindProject::warnings` names
+  each one ignored, but no front end prints it yet. This build leaves none:
+  `mind init` gives a project an older marker marks no settings, and the
+  migration moves the old marker out of the way. One is still left by hand,
+  by a copy, and by an older build: one from before #29 asks only whether a
+  `mind.toml` is there, and one from before #166 whether a `settings.json`
+  or a `mind.toml` is, so its `mind init`, or its TUI's making a repository a
+  project, writes its own beside a `settings.toml` and reads the project
+  from it from then on, while this build reads the `settings.toml`. With
+  `mind init` making a `settings.toml` by default, two builds on one machine
+  are enough. A `warning:` line wherever a project is opened, or a doctor
+  check (#96), would make it seen.
+- **`targets` written by hand into a version 3 file.** `targets` came with
+  version 4 of a `settings.json`, which a build from before it refuses, and a
+  file that set them through Mindflayer was written at 4 ([a project's own
   targets](#a-projects-own-targets)). One a person gives `targets` while
   leaving it at 3 is read with them by this build and read past by an older
-  one, which installs into the standard folders and says nothing, until a
-  change of targets writes the 4. Refusing such a file as malformed would
-  close it, at the price of a project no build opens over a version number;
-  a warning naming the version it needs is the other way. A version 3 file
-  whose `targets` do not read as targets at all (not an object, a kind with
-  no folder or something other than a list of them) is read past, as every
-  build before them read the key, rather than refused: a project those
-  builds opened still opens, and installs where its agents read without a
-  word, where a version 4 file holding the same is refused as any key the
-  format defines is. A change of targets writes such a key over whole.
+  one, which installs into the standard folders and says nothing, until `mind
+  migrate` moves it to a `settings.toml`, which no such build reads. Refusing
+  such a file as malformed would close it, at the price of a project no build
+  opens over a version number; a warning naming the version it needs is the
+  other way. A version 3 file whose `targets` do not read as targets at all
+  (not an object, a kind with no folder or something other than a list of
+  them) is read past, as every build before them read the key, rather than
+  refused: a project those builds opened still opens, and installs where its
+  agents read without a word, where a version 4 file holding the same is
+  refused as any key the format defines is. The move to a `settings.toml`
+  writes what this build read, no `targets`, and the copy it keeps holds the
+  key as it was.
+- **A key a settings.json holds that this build does not know.** Its move
+  to a `settings.toml` writes what this build reads, the keys the format
+  defines and an unknown one inside `directories` or `targets`, and leaves a
+  key it does not know at the top of the file, a `$schema` say, in the copy
+  kept in `.mind/tmp` alone, as #38's move leaves a `mind.toml`'s. Nothing
+  wrote one but a person, and none means anything to Mindflayer, so it is
+  not said. Carrying each into the TOML is the other way, at the price of a
+  JSON `null`, which TOML cannot hold, refusing the move.
 - **An agent pointed at a target some other way.** Whether an agent reads a
   project's own target is told by where docs/agents.md says it reads, so one
   pointed there by a link from a folder it reads is seen, and one pointed
@@ -5322,16 +5436,16 @@ just listed.
   shows as untracked. Their entries are spelled from the route, as an
   install's are from the record, and one answer should serve both.
 - **Agents changed by hand.** `mind agents` carries what is installed along
-  (#37), and `mind targets` (#40), but the settings are JSON anybody can
-  edit. An install after such an edit replaces its record's targets with the
-  ones the project has now, so a copy in the folder of an agent the project
-  stopped naming, or one its `targets` stopped naming, is no longer
-  recorded: Foreign, left where it is with its exclude entry. `mind agents`
-  naming the agents the file already names, or `mind targets set` naming the
-  folders it names, re-applies the installs, and takes such copies out, only
-  while the install has not dropped them from its record first. An install
-  that carried the installation's other copies along itself, as `reapply`
-  does, would close it.
+  (#37), and `mind targets` (#40), but the settings are TOML anybody can edit,
+  and the comments in them say how. An install after such an edit replaces its
+  record's targets with the ones the project has now, so a copy in the folder
+  of an agent the project stopped naming, or one its `targets` stopped naming,
+  is no longer recorded: Foreign, left where it is with its exclude entry.
+  `mind agents` naming the agents the file already names, or `mind targets
+  set` naming the folders it names, re-applies the installs, and takes such
+  copies out, only while the install has not dropped them from its record
+  first. An install that carried the installation's other copies along itself,
+  as `reapply` does, would close it.
 - **An install surveyed before a change.** An install works out its targets
   from the project it is handed, read before it takes the workspace's lock,
   as it does its standing, which it looks at again under the lock. One

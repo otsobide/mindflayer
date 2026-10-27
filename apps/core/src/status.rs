@@ -31,7 +31,7 @@ use crate::kind::Kind;
 use crate::ledger::{InstallRecord, Target};
 use crate::paths;
 use crate::workspace::{
-    same_directory, FlayerWorkspace, MindProject, MisplacedTarget, WorkspaceError,
+    same_directory, FlayerWorkspace, MarkerFile, MindProject, MisplacedTarget, WorkspaceError,
 };
 
 /// What every project a report covers holds.
@@ -54,6 +54,14 @@ pub struct ProjectStatus {
     /// Where it is.
     #[serde(serialize_with = "paths::lossy")]
     pub path: PathBuf,
+    /// The file its marker is read from, inside its `.mind`: a
+    /// `settings.toml`, or the `mind.toml` or `settings.json` an older
+    /// Mindflayer wrote, which `mind migrate` moves to one. Said because
+    /// nothing else in a report tells a `settings.json` from a
+    /// `settings.toml`, which name the same agents, though only the second
+    /// can be changed. None for an entry that would not open, which has no
+    /// marker to read.
+    pub marker: Option<MarkerFile>,
     /// The agents its settings name, in report order: none for a project a
     /// `mind.toml` marks, which names none.
     pub agents: Vec<Agent>,
@@ -249,6 +257,7 @@ impl Status {
                         name: None,
                         entry: Some(spelled(&member.entry)),
                         path: member.root,
+                        marker: None,
                         agents: Vec::new(),
                         stale: Some(error.to_string()),
                         unreached: Vec::new(),
@@ -360,6 +369,7 @@ impl ProjectStatus {
             name: Some(project.name().to_owned()),
             entry,
             path: root.to_path_buf(),
+            marker: Some(project.marker_file()),
             stale: None,
             unreached: unreached(project, kinds, &agents),
             missed: missed(&agents, &artifacts, &received),

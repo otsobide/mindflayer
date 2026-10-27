@@ -15,7 +15,7 @@ use std::sync::Arc;
 use mindflayer_core::gather::{Progress, Watch};
 use mindflayer_core::url::redacted;
 use mindflayer_core::{
-    paths, Agent, Kind, Layout, Reason, Share, State, DEFAULT_SUBDIRECTORY, QUALIFIER,
+    paths, Agent, Kind, Layout, MarkerFile, Reason, Share, State, DEFAULT_SUBDIRECTORY, QUALIFIER,
 };
 use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
@@ -168,6 +168,11 @@ pub struct Holdings {
     /// as its settings say: none for the workspace's own, and for a project
     /// a `mind.toml` marks, which has no settings to change.
     pub share: Option<Share>,
+    /// The older marker it is read from, a `mind.toml` or a `settings.json`,
+    /// which `mind migrate` moves to a `settings.toml`: none for a project
+    /// its `settings.toml` marks, and for the workspace's own. Until it is
+    /// moved, its settings are changed by nothing, and the header says so.
+    pub older: Option<MarkerFile>,
     /// Whether its settings let a tracked file be edited to reach an agent.
     pub edit_tracked: bool,
     /// Where its settings install skills, each folder as they spell it, when
@@ -1440,6 +1445,9 @@ impl App {
                     "{} cannot be opened, so its agents cannot be changed",
                     member.name
                 ),
+                Ok(holdings) if holdings.older == Some(MarkerFile::SettingsJson) => {
+                    unchanged(&member.name)
+                }
                 Ok(holdings) => match holdings.share {
                     Some(share) => {
                         let form = SettingsForm::new(
@@ -1474,6 +1482,9 @@ impl App {
                     "{} cannot be opened, so where it installs cannot be changed",
                     member.name
                 ),
+                Ok(holdings) if holdings.older == Some(MarkerFile::SettingsJson) => {
+                    unchanged(&member.name)
+                }
                 Ok(holdings) if holdings.share.is_some() => {
                     let form =
                         TargetsForm::new(self.cursor, Kind::Skill, holdings.targets.clone());
@@ -2041,6 +2052,16 @@ impl App {
             self.focus = Focus::Items;
         }
     }
+}
+
+/// What `t` and `T` say of `project`, which a `settings.json` marks: said
+/// before a form opens, as a `mind.toml`'s is, rather than by the command
+/// the form would run, which core refuses the same way.
+fn unchanged(project: &str) -> String {
+    format!(
+        "{project} is marked by a settings.json, which is read as it was written and not changed; \
+         `mind migrate` moves it to a settings.toml"
+    )
 }
 
 /// The kind after this one, round and round.

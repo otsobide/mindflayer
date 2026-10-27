@@ -429,7 +429,7 @@ fn a_project_whose_settings_will_not_open_is_found_without_an_id_and_said() {
     let (workspace, _) = FlayerWorkspace::init(dir.path()).unwrap();
     let settings = dir.path().join("alpha").join(MIND_DIR).join(SETTINGS_FILE);
     fs::create_dir_all(settings.parent().unwrap()).unwrap();
-    fs::write(&settings, "{ not json\n").unwrap();
+    fs::write(&settings, "{ not toml\n").unwrap();
     git_repository(&dir.path().join("beta"));
 
     let scan = scan(&workspace, &Request::default());

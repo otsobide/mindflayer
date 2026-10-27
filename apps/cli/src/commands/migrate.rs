@@ -1,13 +1,14 @@
 //! `flayer migrate` and `mind migrate`: bringing what an older Mindflayer
 //! made into the layout a new one has. `--library` moves a workspace's own
 //! into its library; `mind migrate`, `-p` and `--all-projects` move a
-//! project from its `mind.toml` to settings. Core's [`migrate`] decides
-//! everything about each; here it is said.
+//! project from its `mind.toml` or its `settings.json` to a
+//! `settings.toml`. Core's [`migrate`] decides everything about each; here
+//! it is said.
 
 use std::fmt::Write as _;
 
 use mindflayer_core::migrate::{self, MigrateError, Plan, ProjectPlan, Stranded};
-use mindflayer_core::{Agent, AgentHomes, FlayerWorkspace, MindProject, Share};
+use mindflayer_core::{Agent, AgentHomes, FlayerWorkspace, MarkerFile, MindProject, Share};
 
 use super::all_or_nothing;
 use super::consulted;
@@ -140,17 +141,19 @@ fn listed(words: &[&str]) -> String {
     }
 }
 
-/// What a project's settings are to say once it is moved, and whether to
-/// move it or only say what moving it would do.
+/// What a project's settings are to say once it is moved from a
+/// `mind.toml`, and whether to move it or only say what moving it would do.
+/// A project a `settings.json` marks keeps the agents and share mode it
+/// names, whatever these say.
 pub(crate) struct Asked<'a> {
     pub agents: &'a [Agent],
     pub share: Share,
     pub yes: bool,
 }
 
-/// `mind migrate`: the project at or above here moved to settings, carrying
-/// what the workspace `mind` consults about it records, when that one links
-/// it.
+/// `mind migrate`: the project at or above here moved to a `settings.toml`,
+/// carrying what the workspace `mind` consults about it records, when that
+/// one links it.
 ///
 /// A project nothing links is moved all the same, since its marker is its
 /// own, with a hint saying nothing installed was carried along, as `mind
@@ -163,22 +166,19 @@ pub(crate) struct Asked<'a> {
 /// without it, nothing is left to carry them once settings mark the
 /// project, and a copy recorded without a hash, which only the move holds
 /// to its offer (D-04), is dropped the next time the agents change, as one
-/// nothing can compare. A project its settings mark has nothing to move, so
-/// for that one it is still a warning.
+/// nothing can compare. A project its settings mark moves no copy, from a
+/// `settings.json` or with nothing to move at all
+/// ([`migrate::carries_installs`]), so for that one it is still a warning.
 pub(crate) fn migrate_here(
     project: &MindProject,
     asked: &Asked,
     lookup: &Lookup,
 ) -> Result<Outcome, Failure> {
-    let workspace = match consulted(project, lookup) {
-        Ok(workspace) => workspace,
+    let carries = migrate::carries_installs(project);
+    let (workspace, unread) = match consulted(project, lookup) {
+        Ok(workspace) => (workspace, None),
         Err(error @ CliError::Chosen { .. }) => return Err(error.into()),
-        Err(error) if project.settings().is_some() => {
-            let mut outcome = finished(None, project, asked);
-            outcome.stderr.push(format!("warning: {error}"));
-            outcome.ok = false;
-            return Ok(outcome);
-        }
+        Err(error) if !carries => (None, Some(error)),
         Err(error) => return Err(CliError::MigrateUnrecorded(Box::new(error)).into()),
     };
     let result = laid_out(workspace.as_ref(), project, asked, &lookup.agents);
@@ -187,11 +187,13 @@ pub(crate) fn migrate_here(
     } else {
         "would be carried along"
     };
-    // Only beside a move made or laid out. Never that no workspace links the
-    // project, which the walk up cannot know: one that links it from beside
-    // it is never reached that way, and its records are lost to the move
-    // just the same, so the hint names `-W`, which reaches it.
+    // Only beside a move made or laid out that carries copies. Never that no
+    // workspace links the project, which the walk up cannot know: one that
+    // links it from beside it is never reached that way, and its records are
+    // lost to the move just the same, so the hint names `-W`, which reaches
+    // it.
     let hint = match (&result, &workspace) {
+        _ if !carries => None,
         (Ok(Some(_)), Some(workspace)) if !workspace.is_linked(project.root()) => Some(format!(
             "hint: the workspace at {} does not link this project, so nothing installed in \
                  it {carried}; `mind link` links it, and -W names one that links it from \
@@ -208,14 +210,18 @@ pub(crate) fn migrate_here(
         Ok(outcome) => {
             let mut outcome = finished(outcome, project, asked);
             outcome.stderr.extend(hint);
+            if let Some(error) = unread {
+                outcome.stderr.push(format!("warning: {error}"));
+                outcome.ok = false;
+            }
             Ok(outcome)
         }
         Err(stopped) => Err(stopped.failure()),
     }
 }
 
-/// `flayer migrate -p`: one project the workspace links moved to settings,
-/// carrying what its ledger records along.
+/// `flayer migrate -p`: one project the workspace links moved to a
+/// `settings.toml`, carrying what its ledger records along.
 pub(crate) fn migrate_one(
     workspace: &FlayerWorkspace,
     project: &MindProject,
@@ -229,14 +235,15 @@ pub(crate) fn migrate_one(
 }
 
 /// `flayer migrate --all-projects`: every project the workspace links that
-/// a `mind.toml` marks, moved to settings one at a time.
+/// a `mind.toml` or a `settings.json` marks, moved to a `settings.toml` one
+/// at a time.
 ///
 /// Each is all or nothing on its own, so one that is refused, or fails, is
 /// said with `error:` beside what the others did, naming it, and the command
 /// exits non-zero; the others go ahead, as a stale entry is a warning beside
 /// them. Without `--yes`, each one's lines, a blank line between two, and
-/// nothing written. Those their settings mark already are not listed, there
-/// being nothing to say of them.
+/// nothing written. Those their `settings.toml` marks already are not
+/// listed, there being nothing to say of them.
 pub(crate) fn migrate_all(
     workspace: &FlayerWorkspace,
     asked: &Asked,
@@ -274,7 +281,8 @@ pub(crate) fn migrate_all(
         outcome.stdout.push_str(UNCHANGED);
     } else if !laid && outcome.ok {
         outcome.stdout = String::from(
-            "nothing to migrate: every project the workspace links is marked by its settings already\n",
+            "nothing to migrate: every project the workspace links is marked by its settings.toml \
+             already\n",
         );
     }
     Ok(outcome)
@@ -294,8 +302,9 @@ fn finished(outcome: Option<Outcome>, project: &MindProject, asked: &Asked) -> O
             outcome
         }
         None => Outcome::plain(format!(
-            "nothing to migrate: {} is marked by its settings already\n",
-            project.name()
+            "nothing to migrate: {} is marked by its {} already\n",
+            project.name(),
+            MarkerFile::SettingsToml
         )),
     }
 }
@@ -339,7 +348,7 @@ impl Stopped {
 }
 
 /// One project's move, planned without `yes` and made with it, laid out;
-/// `None` when its settings mark it already.
+/// `None` when its `settings.toml` marks it already.
 ///
 /// The dry run is a report, as `flayer migrate --library`'s is: a line for
 /// each thing that would change, to read before saying yes. Made, a copy
@@ -489,9 +498,9 @@ fn stranded(left: &Stranded) -> String {
              {name}` puts it back",
             path.display()
         ),
-        Stranded::Settings(path) => format!(
+        Stranded::Settings { path, marker } => format!(
             "warning: {} was written and could not be removed, so the project is read from it; \
-             remove it to read the project from its mind.toml again",
+             remove it to read the project from its {marker} again",
             path.display()
         ),
         Stranded::Marker { marker, backup } => format!(

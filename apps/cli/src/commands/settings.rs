@@ -316,23 +316,6 @@ fn report(project: &MindProject, plan: &Plan, done: bool) -> String {
             );
         }
     }
-    // The one version a change moves, with `targets`: said, since a build
-    // from before them then refuses the project, which a team sharing it
-    // has to know.
-    if before.version != after.version {
-        let _ = writeln!(
-            text,
-            "{} version to {} in {name}, where it was {}{}",
-            would("set", "would set"),
-            after.version,
-            before.version,
-            if after.version > before.version {
-                ", so a Mindflayer from before targets refuses it"
-            } else {
-                ""
-            }
-        );
-    }
     match &plan.ignore {
         Some(Ignore::Write(path)) => {
             let _ = writeln!(

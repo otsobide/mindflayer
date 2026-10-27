@@ -2183,6 +2183,59 @@ fn the_header_flags_projects_a_mind_toml_marks_with_the_command_that_moves_them(
 }
 
 #[test]
+fn the_header_flags_projects_a_settings_json_marks_as_it_flags_a_mind_toml() {
+    let dir = workspace_with_two();
+    let header = |dir: &Path| {
+        tui_drawn(&tui_in(dir))
+            .lines()
+            .next()
+            .unwrap_or_default()
+            .to_owned()
+    };
+    let json = dir.path().join("json");
+    fs::create_dir(&json).unwrap();
+    json_project(&json);
+    flayer(dir.path(), &["link", "json"]).unwrap();
+
+    let flagged = header(dir.path());
+    assert!(
+        flagged
+            .contains("  · 1 project marked by settings.json: `flayer migrate --all-projects`  · "),
+        "{flagged}"
+    );
+
+    // Both kinds, counted together and each named once.
+    let old = dir.path().join("old");
+    fs::create_dir(&old).unwrap();
+    older_project(&old);
+    flayer(dir.path(), &["link", "old"]).unwrap();
+    let both = header(dir.path());
+    assert!(
+        both.contains(
+            "  · 2 projects marked by mind.toml or settings.json: \
+             `flayer migrate --all-projects`"
+        ),
+        "{both}"
+    );
+
+    // A project on its own is told what moves it from where it is.
+    let alone = TempDir::new().unwrap();
+    json_project(alone.path());
+    let own = tui_drawn(&mind_tui_in(alone.path()));
+    assert!(
+        own.lines()
+            .next()
+            .unwrap_or_default()
+            .contains("  · marked by settings.json: `mind migrate`  · "),
+        "{own}"
+    );
+
+    flayer(dir.path(), &["migrate", "--all-projects", "--yes"]).unwrap();
+    let moved = header(dir.path());
+    assert!(!moved.contains("marked by"), "{moved}");
+}
+
+#[test]
 fn a_w_among_a_lines_words_is_typed_from_the_workspace_root() {
     let (_dir, outer, _hub, _collapse) = hub_beside_outer();
     let words: Vec<String> = ["flayer", "-W", "../hub", "list"]
@@ -2426,6 +2479,32 @@ fn t_on_the_workspaces_own_row_or_an_older_project_says_why_not() {
         .unwrap()
         .text
         .contains("`mind migrate`"));
+}
+
+#[test]
+fn t_and_capital_t_on_a_project_a_settings_json_marks_say_why_not() {
+    let dir = workspace_with_two();
+    let json = dir.path().join("json");
+    fs::create_dir(&json).unwrap();
+    json_project(&json);
+    flayer(dir.path(), &["link", "json"]).unwrap();
+    let mut app = tui_in(dir.path());
+    while app.member().unwrap().name != "json" {
+        press_key(&mut app, KeyCode::Down);
+    }
+
+    for key in ['t', 'T'] {
+        press_key(&mut app, KeyCode::Char(key));
+
+        assert!(matches!(app.mode, Mode::Browse), "{key}: {:?}", app.mode);
+        let said = &app.message.as_ref().unwrap().text;
+        assert_eq!(
+            said,
+            "json is marked by a settings.json, which is read as it was written and not \
+             changed; `mind migrate` moves it to a settings.toml",
+            "{key}"
+        );
+    }
 }
 
 // ---------------------------------------------------------------------------

@@ -83,7 +83,7 @@ fn adding_codex_says_what_it_would_copy_then_copies_it_where_codex_reads() {
          copied deploy to .agents/skills/deploy, for codex, kept out of git\n"
     );
     assert!(done.ok, "{:?}", done.stderr);
-    assert!(settings(&root).contains(r#""agents": ["claude", "codex"]"#));
+    assert!(settings(&root).contains(r#"agents = ["claude", "codex"]"#));
     assert_eq!(
         fs::read(agents(&root, "deploy").join("SKILL.md")).unwrap(),
         fs::read(claudes(&root, "deploy").join("SKILL.md")).unwrap()
@@ -197,6 +197,35 @@ fn a_project_a_mind_toml_marks_is_refused_and_sent_to_mind_migrate() {
 }
 
 #[test]
+fn a_project_a_settings_json_marks_is_refused_and_sent_to_mind_migrate() {
+    let dir = TempDir::new().unwrap();
+    flayer(dir.path(), &["init"]).unwrap();
+    let root = dir.path().join("json");
+    fs::create_dir(&root).unwrap();
+    json_project(&root);
+    flayer(dir.path(), &["link", "json"]).unwrap();
+    let json = root.join(MIND_DIR).join(SETTINGS_JSON_FILE);
+    let written = fs::read_to_string(&json).unwrap();
+
+    for args in [
+        &["agents", "add", "codex"][..],
+        &["share", "shared", "--yes"][..],
+        &["targets", "set", "skills", ".skills", "--yes"][..],
+    ] {
+        let failure = mind(&root, args).unwrap_err();
+        let said = failure.error.to_string();
+        assert!(said.contains("since a settings.json marks it"), "{said}");
+        assert!(said.ends_with("`mind migrate` moves it to one"), "{said}");
+    }
+    assert_eq!(fs::read_to_string(&json).unwrap(), written);
+
+    // Moved, it changes as any project does.
+    mind(&root, &["migrate", "--yes"]).unwrap();
+    mind(&root, &["share", "shared", "--yes"]).unwrap();
+    assert!(settings(&root).contains("\nshare = \"shared\"\n"));
+}
+
+#[test]
 fn somebodys_skill_where_a_copy_would_go_is_left_and_warned_about() {
     let (dir, root) = installed("claude", false);
     let theirs = agents(&root, "deploy");
@@ -275,14 +304,14 @@ fn sharing_a_local_project_leaves_its_mind_and_its_copies_for_the_team() {
     );
     assert!(done.ok, "{:?}", done.stderr);
     // The settings and the copy are offered to git, for the team to commit.
-    assert_eq!(offered(&root), [".claude", ".mind/settings.json"]);
+    assert_eq!(offered(&root), [".claude", ".mind/settings.toml"]);
     assert!(!root.join(MIND_DIR).join(".gitignore").exists());
 }
 
 #[test]
 fn making_a_shared_project_local_keeps_its_mind_and_its_copies_out_of_git() {
     let (_dir, root) = installed("claude", true);
-    assert_eq!(offered(&root), [".claude", ".mind/settings.json"]);
+    assert_eq!(offered(&root), [".claude", ".mind/settings.toml"]);
 
     let done = mind(&root, &["share", "local", "--edit-tracked", "--yes"]).unwrap();
 
@@ -294,7 +323,7 @@ fn making_a_shared_project_local_keeps_its_mind_and_its_copies_out_of_git() {
          kept .claude/skills/deploy out of git\n"
     );
     assert!(untracked(&root).is_empty(), "{:?}", untracked(&root));
-    assert!(settings(&root).contains(r#""edit_tracked": true"#));
+    assert!(settings(&root).contains("\nedit_tracked = true\n"));
 
     let again = mind(&root, &["share", "local", "--edit-tracked"]).unwrap();
     assert_eq!(

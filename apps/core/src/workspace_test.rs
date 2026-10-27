@@ -100,7 +100,8 @@ fn with_version(path: &Path, version: u32) {
     fs::write(path, rewritten).unwrap();
 }
 
-/// A project marked by settings, written at `root` as a new project's are.
+/// A project marked by settings, written at `root` as a new project's are:
+/// a `settings.toml`, at the newest version a project's marker has.
 fn settings_project(root: &Path, directories: Directories) -> PathBuf {
     let mind = root.join(MIND_DIR);
     fs::create_dir_all(&mind).unwrap();
@@ -159,7 +160,7 @@ fn a_refusal_names_the_marker_that_is_newer() {
 
 // Written against each marker's own constant, so that a check holding one
 // marker to the other's version fails: the second does, both ways round, now
-// that a project's marker reads up to 4 and a workspace's up to 2.
+// that a project's marker reads up to 5 and a workspace's up to 2.
 
 #[test]
 fn a_newer_project_marker_is_refused_while_a_current_workspace_marker_is_read() {
@@ -217,6 +218,32 @@ fn a_mind_toml_claiming_the_settings_version_is_refused_rather_than_guessed_at()
             .to_string()
             .contains("version 3 is written as settings.json"),
         "{error}"
+    );
+
+    with_version(&mind, SETTINGS_TOML_VERSION);
+    let error = MindProject::open(dir.path()).unwrap_err();
+    assert!(
+        error
+            .to_string()
+            .contains("version 5 is written as settings.toml"),
+        "{error}"
+    );
+}
+
+#[test]
+fn each_version_is_written_in_one_file() {
+    for (version, file) in [
+        (1, MarkerFile::MindToml),
+        (MIND_TOML_VERSION, MarkerFile::MindToml),
+        (SETTINGS_VERSION, MarkerFile::SettingsJson),
+        (TARGETS_VERSION, MarkerFile::SettingsJson),
+        (SETTINGS_TOML_VERSION, MarkerFile::SettingsToml),
+    ] {
+        assert_eq!(MarkerFile::of_version(version), file, "{version}");
+    }
+    assert_eq!(
+        MarkerFile::of_version(MIND_FORMAT_VERSION),
+        MarkerFile::SettingsToml
     );
 }
 
@@ -371,11 +398,11 @@ fn a_project_marked_by_settings_without_directories_has_no_folder_for_any_kind()
     let dir = tempfile::TempDir::new().unwrap();
     let path = settings_project(dir.path(), Directories::default());
     let text = fs::read_to_string(&path).unwrap();
-    fs::write(&path, text.replace(",\n  \"directories\": {}", "")).unwrap();
+    fs::write(&path, text.replace("\n[directories]\n", "")).unwrap();
 
     let project = MindProject::open(dir.path()).unwrap();
 
-    assert!(!fs::read_to_string(&path).unwrap().contains("directories"));
+    assert!(!fs::read_to_string(&path).unwrap().contains("[directories]"));
     for kind in Kind::ALL {
         assert_eq!(project.directory_for(kind), None, "{kind}");
         let error = project.required_directory(kind).unwrap_err();
@@ -396,7 +423,8 @@ fn a_project_marked_by_settings_keeps_each_kind_it_names_where_it_says() {
 
     let project = MindProject::open(dir.path()).unwrap();
 
-    assert_eq!(project.config().version(), SETTINGS_VERSION);
+    assert_eq!(project.config().version(), SETTINGS_TOML_VERSION);
+    assert_eq!(project.marker_file(), MarkerFile::SettingsToml);
     assert_eq!(project.name(), "both");
     assert_eq!(
         project.directory_for(Kind::Skill),

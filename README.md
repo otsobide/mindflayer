@@ -21,7 +21,7 @@ layout leaves room for a desktop app later without moving the engine.
 
 | | Marker | Holds | Think of it as |
 |---|---|---|---|
-| **Mind project** | `.mind/settings.json` | the agents that work in it, and its artifacts, in the directories the marker names | a repository's `.git` |
+| **Mind project** | `.mind/settings.toml` | the agents that work in it, and its artifacts, in the directories the marker names | a repository's `.git` |
 | **Flayer workspace** | `.mindflayer/flayer.toml` | references to mind projects, and artifacts of its own it shares with them | the directory your repos sit in |
 
 A mind project's `.mind` belongs to the checkout it is in: a short settings
@@ -245,7 +245,7 @@ $ flayer list
 deploy  Ship the service to staging
 ```
 
-`mind init` makes a `.mind` holding `settings.json`, which says which agents
+`mind init` makes a `.mind` holding `settings.toml`, which says which agents
 work in the project and where it keeps its own skills and rules, and a
 `.gitignore` holding `*`, which is why `git status` shows none of it. The
 `skills/` and `rules/` it makes beside the code are the project's, to commit
@@ -342,8 +342,9 @@ mind targets reset <KIND> [--yes]
                            # install a kind in folders of the project's own,
                            # or back where its agents read; the same again
 mind migrate [--agents AGENTS] [--local|--shared] [--yes]
-                           # move a project an older Mindflayer made to
-                           # settings, and its installs where its agents read
+                           # move a project an older Mindflayer made to a
+                           # settings.toml, and its installs where its
+                           # agents read
 
 flayer                     # the TUI: everything below, a key each
 flayer init [PATH] [--skills DIR] [--rules DIR]
@@ -945,6 +946,7 @@ collapse  commit-style  installed  claude,codex,opencode  load:../src/mindflayer
 collapse  deploy        authored   -
 collapse  notes         foreign    claude,opencode
 tanukeys  commit-style  installed  -                      load:../src/mindflayer/examples
+hint: tanukeys is marked by a mind.toml, which `mind migrate` moves to a settings.toml
 ```
 
 Each artifact is in one of four states:
@@ -961,10 +963,13 @@ none, as for `deploy`, which `collapse` keeps in `skills/`, a folder no agent
 reads, and for everything in a project whose `.mind` an older Mindflayer
 made, which names no agents. Last, where what was installed came
 from, as `--from` takes it: `workspace`, `load:<path>` or a shelf source's
-address. `mind status` says the same of the project you are in, and `flayer
-status -p tanukeys` of one; as in `list`, the project column is there only
-when there is more than one project to tell apart, and the kind column only
-when there is more than one kind.
+address. A project an older Mindflayer made, marked by a `mind.toml` or a
+`settings.json`, gets a hint after the report naming [`mind
+migrate`](#a-project-made-before-settings), which moves it to a
+`settings.toml`; the exit status stays the report's. `mind status` says the
+same of the project you are in, and `flayer status -p tanukeys` of one; as in
+`list`, the project column is there only when there is more than one project
+to tell apart, and the kind column only when there is more than one kind.
 
 A rule the project received is read from what was installed and from its
 `AGENTS.md`, and its agents are the ones it reaches: all of the project's
@@ -1003,6 +1008,7 @@ $ flayer status -p tanukeys --json
         "name": "tanukeys",
         "entry": "tanukeys",
         "path": "/home/you/Projects/tanukeys",
+        "marker": "mind.toml",
         "agents": [],
         "stale": null,
         "unreached": [],
@@ -1021,6 +1027,7 @@ $ flayer status -p tanukeys --json
   },
   "warnings": []
 }
+hint: tanukeys is marked by a mind.toml, which `mind migrate` moves to a settings.toml
 ```
 
 ## The workspace's own skills and rules
@@ -1125,9 +1132,9 @@ rather than on the one the project would find by itself. `flayer -W <dir>` opens
 workspace it names, and every line it runs uses that one; so does an
 activated workspace. The header says which it is showing and why: `named
 with -W`, `activated`, `found above`, or `default workspace`. It also counts
-the projects an older Mindflayer made, still marked by a `mind.toml`, and
-names the command that moves them, `flayer migrate --all-projects`, or `mind
-migrate` for a project on its own
+the projects an older Mindflayer made, still marked by a `mind.toml` or a
+`settings.json`, and names the command that moves them, `flayer migrate
+--all-projects`, or `mind migrate` for a project on its own
 ([upgrading](#a-project-made-before-settings)).
 
 `m`, or `flayer minds` straight from the shell, opens a list of every
@@ -1163,35 +1170,57 @@ reason underneath.
 
 ## Where a project keeps its artifacts
 
-`.mind/settings.json` is the marker and the configuration; the artifacts
+`.mind/settings.toml` is the marker and the configuration; the artifacts
 themselves sit beside the code, because these are files the **agents** read
 and an agent does not know what a `.mind` is. `mind init` writes it:
 
-```json
-{
-  "version": 3,
-  "id": "4f9c2a7e1b3d5f60a8c4e2b6d0f1a3c5",
-  "name": "collapse",
-  "agents": ["claude", "codex", "opencode"],
-  "share": "local",
-  "edit_tracked": false,
-  "directories": {
-    "skills": "skills",
-    "rules": "rules"
-  }
-}
+```toml
+# Mindflayer mind project: what Mindflayer needs to know about the project
+# this .mind is in, and nothing else. No agent reads it.
+#
+# `name` is what the project is shown as, and `agents` the agents that work
+# in it (claude, codex, opencode): what is installed into the project is
+# copied where each of them reads. `mind agents` changes them.
+#
+# `share` is "local" to keep .mind, and what is installed, out of git
+# for this checkout alone, or "shared" to leave both for the team to
+# commit. `edit_tracked` lets a file git tracks, such as AGENTS.md, be
+# edited to reach an agent in a local project. `mind share` changes both.
+#
+# `directories` says where the project keeps the skills and rules it writes
+# itself, relative to the directory holding .mind, to commit with its
+# code; a kind left out has no folder. A `[targets]` table, when there,
+# names the folders a kind is installed in instead of where the agents
+# read: `mind targets` writes it.
+#
+# `id` names the project for good, wherever it moves, and `version` is how
+# this file is laid out: change neither.
+version = 5
+id = "4f9c2a7e1b3d5f60a8c4e2b6d0f1a3c5"
+name = "collapse"
+agents = ["claude", "codex", "opencode"]
+share = "local"
+edit_tracked = false
+
+[directories]
+skills = "skills"
+rules = "rules"
 ```
 
-It is plain JSON, which any tool can read and change. `agents` are the agents
-that work in the project, and so where what is installed into it goes
-(`--agents` names them, comma-separated); `share` says whether that is kept to
-this checkout or left for the team to commit; `edit_tracked` whether a file
-the team tracks may be edited to reach an agent; `directories` where the
-project keeps the skills and rules it writes itself; and the `id` names the
-project wherever it moves. A project that installs somewhere other than where
-its agents read says where in `targets` too ([installing somewhere
-else](#installing-somewhere-else)). Point the directories wherever the agents
-already look, and Mindflayer follows:
+It is TOML, as the workspace's `flayer.toml` is, and its comments say what
+each key does. `agents` are the agents that work in the project, and so
+where what is installed into it goes (`--agents` names them,
+comma-separated); `share` says whether that is kept to this checkout or left
+for the team to commit; `edit_tracked` whether a file the team tracks may be
+edited to reach an agent; `directories` where the project keeps the skills
+and rules it writes itself; and the `id` names the project wherever it
+moves. A project that installs somewhere other than where its agents read
+says where in `targets` too ([installing somewhere
+else](#installing-somewhere-else)). Edit it by hand if you like:
+`mind agents`, `mind share` and `mind targets` change only the keys they set,
+and keep your comments, your layout and any key Mindflayer does not know.
+Point the directories wherever the agents already look, and Mindflayer
+follows:
 
 ```bash
 mind init --skills .claude/skills
@@ -1221,10 +1250,13 @@ with it. `mind init --shared` writes no `.gitignore` and sets `share` to
 project with it, so that every clone gets the same.
 
 A project an older Mindflayer made is marked by `.mind/mind.toml` instead,
-which names the same folders in a table and was committed with the project.
-Mindflayer still reads it the way it was written, `mind init` leaves it as it
-is, and when a project holds both it reads `settings.json`. `mind migrate`
-moves it to settings when you ask ([upgrading](#a-project-made-before-settings)).
+which names the same folders in a table and was committed with the project,
+or by `.mind/settings.json`, which holds these same keys in JSON. Mindflayer
+still reads either the way it was written, and `mind init` leaves it as it
+is. When a project holds more than one, it reads `settings.toml`, then
+`settings.json`, then `mind.toml`. `mind migrate` moves it to a
+`settings.toml` when you ask, and until then its settings are not changed
+([upgrading](#a-project-made-before-settings)).
 
 A project is listed from the folders its agents read as well (one an older
 Mindflayer made, from the one folder its `mind.toml` names):
@@ -1306,9 +1338,10 @@ what was installed; one in a folder no agent reads any more is left and
 said, as `notes` is above. Running the same command again changes nothing
 once it is done. A project has to name at least one agent, so removing the
 last is refused, and so is a project an older Mindflayer made, marked by a
-`mind.toml`, which `mind migrate` moves to settings first. Its rules follow
-later, at the next install or uninstall of one, which renders every rule the
-project has for the agents and the share mode it has then.
+`mind.toml` or a `settings.json`, which `mind migrate` moves to a
+`settings.toml` first. Its rules follow later, at the next install or
+uninstall of one, which renders every rule the project has for the agents
+and the share mode it has then.
 
 `mind share` sets the share mode, and `edit_tracked` with it, off unless
 `--edit-tracked` is given:
@@ -1339,7 +1372,6 @@ goes there instead, one copy for all of them:
 ```
 $ mind targets set skills .skills
 would set the targets of skills to .skills in collapse, where they were the folders its agents read
-would set version to 4 in collapse, where it was 3, so a Mindflayer from before targets refuses it
 would copy commit-style to .skills/commit-style, for claude, codex and opencode, kept out of git
 would remove commit-style from .agents/skills/commit-style
 would remove commit-style from .claude/skills/commit-style
@@ -1347,20 +1379,19 @@ nothing changed: add --yes to go ahead
 note: claude, codex and opencode would read none of the folders collapse would install skills in (.skills), so none of them would see what is installed there until pointed at one
 $ mind targets set skills .skills --yes
 set the targets of skills to .skills in collapse, where they were the folders its agents read
-set version to 4 in collapse, where it was 3, so a Mindflayer from before targets refuses it
 copied commit-style to .skills/commit-style, for claude, codex and opencode, kept out of git
 removed commit-style from .agents/skills/commit-style
 removed commit-style from .claude/skills/commit-style
 note: claude, codex and opencode read none of the folders collapse installs skills in (.skills), so none of them sees what is installed there until pointed at one
 ```
 
-The settings then hold `"targets": {"skills": [".skills"]}`, and name as many
-folders as you give it, each relative to the project. A folder that leads out
-of the project, an absolute one, or one inside `.mind` or `.git` is refused,
-and one written there by hand is given no copy and said by `status`, by an
-install and in the TUI.
-Copies move as they do for [a change of agents](#changing-its-agents-or-how-it-shares):
-only Mindflayer's untouched ones, never over somebody's, and a dry run first.
+The settings then end in a `[targets]` table holding `skills = [".skills"]`,
+and name as many folders as you give it, each relative to the project. A
+folder that leads out of the project, an absolute one, or one inside `.mind`
+or `.git` is refused, and one written there by hand is given no copy and said
+by `status`, by an install and in the TUI. Copies move as they do for [a
+change of agents](#changing-its-agents-or-how-it-shares): only Mindflayer's
+untouched ones, never over somebody's, and a dry run first.
 
 No agent reads `.skills` until it is pointed there, so `status` warns until
 it is. A link from a folder the agent reads is one way, and one the report
@@ -1376,17 +1407,16 @@ $ mind status
 commit-style  installed  claude,codex,opencode  workspace
 ```
 
-`targets` comes with version 4 of the settings, which a Mindflayer from
-before it refuses rather than installing into the standard folders behind
-your back; a project that never sets it stays at version 3. `mind targets
-reset` sends the kind back to where each agent reads, and the version with
-it. With the links taken out again, and somebody's `notes` kept in
-`.skills`, it leaves `notes` where it is:
+Every Mindflayer that reads a `settings.toml` reads `targets` too, so
+setting them changes no version: a build from before them finds no project
+in a `settings.toml` at all, rather than installing into the standard
+folders behind your back. `mind targets reset` sends the kind back to where
+each agent reads, and takes the table out. With the links taken out again,
+and somebody's `notes` kept in `.skills`, it leaves `notes` where it is:
 
 ```
 $ mind targets reset skills --yes
 set the targets of skills to the folders its agents read in collapse, where they were .skills
-set version to 3 in collapse, where it was 4
 copied commit-style to .agents/skills/commit-style, for codex and opencode, kept out of git
 copied commit-style to .claude/skills/commit-style, for claude, kept out of git
 removed commit-style from .skills/commit-style
@@ -1669,12 +1699,12 @@ A project an older Mindflayer made is marked by `.mind/mind.toml`, which
 names the folders it authors in and nothing else: no agents, so whatever was
 installed into it went into its `skills/` beside its own, and no share mode,
 since its `.mind` was committed by design. It keeps working that way until
-you move it to settings. On its own the command changes nothing and says
-what `--yes` would do:
+you move it to a `settings.toml`. On its own the command changes nothing and
+says what `--yes` would do:
 
 ```
 $ mind migrate
-would write .mind/settings.json for collapse: agents claude,codex,opencode, share shared
+would write .mind/settings.toml for collapse: agents claude,codex,opencode, share shared
 would move .mind/mind.toml to .mind/tmp/mind.toml.v2, as it is
 would copy commit-style to .agents/skills/commit-style, for codex and opencode
 would copy commit-style to .claude/skills/commit-style, for claude
@@ -1682,7 +1712,7 @@ would remove commit-style from skills/commit-style
 would leave skills/deploy where it is: the project's own
 nothing changed: add --yes to go ahead
 $ mind migrate --yes
-wrote .mind/settings.json for collapse: agents claude,codex,opencode, share shared
+wrote .mind/settings.toml for collapse: agents claude,codex,opencode, share shared
 moved .mind/mind.toml to .mind/tmp/mind.toml.v2, as it was
 copied commit-style to .agents/skills/commit-style, for codex and opencode
 copied commit-style to .claude/skills/commit-style, for claude
@@ -1704,7 +1734,7 @@ written over. Run again, it has nothing to do:
 
 ```
 $ mind migrate --yes
-nothing to migrate: collapse is marked by its settings already
+nothing to migrate: collapse is marked by its settings.toml already
 ```
 
 What `mind migrate` carries along is what the workspace it finds records,
@@ -1714,11 +1744,12 @@ it, which walking up never reaches, it carries nothing and says so in a
 
 `flayer migrate -p tanukeys` does the same from the workspace, and `flayer
 migrate --all-projects` does it for every project the workspace links that a
-`mind.toml` marks, each on its own: without `--yes` it lists every one and
-writes nothing, and with it one that cannot be moved is said and the others
-go ahead. `flayer migrate` alone says which of the three to ask for, and
-[the TUI](#the-tui)'s header counts the projects still marked by a
-`mind.toml`, naming the command.
+`mind.toml` or a `settings.json` marks, each on its own: without `--yes` it
+lists every one and writes nothing, and with it one that cannot be moved is
+said and the others go ahead. `flayer migrate` alone says which of the three
+to ask for, [the TUI](#the-tui)'s header counts the projects still marked
+by either, naming the command, and [`status`](#what-each-project-has) gives
+each one a hint.
 
 `--local` keeps `.mind` and the copies out of git, as `mind init` does for
 a new project. A `.gitignore` keeps out only what git does not track yet,
@@ -1727,7 +1758,7 @@ how to stop that and leaves it to you:
 
 ```
 $ flayer migrate -p tanukeys --local --agents claude --yes
-wrote .mind/settings.json for tanukeys: agents claude, share local
+wrote .mind/settings.toml for tanukeys: agents claude, share local
 moved .mind/mind.toml to .mind/tmp/mind.toml.v2, as it was
 wrote .mind/.gitignore, keeping .mind out of git
 copied commit-style to .claude/skills/commit-style, for claude, kept out of git
@@ -1744,6 +1775,29 @@ kept, or a project from the first Mindflayer that keeps its skills inside
 folder in `mind.toml`, and such a project moves. Nor while the workspace
 that installed into it cannot be read, since what it records is what says
 which copies to carry.
+
+A project a `.mind/settings.json` marks has its settings already, in the
+JSON Mindflayer wrote them in before TOML. It is read as it was written,
+installs go where its agents read, and nothing changes its settings until it
+moves: `mind agents`, `mind share` and `mind targets` point at
+`mind migrate`, which writes the same settings as a `settings.toml` and
+keeps the `settings.json` as it was in `.mind/tmp`:
+
+```
+$ mind migrate
+would write .mind/settings.toml for collapse: agents claude,codex,opencode, share local
+would move .mind/settings.json to .mind/tmp/settings.json.v3, as it is
+nothing changed: add --yes to go ahead
+$ mind migrate --yes
+wrote .mind/settings.toml for collapse: agents claude,codex,opencode, share local
+moved .mind/settings.json to .mind/tmp/settings.json.v3, as it was
+```
+
+No copy moves, since the agents, the share mode and the folders are the
+ones the file named, so the workspace's records are not needed for it.
+`--agents`, `--local` and `--shared` are what a `mind.toml` is given, and a
+key Mindflayer does not know stays in the copy kept. A `settings.json.v3` an
+earlier migration kept refuses the move, as a `mind.toml.v2` does.
 
 ## Roadmap
 

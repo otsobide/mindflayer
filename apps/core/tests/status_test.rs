@@ -6,8 +6,8 @@ use std::path::PathBuf;
 
 use mindflayer_core::ledger::{InstallRecord, Target};
 use mindflayer_core::{
-    Agent, ArtifactStatus, Directories, FlayerWorkspace, Kind, Ledger, MindProject, ProjectStatus,
-    Share, State, Status, StatusFailure, Unreached,
+    Agent, ArtifactStatus, Directories, FlayerWorkspace, Kind, Ledger, MarkerFile, MindProject,
+    ProjectStatus, Share, State, Status, StatusFailure, Unreached, MIND_DIR, SETTINGS_JSON_FILE,
 };
 use tempfile::TempDir;
 
@@ -299,6 +299,46 @@ fn a_stale_entry_is_reported_as_stale_and_the_rest_still_are() {
 }
 
 #[test]
+fn each_project_says_the_file_its_marker_is_read_from() {
+    let (dir, mut workspace) = workspace();
+    marked(&dir, &mut workspace, "alpha", &Agent::ALL);
+    let beta = dir.path().join("beta");
+    fs::create_dir_all(&beta).unwrap();
+    workspace
+        .link(&MindProject::init(&beta).unwrap().0)
+        .unwrap();
+    let gamma = dir.path().join("gamma");
+    fs::create_dir_all(gamma.join(MIND_DIR)).unwrap();
+    fs::write(
+        gamma.join(MIND_DIR).join(SETTINGS_JSON_FILE),
+        r#"{"version": 3, "id": "0123456789abcdef0123456789abcdef", "name": "gamma",
+            "agents": ["claude"], "share": "shared", "directories": {}}"#,
+    )
+    .unwrap();
+    workspace.link(&MindProject::open(&gamma).unwrap()).unwrap();
+    let old = marked(&dir, &mut workspace, "old-api", &Agent::ALL);
+    fs::remove_dir_all(old.root()).unwrap();
+    let workspace = FlayerWorkspace::open(dir.path()).unwrap();
+
+    let (status, _) = Status::of_workspace(&workspace);
+
+    let markers: Vec<Option<MarkerFile>> = status
+        .projects
+        .iter()
+        .map(|project| project.marker)
+        .collect();
+    assert_eq!(
+        markers,
+        [
+            Some(MarkerFile::SettingsToml),
+            Some(MarkerFile::MindToml),
+            Some(MarkerFile::SettingsJson),
+            None,
+        ]
+    );
+}
+
+#[test]
 fn two_entries_for_one_project_report_it_once() {
     let (dir, mut workspace) = workspace();
     let alpha = marked(&dir, &mut workspace, "alpha", &Agent::ALL);
@@ -564,12 +604,9 @@ fn a_project_installing_where_its_agents_read_has_nothing_unreached() {
 fn a_target_no_install_may_use_is_a_failure_beside_the_report() {
     let (dir, mut workspace) = workspace();
     let alpha = marked(&dir, &mut workspace, "alpha", &Agent::ALL);
-    let path = alpha.root().join(".mind").join("settings.json");
-    let text = fs::read_to_string(&path).unwrap().replacen(
-        "{\n",
-        "{\n  \"targets\": {\"skills\": [\".skills\", \"../shared\"]},\n",
-        1,
-    );
+    let path = alpha.marker_path();
+    let text =
+        fs::read_to_string(&path).unwrap() + "\n[targets]\nskills = [\".skills\", \"../shared\"]\n";
     fs::write(&path, text).unwrap();
 
     let (status, failures) = Status::of_workspace(&workspace);

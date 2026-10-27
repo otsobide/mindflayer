@@ -31,11 +31,10 @@ use crate::kind::{Kind, Layout};
 use crate::ledger::{Ledger, LedgerError, LEDGER_FILE};
 use crate::lock::{self, LockError, WorkspaceLock};
 use crate::paths;
-use crate::settings::{Settings, Share, SETTINGS_FILE};
+use crate::settings::{Settings, Share, SETTINGS_FILE, SETTINGS_JSON_FILE};
 
-/// The newest version of a project's marker this build reads: version 4, a
-/// `.mind/settings.json` that may say where installs land
-/// ([`TARGETS_VERSION`]).
+/// The newest version of a project's marker this build reads: version 5, a
+/// `.mind/settings.toml` ([`SETTINGS_TOML_VERSION`]).
 ///
 /// Refusing to read a version from the future is what lets the format change
 /// later without an old binary silently misreading a newer project. The
@@ -43,7 +42,17 @@ use crate::settings::{Settings, Share, SETTINGS_FILE};
 /// [`FLAYER_FORMAT_VERSION`]: shared, a change to either format would be a new
 /// version of both, and an older build would refuse a workspace that had not
 /// changed at all.
-pub const MIND_FORMAT_VERSION: u32 = 4;
+///
+/// 5 for a `settings.toml` whatever keys it sets, though it holds the keys a
+/// version 4 `settings.json` does: a version names the file it is written in
+/// as well as what that file holds, as [`SETTINGS_VERSION`] drew the line
+/// between `mind.toml` and `settings.json`, so one found in another file is
+/// refused rather than guessed at ([`MarkerFile::of_version`]). The rule
+/// that writes 4 only while `targets` is set stays with the files it was
+/// made for, which are read as they were written. A build from before it
+/// never looks for a `settings.toml`, so it finds no project in one rather
+/// than misreading it.
+pub const MIND_FORMAT_VERSION: u32 = 5;
 
 /// The newest version a `mind.toml` holds: what came before
 /// [`SETTINGS_VERSION`], and what [`MindProject::init`] still writes.
@@ -67,17 +76,19 @@ pub const FLAYER_FORMAT_VERSION: u32 = 2;
 /// which is exactly what the version field exists to prevent.
 pub const DIRECTORIES_VERSION: u32 = 2;
 
-/// The first [`MIND_FORMAT_VERSION`] whose marker is `.mind/settings.json`
-/// ([`crate::settings`]) rather than `.mind/mind.toml`.
+/// The first [`MIND_FORMAT_VERSION`] whose marker is a project's settings
+/// ([`crate::settings`]) rather than `.mind/mind.toml`: `.mind/settings.json`
+/// up to [`TARGETS_VERSION`], and `.mind/settings.toml` from
+/// [`SETTINGS_TOML_VERSION`].
 ///
 /// A line drawn the way [`DIRECTORIES_VERSION`] is: a marker from before it is
-/// read the way it was written, as TOML, and one from it on as JSON. Past it,
-/// a kind the marker names no folder for has none
+/// read the way it was written, as a `mind.toml`, and one from it on as the
+/// settings file its version names ([`MarkerFile::of_version`]). Past it, a
+/// kind the marker names no folder for has none
 /// ([`MindProject::directory_for`]), where a `mind.toml` from version 2 gives
 /// it the default beside the code.
 ///
-/// What `mind init` writes, and what a settings file stays while it says
-/// nothing of where installs land ([`Settings::version_needed`]).
+/// What a `settings.json` stays while it says nothing of where installs land.
 pub const SETTINGS_VERSION: u32 = 3;
 
 /// The first [`MIND_FORMAT_VERSION`] whose settings may say where what is
@@ -87,11 +98,21 @@ pub const SETTINGS_VERSION: u32 = 3;
 /// A version of its own, where a key the format does not define is
 /// otherwise read past: a build from before it would read past `targets`
 /// too, and install into the standard folders without a word, where the
-/// settings send copies elsewhere. Written only by a file that sets them,
-/// so a project that does not stays one every build since
+/// settings send copies elsewhere. A `settings.json` was written at it only
+/// while it set them, so one that did not stayed one every build since
 /// [`SETTINGS_VERSION`] reads. Nothing else in the file changes meaning, so
 /// it is read as a version 3 file is, with `targets` beside.
 pub const TARGETS_VERSION: u32 = 4;
+
+/// The first [`MIND_FORMAT_VERSION`] whose marker is `.mind/settings.toml`
+/// rather than `.mind/settings.json`: the same keys, in TOML written from a
+/// template whose comments say what each one does, as `flayer.toml` is
+/// (D-06, amended).
+///
+/// The one version that file holds, whatever keys it sets: every build that
+/// reads one reads `targets` too, so there is no older reader for a version
+/// of its own to keep out.
+pub const SETTINGS_TOML_VERSION: u32 = 5;
 
 /// The directory a mind project is identified by.
 pub const MIND_DIR: &str = ".mind";
@@ -163,6 +184,60 @@ impl fmt::Display for Marker {
             Marker::Project => "project marker",
             Marker::Workspace => "workspace marker",
         })
+    }
+}
+
+/// Which of the files a project's marker has been a project is read from.
+///
+/// Each holds versions of its own, and a project is read from the newest one
+/// it has ([`MindProject::open`]); the two before the newest are read the
+/// way they were written, and moved to it only when somebody asks
+/// (`mind migrate`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MarkerFile {
+    /// `.mind/mind.toml`, versions 1 and 2: folders, and nothing else.
+    MindToml,
+    /// `.mind/settings.json`, versions 3 and 4.
+    SettingsJson,
+    /// `.mind/settings.toml`, from [`SETTINGS_TOML_VERSION`] on.
+    SettingsToml,
+}
+
+impl MarkerFile {
+    /// Its name, inside [`MIND_DIR`].
+    pub const fn name(self) -> &'static str {
+        match self {
+            MarkerFile::MindToml => MIND_CONFIG,
+            MarkerFile::SettingsJson => SETTINGS_JSON_FILE,
+            MarkerFile::SettingsToml => SETTINGS_FILE,
+        }
+    }
+
+    /// The file a marker of `version` is written in: what a version found
+    /// in another file is refused as.
+    pub fn of_version(version: u32) -> Self {
+        if version < SETTINGS_VERSION {
+            MarkerFile::MindToml
+        } else if version < SETTINGS_TOML_VERSION {
+            MarkerFile::SettingsJson
+        } else {
+            MarkerFile::SettingsToml
+        }
+    }
+}
+
+impl fmt::Display for MarkerFile {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(self.name())
+    }
+}
+
+/// By its name, as a report says it (`ProjectStatus::marker`), rather than
+/// derived from the variant: the spelling a reader finds in `.mind`, which a
+/// renamed variant cannot change.
+impl Serialize for MarkerFile {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        serializer.serialize_str(self.name())
     }
 }
 
@@ -340,7 +415,8 @@ pub enum ProjectConfig {
     /// `.mind/mind.toml`: a project of version 1 or 2, read the way it was
     /// written.
     Toml(MindConfig),
-    /// `.mind/settings.json`: a project from [`SETTINGS_VERSION`] on.
+    /// `.mind/settings.json` or `.mind/settings.toml`: a project from
+    /// [`SETTINGS_VERSION`] on, whose version says which file.
     Settings(Settings),
 }
 
@@ -375,11 +451,11 @@ impl ProjectConfig {
 /// read it.
 #[derive(Debug, Clone, PartialEq, Eq, Error)]
 pub enum ProjectWarning {
-    /// A `mind.toml` beside the settings file the project is read from: an
-    /// older build would read it instead, and say other things about the
-    /// project than this one does.
-    #[error("{path}: ignored, since the project is read from the {SETTINGS_FILE} beside it")]
-    Leftover { path: PathBuf },
+    /// An older marker beside the one the project is read from: an older
+    /// build would read it instead, and say other things about the project
+    /// than this one does.
+    #[error("{path}: ignored, since the project is read from the {read} beside it")]
+    Leftover { path: PathBuf, read: MarkerFile },
 }
 
 /// A folder a project's settings name as where a kind is installed that no
@@ -448,8 +524,8 @@ impl Misplaced {
 pub struct MindProject {
     root: PathBuf,
     config: ProjectConfig,
-    /// A `mind.toml` found beside the settings file that was read instead.
-    leftover: Option<PathBuf>,
+    /// Each older marker found beside the one that was read instead.
+    leftovers: Vec<PathBuf>,
 }
 
 impl MindProject {
@@ -538,8 +614,9 @@ impl MindProject {
         Self::init_settings(root, agents, share, &asked.clone().with_defaults())
     }
 
-    /// Make `root` a project marked by its settings ([`SETTINGS_VERSION`]):
-    /// `.mind/settings.json`, a `.mind/.gitignore` holding `*` unless the
+    /// Make `root` a project marked by its settings
+    /// ([`SETTINGS_TOML_VERSION`]): `.mind/settings.toml`, written from its
+    /// template ([`Settings::text`]), a `.mind/.gitignore` holding `*` unless the
     /// project is [shared](Share::Shared), and the folder of each kind
     /// `directories` names. A kind it leaves out has no folder, and none is
     /// made for it.
@@ -554,7 +631,8 @@ impl MindProject {
     /// marked, by settings or by a `mind.toml`, keeps its marker, and only
     /// what its marker asks for and is missing is made, a folder or the
     /// `.gitignore` of a local project. Moving a project from a `mind.toml`
-    /// to settings is a migration's (#38), not this.
+    /// or a `settings.json` to a `settings.toml` is a migration's (#38), not
+    /// this.
     pub fn init_settings(
         root: impl AsRef<Path>,
         agents: &[Agent],
@@ -618,47 +696,55 @@ impl MindProject {
         ))
     }
 
-    /// Open the mind project rooted at `root`, from its settings when it
-    /// has them and from its `mind.toml` otherwise.
+    /// Open the mind project rooted at `root`, from the newest marker it
+    /// has: its `settings.toml`, else its `settings.json`, else its
+    /// `mind.toml`.
     ///
-    /// The settings win when both are there: they are the newer marker, and
-    /// a `mind.toml` beside them is one an upgrade left, or a copy brought
-    /// back. Still a project rather than a refusal, since either file says
-    /// what it is, but a [warning](Self::warnings) names the one ignored.
+    /// The newest wins when more than one is there: an older one beside it is
+    /// one an upgrade left, or a copy brought back. Still a project rather
+    /// than a refusal, since either file says what it is, but a
+    /// [warning](Self::warnings) names each one ignored.
     pub fn open(root: impl AsRef<Path>) -> Result<Self, WorkspaceError> {
         let root = absolute(root.as_ref())?;
-        let settings_path = root.join(MIND_DIR).join(SETTINGS_FILE);
-        let config_path = root.join(MIND_DIR).join(MIND_CONFIG);
-        if settings_path.is_file() {
-            let settings = Settings::read(&settings_path)?;
+        let mind = root.join(MIND_DIR);
+        let mut found = [
+            MarkerFile::SettingsToml,
+            MarkerFile::SettingsJson,
+            MarkerFile::MindToml,
+        ]
+        .into_iter()
+        .map(|file| (file, mind.join(file.name())))
+        .filter(|(_, path)| path.is_file());
+        let Some((file, path)) = found.next() else {
+            return Err(WorkspaceError::NotAProject { path: root });
+        };
+        let leftovers = found.map(|(_, path)| path).collect();
+        if file != MarkerFile::MindToml {
             return Ok(Self {
                 root,
-                config: ProjectConfig::Settings(settings),
-                leftover: config_path.is_file().then_some(config_path),
+                config: ProjectConfig::Settings(Settings::read(&path)?),
+                leftovers,
             });
         }
-        if !config_path.is_file() {
-            return Err(WorkspaceError::NotAProject { path: root });
-        }
-        let config: MindConfig = read_config(&config_path)?;
-        check_version(&config_path, Marker::Project, config.version)?;
+        let config: MindConfig = read_config(&path)?;
+        check_version(&path, Marker::Project, config.version)?;
         // Not newer than this build, and not a version a `mind.toml` holds
         // either: from `SETTINGS_VERSION` on, the marker is another file, and
         // what a `mind.toml` claiming that version means is nobody's to say.
         if config.version >= SETTINGS_VERSION {
             return Err(WorkspaceError::Malformed {
-                path: config_path,
+                path,
                 detail: format!(
                     "version {} is written as {}, not as {MIND_CONFIG}, which holds versions up to {MIND_TOML_VERSION}",
                     config.version,
-                    SETTINGS_FILE
+                    MarkerFile::of_version(config.version)
                 ),
             });
         }
         Ok(Self {
             root,
             config: ProjectConfig::Toml(config),
-            leftover: None,
+            leftovers,
         })
     }
 
@@ -674,11 +760,30 @@ impl MindProject {
     /// a directory a project, to everything that looks for one.
     ///
     /// The file, not the `.mind` alone, so an empty `.mind` left behind by a
-    /// failed copy is not taken for a project; and either file, so a project
+    /// failed copy is not taken for a project; and any of them, so a project
     /// made by this build and one made by an older one are found alike.
     pub fn is_marked(root: &Path) -> bool {
         let mind = root.join(MIND_DIR);
-        mind.join(SETTINGS_FILE).is_file() || mind.join(MIND_CONFIG).is_file()
+        [
+            MarkerFile::SettingsToml,
+            MarkerFile::SettingsJson,
+            MarkerFile::MindToml,
+        ]
+        .into_iter()
+        .any(|file| mind.join(file.name()).is_file())
+    }
+
+    /// Which file the project is read from.
+    pub fn marker_file(&self) -> MarkerFile {
+        match &self.config {
+            ProjectConfig::Toml(_) => MarkerFile::MindToml,
+            ProjectConfig::Settings(settings) => MarkerFile::of_version(settings.version),
+        }
+    }
+
+    /// The file the project is read from, whether or not it is there still.
+    pub fn marker_path(&self) -> PathBuf {
+        self.mind_dir().join(self.marker_file().name())
     }
 
     /// The directory holding `.mind`.
@@ -774,7 +879,7 @@ impl MindProject {
         let Some(settings) = self.settings() else {
             return Vec::new();
         };
-        let path = self.mind_dir().join(SETTINGS_FILE);
+        let path = self.marker_path();
         Kind::ALL
             .into_iter()
             .flat_map(|kind| {
@@ -822,7 +927,7 @@ impl MindProject {
         Self {
             root: self.root.clone(),
             config: ProjectConfig::Settings(settings),
-            leftover: self.leftover.clone(),
+            leftovers: self.leftovers.clone(),
         }
     }
 
@@ -832,26 +937,23 @@ impl MindProject {
     /// The file is read here, not taken from what was read when the project
     /// was opened, so a change is made to the file it is about to write and
     /// not to a copy that may be minutes old, as a workspace's marker is
-    /// edited ([`FlayerWorkspace`]'s `edit_array`). Each key whose value
-    /// changed is edited where it stands (`settings::edited`), so a key this
-    /// build does not know, the order of the keys and the file's layout all
-    /// stay as somebody left them. A changed file is written through a
-    /// temporary and a rename (`replace_file`), so a crash leaves the old
-    /// settings or the new ones; an unchanged one is not written at all, its
-    /// modification time included. What is in memory afterwards is read back
-    /// from the file.
+    /// edited ([`FlayerWorkspace`]'s `edit_array`), through the same
+    /// `rewrite`. Each key whose value changed is edited where it stands,
+    /// through toml_edit as `flayer.toml` is (`settings::edited`), so a key
+    /// this build does not know, the order of the keys, the comments and the
+    /// file's layout all stay as somebody left them. A changed file is
+    /// written through a temporary and a rename (`replace_file`), so a crash
+    /// leaves the old settings or the new ones; an unchanged one is not
+    /// written at all, its modification time included. What is in memory
+    /// afterwards is read back from the file.
     ///
-    /// A change of `targets` writes the version they need with them
-    /// ([`Settings::version_needed`]), up when a kind is named and down when
-    /// none is any more, which is the one version an edit changes.
-    ///
-    /// Refused for a project a `mind.toml` marks, which has no settings until
-    /// it is moved to them, when the change touches the version or the id,
-    /// and when it moves a kind's folder out of the project or into its
-    /// `.mind`, as `init` refuses one, or sends a kind's installs to a folder
-    /// no install would use: strict when writing, while a folder somebody
-    /// wrote there by hand is still read, and left alone by a change to
-    /// something else.
+    /// Refused for a project an older marker marks
+    /// ([`changeable`](Self::changeable)), when the change touches the
+    /// version or the id, and when it moves a kind's folder out of the
+    /// project or into its `.mind`, as `init` refuses one, or sends a kind's
+    /// installs to a folder no install would use: strict when writing, while
+    /// a folder somebody wrote there by hand is still read, and left alone by
+    /// a change to something else.
     /// A settings file this build refuses to read is refused here too, and
     /// left as it is.
     ///
@@ -868,24 +970,48 @@ impl MindProject {
         &mut self,
         change: impl FnOnce(&mut Settings) -> T,
     ) -> Result<T, WorkspaceError> {
-        if self.settings().is_none() {
-            return Err(WorkspaceError::NoSettings {
-                path: self.root.clone(),
-            });
-        }
-        let path = self.mind_dir().join(SETTINGS_FILE);
-        let text = fs::read_to_string(&path).map_err(|source| WorkspaceError::Read {
-            path: path.clone(),
-            source,
+        self.changeable()?;
+        let path = self.marker_path();
+        let value = rewrite(&path, |text| {
+            let before = crate::settings::parse(&path, text)?;
+            let mut wanted = before.clone();
+            let value = change(&mut wanted);
+            Self::check_change(&path, &before, &wanted)?;
+            let edited = crate::settings::edited(&path, text, &before, &wanted)?;
+            Ok((edited, value))
         })?;
-        let before = crate::settings::parse(&path, &text)?;
-        let mut wanted = before.clone();
-        let value = change(&mut wanted);
-        // `targets` come with the version a build from before them refuses,
-        // and go with it, so a change to them writes the one they need.
-        if wanted.targets != before.targets && wanted.version == before.version {
-            wanted.version = wanted.version_needed();
+        self.config = ProjectConfig::Settings(Settings::read(&path)?);
+        Ok(value)
+    }
+
+    /// The project's settings, when a change may be made to them: those of
+    /// a project its `settings.toml` marks.
+    ///
+    /// Refused for a project an older marker marks, pointing at the
+    /// migration: a `mind.toml` has no settings to change, and a
+    /// `settings.json` is read as it was written and changed by nothing but
+    /// its move to a `settings.toml`, so the settings are changed one way,
+    /// as `flayer.toml` is, and never in a grammar this build no longer
+    /// writes.
+    pub fn changeable(&self) -> Result<&Settings, WorkspaceError> {
+        match &self.config {
+            ProjectConfig::Settings(settings) if self.marker_file() == MarkerFile::SettingsToml => {
+                Ok(settings)
+            }
+            _ => Err(WorkspaceError::NoSettings {
+                path: self.root.clone(),
+                marker: self.marker_file(),
+            }),
         }
+    }
+
+    /// What [`change_settings`](Self::change_settings) holds `wanted`, the
+    /// settings as a change leaves them, to before it writes them.
+    fn check_change(
+        path: &Path,
+        before: &Settings,
+        wanted: &Settings,
+    ) -> Result<(), WorkspaceError> {
         for kind in Kind::ALL {
             if let Some(error) = wanted
                 .directories
@@ -905,7 +1031,7 @@ impl MindProject {
             let folders = targets.unwrap_or_default();
             if targets.is_some() && folders.is_empty() {
                 return Err(WorkspaceError::Edit {
-                    path,
+                    path: path.to_path_buf(),
                     detail: format!(
                         "`targets.{}` would name no folder, which is no place to install anything",
                         kind.folder()
@@ -923,22 +1049,20 @@ impl MindProject {
                 });
             }
         }
-
-        let edited = crate::settings::edited(&path, &text, &before, &wanted)?;
-        if edited != text {
-            replace_file(&path, &edited)?;
-        }
-        self.config = ProjectConfig::Settings(Settings::read(&path)?);
-        Ok(value)
+        Ok(())
     }
 
     /// What opening the project found worth saying, for a front end to say:
     /// collected rather than raised, since none of it stops the project
     /// being read.
     pub fn warnings(&self) -> Vec<ProjectWarning> {
-        self.leftover
+        let read = self.marker_file();
+        self.leftovers
             .iter()
-            .map(|path| ProjectWarning::Leftover { path: path.clone() })
+            .map(|path| ProjectWarning::Leftover {
+                path: path.clone(),
+                read,
+            })
             .collect()
     }
 }
@@ -1539,29 +1663,19 @@ impl FlayerWorkspace {
     {
         self.refuse_unmade()?;
         let path = self.config_path();
-        let text = fs::read_to_string(&path).map_err(|source| WorkspaceError::Read {
-            path: path.clone(),
-            source,
-        })?;
-        let mut document: toml_edit::DocumentMut =
-            text.parse()
-                .map_err(|error: toml_edit::TomlError| WorkspaceError::Edit {
-                    path: path.clone(),
-                    detail: error.to_string(),
-                })?;
-
-        let value = edit(&mut document).map_err(|detail| WorkspaceError::Edit {
+        let refused = |detail: String| WorkspaceError::Edit {
             path: path.clone(),
             detail,
+        };
+        // An already-registered link and a failed unlink both leave the file
+        // untouched, down to its modification time.
+        let value = rewrite(&path, |text| {
+            let mut document: toml_edit::DocumentMut = text
+                .parse()
+                .map_err(|error: toml_edit::TomlError| refused(error.to_string()))?;
+            let value = edit(&mut document).map_err(refused)?;
+            Ok((document.to_string(), value))
         })?;
-
-        // Only write when the edit changed something. An already-registered
-        // link and a failed unlink both leave the file untouched, down to its
-        // modification time.
-        let rewritten = document.to_string();
-        if rewritten != text {
-            replace_file(&path, &rewritten)?;
-        }
 
         // Re-read, so what is in memory is what is on disk rather than what we
         // believe we wrote.
@@ -1642,7 +1756,7 @@ impl FlayerWorkspace {
     pub fn own(&self) -> MindProject {
         MindProject {
             root: self.root.clone(),
-            leftover: None,
+            leftovers: Vec::new(),
             config: ProjectConfig::Toml(MindConfig {
                 // The project marker's version rather than the workspace's:
                 // `directory_for` holds it against `DIRECTORIES_VERSION`, a
@@ -1819,7 +1933,8 @@ pub enum WorkspaceError {
     #[error("{path}: not valid Mindflayer configuration: {detail}")]
     Malformed { path: PathBuf, detail: String },
     #[error(
-        "{path}: not a mind project (no {MIND_DIR}/{SETTINGS_FILE} or {MIND_DIR}/{MIND_CONFIG})"
+        "{path}: not a mind project (no {MIND_DIR}/{SETTINGS_FILE}, {MIND_DIR}/{SETTINGS_JSON_FILE} \
+         or {MIND_DIR}/{MIND_CONFIG})"
     )]
     NotAProject { path: PathBuf },
     #[error("{path}: not a flayer workspace (no {FLAYER_DIR}/{FLAYER_CONFIG})")]
@@ -1862,13 +1977,14 @@ pub enum WorkspaceError {
         why: Misplaced,
     },
     /// Pointing at the migration rather than at `mind init`, which never
-    /// rewrites a marker: what such a project lacks is what moving it to
-    /// settings gives it, as it was committed by design.
+    /// rewrites a marker: what such a project lacks is what moving it to a
+    /// `settings.toml` gives it, as it was committed by design or written
+    /// before.
     #[error(
-        "{path}: has no {SETTINGS_FILE} to change, since a {MIND_CONFIG} marks it; \
+        "{path}: has no {SETTINGS_FILE} to change, since a {marker} marks it; \
          `mind migrate` moves it to one"
     )]
-    NoSettings { path: PathBuf },
+    NoSettings { path: PathBuf, marker: MarkerFile },
     #[error("{path}: cannot hold the workspace's {kind}s, because it is not inside the workspace")]
     OutsideWorkspace { path: PathBuf, kind: Kind },
     #[error(
@@ -1904,7 +2020,7 @@ impl WorkspaceError {
             | WorkspaceError::InsideMind { path, .. }
             | WorkspaceError::NoDirectory { path, .. }
             | WorkspaceError::Target { path, .. }
-            | WorkspaceError::NoSettings { path }
+            | WorkspaceError::NoSettings { path, .. }
             | WorkspaceError::OutsideWorkspace { path, .. }
             | WorkspaceError::OverlapsGathered { path, .. } => path,
             WorkspaceError::Lock(error) => error.path(),
@@ -2026,6 +2142,34 @@ fn climbs(route: &Path) -> bool {
     route
         .components()
         .any(|component| matches!(component, std::path::Component::ParentDir))
+}
+
+/// Change the marker at `path` in place: read it, hand its text to `edit`,
+/// which gives back the text it is to hold, and write that only when it
+/// differs, through [`replace_file`].
+///
+/// One way for both markers, a workspace's and a project's settings, so
+/// both are changed alike: read here rather than taken from what was read
+/// when their holder was opened, so an edit decides what to do from the
+/// file it is about to write and not from a copy that may be minutes old;
+/// and left alone, its modification time included, when nothing changed.
+/// Parsing is the caller's, since what a marker that does not parse is
+/// refused as is its own to say.
+///
+/// Takes no lock: whoever calls it holds the one that keeps the change apart.
+pub(crate) fn rewrite<T>(
+    path: &Path,
+    edit: impl FnOnce(&str) -> Result<(String, T), WorkspaceError>,
+) -> Result<T, WorkspaceError> {
+    let text = fs::read_to_string(path).map_err(|source| WorkspaceError::Read {
+        path: path.to_path_buf(),
+        source,
+    })?;
+    let (rewritten, value) = edit(&text)?;
+    if rewritten != text {
+        replace_file(path, &rewritten)?;
+    }
+    Ok(value)
 }
 
 /// Replace a file's contents through a temporary file and a rename.
@@ -2378,7 +2522,7 @@ fn gathered_overlap(directory: &Path) -> Option<PathBuf> {
 /// command, `init` again included, could read. The C1 controls are allowed
 /// as they are, and escaped all the same, since `char::is_control` is the
 /// one test for the lot and the escape reads the same back.
-fn toml_string(value: &str) -> String {
+pub(crate) fn toml_string(value: &str) -> String {
     let mut quoted = String::from("\"");
     for c in value.chars() {
         match c {

@@ -818,7 +818,7 @@ fn a_block_left_in_a_file_that_can_no_longer_be_edited_is_said() {
     fixture.install("git/no-force-push");
     common::indexed(fixture.dir.path());
     // Turned local by hand, as somebody might edit the settings.
-    let settings = fixture.project.mind_dir().join("settings.json");
+    let settings = fixture.project.marker_path();
     let text = fs::read_to_string(&settings).unwrap();
     fs::write(&settings, text.replace("\"shared\"", "\"local\"")).unwrap();
     fixture.project = MindProject::open(fixture.project.root()).unwrap();

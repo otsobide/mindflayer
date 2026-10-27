@@ -6,7 +6,7 @@
 //! command it is about to run, as it is typed. The install screen, when it is
 //! open, draws itself. Nothing here decides anything; [`super::state`] does.
 
-use mindflayer_core::{Agent, Kind, Reason, Share, State};
+use mindflayer_core::{Agent, Kind, MarkerFile, Reason, Share, State};
 use ratatui::layout::{Constraint, Direction, Layout, Rect};
 use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
@@ -192,27 +192,30 @@ fn header(workspace: &Workspace, frame: &mut Frame, area: Rect) {
 }
 
 /// What the header says of projects an older Mindflayer made, marked by a
-/// `mind.toml`, with the command that moves them to settings: until then
-/// their installs reach only the folder that marker names, and nothing else
-/// on screen tells them apart before a toggle refuses one. Early in the
-/// line, so a narrow terminal keeps it. None when there are none.
+/// `mind.toml` or a `settings.json`, with the command that moves them to a
+/// `settings.toml`: until then a `mind.toml`'s installs reach only the
+/// folder it names, neither one's settings can be changed, and nothing else
+/// on screen tells them apart before a toggle refuses one. Each file named
+/// once, in the order they came, oldest first. Early in the line, so a
+/// narrow terminal keeps it. None when there are none.
 fn older(workspace: &Workspace) -> Option<String> {
-    let count = workspace
+    let older: Vec<MarkerFile> = workspace
         .members
         .iter()
-        .filter(|member| {
-            !member.own
-                && member
-                    .holdings
-                    .as_ref()
-                    .is_ok_and(|holdings| holdings.share.is_none())
-        })
-        .count();
-    match (workspace.scope, count) {
+        .filter(|member| !member.own)
+        .filter_map(|member| member.holdings.as_ref().ok()?.older)
+        .collect();
+    let files: Vec<&str> = [MarkerFile::MindToml, MarkerFile::SettingsJson]
+        .into_iter()
+        .filter(|file| older.contains(file))
+        .map(MarkerFile::name)
+        .collect();
+    let files = files.join(" or ");
+    match (workspace.scope, older.len()) {
         (_, 0) => None,
-        (Scope::Project, _) => Some(String::from("marked by mind.toml: `mind migrate`")),
+        (Scope::Project, _) => Some(format!("marked by {files}: `mind migrate`")),
         (Scope::Workspace, count) => Some(format!(
-            "{} marked by mind.toml: `flayer migrate --all-projects`",
+            "{} marked by {files}: `flayer migrate --all-projects`",
             plural(count, "project")
         )),
     }

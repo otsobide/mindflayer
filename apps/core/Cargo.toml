@@ -13,13 +13,15 @@ serde = { version = "1", features = ["derive"] }
 # scalars, and allowed-tools is a list. serde_yaml_ng is the maintained
 # continuation of serde_yaml, which upstream archived.
 serde_yaml_ng = "0.10"
-# The marker files (.mind/mind.toml, .mindflayer/flayer.toml) are TOML: the
-# format the Rust toolchain already asks everyone here to read and write.
+# The marker files (.mind/settings.toml, .mind/mind.toml,
+# .mindflayer/flayer.toml) are TOML: the format the Rust toolchain already
+# asks everyone here to read and write.
 toml = "0.9"
-# Reading a marker is serde's job; *editing* one is not. Re-serializing would
-# drop the comments that explain the file, so `link` and `unlink` go through
-# toml_edit, which rewrites one array and leaves the rest of the bytes alone.
-# This is the crate cargo itself edits Cargo.toml with.
+# Reading a marker is serde's job, or a key at a time for a project's
+# settings; *editing* one is not. Re-serializing would drop the comments that
+# explain the file, so `link`, `unlink` and a change of a project's settings
+# go through toml_edit, which rewrites what changed and leaves the rest of the
+# bytes alone. This is the crate cargo itself edits Cargo.toml with.
 toml_edit = "0.25"
 # JSON and JSONC config files that agents and people share (`.mcp.json`,
 # `opencode.json`) are edited the way toml_edit edits TOML: one entry changed

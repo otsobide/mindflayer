@@ -53,7 +53,8 @@ fn mind_init_writes_settings_kept_out_of_git_and_empty_folders_that_git_does_not
         )
     );
     assert_eq!(names_in(&root), [".git", ".mind", "rules", "skills"]);
-    assert_eq!(names_in(&marker), [".gitignore", "settings.json"]);
+    // TOML, with comments saying what each key does, and no JSON beside it.
+    assert_eq!(names_in(&marker), [".gitignore", "settings.toml"]);
     for kind in ["skills", "rules"] {
         assert_eq!(names_in(&root.join(kind)), Vec::<String>::new(), "{kind}");
     }
@@ -63,23 +64,35 @@ fn mind_init_writes_settings_kept_out_of_git_and_empty_folders_that_git_does_not
         .unwrap()
         .id
         .to_string();
-    assert_eq!(
-        fs::read_to_string(marker.join(SETTINGS_FILE)).unwrap(),
-        format!(
-            r#"{{
-  "version": 3,
-  "id": "{id}",
-  "name": "collapse",
-  "agents": ["claude", "codex", "opencode"],
-  "share": "local",
-  "edit_tracked": false,
-  "directories": {{
-    "skills": "skills",
-    "rules": "rules"
-  }}
-}}
-"#
-        )
+    let written = fs::read_to_string(marker.join(SETTINGS_FILE)).unwrap();
+    assert!(
+        written.starts_with(
+            "# Mindflayer mind project: what Mindflayer needs to know about the project\n"
+        ),
+        "{written}"
+    );
+    for comment in [
+        "# `name` is what the project is shown as, and `agents` the agents that work\n",
+        "# `share` is \"local\" to keep .mind, and what is installed, out of git\n",
+        "# `directories` says where the project keeps the skills and rules it writes\n",
+        "# `id` names the project for good, wherever it moves, and `version` is how\n",
+    ] {
+        assert!(written.contains(comment), "{comment}{written}");
+    }
+    assert!(
+        written.ends_with(&format!(
+            "\nversion = 5\n\
+             id = \"{id}\"\n\
+             name = \"collapse\"\n\
+             agents = [\"claude\", \"codex\", \"opencode\"]\n\
+             share = \"local\"\n\
+             edit_tracked = false\n\
+             \n\
+             [directories]\n\
+             skills = \"skills\"\n\
+             rules = \"rules\"\n"
+        )),
+        "{written}"
     );
     assert_eq!(
         fs::read_to_string(marker.join(".gitignore")).unwrap(),
@@ -103,7 +116,7 @@ fn mind_init_shared_writes_no_gitignore_so_git_lists_its_settings() {
 
     mind(&root, &["init", "--shared"]).unwrap();
 
-    assert_eq!(names_in(&root.join(MIND_DIR)), ["settings.json"]);
+    assert_eq!(names_in(&root.join(MIND_DIR)), ["settings.toml"]);
     let project = MindProject::open(&root).unwrap();
     assert_eq!(
         project.settings().unwrap().share,
@@ -121,7 +134,7 @@ fn mind_init_writes_the_agents_it_is_given_in_the_order_given() {
 
     let written = fs::read_to_string(dir.path().join(MIND_DIR).join(SETTINGS_FILE)).unwrap();
     assert!(
-        written.contains("\n  \"agents\": [\"opencode\", \"claude\"],\n"),
+        written.contains("\nagents = [\"opencode\", \"claude\"]\n"),
         "{written}"
     );
 }
