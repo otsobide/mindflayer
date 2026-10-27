@@ -147,7 +147,7 @@ fn a_second_survey_knows_what_is_already_there() {
 
     let again = install::survey(&workspace, &ledger, &project, Kind::Skill).unwrap();
 
-    assert_eq!(again[0].standing, Standing::Installed);
+    assert_eq!(again[0].standing, Standing::Current);
     assert!(again[0].standing.present());
     assert!(again[0].standing.ours());
 }
@@ -351,7 +351,7 @@ fn a_project_whose_settings_install_skills_in_one_folder_gets_one_copy_there_alo
         }]
     );
     let surveyed = install::survey(&workspace, &ledger, &project, Kind::Skill).unwrap();
-    assert_eq!(surveyed[0].standing, Standing::Installed);
+    assert_eq!(surveyed[0].standing, Standing::Current);
 }
 
 #[test]
@@ -474,7 +474,7 @@ fn installing_into_every_agents_folder_again_changes_nothing_and_uninstalling_ta
         "{again:?}"
     );
     let surveyed = install::survey(&workspace, &ledger, &project, Kind::Skill).unwrap();
-    assert_eq!(surveyed[0].standing, Standing::Installed);
+    assert_eq!(surveyed[0].standing, Standing::Current);
 
     let removed = install::uninstall(
         &workspace,
@@ -520,7 +520,7 @@ fn a_copy_gone_from_one_agents_folder_is_put_back_by_the_next_install() {
     )
     .unwrap();
 
-    assert_eq!(surveyed[0].standing, Standing::Installed);
+    assert_eq!(surveyed[0].standing, Standing::Missing);
     assert!(
         matches!(again.installed, Installed::Updated { .. }),
         "{again:?}"
@@ -801,7 +801,7 @@ fn two_projects_each_keep_their_own_answer() {
 
     assert_eq!(
         install::survey(&workspace, &ledger, &one, Kind::Skill).unwrap()[0].standing,
-        Standing::Installed
+        Standing::Current
     );
     assert_eq!(
         install::survey(&workspace, &ledger, &two, Kind::Skill).unwrap()[0].standing,
@@ -1471,7 +1471,7 @@ fn the_workspace_offers_its_own_skills_first_and_installs_them_like_any_other() 
         .join("SKILL.md")
         .is_file());
     let again = install::survey(&workspace, &ledger, &project, Kind::Skill).unwrap();
-    assert_eq!(again[0].standing, Standing::Installed);
+    assert_eq!(again[0].standing, Standing::Current);
 }
 
 #[test]

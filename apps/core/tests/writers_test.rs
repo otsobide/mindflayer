@@ -455,7 +455,7 @@ fn an_install_looks_again_at_the_copy_once_it_holds_the_workspace() {
     // surveys when it is built.
     let stale =
         install::offered(&workspace, &ledger, &project, Kind::Skill, "deploy", None).unwrap();
-    assert_eq!(stale.standing, Standing::Installed);
+    assert_eq!(stale.standing, Standing::Current);
     // Then edited in another terminal, which makes it its author's.
     let target = lifecycle::find(&project, &Reference::parse("deploy")).unwrap();
     let edit = lifecycle::start_edit(&target);

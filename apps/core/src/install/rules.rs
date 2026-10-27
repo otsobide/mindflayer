@@ -34,8 +34,9 @@ use std::path::{Path, PathBuf};
 use thiserror::Error;
 
 use super::{
-    copy_at, kept_by_a_load, local, project_entry, route, same_place, targets, unrecorded,
-    user_scope, Candidate, InstallError, Installation, Installed, Offer, Removed, Standing,
+    copy_at, kept_by_a_load, local, project_entry, route, same_place, standing, targets,
+    unrecorded, user_scope, Candidate, InstallError, Installation, Installed, Offer, Removed,
+    Standing,
 };
 use crate::agent::{Agent, AgentHomes};
 use crate::agents_md::{self, AgentsMd, AgentsMdError, Section, Written as BlockWritten};
@@ -225,19 +226,21 @@ pub(crate) fn survey(
 ) -> Result<Vec<Candidate>, InstallError> {
     let held = Held::read(workspace, ledger, project)?;
     Ok(offers
-        .into_iter()
+        .iter()
         .map(|offer| Candidate {
-            standing: held.standing(project.root(), offer.name()).0,
-            offer,
+            standing: held.standing(workspace, project, offer.name(), &offers).0,
+            offer: offer.clone(),
         })
         .collect())
 }
 
 /// What a project marked by its settings holds of rules: what the ledger
-/// records, and what the block of its `AGENTS.md` holds.
+/// records, and the block of its `AGENTS.md`.
 struct Held {
-    recorded: Vec<String>,
-    block: Vec<String>,
+    recorded: Vec<InstallRecord>,
+    /// The file as it reads now: none when it is not there, or cannot be
+    /// read as one, which a render then refuses, saying why.
+    file: Option<AgentsMd>,
 }
 
 impl Held {
@@ -247,32 +250,57 @@ impl Held {
         project: &MindProject,
     ) -> Result<Held, InstallError> {
         Ok(Held {
-            recorded: ledger.installations(&project_entry(workspace, project), Kind::Rule)?,
-            block: block_routes(project.root()),
+            recorded: ledger.records(&project_entry(workspace, project), Kind::Rule)?,
+            file: block_file(project.root()),
         })
     }
 
-    /// How the rule at `route` stands in the project at `root`, and where
-    /// somebody's is when it is somebody's.
+    /// How the rule at `route` stands in `project`, given every rule offered
+    /// (`offers`), and where somebody's is when it is somebody's.
     ///
-    /// Installed while the ledger records it, whatever is left of it, as a
-    /// skill is: the next render puts back what has gone. Otherwise somebody's
-    /// when the block holds a section for it, which this workspace did not
-    /// write (another workspace linking the project, or a hand that copied a
-    /// marker), or a file is at its place in Claude's folder of Mindflayer's
-    /// rules: written over by nothing, as a copy nothing records is not.
-    fn standing(&self, root: &Path, route: &str) -> (Standing, Option<PathBuf>) {
-        if self.recorded.iter().any(|recorded| recorded == route) {
-            return (Standing::Installed, None);
+    /// While the ledger records it, as its section and its file for Claude
+    /// are found against the hash recorded of each, and as the place it came
+    /// from offers it now ([`Standing`]): the next render puts back what has
+    /// gone, as for a skill. Otherwise somebody's when the block holds a
+    /// section for it, which this workspace did not write (another workspace
+    /// linking the project, or a hand that copied a marker), or a file is at
+    /// its place in Claude's folder of Mindflayer's rules: written over by
+    /// nothing, as a copy nothing records is not.
+    fn standing(
+        &self,
+        workspace: &FlayerWorkspace,
+        project: &MindProject,
+        route: &str,
+        offers: &[Offer],
+    ) -> (Standing, Option<PathBuf>) {
+        if let Some(record) = self.recorded.iter().find(|record| record.name == route) {
+            let offered = super::offered_for(record, offers);
+            let standing =
+                standing::of_rule(workspace, project, record, self.file.as_ref(), &offered);
+            return (standing, None);
         }
-        if self.block.iter().any(|held| held == route) {
-            return (Standing::Foreign, Some(root.join(AGENTS_MD)));
+        match self.foreign(project.root(), route) {
+            Some(path) => (Standing::Foreign, Some(path)),
+            None => (Standing::Absent, None),
+        }
+    }
+
+    /// Where somebody's rule at `route` is in the project at `root`, when
+    /// the ledger records none there and something is: [`Held::standing`]'s
+    /// foreign, without looking at what a recorded one holds.
+    fn foreign(&self, root: &Path, route: &str) -> Option<PathBuf> {
+        if self.recorded.iter().any(|record| record.name == route) {
+            return None;
+        }
+        if self
+            .file
+            .as_ref()
+            .is_some_and(|file| file.routes().contains(&route))
+        {
+            return Some(root.join(AGENTS_MD));
         }
         let file = root.join(claude_rules::file_for(route));
-        if fs::symlink_metadata(&file).is_ok() {
-            return (Standing::Foreign, Some(file));
-        }
-        (Standing::Absent, None)
+        fs::symlink_metadata(&file).is_ok().then_some(file)
     }
 }
 
@@ -280,12 +308,17 @@ impl Held {
 /// no block, or cannot be read as one, which a render then refuses, saying
 /// why.
 pub(crate) fn block_routes(root: &Path) -> Vec<String> {
-    let Ok(bytes) = fs::read(root.join(agents_md::FILE)) else {
-        return Vec::new();
-    };
-    AgentsMd::parse(&bytes)
+    block_file(root)
         .map(|text| text.routes().into_iter().map(str::to_owned).collect())
         .unwrap_or_default()
+}
+
+/// The `AGENTS.md` at `root` as it reads now: none when it is not there, or
+/// cannot be read as a file holding Mindflayer's block, which a render then
+/// refuses, saying why.
+pub(crate) fn block_file(root: &Path) -> Option<AgentsMd> {
+    let bytes = fs::read(root.join(agents_md::FILE)).ok()?;
+    AgentsMd::parse(&bytes).ok()
 }
 
 /// The route the ledger names the rule at `route`'s file for Claude by.
@@ -313,16 +346,12 @@ pub(crate) fn install(
     // Looked at before the lock, so a refusal waits for nobody, and again
     // under it, as an install of a skill looks.
     if candidate.standing == Standing::Foreign {
-        if let (Standing::Foreign, Some(path)) =
-            Held::read(workspace, ledger, project)?.standing(root, &name)
-        {
+        if let Some(path) = Held::read(workspace, ledger, project)?.foreign(root, &name) {
             return Ok(Installed::Foreign { name, path }.into());
         }
     }
     let _lock = workspace.lock().map_err(WorkspaceError::from)?;
-    if let (Standing::Foreign, Some(path)) =
-        Held::read(workspace, ledger, project)?.standing(root, &name)
-    {
+    if let Some(path) = Held::read(workspace, ledger, project)?.foreign(root, &name) {
         return Ok(Installed::Foreign { name, path }.into());
     }
     let entry = project_entry(workspace, project);
@@ -390,12 +419,12 @@ pub(crate) fn uninstall(
     let entry = project_entry(workspace, project);
     let Some(record) = ledger.installation(&entry, Kind::Rule, name)? else {
         return Ok(
-            match Held::read(workspace, ledger, project)?.standing(root, name) {
-                (Standing::Foreign, Some(path)) => Removed::Foreign {
+            match Held::read(workspace, ledger, project)?.foreign(root, name) {
+                Some(path) => Removed::Foreign {
                     name: name.to_owned(),
                     path,
                 },
-                _ => Removed::Absent {
+                None => Removed::Absent {
                     name: name.to_owned(),
                 },
             },

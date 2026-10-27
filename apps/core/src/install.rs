@@ -45,30 +45,9 @@ use crate::url::redacted;
 use crate::workspace::{same_directory, FlayerWorkspace, MindProject, WorkspaceError};
 
 pub mod rules;
+mod standing;
 
-/// How one shelf entry stands with respect to one project.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Standing {
-    /// The project does not hold anything by that name.
-    Absent,
-    /// The project holds it, and the ledger says Mindflayer put it there.
-    Installed,
-    /// The project holds something by that name that Mindflayer did not put
-    /// there. It is somebody's work, so it is left alone in both directions.
-    Foreign,
-}
-
-impl Standing {
-    /// Whether the project holds it at all, which is what a checkbox shows.
-    pub fn present(self) -> bool {
-        matches!(self, Standing::Installed | Standing::Foreign)
-    }
-
-    /// Whether Mindflayer may write over it or remove it.
-    pub fn ours(self) -> bool {
-        matches!(self, Standing::Installed | Standing::Absent)
-    }
-}
+pub use standing::Standing;
 
 /// What `origin` says for the workspace's own artifacts.
 pub const WORKSPACE_ORIGIN: &str = "workspace";
@@ -545,19 +524,74 @@ pub fn survey(
     };
     let entry = project_entry(workspace, project);
     let recorded = ledger.copies(&entry, kind)?;
-    let candidates = offers(workspace, ledger, kind)?
-        .into_iter()
-        .map(|offer| {
-            let mut candidate = Candidate {
-                offer,
-                standing: Standing::Absent,
-            };
-            candidate.standing =
-                standing(project.root(), &targets, kind, candidate.name(), &recorded);
-            candidate
-        })
-        .collect();
+    let records = ledger.records(&entry, kind)?;
+    let offers = offers(workspace, ledger, kind)?;
+    // Once a name: every offer of one name stands as the one installation
+    // the project has of it, whichever of them it came from.
+    let mut said: Vec<(String, Standing)> = Vec::new();
+    let mut candidates = Vec::with_capacity(offers.len());
+    for offer in &offers {
+        let standing = match said.iter().find(|(name, _)| name == offer.name()) {
+            Some((_, standing)) => *standing,
+            None => {
+                let record = records.iter().find(|record| record.name == offer.name());
+                let standing = standing(
+                    workspace,
+                    project,
+                    &targets,
+                    kind,
+                    offer.name(),
+                    &recorded,
+                    record.map(|record| (record, &offers[..])),
+                );
+                said.push((offer.name().to_owned(), standing));
+                standing
+            }
+        };
+        candidates.push(Candidate {
+            offer: offer.clone(),
+            standing,
+        });
+    }
     Ok(candidates)
+}
+
+/// Every installation of `kind` the ledger records in `project`, by name in
+/// name order, and how each stands ([`Standing`]): as [`survey`] says of
+/// each offer of its name, and said here too of one nothing offers any more,
+/// which no offer carries.
+///
+/// A rule in a project marked by its settings is told by its section in the
+/// block of `AGENTS.md` and its file for Claude, as for a survey.
+pub fn standings(
+    workspace: &FlayerWorkspace,
+    ledger: &Ledger,
+    project: &MindProject,
+    kind: Kind,
+) -> Result<Vec<(String, Standing)>, InstallError> {
+    let records = ledger.records(&project_entry(workspace, project), kind)?;
+    if records.is_empty() {
+        return Ok(Vec::new());
+    }
+    let offers = offers(workspace, ledger, kind)?;
+    // Matched on the kind, so a third one has to say how its copies are told.
+    let block = match kind {
+        Kind::Skill => None,
+        Kind::Rule => rules::block_file(project.root()),
+    };
+    Ok(records
+        .iter()
+        .map(|record| {
+            let offered = offered_for(record, &offers);
+            let standing = match kind {
+                Kind::Skill => standing::of_skill(workspace, project, record, &offered),
+                Kind::Rule => {
+                    standing::of_rule(workspace, project, record, block.as_ref(), &offered)
+                }
+            };
+            (record.name.clone(), standing)
+        })
+        .collect())
 }
 
 /// Everything of `kind` offered to install, from wherever it is offered, in
@@ -1571,32 +1605,44 @@ pub enum Removed {
     Absent { name: String },
 }
 
-/// How `name` stands in a project whose root is `root` and which installs
-/// into `targets`, given every copy the ledger records Mindflayer writing
-/// there (`recorded`, as [`Ledger::copies`] spells them).
+/// How `name` stands in `project`, which installs into `targets`, given
+/// every copy the ledger records Mindflayer writing there (`recorded`, as
+/// [`Ledger::copies`] spells them), and the record of its installation with
+/// every offer of `kind`, when there is one.
 ///
 /// Foreign when any target holds something of that name the ledger does not
 /// record, whatever the others hold: installing would write beside it, and
 /// uninstalling would take away the copies the agents reading both folders
-/// share with it. Installed when every copy there is recorded, even if one a
-/// record names has gone since, which the next install puts back.
+/// share with it. Otherwise, while the ledger records it, as each copy its
+/// record names is found against what was installed there and what the
+/// place it came from offers now ([`Standing`]), a copy gone since included,
+/// which the next install puts back.
 fn standing(
-    root: &Path,
+    workspace: &FlayerWorkspace,
+    project: &MindProject,
     targets: &[InstallTarget],
     kind: Kind,
     name: &str,
     recorded: &[String],
+    record: Option<(&InstallRecord, &[Offer])>,
 ) -> Standing {
     let copies: Vec<PathBuf> = targets
         .iter()
         .map(|target| copy_at(&target.folder, kind, name))
         .collect();
-    if unrecorded(root, kind, &copies, recorded).is_some() {
-        Standing::Foreign
-    } else if copies.iter().any(|copy| holds(copy, kind)) {
-        Standing::Installed
-    } else {
-        Standing::Absent
+    if unrecorded(project.root(), kind, &copies, recorded).is_some() {
+        return Standing::Foreign;
+    }
+    let Some((record, offers)) = record else {
+        return Standing::Absent;
+    };
+    let offered = offered_for(record, offers);
+    // Matched on the kind, so a third one has to say how its copies are told.
+    match kind {
+        Kind::Skill => standing::of_skill(workspace, project, record, &offered),
+        // Only into a project a `mind.toml` marks, as a copy of its file: one
+        // marked by its settings has its rules told by `rules::survey`.
+        Kind::Rule => standing::of_rule(workspace, project, record, None, &offered),
     }
 }
 

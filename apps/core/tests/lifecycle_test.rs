@@ -598,7 +598,7 @@ fn what_a_project_authors_beside_its_agents_copies_leaves_their_record_alone() {
     assert_eq!(records(&ledger), ["deploy"]);
     assert_eq!(
         standing(&workspace, &ledger, &project, "deploy"),
-        Standing::Installed
+        Standing::Current
     );
     assert!(installed.join("SKILL.md").is_file());
 }
@@ -643,7 +643,7 @@ fn removing_the_copy_in_a_folder_the_project_authors_in_leaves_the_others_instal
     assert_eq!(excluded(&project), ["/.agents/skills/deploy/"]);
     assert_eq!(
         standing(&workspace, &ledger, &project, "deploy"),
-        Standing::Installed
+        Standing::Current
     );
 
     // What the project writes there next is its own, in git's sight, and

@@ -172,7 +172,7 @@ fn an_installed_skill_opens_already_marked_next_time() {
 
     assert_eq!(
         reopened.targets[0].rows[0].candidate.standing,
-        Standing::Installed
+        Standing::Current
     );
     assert!(rendered(&reopened).contains("[x] deploy"));
     assert_eq!(
