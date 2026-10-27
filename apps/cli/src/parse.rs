@@ -266,6 +266,29 @@ pub enum Command {
         force: bool,
     },
 
+    /// Bring what Mindflayer installed into this project up to date with
+    /// where it came from, and put back the copies that have gone.
+    ///
+    /// A copy changed since it was installed is left alone, with every
+    /// other copy of it, and said. Without --yes nothing changes, and the
+    /// command says what would.
+    Update {
+        /// Only these, each by its name, or `kind:name` when one name is
+        /// both [default: everything installed].
+        #[arg(value_name = "NAME")]
+        names: Vec<String>,
+
+        /// Write over a copy changed since it was installed, which is
+        /// otherwise left alone.
+        #[arg(long)]
+        force: bool,
+
+        /// Make the change. Without this nothing changes, and the command
+        /// says what would.
+        #[arg(short, long)]
+        yes: bool,
+    },
+
     /// Change which agents work in this project, and carry what is
     /// installed into it along: a copy wherever an agent it now names
     /// reads, and none left where no agent it names does.
@@ -661,6 +684,38 @@ pub enum FlayerCommand {
         /// otherwise left alone with every other copy.
         #[arg(long)]
         force: bool,
+    },
+
+    /// Bring what Mindflayer installed into projects up to date with where
+    /// it came from, and put back the copies that have gone, as `mind
+    /// update` does in one.
+    ///
+    /// A copy changed since it was installed is left alone, with every
+    /// other copy of it, and said. Without --yes nothing changes, and the
+    /// command says what would.
+    Update {
+        /// A project to update, by name or path; once for each.
+        #[arg(short = 'p', long = "project", value_name = "PROJECT")]
+        projects: Vec<String>,
+
+        /// Every project the workspace links.
+        #[arg(long, conflicts_with = "projects")]
+        all: bool,
+
+        /// Only these, each by its name, or `kind:name` when one name is
+        /// both [default: everything installed].
+        #[arg(value_name = "NAME")]
+        names: Vec<String>,
+
+        /// Write over a copy changed since it was installed, which is
+        /// otherwise left alone.
+        #[arg(long)]
+        force: bool,
+
+        /// Make the change. Without this nothing changes, and the command
+        /// says what would.
+        #[arg(short, long)]
+        yes: bool,
     },
 
     /// Change which agents work in a project, and carry what is installed

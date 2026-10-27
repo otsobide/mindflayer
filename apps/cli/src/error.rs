@@ -91,6 +91,10 @@ pub enum CliError {
     MigrateWhat,
     #[error(transparent)]
     Reapply(#[from] mindflayer_core::ReapplyError),
+    #[error(transparent)]
+    Update(#[from] mindflayer_core::update::UpdateError),
+    #[error("say which projects to update: -p <project> for each, or --all for every one the workspace links")]
+    UpdateWhere,
     #[error("say which project's agents to change (`flayer agents -p <project> <agent>...`); the workspace's own reach agents by being installed")]
     AgentsWhere,
     #[error("say which project's targets to change (`flayer targets -p <project> set <kind> <dir>...`); the workspace's own reach agents by being installed")]
