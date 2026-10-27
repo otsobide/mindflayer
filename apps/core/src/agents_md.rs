@@ -41,12 +41,11 @@ use thiserror::Error;
 
 use crate::artifact::{issue_list, name_issues, Artifact, ArtifactError, Declared};
 use crate::catalog::{report_order, spelled};
+use crate::exclude;
 use crate::lines::{self, Line};
 use crate::paths;
 use crate::workspace::{replace_bytes, same_directory, FlayerWorkspace, MindProject};
 
-/// The file the block is rendered into, at a project's root.
-pub const FILE: &str = "AGENTS.md";
 /// The line that opens Mindflayer's block.
 pub const BEGIN: &str = "<!-- mindflayer:begin -->";
 /// The line that closes it.
@@ -56,6 +55,20 @@ pub const END: &str = "<!-- mindflayer:end -->";
 pub const RULE: &str = "<!-- mindflayer:rule ";
 /// What closes a rule's marker, after its route.
 pub const CLOSE: &str = " -->";
+
+/// The file the block is rendered into, at a project's root.
+pub const FILE: &str = "AGENTS.md";
+/// What Codex reads in a folder in place of its `AGENTS.md`.
+pub const OVERRIDE: &str = "AGENTS.override.md";
+
+/// How many bytes of the `AGENTS.md` files from the git root down Codex
+/// reads, unless its config says otherwise (`project_doc_max_bytes`): it
+/// cuts off whatever comes past them (docs/agents.md, docs-only).
+pub const CODEX_BUDGET: u64 = 32 * 1024;
+/// Where those files are near enough to [`CODEX_BUDGET`] to say so: an
+/// eighth short of it, room for a rule or two more of a page each, so the
+/// warning comes a render before Codex starts cutting rather than after.
+pub const CODEX_NEAR: u64 = CODEX_BUDGET / 8 * 7;
 
 /// What each marker's comment opens with. A comment that opens with it and
 /// is none of them is one written wrong, and refused.
@@ -198,6 +211,11 @@ impl Section {
 /// file that is a link is written through to what it points at, as a marker
 /// shared by a link is, but only inside the project ([`linked_inside`]).
 ///
+/// What the file then holds is checked against what Codex reads of it, and
+/// anything that keeps the rules from Codex is said ([`Warning`]): only
+/// while there is a block, since without one nothing of Mindflayer's is
+/// there to miss.
+///
 /// Takes no lock: the caller holds the workspace's, as one calling
 /// [`crate::config_entry::ConfigFile`] does, and the lock is not
 /// re-entrant.
@@ -250,10 +268,16 @@ pub fn render<'a>(
             Written::Changed
         }
     };
+    let warnings = if text.has_block() {
+        codex_warnings(project.root())
+    } else {
+        Vec::new()
+    };
     Ok(Rendered {
         routes: text.routes().into_iter().map(str::to_owned).collect(),
         file,
         written,
+        warnings,
     })
 }
 
@@ -267,6 +291,9 @@ pub struct Rendered {
     /// is no block. What the caller records as written (#45), since a rule
     /// declaring `paths` is handed in and given no section.
     pub routes: Vec<String>,
+    /// What keeps the block from reaching Codex, or will, in the order
+    /// [`Warning`] lists them.
+    pub warnings: Vec<Warning>,
 }
 
 impl Rendered {
@@ -289,6 +316,122 @@ pub enum Written {
     /// It already held what was asked, or was not there and was asked to
     /// hold nothing, and was left as it was.
     Unchanged,
+}
+
+/// Something about where a rendered `AGENTS.md` sits that keeps its rules
+/// from Codex, in part or whole: said, and no reason not to render.
+///
+/// Codex reads one file a folder, `AGENTS.override.md` before `AGENTS.md`,
+/// from the git root down to where it starts, root first, and cuts the whole
+/// off at a budget (docs/agents.md, docs-only). Each is worked out for Codex
+/// started at the project's root, where the file is. Claude and OpenCode read
+/// past all three, so none is said for them.
+#[derive(Debug, Clone, PartialEq, Eq, Error)]
+pub enum Warning {
+    /// An `AGENTS.override.md` beside the file, which Codex reads in its
+    /// place.
+    #[error("{file}: Codex reads it in place of the AGENTS.md beside it, so the rules rendered there do not reach Codex")]
+    Overridden { file: PathBuf },
+    /// No git work tree holds the project, so Codex, finding no root to read
+    /// down from, reads only the folder it starts in.
+    #[error("{project}: in no git work tree, so Codex reads its AGENTS.md only when started in that folder itself")]
+    NoGitRoot { project: PathBuf },
+    /// What Codex reads from the git root down comes to [`CODEX_NEAR`] or
+    /// more, and not past [`CODEX_BUDGET`].
+    #[error("{project}: the AGENTS.md files Codex reads there come to {bytes} bytes, close to the {CODEX_BUDGET} it reads before cutting off the rest")]
+    NearBudget {
+        project: PathBuf,
+        bytes: u64,
+        /// The file Codex reads in each folder, root first.
+        files: Vec<PathBuf>,
+    },
+    /// What Codex reads from the git root down comes to more than
+    /// [`CODEX_BUDGET`], so it cuts off the end, where the project's own
+    /// file is.
+    #[error("{project}: the AGENTS.md files Codex reads there come to {bytes} bytes, past the {CODEX_BUDGET} it reads, so it cuts off the rest")]
+    OverBudget {
+        project: PathBuf,
+        bytes: u64,
+        /// The file Codex reads in each folder, root first.
+        files: Vec<PathBuf>,
+    },
+    /// The repository, or a file Codex would read, could not be looked at,
+    /// so how much Codex reads is not known.
+    #[error("{project}: how much of its AGENTS.md Codex reads cannot be told: {detail}")]
+    Unmeasured { project: PathBuf, detail: String },
+}
+
+/// What [`Warning`]s the `AGENTS.md` at `project`'s root, as it is on disk,
+/// calls for.
+fn codex_warnings(project: &Path) -> Vec<Warning> {
+    let mut warnings = Vec::new();
+    let beside = project.join(OVERRIDE);
+    if beside.is_file() {
+        warnings.push(Warning::Overridden { file: beside });
+    }
+    let unmeasured = |detail: String| Warning::Unmeasured {
+        project: project.to_path_buf(),
+        detail,
+    };
+    // Every folder from the git root down to the project, root first.
+    let folders = match exclude::work_tree(project) {
+        Ok(Some((root, route))) => {
+            let mut folder = root;
+            let mut folders = vec![folder.clone()];
+            for component in route.components() {
+                if let Component::Normal(name) = component {
+                    folder.push(name);
+                    folders.push(folder.clone());
+                }
+            }
+            folders
+        }
+        Ok(None) => {
+            warnings.push(Warning::NoGitRoot {
+                project: project.to_path_buf(),
+            });
+            vec![project.to_path_buf()]
+        }
+        Err(error) => {
+            warnings.push(unmeasured(error.to_string()));
+            return warnings;
+        }
+    };
+    let mut bytes = 0;
+    let mut files = Vec::new();
+    for folder in folders {
+        for name in [OVERRIDE, FILE] {
+            let path = folder.join(name);
+            match fs::metadata(&path) {
+                Ok(metadata) if metadata.is_file() => {
+                    bytes += metadata.len();
+                    files.push(path);
+                    break;
+                }
+                Ok(_) => {}
+                Err(error) if error.kind() == io::ErrorKind::NotFound => {}
+                Err(error) => {
+                    warnings.push(unmeasured(format!("{}: {error}", path.display())));
+                    return warnings;
+                }
+            }
+        }
+    }
+    let project = project.to_path_buf();
+    if bytes > CODEX_BUDGET {
+        warnings.push(Warning::OverBudget {
+            project,
+            bytes,
+            files,
+        });
+    } else if bytes >= CODEX_NEAR {
+        warnings.push(Warning::NearBudget {
+            project,
+            bytes,
+            files,
+        });
+    }
+    warnings
 }
 
 /// Refuse `folder` as a place for an `AGENTS.md` when agents beyond its own

@@ -204,6 +204,20 @@ pub fn tracks(project: &Path, folder: &Path) -> Result<bool, ExcludeError> {
         .is_some_and(|entries| !entries.is_empty()))
 }
 
+/// The work tree holding `project`, as git names it, and the route from it
+/// down to the project: `None` when no work tree holds it.
+///
+/// For a caller that walks the folders between the two, as Codex reads an
+/// `AGENTS.md` in each ([`crate::agents_md`]). The repository is opened as
+/// [`locate`] opens it.
+pub(crate) fn work_tree(project: &Path) -> Result<Option<(PathBuf, PathBuf)>, ExcludeError> {
+    Ok(discover(project)?.and_then(|(repository, route)| {
+        repository
+            .workdir()
+            .map(|worktree| (worktree.to_path_buf(), route))
+    }))
+}
+
 /// The repository whose work tree holds `project`, and where in that work
 /// tree the project is: `None` when no work tree holds it.
 ///

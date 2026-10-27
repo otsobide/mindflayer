@@ -6,7 +6,10 @@ mod common;
 use std::fs;
 use std::path::PathBuf;
 
-use mindflayer_core::agents_md::{self, AgentsMdError, Malformed, Rendered, Written, BEGIN, END};
+use mindflayer_core::agents_md::{
+    self, AgentsMdError, Malformed, Rendered, Warning, Written, BEGIN, CODEX_BUDGET, CODEX_NEAR,
+    END,
+};
 use mindflayer_core::{Artifact, FlayerWorkspace, MindProject};
 use tempfile::TempDir;
 
@@ -14,21 +17,28 @@ use tempfile::TempDir;
 const TEAM: &str = "# Working here\n\nRun `make test` before every push.\n";
 
 /// A workspace linking one project below it, and a library of rules to
-/// render from.
+/// render from, in a git work tree whose root is the workspace's.
 struct Fixture {
-    _dir: TempDir,
+    dir: TempDir,
     workspace: FlayerWorkspace,
     project: MindProject,
     library: PathBuf,
 }
 
 fn fixture() -> Fixture {
+    let fixture = outside_git();
+    gix::init(fixture.dir.path()).unwrap();
+    fixture
+}
+
+/// The same, in no git work tree.
+fn outside_git() -> Fixture {
     let dir = TempDir::new().unwrap();
     let (mut workspace, _) = FlayerWorkspace::init(dir.path()).unwrap();
     let project = linked(&mut workspace, &dir.path().join("app"));
     Fixture {
         library: dir.path().join("library"),
-        _dir: dir,
+        dir,
         workspace,
         project,
     }
@@ -101,6 +111,7 @@ fn a_render_matches_the_golden_block() {
         rendered.routes,
         ["commit-style", "git/no-force-push", "review/tone"]
     );
+    assert_eq!(rendered.warnings, []);
     assert_eq!(fixture.text(), include_str!("fixtures/agents-md.md"));
 }
 
@@ -483,5 +494,105 @@ fn a_folder_spelled_through_a_link_is_still_above_what_it_leads_to() {
     assert!(
         matches!(refused, Err(AgentsMdError::AboveProjects { .. })),
         "{refused:?}"
+    );
+}
+
+/// A rule whose body is `bytes` long, give or take its line ending.
+fn sized(fixture: &Fixture, route: &str, bytes: usize) -> Artifact {
+    fixture.rule(route, &format!("{}\n", "x".repeat(bytes)))
+}
+
+#[test]
+fn an_override_beside_the_file_is_warned_of() {
+    let fixture = fixture();
+    let beside = fixture.project.root().join(agents_md::OVERRIDE);
+    fs::write(&beside, "Codex reads this instead.\n").unwrap();
+    let rule = fixture.rule("a", "Rule a.\n");
+
+    let rendered = fixture.render(&[&rule], false).unwrap();
+    assert_eq!(rendered.warnings, [Warning::Overridden { file: beside }]);
+    assert!(rendered.warnings[0]
+        .to_string()
+        .contains("do not reach Codex"));
+
+    // Said again on a render that changes nothing, and not once the block
+    // has gone.
+    let again = fixture.render(&[&rule], false).unwrap();
+    assert_eq!(again.written, Written::Unchanged);
+    assert_eq!(again.warnings.len(), 1);
+    assert_eq!(fixture.render(&[], false).unwrap().warnings, []);
+}
+
+#[test]
+fn a_project_in_no_git_work_tree_is_warned_of() {
+    let fixture = outside_git();
+    let rule = fixture.rule("a", "Rule a.\n");
+    let rendered = fixture.render(&[&rule], false).unwrap();
+    assert_eq!(
+        rendered.warnings,
+        [Warning::NoGitRoot {
+            project: fixture.project.root().to_path_buf(),
+        }]
+    );
+}
+
+#[test]
+fn files_from_the_git_root_down_nearing_codexs_budget_are_warned_of() {
+    let fixture = fixture();
+    let root = fixture.dir.path().join(agents_md::FILE);
+    fs::write(&root, "r".repeat(20 * 1024)).unwrap();
+    // An override hides its folder's AGENTS.md from Codex, so only it counts.
+    let middle = fixture.project.root().join("packages");
+    fs::create_dir_all(middle.join("web")).unwrap();
+    let (project, _) = MindProject::init(middle.join("web")).unwrap();
+    fs::write(middle.join(agents_md::FILE), "m".repeat(20 * 1024)).unwrap();
+    fs::write(middle.join(agents_md::OVERRIDE), "o".repeat(1024)).unwrap();
+
+    let small = sized(&fixture, "small", 1024);
+    let rendered = agents_md::render(&fixture.workspace, &project, [&small], false).unwrap();
+    assert_eq!(rendered.warnings, []);
+
+    let large = sized(&fixture, "large", 7 * 1024 + 512);
+    let rendered = agents_md::render(&fixture.workspace, &project, [&large], false).unwrap();
+    let mine = project.root().join(agents_md::FILE);
+    let bytes = 20 * 1024 + 1024 + fs::metadata(&mine).unwrap().len();
+    assert!((CODEX_NEAR..=CODEX_BUDGET).contains(&bytes), "{bytes}");
+    assert_eq!(
+        rendered.warnings,
+        [Warning::NearBudget {
+            project: project.root().to_path_buf(),
+            bytes,
+            files: vec![root.clone(), middle.join(agents_md::OVERRIDE), mine.clone()],
+        }]
+    );
+
+    let larger = sized(&fixture, "larger", 12 * 1024);
+    let rendered = agents_md::render(&fixture.workspace, &project, [&larger], false).unwrap();
+    let bytes = 20 * 1024 + 1024 + fs::metadata(&mine).unwrap().len();
+    assert!(bytes > CODEX_BUDGET);
+    assert!(
+        matches!(&rendered.warnings[..], [Warning::OverBudget { bytes: said, files, .. }] if *said == bytes && files.len() == 3),
+        "{:?}",
+        rendered.warnings
+    );
+    assert!(rendered.warnings[0]
+        .to_string()
+        .contains("cuts off the rest"));
+}
+
+#[test]
+fn a_project_in_no_git_work_tree_counts_only_its_own_file_against_the_budget() {
+    let fixture = outside_git();
+    fs::write(
+        fixture.dir.path().join(agents_md::FILE),
+        "r".repeat(CODEX_BUDGET as usize),
+    )
+    .unwrap();
+    let rule = fixture.rule("a", "Rule a.\n");
+    let rendered = fixture.render(&[&rule], false).unwrap();
+    assert!(
+        matches!(&rendered.warnings[..], [Warning::NoGitRoot { .. }]),
+        "{:?}",
+        rendered.warnings
     );
 }
