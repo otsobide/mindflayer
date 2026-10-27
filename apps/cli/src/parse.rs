@@ -284,6 +284,17 @@ pub enum Command {
         mode: ShareMode,
     },
 
+    /// Install a kind into folders of this project's own, for every agent
+    /// it names, instead of where each agent reads, or send it back there,
+    /// and carry what is installed along.
+    ///
+    /// A folder no agent reads reaches one only once it is pointed there.
+    /// Without --yes nothing changes, and the command says what would.
+    Targets {
+        #[command(subcommand)]
+        change: TargetsChange,
+    },
+
     /// Bring this project, made by an older Mindflayer and marked by a
     /// mind.toml, to settings, and what is installed into it to where its
     /// agents read.
@@ -658,6 +669,23 @@ pub enum FlayerCommand {
         mode: ShareMode,
     },
 
+    /// Install a kind into folders of a project's own, or send it back to
+    /// where each agent reads, as `mind targets` does there.
+    ///
+    /// Without --yes nothing changes, and the command says what would.
+    #[command(
+        override_usage = "flayer targets -p <PROJECT> set [OPTIONS] <KIND> <DIR>...\n       flayer targets -p <PROJECT> reset [OPTIONS] <KIND>"
+    )]
+    Targets {
+        /// The project, by name or path. Needed, and taken on either side of
+        /// `set` or `reset`.
+        #[arg(short, long, value_name = "PROJECT", global = true)]
+        project: Option<String>,
+
+        #[command(subcommand)]
+        change: TargetsChange,
+    },
+
     /// Bring a workspace made by an older Mindflayer, or the projects it
     /// links, into the layout a new one has.
     ///
@@ -732,6 +760,39 @@ pub struct AgentNames {
     /// what would.
     #[arg(short, long)]
     pub yes: bool,
+}
+
+/// How `targets` changes where a project installs a kind.
+#[derive(Debug, Subcommand)]
+pub enum TargetsChange {
+    /// Install a kind in these folders, for every agent the project names,
+    /// in place of where it went.
+    Set {
+        /// The kind: `skills`.
+        #[arg(value_name = "KIND")]
+        kind: Kind,
+
+        /// Each folder, relative to the project: inside it, and outside
+        /// `.mind`.
+        #[arg(required = true, value_name = "DIR")]
+        folders: Vec<String>,
+
+        /// Make the change. Without this nothing changes, and the command
+        /// says what would.
+        #[arg(short, long)]
+        yes: bool,
+    },
+    /// Install a kind where each agent the project names reads it again.
+    Reset {
+        /// The kind: `skills`.
+        #[arg(value_name = "KIND")]
+        kind: Kind,
+
+        /// Make the change. Without this nothing changes, and the command
+        /// says what would.
+        #[arg(short, long)]
+        yes: bool,
+    },
 }
 
 /// What a project's settings are to say once it is moved from its

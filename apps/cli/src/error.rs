@@ -93,6 +93,8 @@ pub enum CliError {
     Reapply(#[from] mindflayer_core::ReapplyError),
     #[error("say which project's agents to change (`flayer agents -p <project> <agent>...`); the workspace's own reach agents by being installed")]
     AgentsWhere,
+    #[error("say which project's targets to change (`flayer targets -p <project> set <kind> <dir>...`); the workspace's own reach agents by being installed")]
+    TargetsWhere,
     #[error("`{editor}` could not be started: {source}")]
     Editor {
         editor: String,

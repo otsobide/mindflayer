@@ -38,7 +38,7 @@ use read::{
     everywhere, everywhere_and_the_shelf, list, list_workspace, one_project, show, validate,
     wanted, Level, Selector,
 };
-use settings::{agents_change, change_here, change_of};
+use settings::{agents_change, change_here, change_of, targets_change};
 use status::{status_here, status_of_project, status_of_workspace};
 use workspace::{load_command, unload_command};
 
@@ -203,6 +203,10 @@ pub(crate) fn run_with(cli: &Cli, lookup: &Lookup, watch: &Watch) -> Result<Outc
             mode.yes,
             lookup,
         ),
+        Command::Targets { change } => {
+            let (change, yes) = targets_change(change);
+            change_here(&project_here(&directory)?, &change, yes, lookup)
+        }
         Command::Migrate { settings, yes } => migrate_here(
             &project_here(&directory)?,
             &Asked {
@@ -462,6 +466,20 @@ fn run_flayer(
                     edit_tracked: mode.edit_tracked,
                 },
                 mode.yes,
+                &lookup.agents,
+            )
+        }
+        // `-p` is the project's on either side of `set` or `reset`, as for
+        // `agents`.
+        FlayerCommand::Targets { project, change } => {
+            let project = project.as_deref().ok_or(CliError::TargetsWhere)?;
+            let workspace = workspace_here(directory, lookup)?;
+            let (change, yes) = targets_change(change);
+            change_of(
+                &workspace,
+                &workspace.pick(project)?,
+                &change,
+                yes,
                 &lookup.agents,
             )
         }
