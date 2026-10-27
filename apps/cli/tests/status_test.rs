@@ -357,7 +357,16 @@ struct Project {
     path: String,
     agents: Vec<String>,
     stale: Option<String>,
+    unreached: Vec<Unreached>,
     artifacts: Vec<Held>,
+}
+
+#[derive(Debug, Deserialize, PartialEq)]
+#[serde(deny_unknown_fields)]
+struct Unreached {
+    kind: String,
+    targets: Vec<String>,
+    agents: Vec<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -425,6 +434,7 @@ fn status_as_json_holds_the_same_entries_as_the_table() {
     );
     assert_eq!(collapse.agents, ["claude", "codex", "opencode"]);
     assert_eq!(collapse.stale, None);
+    assert_eq!(collapse.unreached, []);
     let kinds: Vec<&str> = collapse
         .artifacts
         .iter()

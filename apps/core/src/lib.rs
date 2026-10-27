@@ -62,7 +62,7 @@ pub use skill::{
     Compatibility, Metadata, SkillManifest, MAX_COMPATIBILITY_LEN, MAX_DESCRIPTION_LEN,
     MAX_NAME_SEGMENT_LEN,
 };
-pub use status::{ArtifactStatus, ProjectStatus, State, Status, StatusFailure};
+pub use status::{ArtifactStatus, ProjectStatus, State, Status, StatusFailure, Unreached};
 pub use template::{Template, TemplateError, TEMPLATES_DIR};
 pub use workspace::{
     Directories, FlayerConfig, FlayerWorkspace, Initialization, Loaded, Marker, Member, MindConfig,

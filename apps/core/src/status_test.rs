@@ -33,6 +33,11 @@ fn a_report_serializes_every_field_by_the_name_it_is_held_to() {
                 path: PathBuf::from("/work/collapse"),
                 agents: vec![Agent::Claude, Agent::OpenCode],
                 stale: None,
+                unreached: vec![Unreached {
+                    kind: Kind::Skill,
+                    targets: vec![String::from(".skills")],
+                    agents: vec![Agent::Claude],
+                }],
                 artifacts: vec![ArtifactStatus {
                     kind: Kind::Skill,
                     name: String::from("deploy"),
@@ -47,6 +52,7 @@ fn a_report_serializes_every_field_by_the_name_it_is_held_to() {
                 path: PathBuf::from("/old-api"),
                 agents: Vec::new(),
                 stale: Some(String::from("gone")),
+                unreached: Vec::new(),
                 artifacts: Vec::new(),
             },
         ],
@@ -59,11 +65,13 @@ fn a_report_serializes_every_field_by_the_name_it_is_held_to() {
         concat!(
             r#"{"projects":["#,
             r#"{"name":"collapse","entry":"collapse","path":"/work/collapse","#,
-            r#""agents":["claude","opencode"],"stale":null,"artifacts":["#,
+            r#""agents":["claude","opencode"],"stale":null,"#,
+            r#""unreached":[{"kind":"skill","targets":[".skills"],"agents":["claude"]}],"#,
+            r#""artifacts":["#,
             r#"{"kind":"skill","name":"deploy","state":"partial","#,
             r#""agents":["opencode"],"origin":"workspace"}]},"#,
             r#"{"name":null,"entry":"../old-api","path":"/old-api","#,
-            r#""agents":[],"stale":"gone","artifacts":[]}]}"#,
+            r#""agents":[],"stale":"gone","unreached":[],"artifacts":[]}]}"#,
         )
     );
 }
