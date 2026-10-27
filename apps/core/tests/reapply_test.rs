@@ -677,7 +677,7 @@ fn a_change_keeps_what_the_settings_file_holds_by_hand_and_where() {
     // own: what an edit keeps, and a rewrite would not.
     let written = fs::read_to_string(&path).unwrap().replacen(
         "{\n",
-        "{\n  \"targets\": {\"skills\": [\".skills\"]},\n",
+        "{\n  \"servers\": {\"github\": [\"npx\"]},\n",
         1,
     );
     fs::write(&path, &written).unwrap();
@@ -698,4 +698,191 @@ fn a_change_keeps_what_the_settings_file_holds_by_hand_and_where() {
             r#""agents": ["claude", "codex"]"#
         )
     );
+}
+
+/// Where a project installing skills in `.skills` keeps `name`.
+fn in_skills(project: &MindProject, name: &str) -> PathBuf {
+    project.root().join(".skills").join(name)
+}
+
+fn to_skills() -> Change {
+    Change::Targets {
+        kind: Kind::Skill,
+        folders: Some(vec![PathBuf::from("./.skills/")]),
+    }
+}
+
+#[test]
+fn setting_targets_moves_each_installation_there_and_out_of_the_agents_folders() {
+    let (dir, workspace, project) = installed(&Agent::ALL, Share::Local);
+    let before = tree(dir.path());
+
+    let plan = reapply::plan(
+        Some(&workspace),
+        &project,
+        &to_skills(),
+        &AgentHomes::default(),
+    )
+    .unwrap();
+    assert_eq!(tree(dir.path()), before);
+
+    let applied = reapply::apply(
+        Some(&workspace),
+        &project,
+        &to_skills(),
+        &AgentHomes::default(),
+    )
+    .unwrap();
+
+    assert!(applied.failures.is_empty(), "{:?}", applied.failures);
+    assert_eq!(applied.plan, plan);
+    let moved = &plan.installations[0];
+    assert_eq!(moved.added.len(), 1);
+    assert_eq!(moved.added[0].path, in_skills(&project, "deploy"));
+    assert_eq!(moved.added[0].agents, Agent::ALL);
+    assert_eq!(
+        moved.removed,
+        [agents(&project, "deploy"), claudes(&project, "deploy")]
+    );
+    assert!(in_skills(&project, "deploy").join("SKILL.md").is_file());
+    assert!(!agents(&project, "deploy").exists());
+    assert!(!claudes(&project, "deploy").exists());
+    assert_eq!(targets(&workspace), [target(None, ".skills/deploy")]);
+    assert_eq!(excluded(&project), ["/.skills/deploy/"]);
+    // Written as the settings spell a folder, at the version that reads it.
+    let settings = reopened(&project).settings().unwrap().clone();
+    assert_eq!(settings.version, mindflayer_core::TARGETS_VERSION);
+    assert_eq!(
+        settings.targets.get(Kind::Skill),
+        Some(&[PathBuf::from(".skills")][..])
+    );
+    assert!(fs::read_to_string(settings_file(&project))
+        .unwrap()
+        .contains("\"targets\": {\n    \"skills\": [\".skills\"]\n  }"));
+}
+
+#[test]
+fn resetting_targets_moves_copies_back_and_leaves_somebodys_where_it_is_said() {
+    let (_dir, workspace, project) = installed(&Agent::ALL, Share::Local);
+    reapply::apply(
+        Some(&workspace),
+        &project,
+        &to_skills(),
+        &AgentHomes::default(),
+    )
+    .unwrap();
+    let notes = in_skills(&project, "notes");
+    fs::create_dir_all(&notes).unwrap();
+    fs::write(notes.join("SKILL.md"), skill("notes", "Mine")).unwrap();
+    let project = reopened(&project);
+
+    let applied = reapply::apply(
+        Some(&workspace),
+        &project,
+        &Change::Targets {
+            kind: Kind::Skill,
+            folders: None,
+        },
+        &AgentHomes::default(),
+    )
+    .unwrap();
+
+    assert!(applied.failures.is_empty(), "{:?}", applied.failures);
+    let plan = &applied.plan;
+    assert_eq!(
+        plan.installations[0].removed,
+        [in_skills(&project, "deploy")]
+    );
+    assert_eq!(plan.foreign, std::slice::from_ref(&notes));
+    assert!(notes.join("SKILL.md").is_file());
+    assert!(!in_skills(&project, "deploy").exists());
+    assert!(agents(&project, "deploy").join("SKILL.md").is_file());
+    assert!(claudes(&project, "deploy").join("SKILL.md").is_file());
+    assert_eq!(
+        targets(&workspace),
+        [
+            target(None, ".agents/skills/deploy"),
+            target(Some("claude"), ".claude/skills/deploy"),
+        ]
+    );
+    let settings = reopened(&project).settings().unwrap().clone();
+    assert!(settings.targets.is_empty());
+    assert_eq!(settings.version, mindflayer_core::SETTINGS_VERSION);
+}
+
+#[test]
+fn somebodys_skill_in_a_new_target_is_left_and_nothing_is_written_over_it() {
+    let (_dir, workspace, project) = installed(&[Agent::Claude], Share::Local);
+    let theirs = in_skills(&project, "deploy");
+    fs::create_dir_all(&theirs).unwrap();
+    fs::write(theirs.join("SKILL.md"), skill("deploy", "Theirs")).unwrap();
+
+    let applied = reapply::apply(
+        Some(&workspace),
+        &project,
+        &to_skills(),
+        &AgentHomes::default(),
+    )
+    .unwrap();
+
+    let moved = &applied.plan.installations[0];
+    assert!(moved.added.is_empty(), "{moved:?}");
+    assert_eq!(moved.left.len(), 1);
+    assert_eq!(moved.left[0].path, theirs);
+    assert_eq!(moved.left[0].why, Why::Foreign);
+    assert_eq!(
+        fs::read_to_string(theirs.join("SKILL.md")).unwrap(),
+        skill("deploy", "Theirs")
+    );
+}
+
+#[test]
+fn targets_no_install_may_use_are_refused_before_anything_is_written() {
+    let (dir, workspace, project) = installed(&[Agent::Claude], Share::Local);
+    let before = tree(dir.path());
+    let elsewhere = TempDir::new().unwrap();
+
+    for (kind, folders) in [
+        (Kind::Skill, vec![PathBuf::from("../shared")]),
+        (
+            Kind::Skill,
+            vec![PathBuf::from(".skills"), PathBuf::from(".mind/skills")],
+        ),
+        (Kind::Skill, vec![elsewhere.path().to_path_buf()]),
+        (Kind::Rule, vec![PathBuf::from(".rules")]),
+    ] {
+        let change = Change::Targets {
+            kind,
+            folders: Some(folders),
+        };
+        for result in [
+            reapply::plan(Some(&workspace), &project, &change, &AgentHomes::default()).map(|_| ()),
+            reapply::apply(Some(&workspace), &project, &change, &AgentHomes::default()).map(|_| ()),
+        ] {
+            let error = result.unwrap_err();
+            assert!(
+                matches!(
+                    error,
+                    ReapplyError::Workspace(WorkspaceError::Target { .. })
+                ),
+                "{error}"
+            );
+        }
+    }
+    let none = reapply::apply(
+        Some(&workspace),
+        &project,
+        &Change::Targets {
+            kind: Kind::Skill,
+            folders: Some(Vec::new()),
+        },
+        &AgentHomes::default(),
+    )
+    .unwrap_err();
+    assert_eq!(
+        none.to_string(),
+        "collapse would install its skills in no folder; name one, or reset them to go where its \
+         agents read"
+    );
+    assert_eq!(tree(dir.path()), before);
 }
