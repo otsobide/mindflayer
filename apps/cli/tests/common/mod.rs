@@ -191,7 +191,7 @@ pub fn workspace_with_two() -> TempDir {
     for name in ["alpha", "beta"] {
         let root = dir.path().join(name);
         fs::create_dir(&root).unwrap();
-        mind(&root, &["init"]).unwrap();
+        new_project(&root);
         write_skill(&root, name, &skill_file(name, "A skill"));
         flayer(dir.path(), &["link", name]).unwrap();
     }
@@ -205,7 +205,7 @@ pub fn workspace_with_two_unlinked() -> TempDir {
     for name in ["gamma", "delta"] {
         let root = dir.path().join(name);
         fs::create_dir(&root).unwrap();
-        mind(&root, &["init"]).unwrap();
+        new_project(&root);
     }
     dir
 }
@@ -315,8 +315,15 @@ pub fn write_tree(repo: &gix::Repository, dir: &Path) -> gix::ObjectId {
         .detach()
 }
 
-/// Make `root`, a folder, a mind project as `mind init` makes one.
+/// Make `root`, a folder, a mind project as a person would: a git
+/// repository, given `mind init`.
+///
+/// A repository because a project usually is one, and because a local
+/// project's install keeps its copies out of git through the repository's
+/// exclude file: outside one, every install would say on stderr that nothing
+/// does, and each test reading stderr would have to read past it.
 pub fn new_project(root: &Path) {
+    gix::init(root).expect("initialize a repository");
     mind(root, &["init"]).unwrap();
 }
 
@@ -465,7 +472,7 @@ pub fn workspace_with_candidates() -> TempDir {
     let dir = workspace_with_two();
     let gamma = dir.path().join("gamma");
     fs::create_dir(&gamma).unwrap();
-    mind(&gamma, &["init"]).unwrap();
+    new_project(&gamma);
     fs::create_dir_all(dir.path().join("repo/.git")).unwrap();
     dir
 }

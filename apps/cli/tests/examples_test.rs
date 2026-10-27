@@ -26,13 +26,14 @@ fn text(path: &Path) -> String {
     path.to_string_lossy().into_owned()
 }
 
-/// `Projects`, a workspace linking its project `collapse`.
+/// `Projects`, a workspace linking its project `collapse`, a repository as
+/// the README's is.
 fn projects() -> (TempDir, PathBuf) {
     let dir = TempDir::new().unwrap();
     let projects = dir.path().join("Projects");
     fs::create_dir_all(projects.join("collapse")).unwrap();
     flayer(&projects, &["init"]).unwrap();
-    mind(&projects.join("collapse"), &["init"]).unwrap();
+    new_project(&projects.join("collapse"));
     flayer(&projects, &["link", "collapse"]).unwrap();
     (dir, projects)
 }
