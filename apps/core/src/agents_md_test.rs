@@ -26,6 +26,34 @@ fn render(file: &[u8], sections: &[Section]) -> Vec<u8> {
 }
 
 #[test]
+fn a_section_hashes_what_it_says_whatever_its_lines_end_with() {
+    let said = section("review", "Say what a change does.\n\nThen what is wrong.\n");
+
+    assert_eq!(
+        said.hash(),
+        section(
+            "review",
+            "\r\nSay what a change does.\r\n\r\nThen what is wrong.\r\n"
+        )
+        .hash(),
+        "another ending, and blank lines around the body"
+    );
+    assert_eq!(
+        said.hash(),
+        section("other", "Say what a change does.\n\nThen what is wrong.").hash(),
+        "another route"
+    );
+    assert_eq!(
+        said.hash(),
+        crate::hash::bytes(b"Say what a change does.\n\nThen what is wrong.\n")
+    );
+    assert_ne!(
+        said.hash(),
+        section("review", "Say what a change does.\nThen what is wrong.\n").hash()
+    );
+}
+
+#[test]
 fn an_absent_file_gains_a_block_holding_one_section() {
     let mut file = AgentsMd::parse(b"").unwrap();
     let changed = file

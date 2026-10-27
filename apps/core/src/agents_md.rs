@@ -45,6 +45,7 @@ use crate::agent::AgentHomes;
 use crate::artifact::{issue_list, name_issues, Artifact, ArtifactError, Declared};
 use crate::catalog::{report_order, spelled};
 use crate::exclude;
+use crate::hash;
 use crate::install;
 use crate::lines::{self, Line};
 use crate::paths;
@@ -199,6 +200,23 @@ impl Section {
     /// The rule's route, which names it in its marker.
     pub fn route(&self) -> &str {
         &self.route
+    }
+
+    /// What the section says, as a hash ([`hash::bytes`]) of its body's
+    /// lines, each ended with a newline: what its installation records of
+    /// the copy in this file (D-04), beside the hash of the rule's own file.
+    ///
+    /// Of the lines rather than of the bytes the file holds, so a section
+    /// reads alike whatever ending the file uses: an editor or git turning
+    /// the file's newlines into another kind changes no rule, and is no edit
+    /// of one. Without its marker, which says only whose it is.
+    pub fn hash(&self) -> String {
+        let mut said = String::new();
+        for line in &self.lines {
+            said.push_str(line);
+            said.push('\n');
+        }
+        hash::bytes(said.as_bytes())
     }
 }
 
