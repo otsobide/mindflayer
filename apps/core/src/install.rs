@@ -156,7 +156,7 @@ impl Offer {
     }
 
     /// The directory it is copied from.
-    fn source(&self, workspace: &FlayerWorkspace) -> PathBuf {
+    pub(crate) fn source(&self, workspace: &FlayerWorkspace) -> PathBuf {
         match self {
             Offer::Shelf(gathered) => workspace.root().join(&gathered.path),
             Offer::Workspace { path, .. } | Offer::Loaded { path, .. } => path.clone(),

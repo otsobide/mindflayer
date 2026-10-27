@@ -2076,7 +2076,7 @@ fn stays_inside(directory: &Path) -> bool {
 /// Refused in a shared project too, whose share a change may later make
 /// local. Only when writing settings: a `mind.toml` of version 1 kept every
 /// kind inside `.mind`, and is still read that way.
-fn misplaced_authored(kind: Kind, directory: &Path) -> Option<WorkspaceError> {
+pub(crate) fn misplaced_authored(kind: Kind, directory: &Path) -> Option<WorkspaceError> {
     let path = directory.to_path_buf();
     if !stays_inside(directory) {
         return Some(WorkspaceError::OutsideProject { path, kind });

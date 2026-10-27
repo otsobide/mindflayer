@@ -1,0 +1,377 @@
+//! Moving a project an older Mindflayer made from its `mind.toml` to
+//! settings, and what is installed into it to where its agents read.
+
+mod common;
+
+use std::fs;
+use std::path::{Path, PathBuf};
+
+use common::{skill, workspace};
+use mindflayer_core::install;
+use mindflayer_core::ledger::{InstallRecord, Target};
+use mindflayer_core::migrate::{self, Refusal};
+use mindflayer_core::reapply::Why;
+use mindflayer_core::{
+    Agent, AgentHomes, Directories, FlayerWorkspace, Kind, MindProject, Share, MIND_CONFIG,
+    MIND_DIR, SETTINGS_FILE,
+};
+use tempfile::TempDir;
+
+/// A workspace keeping `names` as skills of its own, and `collapse`, a
+/// repository a version 2 `mind init` made a project, authoring in
+/// `directories` and linked, with each of `names` installed into it.
+fn older(names: &[&str], directories: &Directories) -> (TempDir, FlayerWorkspace, MindProject) {
+    let (dir, mut workspace) = workspace();
+    let own = workspace.own().directory_for(Kind::Skill).unwrap();
+    for name in names {
+        fs::create_dir_all(own.join(name)).unwrap();
+        fs::write(
+            own.join(name).join("SKILL.md"),
+            skill(name, &format!("What {name} does")),
+        )
+        .unwrap();
+    }
+
+    let root = dir.path().join("collapse");
+    fs::create_dir(&root).unwrap();
+    gix::init(&root).unwrap();
+    let (project, _) = MindProject::init_with(&root, directories).unwrap();
+    workspace.link(&project).unwrap();
+    let ledger = workspace.ledger().unwrap();
+    for name in names {
+        let candidate =
+            install::offered(&workspace, &ledger, &project, Kind::Skill, name, None).unwrap();
+        install::install(
+            &workspace,
+            &ledger,
+            &project,
+            &candidate,
+            &AgentHomes::default(),
+        )
+        .unwrap();
+    }
+    (dir, workspace, project)
+}
+
+/// Rewrite the record of `name` the way a ledger from before schema 3 holds
+/// it, once migrated: no origin for something of the workspace's own, and
+/// no hash.
+fn from_before_hashes(workspace: &FlayerWorkspace, name: &str) {
+    let ledger = workspace.ledger().unwrap();
+    let record = ledger
+        .installation("collapse", Kind::Skill, name)
+        .unwrap()
+        .unwrap();
+    ledger
+        .installed(
+            "collapse",
+            &InstallRecord {
+                origin: None,
+                content_hash: None,
+                ..record
+            },
+        )
+        .unwrap();
+}
+
+fn claudes(project: &MindProject, name: &str) -> PathBuf {
+    project.root().join(".claude").join("skills").join(name)
+}
+
+fn agents(project: &MindProject, name: &str) -> PathBuf {
+    project.root().join(".agents").join("skills").join(name)
+}
+
+fn authored(project: &MindProject, name: &str) -> PathBuf {
+    project.root().join("skills").join(name)
+}
+
+fn write_skill(folder: &Path, name: &str, description: &str) {
+    fs::create_dir_all(folder).unwrap();
+    fs::write(folder.join("SKILL.md"), skill(name, description)).unwrap();
+}
+
+/// What the ledger records of `name` in `collapse`.
+fn targets(workspace: &FlayerWorkspace, name: &str) -> Vec<Target> {
+    workspace
+        .ledger()
+        .unwrap()
+        .installation("collapse", Kind::Skill, name)
+        .unwrap()
+        .map(|record| record.targets)
+        .unwrap_or_default()
+}
+
+fn target(agent: Option<&str>, path: &str) -> Target {
+    Target {
+        agent: agent.map(str::to_owned),
+        path: path.to_owned(),
+    }
+}
+
+/// Every file under `root`, with what it holds: a picture of a tree to hold
+/// a dry run to.
+fn tree(root: &Path) -> Vec<(PathBuf, Vec<u8>)> {
+    let mut found = Vec::new();
+    let mut folders = vec![root.to_path_buf()];
+    while let Some(folder) = folders.pop() {
+        for entry in fs::read_dir(&folder).unwrap() {
+            let path = entry.unwrap().path();
+            if path.is_dir() {
+                folders.push(path);
+            } else {
+                found.push((path.clone(), fs::read(&path).unwrap()));
+            }
+        }
+    }
+    found.sort();
+    found
+}
+
+fn plan(
+    workspace: &FlayerWorkspace,
+    project: &MindProject,
+    agents: &[Agent],
+    share: Share,
+) -> migrate::ProjectPlan {
+    migrate::project_plan(
+        Some(workspace),
+        project,
+        agents,
+        share,
+        &AgentHomes::default(),
+    )
+    .unwrap()
+    .expect("a project a mind.toml marks")
+}
+
+#[test]
+fn a_plan_moves_every_installation_where_the_agents_read_and_writes_nothing() {
+    let (dir, workspace, project) = older(&["deploy", "review"], &Directories::default());
+    from_before_hashes(&workspace, "review");
+    write_skill(&authored(&project, "notes"), "notes", "Mine");
+    let before = tree(dir.path());
+
+    let plan = plan(&workspace, &project, &Agent::ALL, Share::Shared);
+
+    assert!(plan.refusals.is_empty(), "{:?}", plan.refusals);
+    assert!(plan.recorded);
+    assert_eq!(plan.settings.name, "collapse");
+    assert_eq!(plan.settings.agents, Agent::ALL);
+    assert_eq!(plan.settings.share, Share::Shared);
+    assert_eq!(
+        plan.settings.directories,
+        Directories::default()
+            .with(Kind::Skill, "skills")
+            .with(Kind::Rule, "rules")
+    );
+    let mind = project.root().join(MIND_DIR);
+    assert_eq!(plan.settings_file, mind.join(SETTINGS_FILE));
+    assert_eq!(plan.marker, mind.join(MIND_CONFIG));
+    assert_eq!(plan.backup, mind.join("tmp").join("mind.toml.v2"));
+    assert_eq!(plan.ignore, None);
+    // One with a hash and one without, which is held to its offer: both are
+    // what was installed, so both move.
+    let names: Vec<&str> = plan
+        .installations
+        .iter()
+        .map(|retarget| retarget.name.as_str())
+        .collect();
+    assert_eq!(names, ["deploy", "review"]);
+    for retarget in &plan.installations {
+        let added: Vec<(&Path, &[Agent])> = retarget
+            .added
+            .iter()
+            .map(|added| (added.path.as_path(), added.agents.as_slice()))
+            .collect();
+        assert_eq!(
+            added,
+            [
+                (
+                    agents(&project, &retarget.name).as_path(),
+                    &[Agent::Codex, Agent::OpenCode][..]
+                ),
+                (
+                    claudes(&project, &retarget.name).as_path(),
+                    &[Agent::Claude][..]
+                ),
+            ]
+        );
+        assert_eq!(retarget.removed, [authored(&project, &retarget.name)]);
+        assert!(retarget.left.is_empty(), "{:?}", retarget.left);
+    }
+    assert_eq!(plan.authored, [authored(&project, "notes")]);
+    assert!(plan.foreign.is_empty(), "{:?}", plan.foreign);
+    assert!(!plan.tracked);
+    assert_eq!(tree(dir.path()), before);
+}
+
+#[test]
+fn a_project_its_settings_mark_has_nothing_to_plan() {
+    let (dir, workspace) = workspace();
+    let root = dir.path().join("collapse");
+    let (project, _) = MindProject::init_asked(
+        &root,
+        &[Agent::Claude],
+        Share::Local,
+        &Directories::default(),
+    )
+    .unwrap();
+
+    let plan = migrate::project_plan(
+        Some(&workspace),
+        &project,
+        &Agent::ALL,
+        Share::Shared,
+        &AgentHomes::default(),
+    )
+    .unwrap();
+
+    assert!(plan.is_none(), "{plan:?}");
+}
+
+#[test]
+fn a_plan_for_a_local_project_keeps_its_mind_and_its_copies_out_of_git() {
+    let (_dir, workspace, project) = older(&["deploy"], &Directories::default());
+
+    let plan = plan(&workspace, &project, &[Agent::Claude], Share::Local);
+
+    assert_eq!(
+        plan.ignore,
+        Some(project.root().join(MIND_DIR).join(".gitignore"))
+    );
+    assert_eq!(
+        plan.exclude_file,
+        Some(project.root().join(".git").join("info").join("exclude"))
+    );
+    assert!(!plan.outside);
+    // Nothing was in place where Claude reads, so nothing is kept out but
+    // the copy put there.
+    assert!(plan.excluded.is_empty(), "{:?}", plan.excluded);
+    assert_eq!(
+        plan.installations[0]
+            .added
+            .iter()
+            .map(|added| added.path.clone())
+            .collect::<Vec<_>>(),
+        [claudes(&project, "deploy")]
+    );
+}
+
+#[test]
+fn a_copy_already_where_an_agent_reads_stays_and_a_new_one_goes_beside_it() {
+    let (_dir, workspace, project) = older(
+        &["deploy"],
+        &Directories::default().with(Kind::Skill, ".claude/skills"),
+    );
+    assert_eq!(
+        targets(&workspace, "deploy"),
+        [target(None, ".claude/skills/deploy")]
+    );
+
+    let plan = plan(&workspace, &project, &Agent::ALL, Share::Local);
+
+    let retarget = &plan.installations[0];
+    assert!(retarget.removed.is_empty(), "{retarget:?}");
+    assert_eq!(retarget.added.len(), 1);
+    assert_eq!(retarget.added[0].path, agents(&project, "deploy"));
+    assert_eq!(
+        plan.settings.directories.get(Kind::Skill),
+        Some(Path::new(".claude/skills"))
+    );
+    // In place where Claude reads, so a local project keeps it out of git.
+    assert_eq!(plan.excluded, [claudes(&project, "deploy")]);
+}
+
+#[test]
+fn a_copy_edited_since_it_was_installed_without_a_hash_is_left_and_copied_nowhere() {
+    let (_dir, workspace, project) = older(&["deploy"], &Directories::default());
+    from_before_hashes(&workspace, "deploy");
+    write_skill(&authored(&project, "deploy"), "deploy", "Edited by hand");
+
+    let plan = plan(&workspace, &project, &Agent::ALL, Share::Shared);
+
+    let retarget = &plan.installations[0];
+    assert!(retarget.added.is_empty() && retarget.removed.is_empty());
+    let left: Vec<(&Path, &Why)> = retarget
+        .left
+        .iter()
+        .map(|left| (left.path.as_path(), &left.why))
+        .collect();
+    assert_eq!(
+        left,
+        [
+            (authored(&project, "deploy").as_path(), &Why::Edited),
+            (agents(&project, "deploy").as_path(), &Why::Unsourced),
+            (claudes(&project, "deploy").as_path(), &Why::Unsourced),
+        ]
+    );
+    // Its record goes, so it is not listed with what the project wrote
+    // itself until it is migrated: said once, as edited.
+    assert!(plan.authored.is_empty(), "{:?}", plan.authored);
+}
+
+#[test]
+fn somebodys_skill_where_a_copy_would_go_is_left_and_what_else_is_there_said() {
+    let (_dir, workspace, project) = older(&["deploy"], &Directories::default());
+    write_skill(&claudes(&project, "deploy"), "deploy", "Mine");
+    write_skill(&claudes(&project, "notes"), "notes", "Mine too");
+
+    let plan = plan(&workspace, &project, &Agent::ALL, Share::Shared);
+
+    let retarget = &plan.installations[0];
+    assert_eq!(retarget.added.len(), 1, "{retarget:?}");
+    assert_eq!(retarget.added[0].path, agents(&project, "deploy"));
+    assert_eq!(retarget.left[0].path, claudes(&project, "deploy"));
+    assert_eq!(retarget.left[0].why, Why::Foreign);
+    assert_eq!(plan.foreign, [claudes(&project, "notes")]);
+}
+
+#[test]
+fn a_project_no_workspace_links_moves_to_settings_and_carries_nothing() {
+    let (dir, _workspace, project) = older(&["deploy"], &Directories::default());
+    let elsewhere = TempDir::new().unwrap();
+    let (other, _) = FlayerWorkspace::init(elsewhere.path()).unwrap();
+    let before = tree(dir.path());
+
+    let plan = plan(&other, &project, &Agent::ALL, Share::Shared);
+
+    assert!(!plan.recorded);
+    assert!(plan.installations.is_empty());
+    // Nothing says it was installed, so it reads as the project's own.
+    assert_eq!(plan.authored, [authored(&project, "deploy")]);
+    assert_eq!(tree(dir.path()), before);
+}
+
+#[test]
+fn every_reason_not_to_go_ahead_is_said_at_once() {
+    let dir = TempDir::new().unwrap();
+    let root = dir.path().join("ancient");
+    fs::create_dir_all(root.join(MIND_DIR).join("tmp")).unwrap();
+    // A version 1 marker: every kind inside `.mind`.
+    fs::write(
+        root.join(MIND_DIR).join(MIND_CONFIG),
+        "version = 1\nname = \"ancient\"\n",
+    )
+    .unwrap();
+    fs::write(root.join(MIND_DIR).join("tmp").join("mind.toml.v1"), "").unwrap();
+    let project = MindProject::open(&root).unwrap();
+
+    let plan = migrate::project_plan(None, &project, &[], Share::Shared, &AgentHomes::default())
+        .unwrap()
+        .unwrap();
+
+    let said: Vec<String> = plan.refusals.iter().map(ToString::to_string).collect();
+    assert_eq!(said.len(), 4, "{said:#?}");
+    assert!(
+        matches!(&plan.refusals[0], Refusal::Authored(_)),
+        "{said:#?}"
+    );
+    assert!(said[0].starts_with(".mind/skills: cannot hold a project's skills"));
+    assert!(said[1].starts_with(".mind/rules: cannot hold a project's rules"));
+    assert_eq!(
+        said[2],
+        "ancient would name no agent, and what is installed into it would reach none"
+    );
+    assert!(matches!(&plan.refusals[3], Refusal::Backup { .. }));
+}
