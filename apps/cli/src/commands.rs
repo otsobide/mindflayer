@@ -357,14 +357,14 @@ fn run_flayer(
         // Each folder taken from here as `link` takes a path, and each path
         // found spelled as `flayer link` run here would take it, so a line of
         // the report is a line to type.
-        FlayerCommand::Scan { roots, depth } => {
+        FlayerCommand::Scan { roots, depth, json } => {
             let request = scan::Request {
                 roots: targets(directory, roots)?,
                 depth: *depth,
                 from: Some(typed(directory, Path::new(""))?),
             };
             reading_workspace(directory, lookup, |workspace| {
-                Ok(scan_workspace(workspace, &request))
+                Ok(scan_workspace(workspace, &request, *json))
             })
         }
 

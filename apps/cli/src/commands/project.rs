@@ -15,7 +15,7 @@ use mindflayer_core::{
 };
 
 use super::{all_or_nothing, project_here, targets, workspace_for, workspace_here};
-use crate::render::{as_stored, printable, table};
+use crate::render::{as_stored, json, printable, table};
 use crate::{CliError, Failure, Lookup, Outcome};
 
 /// `mind init`: the directory made a mind project, marked by its settings,
@@ -178,13 +178,40 @@ fn unlinked(removed: &[PathBuf]) -> String {
 
 /// `flayer scan`: every repository `request` asks for, under the workspace
 /// here or the folders it names, the default workspace too before it is
-/// made, since what is under it does not wait for that.
-pub(crate) fn scan_workspace(workspace: &FlayerWorkspace, request: &scan::Request) -> Outcome {
-    scanned(&scan(workspace, request))
+/// made, since what is under it does not wait for that; as JSON when
+/// `as_json`.
+pub(crate) fn scan_workspace(
+    workspace: &FlayerWorkspace,
+    request: &scan::Request,
+    as_json: bool,
+) -> Outcome {
+    let scan = scan(workspace, request);
+    let warnings = scan_warnings(&scan);
+    if as_json {
+        return json(&scan, warnings);
+    }
+    scanned(&scan, warnings)
+}
+
+/// What a scan could not read, and that it stopped early, each as a warning
+/// says it, without the prefix: on stderr beside a table, inside the
+/// envelope beside JSON.
+fn scan_warnings(scan: &Scan) -> Vec<String> {
+    let mut warnings: Vec<String> = scan.failures.iter().map(ToString::to_string).collect();
+    if scan.truncated {
+        warnings.push(format!(
+            "stopped after listing {MAX_LISTED} folders; name a folder further down to scan past it, or link one by its path"
+        ));
+    }
+    warnings
 }
 
 /// Every repository a scan found, and whether it is linked yet.
-fn scanned(scan: &Scan) -> Outcome {
+///
+/// No column for a project's id: the path already tells the rows apart,
+/// and the id, 32 digits on every project's line, is for a script to match
+/// a project by, which reads it from the JSON.
+fn scanned(scan: &Scan, warnings: Vec<String>) -> Outcome {
     let mut stdout = String::new();
     if scan.found.is_empty() {
         let roots: Vec<String> = scan
@@ -233,16 +260,10 @@ fn scanned(scan: &Scan) -> Outcome {
         }
     }
 
-    let mut stderr: Vec<String> = scan
-        .failures
+    let stderr: Vec<String> = warnings
         .iter()
-        .map(|failure| format!("warning: {failure}"))
+        .map(|warning| format!("warning: {warning}"))
         .collect();
-    if scan.truncated {
-        stderr.push(format!(
-            "warning: stopped after listing {MAX_LISTED} folders; name a folder further down to scan past it, or link one by its path"
-        ));
-    }
     let ok = stderr.is_empty();
     Outcome { stdout, stderr, ok }
 }

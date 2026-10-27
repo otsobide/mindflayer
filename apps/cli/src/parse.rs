@@ -576,6 +576,11 @@ pub enum FlayerCommand {
         /// that has listed too many folders stops, and says so.
         #[arg(long, value_name = "N", default_value_t = DEFAULT_DEPTH)]
         depth: usize,
+
+        /// Print it as JSON, in the envelope every reading command's --json
+        /// shares.
+        #[arg(long)]
+        json: bool,
     },
 
     /// Collect artifacts from elsewhere onto this workspace's shelf.

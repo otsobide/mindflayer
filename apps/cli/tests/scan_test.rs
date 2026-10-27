@@ -4,6 +4,7 @@ mod common;
 
 use common::*;
 use mindflayer_core::scan::{DEFAULT_DEPTH, MAX_LISTED};
+use serde::Deserialize;
 
 // ---------------------------------------------------------------------------
 // flayer scan
@@ -175,6 +176,110 @@ fn scan_of_a_folder_that_is_not_there_warns_and_still_reports_the_rest() {
     );
 }
 
+/// What `scan --json` holds, field by field: nothing else is allowed, so a
+/// name changed in core fails here first. Every name is a contract.
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct Report {
+    roots: Vec<String>,
+    depth: usize,
+    found: Vec<Found>,
+    truncated: bool,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct Found {
+    path: String,
+    route: String,
+    id: Option<String>,
+    mind: bool,
+    linked: bool,
+}
+
+#[test]
+fn scan_json_is_the_envelope_with_each_one_found_and_its_id() {
+    let dir = workspace_with_two();
+    flayer(dir.path(), &["unlink", "beta"]).unwrap();
+    fs::create_dir_all(dir.path().join("gamma/.git")).unwrap();
+
+    let outcome = flayer(dir.path(), &["scan", "--json", "--depth", "2"]).unwrap();
+
+    assert!(outcome.ok, "{:?}", outcome.stderr);
+    assert!(outcome.stderr.is_empty(), "{:?}", outcome.stderr);
+    let (report, warnings): (Report, _) = enveloped(&outcome);
+    assert!(warnings.is_empty(), "{warnings:?}");
+    assert_eq!(report.roots, vec![dir.path().display().to_string()]);
+    assert_eq!(report.depth, 2);
+    assert!(!report.truncated);
+    let id = |name: &str| {
+        MindProject::open(dir.path().join(name))
+            .unwrap()
+            .settings()
+            .map(|settings| settings.id.to_string())
+    };
+    let found: Vec<(&str, &str, Option<String>, bool, bool)> = report
+        .found
+        .iter()
+        .map(|found| {
+            (
+                found.path.as_str(),
+                found.route.as_str(),
+                found.id.clone(),
+                found.mind,
+                found.linked,
+            )
+        })
+        .collect();
+    let path = |name: &str| dir.path().join(name).display().to_string();
+    let (alpha, beta, gamma) = (path("alpha"), path("beta"), path("gamma"));
+    assert_eq!(
+        found,
+        vec![
+            (alpha.as_str(), "alpha", id("alpha"), true, true),
+            (beta.as_str(), "beta", id("beta"), true, false),
+            (gamma.as_str(), "gamma", None, false, false),
+        ]
+    );
+    assert!(id("alpha").is_some());
+}
+
+#[test]
+fn scan_json_says_what_it_could_not_read_and_that_it_stopped_as_warnings() {
+    let dir = workspace_with_two();
+    let crowded = dir.path().join("crowded");
+    // The root and every folder in it but the last are listed, which is
+    // the whole budget.
+    for index in 0..MAX_LISTED {
+        fs::create_dir_all(crowded.join(format!("d{index:04}"))).unwrap();
+    }
+
+    let outcome = flayer(dir.path(), &["scan", "--json", "wrok", "crowded"]).unwrap();
+
+    // Failed as the text would have, and nothing said beside the envelope.
+    assert!(!outcome.ok);
+    assert!(outcome.stderr.is_empty(), "{:?}", outcome.stderr);
+    let (report, warnings): (Report, _) = enveloped(&outcome);
+    assert!(report.truncated);
+    assert!(report.found.is_empty(), "{:?}", report.found);
+    assert_eq!(
+        report.roots,
+        vec![
+            dir.path().join("wrok").display().to_string(),
+            crowded.display().to_string()
+        ]
+    );
+    assert_eq!(warnings.len(), 2, "{warnings:?}");
+    assert!(
+        warnings[0].contains("wrok: cannot be listed"),
+        "{warnings:?}"
+    );
+    assert!(
+        warnings[1].starts_with(&format!("stopped after listing {MAX_LISTED} folders")),
+        "{warnings:?}"
+    );
+}
+
 #[test]
 fn a_scan_that_stops_early_says_so_on_stderr() {
     let dir = workspace_with_two();
@@ -211,6 +316,7 @@ fn flayer_scan_looks_three_levels_down_unless_told() {
         Some(mindflayer_cli::FlayerCommand::Scan {
             ref roots,
             depth: DEFAULT_DEPTH,
+            json: false,
         }) if roots.is_empty()
     ));
 }
