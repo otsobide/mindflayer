@@ -13,6 +13,7 @@
 
 pub mod activate;
 pub mod agent;
+pub mod agents_md;
 pub mod artifact;
 pub mod catalog;
 pub mod config_entry;

@@ -1,11 +1,11 @@
 //! A file's bytes as lines that keep their own endings.
 //!
 //! For a file somebody else owns that Mindflayer edits only inside a marked
-//! block of its own, git's `info/exclude` ([`crate::exclude`]) first. Lines
-//! rather than one string to search and splice: what is outside the block is
-//! written back exactly as read, CRLF, a missing final newline and bytes that
-//! are not UTF-8 included, and a line Mindflayer adds takes whichever ending
-//! the file already uses.
+//! block of its own: git's `info/exclude` ([`crate::exclude`]) and a
+//! project's `AGENTS.md` ([`crate::agents_md`]). Lines rather than one string
+//! to search and splice: what is outside the block is written back exactly as
+//! read, CRLF, a missing final newline and bytes that are not UTF-8 included,
+//! and a line Mindflayer adds takes whichever ending the file already uses.
 
 pub(crate) const LF: &[u8] = b"\n";
 pub(crate) const CRLF: &[u8] = b"\r\n";
