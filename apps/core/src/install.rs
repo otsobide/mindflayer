@@ -13,6 +13,10 @@
 //! Where in the project is its agents' to say: a copy in each folder one of
 //! them reads ([`targets`]), written together and recorded as one
 //! installation, so that every agent the project names runs the same skill.
+//! A rule is no folder: it reaches a project marked by its settings as a
+//! section of the block in its `AGENTS.md`, rendered with every other rule
+//! the project has, and one a `mind.toml` marks as a copy of its file
+//! ([`rules`]).
 
 use std::fs;
 use std::io;
@@ -22,8 +26,11 @@ use std::time::Duration;
 use thiserror::Error;
 
 use crate::agent::{Agent, AgentHomes};
-use crate::artifact::{self, issue_list, Artifact, ArtifactError, ValidationIssue};
+use crate::agents_md::AgentsMdError;
+use crate::artifact::{self, issue_list, name_issues, Artifact, ArtifactError, ValidationIssue};
 use crate::catalog::{Catalog, DiscoveryFailure};
+use crate::claude_md::ClaudeMdError;
+use crate::claude_rules::ClaudeRulesError;
 use crate::copy;
 use crate::exclude::{self, ExcludeError, Excluded};
 use crate::gather::Scrub;
@@ -36,6 +43,8 @@ use crate::paths;
 use crate::settings::Share;
 use crate::url::redacted;
 use crate::workspace::{same_directory, FlayerWorkspace, MindProject, WorkspaceError};
+
+pub mod rules;
 
 /// How one shelf entry stands with respect to one project.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -201,6 +210,37 @@ pub fn is_folder_name(name: &str) -> bool {
         (components.next(), components.next()),
         (Some(Component::Normal(_)), None)
     ) && !name.contains(['/', '\\'])
+}
+
+/// Whether `name` is one an install of `kind` can file a copy under, and so
+/// one that is offered, installed and removed: one folder name for a skill
+/// ([`is_folder_name`]); for a rule, a route held to the rules every name is
+/// ([`name_issues`]), lowercase words joined by single hyphens and slashes,
+/// which becomes folders and a file, and the marker of a section in
+/// `AGENTS.md`, and never climbs out of the folder it is filed in.
+///
+/// Matched on the kind, so a third one has to say what it is filed under.
+pub fn is_installable_name(kind: Kind, name: &str) -> bool {
+    match kind {
+        Kind::Skill => is_folder_name(name),
+        Kind::Rule => name_issues(name).is_empty(),
+    }
+}
+
+/// Refuse `name` when an install of `kind` cannot file a copy under it.
+fn installable_name(kind: Kind, name: &str) -> Result<(), InstallError> {
+    if is_installable_name(kind, name) {
+        return Ok(());
+    }
+    Err(match kind {
+        Kind::Skill => InstallError::UnsafeName {
+            name: name.to_owned(),
+        },
+        Kind::Rule => InstallError::UnsafeRoute {
+            problem: issue_list(&name_issues(name)),
+            route: name.to_owned(),
+        },
+    })
 }
 
 /// What an install leaves out of every copy it writes, from the top of the
@@ -376,12 +416,18 @@ pub fn loaded_offers(workspace: &FlayerWorkspace, kind: Kind) -> Vec<Offer> {
     from_loads(workspace, &[kind]).offers
 }
 
-/// Every installable artifact the workspaces `workspace` loads offer, and
-/// every reason something was not offered: a loaded workspace that cannot be
-/// opened, an artifact in one that cannot be read, a name that is not one
-/// folder name. Failures collected, not raised, like every discovery.
+/// Every skill the workspaces `workspace` loads offer, and every reason
+/// something was not offered: a loaded workspace that cannot be opened, an
+/// artifact in one that cannot be read, a name that is not one folder name.
+/// Failures collected, not raised, like every discovery.
+///
+/// Skills, the kind every front end lists and counts from a load today. A
+/// load offers its rules too, through [`loaded_offers`] and [`survey`],
+/// which install them; the listings this answers take them with the command
+/// line and the screens that install them (#46), so that what a load says it
+/// offers is what those let somebody install.
 pub fn offered_by_loads(workspace: &FlayerWorkspace) -> Loads {
-    from_loads(workspace, &Kind::ALL)
+    from_loads(workspace, &[Kind::Skill])
 }
 
 /// The two above. No ledger: listing what a load offers is reading, and must
@@ -391,11 +437,6 @@ pub fn offered_by_loads(workspace: &FlayerWorkspace) -> Loads {
 /// is not what is being offered; and each loaded directory once, however many
 /// spellings of it the marker has.
 fn from_loads(workspace: &FlayerWorkspace, kinds: &[Kind]) -> Loads {
-    let kinds: Vec<Kind> = kinds
-        .iter()
-        .copied()
-        .filter(|kind| matches!(kind.layout(), Layout::Directory { .. }))
-        .collect();
     let mut loads = Loads::default();
     let mut seen: Vec<PathBuf> = Vec::new();
     for loaded in workspace.loads() {
@@ -420,15 +461,23 @@ fn from_loads(workspace: &FlayerWorkspace, kinds: &[Kind]) -> Loads {
             .unwrap_or_else(|| loaded.entry.display().to_string());
         let own = source.own();
         let (artifacts, failures) =
-            Catalog::discover_kinds(std::slice::from_ref(&own), &kinds).into_parts();
+            Catalog::discover_kinds(std::slice::from_ref(&own), kinds).into_parts();
         loads
             .failures
             .extend(failures.into_iter().map(LoadFailure::Artifact));
         for artifact in artifacts {
-            if !is_folder_name(artifact.name()) {
-                loads.failures.push(LoadFailure::UnsafeName {
-                    path: artifact.path().to_path_buf(),
-                    name: artifact.name().to_owned(),
+            if let Err(refused) = installable_name(artifact.kind(), artifact.name()) {
+                let path = artifact.path().to_path_buf();
+                loads.failures.push(match refused {
+                    InstallError::UnsafeRoute { route, problem } => LoadFailure::UnsafeRoute {
+                        path,
+                        route,
+                        problem,
+                    },
+                    _ => LoadFailure::UnsafeName {
+                        path,
+                        name: artifact.name().to_owned(),
+                    },
                 });
                 continue;
             }
@@ -456,6 +505,12 @@ pub enum LoadFailure {
         "{path}: declares the name `{name}`, which is not one folder name, so it is not offered"
     )]
     UnsafeName { path: PathBuf, name: String },
+    #[error("{path}: the rule `{route}` cannot be installed under that name ({problem}), so it is not offered")]
+    UnsafeRoute {
+        path: PathBuf,
+        route: String,
+        problem: String,
+    },
 }
 
 /// Everything of `kind` that can be installed, and how each stands with
@@ -478,18 +533,48 @@ pub fn survey(
     project: &MindProject,
     kind: Kind,
 ) -> Result<Vec<Candidate>, InstallError> {
+    // A rule reaches a project marked by its settings through the block of
+    // its `AGENTS.md` rather than as a copy in a folder (D-03), so how one
+    // stands there is told by the ledger and that block.
+    if kind == Kind::Rule && project.settings().is_some() {
+        if rules::receives(project).is_err() {
+            return Ok(Vec::new());
+        }
+        return rules::survey(workspace, ledger, project, offers(workspace, ledger, kind)?);
+    }
     let Ok(targets) = targets(project, kind) else {
         return Ok(Vec::new());
     };
     let entry = project_entry(workspace, project);
     let recorded = ledger.copies(&entry, kind)?;
+    let candidates = offers(workspace, ledger, kind)?
+        .into_iter()
+        .map(|offer| {
+            let mut candidate = Candidate {
+                offer,
+                standing: Standing::Absent,
+            };
+            candidate.standing =
+                standing(project.root(), &targets, kind, candidate.name(), &recorded);
+            candidate
+        })
+        .collect();
+    Ok(candidates)
+}
 
+/// Everything of `kind` offered to install, from wherever it is offered, in
+/// the order [`survey`] gives it: the workspace's own, what it loads, the
+/// shelf. Nothing whose name no copy can be filed under
+/// ([`is_installable_name`]).
+fn offers(
+    workspace: &FlayerWorkspace,
+    ledger: &Ledger,
+    kind: Kind,
+) -> Result<Vec<Offer>, InstallError> {
     // The workspace's own come first: what it keeps for its projects before
-    // what it gathered from elsewhere. Only kinds that are a directory each,
-    // because installing copies a directory: the same line the shelf draws.
+    // what it gathered from elsewhere.
     let mut offers = Vec::new();
-    let installable = matches!(kind.layout(), Layout::Directory { .. });
-    if installable && workspace.own_kinds().contains(&kind) {
+    if workspace.own_kinds().contains(&kind) {
         let own = workspace.own();
         let catalog = Catalog::discover_kinds(std::slice::from_ref(&own), &[kind]);
         offers.extend(catalog.artifacts().iter().map(|artifact| Offer::Workspace {
@@ -508,20 +593,8 @@ pub fn survey(
             .map(Offer::Shelf),
     );
 
-    let candidates = offers
-        .into_iter()
-        .filter(|offer| is_folder_name(offer.name()))
-        .map(|offer| {
-            let mut candidate = Candidate {
-                offer,
-                standing: Standing::Absent,
-            };
-            candidate.standing =
-                standing(project.root(), &targets, kind, candidate.name(), &recorded);
-            candidate
-        })
-        .collect();
-    Ok(candidates)
+    offers.retain(|offer| is_installable_name(kind, offer.name()));
+    Ok(offers)
 }
 
 /// The one candidate called `name` that `from` names, among what `project`
@@ -542,7 +615,7 @@ pub fn offered(
     name: &str,
     from: Option<&str>,
 ) -> Result<Candidate, InstallError> {
-    targets(project, kind)?;
+    receives(project, kind)?;
     let mut matching: Vec<Candidate> = survey(workspace, ledger, project, kind)?
         .into_iter()
         .filter(|candidate| candidate.name() == name)
@@ -559,6 +632,17 @@ pub fn offered(
             origins: matching.iter().map(Candidate::origin).collect(),
         }),
     }
+}
+
+/// Refuse `project` when an install of `kind` has nowhere to go in it: no
+/// [`targets`] for a kind copied into a folder, and for a rule into a
+/// project marked by its settings, which goes into its `AGENTS.md`, no agent
+/// to read it ([`rules::receives`]).
+fn receives(project: &MindProject, kind: Kind) -> Result<(), InstallError> {
+    if kind == Kind::Rule && project.settings().is_some() {
+        return rules::receives(project);
+    }
+    targets(project, kind).map(drop)
 }
 
 /// Copy one shelf entry into a project: a copy in each of its [`targets`],
@@ -582,11 +666,13 @@ pub fn install(
 ) -> Result<Installation, InstallError> {
     let kind = candidate.kind();
     let name = candidate.name().to_owned();
-    let entry = project_entry(workspace, project);
-
-    if !is_folder_name(&name) {
-        return Err(InstallError::UnsafeName { name });
+    installable_name(kind, &name)?;
+    // Matched on the kind, so a third one has to say how it is installed.
+    match kind {
+        Kind::Skill => {}
+        Kind::Rule => return rules::install(workspace, ledger, project, candidate, homes),
     }
+    let entry = project_entry(workspace, project);
     // The folder is named after the artifact, not after the folder it had on
     // the shelf: inside a project a skill's directory has to match its
     // declared name, which is what `validate` checks and what an agent uses to
@@ -802,6 +888,8 @@ pub fn install(
                 .map(|(target, to)| Target {
                     agent: target.agent(),
                     path: route(project.root(), to),
+                    // Every copy holds the tree `content_hash` names.
+                    content_hash: None,
                 })
                 .collect(),
         },
@@ -848,6 +936,7 @@ pub fn install(
         swept,
         left_out,
         excluded,
+        rendered: None,
     })
 }
 
@@ -948,8 +1037,9 @@ fn unfit(kind: Kind, from: &Path, name: &str) -> Result<Vec<ValidationIssue>, In
     // Matched on the kind, so a third one has to say what it is held to.
     let artifact = match kind {
         Kind::Skill => Artifact::skill(from, from)?,
-        // A rule is one file, and installing copies a directory, so none is
-        // ever offered.
+        // A rule is held to its route, which `installable_name` asks, and
+        // its front matter says nothing an agent would pass it over for;
+        // nor does an install of one come here ([`rules::install`]).
         Kind::Rule => return Ok(Vec::new()),
     };
     Ok(artifact
@@ -964,17 +1054,21 @@ fn unfit(kind: Kind, from: &Path, name: &str) -> Result<Vec<ValidationIssue>, In
 /// says Mindflayer wrote: a folder of that name in a target the record does
 /// not name is somebody's, and stays. Anything else is reported and left
 /// where it is.
+///
+/// `homes` are the agents' own folders, which the front end decides as it
+/// does for [`install`]: taking one thing out can change how the rest reach
+/// the agents.
 pub fn uninstall(
     workspace: &FlayerWorkspace,
     ledger: &Ledger,
     project: &MindProject,
     kind: Kind,
     name: &str,
+    homes: &AgentHomes,
 ) -> Result<Removed, InstallError> {
-    if !is_folder_name(name) {
-        return Err(InstallError::UnsafeName {
-            name: name.to_owned(),
-        });
+    installable_name(kind, name)?;
+    if kind == Kind::Rule && project.settings().is_some() {
+        return rules::uninstall(workspace, ledger, project, name, homes);
     }
     // Held from before the record is read until it is dropped, for the
     // reason `install` holds it: an install of the same name at the same
@@ -1004,19 +1098,33 @@ pub fn uninstall(
 
     let mut paths = Vec::with_capacity(record.targets.len());
     for target in &record.targets {
-        let path = recorded_copy(project, name, &target.path)?;
+        let path = recorded_copy(project, kind, name, &target.path)?;
         if let Some(loaded) = kept_by_a_load(workspace, kind, &path) {
             return Err(InstallError::KeptByALoad { path, loaded });
         }
         paths.push(path);
     }
     for path in &paths {
-        if path.exists() {
-            std::fs::remove_dir_all(path).map_err(|source| InstallError::Write {
-                path: path.clone(),
-                source,
-                swept: Vec::new(),
-            })?;
+        let removed = match kind.layout() {
+            Layout::Directory { .. } if path.exists() => fs::remove_dir_all(path),
+            // A copy of a rule is the file itself, never a link to one, so
+            // whatever is at its place is taken away rather than followed.
+            Layout::Files { .. } if fs::symlink_metadata(path).is_ok() => fs::remove_file(path),
+            _ => Ok(()),
+        };
+        removed.map_err(|source| InstallError::Write {
+            path: path.clone(),
+            source,
+            swept: Vec::new(),
+        })?;
+        // The folders its route was filed in, which the install made on the
+        // way, go too while they are empty, as a removal of a rule leaves
+        // none (`lifecycle::prune`); not the folder of rules itself.
+        if let Layout::Files { .. } = kind.layout() {
+            let folder = path.ancestors().nth(name.split('/').count());
+            if let Some(folder) = folder {
+                crate::lifecycle::prune(folder, path.parent());
+            }
         }
     }
     ledger.uninstalled(&entry, kind, name)?;
@@ -1033,11 +1141,13 @@ pub fn uninstall(
         name: name.to_owned(),
         paths,
         still_excluded,
+        rendered: None,
     })
 }
 
 /// Where in `project` a target of `name`'s installation recorded at `route`
-/// is, as long as that is a folder of the project named after it.
+/// is, as long as that is a folder of the project named after it, or for a
+/// rule, the file its route names ([`copy_at`]) in a folder of the project.
 ///
 /// The ledger is the workspace's own, but a removal deletes whatever this
 /// says, so a route that climbs out of the project, starts over at a root, or
@@ -1046,6 +1156,7 @@ pub fn uninstall(
 /// project's.
 pub(crate) fn recorded_copy(
     project: &MindProject,
+    kind: Kind,
     name: &str,
     route: &str,
 ) -> Result<PathBuf, InstallError> {
@@ -1053,7 +1164,11 @@ pub(crate) fn recorded_copy(
     let inside = path
         .components()
         .all(|component| matches!(component, Component::Normal(_)));
-    if !inside || path.file_name() != Some(std::ffi::OsStr::new(name)) {
+    let named = match kind.layout() {
+        Layout::Directory { .. } => path.file_name() == Some(std::ffi::OsStr::new(name)),
+        Layout::Files { .. } => path.ends_with(copy_at(Path::new(""), kind, name)),
+    };
+    if !inside || !named {
         return Err(InstallError::Recorded {
             name: name.to_owned(),
             route: route.to_owned(),
@@ -1081,7 +1196,9 @@ pub(crate) fn recorded_copy(
 /// its settings may make it (`"skills": ".claude/skills"`), and the change
 /// reached the copy there: the one in `.agents/skills` is still what was
 /// installed. The installation goes with its last copy. A record from before
-/// installations had targets names none, and is dropped as it was.
+/// installations had targets names none, and is dropped as it was; a rule's
+/// naming none reaches no agent the project names, and stays, since the
+/// change reached nothing it installed.
 ///
 /// In a local project, `at` stops being kept out of git with its record:
 /// what is there now, or is written there next, is its author's, and a line
@@ -1228,6 +1345,12 @@ pub struct Installation {
     /// for a project whose copies are committed. [`Excluded::warning`] says
     /// when nothing keeps them out, outside a git work tree.
     pub excluded: Option<Excluded>,
+    /// What rendering the project's rules did, for a rule installed into a
+    /// project marked by its settings ([`rules::Rendered`]): every rule it
+    /// has is rendered with the one installed, and what there is to say of
+    /// any of them is said here. None for a skill, and for a rule copied
+    /// into a project a `mind.toml` marks.
+    pub rendered: Option<rules::Rendered>,
 }
 
 impl From<Installed> for Installation {
@@ -1239,6 +1362,7 @@ impl From<Installed> for Installation {
             swept: Vec::new(),
             left_out: Vec::new(),
             excluded: None,
+            rendered: None,
         }
     }
 }
@@ -1254,6 +1378,11 @@ pub enum Removed {
         /// could not be edited: a line left there keeps whatever somebody
         /// writes in that place later out of git, which is worth saying.
         still_excluded: Option<String>,
+        /// What rendering the project's rules without it did, for a rule
+        /// taken out of a project marked by its settings, as
+        /// [`Installation::rendered`] says for one installed. Boxed, being
+        /// far larger than what the other two say.
+        rendered: Option<Box<rules::Rendered>>,
     },
     /// Present, at `path`, but nobody here put it there.
     Foreign { name: String, path: PathBuf },
@@ -1305,11 +1434,21 @@ fn unrecorded(root: &Path, kind: Kind, copies: &[PathBuf], recorded: &[String]) 
 }
 
 /// Where a copy of `name` goes in `folder`: a folder of that name for a kind
-/// that is one, a file for a kind that is files.
+/// that is one; for a kind that is files, the file its route names, folders
+/// and all, as discovery names one by its route ([`crate::catalog`]).
+///
+/// Joined a word of the route at a time, so it is the same path on every
+/// platform.
 pub(crate) fn copy_at(folder: &Path, kind: Kind, name: &str) -> PathBuf {
     match kind.layout() {
         Layout::Directory { .. } => folder.join(name),
-        Layout::Files { extension } => folder.join(format!("{name}.{extension}")),
+        Layout::Files { extension } => {
+            let mut path = folder.to_path_buf();
+            path.extend(name.split('/'));
+            let last = name.rsplit('/').next().unwrap_or(name);
+            path.set_file_name(format!("{last}.{extension}"));
+            path
+        }
     }
 }
 
@@ -1451,6 +1590,33 @@ pub enum InstallError {
     },
     #[error("`{name}` is not one folder name, so it cannot be installed or removed")]
     UnsafeName { name: String },
+    #[error("`{route}` is no name a rule can be installed under ({problem}), so it cannot be installed or removed")]
+    UnsafeRoute { route: String, problem: String },
+    #[error("{path} leads to {target}, outside {within}, where it is offered from, so it is not installed: what it leads to is not that workspace's to give")]
+    Outside {
+        path: PathBuf,
+        target: PathBuf,
+        within: PathBuf,
+    },
+    #[error("rule `{name}` was installed from {}, which no longer offers it, so the project's rules are not rendered: put it back there, or uninstall it", .origin.as_deref().unwrap_or("a place not recorded"))]
+    NoLongerOffered {
+        name: String,
+        origin: Option<String>,
+    },
+    #[error("{file}: its block holds rule `{route}`, which this workspace did not install there, so the project's rules are not rendered: uninstall it from the workspace that did, or take its section out by hand")]
+    NotRecorded { file: PathBuf, route: String },
+    #[error("{file}: holds rule `{route}` in Mindflayer's block, which cannot be edited ({why}), so the rule is not uninstalled: share the project or set edit_tracked, or take its section out by hand")]
+    Withheld {
+        file: PathBuf,
+        route: String,
+        why: rules::Withheld,
+    },
+    #[error(transparent)]
+    AgentsMd(#[from] AgentsMdError),
+    #[error(transparent)]
+    ClaudeMd(#[from] ClaudeMdError),
+    #[error(transparent)]
+    ClaudeRules(#[from] ClaudeRulesError),
     #[error("`{name}` cannot be installed: {}", issue_list(.issues))]
     Unfit {
         name: String,

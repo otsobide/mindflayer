@@ -664,8 +664,15 @@ fn removing_the_copy_in_a_folder_the_project_authors_in_leaves_the_others_instal
     );
 
     // And the copy left can still be taken out, without the project's own.
-    let uninstalled =
-        install::uninstall(&workspace, &ledger, &project, Kind::Skill, "deploy").unwrap();
+    let uninstalled = install::uninstall(
+        &workspace,
+        &ledger,
+        &project,
+        Kind::Skill,
+        "deploy",
+        &AgentHomes::default(),
+    )
+    .unwrap();
     assert!(
         matches!(uninstalled, install::Removed::Removed { .. }),
         "{uninstalled:?}"
@@ -731,8 +738,15 @@ fn editing_or_renaming_the_copy_in_a_folder_the_project_authors_in_keeps_the_oth
     // Nothing a shared project installs is kept out of git.
     assert!(excluded(&project).is_empty());
     assert!(dir.path().join("collapse/.agents/skills/audit").is_dir());
-    let uninstalled =
-        install::uninstall(&workspace, &ledger, &project, Kind::Skill, "audit").unwrap();
+    let uninstalled = install::uninstall(
+        &workspace,
+        &ledger,
+        &project,
+        Kind::Skill,
+        "audit",
+        &AgentHomes::default(),
+    )
+    .unwrap();
     assert!(
         matches!(uninstalled, install::Removed::Removed { .. }),
         "{uninstalled:?}"
@@ -761,6 +775,68 @@ fn adding_where_an_installed_copy_was_deleted_by_hand_drops_its_record() {
     assert_eq!(
         standing(&workspace, &ledger, &project, "deploy"),
         Standing::Foreign
+    );
+}
+
+#[test]
+fn adding_a_rule_beside_an_installed_one_that_reaches_no_agent_keeps_its_record() {
+    // A project naming only Codex, given a rule about some files, which only
+    // Claude reads: installed with no target at all.
+    let dir = TempDir::new().unwrap();
+    let (mut workspace, _) = FlayerWorkspace::init(dir.path()).unwrap();
+    let root = dir.path().join("collapse");
+    fs::create_dir(&root).unwrap();
+    let directories = Directories::default().with(Kind::Rule, "rules");
+    let (project, _) =
+        MindProject::init_settings(&root, &[Agent::Codex], Share::Shared, &directories).unwrap();
+    workspace.link(&project).unwrap();
+    let own = workspace.own().directory_for(Kind::Rule).unwrap();
+    write(
+        &own,
+        "rust/errors.md",
+        "---\npaths:\n  - \"src/**/*.rs\"\n---\nReturn errors.\n",
+    );
+    let ledger = workspace.ledger().unwrap();
+    let candidate = install::offered(
+        &workspace,
+        &ledger,
+        &project,
+        Kind::Rule,
+        "rust/errors",
+        None,
+    )
+    .unwrap();
+    install::install(
+        &workspace,
+        &ledger,
+        &project,
+        &candidate,
+        &AgentHomes::default(),
+    )
+    .unwrap();
+    let recorded = ledger
+        .installation("collapse", Kind::Rule, "rust/errors")
+        .unwrap()
+        .unwrap();
+    assert_eq!(recorded.targets, []);
+
+    // Its own of the same route, in the folder it authors in.
+    let added = lifecycle::add(
+        Some(&workspace),
+        &project,
+        Kind::Rule,
+        "rust/errors",
+        "Our own",
+        None,
+    )
+    .unwrap();
+
+    assert_eq!(added.stale.unwrap(), Record::Untouched);
+    assert_eq!(
+        ledger
+            .installation("collapse", Kind::Rule, "rust/errors")
+            .unwrap(),
+        Some(recorded)
     );
 }
 
@@ -865,7 +941,15 @@ fn an_edit_that_changes_an_installed_copy_drops_its_record() {
         Standing::Foreign
     );
     assert_eq!(
-        install::uninstall(&workspace, &ledger, &project, Kind::Skill, "deploy").unwrap(),
+        install::uninstall(
+            &workspace,
+            &ledger,
+            &project,
+            Kind::Skill,
+            "deploy",
+            &AgentHomes::default()
+        )
+        .unwrap(),
         install::Removed::Foreign {
             name: String::from("deploy"),
             path: project.root().join("skills").join("deploy"),

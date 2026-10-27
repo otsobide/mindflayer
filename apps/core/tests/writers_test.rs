@@ -500,8 +500,15 @@ fn an_uninstall_waits_for_the_writer_before_it() {
     let (uninstalling, from) = (workspace.clone(), project.clone());
 
     waits_for_the_writer_before_it(&workspace, move || {
-        let removed =
-            install::uninstall(&uninstalling, &ledger, &from, Kind::Skill, "deploy").unwrap();
+        let removed = install::uninstall(
+            &uninstalling,
+            &ledger,
+            &from,
+            Kind::Skill,
+            "deploy",
+            &AgentHomes::default(),
+        )
+        .unwrap();
         assert!(matches!(removed, Removed::Removed { .. }), "{removed:?}");
     });
 

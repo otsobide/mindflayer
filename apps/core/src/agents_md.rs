@@ -31,9 +31,9 @@
 //! block, and the next render would replace it.
 //!
 //! Which rules a project is given, and when, is the caller's to decide, and
-//! so is keeping a record of what was written (#45); whether Claude reads the
-//! file at all, natively or through an import, is [`crate::claude_md`]'s.
-//! This only renders what it is handed.
+//! so is keeping a record of what was written ([`crate::install::rules`]);
+//! whether Claude reads the file at all, natively or through an import, is
+//! [`crate::claude_md`]'s. This only renders what it is handed.
 
 use std::fs;
 use std::io::{self, Write as _};
@@ -45,6 +45,7 @@ use crate::agent::AgentHomes;
 use crate::artifact::{issue_list, name_issues, Artifact, ArtifactError, Declared};
 use crate::catalog::{report_order, spelled};
 use crate::exclude;
+use crate::hash;
 use crate::install;
 use crate::lines::{self, Line};
 use crate::paths;
@@ -200,6 +201,23 @@ impl Section {
     pub fn route(&self) -> &str {
         &self.route
     }
+
+    /// What the section says, as a hash ([`hash::bytes`]) of its body's
+    /// lines, each ended with a newline: what its installation records of
+    /// the copy in this file (D-04), beside the hash of the rule's own file.
+    ///
+    /// Of the lines rather than of the bytes the file holds, so a section
+    /// reads alike whatever ending the file uses: an editor or git turning
+    /// the file's newlines into another kind changes no rule, and is no edit
+    /// of one. Without its marker, which says only whose it is.
+    pub fn hash(&self) -> String {
+        let mut said = String::new();
+        for line in &self.lines {
+            said.push_str(line);
+            said.push('\n');
+        }
+        hash::bytes(said.as_bytes())
+    }
 }
 
 /// Render `rules` into the block of `project`'s `AGENTS.md`, each that has a
@@ -209,9 +227,10 @@ impl Section {
 /// The block holds those sections and nothing else afterwards. A file that
 /// is not there is made with `create_new`, so one somebody made meanwhile is
 /// never written over, and only then is [`Written::Created`] said: the
-/// caller keeps that (#45) and hands it back as `created` on a later render,
-/// so that when no rule is left the file goes too, unless somebody has
-/// written something in it since. Mindflayer takes away only a file it made.
+/// caller keeps that ([`crate::install::rules`], in the ledger) and hands
+/// it back as `created` on a later render, so that when no rule is left
+/// the file goes too, unless somebody has written something in it since.
+/// Mindflayer takes away only a file it made.
 /// A file that is there is replaced whole through a temporary and a rename
 /// ([`replace_bytes`]), every byte outside the block as it was, and one that
 /// already holds what was asked is not written at all, modification time
@@ -247,6 +266,23 @@ pub fn render<'a>(
     created: bool,
     homes: &AgentHomes,
 ) -> Result<Rendered, AgentsMdError> {
+    render_keeping(workspace, project, rules, Vec::new(), created, homes)
+}
+
+/// [`render`], with `kept` among the sections, each as it is handed in: the
+/// section the block holds of a rule its caller can no longer read from
+/// where it was installed from, and keeps as the project holds it
+/// ([`AgentsMd::section`]) rather than take it away with a change to some
+/// other rule. In the order of their routes with the rest, which is the
+/// order a listing gives the rules ([`report_order`]).
+pub(crate) fn render_keeping<'a>(
+    workspace: &FlayerWorkspace,
+    project: &MindProject,
+    rules: impl IntoIterator<Item = &'a Artifact>,
+    kept: Vec<Section>,
+    created: bool,
+    homes: &AgentHomes,
+) -> Result<Rendered, AgentsMdError> {
     let file = project.root().join(FILE);
     linked_inside(project.root(), &file)?;
     let mut rules: Vec<&Artifact> = rules.into_iter().collect();
@@ -254,6 +290,10 @@ pub fn render<'a>(
     let mut sections = Vec::new();
     for rule in rules {
         sections.extend(Section::of(rule)?);
+    }
+    if !kept.is_empty() {
+        sections.extend(kept);
+        sections.sort_by(|a, b| a.route.cmp(&b.route));
     }
     // Only a render that leaves a block is held to where it is: one that
     // drops it is how a block put there before a project was linked below,
@@ -318,8 +358,9 @@ pub struct Rendered {
     pub file: PathBuf,
     pub written: Written,
     /// The route of each rule the block holds, in its order: none when there
-    /// is no block. What the caller records as written (#45), since a rule
-    /// declaring `paths` is handed in and given no section.
+    /// is no block. What the caller records as written
+    /// ([`crate::install::rules`]), since a rule declaring `paths` is handed
+    /// in and given no section.
     pub routes: Vec<String>,
     /// What keeps the block from reaching Codex, or will, in the order
     /// [`Warning`] lists them.
@@ -583,7 +624,7 @@ fn is_below(path: &Path, folder: &Path) -> bool {
 /// own, which would undo what somebody linked on purpose. A link to nothing
 /// is let by: there is nothing to read, and `create_new` makes nothing
 /// through it.
-fn linked_inside(project: &Path, file: &Path) -> Result<(), AgentsMdError> {
+pub(crate) fn linked_inside(project: &Path, file: &Path) -> Result<(), AgentsMdError> {
     let is_link = fs::symlink_metadata(file).is_ok_and(|metadata| metadata.is_symlink());
     if !is_link {
         return Ok(());
@@ -695,6 +736,28 @@ impl AgentsMd {
             .collect()
     }
 
+    /// The section the block holds for the rule at `route`, as written
+    /// there, an edit included: `None` when the block holds none, or a line
+    /// of it that is not UTF-8, which no section is rendered from.
+    ///
+    /// Its lines run from its marker to the next one, or to the end of the
+    /// block, less the blank lines [`Section::new`] leaves out, the one
+    /// between two sections among them, so a section read back is the one
+    /// that was rendered.
+    pub fn section(&self, route: &str) -> Option<Section> {
+        let block = self.block.as_ref()?;
+        let mut lines = block
+            .lines
+            .iter()
+            .skip_while(|line| marker(&line.text) != Marker::Rule(route));
+        lines.next()?;
+        let body: Vec<&str> = lines
+            .take_while(|line| marker(&line.text) == Marker::Text)
+            .map(|line| std::str::from_utf8(&line.text).ok())
+            .collect::<Option<_>>()?;
+        Section::new(route, &body.join("\n")).ok()
+    }
+
     /// Whether the file holds Mindflayer's block.
     pub fn has_block(&self) -> bool {
         self.block.is_some()
@@ -712,8 +775,9 @@ impl AgentsMd {
     /// Everything between the markers is Mindflayer's, so it is replaced
     /// whole, a line somebody wrote there included; telling an edited section
     /// from the one rendered is for the ledger's record of what was written
-    /// (D-04, #45). A file with no block gains one after what it holds, on
-    /// lines of its own and an empty line apart from it (`Block::spacer`).
+    /// ([`Section::hash`], D-04). A file with no block gains one after what
+    /// it holds, on lines of its own and an empty line apart from it
+    /// (`Block::spacer`).
     /// No section drops the block, that empty line included, giving back the
     /// file as it was before the block was written.
     pub fn set_block(&mut self, sections: &[Section]) -> Result<bool, AgentsMdError> {

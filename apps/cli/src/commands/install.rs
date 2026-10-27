@@ -190,11 +190,13 @@ pub(crate) fn shown(project: &MindProject, path: &Path) -> String {
         .unwrap_or_else(|| path.display().to_string())
 }
 
-/// Take one skill Mindflayer installed back out of one project.
+/// Take one skill Mindflayer installed back out of one project, handing
+/// core the agents' own folders, `homes`, as an install does.
 pub(crate) fn uninstall_named(
     workspace: &FlayerWorkspace,
     project: &MindProject,
     name: &str,
+    homes: &AgentHomes,
 ) -> Result<Outcome, Failure> {
     use mindflayer_core::install::{self as installing, Removed};
 
@@ -205,7 +207,7 @@ pub(crate) fn uninstall_named(
         error: Box::new(error),
         warnings: said.lines(),
     };
-    let taken = match installing::uninstall(workspace, &ledger, project, Kind::Skill, name) {
+    let taken = match installing::uninstall(workspace, &ledger, project, Kind::Skill, name, homes) {
         Ok(taken) => taken,
         Err(error) => return Err(failed(error.into(), said)),
     };

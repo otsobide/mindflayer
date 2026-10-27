@@ -38,7 +38,7 @@
 //! file for the same rule, so Claude reads each rule once. [`render`] adds
 //! the import where the reach says, and takes it out everywhere else.
 //! Which rules a project is given, and when to render, are the caller's
-//! (#45), as for the block itself.
+//! ([`crate::install::rules`]), as for the block itself.
 
 use std::fs;
 use std::io;

@@ -64,12 +64,16 @@ fn an_install_records_one_copy_at_the_folder_the_project_names() {
         [Target {
             agent: None,
             path: String::from("skills/deploy"),
+            content_hash: None,
         }]
     );
 }
 
 /// What schema 2 wrote, dumped from a ledger it made.
 const VERSION_2: &str = include_str!("fixtures/ledger-v2.sql");
+
+/// What schema 3 wrote, dumped from a ledger it made.
+const VERSION_3: &str = include_str!("fixtures/ledger-v3.sql");
 
 /// A ledger file in `dir` holding what `fixture` describes, untouched by
 /// anything of this build's.
@@ -368,6 +372,7 @@ fn a_version_2_installation_reads_back_through_the_ledger() {
             targets: vec![Target {
                 agent: None,
                 path: String::from("skills/deploy"),
+                content_hash: None,
             }],
         })
     );
@@ -409,4 +414,76 @@ fn reading_a_version_2_ledger_migrates_it_through_the_same_copy() {
     assert_eq!(ledger.history(100).unwrap().len(), 11);
     let copy = Connection::open(backup_path(&workspace.ledger_path(), 2)).unwrap();
     assert_eq!(version_of(&copy), 2);
+}
+
+#[test]
+fn a_version_3_ledger_keeps_every_row_it_had_and_its_copies_gain_no_hash() {
+    let dir = TempDir::new().unwrap();
+    let path = written_at(dir.path(), VERSION_3);
+    let before = as_written(VERSION_3);
+
+    let ledger = Ledger::open(&path).unwrap();
+
+    let after = Connection::open(&path).unwrap();
+    assert_eq!(version_of(&after), SCHEMA_VERSION);
+    for query in [
+        "SELECT * FROM sources ORDER BY id",
+        "SELECT * FROM artifacts ORDER BY id",
+        "SELECT * FROM actions ORDER BY id",
+        "SELECT * FROM installations ORDER BY id",
+        "SELECT installation_id, agent, path FROM installation_targets
+          ORDER BY installation_id, path",
+    ] {
+        let kept = rows(&after, query);
+        assert_eq!(kept, rows(&before, query), "{query}");
+        assert!(!kept.is_empty(), "{query} reads nothing to compare");
+    }
+    // Every copy it recorded is a skill's, holding the tree its
+    // installation's hash names.
+    assert!(
+        rows(&after, "SELECT content_hash FROM installation_targets")
+            .iter()
+            .all(|row| row == &[Value::Null])
+    );
+    assert!(rows(&after, "SELECT * FROM created_files").is_empty());
+    let notes = ledger
+        .installation("tanukeys", Kind::Skill, "notes")
+        .unwrap()
+        .unwrap();
+    assert_eq!(
+        notes.targets,
+        [
+            Target {
+                agent: None,
+                path: String::from(".agents/skills/notes"),
+                content_hash: None,
+            },
+            Target {
+                agent: Some(String::from("claude")),
+                path: String::from(".claude/skills/notes"),
+                content_hash: None,
+            },
+        ]
+    );
+    assert!(notes.content_hash.is_some());
+}
+
+#[test]
+fn a_version_3_ledger_is_copied_aside_and_the_copy_opens_at_version_3() {
+    let dir = TempDir::new().unwrap();
+    let path = written_at(dir.path(), VERSION_3);
+    let before = as_written(VERSION_3);
+
+    Ledger::open(&path).unwrap();
+
+    let copy = Connection::open(backup_path(&path, 3)).unwrap();
+    assert_eq!(version_of(&copy), 3);
+    for query in [
+        "SELECT * FROM sources ORDER BY id",
+        "SELECT * FROM installations ORDER BY id",
+        "SELECT * FROM installation_targets ORDER BY installation_id, path",
+        "SELECT type, name, sql FROM sqlite_master ORDER BY name",
+    ] {
+        assert_eq!(rows(&copy, query), rows(&before, query), "{query}");
+    }
 }

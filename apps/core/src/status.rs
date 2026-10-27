@@ -16,17 +16,19 @@
 //! What it serializes to is a contract from the first report on, which is why
 //! each name in it is spelled as a command line takes it.
 
+use std::fs;
 use std::path::{Path, PathBuf};
 
 use serde::{Serialize, Serializer};
 use thiserror::Error;
 
 use crate::agent::Agent;
+use crate::agents_md;
 use crate::artifact::{Artifact, Provenance};
 use crate::catalog::{Catalog, DiscoveryFailure};
 use crate::install;
 use crate::kind::Kind;
-use crate::ledger::InstallRecord;
+use crate::ledger::{InstallRecord, Target};
 use crate::paths;
 use crate::workspace::{
     same_directory, FlayerWorkspace, MindProject, MisplacedTarget, WorkspaceError,
@@ -322,6 +324,13 @@ impl ProjectStatus {
             .unwrap_or_default();
         agents.sort();
         agents.dedup();
+        // What a project marked by its settings received as rules is no
+        // copy discovery finds, but sections of a block and Claude's files:
+        // read from the ledger and that block (D-23).
+        let (rules, installed): (Vec<InstallRecord>, Vec<InstallRecord>) = installed
+            .into_iter()
+            .partition(|record| record.kind == Kind::Rule && project.settings().is_some());
+        let rendered = rendered(root, &agents, rules);
         let status = ProjectStatus {
             name: Some(project.name().to_owned()),
             entry,
@@ -329,7 +338,7 @@ impl ProjectStatus {
             stale: None,
             unreached: unreached(project, kinds, &agents),
             agents,
-            artifacts: standing(root, catalog.artifacts(), installed),
+            artifacts: standing(root, catalog.artifacts(), installed, rendered),
         };
         (status, catalog)
     }
@@ -360,10 +369,16 @@ impl ProjectStatus {
 /// once nothing of it is left; unless the project holds something else by
 /// that name, which is then that name's one entry, said as what is there:
 /// a row is one name, and that one is somebody's.
+///
+/// `rendered` are the rules a project marked by its settings received, as
+/// [`rendered`] reads them, each listed under the same rule: after what
+/// discovery found, and not under a name the project holds something else
+/// by.
 fn standing(
     root: &Path,
     artifacts: &[Artifact],
     records: Vec<InstallRecord>,
+    rendered: Vec<ArtifactStatus>,
 ) -> Vec<ArtifactStatus> {
     let mut unclaimed = records;
     let mut held: Vec<ArtifactStatus> = Vec::new();
@@ -411,6 +426,14 @@ fn standing(
             origin: record.and_then(|record| record.origin),
         });
     }
+    for rule in rendered {
+        if !held
+            .iter()
+            .any(|other| other.kind == rule.kind && other.name == rule.name)
+        {
+            held.push(rule);
+        }
+    }
     for record in unclaimed {
         if held
             .iter()
@@ -430,13 +453,77 @@ fn standing(
     held
 }
 
+/// How each rule recorded as installed into the project at `root`, which its
+/// settings mark, stands, from the ledger and the block of its `AGENTS.md`
+/// (D-23): catalog discovery reads no block, since a section is never
+/// authored in place but rendered from a rule kept elsewhere.
+///
+/// Installed while every target recorded is found, its section in the block
+/// and its file for Claude where it was written, and partial while one is
+/// not, as for a skill's copies; a rule recorded with none, which reaches no
+/// agent the project names, has nothing missing. It reaches Codex and
+/// OpenCode through the block, and Claude through its own file, or through
+/// the block when it was given none: a render gives Claude every rule as a
+/// file while Claude reads no block, so a rule in the block with no file of
+/// its own is one Claude reads there. Only the agents among `agents`, the
+/// project's own.
+///
+/// A block that cannot be read holds none of them, and every rule in it
+/// reads as partial: the next render refuses it, saying why.
+fn rendered(root: &Path, agents: &[Agent], records: Vec<InstallRecord>) -> Vec<ArtifactStatus> {
+    if records.is_empty() {
+        return Vec::new();
+    }
+    let block = install::rules::block_routes(root);
+    records
+        .into_iter()
+        .map(|record| {
+            let file = install::rules::claude_file(&record.name);
+            let found = |target: &Target| {
+                if target.path == agents_md::FILE {
+                    block.contains(&record.name)
+                } else {
+                    fs::symlink_metadata(root.join(&target.path)).is_ok()
+                }
+            };
+            let missing = record.targets.iter().any(|target| !found(target));
+            let in_block = record
+                .targets
+                .iter()
+                .any(|target| target.path == agents_md::FILE && found(target));
+            let given_file = record.targets.iter().find(|target| target.path == file);
+            let in_file = given_file.is_some_and(found);
+            let reached = agents
+                .iter()
+                .copied()
+                .filter(|agent| match agent {
+                    Agent::Claude => in_file || (in_block && given_file.is_none()),
+                    Agent::Codex | Agent::OpenCode => in_block,
+                })
+                .collect();
+            ArtifactStatus {
+                kind: Kind::Rule,
+                name: record.name,
+                state: if missing {
+                    State::Partial
+                } else {
+                    State::Installed
+                },
+                agents: reached,
+                origin: record.origin,
+            }
+        })
+        .collect()
+}
+
 /// Each of `kinds` that `project` installs only in folders some of `agents`,
 /// its own, do not read, with those agents.
 ///
 /// From where an install of each would put its copies
 /// ([`install::targets`]), so two spellings of one folder are one, and a kind
-/// installed nowhere, every rule for now, is passed over: nothing of it
-/// reaches any agent through a folder, which is not this to say.
+/// installed in no folder is passed over: a rule, which reaches a project
+/// marked by its settings through the block of its `AGENTS.md`, says which
+/// agents it reaches as each rule's own entry does ([`rendered`]).
 pub(crate) fn unreached(project: &MindProject, kinds: &[Kind], agents: &[Agent]) -> Vec<Unreached> {
     let root = project.root();
     kinds

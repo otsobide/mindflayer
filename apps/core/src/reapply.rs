@@ -258,6 +258,8 @@ impl Added {
         Target {
             agent: install::agent_of(&self.agents),
             path: install::route(root, &self.path),
+            // A skill's copy, holding the tree its installation's hash names.
+            content_hash: None,
         }
     }
 }
@@ -533,6 +535,7 @@ pub fn apply(
                     kept.push(Target {
                         agent: recorded_agent(retarget, &root, &path),
                         path: install::route(&root, &path),
+                        content_hash: None,
                     });
                     applied
                         .failures
@@ -807,7 +810,7 @@ pub(crate) fn retarget(
     // every copy of it was written with: none for one that is not there.
     let mut compared: Vec<(PathBuf, &Target, Option<Compared>)> = Vec::new();
     for target in &record.targets {
-        let path = install::recorded_copy(project, name, &target.path)?;
+        let path = install::recorded_copy(project, kind, name, &target.path)?;
         let there = fs::symlink_metadata(&path).is_ok();
         let found = there.then(|| compare(&path, record.content_hash.as_deref(), offers));
         compared.push((path, target, found));
@@ -841,6 +844,7 @@ pub(crate) fn retarget(
                 retarget.kept.push(Target {
                     agent: install::agent_of(&now.agents),
                     path: route,
+                    content_hash: None,
                 });
             }
             continue;

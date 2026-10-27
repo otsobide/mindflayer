@@ -188,7 +188,7 @@ pub(crate) fn run_with(cli: &Cli, lookup: &Lookup, watch: &Watch) -> Result<Outc
         Command::Uninstall { name } => {
             let project = project_here(&directory)?;
             let workspace = managing(&project, lookup)?;
-            uninstall_named(&workspace, &project, name)
+            uninstall_named(&workspace, &project, name, &lookup.agents)
         }
         Command::Agents { change, named } => {
             let (change, yes) = agents_change(change.as_ref(), named);
@@ -406,7 +406,7 @@ fn run_flayer(
         },
         FlayerCommand::Uninstall { project, name } => {
             let workspace = workspace_here(directory, lookup)?;
-            uninstall_named(&workspace, &workspace.pick(project)?, name)
+            uninstall_named(&workspace, &workspace.pick(project)?, name, &lookup.agents)
         }
 
         // Resolved as a read, on the default workspace before it is made

@@ -663,8 +663,9 @@ fn occupied(path: &Path) -> bool {
 
 /// Remove the folders a rule leaves empty, up to but not including the folder
 /// the kind lives in. Folders under it only group, so an empty one groups
-/// nothing.
-fn prune(root: &Path, from: Option<&Path>) {
+/// nothing. An uninstall of a rule's copy prunes the same way
+/// ([`install::uninstall`]).
+pub(crate) fn prune(root: &Path, from: Option<&Path>) {
     let mut current = from;
     while let Some(folder) = current {
         if folder == root || !folder.starts_with(root) || fs::remove_dir(folder).is_err() {

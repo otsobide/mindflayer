@@ -26,6 +26,34 @@ fn render(file: &[u8], sections: &[Section]) -> Vec<u8> {
 }
 
 #[test]
+fn a_section_hashes_what_it_says_whatever_its_lines_end_with() {
+    let said = section("review", "Say what a change does.\n\nThen what is wrong.\n");
+
+    assert_eq!(
+        said.hash(),
+        section(
+            "review",
+            "\r\nSay what a change does.\r\n\r\nThen what is wrong.\r\n"
+        )
+        .hash(),
+        "another ending, and blank lines around the body"
+    );
+    assert_eq!(
+        said.hash(),
+        section("other", "Say what a change does.\n\nThen what is wrong.").hash(),
+        "another route"
+    );
+    assert_eq!(
+        said.hash(),
+        crate::hash::bytes(b"Say what a change does.\n\nThen what is wrong.\n")
+    );
+    assert_ne!(
+        said.hash(),
+        section("review", "Say what a change does.\nThen what is wrong.\n").hash()
+    );
+}
+
+#[test]
 fn an_absent_file_gains_a_block_holding_one_section() {
     let mut file = AgentsMd::parse(b"").unwrap();
     let changed = file
@@ -171,6 +199,34 @@ fn bytes_that_are_not_utf8_survive_a_render_and_a_removal() {
     let rendered = render(before, &[section("a", "Rule a.")]);
     assert!(rendered.starts_with(before));
     assert_eq!(render(&rendered, &[]), before);
+}
+
+#[test]
+fn a_section_reads_back_as_the_one_rendered_and_an_edit_with_it() {
+    let sections = [
+        section("a", "Rule a.\n\nIts second paragraph.\n"),
+        section("c/d", "Rule d.\r\n"),
+    ];
+    let rendered = render(TEAM.as_bytes(), &sections);
+    let file = AgentsMd::parse(&rendered).unwrap();
+
+    assert_eq!(file.section("a"), Some(sections[0].clone()));
+    assert_eq!(file.section("c/d"), Some(sections[1].clone()));
+    assert_eq!(file.section("b"), None);
+    assert_eq!(AgentsMd::parse(TEAM.as_bytes()).unwrap().section("a"), None);
+
+    let edited = String::from_utf8(rendered)
+        .unwrap()
+        .replace("Rule d.", "Rule d, edited by hand.");
+    let file = AgentsMd::parse(edited.as_bytes()).unwrap();
+    assert_eq!(
+        file.section("c/d"),
+        Some(section("c/d", "Rule d, edited by hand."))
+    );
+    let mut unreadable = edited.into_bytes();
+    let at = unreadable.windows(4).position(|w| w == b"hand").unwrap();
+    unreadable[at] = 0xff;
+    assert_eq!(AgentsMd::parse(&unreadable).unwrap().section("c/d"), None);
 }
 
 #[test]

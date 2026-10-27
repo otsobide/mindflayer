@@ -864,6 +864,7 @@ fn record(ledger: &Ledger, name: &str, paths: &[&str]) {
                     .map(|path| Target {
                         agent: None,
                         path: (*path).to_owned(),
+                        content_hash: None,
                     })
                     .collect(),
             },
@@ -965,6 +966,7 @@ fn a_project_the_workspace_does_not_link_has_no_record_in_its_ledger() {
                 targets: vec![Target {
                     agent: None,
                     path: String::from(".claude/skills/deploy"),
+                    content_hash: None,
                 }],
             },
         )

@@ -67,6 +67,7 @@ fn record(ledger: &Ledger, project: &str, name: &str, origin: &str, paths: &[&st
                     .map(|path| Target {
                         agent: None,
                         path: (*path).to_owned(),
+                        content_hash: None,
                     })
                     .collect(),
             },
