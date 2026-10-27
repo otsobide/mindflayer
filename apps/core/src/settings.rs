@@ -147,7 +147,8 @@ impl Settings {
     /// build knows first, as `mind.toml` spelled out its defaults; a
     /// `[targets]` table only when it names a kind, since leaving it out
     /// says the same. Each path is spelled with `/`, so the file reads the
-    /// same on every platform, and one that is not UTF-8 is refused.
+    /// same on every platform, and one that is not UTF-8 is refused; each
+    /// key is quoted when TOML cannot hold it bare ([`toml_key`]).
     ///
     /// [`MindProject::change_settings`]: crate::MindProject::change_settings
     pub fn text(&self) -> Result<String, WorkspaceError> {
@@ -192,7 +193,7 @@ impl Settings {
             self.edit_tracked,
         );
         for (key, directory) in self.directories.entries() {
-            text.push_str(&format!("{key} = {}\n", toml_path(directory)?));
+            text.push_str(&format!("{} = {}\n", toml_key(key), toml_path(directory)?));
         }
         if !self.targets.is_empty() {
             text.push_str(&format!("\n[{TARGETS}]\n"));
@@ -201,7 +202,7 @@ impl Settings {
                     .iter()
                     .map(|folder| toml_path(folder))
                     .collect::<Result<Vec<String>, WorkspaceError>>()?;
-                text.push_str(&format!("{key} = [{}]\n", folders.join(", ")));
+                text.push_str(&format!("{} = [{}]\n", toml_key(key), folders.join(", ")));
             }
         }
         Ok(text)
@@ -366,6 +367,18 @@ impl fmt::Display for ProjectId {
 /// `path` as a TOML string spelled with `/`, refused when it is not UTF-8.
 fn toml_path(path: &Path) -> Result<String, WorkspaceError> {
     config_path(path).map(|written| toml_string(&written))
+}
+
+/// `key` as a TOML key, quoted when it is not a bare one, as toml_edit
+/// writes a key an edit adds ([`edited`]), so the two spell a key alike.
+///
+/// Quoted only when it has to be, rather than always, so the kinds this
+/// build knows read `skills = ...` as the template's comments do. Not left
+/// bare: a key this build does not know is carried from a file that quoted
+/// it, `"my.kind"` in a `settings.json` or a `mind.toml`, and written bare
+/// would be a dotted key, or no key at all, in a file no command could read.
+fn toml_key(key: &str) -> String {
+    toml_edit::Key::new(key).display_repr().into_owned()
 }
 
 const VERSION: &str = "version";

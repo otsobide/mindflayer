@@ -628,3 +628,28 @@ fn a_directory_or_target_key_a_settings_json_holds_that_this_build_does_not_know
         "{toml}"
     );
 }
+
+#[test]
+fn a_directory_or_target_key_that_is_not_a_bare_key_is_quoted_and_reads_back() {
+    let odd = ["my.kind", "two words", "ñandú", "say \"hi\""];
+    let mut directories = Directories::default().with(Kind::Skill, "skills");
+    let mut targets = Targets::default().with(Kind::Skill, vec![PathBuf::from(".skills")]);
+    for key in odd {
+        directories = directories.with_key(key, "elsewhere");
+        targets = targets.with_key(key, vec![PathBuf::from(".elsewhere")]);
+    }
+    let settings = Settings {
+        directories,
+        targets,
+        ..standard_in_toml()
+    };
+
+    let text = settings.text().unwrap();
+
+    assert!(
+        text.contains("\"my.kind\" = \"elsewhere\"\n")
+            && text.contains("\"two words\" = [\".elsewhere\"]\n"),
+        "{text}"
+    );
+    assert_eq!(parse(toml_path(), &text).unwrap(), settings);
+}

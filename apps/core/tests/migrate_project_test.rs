@@ -14,8 +14,8 @@ use mindflayer_core::migrate::{self, Refusal};
 use mindflayer_core::reapply::Why;
 use mindflayer_core::{
     Agent, AgentHomes, Directories, FlayerWorkspace, Kind, MarkerFile, MindProject, Settings,
-    Share, MIND_CONFIG, MIND_DIR, SETTINGS_FILE, SETTINGS_JSON_FILE, SETTINGS_TOML_VERSION,
-    TARGETS_VERSION,
+    Share, DIRECTORIES_VERSION, MIND_CONFIG, MIND_DIR, SETTINGS_FILE, SETTINGS_JSON_FILE,
+    SETTINGS_TOML_VERSION, TARGETS_VERSION,
 };
 use tempfile::TempDir;
 
@@ -920,4 +920,86 @@ fn a_mind_toml_is_moved_straight_to_a_settings_toml() {
         MindProject::open(project.root()).unwrap().marker_file(),
         MarkerFile::SettingsToml
     );
+}
+
+/// The directories a marker holding `entries` (JSON members) names, through
+/// the type's own reading of them, since a key this build does not know is
+/// one no public method makes.
+fn directories(entries: &str) -> Directories {
+    serde_json::from_str(&format!("{{{entries}}}")).unwrap()
+}
+
+/// Keys a marker may quote that a TOML file cannot hold bare: a dot, which
+/// would make a table of the key, a space and a letter outside ASCII.
+const ODD: &str =
+    r#""skills": "skills", "rules": "rules", "my.kind": "x", "two words": "y", "ñandú": "z""#;
+
+#[test]
+fn a_settings_json_naming_a_key_toml_cannot_hold_bare_moves_and_opens_with_it() {
+    let dir = TempDir::new().unwrap();
+    let mind = dir.path().join(MIND_DIR);
+    fs::create_dir_all(&mind).unwrap();
+    fs::write(
+        mind.join(SETTINGS_JSON_FILE),
+        format!(
+            "{{\"version\": 4, \"id\": \"0123456789abcdef0123456789abcdef\", \
+             \"name\": \"collapse\", \"agents\": [\"claude\"], \"share\": \"shared\", \
+             \"directories\": {{{ODD}}}, \"targets\": {{\"my.kind\": [\".x\"]}}}}"
+        ),
+    )
+    .unwrap();
+    let project = MindProject::open(dir.path()).unwrap();
+    assert_eq!(project.settings().unwrap().directories, directories(ODD));
+
+    migrate::project(
+        None,
+        &project,
+        &Agent::ALL,
+        Share::Shared,
+        &AgentHomes::default(),
+    )
+    .unwrap()
+    .expect("a project a settings.json marks");
+
+    let reopened = MindProject::open(dir.path()).unwrap();
+    assert_eq!(reopened.marker_file(), MarkerFile::SettingsToml);
+    assert_eq!(
+        reopened.settings().unwrap(),
+        &Settings {
+            version: SETTINGS_TOML_VERSION,
+            ..project.settings().unwrap().clone()
+        }
+    );
+}
+
+#[test]
+fn a_mind_toml_naming_a_key_toml_cannot_hold_bare_moves_and_opens_with_it() {
+    let dir = TempDir::new().unwrap();
+    let mind = dir.path().join(MIND_DIR);
+    fs::create_dir_all(&mind).unwrap();
+    fs::write(
+        mind.join(MIND_CONFIG),
+        format!(
+            "version = {DIRECTORIES_VERSION}\nname = \"collapse\"\n\n[directories]\n\
+             skills = \"skills\"\nrules = \"rules\"\n\
+             \"my.kind\" = \"x\"\n\"two words\" = \"y\"\n\"ñandú\" = \"z\"\n"
+        ),
+    )
+    .unwrap();
+    let project = MindProject::open(dir.path()).unwrap();
+    assert_eq!(project.config().directories(), &directories(ODD));
+
+    migrate::project(
+        None,
+        &project,
+        &[Agent::Claude],
+        Share::Shared,
+        &AgentHomes::default(),
+    )
+    .unwrap()
+    .expect("a project a mind.toml marks");
+
+    let reopened = MindProject::open(dir.path()).unwrap();
+    assert_eq!(reopened.marker_file(), MarkerFile::SettingsToml);
+    assert_eq!(reopened.settings().unwrap().directories, directories(ODD));
 }
