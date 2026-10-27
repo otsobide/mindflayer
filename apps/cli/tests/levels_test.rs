@@ -646,6 +646,57 @@ fn a_copy_changed_since_it_was_installed_is_taken_out_only_with_force() {
 }
 
 #[test]
+fn a_copy_changed_since_it_was_installed_is_written_over_only_with_force() {
+    let dir = workspace_with_own();
+    let alpha = dir.path().join("alpha");
+    mind(&alpha, &["install", "commit-style"]).unwrap();
+    let copies = copies(&alpha, "commit-style");
+    let manifest = copies[0].join("SKILL.md");
+    let written = fs::read_to_string(&manifest).unwrap();
+    let edited = written.clone() + "Ours.\n";
+    let status = |of: &str| {
+        let report = mind(&alpha, &["status"]).unwrap().stdout;
+        assert!(report.contains(&format!("commit-style  {of}")), "{report}");
+    };
+
+    // From the project, then from the workspace: each edit is left alone
+    // until the install is forced, and forcing writes it over.
+    for from_the_workspace in [false, true] {
+        let install = |force: bool| {
+            let mut args = if from_the_workspace {
+                vec!["install", "-p", "alpha", "commit-style"]
+            } else {
+                vec!["install", "commit-style"]
+            };
+            if force {
+                args.push("--force");
+            }
+            if from_the_workspace {
+                flayer(dir.path(), &args)
+            } else {
+                mind(&alpha, &args)
+            }
+            .unwrap()
+        };
+        fs::write(&manifest, &edited).unwrap();
+        status("edited");
+
+        let refused = install(false);
+        assert!(!refused.ok);
+        assert_eq!(fs::read_to_string(&manifest).unwrap(), edited);
+        let forced = install(true);
+
+        assert!(forced.ok, "{:?}", forced.stderr);
+        assert_eq!(
+            forced.stdout,
+            "updated commit-style in alpha, from workspace\n"
+        );
+        assert_eq!(fs::read_to_string(&manifest).unwrap(), written);
+        status("installed");
+    }
+}
+
+#[test]
 fn force_is_for_one_install_and_not_for_the_screen() {
     let dir = workspace_with_own();
     let line = line("flayer", &["install", "--force"], dir.path());

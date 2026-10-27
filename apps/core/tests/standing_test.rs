@@ -440,6 +440,35 @@ fn a_rules_section_or_file_gone_is_missing() {
 }
 
 #[test]
+fn a_rules_section_or_file_gone_is_put_back_by_an_install() {
+    let given = given(&[]);
+    given.rule("git/no-force-push", NO_FORCE_PUSH);
+    given.rule("rust/errors", ERRORS);
+    given.install(Kind::Rule, "git/no-force-push");
+    given.install(Kind::Rule, "rust/errors");
+    let file = given.claude_file("rust/errors");
+    let written = fs::read_to_string(&file).unwrap();
+    fs::write(given.agents_md(), "# Ours\n").unwrap();
+    fs::remove_file(&file).unwrap();
+    assert_eq!(
+        given.surveyed(Kind::Rule, "git/no-force-push"),
+        [Standing::Missing]
+    );
+
+    given.install(Kind::Rule, "git/no-force-push");
+    given.install(Kind::Rule, "rust/errors");
+
+    let text = fs::read_to_string(given.agents_md()).unwrap();
+    assert!(text.starts_with("# Ours\n"), "{text}");
+    assert!(text.contains("<!-- mindflayer:rule git/no-force-push -->"));
+    assert!(text.contains(NO_FORCE_PUSH), "{text}");
+    assert_eq!(fs::read_to_string(&file).unwrap(), written);
+    for route in ["git/no-force-push", "rust/errors"] {
+        assert_eq!(given.standing(Kind::Rule, route), Standing::Current);
+    }
+}
+
+#[test]
 fn a_rule_the_place_it_came_from_no_longer_offers_is_orphaned() {
     let given = given(&[]);
     let offer = given.rule("git/no-force-push", NO_FORCE_PUSH);
