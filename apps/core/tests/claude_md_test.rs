@@ -936,16 +936,24 @@ fn an_import_no_longer_wanted_in_a_tracked_file_is_left_and_said() {
 #[test]
 fn a_malformed_file_refuses_the_render_with_nothing_written() {
     let fixture = fixture(Share::Shared);
-    write(fixture.root(), "CLAUDE.md", TEAM);
+    // The file read first holds the import, which a render with no block
+    // takes out: one that wrote each file as it went would have taken it
+    // out before meeting the malformed one.
+    let imported =
+        format!("<!-- mindflayer:begin -->\n@AGENTS.md\n<!-- mindflayer:end -->\n\n{TEAM}");
+    write(fixture.root(), "CLAUDE.md", &imported);
     write(
         fixture.root(),
         ".claude/CLAUDE.md",
-        "<!-- mindflayer:end -->\n",
+        &format!("<!-- mindflayer:begin -->\n@../AGENTS.md\n\n{TEAM}"),
     );
-    for block_written in [true, false] {
+    for block_written in [false, true] {
         let error = claude_md::render(&fixture.project, &NO_HOMES, block_written).unwrap_err();
         assert!(matches!(error, ClaudeMdError::Malformed { .. }), "{error}");
-        assert_eq!(fs::read_to_string(fixture.file("CLAUDE.md")).unwrap(), TEAM);
+        assert_eq!(
+            fs::read_to_string(fixture.file("CLAUDE.md")).unwrap(),
+            imported
+        );
     }
 }
 
