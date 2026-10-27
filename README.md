@@ -1463,6 +1463,11 @@ $ mind migrate --yes
 nothing to migrate: collapse is marked by its settings already
 ```
 
+What `mind migrate` carries along is what the workspace it finds records,
+walking up from the project. In a project linked from a workspace beside
+it, which walking up never reaches, it carries nothing and says so in a
+`hint:`; `-W` names that workspace, as for any `mind` command.
+
 `flayer migrate -p tanukeys` does the same from the workspace, and `flayer
 migrate --all-projects` does it for every project the workspace links that a
 `mind.toml` marks, each on its own: without `--yes` it lists every one and

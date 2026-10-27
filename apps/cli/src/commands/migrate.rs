@@ -187,15 +187,20 @@ pub(crate) fn migrate_here(
     } else {
         "would be carried along"
     };
-    // Only beside a move made or laid out.
+    // Only beside a move made or laid out. Never that no workspace links the
+    // project, which the walk up cannot know: one that links it from beside
+    // it is never reached that way, and its records are lost to the move
+    // just the same, so the hint names `-W`, which reaches it.
     let hint = match (&result, &workspace) {
         (Ok(Some(_)), Some(workspace)) if !workspace.is_linked(project.root()) => Some(format!(
             "hint: the workspace at {} does not link this project, so nothing installed in \
-                 it {carried}; `mind link` links it",
+                 it {carried}; `mind link` links it, and -W names one that links it from \
+                 elsewhere",
             workspace.root().display()
         )),
         (Ok(Some(_)), None) => Some(format!(
-            "hint: no workspace links this project, so nothing installed in it {carried}"
+            "hint: no workspace here or above links this project, so nothing installed in it \
+             {carried}; -W names one that links it from elsewhere"
         )),
         _ => None,
     };

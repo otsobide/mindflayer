@@ -379,9 +379,70 @@ fn a_project_no_workspace_links_is_moved_and_told_nothing_was_carried() {
     );
     assert_eq!(
         done.stderr,
-        ["hint: no workspace links this project, so nothing installed in it was carried along"]
+        [
+            "hint: no workspace here or above links this project, so nothing installed in it was \
+             carried along; -W names one that links it from elsewhere"
+        ]
     );
     assert!(settings(&root).is_file());
+}
+
+#[test]
+fn a_project_linked_from_beside_is_told_how_to_reach_its_workspace() {
+    let dir = TempDir::new().unwrap();
+    let hub = dir.path().join("hub");
+    fs::create_dir(&hub).unwrap();
+    flayer(&hub, &["init"]).unwrap();
+    let root = dir.path().join("collapse");
+    fs::create_dir(&root).unwrap();
+    gix::init(&root).unwrap();
+    older_project(&root);
+    flayer(&hub, &["link", "../collapse"]).unwrap();
+    flayer(&hub, &["add", "skill", "deploy", "What deploy does"]).unwrap();
+    flayer(&hub, &["install", "-p", "collapse", "deploy"]).unwrap();
+
+    // Walking up from the project never reaches it, so its records are not
+    // read, and the hint names what does reach it.
+    let unreached = mind(&root, &["migrate"]).unwrap();
+
+    assert!(unreached
+        .stdout
+        .contains("would leave skills/deploy where it is: the project's own\n"));
+    assert_eq!(
+        unreached.stderr,
+        [
+            "hint: no workspace here or above links this project, so nothing installed in it \
+             would be carried along; -W names one that links it from elsewhere"
+        ]
+    );
+
+    let reached = mind(&root, &["migrate", "-W", hub.to_str().unwrap()]).unwrap();
+
+    assert!(reached
+        .stdout
+        .contains("would remove deploy from skills/deploy\n"));
+    assert!(reached.stderr.is_empty(), "{:?}", reached.stderr);
+}
+
+#[test]
+fn a_project_the_workspace_above_does_not_link_is_told_how_to_link_it() {
+    let dir = workspace();
+    let root = dir.path().join("collapse");
+    fs::create_dir(&root).unwrap();
+    gix::init(&root).unwrap();
+    older_project(&root);
+
+    let dry = mind(&root, &["migrate"]).unwrap();
+
+    assert_eq!(
+        dry.stderr,
+        [format!(
+            "hint: the workspace at {} does not link this project, so nothing installed in it \
+             would be carried along; `mind link` links it, and -W names one that links it from \
+             elsewhere",
+            dir.path().display()
+        )]
+    );
 }
 
 #[test]
