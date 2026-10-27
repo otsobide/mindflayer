@@ -1005,9 +1005,13 @@ is.
   a failure, and nothing puts it back ([open questions](#open-questions)).
 - **Refused before anything is written**, every reason at once: a folder
   the `mind.toml` keeps a kind in that settings cannot name, inside `.mind`
-  as a version 1 project kept every kind, or outside the project; no agent;
-  a kept marker; and a copy that would land in an agent's own folder or
-  where a loaded workspace keeps its own, as an install refuses one.
+  as a version 1 project kept every kind it named no folder for, or outside
+  the project; no agent; a kept marker; and a copy that would land in an
+  agent's own folder or where a loaded workspace keeps its own, as an
+  install refuses one. A folder a version 1 `mind.toml` does name is kept,
+  as every other command reads it (`MindProject::directory_for`), so
+  naming one outside `.mind`, as the refusal asks, gets such a project
+  past it.
 - **A second run is a no-op.** A project its settings mark has nothing to
   migrate, and nothing is written for it, not even its ledger opened.
 - **Each project on its own.** `--all-projects` moves every project the

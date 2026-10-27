@@ -139,7 +139,8 @@ pub enum Refusal {
     Unreadable(WorkspaceError),
     /// A folder a project's `mind.toml` keeps a kind in that its settings
     /// cannot name ([`project_plan`]): inside `.mind`, where a version 1
-    /// project kept every kind, or outside the project.
+    /// project kept every kind it named no folder for, or outside the
+    /// project.
     #[error("{0}, so the project's settings cannot name it; move what is there and name the folder in {MIND_CONFIG} first")]
     Authored(WorkspaceError),
     /// A project to be moved to settings naming no agent, which would have

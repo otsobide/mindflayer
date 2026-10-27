@@ -376,6 +376,42 @@ fn every_reason_not_to_go_ahead_is_said_at_once() {
     assert!(matches!(&plan.refusals[3], Refusal::Backup { .. }));
 }
 
+#[test]
+fn a_version_1_project_naming_its_folders_outside_mind_moves_with_them() {
+    let dir = TempDir::new().unwrap();
+    let root = dir.path().join("ancient");
+    fs::create_dir_all(root.join(MIND_DIR)).unwrap();
+    // What the refusal of one that kept them inside `.mind` asks for.
+    fs::write(
+        root.join(MIND_DIR).join(MIND_CONFIG),
+        "version = 1\nname = \"ancient\"\n\n[directories]\nskills = \"skills\"\nrules = \"rules\"\n",
+    )
+    .unwrap();
+    write_skill(&root.join("skills").join("notes"), "notes", "Mine");
+    let project = MindProject::open(&root).unwrap();
+
+    let plan = migrate::project_plan(
+        None,
+        &project,
+        &Agent::ALL,
+        Share::Shared,
+        &AgentHomes::default(),
+    )
+    .unwrap()
+    .unwrap();
+
+    assert!(plan.refusals.is_empty(), "{:?}", plan.refusals);
+    assert_eq!(
+        plan.settings.directories.get(Kind::Skill),
+        Some(Path::new("skills"))
+    );
+    assert_eq!(
+        plan.settings.directories.get(Kind::Rule),
+        Some(Path::new("rules"))
+    );
+    assert_eq!(plan.authored, [root.join("skills").join("notes")]);
+}
+
 fn migrated(
     workspace: &FlayerWorkspace,
     project: &MindProject,

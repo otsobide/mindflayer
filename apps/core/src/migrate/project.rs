@@ -105,10 +105,10 @@ pub struct ProjectPlan {
 /// Refused as [`project`] would refuse it, every reason at once, so a dry
 /// run says what the real one will: a folder the `mind.toml` keeps a kind in
 /// that settings cannot name, inside `.mind` as a version 1 project kept
-/// every kind, or outside the project; no agent; a copy of the marker an
-/// earlier migration kept; and a copy that would land inside one of
-/// `homes`, or where a loaded workspace keeps its own, as an install
-/// refuses one.
+/// every kind it named no folder for, or outside the project; no agent; a
+/// copy of the marker an earlier migration kept; and a copy that would land
+/// inside one of `homes`, or where a loaded workspace keeps its own, as an
+/// install refuses one.
 pub fn project_plan(
     workspace: Option<&FlayerWorkspace>,
     project: &MindProject,
@@ -718,8 +718,11 @@ pub(super) fn plan_with(
 ///
 /// Every kind's default filled in (`Directories::with_defaults`, as `mind
 /// init` fills them), and any key this build does not know carried along. A
-/// version 1 marker kept every kind inside `.mind`, and is described so, for
-/// the plan to refuse: settings cannot name a folder there.
+/// version 1 marker kept every kind it names no folder for inside `.mind`,
+/// and is described so, for the plan to refuse: settings cannot name a
+/// folder there. A folder it does name is kept, as every other command reads
+/// it ([`MindProject::directory_for`]), so naming one outside `.mind` is how
+/// such a project gets past the refusal.
 fn authored(config: &MindConfig) -> Directories {
     if config.version >= DIRECTORIES_VERSION {
         return config.directories.clone().with_defaults();
@@ -727,7 +730,11 @@ fn authored(config: &MindConfig) -> Directories {
     Kind::ALL
         .into_iter()
         .fold(config.directories.clone(), |directories, kind| {
-            directories.with(kind, Path::new(MIND_DIR).join(kind.folder()))
+            if directories.get(kind).is_some() {
+                directories
+            } else {
+                directories.with(kind, Path::new(MIND_DIR).join(kind.folder()))
+            }
         })
 }
 

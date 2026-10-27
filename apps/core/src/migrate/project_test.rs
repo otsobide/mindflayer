@@ -44,3 +44,19 @@ fn a_version_1_marker_is_described_inside_mind_where_it_kept_every_kind() {
         ));
     }
 }
+
+#[test]
+fn a_version_1_marker_keeps_the_folders_it_names_outside_mind() {
+    let written = authored(&marker(
+        1,
+        Directories::default()
+            .with(Kind::Skill, "skills")
+            .with(Kind::Rule, "rules"),
+    ));
+
+    assert_eq!(written.get(Kind::Skill), Some(Path::new("skills")));
+    assert_eq!(written.get(Kind::Rule), Some(Path::new("rules")));
+    for kind in Kind::ALL {
+        assert!(misplaced_authored(kind, written.get(kind).unwrap()).is_none());
+    }
+}
