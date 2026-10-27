@@ -1182,6 +1182,16 @@ fn every_task_the_tui_runs_is_a_line_the_binaries_accept() {
             share: Some(Share::Shared),
             edit_tracked: false,
         },
+        Task::Targets {
+            holder: Holder::Project(String::from("alpha")),
+            kind: Kind::Skill,
+            folders: Some(vec![String::from(".skills"), String::from("-odd")]),
+        },
+        Task::Targets {
+            holder: Holder::Elsewhere(String::from("-odd")),
+            kind: Kind::Skill,
+            folders: None,
+        },
     ];
 
     for task in &tasks {
@@ -2407,4 +2417,142 @@ fn a_project_installing_where_no_agent_reads_is_marked_and_its_pane_says_why() {
     // Its neighbour installs where its agents read, and is not marked.
     assert!(drawn.contains("beta  1 "), "{drawn}");
     assert!(!drawn.contains("beta  1  ⚠"), "{drawn}");
+}
+
+#[test]
+fn capital_t_on_a_project_opens_where_it_installs_skills_and_runs_targets_set() {
+    let dir = workspace_with_own();
+    flayer(dir.path(), &["install", "-p", "alpha", "commit-style"]).unwrap();
+    let mut app = tui_in(dir.path());
+    assert_eq!(app.member().unwrap().name, "alpha");
+
+    press_key(&mut app, KeyCode::Char('T'));
+    let Mode::Targets(form) = &app.mode else {
+        panic!("{:?}", app.mode)
+    };
+    // Empty: the project installs where its agents read.
+    assert_eq!(form.folders.text(), "");
+    assert!(tui_drawn(&app).contains("Where alpha installs skills"));
+
+    type_text(&mut app, ".skills");
+    let drawn = tui_drawn(&app);
+    assert!(
+        drawn.contains("mind -C alpha targets set --yes skills .skills"),
+        "{drawn}"
+    );
+    let task = press_and_run(&mut app, KeyCode::Enter);
+
+    assert_eq!(
+        task,
+        Some(Task::Targets {
+            holder: Holder::Project(String::from("alpha")),
+            kind: Kind::Skill,
+            folders: Some(vec![String::from(".skills")]),
+        })
+    );
+    // What it said, to read in full: the copies moved.
+    let Mode::Reading(reader) = &app.mode else {
+        panic!("{:?}", app.mode)
+    };
+    let said: Vec<&str> = reader.lines.iter().map(|(_, line)| line.as_str()).collect();
+    assert!(
+        said.contains(&"removed commit-style from .claude/skills/commit-style"),
+        "{said:?}"
+    );
+    let alpha = dir.path().join("alpha");
+    assert!(alpha.join(".skills/commit-style/SKILL.md").is_file());
+    assert!(app
+        .transcript()
+        .starts_with("$ mind -C alpha targets set --yes skills .skills\n"));
+
+    // Back on the project, its row and its pane say no agent sees it.
+    press_key(&mut app, KeyCode::Esc);
+    let holdings = app.member().unwrap().holdings.as_ref().unwrap();
+    assert_eq!(holdings.targets, Some(vec![String::from(".skills")]));
+    assert_eq!(
+        holdings.unreached,
+        [String::from(
+            "claude, codex and opencode read none of the folders alpha installs skills in \
+             (.skills), so none of them sees what is installed there until pointed at one"
+        )]
+    );
+    assert!(tui_drawn(&app).contains("alpha  2  ⚠"));
+}
+
+#[test]
+fn clearing_the_folders_runs_targets_reset_and_leaving_them_runs_nothing() {
+    let dir = workspace_with_own();
+    mind(
+        &dir.path().join("alpha"),
+        &["targets", "set", "skills", ".skills", "-y"],
+    )
+    .unwrap();
+    let mut app = tui_in(dir.path());
+    press_key(&mut app, KeyCode::Char('T'));
+    let Mode::Targets(form) = &app.mode else {
+        panic!("{:?}", app.mode)
+    };
+    assert_eq!(form.folders.text(), ".skills");
+
+    // As it opened, there is nothing to run.
+    assert_eq!(press_key(&mut app, KeyCode::Enter), TuiStep::Stay);
+    assert!(tui_drawn(&app).contains("nothing changed yet"));
+
+    for _ in 0..".skills".len() {
+        press_key(&mut app, KeyCode::Backspace);
+    }
+    let task = press_and_run(&mut app, KeyCode::Enter).unwrap();
+
+    assert_eq!(task.describe(), "mind -C alpha targets reset --yes skills");
+    let settings = MindProject::open(dir.path().join("alpha")).unwrap();
+    assert!(settings.settings().unwrap().targets.is_empty());
+}
+
+#[test]
+fn a_folder_no_install_may_use_is_refused_by_the_command_in_the_form() {
+    let dir = workspace_with_two();
+    let mut app = tui_in(dir.path());
+    press_key(&mut app, KeyCode::Char('T'));
+    type_text(&mut app, "../shared");
+
+    press_and_run(&mut app, KeyCode::Enter).unwrap();
+
+    let Mode::Targets(form) = &app.mode else {
+        panic!("{:?}", app.mode)
+    };
+    let error = form.error.as_deref().unwrap_or_default();
+    assert!(error.contains("is not inside the project"), "{error}");
+}
+
+#[test]
+fn capital_t_on_the_workspaces_own_row_or_an_older_project_says_why_not() {
+    let dir = workspace_with_two();
+    let old = dir.path().join("old");
+    fs::create_dir(&old).unwrap();
+    older_project(&old);
+    flayer(dir.path(), &["link", "old"]).unwrap();
+    let mut app = tui_in(dir.path());
+
+    press_key(&mut app, KeyCode::Up);
+    assert!(app.member().unwrap().own);
+    press_key(&mut app, KeyCode::Char('T'));
+    assert!(matches!(app.mode, Mode::Browse));
+    assert!(app
+        .message
+        .as_ref()
+        .unwrap()
+        .text
+        .contains("reach agents by being installed"));
+
+    while app.member().unwrap().name != "old" {
+        press_key(&mut app, KeyCode::Down);
+    }
+    press_key(&mut app, KeyCode::Char('T'));
+    assert!(matches!(app.mode, Mode::Browse));
+    assert!(app
+        .message
+        .as_ref()
+        .unwrap()
+        .text
+        .contains("`mind migrate`"));
 }

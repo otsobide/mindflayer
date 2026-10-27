@@ -890,6 +890,17 @@ fn held(
                 .unwrap_or_default(),
             share: settings.map(|settings| settings.share),
             edit_tracked: settings.is_some_and(|settings| settings.edit_tracked),
+            targets: settings
+                .and_then(|settings| settings.targets.get(Kind::Skill))
+                .map(|folders| {
+                    folders
+                        .iter()
+                        .map(|folder| {
+                            paths::to_config_string(folder)
+                                .unwrap_or_else(|| folder.display().to_string())
+                        })
+                        .collect()
+                }),
             unreached,
             warnings,
             directories,

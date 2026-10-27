@@ -16,8 +16,8 @@ use ratatui::Frame;
 use super::minds::{self, Minds};
 use super::state::{
     AddField, AddForm, App, Confirm, Focus, GatherForm, Input, Item, LinkForm, LoadForm, Member,
-    Mode, Reader, RenameForm, Running, Scope, SettingsForm, Task, Tone, View, Workspace,
-    GATHER_FIELDS,
+    Mode, Reader, RenameForm, Running, Scope, SettingsForm, TargetsForm, Task, Tone, View,
+    Workspace, GATHER_FIELDS,
 };
 use crate::install::ui::{centred, pane, selected};
 use crate::progress::said;
@@ -46,6 +46,7 @@ pub fn draw(app: &App, frame: &mut Frame) {
             Mode::Reading(reader) => reading(reader, frame, area),
             Mode::Minds(screen) => minds_screen(app, screen, frame, area),
             Mode::Settings(form) => setting(app, form, frame, area),
+            Mode::Targets(form) => targeting(app, form, frame, area),
             Mode::Browse | Mode::Installing(_) => {}
         }
     }
@@ -596,10 +597,10 @@ fn footer(app: &App, frame: &mut Frame, area: Rect) {
             "q quit  ? keys  enter show  e edit  r rename  d delete  a add  ← back  v validate"
         }
         (Focus::Projects, Scope::Workspace) => {
-            "q quit  ? keys  → open  a add  m minds  l link  u unlink  v validate  g gather  L load  s shelf  i install  t agents"
+            "q quit  ? keys  → open  a add  m minds  l link  u unlink  v validate  g gather  L load  s shelf  i install  t agents  T targets"
         }
         (Focus::Projects, Scope::Project) => {
-            "q quit  ? keys  → open  a add  v validate  l link it to the workspace above  L load  t agents"
+            "q quit  ? keys  → open  a add  v validate  l link it to the workspace above  L load  t agents  T targets"
         }
     };
     let second = match &app.message {
@@ -695,6 +696,46 @@ fn renaming(app: &App, form: &RenameForm, frame: &mut Frame, area: Rect) {
     runs(frame, rows[2], app.rename_task(form).as_ref());
     error(frame, rows[3], form.error.as_deref());
     keys(frame, rows[4], "enter rename   esc cancel");
+}
+
+/// Where one project installs skills, typed, and what applying it would run.
+fn targeting(app: &App, form: &TargetsForm, frame: &mut Frame, area: Rect) {
+    let project = app
+        .workspace()
+        .and_then(|workspace| workspace.members.get(form.member))
+        .map_or_else(String::new, |member| printable(&member.name));
+    let inner = popup(
+        frame,
+        area,
+        &format!("Where {project} installs {}s", form.kind),
+        90,
+        8,
+    );
+    let rows = lines(inner, 6);
+
+    input(
+        frame,
+        rows[0],
+        &format!("{}s go in", form.kind),
+        &form.folders,
+        true,
+    );
+    for (row, hint) in [
+        "folders in the project, a space between each; none for where its agents read",
+        "an agent sees a folder of the project's own only once it is pointed there",
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        let line = Line::from(vec![
+            Span::raw(" ".repeat(usize::from(LABEL))),
+            Span::styled(hint, dim()),
+        ]);
+        frame.render_widget(Paragraph::new(line), rows[row + 1]);
+    }
+    runs(frame, rows[3], app.targets_task(form).as_ref());
+    error(frame, rows[4], form.error.as_deref());
+    keys(frame, rows[5], "enter apply   esc cancel");
 }
 
 /// The agents and share toggles of one project, and what applying them

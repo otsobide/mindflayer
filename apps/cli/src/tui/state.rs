@@ -170,6 +170,10 @@ pub struct Holdings {
     pub share: Option<Share>,
     /// Whether its settings let a tracked file be edited to reach an agent.
     pub edit_tracked: bool,
+    /// Where its settings install skills, each folder as they spell it, when
+    /// they name `targets` for them: none when skills go where its agents
+    /// read, and for the workspace's own, which have no settings.
+    pub targets: Option<Vec<String>>,
     /// What it installs that some of its agents do not see, as `status` says
     /// it: each kind installed only where some of them do not read, and each
     /// folder its settings name that no install uses.
@@ -350,6 +354,13 @@ pub enum Task {
         folder: String,
         reference: Option<String>,
     },
+    /// `… targets set --yes <kind> <dir>...`, or `… targets reset --yes
+    /// <kind>` when no folder is named: what the targets form amounts to.
+    Targets {
+        holder: Holder,
+        kind: Kind,
+        folders: Option<Vec<String>>,
+    },
     /// `… agents --yes <agent>...`, then `… share --yes <mode>
     /// [--edit-tracked]`, each only when what it sets changes: what the
     /// agents and share toggles amount to.
@@ -490,6 +501,18 @@ impl Task {
                 }
                 lines
             }
+            Task::Targets {
+                holder,
+                kind,
+                folders,
+            } => match folders {
+                Some(folders) => {
+                    let mut positionals = vec![kind.folder()];
+                    positionals.extend(folders.iter().map(String::as_str));
+                    vec![at(holder, &["targets", "set", "--yes"], &positionals)]
+                }
+                None => vec![at(holder, &["targets", "reset", "--yes"], &[kind.folder()])],
+            },
             Task::OpenInstall | Task::ApplyInstall => vec![words(&["flayer", "install"], &[])],
             Task::Refresh => Vec::new(),
         }
@@ -517,6 +540,7 @@ impl Task {
                 | Task::Gather { .. }
                 | Task::Minds { .. }
                 | Task::Settings { .. }
+                | Task::Targets { .. }
                 | Task::ApplyInstall
         )
     }
@@ -877,6 +901,8 @@ pub enum Mode {
     Minds(Minds),
     /// A project's agents and share mode, toggled, to change in one pass.
     Settings(SettingsForm),
+    /// Where a project installs skills, typed.
+    Targets(TargetsForm),
 }
 
 /// The whole TUI.
@@ -1124,6 +1150,7 @@ impl App {
             Mode::Installing(screen) => self.installing(screen, key),
             Mode::Minds(screen) => self.in_minds(screen, key),
             Mode::Settings(form) => self.setting(form, key),
+            Mode::Targets(form) => self.targeting(form, key),
         };
         self.mode = mode;
         step
@@ -1152,6 +1179,7 @@ impl App {
             KeyCode::Char(key @ ('e' | 'r' | 'd')) => return self.on_item(key),
             KeyCode::Char('a') => return self.start_adding(),
             KeyCode::Char('t') => return self.start_settings(),
+            KeyCode::Char('T') => return self.start_targets(),
             KeyCode::Char('v') => {
                 let holder = match self.scope() {
                     Scope::Workspace => Holder::Workspace,
@@ -1430,6 +1458,62 @@ impl App {
         };
         self.message = Some(Message::info(refusal));
         (Mode::Browse, Step::Stay)
+    }
+
+    /// `T`: where the project under the cursor installs skills, from either
+    /// column, as `t` changes its agents from either.
+    fn start_targets(&mut self) -> (Mode, Step) {
+        let refusal = match self.member() {
+            None => String::from("link a project first; l links one"),
+            Some(member) if member.own => String::from(
+                "these are the workspace's own, which reach agents by being installed into a project",
+            ),
+            Some(member) => match &member.holdings {
+                Err(_) => format!(
+                    "{} cannot be opened, so where it installs cannot be changed",
+                    member.name
+                ),
+                Ok(holdings) if holdings.share.is_some() => {
+                    let form =
+                        TargetsForm::new(self.cursor, Kind::Skill, holdings.targets.clone());
+                    return (Mode::Targets(form), Step::Stay);
+                }
+                Ok(_) => format!(
+                    "{} is marked by a mind.toml, which installs where it names; `mind migrate` moves it to settings",
+                    member.name
+                ),
+            },
+        };
+        self.message = Some(Message::info(refusal));
+        (Mode::Browse, Step::Stay)
+    }
+
+    fn targeting(&mut self, mut form: TargetsForm, key: KeyEvent) -> (Mode, Step) {
+        form.error = None;
+        match key.code {
+            KeyCode::Esc => (Mode::Browse, Step::Stay),
+            KeyCode::Enter => match self.targets_task(&form) {
+                Some(task) => (Mode::Targets(form), Step::Run(task)),
+                None if self.member_of(form.member).is_none() => (Mode::Browse, Step::Stay),
+                None => {
+                    form.error = Some(String::from(
+                        "nothing changed yet: type the folders, or clear them for where its agents read",
+                    ));
+                    (Mode::Targets(form), Step::Stay)
+                }
+            },
+            _ => {
+                form.folders.press(key);
+                (Mode::Targets(form), Step::Stay)
+            }
+        }
+    }
+
+    /// What the targets form would run, if it were submitted now: nothing
+    /// while it says what the project says already.
+    pub fn targets_task(&self, form: &TargetsForm) -> Option<Task> {
+        let member = self.member_of(form.member)?;
+        form.task(member.holder())
     }
 
     fn setting(&mut self, mut form: SettingsForm, key: KeyEvent) -> (Mode, Step) {
@@ -1804,7 +1888,7 @@ impl App {
                 | Task::Minds { .. },
                 _,
             )
-            | (Task::Gather { .. } | Task::Settings { .. }, None) => {
+            | (Task::Gather { .. } | Task::Settings { .. } | Task::Targets { .. }, None) => {
                 self.mode = Mode::Reading(Reader::of(&dones));
             }
             (_, Some(error)) => {
@@ -1875,6 +1959,7 @@ impl App {
             Mode::Loading(form) => &mut form.error,
             Mode::Gathering(form) => &mut form.error,
             Mode::Settings(form) => &mut form.error,
+            Mode::Targets(form) => &mut form.error,
             _ => return false,
         };
         *slot = Some(error.to_owned());
@@ -2396,6 +2481,57 @@ impl SettingsForm {
     }
 }
 
+/// Where a project installs a kind, typed: what `T` opens.
+#[derive(Debug, Clone)]
+pub struct TargetsForm {
+    /// The project it is for.
+    pub member: usize,
+    /// The kind it is about: skills, the one installed for now.
+    pub kind: Kind,
+    /// The folders, relative to the project, separated by spaces; empty for
+    /// where its agents read. Starts out holding what the settings say.
+    pub folders: Input,
+    pub error: Option<String>,
+    /// What the settings name now.
+    was: Option<Vec<String>>,
+}
+
+impl TargetsForm {
+    pub fn new(member: usize, kind: Kind, was: Option<Vec<String>>) -> Self {
+        Self {
+            member,
+            kind,
+            folders: Input::with(&was.as_deref().unwrap_or_default().join(" ")),
+            error: None,
+            was,
+        }
+    }
+
+    /// The task the form amounts to for `holder`: none while it says what
+    /// the project says already. Which folders an install may use is core's
+    /// to say, when the command runs, so the form takes whatever is typed.
+    ///
+    /// Split on spaces, as a shell would split the line without quotes: a
+    /// folder whose name holds one is named on the command line instead.
+    fn task(&self, holder: Holder) -> Option<Task> {
+        let typed: Vec<String> = self
+            .folders
+            .text()
+            .split_whitespace()
+            .map(str::to_owned)
+            .collect();
+        let folders = (!typed.is_empty()).then_some(typed);
+        if folders == self.was {
+            return None;
+        }
+        Some(Task::Targets {
+            holder,
+            kind: self.kind,
+            folders,
+        })
+    }
+}
+
 /// A yes or no before something that writes.
 #[derive(Debug)]
 pub struct Confirm {
@@ -2465,7 +2601,7 @@ impl Reader {
 
     /// Every key, and the command it runs.
     pub fn help() -> Self {
-        let rows: [(&str, &str, &[&str]); 17] = [
+        let rows: [(&str, &str, &[&str]); 18] = [
             (
                 "a",
                 "add a skill or a rule",
@@ -2506,6 +2642,14 @@ impl Reader {
                 &[
                     "mind -C <project> agents --yes <agent>...",
                     "mind -C <project> share --yes local|shared [--edit-tracked]",
+                ],
+            ),
+            (
+                "T",
+                "where the project installs skills, instead of where its agents read",
+                &[
+                    "mind -C <project> targets set --yes skills <dir>...",
+                    "mind -C <project> targets reset --yes skills, with none typed",
                 ],
             ),
             (
