@@ -78,7 +78,7 @@ pub struct ProjectPlan {
     pub installations: Vec<Retarget>,
     /// What the project authors itself, in the folders its settings keep
     /// naming: every artifact there that no installation records, left
-    /// where it is, as an edit makes a copy its author's.
+    /// where it is, its author's.
     pub authored: Vec<PathBuf>,
     /// What sits in a folder the project's agents are sent copies to that
     /// Mindflayer did not put there, but for one an installation's copy

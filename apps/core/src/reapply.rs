@@ -25,8 +25,12 @@
 //! than what was installed, and one in a folder the change drops is left too,
 //! and said. A recorded copy that is no longer what was installed, by its
 //! hash, is never deleted: it is left where it is, and stops being
-//! Mindflayer's, as an edit has made a copy its author's until D-04's states
-//! (#47) say more.
+//! Mindflayer's when it is in a folder the change drops. Where an agent
+//! reads, an edited copy stays recorded and reads as edited (D-04); in a
+//! folder no agent the project names is sent copies to, no install writes
+//! again and no listing reads, so a record kept there would call the
+//! installation partial or edited for good, and the next install, which
+//! records its copies afresh, would drop it all the same.
 
 use std::fs;
 use std::io;
@@ -280,7 +284,8 @@ pub enum Why {
     Unsourced,
     /// Changed since it was installed, in a folder no agent the project
     /// names is sent copies to any more: never deleted, and no longer
-    /// Mindflayer's.
+    /// Mindflayer's, since nothing of Mindflayer's writes or reads there
+    /// again.
     Edited,
     /// The same, for a copy that cannot be compared with what was installed:
     /// recorded without a hash, or not read whole, for the reason given.
