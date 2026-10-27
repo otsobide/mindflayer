@@ -85,6 +85,8 @@ pub enum CliError {
     Refused(mindflayer_core::migrate::Refusal),
     #[error(transparent)]
     Migrate(#[from] mindflayer_core::migrate::MigrateError),
+    #[error("say what to migrate: --library moves the workspace's own into its library, -p <project> moves a project it links from its mind.toml to settings, and --all-projects moves every one")]
+    MigrateWhat,
     #[error(transparent)]
     Reapply(#[from] mindflayer_core::ReapplyError),
     #[error("say which project's agents to change (`flayer agents -p <project> <agent>...`); the workspace's own reach agents by being installed")]

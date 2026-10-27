@@ -259,10 +259,16 @@ fn what_an_unlinked_project_at_the_root_keeps_is_said_to_be_the_workspaces_no_mo
 #[test]
 fn migrate_is_told_what_to_migrate() {
     let dir = TempDir::new().unwrap();
+    beside(dir.path());
 
-    let error = FlayerCli::try_parse_from(line("flayer", &["migrate"], dir.path())).unwrap_err();
+    let failure = flayer(dir.path(), &["migrate"]).unwrap_err();
 
-    assert!(error.to_string().contains("--library"), "{error}");
+    let said = failure.error.to_string();
+    assert!(
+        said.starts_with("say what to migrate: --library "),
+        "{said}"
+    );
+    assert!(dir.path().join("skills").is_dir(), "nothing moved");
 }
 
 #[test]

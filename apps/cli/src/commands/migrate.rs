@@ -1,8 +1,8 @@
 //! `flayer migrate` and `mind migrate`: bringing what an older Mindflayer
 //! made into the layout a new one has. `--library` moves a workspace's own
-//! into its library; `mind migrate` moves a project from its `mind.toml` to
-//! settings. Core's [`migrate`] decides everything about each; here it is
-//! said.
+//! into its library; `mind migrate`, `-p` and `--all-projects` move a
+//! project from its `mind.toml` to settings. Core's [`migrate`] decides
+//! everything about each; here it is said.
 
 use std::fmt::Write as _;
 
@@ -203,6 +203,72 @@ pub(crate) fn migrate_here(
     }
 }
 
+/// `flayer migrate -p`: one project the workspace links moved to settings,
+/// carrying what its ledger records along.
+pub(crate) fn migrate_one(
+    workspace: &FlayerWorkspace,
+    project: &MindProject,
+    asked: &Asked,
+    homes: &AgentHomes,
+) -> Result<Outcome, Failure> {
+    match laid_out(Some(workspace), project, asked, homes) {
+        Ok(outcome) => Ok(finished(outcome, project, asked)),
+        Err(stopped) => Err(stopped.failure()),
+    }
+}
+
+/// `flayer migrate --all-projects`: every project the workspace links that
+/// a `mind.toml` marks, moved to settings one at a time.
+///
+/// Each is all or nothing on its own, so one that is refused, or fails, is
+/// said with `error:` beside what the others did, naming it, and the command
+/// exits non-zero; the others go ahead, as a stale entry is a warning beside
+/// them. Without `--yes`, each one's lines, a blank line between two, and
+/// nothing written. Those their settings mark already are not listed, there
+/// being nothing to say of them.
+pub(crate) fn migrate_all(
+    workspace: &FlayerWorkspace,
+    asked: &Asked,
+    homes: &AgentHomes,
+) -> Result<Outcome, Failure> {
+    let mut outcome = Outcome::plain(String::new());
+    let mut laid = false;
+    for member in workspace.members() {
+        let project = match member.project {
+            Ok(project) => project,
+            Err(error) => {
+                outcome.stderr.push(format!("warning: {error}"));
+                outcome.ok = false;
+                continue;
+            }
+        };
+        match laid_out(Some(workspace), &project, asked, homes) {
+            Ok(None) => {}
+            Ok(Some(one)) => {
+                if laid {
+                    outcome.stdout.push('\n');
+                }
+                laid = true;
+                outcome.stdout.push_str(&one.stdout);
+                outcome.stderr.extend(one.stderr);
+                outcome.ok &= one.ok;
+            }
+            Err(stopped) => {
+                outcome.stderr.extend(stopped.lines(&project));
+                outcome.ok = false;
+            }
+        }
+    }
+    if laid && !asked.yes {
+        outcome.stdout.push_str(UNCHANGED);
+    } else if !laid && outcome.ok {
+        outcome.stdout = String::from(
+            "nothing to migrate: every project the workspace links is marked by its settings already\n",
+        );
+    }
+    Ok(outcome)
+}
+
 /// What a dry run of a project's move ends with.
 const UNCHANGED: &str = "nothing changed: add --yes to go ahead\n";
 
@@ -240,6 +306,23 @@ impl Stopped {
                 .err()
                 .unwrap_or_else(|| CliError::Migrate(MigrateError::Refused(Vec::new())).into()),
             Stopped::Failed(failure) => failure,
+        }
+    }
+
+    /// As lines beside what other projects did, each error naming the
+    /// project it is about.
+    fn lines(self, project: &MindProject) -> Vec<String> {
+        let at = project.root().display();
+        match self {
+            Stopped::Refused(refusals) => refusals
+                .into_iter()
+                .map(|refusal| format!("error: {at}: {}", CliError::Refused(refusal)))
+                .collect(),
+            Stopped::Failed(failure) => {
+                let mut lines = failure.warnings;
+                lines.push(format!("error: {at}: {}", failure.error));
+                lines
+            }
         }
     }
 }

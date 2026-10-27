@@ -1,6 +1,6 @@
-//! `mind migrate`: moving a project an older Mindflayer made from its
-//! `mind.toml` to settings, and what is installed into it to where its
-//! agents read.
+//! `mind migrate`, `flayer migrate -p` and `flayer migrate --all-projects`:
+//! moving a project an older Mindflayer made from its `mind.toml` to
+//! settings, and what is installed into it to where its agents read.
 
 mod common;
 
@@ -137,6 +137,28 @@ fn mind_migrate_says_what_it_would_move_then_moves_it_and_then_has_nothing_to_do
 }
 
 #[test]
+fn flayer_migrate_moves_one_project_it_links_by_name() {
+    let dir = workspace();
+    let root = older_in(dir.path(), "collapse", &["deploy"]);
+
+    let done = flayer(
+        dir.path(),
+        &["migrate", "-p", "collapse", "--agents", "claude", "--yes"],
+    )
+    .unwrap();
+
+    assert_eq!(
+        done.stdout,
+        "wrote .mind/settings.json for collapse: agents claude, share shared\n\
+         moved .mind/mind.toml to .mind/tmp/mind.toml.v2, as it was\n\
+         copied deploy to .claude/skills/deploy, for claude\n\
+         removed deploy from skills/deploy\n"
+    );
+    assert!(settings(&root).is_file());
+    assert_eq!(recorded(dir.path(), "collapse"), [".claude/skills/deploy"]);
+}
+
+#[test]
 fn a_project_already_keeping_its_skills_where_claude_reads_keeps_that_copy() {
     let dir = workspace();
     let root = dir.path().join("collapse");
@@ -198,6 +220,109 @@ fn a_copy_edited_since_it_was_installed_is_left_where_it_is_and_said() {
         skill_file("deploy", "Changed by hand")
     );
     assert!(recorded(dir.path(), "collapse").is_empty());
+}
+
+#[test]
+fn every_older_project_is_listed_without_yes_and_nothing_is_written() {
+    let dir = workspace();
+    let alpha = older_in(dir.path(), "alpha", &["deploy"]);
+    let beta = older_in(dir.path(), "beta", &[]);
+    let gamma = dir.path().join("gamma");
+    fs::create_dir(&gamma).unwrap();
+    new_project(&gamma);
+    flayer(dir.path(), &["link", "gamma"]).unwrap();
+
+    let dry = flayer(dir.path(), &["migrate", "--all-projects"]).unwrap();
+
+    assert_eq!(
+        dry.stdout,
+        "would write .mind/settings.json for alpha: agents claude,codex,opencode, share shared\n\
+         would move .mind/mind.toml to .mind/tmp/mind.toml.v2, as it is\n\
+         would copy deploy to .agents/skills/deploy, for codex and opencode\n\
+         would copy deploy to .claude/skills/deploy, for claude\n\
+         would remove deploy from skills/deploy\n\
+         \n\
+         would write .mind/settings.json for beta: agents claude,codex,opencode, share shared\n\
+         would move .mind/mind.toml to .mind/tmp/mind.toml.v2, as it is\n\
+         nothing changed: add --yes to go ahead\n"
+    );
+    assert!(dry.ok, "{:?}", dry.stderr);
+    for root in [&alpha, &beta] {
+        assert!(marker(root).is_file(), "{}", root.display());
+        assert!(!settings(root).exists(), "{}", root.display());
+    }
+    assert!(alpha.join("skills/deploy/SKILL.md").is_file());
+    assert!(!alpha.join(".claude").exists());
+    assert_eq!(recorded(dir.path(), "alpha"), ["skills/deploy"]);
+}
+
+#[test]
+fn every_older_project_is_moved_on_its_own_and_one_refused_is_named() {
+    let dir = workspace();
+    let alpha = older_in(dir.path(), "alpha", &["deploy"]);
+    let beta = older_in(dir.path(), "beta", &[]);
+    // A copy of the marker an earlier migration kept, which refuses beta.
+    let kept = beta.join(MIND_DIR).join("tmp").join("mind.toml.v2");
+    fs::create_dir_all(kept.parent().unwrap()).unwrap();
+    fs::write(&kept, "").unwrap();
+
+    let done = flayer(dir.path(), &["migrate", "--all-projects", "--yes"]).unwrap();
+
+    assert_eq!(
+        done.stdout,
+        "wrote .mind/settings.json for alpha: agents claude,codex,opencode, share shared\n\
+         moved .mind/mind.toml to .mind/tmp/mind.toml.v2, as it was\n\
+         copied deploy to .agents/skills/deploy, for codex and opencode\n\
+         copied deploy to .claude/skills/deploy, for claude\n\
+         removed deploy from skills/deploy\n"
+    );
+    assert_eq!(
+        done.stderr,
+        [format!(
+            "error: {}: nothing moved: {}: already there, kept by an earlier migration; move it \
+             aside to migrate again",
+            beta.display(),
+            kept.display()
+        )]
+    );
+    assert!(!done.ok);
+    assert!(settings(&alpha).is_file());
+    assert!(marker(&beta).is_file() && !settings(&beta).exists());
+
+    let again = flayer(dir.path(), &["migrate", "--all-projects", "--yes"]).unwrap();
+    assert!(!again.ok, "beta is still refused");
+    fs::remove_file(&kept).unwrap();
+    flayer(dir.path(), &["migrate", "--all-projects", "--yes"]).unwrap();
+    let none = flayer(dir.path(), &["migrate", "--all-projects", "--yes"]).unwrap();
+    assert_eq!(
+        none.stdout,
+        "nothing to migrate: every project the workspace links is marked by its settings already\n"
+    );
+}
+
+#[test]
+fn flayer_migrate_naming_nothing_says_what_there_is_to_migrate() {
+    let dir = workspace();
+
+    let failure = flayer(dir.path(), &["migrate", "--yes"]).unwrap_err();
+
+    assert_eq!(
+        failure.error.to_string(),
+        "say what to migrate: --library moves the workspace's own into its library, -p <project> \
+         moves a project it links from its mind.toml to settings, and --all-projects moves every \
+         one"
+    );
+    for refused in [
+        &["migrate", "--library", "--all-projects"][..],
+        &["migrate", "-p", "alpha", "--all-projects"],
+        &["migrate", "--library", "--local"],
+        &["migrate", "-p", "alpha", "--local", "--shared"],
+    ] {
+        assert!(
+            FlayerCli::try_parse_from(line("flayer", refused, dir.path())).is_err(),
+            "{refused:?}"
+        );
+    }
 }
 
 #[test]

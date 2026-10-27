@@ -27,7 +27,7 @@ use activate::{activate_command, which_command};
 use artifact::{add_to, edit_in, remove_from, rename_in, templates_of};
 use gather::run_gather;
 use install::{install_named, uninstall_named};
-use migrate::{migrate_here, migrate_library, Asked};
+use migrate::{migrate_all, migrate_here, migrate_library, migrate_one, Asked};
 use project::{
     init_project, init_workspace, link_here, link_projects, scan_workspace, unlink_here,
     unlink_projects,
@@ -392,11 +392,31 @@ fn run_flayer(
 
         // Resolved as a read, on the default workspace before it is made
         // too: a workspace made for the occasion keeps its own in its
-        // library from the start, and has nothing to move.
-        FlayerCommand::Migrate { library: _, yes } => {
-            reading_workspace(directory, lookup, |workspace| {
-                migrate_library(workspace, *yes)
-            })
+        // library from the start, and links no project to move.
+        FlayerCommand::Migrate {
+            library,
+            project,
+            all_projects,
+            settings,
+            yes,
+        } => {
+            let asked = Asked {
+                agents: &settings.agents,
+                share: settings.share(),
+                yes: *yes,
+            };
+            match (library, project, all_projects) {
+                (true, _, _) => reading_workspace(directory, lookup, |workspace| {
+                    migrate_library(workspace, *yes)
+                }),
+                (_, Some(project), _) => reading_workspace(directory, lookup, |workspace| {
+                    migrate_one(workspace, &workspace.pick(project)?, &asked, &lookup.agents)
+                }),
+                (_, _, true) => reading_workspace(directory, lookup, |workspace| {
+                    migrate_all(workspace, &asked, &lookup.agents)
+                }),
+                (false, None, false) => Err(CliError::MigrateWhat.into()),
+            }
         }
 
         // `-p` is the project's whichever side of `add` or `remove` it is
