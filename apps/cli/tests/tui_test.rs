@@ -1944,16 +1944,18 @@ fn the_header_says_why_the_workspace_on_screen_is_the_one_shown() {
     });
 
     let header = |drawn: &str| drawn.lines().next().unwrap_or_default().to_owned();
+    // The hub links collapse, which an older Mindflayer made, so what the
+    // header says of that comes between the hub's name and why it is shown.
     assert!(
         header(&found).contains("outer  · found above · "),
         "{found}"
     );
     assert!(
-        header(&named).contains("hub  · named with -W · "),
+        header(&named).contains(" hub  · ") && header(&named).contains("  · named with -W · "),
         "{named}"
     );
     assert!(
-        header(&activated).contains("hub  · activated · "),
+        header(&activated).contains(" hub  · ") && header(&activated).contains("  · activated · "),
         "{activated}"
     );
 }
@@ -1969,6 +1971,54 @@ fn the_header_of_a_project_on_its_own_gives_no_reason() {
     assert!(
         header.contains("· a project no workspace manages  · "),
         "{drawn}"
+    );
+}
+
+#[test]
+fn the_header_flags_projects_a_mind_toml_marks_with_the_command_that_moves_them() {
+    let dir = workspace_with_two();
+    let header = |dir: &Path| {
+        tui_drawn(&tui_in(dir))
+            .lines()
+            .next()
+            .unwrap_or_default()
+            .to_owned()
+    };
+    assert!(
+        !header(dir.path()).contains("mind.toml"),
+        "{}",
+        header(dir.path())
+    );
+
+    for name in ["old", "older"] {
+        let root = dir.path().join(name);
+        fs::create_dir(&root).unwrap();
+        older_project(&root);
+        flayer(dir.path(), &["link", name]).unwrap();
+    }
+
+    let flagged = header(dir.path());
+    assert!(
+        flagged.contains("  · 2 projects marked by mind.toml: `flayer migrate --all-projects`  · "),
+        "{flagged}"
+    );
+    // A project on its own is told what moves it from where it is.
+    let alone = TempDir::new().unwrap();
+    older_project(alone.path());
+    let own = tui_drawn(&mind_tui_in(alone.path()));
+    assert!(
+        own.lines()
+            .next()
+            .unwrap_or_default()
+            .contains("  · marked by mind.toml: `mind migrate`  · "),
+        "{own}"
+    );
+
+    flayer(dir.path(), &["migrate", "--all-projects", "--yes"]).unwrap();
+    assert!(
+        !header(dir.path()).contains("mind.toml"),
+        "{}",
+        header(dir.path())
     );
 }
 
