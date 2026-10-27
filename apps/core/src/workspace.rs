@@ -695,6 +695,18 @@ impl MindProject {
         }
     }
 
+    /// This project as it would be read with `settings` for its marker,
+    /// nothing written: for asking where it would install, and what it would
+    /// read, before a change to its settings is made
+    /// ([`crate::reapply`]).
+    pub(crate) fn with_settings(&self, settings: Settings) -> Self {
+        Self {
+            root: self.root.clone(),
+            config: ProjectConfig::Settings(settings),
+            leftover: self.leftover.clone(),
+        }
+    }
+
     /// Change the project's settings as `change` changes a copy of them, and
     /// write back only what it changed.
     ///
@@ -719,10 +731,15 @@ impl MindProject {
     /// A settings file this build refuses to read is refused here too, and
     /// left as it is.
     ///
-    /// Takes no lock. The settings are the project's, which has none of its
-    /// own, and a workspace's would keep out only that workspace's writers,
-    /// while several may link the project; what its first caller holds is
-    /// that caller's to decide (an open question).
+    /// Takes no lock, as `config_entry::ConfigFile` takes none: its caller
+    /// holds the one that keeps its change apart. A change to the agents or
+    /// the share mode carries what is installed along, which is the writing
+    /// of a workspace's copies, ledger and exclude entries, so
+    /// [`crate::reapply::apply`] holds the lock of the workspace that links
+    /// the project from before it reads the settings until all of it is
+    /// written. A lock of the project's own, in `.mind`, would keep out the
+    /// writers of a second workspace linking it too, but not their installs,
+    /// which go by that workspace's lock (an open question).
     pub fn change_settings<T>(
         &mut self,
         change: impl FnOnce(&mut Settings) -> T,
@@ -1776,7 +1793,7 @@ fn create_dir(path: &Path) -> Result<(), WorkspaceError> {
 /// Give the `.mind` at `dir` the `.gitignore` that keeps it out of git,
 /// unless it has one. `create_new`, so one somebody changed is left as they
 /// left it.
-fn ignore_itself(dir: &Path) -> Result<(), WorkspaceError> {
+pub(crate) fn ignore_itself(dir: &Path) -> Result<(), WorkspaceError> {
     match write_new(&dir.join(".gitignore"), MIND_IGNORE) {
         Err(WorkspaceError::Create { source, .. })
             if source.kind() == io::ErrorKind::AlreadyExists =>

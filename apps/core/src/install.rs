@@ -222,7 +222,7 @@ const LEAVE_OUT: [(&str, &str); 1] = [(
 )];
 
 /// The names [`LEAVE_OUT`] leaves out, as the copy takes them.
-fn left_out_names() -> [&'static str; LEAVE_OUT.len()] {
+pub(crate) fn left_out_names() -> [&'static str; LEAVE_OUT.len()] {
     LEAVE_OUT.map(|(name, _)| name)
 }
 
@@ -247,13 +247,18 @@ pub struct InstallTarget {
 }
 
 impl InstallTarget {
-    /// The agent the ledger says a copy here is for: the one agent it is for,
-    /// or none for a copy two agents share, or no agent owns.
+    /// The agent the ledger says a copy here is for ([`agent_of`]).
     fn agent(&self) -> Option<String> {
-        match self.agents.as_slice() {
-            [agent] => Some(agent.name().to_owned()),
-            _ => None,
-        }
+        agent_of(&self.agents)
+    }
+}
+
+/// The agent the ledger says a copy for `agents` is for: the one agent it is
+/// for, or none for a copy two agents share, or no agent owns.
+pub(crate) fn agent_of(agents: &[Agent]) -> Option<String> {
+    match agents {
+        [agent] => Some(agent.name().to_owned()),
+        _ => None,
     }
 }
 
@@ -840,7 +845,7 @@ pub fn install(
 ///
 /// Resolved as far as each path exists, so a home reached through a link,
 /// or a project reached through one, is still the folder it is.
-fn user_scope(homes: &AgentHomes, copies: &[PathBuf]) -> Option<InstallError> {
+pub(crate) fn user_scope(homes: &AgentHomes, copies: &[PathBuf]) -> Option<InstallError> {
     let folders: Vec<(&str, &Path, PathBuf)> = homes
         .folders()
         .into_iter()
@@ -873,7 +878,7 @@ fn local(project: &MindProject) -> Option<&str> {
 
 /// One exclude entry for each of `copies`, a folder each, as the project
 /// spells it.
-fn entries(project: &MindProject, copies: &[PathBuf]) -> Vec<exclude::Entry> {
+pub(crate) fn entries(project: &MindProject, copies: &[PathBuf]) -> Vec<exclude::Entry> {
     copies
         .iter()
         .filter_map(|copy| paths::relative_to(copy, project.root()))
@@ -1017,7 +1022,11 @@ pub fn uninstall(
 /// ends in another name is refused rather than followed: before records had
 /// targets, a removal was only ever `name` joined onto a folder of the
 /// project's.
-fn recorded_copy(project: &MindProject, name: &str, route: &str) -> Result<PathBuf, InstallError> {
+pub(crate) fn recorded_copy(
+    project: &MindProject,
+    name: &str,
+    route: &str,
+) -> Result<PathBuf, InstallError> {
     let path = Path::new(route);
     let inside = path
         .components()
@@ -1275,7 +1284,7 @@ fn unrecorded(root: &Path, kind: Kind, copies: &[PathBuf], recorded: &[String]) 
 
 /// Where a copy of `name` goes in `folder`: a folder of that name for a kind
 /// that is one, a file for a kind that is files.
-fn copy_at(folder: &Path, kind: Kind, name: &str) -> PathBuf {
+pub(crate) fn copy_at(folder: &Path, kind: Kind, name: &str) -> PathBuf {
     match kind.layout() {
         Layout::Directory { .. } => folder.join(name),
         Layout::Files { extension } => folder.join(format!("{name}.{extension}")),
@@ -1283,7 +1292,7 @@ fn copy_at(folder: &Path, kind: Kind, name: &str) -> PathBuf {
 }
 
 /// Whether something is at `copy`, where an install would write.
-fn holds(copy: &Path, kind: Kind) -> bool {
+pub(crate) fn holds(copy: &Path, kind: Kind) -> bool {
     match kind.layout() {
         // Anything by that name, not only a finished artifact: a folder of
         // notes somebody started by hand is theirs, and installing over it
@@ -1359,7 +1368,11 @@ fn resolved(path: &Path) -> Option<PathBuf> {
 /// workspace keeping both in one folder has nothing in it Mindflayer may
 /// write or remove, from the first install on; otherwise an install today
 /// is the loaded workspace's own tomorrow, and can never be updated again.
-fn kept_by_a_load(workspace: &FlayerWorkspace, kind: Kind, path: &Path) -> Option<PathBuf> {
+pub(crate) fn kept_by_a_load(
+    workspace: &FlayerWorkspace,
+    kind: Kind,
+    path: &Path,
+) -> Option<PathBuf> {
     let at = resolved(path)?;
     workspace.loads().into_iter().find_map(|loaded| {
         let source = loaded.workspace.ok()?;
