@@ -362,7 +362,7 @@ pub fn execute(words: &[String], base: &Path, lookup: &Lookup, watch: &Watch) ->
                 base.join(named)
             }),
             activated: None,
-            home: lookup.home.clone(),
+            ..lookup.clone()
         },
         None => lookup.clone(),
     };

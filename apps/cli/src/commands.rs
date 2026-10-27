@@ -50,7 +50,11 @@ pub fn run(cli: &Cli) -> Result<Outcome, Failure> {
 pub fn run_watched(cli: &Cli, watch: &Watch) -> Result<Outcome, Failure> {
     run_with(
         cli,
-        &Lookup::given(cli.home.as_deref(), cli.workspace.as_deref()),
+        &Lookup::given(
+            cli.home.as_deref(),
+            cli.workspace.as_deref(),
+            &cli.agent_homes,
+        ),
         watch,
     )
 }
@@ -177,7 +181,11 @@ pub fn run_flayer_cli(cli: &FlayerCli) -> Result<Outcome, Failure> {
 pub fn run_flayer_cli_watched(cli: &FlayerCli, watch: &Watch) -> Result<Outcome, Failure> {
     run_flayer_with(
         cli,
-        &Lookup::given(cli.home.as_deref(), cli.workspace.as_deref()),
+        &Lookup::given(
+            cli.home.as_deref(),
+            cli.workspace.as_deref(),
+            &cli.agent_homes,
+        ),
         watch,
     )
 }
