@@ -2,8 +2,8 @@
 #
 # A couple of skills and rules to try Mindflayer with, without gathering
 # anything first. Load this folder into the workspace that manages your
-# projects with `flayer load <path>`, and install its skills from there. It
-# manages no projects and loads nothing: it only offers its own.
+# projects with `flayer load <path>`, and install them from there. It manages
+# no projects and loads nothing: it only offers its own.
 #
 # `directories` is spelled out rather than left to the default, so this folder
 # reads the same whatever a new workspace keeps its own in. Beside this

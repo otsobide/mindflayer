@@ -1715,7 +1715,7 @@ impl App {
                                 format!("Unload {}?", source.name),
                                 String::new(),
                                 String::from(
-                                    "Its skills stop being offered here; what was installed from it stays, and nothing on disk is deleted.",
+                                    "What it offers stops being offered here; what was installed from it stays, and nothing on disk is deleted.",
                                 ),
                             ],
                             task,

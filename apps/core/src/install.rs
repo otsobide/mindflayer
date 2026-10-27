@@ -416,18 +416,16 @@ pub fn loaded_offers(workspace: &FlayerWorkspace, kind: Kind) -> Vec<Offer> {
     from_loads(workspace, &[kind]).offers
 }
 
-/// Every skill the workspaces `workspace` loads offer, and every reason
-/// something was not offered: a loaded workspace that cannot be opened, an
-/// artifact in one that cannot be read, a name that is not one folder name.
-/// Failures collected, not raised, like every discovery.
+/// Everything the workspaces `workspace` loads offer, of every kind, and
+/// every reason something was not offered: a loaded workspace that cannot
+/// be opened, an artifact in one that cannot be read, a name no copy can be
+/// filed under. Failures collected, not raised, like every discovery.
 ///
-/// Skills, the kind every front end lists and counts from a load today. A
-/// load offers its rules too, through [`loaded_offers`] and [`survey`],
-/// which install them; the listings this answers take them with the command
-/// line and the screens that install them (#46), so that what a load says it
-/// offers is what those let somebody install.
+/// Every kind, as [`survey`] offers every kind to install, so what a load
+/// is said to offer, in `flayer load`, `flayer gather list` and the TUI, is
+/// what the command line and the install screen let somebody install.
 pub fn offered_by_loads(workspace: &FlayerWorkspace) -> Loads {
-    from_loads(workspace, &[Kind::Skill])
+    from_loads(workspace, &Kind::ALL)
 }
 
 /// The two above. No ledger: listing what a load offers is reading, and must

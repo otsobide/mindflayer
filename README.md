@@ -284,19 +284,23 @@ projects, and install from it:
 ```
 $ cd ~/Projects
 $ flayer load ~/src/mindflayer/examples
-loaded examples as ../src/mindflayer/examples: 2 skills to install
+loaded examples as ../src/mindflayer/examples: 2 skills and 2 rules to install
   into the workspace at /home/you/Projects
 
 $ flayer install -p collapse commit-style
 installed commit-style into collapse, from load:../src/mindflayer/examples
+$ flayer install -p collapse git/commits
+installed rule git/commits into collapse, from load:../src/mindflayer/examples
 ```
 
 `collapse/.claude/skills/commit-style` now holds the skill and the
 `references/examples.md` it carries, for Claude Code, and
-`collapse/.agents/skills/commit-style` the same for Codex and OpenCode, both
-kept out of git. Only the skills are offered, because a rule cannot be
-installed yet: the two rules are there to read, and to copy into a project by
-hand. `flayer -W ~/src/mindflayer/examples validate` says all four are ok.
+`collapse/.agents/skills/commit-style` the same for Codex and OpenCode.
+`collapse/AGENTS.md` holds the rule, in a block of Mindflayer's that all
+three read, and all of it is kept out of git. `style/comments` installs the
+same way, but it states which files it is about, so it goes to Claude Code
+alone, and the install says so. `flayer -W ~/src/mindflayer/examples
+validate` says all four are ok.
 
 ## Commands
 

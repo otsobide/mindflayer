@@ -219,8 +219,9 @@ pub enum Command {
     /// Drop this project from the flayer workspace above it.
     Unlink,
 
-    /// Offer other flayer workspaces' own skills to the workspace above this
-    /// project, read live from where they are; on its own, list what it loads.
+    /// Offer other flayer workspaces' own skills and rules to the workspace
+    /// above this project, read live from where they are; on its own, list
+    /// what it loads.
     Load {
         /// Each workspace's directory, the one holding `.mindflayer`
         /// [default: list the loaded ones].
@@ -548,13 +549,14 @@ pub enum FlayerCommand {
         projects: Vec<PathBuf>,
     },
 
-    /// Offer other flayer workspaces' own skills to this workspace's projects,
-    /// read live from where they are.
+    /// Offer other flayer workspaces' own skills and rules to this
+    /// workspace's projects, read live from where they are.
     ///
     /// Into the workspace at or above here that is not one being loaded, or
     /// else the default one in your home: so `flayer load .` from inside a
-    /// workspace full of skills loads it into the one that manages you. On its
-    /// own, it lists what this workspace loads and what each offers.
+    /// workspace full of skills and rules loads it into the one that manages
+    /// you. On its own, it lists what this workspace loads and what each
+    /// offers.
     Load {
         /// Each workspace's directory, the one holding `.mindflayer`
         /// [default: list the loaded ones].
@@ -562,7 +564,7 @@ pub enum FlayerCommand {
         workspaces: Vec<PathBuf>,
     },
 
-    /// Stop offering a loaded workspace's skills.
+    /// Stop offering a loaded workspace's skills and rules.
     Unload {
         /// Each workspace's directory, as loaded. It need not still exist.
         #[arg(required = true, value_name = "WORKSPACE")]
