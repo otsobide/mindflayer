@@ -1933,7 +1933,11 @@ same.
   with its exclude entry: its author's now, as an edit makes a copy, until
   D-04's states (#47) say more. Deleting it on a guess was turned down, and
   so was keeping it recorded, which would name a copy in a folder no listing
-  of the project reads and call the installation partial for good.
+  of the project reads and call the installation partial for good. Which
+  folder a copy is in is told by the folder on disk, as `install::targets`
+  makes two spellings of one folder one target, not by the route recorded:
+  a copy recorded in `.agents/skills` stays when codex goes and Claude reads
+  it through a `.claude/skills` linked there.
 - **Somebody's is left, and said.** A folder where a new copy would go that
   holds something unrecorded is not written over, so that agent reads it
   rather than what was installed: a warning, as an install refused over
