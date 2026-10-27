@@ -717,18 +717,33 @@ fn held(
     let mut warnings = Vec::new();
     for failure in catalog.failures() {
         match lifecycle::identify(project, failure.path()) {
-            Some((kind, name)) => items.push(Item {
-                kind,
-                name,
-                summary: String::new(),
-                issues: Vec::new(),
-                // The reason without the path, which the row already says.
-                broken: Some(
-                    failure
-                        .source()
-                        .map_or_else(|| failure.to_string(), ToString::to_string),
-                ),
-            }),
+            Some((kind, name)) => {
+                let broken = Item {
+                    kind,
+                    name,
+                    summary: String::new(),
+                    issues: Vec::new(),
+                    // The reason without the path, which the row already says.
+                    broken: Some(
+                        failure
+                            .source()
+                            .map_or_else(|| failure.to_string(), ToString::to_string),
+                    ),
+                };
+                // Its name may be listed already, from a copy in the
+                // project's agents' folders. A row is named by its name
+                // alone, and a change to that name reaches the project's own
+                // copy, this one, so the row is this one's: a second row of
+                // the same name would aim a key at the agents' copy and
+                // reach this.
+                match items
+                    .iter_mut()
+                    .find(|item| item.kind == broken.kind && item.name == broken.name)
+                {
+                    Some(item) => *item = broken,
+                    None => items.push(broken),
+                }
+            }
             None => warnings.push(failure.to_string()),
         }
     }
