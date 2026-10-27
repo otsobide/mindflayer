@@ -63,7 +63,8 @@ pub(crate) fn edit_in(
     reference: &str,
     editor: Option<&str>,
 ) -> Result<Outcome, Failure> {
-    let target = lifecycle::find(holder, &Reference::parse(reference)).map_err(CliError::from)?;
+    let target = lifecycle::find_to_change(workspace, holder, &Reference::parse(reference))
+        .map_err(CliError::from)?;
     let edit = lifecycle::start_edit(&target);
     let editor = editor.map_or_else(default_editor, str::to_owned);
     let opened = open_in_editor(&editor, edit.file());
@@ -98,7 +99,8 @@ pub(crate) fn rename_in(
     reference: &str,
     to: &str,
 ) -> Result<Outcome, Failure> {
-    let target = lifecycle::find(holder, &Reference::parse(reference)).map_err(CliError::from)?;
+    let target = lifecycle::find_to_change(workspace, holder, &Reference::parse(reference))
+        .map_err(CliError::from)?;
     let renamed = lifecycle::rename(workspace, holder, &target, to).map_err(CliError::from)?;
     let mut outcome = Outcome::plain(format!(
         "renamed {} {} to {} at {}\n",
@@ -126,7 +128,8 @@ pub(crate) fn remove_from(
     reference: &str,
     yes: bool,
 ) -> Result<Outcome, Failure> {
-    let target = lifecycle::find(holder, &Reference::parse(reference)).map_err(CliError::from)?;
+    let target = lifecycle::find_to_change(workspace, holder, &Reference::parse(reference))
+        .map_err(CliError::from)?;
     // Deleting is the one thing here that cannot be taken back, so it is
     // asked for twice: once by naming it, once by saying yes.
     if !yes {

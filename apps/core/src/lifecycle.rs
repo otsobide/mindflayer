@@ -210,6 +210,47 @@ pub fn find(project: &MindProject, reference: &Reference) -> Result<Target, Life
     }
 }
 
+/// [`find`], for a change made with `workspace` consulted: a name the project
+/// holds nothing of where it authors, but received as a rule, is refused as
+/// such ([`LifecycleError::Received`]) rather than as nothing at all.
+///
+/// A rule a project marked by its settings received is no file of its own
+/// but a section of the block in its `AGENTS.md`, and maybe a file for
+/// Claude, rendered from where it was installed from (D-23): a change made
+/// there is undone by the next render, and what reaches it is a change made
+/// where it is offered. `status` lists it, so "nothing named" would deny
+/// what the report just showed; the ledger says whether it is one, and the
+/// refusal says how to take it out instead.
+pub fn find_to_change(
+    workspace: Option<&FlayerWorkspace>,
+    project: &MindProject,
+    reference: &Reference,
+) -> Result<Target, LifecycleError> {
+    let typed = match find(project, reference) {
+        Err(LifecycleError::NotFound { typed }) => typed,
+        found => return found,
+    };
+    let name = reference.name();
+    let received = project.settings().is_some()
+        && reference.kind().is_none_or(|kind| kind == Kind::Rule)
+        && install::is_installable_name(Kind::Rule, name)
+        && workspace.is_some_and(|workspace| {
+            let entry = install::entry_for_root(workspace, project.root());
+            workspace
+                .ledger_for_reading()
+                .and_then(|ledger| ledger.installation(&entry, Kind::Rule, name))
+                .is_ok_and(|record| record.is_some())
+        });
+    Err(if received {
+        LifecycleError::Received {
+            typed,
+            project: project.name().to_owned(),
+        }
+    } else {
+        LifecycleError::NotFound { typed }
+    })
+}
+
 /// Where an artifact of `kind` called `name` lives in `project`, whether or
 /// not it is there; `None` when the project keeps no folder for `kind`.
 pub fn place(project: &MindProject, kind: Kind, name: &str) -> Option<PathBuf> {
@@ -719,6 +760,10 @@ fn disowned(
 pub enum LifecycleError {
     #[error("nothing named `{typed}` here")]
     NotFound { typed: String },
+    /// Not authored in the project but received: a rule rendered into it
+    /// from where it was installed from ([`find_to_change`]).
+    #[error("`{typed}` is a rule {project} received, rendered from where it was installed from rather than kept in it, so it is not changed from here: uninstall it, or change it where it is offered and install it again")]
+    Received { typed: String, project: String },
     /// Listed, from a folder the project's agents read, but in none the
     /// project authors in: installed there, or somebody's own.
     #[error("`{typed}` is at {path}, in a folder this project's agents read and it does not author in, so it is not changed from here")]

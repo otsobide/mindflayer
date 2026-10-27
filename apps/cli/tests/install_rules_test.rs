@@ -299,3 +299,21 @@ fn a_project_a_mind_toml_marks_is_given_a_copy_of_the_rule_filed_by_its_route() 
     assert_eq!(removed.stdout, "removed rule git/commits from beta\n");
     assert!(!copy.exists());
 }
+
+#[test]
+fn a_rule_the_project_received_is_not_changed_from_it_and_says_how_to_take_it_out() {
+    let (_dir, alpha) = workspace(&[]);
+    mind(&alpha, &["install", "git/commits"]).unwrap();
+    let said = "`git/commits` is a rule alpha received, rendered from where it was installed \
+                from rather than kept in it, so it is not changed from here: uninstall it, or \
+                change it where it is offered and install it again";
+
+    let removed = mind(&alpha, &["remove", "git/commits", "--yes"]).unwrap_err();
+    let renamed = mind(&alpha, &["rename", "git/commits", "git/steps"]).unwrap_err();
+    let edited = mind(&alpha, &["edit", "git/commits", "--editor", "true"]).unwrap_err();
+
+    for failure in [&removed, &renamed, &edited] {
+        assert_eq!(failure.error.to_string(), said);
+    }
+    assert_eq!(fs::read_to_string(alpha.join("AGENTS.md")).unwrap(), BLOCK);
+}

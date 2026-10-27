@@ -17,10 +17,11 @@ use mindflayer_core::install::{
     self, Candidate, InstallError, Installation, Installed, Removed, Standing, WORKSPACE_ORIGIN,
 };
 use mindflayer_core::ledger::{InstallRecord, Target};
+use mindflayer_core::lifecycle;
 use mindflayer_core::migrate;
 use mindflayer_core::{
-    hash, Agent, AgentHomes, Directories, FlayerWorkspace, Kind, Ledger, MindProject, Missed,
-    Reference, Share, State, Status,
+    hash, Agent, AgentHomes, Directories, FlayerWorkspace, Kind, Ledger, LifecycleError,
+    MindProject, Missed, Reference, Share, State, Status,
 };
 use tempfile::TempDir;
 
@@ -1630,4 +1631,58 @@ fn status_says_nothing_missed_of_a_rule_a_project_a_mind_toml_marks_holds() {
     let (status, _) = Status::of_project(&project, Some(&workspace));
 
     assert_eq!(status.projects[0].missed, []);
+}
+
+#[test]
+fn a_change_aimed_at_a_rule_the_project_received_is_refused_as_received() {
+    let fixture = fixture(Share::Shared, &Agent::ALL);
+    fixture.rule("git/no-force-push", NO_FORCE_PUSH);
+    fixture.install("git/no-force-push");
+    let find = |typed: &str| {
+        lifecycle::find_to_change(
+            Some(&fixture.workspace),
+            &fixture.project,
+            &Reference::parse(typed),
+        )
+        .unwrap_err()
+    };
+
+    let received = find("git/no-force-push");
+    let qualified = find("rule:git/no-force-push");
+    let as_a_skill = find("skill:git/no-force-push");
+    let nothing = find("nothing");
+
+    assert!(
+        matches!(&received, LifecycleError::Received { typed, project }
+            if typed == "git/no-force-push" && project == "app"),
+        "{received:?}"
+    );
+    assert_eq!(
+        received.to_string(),
+        "`git/no-force-push` is a rule app received, rendered from where it was installed from \
+         rather than kept in it, so it is not changed from here: uninstall it, or change it \
+         where it is offered and install it again"
+    );
+    assert!(
+        matches!(qualified, LifecycleError::Received { .. }),
+        "{qualified:?}"
+    );
+    assert!(
+        matches!(as_a_skill, LifecycleError::NotFound { .. }),
+        "{as_a_skill:?}"
+    );
+    assert!(
+        matches!(nothing, LifecycleError::NotFound { .. }),
+        "{nothing:?}"
+    );
+    // Without the workspace whose ledger says so, nothing says it was
+    // received.
+    assert!(matches!(
+        lifecycle::find_to_change(
+            None,
+            &fixture.project,
+            &Reference::parse("git/no-force-push")
+        ),
+        Err(LifecycleError::NotFound { .. })
+    ));
 }
