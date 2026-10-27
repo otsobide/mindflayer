@@ -686,3 +686,50 @@ fn status_lists_the_rules_a_project_received_and_warns_of_one_some_agents_read_n
     );
     assert!(!json.ok);
 }
+
+#[cfg(unix)]
+#[test]
+fn status_says_an_installed_skill_edited_with_mind_edit_is_edited() {
+    // A project that authors its skills where Claude reads them, so the copy
+    // installed there is one `mind edit` reaches.
+    let dir = TempDir::new().unwrap();
+    let collapse = dir.path().join("collapse");
+    fs::create_dir(&collapse).unwrap();
+    gix::init(&collapse).unwrap();
+    mind(&collapse, &["init", "--skills", ".claude/skills"]).unwrap();
+    flayer(dir.path(), &["init"]).unwrap();
+    flayer(dir.path(), &["link", "collapse"]).unwrap();
+    flayer(
+        dir.path(),
+        &["add", "skill", "commit-style", "How commits are written"],
+    )
+    .unwrap();
+    flayer(dir.path(), &["install", "-p", "collapse", "commit-style"]).unwrap();
+    let before = flayer(dir.path(), &["status", "-p", "collapse"]).unwrap();
+    assert_eq!(
+        before.stdout,
+        "commit-style  installed  claude,codex,opencode  workspace\n"
+    );
+
+    mind(
+        &collapse,
+        &["edit", "commit-style", "--editor", "printf 'Ours.\\n' >>"],
+    )
+    .unwrap();
+
+    let after = flayer(dir.path(), &["status", "-p", "collapse"]).unwrap();
+    assert_eq!(
+        after.stdout,
+        "commit-style  edited  claude,codex,opencode  workspace\n"
+    );
+    // Discovery says the same of the two copies, from where it reads them.
+    assert_eq!(after.stderr.len(), 1, "{:?}", after.stderr);
+    assert!(after.stderr[0]
+        .ends_with("differ, so the agents reading them do not all load the same skill"));
+    let json = flayer(dir.path(), &["status", "-p", "collapse", "--json"]).unwrap();
+    assert!(
+        json.stdout.contains("\"state\": \"edited\""),
+        "{}",
+        json.stdout
+    );
+}

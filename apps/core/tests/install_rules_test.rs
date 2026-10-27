@@ -1363,6 +1363,30 @@ fn status_says_claude_reads_a_rule_by_its_own_file_where_it_reads_no_block() {
 }
 
 #[test]
+fn status_says_a_rule_edited_in_its_section_or_its_file_is_edited() {
+    let fixture = fixture(Share::Shared, &Agent::ALL);
+    fixture.rule("git/no-force-push", NO_FORCE_PUSH);
+    fixture.rule("rust/errors", SCOPED);
+    fixture.install("git/no-force-push");
+    fixture.install("rust/errors");
+
+    let edited = fixture
+        .text()
+        .replace(NO_FORCE_PUSH, "Never force-push, ever.\n");
+    fs::write(fixture.agents_md(), edited).unwrap();
+    fs::write(fixture.claude_file("rust/errors"), "Ours now.\n").unwrap();
+
+    assert_eq!(
+        status_of(&fixture, "git/no-force-push").map(|(state, _, _)| state),
+        Some(State::Edited)
+    );
+    assert_eq!(
+        status_of(&fixture, "rust/errors").map(|(state, _, _)| state),
+        Some(State::Edited)
+    );
+}
+
+#[test]
 fn status_lists_a_rule_copied_into_a_project_a_mind_toml_marks_as_its_copy() {
     let (_dir, workspace, project, ledger) = older();
     own_rule(&workspace, "git/no-force-push", NO_FORCE_PUSH);
