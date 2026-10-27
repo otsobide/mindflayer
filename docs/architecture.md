@@ -5794,7 +5794,13 @@ just listed.
   installation records is the ledger's, which discovery does not open, and
   a foreign copy has none. If a skill's assets make a listing slow, that
   recorded hash, compared where `Catalog::with_records` already reads the
-  ledger, is where to start.
+  ledger, is where to start. `status`, and so the TUI's rows, reads more:
+  each installation's standing (`install::standings`) hashes every copy its
+  record names again, and compares one of them with the offer it came from,
+  reading both, so that an outdated install can be told from a current one,
+  which only #48 says. Telling an edit alone would need no offer but for a
+  record with no hash; the price was taken so that a report and a refusal
+  are told by one function.
 - **A screen that lists what it cannot change.** The TUI's project rows
   come from the same discovery, so a v3 project's rows list the skills in its
   agents' folders as well. A row is one name, so a change aimed at it reaches
