@@ -27,9 +27,25 @@ use std::sync::atomic::{AtomicU64, Ordering};
 /// be committed. A link back into a directory already being copied is
 /// refused too, rather than copied until the path is too long.
 pub fn tree(from: &Path, to: &Path, within: &Path) -> Result<(), io::Error> {
+    tree_leaving(from, to, within, &[])
+}
+
+/// [`tree`], without whatever is named `leave_out` directly inside `from`.
+///
+/// Left out rather than copied and then deleted, so what is left out is
+/// never read: a link in it pointing out of `within` does not refuse a copy
+/// that would never have held it. Only at the top, where a name means what
+/// the caller left it out for; further down the same name is somebody's
+/// file like any other.
+fn tree_leaving(
+    from: &Path,
+    to: &Path,
+    within: &Path,
+    leave_out: &[&str],
+) -> Result<(), io::Error> {
     let bounds = [fs::canonicalize(within)?, fs::canonicalize(from)?];
     let mut path = Vec::new();
-    copy_tree(from, to, &bounds, &mut path)
+    copy_tree(from, to, &bounds, &mut path, leave_out)
 }
 
 fn copy_tree(
@@ -37,11 +53,15 @@ fn copy_tree(
     to: &Path,
     bounds: &[PathBuf; 2],
     path: &mut Vec<PathBuf>,
+    leave_out: &[&str],
 ) -> Result<(), io::Error> {
     path.push(fs::canonicalize(from)?);
     fs::create_dir_all(to)?;
     for entry in fs::read_dir(from)? {
         let entry = entry?;
+        if leave_out.iter().any(|name| entry.file_name() == *name) {
+            continue;
+        }
         let source = entry.path();
         let target = to.join(entry.file_name());
         let kind = entry.file_type()?;
@@ -62,12 +82,12 @@ fn copy_tree(
                         source.display()
                     )));
                 }
-                copy_tree(&pointed, &target, bounds, path)?;
+                copy_tree(&pointed, &target, bounds, path, &[])?;
             } else {
                 fs::copy(&pointed, &target)?;
             }
         } else if kind.is_dir() {
-            copy_tree(&source, &target, bounds, path)?;
+            copy_tree(&source, &target, bounds, path, &[])?;
         } else {
             fs::copy(&source, &target)?;
         }
@@ -244,7 +264,7 @@ impl Stage {
     ///
     /// Mutable, because a stage builds one copy at a time in one place.
     pub fn replace(&mut self, from: &Path, to: &Path, within: &Path) -> Result<Change, io::Error> {
-        let changes = self.place(from, std::slice::from_ref(&to.to_path_buf()), within)?;
+        let changes = self.place(from, std::slice::from_ref(&to.to_path_buf()), within, &[])?;
         Ok(changes[0])
     }
 
@@ -266,6 +286,10 @@ impl Stage {
     /// back where it replaced one. The folder a target goes in, made on the
     /// way, is left.
     ///
+    /// What is named `leave_out` directly inside `from` goes into none of
+    /// the copies and is never read, as `tree_leaving` leaves it out: which
+    /// names, and why, is the caller's to say.
+    ///
     /// The changes come back in the order of `to`, which has to name each
     /// folder on disk once: two spellings of one folder would be put in
     /// place twice, and the second rename would find the first's copy there.
@@ -276,12 +300,13 @@ impl Stage {
         from: &Path,
         to: &[PathBuf],
         within: &Path,
+        leave_out: &[&str],
     ) -> Result<Vec<Change>, io::Error> {
         for target in to {
             self.clear_beside(target)?;
         }
         let built = self.fresh("new")?;
-        if let Err(error) = tree(from, &built, within) {
+        if let Err(error) = tree_leaving(from, &built, within, leave_out) {
             let _ = fs::remove_dir_all(&built);
             return Err(error);
         }
@@ -596,7 +621,17 @@ pub enum Change {
 
 /// Whether two directories hold the same names and the same bytes.
 pub fn same(a: &Path, b: &Path) -> Result<bool, io::Error> {
-    let (left, right) = (listing(a)?, listing(b)?);
+    same_leaving(a, b, &[])
+}
+
+/// Whether `b` holds what a copy of `a` leaving out `leave_out` would
+/// ([`Stage::place`]): the same names and bytes, but for what is named
+/// `leave_out` directly inside `a`. Only `a`'s are passed over, so a `b`
+/// that holds one of those names is not that copy.
+pub fn same_leaving(a: &Path, b: &Path, leave_out: &[&str]) -> Result<bool, io::Error> {
+    let mut left = listing(a)?;
+    left.retain(|name| !leave_out.iter().any(|left_out| name == *left_out));
+    let right = listing(b)?;
     if left != right {
         return Ok(false);
     }
