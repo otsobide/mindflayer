@@ -28,7 +28,7 @@ use thiserror::Error;
 use crate::agent::{Agent, AgentHomes};
 use crate::agents_md::AgentsMdError;
 use crate::artifact::{self, issue_list, name_issues, Artifact, ArtifactError, ValidationIssue};
-use crate::catalog::{Catalog, DiscoveryFailure};
+use crate::catalog::{Catalog, DiscoveryFailure, Reference, QUALIFIER};
 use crate::claude_md::ClaudeMdError;
 use crate::claude_rules::ClaudeRulesError;
 use crate::copy;
@@ -631,6 +631,142 @@ pub fn offered(
             name: name.to_owned(),
             origins: matching.iter().map(Candidate::origin).collect(),
         }),
+    }
+}
+
+/// The one candidate `reference` names among what `project` can be offered:
+/// of the kind it is qualified with (`rule:git/commits`), or, typed bare, of
+/// the one kind that offers its name, as [`offered`] finds one of a kind.
+///
+/// A bare name that more than one kind offers is refused
+/// ([`InstallError::OfferedAsKinds`]), for the qualifier to say which, as
+/// `mind show` refuses one: a skill and a rule of one name are two things,
+/// and which of them goes in is not something to guess. A kind offering
+/// the name from two places counts as offering it, and says so itself
+/// ([`InstallError::OfferedTwice`]) when no other kind does.
+///
+/// Only the kinds a copy could be filed under that name are asked
+/// ([`is_installable_name`]), so `git/commits`, which no skill can be
+/// called, is a rule's however it is typed. When no kind offers it, the
+/// first refusal that says more than that nothing is offered is the one
+/// given: a project with nowhere to put a skill is told so, as before
+/// rules could be installed, rather than sent to gather one. A ledger that
+/// cannot be read is said first, from whichever kind found it.
+pub fn offered_typed(
+    workspace: &FlayerWorkspace,
+    ledger: &Ledger,
+    project: &MindProject,
+    reference: &Reference,
+    from: Option<&str>,
+) -> Result<Candidate, InstallError> {
+    let name = reference.name();
+    if let Some(kind) = reference.kind() {
+        return offered(workspace, ledger, project, kind, name, from);
+    }
+    let mut asked: Vec<(Kind, Result<Candidate, InstallError>)> = filed_as(name)
+        .into_iter()
+        .map(|kind| (kind, offered(workspace, ledger, project, kind, name, from)))
+        .collect();
+    if let Some(index) = asked
+        .iter()
+        .position(|(_, asked)| matches!(asked, Err(InstallError::Ledger(_))))
+    {
+        return asked.swap_remove(index).1;
+    }
+    let offering = |asked: &Result<Candidate, InstallError>| {
+        matches!(asked, Ok(_) | Err(InstallError::OfferedTwice { .. }))
+    };
+    let kinds: Vec<Kind> = asked
+        .iter()
+        .filter(|(_, asked)| offering(asked))
+        .map(|(kind, _)| *kind)
+        .collect();
+    if kinds.len() > 1 {
+        return Err(InstallError::OfferedAsKinds {
+            name: name.to_owned(),
+            kinds,
+        });
+    }
+    let index = asked
+        .iter()
+        .position(|(_, asked)| offering(asked))
+        .or_else(|| {
+            asked
+                .iter()
+                .position(|(_, asked)| !matches!(asked, Err(InstallError::NotOffered { .. })))
+        })
+        .unwrap_or(0);
+    asked.swap_remove(index).1
+}
+
+/// Take what `reference` names back out of `project`, and say which kind it
+/// was: the kind it is qualified with, or, typed bare, the one kind the
+/// ledger records an installation of that name of, as [`uninstall`] takes
+/// one of a kind out.
+///
+/// A bare name the ledger records as more than one kind is refused
+/// ([`InstallError::InstalledAsKinds`]), for the qualifier to say which:
+/// taking both out would be twice what was asked. One it records as none
+/// changes nothing whichever kind it is taken for, so each kind it could be
+/// filed as is asked what is there, and somebody's of either is said
+/// ([`Removed::Foreign`]) before the absence the first kind finds: the name
+/// was typed because something by it is somewhere.
+pub fn uninstall_typed(
+    workspace: &FlayerWorkspace,
+    ledger: &Ledger,
+    project: &MindProject,
+    reference: &Reference,
+    homes: &AgentHomes,
+) -> Result<(Kind, Removed), InstallError> {
+    let name = reference.name();
+    let kind = match reference.kind() {
+        Some(kind) => kind,
+        None => {
+            let entry = project_entry(workspace, project);
+            let kinds = filed_as(name);
+            let mut recorded = Vec::new();
+            for &kind in &kinds {
+                if ledger.installation(&entry, kind, name)?.is_some() {
+                    recorded.push(kind);
+                }
+            }
+            match recorded[..] {
+                [kind] => kind,
+                [] => {
+                    let mut absent = None;
+                    for kind in kinds {
+                        let removed = uninstall(workspace, ledger, project, kind, name, homes)?;
+                        if matches!(removed, Removed::Foreign { .. }) {
+                            return Ok((kind, removed));
+                        }
+                        absent.get_or_insert((kind, removed));
+                    }
+                    return Ok(absent.expect("a name is asked of one kind at least"));
+                }
+                _ => {
+                    return Err(InstallError::InstalledAsKinds {
+                        name: name.to_owned(),
+                        kinds: recorded,
+                    })
+                }
+            }
+        }
+    };
+    uninstall(workspace, ledger, project, kind, name, homes).map(|removed| (kind, removed))
+}
+
+/// The kinds a copy could be filed as under `name` ([`is_installable_name`]),
+/// or every kind when none could, so that what is asked of them refuses the
+/// name, saying why.
+fn filed_as(name: &str) -> Vec<Kind> {
+    let kinds: Vec<Kind> = Kind::ALL
+        .into_iter()
+        .filter(|&kind| is_installable_name(kind, name))
+        .collect();
+    if kinds.is_empty() {
+        Kind::ALL.to_vec()
+    } else {
+        kinds
     }
 }
 
@@ -1641,6 +1777,10 @@ pub enum InstallError {
     NotOffered { name: String, from: Option<String> },
     #[error("`{name}` is offered by more than one place ({}), so say which with --from", .origins.join(", "))]
     OfferedTwice { name: String, origins: Vec<String> },
+    #[error("`{name}` is offered as {}, so say which: {}", as_kinds(.kinds), qualified(.name, .kinds))]
+    OfferedAsKinds { name: String, kinds: Vec<Kind> },
+    #[error("`{name}` is installed as {}, so say which: {}", as_kinds(.kinds), qualified(.name, .kinds))]
+    InstalledAsKinds { name: String, kinds: Vec<Kind> },
     #[error("{project} names no agent in its settings that {kind}s are installed for, so none can be installed into it")]
     NoTarget { project: String, kind: Kind },
     #[error("none of the folders {project}'s settings name for its {kind}s is one an install may use, so none can be installed into it")]
@@ -1677,5 +1817,29 @@ impl InstallError {
             InstallError::Write { swept, .. } => swept,
             _ => &[],
         }
+    }
+}
+
+/// "a skill and as a rule": the kinds a name is, as a refusal says them.
+fn as_kinds(kinds: &[Kind]) -> String {
+    let each: Vec<String> = kinds.iter().map(|kind| format!("a {kind}")).collect();
+    match each.split_last() {
+        Some((last, [])) => last.clone(),
+        Some((last, rest)) => format!("{} and as {last}", rest.join(", as ")),
+        None => String::new(),
+    }
+}
+
+/// "`skill:deploy` or `rule:deploy`": what to type for each, with the
+/// qualifier a [`Reference`] reads.
+fn qualified(name: &str, kinds: &[Kind]) -> String {
+    let each: Vec<String> = kinds
+        .iter()
+        .map(|kind| format!("`{}{QUALIFIER}{name}`", kind.slug()))
+        .collect();
+    match each.split_last() {
+        Some((last, [])) => last.clone(),
+        Some((last, rest)) => format!("{} or {last}", rest.join(", ")),
+        None => String::new(),
     }
 }

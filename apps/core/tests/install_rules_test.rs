@@ -14,13 +14,13 @@ use mindflayer_core::claude_md::{self, Fallback, Reach};
 use mindflayer_core::claude_rules::{self, Warning as FileWarning};
 use mindflayer_core::install::rules::{self, Warning, Withheld};
 use mindflayer_core::install::{
-    self, InstallError, Installation, Installed, Removed, Standing, WORKSPACE_ORIGIN,
+    self, Candidate, InstallError, Installation, Installed, Removed, Standing, WORKSPACE_ORIGIN,
 };
 use mindflayer_core::ledger::{InstallRecord, Target};
 use mindflayer_core::migrate;
 use mindflayer_core::{
-    hash, Agent, AgentHomes, Directories, FlayerWorkspace, Kind, Ledger, MindProject, Share, State,
-    Status,
+    hash, Agent, AgentHomes, Directories, FlayerWorkspace, Kind, Ledger, MindProject, Reference,
+    Share, State, Status,
 };
 use tempfile::TempDir;
 
@@ -1233,4 +1233,215 @@ fn status_lists_a_rule_copied_into_a_project_a_mind_toml_marks_as_its_copy() {
         .unwrap();
     assert_eq!(rule.state, State::Installed);
     assert_eq!(rule.origin.as_deref(), Some(WORKSPACE_ORIGIN));
+}
+
+impl Fixture {
+    /// The workspace's own skill `name`.
+    fn skill(&self, name: &str) {
+        let folder = self
+            .workspace
+            .own()
+            .directory_for(Kind::Skill)
+            .unwrap()
+            .join(name);
+        fs::create_dir_all(&folder).unwrap();
+        fs::write(
+            folder.join("SKILL.md"),
+            format!("---\nname: {name}\ndescription: What {name} does\n---\n\nSteps.\n"),
+        )
+        .unwrap();
+    }
+
+    /// What `typed` names among what the project is offered.
+    fn typed(&self, typed: &str) -> Result<Candidate, InstallError> {
+        install::offered_typed(
+            &self.workspace,
+            &self.ledger,
+            &self.project,
+            &Reference::parse(typed),
+            None,
+        )
+    }
+
+    /// Install what `typed` names, as a command line would.
+    fn install_typed(&self, typed: &str) -> Installation {
+        let candidate = self.typed(typed).unwrap();
+        install::install(
+            &self.workspace,
+            &self.ledger,
+            &self.project,
+            &candidate,
+            &AgentHomes::default(),
+        )
+        .unwrap()
+    }
+
+    /// Take out what `typed` names, as a command line would.
+    fn uninstall_typed(&self, typed: &str) -> Result<(Kind, Removed), InstallError> {
+        install::uninstall_typed(
+            &self.workspace,
+            &self.ledger,
+            &self.project,
+            &Reference::parse(typed),
+            &AgentHomes::default(),
+        )
+    }
+}
+
+#[test]
+fn a_name_typed_bare_is_of_the_one_kind_that_offers_it() {
+    let fixture = fixture(Share::Shared, &Agent::ALL);
+    fixture.skill("deploy");
+    fixture.rule("git/no-force-push", NO_FORCE_PUSH);
+    fixture.rule("deploy-notes", NO_FORCE_PUSH);
+
+    let rule = fixture.typed("git/no-force-push").unwrap();
+    let skill = fixture.typed("deploy").unwrap();
+    let also_rule = fixture.typed("deploy-notes").unwrap();
+
+    assert_eq!(
+        (rule.kind(), rule.name()),
+        (Kind::Rule, "git/no-force-push")
+    );
+    assert_eq!((skill.kind(), skill.name()), (Kind::Skill, "deploy"));
+    assert_eq!(also_rule.kind(), Kind::Rule);
+    let nothing = fixture.typed("nothing").unwrap_err();
+    assert!(
+        matches!(&nothing, InstallError::NotOffered { name, .. } if name == "nothing"),
+        "{nothing:?}"
+    );
+}
+
+#[test]
+fn a_name_two_kinds_offer_is_installed_only_as_the_kind_it_is_qualified_with() {
+    let fixture = fixture(Share::Shared, &Agent::ALL);
+    fixture.skill("deploy");
+    fixture.rule("deploy", NO_FORCE_PUSH);
+
+    let refused = fixture.typed("deploy").unwrap_err();
+
+    assert!(
+        matches!(&refused, InstallError::OfferedAsKinds { kinds, .. } if kinds == &Kind::ALL),
+        "{refused:?}"
+    );
+    assert_eq!(
+        refused.to_string(),
+        "`deploy` is offered as a skill and as a rule, so say which: `skill:deploy` or `rule:deploy`"
+    );
+    assert_eq!(fixture.typed("rule:deploy").unwrap().kind(), Kind::Rule);
+    assert_eq!(fixture.typed("skill:deploy").unwrap().kind(), Kind::Skill);
+
+    fixture.install_typed("rule:deploy");
+
+    assert!(fixture.text().contains("<!-- mindflayer:rule deploy -->"));
+    assert!(!fixture
+        .project
+        .root()
+        .join(".claude/skills/deploy")
+        .exists());
+}
+
+#[test]
+fn a_project_no_kind_can_go_into_is_told_so_rather_than_sent_to_gather() {
+    let fixture = fixture(Share::Shared, &[]);
+    fixture.rule("git/no-force-push", NO_FORCE_PUSH);
+
+    let refused = fixture.typed("deploy").unwrap_err();
+
+    assert!(
+        matches!(
+            &refused,
+            InstallError::NoTarget {
+                kind: Kind::Skill,
+                ..
+            }
+        ),
+        "{refused:?}"
+    );
+}
+
+#[test]
+fn a_bare_name_is_taken_out_as_the_one_kind_installed_under_it() {
+    let fixture = fixture(Share::Shared, &Agent::ALL);
+    fixture.skill("deploy");
+    fixture.rule("deploy", NO_FORCE_PUSH);
+    fixture.install_typed("rule:deploy");
+
+    let (kind, removed) = fixture.uninstall_typed("deploy").unwrap();
+
+    assert_eq!(kind, Kind::Rule);
+    assert!(
+        matches!(&removed, Removed::Removed { name, .. } if name == "deploy"),
+        "{removed:?}"
+    );
+    assert!(!fixture.agents_md().exists());
+    assert!(fixture.records().is_empty());
+}
+
+#[test]
+fn a_bare_name_installed_as_two_kinds_is_taken_out_only_once_qualified() {
+    let fixture = fixture(Share::Shared, &Agent::ALL);
+    fixture.skill("deploy");
+    fixture.rule("deploy", NO_FORCE_PUSH);
+    fixture.install_typed("rule:deploy");
+    fixture.install_typed("skill:deploy");
+
+    let refused = fixture.uninstall_typed("deploy").unwrap_err();
+
+    assert_eq!(
+        refused.to_string(),
+        "`deploy` is installed as a skill and as a rule, so say which: `skill:deploy` or `rule:deploy`"
+    );
+    assert!(fixture.text().contains("<!-- mindflayer:rule deploy -->"));
+    let (kind, _) = fixture.uninstall_typed("skill:deploy").unwrap();
+    assert_eq!(kind, Kind::Skill);
+    assert!(!fixture
+        .project
+        .root()
+        .join(".claude/skills/deploy")
+        .exists());
+    assert!(fixture.text().contains("<!-- mindflayer:rule deploy -->"));
+}
+
+#[test]
+fn a_bare_name_nothing_records_says_whose_is_there_of_either_kind() {
+    let fixture = fixture(Share::Shared, &Agent::ALL);
+    let theirs = format!(
+        "{TEAM}\n<!-- mindflayer:begin -->\n<!-- mindflayer:rule review/tone -->\nTheirs.\n<!-- mindflayer:end -->\n"
+    );
+    fs::write(fixture.agents_md(), &theirs).unwrap();
+    let skill = fixture.project.root().join(".claude/skills/notes");
+    fs::create_dir_all(&skill).unwrap();
+    fs::write(skill.join("SKILL.md"), "Mine.\n").unwrap();
+
+    assert_eq!(
+        fixture.uninstall_typed("review/tone").unwrap(),
+        (
+            Kind::Rule,
+            Removed::Foreign {
+                name: String::from("review/tone"),
+                path: fixture.agents_md(),
+            }
+        )
+    );
+    assert_eq!(
+        fixture.uninstall_typed("notes").unwrap(),
+        (
+            Kind::Skill,
+            Removed::Foreign {
+                name: String::from("notes"),
+                path: skill,
+            }
+        )
+    );
+    assert_eq!(
+        fixture.uninstall_typed("nothing").unwrap(),
+        (
+            Kind::Skill,
+            Removed::Absent {
+                name: String::from("nothing"),
+            }
+        )
+    );
+    assert_eq!(fixture.text(), theirs);
 }
