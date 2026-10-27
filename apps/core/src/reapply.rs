@@ -178,17 +178,17 @@ pub struct Retarget {
     /// Copies left where they are, and why.
     pub left: Vec<Left>,
     /// The copy the added ones are made from.
-    source: Option<PathBuf>,
+    pub(crate) source: Option<PathBuf>,
     /// Each copy the record names that stays where it is, with the agent
     /// the ledger says it is for now.
-    kept: Vec<Target>,
+    pub(crate) kept: Vec<Target>,
     /// What the record names now, to tell whether it changes.
-    recorded: Vec<Target>,
+    pub(crate) recorded: Vec<Target>,
 }
 
 impl Retarget {
     /// Whether anything a front end would say happens to it.
-    fn moves(&self) -> bool {
+    pub(crate) fn moves(&self) -> bool {
         !(self.added.is_empty()
             && self.removed.is_empty()
             && self.forgotten.is_empty()
@@ -207,7 +207,7 @@ pub struct Added {
 
 impl Added {
     /// What the ledger records of it.
-    fn target(&self, root: &Path) -> Target {
+    pub(crate) fn target(&self, root: &Path) -> Target {
         Target {
             agent: install::agent_of(&self.agents),
             path: install::route(root, &self.path),
@@ -244,7 +244,7 @@ pub enum Why {
 impl Why {
     /// Whether the copy stops being Mindflayer's: its record goes, and in a
     /// local project its exclude entry, since what is there is its author's.
-    fn disowns(&self) -> bool {
+    pub(crate) fn disowns(&self) -> bool {
         matches!(self, Why::Edited | Why::Uncompared(_))
     }
 }
@@ -582,7 +582,7 @@ fn plan_with(
         let wanted = install::targets(&changed, kind).unwrap_or_default();
         let entry = install::entry_for_root(workspace, root);
         for record in ledger.records(&entry, kind)? {
-            let retarget = retarget(project, kind, &record, &wanted)?;
+            let retarget = retarget(project, kind, &record, &wanted, None)?;
             in_place.extend(
                 retarget
                     .kept
@@ -676,15 +676,21 @@ fn plan_with(
 
 /// How the installation `record` of `kind` moves in `project`, given a copy
 /// in each of `wanted`.
-fn retarget(
+///
+/// `offers` is where what was installed is offered now, for a record with
+/// no hash to be read as D-04 reads one from before hashes were kept
+/// ([`compare`]): `None` reads such a record as one whose copies cannot be
+/// compared, as a change of agents does, which looks for no offer.
+pub(crate) fn retarget(
     project: &MindProject,
     kind: Kind,
     record: &InstallRecord,
     wanted: &[InstallTarget],
-) -> Result<Retarget, ReapplyError> {
+    offers: Option<&[PathBuf]>,
+) -> Result<Retarget, InstallError> {
     let name = &record.name;
     if !install::is_folder_name(name) {
-        return Err(InstallError::UnsafeName { name: name.clone() }.into());
+        return Err(InstallError::UnsafeName { name: name.clone() });
     }
     let mut retarget = Retarget {
         kind,
@@ -708,7 +714,7 @@ fn retarget(
     for target in &record.targets {
         let path = install::recorded_copy(project, name, &target.path)?;
         let there = fs::symlink_metadata(&path).is_ok();
-        let found = there.then(|| compare(&path, record.content_hash.as_deref()));
+        let found = there.then(|| compare(&path, record.content_hash.as_deref(), offers));
         compared.push((path, target, found));
     }
     retarget.source = compared
@@ -788,20 +794,55 @@ enum Compared {
 /// How the copy at `path` stands against what was installed, whose hash is
 /// `recorded`.
 ///
-/// By the hash and nothing else, as D-04 compares a copy: a record without
-/// one, written before hashes were kept or for copies that could not be read
-/// back, cannot say, and a copy that is not there whole (a link, which the
-/// hash refuses, or a file that cannot be read) cannot be compared. Either is
-/// left where it is rather than deleted on a guess.
-fn compare(path: &Path, recorded: Option<&str>) -> Compared {
+/// By the hash, as D-04 compares a copy, and a copy that is not there whole
+/// (a link, which the hash refuses, or a file that cannot be read) cannot be
+/// compared. A record without one, written before hashes were kept or for
+/// copies that could not be read back, is held to what is `offers`ed now,
+/// when the caller looked: D-04 reads such a record as current only while
+/// its copy matches its offer byte for byte, and as edited otherwise.
+/// Without offers to hold it to it cannot say. What cannot be told is left
+/// where it is rather than deleted on a guess.
+fn compare(path: &Path, recorded: Option<&str>, offers: Option<&[PathBuf]>) -> Compared {
+    let hashed = hash::tree(path);
     let Some(recorded) = recorded else {
-        return Compared::Unknown(String::from("it was recorded without a hash"));
+        return match (hashed, offers) {
+            (_, None) => Compared::Unknown(String::from("it was recorded without a hash")),
+            (_, Some([])) => Compared::Unknown(String::from(
+                "it was recorded without a hash, and nothing offers it to hold it to",
+            )),
+            // Hashed all the same, so a copy holding a link is not compared
+            // through it, as a recorded copy never is.
+            (Err(error), Some(_)) => Compared::Unknown(error.to_string()),
+            (Ok(_), Some(offers)) => matches_an_offer(path, offers),
+        };
     };
-    match hash::tree(path) {
+    match hashed {
         Ok(hash) if hash == recorded => Compared::Untouched,
         Ok(_) => Compared::Edited,
         Err(error) => Compared::Unknown(error.to_string()),
     }
+}
+
+/// Whether the copy at `path` is what one of `offers` installs: its names
+/// and bytes, but for what an install leaves out (`copy::same_leaving`, as
+/// `install::is_current` tells which offer a project holds).
+///
+/// Any one of them will do, since a record from before hashes may not say
+/// which of two places offering one name it came from. One that cannot be
+/// read might have been it, so a copy matching none of the others is then
+/// one that cannot be compared rather than one edited.
+fn matches_an_offer(path: &Path, offers: &[PathBuf]) -> Compared {
+    let mut unread = None;
+    for offer in offers {
+        match copy::same_leaving(offer, path, &install::left_out_names()) {
+            Ok(true) => return Compared::Untouched,
+            Ok(false) => {}
+            Err(error) => {
+                unread.get_or_insert_with(|| format!("{}: {error}", offer.display()));
+            }
+        }
+    }
+    unread.map_or(Compared::Edited, Compared::Unknown)
 }
 
 /// The agent the ledger says the copy at `path` is for, as the record of
