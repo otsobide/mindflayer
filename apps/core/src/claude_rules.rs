@@ -12,6 +12,7 @@
 //! .claude/rules/mindflayer/rust/errors.md
 //! ```
 //!
+//! Such a rule reaches Claude alone, which is said ([`Warning::ClaudeOnly`]).
 //! The same files give Claude the rules about every file when it reads no
 //! block, in [`Mode::Fallback`]. Which mode applies is the caller's to say,
 //! from whether Claude reads `AGENTS.md` (#44), never from whether a block
@@ -38,14 +39,14 @@
 //! written where the block of `AGENTS.md` would be refused
 //! ([`crate::agents_md::misplaced`]), nor through a link out of the project.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::io::{self, Write as _};
 use std::path::{Path, PathBuf};
 
 use thiserror::Error;
 
-use crate::agent::AgentHomes;
+use crate::agent::{Agent, AgentHomes};
 use crate::agents_md::{self, Misplaced};
 use crate::artifact::{issue_list, name_issues, Artifact, ArtifactError, Declared};
 use crate::catalog::{report_order, spelled};
@@ -187,6 +188,11 @@ pub enum Written {
 /// it nor any other file from being rendered.
 #[derive(Debug, Clone, PartialEq, Eq, Error)]
 pub enum Warning {
+    /// The rule is about some files only, so it reaches Claude Code alone:
+    /// `missed` are the project's agents that read no `.claude/rules`, in
+    /// report order. Never empty.
+    #[error("{}", claude_only(.route, .missed))]
+    ClaudeOnly { route: String, missed: Vec<Agent> },
     /// Somebody's file is where the rule's would go.
     #[error(
         "{path}: not a file Mindflayer wrote, so rule `{route}` is not written there and \
@@ -260,6 +266,7 @@ pub fn render<'a>(
     let mut rules: Vec<&Artifact> = rules.into_iter().collect();
     rules.sort_by(|a, b| report_order(a, b));
     let mut asked: BTreeMap<String, Vec<u8>> = BTreeMap::new();
+    let mut scoped = BTreeSet::new();
     for rule in rules {
         let Declared::Rule(manifest) = rule.declared() else {
             return Err(ClaudeRulesError::NotARule {
@@ -278,6 +285,9 @@ pub fn render<'a>(
         let bytes = fs::read(&file).map_err(|source| ArtifactError::Read { path: file, source })?;
         if asked.contains_key(&route) {
             return Err(ClaudeRulesError::Twice { route });
+        }
+        if manifest.is_scoped() {
+            scoped.insert(route.clone());
         }
         asked.insert(route, bytes);
     }
@@ -335,10 +345,17 @@ pub fn render<'a>(
 
     // Every file written before any is taken away, so a rule renamed is
     // never missing from Claude's folder between its old file and its new.
+    let missed = missed(project);
     let mut files = Vec::new();
     let mut warnings = Vec::new();
     let mut removals = Vec::new();
     for (route, path, plan) in plans {
+        if scoped.contains(&route) && !missed.is_empty() {
+            warnings.push(Warning::ClaudeOnly {
+                route: route.clone(),
+                missed: missed.clone(),
+            });
+        }
         let recorded = owned.get(&route).map(|hash| (*hash).to_owned());
         let (written, hash) = match plan {
             Plan::Create(bytes) => match create(&path, &bytes) {
@@ -437,11 +454,61 @@ impl Warning {
     /// The route of the rule it is about.
     fn route(&self) -> &str {
         match self {
-            Warning::Foreign { route, .. }
+            Warning::ClaudeOnly { route, .. }
+            | Warning::Foreign { route, .. }
             | Warning::Edited { route, .. }
             | Warning::Failed { route, .. } => route,
         }
     }
+}
+
+/// The agents `project` names that a rule about some files only does not
+/// reach, in report order: every agent but those that read
+/// [`reads_rule_files`], for a project a `mind.toml` marks, which names
+/// none, so any of them may work in it.
+fn missed(project: &MindProject) -> Vec<Agent> {
+    let named = project
+        .settings()
+        .map_or(&Agent::ALL[..], |settings| &settings.agents[..]);
+    let mut missed: Vec<Agent> = named
+        .iter()
+        .copied()
+        .filter(|agent| !reads_rule_files(*agent))
+        .collect();
+    missed.sort();
+    missed.dedup();
+    missed
+}
+
+/// Whether `agent` reads a project's `.claude/rules`, and honours `paths`
+/// in what it finds there.
+///
+/// Claude does (docs/agents.md, verified on 2.1.309). Codex and OpenCode do
+/// not: their instruction files are the `AGENTS.md` chain, and OpenCode's
+/// `instructions` (docs-only, both); were either to read the folder after
+/// all, [`Warning::ClaudeOnly`] would be too cautious, never wrong about
+/// Claude. One arm an agent with no wildcard, so a new agent does not
+/// compile until somebody has said whether it reads them. Not
+/// [`Agent::reads`], which says no folder of rules is read until the
+/// ledger records what is written there (#45), so no listing takes these
+/// files for somebody's.
+fn reads_rule_files(agent: Agent) -> bool {
+    match agent {
+        Agent::Claude => true,
+        Agent::Codex | Agent::OpenCode => false,
+    }
+}
+
+/// What [`Warning::ClaudeOnly`] says of the rule at `route`, which the
+/// agents in `missed` are not given.
+fn claude_only(route: &str, missed: &[Agent]) -> String {
+    let names: Vec<&str> = missed.iter().map(|agent| agent.name()).collect();
+    let (spoken, reads) = match names.split_last() {
+        Some((last, [])) => ((*last).to_owned(), "reads"),
+        Some((last, rest)) => (format!("{} and {last}", rest.join(", ")), "read"),
+        None => (String::new(), "read"),
+    };
+    format!("rule `{route}` states `paths`, so it reaches claude only: {spoken} {reads} no .claude/rules")
 }
 
 /// `route` held to the rules every name is ([`name_issues`]), since it

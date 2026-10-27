@@ -176,6 +176,19 @@ fn a_path_scoped_rule_is_one_file_and_no_section_in_the_block() {
             hash: hash::bytes(SCOPED.as_bytes()),
         }]
     );
+    // Said, naming the project's agents it does not reach.
+    assert_eq!(
+        rendered.warnings,
+        [Warning::ClaudeOnly {
+            route: "rust/errors".to_owned(),
+            missed: vec![Agent::Codex, Agent::OpenCode],
+        }]
+    );
+    assert_eq!(
+        rendered.warnings[0].to_string(),
+        "rule `rust/errors` states `paths`, so it reaches claude only: codex and opencode \
+         read no .claude/rules"
+    );
     assert_eq!(block.routes, ["git/no-force-push"]);
     let text = fs::read_to_string(&block.file).unwrap();
     assert!(!text.contains("rust/errors"), "{text}");
@@ -829,4 +842,60 @@ fn a_link_inside_the_project_is_followed() {
 
     assert_eq!(written(&rendered), [("a", Written::Created)]);
     assert!(kept.join("rules/mindflayer/a.md").is_file());
+}
+
+#[test]
+fn a_path_scoped_rule_is_said_to_miss_only_the_agents_its_project_names() {
+    let fixture = fixture();
+    let rule = fixture.rule("rust/errors", SCOPED);
+    let unscoped = fixture.rule("git/no-force-push", UNSCOPED);
+    let missed = |project: &MindProject| -> Vec<Vec<Agent>> {
+        claude_rules::render(
+            &fixture.workspace,
+            project,
+            [&rule, &unscoped],
+            Mode::Fallback,
+            &[],
+            &AgentHomes::default(),
+        )
+        .unwrap()
+        .warnings
+        .into_iter()
+        .map(|warning| match warning {
+            Warning::ClaudeOnly { missed, .. } => missed,
+            other => panic!("{other:?}"),
+        })
+        .collect()
+    };
+    let project = |name: &str, agents: &[Agent]| {
+        let root = fixture.dir.path().join(name);
+        fs::create_dir_all(&root).unwrap();
+        MindProject::init_settings(&root, agents, Share::Shared, &Directories::default())
+            .unwrap()
+            .0
+    };
+
+    assert_eq!(
+        missed(&project("claude", &[Agent::Claude])),
+        Vec::<Vec<Agent>>::new()
+    );
+    assert_eq!(
+        missed(&project("two", &[Agent::OpenCode, Agent::Claude])),
+        [[Agent::OpenCode]]
+    );
+    // A project a `mind.toml` marks names none, so any of them may work in
+    // it.
+    let older = fixture.dir.path().join("older");
+    fs::create_dir_all(&older).unwrap();
+    let (older, _) = MindProject::init(&older).unwrap();
+    assert_eq!(missed(&older), [[Agent::Codex, Agent::OpenCode]]);
+
+    let one = Warning::ClaudeOnly {
+        route: "rust/errors".to_owned(),
+        missed: vec![Agent::Codex],
+    };
+    assert!(
+        one.to_string().ends_with("codex reads no .claude/rules"),
+        "{one}"
+    );
 }
