@@ -633,3 +633,100 @@ fn a_workspace_sees_a_project_that_keeps_its_skills_elsewhere() {
     // The workspace reads the project's own answer rather than assuming one.
     assert!(outcome.stdout.contains("deploy"), "{}", outcome.stdout);
 }
+
+// ---------------------------------------------------------------------------
+// A project marked by its settings
+// ---------------------------------------------------------------------------
+
+/// Write `contents` at `route` below `root`, wherever that is.
+fn put(root: &Path, route: &str, contents: &str) {
+    let path = root.join(route);
+    fs::create_dir_all(path.parent().unwrap()).unwrap();
+    fs::write(path, contents).unwrap();
+}
+
+/// A project in `dir`, marked by its settings, naming every agent and
+/// authoring skills in `skills/`.
+fn marked(dir: &Path) -> MindProject {
+    let directories = mindflayer_core::Directories::default().with(Kind::Skill, "skills");
+    MindProject::init_settings(
+        dir,
+        &mindflayer_core::Agent::ALL,
+        mindflayer_core::Share::Shared,
+        &directories,
+    )
+    .unwrap()
+    .0
+}
+
+#[test]
+fn a_skill_in_both_agents_folders_is_listed_once() {
+    let dir = TempDir::new().unwrap();
+    marked(dir.path());
+    let deploy = skill_file("deploy", "Ship it");
+    put(dir.path(), ".agents/skills/deploy/SKILL.md", &deploy);
+    put(dir.path(), ".claude/skills/deploy/SKILL.md", &deploy);
+
+    let outcome = mind(dir.path(), &["list"]).unwrap();
+
+    assert_eq!(outcome.stdout, "deploy  Ship it\n");
+    assert!(
+        outcome.ok && outcome.stderr.is_empty(),
+        "{:?}",
+        outcome.stderr
+    );
+}
+
+#[test]
+fn copies_that_differ_are_a_warning_and_validate_counts_them() {
+    let dir = TempDir::new().unwrap();
+    marked(dir.path());
+    put(
+        dir.path(),
+        ".agents/skills/deploy/SKILL.md",
+        &skill_file("deploy", "Ship it"),
+    );
+    put(
+        dir.path(),
+        ".claude/skills/deploy/SKILL.md",
+        &skill_file("deploy", "Ship it otherwise"),
+    );
+    let warning = format!(
+        "warning: the copies of `deploy` at {} and {} differ, so the agents reading them do not \
+         all load the same skill",
+        dir.path().join(".agents/skills/deploy").display(),
+        dir.path().join(".claude/skills/deploy").display()
+    );
+
+    let listed = mind(dir.path(), &["list"]).unwrap();
+    let checked = mind(dir.path(), &["validate"]).unwrap();
+
+    assert_eq!(listed.stdout, "deploy  Ship it\n");
+    assert_eq!(listed.stderr, std::slice::from_ref(&warning));
+    assert!(!listed.ok);
+    assert_eq!(
+        checked.stdout,
+        "deploy: ok\n\n1 skill checked, 0 invalid, 1 with copies that differ\n"
+    );
+    assert_eq!(checked.stderr, [warning]);
+    assert!(!checked.ok);
+}
+
+#[test]
+fn an_empty_project_marked_by_its_settings_says_every_folder_it_looked_in() {
+    let dir = TempDir::new().unwrap();
+    let project = marked(dir.path());
+
+    let outcome = mind(dir.path(), &["list"]).unwrap();
+
+    let name = project.name();
+    assert_eq!(
+        outcome.stdout,
+        format!(
+            "nothing found\n  {name}: {}\n  {name}: {}\n  {name}: {}\n",
+            dir.path().join(".agents").join("skills").display(),
+            dir.path().join(".claude").join("skills").display(),
+            dir.path().join("skills").display()
+        )
+    );
+}

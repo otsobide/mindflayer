@@ -510,3 +510,41 @@ fn mind_add_from_a_template_refuses_when_the_workspace_that_lends_it_cannot_be_r
     assert!(matches!(*failure.error, CliError::Workspace(_)));
     assert!(!alpha.join("skills/deploy").exists());
 }
+
+/// Write `contents` at `route` below `root`, wherever that is.
+fn put(root: &Path, route: &str, contents: &str) {
+    let path = root.join(route);
+    fs::create_dir_all(path.parent().unwrap()).unwrap();
+    fs::write(path, contents).unwrap();
+}
+
+#[test]
+fn a_skill_only_in_an_agents_folder_is_not_changed_from_a_project() {
+    let dir = TempDir::new().unwrap();
+    let directories = mindflayer_core::Directories::default().with(Kind::Skill, "skills");
+    MindProject::init_settings(
+        dir.path(),
+        &mindflayer_core::Agent::ALL,
+        mindflayer_core::Share::Shared,
+        &directories,
+    )
+    .unwrap();
+    put(
+        dir.path(),
+        ".claude/skills/review/SKILL.md",
+        &skill_file("review", "Reads the diff"),
+    );
+
+    let failure = mind(dir.path(), &["rename", "review", "audit"]).unwrap_err();
+
+    assert!(
+        failure
+            .error
+            .to_string()
+            .contains("in a folder this project's agents read and it does not author in"),
+        "{}",
+        failure.error
+    );
+    assert!(dir.path().join(".claude/skills/review/SKILL.md").is_file());
+    assert!(!dir.path().join(".claude/skills/audit").exists());
+}

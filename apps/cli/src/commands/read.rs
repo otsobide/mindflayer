@@ -200,10 +200,12 @@ pub(crate) fn list(catalog: &Catalog, projects: &[MindProject], level: Level) ->
             }
         }
         for project in projects {
-            // A kind the project keeps no folder for was looked for nowhere.
+            // Every folder discovery read, as core says: a project marked by
+            // its settings is read in its agents' folders too. A kind the
+            // project keeps no folder for was looked for nowhere.
             for directory in Kind::ALL
                 .into_iter()
-                .filter_map(|kind| project.directory_for(kind))
+                .flat_map(|kind| Catalog::folders(project, kind))
             {
                 let _ = writeln!(text, "  {}: {}", project.name(), directory.display());
             }
@@ -520,19 +522,30 @@ pub(crate) fn validate(
 
     // Counting only what loaded would report "0 invalid" for a project whose
     // files could not be read at all, with the reason on stderr where a CI log
-    // will not put it next to the verdict.
-    let unreadable = catalog.failures().len();
-    let unreadable = if unreadable == 0 {
-        String::new()
-    } else {
-        format!(", {} unreadable", plural(unreadable, "file"))
-    };
+    // will not put it next to the verdict. Copies of one name that differ
+    // were read, so they are counted apart, for the same reason.
+    let unreadable = catalog
+        .failures()
+        .iter()
+        .filter(|failure| failure.is_unreadable())
+        .count();
+    let differing = artifacts
+        .iter()
+        .filter(|artifact| artifact.copies_differ())
+        .count();
+    let mut tally = String::new();
+    if unreadable > 0 {
+        let _ = write!(tally, ", {} unreadable", plural(unreadable, "file"));
+    }
+    if differing > 0 {
+        let _ = write!(tally, ", {differing} with copies that differ");
+    }
     let _ = writeln!(
         text,
-        "\n{} checked, {invalid} invalid{unreadable}",
+        "\n{} checked, {invalid} invalid{tally}",
         counted(&artifacts)
     );
-    Ok((text, invalid == 0 && unreadable.is_empty()))
+    Ok((text, invalid == 0 && unreadable == 0 && differing == 0))
 }
 
 /// "2 skills", "2 skills and 1 rule": what was looked at, by kind.
