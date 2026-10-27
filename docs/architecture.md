@@ -776,8 +776,11 @@ is read from the one folder its marker names, exactly as before.
   `"skills": ".claude/skills"` say, is read once, matched by its spelling and
   then on disk (`same_directory`), so a skill in it is listed once. Whether
   that skill is the project's own or an install's is the ledger's to say,
-  below. `Catalog::folders` is the list read, in order, which `list` names
-  when it finds nothing.
+  below. So are two targets that are one folder on disk, `.claude/skills`
+  linked to `.agents/skills` so that Claude and Codex share it, under the
+  first spelling: read twice, each failure there would be said twice.
+  `Catalog::folders` is the list read, in order, which `list` names when it
+  finds nothing.
 - **One artifact a name.** Every copy of one name the project holds, in a
   target, a folder one of its agents reads or the folder it authors in, is
   one artifact (`Artifact::copies`), described by its first copy: the
