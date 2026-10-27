@@ -281,18 +281,89 @@ fn applying_an_untouched_minds_screen_asks_nothing() {
 #[test]
 fn flayer_minds_is_a_command_at_both_spellings() {
     let direct = FlayerCli::try_parse_from(["flayer", "minds"]).unwrap();
-    let nested = Cli::try_parse_from(["mind", "flayer", "minds"]).unwrap();
+    let nested = Cli::try_parse_from(["mind", "flayer", "minds", "work"]).unwrap();
 
     assert!(matches!(
         direct.command,
-        Some(mindflayer_cli::FlayerCommand::Minds)
+        Some(mindflayer_cli::FlayerCommand::Minds { ref roots }) if roots.is_empty()
     ));
     assert!(matches!(
         nested.command,
         Some(mindflayer_cli::Command::Flayer {
-            command: Some(mindflayer_cli::FlayerCommand::Minds)
-        })
+            command: Some(mindflayer_cli::FlayerCommand::Minds { ref roots })
+        }) if roots == &[PathBuf::from("work")]
     ));
+}
+
+/// `workspace_with_candidates`, and beside it `work`, a folder holding
+/// `acme/delta`, a mind project, and `plain`, a git repository: what
+/// `flayer minds <work>` offers.
+fn candidates_and_a_folder_beside() -> (TempDir, TempDir) {
+    let dir = workspace_with_candidates();
+    let work = TempDir::new().unwrap();
+    let delta = work.path().join("acme/delta");
+    fs::create_dir_all(&delta).unwrap();
+    new_project(&delta);
+    fs::create_dir_all(work.path().join("plain/.git")).unwrap();
+    (dir, work)
+}
+
+#[test]
+fn flayer_minds_given_a_folder_offers_what_is_under_it_beside_every_linked_one() {
+    let (dir, work) = candidates_and_a_folder_beside();
+
+    let app = tui::minds(dir.path(), &[work.path().to_path_buf()], &Lookup::default()).unwrap();
+
+    // By path, since the lines run from the workspace root, outside the
+    // folder; and not `gamma` or `repo`, under the workspace it was not
+    // told to look under.
+    let delta = work.path().join("acme/delta").display().to_string();
+    let plain = work.path().join("plain").display().to_string();
+    assert_eq!(
+        minds_rows(&app),
+        vec![delta.as_str(), plain.as_str(), "alpha", "beta"]
+    );
+    let drawn = tui_drawn(&app);
+    assert!(
+        drawn.contains(&format!("found under {}", work.path().display())),
+        "{drawn}"
+    );
+}
+
+#[test]
+fn applying_the_minds_screen_given_a_folder_links_by_path_and_looks_there_again() {
+    let (dir, work) = candidates_and_a_folder_beside();
+    let mut app = tui::minds(dir.path(), &[work.path().to_path_buf()], &Lookup::default()).unwrap();
+    let delta = work.path().join("acme/delta");
+    let spelled = delta.display().to_string();
+
+    press_key(&mut app, KeyCode::Char(' '));
+    press_key(&mut app, KeyCode::Char('a'));
+    let task = press_and_run(&mut app, KeyCode::Char('y'));
+
+    assert_eq!(
+        task,
+        Some(Task::Minds {
+            init: Vec::new(),
+            link: vec![spelled.clone()],
+            unlink: Vec::new(),
+        })
+    );
+    assert!(FlayerWorkspace::open(dir.path()).unwrap().is_linked(&delta));
+    let transcript = app.transcript();
+    assert!(
+        transcript.contains(&format!("$ flayer link {spelled}\n")),
+        "{transcript}"
+    );
+    // Read again under the same folder: `plain` is still offered, and
+    // `gamma`, under the workspace, still is not.
+    press_key(&mut app, KeyCode::Esc);
+    press_key(&mut app, KeyCode::Char('m'));
+    let rows = minds_rows(&app);
+    let plain = work.path().join("plain").display().to_string();
+    assert!(rows.contains(&plain.as_str()), "{rows:?}");
+    assert!(!rows.contains(&"gamma"), "{rows:?}");
+    assert_eq!(rows.len(), 4, "{rows:?}");
 }
 
 #[test]
@@ -1406,7 +1477,7 @@ fn flayer_minds_opens_on_the_default_workspace_without_making_it() {
     fs::create_dir(&alpha).unwrap();
     mind(&alpha, &["init"]).unwrap();
 
-    let app = tui::minds(elsewhere.path(), &Lookup::at_home(Some(home.path()))).unwrap();
+    let app = tui::minds(elsewhere.path(), &[], &Lookup::at_home(Some(home.path()))).unwrap();
 
     assert_eq!(minds_rows(&app), vec!["alpha"]);
     assert!(!home.path().join(FLAYER_DIR).exists());
@@ -1416,7 +1487,7 @@ fn flayer_minds_opens_on_the_default_workspace_without_making_it() {
 fn flayer_minds_with_no_workspace_and_no_default_says_so() {
     let elsewhere = TempDir::new().unwrap();
 
-    let error = tui::minds(elsewhere.path(), &Lookup::default()).unwrap_err();
+    let error = tui::minds(elsewhere.path(), &[], &Lookup::default()).unwrap_err();
 
     assert!(matches!(error, CliError::NotInWorkspace(_)), "{error}");
 }
@@ -1426,7 +1497,7 @@ fn flayer_minds_opens_on_the_default_workspace_not_on_one_above_its_home() {
     let (_outer, home) = home_inside_a_workspace();
     let elsewhere = TempDir::new().unwrap();
 
-    let app = tui::minds(elsewhere.path(), &Lookup::at_home(Some(&home))).unwrap();
+    let app = tui::minds(elsewhere.path(), &[], &Lookup::at_home(Some(&home))).unwrap();
 
     // Not `alpha`, `beta` and `h/gamma`: those are the workspace above.
     assert_eq!(minds_rows(&app), vec!["gamma"]);

@@ -559,7 +559,15 @@ pub enum FlayerCommand {
 
     /// Open the minds screen: every mind project and repository under this
     /// workspace, ticked where it is linked, to link and unlink in one pass.
-    Minds,
+    ///
+    /// Given folders, it looks for what to link under those instead, as
+    /// `flayer scan` does, and still lists every project the workspace links.
+    Minds {
+        /// Each folder to look under, itself included [default: the
+        /// workspace's root].
+        #[arg(value_name = "DIR")]
+        roots: Vec<PathBuf>,
+    },
 
     /// Look for projects and repositories to link: under this workspace, or
     /// under each folder given.

@@ -234,7 +234,11 @@ fn projects(app: &App, workspace: &Workspace, frame: &mut Frame, area: Rect) {
         ];
         if !workspace.unlinked.is_empty() {
             text.push(Line::from(Span::styled(
-                format!("{} found under here", workspace.unlinked.len()),
+                format!(
+                    "{} found under {}",
+                    workspace.unlinked.len(),
+                    looked_under(workspace)
+                ),
                 dim(),
             )));
         }
@@ -301,9 +305,12 @@ fn holdings(app: &App, workspace: &Workspace, frame: &mut Frame, area: Rect) {
     let focused = app.focus == Focus::Items;
     let Some(member) = app.member() else {
         let text = if workspace.unlinked.is_empty() {
-            "nothing linked; l links a project by its path"
+            String::from("nothing linked; l links a project by its path")
         } else {
-            "nothing linked; l picks from what is under this workspace"
+            format!(
+                "nothing linked; l picks from what is under {}",
+                looked_under(workspace)
+            )
         };
         frame.render_widget(
             Paragraph::new(Span::styled(text, dim()))
@@ -774,7 +781,10 @@ fn linking(app: &App, form: &LinkForm, frame: &mut Frame, area: Rect) {
     if workspace.unlinked.is_empty() {
         frame.render_widget(
             Paragraph::new(Span::styled(
-                "nothing unlinked found under this workspace; type a path",
+                format!(
+                    "nothing unlinked found under {}; type a path",
+                    looked_under(workspace)
+                ),
                 dim(),
             )),
             rows[2],
@@ -1011,6 +1021,20 @@ fn reading(reader: &Reader, frame: &mut Frame, area: Rect) {
     );
 }
 
+/// Where the screen looked for what could be linked, as its texts name it:
+/// the workspace, or the folders `flayer minds` was given.
+fn looked_under(workspace: &Workspace) -> String {
+    if workspace.roots.is_empty() {
+        return String::from("this workspace");
+    }
+    let roots: Vec<String> = workspace
+        .roots
+        .iter()
+        .map(|root| printable(&root.display().to_string()))
+        .collect();
+    roots.join(", ")
+}
+
 /// The minds screen: every directory the workspace manages or could, ticked
 /// where it does, over everything below the header.
 fn minds_screen(app: &App, screen: &Minds, frame: &mut Frame, area: Rect) {
@@ -1025,6 +1049,16 @@ fn minds_screen(app: &App, screen: &Minds, frame: &mut Frame, area: Rect) {
     let name = app
         .workspace()
         .map_or_else(String::new, |workspace| printable(&workspace.name));
+    // Where it looked, when that is not the workspace the title names.
+    let under = app
+        .workspace()
+        .filter(|workspace| !workspace.roots.is_empty())
+        .map_or_else(String::new, |workspace| {
+            format!(", found under {}", looked_under(workspace))
+        });
+    let looked = app
+        .workspace()
+        .map_or_else(|| String::from("this workspace"), looked_under);
     let (link, init, unlink) = screen.counts();
     let waiting = match (link, unlink) {
         (0, 0) => String::from("nothing marked"),
@@ -1036,7 +1070,7 @@ fn minds_screen(app: &App, screen: &Minds, frame: &mut Frame, area: Rect) {
     let block = Block::bordered()
         .border_type(BorderType::Thick)
         .border_style(Style::default().fg(Color::Cyan))
-        .title(format!(" Minds in {name} "))
+        .title(format!(" Minds in {name}{under} "))
         .title_bottom(
             Line::from(format!(
                 " ↑↓ move   space tick   a apply   esc back · {waiting} "
@@ -1049,7 +1083,9 @@ fn minds_screen(app: &App, screen: &Minds, frame: &mut Frame, area: Rect) {
     if screen.rows.is_empty() {
         frame.render_widget(
             Paragraph::new(Span::styled(
-                "nothing linked, and no repository under this workspace; l links one by its path",
+                format!(
+                    "nothing linked, and no repository under {looked}; l links one by its path"
+                ),
                 dim(),
             ))
             .wrap(Wrap { trim: true }),

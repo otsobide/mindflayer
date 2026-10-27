@@ -351,8 +351,11 @@ fn run_flayer(
         }
 
         // A screen, so it opens as one: on the default workspace before it
-        // is made too, which its first change makes.
-        FlayerCommand::Minds => tui::run_minds(directory, lookup),
+        // is made too, which its first change makes. Its folders are taken
+        // from here as `scan` takes them.
+        FlayerCommand::Minds { roots } => {
+            tui::run_minds(directory, &targets(directory, roots)?, lookup)
+        }
 
         // Each folder taken from here as `link` takes a path, and each path
         // found spelled as `flayer link` run here would take it, so a line of
