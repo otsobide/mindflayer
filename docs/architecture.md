@@ -1986,7 +1986,11 @@ partial for a copy that is missing.
   reported all the same, as `mind list` reports a project nothing links, with
   a hint saying why nothing in it reads as installed. Refusing, as `mind
   install` refuses without a workspace that manages the project, was turned
-  down: a read has nothing to protect by refusing.
+  down: a read has nothing to protect by refusing. So one found that cannot
+  be read is a warning beside the report, as it is beside a change, and the
+  warning says why nothing reads as installed in place of the hint. One `-W`
+  or the activation names that is no workspace still refuses, as it refuses
+  every command: whoever chose it meant that one.
 
 The CLI lays the report out as `list` lays out its own: a project column only
 when its rows come from more than one project, or a stale entry's row, which

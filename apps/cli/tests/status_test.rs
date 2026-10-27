@@ -211,6 +211,56 @@ fn a_project_the_workspace_above_does_not_link_says_so() {
 }
 
 #[test]
+fn a_workspace_above_that_cannot_be_read_is_a_warning_beside_the_report() {
+    let dir = TempDir::new().unwrap();
+    flayer(dir.path(), &["init"]).unwrap();
+    let alpha = dir.path().join("alpha");
+    fs::create_dir(&alpha).unwrap();
+    new_project(&alpha);
+    flayer(dir.path(), &["link", "alpha"]).unwrap();
+    mind(&alpha, &["add", "skill", "review", "Review a change"]).unwrap();
+    let marker = dir.path().join(FLAYER_DIR).join(FLAYER_CONFIG);
+    let mut text = fs::read_to_string(&marker).unwrap();
+    text.push_str("garbage = [\n");
+    fs::write(&marker, text).unwrap();
+
+    let outcome = mind(&alpha, &["status"]).unwrap();
+    let json = mind(&alpha, &["status", "--json"]).unwrap();
+
+    assert_eq!(outcome.stdout, "review  authored  -\n");
+    // The warning says why nothing reads as installed: no hint guesses.
+    assert_eq!(outcome.stderr.len(), 1, "{:?}", outcome.stderr);
+    let said = marker.display().to_string();
+    assert!(
+        outcome.stderr[0].starts_with("warning: ") && outcome.stderr[0].contains(&said),
+        "{:?}",
+        outcome.stderr
+    );
+    assert!(!outcome.ok);
+    let (report, warnings): (Report, _) = enveloped(&json);
+    assert_eq!(words(&report), ["alpha review authored -"]);
+    assert_eq!(warnings, [&outcome.stderr[0]["warning: ".len()..]]);
+    assert!(json.stderr.is_empty(), "{:?}", json.stderr);
+    assert!(!json.ok);
+}
+
+#[test]
+fn a_workspace_named_that_is_none_still_refuses_mind_status() {
+    let dir = TempDir::new().unwrap();
+    new_project(dir.path());
+    let nowhere = TempDir::new().unwrap();
+
+    let named = nowhere.path().to_string_lossy();
+    let failure = mind(dir.path(), &["status", "-W", &named]).unwrap_err();
+
+    assert!(
+        matches!(*failure.error, CliError::Chosen { .. }),
+        "{}",
+        failure.error
+    );
+}
+
+#[test]
 fn a_ledger_that_will_not_open_is_a_warning_beside_the_report() {
     let (_dir, projects) = workspace_with_everything();
     let ledger = projects.join(FLAYER_DIR).join("mindflayer.db");

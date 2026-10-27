@@ -9,7 +9,7 @@ use mindflayer_core::{Agent, FlayerWorkspace, Kind, MindProject, Status, StatusF
 use super::consulted;
 use super::read::looked_in;
 use crate::render::{json, printable, table};
-use crate::{Failure, Lookup, Outcome};
+use crate::{CliError, Failure, Lookup, Outcome};
 
 /// What the state column says of an entry that would not open.
 const STALE: &str = "stale";
@@ -28,7 +28,7 @@ pub(crate) fn status_of_workspace(workspace: &FlayerWorkspace, as_json: bool) ->
         ));
     }
     let (status, failures) = Status::of_workspace(workspace);
-    report(&status, failures, Layout::across(as_json), || {
+    report(&status, said(&failures), Layout::across(as_json), || {
         workspace.projects().0
     })
 }
@@ -40,7 +40,9 @@ pub(crate) fn status_of_project(
     as_json: bool,
 ) -> Outcome {
     let (status, failures) = Status::of_project(&project, Some(workspace));
-    report(&status, failures, Layout::one(as_json), || vec![project])
+    report(&status, said(&failures), Layout::one(as_json), || {
+        vec![project]
+    })
 }
 
 /// `mind status`: the project at or above here, against the workspace `mind`
@@ -52,12 +54,23 @@ pub(crate) fn status_of_project(
 ///
 /// The hint goes to stderr in JSON too: it is advice for whoever reads the
 /// terminal, not something the data leaves out.
+///
+/// A workspace found that cannot be read is said as a warning beside the
+/// report, in its envelope under `--json`, as [`consulting`](super::consulting)
+/// says one beside a change, rather than refusing it: a read has nothing to
+/// protect by refusing, and `mind list` reports the same project. Not one
+/// `-W` or the activation names that is no workspace, which refuses this as
+/// it refuses every other command: whoever chose it meant that one.
 pub(crate) fn status_here(
     project: MindProject,
     lookup: &Lookup,
     as_json: bool,
 ) -> Result<Outcome, Failure> {
-    let workspace = consulted(&project, lookup)?;
+    let (workspace, unread) = match consulted(&project, lookup) {
+        Ok(workspace) => (workspace, None),
+        Err(error @ CliError::Chosen { .. }) => return Err(error.into()),
+        Err(error) => (None, Some(error.to_string())),
+    };
     if let Some(workspace) = workspace
         .as_ref()
         .filter(|workspace| workspace.is_linked(project.root()))
@@ -65,16 +78,22 @@ pub(crate) fn status_here(
         return Ok(status_of_project(workspace, project, as_json));
     }
     let (status, failures) = Status::of_project(&project, None);
-    let mut outcome = report(&status, failures, Layout::one(as_json), || vec![project]);
-    outcome.stderr.push(match workspace {
-        Some(workspace) => format!(
+    let mut warnings: Vec<String> = unread.iter().cloned().collect();
+    warnings.extend(said(&failures));
+    let mut outcome = report(&status, warnings, Layout::one(as_json), || vec![project]);
+    // Not when the workspace could not be read: the warning says why
+    // nothing reads as installed, and that none links the project is not
+    // known.
+    outcome.stderr.extend(match (workspace, unread) {
+        (Some(workspace), _) => Some(format!(
             "hint: the workspace at {} does not link this project, so nothing in it reads as installed; \
              `mind link` links it",
             workspace.root().display()
-        ),
-        None => String::from(
+        )),
+        (None, None) => Some(String::from(
             "hint: no workspace links this project, so nothing in it reads as installed",
-        ),
+        )),
+        (None, Some(_)) => None,
     });
     Ok(outcome)
 }
@@ -107,24 +126,30 @@ impl Layout {
     }
 }
 
-/// The report laid out, with what could not be read said: on stderr beside
-/// a table, inside the envelope beside JSON.
+/// What a report could not read, each as a warning says it, without the
+/// prefix.
+fn said(failures: &[StatusFailure]) -> Vec<String> {
+    failures.iter().map(ToString::to_string).collect()
+}
+
+/// The report laid out, with what could not be read (`warnings`) said: on
+/// stderr beside a table, inside the envelope beside JSON.
 ///
 /// `looked` gives the projects it read, asked only for a table that found
 /// nothing, to say where it looked.
 fn report(
     status: &Status,
-    failures: Vec<StatusFailure>,
+    warnings: Vec<String>,
     layout: Layout,
     looked: impl FnOnce() -> Vec<MindProject>,
 ) -> Outcome {
     let across = match layout {
-        Layout::Json => return json(status, failures.iter().map(ToString::to_string).collect()),
+        Layout::Json => return json(status, warnings),
         Layout::Table { across } => across,
     };
-    let stderr: Vec<String> = failures
+    let stderr: Vec<String> = warnings
         .iter()
-        .map(|failure| format!("warning: {failure}"))
+        .map(|warning| format!("warning: {warning}"))
         .collect();
     let ok = stderr.is_empty();
     let stdout = rows(status, across).unwrap_or_else(|| {
