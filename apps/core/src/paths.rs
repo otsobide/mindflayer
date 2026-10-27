@@ -10,6 +10,8 @@
 
 use std::path::{Component, Path, PathBuf};
 
+use serde::Serializer;
+
 /// Resolve `.` and `..` without touching the disk.
 ///
 /// `..` at the root is dropped rather than escaping it, so the result of
@@ -105,6 +107,12 @@ pub fn to_config_string(path: &Path) -> Option<String> {
     } else {
         text.replace(std::path::MAIN_SEPARATOR, "/")
     })
+}
+
+/// A path as text in a report's JSON, whatever bytes it holds: a report that
+/// failed over one unprintable path would say nothing about the rest.
+pub(crate) fn lossy<S: Serializer>(path: &Path, serializer: S) -> Result<S::Ok, S::Error> {
+    serializer.serialize_str(&path.to_string_lossy())
 }
 
 #[cfg(test)]

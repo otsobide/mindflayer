@@ -48,7 +48,7 @@ pub struct ProjectStatus {
     /// `flayer unlink` take. None for a project no workspace links.
     pub entry: Option<String>,
     /// Where it is.
-    #[serde(serialize_with = "lossy")]
+    #[serde(serialize_with = "paths::lossy")]
     pub path: PathBuf,
     /// The agents its settings name, in report order: none for a project a
     /// `mind.toml` marks, which names none.
@@ -387,12 +387,6 @@ fn standing(
 /// A registry entry as the marker spells it, with `/` whatever the platform.
 fn spelled(entry: &Path) -> String {
     paths::to_config_string(entry).unwrap_or_else(|| entry.display().to_string())
-}
-
-/// A path as text, whatever bytes it holds: a report that failed over one
-/// unprintable path would say nothing about the rest.
-fn lossy<S: Serializer>(path: &Path, serializer: S) -> Result<S::Ok, S::Error> {
-    serializer.serialize_str(&path.to_string_lossy())
 }
 
 #[cfg(test)]
