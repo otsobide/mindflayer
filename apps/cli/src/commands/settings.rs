@@ -52,18 +52,25 @@ pub(crate) fn change_here(
         Err(error) => (None, Some(format!("warning: {error}"))),
     };
     let mut result = change_project(workspace.as_ref(), project, change, yes, &lookup.agents);
-    // Not when nothing changes, since then nothing was left to carry; nor
-    // when the workspace could not be read, whose warning says why.
-    let changed = !matches!(&result, Ok(outcome) if outcome.stdout.starts_with(NOTHING));
+    // Only beside a change made or laid out: a refusal changes nothing and
+    // one that changes nothing has nothing to carry, so either would be told
+    // about installs no change of theirs could have moved. Nor when the
+    // workspace could not be read, whose warning says why.
+    let changes = matches!(&result, Ok(outcome) if !outcome.stdout.starts_with(NOTHING));
+    let carried = if yes {
+        "was carried along"
+    } else {
+        "would be carried along"
+    };
     let hint = match (&workspace, &unread) {
-        _ if !changed => None,
+        _ if !changes => None,
         (Some(workspace), _) if !workspace.is_linked(project.root()) => Some(format!(
             "hint: the workspace at {} does not link this project, so nothing installed in it \
-             was carried along; `mind link` links it",
+             {carried}; `mind link` links it",
             workspace.root().display()
         )),
-        (None, None) => Some(String::from(
-            "hint: no workspace links this project, so nothing installed in it was carried along",
+        (None, None) => Some(format!(
+            "hint: no workspace links this project, so nothing installed in it {carried}"
         )),
         _ => None,
     };

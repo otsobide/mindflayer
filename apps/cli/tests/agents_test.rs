@@ -324,6 +324,14 @@ fn a_project_no_workspace_links_changes_its_settings_and_is_told_what_was_not_ca
     gix::init(dir.path()).unwrap();
     mind(dir.path(), &["init", "--agents", "claude"]).unwrap();
 
+    let dry = mind(dir.path(), &["agents", "add", "codex"]).unwrap();
+    assert_eq!(
+        dry.stderr,
+        [
+            "hint: no workspace links this project, so nothing installed in it would be carried \
+          along"
+        ]
+    );
     let done = mind(dir.path(), &["agents", "add", "codex", "--yes"]).unwrap();
 
     let name = MindProject::open(dir.path()).unwrap().name().to_owned();
@@ -336,4 +344,11 @@ fn a_project_no_workspace_links_changes_its_settings_and_is_told_what_was_not_ca
         ["hint: no workspace links this project, so nothing installed in it was carried along"]
     );
     assert!(done.ok);
+    // A refusal changes nothing, so there is nothing it did not carry.
+    let refused = mind(
+        dir.path(),
+        &["agents", "remove", "claude", "codex", "--yes"],
+    )
+    .unwrap_err();
+    assert!(refused.warnings.is_empty(), "{:?}", refused.warnings);
 }
