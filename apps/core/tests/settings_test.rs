@@ -7,8 +7,8 @@ use std::time::{Duration, SystemTime};
 
 use mindflayer_core::{
     create, scan, Agent, AgentTarget, Catalog, CreateError, Directories, FlayerWorkspace,
-    Initialization, Kind, MindProject, ProjectWarning, Settings, Share, WorkspaceError,
-    MIND_CONFIG, MIND_DIR, MIND_IGNORE, SETTINGS_FILE,
+    Initialization, Kind, MindProject, ProjectWarning, Settings, Share, Targets, WorkspaceError,
+    MIND_CONFIG, MIND_DIR, MIND_IGNORE, SETTINGS_FILE, SETTINGS_VERSION, TARGETS_VERSION,
 };
 use tempfile::TempDir;
 
@@ -472,7 +472,7 @@ fn git_sees_a_shared_projects_settings() {
 /// another in `directories`, which is written on one line.
 const BY_HAND: &str = r#"{
     "name": "collapse",
-    "targets": {"skills": [".skills"]},
+    "servers": {"github": ["npx"]},
     "version": 3,
     "agents": ["claude"],
     "id": "0123456789abcdef0123456789abcdef",
@@ -611,6 +611,70 @@ fn an_edit_names_a_folder_in_settings_that_named_none() {
             "\"share\": \"local\"\n}",
             "\"share\": \"local\",\n    \"directories\": {\n        \"skills\": \".claude/skills\"\n    }\n}"
         )
+    );
+}
+
+#[test]
+fn an_edit_of_targets_writes_them_last_and_the_version_they_need() {
+    let dir = TempDir::new().unwrap();
+    let (mut project, path) = by_hand(dir.path());
+
+    project
+        .change_settings(|settings| {
+            settings.targets = Targets::default().with(Kind::Skill, vec![PathBuf::from(".skills")]);
+        })
+        .unwrap();
+
+    assert_eq!(
+        fs::read_to_string(&path).unwrap(),
+        BY_HAND.replace(r#""version": 3"#, r#""version": 4"#).replace(
+            "\"skills\": \"skills\"}\n}",
+            "\"skills\": \"skills\"},\n    \"targets\": {\n        \"skills\": [\".skills\"]\n    }\n}"
+        )
+    );
+    let settings = project.settings().unwrap();
+    assert_eq!(settings.version, TARGETS_VERSION);
+    assert_eq!(
+        settings.targets.get(Kind::Skill),
+        Some(&[PathBuf::from(".skills")][..])
+    );
+}
+
+#[test]
+fn an_edit_that_names_no_kind_any_more_takes_targets_and_their_version_out() {
+    let dir = TempDir::new().unwrap();
+    let (mut project, path) = by_hand(dir.path());
+    project
+        .change_settings(|settings| {
+            settings.targets = Targets::default().with(Kind::Skill, vec![PathBuf::from(".skills")]);
+        })
+        .unwrap();
+
+    project
+        .change_settings(|settings| settings.targets = Targets::default())
+        .unwrap();
+
+    assert_eq!(fs::read_to_string(&path).unwrap(), BY_HAND);
+    assert_eq!(project.settings().unwrap().version, SETTINGS_VERSION);
+}
+
+#[test]
+fn an_edit_of_something_else_leaves_targets_written_by_hand_and_their_version() {
+    let dir = TempDir::new().unwrap();
+    let (mut project, path) = by_hand(dir.path());
+    let hand = BY_HAND.replace(
+        "\"version\": 3,",
+        "\"version\": 3,\n    \"targets\": {\"skills\": [\".skills\"]},",
+    );
+    fs::write(&path, &hand).unwrap();
+
+    project
+        .change_settings(|settings| settings.agents = vec![Agent::Codex])
+        .unwrap();
+
+    assert_eq!(
+        fs::read_to_string(&path).unwrap(),
+        hand.replace(r#""agents": ["claude"]"#, r#""agents": ["codex"]"#)
     );
 }
 

@@ -33,8 +33,9 @@ use crate::lock::{self, LockError, WorkspaceLock};
 use crate::paths;
 use crate::settings::{Settings, Share, SETTINGS_FILE};
 
-/// The newest version of a project's marker this build reads: version 3, a
-/// `.mind/settings.json` ([`SETTINGS_VERSION`]).
+/// The newest version of a project's marker this build reads: version 4, a
+/// `.mind/settings.json` that may say where installs land
+/// ([`TARGETS_VERSION`]).
 ///
 /// Refusing to read a version from the future is what lets the format change
 /// later without an old binary silently misreading a newer project. The
@@ -42,15 +43,14 @@ use crate::settings::{Settings, Share, SETTINGS_FILE};
 /// [`FLAYER_FORMAT_VERSION`]: shared, a change to either format would be a new
 /// version of both, and an older build would refuse a workspace that had not
 /// changed at all.
-pub const MIND_FORMAT_VERSION: u32 = 3;
+pub const MIND_FORMAT_VERSION: u32 = 4;
 
 /// The newest version a `mind.toml` holds: what came before
 /// [`SETTINGS_VERSION`], and what [`MindProject::init`] still writes.
 ///
 /// Not [`MIND_FORMAT_VERSION`], which is the newest a project's marker holds
-/// in either file, and the one `mind init` writes: a new project is marked by
-/// its settings, which an older build finds no project in, rather than one it
-/// misreads.
+/// in either file: a new project is marked by its settings, which an older
+/// build finds no project in, rather than one it misreads.
 pub const MIND_TOML_VERSION: u32 = 2;
 
 /// The layout version written into new `flayer.toml` markers, and the newest
@@ -75,7 +75,23 @@ pub const DIRECTORIES_VERSION: u32 = 2;
 /// a kind the marker names no folder for has none
 /// ([`MindProject::directory_for`]), where a `mind.toml` from version 2 gives
 /// it the default beside the code.
+///
+/// What `mind init` writes, and what a settings file stays while it says
+/// nothing of where installs land ([`Settings::version_needed`]).
 pub const SETTINGS_VERSION: u32 = 3;
+
+/// The first [`MIND_FORMAT_VERSION`] whose settings may say where what is
+/// installed into the project lands (`targets`), in place of the folders its
+/// agents read.
+///
+/// A version of its own, where a key the format does not define is
+/// otherwise read past: a build from before it would read past `targets`
+/// too, and install into the standard folders without a word, where the
+/// settings send copies elsewhere. Written only by a file that sets them,
+/// so a project that does not stays one every build since
+/// [`SETTINGS_VERSION`] reads. Nothing else in the file changes meaning, so
+/// it is read as a version 3 file is, with `targets` beside.
+pub const TARGETS_VERSION: u32 = 4;
 
 /// The directory a mind project is identified by.
 pub const MIND_DIR: &str = ".mind";
@@ -722,6 +738,10 @@ impl MindProject {
     /// modification time included. What is in memory afterwards is read back
     /// from the file.
     ///
+    /// A change of `targets` writes the version they need with them
+    /// ([`Settings::version_needed`]), up when a kind is named and down when
+    /// none is any more, which is the one version an edit changes.
+    ///
     /// Refused for a project a `mind.toml` marks, which has no settings until
     /// it is moved to them, when the change touches the version or the id,
     /// and when it moves a kind's folder out of the project or into its
@@ -757,6 +777,11 @@ impl MindProject {
         let before = crate::settings::parse(&path, &text)?;
         let mut wanted = before.clone();
         let value = change(&mut wanted);
+        // `targets` come with the version a build from before them refuses,
+        // and go with it, so a change to them writes the one they need.
+        if wanted.targets != before.targets && wanted.version == before.version {
+            wanted.version = wanted.version_needed();
+        }
         for kind in Kind::ALL {
             if let Some(error) = wanted
                 .directories
