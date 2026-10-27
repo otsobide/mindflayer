@@ -680,7 +680,8 @@ impl DiscoveryFailure {
 
 /// The order a catalog reports artifacts in, and so the order anything else
 /// that lists them for somebody to read puts them in, so the two never
-/// disagree.
+/// disagree: the rules in a project's `AGENTS.md` block
+/// ([`crate::agents_md::render`]) read in the order `list` gives them.
 ///
 /// Grouped by kind, then by name. Kind first because a mixed listing reads as
 /// blocks of like things rather than an alphabetical shuffle of two different

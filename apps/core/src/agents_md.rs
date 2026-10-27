@@ -28,12 +28,24 @@
 //! than repaired, as in git's exclude file ([`crate::exclude`]): guessing
 //! where a missing marker belongs could swallow somebody's text into the
 //! block, and the next render would replace it.
+//!
+//! Which rules a project is given, and when, is the caller's to decide, and
+//! so is keeping a record of what was written (#45); whether Claude reads the
+//! file at all is #44's. This only renders what it is handed.
+
+use std::fs;
+use std::io::{self, Write as _};
+use std::path::{Path, PathBuf};
 
 use thiserror::Error;
 
-use crate::artifact::{issue_list, name_issues};
+use crate::artifact::{issue_list, name_issues, Artifact, ArtifactError, Declared};
+use crate::catalog::report_order;
 use crate::lines::{self, Line};
+use crate::workspace::{replace_bytes, MindProject};
 
+/// The file the block is rendered into, at a project's root.
+pub const FILE: &str = "AGENTS.md";
 /// The line that opens Mindflayer's block.
 pub const BEGIN: &str = "<!-- mindflayer:begin -->";
 /// The line that closes it.
@@ -81,6 +93,28 @@ pub struct Section {
 }
 
 impl Section {
+    /// The section for `rule`, or `None` for a rule about some files only.
+    ///
+    /// A rule whose front matter states `paths` goes to Claude's rules
+    /// folder alone (D-03, #43), where Claude loads it once one of those
+    /// files is read: in `AGENTS.md` every agent would read it for every
+    /// file. A `paths` written in a shape that is not read is ignored, as
+    /// everywhere else ([`crate::rule::Lenient`]), so the rule is about every
+    /// file and has its section. The body is what an agent is given,
+    /// [`Artifact::contents`], read from the file as it is now.
+    pub fn of(rule: &Artifact) -> Result<Option<Self>, AgentsMdError> {
+        let Declared::Rule(manifest) = rule.declared() else {
+            return Err(AgentsMdError::NotARule {
+                name: rule.qualified_name(),
+            });
+        };
+        if manifest.paths.stated().is_some() {
+            return Ok(None);
+        }
+        let body = rule.contents()?;
+        Section::new(rule.name(), &body).map(Some)
+    }
+
     /// The section for the rule at `route`, whose body, its front matter
     /// already taken off, is `body`.
     ///
@@ -135,6 +169,158 @@ impl Section {
     pub fn route(&self) -> &str {
         &self.route
     }
+}
+
+/// Render `rules` into the block of `project`'s `AGENTS.md`, each that has a
+/// [section](Section::of) once, in the order a listing gives them
+/// ([`report_order`]).
+///
+/// The block holds those sections and nothing else afterwards. A file that
+/// is not there is made with `create_new`, so one somebody made meanwhile is
+/// never written over, and only then is [`Written::Created`] said: the
+/// caller keeps that (#45) and hands it back as `created` on a later render,
+/// so that when no rule is left the file goes too, unless somebody has
+/// written something in it since. Mindflayer takes away only a file it made.
+/// A file that is there is replaced whole through a temporary and a rename
+/// ([`replace_bytes`]), every byte outside the block as it was, and one that
+/// already holds what was asked is not written at all, modification time
+/// included.
+///
+/// A block that cannot be read, a rule that cannot be, and two rules of one
+/// name are refused before anything is written: a section left out because
+/// its rule could not be read would take that rule away from every agent
+/// until the next render. The caller collects the refusal, as it does any
+/// other one project's failure.
+///
+/// Takes no lock: the caller holds the workspace's, as one calling
+/// [`crate::config_entry::ConfigFile`] does, and the lock is not
+/// re-entrant.
+pub fn render<'a>(
+    project: &MindProject,
+    rules: impl IntoIterator<Item = &'a Artifact>,
+    created: bool,
+) -> Result<Rendered, AgentsMdError> {
+    let file = project.root().join(FILE);
+    let mut rules: Vec<&Artifact> = rules.into_iter().collect();
+    rules.sort_by(|a, b| report_order(a, b));
+    let mut sections = Vec::new();
+    for rule in rules {
+        sections.extend(Section::of(rule)?);
+    }
+
+    let read = read(&file)?;
+    let mut text = AgentsMd::parse(read.as_deref().unwrap_or_default()).map_err(|problem| {
+        AgentsMdError::Malformed {
+            file: file.clone(),
+            problem,
+        }
+    })?;
+    text.set_block(&sections)?;
+    let bytes = text.to_bytes();
+
+    let left_empty = !text.has_block() && text.is_blank_outside();
+    let written = match &read {
+        None if !text.has_block() => Written::Unchanged,
+        None => {
+            create(&file, &bytes)?;
+            Written::Created
+        }
+        // A link somebody put in place of the file is theirs, and so is
+        // what it points at: emptied, never taken away.
+        Some(_) if created && left_empty && is_plain_file(&file) => {
+            fs::remove_file(&file).map_err(|source| AgentsMdError::Write {
+                path: file.clone(),
+                source,
+            })?;
+            Written::Removed
+        }
+        Some(old) if *old == bytes => Written::Unchanged,
+        Some(_) => {
+            replace_bytes(&file, &bytes)
+                .map_err(|(path, source)| AgentsMdError::Write { path, source })?;
+            Written::Changed
+        }
+    };
+    Ok(Rendered {
+        routes: text.routes().into_iter().map(str::to_owned).collect(),
+        file,
+        written,
+    })
+}
+
+/// What [`render`] did.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Rendered {
+    /// The project's `AGENTS.md`, whether or not it is there now.
+    pub file: PathBuf,
+    pub written: Written,
+    /// The route of each rule the block holds, in its order: none when there
+    /// is no block. What the caller records as written (#45), since a rule
+    /// declaring `paths` is handed in and given no section.
+    pub routes: Vec<String>,
+}
+
+impl Rendered {
+    /// Whether the file was not there, and this render made it.
+    pub fn created(&self) -> bool {
+        self.written == Written::Created
+    }
+}
+
+/// What [`render`] did to the file.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Written {
+    /// It was not there, and now holds the block: made with `create_new`.
+    Created,
+    /// It was replaced whole, through a temporary and a rename.
+    Changed,
+    /// It was taken away: Mindflayer made it, and the block was all that was
+    /// left in it.
+    Removed,
+    /// It already held what was asked, or was not there and was asked to
+    /// hold nothing, and was left as it was.
+    Unchanged,
+}
+
+/// The file's bytes, `None` when it is not there.
+fn read(path: &Path) -> Result<Option<Vec<u8>>, AgentsMdError> {
+    match fs::read(path) {
+        Ok(bytes) => Ok(Some(bytes)),
+        Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(None),
+        Err(source) => Err(AgentsMdError::Read {
+            path: path.to_path_buf(),
+            source,
+        }),
+    }
+}
+
+/// Write a new file whole, refusing one that is there by now.
+///
+/// `create_new` rather than a temporary renamed into place, which would put
+/// this file over one somebody made after the read found none. A write that
+/// fails takes away what it made, so no half of a block is left to be refused
+/// as malformed later.
+fn create(path: &Path, contents: &[u8]) -> Result<(), AgentsMdError> {
+    let write_error = |source| AgentsMdError::Write {
+        path: path.to_path_buf(),
+        source,
+    };
+    let mut file = fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(path)
+        .map_err(write_error)?;
+    if let Err(source) = file.write_all(contents) {
+        drop(file);
+        let _ = fs::remove_file(path);
+        return Err(write_error(source));
+    }
+    Ok(())
+}
+
+/// Whether `path` is a file itself, not a link to one.
+fn is_plain_file(path: &Path) -> bool {
+    fs::symlink_metadata(path).is_ok_and(|metadata| metadata.is_file())
 }
 
 impl AgentsMd {
@@ -434,6 +620,24 @@ pub enum AgentsMdError {
     Marked { route: String, line: String },
     #[error("two rules are named `{route}`, and AGENTS.md holds one section a name")]
     Twice { route: String },
+    #[error("`{name}` is not a rule, so it has no section in AGENTS.md")]
+    NotARule { name: String },
+    #[error(transparent)]
+    Rule(#[from] ArtifactError),
+    #[error("{path}: cannot be read: {source}")]
+    Read {
+        path: PathBuf,
+        #[source]
+        source: io::Error,
+    },
+    #[error("{path}: cannot be written: {source}")]
+    Write {
+        path: PathBuf,
+        #[source]
+        source: io::Error,
+    },
+    #[error("{file}: {problem}, so nothing was written")]
+    Malformed { file: PathBuf, problem: Malformed },
 }
 
 #[cfg(test)]
