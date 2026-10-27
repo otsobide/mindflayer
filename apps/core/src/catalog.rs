@@ -301,10 +301,11 @@ impl Catalog {
     /// does is handed the one its workspace keeps, whose records are that
     /// workspace's alone. A project it does not link has none there.
     ///
-    /// A ledger that cannot be read is a failure, said once for each project
-    /// and kind it was asked about, and leaves their copies unrecorded:
-    /// foreign or authored, which nothing changes, rather than installed,
-    /// which an uninstall may delete.
+    /// A ledger that cannot be read is a failure, said once however many
+    /// projects and kinds it was asked about, since every failure to read it
+    /// is about its one file, and settling keeps one failure a path. It leaves
+    /// their copies unrecorded: foreign or authored, which nothing changes,
+    /// rather than installed, which an uninstall may delete.
     pub fn with_records(mut self, workspace: &FlayerWorkspace, ledger: &Ledger) -> Self {
         let mut recorded: BTreeMap<(PathBuf, Kind), BTreeSet<String>> = BTreeMap::new();
         let Catalog {
