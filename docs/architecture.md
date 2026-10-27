@@ -1941,10 +1941,14 @@ same.
 - **Somebody's is left, and said.** A folder where a new copy would go that
   holds something unrecorded is not written over, so that agent reads it
   rather than what was installed: a warning, as an install refused over
-  somebody's skill is. What sits unrecorded in a folder the change stops
-  sending copies to is left too, and listed, since no listing of the project
-  reads that folder once no agent it names is sent copies there. The folder
-  the project authors in is not one of those, being read whatever its agents.
+  somebody's skill is. Refusing the whole change over it was turned down: an
+  install is refused because it would write a second skill of that name where
+  an agent reads both folders, and the change writes no copy beside
+  somebody's, while which agents a project names is its own to choose. What
+  sits unrecorded in a folder the change stops sending copies to is left too,
+  and listed, since no listing of the project reads that folder once no agent
+  it names is sent copies there. The folder the project authors in is not one
+  of those, being read whatever its agents.
 - **Turning shared forgets the whole group; turning local fills it.** A
   project turning shared has its `.mind/.gitignore` removed, only while it
   holds what Mindflayer writes (`MIND_IGNORE`), so one changed by hand stays
