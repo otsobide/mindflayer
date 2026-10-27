@@ -17,7 +17,7 @@ use std::path::{Path, PathBuf};
 
 use mindflayer_core::gather::Watch;
 use mindflayer_core::resolve::{self, resolve, Intent};
-use mindflayer_core::{paths, Catalog, FlayerWorkspace, MindProject, Reference};
+use mindflayer_core::{paths, Catalog, FlayerWorkspace, MindProject, Reference, Share};
 
 use crate::homes::Lookup;
 use crate::{tui, Cli, CliError, Command, Failure, FlayerCli, FlayerCommand, Outcome};
@@ -72,9 +72,18 @@ pub(crate) fn run_with(cli: &Cli, lookup: &Lookup, watch: &Watch) -> Result<Outc
             lookup,
             watch,
         ),
-        Command::Init { skills, rules } => {
-            init_project(&directory, skills.as_deref(), rules.as_deref())
-        }
+        Command::Init {
+            agents,
+            shared,
+            skills,
+            rules,
+        } => init_project(
+            &directory,
+            agents,
+            if *shared { Share::Shared } else { Share::Local },
+            skills.as_deref(),
+            rules.as_deref(),
+        ),
         Command::Add {
             kind,
             name,

@@ -2108,7 +2108,7 @@ impl Confirm {
                 format!("{path} is not a mind project yet."),
                 String::new(),
                 String::from(
-                    "Make it one (a .mind marker and empty skills/ and rules/ folders) and link it?",
+                    "Make it one (a .mind marker kept out of git, and empty skills/ and rules/ folders) and link it?",
                 ),
             ],
             task: Task::InitAndLink { path },

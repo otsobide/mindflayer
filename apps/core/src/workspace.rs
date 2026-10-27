@@ -1,9 +1,9 @@
 //! The two levels Mindflayer works at.
 //!
 //! A **mind project** is a directory carrying a `.mind`, the way a repository
-//! carries a `.git`: it holds skills and rules beside the code, in the
-//! directories its marker names (`skills/<name>/SKILL.md` and `rules/` by
-//! default), and it travels with the code it belongs to.
+//! carries a `.git`: its marker says which agents work in it, and it authors
+//! skills and rules beside the code, in the directories the marker names
+//! (`skills/<name>/SKILL.md` and `rules/` by default).
 //!
 //! A **flayer workspace** sits above them, carrying a `.mindflayer` that
 //! references the mind projects it manages, so their artifacts can be listed
@@ -44,13 +44,13 @@ use crate::settings::{Settings, Share, SETTINGS_FILE};
 /// changed at all.
 pub const MIND_FORMAT_VERSION: u32 = 3;
 
-/// The newest version a `mind.toml` holds, and the one `init` still writes
-/// into a new project: what came before [`SETTINGS_VERSION`].
+/// The newest version a `mind.toml` holds: what came before
+/// [`SETTINGS_VERSION`], and what [`MindProject::init`] still writes.
 ///
 /// Not [`MIND_FORMAT_VERSION`], which is the newest a project's marker holds
-/// in either file. A new project is written as version 2 until `mind init`
-/// writes settings (#35): this build reads a version it does not make yet,
-/// so no project a command of its makes is one an older build cannot read.
+/// in either file, and the one `mind init` writes: a new project is marked by
+/// its settings, which an older build finds no project in, rather than one it
+/// misreads.
 pub const MIND_TOML_VERSION: u32 = 2;
 
 /// The layout version written into new `flayer.toml` markers, and the newest
@@ -131,9 +131,8 @@ pub enum Marker {
 }
 
 impl Marker {
-    /// The newest version of this marker this build reads. For a workspace,
-    /// also the one it writes; a new project is still written as
-    /// [`MIND_TOML_VERSION`].
+    /// The newest version of this marker this build reads, and the one
+    /// `flayer init` and `mind init` write into a new one.
     pub const fn version(self) -> u32 {
         match self {
             Marker::Project => MIND_FORMAT_VERSION,
@@ -279,6 +278,20 @@ impl Directories {
         self.resolved_with(Directories::default_for)
     }
 
+    /// Every kind named: one this leaves out at a project's default beside
+    /// the code ([`default_for`](Self::default_for)), and any key this build
+    /// does not recognise carried along.
+    ///
+    /// What a new project's settings are given to author in
+    /// ([`MindProject::init_asked`]). In settings a kind left out has no
+    /// folder at all ([`SETTINGS_VERSION`]), so the `skills/` and `rules/` a
+    /// new project still gets by default (D-06) are written down rather than
+    /// left to a default. Crate-private, so that no front end spells the
+    /// folders or decides when they are filled in.
+    pub(crate) fn with_defaults(self) -> Self {
+        self.filled(Directories::default_for)
+    }
+
     /// The same, with `default` answering for a kind nothing names: a
     /// project's default or a workspace's.
     fn resolved_with(&self, default: fn(Kind) -> PathBuf) -> Vec<(Kind, PathBuf)> {
@@ -364,7 +377,14 @@ pub struct MindProject {
 
 impl MindProject {
     /// Create `.mind` and the folders its artifacts live in, under `root`,
-    /// with every kind in its default place.
+    /// with every kind in its default place, marked by a `mind.toml` at
+    /// [`MIND_TOML_VERSION`]: the project an older Mindflayer made.
+    ///
+    /// No front end makes one since `mind init` writes settings
+    /// ([`init_asked`](Self::init_asked)). It stays for what has to
+    /// start from such a project, since each one made before is still read
+    /// the way it was written: the tests of how it is read, and of what a
+    /// copy installed where it authors does.
     pub fn init(root: impl AsRef<Path>) -> Result<(Self, Initialization), WorkspaceError> {
         Self::init_with(root, &Directories::default())
     }
@@ -423,6 +443,24 @@ impl MindProject {
         ))
     }
 
+    /// Make `root` a project as `mind init` does:
+    /// [`init_settings`](Self::init_settings), with each kind in the folder
+    /// `asked` names, or else at its default beside the code.
+    ///
+    /// The fill is core's, not the front end's, because which folders a new
+    /// project gets is a rule (D-06: `skills/` and `rules/` unless told
+    /// otherwise), and a front end handing `init_settings` only what it was
+    /// asked would make a project with no folder for the rest. That one
+    /// takes its folders as given, for what needs a project that keeps none.
+    pub fn init_asked(
+        root: impl AsRef<Path>,
+        agents: &[Agent],
+        share: Share,
+        asked: &Directories,
+    ) -> Result<(Self, Initialization), WorkspaceError> {
+        Self::init_settings(root, agents, share, &asked.clone().with_defaults())
+    }
+
     /// Make `root` a project marked by its settings ([`SETTINGS_VERSION`]):
     /// `.mind/settings.json`, a `.mind/.gitignore` holding `*` unless the
     /// project is [shared](Share::Shared), and the folder of each kind
@@ -450,13 +488,11 @@ impl MindProject {
         let dir = root.join(MIND_DIR);
 
         for kind in Kind::ALL {
-            if let Some(directory) = directories.get(kind) {
-                if !stays_inside(directory) {
-                    return Err(WorkspaceError::OutsideProject {
-                        path: directory.to_path_buf(),
-                        kind,
-                    });
-                }
+            if let Some(error) = directories
+                .get(kind)
+                .and_then(|directory| misplaced_authored(kind, directory))
+            {
+                return Err(error);
             }
         }
         let settings = Settings::new(
@@ -676,9 +712,10 @@ impl MindProject {
     ///
     /// Refused for a project a `mind.toml` marks, which has no settings until
     /// it is moved to them, when the change touches the version or the id,
-    /// and when it moves a kind's folder out of the project, as `init`
-    /// refuses one: strict when writing, while a folder somebody wrote there
-    /// by hand is still read, and left alone by a change to something else.
+    /// and when it moves a kind's folder out of the project or into its
+    /// `.mind`, as `init` refuses one: strict when writing, while a folder
+    /// somebody wrote there by hand is still read, and left alone by a change
+    /// to something else.
     /// A settings file this build refuses to read is refused here too, and
     /// left as it is.
     ///
@@ -704,17 +741,13 @@ impl MindProject {
         let mut wanted = before.clone();
         let value = change(&mut wanted);
         for kind in Kind::ALL {
-            match wanted.directories.get(kind) {
-                Some(directory)
-                    if before.directories.get(kind) != Some(directory)
-                        && !stays_inside(directory) =>
-                {
-                    return Err(WorkspaceError::OutsideProject {
-                        path: directory.to_path_buf(),
-                        kind,
-                    });
-                }
-                _ => {}
+            if let Some(error) = wanted
+                .directories
+                .get(kind)
+                .filter(|directory| before.directories.get(kind) != Some(*directory))
+                .and_then(|directory| misplaced_authored(kind, directory))
+            {
+                return Err(error);
             }
         }
 
@@ -1627,6 +1660,12 @@ pub enum WorkspaceError {
     NonUtf8Path { path: PathBuf },
     #[error("{path}: cannot hold a project's {kind}s, because it is not inside the project")]
     OutsideProject { path: PathBuf, kind: Kind },
+    #[error(
+        "{path}: cannot hold a project's {kind}s, \
+         because it is inside {MIND_DIR}, which holds Mindflayer's own files \
+         and is kept out of git unless the project is shared"
+    )]
+    InsideMind { path: PathBuf, kind: Kind },
     #[error("{path}: keeps no {kind}s of its own, since its marker names no folder for them")]
     NoDirectory { path: PathBuf, kind: Kind },
     #[error("{path}: has no {SETTINGS_FILE} to change, since a {MIND_CONFIG} marks it")]
@@ -1663,6 +1702,7 @@ impl WorkspaceError {
             | WorkspaceError::NotLoaded { path, .. }
             | WorkspaceError::NonUtf8Path { path }
             | WorkspaceError::OutsideProject { path, .. }
+            | WorkspaceError::InsideMind { path, .. }
             | WorkspaceError::NoDirectory { path, .. }
             | WorkspaceError::NoSettings { path }
             | WorkspaceError::OutsideWorkspace { path, .. }
@@ -1974,8 +2014,8 @@ fn directory_lines(resolved: Vec<(Kind, PathBuf)>) -> String {
 
 /// Whether a kind's directory stays inside what it belongs to.
 ///
-/// A mind project is meant to be committed, and its artifacts with it, so a
-/// kind's directory has to be somewhere inside it; a workspace's own
+/// What a mind project authors is the project's, written beside its code, so
+/// a kind's directory has to be somewhere inside it; a workspace's own
 /// artifacts belong to it the same way. Anything else describes artifacts
 /// that are not the holder's, and `mind init --skills /etc` should say so
 /// rather than making the folder.
@@ -1991,6 +2031,31 @@ fn stays_inside(directory: &Path) -> bool {
         paths::normalize(directory).components().next(),
         Some(std::path::Component::Normal(_))
     )
+}
+
+/// Why `directory`, a route from a project's root, cannot be where its
+/// settings say it authors `kind`s: it leads out of the project
+/// ([`stays_inside`]), or into its `.mind`.
+///
+/// `.mind` is Mindflayer's: the marker, the templates, the stage an install
+/// builds in. A local project's keeps itself out of git, so a folder there
+/// would hide what the project wrote from the team without a word, where the
+/// point of authoring beside the code (D-06) is that it is committed with it.
+/// Refused in a shared project too, whose share a change may later make
+/// local. Only when writing settings: a `mind.toml` of version 1 kept every
+/// kind inside `.mind`, and is still read that way.
+fn misplaced_authored(kind: Kind, directory: &Path) -> Option<WorkspaceError> {
+    let path = directory.to_path_buf();
+    if !stays_inside(directory) {
+        return Some(WorkspaceError::OutsideProject { path, kind });
+    }
+    // Without regard to case, as `gathered_overlap` compares, since `.MIND`
+    // is the same folder as `.mind` where the file system ignores case.
+    let inside_mind = matches!(
+        paths::normalize(directory).components().next(),
+        Some(std::path::Component::Normal(first)) if first.eq_ignore_ascii_case(MIND_DIR)
+    );
+    inside_mind.then_some(WorkspaceError::InsideMind { path, kind })
 }
 
 /// Why `directory`, a route from a workspace's root, cannot hold the

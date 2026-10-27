@@ -342,6 +342,31 @@ fn a_version_2_marker_still_keeps_each_kind_where_it_says_or_beside_the_code() {
 }
 
 #[test]
+fn with_defaults_names_every_kind_and_keeps_what_was_named() {
+    let named = Directories::default()
+        .with(Kind::Skill, ".claude/skills")
+        .with_key("servers", "mcp");
+
+    let filled = named.with_defaults();
+
+    assert_eq!(
+        filled.entries(),
+        [
+            ("skills", Path::new(".claude/skills")),
+            ("rules", Path::new("rules")),
+            ("servers", Path::new("mcp")),
+        ]
+    );
+    assert_eq!(
+        Directories::default().with_defaults().entries(),
+        [
+            ("skills", Path::new("skills")),
+            ("rules", Path::new("rules"))
+        ]
+    );
+}
+
+#[test]
 fn a_project_marked_by_settings_without_directories_has_no_folder_for_any_kind() {
     let dir = tempfile::TempDir::new().unwrap();
     let path = settings_project(dir.path(), Directories::default());

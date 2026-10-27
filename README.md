@@ -1,7 +1,7 @@
 # 🧠 Mindflayer
 
 Manage what your coding agents read, the way git manages code: a project
-carries a `.mind` directory holding its **skills** and **rules**, and a
+carries a `.mind` directory beside its **skills** and **rules**, and a
 workspace above it carries a `.mindflayer` that orchestrates several such
 projects at once.
 
@@ -21,14 +21,16 @@ layout leaves room for a desktop app later without moving the engine.
 
 | | Marker | Holds | Think of it as |
 |---|---|---|---|
-| **Mind project** | `.mind/mind.toml` | its artifacts, in the directories the marker names | a repository's `.git` |
+| **Mind project** | `.mind/settings.json` | the agents that work in it, and its artifacts, in the directories the marker names | a repository's `.git` |
 | **Flayer workspace** | `.mindflayer/flayer.toml` | references to mind projects, and artifacts of its own it shares with them | the directory your repos sit in |
 
-A mind project is meant to be committed: the marker and the artifacts travel
-with the code they describe, so whoever clones the repository gets its skills
-and rules. A flayer workspace is the level above, where several projects are
-managed together, and where the skills and rules that belong to all of them
-live, once, to be installed into whichever needs them.
+A mind project's `.mind` belongs to the checkout it is in: a short settings
+file that keeps itself out of git, the way a Python virtualenv does. What the
+project writes itself, its skills and rules, sits beside its code and is
+committed with it, so whoever clones the repository gets them. A flayer
+workspace is the level above, where several projects are managed together,
+and where the skills and rules that belong to all of them live, once, to be
+installed into whichever needs them.
 
 Every command that reads or changes artifacts works at both levels: `mind
 <cmd>` on the project you are in, `flayer <cmd>` on the workspace: its own
@@ -203,18 +205,35 @@ and is **not** if your Rust came from a system package. `make dev/link` says so
 when it is missing; `BINDIR` is how you point somewhere else, and
 [Development](#development) has the rest.
 
-Then:
+Then make a repository a mind project, and give the folder it sits in a
+workspace to manage it, and others like it, from:
 
-```bash
-cd ~/Projects/collapse
-mind init                      # a .mind marker, and empty skills/ and rules/
-mind add skill deploy "Ship the service to staging"
-
-cd ~/Projects
-flayer init                    # a .mindflayer, to manage several of them
-flayer link collapse           # tell it which projects those are
-flayer list                    # every skill across all of them
 ```
+$ cd ~/Projects/collapse
+$ mind init
+initialized mind project `collapse` in /home/you/Projects/collapse/.mind
+$ mind add skill deploy "Ship the service to staging"
+created skill deploy at /home/you/Projects/collapse/skills/deploy/SKILL.md
+$ git status --short
+?? skills/
+
+$ cd ~/Projects
+$ flayer init
+initialized flayer workspace `Projects` in /home/you/Projects/.mindflayer
+$ flayer link collapse
+linked collapse as collapse
+$ flayer list
+deploy  Ship the service to staging
+```
+
+`mind init` makes a `.mind` holding `settings.json`, which says which agents
+work in the project and where it keeps its own skills and rules, and a
+`.gitignore` holding `*`, which is why `git status` shows none of it. The
+`skills/` and `rules/` it makes beside the code are the project's, to commit
+with it. Every agent is named unless `--agents claude,codex` names fewer, and
+`--shared` leaves the `.gitignore` out, for a team that commits its `.mind`:
+[where a project keeps its artifacts](#where-a-project-keeps-its-artifacts)
+has the rest.
 
 Or run `flayer` on its own and do all of that from [the TUI](#the-tui): it
 opens the workspace at or above where you are (or, with none, the one in your
@@ -253,11 +272,12 @@ $ flayer install -p collapse commit-style
 installed commit-style into collapse, from load:../src/mindflayer/examples
 ```
 
-`collapse/skills/commit-style` now holds the skill and the
-`references/examples.md` it carries. Only the skills are offered, because a
-rule cannot be installed yet: the two rules are there to read, and to copy
-into a project by hand. `flayer -W ~/src/mindflayer/examples validate` says
-all four are ok.
+`collapse/.claude/skills/commit-style` now holds the skill and the
+`references/examples.md` it carries, for Claude Code, and
+`collapse/.agents/skills/commit-style` the same for Codex and OpenCode, both
+kept out of git. Only the skills are offered, because a rule cannot be
+installed yet: the two rules are there to read, and to copy into a project by
+hand. `flayer -W ~/src/mindflayer/examples validate` says all four are ok.
 
 ## Commands
 
@@ -266,8 +286,9 @@ standing in; `flayer` acts on the workspace above it.
 
 ```bash
 mind                       # the TUI, on this project
-mind init [--skills DIR] [--rules DIR]
-                           # create a .mind here, saying where its artifacts go
+mind init [--agents AGENTS] [--shared] [--skills DIR] [--rules DIR]
+                           # create a .mind here: for which agents, kept out of
+                           # git unless shared, and where its artifacts go
 mind add <KIND> <NAME> <DESCRIPTION> [--template NAME]
                            # create a skill or a rule that validates as written
 mind edit <NAME> [--editor CMD]
@@ -659,12 +680,12 @@ exception, which is the rule the whole command works by:
 
 > Mindflayer only manages what it installed.
 
-A skill already in the project that Mindflayer did not put there is shown
-ticked and marked `(not installed by mindflayer)`. It cannot be unticked and it
-is never overwritten or deleted: somebody wrote it. The ledger is what knows
-the difference. One in any of the folders an install would write refuses the
-whole install, and the others are left alone too, so the agents never read two
-different skills of one name.
+A skill already where an install would put it, that Mindflayer did not put
+there, is shown ticked and marked `(not installed by mindflayer)`. It cannot be
+unticked and it is never overwritten or deleted: somebody wrote it. The ledger
+is what knows the difference. One in any of the folders an install would write
+refuses the whole install, and the others are left alone too, so the agents
+never read two different skills of one name.
 
 Two shelves can offer `commit-style`, but a project has one directory of that
 name, so ticking one unticks the other rather than letting both apply and the
@@ -877,46 +898,68 @@ directory has gone is listed with a `!`, where `u` drops it; an artifact
 
 ## Where a project keeps its artifacts
 
-`.mind/mind.toml` is the marker and the configuration; the artifacts themselves
-sit beside the code, because these are files the **agents** read and an agent
-does not know what a `.mind` is. `mind init` writes where each kind goes:
+`.mind/settings.json` is the marker and the configuration; the artifacts
+themselves sit beside the code, because these are files the **agents** read
+and an agent does not know what a `.mind` is. `mind init` writes it:
 
-```toml
-version = 2
-name = "collapse"
-
-[directories]
-skills = "skills"
-rules = "rules"
+```json
+{
+  "version": 3,
+  "id": "4f9c2a7e1b3d5f60a8c4e2b6d0f1a3c5",
+  "name": "collapse",
+  "agents": ["claude", "codex", "opencode"],
+  "share": "local",
+  "edit_tracked": false,
+  "directories": {
+    "skills": "skills",
+    "rules": "rules"
+  }
+}
 ```
 
-Point them wherever the agents already look, and Mindflayer follows:
+It is plain JSON, which any tool can read and change. `agents` are the agents
+that work in the project, and so where what is installed into it goes
+(`--agents` names them, comma-separated); `share` says whether that is kept to
+this checkout or left for the team to commit; `edit_tracked` whether a file
+the team tracks may be edited to reach an agent; `directories` where the
+project keeps the skills and rules it writes itself; and the `id` names the
+project wherever it moves. Point the directories wherever the agents already
+look, and Mindflayer follows:
 
 ```bash
 mind init --skills .claude/skills
 mind init --skills docs/skills --rules docs/rules
 ```
 
-Both are relative to the project, and have to stay inside it: a mind project
-is meant to be committed and its artifacts with it, so `--skills /etc/skills`
-is refused rather than made. `init` never overwrites an existing marker, so a
-second `mind init --skills elsewhere` changes nothing and says so: moving a
-project's artifacts is not something `init` should do behind your back.
+Both are relative to the project, and have to stay inside it: the artifacts
+are the project's own, so `--skills /etc/skills` is refused rather than made.
+So is a folder inside `.mind`, such as `--skills .mind/skills`: a local
+project's `.mind` keeps itself out of git (below), and would take the
+project's own skills with it.
+`init` never overwrites an existing marker, so a second `mind init --skills
+elsewhere` changes nothing and says so: moving a project's artifacts is not
+something `init` should do behind your back.
 
-The values are written out even when they are the defaults, so the answer to
+The folders are written out even when they are the defaults, so the answer to
 "where do this project's skills go" is in the file rather than in somebody's
-memory. A workspace reads them too: it is how `flayer install` knows where a
-skill goes, without ever assuming.
+memory. A kind `directories` leaves out has no folder at all, rather than the
+default.
 
-A project can also be marked by `.mind/settings.json`, the version 3 marker
-that `mind init` is moving to. It is plain JSON, any tool can read and change
-it, and it names the same folders under `directories`, beside the agents the
-project works with, whether what is installed into it is shared with the team
-and an id. A kind it leaves out of `directories` has no folder at all, rather
-than the default. Mindflayer finds and reads either marker, and when a project
-holds both it reads `settings.json`.
+`.mind` keeps itself out of git, as a Python virtualenv does: `mind init`
+writes a `.mind/.gitignore` holding `*`, so `git status` never offers the
+settings and your own `.gitignore` needs no line for them. The skills and
+rules beside the code are not kept out: they are the project's, to commit
+with it. `mind init --shared` writes no `.gitignore` and sets `share` to
+`shared`, for a team that commits its `.mind`, and what is installed into the
+project with it, so that every clone gets the same.
 
-Such a project is listed from the folders its agents read as well:
+A project an older Mindflayer made is marked by `.mind/mind.toml` instead,
+which names the same folders in a table and was committed with the project.
+Mindflayer still reads it the way it was written, `mind init` leaves it as it
+is, and when a project holds both it reads `settings.json`.
+
+A project is listed from the folders its agents read as well (one an older
+Mindflayer made, from the one folder its `mind.toml` names):
 `.claude/skills` for Claude, `.agents/skills` for Codex and OpenCode. A skill
 there is listed once, whoever put it there, and once with the project's own of
 that name, which it reads as; when it sits in both folders with different
@@ -925,8 +968,9 @@ same skill. Mindflayer changes only what sits in the folders the project
 authors in, so `mind edit`, `rename` and `remove` reach the project's own copy
 and leave a skill in an agent's folder alone.
 
-What is installed into such a project goes where its agents read, never into
-the folder it authors in: one copy in `.claude/skills` for Claude, one in
+What is installed into a project goes where its agents read, never into the
+folder it authors in (one an older Mindflayer made takes it in that folder):
+one copy in `.claude/skills` for Claude, one in
 `.agents/skills` that Codex and OpenCode share, the same bytes, put in place
 together or not at all, and recorded as one installation. A local project
 keeps them out of git with a block of its own in the repository's
@@ -1134,15 +1178,19 @@ comments, the key order and the description stay as they were. `remove`
 without `--yes` is a dry run, because it is the one thing here that cannot be
 taken back.
 
-Changing something `flayer install` put there makes it yours. Removing it,
-renaming it or editing it drops the workspace's record that Mindflayer
-installed it, so the install screen shows it as somebody's and never
-overwrites or deletes it, and a skill you write later under the same name does
-not inherit a record that was about something else. The record dropped is the
-one held by the workspace the command works in: `flayer`'s, wherever the
-project sits, or for `mind` the one named or activated, or else the workspace
-above the project, or else the one in your home. Another workspace that links
-the same project keeps its own (an
+What `flayer install` put in an agent's folder is not changed from the
+project: `edit`, `rename` and `remove` refuse a skill found only where its
+agents read, which `mind uninstall` takes out. Where a copy sits in a folder
+the project writes in too (one whose `--skills` is an agent's folder, or a
+project an older Mindflayer made, whose one folder takes the copy), changing
+it makes it yours. Removing it, renaming it or editing it drops the
+workspace's record that Mindflayer installed it, so the install screen shows
+it as somebody's and never overwrites or deletes it, and a skill you write
+later under the same name does not inherit a record that was about something
+else. The record dropped is the one held by the workspace the command works
+in: `flayer`'s, wherever the project sits, or for `mind` the one named or
+activated, or else the workspace above the project, or else the one in your
+home. Another workspace that links the same project keeps its own (an
 [open question](docs/architecture.md#open-questions)).
 
 ## Upgrading

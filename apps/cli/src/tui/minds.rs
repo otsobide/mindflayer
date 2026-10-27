@@ -177,7 +177,7 @@ impl Minds {
                 ("are", "each")
             };
             asked.push(format!(
-                "{} {is} not a mind project yet: `mind init` makes {it} one (a .mind, and empty skills/ and rules/).",
+                "{} {is} not a mind project yet: `mind init` makes {it} one (a .mind kept out of git, and empty skills/ and rules/).",
                 names.join(", "),
             ));
         }

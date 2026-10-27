@@ -26,13 +26,14 @@ fn text(path: &Path) -> String {
     path.to_string_lossy().into_owned()
 }
 
-/// `Projects`, a workspace linking its project `collapse`.
+/// `Projects`, a workspace linking its project `collapse`, a repository as
+/// the README's is.
 fn projects() -> (TempDir, PathBuf) {
     let dir = TempDir::new().unwrap();
     let projects = dir.path().join("Projects");
     fs::create_dir_all(projects.join("collapse")).unwrap();
     flayer(&projects, &["init"]).unwrap();
-    mind(&projects.join("collapse"), &["init"]).unwrap();
+    new_project(&projects.join("collapse"));
     flayer(&projects, &["link", "collapse"]).unwrap();
     (dir, projects)
 }
@@ -179,14 +180,18 @@ fn a_workspace_loads_the_examples_and_installs_commit_style_with_its_reference()
         offered.stdout
     );
     assert!(installed.ok, "{:?}", installed.stderr);
-    let copy = projects.join("collapse/skills/commit-style");
     let source = examples().join("skills/commit-style");
-    for file in ["SKILL.md", "references/examples.md"] {
-        assert_eq!(
-            fs::read(copy.join(file)).unwrap(),
-            fs::read(source.join(file)).unwrap(),
-            "{file}"
-        );
+    // Where the README says the copies are: one for Claude, one Codex and
+    // OpenCode share.
+    for folder in [".claude/skills", ".agents/skills"] {
+        let copy = projects.join("collapse").join(folder).join("commit-style");
+        for file in ["SKILL.md", "references/examples.md"] {
+            assert_eq!(
+                fs::read(copy.join(file)).unwrap(),
+                fs::read(source.join(file)).unwrap(),
+                "{folder}: {file}"
+            );
+        }
     }
 }
 

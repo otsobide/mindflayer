@@ -376,8 +376,11 @@ catalog actually found.
 ## The two levels
 
 A **mind project** is a directory carrying `.mind`, the way a repository
-carries `.git`. Its skills live in `skills/<name>/SKILL.md` by default. It is
-meant to be committed: the skills travel with the code they describe.
+carries `.git`. Its skills live in `skills/<name>/SKILL.md` by default, beside
+the code, and are committed with it, so they travel with the code they
+describe. The `.mind` itself is the checkout's: its settings keep themselves
+out of git unless the project is shared
+([D-01](#d-01-a-projects-mind-ignores-itself)).
 
 A **flayer workspace** carries `.mindflayer` and references the mind projects
 it manages, so their skills can be handled together. It is the level above, and
@@ -604,17 +607,9 @@ happen.
 ### Where a project keeps its artifacts
 
 `.mind` is the marker and the configuration. The artifacts themselves sit
-beside the code, in directories the marker names. A `mind.toml`, which `mind
-init` still writes, names them in a table:
-
-```toml
-[directories]
-skills = "skills"
-rules = "rules"
-```
-
-and a project's settings, the version 3 marker ([a project's
-settings](#a-projects-settings)), in an object:
+beside the code, in directories the marker names. A project's settings, the
+version 3 marker `mind init` writes ([a project's
+settings](#a-projects-settings)), name them in an object:
 
 ```json
 "directories": {
@@ -623,25 +618,50 @@ settings](#a-projects-settings)), in an object:
 }
 ```
 
+and a `mind.toml`, the marker of a project an older Mindflayer made, in a
+table:
+
+```toml
+[directories]
+skills = "skills"
+rules = "rules"
+```
+
 Beside the code rather than inside `.mind`, because these are files the
 **agents** read, and an agent looking for skills does not know what a `.mind`
 is. Every project already has a place its agents look (`.claude/skills`,
 `docs/rules`), and the marker is how a project says which, so Mindflayer
 follows the repository rather than the repository following Mindflayer.
 
-The table is keyed by the kind's folder name, which is the plural spelling the
+Both are keyed by the kind's folder name, which is the plural spelling the
 CLI already accepts, so there is no second table to keep in step. A key this
 build does not recognise is carried along rather than rejected, for the reason
 unknown front matter keys are.
 
 `init` writes every kind's directory even when it is the default. The answer to
 "where do this project's skills go" then lives in the file somebody opens
-rather than in a function they have to find.
+rather than in a function they have to find. In settings it is also the only
+way to have the folder at all, since a kind they leave out has none (below), so
+`mind init` hands core only the folders it was told about, and core gives each
+other kind its default (`MindProject::init_asked`). Which folders a new project
+gets is a rule ([D-06](#d-06-projects-keep-authoring-beside-the-code)), and a
+front end that filled them in itself could disagree with this one;
+`MindProject::init_settings` takes its folders as given, for what needs a
+project that keeps none.
 
 A directory has to be inside the project. An absolute path, or one that climbs
 out with `..`, describes a project whose artifacts are not the project's, and
 that contradicts the one thing a mind project is for. `mind init --skills
 /etc/skills` is refused rather than made, before anything is written.
+
+Nor, in settings, inside `.mind` (`InsideMind`), which is Mindflayer's: the
+marker, the templates and an install's stage. A local project's keeps itself
+out of git, so `mind init --skills .mind/skills` would hide what the project
+wrote from its team without a word, where authoring beside the code is so it
+is committed with it. A shared project is refused the same, since a change to
+its share may make it local later. `init` and `change_settings` refuse it,
+and a settings file somebody wrote that way is still read: only a version 1
+`mind.toml` kept its kinds inside `.mind` on purpose.
 
 Because this changed where a project's artifacts are, the project marker went
 to version 2, and a `mind.toml` written before it is read the way it was
@@ -729,7 +749,20 @@ in process, whether a local project's settings are ignored. A second run, as
 for `init`, rewrites nothing and only makes what the marker asks for and is
 missing, a deleted `.gitignore` of a local project included; a project a
 `mind.toml` marks is not given settings, since moving it is a migration's
-(#38). `mind init` keeps writing version 2 until #35 switches it.
+(#38).
+
+`mind init` writes them (#35): every agent unless `--agents` names fewer,
+local unless `--shared`, and `skills/` and `rules/` unless `--skills` or
+`--rules` says otherwise. Every agent, so a project made without a thought
+for it reaches whichever agent is opened there; local, because that is what a
+new project is (D-02). The TUI's offer to make a project and the minds
+screen run that same `mind init`, so they write the same marker. The CLI's
+test makes a fresh repository a project and asks gix, in process, what `git
+status` would list: nothing, since `.mind` ignores itself and git lists no
+empty folder, until the first artifact is written into `skills/`, which is
+there for the team to commit. `MindProject::init`, which writes a `mind.toml`,
+is no front end's any more; it stays for the tests that start from a project
+an older build made, which is still read the way it was written.
 
 Either file makes a directory a project, and when both are there the settings
 win: they are the newer marker, and a `mind.toml` beside them is one an
@@ -910,10 +943,18 @@ Shared, the project marker going to 3 would have written every new
 not changed at all. A project's marker reads up to 3 today, a settings file,
 and a workspace's up to 2, and neither moved when the other did.
 
-A project's newest version is not yet the one `init` writes: `mind init` still
-makes a version 2 `mind.toml` (`MIND_TOML_VERSION`) until #35 switches it, so
-this build reads settings before any command of its makes them, and no older
-build, which finds no project without a `mind.toml`, meets one it made.
+A project's newest version is the one `mind init` writes, a settings file,
+and `mind init` waited to write it (#35) until this build read such a project
+(#29), listed it (#33) and installed into it (#34). An older build finds no
+project without a `mind.toml`, so it says a new one is not a project, or that
+a workspace's entry for it is stale, rather than misreading it. Except where
+that answer leads it to make one: a build from before #29 asks only whether a
+`mind.toml` is there, so its `mind init`, or its TUI's making a repository a
+project, writes one beside the settings and reads the project as a `mind.toml`
+one from then on, while this build reads the settings and passes the
+`mind.toml` by ([open questions](#open-questions)).
+`MIND_TOML_VERSION` is the newest a `mind.toml` holds, which only
+`MindProject::init` still writes.
 
 An older marker is read the way it was written, never refused. Two lines are
 drawn so far, both project-marker versions, since a workspace's number says
@@ -3274,12 +3315,17 @@ and each of those issues rewrites the sections it changes.
 `mind init --shared` leaves it out for a team that wants its marker committed.
 The rule lives inside the folder Mindflayer owns, so it needs no git repository
 at init time, survives a copy and goes when `.mind` does. Rejected: keeping
-`.mind` committed, as today, against the owner's ask for an ignored one; an
+`.mind` committed, as a `mind.toml` project's was, against the owner's ask for
+an ignored one; an
 anchored `/.mind/` line in `$GIT_COMMON_DIR/info/exclude`, which stays the
 mechanism for installed copies (D-02) because they have no Mindflayer folder to
 hold a `.gitignore`; and a line in the repository's `.gitignore`, which edits a
 team file. A fresh clone has no `.mind`, and `scan` already offers plain
 repositories. Unblocks #29, #35 and #38.
+
+Carrying it out, #29 writes the `.gitignore` (`MindProject::init_settings`),
+and #35 makes it what `mind init` does, with `--shared` to leave it out (see
+[a project's settings](#a-projects-settings)).
 
 ### D-02: Installs stay local unless a project shares them
 
@@ -3394,6 +3440,9 @@ vision points 2 and 8 (the flayer as the source, a minimal `.mind`). The plan
 made the folders opt-in (`--skills`, `--rules`); the owner prefers them to
 exist from the start. Unblocks #29, #33, #35 and #59.
 
+Carrying it out, #35 makes `mind init` write settings that name `skills/` and
+`rules/`, or the folders `--skills` and `--rules` give, and make them.
+
 ### D-07: One copy per agent folder
 
 Amended by the owner. An installed skill is a real copy in
@@ -3454,8 +3503,9 @@ configuration in a database. Unblocks #29 and #37.
 Carrying it out, #29 adds the format, `Settings` in `settings.rs`, which
 `MindProject` reads from a settings file before a `mind.toml`, and
 `MindProject::init_settings`, which writes it with D-01's `.gitignore` (see
-[a project's settings](#a-projects-settings)). No command writes one yet:
-`mind init` does from #35.
+[a project's settings](#a-projects-settings)), and #35 makes `mind init`
+write one, naming the agents `--agents` gives and the share mode `--shared`
+chooses.
 
 ### D-10: An MCP server is one owned entry per agent
 
@@ -3838,9 +3888,14 @@ leak into the lifecycle code. Unblocks #33, #45, #62, #93, #94 and #95.
   ignore.
 - **A leftover `mind.toml` nobody is told about.** A project holding both
   markers is read from its settings, and `MindProject::warnings` names the
-  `mind.toml` ignored, but no front end prints it yet: no command writes
-  settings before #35, and #38's migration moves the old marker out of the
-  way, so one is left only by hand or by a copy. A `warning:` line wherever a
+  `mind.toml` ignored, but no front end prints it yet. This build leaves
+  none: `mind init` gives a project a `mind.toml` marks no settings, and
+  #38's migration moves the old marker out of the way. One is still left by
+  hand, by a copy, and by an older build: one from before #29 asks only
+  whether a `mind.toml` is there, so its `mind init`, or its TUI's making a
+  repository a project, writes one beside the settings and reads the project
+  from it from then on. With `mind init` making a settings project by
+  default, two builds on one machine are enough. A `warning:` line wherever a
   project is opened, or a doctor check (#96), would make it seen.
 - **A key an older build reads past.** A key a project's settings do not
   define is read past and kept, which leaves room for #40's `targets`. A

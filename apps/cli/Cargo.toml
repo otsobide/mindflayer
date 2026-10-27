@@ -36,7 +36,9 @@ thiserror = "2"
 ratatui = "0.30.2"
 
 [dev-dependencies]
-gix = { version = "0.87", default-features = false }
+# `dirwalk`, to ask in process what git would list as untracked in a project
+# `mind init` made. It builds nothing new: core's gix already has it.
+gix = { version = "0.87", default-features = false, features = ["dirwalk"] }
 mindflayer-core = { path = "../core" }
 # To leave in a workspace's database what an older Mindflayer would have, which
 # nothing this one writes can, for the suites that check it is scrubbed. The

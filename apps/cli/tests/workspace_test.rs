@@ -11,7 +11,9 @@ use common::*;
 
 /// Under one directory, none above another: `outer`, a workspace with a
 /// skill of its own and `alpha` linked under it; `hub`, a workspace with a
-/// skill of its own; and `collapse`, a project under neither.
+/// skill of its own; and `collapse`, a project under neither, made as an
+/// older Mindflayer made it, so a copy installed there is in the folder it
+/// authors in, where a change from the project reaches it.
 struct Fixture {
     _dir: TempDir,
     outer: PathBuf,
@@ -32,7 +34,7 @@ fn fixture() -> Fixture {
     flayer(&outer, &["init"]).unwrap();
     flayer(&hub, &["init"]).unwrap();
     mind(&alpha, &["init"]).unwrap();
-    mind(&collapse, &["init"]).unwrap();
+    older_project(&collapse);
     flayer(&outer, &["link", "alpha"]).unwrap();
     flayer(&outer, &["add", "skill", "outer-skill", "The outer one's"]).unwrap();
     flayer(&hub, &["add", "skill", "hub-skill", "The hub's"]).unwrap();

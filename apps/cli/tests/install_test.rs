@@ -156,7 +156,9 @@ fn applying_installs_what_was_marked_and_reports_it() {
         "{}",
         outcome.stdout
     );
-    assert!(dir.path().join("collapse/skills/deploy/SKILL.md").is_file());
+    for copy in copies(&dir.path().join("collapse"), "deploy") {
+        assert!(copy.join("SKILL.md").is_file(), "{}", copy.display());
+    }
 }
 
 #[test]
@@ -183,9 +185,7 @@ fn an_installed_skill_opens_already_marked_next_time() {
 #[test]
 fn unmarking_an_installed_skill_removes_it() {
     let (dir, workspace, ledger) = shelved(&["collapse"], &["deploy"]);
-    let mut screen = screen_for(&workspace, &ledger);
-    press(&mut screen, &[KeyCode::Right, KeyCode::Char(' ')]);
-    install_screen::apply(&workspace, &ledger, &screen, &AgentHomes::default()).unwrap();
+    installed(dir.path(), &workspace, &ledger);
 
     let mut again = screen_for(&workspace, &ledger);
     press(&mut again, &[KeyCode::Right, KeyCode::Char(' ')]);
@@ -204,18 +204,23 @@ fn unmarking_an_installed_skill_removes_it() {
         "{}",
         outcome.stdout
     );
-    assert!(!dir.path().join("collapse/skills/deploy").exists());
+    for copy in copies(&dir.path().join("collapse"), "deploy") {
+        assert!(!copy.exists(), "{}", copy.display());
+    }
 }
 
 #[test]
 fn a_skill_written_by_hand_is_shown_but_not_touched() {
     let (dir, workspace, ledger) = shelved(&["collapse"], &["deploy"]);
-    // Same name as a shelf entry, but nobody here put it there.
-    write_skill(
-        &dir.path().join("collapse"),
-        "deploy",
-        &skill_file("deploy", "Written by a person"),
-    );
+    // Same name as a shelf entry, but nobody here put it there: in a folder
+    // an install of it would write.
+    let written = copies(&dir.path().join("collapse"), "deploy").remove(0);
+    fs::create_dir_all(&written).unwrap();
+    fs::write(
+        written.join("SKILL.md"),
+        skill_file("deploy", "Written by a person"),
+    )
+    .unwrap();
 
     let mut screen = screen_for(&workspace, &ledger);
     let drawn = rendered(&screen);
@@ -227,7 +232,7 @@ fn a_skill_written_by_hand_is_shown_but_not_touched() {
     assert_eq!(screen.counts(), (0, 0), "the box did not move");
     let after = rendered(&screen);
     assert!(after.contains("left alone"), "and it says why:\n{after}");
-    let kept = fs::read_to_string(dir.path().join("collapse/skills/deploy/SKILL.md")).unwrap();
+    let kept = fs::read_to_string(written.join("SKILL.md")).unwrap();
     assert!(kept.contains("Written by a person"));
 }
 
@@ -300,10 +305,13 @@ fn an_install_that_fails_still_says_what_it_cleared_before_the_error() {
     let dir = workspace_with_own();
     let alpha = dir.path().join("alpha");
     let left = interrupted(&alpha);
-    // A file where the skills folder goes: the copy is built, but cannot be
-    // put in place.
-    let skills = directory_for(&alpha, Kind::Skill);
-    fs::remove_dir_all(&skills).unwrap();
+    // A file where a folder the copies go in would be: the copy is built,
+    // but cannot be put in place.
+    let skills = copies(&alpha, "commit-style")[0]
+        .parent()
+        .unwrap()
+        .to_owned();
+    fs::create_dir_all(skills.parent().unwrap()).unwrap();
     fs::write(&skills, "not a folder").unwrap();
 
     let failure = mind(&alpha, &["install", "commit-style"]).unwrap_err();
@@ -348,10 +356,10 @@ fn applying_says_what_an_install_that_failed_had_cleared() {
     interrupted(&collapse);
     let mut screen = screen_for(&workspace, &ledger);
     press(&mut screen, &[KeyCode::Right, KeyCode::Char(' ')]);
-    // A file where the skills folder goes, once the screen is open: the copy
-    // is built, but cannot be put in place.
-    let skills = directory_for(&collapse, Kind::Skill);
-    fs::remove_dir_all(&skills).unwrap();
+    // A file where a folder the copies go in would be, once the screen is
+    // open: the copy is built, but cannot be put in place.
+    let skills = copies(&collapse, "deploy")[0].parent().unwrap().to_owned();
+    fs::create_dir_all(skills.parent().unwrap()).unwrap();
     fs::write(&skills, "not a folder").unwrap();
 
     let outcome =
@@ -657,7 +665,9 @@ fn a_mark_on_a_source_the_scrub_makes_one_with_another_installs_from_the_one_kep
     let outcome = install_screen::commit(&workspace, &screen, &AgentHomes::default()).unwrap();
 
     assert!(outcome.ok, "{:?}", outcome.stderr);
-    assert!(dir.path().join("collapse/skills/deploy/SKILL.md").is_file());
+    for copy in copies(&dir.path().join("collapse"), "deploy") {
+        assert!(copy.join("SKILL.md").is_file(), "{}", copy.display());
+    }
     assert_eq!(
         workspace
             .ledger_for_reading()
@@ -695,7 +705,9 @@ fn a_mark_on_what_only_the_source_the_scrub_drops_had_is_said_and_left_undone() 
              shelf once the ledger was scrubbed, so it was left as it was"
         ]
     );
-    assert!(!dir.path().join("collapse/skills/lint").exists());
+    for copy in copies(&dir.path().join("collapse"), "lint") {
+        assert!(!copy.exists(), "{}", copy.display());
+    }
 }
 
 #[test]

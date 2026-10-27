@@ -562,26 +562,31 @@ fn init_can_be_told_where_this_project_keeps_its_skills() {
 
     assert!(outcome.ok);
     assert!(dir.path().join(".claude").join("skills").is_dir());
-    let written = fs::read_to_string(dir.path().join(MIND_DIR).join(MIND_CONFIG)).unwrap();
+    let written = fs::read_to_string(dir.path().join(MIND_DIR).join(SETTINGS_FILE)).unwrap();
+    // The kind that was not mentioned keeps its default, written down too,
+    // since a kind the settings leave out has no folder at all.
     assert!(
-        written.contains(r#"skills = ".claude/skills""#),
+        written.contains(
+            "  \"directories\": {\n    \"skills\": \".claude/skills\",\n    \"rules\": \"rules\"\n  }\n"
+        ),
         "{written}"
     );
-    // The kind that was not mentioned keeps its default.
     assert!(dir.path().join("rules").is_dir());
 }
 
 #[test]
 fn listing_reads_from_where_the_project_says_its_skills_are() {
     let dir = TempDir::new().unwrap();
-    mind(dir.path(), &["init", "--skills", ".claude/skills"]).unwrap();
+    // A folder no agent reads, so only the settings lead the listing there:
+    // `.claude/skills` would be read for Claude whatever they said.
+    mind(dir.path(), &["init", "--skills", "docs/skills"]).unwrap();
     write_skill(dir.path(), "deploy", &skill_file("deploy", "Ship it"));
 
     let outcome = mind(dir.path(), &["list", "skills"]).unwrap();
 
     assert_eq!(outcome.stdout, "deploy  Ship it\n");
     // And it really is the configured folder that was read.
-    assert!(dir.path().join(".claude/skills/deploy/SKILL.md").is_file());
+    assert!(dir.path().join("docs/skills/deploy/SKILL.md").is_file());
 }
 
 #[test]
@@ -619,12 +624,27 @@ fn init_refuses_a_directory_outside_the_project() {
 }
 
 #[test]
+fn init_refuses_a_directory_inside_the_mind_that_keeps_itself_out_of_git() {
+    let dir = TempDir::new().unwrap();
+
+    let failure = mind(dir.path(), &["init", "--skills", ".mind/skills"]).unwrap_err();
+
+    assert_eq!(
+        failure.error.to_string(),
+        ".mind/skills: cannot hold a project's skills, because it is inside .mind, which holds \
+         Mindflayer's own files and is kept out of git unless the project is shared"
+    );
+    assert!(!dir.path().join(MIND_DIR).exists(), "nothing was made");
+}
+
+#[test]
 fn a_workspace_sees_a_project_that_keeps_its_skills_elsewhere() {
     let dir = TempDir::new().unwrap();
     flayer(dir.path(), &["init"]).unwrap();
     let project = dir.path().join("collapse");
     fs::create_dir(&project).unwrap();
-    mind(&project, &["init", "--skills", ".claude/skills"]).unwrap();
+    // Not `.claude/skills`, which Claude's folder would reach anyway.
+    mind(&project, &["init", "--skills", "docs/skills"]).unwrap();
     write_skill(&project, "deploy", &skill_file("deploy", "Ship it"));
     flayer(dir.path(), &["link", "collapse"]).unwrap();
 

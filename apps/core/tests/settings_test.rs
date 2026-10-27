@@ -321,6 +321,22 @@ fn a_new_project_naming_no_directories_makes_no_folder() {
 }
 
 #[test]
+fn a_project_made_as_mind_init_makes_one_gives_each_kind_not_asked_for_its_default() {
+    let dir = TempDir::new().unwrap();
+    let asked = Directories::default().with(Kind::Skill, "docs/skills");
+
+    let (project, _) =
+        MindProject::init_asked(dir.path(), &Agent::ALL, Share::Local, &asked).unwrap();
+
+    assert_eq!(
+        project.settings().unwrap().directories,
+        asked.with(Kind::Rule, "rules")
+    );
+    assert!(dir.path().join("docs").join("skills").is_dir());
+    assert!(dir.path().join("rules").is_dir());
+}
+
+#[test]
 fn a_gitignore_somebody_wrote_is_left_as_they_left_it() {
     let dir = TempDir::new().unwrap();
     fs::create_dir(dir.path().join(MIND_DIR)).unwrap();
@@ -391,6 +407,38 @@ fn a_directory_outside_the_project_is_refused_before_anything_is_made() {
             matches!(error, WorkspaceError::OutsideProject { .. }),
             "{outside}: {error}"
         );
+    }
+    assert!(!dir.path().join(MIND_DIR).exists());
+}
+
+#[test]
+fn a_directory_inside_mind_is_refused_before_anything_is_made() {
+    let dir = TempDir::new().unwrap();
+
+    // Shared too, though git would see its `.mind`: a change may make it
+    // local later.
+    for share in [Share::Local, Share::Shared] {
+        for inside in [
+            ".mind",
+            ".mind/skills",
+            "skills/../.mind/skills",
+            ".MIND/skills",
+        ] {
+            let directories = Directories::default().with(Kind::Skill, inside);
+            let error = MindProject::init_settings(dir.path(), &Agent::ALL, share, &directories)
+                .unwrap_err();
+
+            assert!(
+                matches!(
+                    error,
+                    WorkspaceError::InsideMind {
+                        kind: Kind::Skill,
+                        ..
+                    }
+                ),
+                "{inside}: {error}"
+            );
+        }
     }
     assert!(!dir.path().join(MIND_DIR).exists());
 }
@@ -651,6 +699,30 @@ fn an_edit_that_moves_a_folder_out_of_the_project_is_refused() {
             "{outside}: {error}"
         );
     }
+    assert_eq!(fs::read_to_string(&path).unwrap(), BY_HAND);
+}
+
+#[test]
+fn an_edit_that_moves_a_folder_into_mind_is_refused() {
+    let dir = TempDir::new().unwrap();
+    let (mut project, path) = by_hand(dir.path());
+
+    let error = project
+        .change_settings(|settings| {
+            settings.directories = settings.directories.clone().with(Kind::Rule, ".mind/rules");
+        })
+        .unwrap_err();
+
+    assert!(
+        matches!(
+            error,
+            WorkspaceError::InsideMind {
+                kind: Kind::Rule,
+                ..
+            }
+        ),
+        "{error}"
+    );
     assert_eq!(fs::read_to_string(&path).unwrap(), BY_HAND);
 }
 

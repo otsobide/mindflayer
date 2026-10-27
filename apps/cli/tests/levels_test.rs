@@ -17,7 +17,8 @@ fn mind_init_creates_a_project_and_flayer_init_a_workspace() {
     let one = mind(project.path(), &["init"]).unwrap();
     let two = flayer(workspace.path(), &["init"]).unwrap();
 
-    assert!(project.path().join(MIND_DIR).join(MIND_CONFIG).is_file());
+    assert!(project.path().join(MIND_DIR).join(SETTINGS_FILE).is_file());
+    assert!(!project.path().join(MIND_DIR).join(MIND_CONFIG).exists());
     // `.mind` is the marker and the configuration; the skills sit beside the
     // code, where the agents that read them look.
     assert!(project.path().join("skills").is_dir());
@@ -31,6 +32,117 @@ fn mind_init_creates_a_project_and_flayer_init_a_workspace() {
         .is_file());
     assert!(!workspace.path().join(MIND_DIR).exists());
     assert!(two.stdout.starts_with("initialized flayer workspace"));
+}
+
+#[test]
+fn mind_init_writes_settings_kept_out_of_git_and_empty_folders_that_git_does_not_list() {
+    let parent = TempDir::new().unwrap();
+    let root = parent.path().join("collapse");
+    fs::create_dir(&root).unwrap();
+    gix::init(&root).unwrap();
+    assert_eq!(untracked(&root), Vec::<String>::new());
+
+    let outcome = mind(&root, &["init"]).unwrap();
+
+    let marker = root.join(MIND_DIR);
+    assert_eq!(
+        outcome.stdout,
+        format!(
+            "initialized mind project `collapse` in {}\n",
+            marker.display()
+        )
+    );
+    assert_eq!(names_in(&root), [".git", ".mind", "rules", "skills"]);
+    assert_eq!(names_in(&marker), [".gitignore", "settings.json"]);
+    for kind in ["skills", "rules"] {
+        assert_eq!(names_in(&root.join(kind)), Vec::<String>::new(), "{kind}");
+    }
+    let id = MindProject::open(&root)
+        .unwrap()
+        .settings()
+        .unwrap()
+        .id
+        .to_string();
+    assert_eq!(
+        fs::read_to_string(marker.join(SETTINGS_FILE)).unwrap(),
+        format!(
+            r#"{{
+  "version": 3,
+  "id": "{id}",
+  "name": "collapse",
+  "agents": ["claude", "codex", "opencode"],
+  "share": "local",
+  "edit_tracked": false,
+  "directories": {{
+    "skills": "skills",
+    "rules": "rules"
+  }}
+}}
+"#
+        )
+    );
+    assert_eq!(
+        fs::read_to_string(marker.join(".gitignore")).unwrap(),
+        mindflayer_core::MIND_IGNORE
+    );
+    // The `.mind` ignores itself, and git lists no empty folder: nothing for
+    // `git status` to offer until an artifact is written.
+    assert_eq!(untracked(&root), Vec::<String>::new());
+    // And what the project authors is not kept out: its first skill is there
+    // for the team to commit, as the code beside it is.
+    mind(&root, &["add", "skill", "deploy", "Ship it"]).unwrap();
+    assert_eq!(untracked(&root), ["skills"]);
+}
+
+#[test]
+fn mind_init_shared_writes_no_gitignore_so_git_lists_its_settings() {
+    let parent = TempDir::new().unwrap();
+    let root = parent.path().join("collapse");
+    fs::create_dir(&root).unwrap();
+    gix::init(&root).unwrap();
+
+    mind(&root, &["init", "--shared"]).unwrap();
+
+    assert_eq!(names_in(&root.join(MIND_DIR)), ["settings.json"]);
+    let project = MindProject::open(&root).unwrap();
+    assert_eq!(
+        project.settings().unwrap().share,
+        mindflayer_core::Share::Shared
+    );
+    // The team's to commit: the one thing git has to offer.
+    assert_eq!(untracked(&root), [".mind"]);
+}
+
+#[test]
+fn mind_init_writes_the_agents_it_is_given_in_the_order_given() {
+    let dir = TempDir::new().unwrap();
+
+    mind(dir.path(), &["init", "--agents", "opencode,claude"]).unwrap();
+
+    let written = fs::read_to_string(dir.path().join(MIND_DIR).join(SETTINGS_FILE)).unwrap();
+    assert!(
+        written.contains("\n  \"agents\": [\"opencode\", \"claude\"],\n"),
+        "{written}"
+    );
+}
+
+#[test]
+fn mind_init_refuses_an_agent_it_does_not_know_before_writing_anything() {
+    let dir = TempDir::new().unwrap();
+
+    let error = Cli::try_parse_from(line(
+        "mind",
+        &["init", "--agents", "claude,cursor"],
+        dir.path(),
+    ))
+    .unwrap_err();
+
+    let said = error.to_string();
+    assert!(
+        said.contains("'cursor'") && said.contains("[possible values: claude, codex, opencode]"),
+        "{said}"
+    );
+    assert!(!dir.path().join(MIND_DIR).exists());
 }
 
 #[test]
@@ -414,17 +526,21 @@ fn a_skill_of_the_workspaces_installs_at_either_level() {
         from_the_workspace.stdout,
         "installed commit-style into beta, from workspace\n"
     );
-    assert!(alpha.join("skills/commit-style/SKILL.md").is_file());
-    assert!(dir
-        .path()
-        .join("beta/skills/commit-style/SKILL.md")
-        .is_file());
+    let (in_alpha, in_beta) = (
+        copies(&alpha, "commit-style"),
+        copies(&dir.path().join("beta"), "commit-style"),
+    );
+    for copy in in_alpha.iter().chain(&in_beta) {
+        assert!(copy.join("SKILL.md").is_file(), "{}", copy.display());
+    }
 
     assert_eq!(
         mind(&alpha, &["uninstall", "commit-style"]).unwrap().stdout,
         "removed commit-style from alpha\n"
     );
-    assert!(!alpha.join("skills/commit-style").exists());
+    for copy in &in_alpha {
+        assert!(!copy.exists(), "{}", copy.display());
+    }
     let again = mind(&alpha, &["uninstall", "commit-style"]).unwrap_err();
     assert!(matches!(*again.error, CliError::NotInstalled { .. }));
 }
@@ -437,7 +553,7 @@ fn a_copy_that_cannot_be_hashed_is_installed_and_said() {
     mind(&alpha, &["install", "commit-style"]).unwrap();
     // A file in the copy swapped for a link to the same bytes, which
     // installing again leaves where it is and the hash refuses.
-    let file = alpha.join("skills/commit-style/SKILL.md");
+    let file = copies(&alpha, "commit-style")[0].join("SKILL.md");
     let elsewhere = dir.path().join("SKILL.md");
     fs::rename(&file, &elsewhere).unwrap();
     std::os::unix::fs::symlink(&elsewhere, &file).unwrap();
@@ -500,8 +616,10 @@ fn one_name_from_two_places_is_installed_from_the_one_named() {
         twice.error
     );
     assert!(ours.stdout.contains("from workspace"), "{}", ours.stdout);
-    let installed = fs::read_to_string(project.join("skills/deploy/SKILL.md")).unwrap();
-    assert!(installed.contains("Our own deploy"));
+    for copy in copies(&project, "deploy") {
+        let installed = fs::read_to_string(copy.join("SKILL.md")).unwrap();
+        assert!(installed.contains("Our own deploy"), "{}", copy.display());
+    }
 }
 
 #[test]
