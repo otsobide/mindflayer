@@ -461,6 +461,138 @@ fn an_import_in_the_second_file_keeps_it_there() {
     );
 }
 
+/// A team's `CLAUDE.md` sharing `AGENTS.md` with Claude, as Claude's docs
+/// show it: the import on a line of its own, above the team's own text.
+const SHARING: &str = "@AGENTS.md\n\n# Working here\n\nRun `make test` before every push.\n";
+
+#[test]
+fn a_tracked_claude_md_that_imports_agents_md_itself_is_how_claude_reaches_the_block() {
+    let fixture = fixture(Share::Local);
+    write(fixture.root(), "CLAUDE.md", SHARING);
+    fixture.track();
+    // Claude reads the block through the team's own line, so its rules
+    // folder must not give the rules about every file a second time.
+    let reach = fixture.reach(true);
+    assert_eq!(reach, Reach::Imported(fixture.file("CLAUDE.md")));
+    assert_eq!(reach.mode(), Mode::Scoped);
+
+    for block_written in [true, false] {
+        let rendered = fixture.render(block_written);
+        assert_eq!(rendered.files[0].written, Written::Unchanged);
+        assert!(rendered.warnings.is_empty());
+        assert_eq!(
+            fs::read_to_string(fixture.file("CLAUDE.md")).unwrap(),
+            SHARING
+        );
+    }
+}
+
+#[test]
+fn a_dot_claude_md_that_imports_agents_md_itself_is_how_claude_reaches_the_block() {
+    let fixture = fixture(Share::Local);
+    write(fixture.root(), "CLAUDE.md", TEAM);
+    let sharing = SHARING.replace("@AGENTS.md", "@../AGENTS.md");
+    write(fixture.root(), ".claude/CLAUDE.md", &sharing);
+    fixture.track();
+    assert_eq!(
+        fixture.reach(true),
+        Reach::Imported(fixture.file(".claude/CLAUDE.md"))
+    );
+}
+
+#[test]
+fn a_claude_md_that_imports_agents_md_itself_is_never_given_a_second_import() {
+    let fixture = fixture(Share::Shared);
+    write(fixture.root(), "CLAUDE.md", SHARING);
+    let rendered = fixture.render(true);
+    assert_eq!(rendered.reach, Reach::Imported(fixture.file("CLAUDE.md")));
+    assert_eq!(rendered.files[0].written, Written::Unchanged);
+    assert_eq!(
+        fs::read_to_string(fixture.file("CLAUDE.md")).unwrap(),
+        SHARING
+    );
+}
+
+#[test]
+fn mindflayers_import_beside_one_somebody_wrote_is_taken_out() {
+    let fixture = fixture(Share::Shared);
+    // What an earlier render made of the team's file, and their own import
+    // in the other file.
+    write(
+        fixture.root(),
+        "CLAUDE.md",
+        &format!("<!-- mindflayer:begin -->\n@AGENTS.md\n<!-- mindflayer:end -->\n\n{SHARING}"),
+    );
+    let sharing = SHARING.replace("@AGENTS.md", "@../AGENTS.md");
+    write(fixture.root(), ".claude/CLAUDE.md", &sharing);
+    let rendered = fixture.render(true);
+    assert_eq!(rendered.reach, Reach::Imported(fixture.file("CLAUDE.md")));
+    assert_eq!(rendered.files[0].written, Written::Removed);
+    assert_eq!(rendered.files[1].written, Written::Unchanged);
+    assert_eq!(
+        fs::read_to_string(fixture.file("CLAUDE.md")).unwrap(),
+        SHARING
+    );
+    assert_eq!(
+        fs::read_to_string(fixture.file(".claude/CLAUDE.md")).unwrap(),
+        sharing
+    );
+}
+
+#[test]
+fn a_claude_local_md_that_imports_agents_md_is_how_claude_reaches_the_block() {
+    // Alone, beside a tracked CLAUDE.md that may not take the import, and
+    // below a CLAUDE.md above the project.
+    for beside in [None, Some("CLAUDE.md"), Some("../CLAUDE.md")] {
+        let fixture = fixture(Share::Local);
+        if let Some(name) = beside {
+            write(fixture.root(), name, TEAM);
+        }
+        write(fixture.root(), "CLAUDE.local.md", SHARING);
+        fixture.track();
+        let reach = fixture.reach(true);
+        assert_eq!(
+            reach,
+            Reach::Imported(fixture.file("CLAUDE.local.md")),
+            "{beside:?}"
+        );
+        assert_eq!(reach.mode(), Mode::Scoped);
+        fixture.render(true);
+        assert_eq!(
+            fs::read_to_string(fixture.file("CLAUDE.local.md")).unwrap(),
+            SHARING
+        );
+        if let Some(name) = beside {
+            assert_eq!(fs::read_to_string(fixture.file(name)).unwrap(), TEAM);
+        }
+    }
+}
+
+#[test]
+fn a_claude_md_that_may_take_the_import_takes_it_before_a_claude_local_md_does() {
+    // A person's own file reaches only them: a teammate cloning a shared
+    // project needs the import in the file they share.
+    let fixture = fixture(Share::Shared);
+    write(fixture.root(), "CLAUDE.md", TEAM);
+    write(fixture.root(), "CLAUDE.local.md", SHARING);
+    assert_eq!(
+        fixture.reach(true),
+        Reach::Import(fixture.file("CLAUDE.md"))
+    );
+}
+
+#[test]
+fn an_import_quoted_in_a_code_fence_is_not_how_claude_reaches_the_block() {
+    let fixture = fixture(Share::Local);
+    let quoted = format!("{TEAM}\n```markdown\n@AGENTS.md\n```\n");
+    write(fixture.root(), "CLAUDE.md", &quoted);
+    fixture.track();
+    assert_eq!(
+        fixture.reach(true),
+        Reach::Fallback(Fallback::Tracked(fixture.file("CLAUDE.md")))
+    );
+}
+
 #[test]
 fn a_malformed_block_in_the_projects_claude_md_is_refused() {
     let fixture = fixture(Share::Shared);

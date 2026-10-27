@@ -186,3 +186,69 @@ fn a_rules_marker_in_the_block_is_refused_as_a_copy_of_agents_md() {
         Malformed::Ruled { line: 4 }
     );
 }
+
+/// Whether `file`, read as a person's own file is, imports `AGENTS.md`.
+fn follows(file: &str) -> bool {
+    imported_by(&lines::split(file.as_bytes()), IMPORT)
+}
+
+#[test]
+fn an_import_somebody_wrote_is_a_line_of_its_own() {
+    assert!(follows("@AGENTS.md\n"));
+    assert!(follows("@AGENTS.md"));
+    assert!(follows("@AGENTS.md  \r\n"));
+    assert!(follows(&format!("@AGENTS.md\n\n{TEAM}")));
+    assert!(follows(&format!("{TEAM}\n@AGENTS.md\n")));
+    assert!(!follows(TEAM));
+    assert!(!follows(" @AGENTS.md\n"));
+    assert!(!follows("    @AGENTS.md\n"));
+    assert!(!follows("`@AGENTS.md`\n"));
+    assert!(!follows("@AGENTS.md.\n"));
+    assert!(!follows("@../AGENTS.md\n"));
+    // Claude follows one in a sentence too, but a word is not looked for.
+    assert!(!follows("Read @AGENTS.md first.\n"));
+}
+
+#[test]
+fn an_import_in_a_code_fence_is_not_one() {
+    assert!(!follows("```\n@AGENTS.md\n```\n"));
+    assert!(!follows("~~~markdown\n@AGENTS.md\n~~~\n"));
+    assert!(!follows("   ```\n@AGENTS.md\n"));
+    // Closed only by a run as long, of the same character, alone.
+    assert!(!follows("````\n```\n@AGENTS.md\n````\n"));
+    assert!(!follows("```\n~~~\n@AGENTS.md\n```\n"));
+    assert!(!follows("```\n``` text\n@AGENTS.md\n```\n"));
+    assert!(follows("```\nmake test\n```\n\n@AGENTS.md\n"));
+    assert!(follows("~~~\n~~~~ \n@AGENTS.md\n"));
+}
+
+#[test]
+fn an_import_in_an_html_comment_is_not_one() {
+    assert!(!follows("<!--\n@AGENTS.md\n-->\n"));
+    assert!(!follows("<!-- notes\n@AGENTS.md\n"));
+    assert!(!follows("<!-- one -->\n<!-- two\n@AGENTS.md\n-->\n"));
+    assert!(!follows("<!--\n--> <!--\n@AGENTS.md\n-->\n"));
+    assert!(follows("<!--\nnotes\n-->\n@AGENTS.md\n"));
+    // Mindflayer's markers are comments of one line each.
+    assert!(follows(
+        "<!-- mindflayer:begin -->\n@AGENTS.md\n<!-- mindflayer:end -->\n"
+    ));
+}
+
+#[test]
+fn an_import_outside_the_block_is_somebodys_and_the_one_inside_is_not() {
+    let theirs = format!("@AGENTS.md\n\n{TEAM}");
+    let file = ClaudeMd::parse(theirs.as_bytes()).unwrap();
+    assert!(file.imports_outside(IMPORT));
+    assert!(!file.imports(IMPORT));
+
+    let ours = imported(TEAM.as_bytes());
+    let file = ClaudeMd::parse(&ours).unwrap();
+    assert!(!file.imports_outside(IMPORT));
+    assert!(file.imports(IMPORT));
+
+    let both = imported(theirs.as_bytes());
+    let file = ClaudeMd::parse(&both).unwrap();
+    assert!(file.imports_outside(IMPORT));
+    assert!(file.imports(IMPORT));
+}

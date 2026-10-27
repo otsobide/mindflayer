@@ -31,12 +31,14 @@
 //!
 //! [`reach`] decides how Claude gets the block, from the predicate, the
 //! project's settings and whether the block was written: natively, through
-//! the import, or not at all, when Claude's own rules folder is to hold
-//! every rule instead ([`Reach::mode`], [`crate::claude_rules`]). Never both
-//! a block Claude reads and a rule file for the same rule, so Claude reads
-//! each rule once. [`render`] adds the import where the reach says, and
-//! takes it out everywhere else. Which rules a project is given, and when
-//! to render, are the caller's (#45), as for the block itself.
+//! an import of `AGENTS.md` the project's files already hold, Mindflayer's
+//! or somebody's, through the import added, or not at all, when Claude's
+//! own rules folder is to hold every rule instead ([`Reach::mode`],
+//! [`crate::claude_rules`]). Never both a block Claude reads and a rule
+//! file for the same rule, so Claude reads each rule once. [`render`] adds
+//! the import where the reach says, and takes it out everywhere else.
+//! Which rules a project is given, and when to render, are the caller's
+//! (#45), as for the block itself.
 
 use std::fs;
 use std::io;
@@ -79,6 +81,10 @@ const OWN: [(&[&str], &str); 2] = [
     (&[CLAUDE_MD], "@AGENTS.md"),
     (&[".claude", CLAUDE_MD], "@../AGENTS.md"),
 ];
+
+/// A person's own file, which Mindflayer never writes in but reads for an
+/// import of `AGENTS.md` they wrote themselves, and that import's line.
+const LOCAL: (&[&str], &str) = (&[CLAUDE_LOCAL_MD], "@AGENTS.md");
 
 /// Whether Claude Code, started in `folder`, reads the `AGENTS.md` there:
 /// whether no `CLAUDE.md`, `.claude/CLAUDE.md` or `CLAUDE.local.md` is in
@@ -171,7 +177,13 @@ pub enum Reach {
     /// in: it would bring the file into itself, between the markers the
     /// block already holds.
     Same(PathBuf),
-    /// Claude reads the block through the import in this file, the
+    /// Claude reads the block through an import of `AGENTS.md` somebody
+    /// wrote in this file, outside Mindflayer's markers, as Claude's docs
+    /// show a `CLAUDE.md` sharing `AGENTS.md`: the project's own
+    /// `CLAUDE.md`, `.claude/CLAUDE.md` or `CLAUDE.local.md`. Nothing is
+    /// written, and Mindflayer's import, wherever it is, is no longer wanted.
+    Imported(PathBuf),
+    /// Claude reads the block through Mindflayer's import in this file, the
     /// project's own `CLAUDE.md` or `.claude/CLAUDE.md`, there already or for
     /// [`render`] to add.
     Import(PathBuf),
@@ -187,7 +199,7 @@ impl Reach {
     /// reads each rule once and misses none.
     pub fn mode(&self) -> Mode {
         match self {
-            Reach::Native | Reach::Same(_) | Reach::Import(_) => Mode::Scoped,
+            Reach::Native | Reach::Same(_) | Reach::Imported(_) | Reach::Import(_) => Mode::Scoped,
             Reach::Fallback(_) => Mode::Fallback,
         }
     }
@@ -254,6 +266,13 @@ pub enum Fallback {
 ///   leaves out).
 /// - [`Reach::Same`] when one of Claude's own files in the project is that
 ///   `AGENTS.md`, through a link.
+/// - [`Reach::Imported`] when the project's own `CLAUDE.md` or
+///   `.claude/CLAUDE.md` already imports `AGENTS.md` with a line of its own
+///   ([`ClaudeMd::imports_outside`]), whether or not it may be edited:
+///   Claude reads the block through it, and the fallback beside it would
+///   give Claude every rule about every file twice. Chosen before
+///   Mindflayer's own import, which beside it would only name the same file
+///   a second time, and which [`render`] then takes out.
 /// - [`Reach::Import`] when the project's own `CLAUDE.md` or
 ///   `.claude/CLAUDE.md` is there and may be edited: in a shared project,
 ///   in one a `mind.toml` marks, which was committed by design (D-02), and
@@ -262,6 +281,11 @@ pub enum Fallback {
 ///   holding the import keeps it, so the import never moves from file to
 ///   file, and is kept even where it may no longer be edited, since Claude
 ///   reads it there all the same.
+/// - [`Reach::Imported`] again when no file of the project's own can take
+///   the import but a `CLAUDE.local.md` imports `AGENTS.md`, as its owner
+///   may have written it to keep reading that file: last, since it reaches
+///   only them, and a teammate cloning a shared project needs the import
+///   in the `CLAUDE.md` they share.
 /// - [`Reach::Fallback`] otherwise: no block, only a `CLAUDE.local.md`, a
 ///   `CLAUDE.md` only above the project, a project's own one git tracks
 ///   without `edit_tracked`, or one reached through a link, which is never
@@ -271,7 +295,8 @@ pub enum Fallback {
 /// Reads, and writes nothing: [`render`] carries it out. A `CLAUDE.md` of
 /// the project's own that holds a malformed block is refused, as writing
 /// the import into it would be, since what Claude reads there cannot be
-/// told.
+/// told. Each is read before any is chosen, so whichever file holds an
+/// import, a malformed one refuses the reach as it refuses the render.
 pub fn reach(
     project: &MindProject,
     homes: &AgentHomes,
@@ -339,8 +364,7 @@ fn decide(project: &MindProject, survey: &Survey) -> Result<Reach, ClaudeMdError
         }
     }
 
-    let mut chosen = None;
-    let mut refused = None;
+    let mut own = Vec::new();
     for (name, import) in OWN {
         let Some(file) = survey.own(name) else {
             continue;
@@ -348,10 +372,27 @@ fn decide(project: &MindProject, survey: &Survey) -> Result<Reach, ClaudeMdError
         let edit = edit(project, &survey.real, &file, name)?;
         // A link's import would mean whatever the link leads to, so only a
         // file in its place is asked whether it imports.
-        let looked = !matches!(edit, Edit::Refused(Fallback::Linked { .. }));
-        if looked && read(&file)?.imports(import) {
-            return Ok(Reach::Import(file));
-        }
+        let text = match edit {
+            Edit::Refused(Fallback::Linked { .. }) => None,
+            _ => Some(read(&file)?),
+        };
+        own.push((file, import, edit, text));
+    }
+    let holding = |holds: fn(&ClaudeMd, &str) -> bool| {
+        own.iter()
+            .find(|(_, import, _, text)| text.as_ref().is_some_and(|text| holds(text, import)))
+            .map(|(file, ..)| file.clone())
+    };
+    if let Some(file) = holding(ClaudeMd::imports_outside) {
+        return Ok(Reach::Imported(file));
+    }
+    if let Some(file) = holding(ClaudeMd::imports) {
+        return Ok(Reach::Import(file));
+    }
+
+    let mut chosen = None;
+    let mut refused = None;
+    for (file, _, edit, _) in own {
         match edit {
             Edit::Allowed => {
                 chosen.get_or_insert(file);
@@ -363,6 +404,12 @@ fn decide(project: &MindProject, survey: &Survey) -> Result<Reach, ClaudeMdError
     }
     if let Some(file) = chosen {
         return Ok(Reach::Import(file));
+    }
+    let (name, import) = LOCAL;
+    if let Some(file) = survey.own(name) {
+        if survey.in_place(&file, name) && imported_by(&read_lines(&file)?, import) {
+            return Ok(Reach::Imported(file));
+        }
     }
     if let Some(reason) = refused {
         return Ok(Reach::Fallback(reason));
@@ -595,14 +642,108 @@ fn resolved(path: &Path) -> Result<PathBuf, ClaudeMdError> {
 
 /// The `CLAUDE.md` at `file`, parsed.
 fn read(file: &Path) -> Result<ClaudeMd, ClaudeMdError> {
-    let bytes = fs::read(file).map_err(|source| ClaudeMdError::Read {
-        path: file.to_path_buf(),
-        source,
-    })?;
-    ClaudeMd::parse(&bytes).map_err(|problem| ClaudeMdError::Malformed {
+    ClaudeMd::parse(&read_bytes(file)?).map_err(|problem| ClaudeMdError::Malformed {
         file: file.to_path_buf(),
         problem,
     })
+}
+
+/// The lines of the file at `file`, a byte order mark left out: one
+/// Mindflayer never writes in, so no block of its own there is looked for,
+/// and none is refused.
+fn read_lines(file: &Path) -> Result<Vec<Line>, ClaudeMdError> {
+    let bytes = read_bytes(file)?;
+    Ok(lines::split(bytes.strip_prefix(BOM).unwrap_or(&bytes)))
+}
+
+fn read_bytes(file: &Path) -> Result<Vec<u8>, ClaudeMdError> {
+    fs::read(file).map_err(|source| ClaudeMdError::Read {
+        path: file.to_path_buf(),
+        source,
+    })
+}
+
+/// Whether one of `lines` is `import` as Claude follows it: the whole
+/// line, trailing whitespace forgiven, the shape Claude's docs show and the
+/// probe verified outside the markers (docs/agents.md, `claude-import` run
+/// 1). Not a line in a fenced code block, which Claude's import parsing
+/// skips (docs-only), nor one in an HTML comment over several lines, which
+/// Claude strips, before or after following imports, which is not known.
+///
+/// Narrow on purpose, and line by line rather than as markdown, as
+/// `AGENTS.md` is read: a line taken for an import Claude does not follow
+/// would keep the rules about every file from Claude, which would read them
+/// only in the block, while an import missed has Claude read them twice at
+/// worst, in the block and in its rules folder, as before the import was
+/// looked for. So a fence is taken as opened by any run of three backticks
+/// or tildes, and closed only by one that CommonMark closes it with, and an
+/// import in the middle of a sentence, which Claude follows too, is not
+/// looked for.
+fn imported_by<'a>(lines: impl IntoIterator<Item = &'a Line>, import: &str) -> bool {
+    enum In {
+        Text,
+        Fence { mark: u8, length: usize },
+        Comment,
+    }
+    let mut state = In::Text;
+    for line in lines {
+        let text = &line.text[..];
+        state = match state {
+            In::Fence { mark, length } => match fence(text) {
+                Some((closing, run, rest))
+                    if closing == mark && run >= length && rest.trim_ascii().is_empty() =>
+                {
+                    In::Text
+                }
+                _ => In::Fence { mark, length },
+            },
+            In::Comment => match find(text, b"-->") {
+                Some(at) if !opens_comment(&text[at..]) => In::Text,
+                _ => In::Comment,
+            },
+            In::Text => {
+                if let Some((mark, length, _)) = fence(text) {
+                    In::Fence { mark, length }
+                } else if opens_comment(text) {
+                    In::Comment
+                } else if text.trim_ascii_end() == import.as_bytes() {
+                    return true;
+                } else {
+                    In::Text
+                }
+            }
+        };
+    }
+    false
+}
+
+/// The run of three or more backticks or tildes `text` starts with, after
+/// at most three spaces, as its character, its length and what follows it.
+fn fence(text: &[u8]) -> Option<(u8, usize, &[u8])> {
+    let indent = text.iter().take_while(|&&byte| byte == b' ').count();
+    if indent > 3 {
+        return None;
+    }
+    let rest = &text[indent..];
+    let mark = *rest.first()?;
+    if mark != b'`' && mark != b'~' {
+        return None;
+    }
+    let length = rest.iter().take_while(|&&byte| byte == mark).count();
+    (length >= 3).then(|| (mark, length, &rest[length..]))
+}
+
+/// Whether `text` leaves an HTML comment open: its last `<!--` has no
+/// `-->` after it.
+fn opens_comment(text: &[u8]) -> bool {
+    text.windows(4)
+        .rposition(|window| window == b"<!--")
+        .is_some_and(|at| find(&text[at + 4..], b"-->").is_none())
+}
+
+fn find(text: &[u8], needle: &[u8]) -> Option<usize> {
+    text.windows(needle.len())
+        .position(|window| window == needle)
 }
 
 /// What a file Windows wrote may open with: kept ahead of the block, which
@@ -705,6 +846,14 @@ impl ClaudeMd {
         self.block.as_ref().is_some_and(|block| {
             matches!(&block.lines[..], [line] if line.text.trim_ascii_end() == import.as_bytes())
         })
+    }
+
+    /// Whether a line outside the block is `import`, as somebody wrote it
+    /// to share `AGENTS.md` with Claude: Claude follows it as it follows
+    /// Mindflayer's, which beside it would only name the file a second time.
+    /// What counts as that line is narrow ([`imported_by`]).
+    pub fn imports_outside(&self, import: &str) -> bool {
+        imported_by(self.before.iter().chain(&self.after), import)
     }
 
     /// Make the block hold `import` alone, and whether that changed
