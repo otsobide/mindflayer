@@ -1677,7 +1677,13 @@ pub enum WorkspaceError {
     InsideMind { path: PathBuf, kind: Kind },
     #[error("{path}: keeps no {kind}s of its own, since its marker names no folder for them")]
     NoDirectory { path: PathBuf, kind: Kind },
-    #[error("{path}: has no {SETTINGS_FILE} to change, since a {MIND_CONFIG} marks it")]
+    /// Pointing at the migration rather than at `mind init`, which never
+    /// rewrites a marker: what such a project lacks is what moving it to
+    /// settings gives it, as it was committed by design.
+    #[error(
+        "{path}: has no {SETTINGS_FILE} to change, since a {MIND_CONFIG} marks it; \
+         `mind migrate` moves it to one"
+    )]
     NoSettings { path: PathBuf },
     #[error("{path}: cannot hold the workspace's {kind}s, because it is not inside the workspace")]
     OutsideWorkspace { path: PathBuf, kind: Kind },
