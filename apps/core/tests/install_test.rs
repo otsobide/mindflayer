@@ -1246,3 +1246,74 @@ fn from_typed_with_credentials_names_the_source_they_were_taken_out_of_and_repea
     );
     assert!(!nothing.to_string().contains("ghp_t0ken"), "{nothing}");
 }
+
+// ---------------------------------------------------------------------------
+// What no copy holds
+// ---------------------------------------------------------------------------
+
+/// A shelf holding `deploy` with a `.claude-plugin` folder beside its
+/// `SKILL.md`, as a plugin's skill is gathered, and a project marked by its
+/// settings naming every agent.
+fn plugin_skill() -> (TempDir, FlayerWorkspace, MindProject, Ledger) {
+    let (dir, workspace, _, ledger) = gathered(&[
+        ("skills/deploy/SKILL.md", &skill("deploy", "Ship it")),
+        (
+            "skills/deploy/.claude-plugin/plugin.json",
+            r#"{"name": "deploy", "hooks": "hooks.json"}"#,
+        ),
+        ("skills/deploy/scripts/.claude-plugin/example.json", "{}"),
+    ]);
+    let root = dir.path().join("alpha");
+    fs::create_dir(&root).unwrap();
+    let (project, _) =
+        MindProject::init_settings(&root, &Agent::ALL, Share::Shared, &Directories::default())
+            .unwrap();
+    (dir, workspace, project, ledger)
+}
+
+#[test]
+fn a_gathered_skill_holding_a_claude_plugin_folder_is_installed_without_it_and_says_so() {
+    let (_dir, workspace, project, ledger) = plugin_skill();
+
+    let done = install_from_shelf(&workspace, &ledger, &project, "deploy");
+
+    assert!(
+        matches!(done.installed, Installed::Added { .. }),
+        "{done:?}"
+    );
+    assert_eq!(done.left_out.len(), 1, "{:?}", done.left_out);
+    assert!(done.left_out[0].path.ends_with("deploy/.claude-plugin"));
+    assert!(done.left_out[0].reason.contains("as a plugin"));
+    for copy in agents_copies(&project, "deploy") {
+        assert!(copy.join("SKILL.md").is_file());
+        assert!(!copy.join(".claude-plugin").exists(), "{}", copy.display());
+        // Only the top one: further down it is the skill's own file.
+        assert!(copy.join("scripts/.claude-plugin/example.json").is_file());
+    }
+    let record = ledger
+        .installation("alpha", Kind::Skill, "deploy")
+        .unwrap()
+        .unwrap();
+    let [agents, _] = agents_copies(&project, "deploy");
+    assert_eq!(
+        record.content_hash,
+        Some(mindflayer_core::hash::tree(&agents).unwrap())
+    );
+}
+
+#[test]
+fn a_skill_installed_without_what_is_left_out_is_still_current_and_installs_unchanged() {
+    let (_dir, workspace, project, ledger) = plugin_skill();
+    install_from_shelf(&workspace, &ledger, &project, "deploy");
+
+    let surveyed = install::survey(&workspace, &ledger, &project, Kind::Skill).unwrap();
+    let again = install::install(&workspace, &ledger, &project, &surveyed[0]).unwrap();
+
+    assert!(install::is_current(&workspace, &project, &surveyed[0]));
+    assert!(
+        matches!(again.installed, Installed::Unchanged { .. }),
+        "{again:?}"
+    );
+    // Still not all that was offered, so still said.
+    assert_eq!(again.left_out.len(), 1);
+}

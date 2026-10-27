@@ -86,6 +86,14 @@ pub(crate) fn install_named(
             },
     };
     outcome.stdout.push_str(&swept(project, &done.swept));
+    // Installed all the same, but not all of what was offered, which is
+    // worth a look before an agent runs it.
+    for left in &done.left_out {
+        outcome
+            .stderr
+            .push(format!("warning: {name} in {into} {}", left_out(left)));
+        outcome.ok = false;
+    }
     // Installed and recorded all the same, but without what tells a later
     // edit apart, which is worth a look at what is in the copy.
     if let Some(reason) = unhashed {
@@ -124,6 +132,15 @@ pub(crate) fn cleared(project: &MindProject, swept: &[std::path::PathBuf]) -> Ve
             )
         })
         .collect()
+}
+
+/// What to say after a skill's name of what installing it left out.
+pub(crate) fn left_out(left: &mindflayer_core::install::LeftOut) -> String {
+    let name = left.path.file_name().map_or_else(
+        || left.path.display().to_string(),
+        |name| name.to_string_lossy().into_owned(),
+    );
+    format!("was installed without its {name}, since {}", left.reason)
 }
 
 /// A path in `project` as somebody standing in it would spell it, or as it

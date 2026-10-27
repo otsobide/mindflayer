@@ -704,3 +704,38 @@ fn installing_and_uninstalling_one_skill_scrub_the_ledger_first() {
     assert!(removed.ok, "{:?}", removed.stderr);
     assert_eq!(removed.stderr, [SCRUBBED]);
 }
+
+#[test]
+fn installing_a_skill_that_holds_a_claude_plugin_folder_leaves_it_out_and_warns() {
+    let dir = TempDir::new().unwrap();
+    flayer(dir.path(), &["init"]).unwrap();
+    with_settings(dir.path(), r#""claude", "codex""#);
+    let source = repository(&[
+        (
+            "skills/deploy/SKILL.md",
+            &skill_file("deploy", "Ship the service"),
+        ),
+        ("skills/deploy/.claude-plugin/plugin.json", "{}"),
+    ]);
+    let url = source.path().to_string_lossy().into_owned();
+    flayer(dir.path(), &["gather", "git", &url]).unwrap();
+
+    let outcome = flayer(dir.path(), &["install", "-p", "alpha", "deploy"]).unwrap();
+
+    assert_eq!(
+        outcome.stdout,
+        format!("installed deploy into alpha, from {url}\n")
+    );
+    assert_eq!(
+        outcome.stderr,
+        vec![
+            "warning: deploy in alpha was installed without its .claude-plugin, since Claude \
+             would load the skill as a plugin, with the hooks and MCP servers it declares"
+        ]
+    );
+    assert!(!outcome.ok);
+    let root = dir.path().join("alpha");
+    assert!(root.join(".claude/skills/deploy/SKILL.md").is_file());
+    assert!(!root.join(".claude/skills/deploy/.claude-plugin").exists());
+    assert!(!root.join(".agents/skills/deploy/.claude-plugin").exists());
+}

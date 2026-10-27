@@ -199,6 +199,38 @@ pub fn is_folder_name(name: &str) -> bool {
     ) && !name.contains(['/', '\\'])
 }
 
+/// What an install leaves out of every copy it writes, from the top of the
+/// artifact, and why: a `.claude-plugin` folder, by which Claude would load
+/// the skill as a plugin, with whatever hooks and MCP servers it declares
+/// (docs-only, in `docs/agents.md`, so it is left out whatever Claude does
+/// with it).
+///
+/// A skill is instructions an agent reads when it chooses to; a plugin's
+/// hooks run commands on their own and its servers are started for it, which
+/// installing a skill must not turn on behind anybody's back. Left out of
+/// every install, whichever agents the project names: an agent folder an
+/// override names (#40) may be Claude's too. Only at the top, where Claude
+/// looks for one: a skill that teaches plugin writing can ship one further
+/// down as an example, and it is the skill's like any other file.
+const LEAVE_OUT: [(&str, &str); 1] = [(
+    ".claude-plugin",
+    "Claude would load the skill as a plugin, with the hooks and MCP servers it declares",
+)];
+
+/// The names [`LEAVE_OUT`] leaves out, as the copy takes them.
+fn left_out_names() -> [&'static str; LEAVE_OUT.len()] {
+    LEAVE_OUT.map(|(name, _)| name)
+}
+
+/// Something an offer holds that an install left out of every copy.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LeftOut {
+    /// Where it is in the offer.
+    pub path: PathBuf,
+    /// Why no copy holds it, as a clause a front end can say after its name.
+    pub reason: &'static str,
+}
+
 /// One folder of a project's that an install of a kind puts a copy in, under
 /// the artifact's name.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -641,7 +673,16 @@ pub fn install(
         source,
         swept: Vec::new(),
     })?;
-    let changes = match stage.place(&from, &copies, &within, &[]) {
+    // Said, since what lands is then not all of what was offered.
+    let left_out: Vec<LeftOut> = LEAVE_OUT
+        .iter()
+        .map(|(name, reason)| LeftOut {
+            path: from.join(name),
+            reason,
+        })
+        .filter(|left| fs::symlink_metadata(&left.path).is_ok())
+        .collect();
+    let changes = match stage.place(&from, &copies, &within, &left_out_names()) {
         Ok(changes) => changes,
         // What was cleared on the way goes out with the error rather than
         // with the stage: it was cleared whether or not this copy lands.
@@ -696,6 +737,11 @@ pub fn install(
         },
     )?;
     let mut detail = format!("{name} into {}", project.name());
+    for left in &left_out {
+        if let Some(name) = left.path.file_name() {
+            detail.push_str(&format!(", without {}", name.to_string_lossy()));
+        }
+    }
     if let Some(reason) = &unhashed {
         detail.push_str(&format!(", recorded without a hash: {reason}"));
     }
@@ -727,7 +773,11 @@ pub fn install(
             unhashed,
         }
     };
-    Ok(Installation { installed, swept })
+    Ok(Installation {
+        installed,
+        swept,
+        left_out,
+    })
 }
 
 /// The one hash every copy holds ([`hash::tree`]), or why there is none:
@@ -988,15 +1038,19 @@ pub struct Installation {
     /// where earlier versions staged. Said rather than cleared quietly,
     /// because each is an install that did not finish.
     pub swept: Vec<PathBuf>,
+    /// What the offer holds that no copy does (`LEAVE_OUT`): said, because
+    /// the copies are then not all that was offered.
+    pub left_out: Vec<LeftOut>,
 }
 
 impl From<Installed> for Installation {
     /// An installation that never reached the scratch folder, and so cleared
-    /// nothing in it.
+    /// nothing in it and copied nothing.
     fn from(installed: Installed) -> Self {
         Installation {
             installed,
             swept: Vec::new(),
+            left_out: Vec::new(),
         }
     }
 }
@@ -1151,10 +1205,10 @@ fn kept_by_a_load(workspace: &FlayerWorkspace, kind: Kind, path: &Path) -> Optio
 }
 
 /// Whether `candidate` is the copy `project` holds: the same names and bytes
-/// as the folder there. For telling which of two offers of one name is the
-/// one installed, which a record from before schema 3 does not say for what
-/// came from a workspace rather than the shelf, and which an edit since may
-/// have made neither.
+/// as the folder there, but for what an install leaves out (`LEAVE_OUT`).
+/// For telling which of two offers of one name is the one installed, which
+/// a record from before schema 3 does not say for what came from a workspace
+/// rather than the shelf, and which an edit since may have made neither.
 ///
 /// Compared with the first copy the project holds of it: an install writes
 /// every copy from one tree, so any of them is what was installed, and one
@@ -1171,7 +1225,10 @@ pub fn is_current(
         .iter()
         .map(|target| target.folder.join(candidate.name()))
         .find(|at| at.is_dir())
-        .is_some_and(|at| copy::same(&candidate.source(workspace), &at).unwrap_or(false))
+        .is_some_and(|at| {
+            copy::same_leaving(&candidate.source(workspace), &at, &left_out_names())
+                .unwrap_or(false)
+        })
 }
 
 /// Why an install or an uninstall could not happen at all.

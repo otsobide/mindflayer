@@ -255,6 +255,14 @@ pub fn apply(
                         continue;
                     }
                 };
+                for left in &done.left_out {
+                    stderr.push(format!(
+                        "warning: {}: {} {}",
+                        project.name(),
+                        entry.candidate.name(),
+                        crate::commands::install::left_out(left)
+                    ));
+                }
                 if let Some(reason) = done.installed.unhashed() {
                     stderr.push(format!(
                         "warning: {}: {} was recorded without a hash of what it holds: {reason}",
