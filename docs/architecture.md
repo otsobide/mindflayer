@@ -1145,11 +1145,11 @@ whatever the command (`render::json`):
 {"version": 1, "data": ..., "warnings": [...]}
 ```
 
-`status` is the first to take it ([what each project
+`status` was the first to take it ([what each project
 has](#what-each-project-has)), and every later reading command takes the same
-one rather than a shape of its own: `scan --json` (#39), and the read types
-#61 makes serializable. One shape is one parser for a script, and for the
-panel's backend when it reads through the CLI.
+one rather than a shape of its own: `scan --json` ([Scanning](#scanning)), and
+the read types #61 makes serializable. One shape is one parser for a script,
+and for the panel's backend when it reads through the CLI.
 
 - **The warnings are inside it.** Failures are collected, not raised, in JSON
   as in text: what a table would say on stderr as `warning:` lines goes into
@@ -2396,13 +2396,14 @@ was made rather than typed out again.
 `m`, or `flayer minds`, lists every project the workspace links, ticked, and
 every one `flayer scan` finds under it that it does not, unticked, all in one
 list by path, because the question it answers is "which of these", not "which
-kind". Ticking only marks. Applying turns the marks into lines like any other
-task: `mind -C <path> init` for each repository that is not a project yet, then
-one `flayer link` and one `flayer unlink`, each with every path at once. So the
-screen needed `link` and `unlink` to take several paths, and they take them
-**all or nothing**: every path is checked before any entry is written, so a
-refused one leaves the registry as it was rather than half changed by a
-command that reports failure.
+kind". `flayer minds DIR` finds those under the folders it names instead
+([Scanning](#scanning)). Ticking only marks. Applying turns the marks into
+lines like any other task: `mind -C <path> init` for each repository that is
+not a project yet, then one `flayer link` and one `flayer unlink`, each with
+every path at once. So the screen needed `link` and `unlink` to take several
+paths, and they take them **all or nothing**: every path is checked before any
+entry is written, so a refused one leaves the registry as it was rather than
+half changed by a command that reports failure.
 
 ### The agents and share toggles
 
@@ -3560,22 +3561,65 @@ question](#open-questions).
 
 ## Scanning
 
-`flayer scan` walks down from the workspace root looking for mind projects and
-git repositories, and says which of them the registry already points at. It
-links nothing (a workspace manages what it was told to); it only makes the
-telling easier, which is what the TUI's link form is built on.
+`flayer scan` walks down from the workspace root, or from each folder it is
+given, looking for mind projects and git repositories, and says which of them
+the registry already points at. It links nothing (a workspace manages what it
+was told to); it only makes the telling easier, which is what the TUI's link
+form and the minds screen are built on.
 
-The walk is bounded, because a workspace can sit at the top of a home
-directory. It goes three levels down (`repo`, `org/repo`,
-`github.com/org/repo`), breadth first, so a budget of listed folders runs out
-on the deepest rather than on a whole neighbouring tree, and never into hidden
-folders, symlinks, `node_modules` or `target`. A repository is a leaf, since its
-folders are its own. The workspace root is the exception: it is also where the
-others are kept. A scan that runs out of budget says so rather than passing for
-complete. A folder that cannot be listed is a failure reported beside what was
-found, except a root that is not there at all: that holds nothing, and only
-the default workspace before it is made can have one, in a home nobody has
-created yet.
+It had to be pointed somewhere else once the default workspace moved to
+`~/.mindflayer`: a workspace in a home directory has nothing under it but the
+home, and the projects are wherever somebody keeps them, say `~/Work`. So
+core's `scan` takes a `Request`: the roots, none meaning the workspace root,
+and the depth, `DEFAULT_DEPTH` (three) unless told otherwise. A front end
+makes the folders it was typed absolute from the directory the command works
+in, as it does the paths `link` is given, and each root is taken once
+however it was spelled. A root named that is not there is a failure beside
+what the others hold, said even at depth 0, so a typo is never an empty
+answer.
+
+The walk is bounded, because a root can sit at the top of a home directory.
+It goes three levels down unless told (`repo`, `org/repo`,
+`github.com/org/repo`), breadth first, so a budget of listed folders
+(`MAX_LISTED`) runs out on the deepest rather than on a whole neighbouring
+tree, and never into hidden folders, symlinks, `node_modules` or `target`. A
+repository is a leaf, since its folders are its own. A root is the exception:
+it is a candidate itself and is looked inside even when it is a repository,
+whatever it is called and however it is reached, because somebody named it.
+Every root starts the walk at once rather than one after another, so the one
+budget, however deep the scan, is shared breadth first across them: when it
+runs out it is the deepest folders that went unseen, never a whole second
+root behind a first that filled it, and a folder two roots reach is looked at
+once. A scan that runs out of budget says so (`truncated`) rather than
+passing for complete. A folder that cannot be listed is a failure reported
+beside what was found, except the workspace root when it is not there at
+all: that holds nothing, and only the default workspace before it is made
+can have one, in a home nobody has created yet.
+
+What it reports is spelled to be typed. Each one found carries the route
+`flayer link` takes for it from where the request says (`Request::from`):
+the directory `flayer scan` runs in, and the workspace root for the TUI,
+whose lines run there. A directory inside gets the route from there; one
+outside, its path, rather than a route that climbs out with `..`, which reads
+right from one directory only. A project marked by its settings carries the
+id they name it by ([D-09](#d-09-project-settings-live-in-the-project)),
+which is what names it for good whatever it is called and wherever it is; a
+git repository, a project a `mind.toml` still marks and one whose marker will
+not open have none, and the last is listed all the same, with a failure
+beside it, since its marker still says it is a project.
+
+`flayer scan --json` prints the scan in [the envelope](#json-in-one-envelope),
+each field by its name (`roots`, `depth`, `found`, each with `path`, `route`,
+`id`, `mind` and `linked`, and `truncated`); its failures, and that it stopped
+early, are the envelope's warnings. The table leaves the id out: the path already tells its
+rows apart, and the id is for a script to match a project by.
+
+`flayer minds DIR` opens the minds screen looking under the folders it is
+given rather than the workspace root, and the TUI keeps them and looks there
+each time it reads the disk again, so a change made from the screen does not
+send it back to the workspace root. It still lists every project the
+workspace links: a folder says where to look for more, not which of its own
+to show.
 
 ## Writers at the same time
 
@@ -4701,6 +4745,15 @@ leak into the lifecycle code. Unblocks #33, #45, #62, #93, #94 and #95.
   the narrower reading and the one every agent accepts, so a gathered `café` is
   warned about and not installed. If the agents settle on the wider one, the
   name rule is one function (`is_kebab_case`).
+- **Folders a workspace scans.** `flayer scan DIR` and `flayer minds DIR`
+  look where they are told for one command, or one session of the screen;
+  nothing keeps the folders, so the TUI's `m` and link form opened another
+  time look under the workspace root again, and a default workspace in home
+  offers the whole home, three levels down. Keeping them in `flayer.toml`
+  would be a format change, and whether it belongs with ranked suggestions
+  (#58) is open. Nor does the screen take a depth: `flayer minds` looks
+  `DEFAULT_DEPTH` levels down, and a project further down is linked by its
+  path.
 - **The shelf in other reports.** `flayer validate` reads the shelf; `flayer
   list` and `show` do not, because `gather list` is the shelf's listing. Seeing
   a gathered skill's contents before installing it means reading its folder.
