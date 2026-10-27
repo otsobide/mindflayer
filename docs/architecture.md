@@ -947,7 +947,12 @@ A project's newest version is the one `mind init` writes, a settings file,
 and `mind init` waited to write it (#35) until this build read such a project
 (#29), listed it (#33) and installed into it (#34). An older build finds no
 project without a `mind.toml`, so it says a new one is not a project, or that
-a workspace's entry for it is stale, rather than misreading it.
+a workspace's entry for it is stale, rather than misreading it. Except where
+that answer leads it to make one: a build from before #29 asks only whether a
+`mind.toml` is there, so its `mind init`, or its TUI's making a repository a
+project, writes one beside the settings and reads the project as a `mind.toml`
+one from then on, while this build reads the settings and passes the
+`mind.toml` by ([open questions](#open-questions)).
 `MIND_TOML_VERSION` is the newest a `mind.toml` holds, which only
 `MindProject::init` still writes.
 
@@ -3883,9 +3888,14 @@ leak into the lifecycle code. Unblocks #33, #45, #62, #93, #94 and #95.
   ignore.
 - **A leftover `mind.toml` nobody is told about.** A project holding both
   markers is read from its settings, and `MindProject::warnings` names the
-  `mind.toml` ignored, but no front end prints it yet: `mind init` gives a
-  project a `mind.toml` marks no settings, and #38's migration moves the old
-  marker out of the way, so one is left only by hand or by a copy. A `warning:` line wherever a
+  `mind.toml` ignored, but no front end prints it yet. This build leaves
+  none: `mind init` gives a project a `mind.toml` marks no settings, and
+  #38's migration moves the old marker out of the way. One is still left by
+  hand, by a copy, and by an older build: one from before #29 asks only
+  whether a `mind.toml` is there, so its `mind init`, or its TUI's making a
+  repository a project, writes one beside the settings and reads the project
+  from it from then on. With `mind init` making a settings project by
+  default, two builds on one machine are enough. A `warning:` line wherever a
   project is opened, or a doctor check (#96), would make it seen.
 - **A key an older build reads past.** A key a project's settings do not
   define is read past and kept, which leaves room for #40's `targets`. A
