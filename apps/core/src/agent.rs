@@ -1,8 +1,9 @@
 //! What core knows about the agents that read what Mindflayer manages.
 //!
 //! Which agents there are ([`Agent`]), where each kind goes in a project for
-//! each of them to read it ([`TargetTable`]), and where each keeps what it
-//! reads for every project ([`AgentHomes`]). The checks that will need those
+//! each of them to read it ([`TargetTable`]), every folder in a project each
+//! reads it from, whoever put it there ([`Agent::reads`]), and where each
+//! keeps what it reads for every project ([`AgentHomes`]). The checks that will need those
 //! last folders (Claude's user memory, Codex's config, the skills in
 //! `~/.agents`) are handed them rather than looking them up.
 //!
@@ -56,6 +57,55 @@ impl Agent {
             Agent::OpenCode => "opencode",
         }
     }
+
+    /// Every folder in a project this agent reads `kind` from, whoever put
+    /// what is there, each relative to the project's root.
+    ///
+    /// Not the [`TargetTable`], which says where Mindflayer puts a copy for
+    /// the agent: one folder for each, where this is every folder it reads,
+    /// which can be more. OpenCode reads `.claude/skills` as well as
+    /// `.agents/skills`, and is sent a copy only in the second. A listing
+    /// asks this which agents see a skill wherever it sits; an install asks
+    /// the table where to write. Folded into one, either OpenCode would be
+    /// sent a second copy it does not need, or a listing would say it misses
+    /// the skills in Claude's folder, which it reads.
+    ///
+    /// Pure, as the table is, and resting on the same facts in
+    /// `docs/agents.md`: a change here that disagrees with them starts
+    /// there. Nothing at user scope, which is no project's.
+    pub fn reads(self, kind: Kind) -> Vec<PathBuf> {
+        read(kind, self)
+    }
+}
+
+/// Where `agent` reads `kind` in a project, in path order.
+///
+/// One arm per pair with no wildcard, as [`standard`]'s, so a new kind or a
+/// new agent does not compile until somebody has said what it reads.
+fn read(kind: Kind, agent: Agent) -> Vec<PathBuf> {
+    // Joined a folder at a time, as `standard` joins them, so a folder here
+    // and the same folder in the table are equal paths on Windows too.
+    let skills = |folder: &str| Path::new(folder).join("skills");
+    match (kind, agent) {
+        // Verified on Claude Code 2.1.309, which does not read
+        // `.agents/skills`.
+        (Kind::Skill, Agent::Claude) => vec![skills(".claude")],
+        // Docs-only. Not `.codex/skills`, read only in a trusted project, so
+        // it says nothing of what Codex sees in any other.
+        (Kind::Skill, Agent::Codex) => vec![skills(".agents")],
+        // Docs-only, for V1 and V2 alike. V1 can switch `.claude/skills` off
+        // (`OPENCODE_DISABLE_CLAUDE_CODE`), which nothing in a project shows,
+        // so it is read here as the default reads it.
+        (Kind::Skill, Agent::OpenCode) => {
+            vec![skills(".agents"), skills(".claude"), skills(".opencode")]
+        }
+        // A rule reaches an agent through `AGENTS.md`, or Claude's rule files
+        // (D-03), which M2 puts in this and the target table together. Claude
+        // does read `.claude/rules`, but how far down, and what a rule there
+        // is to Mindflayer, is M2's to say; until then no folder of rules is
+        // said to be read, so no listing claims an agent sees a rule.
+        (Kind::Rule, Agent::Claude | Agent::Codex | Agent::OpenCode) => Vec::new(),
+    }
 }
 
 impl fmt::Display for Agent {
@@ -105,8 +155,9 @@ impl fmt::Display for UnknownAgent {
 /// standard layout is only the default: a project's settings may put a kind
 /// somewhere else for every agent (#40), and a caller handed the table then
 /// follows that without changing. The project hands it on, in core: which
-/// table applies is its settings' to say, so an install takes the table from
-/// the project it installs into (#34), and no front end calls
+/// table applies is its settings' to say, so a caller asks the project
+/// ([`MindProject::targets`](crate::MindProject::targets)), as an install
+/// will (#34), and no front end calls
 /// [`standard`](TargetTable::standard) and picks one those settings would
 /// contradict.
 ///

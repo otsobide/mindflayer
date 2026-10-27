@@ -7,7 +7,10 @@ use std::path::{Path, PathBuf};
 use mindflayer_core::install::{self, InstallError, Standing};
 use mindflayer_core::ledger::{Ledger, SourceKind};
 use mindflayer_core::lifecycle::{self, Record, Target};
-use mindflayer_core::{create, FlayerWorkspace, Kind, LifecycleError, MindProject, Reference};
+use mindflayer_core::{
+    create, Agent, Catalog, Directories, FlayerWorkspace, Kind, LifecycleError, MindProject,
+    Reference, Share,
+};
 use tempfile::TempDir;
 
 fn project() -> (TempDir, MindProject) {
@@ -117,6 +120,60 @@ fn a_name_that_climbs_out_is_never_turned_into_a_place() {
     let error = find(&project, "../outside").unwrap_err();
 
     assert!(matches!(error, LifecycleError::NotFound { .. }), "{error}");
+}
+
+/// A project in a temporary folder, marked by its settings, naming every
+/// agent and authoring skills in `skills`.
+fn marked(skills: &str) -> (TempDir, MindProject) {
+    let dir = TempDir::new().unwrap();
+    let directories = Directories::default().with(Kind::Skill, skills);
+    let (project, _) =
+        MindProject::init_settings(dir.path(), &Agent::ALL, Share::Shared, &directories).unwrap();
+    (dir, project)
+}
+
+const REVIEW: &str = "---\nname: review\ndescription: Reads the diff\n---\n";
+
+#[test]
+fn a_skill_only_in_an_agents_folder_is_listed_but_never_changed_from_here() {
+    let (dir, project) = marked("skills");
+    write(dir.path(), ".claude/skills/review/SKILL.md", REVIEW);
+
+    let error = find(&project, "review").unwrap_err();
+
+    assert!(
+        matches!(error, LifecycleError::NotAuthored { .. }),
+        "{error}"
+    );
+    assert_eq!(
+        error.to_string(),
+        format!(
+            "`review` is at {}, in a folder this project's agents read and it does not author \
+             in, so it is not changed from here",
+            dir.path().join(".claude/skills/review").display()
+        )
+    );
+    // Which a listing shows all the same.
+    let listed = Catalog::discover(std::slice::from_ref(&project));
+    assert_eq!(listed.artifacts()[0].name(), "review");
+    assert!(matches!(
+        find(&project, "absent"),
+        Err(LifecycleError::NotFound { .. })
+    ));
+}
+
+#[test]
+fn a_project_authoring_in_an_agents_folder_changes_only_its_own_copy() {
+    let (dir, project) = marked(".claude/skills");
+    write(dir.path(), ".claude/skills/review/SKILL.md", REVIEW);
+    write(dir.path(), ".agents/skills/review/SKILL.md", REVIEW);
+
+    let target = find(&project, "review").unwrap();
+
+    assert_eq!(target.path, dir.path().join(".claude/skills/review"));
+    lifecycle::remove(None, &project, &target).unwrap();
+    assert!(!dir.path().join(".claude/skills/review").exists());
+    assert!(dir.path().join(".agents/skills/review/SKILL.md").is_file());
 }
 
 #[test]

@@ -20,6 +20,9 @@ fn skill(name: &str, description: &str, directory: &str) -> Artifact {
             metadata: Metadata::default(),
         }),
         summary: first_line(description),
+        placement: Placement::authored(),
+        others: Vec::new(),
+        differ: false,
     }
 }
 
@@ -44,6 +47,9 @@ fn declaring(name: &str, summary: Option<&str>, manifest: RuleManifest) -> Artif
         project: PathBuf::from("/work/repo"),
         declared: Declared::Rule(manifest),
         summary: summary.map(str::to_owned),
+        placement: Placement::authored(),
+        others: Vec::new(),
+        differ: false,
     }
 }
 
@@ -381,4 +387,117 @@ fn the_strict_rules_are_asked_of_the_folder_a_skill_is_about_to_be_filed_in() {
             directory: "deploy".into(),
         }]
     );
+}
+
+/// A copy at `path` that `agents` read, with `issues` there.
+fn copy_at(path: &str, agents: &[Agent], authored: bool, installed: bool) -> ArtifactCopy {
+    ArtifactCopy {
+        path: PathBuf::from(path),
+        placement: Placement {
+            agents: agents.to_vec(),
+            authored,
+            installed,
+        },
+        issues: Vec::new(),
+    }
+}
+
+/// `skill` at `path`, placed as `placement` says, with `others` beside it.
+fn copied(path: &str, placement: Placement, others: Vec<ArtifactCopy>) -> Artifact {
+    let mut artifact = skill("deploy", "Ship it", path);
+    artifact.placement = placement;
+    artifact.others = others;
+    artifact
+}
+
+#[test]
+fn an_artifact_loaded_on_its_own_is_one_authored_copy_no_agent_reads() {
+    let artifact = skill("deploy", "", "/s/deploy");
+
+    let copies = artifact.copies();
+
+    assert_eq!(copies.len(), 1);
+    assert_eq!(copies[0].path(), Path::new("/s/deploy"));
+    assert_eq!(copies[0].agents(), []);
+    assert!(copies[0].is_authored() && !copies[0].is_installed());
+    assert_eq!(copies[0].issues(), artifact.validate());
+    assert_eq!(artifact.provenance(), Provenance::Authored);
+    assert_eq!(artifact.agents(), []);
+}
+
+#[test]
+fn every_copy_is_judged_and_what_another_has_is_added_after_the_firsts() {
+    let mismatch = ValidationIssue::NameDirectoryMismatch {
+        name: "deploy".into(),
+        directory: "Deploy".into(),
+    };
+    let mut emptied = copy_at("/p/.claude/skills/Deploy", &[Agent::Claude], false, false);
+    emptied.issues = vec![mismatch.clone(), ValidationIssue::DescriptionEmpty];
+    let mut first = skill("deploy", "Ship it", "/p/.agents/skills/Deploy");
+    first.others = vec![emptied];
+
+    // What both copies have is said once, the first's first; what only the
+    // other has is added.
+    assert_eq!(first.copies()[0].issues(), std::slice::from_ref(&mismatch));
+    assert_eq!(
+        first.copies()[1].issues(),
+        [mismatch.clone(), ValidationIssue::DescriptionEmpty]
+    );
+    assert_eq!(
+        first.validate(),
+        [mismatch, ValidationIssue::DescriptionEmpty]
+    );
+}
+
+#[test]
+fn an_artifacts_agents_are_every_copys_once_in_report_order() {
+    let artifact = copied(
+        "/p/.claude/skills/deploy",
+        Placement {
+            agents: vec![Agent::Claude, Agent::OpenCode],
+            authored: false,
+            installed: false,
+        },
+        vec![copy_at(
+            "/p/.agents/skills/deploy",
+            &[Agent::Codex, Agent::OpenCode],
+            false,
+            false,
+        )],
+    );
+
+    assert_eq!(
+        artifact.agents(),
+        [Agent::Claude, Agent::Codex, Agent::OpenCode]
+    );
+}
+
+#[test]
+fn an_artifact_is_installed_only_when_every_copy_is_recorded() {
+    let placed = |authored, installed| Placement {
+        agents: vec![Agent::Claude],
+        authored,
+        installed,
+    };
+    let other = |authored, installed| {
+        vec![copy_at(
+            "/p/.agents/skills/deploy",
+            &[Agent::Codex],
+            authored,
+            installed,
+        )]
+    };
+
+    let both = copied("/p/a", placed(false, true), other(false, true));
+    assert_eq!(both.provenance(), Provenance::Installed);
+    // A copy nothing records is somebody's, so the whole is not Mindflayer's.
+    let one = copied("/p/a", placed(false, true), other(false, false));
+    assert_eq!(one.provenance(), Provenance::Foreign);
+    assert_eq!(one.copies()[0].provenance(), Provenance::Installed);
+    assert_eq!(one.copies()[1].provenance(), Provenance::Foreign);
+    // And the project's own when that copy sits where it authors.
+    let authored = copied("/p/a", placed(false, true), other(true, false));
+    assert_eq!(authored.provenance(), Provenance::Authored);
+    let neither = copied("/p/a", placed(false, false), other(false, false));
+    assert_eq!(neither.provenance(), Provenance::Foreign);
 }

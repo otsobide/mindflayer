@@ -1348,6 +1348,42 @@ fn a_skill_that_cannot_be_read_is_listed_where_it_can_be_dealt_with() {
     assert!(!dir.path().join("alpha/skills/broken").exists());
 }
 
+#[test]
+fn a_projects_own_skill_that_cannot_be_read_takes_the_row_its_agents_copy_has() {
+    let dir = TempDir::new().unwrap();
+    flayer(dir.path(), &["init"]).unwrap();
+    let alpha = dir.path().join("alpha");
+    fs::create_dir(&alpha).unwrap();
+    let directories = mindflayer_core::Directories::default().with(Kind::Skill, "skills");
+    MindProject::init_settings(
+        &alpha,
+        &mindflayer_core::Agent::ALL,
+        mindflayer_core::Share::Shared,
+        &directories,
+    )
+    .unwrap();
+    flayer(dir.path(), &["link", "alpha"]).unwrap();
+    write_skill(&alpha, "deploy", "no front matter at all\n");
+    let claudes = alpha.join(".claude/skills/deploy");
+    fs::create_dir_all(&claudes).unwrap();
+    fs::write(claudes.join("SKILL.md"), skill_file("deploy", "Ship it")).unwrap();
+    let mut app = tui_in(dir.path());
+
+    // One row, the project's own, which is what `d` on it removes.
+    press_key(&mut app, KeyCode::Right);
+    let items = &app.member().unwrap().holdings.as_ref().unwrap().items;
+    let rows: Vec<(&str, bool)> = items
+        .iter()
+        .map(|item| (item.name.as_str(), item.broken.is_some()))
+        .collect();
+    assert_eq!(rows, [("deploy", true)]);
+    press_key(&mut app, KeyCode::Char('d'));
+    press_and_run(&mut app, KeyCode::Char('y'));
+
+    assert!(!alpha.join("skills/deploy").exists());
+    assert!(claudes.join("SKILL.md").is_file());
+}
+
 // ---------------------------------------------------------------------------
 // Both levels, in the TUI
 // ---------------------------------------------------------------------------

@@ -875,6 +875,50 @@ fn forgetting_an_installation_forgets_its_copies() {
 }
 
 #[test]
+fn every_copy_installed_into_a_project_is_listed_by_path_whichever_install_wrote_it() {
+    let ledger = Ledger::in_memory().unwrap();
+    ledger
+        .installed(
+            "collapse",
+            &installation_of(
+                "deploy",
+                &[
+                    (Some("claude"), ".claude/skills/deploy"),
+                    (None, ".agents/skills/deploy"),
+                ],
+            ),
+        )
+        .unwrap();
+    ledger
+        .installed(
+            "collapse",
+            &installation_of("audit", &[(None, ".agents/skills/audit")]),
+        )
+        .unwrap();
+    ledger
+        .installed(
+            "tanukeys",
+            &installation_of("deploy", &[(None, "skills/deploy")]),
+        )
+        .unwrap();
+
+    assert_eq!(
+        ledger.copies("collapse", Kind::Skill).unwrap(),
+        [
+            ".agents/skills/audit",
+            ".agents/skills/deploy",
+            ".claude/skills/deploy"
+        ]
+    );
+    assert_eq!(
+        ledger.copies("tanukeys", Kind::Skill).unwrap(),
+        ["skills/deploy"]
+    );
+    assert!(ledger.copies("collapse", Kind::Rule).unwrap().is_empty());
+    assert!(ledger.copies("elsewhere", Kind::Skill).unwrap().is_empty());
+}
+
+#[test]
 fn a_ledger_waits_for_another_writer_as_long_as_a_writer_waits_for_the_workspace() {
     let dir = tempfile::TempDir::new().unwrap();
     let path = dir.path().join(LEDGER_FILE);

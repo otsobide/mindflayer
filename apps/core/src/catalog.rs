@@ -1,15 +1,20 @@
 //! Every artifact held by a set of mind projects.
 
+use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
 
 use thiserror::Error;
 
+use crate::agent::Agent;
 use crate::artifact::{Artifact, ArtifactError};
+use crate::hash;
+use crate::install;
 use crate::kind::{Kind, Layout};
+use crate::ledger::{Ledger, LedgerError};
 use crate::paths;
-use crate::workspace::{FlayerWorkspace, MindProject};
+use crate::workspace::{same_directory, FlayerWorkspace, MindProject};
 
 /// The artifacts discovered across some mind projects, and what went wrong.
 ///
@@ -32,38 +37,214 @@ impl Catalog {
     ///
     /// Restricting here rather than filtering the result is what keeps a
     /// listing from reporting failures in a kind nobody asked about.
+    ///
+    /// A project marked by its settings is read where its agents read: the
+    /// folders its agents are sent copies in ([`MindProject::targets`]),
+    /// beside the folder it authors in, each folder once
+    /// ([`folders`](Self::folders)). What its agents load is what sits in
+    /// their folders, whoever put it there, so that is what is listed: an
+    /// install's copies, and a skill somebody keeps there by hand, which
+    /// nothing records and so is [foreign](crate::Provenance::Foreign). Every
+    /// copy of one name is one artifact, with each agent that reads a copy
+    /// ([`Artifact::agents`]), and copies they read that do not hold the same
+    /// are a failure ([`DiscoveryFailure::Diverged`]); one the project
+    /// authors where none of them reads is one more copy, read by no agent
+    /// and compared with none. Every other project is read from the one
+    /// folder its marker names, as before.
     pub fn discover_kinds(projects: &[MindProject], kinds: &[Kind]) -> Self {
+        Self::discover_in(projects, kinds, Reach::Agents)
+    }
+
+    /// The same, only in the folders the projects author in.
+    ///
+    /// What a change to a project's own artifacts looks in
+    /// ([`crate::lifecycle::find`]): never a copy in an agent's folder the
+    /// project does not author in, which is foreign or an install's, and no
+    /// edit, rename or removal of the project's own is Mindflayer's to make
+    /// there. Each copy is its own artifact, as in every project before
+    /// settings, so two of one name are two things to choose between. The
+    /// same as [`discover_kinds`](Self::discover_kinds) for a project a
+    /// `mind.toml` marks.
+    pub fn discover_authored(projects: &[MindProject], kinds: &[Kind]) -> Self {
+        Self::discover_in(projects, kinds, Reach::Authored)
+    }
+
+    /// The two above.
+    fn discover_in(projects: &[MindProject], kinds: &[Kind], reach: Reach) -> Self {
         let mut catalog = Catalog::default();
 
         for project in projects {
             for kind in kinds {
+                let (mut found, mut shared) = (Vec::new(), Vec::new());
                 // A kind the project keeps no folder for holds nothing: an
                 // absence, like a folder nobody has made yet.
-                let Some(root) = project.directory_for(*kind) else {
-                    continue;
-                };
-                match kind.layout() {
-                    Layout::Directory { manifest } => {
-                        // Skill is the only directory-shaped kind, so this
-                        // arm names its constructor directly. A second one
-                        // would add a match here, which is the point of a
-                        // closed enum: the compiler asks.
-                        match kind {
-                            Kind::Skill => {
-                                catalog.take_directories(&root, manifest, project.root())
-                            }
-                            Kind::Rule => unreachable!("a rule is not a directory"),
+                for folder in read_from(project, *kind) {
+                    if reach == Reach::Authored && !folder.authored {
+                        continue;
+                    }
+                    for mut artifact in catalog.load(&folder.path, *kind, project.root()) {
+                        artifact.placed(folder.agents.clone(), folder.authored);
+                        if folder.shared && reach == Reach::Agents {
+                            shared.push(artifact);
+                        } else {
+                            found.push(artifact);
                         }
                     }
-                    Layout::Files { extension } => {
-                        catalog.take_files(&root, extension, project.root());
-                    }
                 }
+                found.extend(catalog.gather_copies(shared));
+                // By path, as one folder is read, so two of one name in one
+                // project come in the same order wherever they were found.
+                found.sort_by(|a, b| a.path().cmp(b.path()));
+                catalog.artifacts.extend(found);
             }
         }
 
         catalog.settle();
         catalog
+    }
+
+    /// Every folder discovery reads `kind` from in `project`, in the order
+    /// it reads them, whether or not each is there.
+    ///
+    /// For a project marked by its settings, the folder each of its agents
+    /// is sent a copy in, then the one it authors in, unless that is one of
+    /// them: one folder named twice, or reached twice through a link, is read
+    /// once, so a skill in it is listed once, whatever the ledger says of it.
+    /// For any other, the one folder its marker names. None for a kind it
+    /// keeps nowhere. What a front end names to say where it looked.
+    pub fn folders(project: &MindProject, kind: Kind) -> Vec<PathBuf> {
+        read_from(project, kind)
+            .into_iter()
+            .map(|folder| folder.path)
+            .collect()
+    }
+
+    /// Every artifact of `kind` in the folder `root`, loaded, with what could
+    /// not be collected as a failure.
+    fn load(&mut self, root: &Path, kind: Kind, project: &Path) -> Vec<Artifact> {
+        match kind.layout() {
+            Layout::Directory { manifest } => {
+                // Skill is the only directory-shaped kind, so this arm names
+                // its constructor directly. A second one would add a match
+                // here, which is the point of a closed enum: the compiler
+                // asks.
+                match kind {
+                    Kind::Skill => self.load_directories(root, manifest, project),
+                    Kind::Rule => unreachable!("a rule is not a directory"),
+                }
+            }
+            Layout::Files { extension } => self.load_files(root, extension, project),
+        }
+    }
+
+    /// One artifact for each name among `copies`, all of one kind in one
+    /// project, read from its folders: the copy the project authors first,
+    /// when it authors one, then the rest by path, with a failure when the
+    /// copies its agents read do not all hold the same.
+    ///
+    /// The project's own copy leads because it is the one a change made from
+    /// the project reaches ([`crate::lifecycle::find`]), so what `show`
+    /// prints and what `edit` opens are one file. One that no agent reads is
+    /// taken in without being compared: it is the source an install delivers
+    /// from, and a source edited since it was delivered is a status to report
+    /// (#36), not a warning on every listing until it is installed again.
+    fn gather_copies(&mut self, copies: Vec<Artifact>) -> Vec<Artifact> {
+        let mut gathered = Vec::new();
+        let mut named: BTreeMap<String, Vec<Artifact>> = BTreeMap::new();
+        for copy in copies {
+            named.entry(copy.name().to_owned()).or_default().push(copy);
+        }
+        for (name, mut copies) in named {
+            copies.sort_by(|a, b| {
+                b.first_is_authored()
+                    .cmp(&a.first_is_authored())
+                    .then_with(|| a.path().cmp(b.path()))
+            });
+            let mut copies = copies.into_iter();
+            let Some(mut first) = copies.next() else {
+                continue;
+            };
+            // Every copy an agent reads, each compared with the first of them.
+            let mut read = Vec::new();
+            if first.first_is_read() {
+                read.push(first.path().to_path_buf());
+            }
+            let mut hashed = None;
+            let mut differ = false;
+            for other in copies {
+                let mut differs = false;
+                if other.first_is_read() {
+                    if let Some(base) = read.first() {
+                        differs = self.differs(&name, base, &mut hashed, other.path());
+                    }
+                    read.push(other.path().to_path_buf());
+                }
+                differ |= differs;
+                first.take_copy(other, differs);
+            }
+            if differ {
+                self.failures.push(DiscoveryFailure::Diverged {
+                    kind: first.kind(),
+                    name,
+                    paths: read,
+                });
+            }
+            gathered.push(first);
+        }
+        gathered
+    }
+
+    /// Whether the copy at `other` holds other names or bytes than the one at
+    /// `first`, whose hash is `hashed` once worked out: both copies the
+    /// project's agents read.
+    ///
+    /// By [`hash::tree`], what an install records of what it wrote, rather
+    /// than by following both trees side by side: it refuses a link rather
+    /// than reading wherever one points, and a copy here is anybody's. One
+    /// folder reached twice, through a link to it or by a second spelling, is
+    /// the same copy without reading it. A copy that cannot be hashed is said,
+    /// and is not taken to differ: nothing is known either way.
+    ///
+    /// Every copy compared is a skill's folder: no agent is said to read a
+    /// folder of rules ([`Agent::reads`]), so no rule is ever gathered here,
+    /// and how two rule files would compare is M2's to say when one is.
+    fn differs(
+        &mut self,
+        name: &str,
+        first: &Path,
+        hashed: &mut Option<Option<String>>,
+        other: &Path,
+    ) -> bool {
+        if same_directory(first, other) {
+            return false;
+        }
+        let first_hash = hashed
+            .get_or_insert_with(|| match hash::tree(first) {
+                Ok(hash) => Some(hash),
+                Err(source) => {
+                    self.failures.push(DiscoveryFailure::Uncompared {
+                        name: name.to_owned(),
+                        path: first.to_path_buf(),
+                        source,
+                    });
+                    None
+                }
+            })
+            .clone();
+        let Some(first_hash) = first_hash else {
+            return false;
+        };
+        match hash::tree(other) {
+            Ok(hash) => hash != first_hash,
+            Err(source) => {
+                self.failures.push(DiscoveryFailure::Uncompared {
+                    name: name.to_owned(),
+                    path: other.to_path_buf(),
+                    source,
+                });
+                false
+            }
+        }
     }
 
     /// What a workspace has gathered onto its shelf, of some kinds.
@@ -97,12 +278,59 @@ impl Catalog {
                 if !source.is_dir() {
                     continue;
                 }
-                catalog.take_directories(&source, manifest, workspace.root());
+                let found = catalog.load_directories(&source, manifest, workspace.root());
+                catalog.artifacts.extend(found);
             }
         }
 
         catalog.settle();
         catalog
+    }
+
+    /// The same catalog, with every copy `ledger` records Mindflayer putting
+    /// into a project `workspace` links marked as installed
+    /// ([`Provenance::Installed`](crate::Provenance::Installed)).
+    ///
+    /// What makes a skill in a folder a project authors in its own or an
+    /// install's, and one in an agent's folder an install's or somebody
+    /// else's: the ledger, by the path of each copy it records
+    /// ([`Ledger::copies`]), not by name, so an install of one name into one
+    /// folder does not claim what somebody keeps under that name in another.
+    /// Apart from discovery, which reads files and nothing else: a listing
+    /// that says nothing of who put what where opens no ledger, and one that
+    /// does is handed the one its workspace keeps, whose records are that
+    /// workspace's alone. A project it does not link has none there.
+    ///
+    /// A ledger that cannot be read is a failure, said once however many
+    /// projects and kinds it was asked about, since every failure to read it
+    /// is about its one file, and settling keeps one failure a path. It leaves
+    /// their copies unrecorded: foreign or authored, which nothing changes,
+    /// rather than installed, which an uninstall may delete.
+    pub fn with_records(mut self, workspace: &FlayerWorkspace, ledger: &Ledger) -> Self {
+        let mut recorded: BTreeMap<(PathBuf, Kind), BTreeSet<String>> = BTreeMap::new();
+        let Catalog {
+            artifacts,
+            failures,
+        } = &mut self;
+        for artifact in artifacts.iter_mut() {
+            let (root, kind) = (artifact.project().to_path_buf(), artifact.kind());
+            if !workspace.is_linked(&root) {
+                continue;
+            }
+            let copies = recorded.entry((root.clone(), kind)).or_insert_with(|| {
+                let entry = install::entry_for_root(workspace, &root);
+                match ledger.copies(&entry, kind) {
+                    Ok(copies) => copies.into_iter().collect(),
+                    Err(error) => {
+                        failures.push(DiscoveryFailure::Ledger(error));
+                        BTreeSet::new()
+                    }
+                }
+            });
+            artifact.record(|path| copies.contains(&install::route(&root, path)));
+        }
+        self.settle();
+        self
     }
 
     /// Two catalogs as one, in the same order and with each file once.
@@ -155,13 +383,15 @@ impl Catalog {
     }
 
     /// One artifact per immediate subdirectory holding `manifest`.
-    fn take_directories(&mut self, root: &Path, manifest: &str, project: &Path) {
+    fn load_directories(&mut self, root: &Path, manifest: &str, project: &Path) -> Vec<Artifact> {
+        let mut found = Vec::new();
         for path in self.directories_in(root, manifest) {
             match Artifact::skill(path, project) {
-                Ok(artifact) => self.artifacts.push(artifact),
+                Ok(artifact) => found.push(artifact),
                 Err(error) => self.failures.push(error.into()),
             }
         }
+        found
     }
 
     /// Every immediate subdirectory of `root` holding `manifest`, in order.
@@ -183,17 +413,19 @@ impl Catalog {
     ///
     /// The name is the route below `root` without the extension, so folders
     /// group and mean nothing else.
-    fn take_files(&mut self, root: &Path, extension: &str, project: &Path) {
+    fn load_files(&mut self, root: &Path, extension: &str, project: &Path) -> Vec<Artifact> {
+        let mut found = Vec::new();
         for path in self.files_in(root, extension) {
             let Some(name) = route(root, &path) else {
                 self.failures.push(DiscoveryFailure::UnusableName { path });
                 continue;
             };
             match Artifact::rule(&path, name, project) {
-                Ok(artifact) => self.artifacts.push(artifact),
+                Ok(artifact) => found.push(artifact),
                 Err(error) => self.failures.push(error.into()),
             }
         }
+        found
     }
 
     /// Every file with `extension` at any depth under `root`, in order,
@@ -376,7 +608,8 @@ impl Reference {
     }
 }
 
-/// Why an artifact, or a whole folder, could not be read.
+/// Why an artifact, or a whole folder, could not be read, or why what was
+/// read under one name is not one thing.
 #[derive(Debug, Error)]
 pub enum DiscoveryFailure {
     #[error("{path}: cannot be listed: {source}")]
@@ -389,18 +622,180 @@ pub enum DiscoveryFailure {
     UnusableName { path: PathBuf },
     #[error(transparent)]
     Artifact(#[from] ArtifactError),
+    /// Copies of one name, in the folders a project's agents read, that do
+    /// not all hold the same names and bytes. Listed all the same, as one
+    /// artifact ([`Artifact::copies_differ`]).
+    #[error("the copies of `{name}` at {} differ, so the agents reading them do not all load the same {kind}", spelled(.paths))]
+    Diverged {
+        kind: Kind,
+        name: String,
+        /// Every copy an agent reads, in the order the artifact lists them:
+        /// not the project's own where no agent reads, which is not
+        /// compared.
+        paths: Vec<PathBuf>,
+    },
+    /// The ledger, read to say which copies were installed, could not be.
+    #[error(transparent)]
+    Ledger(LedgerError),
+    /// A copy that could not be read through to be compared with the others
+    /// of its name: one holding a link, or a file that cannot be read.
+    #[error("{path}: cannot be compared with the other copies of `{name}`: {source}")]
+    Uncompared {
+        name: String,
+        path: PathBuf,
+        #[source]
+        source: io::Error,
+    },
 }
 
 impl DiscoveryFailure {
-    /// The path the failure is about.
+    /// The path the failure is about: the first copy an agent reads, for
+    /// copies that differ.
     pub fn path(&self) -> &Path {
         match self {
-            DiscoveryFailure::Directory { path, .. } | DiscoveryFailure::UnusableName { path } => {
-                path
-            }
+            DiscoveryFailure::Directory { path, .. }
+            | DiscoveryFailure::UnusableName { path }
+            | DiscoveryFailure::Uncompared { path, .. } => path,
             DiscoveryFailure::Artifact(error) => error.path(),
+            DiscoveryFailure::Ledger(error) => error.path(),
+            DiscoveryFailure::Diverged { paths, .. } => &paths[0],
         }
     }
+
+    /// Whether something could not be read at all, rather than read and
+    /// found to disagree with itself: what a count of unreadable files
+    /// counts.
+    pub fn is_unreadable(&self) -> bool {
+        match self {
+            DiscoveryFailure::Directory { .. }
+            | DiscoveryFailure::UnusableName { .. }
+            | DiscoveryFailure::Artifact(_)
+            | DiscoveryFailure::Ledger(_)
+            | DiscoveryFailure::Uncompared { .. } => true,
+            DiscoveryFailure::Diverged { .. } => false,
+        }
+    }
+}
+
+/// `a`, `a and b`, `a, b and c`.
+fn spelled(paths: &[PathBuf]) -> String {
+    let shown: Vec<String> = paths
+        .iter()
+        .map(|path| path.display().to_string())
+        .collect();
+    match shown.split_last() {
+        None => String::new(),
+        Some((last, [])) => last.clone(),
+        Some((last, rest)) => format!("{} and {last}", rest.join(", ")),
+    }
+}
+
+/// How far discovery reaches into a project marked by its settings.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Reach {
+    /// Every folder it reads: its agents' and its own.
+    Agents,
+    /// Only the folder it authors in.
+    Authored,
+}
+
+/// One folder discovery reads a kind from in a project, and how what is in
+/// it stands.
+struct Folder {
+    path: PathBuf,
+    /// The project's agents that read it.
+    agents: Vec<Agent>,
+    /// Whether the project's marker names it for the kind.
+    authored: bool,
+    /// Whether a copy here of one name is one copy of a single artifact
+    /// with every other of that name in such a folder: every folder of a
+    /// project whose agents are sent the kind somewhere.
+    shared: bool,
+}
+
+/// [`Catalog::folders`], with how each stands.
+fn read_from(project: &MindProject, kind: Kind) -> Vec<Folder> {
+    let authored = project.directory_for(kind);
+    let Some(settings) = project.settings() else {
+        // A `mind.toml` names no agents: its own folder, as ever.
+        return authored
+            .into_iter()
+            .map(|path| Folder {
+                path,
+                agents: Vec::new(),
+                authored: true,
+                shared: false,
+            })
+            .collect();
+    };
+    let agents = &settings.agents;
+    let mut folders: Vec<Folder> = Vec::new();
+    for target in project.targets(kind) {
+        let path = project.root().join(&target.path);
+        // Two targets that are one folder on disk, `.claude/skills` linked to
+        // `.agents/skills` so that Claude and Codex share it, are read once,
+        // under the first spelling, as the authored folder is below: read
+        // twice, each skill there would load twice and each failure in it be
+        // said twice. Its readers are both targets' already, since `readers`
+        // matches through the filesystem too.
+        if folders
+            .iter()
+            .any(|folder| same_directory(&folder.path, &path))
+        {
+            continue;
+        }
+        folders.push(Folder {
+            agents: readers(project, kind, &path, agents),
+            path,
+            authored: false,
+            shared: true,
+        });
+    }
+    if let Some(authored) = authored {
+        match folders
+            .iter_mut()
+            .find(|folder| same_directory(&folder.path, &authored))
+        {
+            Some(folder) => folder.authored = true,
+            None => {
+                // One more copy of each name it shares with the targets,
+                // read by no agent unless one reads here: the project's own
+                // source and what its agents load of it are one entry. Not
+                // for a kind sent nowhere, rules today, which stay one
+                // artifact a file as in any other project.
+                folders.push(Folder {
+                    shared: !folders.is_empty(),
+                    agents: readers(project, kind, &authored, agents),
+                    path: authored,
+                    authored: true,
+                });
+            }
+        }
+    }
+    folders
+}
+
+/// The agents among `agents` that read `kind` in `project` from `folder`,
+/// each once, in report order: by where each reads ([`Agent::reads`]), not
+/// where it is sent copies, since OpenCode reads Claude's folder too.
+///
+/// The folder is matched by its spelling, then through the filesystem, so
+/// a folder named `./.claude/skills`, or reached through a link, is still
+/// Claude's.
+fn readers(project: &MindProject, kind: Kind, folder: &Path, agents: &[Agent]) -> Vec<Agent> {
+    let mut readers: Vec<Agent> = agents
+        .iter()
+        .copied()
+        .filter(|agent| {
+            agent
+                .reads(kind)
+                .iter()
+                .any(|read| same_directory(&project.root().join(read), folder))
+        })
+        .collect();
+    readers.sort();
+    readers.dedup();
+    readers
 }
 
 /// A file's route below `root`, without its extension, `/` separated.

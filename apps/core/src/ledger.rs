@@ -856,6 +856,35 @@ impl Ledger {
             .map_err(|source| self.failed("reading installations", source))
     }
 
+    /// Every copy this ledger says Mindflayer wrote into a project for
+    /// `kind`, whichever installation wrote it, by path relative to the
+    /// project, `/` separated, in path order.
+    ///
+    /// By copy rather than by name, for a listing that has to say which of
+    /// the folders holding a skill hold Mindflayer's copy: a name alone
+    /// would claim a copy somebody keeps in one agent's folder because
+    /// Mindflayer installed one of that name into another's. One query
+    /// rather than one per installation, since a listing asks it of every
+    /// project.
+    pub fn copies(&self, project: &str, kind: Kind) -> Result<Vec<String>, LedgerError> {
+        let failed = |source| self.failed("reading the copies installed", source);
+        let mut statement = self
+            .connection
+            .prepare(
+                "SELECT installation_targets.path
+                   FROM installation_targets
+                   JOIN installations
+                     ON installations.id = installation_targets.installation_id
+                  WHERE installations.project = ?1 AND installations.kind = ?2
+                  ORDER BY installation_targets.path",
+            )
+            .map_err(failed)?;
+        let rows = statement
+            .query_map(rusqlite::params![project, kind.slug()], |row| row.get(0))
+            .map_err(failed)?;
+        rows.collect::<Result<Vec<String>, _>>().map_err(failed)
+    }
+
     /// The sources whose stored URL still carries credentials, which only a
     /// Mindflayer from before they were refused could have stored.
     ///

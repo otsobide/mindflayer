@@ -878,12 +878,18 @@ fn holds(directory: &Path, kind: Kind, name: &str) -> bool {
 /// project: `mind` run inside it and `flayer -p` must read and write one
 /// record, whichever symlinks either went through.
 fn project_entry(workspace: &FlayerWorkspace, project: &MindProject) -> String {
-    route(workspace.root(), &workspace.spelling_of(project.root()))
+    entry_for_root(workspace, project.root())
+}
+
+/// [`project_entry`], for a project known only by its root, as an artifact
+/// knows the one it was found in.
+pub(crate) fn entry_for_root(workspace: &FlayerWorkspace, root: &Path) -> String {
+    route(workspace.root(), &workspace.spelling_of(root))
 }
 
 /// A path below another, `/` separated, or the path itself when there is no
 /// route between them.
-fn route(base: &Path, target: &Path) -> String {
+pub(crate) fn route(base: &Path, target: &Path) -> String {
     paths::relative_to(target, base)
         .as_deref()
         .and_then(paths::to_config_string)

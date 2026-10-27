@@ -6,9 +6,9 @@ use std::path::{Path, PathBuf};
 use std::time::{Duration, SystemTime};
 
 use mindflayer_core::{
-    create, scan, Agent, Catalog, CreateError, Directories, FlayerWorkspace, Initialization, Kind,
-    MindProject, ProjectWarning, Settings, Share, WorkspaceError, MIND_CONFIG, MIND_DIR,
-    MIND_IGNORE, SETTINGS_FILE,
+    create, scan, Agent, AgentTarget, Catalog, CreateError, Directories, FlayerWorkspace,
+    Initialization, Kind, MindProject, ProjectWarning, Settings, Share, WorkspaceError,
+    MIND_CONFIG, MIND_DIR, MIND_IGNORE, SETTINGS_FILE,
 };
 use tempfile::TempDir;
 
@@ -159,6 +159,48 @@ fn adding_a_kind_the_settings_name_no_folder_for_is_refused_before_anything_is_m
         )
     );
     assert!(!dir.path().join("rules").exists());
+}
+
+#[test]
+fn a_project_marked_by_its_settings_goes_where_the_table_sends_its_agents() {
+    let dir = TempDir::new().unwrap();
+    let claude = dir.path().join("claude");
+    let (alone, _) =
+        MindProject::init_settings(&claude, &[Agent::Claude], Share::Local, &skills_beside())
+            .unwrap();
+    settings_project(dir.path(), skills_beside());
+    let every = MindProject::open(dir.path()).unwrap();
+
+    assert_eq!(
+        alone.targets(Kind::Skill),
+        [AgentTarget {
+            path: Path::new(".claude").join("skills"),
+            agents: vec![Agent::Claude],
+        }]
+    );
+    let paths: Vec<PathBuf> = every
+        .targets(Kind::Skill)
+        .into_iter()
+        .map(|target| target.path)
+        .collect();
+    assert_eq!(
+        paths,
+        [
+            Path::new(".agents").join("skills"),
+            Path::new(".claude").join("skills")
+        ]
+    );
+    assert_eq!(every.targets(Kind::Rule), []);
+}
+
+#[test]
+fn a_project_a_mind_toml_marks_names_no_agents_to_go_to() {
+    let dir = TempDir::new().unwrap();
+    let (project, _) = MindProject::init(dir.path()).unwrap();
+
+    for kind in Kind::ALL {
+        assert_eq!(project.targets(kind), []);
+    }
 }
 
 /// Every kind beside the code, as a new project names them by default.

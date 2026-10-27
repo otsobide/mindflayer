@@ -188,3 +188,71 @@ fn the_standard_table_never_targets_codexs_old_folders_or_a_users_own() {
         }
     }
 }
+
+#[test]
+fn claude_and_codex_each_read_skills_in_one_folder_of_their_own() {
+    assert_eq!(Agent::Claude.reads(Kind::Skill), [claude_skills()]);
+    assert_eq!(Agent::Codex.reads(Kind::Skill), [agents_skills()]);
+}
+
+#[test]
+fn opencode_reads_claudes_skills_as_well_as_the_folder_it_is_sent_a_copy_in() {
+    // More than the table sends it: what it reads is not where it is
+    // written for.
+    assert_eq!(
+        Agent::OpenCode.reads(Kind::Skill),
+        [
+            agents_skills(),
+            claude_skills(),
+            Path::new(".opencode").join("skills")
+        ]
+    );
+    assert_eq!(
+        TargetTable::standard().targets(Kind::Skill, &[Agent::OpenCode]),
+        [AgentTarget {
+            path: agents_skills(),
+            agents: vec![Agent::OpenCode],
+        }]
+    );
+}
+
+#[test]
+fn every_agent_reads_each_place_the_standard_table_sends_it() {
+    let table = TargetTable::standard();
+    for kind in Kind::ALL {
+        for agent in Agent::ALL {
+            for target in table.targets(kind, &[agent]) {
+                assert!(
+                    agent.reads(kind).contains(&target.path),
+                    "{agent} is sent {kind} copies in {}, which it does not read",
+                    target.path.display()
+                );
+            }
+        }
+    }
+}
+
+#[test]
+fn no_agent_is_said_to_read_outside_the_project_or_codexs_trusted_folder() {
+    let codex_skills = Path::new(".codex").join("skills");
+    for kind in Kind::ALL {
+        for agent in Agent::ALL {
+            for path in agent.reads(kind) {
+                assert!(
+                    path.components()
+                        .all(|part| matches!(part, Component::Normal(name) if name != "~")),
+                    "{agent} reads {kind} at {}, outside the project",
+                    path.display()
+                );
+                assert_ne!(path, codex_skills, "{agent} reads {kind} only when trusted");
+            }
+        }
+    }
+}
+
+#[test]
+fn no_agent_is_said_to_read_a_folder_of_rules_yet() {
+    for agent in Agent::ALL {
+        assert_eq!(agent.reads(Kind::Rule), Vec::<PathBuf>::new());
+    }
+}
