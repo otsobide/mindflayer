@@ -3184,7 +3184,8 @@ though Claude reads `.claude/rules`.
 Rules have no entry yet, by design rather than by omission.
 [D-03](#d-03-rules-reach-every-agent-through-agentsmd) gives a rule a section
 of a block in the project's `AGENTS.md`, with Claude's fallback in
-`.claude/rules/mindflayer` chosen by #44's predicate. The block is no folder
+`.claude/rules/mindflayer` chosen by `claude_md::reach` ([how Claude reaches
+the block](#how-claude-reaches-the-block)). The block is no folder
 a copy goes into, one file every agent shares, so it is rendered outside the
 table ([how a rule reaches the agents](#how-a-rule-reaches-the-agents)), and
 whether the table carries Claude's fallback folder is for M2 to say. MCP
@@ -3330,9 +3331,10 @@ A change to an agent path cites it; this section is about how Mindflayer
 finds the agents' own folders, not what the agents do in them.
 
 Checks to come read what an agent reads for every project, not only what a
-project holds: Claude's user memory, Codex's config, OpenCode's configuration
-folder and the skills in `~/.agents` (#44, #91, #96). Those folders come in
-the way home does. `--claude-config-dir`, `--codex-home`,
+project holds: Claude's user memory, which `claude_md` leaves out of what
+keeps Claude from reading `AGENTS.md` (#44), Codex's config, OpenCode's
+configuration folder and the skills in `~/.agents` (#91, #96). Those folders
+come in the way home does. `--claude-config-dir`, `--codex-home`,
 `--opencode-config-dir` and `--agents-dir` are global options on both parsers,
 and `homes::agent_homes` takes each from its option, then from the variable
 the agent itself reads (`$CLAUDE_CONFIG_DIR`, `$CODEX_HOME`,
@@ -3390,7 +3392,8 @@ Codex has no way to include another ([docs/agents.md](agents.md)).
 alone is given ([Claude's rule files](#claudes-rule-files)). Which rules a
 project is given, when, and the record of what was written are #45's;
 whether Claude reads the file at all, or needs an `@AGENTS.md` import in its
-`CLAUDE.md`, is #44's predicate. Nothing calls either yet.
+`CLAUDE.md`, is `claude_md`'s ([how Claude reaches the
+block](#how-claude-reaches-the-block)). Nothing calls any of them yet.
 
 ```markdown
 # Working here
@@ -3466,8 +3469,9 @@ Never force-push a branch somebody else may have pulled.
   file that is there is replaced through `replace_bytes`, a temporary and a
   rename, which follows a link to the file it names: an `AGENTS.md` linked
   to the `CLAUDE.md` beside it, as some teams keep the two, is written
-  through, though #44's import would share its markers there (an [open
-  question](#open-questions)). A link leading out of the project is refused
+  through, and Claude then reads the block as that `CLAUDE.md`, with no
+  import beside it (`Reach::Same`, [how Claude reaches the
+  block](#how-claude-reaches-the-block)). A link leading out of the project is refused
   (`AgentsMdError::LinkedOut`), since a repository can hold one to the
   user's own `~/.codex/AGENTS.md`, and replacing it with a file of the
   project's own would undo what somebody linked on purpose. It takes no
@@ -3522,11 +3526,13 @@ renderer gives Claude the rules about every file when it reads no block.
 
 - **Two modes, chosen by the caller.** `Mode::Scoped` writes only the rules
   that state `paths`, for a project whose Claude reads the block, natively or
-  through #44's import. `Mode::Fallback` writes every rule, for one whose
-  Claude reads no block. Which applies comes from #44's predicate alone,
-  never from whether a block was written: in fallback mode the block may
-  still be written for Codex and OpenCode, and Claude, reading none of it,
-  reads each rule once and misses none. A file left from the other mode goes
+  through the import in its `CLAUDE.md`. `Mode::Fallback` writes every rule,
+  for one whose Claude reads no block. Which applies is `Reach::mode`, from
+  how Claude reaches the block ([how Claude reaches the
+  block](#how-claude-reaches-the-block)), never from whether a block was
+  written alone: in fallback mode the block may still be written for Codex
+  and OpenCode, and Claude, reading none of it, reads each rule once and
+  misses none. A file left from the other mode goes
   once its rule is no longer taken, unless somebody changed it since: that
   one stays, and is said, like any edited file.
 - **The rule as written.** A file holds the rule's bytes, front matter
@@ -3622,6 +3628,112 @@ renderer gives Claude the rules about every file when it reads no block.
   #45 records them.
 - **No lock of its own.** As `agents_md::render`, it takes none: its caller
   holds the workspace's.
+
+### How Claude reaches the block
+
+Claude Code reads `AGENTS.md` natively only when no `CLAUDE.md`,
+`.claude/CLAUDE.md` or `CLAUDE.local.md` is in the folder it starts in or
+any folder above it (verified on 2.1.309, [docs/agents.md](agents.md)). So
+the block reaches Codex and OpenCode wherever it is, and Claude only as
+`claude_md` decides: natively, through an `@AGENTS.md` import Mindflayer
+adds to the project's own `CLAUDE.md`, or not at all, when Claude's rule
+files carry every rule instead ([Claude's rule
+files](#claudes-rule-files)).
+
+```markdown
+<!-- mindflayer:begin -->
+@AGENTS.md
+<!-- mindflayer:end -->
+
+# Working here
+```
+
+- **One predicate.** `claude_md::reads_agents_md` looks for the three names
+  in the project's root and every folder above it, past the git root, since
+  a `CLAUDE.md` in the folder somebody keeps their repositories in stops the
+  read too (verified). It stops below `/`, as Claude's own check does by the
+  directory counts in its debug log: counting `/` would choose the fallback
+  where Claude reads the block natively, and give Claude every rule about
+  every file twice (D-03 records the choice). The user memory file,
+  `CLAUDE.md` in the Claude folder the front end hands over in
+  `AgentHomes`, never counts, also where the walk from a project under the
+  home finds it as the home's `.claude/CLAUDE.md` (verified); it is told by
+  the file it is, both paths resolved, so a spelling through a link is still
+  that file. The walk starts from the project's root resolved, as Claude,
+  started there, has its directory from the system. Anything at one of the
+  names counts, a link followed, a link to nothing not.
+- **Four reaches.** `claude_md::reach` takes the predicate, the project's
+  settings and whether the block was written, and says how Claude gets the
+  block. `Reach::Native` when nothing is in the way. `Reach::Same` when one
+  of Claude's own names in the project is the `AGENTS.md`, one file through
+  a link, as some teams keep the two: Claude reads the block as that file,
+  and an import there would bring the file into itself, between markers the
+  block already holds. `Reach::Import` when the project's own `CLAUDE.md`
+  or `.claude/CLAUDE.md` may take the import. `Reach::Fallback`, with its
+  reason, otherwise: no block written, only a `CLAUDE.local.md`, a
+  `CLAUDE.md` only above the project, the project's own one tracked by git
+  in a local project without `edit_tracked`, one reached through a link, or
+  one of which git cannot say whether it tracks it. `Same` is the case #42
+  left to this predicate: the block is written through such a link, and an
+  import in the same file would have each render take the other's block
+  for its own.
+- **Never read twice.** `Reach::mode` is the mode Claude's rule files are
+  rendered in: `Mode::Scoped` for `Native`, `Same` and `Import`, where Claude
+  reads the block once, natively, as its own file, or through an import,
+  which loads a file once and turns the native read off by being in a
+  `CLAUDE.md` (verified); `Mode::Fallback` for every reason Claude reads no
+  block, where its rules folder holds every rule and the block none of them
+  for Claude. No block written is a fallback too, whatever the predicate
+  says: Claude cannot read a block that is not there, and the rules folder
+  then holds the rules about every file that a refused or skipped block
+  would have. So Claude reads a rule in exactly one place.
+- **Which file takes the import.** `CLAUDE.md` first, the file the probe
+  verified the import in, as `@AGENTS.md`; then `.claude/CLAUDE.md`, as
+  `@../AGENTS.md`, since Claude resolves an import from the file holding it
+  (docs-only, with its fallback in docs/agents.md). Never
+  `CLAUDE.local.md`, a person's own file, kept out of the team's view. A
+  file may take it in a shared project, in one a `mind.toml` marks, which
+  was committed by design, and in a local one while git does not track the
+  file (`exclude::tracks_file`, from the index with gix) or its settings say
+  `edit_tracked` (D-02). A file already holding the import keeps it, so it
+  never moves from one file to the other, and counts as how Claude reaches
+  the block even once it may no longer be edited, a tracked `CLAUDE.md`
+  committed with the import in it say, since Claude reads it there anyway:
+  taking the fallback beside it would have Claude read every rule twice.
+- **A block at the top.** The import sits between the markers the block of
+  `AGENTS.md` has, read by the same search (`agents_md::locate`) through
+  the same lines (`lines`), at the top of the file, an empty line below it,
+  the layout the probe verified. The empty line is the block's, taken out
+  with it, so the file comes back as it was. Everything outside the block
+  is kept byte for byte, CRLF and a missing final newline included, and a
+  byte order mark stays first, where the block would otherwise push it into
+  the middle of the file. A malformed block is refused with nothing
+  written, as in `AGENTS.md`, and so is a rule's marker in the block: it
+  marks a copy of `AGENTS.md`, and an import beside its rules would give
+  them twice.
+- **What is never touched.** `claude_md::render` edits only the project's
+  own `CLAUDE.md` and `.claude/CLAUDE.md`, each only while it is there. It
+  never makes one, as it never makes a `CLAUDE.local.md`: a `CLAUDE.md`
+  Mindflayer made would itself turn Claude's native read off. It never edits
+  a file above the project, which is reported as the fallback's reason
+  (`Fallback::Above`) instead: Claude reads it in every project below, and
+  it is nobody's to edit for one of them. Nor a file reached through a
+  link, whose import would mean whatever the link leads to; nor the user
+  memory file in a project at the home; nor the `AGENTS.md` itself.
+- **Added once, gone with the last rule.** The import goes into the file
+  the reach names, and comes out of the project's other `CLAUDE.md`, so it
+  is in one file at most, however many rules there are; once no block is
+  written it comes out of both, and each file is as it was before.
+  Replaced through a temporary and a rename, never through a link
+  (`replace_bytes_unresolved`), and a file whose text a change leaves as it
+  was is not written. Every file is read before any is written, so a
+  malformed block refuses the whole render. An import no longer wanted in a
+  file that may no longer be edited stays there, and is said
+  (`claude_md::Warning`), never taken out behind the setting that keeps
+  Mindflayer out of the file ([an open question](#open-questions)).
+- **No lock of its own.** As the two renderers, it takes none: its caller
+  holds the workspace's. Which rules a project is given and when to render
+  are #45's, as for the block.
 
 ## One entry of a config file somebody else owns
 
@@ -4234,7 +4346,10 @@ or share mode change](#when-a-projects-agents-targets-or-share-mode-change)).
 a v2 project to settings shared unless `--local` ([moving a project to its
 settings](#moving-a-project-to-its-settings)). #43 keeps Claude's rule files
 out of git the same way, an entry a file ([Claude's rule
-files](#claudes-rule-files)).
+files](#claudes-rule-files)). #44 adds the `@AGENTS.md` import to a
+project's `CLAUDE.md` that git tracks only in a shared project or with
+`edit_tracked`, and otherwise gives Claude every rule through those files
+([how Claude reaches the block](#how-claude-reaches-the-block)).
 
 ### D-03: Rules reach every agent through `AGENTS.md`
 
@@ -4244,7 +4359,8 @@ route. Where Claude would not read that file, a managed `@AGENTS.md` import
 goes into the project's own `CLAUDE.md`, or
 `.claude/rules/mindflayer/<route>.md` when no file may be edited (D-02); a rule
 that declares `paths:` goes only there. One core predicate (#44) decides,
-walking every ancestor directory and ignoring the user memory file. The root
+walking every ancestor directory but `/` (see below) and ignoring the user
+memory file. The root
 `AGENTS.md` is the only per-project file all three agents read, and Codex has
 no include mechanism. Claude 2.1.277+ reads it natively only when no
 `CLAUDE.md`, `.claude/CLAUDE.md` or `CLAUDE.local.md` sits in the start
@@ -4261,12 +4377,13 @@ the block's text reaches Claude without its markers, the import loads it once,
 and a rule with `paths:` loads only when a matching file is read
 ([docs/agents.md](agents.md)). Two it did not try: that a `.claude/CLAUDE.md`
 counts as well, seen only among the names in Claude's debug output, and the
-2.1.277 floor, which is docs-only. One corner differs from what this says:
-Claude's check most likely stops below `/`, so a `CLAUDE.md` at `/` alone does
-not stop it reading `AGENTS.md` (read from the directory counts in its debug
-log, not tried). #44's walk up to and including `/` would then choose Fallback
-while Claude still read the block, and give Claude each unscoped rule twice;
-whether #44 stops below `/` too is an [open question](#open-questions).
+2.1.277 floor, which is docs-only. One corner differs from what this said
+when validated: Claude's check most likely stops below `/`, so a `CLAUDE.md`
+at `/` alone does not stop it reading `AGENTS.md` (read from the directory
+counts in its debug log, not tried). #44's walk stops below `/` too: every
+ancestor directory but the filesystem's root, so the predicate agrees with
+Claude, where walking up to and including `/` would choose Fallback while
+Claude still read the block, and give Claude each unscoped rule twice.
 Unblocks #17, #42, #43, #44 and #45.
 
 Carrying it out, #42 renders the block, between those markers and under a
@@ -4282,13 +4399,25 @@ agents](#how-a-rule-reaches-the-agents)).
 
 #43 writes a rule that states `paths:` as
 `.claude/rules/mindflayer/<route>.md`, front matter kept, and every rule there
-in the fallback mode #44's predicate chooses, never because a block was or was
-not written. It says that such a rule reaches Claude alone, naming the
-project's agents it misses. What is Mindflayer's there is what its caller
-recorded of an earlier render, each file's hash among it, so a file nothing
-recorded, or one changed since, is never written over or taken away. It is
-refused where the block is, and through a link out of the project ([Claude's
-rule files](#claudes-rule-files)).
+in the fallback mode #44 chooses, never because a block was written alone.
+It says that such a rule reaches Claude alone, naming the project's agents
+it misses. What is Mindflayer's there is what its caller recorded of an
+earlier render, each file's hash among it, so a file nothing recorded, or
+one changed since, is never written over or taken away. It is refused where
+the block is, and through a link out of the project ([Claude's rule
+files](#claudes-rule-files)).
+
+#44 is the predicate, `claude_md::reads_agents_md`: the three names in the
+project's root and every folder above it but `/`, the user memory file left
+out by the file it is. `claude_md::reach` turns it, the project's settings
+and whether the block was written into Native, the import in the project's
+own `CLAUDE.md` or `.claude/CLAUDE.md`, or the fallback with its reason, and
+one more: a `CLAUDE.md` that is the `AGENTS.md` through a link, which Claude
+reads the block as. `claude_md::render` adds the import once, between the
+block's markers at the top of the file, and takes it out with the last rule;
+it never makes a `CLAUDE.md` or a `CLAUDE.local.md`, and never edits a file
+above the project, reporting it as the fallback's reason instead ([how
+Claude reaches the block](#how-claude-reaches-the-block)).
 
 ### D-04: An edited copy is detected, not disowned
 
@@ -5045,14 +5174,42 @@ leak into the lifecycle code. Unblocks #33, #45, #62, #93, #94 and #95.
   read. #17 did not settle it: it ran only Claude Code and did not try an
   empty `$CLAUDE_CONFIG_DIR`, so how each agent reads one is for an addition
   to `scripts/agent-probe` to record.
-- **A `CLAUDE.md` at `/`.** D-03 counts a `CLAUDE.md` in any directory above
-  the project, and #44 walks up to and including `/`. Claude's own check most
-  likely stops below `/` ([docs/agents.md](agents.md)), so with a `CLAUDE.md`
-  at `/` and none nearer, Claude reads `AGENTS.md` natively while #44 would
-  choose Fallback, and Claude reads each unscoped rule twice. Stopping #44's
-  walk below `/` matches Claude, if Claude does stop there; #17 inferred that
-  from the debug log's directory counts and could not put a file at `/` to
-  try it. #44 settles which.
+- **A `CLAUDE.md` at `/`.** #44's walk stops below `/`, as Claude's own check
+  most likely does ([docs/agents.md](agents.md)): #17 inferred it from the
+  debug log's directory counts and could not put a file at `/` to try it.
+  Were Claude to count `/` after all, a `CLAUDE.md` there with none nearer
+  would have the predicate say Claude reads the block while it reads none,
+  and the rules about every file would miss Claude. A probe run allowed to
+  write at `/`, in a container say, would settle it.
+- **An import from `.claude/CLAUDE.md`.** The import goes there, as
+  `@../AGENTS.md`, only when the project's `CLAUDE.md` is not there or may
+  not be edited. That Claude resolves an import from the file holding it,
+  and reads both `CLAUDE.md` and `.claude/CLAUDE.md` in one folder, is
+  docs-only ([docs/agents.md](agents.md)); were either wrong, the block
+  would miss Claude in that one case. A `claude-import` run with the line in
+  `.claude/CLAUDE.md` would settle both.
+- **Claude started below a project's root.** The predicate looks from the
+  project's root up, for Claude started there. A `CLAUDE.md` in a folder
+  between the root and a deeper start keeps Claude from reading `AGENTS.md`
+  natively there, while the reach says it does, and no import is added.
+  Looking below the root too would tell, at the price of walking the whole
+  project, and of an import for a start nobody may use.
+- **A `CLAUDE.md` hard linked to `AGENTS.md`.** One file under two names is
+  told by resolving both paths, which sees a symbolic link and not a hard
+  one, and the block's render replaces `AGENTS.md` through a rename, which
+  splits a hard link anyway. The two are then files of their own, the import
+  goes into `CLAUDE.md` as into any other, and Claude reads the team's text
+  twice, once in each, though each rule once. Writing `AGENTS.md` in place
+  rather than by a rename, where it has more than one link, would keep them
+  one file, at the price of a write that is no longer all or nothing.
+- **An import left in a file git tracks.** An import no longer wanted in a
+  file that may no longer be edited, a `CLAUDE.md` committed with it in a
+  project turned local, stays and is said at every render
+  (`claude_md::Warning::Tracked`), until `edit_tracked` or shared mode lets
+  it be taken out. Once the last rule is gone it imports an `AGENTS.md`
+  holding no block, which gives Claude nothing more. Beside a `CLAUDE.md`
+  that is the `AGENTS.md` through a link, Claude reads the block through
+  both, and whether it loads the one file twice is not recorded.
 - **Codex and OpenCode on their binaries.** #17 ran only Claude Code, so
   every Codex and OpenCode fact in [docs/agents.md](agents.md) is docs-only,
   each with a fallback. Its checks 2 (OpenCode given the same skill in both
@@ -5179,19 +5336,6 @@ leak into the lifecycle code. Unblocks #33, #45, #62, #93, #94 and #95.
   path as spelled, as `ConfigFile` does, would close it, at the price of
   replacing the link to a file inside the project that some teams keep
   between `AGENTS.md` and `CLAUDE.md`.
-- **An `AGENTS.md` linked to the `CLAUDE.md` beside it.** A render writes
-  through such a link, so its block lands in `CLAUDE.md`, between the same
-  `<!-- mindflayer:begin -->` and `<!-- mindflayer:end -->` that #44 writes
-  its `@AGENTS.md` import between there ([docs/agents.md](agents.md)). With
-  both in one file, each writer would take the other's block for its own: a
-  render would replace the import line with the rules, and #44 the rules
-  with the import, each undoing the other on every run, while two blocks
-  would have the second refused as malformed (`Malformed::Reopened`), and
-  the import would bring the file into itself. Claude reads that file as
-  its `CLAUDE.md`, so the rules already reach it, and #44's predicate is
-  where the case belongs: it can count Claude as reached when the two names
-  are one file and write no import, or the import can take markers of its
-  own.
 - **A config file left empty by its last entry.** Removing the last server
   leaves `"mcpServers": {}` in a JSON file, and a `.codex/config.toml` that
   Mindflayer made holding nothing, and the file stays, with any folder made for
