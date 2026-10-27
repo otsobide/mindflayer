@@ -2420,6 +2420,29 @@ fn a_project_installing_where_no_agent_reads_is_marked_and_its_pane_says_why() {
 }
 
 #[test]
+fn a_strip_is_drawn_on_a_terminal_too_short_for_it() {
+    let dir = workspace_with_own();
+    let alpha = dir.path().join("alpha");
+    mind(&alpha, &["targets", "set", "skills", ".skills", "-y"]).unwrap();
+    let app = tui_in(dir.path());
+    assert!(!app
+        .member()
+        .unwrap()
+        .holdings
+        .as_ref()
+        .unwrap()
+        .unreached
+        .is_empty());
+
+    // Its pane shorter than the three rows a strip takes at least, which
+    // must not end the process.
+    for height in 1..10 {
+        let mut terminal = Terminal::new(TestBackend::new(110, height)).unwrap();
+        terminal.draw(|frame| tui::ui::draw(&app, frame)).unwrap();
+    }
+}
+
+#[test]
 fn capital_t_on_a_project_opens_where_it_installs_skills_and_runs_targets_set() {
     let dir = workspace_with_own();
     flayer(dir.path(), &["install", "-p", "alpha", "commit-style"]).unwrap();

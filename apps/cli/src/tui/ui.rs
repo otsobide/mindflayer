@@ -384,11 +384,15 @@ fn holdings(app: &App, workspace: &Workspace, frame: &mut Frame, area: Rect) {
             (title, wrapped)
         })
         .collect();
+    // At most half the pane, and at least a line between its borders while
+    // the pane has room for one: a pane shorter than that gets what it has,
+    // since a lower bound above the upper one panics.
+    let most = area.height / 2;
     let mut constraints = vec![Constraint::Min(3)];
     for (_, lines) in &strips {
         let height = u16::try_from(lines.len() + 2)
             .unwrap_or(u16::MAX)
-            .clamp(3, area.height / 2);
+            .clamp(3.min(most), most);
         constraints.push(Constraint::Length(height));
     }
     let parts = Layout::default()
