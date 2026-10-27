@@ -77,7 +77,8 @@ under `apps/` with its own `Makefile`:
   workspace a command uses (`resolve`), the shell code that activates one
   (`activate`), kinds, the agents and where each kind goes for them
   (`agent`), the catalog, gathering (`gix`), the SQLite ledger,
-  installing, keeping installs out of git (`exclude`), creating and changing
+  installing, keeping installs out of git (`exclude`), what each project
+  holds, from where and for which agents (`status`), creating and changing
   artifacts, and moving a workspace's own into its library (`migrate`). Its
   only I/O is files, and it never reads the environment.
 - `apps/cli` (`mindflayer-cli`): the binaries `mind` (`src/main.rs`) and
@@ -87,8 +88,9 @@ under `apps/` with its own `Makefile`:
   commands has a file under `src/commands/`: `project` (init, link, unlink,
   scan), `workspace` (load, unload), `activate` (activate, which),
   `artifact` (add, edit, rename, remove, templates), `read` (list, show,
-  validate), `gather`, `install` and `migrate` (migrate --library).
-  `src/render.rs` holds `Outcome`, `Failure` and the table helpers,
+  validate), `status`, `gather`, `install` and `migrate` (migrate
+  --library). `src/render.rs` holds `Outcome`, `Failure`, the table helpers
+  and the envelope every `--json` prints (`json`),
   `src/error.rs` holds `CliError`, and `src/homes.rs` decides the default
   home and the agent homes, and gathers them with `-W` and
   `$MINDFLAYER_WORKSPACE` into a `Lookup`. `src/tui/` and `src/install/` are
@@ -162,9 +164,22 @@ These are easy to break from a single file without noticing.
   source is.
 - **Output is built, then printed.** Commands return an `Outcome` (stdout
   text, stderr lines, ok), so tests assert on the exact text a user sees.
+- **Reading commands print JSON in one envelope, and its names are a
+  contract.** A reading command's `--json` prints `render::json`'s
+  `{"version": 1, "data": ..., "warnings": [...]}`, never a shape of its own,
+  with what it would have said on stderr as `warning:` lines in `warnings`
+  and the exit status its text has. `data` is a type core builds and sorts,
+  deriving `Serialize` with its fields named in snake_case; a kind, an agent
+  or a state goes out as the word a command line takes for it
+  (`Kind::slug`, `Agent::name`, `State::slug`), serialized by hand, never
+  derived from the variant. A name once printed is a contract: dropping or
+  renaming one, or changing what it holds, moves `ENVELOPE_VERSION`, and
+  adding one does not. A test reads it back with `common::enveloped`, into
+  structs of its own that refuse a field they do not name.
 - **Failures are collected, not raised.** One unreadable artifact or stale
-  registry entry is a `warning:` on stderr and a non-zero exit, never a reason
-  to hide the rest. An absence (no `skills/` folder yet) is not a failure.
+  registry entry is a `warning:` on stderr (in the envelope, under `--json`)
+  and a non-zero exit, never a reason to hide the rest. An absence (no
+  `skills/` folder yet) is not a failure.
 - **Never overwrite what somebody wrote.**
   - New markers are written from string templates so their comments survive.
     Edits go through `toml_edit` (`edit_array`, or `edit_marker_held` for a
