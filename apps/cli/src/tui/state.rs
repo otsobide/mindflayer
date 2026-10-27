@@ -49,7 +49,8 @@ pub enum View {
     /// project for `mind`.
     Nowhere,
     /// A workspace and everything it holds, or one project on its own.
-    Workspace(Workspace),
+    /// Boxed, since `Nowhere` holds nothing and a view is moved whole.
+    Workspace(Box<Workspace>),
 }
 
 /// A workspace as the screen shows it, or a project on its own.
@@ -60,8 +61,17 @@ pub struct Workspace {
     /// The workspace's own artifacts first, then every registered entry in
     /// the order the marker lists them. On its own, a project is the one.
     pub members: Vec<Member>,
-    /// What sits under the root and could be linked, but is not.
+    /// What sits under the root, or under the folders `flayer minds` was
+    /// given, and could be linked, but is not.
     pub unlinked: Vec<Unlinked>,
+    /// Where `unlinked` was looked for: the folders `flayer minds` was
+    /// given, none meaning the root.
+    pub roots: Vec<PathBuf>,
+    /// What the look for `unlinked` could not read, and that it stopped
+    /// early, in the words `flayer scan` warns with: a folder `flayer minds`
+    /// was given that is not there among them, which would otherwise be an
+    /// empty screen with nothing to say why.
+    pub scan_warnings: Vec<String>,
     /// How many artifacts are on the shelf.
     pub shelf: usize,
     /// The workspaces it loads, in marker order.
@@ -216,10 +226,13 @@ pub struct LoadedSource {
     pub offers: Result<usize, String>,
 }
 
-/// A directory under the workspace that is not linked yet.
+/// A directory under the workspace, or under a folder `flayer minds` was
+/// given, that is not linked yet.
 #[derive(Debug, Clone)]
 pub struct Unlinked {
-    /// The route from the workspace root, which is what `flayer link` is given.
+    /// What `flayer link` is given for it from the workspace root, where the
+    /// TUI runs its lines: the route from there, or its path when it is
+    /// outside.
     pub route: String,
     /// A mind project already, rather than a repository that needs
     /// `mind init` before it can be linked.
@@ -888,6 +901,10 @@ pub struct App {
     /// Where to look for a workspace: what every command this TUI runs is
     /// told, so none of them looks again and finds another.
     pub lookup: Lookup,
+    /// Where to look for what could be linked, every time the disk is read
+    /// again: the folders `flayer minds` was given, none meaning the
+    /// workspace root.
+    pub roots: Vec<PathBuf>,
     /// What runs its command lines, when it is not the real thing: a test's
     /// stand-in.
     pub runner: Option<Runner>,
@@ -914,6 +931,7 @@ impl App {
             busy: None,
             running: None,
             lookup: Lookup::default(),
+            roots: Vec::new(),
             runner: None,
         };
         app.settle_in();
@@ -959,6 +977,15 @@ impl App {
     /// lookup its screen was read with.
     pub fn with_lookup(mut self, lookup: Lookup) -> Self {
         self.lookup = lookup;
+        self
+    }
+
+    /// Look for what could be linked under `roots` rather than under the
+    /// workspace root, each time the disk is read again: the folders the
+    /// screen was read with, so a change made from it does not send the
+    /// minds screen back to the workspace root.
+    pub fn with_roots(mut self, roots: Vec<PathBuf>) -> Self {
+        self.roots = roots;
         self
     }
 

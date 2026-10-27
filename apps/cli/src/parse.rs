@@ -8,6 +8,7 @@ use std::path::PathBuf;
 
 use clap::builder::{PossibleValuesParser, TypedValueParser};
 use clap::{ArgGroup, Args, Parser, Subcommand};
+use mindflayer_core::scan::DEFAULT_DEPTH;
 use mindflayer_core::{Agent, Kind, Share, Shell, DEFAULT_SUBDIRECTORY};
 
 /// Manage the agent skills in a mind project.
@@ -558,10 +559,37 @@ pub enum FlayerCommand {
 
     /// Open the minds screen: every mind project and repository under this
     /// workspace, ticked where it is linked, to link and unlink in one pass.
-    Minds,
+    ///
+    /// Given folders, it looks for what to link under those instead, as
+    /// `flayer scan` does, and still lists every project the workspace links.
+    Minds {
+        /// Each folder to look under, itself included [default: the
+        /// workspace's root].
+        #[arg(value_name = "DIR")]
+        roots: Vec<PathBuf>,
+    },
 
-    /// Look under this workspace for projects and repositories to link.
-    Scan,
+    /// Look for projects and repositories to link: under this workspace, or
+    /// under each folder given.
+    ///
+    /// It links nothing, and prints each path as `flayer link` run from here
+    /// takes it.
+    Scan {
+        /// Each folder to look under, itself included [default: the
+        /// workspace's root].
+        #[arg(value_name = "DIR")]
+        roots: Vec<PathBuf>,
+
+        /// How many levels below each folder to look. However deep, a scan
+        /// that has listed too many folders stops, and says so.
+        #[arg(long, value_name = "N", default_value_t = DEFAULT_DEPTH)]
+        depth: usize,
+
+        /// Print it as JSON, in the envelope every reading command's --json
+        /// shares.
+        #[arg(long)]
+        json: bool,
+    },
 
     /// Collect artifacts from elsewhere onto this workspace's shelf.
     #[command(subcommand)]

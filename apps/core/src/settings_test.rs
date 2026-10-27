@@ -277,6 +277,16 @@ fn what_is_not_strict_json_is_refused() {
 }
 
 #[test]
+fn an_id_is_serialized_as_its_text() {
+    let id = ProjectId::parse(ID_TEXT).unwrap();
+
+    assert_eq!(
+        serde_json::to_string(&id).unwrap(),
+        format!("\"{ID_TEXT}\"")
+    );
+}
+
+#[test]
 fn an_id_is_32_lowercase_hexadecimal_digits_and_new_ones_differ() {
     let one = ProjectId::generate();
     let other = ProjectId::generate();

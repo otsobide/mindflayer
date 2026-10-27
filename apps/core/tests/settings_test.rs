@@ -94,7 +94,7 @@ fn a_scan_takes_a_project_marked_by_its_settings_for_a_project() {
     fs::create_dir(dir.path().join("alpha")).unwrap();
     settings_project(&dir.path().join("alpha"), skills_beside());
 
-    let scan = scan(&workspace);
+    let scan = scan(&workspace, &scan::Request::default());
 
     assert_eq!(scan.found.len(), 1);
     assert_eq!(scan.found[0].route, "alpha");

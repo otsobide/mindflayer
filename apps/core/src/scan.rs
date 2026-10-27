@@ -1,44 +1,85 @@
-//! Finding the repositories under a workspace that it could manage.
+//! Finding the repositories a workspace could manage: under the workspace, or
+//! under any folder somebody points it at.
 //!
 //! A workspace manages what it was told to, never what merely sits inside it,
 //! so nothing here links anything. It answers the question that comes just
-//! before a link: which directories under the workspace are mind projects, or
-//! git repositories that could become one, and which are linked already.
+//! before a link: which directories are mind projects, or git repositories
+//! that could become one, and which are linked already.
 
-use std::collections::VecDeque;
+use std::collections::{HashSet, VecDeque};
 use std::fs;
 use std::io;
-use std::path::{Path, PathBuf};
+use std::path::{Component, Path, PathBuf};
 
+use serde::Serialize;
 use thiserror::Error;
 
 use crate::paths;
-use crate::workspace::{FlayerWorkspace, MindProject};
+use crate::settings::ProjectId;
+use crate::workspace::{FlayerWorkspace, MindProject, WorkspaceError};
 
-/// How far below the workspace root a scan looks.
+/// How far below each root a scan looks unless it is told otherwise.
 ///
 /// Three levels reaches `repo`, `org/repo` and `github.com/org/repo` from a
-/// workspace at the top, which is how people lay repositories out. Deeper than
-/// that is somebody's source tree rather than a place repositories are kept.
-pub const MAX_DEPTH: usize = 3;
+/// folder at the top, which is how people lay repositories out. Deeper than
+/// that is somebody's source tree rather than a place repositories are kept;
+/// a scan told to go further is still held to [`MAX_LISTED`].
+pub const DEFAULT_DEPTH: usize = 3;
 
-/// How many directories a scan lists before it stops.
+/// How many directories a scan lists before it stops, whatever its depth and
+/// however many roots it has.
 ///
-/// A workspace at the root of a home directory must not turn into a crawl of
-/// the disk. A scan that stops early says so rather than passing for complete.
+/// A folder at the root of a home directory must not turn into a crawl of the
+/// disk. A scan that stops early says so rather than passing for complete.
 pub const MAX_LISTED: usize = 4096;
 
 /// Folders that are never a place repositories are kept, and are often huge.
 const SKIPPED: [&str; 2] = ["node_modules", "target"];
 
-/// A directory a workspace could manage.
+/// What a scan is asked to look through.
 #[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Request {
+    /// The folders to look under, absolute: a front end makes what it was
+    /// typed so, from the directory the command works in, as it does the
+    /// paths `link` is given. None means the workspace root.
+    pub roots: Vec<PathBuf>,
+    /// How many levels below each root to look; none judges the roots alone.
+    pub depth: usize,
+    /// Where each route is spelled from: the directory `flayer link` would be
+    /// run in with it. None means the workspace root, where the TUI runs its
+    /// lines.
+    pub from: Option<PathBuf>,
+}
+
+/// The workspace root, to [`DEFAULT_DEPTH`], spelled from there.
+impl Default for Request {
+    fn default() -> Self {
+        Request {
+            roots: Vec::new(),
+            depth: DEFAULT_DEPTH,
+            from: None,
+        }
+    }
+}
+
+/// A directory a workspace could manage.
+///
+/// What it serializes to is a contract, as a status report's is: each field
+/// by its name.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct Found {
     /// Where it is.
-    pub root: PathBuf,
-    /// The route to it from the workspace root, `/` separated: what
-    /// `flayer link` would be given.
+    #[serde(serialize_with = "paths::lossy")]
+    pub path: PathBuf,
+    /// What `flayer link` would be given for it, run where the request
+    /// spells routes from: the route from there, `/` separated, when it is
+    /// inside, and its path otherwise.
     pub route: String,
+    /// The id its settings name it by (D-09), whatever it is called and
+    /// wherever it is: none for a git repository that is not a project yet,
+    /// for a project a `mind.toml` still marks, which has none, and for one
+    /// whose marker would not open, which is a failure beside it.
+    pub id: Option<ProjectId>,
     /// A mind project already, rather than a git repository that is not one
     /// yet and would need `mind init` before it can be linked.
     pub mind: bool,
@@ -47,40 +88,91 @@ pub struct Found {
 }
 
 /// What a scan found.
-#[derive(Debug, Default)]
+#[derive(Debug, Serialize)]
 pub struct Scan {
+    /// Where it looked, each once, in the order it was given them: the
+    /// workspace root when it was given none.
+    #[serde(serialize_with = "paths::lossy_all")]
+    pub roots: Vec<PathBuf>,
+    /// How many levels below each root it looked.
+    pub depth: usize,
     /// Ordered by route.
     pub found: Vec<Found>,
-    /// Folders that could not be listed. One unreadable folder must not hide
-    /// the repositories beside it.
+    /// Folders that could not be listed, and markers that would not open.
+    /// One unreadable folder must not hide the repositories beside it.
+    ///
+    /// Not serialized: a front end says them as its warnings, which in JSON
+    /// are the envelope's, beside the data rather than in it.
+    #[serde(skip)]
     pub failures: Vec<ScanFailure>,
     /// It stopped at [`MAX_LISTED`] before looking everywhere.
     pub truncated: bool,
 }
 
-/// Look under a workspace for mind projects and git repositories.
+/// Look for mind projects and git repositories under the roots `request`
+/// names, or under the workspace root when it names none.
 ///
-/// A repository is a leaf: the scan does not look inside one, because its
-/// folders are its own and a repository nested in another is its submodule,
-/// managed with it. Hidden folders and symlinked ones are not entered either:
-/// the first are tooling, and the second can loop.
-pub fn scan(workspace: &FlayerWorkspace) -> Scan {
-    let root = workspace.root();
-    let mut scan = Scan::default();
+/// Every root is a candidate itself, and is looked inside even when it is a
+/// repository, since it is where somebody said the others are kept. Below a
+/// root a repository is a leaf: the scan does not look inside one, because
+/// its folders are its own and a repository nested in another is its
+/// submodule, managed with it. Hidden folders and symlinked ones are not
+/// entered either: the first are tooling, and the second can loop. A root is
+/// entered whatever it is called and however it is reached, because somebody
+/// named it.
+pub fn scan(workspace: &FlayerWorkspace, request: &Request) -> Scan {
+    // A root somebody named that is not there is a typo worth a warning; the
+    // workspace root not being there is an absence, since the default
+    // workspace before it is made can be read in a home nobody has created
+    // yet.
+    let named = !request.roots.is_empty();
+    let mut roots: Vec<PathBuf> = Vec::new();
+    if named {
+        for root in &request.roots {
+            let root = paths::normalize(root);
+            if !roots.contains(&root) {
+                roots.push(root);
+            }
+        }
+    } else {
+        roots.push(workspace.root().to_path_buf());
+    }
+    let from = request.from.as_deref().unwrap_or(workspace.root());
+    let mut scan = Scan {
+        roots: roots.clone(),
+        depth: request.depth,
+        found: Vec::new(),
+        failures: Vec::new(),
+        truncated: false,
+    };
 
-    // The workspace root is a candidate too: a workspace can manage the
-    // project it sits in. Unlike every other repository it is still looked
-    // inside, because it is also where the others are kept.
-    if let Some(found) = judge(workspace, root) {
-        scan.found.push(found);
+    // Every root starts the walk at once rather than one after another, so
+    // the budget is spent breadth first across all of them: when it runs out
+    // it is the deepest folders that went unseen, never a whole second root
+    // behind a first that filled it. A folder two roots reach, one inside
+    // the other, is looked at once.
+    let mut seen: HashSet<PathBuf> = HashSet::new();
+    let mut pending: VecDeque<(PathBuf, usize)> = VecDeque::new();
+    for root in roots {
+        // Said even when the scan lists nothing, at depth 0, so a typo is
+        // never an empty answer.
+        if named {
+            if let Err(source) = fs::metadata(&root) {
+                scan.failures
+                    .push(ScanFailure::Unlisted { path: root, source });
+                continue;
+            }
+        }
+        if let Some(found) = judge(workspace, &root, from, &mut scan.failures) {
+            scan.found.push(found);
+        }
+        seen.insert(root.clone());
+        pending.push_back((root, 0));
     }
 
-    // Breadth first, so that when the budget runs out it is the deepest
-    // folders that went unseen rather than a whole neighbouring tree.
-    let mut pending = VecDeque::from([(root.to_path_buf(), 0usize)]);
     let mut listed = 0usize;
     while let Some((directory, depth)) = pending.pop_front() {
-        if depth >= MAX_DEPTH {
+        if depth >= request.depth {
             continue;
         }
         if listed == MAX_LISTED {
@@ -91,12 +183,11 @@ pub fn scan(workspace: &FlayerWorkspace) -> Scan {
 
         let children = match subdirectories(&directory) {
             Ok(children) => children,
-            // A root that is not there holds nothing, which is an absence
-            // and not a failure: the default workspace before it is made can
-            // be read in a home nobody has created yet.
-            Err(source) if depth == 0 && source.kind() == io::ErrorKind::NotFound => continue,
+            Err(source) if !named && depth == 0 && source.kind() == io::ErrorKind::NotFound => {
+                continue;
+            }
             Err(source) => {
-                scan.failures.push(ScanFailure {
+                scan.failures.push(ScanFailure::Unlisted {
                     path: directory,
                     source,
                 });
@@ -104,7 +195,10 @@ pub fn scan(workspace: &FlayerWorkspace) -> Scan {
             }
         };
         for child in children {
-            if let Some(found) = judge(workspace, &child) {
+            if !seen.insert(child.clone()) {
+                continue;
+            }
+            if let Some(found) = judge(workspace, &child, from, &mut scan.failures) {
                 scan.found.push(found);
                 continue;
             }
@@ -119,28 +213,61 @@ pub fn scan(workspace: &FlayerWorkspace) -> Scan {
     }
 
     scan.found.sort_by(|a, b| a.route.cmp(&b.route));
-    scan.failures.sort_by(|a, b| a.path.cmp(&b.path));
+    scan.failures.sort_by(|a, b| a.path().cmp(b.path()));
     scan
 }
 
-/// What a directory is to the workspace, if it is anything.
-fn judge(workspace: &FlayerWorkspace, directory: &Path) -> Option<Found> {
+/// What a directory is to the workspace, if it is anything, with its route
+/// spelled from `from`, and a failure in `failures` when its marker would not
+/// open.
+///
+/// A project whose marker would not open is listed all the same: its marker
+/// still says it is one, and `flayer link`, refusing it, says why again.
+fn judge(
+    workspace: &FlayerWorkspace,
+    directory: &Path,
+    from: &Path,
+    failures: &mut Vec<ScanFailure>,
+) -> Option<Found> {
     let mind = MindProject::is_marked(directory);
     // `exists`, not `is_dir`: a worktree or a submodule has a `.git` file.
     let git = directory.join(".git").exists();
     if !mind && !git {
         return None;
     }
-    let route = paths::relative_to(directory, workspace.root())
-        .as_deref()
-        .and_then(paths::to_config_string)
-        .unwrap_or_else(|| directory.display().to_string());
+    let id = if mind {
+        match MindProject::open(directory) {
+            Ok(project) => project.settings().map(|settings| settings.id.clone()),
+            Err(error) => {
+                failures.push(ScanFailure::Unread(error));
+                None
+            }
+        }
+    } else {
+        None
+    };
     Some(Found {
-        root: directory.to_path_buf(),
-        route,
+        path: directory.to_path_buf(),
+        route: route(directory, from),
+        id,
         mind,
         linked: workspace.is_linked(directory),
     })
+}
+
+/// What `flayer link` run in `from` would be given for `directory`: the
+/// route from there when it is inside, and its path otherwise.
+///
+/// Not a route that climbs out with `..`, which reads right from one
+/// directory only and grows a `..` for every level between the two: the
+/// path reads the same from anywhere, and is what somebody who pointed the
+/// scan at a folder outside the workspace typed.
+fn route(directory: &Path, from: &Path) -> String {
+    paths::relative_to(directory, from)
+        .filter(|route| route.components().next() != Some(Component::ParentDir))
+        .as_deref()
+        .and_then(paths::to_config_string)
+        .unwrap_or_else(|| directory.display().to_string())
 }
 
 /// The directories directly inside `directory`, in name order, leaving out
@@ -166,11 +293,32 @@ fn subdirectories(directory: &Path) -> Result<Vec<PathBuf>, io::Error> {
     Ok(found)
 }
 
-/// A folder a scan could not list.
+/// What a scan could not read on its way, collected rather than raised.
 #[derive(Debug, Error)]
-#[error("{path}: cannot be listed: {source}")]
-pub struct ScanFailure {
-    pub path: PathBuf,
-    #[source]
-    pub source: io::Error,
+pub enum ScanFailure {
+    /// A folder it could not list, so nothing below it was seen: a root
+    /// named that is not there among them.
+    #[error("{path}: cannot be listed: {source}")]
+    Unlisted {
+        path: PathBuf,
+        #[source]
+        source: io::Error,
+    },
+    /// A project whose marker would not open, listed without an id.
+    #[error(transparent)]
+    Unread(WorkspaceError),
 }
+
+impl ScanFailure {
+    /// The folder, or the marker, it is about.
+    pub fn path(&self) -> &Path {
+        match self {
+            ScanFailure::Unlisted { path, .. } => path,
+            ScanFailure::Unread(error) => error.path(),
+        }
+    }
+}
+
+#[cfg(test)]
+#[path = "scan_test.rs"]
+mod tests;

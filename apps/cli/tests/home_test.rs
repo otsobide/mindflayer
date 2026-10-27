@@ -122,9 +122,14 @@ fn flayer_scan_reads_the_default_workspace_without_making_it() {
 
     let outcome = flayer_at_home(elsewhere.path(), home.path(), &["scan"]).unwrap();
 
-    // What is under it does not wait for it to be made.
+    // What is under it does not wait for it to be made. Spelled by its path,
+    // since it is not under where the command ran: `flayer link code/api`
+    // typed there would miss it.
+    let api = home.path().join("code/api");
     assert!(
-        outcome.stdout.starts_with("code/api  not linked"),
+        outcome
+            .stdout
+            .starts_with(&format!("{}  not linked", api.display())),
         "{}",
         outcome.stdout
     );

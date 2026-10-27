@@ -35,6 +35,7 @@ use ratatui::crossterm::event::{self, Event, KeyEventKind};
 use ratatui::crossterm::terminal::{self, EnterAlternateScreen};
 use ratatui::DefaultTerminal;
 
+use crate::commands::project::scan_warnings;
 use crate::commands::workspace::{load_warnings, same_directory};
 use crate::commands::{consulted, run_flayer_with, run_with};
 use crate::install::state::Screen as InstallScreen;
@@ -69,25 +70,28 @@ pub fn run(directory: &Path, lookup: &Lookup) -> Result<Outcome, Failure> {
 }
 
 /// Open the TUI straight onto the minds screen: what `flayer minds` does.
-pub fn run_minds(directory: &Path, lookup: &Lookup) -> Result<Outcome, Failure> {
+pub fn run_minds(directory: &Path, roots: &[PathBuf], lookup: &Lookup) -> Result<Outcome, Failure> {
     if !io::stdout().is_terminal() {
         return Err(CliError::NotATerminal.into());
     }
-    open(minds(directory, lookup)?, "flayer minds")
+    open(minds(directory, roots, lookup)?, "flayer minds")
 }
 
 /// The TUI `flayer minds` opens from `directory`: on the minds screen of the
-/// workspace the TUI itself would open there.
+/// workspace the TUI itself would open there, offering what is under
+/// `roots`, absolute, or under the workspace root when there are none.
 ///
 /// Read from `directory` rather than from the root of a workspace found
 /// first: the default workspace before it is made has no marker to stop a
 /// walk up from its root, which would carry on to any workspace above it.
-pub fn minds(directory: &Path, lookup: &Lookup) -> Result<App, CliError> {
-    let view = load(directory, lookup)?;
+pub fn minds(directory: &Path, roots: &[PathBuf], lookup: &Lookup) -> Result<App, CliError> {
+    let view = load_under(directory, lookup, roots)?;
     if matches!(view, View::Nowhere) {
         return Err(CliError::NotInWorkspace(directory.to_path_buf()));
     }
-    let mut app = App::new(directory.to_path_buf(), view).with_lookup(lookup.clone());
+    let mut app = App::new(directory.to_path_buf(), view)
+        .with_lookup(lookup.clone())
+        .with_roots(roots.to_vec());
     if let Some(workspace) = app.workspace() {
         app.mode = Mode::Minds(minds::Minds::of(workspace));
     }
@@ -265,7 +269,7 @@ fn start(app: &mut App, task: Task) {
 fn conclude(app: &mut App, task: &Task, performed: Performed) {
     let view = task.reloads().then(|| {
         match app.opened {
-            Scope::Workspace => load(&app.directory, &app.lookup),
+            Scope::Workspace => load_under(&app.directory, &app.lookup, &app.roots),
             Scope::Project => load_project(&app.directory, &app.lookup),
         }
         .map_err(|error| error.to_string())
@@ -423,7 +427,9 @@ fn draws(command: Option<&FlayerCommand>) -> bool {
     matches!(
         command,
         None | Some(
-            FlayerCommand::Tui | FlayerCommand::Minds | FlayerCommand::Install { name: None, .. }
+            FlayerCommand::Tui
+                | FlayerCommand::Minds { .. }
+                | FlayerCommand::Install { name: None, .. }
         )
     )
 }
@@ -509,10 +515,20 @@ fn apply_install(base: &Path, screen: &InstallScreen, homes: &AgentHomes) -> Don
 /// screen is, and that runs a command that writes, which makes it the way it
 /// would from the shell.
 pub fn load(directory: &Path, lookup: &Lookup) -> Result<View, CliError> {
+    load_under(directory, lookup, &[])
+}
+
+/// What [`load`] shows, with what could be linked looked for under `roots`,
+/// absolute, rather than under the workspace root: what `flayer minds DIR`
+/// opens on.
+pub fn load_under(directory: &Path, lookup: &Lookup, roots: &[PathBuf]) -> Result<View, CliError> {
     Ok(match resolve(&lookup.inputs(directory, Intent::Read))? {
-        Some(resolved) => {
-            View::Workspace(workspace_view(&resolved.workspace, resolved.reason, lookup))
-        }
+        Some(resolved) => View::Workspace(Box::new(workspace_view(
+            &resolved.workspace,
+            resolved.reason,
+            lookup,
+            roots,
+        ))),
         None => View::Nowhere,
     })
 }
@@ -533,14 +549,19 @@ pub fn load_project(directory: &Path, lookup: &Lookup) -> Result<View, CliError>
     let consulted = resolve::consulted(&lookup.inputs(project.root(), Intent::Read), &project)?;
     if let Some(Resolved { workspace, reason }) = &consulted {
         if workspace.is_linked(project.root()) {
-            return Ok(View::Workspace(workspace_view(workspace, *reason, lookup)));
+            return Ok(View::Workspace(Box::new(workspace_view(
+                workspace,
+                *reason,
+                lookup,
+                &[],
+            ))));
         }
     }
     let above = consulted.map(|resolved| resolved.workspace);
     // `.`, because the commands run from the project itself.
     let entry = String::from(".");
     let root = project.root().to_path_buf();
-    Ok(View::Workspace(Workspace {
+    Ok(View::Workspace(Box::new(Workspace {
         name: project.name().to_owned(),
         // `above`'s templates, the ones `mind add` will find, and no
         // records: it does not link the project, so it says nothing of what
@@ -555,6 +576,8 @@ pub fn load_project(directory: &Path, lookup: &Lookup) -> Result<View, CliError>
         )],
         root,
         unlinked: Vec::new(),
+        roots: Vec::new(),
+        scan_warnings: Vec::new(),
         shelf: 0,
         // What `mind load` has put into the workspace above, so the load form
         // can show it and unload it from here too.
@@ -565,12 +588,18 @@ pub fn load_project(directory: &Path, lookup: &Lookup) -> Result<View, CliError>
             .or_else(|| lookup.home.clone()),
         reason: None,
         made: true,
-    }))
+    })))
 }
 
 /// A workspace as the screen shows it: its own artifacts first, then every
-/// project it manages.
-fn workspace_view(workspace: &FlayerWorkspace, reason: Reason, lookup: &Lookup) -> Workspace {
+/// project it manages, and what could be linked under `roots`, or under its
+/// root when there are none.
+fn workspace_view(
+    workspace: &FlayerWorkspace,
+    reason: Reason,
+    lookup: &Lookup,
+    roots: &[PathBuf],
+) -> Workspace {
     let own = workspace.own();
     let mut members = vec![held(
         String::new(),
@@ -586,7 +615,15 @@ fn workspace_view(workspace: &FlayerWorkspace, reason: Reason, lookup: &Lookup) 
             .into_iter()
             .map(|registered| member(registered, workspace, lookup)),
     );
-    let unlinked = scan(workspace)
+    // Spelled from the workspace root, the default, where the TUI runs its
+    // lines.
+    let request = scan::Request {
+        roots: roots.to_vec(),
+        ..scan::Request::default()
+    };
+    let scanned = scan(workspace, &request);
+    let scan_warnings = scan_warnings(&scanned);
+    let unlinked = scanned
         .found
         .into_iter()
         .filter(|found| !found.linked)
@@ -600,6 +637,8 @@ fn workspace_view(workspace: &FlayerWorkspace, reason: Reason, lookup: &Lookup) 
         root: workspace.root().to_path_buf(),
         members,
         unlinked,
+        roots: roots.to_vec(),
+        scan_warnings,
         shelf: shelf(workspace),
         loaded: loaded(workspace),
         scope: Scope::Workspace,

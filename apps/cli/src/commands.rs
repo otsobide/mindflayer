@@ -19,7 +19,9 @@ use std::path::{Path, PathBuf};
 
 use mindflayer_core::gather::Watch;
 use mindflayer_core::resolve::{self, resolve, Intent};
-use mindflayer_core::{paths, Catalog, Change, FlayerWorkspace, MindProject, Reference, Share};
+use mindflayer_core::{
+    paths, scan, Catalog, Change, FlayerWorkspace, MindProject, Reference, Share,
+};
 
 use crate::homes::Lookup;
 use crate::{tui, Cli, CliError, Command, Failure, FlayerCli, FlayerCommand, Outcome};
@@ -349,11 +351,24 @@ fn run_flayer(
         }
 
         // A screen, so it opens as one: on the default workspace before it
-        // is made too, which its first change makes.
-        FlayerCommand::Minds => tui::run_minds(directory, lookup),
+        // is made too, which its first change makes. Its folders are taken
+        // from here as `scan` takes them.
+        FlayerCommand::Minds { roots } => {
+            tui::run_minds(directory, &targets(directory, roots)?, lookup)
+        }
 
-        FlayerCommand::Scan => {
-            reading_workspace(directory, lookup, |workspace| Ok(scan_workspace(workspace)))
+        // Each folder taken from here as `link` takes a path, and each path
+        // found spelled as `flayer link` run here would take it, so a line of
+        // the report is a line to type.
+        FlayerCommand::Scan { roots, depth, json } => {
+            let request = scan::Request {
+                roots: targets(directory, roots)?,
+                depth: *depth,
+                from: Some(typed(directory, Path::new(""))?),
+            };
+            reading_workspace(directory, lookup, |workspace| {
+                Ok(scan_workspace(workspace, &request, *json))
+            })
         }
 
         FlayerCommand::Gather(command) => run_gather(command, directory, lookup, watch),
