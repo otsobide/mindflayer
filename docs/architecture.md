@@ -3576,7 +3576,10 @@ renderer gives Claude the rules about every file when it reads no block.
 - **Refused whole, or failed file by file.** A rule that is not a rule, one
   that cannot be read or is named no name, two rules of one name and a
   recorded route that is no name refuse the whole render before anything is
-  written, as the block's render refuses them. A file that cannot be looked
+  written, as the block's render refuses them. Two of one name are refused
+  among every rule handed in, whichever the mode takes: in scoped mode the
+  block compares only the rules about every file, so a pair of which one
+  states `paths` is this render's to refuse. A file that cannot be looked
   at, written or taken away is only its rule's failure
   (`claude_rules::Warning::Failed`): each file stands on its own, and the
   caller has to hear of every file that was written, to record it.

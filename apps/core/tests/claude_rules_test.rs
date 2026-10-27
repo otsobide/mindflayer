@@ -538,6 +538,26 @@ fn two_rules_of_one_name_are_refused_and_nothing_is_written() {
 }
 
 #[test]
+fn two_rules_of_one_name_are_refused_in_scoped_mode_when_only_one_is_scoped() {
+    let fixture = fixture();
+    let scoped = fixture.rule("a", SCOPED);
+    let elsewhere = TempDir::new().unwrap();
+    let file = elsewhere.path().join("a.md");
+    fs::write(&file, UNSCOPED).unwrap();
+    let unscoped = Artifact::rule(&file, "a".to_owned(), elsewhere.path()).unwrap();
+
+    // The block takes only the rule about every file, so it has no second
+    // section to compare it with: refusing the pair is this render's.
+    let refused = fixture.render(&[&scoped, &unscoped], Mode::Scoped, &[]);
+
+    assert!(
+        matches!(&refused, Err(ClaudeRulesError::Twice { route }) if route == "a"),
+        "{refused:?}"
+    );
+    assert!(!fixture.folder().exists());
+}
+
+#[test]
 fn a_rule_that_cannot_be_read_is_refused_and_nothing_is_written() {
     let fixture = fixture();
     let a = fixture.rule("a", "Rule a.\n");

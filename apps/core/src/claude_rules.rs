@@ -237,8 +237,9 @@ pub enum Warning {
 /// ([`Rendered::still_excluded`]), not raised: the files are gone already.
 ///
 /// A rule that is not a rule, cannot be read or is named no name, two rules
-/// of one name, and a route recorded that is no name are refused before
-/// anything is written, as the block of `AGENTS.md` refuses them. So is a
+/// of one name among all those handed in, whichever `mode` takes, and a
+/// route recorded that is no name are refused before anything is written,
+/// as the block of `AGENTS.md` refuses them. So is a
 /// rule file a link on its way would put outside the project ([`inside`]),
 /// and any file at all where the agents of other projects would read it too
 /// ([`agents_md::misplaced`]): above a project the workspace links, at the
@@ -267,12 +268,22 @@ pub fn render<'a>(
     rules.sort_by(|a, b| report_order(a, b));
     let mut asked: BTreeMap<String, Vec<u8>> = BTreeMap::new();
     let mut scoped = BTreeSet::new();
+    let mut names = BTreeSet::new();
     for rule in rules {
         let Declared::Rule(manifest) = rule.declared() else {
             return Err(ClaudeRulesError::NotARule {
                 name: rule.qualified_name(),
             });
         };
+        // Among every rule handed in, taken or not: in scoped mode a rule
+        // about every file goes to the block, which compares only its own
+        // sections, so a scoped rule of the same name would reach Claude
+        // twice under one route with neither render refusing it.
+        if !names.insert(rule.name()) {
+            return Err(ClaudeRulesError::Twice {
+                route: rule.name().to_owned(),
+            });
+        }
         let taken = match mode {
             Mode::Scoped => manifest.is_scoped(),
             Mode::Fallback => true,
@@ -283,9 +294,6 @@ pub fn render<'a>(
         let route = named(rule.name())?;
         let file = rule.file();
         let bytes = fs::read(&file).map_err(|source| ArtifactError::Read { path: file, source })?;
-        if asked.contains_key(&route) {
-            return Err(ClaudeRulesError::Twice { route });
-        }
         if manifest.is_scoped() {
             scoped.insert(route.clone());
         }
