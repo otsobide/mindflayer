@@ -23,6 +23,7 @@ pub use mindflayer_core::ledger::Ledger;
 pub use mindflayer_core::{AgentHomes, FlayerWorkspace, Reason};
 pub use mindflayer_core::{
     Kind, MindProject, FLAYER_CONFIG, FLAYER_DIR, MIND_CONFIG, MIND_DIR, SETTINGS_FILE,
+    SETTINGS_JSON_FILE,
 };
 pub use ratatui::backend::TestBackend;
 pub use ratatui::crossterm::event::KeyCode;
@@ -419,6 +420,33 @@ pub fn new_project(root: &Path) {
 /// `mind init` writes.
 pub fn older_project(root: &Path) {
     MindProject::init(root).expect("mark a project with a mind.toml");
+}
+
+/// Make `root`, a folder, a project the way a version 3 `mind init` did: a
+/// git repository whose `.mind` holds a `settings.json` naming every agent,
+/// local, and authoring in `skills/` and `rules/`, and the `.gitignore` that
+/// keeps it out of git. Written here as that build wrote it, so these tests
+/// keep such a project whatever `mind init` writes.
+pub fn json_project(root: &Path) {
+    gix::init(root).expect("initialize a repository");
+    let mind = root.join(MIND_DIR);
+    fs::create_dir_all(&mind).unwrap();
+    fs::write(mind.join(".gitignore"), mindflayer_core::MIND_IGNORE).unwrap();
+    let name = root.file_name().unwrap().to_str().unwrap();
+    fs::write(
+        mind.join(SETTINGS_JSON_FILE),
+        format!(
+            "{{\n  \"version\": 3,\n  \"id\": \"{}\",\n  \"name\": \"{name}\",\n  \
+             \"agents\": [\"claude\", \"codex\", \"opencode\"],\n  \"share\": \"local\",\n  \
+             \"edit_tracked\": false,\n  \"directories\": {{\n    \"skills\": \"skills\",\n    \
+             \"rules\": \"rules\"\n  }}\n}}\n",
+            mindflayer_core::ProjectId::generate()
+        ),
+    )
+    .unwrap();
+    for folder in ["skills", "rules"] {
+        fs::create_dir_all(root.join(folder)).unwrap();
+    }
 }
 
 /// A workspace with `projects` linked and a shelf holding `skills`.

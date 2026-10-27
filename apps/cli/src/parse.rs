@@ -298,8 +298,9 @@ pub enum Command {
     },
 
     /// Bring this project, made by an older Mindflayer and marked by a
-    /// mind.toml, to settings, and what is installed into it to where its
-    /// agents read.
+    /// mind.toml, to a settings.toml, and what is installed into it to where
+    /// its agents read; or one marked by a settings.json to a settings.toml
+    /// saying the same.
     ///
     /// Without --yes nothing changes, and the command says what would.
     Migrate {
@@ -714,11 +715,13 @@ pub enum FlayerCommand {
         library: bool,
 
         /// Move one project the workspace links, by name or path, from its
-        /// mind.toml to settings, as `mind migrate` does there.
+        /// mind.toml or settings.json to a settings.toml, as `mind migrate`
+        /// does there.
         #[arg(short, long, value_name = "PROJECT")]
         project: Option<String>,
 
-        /// Move every project the workspace links that a mind.toml marks.
+        /// Move every project the workspace links that a mind.toml or a
+        /// settings.json marks.
         #[arg(long)]
         all_projects: bool,
 
@@ -802,13 +805,16 @@ pub enum TargetsChange {
 
 /// What a project's settings are to say once it is moved from its
 /// `mind.toml`, which says neither: the agents that work in it, and whether
-/// what is installed into it is the team's.
+/// what is installed into it is the team's. A `settings.json` says both, and
+/// keeps what it says.
 #[derive(Debug, Args)]
 pub struct Migrated {
     /// The agents that work in the project, comma-separated [default:
     /// claude,codex,opencode].
     ///
-    /// What is installed into it is copied where each of them reads it.
+    /// What is installed into it is copied where each of them reads it. A
+    /// project a settings.json marks keeps the agents and the share mode it
+    /// names.
     #[arg(
         long,
         value_name = "AGENTS",

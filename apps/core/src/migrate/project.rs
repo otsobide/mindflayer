@@ -1,6 +1,6 @@
-//! Bringing a project an older Mindflayer made, marked by a `mind.toml`, to
-//! the settings a new one has, and what is installed into it to where its
-//! agents read.
+//! Bringing a project an older Mindflayer made, marked by a `mind.toml` or a
+//! `settings.json`, to the `settings.toml` a new one has, and what is
+//! installed into it to where its agents read.
 //!
 //! A `mind.toml` names the folders a project authors in and nothing else:
 //! no agents, so everything installed into it went into the one folder it
@@ -22,6 +22,13 @@
 //! put anywhere is left where it is and said. A record from before hashes
 //! were kept, which is what most of a v2 project's are, is held to its offer
 //! (D-04).
+//!
+//! A project a `settings.json` marks has its settings already, so its move
+//! is the other one: the same settings written as a `settings.toml`, from
+//! its template, and the `settings.json` kept as it was in `.mind/tmp`, as a
+//! `mind.toml` is. Its agents, share mode and folders stay what the file
+//! says, so every copy is where they send it already, and no workspace is
+//! read to move one ([`carries_installs`]).
 
 use std::fs;
 use std::io;
@@ -39,25 +46,26 @@ use crate::install::{self, Candidate, InstallError, Offer};
 use crate::kind::{Kind, Layout};
 use crate::ledger::{Action, InstallRecord, Ledger, LedgerError, Moved, Target};
 use crate::reapply::{self, Retarget, Why};
-use crate::settings::{Settings, Share, SETTINGS_FILE};
+use crate::settings::{Settings, Share, SETTINGS_FILE, SETTINGS_JSON_FILE};
 use crate::workspace::{
     ignore_itself, misplaced_authored, same_directory, write_new, Directories, FlayerWorkspace,
-    MindConfig, MindProject, ProjectConfig, WorkspaceError, DIRECTORIES_VERSION, MIND_CONFIG,
-    MIND_DIR, MIND_IGNORE,
+    MarkerFile, MindConfig, MindProject, ProjectConfig, WorkspaceError, DIRECTORIES_VERSION,
+    MIND_CONFIG, MIND_DIR, MIND_IGNORE, SETTINGS_TOML_VERSION,
 };
 
-/// What moving a project from its `mind.toml` to its settings would do:
-/// [`project_plan`], or what [`project`] did.
+/// What moving a project from its older marker to a `settings.toml` would
+/// do: [`project_plan`], or what [`project`] did.
 #[derive(Debug)]
 pub struct ProjectPlan {
-    /// The settings written: the `mind.toml`'s name and folders, the agents
-    /// and share mode asked for, and an id of the project's own.
+    /// The settings written: from a `mind.toml`, its name and folders, the
+    /// agents and share mode asked for, and an id of the project's own; from
+    /// a `settings.json`, what it holds.
     pub settings: Settings,
     /// Where they go: `.mind/settings.toml`.
     pub settings_file: PathBuf,
-    /// The `mind.toml` that marks the project now.
+    /// The `mind.toml` or `settings.json` that marks the project now.
     pub marker: PathBuf,
-    /// Where it is kept as it was, `.mind/tmp/mind.toml.v<version>`.
+    /// Where it is kept as it was, `.mind/tmp/<its name>.v<version>`.
     pub backup: PathBuf,
     /// Whether the installations a workspace records were read: false when
     /// no workspace given links the project, whose copies are then left
@@ -99,7 +107,10 @@ pub struct ProjectPlan {
 /// What moving `project` from its `mind.toml` to settings naming `agents`
 /// and `share` would do, against what `workspace` records of it when that
 /// one links it: nothing written, the ledger read without being made.
-/// `None` for a project its settings mark already, which has nothing to
+/// From a `settings.json`, what writing the same settings as a
+/// `settings.toml` would do, `agents`, `share` and `workspace` unasked,
+/// since the file says what they are and moving it moves no copy. `None`
+/// for a project its `settings.toml` marks already, which has nothing to
 /// move.
 ///
 /// Refused as [`project`] would refuse it, every reason at once, so a dry
@@ -117,9 +128,10 @@ pub fn project_plan(
     homes: &AgentHomes,
 ) -> Result<Option<ProjectPlan>, MigrateError> {
     // Before the ledger is opened, as `project` asks, so a ledger that
-    // cannot be read fails neither for a project with nothing to move.
-    if project.settings().is_some() {
-        return Ok(None);
+    // cannot be read fails neither for a project that moves no copy.
+    match project.config() {
+        ProjectConfig::Settings(settings) => return Ok(json_plan(project, settings)),
+        ProjectConfig::Toml(_) => {}
     }
     let linked = linking(workspace, project);
     let ledger = match linked {
@@ -127,6 +139,61 @@ pub fn project_plan(
         None => None,
     };
     plan_with(linked.zip(ledger.as_ref()), project, agents, share, homes)
+}
+
+/// Whether moving `project` forward carries what is installed into it
+/// along, and so reads what a workspace records of it: a move from a
+/// `mind.toml`, which gives the project agents to send its copies to.
+///
+/// Not a move from a `settings.json`, whose agents, share mode and folders
+/// stay what the file says, and send every copy where it is already: for a
+/// front end to tell a workspace it cannot read from one it has no need to.
+pub fn carries_installs(project: &MindProject) -> bool {
+    project.marker_file() == MarkerFile::MindToml
+}
+
+/// What moving `project`, which `settings` mark, would do: `None` for a
+/// `settings.toml`, and for a `settings.json` the same settings written as
+/// a `settings.toml`, at the one version it holds, and the `settings.json`
+/// kept as `.mind/tmp/settings.json.v<version>`. Refused only for a copy of
+/// it an earlier migration kept there.
+///
+/// Carried as they are, a folder written there by hand that a change would
+/// refuse included: the move changes the grammar the settings are written
+/// in, not what they say, so the project reads the same after it as before.
+fn json_plan(project: &MindProject, settings: &Settings) -> Option<ProjectPlan> {
+    if project.marker_file() != MarkerFile::SettingsJson {
+        return None;
+    }
+    let backup = project
+        .scratch_dir()
+        .join(format!("{SETTINGS_JSON_FILE}.v{}", settings.version));
+    let refusals = if fs::symlink_metadata(&backup).is_ok() {
+        vec![Refusal::Backup {
+            path: backup.clone(),
+        }]
+    } else {
+        Vec::new()
+    };
+    Some(ProjectPlan {
+        settings: Settings {
+            version: SETTINGS_TOML_VERSION,
+            ..settings.clone()
+        },
+        settings_file: project.mind_dir().join(SETTINGS_FILE),
+        marker: project.marker_path(),
+        backup,
+        recorded: false,
+        ignore: None,
+        installations: Vec::new(),
+        authored: Vec::new(),
+        foreign: Vec::new(),
+        excluded: Vec::new(),
+        exclude_file: None,
+        outside: false,
+        tracked: false,
+        refusals,
+    })
 }
 
 /// What [`project`] did.
@@ -190,10 +257,12 @@ pub enum Stranded {
     /// authors in and could not be moved back to `path`: it goes with the
     /// scratch folder, and installing it again puts it back.
     Retired { name: String, path: PathBuf },
-    /// The settings, written beside the `mind.toml` they are read before.
-    Settings(PathBuf),
-    /// The `mind.toml`, kept at `backup` and not back at `marker`, which
-    /// leaves the project marked by nothing but settings, if by anything.
+    /// The settings, written beside the older marker they are read before:
+    /// `marker`, which marks the project again once they are removed.
+    Settings { path: PathBuf, marker: MarkerFile },
+    /// The older marker, kept at `backup` and not back at `marker`, which
+    /// leaves the project marked by nothing but its `settings.toml`, if by
+    /// anything.
     Marker { marker: PathBuf, backup: PathBuf },
     /// The `.gitignore` written for a project that was to be local, which
     /// keeps the committed `.mind` of a project from before settings out of
@@ -203,8 +272,12 @@ pub enum Stranded {
 
 /// Move `project` from its `mind.toml` to settings naming `agents` and
 /// `share`, and carry what `workspace` records installing into it along,
-/// when that one links it: [`project_plan`], done. `None` for a project its
-/// settings mark already, which is left as it is, and nothing written.
+/// when that one links it: [`project_plan`], done. From a `settings.json`,
+/// write the same settings as a `settings.toml` and keep the `settings.json`
+/// in `.mind/tmp`, with no workspace's lock or ledger, since no copy moves:
+/// a second move at once finds the `settings.toml` there, which `create_new`
+/// refuses. `None` for a project its `settings.toml` marks already, which is
+/// left as it is, and nothing written.
 ///
 /// Holds that workspace's lock from before the project is read again until
 /// every copy, record and marker is written, as a change of agents does, so
@@ -231,8 +304,21 @@ pub fn project(
     share: Share,
     homes: &AgentHomes,
 ) -> Result<Option<ProjectMigrated>, MigrateError> {
-    if project.settings().is_some() {
-        return Ok(None);
+    match project.marker_file() {
+        MarkerFile::SettingsToml => return Ok(None),
+        MarkerFile::SettingsJson => {
+            // Read again, as a move from a `mind.toml` is under its lock:
+            // another run may have moved it since.
+            let project = MindProject::open(project.root())?;
+            let Some(plan) = project
+                .settings()
+                .and_then(|settings| json_plan(&project, settings))
+            else {
+                return Ok(None);
+            };
+            return carry(&project, None, plan, Scrub::default()).map(Some);
+        }
+        MarkerFile::MindToml => {}
     }
     let linked = linking(workspace, project);
     let (ledger, scrub) = match linked {
@@ -251,9 +337,21 @@ pub fn project(
     // and another run may have moved it since.
     let project = MindProject::open(project.root())?;
     let records = linked.zip(ledger.as_ref());
-    let Some(mut plan) = plan_with(records, &project, agents, share, homes)? else {
+    let Some(plan) = plan_with(records, &project, agents, share, homes)? else {
         return Ok(None);
     };
+    carry(&project, records, plan, scrub).map(Some)
+}
+
+/// `plan`, made for `project` against `records`: refused when it says why
+/// not, and otherwise carried out in a stage of the project's scratch
+/// folder, everything written put back when a step fails.
+fn carry(
+    project: &MindProject,
+    records: Option<(&FlayerWorkspace, &Ledger)>,
+    mut plan: ProjectPlan,
+    scrub: Scrub,
+) -> Result<ProjectMigrated, MigrateError> {
     if !plan.refusals.is_empty() {
         return Err(MigrateError::Refused(std::mem::take(&mut plan.refusals)));
     }
@@ -266,8 +364,8 @@ pub fn project(
         }),
         stranded: Vec::new(),
     })?;
-    let mut undo = Undo::new(&project, plan.settings.id.as_str());
-    if let Err(failure) = carry_out(&project, records, &plan, &mut stage, &mut undo) {
+    let mut undo = Undo::new(project, plan.settings.id.as_str());
+    if let Err(failure) = carry_out(project, records, &plan, &mut stage, &mut undo) {
         // Before the stage goes, since what was taken out is in it.
         let stranded = undo.run();
         return Err(MigrateError::Project {
@@ -280,7 +378,7 @@ pub fn project(
     let swept = stage.swept().to_vec();
     // What was taken out goes with it, now that the ledger holds the move.
     drop(stage);
-    Ok(Some(ProjectMigrated { plan, scrub, swept }))
+    Ok(ProjectMigrated { plan, scrub, swept })
 }
 
 /// Every step of [`project`] after the plan, each one written down in
@@ -499,7 +597,10 @@ impl<'a> Undo<'a> {
         }
         if let Some(settings) = self.settings {
             if fs::remove_file(&settings).is_err() {
-                stranded.push(Stranded::Settings(settings));
+                stranded.push(Stranded::Settings {
+                    path: settings,
+                    marker: self.project.marker_file(),
+                });
             }
         }
         for (name, path, aside) in self.retired.into_iter().rev() {

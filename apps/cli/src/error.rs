@@ -87,7 +87,7 @@ pub enum CliError {
     Migrate(#[from] mindflayer_core::migrate::MigrateError),
     #[error("nothing moved: what the workspace records of the project decides which of its copies move, and it cannot be read: {0}")]
     MigrateUnrecorded(Box<CliError>),
-    #[error("say what to migrate: --library moves the workspace's own into its library, -p <project> moves a project it links from its mind.toml to settings, and --all-projects moves every one")]
+    #[error("say what to migrate: --library moves the workspace's own into its library, -p <project> moves a project it links from its mind.toml or settings.json to a settings.toml, and --all-projects moves every one")]
     MigrateWhat,
     #[error(transparent)]
     Reapply(#[from] mindflayer_core::ReapplyError),

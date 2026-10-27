@@ -1,5 +1,6 @@
-//! Moving a project an older Mindflayer made from its `mind.toml` to
-//! settings, and what is installed into it to where its agents read.
+//! Moving a project an older Mindflayer made from its `mind.toml` to a
+//! `settings.toml`, and what is installed into it to where its agents read,
+//! or from its `settings.json` to a `settings.toml` saying the same.
 
 mod common;
 
@@ -12,8 +13,9 @@ use mindflayer_core::ledger::{InstallRecord, Target};
 use mindflayer_core::migrate::{self, Refusal};
 use mindflayer_core::reapply::Why;
 use mindflayer_core::{
-    Agent, AgentHomes, Directories, FlayerWorkspace, Kind, MindProject, Share, MIND_CONFIG,
-    MIND_DIR, SETTINGS_FILE,
+    Agent, AgentHomes, Directories, FlayerWorkspace, Kind, MarkerFile, MindProject, Settings,
+    Share, MIND_CONFIG, MIND_DIR, SETTINGS_FILE, SETTINGS_JSON_FILE, SETTINGS_TOML_VERSION,
+    TARGETS_VERSION,
 };
 use tempfile::TempDir;
 
@@ -143,7 +145,7 @@ fn plan(
         &AgentHomes::default(),
     )
     .unwrap()
-    .expect("a project a mind.toml marks")
+    .expect("a project an older marker marks")
 }
 
 #[test]
@@ -427,7 +429,7 @@ fn migrated(
         &AgentHomes::default(),
     )
     .unwrap()
-    .expect("a project a mind.toml marks")
+    .expect("a project an older marker marks")
 }
 
 /// The lines of the project's group in the repository's exclude file.
@@ -710,4 +712,212 @@ fn a_project_no_workspace_links_is_moved_and_what_it_holds_left_alone() {
         .unwrap()
         .settings()
         .is_some());
+}
+
+// ---------------------------------------------------------------------------
+// From a settings.json
+// ---------------------------------------------------------------------------
+
+/// What a version 4 `mind init` and `mind targets set` wrote, laid out as
+/// somebody keeps it by hand, with a key this build does not know.
+const JSON: &str = r#"{
+    "version": 4,
+    "id": "0123456789abcdef0123456789abcdef",
+    "name": "collapse",
+    "agents": ["claude", "codex"],
+    "share": "local",
+    "edit_tracked": true,
+    "servers": {"github": ["npx"]},
+    "directories": {"skills": "skills", "rules": "docs/rules", "mcp": "servers"},
+    "targets": {"skills": [".skills"]}
+}
+"#;
+
+/// The names in `dir`, sorted.
+fn names_in(dir: &Path) -> Vec<String> {
+    let mut names: Vec<String> = fs::read_dir(dir)
+        .unwrap()
+        .map(|entry| entry.unwrap().file_name().to_string_lossy().into_owned())
+        .collect();
+    names.sort();
+    names
+}
+
+/// A workspace, and `collapse` beside it, a project [`JSON`] marks, linked:
+/// with no install, so the workspace has no ledger yet.
+fn json_project() -> (TempDir, FlayerWorkspace, MindProject) {
+    let (dir, mut workspace) = workspace();
+    let root = dir.path().join("collapse");
+    fs::create_dir_all(root.join(MIND_DIR)).unwrap();
+    fs::write(root.join(MIND_DIR).join(SETTINGS_JSON_FILE), JSON).unwrap();
+    let project = MindProject::open(&root).unwrap();
+    workspace.link(&project).unwrap();
+    (dir, workspace, project)
+}
+
+#[test]
+fn a_settings_json_is_planned_into_a_settings_toml_saying_the_same_and_nothing_written() {
+    let (dir, workspace, project) = json_project();
+    let before = tree(dir.path());
+
+    // What `--agents` and `--local` ask is a mind.toml's to be given: a
+    // settings.json says its own.
+    let plan = plan(&workspace, &project, &[Agent::OpenCode], Share::Shared);
+
+    assert!(plan.refusals.is_empty(), "{:?}", plan.refusals);
+    let read = project.settings().unwrap();
+    assert_eq!(read.version, TARGETS_VERSION);
+    assert_eq!(
+        plan.settings,
+        Settings {
+            version: SETTINGS_TOML_VERSION,
+            ..read.clone()
+        }
+    );
+    let mind = project.root().join(MIND_DIR);
+    assert_eq!(plan.settings_file, mind.join(SETTINGS_FILE));
+    assert_eq!(plan.marker, mind.join(SETTINGS_JSON_FILE));
+    assert_eq!(plan.backup, mind.join("tmp").join("settings.json.v4"));
+    assert!(!plan.recorded);
+    assert_eq!(plan.ignore, None);
+    assert!(plan.installations.is_empty());
+    assert!(plan.authored.is_empty() && plan.foreign.is_empty() && plan.excluded.is_empty());
+    assert!(!migrate::carries_installs(&project));
+    assert_eq!(tree(dir.path()), before);
+    // No workspace is read for a move that carries no copy.
+    assert!(!workspace.ledger_path().exists());
+}
+
+#[test]
+fn migrating_a_settings_json_writes_a_settings_toml_and_keeps_it_as_it_was() {
+    let (dir, workspace, project) = json_project();
+    let mind = project.root().join(MIND_DIR);
+
+    let done = migrated(&workspace, &project, &[Agent::OpenCode], Share::Shared);
+
+    assert_eq!(names_in(&mind), ["settings.toml", "tmp"]);
+    let written = fs::read_to_string(mind.join(SETTINGS_FILE)).unwrap();
+    assert_eq!(written, done.plan.settings.text().unwrap());
+    assert!(
+        written.ends_with(
+            "version = 5\n\
+             id = \"0123456789abcdef0123456789abcdef\"\n\
+             name = \"collapse\"\n\
+             agents = [\"claude\", \"codex\"]\n\
+             share = \"local\"\n\
+             edit_tracked = true\n\
+             \n\
+             [directories]\n\
+             skills = \"skills\"\n\
+             rules = \"docs/rules\"\n\
+             mcp = \"servers\"\n\
+             \n\
+             [targets]\n\
+             skills = [\".skills\"]\n"
+        ),
+        "{written}"
+    );
+    // Kept as it was, where a project's own `.gitignore` keeps it out of git.
+    assert_eq!(
+        fs::read_to_string(mind.join("tmp").join("settings.json.v4")).unwrap(),
+        JSON
+    );
+    assert!(mind.join("tmp").join(".gitignore").is_file());
+    let reopened = MindProject::open(project.root()).unwrap();
+    assert!(reopened.warnings().is_empty(), "{:?}", reopened.warnings());
+    assert_eq!(
+        reopened.settings().unwrap(),
+        &Settings {
+            version: SETTINGS_TOML_VERSION,
+            ..project.settings().unwrap().clone()
+        }
+    );
+    assert!(!workspace.ledger_path().exists());
+
+    // Nothing to move a second time, whichever project it is handed.
+    let before = tree(dir.path());
+    for again in [&reopened, &project] {
+        let moved = migrate::project(
+            Some(&workspace),
+            again,
+            &Agent::ALL,
+            Share::Shared,
+            &AgentHomes::default(),
+        )
+        .unwrap();
+        assert!(moved.is_none(), "{moved:?}");
+    }
+    assert_eq!(tree(dir.path()), before);
+}
+
+#[test]
+fn a_settings_json_moves_with_no_workspace_at_all() {
+    let dir = TempDir::new().unwrap();
+    fs::create_dir_all(dir.path().join(MIND_DIR)).unwrap();
+    fs::write(dir.path().join(MIND_DIR).join(SETTINGS_JSON_FILE), JSON).unwrap();
+    let project = MindProject::open(dir.path()).unwrap();
+
+    let done = migrate::project(
+        None,
+        &project,
+        &Agent::ALL,
+        Share::Shared,
+        &AgentHomes::default(),
+    )
+    .unwrap()
+    .expect("a project a settings.json marks");
+
+    assert_eq!(
+        MindProject::open(dir.path()).unwrap().settings(),
+        Some(&done.plan.settings)
+    );
+}
+
+#[test]
+fn a_settings_json_kept_by_an_earlier_migration_refuses_the_move() {
+    let (dir, workspace, project) = json_project();
+    let kept = project.scratch_dir().join("settings.json.v4");
+    fs::create_dir_all(project.scratch_dir()).unwrap();
+    fs::write(&kept, "somebody's").unwrap();
+    let before = tree(dir.path());
+
+    let planned = plan(&workspace, &project, &Agent::ALL, Share::Shared);
+    let failed = migrate::project(
+        Some(&workspace),
+        &project,
+        &Agent::ALL,
+        Share::Shared,
+        &AgentHomes::default(),
+    )
+    .unwrap_err();
+
+    assert!(
+        matches!(&planned.refusals[..], [Refusal::Backup { path }] if *path == kept),
+        "{:?}",
+        planned.refusals
+    );
+    assert!(
+        matches!(&failed, migrate::MigrateError::Refused(refusals) if refusals.len() == 1),
+        "{failed}"
+    );
+    assert_eq!(tree(dir.path()), before);
+}
+
+#[test]
+fn a_mind_toml_is_moved_straight_to_a_settings_toml() {
+    let (_dir, workspace, project) = older(&[], &Directories::default());
+    let mind = project.root().join(MIND_DIR);
+
+    let done = migrated(&workspace, &project, &[Agent::Claude], Share::Shared);
+
+    assert_eq!(done.plan.settings.version, SETTINGS_TOML_VERSION);
+    assert_eq!(
+        fs::read_to_string(mind.join(SETTINGS_FILE)).unwrap(),
+        done.plan.settings.text().unwrap()
+    );
+    assert!(!mind.join(SETTINGS_JSON_FILE).exists());
+    assert_eq!(
+        MindProject::open(project.root()).unwrap().marker_file(),
+        MarkerFile::SettingsToml
+    );
 }
