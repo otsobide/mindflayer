@@ -276,6 +276,26 @@ fn a_skill_written_by_hand_is_shown_but_not_touched() {
 }
 
 #[test]
+fn a_skill_offered_changed_since_it_was_installed_is_marked_outdated_and_stays_ticked() {
+    let dir = workspace_with_own();
+    flayer(dir.path(), &["install", "-p", "alpha", "commit-style"]).unwrap();
+    let manifest = own_directory_for(dir.path(), Kind::Skill).join("commit-style/SKILL.md");
+    let since = fs::read_to_string(&manifest).unwrap() + "Since.\n";
+    fs::write(&manifest, since).unwrap();
+    let workspace = FlayerWorkspace::open(dir.path()).unwrap();
+    let ledger = workspace.ledger_for_reading().unwrap();
+
+    let screen = screen_for(&workspace, &ledger);
+
+    let drawn = rendered(&screen);
+    assert!(
+        drawn.contains("[x] commit-style  (outdated; flayer update refreshes it)"),
+        "{drawn}"
+    );
+    assert_eq!(screen.counts(), (0, 0));
+}
+
+#[test]
 fn a_skill_changed_since_it_was_installed_is_shown_but_not_touched() {
     let (dir, workspace, ledger) = shelved(&["collapse"], &["deploy"]);
     installed(dir.path(), &workspace, &ledger);
