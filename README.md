@@ -306,6 +306,12 @@ mind load / mind unload <path>...
 mind install <SKILL> [--from ORIGIN]
                            # put a skill in: the workspace's own, or the shelf's
 mind uninstall <SKILL>     # take one Mindflayer installed back out
+mind agents [add|remove] <AGENT>... [--yes]
+                           # which agents work here, carrying what is
+                           # installed along; without --yes, say what would
+mind share local|shared [--edit-tracked] [--yes]
+                           # keep installs to this checkout, or leave them
+                           # for the team to commit; without --yes, the same
 
 flayer                     # the TUI: everything below, a key each
 flayer init [PATH] [--skills DIR] [--rules DIR]
@@ -336,6 +342,8 @@ flayer install             # a screen for putting skills into its projects
 flayer install -p PROJECT <SKILL> [--from ORIGIN]
                            # one, without the screen
 flayer uninstall -p PROJECT <SKILL>
+flayer agents|share -p PROJECT ...
+                           # mind's agents and share, for one of its projects
 flayer migrate --library [--yes]
                            # move its own skills and rules into its library;
                            # without --yes, say what would move
@@ -938,6 +946,7 @@ Every key runs a command you could have typed, through the same parser:
 | `m` | tick and untick every project under the workspace | `mind -C <path> init`, `flayer link <path>...`, `flayer unlink <path>...` |
 | `l` | link a project | `flayer link <path>` |
 | `u` | unlink the project | `flayer unlink <path>` |
+| `t` | toggle the project's agents and share mode, then apply | `mind -C <project> agents --yes <agent>...`, `mind -C <project> share --yes local\|shared` |
 | `v` | validate everything | `flayer validate` |
 | `g` | gather from a git repository, showing how far it has got; `esc` stops it, until it starts placing | `flayer gather git <url>` |
 | `L` | load another workspace's own skills; enter on a loaded one unloads it | `flayer load <path>`, `flayer unload <path>` |
@@ -1079,6 +1088,59 @@ of git, as a `note:`. A skill's own `.claude-plugin` folder goes into no copy,
 with a warning, since Claude would load the skill as a plugin, hooks and MCP
 servers included. And a project at your home is refused an install, since its
 `.claude/skills` and `.agents/skills` are the ones every project reads.
+
+### Changing its agents, or how it shares
+
+When a project starts using Codex, stops using Claude, or moves between local
+and shared, what is installed into it follows. `mind agents` changes the
+agents it names (`mind agents claude codex` names exactly those, `add` and
+`remove` change the ones it names), and says first what that does:
+
+```
+$ mind agents add codex
+would set agents to claude,codex in collapse, where they were claude
+would copy commit-style to .agents/skills/commit-style, for codex, kept out of git
+nothing changed: add --yes to go ahead
+$ mind agents add codex --yes
+set agents to claude,codex in collapse, where they were claude
+copied commit-style to .agents/skills/commit-style, for codex, kept out of git
+$ mind agents remove claude --yes
+set agents to codex in collapse, where they were claude,codex
+removed commit-style from .claude/skills/commit-style
+left .claude/skills/notes where it is: Mindflayer did not install it
+```
+
+Every installation is brought to where the agents the project names now
+read: a folder a new agent reads gets a copy of one already there, the same
+bytes, and a folder no agent it names reads any more loses Mindflayer's
+copy. Only a copy nobody has changed since it was installed is taken out:
+one that was edited is left where it is and becomes yours, and somebody
+else's skill is never touched, wherever it is. One where a new copy would go
+is left alone with a warning, since that agent then reads it rather than
+what was installed; one in a folder no agent reads any more is left and
+said, as `notes` is above. Running the same command again changes nothing
+once it is done. A project has to name at least one agent, so removing the
+last is refused, and so is a project an older Mindflayer made, marked by a
+`mind.toml`, which `mind migrate` moves to settings first.
+
+`mind share` sets the share mode, and `edit_tracked` with it, off unless
+`--edit-tracked` is given:
+
+```
+$ mind share shared --yes
+set share to shared in collapse, where it was local
+removed .mind/.gitignore, so .mind can be committed
+stopped keeping /.agents/skills/commit-style/ out of git
+```
+
+Turning shared removes `.mind/.gitignore`, if it is still the one
+Mindflayer wrote, and the project's whole group in `.git/info/exclude`, so
+the settings and the copies are the team's to commit; turning local writes
+both back, an entry for each copy installed. `flayer agents -p collapse ...`
+and `flayer share -p collapse ...` do the same from the workspace, and `t` in
+[the TUI](#the-tui) toggles them for the project under the cursor. A project
+no workspace links still changes its settings, which are its own, and is told
+that nothing installed in it was carried along.
 
 ## What a skill looks like
 
