@@ -565,3 +565,34 @@ fn the_record_of_another_workspace_is_never_read_or_written() {
     assert!(plan.installations.is_empty());
     assert_eq!(targets(&workspace).len(), 1);
 }
+
+#[test]
+fn a_change_keeps_what_the_settings_file_holds_by_hand_and_where() {
+    let (_dir, workspace, project) = installed(&[Agent::Claude], Share::Local);
+    let path = settings_file(&project);
+    // A key this build does not know, written first, and a layout of one's
+    // own: what an edit keeps, and a rewrite would not.
+    let written = fs::read_to_string(&path).unwrap().replacen(
+        "{\n",
+        "{\n  \"targets\": {\"skills\": [\".skills\"]},\n",
+        1,
+    );
+    fs::write(&path, &written).unwrap();
+
+    reapply::apply(
+        Some(&workspace),
+        &project,
+        &Change::AddAgents(vec![Agent::Codex]),
+        &AgentHomes::default(),
+    )
+    .unwrap();
+
+    let text = fs::read_to_string(&path).unwrap();
+    assert_eq!(
+        text,
+        written.replace(
+            r#""agents": ["claude"]"#,
+            r#""agents": ["claude", "codex"]"#
+        )
+    );
+}
