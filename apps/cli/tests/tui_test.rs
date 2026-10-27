@@ -447,6 +447,60 @@ fn an_invalid_artifact_is_marked_where_it_is_listed() {
 }
 
 #[test]
+fn a_projects_rows_say_how_each_artifact_stands_and_which_agents_read_it() {
+    let dir = TempDir::new().unwrap();
+    flayer(dir.path(), &["init"]).unwrap();
+    let collapse = dir.path().join("collapse");
+    fs::create_dir(&collapse).unwrap();
+    new_project(&collapse);
+    flayer(dir.path(), &["link", "collapse"]).unwrap();
+    flayer(
+        dir.path(),
+        &["add", "skill", "commit-style", "How commits are written"],
+    )
+    .unwrap();
+    flayer(dir.path(), &["install", "-p", "collapse", "commit-style"]).unwrap();
+    flayer(dir.path(), &["add", "skill", "deploy", "Ship the service"]).unwrap();
+    flayer(dir.path(), &["install", "-p", "collapse", "deploy"]).unwrap();
+    fs::remove_dir_all(collapse.join(".claude/skills/deploy")).unwrap();
+    mind(&collapse, &["add", "skill", "review", "Review a change"]).unwrap();
+    let notes = collapse.join(".claude/skills/notes");
+    fs::create_dir_all(&notes).unwrap();
+    fs::write(notes.join("SKILL.md"), skill_file("notes", "My own notes")).unwrap();
+    let mut app = tui_in(dir.path());
+
+    let drawn = tui_drawn(&app);
+    press_key(&mut app, KeyCode::Up);
+    let own = tui_drawn(&app);
+
+    // What `flayer status -p collapse` says, a row each: the state, then a
+    // badge in each agent's place where that agent reads it.
+    for row in [
+        "skill commit-style  installed CC CX OC  How commits are written",
+        "skill deploy        partial      CX OC  Ship the service",
+        "skill notes         foreign   CC    OC  My own notes",
+        "skill review        authored            Review a change",
+    ] {
+        assert!(drawn.contains(row), "{row}\n{drawn}");
+    }
+    let status = flayer(dir.path(), &["status", "-p", "collapse"]).unwrap();
+    assert_eq!(
+        status.stdout,
+        "\
+commit-style  installed  claude,codex,opencode  workspace
+deploy        partial    codex,opencode         workspace
+notes         foreign    claude,opencode
+review        authored   -
+"
+    );
+    // The workspace's own are no project's, and say nothing of the kind.
+    assert!(
+        own.contains("skill commit-style  How commits are written"),
+        "{own}"
+    );
+}
+
+#[test]
 fn validate_in_the_tui_reads_as_flayer_validate_does() {
     let dir = workspace_with_two();
     let mut app = tui_in(dir.path());

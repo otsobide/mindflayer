@@ -6,7 +6,7 @@
 //! command it is about to run, as it is typed. The install screen, when it is
 //! open, draws itself. Nothing here decides anything; [`super::state`] does.
 
-use mindflayer_core::{Kind, Reason};
+use mindflayer_core::{Agent, Kind, Reason, State};
 use ratatui::layout::{Constraint, Direction, Layout, Rect};
 use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
@@ -360,7 +360,7 @@ fn holdings(app: &App, workspace: &Workspace, frame: &mut Frame, area: Rect) {
         let rows: Vec<ListItem> = holdings
             .items
             .iter()
-            .map(|item| item_row(item, width, room))
+            .map(|item| item_row(item, &holdings.agents, width, room))
             .collect();
         let mut state = ListState::default();
         state.select(Some(app.item));
@@ -391,11 +391,12 @@ fn holdings(app: &App, workspace: &Workspace, frame: &mut Frame, area: Rect) {
 /// it rather than as rows of their own.
 const ISSUE_INDENT: &str = "        ";
 
-/// One artifact: its kind, its name, what it is for, and, underneath, what
+/// One artifact: its kind, its name, how it stands in its project and which
+/// of `agents`, the project's, read it, what it is for, and, underneath, what
 /// `validate` would say about it, right beside the thing it is about, wrapped
 /// to `room` rather than cut off, because the end of a reason is usually the
 /// part that says what to do.
-fn item_row(item: &Item, width: usize, room: usize) -> ListItem<'_> {
+fn item_row<'a>(item: &'a Item, agents: &[Agent], width: usize, room: usize) -> ListItem<'a> {
     let name = printable(&item.name);
     let padding = width.saturating_sub(name.chars().count());
     let red = Style::default().fg(Color::Red);
@@ -415,13 +416,32 @@ fn item_row(item: &Item, width: usize, room: usize) -> ListItem<'_> {
             Span::styled(printable(&item.summary), Style::default().fg(Color::Gray)),
         ),
     };
-    let mut lines = vec![Line::from(vec![
+    let mut spans = vec![
         mark,
         Span::styled(format!("{:<5} ", item.kind.slug()), dim()),
         Span::styled(format!("{name}{}", " ".repeat(padding)), bold()),
         Span::raw("  "),
-        summary,
-    ])];
+    ];
+    // What `status` says of it, before what it is for: a row of the
+    // workspace's own, which is no project's, says nothing of the kind.
+    if let Some(state) = item.state {
+        let widest = State::ALL
+            .iter()
+            .map(|state| state.slug().len())
+            .max()
+            .unwrap_or(0);
+        spans.push(Span::styled(
+            format!("{:<widest$}", state.slug()),
+            state_style(state),
+        ));
+        spans.push(Span::raw(" "));
+        if !agents.is_empty() {
+            spans.extend(badges(agents, &item.agents));
+            spans.push(Span::raw("  "));
+        }
+    }
+    spans.push(summary);
+    let mut lines = vec![Line::from(spans)];
     for issue in item.broken.iter().chain(&item.issues) {
         for part in wrap(&printable(issue), room) {
             lines.push(Line::from(Span::styled(
@@ -431,6 +451,47 @@ fn item_row(item: &Item, width: usize, room: usize) -> ListItem<'_> {
         }
     }
     ListItem::new(lines)
+}
+
+/// What a state looks like: green for what Mindflayer installed whole,
+/// yellow for an install partly gone, which the next install puts back, and
+/// magenta for somebody's, which no key of Mindflayer's changes.
+fn state_style(state: State) -> Style {
+    match state {
+        State::Installed => Style::default().fg(Color::Green),
+        State::Partial => warn(),
+        State::Foreign => Style::default().fg(Color::Magenta),
+        State::Authored => Style::default(),
+    }
+}
+
+/// A badge for each of `slots`, the agents a project names, in its place
+/// whether or not the artifact reaches it: shown where it is among `reached`,
+/// blank where it is not, so a column of rows reads down by agent.
+fn badges(slots: &[Agent], reached: &[Agent]) -> Vec<Span<'static>> {
+    let mut spans = Vec::new();
+    for (index, agent) in slots.iter().enumerate() {
+        if index > 0 {
+            spans.push(Span::raw(" "));
+        }
+        let label = badge(*agent);
+        spans.push(if reached.contains(agent) {
+            Span::styled(label, bold().fg(Color::Cyan))
+        } else {
+            Span::raw(" ".repeat(label.chars().count()))
+        });
+    }
+    spans
+}
+
+/// The two letters a row shows for an agent: its own initials rather than
+/// its first, which Claude Code and Codex share.
+pub(crate) const fn badge(agent: Agent) -> &'static str {
+    match agent {
+        Agent::Claude => "CC",
+        Agent::Codex => "CX",
+        Agent::OpenCode => "OC",
+    }
 }
 
 /// Break text into lines of at most `room` characters, at spaces where there
