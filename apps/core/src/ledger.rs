@@ -793,6 +793,82 @@ impl Ledger {
         transaction.commit().map_err(failed)
     }
 
+    /// Record what a render of a project's `kind` leaves it: each of
+    /// `records` with its hash and copies in place of what was recorded of
+    /// it, every other installation of `kind` in the project forgotten, and
+    /// for each of `files`, a route from the project, whether Mindflayer made
+    /// it ([`Ledger::set_created`]).
+    ///
+    /// For a kind the project is given as one render of all of it, as its
+    /// rules are a block of one file: what is recorded of each is what that
+    /// render wrote, so the whole is written at once, in one transaction, and
+    /// a render's record is never half there. An installation keeps the time
+    /// it was first recorded at, and its origin is taken in as every URL is.
+    pub fn rendered(
+        &self,
+        project: &str,
+        kind: Kind,
+        records: &[InstallRecord],
+        files: &[(&str, bool)],
+    ) -> Result<(), LedgerError> {
+        let failed = |source| self.failed("recording what a render wrote", source);
+        let transaction = self.connection.unchecked_transaction().map_err(failed)?;
+        let recorded: Vec<(i64, String)> = {
+            let mut statement = transaction
+                .prepare("SELECT id, name FROM installations WHERE project = ?1 AND kind = ?2")
+                .map_err(failed)?;
+            let rows = statement
+                .query_map(rusqlite::params![project, kind.slug()], |row| {
+                    Ok((row.get(0)?, row.get(1)?))
+                })
+                .map_err(failed)?;
+            rows.collect::<Result<_, _>>().map_err(failed)?
+        };
+        for (id, name) in recorded {
+            if !records.iter().any(|record| record.name == name) {
+                transaction
+                    .execute("DELETE FROM installations WHERE id = ?1", [id])
+                    .map_err(failed)?;
+            }
+        }
+        for record in records {
+            let origin = record.origin.as_deref().map(redacted);
+            let id: i64 = transaction
+                .query_row(
+                    "INSERT INTO installations
+                         (project, kind, name, source_id, origin, content_hash, installed_at)
+                     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
+                     ON CONFLICT (project, kind, name) DO UPDATE SET
+                         source_id = excluded.source_id,
+                         origin = excluded.origin,
+                         content_hash = excluded.content_hash
+                     RETURNING id",
+                    rusqlite::params![
+                        project,
+                        kind.slug(),
+                        record.name,
+                        record.source_id,
+                        origin.as_deref(),
+                        record.content_hash,
+                        now()
+                    ],
+                    |row| row.get(0),
+                )
+                .map_err(failed)?;
+            transaction
+                .execute(
+                    "DELETE FROM installation_targets WHERE installation_id = ?1",
+                    [id],
+                )
+                .map_err(failed)?;
+            insert_targets(&transaction, id, &record.targets).map_err(failed)?;
+        }
+        for (path, created) in files {
+            set_created_in(&transaction, project, path, *created).map_err(failed)?;
+        }
+        transaction.commit().map_err(failed)
+    }
+
     /// What the ledger records of installing `name` into a project, if it
     /// records anything.
     pub fn installation(

@@ -805,6 +805,106 @@ fn a_file_shared_by_several_installations_is_one_copy() {
     );
 }
 
+/// A rule's installation with a copy at each of `targets`, each with a hash
+/// of its own.
+fn rule_of(name: &str, targets: &[(Option<&str>, &str, &str)]) -> InstallRecord {
+    InstallRecord {
+        kind: Kind::Rule,
+        name: name.to_owned(),
+        source_id: None,
+        origin: Some(String::from("workspace")),
+        content_hash: Some(format!("{name}-rule")),
+        targets: targets
+            .iter()
+            .map(|(agent, path, hash)| Target {
+                agent: agent.map(str::to_owned),
+                path: (*path).to_owned(),
+                content_hash: Some((*hash).to_owned()),
+            })
+            .collect(),
+    }
+}
+
+#[test]
+fn a_render_records_every_rule_it_left_and_forgets_the_rest_of_its_kind() {
+    let ledger = Ledger::in_memory().unwrap();
+    let commits = rule_of("git/commits", &[(None, "AGENTS.md", "a")]);
+    let review = rule_of("review", &[(None, "AGENTS.md", "b")]);
+    ledger
+        .rendered(
+            "collapse",
+            Kind::Rule,
+            &[commits.clone(), review],
+            &[("AGENTS.md", true)],
+        )
+        .unwrap();
+    ledger
+        .installed(
+            "collapse",
+            &installation_of("deploy", &[(None, "skills/deploy")]),
+        )
+        .unwrap();
+    ledger
+        .rendered("tanukeys", Kind::Rule, std::slice::from_ref(&commits), &[])
+        .unwrap();
+    let changed = rule_of(
+        "git/commits",
+        &[
+            (None, "AGENTS.md", "c"),
+            (
+                Some("claude"),
+                ".claude/rules/mindflayer/git/commits.md",
+                "d",
+            ),
+        ],
+    );
+
+    ledger
+        .rendered(
+            "collapse",
+            Kind::Rule,
+            std::slice::from_ref(&changed),
+            &[("AGENTS.md", false)],
+        )
+        .unwrap();
+
+    let mut expected = changed;
+    expected.targets.reverse();
+    assert_eq!(ledger.records("collapse", Kind::Rule).unwrap(), [expected]);
+    assert!(!ledger.created("collapse", "AGENTS.md").unwrap());
+    // Another kind, and another project, are not the render's.
+    assert_eq!(
+        ledger.installations("collapse", Kind::Skill).unwrap(),
+        ["deploy"]
+    );
+    assert_eq!(ledger.records("tanukeys", Kind::Rule).unwrap(), [commits]);
+}
+
+#[test]
+fn a_render_keeps_the_time_an_installation_was_first_recorded_at() {
+    let ledger = Ledger::in_memory().unwrap();
+    let commits = rule_of("git/commits", &[(None, "AGENTS.md", "a")]);
+    ledger
+        .rendered("collapse", Kind::Rule, std::slice::from_ref(&commits), &[])
+        .unwrap();
+    ledger
+        .connection
+        .execute("UPDATE installations SET installed_at = 1", [])
+        .unwrap();
+
+    ledger
+        .rendered("collapse", Kind::Rule, &[commits], &[])
+        .unwrap();
+
+    let at: i64 = ledger
+        .connection
+        .query_row("SELECT installed_at FROM installations", [], |row| {
+            row.get(0)
+        })
+        .unwrap();
+    assert_eq!(at, 1);
+}
+
 #[test]
 fn whether_mindflayer_made_a_file_is_kept_per_project_until_it_is_forgotten() {
     let ledger = Ledger::in_memory().unwrap();
