@@ -925,6 +925,68 @@ impl Ledger {
             .map_err(|source| self.failed("reading installations", source))
     }
 
+    /// Every installation into a project of `kind`, each read as
+    /// [`Ledger::installation`] reads one, in name order.
+    ///
+    /// For a report on everything a project was given, which has to name
+    /// what was installed even where no copy of it is left to find, and asks
+    /// once rather than once a name.
+    pub fn records(&self, project: &str, kind: Kind) -> Result<Vec<InstallRecord>, LedgerError> {
+        let failed = |source| self.failed("reading the installations", source);
+        let mut statement = self
+            .connection
+            .prepare(
+                "SELECT installations.id, installations.name, installations.source_id,
+                        installations.origin, installations.content_hash,
+                        installation_targets.agent, installation_targets.path
+                   FROM installations
+                   LEFT JOIN installation_targets
+                     ON installation_targets.installation_id = installations.id
+                  WHERE installations.project = ?1 AND installations.kind = ?2
+                  ORDER BY installations.name, installation_targets.path",
+            )
+            .map_err(failed)?;
+        let rows = statement
+            .query_map(rusqlite::params![project, kind.slug()], |row| {
+                Ok((
+                    row.get::<_, i64>(0)?,
+                    row.get::<_, String>(1)?,
+                    row.get::<_, Option<i64>>(2)?,
+                    row.get::<_, Option<String>>(3)?,
+                    row.get::<_, Option<String>>(4)?,
+                    row.get::<_, Option<String>>(5)?,
+                    row.get::<_, Option<String>>(6)?,
+                ))
+            })
+            .map_err(failed)?;
+        let mut records: Vec<(i64, InstallRecord)> = Vec::new();
+        for row in rows {
+            let (id, name, source_id, origin, content_hash, agent, path) = row.map_err(failed)?;
+            // One row a copy, an installation's together, since a name is
+            // one installation a project and the rows come in name order.
+            if records.last().is_none_or(|(last, _)| *last != id) {
+                records.push((
+                    id,
+                    InstallRecord {
+                        kind,
+                        name,
+                        source_id,
+                        // Out as every URL comes out, as `installation` has it.
+                        origin: origin.map(|text| redacted(&text).into_owned()),
+                        content_hash,
+                        targets: Vec::new(),
+                    },
+                ));
+            }
+            // None for an installation recording no copy, which the join
+            // still gives a row.
+            if let (Some(path), Some((_, record))) = (path, records.last_mut()) {
+                record.targets.push(Target { agent, path });
+            }
+        }
+        Ok(records.into_iter().map(|(_, record)| record).collect())
+    }
+
     /// Every copy this ledger says Mindflayer wrote into a project for
     /// `kind`, whichever installation wrote it, by path relative to the
     /// project, `/` separated, in path order.
