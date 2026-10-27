@@ -215,7 +215,7 @@ initialized mind project `collapse` in /home/you/Projects/collapse/.mind
 $ mind add skill deploy "Ship the service to staging"
 created skill deploy at /home/you/Projects/collapse/skills/deploy/SKILL.md
 $ git status --short
-?? skills/deploy/SKILL.md
+?? skills/
 
 $ cd ~/Projects
 $ flayer init
