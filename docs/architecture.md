@@ -3894,7 +3894,8 @@ line and the screens install rules (#46).
   file as written, filed by its route with its folders made, and recorded
   as a skill's copy is, its target with the same hash as the installation.
   An unrecorded file there is somebody's, and refuses the install, as for a
-  skill; an uninstall removes the file its record names.
+  skill; an uninstall removes the file its record names, and the folders
+  its route was filed in that this leaves empty, as removing a rule does.
 - **Held by the workspace's lock**, from before the records are read until
   the last is written, as an install of a skill holds it; none of the three
   renderers takes it.

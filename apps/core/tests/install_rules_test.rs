@@ -154,6 +154,10 @@ fn a_project_a_mind_toml_marks_gets_a_copy_of_the_rule_filed_by_its_route() {
         "{removed:?}"
     );
     assert!(!copy.exists());
+    // The folder its route was filed in goes with it, and the folder of
+    // rules stays.
+    assert!(!copy.parent().unwrap().exists());
+    assert!(project.directory_for(Kind::Rule).unwrap().is_dir());
     assert!(ledger.records("app", Kind::Rule).unwrap().is_empty());
 }
 

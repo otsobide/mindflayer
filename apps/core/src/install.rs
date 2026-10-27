@@ -1117,6 +1117,15 @@ pub fn uninstall(
             source,
             swept: Vec::new(),
         })?;
+        // The folders its route was filed in, which the install made on the
+        // way, go too while they are empty, as a removal of a rule leaves
+        // none (`lifecycle::prune`); not the folder of rules itself.
+        if let Layout::Files { .. } = kind.layout() {
+            let folder = path.ancestors().nth(name.split('/').count());
+            if let Some(folder) = folder {
+                crate::lifecycle::prune(folder, path.parent());
+            }
+        }
     }
     ledger.uninstalled(&entry, kind, name)?;
     let detail = format!("{name} from {}", project.name());
