@@ -237,6 +237,27 @@ fn a_skill_written_by_hand_is_shown_but_not_touched() {
 }
 
 #[test]
+fn a_skill_changed_since_it_was_installed_is_shown_but_not_touched() {
+    let (dir, workspace, ledger) = shelved(&["collapse"], &["deploy"]);
+    installed(dir.path(), &workspace, &ledger);
+    let manifest = copies(&dir.path().join("collapse"), "deploy")[0].join("SKILL.md");
+    let edited = fs::read_to_string(&manifest).unwrap() + "Ours.\n";
+    fs::write(&manifest, &edited).unwrap();
+
+    let mut screen = screen_for(&workspace, &ledger);
+    let drawn = rendered(&screen);
+    assert!(drawn.contains("[x] deploy"), "shown as present:\n{drawn}");
+    assert!(drawn.contains("changed since it was installed"), "{drawn}");
+
+    press(&mut screen, &[KeyCode::Right, KeyCode::Char(' ')]);
+
+    assert_eq!(screen.counts(), (0, 0), "the box did not move");
+    let after = rendered(&screen);
+    assert!(after.contains("left alone"), "and it says why:\n{after}");
+    assert_eq!(fs::read_to_string(&manifest).unwrap(), edited);
+}
+
+#[test]
 fn one_name_from_two_shelves_cannot_be_marked_twice() {
     let (dir, workspace, ledger) = shelved(&["collapse"], &["deploy"]);
     // A second repository offering the same name.
