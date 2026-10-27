@@ -333,6 +333,15 @@ impl Catalog {
         self
     }
 
+    /// The same catalog, with a failure met reading something beside it: the
+    /// ledger, read for a report on who put each copy where, which a front
+    /// end then says with discovery's own.
+    pub(crate) fn failing(mut self, failure: DiscoveryFailure) -> Self {
+        self.failures.push(failure);
+        self.settle();
+        self
+    }
+
     /// Two catalogs as one, in the same order and with each file once.
     ///
     /// For a report over holders that are found differently (a workspace's

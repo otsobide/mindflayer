@@ -1518,11 +1518,20 @@ impl FlayerWorkspace {
     /// `link` uses), so a project registered as `./collapse` is linked when
     /// asked about as `collapse`.
     pub fn is_linked(&self, root: &Path) -> bool {
+        self.linked_as(root).is_some()
+    }
+
+    /// The first registered entry that points at the directory `root`, as
+    /// the marker spells it, matched as [`is_linked`](Self::is_linked)
+    /// matches: what a report names the project by, and what `-p` and
+    /// `unlink` are given.
+    pub(crate) fn linked_as(&self, root: &Path) -> Option<&Path> {
         let target = paths::normalize(root);
         self.config
             .projects
             .iter()
-            .any(|entry| points_at(&self.root, entry, &target))
+            .find(|entry| points_at(&self.root, entry, &target))
+            .map(PathBuf::as_path)
     }
 
     /// The directory `root` names, spelled the way this workspace's entry
