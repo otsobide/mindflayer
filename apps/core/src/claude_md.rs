@@ -37,7 +37,11 @@ use thiserror::Error;
 
 use crate::agent::AgentHomes;
 use crate::agents_md::{self, Malformed, BEGIN, END};
+use crate::claude_rules::{self, Mode};
+use crate::exclude;
 use crate::lines::{self, Line};
+use crate::settings::Share;
+use crate::workspace::MindProject;
 
 /// The file Claude reads as a folder's instructions, and its user memory
 /// file's name in its own folder.
@@ -51,6 +55,21 @@ pub const CLAUDE_LOCAL_MD: &str = "CLAUDE.local.md";
 /// folder Claude looks in, as a route of folder names from that folder, in
 /// the order Claude's check lists them.
 const NAMES: [&[&str]; 3] = [&[CLAUDE_MD], &[".claude", CLAUDE_MD], &[CLAUDE_LOCAL_MD]];
+
+/// The project's own files an import may go in, in the order one is chosen,
+/// each with the line that brings in the `AGENTS.md` at the project's root
+/// from where the file is.
+///
+/// `CLAUDE.md` first, the one the probe verified the import in. From
+/// `.claude`, `@../AGENTS.md`: Claude takes an import's path from the file
+/// it is in, not from where it starts (docs/agents.md, docs-only). Never
+/// `CLAUDE.local.md`, which is a person's own and kept to themselves, so an
+/// import there would reach nobody else, and would leave the project with
+/// rules that live in a file no teammate has.
+const OWN: [(&[&str], &str); 2] = [
+    (&[CLAUDE_MD], "@AGENTS.md"),
+    (&[".claude", CLAUDE_MD], "@../AGENTS.md"),
+];
 
 /// Whether Claude Code, started in `folder`, reads the `AGENTS.md` there:
 /// whether no `CLAUDE.md`, `.claude/CLAUDE.md` or `CLAUDE.local.md` is in
@@ -88,8 +107,7 @@ fn stopping(folder: &Path, homes: &AgentHomes) -> Result<Vec<PathBuf>, ClaudeMdE
     let mut found = Vec::new();
     for folder in searched(&start) {
         for name in NAMES {
-            let mut path = folder.to_path_buf();
-            path.extend(name);
+            let path = joined(folder, name);
             match fs::metadata(&path) {
                 Ok(_) => {}
                 Err(error)
@@ -127,6 +145,255 @@ fn searched(start: &Path) -> impl Iterator<Item = &Path> {
     start
         .ancestors()
         .take_while(|folder| folder.parent().is_some())
+}
+
+/// How Claude Code reaches the block of rules in a project's `AGENTS.md`,
+/// as [`reach`] decides it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Reach {
+    /// Claude reads `AGENTS.md` itself: nothing in the project or above it
+    /// keeps it from doing so ([`reads_agents_md`]).
+    Native,
+    /// Claude reads the block as one of its own files, the project's
+    /// `CLAUDE.md`, `.claude/CLAUDE.md` or `CLAUDE.local.md` here, which is
+    /// its `AGENTS.md`, one file through a link, as some teams keep the two.
+    /// The block is written through the link ([`crate::agents_md::render`]),
+    /// so no import is: one would bring the file into itself, between the
+    /// markers the block already holds.
+    Same(PathBuf),
+    /// Claude reads the block through the import in this file, the
+    /// project's own `CLAUDE.md` or `.claude/CLAUDE.md`, there already or to
+    /// be added.
+    Import(PathBuf),
+    /// Claude reads no block, and is to have every rule from its own rules
+    /// folder ([`Mode::Fallback`]), for this reason.
+    Fallback(Fallback),
+}
+
+impl Reach {
+    /// Which rules Claude's own rules folder is to hold
+    /// ([`crate::claude_rules::render`]): those about some files only while
+    /// Claude reads the block, and every rule while it does not, so Claude
+    /// reads each rule once and misses none.
+    pub fn mode(&self) -> Mode {
+        match self {
+            Reach::Native | Reach::Same(_) | Reach::Import(_) => Mode::Scoped,
+            Reach::Fallback(_) => Mode::Fallback,
+        }
+    }
+}
+
+/// Why Claude reads no block of rules in a project, and gets them from its
+/// own rules folder instead: said, and no failure.
+#[derive(Debug, Clone, PartialEq, Eq, Error)]
+pub enum Fallback {
+    /// No block was written into `AGENTS.md`: no rule about every file was
+    /// asked for, or the block was not rendered.
+    #[error("no block of rules in AGENTS.md for Claude Code to read")]
+    NoBlock,
+    /// What keeps Claude from reading `AGENTS.md` in the project is its
+    /// `CLAUDE.local.md`, and no `CLAUDE.md` of its own is there to import
+    /// it from.
+    #[error(
+        "{0}: Claude Code reads it in place of AGENTS.md, and it is a person's own, so no \
+         import is added there; Claude Code gets its rules from {folder}",
+        folder = claude_rules::folder().display()
+    )]
+    LocalOnly(PathBuf),
+    /// What keeps Claude from reading `AGENTS.md` is above the project, the
+    /// nearest such file given, and the project has no `CLAUDE.md` of its own
+    /// to import it from. Never edited: it is not the project's, and Claude
+    /// reads it in every project below.
+    #[error(
+        "{0}: above the project, where Claude Code reads it in place of AGENTS.md, and \
+         Mindflayer edits nothing above a project; Claude Code gets its rules from {folder}",
+        folder = claude_rules::folder().display()
+    )]
+    Above(PathBuf),
+    /// The project's own `CLAUDE.md`, which git tracks in a local project
+    /// that does not set `edit_tracked` (D-02).
+    #[error(
+        "{0}: git tracks it, and the project is local without edit_tracked, so no import of \
+         AGENTS.md is added there; Claude Code gets its rules from {folder}",
+        folder = claude_rules::folder().display()
+    )]
+    Tracked(PathBuf),
+    /// The project's own `CLAUDE.md`, reached through a link to `target`.
+    #[error(
+        "{file}: a link to {target}, so no import of AGENTS.md is added through it; Claude \
+         Code gets its rules from {folder}",
+        folder = claude_rules::folder().display()
+    )]
+    Linked { file: PathBuf, target: PathBuf },
+    /// The project's own `CLAUDE.md`, of which whether git tracks it cannot
+    /// be told.
+    #[error(
+        "{file}: whether git tracks it cannot be told ({detail}), so no import of AGENTS.md \
+         is added there; Claude Code gets its rules from {folder}",
+        folder = claude_rules::folder().display()
+    )]
+    Untold { file: PathBuf, detail: String },
+}
+
+/// How Claude Code, started at `project`'s root, is to reach the block of
+/// rules in its `AGENTS.md`, given whether the block is there
+/// (`block_written`, what [`crate::agents_md::render`] said).
+///
+/// - [`Reach::Native`] when Claude reads `AGENTS.md` itself
+///   ([`reads_agents_md`], with `homes` naming the user memory file it
+///   leaves out).
+/// - [`Reach::Same`] when one of Claude's own files in the project is that
+///   `AGENTS.md`, through a link.
+/// - [`Reach::Import`] when the project's own `CLAUDE.md` or
+///   `.claude/CLAUDE.md` is there and may be edited: in a shared project,
+///   in one a `mind.toml` marks, which was committed by design (D-02), and
+///   in a local one while git does not track the file or its settings say
+///   `edit_tracked`. Chosen in the order of [`OWN`], but one already
+///   holding the import keeps it, so the import never moves from file to
+///   file, and is kept even where it may no longer be edited, since Claude
+///   reads it there all the same.
+/// - [`Reach::Fallback`] otherwise: no block, only a `CLAUDE.local.md`, a
+///   `CLAUDE.md` only above the project, a project's own one git tracks
+///   without `edit_tracked`, or one reached through a link, which is never
+///   followed to write, as its import would then mean whatever the link
+///   leads to.
+///
+/// Reads, and writes nothing. A `CLAUDE.md` of the project's own that holds
+/// a malformed block is refused, as writing the import into it would be,
+/// since what Claude reads there cannot be told.
+pub fn reach(
+    project: &MindProject,
+    homes: &AgentHomes,
+    block_written: bool,
+) -> Result<Reach, ClaudeMdError> {
+    if !block_written {
+        return Ok(Reach::Fallback(Fallback::NoBlock));
+    }
+    let root = project.root();
+    let stopping = stopping(root, homes)?;
+    let Some(nearest) = stopping.first() else {
+        return Ok(Reach::Native);
+    };
+    let real = resolved(root)?;
+    // The project's file at `name` while it is one that keeps Claude from
+    // reading `AGENTS.md`, as the project spells it: never the user memory
+    // file, which a project at the user's home holds as `.claude/CLAUDE.md`.
+    let own = |name: &[&str]| {
+        stopping
+            .contains(&joined(&real, name))
+            .then(|| joined(root, name))
+    };
+
+    let agents = fs::canonicalize(root.join(agents_md::FILE)).ok();
+    for name in NAMES {
+        if let Some(file) = own(name) {
+            if agents.is_some() && fs::canonicalize(&file).ok() == agents {
+                return Ok(Reach::Same(file));
+            }
+        }
+    }
+
+    let mut chosen = None;
+    let mut refused = None;
+    for (name, import) in OWN {
+        let Some(file) = own(name) else {
+            continue;
+        };
+        let edit = edit(project, &real, &file, name)?;
+        // A link's import would mean whatever the link leads to, so only a
+        // file in its place is asked whether it imports.
+        let looked = !matches!(edit, Edit::Refused(Fallback::Linked { .. }));
+        if looked && read(&file)?.imports(import) {
+            return Ok(Reach::Import(file));
+        }
+        match edit {
+            Edit::Allowed => {
+                chosen.get_or_insert(file);
+            }
+            Edit::Refused(reason) => {
+                refused.get_or_insert(reason);
+            }
+        }
+    }
+    if let Some(file) = chosen {
+        return Ok(Reach::Import(file));
+    }
+    if let Some(reason) = refused {
+        return Ok(Reach::Fallback(reason));
+    }
+    // No file of the project's own: what is in the way is a person's own
+    // `CLAUDE.local.md`, or something above the project.
+    let local = joined(&real, &[CLAUDE_LOCAL_MD]);
+    Ok(Reach::Fallback(if *nearest == local {
+        Fallback::LocalOnly(root.join(CLAUDE_LOCAL_MD))
+    } else {
+        Fallback::Above(nearest.clone())
+    }))
+}
+
+/// Whether the project's own `file`, at `name` from its root, may be edited
+/// to hold the import, the root being `real` resolved.
+enum Edit {
+    Allowed,
+    Refused(Fallback),
+}
+
+fn edit(
+    project: &MindProject,
+    real: &Path,
+    file: &Path,
+    name: &[&str],
+) -> Result<Edit, ClaudeMdError> {
+    let target = resolved(file)?;
+    if target != joined(real, name) {
+        return Ok(Edit::Refused(Fallback::Linked {
+            file: file.to_path_buf(),
+            target,
+        }));
+    }
+    // A project a `mind.toml` marks has no settings, and was committed by
+    // design, as a shared one is.
+    let Some(settings) = project.settings() else {
+        return Ok(Edit::Allowed);
+    };
+    if settings.share == Share::Shared || settings.edit_tracked {
+        return Ok(Edit::Allowed);
+    }
+    let route: PathBuf = name.iter().collect();
+    Ok(match exclude::tracks_file(project.root(), &route) {
+        Ok(false) => Edit::Allowed,
+        Ok(true) => Edit::Refused(Fallback::Tracked(file.to_path_buf())),
+        Err(error) => Edit::Refused(Fallback::Untold {
+            file: file.to_path_buf(),
+            detail: error.to_string(),
+        }),
+    })
+}
+
+/// `folder` with the route `name` below it.
+fn joined(folder: &Path, name: &[&str]) -> PathBuf {
+    let mut path = folder.to_path_buf();
+    path.extend(name);
+    path
+}
+
+fn resolved(path: &Path) -> Result<PathBuf, ClaudeMdError> {
+    fs::canonicalize(path).map_err(|source| ClaudeMdError::Read {
+        path: path.to_path_buf(),
+        source,
+    })
+}
+
+/// The `CLAUDE.md` at `file`, parsed.
+fn read(file: &Path) -> Result<ClaudeMd, ClaudeMdError> {
+    let bytes = fs::read(file).map_err(|source| ClaudeMdError::Read {
+        path: file.to_path_buf(),
+        source,
+    })?;
+    ClaudeMd::parse(&bytes).map_err(|problem| ClaudeMdError::Malformed {
+        file: file.to_path_buf(),
+        problem,
+    })
 }
 
 /// What a file Windows wrote may open with: kept ahead of the block, which
@@ -302,7 +569,8 @@ impl ClaudeMd {
     }
 }
 
-/// Why whether Claude reads a project's `AGENTS.md` could not be told.
+/// Why how Claude reads a project's `AGENTS.md` could not be told, or the
+/// import could not be written.
 #[derive(Debug, Error)]
 pub enum ClaudeMdError {
     #[error("{path}: cannot be read: {source}")]
@@ -311,6 +579,8 @@ pub enum ClaudeMdError {
         #[source]
         source: io::Error,
     },
+    #[error("{file}: {problem}, so nothing was written")]
+    Malformed { file: PathBuf, problem: Malformed },
 }
 
 #[cfg(test)]

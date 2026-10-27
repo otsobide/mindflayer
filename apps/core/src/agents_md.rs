@@ -32,7 +32,8 @@
 //!
 //! Which rules a project is given, and when, is the caller's to decide, and
 //! so is keeping a record of what was written (#45); whether Claude reads the
-//! file at all is #44's. This only renders what it is handed.
+//! file at all, natively or through an import, is [`crate::claude_md`]'s.
+//! This only renders what it is handed.
 
 use std::fs;
 use std::io::{self, Write as _};
@@ -573,9 +574,9 @@ fn is_below(path: &Path, folder: &Path) -> bool {
 ///
 /// One that is a link to a file in the project, `AGENTS.md` to `CLAUDE.md`
 /// as some teams keep the two, is written through, as [`replace_bytes`]
-/// follows a link to the file it names rather than replacing the link; #44's
-/// import, between the same markers in that `CLAUDE.md`, has yet to allow
-/// for it (docs/architecture.md, open questions). One
+/// follows a link to the file it names rather than replacing the link:
+/// Claude then reads the block as that `CLAUDE.md`, and no import goes in
+/// beside it ([`crate::claude_md::Reach::Same`]). One
 /// leading out is not: a repository can hold a link to the user's own
 /// `~/.codex/AGENTS.md`, which every project would then be given this one's
 /// rules through. Refused rather than replaced by a file of the project's
