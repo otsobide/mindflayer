@@ -1647,7 +1647,10 @@ gets a copy in `.claude/skills` for Claude and one in `.agents/skills` that
 Codex and OpenCode share, and one whose settings name `targets` a copy in
 each folder they name, for all of them ([a project's own
 targets](#a-projects-own-targets)). A project a `mind.toml` marks names no
-agents, and gets one copy in the folder its marker names, as before.
+agents, and gets one copy in the folder its marker names, as before. A rule is
+no folder, and reaches a project's agents otherwise: through the block of its
+`AGENTS.md` and Claude's files, rendered with every other rule it has
+([installing rules](#installing-rules)).
 
 Not the folder a project's settings say it authors in
 ([D-06](#d-06-projects-keep-authoring-beside-the-code)): what the workspace
@@ -1827,7 +1830,8 @@ questions.
 ### Two places offer, one command takes
 
 What can be installed comes from the workspace's own skills, offered first,
-the workspaces it loads (below), and the shelf (`install::Offer`). Every
+the workspaces it loads (below), and the shelf (`install::Offer`); a rule from
+the first two, by its route, since nothing gathers one. Every
 installation records its origin, in the spelling `--from` takes; one from the
 shelf also points at the source it came from, and one of the workspace's own
 at none, because it came from nowhere but the workspace.
@@ -1958,8 +1962,9 @@ installed into it out of git, through a block of anchored entries in
 `$GIT_COMMON_DIR/info/exclude` that `exclude` keeps. Which paths to exclude
 is the installing side's to choose, and `exclude` only writes them down: an
 install of a skill names one entry for each copy, a render of Claude's rule
-files one for each file ([Claude's rule files](#claudes-rule-files)), and #45
-will for the rest of what rules write, #94 for MCP config.
+files one for each file ([Claude's rule files](#claudes-rule-files)), a
+render of a project's rules one for an `AGENTS.md` it made ([installing
+rules](#installing-rules)), and #94 will for MCP config.
 
 ```
 # mindflayer:begin
@@ -2268,6 +2273,25 @@ from its settings, so a front end can lay its rows out by agent; a project a
 Whether a copy is current, outdated or edited is #47's to tell, once a copy is
 compared with what it came from, and the states it adds (#48) take over from
 partial for a copy that is missing.
+
+The rules a project marked by its settings received are no copies discovery
+finds, but sections of the block in its `AGENTS.md` and Claude's files, so
+each is listed from its record and the block, an installed view
+([D-23](#d-23-what-a-project-received-is-an-installed-view)): catalog
+discovery parses no block, since a section is never authored in place but
+rendered from a rule kept elsewhere. A rule is installed while every target
+its record names is found, its route among the block's sections and its file
+for Claude where it was written, and partial while one is not, as a skill's
+copies are; one recorded with none has nothing missing. It reaches Codex and
+OpenCode through the block, and Claude through its own file, or through the
+block where the render gave it none: a render gives Claude every rule as a
+file while Claude reads no block, so a rule in the block with no file of its
+own is one Claude reads there (a file that was somebody's when the render ran
+is the one case this tells wrong, and the render said it). A block that
+cannot be read holds none of them, and the next render says why. A rule
+copied into a project a `mind.toml` marks is discovered as its copy, as a
+skill is. A name the project authors a rule of too keeps the one entry
+discovery gives it, as a skill's does.
 
 Each project also names, in `unreached`, every kind it installs only in
 folders some of its agents do not read, with those agents: what a project's
@@ -3190,18 +3214,20 @@ would either send OpenCode a second copy it does not need, or have a listing
 say OpenCode misses what sits in Claude's folder. A test holds the two
 together: every folder the standard table sends an agent is one it reads.
 `.codex/skills`, read only in a trusted project, is not counted, and no folder
-of rules is said to be read until M2 settles how a rule reaches each agent,
-though Claude reads `.claude/rules`.
+of rules is said to be read, though Claude reads `.claude/rules`: what
+Mindflayer writes there is listed from the ledger as its rule's target
+([installing rules](#installing-rules)), not found by discovery.
 
-Rules have no entry yet, by design rather than by omission.
+Rules have no entry, by design rather than by omission.
 [D-03](#d-03-rules-reach-every-agent-through-agentsmd) gives a rule a section
 of a block in the project's `AGENTS.md`, with Claude's fallback in
 `.claude/rules/mindflayer` chosen by `claude_md::reach` ([how Claude reaches
 the block](#how-claude-reaches-the-block)). The block is no folder
 a copy goes into, one file every agent shares, so it is rendered outside the
 table ([how a rule reaches the agents](#how-a-rule-reaches-the-agents)), and
-whether the table carries Claude's fallback folder is for M2 to say. MCP
-servers, entries in each agent's own config file, come in M6.
+so are Claude's files, which follow how Claude reaches the block rather than
+an agent alone ([installing rules](#installing-rules)). MCP servers, entries
+in each agent's own config file, come in M6.
 
 `TargetTable::targets(kind, agents)` gives one target (`AgentTarget`) per
 location, each with the agents it is for: all three agents take a skill in two
@@ -3271,9 +3297,10 @@ and from there, none of them knowing an override was read.
   files, in every clone of a shared project; and only for a kind
   installed as a folder an artifact, so a rule, which reaches agents through
   `AGENTS.md` ([D-03](#d-03-rules-reach-every-agent-through-agentsmd)), has
-  none until M2 says how the table carries it. What an install refuses of
-  any target, an agent's own folder and one a loaded workspace keeps as its
-  own, it refuses of these too, since only it knows the homes and the loads.
+  none: its block and Claude's files are rendered outside the table. What
+  an install refuses of any target, an agent's own folder and one a loaded
+  workspace keeps as its own, it refuses of these too, since only it knows
+  the homes and the loads.
 - **Strict when writing, lenient when reading.** A change that names a folder
   no install may use is refused before anything is written, and so is a kind
   named with no folder at all, which would install it nowhere: an
@@ -3402,10 +3429,11 @@ the one file of a project that Claude Code, Codex and OpenCode all read, and
 Codex has no way to include another ([docs/agents.md](agents.md)).
 `agents_md::render` writes it, and `claude_rules::render` the rules Claude
 alone is given ([Claude's rule files](#claudes-rule-files)). Which rules a
-project is given, when, and the record of what was written are #45's;
-whether Claude reads the file at all, or needs an `@AGENTS.md` import in its
-`CLAUDE.md`, is `claude_md`'s ([how Claude reaches the
-block](#how-claude-reaches-the-block)). Nothing calls any of them yet.
+project is given, when, and the record of what was written are
+`install::rules`' ([installing rules](#installing-rules)); whether Claude
+reads the file at all, or needs an `@AGENTS.md` import in its `CLAUDE.md`,
+is `claude_md`'s ([how Claude reaches the
+block](#how-claude-reaches-the-block)).
 
 ```markdown
 # Working here
@@ -3474,9 +3502,10 @@ Never force-push a branch somebody else may have pulled.
   refused and never acted on.
 - **Made, changed, taken away.** A file that is not there is made with
   `create_new`, and only then is the render said to have made it
-  (`Written::Created`); #45 keeps that and hands it back as `created`, so
-  that once no rule is left the block goes, and the file with it when
-  nothing but blank lines is left. Mindflayer takes away only a file it
+  (`Written::Created`); the ledger keeps that (`created_files`) and the
+  next render is handed it back as `created`, so that once no rule is left
+  the block goes, and the file with it when nothing but blank lines is
+  left. Mindflayer takes away only a file it
   made, and a link somebody put in its place is emptied, never removed. A
   file that is there is replaced through `replace_bytes`, a temporary and a
   rename, which follows a link to the file it names: an `AGENTS.md` linked
@@ -3558,10 +3587,11 @@ renderer gives Claude the rules about every file when it reads no block.
   theirs. Below it a file is filed by its route, folders and all, as in the
   library; a route is held to the name rules (`name_issues`), so it never
   climbs out, and neither does a recorded one.
-- **What is Mindflayer's is what the caller recorded.** The ledger records
-  rule files only with #45, so the renderer is handed what an earlier render
-  returned (`Rendered::recorded`): each file's route, and the hash of what it
-  held (`hash::bytes`, the SHA-256 of the bytes, beside `hash::tree` for a
+- **What is Mindflayer's is what the caller recorded.** The renderer is
+  handed what the ledger records of each file ([installing
+  rules](#installing-rules)), as an earlier render returned it
+  (`Rendered::recorded`): each file's route, and the hash of what it held
+  (`hash::bytes`, the SHA-256 of the bytes, beside `hash::tree` for a
   folder). A file is Mindflayer's while it holds exactly that: replaced when
   its rule changes, taken away when its rule is no longer asked for.
   Anything else at a rule's place is somebody's, never written over or taken
@@ -3636,8 +3666,9 @@ renderer gives Claude the rules about every file when it reads no block.
   the warning would be too cautious, never wrong about Claude). Which agents
   read the folder is a match with an arm an agent and no wildcard, so a new
   agent says whether it does before it compiles. `Agent::reads` still names
-  no folder of rules, so no listing takes these files for somebody's before
-  #45 records them.
+  no folder of rules, so discovery reads none of these files, and a listing
+  of the project takes none for somebody's: status lists each as a target
+  of its rule, from the ledger ([installing rules](#installing-rules)).
 - **No lock of its own.** As `agents_md::render`, it takes none: its caller
   holds the workspace's.
 
@@ -3768,7 +3799,105 @@ files](#claudes-rule-files)).
   Mindflayer out of the file ([an open question](#open-questions)).
 - **No lock of its own.** As the two renderers, it takes none: its caller
   holds the workspace's. Which rules a project is given and when to render
-  are #45's, as for the block.
+  are `install::rules`', as for the block.
+
+### Installing rules
+
+A rule is installed, and taken out, through the same `install::install`
+and `install::uninstall` a skill is (`install::rules`), offered from the
+workspace's own rules and from a load's, by the route it is filed under:
+held to the rules every name is, as the block holds it (`name_issues`),
+rather than to one folder name, and two places offering one route are
+refused as for a skill (`OfferedTwice`), `--from` saying which. A rule is
+never gathered (#111), so the shelf offers none. The front ends still list
+and count only skills from a load (`offered_by_loads`), until the command
+line and the screens install rules (#46).
+
+- **One render for every rule.** The block is one file, written whole, so
+  a project marked by its settings is given its rules together: installing
+  one, or taking one out, renders every rule the ledger records for the
+  project, each from the offer it was installed from, as it is there now,
+  into the block ([how a rule reaches the
+  agents](#how-a-rule-reaches-the-agents)), then the import or none in its
+  `CLAUDE.md` ([how Claude reaches the block](#how-claude-reaches-the-block)),
+  then Claude's rule files in the mode that reach says ([Claude's rule
+  files](#claudes-rule-files)). `install::rules::render` does the same with
+  nothing installed or taken out, for a front end to bring the three in
+  line with a project as it is now. Rendering only the rule asked for was
+  turned down: the block has no part of its own to write, and leaving the
+  other sections as they stand would need each read back from the file,
+  which is what an edit there changes.
+- **One installation a rule, a hash a target.** Its targets are its
+  section, recorded by the file it is in, `AGENTS.md`, and its file for
+  Claude, each with the hash of what it holds (schema 4, [why the ledger is
+  SQLite](#why-the-ledger-is-sqlite)): the section's is `Section::hash`, of
+  its lines whatever ending the file uses, and the file's `hash::bytes`. A
+  rule given neither, one about some files in a project that does not name
+  Claude, is recorded with none, and said to reach no agent
+  (`Warning::Unreached`). The installation's own hash is of the rule as it
+  was rendered, what #47 compares the offer with.
+- **`AGENTS.md` goes only if Mindflayer made it.** Whether the render made
+  the file is noted in the ledger (`created_files`) and handed back to the
+  next render, so the last rule out takes away a file Mindflayer made and
+  leaves one somebody wrote, as it was before the block. A file Mindflayer
+  made that somebody then wrote in is theirs once no block is left in it,
+  and so is one git tracks: somebody committed it.
+- **Local mode, and a file the team owns.** In a local project
+  ([D-02](#d-02-installs-stay-local-unless-a-project-shares-them)) an
+  `AGENTS.md` Mindflayer makes is kept out of git before it is made, an
+  entry in the project's group of the exclude block, taken out once the
+  file is no longer Mindflayer's; one somebody had is theirs to commit, and
+  gets none. One git tracks is written only in a shared project or with
+  `edit_tracked`. Otherwise no block is written there: Claude has every
+  rule from its rule files, since the reach of no block is the fallback,
+  and the agents that read rules only in the block, Codex and OpenCode
+  among those the project names, are said to read none of them
+  (`Warning::Withheld`). A block written there before, by a project shared
+  then, is left as it is, and said (`Warning::Left`), as an import left in
+  a tracked `CLAUDE.md` is.
+- **Somebody's section is never written over.** A section in the block
+  that the ledger does not record was written by another workspace that
+  links the project, or by a hand that copied a marker, and rendering the
+  block whole would take it out. So it makes its rule `Standing::Foreign`,
+  as a file at a rule's place in Claude's folder that nothing records does,
+  and refuses every render of the project's rules until it is gone
+  (`InstallError::NotRecorded`). Taking it for this workspace's was turned
+  down: two workspaces, each with its own ledger, would take turns taking
+  each other's rules out.
+- **A rule no longer offered refuses the render.** A rule whose origin
+  offers it no more (deleted from the library, a load gone) cannot be
+  rendered, and leaving its section out would take it from every agent,
+  which is what the block refuses a rule it cannot read for. So the render
+  is refused (`NoLongerOffered`) until it is put back, or uninstalled,
+  which renders the rest without it.
+- **Refused before anything is written.** What can refuse is asked first:
+  a block that cannot be read or holds somebody's section, a place no rule
+  is written (`agents_md::misplaced`), an `AGENTS.md` linked out of the
+  project, a `CLAUDE.md` whose block cannot be read (`claude_md::reach`), a
+  rule linked out of the workspace offering it (`InstallError::Outside`).
+  The block is written before the import and the files; one of those that
+  fails after it records what was written, then is raised, and the next
+  render finishes it.
+- **Recorded before it is written.** Before the first write the ledger
+  holds the rule being installed, and, for each rule's file for Claude that
+  nothing is at, the hash of what the render would put there (and whether
+  the render will make `AGENTS.md`). A render killed part way then leaves
+  files the next one knows for Mindflayer's, rather than taking each for
+  somebody's and leaving it where Claude reads it. A record of a file that
+  was not made says nothing wrong: the next render makes it, or forgets it.
+  A file replaced and not yet recorded reads as edited, and is left, until
+  a render finds it holding its rule as written again, which makes it
+  current. An uninstall keeps its record until the render is done, so one
+  killed part way is run again.
+- **A project a `mind.toml` marks gets a copy.** It names no agents and
+  has no block, so a rule is copied into the folder its marker names, the
+  file as written, filed by its route with its folders made, and recorded
+  as a skill's copy is, its target with the same hash as the installation.
+  An unrecorded file there is somebody's, and refuses the install, as for a
+  skill; an uninstall removes the file its record names.
+- **Held by the workspace's lock**, from before the records are read until
+  the last is written, as an install of a skill holds it; none of the three
+  renderers takes it.
 
 ## One entry of a config file somebody else owns
 
@@ -4384,7 +4513,10 @@ out of git the same way, an entry a file ([Claude's rule
 files](#claudes-rule-files)). #44 adds the `@AGENTS.md` import to a
 project's `CLAUDE.md` that git tracks only in a shared project or with
 `edit_tracked`, and otherwise gives Claude every rule through those files
-([how Claude reaches the block](#how-claude-reaches-the-block)).
+([how Claude reaches the block](#how-claude-reaches-the-block)). #45 keeps
+an `AGENTS.md` Mindflayer made out of git, and writes no block into one git
+tracks in a local project without `edit_tracked`, saying which agents then
+miss the rules ([installing rules](#installing-rules)).
 
 ### D-03: Rules reach every agent through `AGENTS.md`
 
@@ -4456,6 +4588,14 @@ block's markers at the top of the file, and takes it out with the last rule;
 it never makes a `CLAUDE.md` or a `CLAUDE.local.md`, and never edits a file
 above the project, reporting it as the fallback's reason instead ([how
 Claude reaches the block](#how-claude-reaches-the-block)).
+
+#45 wires the three to installing: a rule installed into a project marked by
+its settings, or taken out of it, renders every rule the project has, the
+block, then the import, then Claude's rule files in the mode the reach says,
+and records each rule with a hash of its section and of its file, and
+whether Mindflayer made `AGENTS.md`. A project a `mind.toml` marks is given a
+copy of the rule's file in its rules folder instead ([installing
+rules](#installing-rules)).
 
 ### D-04: An edited copy is detected, not disowned
 
@@ -4798,6 +4938,12 @@ parse `AGENTS.md` blocks and agent configs; and treating installed sections and
 entries as artifacts editable in place, which lets three agents' config formats
 leak into the lifecycle code. Unblocks #33, #45, #62, #93, #94 and #95.
 
+Carrying it out, #45 lists the rules a project marked by its settings
+received in `status`, from the ledger and the block of its `AGENTS.md`, and
+never through discovery ([what each project has](#what-each-project-has)).
+A lifecycle change finds no section, since it looks only where the project
+authors; saying so with a hint to uninstall is the front ends' (#46).
+
 ## Open questions
 
 - **Precedence between projects.** Two projects in one workspace can declare
@@ -4846,18 +4992,13 @@ leak into the lifecycle code. Unblocks #33, #45, #62, #93, #94 and #95.
   `.mindflayer` yet) finds a marker it cannot read, or fails to create one.
   Writing the marker whole under a name of its own and linking it into place
   would let the second find it whole.
-- **Installing rules.** Installing copies a directory, so only skills can be
-  installed: from the shelf, and now from the workspace's own. The workspace's
-  own rules have no way into a project yet; a rule is one file, filed by its
-  route, and copying one means answering where its folders go.
-  [D-03](#d-03-rules-reach-every-agent-through-agentsmd) answers it: a rule
-  reaches a project as its section of a managed block in `AGENTS.md`, with
-  `.claude/rules/mindflayer` as Claude's fallback. #42 renders the block
-  ([how a rule reaches the agents](#how-a-rule-reaches-the-agents)), #43
-  Claude's rule files ([Claude's rule files](#claudes-rule-files)), and #45
-  carries it out.
-  Until then [the examples'](#the-examples-are-a-workspace) two rules are
-  listed and validated, but a load offers only their skills.
+- **Rules from the command line.** Core installs a rule as it installs a
+  skill ([installing rules](#installing-rules)), but `mind install`,
+  `flayer install` and the install screen still take skills only, and what
+  a load is said to offer counts its skills (`offered_by_loads`), so [the
+  examples'](#the-examples-are-a-workspace) two rules are listed and
+  validated but offered by no front end. #46 brings rules to each, with
+  `rule:` to say which kind a name is.
 - **Examples outside a clone.** The examples are a folder in the repository,
   so only somebody with a clone has them to load; a binary that arrives some
   other way, as a release would, has none. Embedding them in the binary, or
@@ -5347,13 +5488,12 @@ leak into the lifecycle code. Unblocks #33, #45, #62, #93, #94 and #95.
   (#96), would make each warning exact for one more case.
 - **A section edited by hand.** A render replaces everything between the
   markers, so a line somebody wrote in a rule's section is gone at the next
-  one, as Mindflayer's marked blocks have it. A record of what each render
-  wrote, a hash for each section beside a copy's
-  ([D-04](#d-04-an-edited-copy-is-detected-not-disowned)), is what would
-  tell an edited section from the one rendered and leave it be, and #45 is
-  where that record is kept. Claude's rule files already tell one apart, by
-  the hash their caller hands back of each ([Claude's rule
-  files](#claudes-rule-files)); a section would need a hash of its own.
+  one, as Mindflayer's marked blocks have it. Each section's hash is now
+  recorded beside its file's ([installing rules](#installing-rules)), which
+  is what tells an edited section from the one rendered; reading a section
+  back and leaving an edited one be, as Claude's rule files are left
+  ([Claude's rule files](#claudes-rule-files)), is #47's, with the states
+  it adds.
 - **`.claude/rules` above where Claude starts.** Claude reads every
   `AGENTS.md` and `CLAUDE.md` from where it starts up the tree, but whether
   it reads a `.claude/rules` in a folder above, as it reads `.claude/rules`
@@ -5369,16 +5509,50 @@ leak into the lifecycle code. Unblocks #33, #45, #62, #93, #94 and #95.
   which a lifecycle change can rename or remove. Nothing is lost, since a
   render writes a file it recorded again where it finds none, and never
   writes over one it did not record; but the listing shows Mindflayer's
-  files as the project's. Leaving out the `mindflayer` folder where a project
-  authors in `.claude/rules`, as a listing tells installed copies from
-  authored ones once #45 records them, would keep the two apart.
-- **A render stopped part way.** A render that writes some files and is
-  killed before its caller records them leaves files no record names, which
-  the next render takes for somebody's: left alone, with their rules not
-  written, until somebody removes them. Each file is whole, made with
-  `create_new` and replaced by a rename, so nothing half written is left,
-  only unrecorded. Recording what a render is about to write before it
-  writes, as #45 may, would close it.
+  files as the project's. The ledger records them now ([installing
+  rules](#installing-rules)), so a listing could tell them apart as it
+  tells installed copies from authored ones; leaving out the `mindflayer`
+  folder where a project authors in `.claude/rules` would keep the two
+  apart, and the status entry of each rule its one.
+- **A file replaced by a render stopped part way.** A render records each
+  file it may make before it makes it ([installing
+  rules](#installing-rules)), so one killed part way leaves no made file
+  unrecorded. A file it replaced, a rule changed since the last render, is
+  recorded by its new hash only once the render is done: killed between,
+  the file reads as edited, and is left, until a render finds it holding
+  its rule as written again. Recording both hashes for the moment between
+  would close that, at the price of a target that holds two.
+- **A rule whose offer has gone.** Every render gives each rule from the
+  offer it was installed from, so one no longer offered there (deleted from
+  the library, a load gone) refuses every render of the project's rules
+  until it is put back or uninstalled ([installing
+  rules](#installing-rules)). Rendering it from its section as the block
+  holds it, or from its file for Claude, would let the rest change
+  meanwhile, at the price of a rule no offer stands behind, which #47 calls
+  orphaned.
+- **Every render brings every rule up to date.** A render gives each rule
+  as its offer holds it now, so installing one rule updates the sections of
+  the others too, where installing a skill touches no other skill. The
+  block is one file written whole, and rendering only one rule would mean
+  reading the others back from it. Whether a render should leave an
+  outdated rule as it was until it is updated by name is for #47 and #48
+  to choose, with the states they add.
+- **Rules after a change of agents or share mode.** `reapply` carries a
+  project's skills along when its agents, targets or share mode change, but
+  not its rules: those are rendered again by the next install or uninstall
+  of one, or by `install::rules::render`, which nothing calls on a change
+  yet. Until then a project that stops naming Claude keeps Claude's files,
+  and one turning local leaves an `AGENTS.md` Mindflayer made in git's
+  view. Rendering the rules again at the end of `reapply::apply`, under the
+  lock it holds, would close it, with what the render says in what the
+  change says.
+- **Claude's reach in a report.** Status says Claude reads a rule through
+  the block when the render gave it no file of its own, as the ledger
+  records it, rather than asking `claude_md` again, which needs the agents'
+  own folders a report is not handed. A file for Claude that was somebody's
+  when the render ran is the one case that reads wrong: no file is
+  recorded, and Claude reads neither. Handing a report the agents' folders
+  would let it ask.
 - **A link made while `AGENTS.md` is written.** A link in place of the file
   is looked at before the read, and one leading out of the project is
   refused; a link made in the moment between that look and the rename is

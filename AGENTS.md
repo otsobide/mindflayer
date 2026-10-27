@@ -81,7 +81,9 @@ under `apps/` with its own `Makefile`:
   rendered into the block of its `AGENTS.md` (`agents_md`) and into
   Claude's rules folder (`claude_rules`), whether Claude reads that block
   and the `@AGENTS.md` import in a project's `CLAUDE.md` that makes it
-  (`claude_md`), changing a project's agents or
+  (`claude_md`), installing a rule through those three, or as a copy into
+  a project a `mind.toml` marks (`install::rules`), changing a project's
+  agents or
   share mode and carrying its installs along
   (`reapply`), what each project holds, from where and for which agents
   (`status`), creating and changing artifacts, and moving a workspace's own
@@ -241,18 +243,20 @@ These are easy to break from a single file without noticing.
     route twice are refused like a broken block. A missing `AGENTS.md` is
     made with `create_new`, and only then said to be created; one that is
     there goes through `replace_bytes`, written through a link only to a
-    file inside the project; and the file is taken away only when the
-    caller says Mindflayer made it and nothing else is left in it. No block
+    file inside the project; and the file is taken away only when
+    Mindflayer made it, as the ledger notes (`created_files`), and nothing
+    else is left in it. No block
     is left in a workspace's root, unless a project it links is there, nor
     in a folder above a project it links, whose agents would read it too,
     nor inside an agent's own folder (`AgentsMdError::UserScope`); a render
     that takes one out goes ahead there.
   - Claude's rule files, `.claude/rules/mindflayer/<route>.md`
-    (`claude_rules`), hold a rule as written, front matter included. Until
-    the ledger records them (#45), a render is handed what an earlier one
-    returned (`claude_rules::Recorded`: each file's route and its
-    `hash::bytes`), and a file is Mindflayer's only while it holds exactly
-    that: only such a file is replaced or taken away. A file nothing
+    (`claude_rules`), hold a rule as written, front matter included. A
+    render is handed what the ledger records of them
+    (`claude_rules::Recorded`: each file's route and its `hash::bytes`),
+    each file it may make recorded before it is made (`install::rules`), and
+    a file is Mindflayer's only while it holds exactly that: only such a
+    file is replaced or taken away. A file nothing
     recorded, even one holding the rule, or one changed since, is left
     exactly as it is and said, and so is a link at a rule's place. A new
     file is made with `create_new`; one replaced goes through
@@ -329,7 +333,19 @@ These are easy to break from a single file without noticing.
   consults cannot be read, never made as if that one recorded nothing.
   `install::disown` is private to core, so no front end drops a record on its
   own. A front end adds through `lifecycle::add`, never `create` or
-  `create_from`, which leave a stale record in place.
+  `create_from`, which leave a stale record in place. A rule is one
+  installation too: in a project marked by its settings, its targets are
+  its section of the block, recorded as `AGENTS.md`, and its file for
+  Claude, each with a hash of its own (`Target::content_hash`, since the
+  two hold different bytes); in one a `mind.toml` marks, its copy in the
+  rules folder, filed by its route. Installing or uninstalling one renders
+  every rule the project has (`install::rules`), each from the offer it
+  was installed from: a section in the block, or a file at a rule's place
+  for Claude, that the ledger does not record is `Standing::Foreign`, and
+  a block holding such a section refuses the render (`NotRecorded`), as a
+  rule no longer offered does (`NoLongerOffered`). What a project received
+  as rules is listed from the ledger and the block (`status`, D-23), never
+  by discovery, which reads no block.
 - **Strict when writing, lenient when reading.** A skill's front matter is
   the Agent Skills format. `mind add`, `rename` and `install` refuse a name or
   description that breaks its rules, all through `artifact::strict_issues`
@@ -343,8 +359,12 @@ These are easy to break from a single file without noticing.
   warning, never a reason to hide the rule. `mind add --template` refuses that
   same list (`artifact::rule_issues`) for the rule it is about to write.
 - **Loaded and gathered content is untrusted.**
-  - An installed name must be one folder name (`install::is_folder_name`).
-  - Symlinks are followed only inside the source (`copy::tree`'s `within`).
+  - An installed name must be one folder name for a skill
+    (`install::is_folder_name`), and for a rule a route held to the name
+    rules, which never climbs out (`install::is_installable_name`).
+  - Symlinks are followed only inside the source (`copy::tree`'s `within`),
+    and a rule offered for install that leads out of the workspace offering
+    it is refused (`InstallError::Outside`).
   - A project's artifact directories must stay inside the project, and so
     must the folders its `targets` name, outside `.mind` and any
     `.mindflayer` too (`misplaced_target`): refused when a change names one,
@@ -379,7 +399,8 @@ These are easy to break from a single file without noticing.
     `url::redacted` too.
 - **Writers take turns; readers never wait.** Core's writers hold the
   workspace's `.mindflayer/lock` (`FlayerWorkspace::lock`) while they change
-  it: `edit_array`, `install::install` and `uninstall`, `gather::gather`,
+  it: `edit_array`, `install::install` and `uninstall`,
+  `install::rules::render`, `gather::gather`,
   `gather::scrub`, which `FlayerWorkspace::ledger_to_write` runs, when it has
   clones to rewrite, `migrate::library`, from its plan to its rewrite of
   the marker, `migrate::project`, from before it reads the project again
