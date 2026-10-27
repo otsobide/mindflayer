@@ -179,6 +179,19 @@ Folders under `rules/` group and mean nothing else, so
 `rules/git/no-force-push.md` is the rule `git/no-force-push`. Skills are flat,
 because a skill's directory already belongs to it.
 
+Which agents a rule reaches depends on its `paths`. A rule that states none is
+about every file, and reaches Claude Code, Codex and OpenCode alike, through a
+marked block in the project's `AGENTS.md`, the one file all three read (or,
+for a Claude that reads no `AGENTS.md` there, through a rule file of its own,
+so it reads each rule once). A rule that states `paths` is about those files
+only, and only Claude Code honours that: it goes to Claude alone, as
+`.claude/rules/mindflayer/<name>.md`, which Claude loads once it reads a file
+the patterns match, and never into `AGENTS.md`, where every agent would read
+it for every file. Codex and OpenCode read no `.claude/rules`, so a
+path-scoped rule does not reach them, and Mindflayer says so for each one it
+writes. Rules cannot be installed into a project yet; this is where they will
+go.
+
 Those are the defaults, and a project can say otherwise: see [where a project
 keeps its artifacts](#where-a-project-keeps-its-artifacts).
 
