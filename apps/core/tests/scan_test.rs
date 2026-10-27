@@ -25,11 +25,11 @@ fn paths(found: &[Found]) -> Vec<&Path> {
 }
 
 /// What a scan of `roots` to `depth` finds.
-fn under(workspace: &FlayerWorkspace, roots: &[PathBuf], depth: usize) -> mindflayer_core::Scan {
+fn under(workspace: &FlayerWorkspace, roots: &[&Path], depth: usize) -> mindflayer_core::Scan {
     scan(
         workspace,
         &Request {
-            roots: roots.to_vec(),
+            roots: roots.iter().map(|root| root.to_path_buf()).collect(),
             depth,
             ..Request::default()
         },
@@ -167,7 +167,7 @@ fn a_scan_looks_under_every_root_it_is_given_and_not_under_the_workspace() {
     fs::create_dir_all(two.join("acme/beta")).unwrap();
     MindProject::init(two.join("acme/beta")).unwrap();
 
-    let scan = under(&workspace, &[two.clone(), one.clone()], DEFAULT_DEPTH);
+    let scan = under(&workspace, &[&two, &one], DEFAULT_DEPTH);
 
     let mut found = paths(&scan.found);
     found.sort();
@@ -186,7 +186,7 @@ fn the_depth_a_scan_is_given_is_how_far_below_each_root_it_looks() {
     git_repository(&root.join("a/b/c/d/deeper"));
 
     let found = |depth| {
-        let mut found: Vec<PathBuf> = paths(&under(&workspace, &[root.clone()], depth).found)
+        let mut found: Vec<PathBuf> = paths(&under(&workspace, &[&root], depth).found)
             .into_iter()
             .map(|path| path.strip_prefix(&root).unwrap().to_path_buf())
             .collect();
@@ -211,7 +211,7 @@ fn a_root_is_a_candidate_and_is_looked_inside_even_when_it_is_a_repository() {
     git_repository(&root);
     git_repository(&root.join("vendor/lib"));
 
-    let scan = under(&workspace, &[root.clone()], DEFAULT_DEPTH);
+    let scan = under(&workspace, &[&root], DEFAULT_DEPTH);
 
     assert_eq!(
         paths(&scan.found),
@@ -230,7 +230,7 @@ fn a_folder_two_roots_reach_is_found_once() {
 
     let scan = under(
         &workspace,
-        &[outer.clone(), inner.clone(), outer.join("./")],
+        &[&outer, &inner, &outer.join("./")],
         DEFAULT_DEPTH,
     );
 
@@ -249,7 +249,7 @@ fn a_root_named_that_is_not_there_is_a_failure_beside_what_the_others_hold() {
     git_repository(&root.join("alpha"));
 
     for depth in [0, DEFAULT_DEPTH] {
-        let scan = under(&workspace, &[missing.clone(), root.clone()], depth);
+        let scan = under(&workspace, &[&missing, &root], depth);
 
         assert_eq!(scan.failures.len(), 1, "{:?}", scan.failures);
         assert_eq!(scan.failures[0].path(), missing);
@@ -275,7 +275,7 @@ fn below_a_root_hidden_folders_and_build_output_are_not_entered() {
     git_repository(&root.join("target/debug/build"));
     git_repository(&root.join("kept"));
 
-    let scan = under(&workspace, &[root.clone()], DEFAULT_DEPTH);
+    let scan = under(&workspace, &[&root], DEFAULT_DEPTH);
 
     assert_eq!(paths(&scan.found), vec![root.join("kept")]);
 }
@@ -293,7 +293,7 @@ fn below_a_root_a_symlinked_folder_is_not_entered() {
     // A loop, which entering links would never leave.
     std::os::unix::fs::symlink(&root, root.join("kept-loop")).unwrap();
 
-    let scan = under(&workspace, &[root.clone()], 10);
+    let scan = under(&workspace, &[&root], 10);
 
     assert_eq!(paths(&scan.found), vec![root.join("kept")]);
     assert!(scan.failures.is_empty(), "{:?}", scan.failures);
@@ -312,8 +312,8 @@ fn a_scan_that_runs_out_of_budget_says_so_and_still_sees_a_second_root() {
     let other = dir.path().join("other");
     git_repository(&other.join("alpha"));
 
-    let crowded_only = under(&workspace, &[crowded.clone()], DEFAULT_DEPTH);
-    let both = under(&workspace, &[crowded, other.clone()], DEFAULT_DEPTH);
+    let crowded_only = under(&workspace, &[&crowded], DEFAULT_DEPTH);
+    let both = under(&workspace, &[&crowded, &other], DEFAULT_DEPTH);
 
     assert!(crowded_only.truncated);
     assert!(crowded_only.found.is_empty());
@@ -334,7 +334,7 @@ fn a_scan_links_nothing() {
     let marker = dir.path().join("ws").join(FLAYER_DIR).join(FLAYER_CONFIG);
     let before = fs::read_to_string(&marker).unwrap();
 
-    let scan = under(&workspace, &[root.clone()], DEFAULT_DEPTH);
+    let scan = under(&workspace, &[&root], DEFAULT_DEPTH);
 
     assert_eq!(scan.found.len(), 2);
     assert!(scan.found.iter().all(|found| !found.linked));
@@ -378,7 +378,7 @@ fn a_repository_outside_the_workspace_is_spelled_by_its_path() {
     let root = dir.path().join("work");
     git_repository(&root.join("alpha"));
 
-    let scan = under(&workspace, &[root.clone()], DEFAULT_DEPTH);
+    let scan = under(&workspace, &[&root], DEFAULT_DEPTH);
 
     assert_eq!(
         routes(&scan.found),
