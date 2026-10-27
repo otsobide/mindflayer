@@ -32,6 +32,7 @@ use std::path::{Component, Path, PathBuf};
 
 use thiserror::Error;
 
+use crate::lines::{self, Line};
 use crate::paths;
 use crate::workspace::replace_bytes;
 
@@ -41,9 +42,6 @@ pub const BEGIN: &str = "# mindflayer:begin";
 pub const END: &str = "# mindflayer:end";
 /// What opens one project's group inside the block, before the project's key.
 pub const GROUP: &str = "# project ";
-
-const LF: &[u8] = b"\n";
-const CRLF: &[u8] = b"\r\n";
 
 /// Keep `entries` of the project at `project` out of git, in the group
 /// headed `key`.
@@ -437,23 +435,17 @@ fn escape(segment: &str) -> String {
 
 /// An exclude file's text, split around Mindflayer's block.
 ///
-/// Kept as lines with their own endings rather than as one string to search
-/// and splice: what is outside the block is re-emitted exactly as read, CRLF,
-/// a missing final newline and bytes that are not UTF-8 included, and a new
-/// line is written with whichever ending the file already uses.
+/// Kept as lines with their own endings ([`crate::lines`]) rather than as
+/// one string to search and splice: what is outside the block is re-emitted
+/// exactly as read, CRLF, a missing final newline and bytes that are not
+/// UTF-8 included, and a new line is written with whichever ending the file
+/// already uses.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ExcludeFile {
     before: Vec<Line>,
     block: Option<Block>,
     after: Vec<Line>,
     ending: &'static [u8],
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-struct Line {
-    text: Vec<u8>,
-    /// `\n`, `\r\n`, or nothing for a last line without one.
-    end: &'static [u8],
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -481,12 +473,8 @@ impl ExcludeFile {
     /// swallow somebody's patterns into Mindflayer's block, and the next edit
     /// would rewrite them.
     pub fn parse(bytes: &[u8]) -> Result<Self, Malformed> {
-        let lines = split(bytes);
-        let ending = lines
-            .iter()
-            .map(|line| line.end)
-            .find(|end| !end.is_empty())
-            .unwrap_or(LF);
+        let lines = lines::split(bytes);
+        let ending = lines::ending(&lines);
 
         let mut begin = None;
         let mut end = None;
@@ -730,48 +718,6 @@ impl ExcludeFile {
         self.after.iter().for_each(&mut emit);
         out
     }
-}
-
-impl Line {
-    fn new(text: &str, end: &'static [u8]) -> Self {
-        Line {
-            text: text.as_bytes().to_vec(),
-            end,
-        }
-    }
-
-    fn is_blank(&self) -> bool {
-        self.text.trim_ascii().is_empty()
-    }
-}
-
-/// The file's lines, each with the ending it had.
-fn split(bytes: &[u8]) -> Vec<Line> {
-    let mut lines = Vec::new();
-    let mut rest = bytes;
-    while !rest.is_empty() {
-        match rest.iter().position(|&byte| byte == b'\n') {
-            Some(at) => {
-                let (text, end) = match rest[..at].strip_suffix(b"\r") {
-                    Some(text) => (text, CRLF),
-                    None => (&rest[..at], LF),
-                };
-                lines.push(Line {
-                    text: text.to_vec(),
-                    end,
-                });
-                rest = &rest[at + 1..];
-            }
-            None => {
-                lines.push(Line {
-                    text: rest.to_vec(),
-                    end: b"",
-                });
-                break;
-            }
-        }
-    }
-    lines
 }
 
 /// Whether a line is the marker `marker`. Trailing whitespace is forgiven,
