@@ -1,9 +1,9 @@
 //! The two levels Mindflayer works at.
 //!
 //! A **mind project** is a directory carrying a `.mind`, the way a repository
-//! carries a `.git`: it holds skills and rules beside the code, in the
-//! directories its marker names (`skills/<name>/SKILL.md` and `rules/` by
-//! default), and it travels with the code it belongs to.
+//! carries a `.git`: its marker says which agents work in it, and it authors
+//! skills and rules beside the code, in the directories the marker names
+//! (`skills/<name>/SKILL.md` and `rules/` by default).
 //!
 //! A **flayer workspace** sits above them, carrying a `.mindflayer` that
 //! references the mind projects it manages, so their artifacts can be listed
@@ -44,13 +44,13 @@ use crate::settings::{Settings, Share, SETTINGS_FILE};
 /// changed at all.
 pub const MIND_FORMAT_VERSION: u32 = 3;
 
-/// The newest version a `mind.toml` holds, and the one `init` still writes
-/// into a new project: what came before [`SETTINGS_VERSION`].
+/// The newest version a `mind.toml` holds: what came before
+/// [`SETTINGS_VERSION`], and what [`MindProject::init`] still writes.
 ///
 /// Not [`MIND_FORMAT_VERSION`], which is the newest a project's marker holds
-/// in either file. A new project is written as version 2 until `mind init`
-/// writes settings (#35): this build reads a version it does not make yet,
-/// so no project a command of its makes is one an older build cannot read.
+/// in either file, and the one `mind init` writes: a new project is marked by
+/// its settings, which an older build finds no project in, rather than one it
+/// misreads.
 pub const MIND_TOML_VERSION: u32 = 2;
 
 /// The layout version written into new `flayer.toml` markers, and the newest
@@ -131,9 +131,8 @@ pub enum Marker {
 }
 
 impl Marker {
-    /// The newest version of this marker this build reads. For a workspace,
-    /// also the one it writes; a new project is still written as
-    /// [`MIND_TOML_VERSION`].
+    /// The newest version of this marker this build reads, and the one
+    /// `flayer init` and `mind init` write into a new one.
     pub const fn version(self) -> u32 {
         match self {
             Marker::Project => MIND_FORMAT_VERSION,
@@ -377,7 +376,14 @@ pub struct MindProject {
 
 impl MindProject {
     /// Create `.mind` and the folders its artifacts live in, under `root`,
-    /// with every kind in its default place.
+    /// with every kind in its default place, marked by a `mind.toml` at
+    /// [`MIND_TOML_VERSION`]: the project an older Mindflayer made.
+    ///
+    /// No front end makes one since `mind init` writes settings
+    /// ([`init_settings`](Self::init_settings)). It stays for what has to
+    /// start from such a project, since each one made before is still read
+    /// the way it was written: the tests of how it is read, and of what a
+    /// copy installed where it authors does.
     pub fn init(root: impl AsRef<Path>) -> Result<(Self, Initialization), WorkspaceError> {
         Self::init_with(root, &Directories::default())
     }
@@ -436,11 +442,11 @@ impl MindProject {
         ))
     }
 
-    /// Make `root` a project marked by its settings ([`SETTINGS_VERSION`]):
-    /// `.mind/settings.json`, a `.mind/.gitignore` holding `*` unless the
-    /// project is [shared](Share::Shared), and the folder of each kind
-    /// `directories` names. A kind it leaves out has no folder, and none is
-    /// made for it.
+    /// Make `root` a project marked by its settings ([`SETTINGS_VERSION`]),
+    /// as `mind init` does: `.mind/settings.json`, a `.mind/.gitignore`
+    /// holding `*` unless the project is [shared](Share::Shared), and the
+    /// folder of each kind `directories` names. A kind it leaves out has no
+    /// folder, and none is made for it.
     ///
     /// The `.gitignore` is the venv's way of keeping a folder out of git
     /// (D-01): inside the folder it is about, so it needs no repository yet,
@@ -1987,8 +1993,8 @@ fn directory_lines(resolved: Vec<(Kind, PathBuf)>) -> String {
 
 /// Whether a kind's directory stays inside what it belongs to.
 ///
-/// A mind project is meant to be committed, and its artifacts with it, so a
-/// kind's directory has to be somewhere inside it; a workspace's own
+/// What a mind project authors is the project's, written beside its code, so
+/// a kind's directory has to be somewhere inside it; a workspace's own
 /// artifacts belong to it the same way. Anything else describes artifacts
 /// that are not the holder's, and `mind init --skills /etc` should say so
 /// rather than making the folder.
