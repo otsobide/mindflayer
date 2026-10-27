@@ -888,7 +888,10 @@ pub(crate) fn in_agent_home(
 /// stays when the project is renamed or moved. None for a shared one, whose
 /// copies are the team's to commit, and for one a `mind.toml` marks, since a
 /// project from before settings was committed by design.
-fn local(project: &MindProject) -> Option<&str> {
+///
+/// Asked by whatever else Mindflayer writes into a project, as Claude's rule
+/// files ([`crate::claude_rules`]), so all of it is kept out of git alike.
+pub(crate) fn local(project: &MindProject) -> Option<&str> {
     project
         .settings()
         .filter(|settings| settings.share == Share::Local)

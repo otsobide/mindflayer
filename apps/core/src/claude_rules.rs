@@ -31,6 +31,10 @@
 //! that, and anything else at a rule's place is somebody's, written over
 //! and taken away by nothing. Keeping the record is the caller's (#45), as
 //! is deciding which rules a project is given and when.
+//!
+//! A local project keeps the files out of git (D-02), one entry each in its
+//! group of the exclude block ([`crate::exclude`]), written before they land
+//! and taken out after they go, as an install's copies are.
 
 use std::collections::BTreeMap;
 use std::fs;
@@ -41,7 +45,9 @@ use thiserror::Error;
 
 use crate::artifact::{issue_list, name_issues, Artifact, ArtifactError, Declared};
 use crate::catalog::report_order;
+use crate::exclude::{self, ExcludeError, Excluded};
 use crate::hash;
+use crate::install;
 use crate::workspace::{replace_bytes_unresolved, MindProject};
 
 /// The folders, from a project's root, the files go in.
@@ -105,6 +111,15 @@ pub struct Rendered {
     pub files: Vec<RuleFile>,
     /// What there is to say, file by file in the same order.
     pub warnings: Vec<Warning>,
+    /// What keeping the files out of git did, for a local project (D-02):
+    /// `None` for a shared one, one a `mind.toml` marks, and a render that
+    /// leaves no file of Mindflayer's. [`Excluded::warning`] says when
+    /// nothing keeps them out, outside a git work tree.
+    pub excluded: Option<Excluded>,
+    /// Why the exclude block still names a file the render took away, or
+    /// failed to make, when it could not be edited: a line left there keeps
+    /// whatever somebody writes in that place later out of git.
+    pub still_excluded: Option<String>,
 }
 
 impl Rendered {
@@ -203,6 +218,14 @@ pub enum Warning {
 /// never followed through a link. A render that changes nothing writes
 /// nothing.
 ///
+/// A local project's exclude entries are written first, one for each file
+/// left Mindflayer's, so none shows in `git status`, not even for a moment;
+/// a block that cannot be edited refuses the render with nothing written,
+/// rather than leave rules one machine has in every teammate's way. The
+/// entries of files taken away, gone or not made after all are taken out
+/// last, and a block that cannot be edited then is said
+/// ([`Rendered::still_excluded`]), not raised: the files are gone already.
+///
 /// A rule that is not a rule, cannot be read or is named no name, two rules
 /// of one name, and a route recorded that is no name are refused before
 /// anything is written, as the block of `AGENTS.md` refuses them. A file
@@ -265,6 +288,18 @@ pub fn render<'a>(
             (route.clone(), path, plan)
         })
         .collect();
+
+    // Out of git before anything is written, as an install's copies are.
+    let key = install::local(project);
+    let kept: Vec<String> = plans
+        .iter()
+        .filter(|(route, _, plan)| plan.keeps(owned.contains_key(route)))
+        .map(|(route, _, _)| route.clone())
+        .collect();
+    let excluded = match key {
+        Some(key) if !kept.is_empty() => Some(exclude::add(root, key, &entries(&kept))?),
+        _ => None,
+    };
 
     // Every file written before any is taken away, so a rule renamed is
     // never missing from Claude's folder between its old file and its new.
@@ -339,9 +374,32 @@ pub fn render<'a>(
             }
         }
     }
+    // Out of the exclude block last, so no file shows in `git status` on its
+    // way out: each that was Mindflayer's and is not any more, a file that
+    // failed to land included, since a line naming an empty place would keep
+    // whatever somebody writes there later out of git without a word. Never
+    // somebody's file's, which no entry of this project's was written for.
+    let dropped: Vec<&str> = files
+        .iter()
+        .filter(|file| {
+            file.hash.is_none()
+                && (matches!(file.written, Written::Removed | Written::Gone)
+                    || kept.contains(&file.route))
+        })
+        .map(|file| file.route.as_str())
+        .collect();
+    let still_excluded = key
+        .filter(|_| !dropped.is_empty())
+        .and_then(|key| exclude::remove(root, key, &entries(&dropped)).err())
+        .map(|error| error.to_string());
     // Back in route order, a removal's failure among them.
     warnings.sort_by(|a, b| a.route().cmp(b.route()));
-    Ok(Rendered { files, warnings })
+    Ok(Rendered {
+        files,
+        warnings,
+        excluded,
+        still_excluded,
+    })
 }
 
 impl Warning {
@@ -389,6 +447,27 @@ enum Plan {
     Foreign,
     /// What is there cannot be looked at.
     Unlooked(io::Error),
+}
+
+impl Plan {
+    /// Whether the file is Mindflayer's once the plan is carried out, and so
+    /// kept out of git in a local project: one it writes or finds current,
+    /// and one recorded that it leaves where it is.
+    fn keeps(&self, recorded: bool) -> bool {
+        match self {
+            Plan::Create(_) | Plan::Replace(_) | Plan::Keep(_) | Plan::Edited => true,
+            Plan::Unlooked(_) => recorded,
+            Plan::Remove | Plan::Gone | Plan::Foreign => false,
+        }
+    }
+}
+
+/// One exclude entry for each route's file, as the project spells it.
+fn entries(routes: &[impl AsRef<str>]) -> Vec<exclude::Entry> {
+    routes
+        .iter()
+        .map(|route| exclude::Entry::file(file_for(route.as_ref())))
+        .collect()
 }
 
 /// What to do at a rule's place, given the rule as it is now when it is
@@ -493,6 +572,8 @@ pub enum ClaudeRulesError {
     NotARule { name: String },
     #[error(transparent)]
     Rule(#[from] ArtifactError),
+    #[error("{0}, so no rule file was written, since none could be kept out of git")]
+    Exclude(#[from] ExcludeError),
 }
 
 #[cfg(test)]

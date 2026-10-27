@@ -33,14 +33,21 @@ struct Fixture {
 }
 
 fn fixture() -> Fixture {
+    fixture_with(Share::Shared, true)
+}
+
+/// The same, sharing as `share` says, and in a git work tree only when
+/// `in_git`.
+fn fixture_with(share: Share, in_git: bool) -> Fixture {
     let dir = TempDir::new().unwrap();
-    gix::init(dir.path()).unwrap();
+    if in_git {
+        gix::init(dir.path()).unwrap();
+    }
     let (mut workspace, _) = FlayerWorkspace::init(dir.path()).unwrap();
     let root = dir.path().join("app");
     fs::create_dir_all(&root).unwrap();
     let (project, _) =
-        MindProject::init_settings(&root, &Agent::ALL, Share::Shared, &Directories::default())
-            .unwrap();
+        MindProject::init_settings(&root, &Agent::ALL, share, &Directories::default()).unwrap();
     workspace.link(&project).unwrap();
     Fixture {
         library: dir.path().join("library"),
@@ -75,6 +82,25 @@ impl Fixture {
 
     fn file(&self, route: &str) -> PathBuf {
         self.project.root().join(claude_rules::file_for(route))
+    }
+
+    fn exclude_file(&self) -> PathBuf {
+        self.dir.path().join(".git").join("info").join("exclude")
+    }
+
+    /// Whether gix, reading the exclude file as git does, holds the file at
+    /// `route`'s place to be ignored.
+    fn ignored(&self, route: &str) -> bool {
+        let repository = gix::open_opts(self.dir.path(), gix::open::Options::isolated()).unwrap();
+        let index = repository.index_or_empty().unwrap();
+        let mut excludes = repository
+            .excludes(&index, None, Default::default())
+            .unwrap();
+        let path = format!("app/.claude/rules/mindflayer/{route}.md");
+        excludes
+            .at_path(path.as_str(), Some(gix::index::entry::Mode::FILE))
+            .unwrap()
+            .is_excluded()
     }
 
     /// Every file under the folder, as a `/`-joined route from it, sorted.
@@ -524,4 +550,145 @@ fn a_recorded_route_that_is_no_name_is_refused_and_nothing_is_taken_away() {
         "{refused:?}"
     );
     assert!(outside.exists());
+}
+
+#[test]
+fn a_local_project_keeps_its_rule_files_out_of_git_and_takes_them_back_in() {
+    let fixture = fixture_with(Share::Local, true);
+    let id = fixture.project.settings().unwrap().id.as_str().to_owned();
+    let file = fixture.exclude_file();
+    let before = fs::read_to_string(&file).unwrap();
+    let a = fixture.rule("a", "Rule a.\n");
+    let force = fixture.rule("git/no-force-push", UNSCOPED);
+    // Somebody's file gets no entry.
+    let theirs = fixture.rule("theirs", "Rule theirs.\n");
+    fs::create_dir_all(fixture.folder()).unwrap();
+    fs::write(fixture.file("theirs"), "Theirs.\n").unwrap();
+
+    let first = fixture
+        .render(&[&a, &force, &theirs], Mode::Fallback, &[])
+        .unwrap();
+
+    assert_eq!(
+        first.excluded,
+        Some(mindflayer_core::Excluded::Written { file: file.clone() })
+    );
+    assert_eq!(
+        fs::read_to_string(&file).unwrap(),
+        format!(
+            "{before}# mindflayer:begin\n# project {id}\n/app/.claude/rules/mindflayer/a.md\n\
+             /app/.claude/rules/mindflayer/git/no-force-push.md\n# mindflayer:end\n"
+        )
+    );
+    assert!(fixture.ignored("a"));
+    assert!(fixture.ignored("git/no-force-push"));
+    assert!(!fixture.ignored("theirs"));
+
+    let again = fixture
+        .render(&[&a, &force, &theirs], Mode::Fallback, &first.recorded())
+        .unwrap();
+    assert_eq!(
+        again.excluded,
+        Some(mindflayer_core::Excluded::Unchanged { file: file.clone() })
+    );
+
+    let removed = fixture
+        .render(&[&theirs], Mode::Fallback, &first.recorded())
+        .unwrap();
+    assert_eq!(removed.excluded, None);
+    assert_eq!(removed.still_excluded, None);
+    assert_eq!(fs::read_to_string(&file).unwrap(), before);
+    assert!(!fixture.ignored("a"));
+}
+
+#[test]
+fn a_shared_project_leaves_the_exclude_file_alone() {
+    let fixture = fixture();
+    let file = fixture.exclude_file();
+    let before = fs::read(&file).unwrap();
+    let rule = fixture.rule("a", "Rule a.\n");
+
+    let first = fixture.render(&[&rule], Mode::Fallback, &[]).unwrap();
+    let removed = fixture
+        .render(&[], Mode::Fallback, &first.recorded())
+        .unwrap();
+
+    assert_eq!(first.excluded, None);
+    assert_eq!(removed.still_excluded, None);
+    assert_eq!(fs::read(&file).unwrap(), before);
+}
+
+#[test]
+fn a_local_project_outside_git_is_told_nothing_keeps_its_files_out() {
+    let fixture = fixture_with(Share::Local, false);
+    let rule = fixture.rule("a", "Rule a.\n");
+
+    let rendered = fixture.render(&[&rule], Mode::Fallback, &[]).unwrap();
+
+    let excluded = rendered.excluded.unwrap();
+    assert!(
+        matches!(excluded, mindflayer_core::Excluded::Outside { .. }),
+        "{excluded:?}"
+    );
+    assert!(excluded
+        .warning()
+        .unwrap()
+        .contains("not in a git work tree"));
+    assert!(fixture.file("a").is_file());
+}
+
+#[test]
+fn an_exclude_block_that_cannot_be_read_refuses_the_render_with_nothing_written() {
+    let fixture = fixture_with(Share::Local, true);
+    let file = fixture.exclude_file();
+    fs::write(&file, "# mindflayer:begin\n/mine/\n").unwrap();
+    let rule = fixture.rule("a", "Rule a.\n");
+
+    let refused = fixture.render(&[&rule], Mode::Fallback, &[]).unwrap_err();
+
+    assert!(matches!(refused, ClaudeRulesError::Exclude(_)), "{refused}");
+    assert!(
+        refused.to_string().contains("no rule file was written"),
+        "{refused}"
+    );
+    assert!(!fixture.folder().exists());
+    assert_eq!(
+        fs::read_to_string(&file).unwrap(),
+        "# mindflayer:begin\n/mine/\n"
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn a_file_that_fails_to_land_takes_its_exclude_entry_back_out() {
+    let fixture = fixture_with(Share::Local, true);
+    let id = fixture.project.settings().unwrap().id.as_str().to_owned();
+    let file = fixture.exclude_file();
+    let before = fs::read_to_string(&file).unwrap();
+    // A link to nothing where the folder of `git/...` would be, which no
+    // folder can be made through.
+    fs::create_dir_all(fixture.folder()).unwrap();
+    std::os::unix::fs::symlink("nowhere", fixture.folder().join("git")).unwrap();
+    let blocked = fixture.rule("git/no-force-push", UNSCOPED);
+    let fine = fixture.rule("review/tone", "Say what a change does first.\n");
+
+    let rendered = fixture
+        .render(&[&blocked, &fine], Mode::Fallback, &[])
+        .unwrap();
+
+    assert_eq!(
+        written(&rendered),
+        [
+            ("git/no-force-push", Written::Failed),
+            ("review/tone", Written::Created)
+        ]
+    );
+    assert_eq!(rendered.still_excluded, None);
+    assert_eq!(
+        fs::read_to_string(&file).unwrap(),
+        format!(
+            "{before}# mindflayer:begin\n# project {id}\n\
+             /app/.claude/rules/mindflayer/review/tone.md\n# mindflayer:end\n"
+        )
+    );
 }
