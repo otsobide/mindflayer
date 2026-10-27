@@ -125,7 +125,8 @@ impl Settings {
     /// Read the settings file at `path`.
     ///
     /// Refused when it is not strict JSON, when a key the format defines is
-    /// missing or holds the wrong thing, and when its version is neither
+    /// missing or holds the wrong thing (but for `targets` in a version 3
+    /// file, read past then as before them), and when its version is neither
     /// [`SETTINGS_VERSION`] nor [`TARGETS_VERSION`]: a newer one as written
     /// by a newer Mindflayer, an older one as no settings file at all, since
     /// versions 1 and 2 are `mind.toml`'s. A key this build does not know is
@@ -426,7 +427,9 @@ pub(crate) fn parse(path: &Path, text: &str) -> Result<Settings, WorkspaceError>
 /// that key is what the version says an older build cannot read.
 ///
 /// `targets` emptied is taken out whole rather than left as `{}`, since
-/// leaving it out is what a file that installs where its agents read says.
+/// leaving it out is what a file that installs where its agents read says;
+/// `targets` that a version 3 file holds and that were read past for not
+/// reading as targets are written over whole.
 pub(crate) fn edited(
     path: &Path,
     text: &str,
@@ -455,13 +458,20 @@ pub(crate) fn edited(
         if was == now {
             continue;
         }
-        let present = config_entry::get(Format::Json, text, &[key])
-            .map_err(|error| refused(error.to_string()))?
-            .is_some();
+        let found = config_entry::get(Format::Json, text, &[key])
+            .map_err(|error| refused(error.to_string()))?;
+        let present = found.is_some();
         if key == TARGETS && matches!(&now, Value::Object(now) if now.is_empty()) {
             if present {
                 edits.push((vec![key.to_owned()], Edit::Remove));
             }
+            continue;
+        }
+        // Written over whole when what the file holds does not read as
+        // targets, which a version 3 file's read past: an entry at a time
+        // would edit inside something that is no list of folders a kind.
+        if key == TARGETS && found.is_some_and(|found| !reads_as_targets(found)) {
+            edits.push((vec![key.to_owned()], Edit::Replace(now)));
             continue;
         }
         if let (Value::Object(was), Value::Object(now)) = (&was, &now) {
@@ -500,6 +510,14 @@ pub(crate) fn edited(
     Ok(text)
 }
 
+/// Whether `value`, what a settings file holds under `targets`, reads as
+/// them at the version that defines the key.
+fn reads_as_targets(value: Value) -> bool {
+    Members(&[(TARGETS.to_owned(), value)])
+        .strict_targets()
+        .is_ok()
+}
+
 /// The members of a settings file's object, read a key at a time.
 struct Members<'a>(&'a [(String, Value)]);
 
@@ -513,7 +531,7 @@ impl<'a> Members<'a> {
             share: self.share()?,
             edit_tracked: self.edit_tracked()?,
             directories: self.directories()?,
-            targets: self.targets()?,
+            targets: self.targets(version)?,
         })
     }
 
@@ -630,8 +648,20 @@ impl<'a> Members<'a> {
     /// A kind named with no folder is refused rather than read as installed
     /// nowhere: leaving the kind out is how a file says the standard
     /// folders, and a project that installs a kind nowhere is one an install
-    /// can only refuse.
-    fn targets(&self) -> Result<Targets, String> {
+    /// can only refuse. Refused only from [`TARGETS_VERSION`], the version
+    /// that defines the key: in a version 3 file, which every build before
+    /// it opened with the key read past, one that does not read as targets
+    /// is read past still, rather than closing a project those builds
+    /// opened. An edit of `targets` writes it over, at the version it needs.
+    fn targets(&self, version: u32) -> Result<Targets, String> {
+        match self.strict_targets() {
+            Err(_) if version < TARGETS_VERSION => Ok(Targets::default()),
+            read => read,
+        }
+    }
+
+    /// `targets`, held to what the key holds.
+    fn strict_targets(&self) -> Result<Targets, String> {
         let entries = match self.get(TARGETS)? {
             None => return Ok(Targets::default()),
             Some(Value::Object(entries)) => entries,

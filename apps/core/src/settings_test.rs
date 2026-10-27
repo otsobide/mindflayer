@@ -301,24 +301,55 @@ fn each_key_the_format_defines_is_held_to_what_it_holds() {
             r#""directories": {"skills": "a", "skills": "b"}"#,
             "`skills` is written more than once, so which one is meant cannot be told",
         ),
-        (r#""targets": [".skills"]"#, "`targets` is not an object"),
-        (
-            r#""targets": {"skills": ".skills"}"#,
-            "`targets.skills` is not a list of folders",
-        ),
-        (
-            r#""targets": {"skills": [".skills", 1]}"#,
-            "`targets.skills` is not a list of folders",
-        ),
-        (
-            r#""targets": {"skills": []}"#,
-            "`targets.skills` names no folder; leave `skills` out to install them where the \
-             project's agents read",
-        ),
         (r#""version": "3""#, "`version` is not a version number"),
         (r#""version": 3.5"#, "`version` is not a version number"),
     ] {
         assert_eq!(refusal(&with_member(member)), expected, "{member}");
+    }
+}
+
+/// `targets` that do not read as targets: each member, with what a version
+/// 4 file holding it is refused for.
+const UNREAD_TARGETS: [(&str, &str); 5] = [
+    (r#""targets": [".skills"]"#, "`targets` is not an object"),
+    (
+        r#""targets": {"skills": ".skills"}"#,
+        "`targets.skills` is not a list of folders",
+    ),
+    (
+        r#""targets": {"skills": [".skills", 1]}"#,
+        "`targets.skills` is not a list of folders",
+    ),
+    (
+        r#""targets": {"skills": []}"#,
+        "`targets.skills` names no folder; leave `skills` out to install them where the \
+         project's agents read",
+    ),
+    (
+        r#""targets": {"skills": ["a"], "skills": ["b"]}"#,
+        "`skills` is written more than once, so which one is meant cannot be told",
+    ),
+];
+
+#[test]
+fn targets_in_a_version_4_file_are_held_to_what_they_hold() {
+    for (member, expected) in UNREAD_TARGETS {
+        let text = with_member(member).replace("\"version\": 3", "\"version\": 4");
+
+        assert_eq!(refusal(&text), expected, "{member}");
+    }
+}
+
+#[test]
+fn targets_a_version_3_file_holds_that_do_not_read_are_read_past() {
+    // Every build before targets opened such a file, reading the key past,
+    // so this one opens it too, installing where the agents read.
+    for (member, _) in UNREAD_TARGETS {
+        assert_eq!(
+            parse(path(), &with_member(member)).unwrap(),
+            standard(),
+            "{member}"
+        );
     }
 }
 

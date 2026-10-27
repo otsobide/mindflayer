@@ -870,6 +870,49 @@ fn an_edit_of_something_else_leaves_targets_written_by_hand_and_their_version() 
 }
 
 #[test]
+fn a_version_3_file_whose_targets_do_not_read_opens_and_an_edit_of_them_writes_them_over() {
+    for unread in [
+        r#"{"skills": []}"#,
+        r#"[".skills"]"#,
+        r#"{"skills": ".skills"}"#,
+    ] {
+        let dir = TempDir::new().unwrap();
+        let (_, path) = by_hand(dir.path());
+        let hand = BY_HAND.replace(
+            "\"version\": 3,",
+            &format!("\"version\": 3,\n    \"targets\": {unread},"),
+        );
+        fs::write(&path, &hand).unwrap();
+
+        // Opened as every build before targets opened it, the key read past.
+        let mut project = MindProject::open(dir.path()).unwrap();
+        assert!(project.settings().unwrap().targets.is_empty(), "{unread}");
+        project
+            .change_settings(|settings| settings.agents = vec![Agent::Codex])
+            .unwrap();
+        assert_eq!(
+            fs::read_to_string(&path).unwrap(),
+            hand.replace(r#""agents": ["claude"]"#, r#""agents": ["codex"]"#),
+            "{unread}"
+        );
+
+        project
+            .change_settings(|settings| {
+                settings.targets =
+                    Targets::default().with(Kind::Skill, vec![PathBuf::from(".skills")]);
+            })
+            .unwrap();
+        let settings = project.settings().unwrap();
+        assert_eq!(settings.version, TARGETS_VERSION, "{unread}");
+        assert_eq!(
+            settings.targets.get(Kind::Skill),
+            Some(&[PathBuf::from(".skills")][..]),
+            "{unread}"
+        );
+    }
+}
+
+#[test]
 fn an_edit_of_the_version_or_the_id_is_refused_and_writes_nothing() {
     let dir = TempDir::new().unwrap();
     let (mut project, path) = by_hand(dir.path());

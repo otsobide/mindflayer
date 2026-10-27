@@ -3288,7 +3288,9 @@ and from there, none of them knowing an override was read.
   down once no kind is named, the one version an edit changes. A version 3
   file given `targets` by hand is read with them all the same: somebody
   wrote them to be used, and only an older build could miss them ([an open
-  question](#open-questions)). Bumping every file to 4 was turned down: a
+  question](#open-questions)). One whose `targets` do not read as them is
+  read past, as before them, so that no project an older build opened stops
+  opening. Bumping every file to 4 was turned down: a
   project that never sets an override would be refused by every older build
   for nothing.
 
@@ -4559,7 +4561,13 @@ leak into the lifecycle code. Unblocks #33, #45, #62, #93, #94 and #95.
   one, which installs into the standard folders and says nothing, until a
   change of targets writes the 4. Refusing such a file as malformed would
   close it, at the price of a project no build opens over a version number;
-  a warning naming the version it needs is the other way.
+  a warning naming the version it needs is the other way. A version 3 file
+  whose `targets` do not read as targets at all (not an object, a kind with
+  no folder or something other than a list of them) is read past, as every
+  build before them read the key, rather than refused: a project those
+  builds opened still opens, and installs where its agents read without a
+  word, where a version 4 file holding the same is refused as any key the
+  format defines is. A change of targets writes such a key over whole.
 - **An agent pointed at a target some other way.** Whether an agent reads a
   project's own target is told by where docs/agents.md says it reads, so one
   pointed there by a link from a folder it reads is seen, and one pointed
