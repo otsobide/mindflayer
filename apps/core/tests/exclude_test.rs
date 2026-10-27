@@ -1,6 +1,8 @@
 //! Keeping a project's paths out of git through `info/exclude`, checked
 //! against what gix, reading the file the way git does, reports as ignored.
 
+mod common;
+
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -453,4 +455,50 @@ fn a_linked_worktree_keeps_its_entries_in_the_common_dir() {
         &linked,
         "packages/app/.agents/skills/commit-style/"
     ));
+}
+
+/// Put every file under `work_tree` in its repository's index, as `git add
+/// -A` would.
+fn indexed(work_tree: &Path) {
+    let repository = gix::open_opts(work_tree, gix::open::Options::isolated()).unwrap();
+    let tree = common::write_tree(&repository, work_tree);
+    let mut index = repository.index_from_tree(&tree).unwrap();
+    index.write(Default::default()).unwrap();
+}
+
+#[test]
+fn a_folder_is_tracked_when_the_index_names_a_file_inside_it() {
+    let repo = repository();
+    let app = project(repo.path(), "packages/app");
+    project(&app, ".mind");
+    fs::write(app.join(".mind/mind.toml"), "version = 2\n").unwrap();
+    project(&app, ".mindflayer");
+    fs::write(app.join(".mindflayer/flayer.toml"), "version = 2\n").unwrap();
+    let web = project(repo.path(), "packages/web");
+    project(&web, ".mindy");
+    fs::write(web.join(".mindy/notes"), "Mine").unwrap();
+    indexed(repo.path());
+    // Made after the index was written, so git does not track it.
+    let late = project(repo.path(), "packages/late");
+    project(&late, ".mind");
+    fs::write(late.join(".mind/mind.toml"), "version = 2\n").unwrap();
+
+    assert!(exclude::tracks(&app, Path::new(".mind")).unwrap());
+    assert!(exclude::tracks(repo.path(), Path::new("packages/app/.mind")).unwrap());
+    // A folder whose name only starts the same is another folder.
+    assert!(!exclude::tracks(&web, Path::new(".mind")).unwrap());
+    assert!(!exclude::tracks(&late, Path::new(".mind")).unwrap());
+}
+
+#[test]
+fn nothing_is_tracked_outside_a_work_tree_or_in_a_repository_with_no_index() {
+    let outside = TempDir::new().unwrap();
+    project(outside.path(), ".mind");
+    fs::write(outside.path().join(".mind/mind.toml"), "").unwrap();
+    assert!(!exclude::tracks(outside.path(), Path::new(".mind")).unwrap());
+
+    let repo = repository();
+    project(repo.path(), ".mind");
+    fs::write(repo.path().join(".mind/mind.toml"), "").unwrap();
+    assert!(!exclude::tracks(repo.path(), Path::new(".mind")).unwrap());
 }
