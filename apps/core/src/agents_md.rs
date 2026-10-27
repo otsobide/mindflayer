@@ -655,60 +655,20 @@ impl AgentsMd {
     pub fn parse(bytes: &[u8]) -> Result<Self, Malformed> {
         let lines = lines::split(bytes);
         let ending = lines::ending(&lines);
-
-        let mut begin = None;
-        let mut end = None;
-        let mut routes: Vec<String> = Vec::new();
-        for (index, line) in lines.iter().enumerate() {
-            let number = index + 1;
-            match marker(&line.text) {
-                Marker::Text => {}
-                Marker::Begin => {
-                    if begin.is_some() {
-                        return Err(Malformed::Reopened { line: number });
-                    }
-                    begin = Some(index);
-                }
-                Marker::End => {
-                    if begin.is_none() || end.is_some() {
-                        return Err(Malformed::Unopened { line: number });
-                    }
-                    end = Some(index);
-                }
-                Marker::Rule(route) => {
-                    if begin.is_none() || end.is_some() {
-                        return Err(Malformed::Stray { line: number });
-                    }
-                    if routes.iter().any(|seen| seen == route) {
-                        return Err(Malformed::Repeated {
-                            line: number,
-                            route: route.to_owned(),
-                        });
-                    }
-                    routes.push(route.to_owned());
-                }
-                Marker::Miswritten => return Err(Malformed::Miswritten { line: number }),
-            }
-        }
-
-        let (begin, end) = match (begin, end) {
-            (None, _) => {
-                return Ok(AgentsMd {
-                    before: lines,
-                    block: None,
-                    after: Vec::new(),
-                    ending,
-                })
-            }
-            (Some(begin), None) => return Err(Malformed::Unclosed { line: begin + 1 }),
-            (Some(begin), Some(end)) => (begin, end),
+        let Some(span) = locate(&lines)? else {
+            return Ok(AgentsMd {
+                before: lines,
+                block: None,
+                after: Vec::new(),
+                ending,
+            });
         };
 
         let mut lines = lines.into_iter();
-        let mut before: Vec<Line> = lines.by_ref().take(begin).collect();
+        let mut before: Vec<Line> = lines.by_ref().take(span.begin).collect();
         let spacer = before.pop_if(|line| line.text.is_empty());
         let begin_line = lines.next().expect("the begin marker was found");
-        let inside: Vec<Line> = lines.by_ref().take(end - begin - 1).collect();
+        let inside: Vec<Line> = lines.by_ref().take(span.end - span.begin - 1).collect();
         let end_line = lines.next().expect("the end marker was found");
         Ok(AgentsMd {
             before,
@@ -716,7 +676,7 @@ impl AgentsMd {
                 spacer,
                 begin: begin_line,
                 lines: inside,
-                routes,
+                routes: span.rules.into_iter().map(|(_, route)| route).collect(),
                 end: end_line,
             }),
             after: lines.collect(),
@@ -841,6 +801,66 @@ impl AgentsMd {
         }
         self.after.iter().for_each(&mut emit);
         out
+    }
+}
+
+/// Where Mindflayer's block lies among a file's lines, as [`locate`] finds
+/// it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct Span {
+    /// The begin marker's index among the lines.
+    pub(crate) begin: usize,
+    /// The end marker's.
+    pub(crate) end: usize,
+    /// Each rule's marker between the two, in order: its index among the
+    /// lines, and the route it names.
+    pub(crate) rules: Vec<(usize, String)>,
+}
+
+/// Where Mindflayer's block is among `lines`: `None` when they hold no
+/// marker, refused unless they hold exactly one well-formed block.
+///
+/// One search for every markdown file Mindflayer keeps a block in, so a
+/// marker reads the same in each and one written wrong is refused alike.
+pub(crate) fn locate(lines: &[Line]) -> Result<Option<Span>, Malformed> {
+    let mut begin = None;
+    let mut end = None;
+    let mut rules: Vec<(usize, String)> = Vec::new();
+    for (index, line) in lines.iter().enumerate() {
+        let number = index + 1;
+        match marker(&line.text) {
+            Marker::Text => {}
+            Marker::Begin => {
+                if begin.is_some() {
+                    return Err(Malformed::Reopened { line: number });
+                }
+                begin = Some(index);
+            }
+            Marker::End => {
+                if begin.is_none() || end.is_some() {
+                    return Err(Malformed::Unopened { line: number });
+                }
+                end = Some(index);
+            }
+            Marker::Rule(route) => {
+                if begin.is_none() || end.is_some() {
+                    return Err(Malformed::Stray { line: number });
+                }
+                if rules.iter().any(|(_, seen)| seen == route) {
+                    return Err(Malformed::Repeated {
+                        line: number,
+                        route: route.to_owned(),
+                    });
+                }
+                rules.push((index, route.to_owned()));
+            }
+            Marker::Miswritten => return Err(Malformed::Miswritten { line: number }),
+        }
+    }
+    match (begin, end) {
+        (None, _) => Ok(None),
+        (Some(begin), None) => Err(Malformed::Unclosed { line: begin + 1 }),
+        (Some(begin), Some(end)) => Ok(Some(Span { begin, end, rules })),
     }
 }
 
