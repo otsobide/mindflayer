@@ -3179,9 +3179,11 @@ though Claude reads `.claude/rules`.
 Rules have no entry yet, by design rather than by omission.
 [D-03](#d-03-rules-reach-every-agent-through-agentsmd) gives a rule a section
 of a block in the project's `AGENTS.md`, with Claude's fallback in
-`.claude/rules/mindflayer` chosen by #44's predicate, and M2 decides how the
-table carries that. MCP servers, entries in each agent's own config file, come
-in M6.
+`.claude/rules/mindflayer` chosen by #44's predicate. The block is no folder
+a copy goes into, one file every agent shares, so it is rendered outside the
+table ([how a rule reaches the agents](#how-a-rule-reaches-the-agents)), and
+whether the table carries Claude's fallback folder is for M2 to say. MCP
+servers, entries in each agent's own config file, come in M6.
 
 `TargetTable::targets(kind, agents)` gives one target (`AgentTarget`) per
 location, each with the agents it is for: all three agents take a skill in two
@@ -3363,13 +3365,138 @@ too, as an empty `$MINDFLAYER_HOME` does; whether the agents agree is an [open
 question](#open-questions).
 
 Installing is the first to take them, to refuse a copy inside one ([never
-into an agent's own folder](#never-into-an-agents-own-folder)). They are
+into an agent's own folder](#never-into-an-agents-own-folder)), and
+rendering a project's rules takes them to refuse a block of them there ([how
+a rule reaches the agents](#how-a-rule-reaches-the-agents)). They are
 decided once per command line, with the workspace to use, into the same
 `Lookup` (`Lookup::given`), which the TUI keeps and hands to every line it
 runs (`tui::execute`) and to its install screen: a line the TUI runs carries
 none of the four options, so deciding them again would read the environment
 the TUI was opened in, and a test that drives the TUI would reach the real
 folders. Nothing reads what is in them yet.
+
+## How a rule reaches the agents
+
+A rule reaches a project's agents as a section of a block in the project's
+root `AGENTS.md` ([D-03](#d-03-rules-reach-every-agent-through-agentsmd)):
+the one file of a project that Claude Code, Codex and OpenCode all read, and
+Codex has no way to include another ([docs/agents.md](agents.md)).
+`agents_md::render` writes it. Which rules a project is given, when, and the
+record of what was written are #45's; whether Claude reads the file at all,
+or needs an `@AGENTS.md` import in its `CLAUDE.md`, is #44's predicate.
+Nothing calls it yet.
+
+```markdown
+# Working here
+
+Run `make test` before every push.
+
+<!-- mindflayer:begin -->
+<!-- mindflayer:rule commit-style -->
+Write commit messages as `<area>: <imperative summary>`.
+
+<!-- mindflayer:rule git/no-force-push -->
+Never force-push a branch somebody else may have pulled.
+<!-- mindflayer:end -->
+```
+
+- **HTML comments for markers.** Claude strips a block-level comment before
+  the file reaches the model and keeps the text between two of them,
+  verified on 2.1.309 with the file read natively and imported. Codex and
+  OpenCode read the file as it is, where a comment is a line of markup that
+  says nothing. A heading of Mindflayer's own was turned down: every agent
+  would read it as one more instruction.
+- **One section a rule, in listing order.** A section is the rule's marker,
+  naming its route, then its body: `Artifact::contents`, the file less its
+  front matter, without the blank lines it opens and closes with, so the
+  block is laid out the same however each file spaces its fences or ends.
+  One blank line separates two sections, which keeps two rules two
+  paragraphs once Claude has stripped the markers. They come in the order
+  `list` gives them (`catalog::report_order`), by name. A rule that states
+  `paths` has no section: it goes to `.claude/rules/mindflayer` alone (#43),
+  where Claude loads it only once one of those files is read, while in the
+  block every agent would read it for every file. A `paths` in a shape
+  nothing reads says nothing, as everywhere else, so that rule has its
+  section.
+- **Strict when writing.** A route is held to the rules every name is
+  (`name_issues`), which also keeps its marker one that reads back as
+  itself: lowercase words joined by single hyphens and slashes hold no space
+  and no `--`. A body line that would read back as a marker is refused, and
+  so are two rules of one name, a rule that cannot be read and anything that
+  is not a rule. Each refuses the whole render, with nothing written: a
+  section left out would take its rule away from every agent until the next
+  render.
+- **Every byte outside the block is kept.** The file is read as lines that
+  keep their endings (`lines`, shared with git's exclude file), and only what
+  lies between the markers is replaced, whole, a line somebody wrote there
+  included. A new block goes after what the file holds, on lines of its own,
+  with the ending the file already uses, so a CRLF file stays CRLF; a last
+  line without a newline gets one, and the end marker goes without. An empty
+  line sets it apart from what is above, so that once Claude strips the
+  markers the file's last paragraph and the first rule's are still two, the
+  layout the probe verified ([docs/agents.md](agents.md)). That line is the
+  block's: an empty line just above the begin marker is taken out with it,
+  one somebody wrote there by hand included, since nothing tells the two
+  apart. So dropping the block gives the file back exactly as it was before
+  the block was written, and a render that changes nothing writes nothing.
+- **Refused, never repaired.** A block left open, an end marker closing
+  nothing, a second block, a rule's marker outside the block, one route
+  twice, and a line written like a marker but none of them (indented, spaced
+  otherwise, naming a mark there is not) are each refused with the line they
+  are on, and nothing is written (`agents_md::Malformed`), as in the exclude
+  file. Read as text, a hand-indented begin marker would have the next render
+  write a second block below the first. The file is read a line at a time,
+  not as markdown, so a marker quoted in somebody's code fence counts:
+  telling fences apart would need a markdown parser, for a mistake that is
+  refused and never acted on.
+- **Made, changed, taken away.** A file that is not there is made with
+  `create_new`, and only then is the render said to have made it
+  (`Written::Created`); #45 keeps that and hands it back as `created`, so
+  that once no rule is left the block goes, and the file with it when
+  nothing but blank lines is left. Mindflayer takes away only a file it
+  made, and a link somebody put in its place is emptied, never removed. A
+  file that is there is replaced through `replace_bytes`, a temporary and a
+  rename, which follows a link to the file it names: an `AGENTS.md` linked
+  to the `CLAUDE.md` beside it, as some teams keep the two, is written
+  through, though #44's import would share its markers there (an [open
+  question](#open-questions)). A link leading out of the project is refused
+  (`AgentsMdError::LinkedOut`), since a repository can hold one to the
+  user's own `~/.codex/AGENTS.md`, and replacing it with a file of the
+  project's own would undo what somebody linked on purpose. It takes no
+  lock, as `ConfigFile` takes none: its caller holds the workspace's.
+- **Never above other projects.** Claude reads every `AGENTS.md` from where
+  it starts up toward `/`, and OpenCode V2 up to the home directory, so rules
+  rendered into a folder above a project the workspace links would reach
+  that project too, beside its own: a monorepo's root, above its packages.
+  A block is refused in such a folder, a stale entry's included, and in the
+  workspace's own root unless a project it links is there. The workspace
+  puts nothing in its own directory (`FlayerWorkspace::own` is a holder at
+  that root, not a project), while a project at the root is a project like
+  any other, and its `AGENTS.md` its own. A render that leaves no block goes
+  ahead in either: a block written before a project was linked below it, or
+  before the one at the root was unlinked, is reaching those agents already,
+  and refusing to take it out would keep the leak the refusal is there to
+  stop.
+- **Never into an agent's own folder.** A block is refused, the same way,
+  in a project at or inside one of the agents' own folders
+  (`AgentsMdError::UserScope`), which the front end hands over as it does
+  for an install ([never into an agent's own
+  folder](#never-into-an-agents-own-folder)): a project at `$CODEX_HOME`
+  would write the `AGENTS.md` Codex reads in every project, one at
+  `~/.config/opencode` OpenCode's, and one at `~/.claude` the
+  `.claude/AGENTS.md` Claude finds above every project in the user's home.
+- **What Codex would miss is said.** Codex reads one file a folder,
+  `AGENTS.override.md` before `AGENTS.md`, from the git root down to where it
+  starts, and cuts the whole off at 32 KiB (`project_doc_max_bytes`); with no
+  git root it reads only the folder it starts in (docs-only, each with its
+  fallback in docs/agents.md). So a render that leaves a block warns
+  (`agents_md::Warning`) of an override beside the file, of a project in no
+  git work tree, and of the files from the git root down coming within an
+  eighth of the budget or past it, each worked out for Codex started at the
+  project's root. Warnings, not refusals: the block still reaches Claude and
+  OpenCode, and what to change is in files that are not Mindflayer's. A
+  repository or a file that cannot be looked at is said the same way, rather
+  than turning a render already written into a failure.
 
 ## One entry of a config file somebody else owns
 
@@ -4015,6 +4142,17 @@ while Claude still read the block, and give Claude each unscoped rule twice;
 whether #44 stops below `/` too is an [open question](#open-questions).
 Unblocks #17, #42, #43, #44 and #45.
 
+Carrying it out, #42 renders the block, between those markers and under a
+`<!-- mindflayer:rule <route> -->` for each rule, leaving out a rule that
+states `paths:`. It leaves no block in a folder above a project the
+workspace links, nor in the workspace's own root where no project it links
+is, nor inside an agent's own folder, since the agents of other projects
+would read an `AGENTS.md` there too, and takes out one it finds there; a
+project at the workspace's root has its rules in its own. It warns of the override, the
+budget, and a project in no git work tree, where Codex reads only the
+folder it starts in ([how a rule reaches the
+agents](#how-a-rule-reaches-the-agents)).
+
 ### D-04: An edited copy is detected, not disowned
 
 The ledger keeps a content hash per target. An untouched copy stays managed and
@@ -4410,7 +4548,9 @@ leak into the lifecycle code. Unblocks #33, #45, #62, #93, #94 and #95.
   route, and copying one means answering where its folders go.
   [D-03](#d-03-rules-reach-every-agent-through-agentsmd) answers it: a rule
   reaches a project as its section of a managed block in `AGENTS.md`, with
-  `.claude/rules/mindflayer` as Claude's fallback, and #45 carries it out.
+  `.claude/rules/mindflayer` as Claude's fallback. #42 renders the block
+  ([how a rule reaches the agents](#how-a-rule-reaches-the-agents)), and #45
+  carries it out.
   Until then [the examples'](#the-examples-are-a-workspace) two rules are
   listed and validated, but a load offers only their skills.
 - **Examples outside a clone.** The examples are a folder in the repository,
@@ -4847,6 +4987,41 @@ leak into the lifecycle code. Unblocks #33, #45, #62, #93, #94 and #95.
   operating system. Only opening each folder without following links and
   writing relative to it (`openat` with `O_NOFOLLOW`, then `renameat`) closes
   that, which is a platform layer of its own for a window that small.
+- **What Codex reads from below a project's root.** The override and the
+  budget are worked out for Codex started at the project's root, where its
+  `AGENTS.md` is. Started in a folder below, Codex reads that folder's
+  `AGENTS.md` files too, after the project's, and its config can rename the
+  files it looks for (`project_doc_fallback_filenames`), say what marks the
+  root (`project_root_markers`) or change the budget, none of which
+  Mindflayer reads yet. Reading Codex's config, as a doctor check would
+  (#96), would make each warning exact for one more case.
+- **A section edited by hand.** A render replaces everything between the
+  markers, so a line somebody wrote in a rule's section is gone at the next
+  one, as Mindflayer's marked blocks have it. A record of what each render
+  wrote, a hash for each section beside a copy's
+  ([D-04](#d-04-an-edited-copy-is-detected-not-disowned)), is what would
+  tell an edited section from the one rendered and leave it be, and #45 is
+  where that record is kept.
+- **A link made while `AGENTS.md` is written.** A link in place of the file
+  is looked at before the read, and one leading out of the project is
+  refused; a link made in the moment between that look and the rename is
+  followed by `replace_bytes`, which resolves the path first. Writing to the
+  path as spelled, as `ConfigFile` does, would close it, at the price of
+  replacing the link to a file inside the project that some teams keep
+  between `AGENTS.md` and `CLAUDE.md`.
+- **An `AGENTS.md` linked to the `CLAUDE.md` beside it.** A render writes
+  through such a link, so its block lands in `CLAUDE.md`, between the same
+  `<!-- mindflayer:begin -->` and `<!-- mindflayer:end -->` that #44 writes
+  its `@AGENTS.md` import between there ([docs/agents.md](agents.md)). With
+  both in one file, each writer would take the other's block for its own: a
+  render would replace the import line with the rules, and #44 the rules
+  with the import, each undoing the other on every run, while two blocks
+  would have the second refused as malformed (`Malformed::Reopened`), and
+  the import would bring the file into itself. Claude reads that file as
+  its `CLAUDE.md`, so the rules already reach it, and #44's predicate is
+  where the case belongs: it can count Claude as reached when the two names
+  are one file and write no import, or the import can take markers of its
+  own.
 - **A config file left empty by its last entry.** Removing the last server
   leaves `"mcpServers": {}` in a JSON file, and a `.codex/config.toml` that
   Mindflayer made holding nothing, and the file stays, with any folder made for

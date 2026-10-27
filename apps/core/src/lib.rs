@@ -13,6 +13,7 @@
 
 pub mod activate;
 pub mod agent;
+pub mod agents_md;
 pub mod artifact;
 pub mod catalog;
 pub mod config_entry;
@@ -26,6 +27,7 @@ pub mod install;
 pub mod kind;
 pub mod ledger;
 pub mod lifecycle;
+mod lines;
 pub mod lock;
 pub mod migrate;
 pub mod paths;

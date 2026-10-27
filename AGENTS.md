@@ -77,12 +77,13 @@ under `apps/` with its own `Makefile`:
   workspace a command uses (`resolve`), the shell code that activates one
   (`activate`), kinds, the agents and where each kind goes for them
   (`agent`), the catalog, gathering (`gix`), the SQLite ledger,
-  installing, keeping installs out of git (`exclude`), changing a project's
-  agents or share mode and carrying its installs along (`reapply`), what
-  each project holds, from where and for which agents (`status`), creating
-  and changing artifacts, and moving a workspace's own into its library and
-  a project from its `mind.toml` to settings (`migrate`). Its only I/O is
-  files, and it never reads the environment.
+  installing, keeping installs out of git (`exclude`), a project's rules
+  rendered into the block of its `AGENTS.md` (`agents_md`), changing a
+  project's agents or share mode and carrying its installs along
+  (`reapply`), what each project holds, from where and for which agents
+  (`status`), creating and changing artifacts, and moving a workspace's own
+  into its library and a project from its `mind.toml` to settings
+  (`migrate`). Its only I/O is files, and it never reads the environment.
 - `apps/cli` (`mindflayer-cli`): the binaries `mind` (`src/main.rs`) and
   `flayer` (`src/bin/flayer.rs`), and the TUI. `src/lib.rs` only re-exports
   the public API. The parsers are in `src/parse.rs`. `src/commands.rs`
@@ -226,7 +227,22 @@ These are easy to break from a single file without noticing.
     Mindflayer writes are `.mind/tmp`'s and a local project's `.mind`'s own
     (`MIND_IGNORE`), each inside a folder it owns, made with `create_new`,
     and the second is removed, when the project turns shared, only while it
-    still holds `MIND_IGNORE`.
+    still holds `MIND_IGNORE`. And `<!-- mindflayer:begin -->` and
+    `<!-- mindflayer:end -->` in a project's root `AGENTS.md` (`agents_md`),
+    a section a rule under `<!-- mindflayer:rule <route> -->`: a render
+    replaces the block whole, adds it after what the file holds, an empty
+    line apart, or drops it, that line with it, and gives the file back as
+    it was, in the file's own line endings. A
+    marker written any other way, a rule's marker outside the block and one
+    route twice are refused like a broken block. A missing `AGENTS.md` is
+    made with `create_new`, and only then said to be created; one that is
+    there goes through `replace_bytes`, written through a link only to a
+    file inside the project; and the file is taken away only when the
+    caller says Mindflayer made it and nothing else is left in it. No block
+    is left in a workspace's root, unless a project it links is there, nor
+    in a folder above a project it links, whose agents would read it too,
+    nor inside an agent's own folder (`AgentsMdError::UserScope`); a render
+    that takes one out goes ahead there.
   - An entry in a config file somebody else owns (`.mcp.json`,
     `opencode.json`, `.codex/config.toml`) is changed one at a time through
     `config_entry`: JSON and JSONC entries are edited through jsonc-parser's
@@ -305,6 +321,10 @@ These are easy to break from a single file without noticing.
     read and again just before it is written, and the write is never
     resolved. A folder made a link between that last look and the rename is
     the one window left (architecture.md, open questions).
+  - An `AGENTS.md` that is a link leading out of its project is refused
+    (`agents_md`), since a repository can link it to the user's own
+    `~/.codex/AGENTS.md`; one to a file inside the project is written
+    through.
   - URLs are stored, logged and shown without credentials. `url::redacted`
     is the one function that takes them out: the ledger applies it to every
     URL it writes and reads, `GitError` to what it says, `git::scrub` to a
@@ -325,10 +345,11 @@ These are easy to break from a single file without noticing.
   until its ledger is written, and `reapply::apply`, from before it reads a
   project's settings until their change and every copy it carries along are
   written. A new
-  writer takes it the same way, inside core; `config_entry::ConfigFile` and
-  `MindProject::change_settings` take none, since the writers that call them
-  hold it. A second workspace linking the same project is kept out by
-  neither lock, an open question in `docs/architecture.md`.
+  writer takes it the same way, inside core; `config_entry::ConfigFile`,
+  `agents_md::render` and `MindProject::change_settings` take none, since
+  the writers that call them hold it. A second workspace linking the same
+  project is kept out by neither lock, an open question in
+  `docs/architecture.md`.
   Opening the ledger takes no lock: a schema migration keeps itself apart
   in its own transaction. The lock is not re-entrant: a writer never calls
   another while it holds it, and a front end never takes it. Reads
@@ -415,7 +436,8 @@ These are easy to break from a single file without noticing.
   find. Core takes the answer as `AgentHomes` and never resolves one.
   `Lookup::given` decides them once per command line, into the `Lookup`
   (`Lookup::agents`), and install is the first to take them, to refuse a
-  copy inside one. `tui::execute` hands each line the TUI's own with the
+  copy inside one, as `agents_md::render` takes them to refuse a block of
+  rules there. `tui::execute` hands each line the TUI's own with the
   rest of its `Lookup`, and so does its install screen: a command the TUI
   runs carries none of the four options, so it would decide them again from
   the environment.

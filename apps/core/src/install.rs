@@ -853,25 +853,33 @@ pub fn install(
 
 /// The refusal for the first of `copies` inside one of the agents' own
 /// folders, if one is.
+pub(crate) fn user_scope(homes: &AgentHomes, copies: &[PathBuf]) -> Option<InstallError> {
+    let (path, home, reader) = in_agent_home(homes, copies)?;
+    Some(InstallError::UserScope { path, home, reader })
+}
+
+/// The first of `paths` inside one of the agents' own folders, if one is,
+/// with that folder and who reads it: for each writer that refuses one to
+/// say in its own words, an install's copy here and a block of rules in
+/// [`crate::agents_md`].
 ///
 /// Resolved as far as each path exists, so a home reached through a link,
 /// or a project reached through one, is still the folder it is.
-pub(crate) fn user_scope(homes: &AgentHomes, copies: &[PathBuf]) -> Option<InstallError> {
+pub(crate) fn in_agent_home(
+    homes: &AgentHomes,
+    paths: &[PathBuf],
+) -> Option<(PathBuf, PathBuf, &'static str)> {
     let folders: Vec<(&str, &Path, PathBuf)> = homes
         .folders()
         .into_iter()
         .filter_map(|(reader, folder)| Some((reader, folder, resolved(folder)?)))
         .collect();
-    copies.iter().find_map(|copy| {
-        let at = resolved(copy)?;
+    paths.iter().find_map(|path| {
+        let at = resolved(path)?;
         folders
             .iter()
             .find(|(_, _, home)| at.starts_with(home))
-            .map(|(reader, folder, _)| InstallError::UserScope {
-                path: copy.clone(),
-                home: folder.to_path_buf(),
-                reader,
-            })
+            .map(|(reader, folder, _)| (path.clone(), folder.to_path_buf(), *reader))
     })
 }
 
