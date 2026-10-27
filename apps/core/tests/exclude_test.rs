@@ -502,3 +502,39 @@ fn nothing_is_tracked_outside_a_work_tree_or_in_a_repository_with_no_index() {
     fs::write(repo.path().join(".mind/mind.toml"), "").unwrap();
     assert!(!exclude::tracks(repo.path(), Path::new(".mind")).unwrap());
 }
+
+#[test]
+fn a_file_is_tracked_when_the_index_names_it_and_not_by_a_name_it_starts() {
+    let repo = repository();
+    let app = project(repo.path(), "packages/app");
+    fs::write(app.join("CLAUDE.md"), "# Team\n").unwrap();
+    project(&app, ".claude");
+    fs::write(app.join(".claude/CLAUDE.md"), "# Team\n").unwrap();
+    let web = project(repo.path(), "packages/web");
+    fs::write(web.join("CLAUDE.md.orig"), "# Old\n").unwrap();
+    indexed(repo.path());
+    // Made after the index was written, so git does not track them.
+    fs::write(app.join("CLAUDE.local.md"), "# Mine\n").unwrap();
+    fs::write(web.join("CLAUDE.md"), "# Mine\n").unwrap();
+
+    assert!(exclude::tracks_file(&app, Path::new("CLAUDE.md")).unwrap());
+    assert!(exclude::tracks_file(&app, Path::new(".claude/CLAUDE.md")).unwrap());
+    assert!(exclude::tracks_file(repo.path(), Path::new("packages/app/CLAUDE.md")).unwrap());
+    assert!(!exclude::tracks_file(&app, Path::new("CLAUDE.local.md")).unwrap());
+    // A file whose name only starts the same is another file.
+    assert!(!exclude::tracks_file(&web, Path::new("CLAUDE.md")).unwrap());
+    // A folder is no file, and a file is no folder.
+    assert!(!exclude::tracks_file(&app, Path::new(".claude")).unwrap());
+    assert!(!exclude::tracks(&app, Path::new("CLAUDE.md")).unwrap());
+}
+
+#[test]
+fn no_file_is_tracked_outside_a_work_tree_or_in_a_repository_with_no_index() {
+    let outside = TempDir::new().unwrap();
+    fs::write(outside.path().join("CLAUDE.md"), "").unwrap();
+    assert!(!exclude::tracks_file(outside.path(), Path::new("CLAUDE.md")).unwrap());
+
+    let repo = repository();
+    fs::write(repo.path().join("CLAUDE.md"), "").unwrap();
+    assert!(!exclude::tracks_file(repo.path(), Path::new("CLAUDE.md")).unwrap());
+}

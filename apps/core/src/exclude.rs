@@ -179,6 +179,40 @@ pub fn locate(project: &Path) -> Result<Option<Location>, ExcludeError> {
 /// and never written: Mindflayer runs no git command, and taking a team's
 /// files out of the index is not its to do.
 pub fn tracks(project: &Path, folder: &Path) -> Result<bool, ExcludeError> {
+    in_index(project, folder, |index, path| {
+        // Ending in a slash, as the index spells a folder's files, so
+        // `.mind` does not take in a `.mindflayer` beside it.
+        let prefix = format!("{path}/");
+        index
+            .prefixed_entries(prefix.as_bytes().into())
+            .is_some_and(|entries| !entries.is_empty())
+    })
+}
+
+/// Whether git tracks the file at `file`, a route from the project at
+/// `project`: whether the index of the work tree holding the project names
+/// it. Never, outside a git work tree.
+///
+/// For a team file Mindflayer would edit to reach an agent, which a local
+/// project leaves alone while git tracks it, unless its settings say
+/// `edit_tracked` (D-02), as a project's `CLAUDE.md`. Read from the index
+/// as [`tracks`] reads it, so a file added and not yet committed is tracked,
+/// as git says it is.
+pub fn tracks_file(project: &Path, file: &Path) -> Result<bool, ExcludeError> {
+    in_index(project, file, |index, path| {
+        index.entry_by_path(path.as_bytes().into()).is_some()
+    })
+}
+
+/// What `look` finds in the index of the work tree holding `project`, given
+/// `inside`, a route from the project, as the index spells it from the work
+/// tree's root: slash separated. False outside a git work tree, and in a
+/// repository with no index yet, where git tracks nothing.
+fn in_index(
+    project: &Path,
+    inside: &Path,
+    look: impl FnOnce(&gix::index::File, &str) -> bool,
+) -> Result<bool, ExcludeError> {
     let Some((repository, route)) = discover(project)? else {
         return Ok(false);
     };
@@ -189,19 +223,14 @@ pub fn tracks(project: &Path, folder: &Path) -> Result<bool, ExcludeError> {
     let index = repository
         .index_or_empty()
         .map_err(|error| unreadable(error.to_string()))?;
-    // Slash separated and ending in one, as the index spells a folder's
-    // files, so `.mind` does not take in a `.mindflayer` beside it.
-    let inside = paths::normalize(&route.join(folder));
-    let Some(mut prefix) = paths::to_config_string(&inside) else {
+    let inside = paths::normalize(&route.join(inside));
+    let Some(path) = paths::to_config_string(&inside) else {
         return Err(unreadable(format!(
             "{} is not valid UTF-8, so the index cannot be searched for it",
             inside.display()
         )));
     };
-    prefix.push('/');
-    Ok(index
-        .prefixed_entries(prefix.as_bytes().into())
-        .is_some_and(|entries| !entries.is_empty()))
+    Ok(look(&index, &path))
 }
 
 /// The work tree holding `project`, as git names it, and the route from it
