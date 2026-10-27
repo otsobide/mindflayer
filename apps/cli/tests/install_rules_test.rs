@@ -325,3 +325,38 @@ fn a_rule_the_project_received_is_not_changed_from_it_and_says_how_to_take_it_ou
     }
     assert_eq!(fs::read_to_string(alpha.join("AGENTS.md")).unwrap(), BLOCK);
 }
+
+#[test]
+fn a_route_two_places_offer_is_installed_from_the_one_from_names() {
+    let (dir, alpha) = workspace(&[]);
+    let team = dir.path().join("team");
+    fs::create_dir(&team).unwrap();
+    flayer(&team, &["init"]).unwrap();
+    flayer(
+        &team,
+        &["add", "rule", "git/commits", "Commit as the team does"],
+    )
+    .unwrap();
+    flayer(dir.path(), &["load", "team"]).unwrap();
+
+    let twice = mind(&alpha, &["install", "git/commits"]).unwrap_err();
+    let theirs = mind(&alpha, &["install", "rule:git/commits", "--from", "team"]).unwrap();
+
+    assert_eq!(
+        twice.error.to_string(),
+        "`git/commits` is offered by more than one place (workspace, load:team), so say which \
+         with --from"
+    );
+    assert_eq!(
+        theirs.stdout,
+        "installed rule git/commits into alpha, from load:team\n"
+    );
+    quiet(&theirs);
+    assert!(fs::read_to_string(alpha.join("AGENTS.md"))
+        .unwrap()
+        .contains("<!-- mindflayer:rule git/commits -->\n# Commit as the team does\n"));
+    assert_eq!(
+        mind(&alpha, &["status"]).unwrap().stdout,
+        "git/commits  installed  claude,codex,opencode  load:team\n"
+    );
+}
