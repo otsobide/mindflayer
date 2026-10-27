@@ -1,5 +1,6 @@
-//! A v3 project's marker: `.mind/settings.json`, holding what the hub needs
-//! to know about the project and nothing else.
+//! A project's marker from version 3 on: `.mind/settings.json`, and from
+//! [`SETTINGS_TOML_VERSION`] `.mind/settings.toml`, holding what the hub
+//! needs to know about the project and nothing else.
 //!
 //! Which agents read it, whether what is installed into it is shared with the
 //! team or kept to this checkout (D-02), whether a team file git tracks may
@@ -37,22 +38,29 @@ use crate::config_entry::{self, Edit, Format, Value};
 use crate::kind::Kind;
 use crate::paths;
 use crate::workspace::{
-    check_version, Directories, Marker, WorkspaceError, SETTINGS_VERSION, TARGETS_VERSION,
+    check_version, toml_string, Directories, Marker, MarkerFile, WorkspaceError, MIND_DIR,
+    SETTINGS_TOML_VERSION, SETTINGS_VERSION, TARGETS_VERSION,
 };
 
-/// The marker file of a v3 project, inside its `.mind`.
+/// The marker file of a version 3 or 4 project, inside its `.mind`.
 pub const SETTINGS_FILE: &str = "settings.json";
 
-/// The contents of `.mind/settings.json`.
+/// The marker file of a project from [`SETTINGS_TOML_VERSION`] on, inside
+/// its `.mind`.
+pub const SETTINGS_TOML_FILE: &str = "settings.toml";
+
+/// The contents of a project's settings file, `.mind/settings.toml` or the
+/// `.mind/settings.json` before it.
 ///
 /// Every key the format defines, and no other: what a newer build added is
 /// left in the file, and an edit leaves it there.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Settings {
-    /// The layout version the file was written with: [`SETTINGS_VERSION`],
-    /// or [`TARGETS_VERSION`] for one that says where installs land
-    /// ([`Settings::version_needed`]); one this build does not know is
-    /// refused.
+    /// The layout version the file was written with, which says which file
+    /// it is in: [`SETTINGS_TOML_VERSION`] for a `settings.toml`; for a
+    /// `settings.json`, [`SETTINGS_VERSION`], or [`TARGETS_VERSION`] for one
+    /// that says where installs land ([`Settings::version_needed`]). One this
+    /// build does not know is refused.
     pub version: u32,
     /// What names the project whatever it is called and wherever it is.
     pub id: ProjectId,
@@ -122,15 +130,17 @@ impl Settings {
         }
     }
 
-    /// Read the settings file at `path`.
+    /// Read the settings file at `path`, in the grammar its name says
+    /// ([`grammar`]).
     ///
-    /// Refused when it is not strict JSON, when a key the format defines is
-    /// missing or holds the wrong thing (but for `targets` in a version 3
-    /// file, read past then as before them), and when its version is neither
-    /// [`SETTINGS_VERSION`] nor [`TARGETS_VERSION`]: a newer one as written
-    /// by a newer Mindflayer, an older one as no settings file at all, since
-    /// versions 1 and 2 are `mind.toml`'s. A key this build does not know is
-    /// read past.
+    /// Refused when it does not parse (a `settings.json` that is not strict
+    /// JSON included), when a key the format defines is missing or holds the
+    /// wrong thing (but for `targets` in a version 3 file, read past then as
+    /// before them), and when its version is not one its file holds: a newer
+    /// one as written by a newer Mindflayer, any other as another file's
+    /// ([`MarkerFile::of_version`]), a `settings.json` holding 3 or 4 and a
+    /// `settings.toml` [`SETTINGS_TOML_VERSION`]. A key this build does not
+    /// know is read past.
     pub fn read(path: &Path) -> Result<Self, WorkspaceError> {
         let text = std::fs::read_to_string(path).map_err(|source| WorkspaceError::Read {
             path: path.to_path_buf(),
@@ -139,15 +149,20 @@ impl Settings {
         parse(path, &text)
     }
 
-    /// The text of a new settings file holding these: pretty-printed, two
-    /// spaces a level, ending in a newline, the keys in the order the format
-    /// lists them, and `targets` only when it names a kind, since leaving it
-    /// out says the same.
+    /// The text of a new settings file holding these, in the grammar their
+    /// version is written in: [`toml_text`](Self::toml_text) from
+    /// [`SETTINGS_TOML_VERSION`] on, and JSON before it.
     ///
-    /// Written as `config_entry` lays out what an edit inserts, so a file
-    /// written new and one an edit has changed since read alike. Refused for
-    /// a directory that is not UTF-8, which JSON cannot hold.
+    /// The JSON is pretty-printed, two spaces a level, ending in a newline,
+    /// the keys in the order the format lists them, and `targets` only when
+    /// it names a kind, since leaving it out says the same: written as
+    /// `config_entry` lays out what an edit inserts, so a file written new
+    /// and one an edit has changed since read alike. Refused for a directory
+    /// that is not UTF-8, which neither grammar can hold.
     pub fn text(&self) -> Result<String, WorkspaceError> {
+        if self.version >= SETTINGS_TOML_VERSION {
+            return self.toml_text();
+        }
         let members = self
             .members()?
             .into_iter()
@@ -155,6 +170,77 @@ impl Settings {
             .map(|(key, value)| (key.to_owned(), value));
         Ok(config_entry::json_text(&Value::Object(members.collect()))
             .expect("settings hold nothing JSON cannot write"))
+    }
+
+    /// The text of a new `settings.toml` holding these, written from a
+    /// template rather than serialized, as `flayer.toml` is: its comments say
+    /// what each key does, in the file somebody opens to change one, and an
+    /// edit keeps them ([`MindProject::change_settings`]). Version
+    /// [`SETTINGS_TOML_VERSION`] whatever these say, the one version that
+    /// file holds.
+    ///
+    /// Every folder `directories` names is written out, the kinds this
+    /// build knows first, as `mind.toml` spelled out its defaults; a
+    /// `[targets]` table only when it names a kind, since leaving it out
+    /// says the same. Each path is spelled with `/`, so the file reads the
+    /// same on every platform, and one that is not UTF-8 is refused.
+    ///
+    /// [`MindProject::change_settings`]: crate::MindProject::change_settings
+    pub fn toml_text(&self) -> Result<String, WorkspaceError> {
+        let agents: Vec<String> = self
+            .agents
+            .iter()
+            .map(|agent| toml_string(agent.name()))
+            .collect();
+        let mut text = format!(
+            "# Mindflayer mind project: what Mindflayer needs to know about the project\n\
+             # this {MIND_DIR} is in, and nothing else. No agent reads it.\n\
+             #\n\
+             # `name` is what the project is shown as, and `agents` the agents that work\n\
+             # in it (claude, codex, opencode): what is installed into the project is\n\
+             # copied where each of them reads. `mind agents` changes them.\n\
+             #\n\
+             # `share` is \"local\" to keep {MIND_DIR}, and what is installed, out of git\n\
+             # for this checkout alone, or \"shared\" to leave both for the team to\n\
+             # commit. `edit_tracked` lets a file git tracks, such as AGENTS.md, be\n\
+             # edited to reach an agent in a local project. `mind share` changes both.\n\
+             #\n\
+             # `directories` says where the project keeps the skills and rules it writes\n\
+             # itself, relative to the directory holding {MIND_DIR}, to commit with its\n\
+             # code; a kind left out has no folder. A `[targets]` table, when there,\n\
+             # names the folders a kind is installed in instead of where the agents\n\
+             # read: `mind targets` writes it.\n\
+             #\n\
+             # `id` names the project for good, wherever it moves, and `version` is how\n\
+             # this file is laid out: change neither.\n\
+             {VERSION} = {SETTINGS_TOML_VERSION}\n\
+             {ID} = {}\n\
+             {NAME} = {}\n\
+             {AGENTS} = [{}]\n\
+             {SHARE} = {}\n\
+             {EDIT_TRACKED} = {}\n\
+             \n\
+             [{DIRECTORIES}]\n",
+            toml_string(self.id.as_str()),
+            toml_string(&self.name),
+            agents.join(", "),
+            toml_string(self.share.name()),
+            self.edit_tracked,
+        );
+        for (key, directory) in self.directories.entries() {
+            text.push_str(&format!("{key} = {}\n", toml_path(directory)?));
+        }
+        if !self.targets.is_empty() {
+            text.push_str(&format!("\n[{TARGETS}]\n"));
+            for (key, folders) in self.targets.entries() {
+                let folders = folders
+                    .iter()
+                    .map(|folder| toml_path(folder))
+                    .collect::<Result<Vec<String>, WorkspaceError>>()?;
+                text.push_str(&format!("{key} = [{}]\n", folders.join(", ")));
+            }
+        }
+        Ok(text)
     }
 
     /// Each key the format defines, with what these settings hold for it, in
@@ -371,6 +457,15 @@ impl fmt::Display for ProjectId {
     }
 }
 
+/// `path` as a TOML string spelled with `/`, refused when it is not UTF-8.
+fn toml_path(path: &Path) -> Result<String, WorkspaceError> {
+    paths::to_config_string(path)
+        .map(|written| toml_string(&written))
+        .ok_or_else(|| WorkspaceError::NonUtf8Path {
+            path: path.to_path_buf(),
+        })
+}
+
 const VERSION: &str = "version";
 const ID: &str = "id";
 const NAME: &str = "name";
@@ -380,29 +475,67 @@ const EDIT_TRACKED: &str = "edit_tracked";
 const DIRECTORIES: &str = "directories";
 const TARGETS: &str = "targets";
 
-/// The settings `text` holds, read from the file at `path`, which errors name.
+/// The grammar the settings file at `path` is written in, which its name
+/// says: JSON for a `settings.json`, TOML for a `settings.toml`.
+///
+/// By the name, unlike an agent's config file (`config_entry`, where the
+/// caller says): each settings file was only ever written in one grammar,
+/// and its name is how the project tells which it is.
+pub(crate) fn grammar(path: &Path) -> Format {
+    if path
+        .extension()
+        .is_some_and(|extension| extension == "json")
+    {
+        Format::Json
+    } else {
+        Format::Toml
+    }
+}
+
+/// The settings `text` holds, read from the file at `path`, which errors
+/// name, in the grammar its name says ([`grammar`]).
+///
+/// Either grammar is read into one tree and held to the keys a key at a
+/// time, so a `settings.toml` and a `settings.json` holding the same are
+/// read alike, and refused alike, each refusal naming the key.
 ///
 /// The version is read first and held to this build before anything else,
 /// so a file a newer Mindflayer wrote is refused for being newer, whatever
 /// else it holds, rather than for a key that version gave a new meaning.
+/// Then to the versions its file holds: one another file holds is
+/// malformed rather than guessed at, since what it would mean here is
+/// nobody's to say.
 pub(crate) fn parse(path: &Path, text: &str) -> Result<Settings, WorkspaceError> {
     let malformed = |detail: String| WorkspaceError::Malformed {
         path: path.to_path_buf(),
         detail,
     };
+    let grammar = grammar(path);
     let document =
-        config_entry::document(Format::Json, text).map_err(|error| malformed(error.to_string()))?;
+        config_entry::document(grammar, text).map_err(|error| malformed(error.to_string()))?;
     let Value::Object(members) = &document else {
         return Err(malformed("it holds no object".to_owned()));
     };
-    let members = Members(members);
+    let members = Members::new(members, grammar);
 
     let version = members.version().map_err(malformed)?;
     check_version(path, Marker::Project, version)?;
-    if version < SETTINGS_VERSION {
+    let (file, held) = match grammar {
+        Format::Toml => (
+            MarkerFile::SettingsToml,
+            format!("version {SETTINGS_TOML_VERSION}"),
+        ),
+        _ => (
+            MarkerFile::SettingsJson,
+            format!("version {SETTINGS_VERSION} or {TARGETS_VERSION}"),
+        ),
+    };
+    let written = MarkerFile::of_version(version);
+    if written != file {
         return Err(malformed(format!(
-            "version {version} is a {}'s, and a settings file is version {SETTINGS_VERSION}",
-            crate::workspace::MIND_CONFIG
+            "version {version} is a {}'s, and a {} is {held}",
+            written.name(),
+            file.name()
         )));
     }
     members.settings(version).map_err(malformed)
@@ -513,15 +646,35 @@ pub(crate) fn edited(
 /// Whether `value`, what a settings file holds under `targets`, reads as
 /// them at the version that defines the key.
 fn reads_as_targets(value: Value) -> bool {
-    Members(&[(TARGETS.to_owned(), value)])
+    Members::new(&[(TARGETS.to_owned(), value)], Format::Json)
         .strict_targets()
         .is_ok()
 }
 
 /// The members of a settings file's object, read a key at a time.
-struct Members<'a>(&'a [(String, Value)]);
+struct Members<'a> {
+    members: &'a [(String, Value)],
+    /// What the grammar calls a group of keys, for a refusal to say: "an
+    /// object" in JSON, "a table" in TOML.
+    group: &'static str,
+}
 
 impl<'a> Members<'a> {
+    fn new(members: &'a [(String, Value)], grammar: Format) -> Self {
+        let group = match grammar {
+            Format::Toml => "a table",
+            _ => "an object",
+        };
+        Members { members, group }
+    }
+
+    /// The members of `entries`, an object inside this one.
+    fn inside(&self, entries: &'a [(String, Value)]) -> Self {
+        Members {
+            members: entries,
+            group: self.group,
+        }
+    }
     fn settings(&self, version: u32) -> Result<Settings, String> {
         Ok(Settings {
             version,
@@ -538,7 +691,7 @@ impl<'a> Members<'a> {
     /// The member named `key`, refused when the file writes it twice: which
     /// one a reader keeps is that reader's, so neither is guessed at.
     fn get(&self, key: &str) -> Result<Option<&'a Value>, String> {
-        let mut named = self.0.iter().filter(|(name, _)| name == key);
+        let mut named = self.members.iter().filter(|(name, _)| name == key);
         match (named.next(), named.next()) {
             (None, _) => Ok(None),
             (Some((_, value)), None) => Ok(Some(value)),
@@ -625,11 +778,11 @@ impl<'a> Members<'a> {
         let entries = match self.get(DIRECTORIES)? {
             None => return Ok(Directories::default()),
             Some(Value::Object(entries)) => entries,
-            Some(_) => return Err(format!("`{DIRECTORIES}` is not an object")),
+            Some(_) => return Err(format!("`{DIRECTORIES}` is not {}", self.group)),
         };
-        let entries = Members(entries);
+        let entries = self.inside(entries);
         let mut directories = Directories::default();
-        for (key, _) in entries.0 {
+        for (key, _) in entries.members {
             let Value::String(directory) = entries.required(key)? else {
                 return Err(format!("`{DIRECTORIES}.{key}` is not a string"));
             };
@@ -665,11 +818,11 @@ impl<'a> Members<'a> {
         let entries = match self.get(TARGETS)? {
             None => return Ok(Targets::default()),
             Some(Value::Object(entries)) => entries,
-            Some(_) => return Err(format!("`{TARGETS}` is not an object")),
+            Some(_) => return Err(format!("`{TARGETS}` is not {}", self.group)),
         };
-        let entries = Members(entries);
+        let entries = self.inside(entries);
         let mut targets = Targets::default();
-        for (key, _) in entries.0 {
+        for (key, _) in entries.members {
             let not_a_list = || format!("`{TARGETS}.{key}` is not a list of folders");
             let Value::Array(folders) = entries.required(key)? else {
                 return Err(not_a_list());

@@ -7,9 +7,9 @@ use std::time::{Duration, SystemTime};
 
 use mindflayer_core::{
     create, scan, Agent, AgentTarget, Catalog, CreateError, Directories, FlayerWorkspace,
-    Initialization, Kind, MindProject, Misplaced, MisplacedTarget, ProjectWarning, Settings, Share,
-    Targets, WorkspaceError, MIND_CONFIG, MIND_DIR, MIND_IGNORE, SETTINGS_FILE, SETTINGS_VERSION,
-    TARGETS_VERSION,
+    Initialization, Kind, MarkerFile, MindProject, Misplaced, MisplacedTarget, ProjectWarning,
+    Settings, Share, Targets, WorkspaceError, MIND_CONFIG, MIND_DIR, MIND_IGNORE, SETTINGS_FILE,
+    SETTINGS_TOML_FILE, SETTINGS_TOML_VERSION, SETTINGS_VERSION, TARGETS_VERSION,
 };
 use tempfile::TempDir;
 
@@ -61,7 +61,8 @@ fn a_project_holding_both_markers_is_read_from_its_settings_and_warns_of_the_oth
     assert_eq!(
         warnings,
         vec![ProjectWarning::Leftover {
-            path: leftover.clone()
+            path: leftover.clone(),
+            read: MarkerFile::SettingsJson,
         }]
     );
     assert_eq!(
@@ -71,6 +72,137 @@ fn a_project_holding_both_markers_is_read_from_its_settings_and_warns_of_the_oth
             leftover.display()
         )
     );
+}
+
+/// Mark `root` a project the way a version 3 `mind init` did, by a
+/// `settings.json`, written here as it wrote it, and as version 4 when
+/// `targets` (a JSON object) is given.
+fn json_project(root: &Path, targets: Option<&str>) -> PathBuf {
+    let mind = root.join(MIND_DIR);
+    fs::create_dir_all(&mind).unwrap();
+    let path = mind.join(SETTINGS_FILE);
+    let (version, targets) = match targets {
+        Some(targets) => (4, format!(",\n  \"targets\": {targets}")),
+        None => (3, String::new()),
+    };
+    fs::write(
+        &path,
+        format!(
+            "{{\n  \"version\": {version},\n  \"id\": \"0123456789abcdef0123456789abcdef\",\n  \
+             \"name\": \"collapse\",\n  \"agents\": [\"claude\", \"codex\"],\n  \
+             \"share\": \"local\",\n  \"edit_tracked\": false,\n  \"directories\": {{\n    \
+             \"skills\": \"skills\",\n    \"rules\": \"rules\"\n  }}{targets}\n}}\n"
+        ),
+    )
+    .unwrap();
+    path
+}
+
+/// Mark `root` a project by a `settings.toml` holding `settings`.
+fn toml_project(root: &Path, settings: &Settings) -> PathBuf {
+    let mind = root.join(MIND_DIR);
+    fs::create_dir_all(&mind).unwrap();
+    let path = mind.join(SETTINGS_TOML_FILE);
+    let settings = Settings {
+        version: SETTINGS_TOML_VERSION,
+        ..settings.clone()
+    };
+    fs::write(&path, settings.text().unwrap()).unwrap();
+    path
+}
+
+#[test]
+fn a_settings_json_of_version_3_or_4_is_read_as_it_was_written() {
+    let three = TempDir::new().unwrap();
+    json_project(three.path(), None);
+    let four = TempDir::new().unwrap();
+    json_project(four.path(), Some(r#"{"skills": [".skills"]}"#));
+
+    let three = MindProject::open(three.path()).unwrap();
+    let four = MindProject::open(four.path()).unwrap();
+
+    for (project, version) in [(&three, SETTINGS_VERSION), (&four, TARGETS_VERSION)] {
+        let settings = project.settings().unwrap();
+        assert_eq!(settings.version, version);
+        assert_eq!(settings.id.as_str(), "0123456789abcdef0123456789abcdef");
+        assert_eq!(settings.agents, [Agent::Claude, Agent::Codex]);
+        assert_eq!(settings.share, Share::Local);
+        assert_eq!(project.marker_file(), MarkerFile::SettingsJson);
+        assert_eq!(
+            project.marker_path(),
+            project.mind_dir().join(SETTINGS_FILE)
+        );
+        assert_eq!(
+            project.directory_for(Kind::Skill),
+            Some(project.root().join("skills"))
+        );
+    }
+    assert!(three.settings().unwrap().targets.is_empty());
+    assert_eq!(
+        four.settings().unwrap().targets.get(Kind::Skill),
+        Some(&[PathBuf::from(".skills")][..])
+    );
+}
+
+#[test]
+fn a_project_holding_a_settings_toml_is_read_from_it_and_warns_of_each_older_marker() {
+    let dir = TempDir::new().unwrap();
+    MindProject::init(dir.path()).unwrap();
+    json_project(dir.path(), None);
+    let settings = Settings::new(
+        "renamed",
+        vec![Agent::OpenCode],
+        Share::Shared,
+        Directories::default(),
+    );
+    toml_project(dir.path(), &settings);
+    let mind = dir.path().join(MIND_DIR);
+
+    let project = MindProject::open(dir.path()).unwrap();
+
+    assert_eq!(project.marker_file(), MarkerFile::SettingsToml);
+    let read = project.settings().unwrap();
+    assert_eq!(read.version, SETTINGS_TOML_VERSION);
+    assert_eq!(read.name, "renamed");
+    assert_eq!(read.agents, [Agent::OpenCode]);
+    assert_eq!(project.directory_for(Kind::Skill), None);
+    let warnings: Vec<String> = project.warnings().iter().map(ToString::to_string).collect();
+    assert_eq!(
+        warnings,
+        [
+            format!(
+                "{}: ignored, since the project is read from the settings.toml beside it",
+                mind.join(SETTINGS_FILE).display()
+            ),
+            format!(
+                "{}: ignored, since the project is read from the settings.toml beside it",
+                mind.join(MIND_CONFIG).display()
+            ),
+        ]
+    );
+}
+
+#[test]
+fn a_project_marked_by_a_settings_toml_alone_is_found_and_says_nothing_else() {
+    let dir = TempDir::new().unwrap();
+    let settings = Settings::new(
+        "collapse",
+        Agent::ALL.to_vec(),
+        Share::Local,
+        skills_beside(),
+    );
+    toml_project(dir.path(), &settings);
+    let deep = dir.path().join("src");
+    fs::create_dir_all(&deep).unwrap();
+
+    assert!(MindProject::is_marked(dir.path()));
+    let found = MindProject::locate(&deep)
+        .unwrap()
+        .expect("a project above");
+
+    assert_eq!(found.root(), dir.path());
+    assert_eq!(found.marker_file(), MarkerFile::SettingsToml);
+    assert!(found.warnings().is_empty());
 }
 
 #[test]

@@ -3,12 +3,16 @@
 use super::*;
 
 use crate::kind::Kind;
-use crate::workspace::MIND_FORMAT_VERSION;
+use crate::workspace::{MIND_FORMAT_VERSION, SETTINGS_TOML_VERSION};
 
 const ID_TEXT: &str = "0123456789abcdef0123456789abcdef";
 
 fn path() -> &'static Path {
     Path::new(".mind/settings.json")
+}
+
+fn toml_path() -> &'static Path {
+    Path::new(".mind/settings.toml")
 }
 
 /// What a new project made with every default would hold, with an id fixed
@@ -102,43 +106,65 @@ fn a_project_authoring_nothing_writes_an_empty_directories() {
 }
 
 #[test]
-fn a_version_5_settings_file_is_refused_naming_the_project_marker() {
-    let text = with_member(&format!("\"version\": {}", MIND_FORMAT_VERSION + 1));
-
-    let error = parse(path(), &text).unwrap_err();
-
-    assert!(
-        matches!(
-            error,
-            WorkspaceError::Version {
-                marker: Marker::Project,
-                found: 5,
-                ..
-            }
+fn a_settings_file_newer_than_this_build_is_refused_naming_the_project_marker() {
+    let newer = MIND_FORMAT_VERSION + 1;
+    for (path, text) in [
+        (path(), with_member(&format!("\"version\": {newer}"))),
+        (
+            toml_path(),
+            standard_toml().replace("version = 5", &format!("version = {newer}")),
         ),
-        "{error}"
-    );
-    assert!(
-        error.to_string().contains("project marker version 5"),
-        "{error}"
-    );
+    ] {
+        let error = parse(path, &text).unwrap_err();
+
+        assert!(
+            matches!(
+                error,
+                WorkspaceError::Version {
+                    marker: Marker::Project,
+                    found,
+                    ..
+                } if found == newer
+            ),
+            "{error}"
+        );
+        assert!(
+            error
+                .to_string()
+                .contains(&format!("project marker version {newer}")),
+            "{error}"
+        );
+    }
 }
 
 #[test]
 fn a_newer_version_is_refused_for_being_newer_whatever_else_the_file_holds() {
-    let error = parse(path(), "{\"version\": 5, \"agents\": \"everyone\"}").unwrap_err();
-
+    let error = parse(path(), "{\"version\": 6, \"agents\": \"everyone\"}").unwrap_err();
     assert!(
-        matches!(error, WorkspaceError::Version { found: 5, .. }),
+        matches!(error, WorkspaceError::Version { found: 6, .. }),
+        "{error}"
+    );
+
+    let error = parse(toml_path(), "version = 6\nagents = \"everyone\"\n").unwrap_err();
+    assert!(
+        matches!(error, WorkspaceError::Version { found: 6, .. }),
         "{error}"
     );
 }
 
 #[test]
-fn a_settings_file_claiming_a_toml_version_is_refused() {
+fn a_settings_json_claiming_another_files_version_is_refused() {
     let detail = refusal(&with_member("\"version\": 2"));
+    assert_eq!(
+        detail,
+        "version 2 is a mind.toml's, and a settings.json is version 3 or 4"
+    );
 
-    assert!(detail.contains("version 2 is a mind.toml's"), "{detail}");
+    let detail = refusal(&with_member("\"version\": 5"));
+    assert_eq!(
+        detail,
+        "version 5 is a settings.toml's, and a settings.json is version 3 or 4"
+    );
 }
 
 #[test]
@@ -444,4 +470,200 @@ fn a_directory_that_is_not_utf8_is_refused_rather_than_mangled() {
         matches!(error, WorkspaceError::NonUtf8Path { .. }),
         "{error}"
     );
+}
+
+// ---------------------------------------------------------------------------
+// settings.toml
+// ---------------------------------------------------------------------------
+
+/// [`standard`], at the version `settings.toml` holds.
+fn standard_in_toml() -> Settings {
+    Settings {
+        version: SETTINGS_TOML_VERSION,
+        ..standard()
+    }
+}
+
+fn standard_toml() -> String {
+    standard_in_toml().text().unwrap()
+}
+
+/// The detail a refusal of `text`, read as a `settings.toml`, gives.
+fn toml_refusal(text: &str) -> String {
+    match parse(toml_path(), text).unwrap_err() {
+        WorkspaceError::Malformed { detail, .. } => detail,
+        other => panic!("not refused as malformed: {other}"),
+    }
+}
+
+#[test]
+fn a_settings_toml_is_written_from_a_template_whose_comments_say_what_each_key_does() {
+    assert_eq!(
+        standard_toml(),
+        r#"# Mindflayer mind project: what Mindflayer needs to know about the project
+# this .mind is in, and nothing else. No agent reads it.
+#
+# `name` is what the project is shown as, and `agents` the agents that work
+# in it (claude, codex, opencode): what is installed into the project is
+# copied where each of them reads. `mind agents` changes them.
+#
+# `share` is "local" to keep .mind, and what is installed, out of git
+# for this checkout alone, or "shared" to leave both for the team to
+# commit. `edit_tracked` lets a file git tracks, such as AGENTS.md, be
+# edited to reach an agent in a local project. `mind share` changes both.
+#
+# `directories` says where the project keeps the skills and rules it writes
+# itself, relative to the directory holding .mind, to commit with its
+# code; a kind left out has no folder. A `[targets]` table, when there,
+# names the folders a kind is installed in instead of where the agents
+# read: `mind targets` writes it.
+#
+# `id` names the project for good, wherever it moves, and `version` is how
+# this file is laid out: change neither.
+version = 5
+id = "0123456789abcdef0123456789abcdef"
+name = "collapse"
+agents = ["claude", "codex", "opencode"]
+share = "local"
+edit_tracked = false
+
+[directories]
+skills = "skills"
+rules = "rules"
+"#
+    );
+}
+
+#[test]
+fn new_settings_round_trip_through_their_toml() {
+    let settings = Settings {
+        version: SETTINGS_TOML_VERSION,
+        ..Settings::new(
+            "say \"hi\" \\ and\u{1b}",
+            vec![Agent::Codex, Agent::Claude],
+            Share::Shared,
+            Directories::default().with(Kind::Skill, ".claude/skills"),
+        )
+    };
+
+    let read = parse(toml_path(), &settings.text().unwrap()).unwrap();
+
+    assert_eq!(read, settings);
+}
+
+#[test]
+fn a_settings_toml_is_version_5_whatever_it_sets() {
+    let in_toml = Settings {
+        version: SETTINGS_TOML_VERSION,
+        ..in_skills()
+    };
+
+    let text = in_toml.text().unwrap();
+
+    assert!(text.contains("\nversion = 5\n"), "{text}");
+    assert!(
+        text.ends_with("\n[targets]\nskills = [\".skills\"]\n"),
+        "{text}"
+    );
+    assert_eq!(parse(toml_path(), &text).unwrap(), in_toml);
+    assert!(!standard_toml().contains("\n[targets]\n"));
+}
+
+#[test]
+fn a_settings_toml_claiming_another_files_version_is_refused() {
+    for (version, file) in [(2, "mind.toml"), (3, "settings.json"), (4, "settings.json")] {
+        let text = standard_toml().replace("version = 5", &format!("version = {version}"));
+
+        assert_eq!(
+            toml_refusal(&text),
+            format!("version {version} is a {file}'s, and a settings.toml is version 5"),
+        );
+    }
+}
+
+#[test]
+fn a_settings_toml_is_held_to_the_keys_a_settings_json_is() {
+    for (from, to, expected) in [
+        (
+            r#"agents = ["claude", "codex", "opencode"]"#,
+            r#"agents = ["claude", "cursor"]"#,
+            "`agents`: unknown agent `cursor`; expected claude, codex or opencode",
+        ),
+        (
+            r#"share = "local""#,
+            r#"share = "team""#,
+            "`share` is neither \"local\" nor \"shared\"",
+        ),
+        (
+            "edit_tracked = false",
+            "edit_tracked = \"no\"",
+            "`edit_tracked` is neither true nor false",
+        ),
+        (
+            "[directories]\nskills = \"skills\"",
+            "directories = [\"skills\"]\n[nothing]\nskills = \"skills\"",
+            "`directories` is not a table",
+        ),
+        (
+            "skills = \"skills\"",
+            "skills = 1",
+            "`directories.skills` is not a string",
+        ),
+        (
+            "rules = \"rules\"\n",
+            "rules = \"rules\"\n\n[targets]\nskills = []\n",
+            "`targets.skills` names no folder; leave `skills` out to install them where the \
+             project's agents read",
+        ),
+        (
+            "version = 5",
+            "version = 5.0",
+            "`version` is not a version number",
+        ),
+    ] {
+        let text = standard_toml().replacen(from, to, 1);
+        assert_ne!(text, standard_toml(), "{from}");
+
+        assert_eq!(toml_refusal(&text), expected, "{to}");
+    }
+}
+
+#[test]
+fn a_settings_toml_that_is_not_toml_is_refused() {
+    let detail = toml_refusal("version = 5\nversion = 5\n");
+
+    assert!(detail.contains("duplicate key"), "{detail}");
+}
+
+#[test]
+fn a_key_this_build_does_not_know_is_read_past_in_toml_too() {
+    let text = standard_toml().replace(
+        "edit_tracked = false\n",
+        "edit_tracked = false\nservers = { github = [\"npx\"] }\n",
+    ) + "\n[mcp]\nanything = true\n";
+
+    assert_eq!(parse(toml_path(), &text).unwrap(), standard_in_toml());
+}
+
+#[test]
+fn a_directory_or_target_key_this_build_does_not_know_is_carried_in_toml() {
+    let settings = Settings {
+        version: SETTINGS_TOML_VERSION,
+        ..in_skills()
+    };
+    let text = settings
+        .text()
+        .unwrap()
+        .replace(
+            "rules = \"rules\"\n",
+            "rules = \"rules\"\nmcp = \"servers\"\n",
+        )
+        .replace(
+            "skills = [\".skills\"]\n",
+            "skills = [\".skills\"]\nmcp = [\".mcp\"]\n",
+        );
+
+    let read = parse(toml_path(), &text).unwrap();
+
+    assert_eq!(read.text().unwrap(), text);
 }
