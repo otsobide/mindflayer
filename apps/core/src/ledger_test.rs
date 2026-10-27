@@ -998,6 +998,100 @@ fn retargeting_an_installation_to_no_copy_forgets_it_and_one_never_made_is_nothi
 }
 
 #[test]
+fn a_migrated_project_moves_every_installation_fills_a_missing_hash_and_logs_it_at_once() {
+    let ledger = Ledger::in_memory().unwrap();
+    let hashed = installation_of("deploy", &[(None, "skills/deploy")]);
+    let unhashed = InstallRecord {
+        content_hash: None,
+        origin: None,
+        ..installation_of("review", &[(None, "skills/review")])
+    };
+    ledger.installed("collapse", &hashed).unwrap();
+    ledger.installed("collapse", &unhashed).unwrap();
+    let moved = |name: &str, hash: Option<&str>| Moved {
+        kind: Kind::Skill,
+        name: name.to_owned(),
+        targets: installation_of(name, &[(Some("claude"), &format!(".claude/skills/{name}"))])
+            .targets,
+        content_hash: hash.map(str::to_owned),
+    };
+
+    ledger
+        .migrated(
+            "collapse",
+            &[
+                moved("deploy", Some("ffff")),
+                moved("review", Some("abcd")),
+                moved("gone", Some("0000")),
+            ],
+            &[(Action::Install, String::from("collapse moved to settings"))],
+        )
+        .unwrap();
+
+    let record = |name: &str| {
+        ledger
+            .installation("collapse", Kind::Skill, name)
+            .unwrap()
+            .unwrap()
+    };
+    // A hash it had is kept: what was installed, not what is there now.
+    assert_eq!(record("deploy").content_hash.as_deref(), Some("e3b0c442"));
+    assert_eq!(record("review").content_hash.as_deref(), Some("abcd"));
+    assert_eq!(
+        record("review").targets,
+        moved("review", None).targets,
+        "{:?}",
+        record("review")
+    );
+    assert!(ledger
+        .installation("collapse", Kind::Skill, "gone")
+        .unwrap()
+        .is_none());
+    let history = ledger.history(5).unwrap();
+    assert_eq!(history.len(), 1);
+    assert_eq!(history[0].target.as_deref(), Some("collapse"));
+    assert_eq!(
+        history[0].detail.as_deref(),
+        Some("collapse moved to settings")
+    );
+}
+
+#[test]
+fn a_migration_the_ledger_cannot_finish_records_none_of_it() {
+    let ledger = Ledger::in_memory().unwrap();
+    ledger
+        .installed(
+            "collapse",
+            &installation_of("deploy", &[(None, "skills/deploy")]),
+        )
+        .unwrap();
+    // Two copies at one path break the table's uniqueness, after the first
+    // installation's copies were written.
+    let twice = Target {
+        agent: None,
+        path: String::from(".agents/skills/deploy"),
+    };
+
+    let failed = ledger.migrated(
+        "collapse",
+        &[Moved {
+            kind: Kind::Skill,
+            name: String::from("deploy"),
+            targets: vec![twice.clone(), twice],
+            content_hash: None,
+        }],
+        &[(Action::Install, String::from("collapse moved"))],
+    );
+
+    assert!(failed.is_err());
+    assert_eq!(
+        ledger.copies("collapse", Kind::Skill).unwrap(),
+        ["skills/deploy"]
+    );
+    assert!(ledger.history(5).unwrap().is_empty());
+}
+
+#[test]
 fn every_copy_installed_into_a_project_is_listed_by_path_whichever_install_wrote_it() {
     let ledger = Ledger::in_memory().unwrap();
     ledger
