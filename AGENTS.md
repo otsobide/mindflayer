@@ -127,12 +127,16 @@ one agent's checks (only `claude.sh` so far).
 These are easy to break from a single file without noticing.
 
 - **Rules live in core.** The CLI parses, asks core and renders. Name limits,
-  front matter, where a kind lives, where it goes for each agent and sort order
-  are all core's, so a future front end cannot disagree with this one. No front
-  end spells an agent's folder or calls `TargetTable::standard`: which table
-  applies is the project's, in core, the standard one until #40 reads an
-  override from its settings, so code that needs one takes the `TargetTable`
-  the project hands it, as an install will (#34).
+  front matter, where a kind lives, where it goes for each agent, where each
+  agent reads it and sort order are all core's, so a future front end cannot
+  disagree with this one. No front end spells an agent's folder or calls
+  `TargetTable::standard`: which table applies is the project's, in core, the
+  standard one until #40 reads an override from its settings, so code that
+  needs one asks the project (`MindProject::targets`), as discovery does and
+  an install will (#34). Where an agent reads (`Agent::reads`) is kept apart
+  from where it is sent a copy: OpenCode reads `.claude/skills` and is sent
+  nothing there. Which folders a project is read from is core's too
+  (`Catalog::folders`).
 - **Two binaries, one parser.** `flayer <cmd>` is `mind flayer <cmd>`, and
   both reach the same function. `mind add` and `flayer add` (with or without
   `-p`) are one implementation given a different holder
@@ -206,7 +210,12 @@ These are easy to break from a single file without noticing.
   install (one installation, a target for each copy it wrote, its origin and
   the `hash::tree` of what it wrote, that hash's one definition) is what
   allows overwriting and deleting. An unrecorded artifact is
-  `Standing::Foreign` and is never touched. Core's lifecycle changes
+  `Standing::Foreign` and is never touched. A v3 project is listed from its
+  agents' folders too, where an unrecorded copy outside the folder it
+  authors in is `Provenance::Foreign` (by the path a record names,
+  `Catalog::with_records`), and a lifecycle change looks only where the
+  project authors (`Catalog::discover_authored`), so it never reaches one.
+  Core's lifecycle changes
   (`lifecycle::add`, `finish_edit`, `rename` and `remove`) drop any record
   they would leave behind and return what they did (`lifecycle::Record`, and
   the `scrub` that opening the ledger ran), which the CLI only renders.
@@ -378,8 +387,9 @@ These are easy to break from a single file without noticing.
 - **`Kind` and `Agent` are closed enums.** To add a kind, follow "Adding a
   third kind" in the architecture doc, and to add an agent, "Adding an agent",
   which starts in `docs/agents.md`. Either way the compiler's exhaustive
-  matches are the checklist: the target table's `standard` matches every kind
-  and agent with no wildcard, so neither compiles until it says where it goes.
+  matches are the checklist: the target table's `standard`, and `read` behind
+  `Agent::reads`, match every kind and agent with no wildcard, so neither
+  compiles until it says where it goes and where it reads.
   "Adding an agent" also lists what no match covers: `Agent::ALL`, and an
   agent home's field, option and place in `common::PINNED` and `CLEARED`.
 

@@ -911,6 +911,14 @@ and an id. A kind it leaves out of `directories` has no folder at all, rather
 than the default. Mindflayer finds and reads either marker, and when a project
 holds both it reads `settings.json`.
 
+Such a project is listed from the folders its agents read as well:
+`.claude/skills` for Claude, `.agents/skills` for Codex and OpenCode. A skill
+there is listed once, whoever put it there, and when it sits in both folders
+with different contents `list` and `validate` warn, since the agents would not
+all load the same skill. Mindflayer changes only what sits in the folders the
+project authors in, so `mind edit`, `rename` and `remove` leave a skill in an
+agent's folder alone.
+
 ## What a skill looks like
 
 `skills/commit-style/SKILL.md`:

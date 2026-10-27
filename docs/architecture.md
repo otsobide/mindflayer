@@ -668,7 +668,10 @@ than sending somebody to gather for it. Naming one skill for it
 (`install::offered`), installing one or uninstalling one is refused with
 `NoDirectory`, since a project was named. Answering with a default instead
 was turned down: an `Option` costs every caller a line, and a default would
-have put the next kind beside every project's code.
+have put the next kind beside every project's code. A listing still reads
+such a project's agents' folders ([read where its agents
+read](#a-project-marked-by-its-settings-is-read-where-its-agents-read)):
+keeping no folder of its own is no reason to hide what its agents load.
 
 ### A project's settings
 
@@ -755,6 +758,84 @@ and an id names the project for good. So is a folder the change moves out of
 the project, as `init` refuses one, while one written there by hand is still
 read and stops no change to something else.
 
+### A project marked by its settings is read where its agents read
+
+What an agent loads is what sits in its folders, whoever put it there, and a
+project marked by its settings says which agents work in it. So discovery
+reads it where they read (`Catalog::discover_kinds`): the folder each of its
+agents is sent copies in (`MindProject::targets`, the project's target table,
+which is the standard one until #40 reads an override), and beside them the
+folder the project authors in, from `directories`. Reading only the authored
+folder, as every project was read before, would list the project's own work
+and none of what its agents run: an install's copies once #34 writes them
+there, and the skills somebody already keeps in `.claude/skills` or
+`.agents/skills` by hand. A project a `mind.toml` marks names no agents, so it
+is read from the one folder its marker names, exactly as before.
+
+- **Each folder once.** An authored folder that is one of the targets,
+  `"skills": ".claude/skills"` say, is read once, matched by its spelling and
+  then on disk (`same_directory`), so a skill in it is listed once. Whether
+  that skill is the project's own or an install's is the ledger's to say,
+  below. `Catalog::folders` is the list read, in order, which `list` names
+  when it finds nothing.
+- **One artifact a name.** Every copy of one name in the agents' folders, a
+  target or a folder one of the project's agents reads, is one artifact
+  (`Artifact::copies`), described by its first copy by path. An installation
+  writes one copy per folder ([D-07](#d-07-one-copy-per-agent-folder)), and
+  a listing that showed each would show one skill twice, under a name the
+  agents see once.
+- **With the agents that see it.** `Artifact::agents` is every agent the
+  project names that reads one of its copies, by `Agent::reads`, which is not
+  the target table ([agents, and where each kind reaches
+  them](#agents-and-where-each-kind-reaches-them)): OpenCode reads
+  `.claude/skills` and is sent a copy only in `.agents/skills`, so a skill in
+  `.claude/skills` alone lists with Claude and OpenCode, and one in both with
+  all three. An agent the project does not name is left out, since nothing
+  of its reaches the project.
+- **Copies that differ are said.** Claude reads one standard folder, Codex the
+  other, and OpenCode loads whichever it takes of the two (V1 at random), so
+  two copies that do not hold the same mean the agents do not run the same
+  skill. They are compared by `hash::tree`, the hash an install records, which
+  refuses a link rather than reading wherever it points, as a copy here is
+  anybody's; one folder reached twice, through a link to it, is one copy
+  without being read. Differing copies are still one artifact
+  (`Artifact::copies_differ`), and a failure, `DiscoveryFailure::Diverged`:
+  a `warning:` and a non-zero exit, like anything else discovery could not
+  make one thing of. `validate` counts them apart from unreadable files
+  (`DiscoveryFailure::is_unreadable`). A copy that cannot be hashed is said
+  too (`Uncompared`), and is not taken to differ.
+- **Each copy is validated.** `Artifact::validate` judges every copy on its
+  own file and folder, adding what another has to what the first has, since
+  an agent loads the copy in the folder it reads: one copy filed under a
+  folder its name does not match fails there and nowhere else.
+- **What the project authors where no agent reads stays apart.** The default
+  `skills/` is read by no agent: what is there is the project's own work,
+  which reaches an agent only once installed. A skill there and one of the
+  same name in `.claude/skills` are two artifacts, not two copies of one,
+  however alike: grouping them would call the project's own source an
+  agent's copy.
+
+Who put a copy there (`Provenance`) is the ledger's, and discovery reads no
+ledger: a listing that says nothing of it opens none. `Catalog::with_records`
+is handed the workspace's, and marks installed each copy whose path an
+installation records (`Ledger::copies`), not each whose name it does, so an
+install into one folder never claims what somebody keeps under that name in
+another. Unrecorded, a copy in a folder the project authors in is
+`Authored`; one only in an agent's folder is `Foreign`, and an artifact is
+`Installed` only when every copy is. Records are a workspace's own, so a
+project the workspace does not link has none in it, and a ledger that cannot
+be read leaves every copy unrecorded, which nothing changes, rather than
+installed, which an uninstall may delete. No listing hands one over yet,
+since none says who put what where; `flayer status` will (#36).
+
+Foreign is never touched. A change to a project's own artifacts looks only in
+the folders it authors in (`Catalog::discover_authored`, from
+`lifecycle::find`), so `edit`, `rename` and `remove` never reach a copy in an
+agent's folder the project does not author in; one named there is refused as
+such (`LifecycleError::NotAuthored`) rather than reported missing, since a
+listing has just shown it. Installing still writes into the authored folder
+until #34 writes a copy in each target.
+
 ### Why the markers are TOML written from a template
 
 New markers are written from a string template, not serialized. Serializing
@@ -824,7 +905,9 @@ SQLite](#why-the-ledger-is-sqlite)).
 
 Discovery returns what it found *and* what it could not read. One skill with
 broken front matter must not hide the forty next to it, and a stale entry in a
-workspace registry must not stop the other projects from being managed.
+workspace registry must not stop the other projects from being managed. Two
+copies of one skill that differ in a project's agents' folders are collected
+the same way: listed, and said.
 
 The CLI prints those on stderr as warnings and exits non-zero: visible, but not
 in the way of the answer.
@@ -1301,7 +1384,11 @@ file this tool put there from one somebody wrote. Today an install writes one
 copy, in the folder the project's marker names; one in each agent's folder is
 #34's. A skill present but unrecorded is `Standing::Foreign`, and Foreign is
 inert in both directions: never overwritten, never deleted, and the caller is
-told so rather than obeyed quietly.
+told so rather than obeyed quietly. A listing says the same of a copy in a
+project's agents' folders (`Provenance::Foreign`), by the path each record
+names rather than by its name, and no change to the project's own reaches one
+([read where its agents
+read](#a-project-marked-by-its-settings-is-read-where-its-agents-read)).
 
 Without that, an install screen is a thing that can delete a colleague's work
 because a checkbox looked untidy. The rule costs one query and removes the
@@ -2387,6 +2474,21 @@ the ones docs/agents.md lists for #28:
   A test pins the table: every location it gives stays inside the project,
   and none is `.codex/skills`.
 
+Where each agent reads is another thing, and core keeps it apart:
+`Agent::reads(kind)` is every folder in a project the agent reads a kind
+from, whoever put what is there, from the same facts. It can be more than the
+table sends: OpenCode reads `.claude/skills` and `.opencode/skills` as well as
+`.agents/skills`, and is sent a copy only in the last. A listing asks it which
+agents see a skill where it sits ([read where its agents
+read](#a-project-marked-by-its-settings-is-read-where-its-agents-read)); an
+install asks the table where to write. One table for both was turned down: it
+would either send OpenCode a second copy it does not need, or have a listing
+say OpenCode misses what sits in Claude's folder. A test holds the two
+together: every folder the standard table sends an agent is one it reads.
+`.codex/skills`, read only in a trusted project, is not counted, and no folder
+of rules is said to be read until M2 settles how a rule reaches each agent,
+though Claude reads `.claude/rules`.
+
 Rules have no entry yet, by design rather than by omission.
 [D-03](#d-03-rules-reach-every-agent-through-agentsmd) gives a rule a section
 of a block in the project's `AGENTS.md`, with Claude's fallback in
@@ -2408,10 +2510,11 @@ D-07 lets a project's `.mind/settings.json` put a kind somewhere else, one
 `.skills` folder for every agent for instance (#40). A caller that takes the
 table then follows the project's without changing, and two agents the
 override sends to one folder get one target, as Codex and OpenCode do now.
-The project hands it on, in core: an install takes the table from the project
-it installs into (#34), which gives the standard one until #40 has it read its
-override, and no front end calls `TargetTable::standard`, which would pick a
-table the project's settings could contradict. Rejected: a free `targets`
+The project hands it on, in core: discovery, and an install (#34), take the
+targets from the project (`MindProject::targets`), which gives the standard
+table until #40 has it read its override, and no front end calls
+`TargetTable::standard`, which would pick a table the project's settings
+could contradict. Rejected: a free `targets`
 over the standard layout, which every caller would hard-wire and #40 would
 have to find again; and a folder per agent alone, which cannot say that a
 skill and a rule reach Claude in different places.
@@ -2434,8 +2537,9 @@ exists, holds foreign content or is tracked is the install's to find out.
 
 Record what it reads first, in docs/agents.md, verified or docs-only with a
 fallback. Then a variant on `Agent` and its name, and its arm for each kind in
-the table's `standard`, which matches every pair with no wildcard: neither a
-new agent nor a new kind compiles until somebody has said where it goes. The
+the table's `standard`, and in `read`, behind `Agent::reads`, which both match
+every pair with no wildcard: neither a new agent nor a new kind compiles until
+somebody has said where it goes and where it reads. The
 compiler lists every match on `Agent`, since each is exhaustive, but not what
 is not a match:
 
@@ -2735,7 +2839,10 @@ rules: they are for what Mindflayer writes, and a folder from before they were
 tightened (`a--b`) or one made by hand is exactly what has to be found to be
 fixed. A template is looked up by one folder name for the same reason, since
 `mind templates` lists whatever is there. More than one match is an error: changing the wrong artifact is
-not something to guess about. The TUI lists unreadable files in the same way,
+not something to guess about. Both looks are only in the folders the project
+authors in (`Catalog::discover_authored`): a listing also shows what sits in
+a project's agents' folders, and none of that is the project's to change, so
+a name found only there is refused (`NotAuthored`). The TUI lists unreadable files in the same way,
 by the name their place gives them (`lifecycle::identify`), so they can be
 reached with a key rather than only read about in a warning.
 
@@ -3710,6 +3817,22 @@ leak into the lifecycle code. Unblocks #33, #45, #62, #93, #94 and #95.
   `--user`, and nothing stops `mind init` in a home. The table cannot tell,
   having no home to compare with; #34 can, by refusing a target inside one of
   the folders `AgentHomes` names, which a front end hands it.
+- **Folders an agent reads and is sent nothing in.** A project marked by its
+  settings is read in its agents' targets and in its authored folder, not in
+  every folder they read ([read where its agents
+  read](#a-project-marked-by-its-settings-is-read-where-its-agents-read)):
+  `.opencode/skills`, and `.claude/skills` in a project that names OpenCode
+  and not Claude, are read only when the project authors there, though
+  OpenCode loads what is in them. The targets are where an install lands and
+  can meet somebody's work, so those are what a listing has to know; reading
+  every folder `Agent::reads` names would list the rest as well, from folders
+  no install of Mindflayer's reaches. Doctor (#96) is the other place a skill
+  only there could be reported.
+- **A minds screen that lists what it cannot change.** The TUI's project rows
+  come from the same discovery, so a v3 project's row lists the skills in its
+  agents' folders, and a change aimed at one is refused (`NotAuthored`). #36
+  gives each row its state; until then a row does not say which of its skills
+  are the project's to change.
 - **An agent's CLI writing the same config file.** The workspace's lock keeps
   Mindflayer's writers apart, not the agents': `claude mcp add` rewriting
   `.mcp.json` between `ConfigFile::edit`'s read and its rename is undone by the
