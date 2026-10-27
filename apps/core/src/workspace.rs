@@ -279,6 +279,19 @@ impl Directories {
         self.resolved_with(Directories::default_for)
     }
 
+    /// Every kind named: one this leaves out at a project's default beside
+    /// the code ([`default_for`](Self::default_for)), and any key this build
+    /// does not recognise carried along.
+    ///
+    /// What a new project's settings are given to author in. In settings a
+    /// kind left out has no folder at all ([`SETTINGS_VERSION`]), so the
+    /// `skills/` and `rules/` a new project still gets by default (D-06) are
+    /// written down rather than left to a default, here in core so that no
+    /// front end spells the folders.
+    pub fn with_defaults(self) -> Self {
+        self.filled(Directories::default_for)
+    }
+
     /// The same, with `default` answering for a kind nothing names: a
     /// project's default or a workspace's.
     fn resolved_with(&self, default: fn(Kind) -> PathBuf) -> Vec<(Kind, PathBuf)> {
