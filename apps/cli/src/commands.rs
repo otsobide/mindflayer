@@ -27,7 +27,7 @@ use activate::{activate_command, which_command};
 use artifact::{add_to, edit_in, remove_from, rename_in, templates_of};
 use gather::run_gather;
 use install::{install_named, uninstall_named};
-use migrate::migrate_library;
+use migrate::{migrate_here, migrate_library, Asked};
 use project::{
     init_project, init_workspace, link_here, link_projects, scan_workspace, unlink_here,
     unlink_projects,
@@ -199,6 +199,15 @@ pub(crate) fn run_with(cli: &Cli, lookup: &Lookup, watch: &Watch) -> Result<Outc
                 edit_tracked: mode.edit_tracked,
             },
             mode.yes,
+            lookup,
+        ),
+        Command::Migrate { settings, yes } => migrate_here(
+            &project_here(&directory)?,
+            &Asked {
+                agents: &settings.agents,
+                share: settings.share(),
+                yes: *yes,
+            },
             lookup,
         ),
         Command::Tui => tui::run_project(&directory, lookup),
