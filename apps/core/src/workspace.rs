@@ -413,6 +413,10 @@ pub enum Misplaced {
     /// It is inside a `.mindflayer`, a workspace's own folder, which no
     /// agent reads and whose shelf and cache gathering replaces.
     InsideWorkspace,
+    /// It is inside a `.git`, a repository's own folder, which no agent
+    /// reads and git owns: a copy there would sit among its refs and hooks,
+    /// under a name git may mean to use.
+    InsideGit,
     /// The kind is not installed into a project as a folder an artifact:
     /// rules, which D-03 gives a block of `AGENTS.md`, for M2 to say where.
     NotInstalled,
@@ -428,6 +432,9 @@ impl Misplaced {
             ),
             Misplaced::InsideWorkspace => format!(
                 "it is inside {FLAYER_DIR}, which holds a workspace's own files and no agent reads"
+            ),
+            Misplaced::InsideGit => format!(
+                "it is inside {GIT_DIR}, which holds a repository's own files and no agent reads"
             ),
             Misplaced::NotInstalled => {
                 format!("{kind}s are not installed into a project as folders yet")
@@ -2265,9 +2272,13 @@ fn starts_in(directory: &Path, folder: &str) -> bool {
 /// `.mind`, which no agent reads and a local project keeps out of git, nor
 /// in a `.mindflayer`, which no agent reads either, and whose shelf and
 /// cache gathering replaces and deletes by names of its own: a workspace at
-/// the project's root keeps both there. Only a kind installed as a folder
-/// an artifact has targets at all; a rule reaches agents through
-/// `AGENTS.md` (D-03), which M2 puts in the target table.
+/// the project's root keeps both there. Nor in a `.git`, the project's or
+/// that of a repository nested in it, which no agent reads and git owns: a
+/// skill named `logs` or `worktrees` would be written where git keeps its
+/// own, and a shared project's settings would send it there in every clone.
+/// Only a kind installed as a folder an artifact has targets at all; a rule
+/// reaches agents through `AGENTS.md` (D-03), which M2 puts in the target
+/// table.
 ///
 /// What install refuses of any target, an agent's own folder and one a
 /// loaded workspace keeps as its own, it refuses of these too, when it
@@ -2282,11 +2293,20 @@ pub(crate) fn misplaced_target(kind: Kind, folder: &Path) -> Option<Misplaced> {
     if starts_in(folder, MIND_DIR) {
         return Some(Misplaced::InsideMind);
     }
-    paths::normalize(folder)
-        .components()
-        .any(|part| part.as_os_str().eq_ignore_ascii_case(FLAYER_DIR))
-        .then_some(Misplaced::InsideWorkspace)
+    let parts = paths::normalize(folder);
+    let named = |name: &str| {
+        parts
+            .components()
+            .any(|part| part.as_os_str().eq_ignore_ascii_case(name))
+    };
+    if named(FLAYER_DIR) {
+        return Some(Misplaced::InsideWorkspace);
+    }
+    named(GIT_DIR).then_some(Misplaced::InsideGit)
 }
+
+/// A repository's own folder, which no install may write in.
+const GIT_DIR: &str = ".git";
 
 /// Why `directory`, a route from a workspace's root, cannot hold the
 /// workspace's own `kind`s: it leads out of the workspace, or it overlaps

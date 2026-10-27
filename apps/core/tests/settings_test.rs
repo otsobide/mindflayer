@@ -252,6 +252,8 @@ fn a_target_outside_the_project_inside_mind_or_absolute_is_passed_over_and_said(
             absolute,
             ".",
             "nested/.mindflayer/skills",
+            ".git",
+            "vendor/lib/.GIT/skills",
         ],
     );
 
@@ -278,6 +280,8 @@ fn a_target_outside_the_project_inside_mind_or_absolute_is_passed_over_and_said(
             misplaced(absolute, Misplaced::Outside),
             misplaced(".", Misplaced::Outside),
             misplaced("nested/.mindflayer/skills", Misplaced::InsideWorkspace),
+            misplaced(".git", Misplaced::InsideGit),
+            misplaced("vendor/lib/.GIT/skills", Misplaced::InsideGit),
         ]
     );
     assert_eq!(
@@ -294,6 +298,13 @@ fn a_target_outside_the_project_inside_mind_or_absolute_is_passed_over_and_said(
             .contains("because it is inside .mind, which holds Mindflayer's own files"),
         "{}",
         said[1]
+    );
+    assert!(
+        said[5]
+            .to_string()
+            .contains("because it is inside .git, which holds a repository's own files"),
+        "{}",
+        said[5]
     );
 }
 
@@ -319,6 +330,7 @@ fn an_edit_sending_a_kind_where_no_install_may_go_is_refused_and_writes_nothing(
             Misplaced::Outside,
         ),
         (Kind::Skill, vec![".mind/skills"], Misplaced::InsideMind),
+        (Kind::Skill, vec![".git"], Misplaced::InsideGit),
         (
             Kind::Skill,
             vec![elsewhere.path().to_str().unwrap()],

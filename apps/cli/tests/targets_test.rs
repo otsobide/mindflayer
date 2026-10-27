@@ -207,6 +207,7 @@ fn a_target_outside_the_project_inside_mind_or_absolute_is_refused() {
     for (folder, because) in [
         ("../shared", "it is not inside the project"),
         (".mind/skills", "it is inside .mind"),
+        (".git", "it is inside .git"),
         (absolute.as_str(), "it is not inside the project"),
     ] {
         for yes in [false, true] {

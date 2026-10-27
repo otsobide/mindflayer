@@ -3246,7 +3246,9 @@ and from there, none of them knowing an override was read.
   project's and no other's; not in `.mind`, which no agent reads and a local
   project keeps out of git; not in a `.mindflayer`, which no agent reads
   either, and whose shelf and cache gathering replaces by names of its own,
-  which a workspace at the project's root keeps there; and only for a kind
+  which a workspace at the project's root keeps there; not in a `.git`,
+  which git owns, where a skill named `logs` would be written among its own
+  files, in every clone of a shared project; and only for a kind
   installed as a folder an artifact, so a rule, which reaches agents through
   `AGENTS.md` ([D-03](#d-03-rules-reach-every-agent-through-agentsmd)), has
   none until M2 says how the table carries it. What an install refuses of

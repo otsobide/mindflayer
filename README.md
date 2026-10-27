@@ -1263,8 +1263,9 @@ note: claude, codex and opencode read none of the folders collapse installs skil
 
 The settings then hold `"targets": {"skills": [".skills"]}`, and name as many
 folders as you give it, each relative to the project. A folder that leads out
-of the project, an absolute one, or one inside `.mind` is refused, and one
-written there by hand is said wherever the project is read and given no copy.
+of the project, an absolute one, or one inside `.mind` or `.git` is refused,
+and one written there by hand is said wherever the project is read and given
+no copy.
 Copies move as they do for [a change of agents](#changing-its-agents-or-how-it-shares):
 only Mindflayer's untouched ones, never over somebody's, and a dry run first.
 
