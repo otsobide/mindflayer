@@ -398,7 +398,7 @@ pub(crate) fn agents(agents: &[Agent]) -> String {
 }
 
 /// Agents as a sentence says them: `codex`, `codex and opencode`.
-fn spoken(agents: &[Agent]) -> String {
+pub(crate) fn spoken(agents: &[Agent]) -> String {
     match agents {
         [] => String::new(),
         [one] => one.name().to_owned(),

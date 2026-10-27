@@ -4,10 +4,13 @@
 //! Core builds and orders the report ([`Status`]); this only lays it out, as
 //! a table naming no more than its rows need to be told apart.
 
-use mindflayer_core::{Agent, FlayerWorkspace, Kind, MindProject, Status, StatusFailure};
+use mindflayer_core::{
+    Agent, FlayerWorkspace, Kind, MindProject, Status, StatusFailure, Unreached,
+};
 
 use super::consulted;
 use super::read::looked_in;
+use super::settings::spoken;
 use crate::render::{json, printable, table};
 use crate::{CliError, Failure, Lookup, Outcome};
 
@@ -28,9 +31,12 @@ pub(crate) fn status_of_workspace(workspace: &FlayerWorkspace, as_json: bool) ->
         ));
     }
     let (status, failures) = Status::of_workspace(workspace);
-    report(&status, said(&failures), Layout::across(as_json), || {
-        workspace.projects().0
-    })
+    report(
+        &status,
+        said(&status, &failures),
+        Layout::across(as_json),
+        || workspace.projects().0,
+    )
 }
 
 /// `flayer status -p`: one project the workspace links.
@@ -40,9 +46,12 @@ pub(crate) fn status_of_project(
     as_json: bool,
 ) -> Outcome {
     let (status, failures) = Status::of_project(&project, Some(workspace));
-    report(&status, said(&failures), Layout::one(as_json), || {
-        vec![project]
-    })
+    report(
+        &status,
+        said(&status, &failures),
+        Layout::one(as_json),
+        || vec![project],
+    )
 }
 
 /// `mind status`: the project at or above here, against the workspace `mind`
@@ -79,7 +88,7 @@ pub(crate) fn status_here(
     }
     let (status, failures) = Status::of_project(&project, None);
     let mut warnings: Vec<String> = unread.iter().cloned().collect();
-    warnings.extend(said(&failures));
+    warnings.extend(said(&status, &failures));
     let mut outcome = report(&status, warnings, Layout::one(as_json), || vec![project]);
     // Not when the workspace could not be read: the warning says why
     // nothing reads as installed, and that none links the project is not
@@ -127,9 +136,66 @@ impl Layout {
 }
 
 /// What a report could not read, each as a warning says it, without the
-/// prefix.
-fn said(failures: &[StatusFailure]) -> Vec<String> {
-    failures.iter().map(ToString::to_string).collect()
+/// prefix, and then each kind a project installs only where some of its
+/// agents do not read.
+///
+/// A warning, and a non-zero exit, though the project is read whole: what
+/// is installed there reaches those agents no more than if it had gone,
+/// which is what a report is asked to say. Pointing them at the folder, or
+/// `targets reset`, ends it.
+fn said(status: &Status, failures: &[StatusFailure]) -> Vec<String> {
+    let mut said: Vec<String> = failures.iter().map(ToString::to_string).collect();
+    for project in &status.projects {
+        let name = project
+            .name
+            .as_deref()
+            .or(project.entry.as_deref())
+            .unwrap_or("?");
+        said.extend(
+            project
+                .unreached
+                .iter()
+                .map(|unreached| unread(&printable(name), unreached, false)),
+        );
+    }
+    said
+}
+
+/// What is said of `unreached`, a kind `project` installs only in folders
+/// some of its agents do not read: by `status`, of the project as it is, and
+/// by a change of its settings, of the project as the change would leave it
+/// (`would`) or has left it.
+pub(crate) fn unread(project: &str, unreached: &Unreached, would: bool) -> String {
+    let kind = unreached.kind;
+    let targets: Vec<String> = unreached
+        .targets
+        .iter()
+        .map(|target| printable(target))
+        .collect();
+    let targets = targets.join(", ");
+    let readers = spoken(&unreached.agents);
+    let one = unreached.agents.len() == 1;
+    if would {
+        let tail = if one {
+            "it would not see"
+        } else {
+            "none of them would see"
+        };
+        format!(
+            "{readers} would read none of the folders {project} would install {kind}s in \
+             ({targets}), so {tail} what is installed there until pointed at one"
+        )
+    } else {
+        let (reads, tail) = if one {
+            ("reads", "it does not see")
+        } else {
+            ("read", "none of them sees")
+        };
+        format!(
+            "{readers} {reads} none of the folders {project} installs {kind}s in ({targets}), \
+             so {tail} what is installed there until pointed at one"
+        )
+    }
 }
 
 /// The report laid out, with what could not be read (`warnings`) said: on

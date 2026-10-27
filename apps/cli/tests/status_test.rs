@@ -500,3 +500,87 @@ fn a_workspace_with_nothing_linked_is_an_empty_report_in_json() {
     assert!(warnings.is_empty());
     assert!(outcome.ok);
 }
+
+/// A workspace linking `collapse`, a project naming every agent whose
+/// settings, written by hand, install skills in `folders`, with `deploy`
+/// installed there.
+fn installing_in(folders: &str) -> (TempDir, PathBuf) {
+    let dir = TempDir::new().unwrap();
+    flayer(dir.path(), &["init"]).unwrap();
+    let root = dir.path().join("collapse");
+    fs::create_dir(&root).unwrap();
+    new_project(&root);
+    let path = root.join(MIND_DIR).join(SETTINGS_FILE);
+    let text = fs::read_to_string(&path).unwrap().replacen(
+        "{\n",
+        &format!("{{\n  \"targets\": {{\"skills\": [{folders}]}},\n"),
+        1,
+    );
+    fs::write(&path, text).unwrap();
+    flayer(dir.path(), &["link", "collapse"]).unwrap();
+    flayer(dir.path(), &["add", "skill", "deploy", "Ship it"]).unwrap();
+    flayer(dir.path(), &["install", "-p", "collapse", "deploy"]).unwrap();
+    (dir, root)
+}
+
+#[test]
+fn status_warns_of_a_kind_installed_where_none_of_the_projects_agents_reads() {
+    let (dir, root) = installing_in("\".skills\"");
+    let unread = "claude, codex and opencode read none of the folders collapse installs skills \
+                  in (.skills), so none of them sees what is installed there until pointed at \
+                  one";
+
+    let here = mind(&root, &["status"]).unwrap();
+    let across = flayer(dir.path(), &["status"]).unwrap();
+    let json = flayer(dir.path(), &["status", "--json"]).unwrap();
+
+    assert_eq!(here.stdout, "deploy  installed  -  workspace\n");
+    for outcome in [&here, &across] {
+        assert_eq!(outcome.stderr, [format!("warning: {unread}")]);
+        assert!(!outcome.ok);
+    }
+    let (report, warnings): (Report, _) = enveloped(&json);
+    assert_eq!(warnings, [unread]);
+    assert_eq!(
+        report.projects[0].unreached,
+        [Unreached {
+            kind: String::from("skill"),
+            targets: vec![String::from(".skills")],
+            agents: vec![
+                String::from("claude"),
+                String::from("codex"),
+                String::from("opencode")
+            ],
+        }]
+    );
+    assert!(!json.ok);
+}
+
+#[test]
+fn status_says_a_target_no_install_may_use_and_the_one_agent_its_others_miss() {
+    let (_dir, root) = installing_in("\".claude/skills\", \"../shared\"");
+    let path = root.join(MIND_DIR).join(SETTINGS_FILE);
+
+    let status = mind(&root, &["status"]).unwrap();
+
+    assert_eq!(
+        status.stdout,
+        "deploy  installed  claude,opencode  workspace\n"
+    );
+    assert_eq!(
+        status.stderr,
+        [
+            format!(
+                "warning: {}: ../shared is no folder to install skills in, because it is not \
+                 inside the project, so nothing is installed there",
+                path.display()
+            ),
+            String::from(
+                "warning: codex reads none of the folders collapse installs skills in \
+                 (.claude/skills), so it does not see what is installed there until pointed at \
+                 one"
+            ),
+        ]
+    );
+    assert!(!status.ok);
+}
