@@ -327,10 +327,12 @@ mind link / mind unlink    # this project, into or out of the workspace above
 mind load / mind unload <path>...
                            # another workspace's skills and rules, into the
                            # one above
-mind install <NAME> [--from ORIGIN]
+mind install <NAME> [--from ORIGIN] [--force]
                            # put a skill or a rule in: the workspace's own, a
-                           # loaded workspace's, or the shelf's
-mind uninstall <NAME>      # take one Mindflayer installed back out
+                           # loaded workspace's, or the shelf's; --force
+                           # writes over a copy changed since it was installed
+mind uninstall <NAME> [--force]
+                           # take one Mindflayer installed back out
 mind agents [add|remove] <AGENT>... [--yes]
                            # which agents work here, carrying what is
                            # installed along; without --yes, say what would
@@ -360,8 +362,8 @@ flayer list|show|validate [-p PROJECT] ...
                            # validate checks the shelf too
 flayer status [-p PROJECT] [--json]
                            # what every project holds, or one: installed,
-                           # partial, foreign or authored, for which agents,
-                           # and from where
+                           # partial, edited, foreign or authored, for which
+                           # agents, and from where
 flayer scan [DIR...] [--depth N] [--json]
                            # the repositories under it, or under each DIR,
                            # and which are linked
@@ -376,9 +378,9 @@ flayer gather git <URL>    # collect skills from a repository onto the shelf
 flayer gather list         # what is on the shelf or loaded, and where from
 flayer install             # a screen for putting skills and rules into its
                            # projects
-flayer install -p PROJECT <NAME> [--from ORIGIN]
+flayer install -p PROJECT <NAME> [--from ORIGIN] [--force]
                            # one, without the screen
-flayer uninstall -p PROJECT <NAME>
+flayer uninstall -p PROJECT <NAME> [--force]
 flayer agents|share|targets -p PROJECT ...
                            # mind's agents, share and targets, for one of its
                            # projects
@@ -815,6 +817,14 @@ never read two different skills of one name. So is a rule whose section in
 `AGENTS.md` Mindflayer did not write there: another workspace linking the
 project did, or a hand that copied a marker.
 
+What Mindflayer installed and somebody changed since is held the same way:
+shown ticked and marked `(changed since it was installed)`, and neither
+written over nor deleted from the screen, since the change is somebody's
+work too. The ledger keeps a hash of what each install wrote, which is how
+it tells: a copy edited by hand or with `mind edit`, a file added to it, or a
+rule's section of `AGENTS.md` rewritten. Only `--force` on [the command
+line](#without-the-screen) writes over it or takes it out.
+
 Two shelves can offer `commit-style`, but a project has one directory of that
 name, so ticking one unticks the other rather than letting both apply and the
 second win quietly. A skill and a rule of one name are two things, and keep a
@@ -840,6 +850,22 @@ removed, and says so. `--from` takes `workspace`, a shelf source's URL, or a
 loaded workspace's path or name, and is only needed when two places offer the
 same name: which of the two lands in the project's one folder of that name is
 not something to guess.
+
+A copy changed since it was installed is left alone too, every other copy
+with it, until `--force` says to write over it or take it out:
+
+```
+$ echo "Keep the subject under 50 characters." >> .agents/skills/commit-style/SKILL.md
+$ mind install commit-style
+warning: commit-style in collapse was changed since it was installed, at .agents/skills/commit-style, so it was left alone; --force writes over it
+$ mind uninstall commit-style
+warning: commit-style in collapse was changed since it was installed, at .agents/skills/commit-style, so it was left alone; --force takes it out
+$ mind install commit-style --force
+updated commit-style in collapse, from workspace
+```
+
+Forcing reaches only what Mindflayer installed: somebody's skill that it did
+not put there stays out of reach whatever is asked.
 
 A rule's line says it is one, since a route reads like a path. One about some
 files only reaches Claude alone, and the install says so, as
@@ -949,12 +975,13 @@ tanukeys  commit-style  installed  -                      load:../src/mindflayer
 hint: tanukeys is marked by a mind.toml, which `mind migrate` moves to a settings.toml
 ```
 
-Each artifact is in one of four states:
+Each artifact is in one of five states:
 
 | State | Means |
 |---|---|
 | `installed` | Mindflayer put every copy there, and every one it put there is still there. |
 | `partial` | a copy it put there is gone, deleted by hand or by `git clean -X`, or no longer reads; installing it again puts every copy back. Here Claude's copy of `code-review` was deleted. |
+| `edited` | a copy it put there holds something else now, edited by hand or with `mind edit`, or renamed; still Mindflayer's install, but no install writes over it and no uninstall takes it out without `--force`. |
 | `foreign` | somebody else's, in a folder an agent reads; Mindflayer never overwrites or deletes it. Here `notes`, kept in `.claude/skills` by hand. |
 | `authored` | the project's own, in a folder it authors in, such as `skills/`. |
 
@@ -1613,16 +1640,34 @@ What `flayer install` put in an agent's folder is not changed from the
 project: `edit`, `rename` and `remove` refuse a skill found only where its
 agents read, which `mind uninstall` takes out. Where a copy sits in a folder
 the project writes in too (one whose `--skills` is an agent's folder, or a
-project an older Mindflayer made, whose one folder takes the copy), changing
-it makes it yours. Removing it, renaming it or editing it drops the
-workspace's record that Mindflayer installed it, so the install screen shows
-it as somebody's and never overwrites or deletes it, and a skill you write
-later under the same name does not inherit a record that was about something
-else. The record dropped is the one held by the workspace the command works
-in: `flayer`'s, wherever the project sits, or for `mind` the one named or
-activated, or else the workspace above the project, or else the one in your
-home. Another workspace that links the same project keeps its own (an
-[open question](docs/architecture.md#open-questions)).
+project an older Mindflayer made, whose one folder takes the copy), the
+change reaches it. Edited or renamed, it stays Mindflayer's install, and
+[`status`](#what-each-project-has) says it is edited: no install writes over
+it and no uninstall takes it out unless forced. Removed, it is uninstalled,
+so a skill you write later under the same name does not inherit a record
+that was about something else. In `app`, made with `mind init --skills
+.claude/skills` and linked:
+
+```
+$ mind install commit-style
+installed commit-style into app, from workspace
+$ mind rename commit-style commits
+renamed skill commit-style to commits at /home/you/Projects/app/.claude/skills/commits
+  it was installed by `flayer install`, and stays so under its new name; renamed, it is left alone by `flayer install` and `flayer uninstall` unless they are forced
+$ mind status
+commit-style  installed  codex,opencode   workspace
+commits       edited     claude,opencode  workspace
+$ mind remove commits --yes
+removed skill commits from /home/you/Projects/app/.claude/skills/commits
+  it had been installed, and is uninstalled with it; `flayer install` can put it back
+```
+
+The copy in `.agents/skills`, which the rename did not reach, is still the
+install as it was. The record changed is the one held by the workspace the
+command works in: `flayer`'s, wherever the project sits, or for `mind` the
+one named or activated, or else the workspace above the project, or else the
+one in your home. Another workspace that links the same project keeps its
+own (an [open question](docs/architecture.md#open-questions)).
 
 ## Upgrading
 
