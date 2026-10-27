@@ -852,10 +852,12 @@ agent's folder the project does not author in. A name the project authors is
 one entry whose first copy is its own, and a change reaches that copy alone;
 one found only in an agent's folder is refused as such
 (`LifecycleError::NotAuthored`) rather than reported missing, since a listing
-has just shown it. Installing writes a copy in each target and none in the
-authored folder, so what a project authors and what it was installed are
-apart: a change to the first drops no record of the second ([A record must
-not outlive the copy it is
+has just shown it. Installing writes a copy in each target, and in the
+authored folder only when that is one of them, so what a project authors and
+what it was installed are apart: a change to the first drops no record of the
+second. Settings that author in a target, `"skills": ".claude/skills"`, put
+an installed copy where a change reaches it, and that change drops the
+record of that copy alone ([A record must not outlive the copy it is
 about](#a-record-must-not-outlive-the-copy-it-is-about)).
 
 ### Why the markers are TOML written from a template
@@ -1710,7 +1712,11 @@ How an install uses it:
   record, then the entries, so no copy shows in `git status` on its way out.
   A block that cannot be edited then is a `warning:` beside what was done
   (`Removed::Removed`'s `still_excluded`), not a reason to undo it: the
-  copies are gone, and only a line naming their empty place is left.
+  copies are gone, and only a line naming their empty place is left. A
+  change from the project that reaches an installed copy, in a folder it
+  authors in that is also a target, takes that copy's entry out the same way
+  ([A record must not outlive the copy it is
+  about](#a-record-must-not-outlive-the-copy-it-is-about)).
 - **Outside git, a note.** A project outside a git work tree gets its copies
   and a `note:` saying nothing keeps them out of git
   (`Excluded::warning`), not a `warning:`: nothing went wrong, and a project
@@ -3030,6 +3036,21 @@ something else. In a project a `mind.toml` marks, the folder it authors in is
 the one it was installed into, so a change there reaches the copy and drops
 its record as before. A record naming no target, which no build has written,
 is dropped by name as records were.
+
+And only that copy's part of the record (`Ledger::uninstalled_copy`), in one
+transaction: settings can make the folder a project authors in one of its
+targets, `"skills": ".claude/skills"`, and a change there reaches the copy an
+install put there and no other. The copy in `.agents/skills` is still what
+was installed, so its target stays recorded, for `flayer install` to update
+and `flayer uninstall` to remove; the installation goes with its last copy.
+Dropping it whole would leave that copy Foreign for good, a skill Codex and
+OpenCode go on loading that nothing of Mindflayer's can change again. In a
+local project the place the change reached also leaves the exclude block,
+after the record, as an uninstall takes its entries out after its copies:
+what is there now, or is written there next, is its author's, and a line
+left behind would hide it from `git status`. A block that cannot be edited
+is reported beside the change as a record that cannot be dropped is
+(`InstallError::StillExcluded`).
 
 Core applies that rule inside each change. Dropping the record in the CLI
 after the change, as it once did, put a rule outside core, and

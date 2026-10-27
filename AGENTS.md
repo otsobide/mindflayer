@@ -229,9 +229,10 @@ These are easy to break from a single file without noticing.
   project authors (`Catalog::discover_authored`), so it never reaches one.
   Core's lifecycle changes
   (`lifecycle::add`, `finish_edit`, `rename` and `remove`) drop any record
-  they would leave behind, only one naming the copy the change reached (a v3
-  project's authored folder holds no installed copy), and return what they
-  did (`lifecycle::Record`, and the `scrub` that opening the ledger ran),
+  they would leave behind, only that of the copy the change reached
+  (`Ledger::uninstalled_copy`: a v3 project whose authored folder is also a
+  target keeps the record of its other copies, and a local one stops
+  excluding that copy's place), and return what they did (`lifecycle::Record`, and the `scrub` that opening the ledger ran),
   which the CLI only renders.
   `install::disown` is private to core, so no front end drops a record on its
   own. A front end adds through `lifecycle::add`, never `create` or
