@@ -28,6 +28,15 @@
 //! block that is not exactly one well-formed one is refused, never repaired,
 //! as in `AGENTS.md`: the markers are read by the same search
 //! (`agents_md::locate`).
+//!
+//! [`reach`] decides how Claude gets the block, from the predicate, the
+//! project's settings and whether the block was written: natively, through
+//! the import, or not at all, when Claude's own rules folder is to hold
+//! every rule instead ([`Reach::mode`], [`crate::claude_rules`]). Never both
+//! a block Claude reads and a rule file for the same rule, so Claude reads
+//! each rule once. [`render`] adds the import where the reach says, and
+//! takes it out everywhere else. Which rules a project is given, and when
+//! to render, are the caller's (#45), as for the block itself.
 
 use std::fs;
 use std::io;
@@ -41,7 +50,7 @@ use crate::claude_rules::{self, Mode};
 use crate::exclude;
 use crate::lines::{self, Line};
 use crate::settings::Share;
-use crate::workspace::MindProject;
+use crate::workspace::{replace_bytes_unresolved, MindProject};
 
 /// The file Claude reads as a folder's instructions, and its user memory
 /// file's name in its own folder.
@@ -80,8 +89,8 @@ const OWN: [(&[&str], &str); 2] = [
 /// user's home finds it as that home's `.claude/CLAUDE.md`: Claude reads it
 /// for every project and goes on reading `AGENTS.md` beside it (verified).
 /// Told by the file it is, both resolved, so a spelling through a link is
-/// still the memory file. No folder in `homes` leaves nothing out, as a
-/// test hands over, which reads such a file as one more `CLAUDE.md`.
+/// still the memory file. With no Claude folder in `homes`, as a test hands
+/// over, nothing is left out, and such a file counts like any other.
 ///
 /// Folders above the git root count too (verified: a `CLAUDE.md` in the
 /// folder a person keeps their repositories in stops the read), and so does
@@ -157,13 +166,14 @@ pub enum Reach {
     /// Claude reads the block as one of its own files, the project's
     /// `CLAUDE.md`, `.claude/CLAUDE.md` or `CLAUDE.local.md` here, which is
     /// its `AGENTS.md`, one file through a link, as some teams keep the two.
-    /// The block is written through the link ([`crate::agents_md::render`]),
-    /// so no import is: one would bring the file into itself, between the
-    /// markers the block already holds.
+    /// The block is in that one file, whichever name is the link
+    /// ([`crate::agents_md::render`] writes through one), so no import goes
+    /// in: it would bring the file into itself, between the markers the
+    /// block already holds.
     Same(PathBuf),
     /// Claude reads the block through the import in this file, the
-    /// project's own `CLAUDE.md` or `.claude/CLAUDE.md`, there already or to
-    /// be added.
+    /// project's own `CLAUDE.md` or `.claude/CLAUDE.md`, there already or for
+    /// [`render`] to add.
     Import(PathBuf),
     /// Claude reads no block, and is to have every rule from its own rules
     /// folder ([`Mode::Fallback`]), for this reason.
@@ -258,9 +268,10 @@ pub enum Fallback {
 ///   followed to write, as its import would then mean whatever the link
 ///   leads to.
 ///
-/// Reads, and writes nothing. A `CLAUDE.md` of the project's own that holds
-/// a malformed block is refused, as writing the import into it would be,
-/// since what Claude reads there cannot be told.
+/// Reads, and writes nothing: [`render`] carries it out. A `CLAUDE.md` of
+/// the project's own that holds a malformed block is refused, as writing
+/// the import into it would be, since what Claude reads there cannot be
+/// told.
 pub fn reach(
     project: &MindProject,
     homes: &AgentHomes,
@@ -269,25 +280,60 @@ pub fn reach(
     if !block_written {
         return Ok(Reach::Fallback(Fallback::NoBlock));
     }
-    let root = project.root();
-    let stopping = stopping(root, homes)?;
-    let Some(nearest) = stopping.first() else {
+    decide(project, &Survey::of(project.root(), homes)?)
+}
+
+/// What [`reach`] and [`render`] look at in a project and above it.
+struct Survey {
+    root: PathBuf,
+    /// The root resolved.
+    real: PathBuf,
+    /// Every file that keeps Claude from reading `AGENTS.md` there.
+    stopping: Vec<PathBuf>,
+    /// The project's `AGENTS.md` resolved, when it is there.
+    agents: Option<PathBuf>,
+}
+
+impl Survey {
+    fn of(root: &Path, homes: &AgentHomes) -> Result<Self, ClaudeMdError> {
+        Ok(Survey {
+            root: root.to_path_buf(),
+            real: resolved(root)?,
+            stopping: stopping(root, homes)?,
+            agents: fs::canonicalize(root.join(agents_md::FILE)).ok(),
+        })
+    }
+
+    /// The project's file at `name`, as the project spells it, while it is
+    /// one that keeps Claude from reading `AGENTS.md`: never the user memory
+    /// file, which a project at the user's home holds as `.claude/CLAUDE.md`.
+    fn own(&self, name: &[&str]) -> Option<PathBuf> {
+        self.stopping
+            .contains(&joined(&self.real, name))
+            .then(|| joined(&self.root, name))
+    }
+
+    /// Whether `file` is the project's `AGENTS.md`, through a link one way or
+    /// the other.
+    fn is_agents_md(&self, file: &Path) -> bool {
+        self.agents.is_some() && fs::canonicalize(file).ok() == self.agents
+    }
+
+    /// Whether the project's `file` at `name` is a file in its place, no
+    /// link leading anywhere on the way to it.
+    fn in_place(&self, file: &Path, name: &[&str]) -> bool {
+        fs::canonicalize(file).is_ok_and(|target| target == joined(&self.real, name))
+    }
+}
+
+/// [`reach`] for a written block, from what `survey` found.
+fn decide(project: &MindProject, survey: &Survey) -> Result<Reach, ClaudeMdError> {
+    let Some(nearest) = survey.stopping.first() else {
         return Ok(Reach::Native);
     };
-    let real = resolved(root)?;
-    // The project's file at `name` while it is one that keeps Claude from
-    // reading `AGENTS.md`, as the project spells it: never the user memory
-    // file, which a project at the user's home holds as `.claude/CLAUDE.md`.
-    let own = |name: &[&str]| {
-        stopping
-            .contains(&joined(&real, name))
-            .then(|| joined(root, name))
-    };
-
-    let agents = fs::canonicalize(root.join(agents_md::FILE)).ok();
     for name in NAMES {
-        if let Some(file) = own(name) {
-            if agents.is_some() && fs::canonicalize(&file).ok() == agents {
+        if let Some(file) = survey.own(name) {
+            if survey.is_agents_md(&file) {
                 return Ok(Reach::Same(file));
             }
         }
@@ -296,10 +342,10 @@ pub fn reach(
     let mut chosen = None;
     let mut refused = None;
     for (name, import) in OWN {
-        let Some(file) = own(name) else {
+        let Some(file) = survey.own(name) else {
             continue;
         };
-        let edit = edit(project, &real, &file, name)?;
+        let edit = edit(project, &survey.real, &file, name)?;
         // A link's import would mean whatever the link leads to, so only a
         // file in its place is asked whether it imports.
         let looked = !matches!(edit, Edit::Refused(Fallback::Linked { .. }));
@@ -323,12 +369,175 @@ pub fn reach(
     }
     // No file of the project's own: what is in the way is a person's own
     // `CLAUDE.local.md`, or something above the project.
-    let local = joined(&real, &[CLAUDE_LOCAL_MD]);
+    let local = joined(&survey.real, &[CLAUDE_LOCAL_MD]);
     Ok(Reach::Fallback(if *nearest == local {
-        Fallback::LocalOnly(root.join(CLAUDE_LOCAL_MD))
+        Fallback::LocalOnly(survey.root.join(CLAUDE_LOCAL_MD))
     } else {
         Fallback::Above(nearest.clone())
     }))
+}
+
+/// Carry out how Claude is to reach `project`'s block, which [`reach`]
+/// decides from `block_written` and `homes`: the import in the file it
+/// names, and in none of the project's other `CLAUDE.md` files.
+///
+/// Only the project's own `CLAUDE.md` and `.claude/CLAUDE.md` are touched,
+/// each only while it is there: never made, as no `CLAUDE.local.md` is
+/// ever made, since a `CLAUDE.md` Mindflayer made would itself keep Claude
+/// from reading `AGENTS.md` natively. Never one above the project either,
+/// which the reach says instead ([`Fallback::Above`]): Claude reads it in
+/// every project below, and it is nobody's to edit for one of them. Never a
+/// link, the user memory file, or the project's `AGENTS.md` itself.
+///
+/// The import is added once, and changed nowhere it already is; with no
+/// block, or a reach that needs no import, it is taken out of whichever file
+/// holds it, so it goes with the last rule, and the file is left exactly as
+/// it was before. One that may not be edited any more, tracked by git in a
+/// local project without `edit_tracked`, keeps it, and that is said
+/// ([`Warning`]), rather than edited behind the setting that keeps
+/// Mindflayer out of it. A file whose text a change leaves as it was is not
+/// written at all.
+///
+/// A file is replaced whole through a temporary and a rename
+/// (`replace_bytes_unresolved`), never through a link. Every file is read
+/// first, and a malformed block in any of them refuses the render with
+/// nothing written.
+///
+/// Takes no lock: the caller holds the workspace's, as one calling
+/// [`crate::agents_md::render`] does, and the lock is not re-entrant.
+pub fn render(
+    project: &MindProject,
+    homes: &AgentHomes,
+    block_written: bool,
+) -> Result<Rendered, ClaudeMdError> {
+    let survey = Survey::of(project.root(), homes)?;
+    let reach = if block_written {
+        decide(project, &survey)?
+    } else {
+        Reach::Fallback(Fallback::NoBlock)
+    };
+
+    let mut found = Vec::new();
+    for (name, import) in OWN {
+        let Some(file) = survey.own(name) else {
+            continue;
+        };
+        if !survey.in_place(&file, name) || survey.is_agents_md(&file) {
+            continue;
+        }
+        let text = read(&file)?;
+        found.push((name, import, file, text));
+    }
+
+    let mut files = Vec::new();
+    let mut warnings = Vec::new();
+    for (name, import, file, mut text) in found {
+        let wanted = reach == Reach::Import(file.clone());
+        let written = if wanted {
+            if text.imports(import) {
+                Written::Unchanged
+            } else {
+                let added = !text.has_block();
+                text.set_import(import);
+                write(&file, &text)?;
+                if added {
+                    Written::Added
+                } else {
+                    Written::Changed
+                }
+            }
+        } else if !text.has_block() {
+            Written::Unchanged
+        } else {
+            match edit(project, &survey.real, &file, name)? {
+                Edit::Allowed => {
+                    text.drop_import();
+                    write(&file, &text)?;
+                    Written::Removed
+                }
+                Edit::Refused(Fallback::Tracked(file)) => {
+                    warnings.push(Warning::Tracked(file));
+                    Written::Unchanged
+                }
+                Edit::Refused(Fallback::Untold { file, detail }) => {
+                    warnings.push(Warning::Untold { file, detail });
+                    Written::Unchanged
+                }
+                // A link is never read here (`Survey::in_place`), and nothing
+                // else is refused.
+                Edit::Refused(_) => Written::Unchanged,
+            }
+        };
+        files.push(ImportFile {
+            path: file,
+            written,
+        });
+    }
+    Ok(Rendered {
+        reach,
+        files,
+        warnings,
+    })
+}
+
+/// What [`render`] did.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Rendered {
+    /// How Claude reaches the block now: what Claude's rule files are to be
+    /// rendered for ([`Reach::mode`]), and why, when it reads no block.
+    pub reach: Reach,
+    /// The project's own `CLAUDE.md` and `.claude/CLAUDE.md`, each that is
+    /// there and could hold the import, in that order, and what the render
+    /// did to it.
+    pub files: Vec<ImportFile>,
+    /// What there is to say about an import left in place.
+    pub warnings: Vec<Warning>,
+}
+
+/// One of the project's own `CLAUDE.md` files, and what [`render`] did to it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ImportFile {
+    pub path: PathBuf,
+    pub written: Written,
+}
+
+/// What [`render`] did to one file.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Written {
+    /// It held no block, and now holds the import, at its top.
+    Added,
+    /// It held a block that was not the import, and now holds the import.
+    Changed,
+    /// It held a block no longer wanted, taken out with the empty line
+    /// below it.
+    Removed,
+    /// It was left as it was.
+    Unchanged,
+}
+
+/// Something [`render`] has to say, which kept nothing from being written.
+#[derive(Debug, Clone, PartialEq, Eq, Error)]
+pub enum Warning {
+    /// The import is in a file git tracks, in a local project without
+    /// `edit_tracked`, where it is no longer wanted, and is left there.
+    #[error(
+        "{0}: holds Mindflayer's import of AGENTS.md, no longer wanted, and is left as it is: \
+         git tracks it, and the project is local without edit_tracked"
+    )]
+    Tracked(PathBuf),
+    /// The import is in a file of which whether git tracks it cannot be
+    /// told, where it is no longer wanted, and is left there.
+    #[error(
+        "{file}: holds Mindflayer's import of AGENTS.md, no longer wanted, and is left as it \
+         is: whether git tracks it cannot be told ({detail})"
+    )]
+    Untold { file: PathBuf, detail: String },
+}
+
+/// Write `text` over the file at `file`, which is there.
+fn write(file: &Path, text: &ClaudeMd) -> Result<(), ClaudeMdError> {
+    replace_bytes_unresolved(file, &text.to_bytes())
+        .map_err(|(path, source)| ClaudeMdError::Write { path, source })
 }
 
 /// Whether the project's own `file`, at `name` from its root, may be edited
@@ -575,6 +784,12 @@ impl ClaudeMd {
 pub enum ClaudeMdError {
     #[error("{path}: cannot be read: {source}")]
     Read {
+        path: PathBuf,
+        #[source]
+        source: io::Error,
+    },
+    #[error("{path}: cannot be written: {source}")]
+    Write {
         path: PathBuf,
         #[source]
         source: io::Error,

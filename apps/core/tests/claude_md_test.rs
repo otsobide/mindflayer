@@ -9,9 +9,14 @@ mod common;
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use mindflayer_core::claude_md::{self, ClaudeMdError, Fallback, Reach};
+use mindflayer_core::agents_md;
+use mindflayer_core::claude_md::{
+    self, ClaudeMd, ClaudeMdError, Fallback, Reach, Warning, Written,
+};
 use mindflayer_core::claude_rules::Mode;
-use mindflayer_core::{Agent, AgentHomes, Directories, MindProject, Share};
+use mindflayer_core::{
+    Agent, AgentHomes, Artifact, Directories, FlayerWorkspace, MindProject, Share,
+};
 use tempfile::TempDir;
 
 /// No agent's own folder, as a front end hands over when a test pins them.
@@ -202,6 +207,10 @@ impl Fixture {
 
     fn reach(&self, block_written: bool) -> Reach {
         claude_md::reach(&self.project, &NO_HOMES, block_written).unwrap()
+    }
+
+    fn render(&self, block_written: bool) -> claude_md::Rendered {
+        claude_md::render(&self.project, &NO_HOMES, block_written).unwrap()
     }
 }
 
@@ -529,4 +538,317 @@ fn a_dot_claude_linked_out_of_the_project_is_never_imported_into() {
 /// `path` resolved, as the walk up from a project spells what it finds.
 fn resolved(path: &Path) -> PathBuf {
     fs::canonicalize(path).unwrap()
+}
+
+/// The line that imports `AGENTS.md` into the file at `name`.
+fn import_for(name: &str) -> &'static str {
+    match name {
+        "CLAUDE.md" => "@AGENTS.md",
+        ".claude/CLAUDE.md" => "@../AGENTS.md",
+        _ => unreachable!("no import goes in {name}"),
+    }
+}
+
+/// What the file at `name` holds before Mindflayer writes in it: the team's
+/// text and its name, so no two are alike, in CRLF for one of them.
+fn original(name: &str) -> String {
+    let text = format!("{TEAM}\nThis is {name}.\n");
+    if name == ".claude/CLAUDE.md" {
+        text.replace('\n', "\r\n")
+    } else {
+        text
+    }
+}
+
+#[test]
+fn each_combination_changes_only_the_file_the_reach_names_and_nothing_outside_its_markers() {
+    for present in combinations() {
+        for tracked in [false, true] {
+            let fixture = fixture(Share::Local);
+            for name in &present {
+                write(fixture.root(), name, &original(name));
+            }
+            if tracked {
+                fixture.track();
+            }
+            let context = format!("{present:?}, tracked: {tracked}");
+
+            let rendered = fixture.render(true);
+            let reach = expected(&fixture, &present, tracked);
+            assert_eq!(rendered.reach, reach, "{context}");
+            for name in &present {
+                let file = fixture.file(name);
+                let now = fs::read(&file).unwrap();
+                if reach == Reach::Import(file.clone()) {
+                    let mut text = ClaudeMd::parse(&now).unwrap();
+                    assert!(text.imports(import_for(name)), "{context}: {name}");
+                    text.drop_import();
+                    assert_eq!(text.to_bytes(), original(name).as_bytes(), "{context}");
+                } else {
+                    assert_eq!(now, original(name).as_bytes(), "{context}: {name}");
+                }
+            }
+            let written: Vec<(PathBuf, Written)> = rendered
+                .files
+                .iter()
+                .map(|file| (file.path.clone(), file.written))
+                .collect();
+            let own: Vec<(PathBuf, Written)> = ["CLAUDE.md", ".claude/CLAUDE.md"]
+                .into_iter()
+                .filter(|name| present.contains(name))
+                .map(|name| {
+                    let file = fixture.file(name);
+                    let added = reach == Reach::Import(file.clone());
+                    let written = if added {
+                        Written::Added
+                    } else {
+                        Written::Unchanged
+                    };
+                    (file, written)
+                })
+                .collect();
+            assert_eq!(written, own, "{context}");
+            assert!(rendered.warnings.is_empty(), "{context}");
+
+            // No block any more: the import goes, and every file is as it was.
+            let rendered = fixture.render(false);
+            assert_eq!(rendered.reach, Reach::Fallback(Fallback::NoBlock));
+            for name in &present {
+                let now = fs::read(fixture.file(name)).unwrap();
+                assert_eq!(now, original(name).as_bytes(), "{context}: {name}");
+            }
+        }
+    }
+}
+
+#[test]
+fn a_render_that_changes_nothing_writes_nothing() {
+    let fixture = fixture(Share::Shared);
+    write(fixture.root(), "CLAUDE.md", TEAM);
+    fixture.render(true);
+    let once = fs::read(fixture.file("CLAUDE.md")).unwrap();
+    let again = fixture.render(true);
+    assert_eq!(again.files[0].written, Written::Unchanged);
+    assert_eq!(fs::read(fixture.file("CLAUDE.md")).unwrap(), once);
+}
+
+#[test]
+fn a_dot_claude_md_imports_the_agents_md_in_the_folder_above_it() {
+    let fixture = fixture(Share::Shared);
+    write(fixture.root(), ".claude/CLAUDE.md", TEAM);
+    fixture.render(true);
+    assert_eq!(
+        fs::read_to_string(fixture.file(".claude/CLAUDE.md")).unwrap(),
+        format!("<!-- mindflayer:begin -->\n@../AGENTS.md\n<!-- mindflayer:end -->\n\n{TEAM}")
+    );
+}
+
+/// A workspace linking one project below it, with the team's `CLAUDE.md`,
+/// and a library of rules to render from.
+struct Rules {
+    _dir: TempDir,
+    workspace: FlayerWorkspace,
+    project: MindProject,
+    library: PathBuf,
+}
+
+impl Rules {
+    fn new() -> Self {
+        let dir = clean();
+        gix::init(dir.path()).unwrap();
+        let (mut workspace, _) = FlayerWorkspace::init(dir.path()).unwrap();
+        let root = folder(dir.path(), "app");
+        let (project, _) =
+            MindProject::init_settings(&root, &Agent::ALL, Share::Local, &Directories::default())
+                .unwrap();
+        workspace.link(&project).unwrap();
+        write(&root, "CLAUDE.md", TEAM);
+        Rules {
+            library: dir.path().join("library"),
+            _dir: dir,
+            workspace,
+            project,
+        }
+    }
+
+    fn rule(&self, route: &str) -> Artifact {
+        let file = write(&self.library, &format!("{route}.md"), "Be brief.\n");
+        Artifact::rule(&file, route.to_owned(), &self.library).unwrap()
+    }
+
+    /// The block rendered for `rules`, then the import as Claude is to
+    /// reach it, as a caller does once a rule is installed or uninstalled.
+    fn render(&self, rules: &[&Artifact]) -> claude_md::Rendered {
+        let block = agents_md::render(
+            &self.workspace,
+            &self.project,
+            rules.iter().copied(),
+            false,
+            &NO_HOMES,
+        )
+        .unwrap();
+        claude_md::render(&self.project, &NO_HOMES, !block.routes.is_empty()).unwrap()
+    }
+
+    fn claude_md(&self) -> String {
+        fs::read_to_string(self.project.root().join("CLAUDE.md")).unwrap()
+    }
+}
+
+#[test]
+fn the_import_is_added_once_however_many_rules_and_is_gone_after_the_last() {
+    let fixture = Rules::new();
+    let rules = [
+        fixture.rule("commit-style"),
+        fixture.rule("git/no-force-push"),
+        fixture.rule("review/tone"),
+    ];
+    for count in 1..=rules.len() {
+        let given: Vec<&Artifact> = rules[..count].iter().collect();
+        let rendered = fixture.render(&given);
+        assert_eq!(
+            rendered.reach,
+            Reach::Import(fixture.project.root().join("CLAUDE.md"))
+        );
+        let text = fixture.claude_md();
+        assert_eq!(text.matches("@AGENTS.md").count(), 1, "{count} rules");
+        assert_eq!(text.matches(agents_md::BEGIN).count(), 1, "{count} rules");
+        assert!(text.ends_with(TEAM));
+    }
+    // One rule uninstalled after another, the import staying till the last.
+    for count in (0..rules.len()).rev() {
+        let given: Vec<&Artifact> = rules[..count].iter().collect();
+        fixture.render(&given);
+        let imported = fixture.claude_md().contains("@AGENTS.md");
+        assert_eq!(imported, count > 0, "{count} rules left");
+    }
+    assert_eq!(fixture.claude_md(), TEAM);
+}
+
+#[test]
+fn nothing_above_the_project_is_edited_whatever_the_reach() {
+    let dir = clean();
+    // A stand-in for ~/Work above the git root, and the repository's own
+    // CLAUDE.md at its root, with the project nested below both.
+    let work = write(dir.path(), "Work/CLAUDE.md", TEAM);
+    let repo = folder(dir.path(), "Work/repo");
+    gix::init(&repo).unwrap();
+    let team = write(&repo, "CLAUDE.md", TEAM);
+    let app = folder(&repo, "packages/app");
+    let (project, _) =
+        MindProject::init_settings(&app, &Agent::ALL, Share::Shared, &Directories::default())
+            .unwrap();
+    for block_written in [true, false] {
+        let rendered = claude_md::render(&project, &NO_HOMES, block_written).unwrap();
+        assert!(rendered.files.is_empty());
+        assert_eq!(fs::read_to_string(&work).unwrap(), TEAM);
+        assert_eq!(fs::read_to_string(&team).unwrap(), TEAM);
+    }
+    assert_eq!(
+        claude_md::render(&project, &NO_HOMES, true).unwrap().reach,
+        Reach::Fallback(Fallback::Above(resolved(&team)))
+    );
+    assert!(!app.join("CLAUDE.md").exists());
+    assert!(!app.join("CLAUDE.local.md").exists());
+}
+
+#[test]
+fn no_claude_md_is_ever_made() {
+    let fixture = fixture(Share::Shared);
+    for block_written in [true, false] {
+        let rendered = fixture.render(block_written);
+        assert!(rendered.files.is_empty());
+    }
+    for name in NAMES {
+        assert!(!fixture.file(name).exists(), "{name}");
+    }
+
+    let fixture = self::fixture(Share::Shared);
+    write(fixture.root(), "CLAUDE.local.md", TEAM);
+    let rendered = fixture.render(true);
+    assert!(rendered.files.is_empty());
+    assert!(!fixture.file("CLAUDE.md").exists());
+    assert_eq!(
+        fs::read_to_string(fixture.file("CLAUDE.local.md")).unwrap(),
+        TEAM
+    );
+}
+
+#[test]
+fn an_import_no_longer_wanted_in_a_tracked_file_is_left_and_said() {
+    let mut fixture = fixture(Share::Shared);
+    write(fixture.root(), "CLAUDE.md", TEAM);
+    fixture.render(true);
+    let imported = fs::read(fixture.file("CLAUDE.md")).unwrap();
+    // Committed with the import in it, then the project turned local.
+    fixture.track();
+    fixture
+        .project
+        .change_settings(|settings| settings.share = Share::Local)
+        .unwrap();
+
+    // Claude still reads it there, so it is still how Claude reaches the block.
+    let rendered = fixture.render(true);
+    assert_eq!(rendered.reach, Reach::Import(fixture.file("CLAUDE.md")));
+    assert!(rendered.warnings.is_empty());
+
+    let rendered = fixture.render(false);
+    assert_eq!(
+        rendered.warnings,
+        [Warning::Tracked(fixture.file("CLAUDE.md"))]
+    );
+    assert_eq!(rendered.files[0].written, Written::Unchanged);
+    assert_eq!(fs::read(fixture.file("CLAUDE.md")).unwrap(), imported);
+}
+
+#[test]
+fn a_malformed_file_refuses_the_render_with_nothing_written() {
+    let fixture = fixture(Share::Shared);
+    write(fixture.root(), "CLAUDE.md", TEAM);
+    write(
+        fixture.root(),
+        ".claude/CLAUDE.md",
+        "<!-- mindflayer:end -->\n",
+    );
+    for block_written in [true, false] {
+        let error = claude_md::render(&fixture.project, &NO_HOMES, block_written).unwrap_err();
+        assert!(matches!(error, ClaudeMdError::Malformed { .. }), "{error}");
+        assert_eq!(fs::read_to_string(fixture.file("CLAUDE.md")).unwrap(), TEAM);
+    }
+}
+
+#[cfg(unix)]
+#[test]
+fn the_agents_md_itself_is_never_imported_into_and_an_import_beside_it_goes() {
+    let fixture = fixture(Share::Shared);
+    write(fixture.root(), "AGENTS.md", TEAM);
+    std::os::unix::fs::symlink("AGENTS.md", fixture.file("CLAUDE.md")).unwrap();
+    let imported =
+        format!("<!-- mindflayer:begin -->\n@../AGENTS.md\n<!-- mindflayer:end -->\n\n{TEAM}");
+    write(fixture.root(), ".claude/CLAUDE.md", &imported);
+
+    let rendered = fixture.render(true);
+    assert_eq!(rendered.reach, Reach::Same(fixture.file("CLAUDE.md")));
+    assert_eq!(fs::read_to_string(fixture.file("AGENTS.md")).unwrap(), TEAM);
+    assert_eq!(
+        fs::read_to_string(fixture.file(".claude/CLAUDE.md")).unwrap(),
+        TEAM
+    );
+    assert_eq!(rendered.files.len(), 1);
+    assert_eq!(rendered.files[0].written, Written::Removed);
+}
+
+#[cfg(unix)]
+#[test]
+fn a_link_is_never_written_through() {
+    let fixture = fixture(Share::Shared);
+    let imported =
+        format!("<!-- mindflayer:begin -->\n@AGENTS.md\n<!-- mindflayer:end -->\n\n{TEAM}");
+    let docs = write(fixture.root(), "docs/claude.md", &imported);
+    std::os::unix::fs::symlink("docs/claude.md", fixture.file("CLAUDE.md")).unwrap();
+    for block_written in [true, false] {
+        let rendered = fixture.render(block_written);
+        assert!(rendered.files.is_empty());
+        assert_eq!(fs::read_to_string(&docs).unwrap(), imported);
+    }
 }
