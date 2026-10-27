@@ -116,7 +116,7 @@ pub fn add(
         Some(template) => create_from(project, kind, name, description, template),
     }?;
     let mut scrub = Scrub::default();
-    let stale = disowned(workspace, project, kind, name, &mut scrub);
+    let stale = disowned(workspace, project, kind, name, artifact.path(), &mut scrub);
     Ok(Added {
         artifact,
         stale,
@@ -272,6 +272,9 @@ pub fn identify(project: &MindProject, file: &Path) -> Option<(Kind, String)> {
 pub struct Edit {
     kind: Kind,
     name: String,
+    /// The artifact, which is what a record names: a skill's directory, or
+    /// a rule's file.
+    path: PathBuf,
     file: PathBuf,
     before: Option<Vec<u8>>,
 }
@@ -303,6 +306,7 @@ pub fn start_edit(target: &Target) -> Edit {
     Edit {
         kind: target.kind,
         name: target.name.clone(),
+        path: target.path.clone(),
         before: fs::read(&file).ok(),
         file,
     }
@@ -322,7 +326,9 @@ pub fn finish_edit(
     let changed = fs::read(&edit.file).ok() != edit.before;
     let mut scrub = Scrub::default();
     let copy = if changed {
-        disowned(workspace, project, edit.kind, &edit.name, &mut scrub)
+        disowned(
+            workspace, project, edit.kind, &edit.name, &edit.path, &mut scrub,
+        )
     } else {
         Ok(Record::Untouched)
     };
@@ -388,7 +394,14 @@ pub fn remove(
         }
     }
     let mut scrub = Scrub::default();
-    let copy = disowned(workspace, project, target.kind, &target.name, &mut scrub);
+    let copy = disowned(
+        workspace,
+        project,
+        target.kind,
+        &target.name,
+        &target.path,
+        &mut scrub,
+    );
     Ok(Removed { copy, scrub })
 }
 
@@ -442,8 +455,22 @@ pub fn rename(
         Kind::Rule => rename_rule(project, target, &directory, to),
     }?;
     let mut scrub = Scrub::default();
-    let copy = disowned(workspace, project, target.kind, &target.name, &mut scrub);
-    let stale = disowned(workspace, project, target.kind, &renamed.name, &mut scrub);
+    let copy = disowned(
+        workspace,
+        project,
+        target.kind,
+        &target.name,
+        &target.path,
+        &mut scrub,
+    );
+    let stale = disowned(
+        workspace,
+        project,
+        target.kind,
+        &renamed.name,
+        &renamed.path,
+        &mut scrub,
+    );
     Ok(Renamed {
         target: renamed,
         copy,
@@ -658,19 +685,21 @@ fn holds(kind: Kind, path: &Path) -> bool {
     file_of(kind, path).is_file()
 }
 
-/// Drop the record `workspace` keeps of an install of `name` into `project`,
-/// adding what opening the ledger to do it scrubbed out of it to `scrub`.
+/// Drop the record `workspace` keeps of an install of `name` into `project`
+/// that names the copy at `at`, the one the change reached, adding what
+/// opening the ledger to do it scrubbed out of it to `scrub`.
 fn disowned(
     workspace: Option<&FlayerWorkspace>,
     project: &MindProject,
     kind: Kind,
     name: &str,
+    at: &Path,
     scrub: &mut Scrub,
 ) -> Result<Record, InstallError> {
     let Some(workspace) = workspace else {
         return Ok(Record::Untouched);
     };
-    let disowned = install::disown(workspace, project, kind, name)?;
+    let disowned = install::disown(workspace, project, kind, name, at)?;
     scrub.absorb(disowned.scrub);
     Ok(if disowned.dropped {
         Record::Dropped

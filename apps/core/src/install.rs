@@ -987,14 +987,21 @@ fn recorded_copy(project: &MindProject, name: &str, route: &str) -> Result<PathB
     Ok(project.root().join(path))
 }
 
-/// Drop the record that Mindflayer installed `name` into `project`, saying
-/// whether there was one.
+/// Drop the record that Mindflayer installed `name` into `project`, when it
+/// names a copy at `at`, saying whether there was one.
 ///
 /// For when what is in the project stops being what was installed: it was
 /// removed, renamed or edited by hand, or something new was written under a
 /// name an old record still claims. The record is what gives the install
 /// screen leave to overwrite and delete, so it must not outlive the copy it
 /// was about: whatever somebody writes there next would inherit it.
+///
+/// Only a record of a copy at `at`, the place the change reached: a project
+/// marked by its settings authors in a folder of its own, beside the copies
+/// installed for its agents, and a change there leaves those copies what was
+/// installed. Dropping their record by name would make them Foreign, never
+/// updated or removed again, over a change to something else. A record from
+/// before installations had targets names none, and is dropped as it was.
 ///
 /// Only the changes in [`crate::lifecycle`] call it, each when its change
 /// calls for it. Public, it would let a front end drop a record on a rule of
@@ -1016,6 +1023,7 @@ pub(crate) fn disown(
     project: &MindProject,
     kind: Kind,
     name: &str,
+    at: &Path,
 ) -> Result<Disowned, InstallError> {
     // Only a workspace that manages the project keeps records about it, and
     // one that has never installed anything has no ledger: this must not
@@ -1029,7 +1037,13 @@ pub(crate) fn disown(
     // trying the change again would find nothing to change.
     let (ledger, scrub) = workspace.ledger_to_write_waiting(Duration::MAX)?;
     let entry = project_entry(workspace, project);
-    let dropped = ledger.uninstalled(&entry, kind, name)?;
+    let at = route(project.root(), at);
+    let reached = ledger
+        .installation(&entry, kind, name)?
+        .is_some_and(|record| {
+            record.targets.is_empty() || record.targets.iter().any(|target| target.path == at)
+        });
+    let dropped = reached && ledger.uninstalled(&entry, kind, name)?;
     if dropped {
         let detail = format!(
             "{name} from {}, which no longer holds the copy that was installed",

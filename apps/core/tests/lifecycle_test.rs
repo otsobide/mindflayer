@@ -514,6 +514,70 @@ fn type_into(file: &Path) {
     fs::write(file, text).unwrap();
 }
 
+/// A workspace with its own `names`, and a project marked by its settings,
+/// naming every agent and authoring skills in `skills`, linked to it, with
+/// each of the workspace's installed for its agents.
+fn installed_for_agents(names: &[&str]) -> (TempDir, FlayerWorkspace, MindProject, Ledger) {
+    let dir = TempDir::new().unwrap();
+    let (mut workspace, _) = FlayerWorkspace::init(dir.path()).unwrap();
+    let root = dir.path().join("collapse");
+    fs::create_dir(&root).unwrap();
+    let directories = Directories::default().with(Kind::Skill, "skills");
+    let (project, _) =
+        MindProject::init_settings(&root, &Agent::ALL, Share::Shared, &directories).unwrap();
+    workspace.link(&project).unwrap();
+    for name in names {
+        create(&workspace.own(), Kind::Skill, name, "From the workspace").unwrap();
+    }
+    let ledger = workspace.ledger().unwrap();
+    for candidate in install::survey(&workspace, &ledger, &project, Kind::Skill).unwrap() {
+        install::install(&workspace, &ledger, &project, &candidate).unwrap();
+    }
+    (dir, workspace, project, ledger)
+}
+
+#[test]
+fn what_a_project_authors_beside_its_agents_copies_leaves_their_record_alone() {
+    let (dir, workspace, project, ledger) = installed_for_agents(&["deploy"]);
+    let installed = dir.path().join("collapse/.claude/skills/deploy");
+    assert!(installed.is_dir());
+
+    // Its own of the same name, in the folder it authors in.
+    let added = lifecycle::add(
+        Some(&workspace),
+        &project,
+        Kind::Skill,
+        "deploy",
+        "Our own",
+        None,
+    )
+    .unwrap();
+    assert_eq!(added.stale.unwrap(), Record::Untouched);
+    let edit = lifecycle::start_edit(&find(&project, "deploy").unwrap());
+    type_into(edit.file());
+    let edited = lifecycle::finish_edit(Some(&workspace), &project, edit);
+    assert_eq!(edited.copy.unwrap(), Record::Untouched);
+    let renamed = lifecycle::rename(
+        Some(&workspace),
+        &project,
+        &find(&project, "deploy").unwrap(),
+        "ship",
+    )
+    .unwrap();
+    assert_eq!(renamed.copy.unwrap(), Record::Untouched);
+    let removed =
+        lifecycle::remove(Some(&workspace), &project, &find(&project, "ship").unwrap()).unwrap();
+    assert_eq!(removed.copy.unwrap(), Record::Untouched);
+
+    // The copies installed for its agents are still Mindflayer's to manage.
+    assert_eq!(records(&ledger), ["deploy"]);
+    assert_eq!(
+        standing(&workspace, &ledger, &project, "deploy"),
+        Standing::Installed
+    );
+    assert!(installed.join("SKILL.md").is_file());
+}
+
 #[test]
 fn adding_where_an_installed_copy_was_deleted_by_hand_drops_its_record() {
     let (dir, workspace, project, ledger) = installed(&["deploy"]);
