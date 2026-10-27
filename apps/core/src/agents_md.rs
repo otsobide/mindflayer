@@ -820,7 +820,8 @@ pub(crate) struct Span {
 /// Where Mindflayer's block is among `lines`: `None` when they hold no
 /// marker, refused unless they hold exactly one well-formed block.
 ///
-/// One search for every markdown file Mindflayer keeps a block in, so a
+/// One search for every markdown file Mindflayer keeps a block in, this
+/// file and the `CLAUDE.md` that imports it ([`crate::claude_md`]), so a
 /// marker reads the same in each and one written wrong is refused alike.
 pub(crate) fn locate(lines: &[Line]) -> Result<Option<Span>, Malformed> {
     let mut begin = None;
@@ -956,6 +957,12 @@ pub enum Malformed {
          which are each a line of their own, as Mindflayer writes them"
     )]
     Miswritten { line: usize },
+    /// A rule's marker in a file whose block holds no rules: the import in
+    /// a `CLAUDE.md` ([`crate::claude_md`]).
+    #[error(
+        "line {line}: a rule's marker, where Mindflayer's block holds only its import of AGENTS.md"
+    )]
+    Ruled { line: usize },
 }
 
 /// Why a project's rules could not be rendered into its `AGENTS.md`.
