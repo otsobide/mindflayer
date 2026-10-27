@@ -18,7 +18,8 @@ use mindflayer_core::install::{
 };
 use mindflayer_core::ledger::{InstallRecord, Target};
 use mindflayer_core::{
-    hash, Agent, AgentHomes, Directories, FlayerWorkspace, Kind, Ledger, MindProject, Share,
+    hash, Agent, AgentHomes, Directories, FlayerWorkspace, Kind, Ledger, MindProject, Share, State,
+    Status,
 };
 use tempfile::TempDir;
 
@@ -926,4 +927,92 @@ fn rendering_a_project_a_mind_toml_marks_renders_nothing() {
 
     assert_eq!(rendered, None);
     assert!(!project.root().join("AGENTS.md").exists());
+}
+
+/// How the rule at `route` stands in the fixture's project, as status says.
+fn status_of(fixture: &Fixture, route: &str) -> Option<(State, Vec<Agent>, Option<String>)> {
+    let (status, failures) = Status::of_project(&fixture.project, Some(&fixture.workspace));
+    assert!(failures.is_empty(), "{failures:?}");
+    status.projects[0]
+        .find(Kind::Rule, route)
+        .map(|rule| (rule.state, rule.agents.clone(), rule.origin.clone()))
+}
+
+#[test]
+fn status_lists_the_rules_a_project_received_from_the_ledger_and_the_block() {
+    let fixture = fixture(Share::Shared, &Agent::ALL);
+    fixture.rule("git/no-force-push", NO_FORCE_PUSH);
+    fixture.rule("rust/errors", SCOPED);
+    fixture.install("git/no-force-push");
+    fixture.install("rust/errors");
+
+    assert_eq!(
+        status_of(&fixture, "git/no-force-push"),
+        Some((
+            State::Installed,
+            Agent::ALL.to_vec(),
+            Some(String::from(WORKSPACE_ORIGIN))
+        ))
+    );
+    assert_eq!(
+        status_of(&fixture, "rust/errors"),
+        Some((
+            State::Installed,
+            vec![Agent::Claude],
+            Some(String::from(WORKSPACE_ORIGIN))
+        ))
+    );
+
+    // The section taken out by hand: recorded, and no longer found.
+    fs::remove_file(fixture.agents_md()).unwrap();
+
+    assert_eq!(
+        status_of(&fixture, "git/no-force-push"),
+        Some((
+            State::Partial,
+            Vec::new(),
+            Some(String::from(WORKSPACE_ORIGIN))
+        ))
+    );
+    assert_eq!(
+        status_of(&fixture, "rust/errors").map(|(state, ..)| state),
+        Some(State::Installed)
+    );
+}
+
+#[test]
+fn status_says_claude_reads_a_rule_by_its_own_file_where_it_reads_no_block() {
+    let fixture = fixture(Share::Shared, &Agent::ALL);
+    fs::write(fixture.dir.path().join("CLAUDE.md"), "# Above\n").unwrap();
+    fixture.rule("git/no-force-push", NO_FORCE_PUSH);
+    fixture.install("git/no-force-push");
+
+    assert_eq!(
+        status_of(&fixture, "git/no-force-push").map(|(state, agents, _)| (state, agents)),
+        Some((State::Installed, Agent::ALL.to_vec()))
+    );
+
+    // Claude's file gone, Claude reads the rule nowhere: the block is not
+    // where it reads it.
+    fs::remove_file(fixture.claude_file("git/no-force-push")).unwrap();
+
+    assert_eq!(
+        status_of(&fixture, "git/no-force-push").map(|(state, agents, _)| (state, agents)),
+        Some((State::Partial, vec![Agent::Codex, Agent::OpenCode]))
+    );
+}
+
+#[test]
+fn status_lists_a_rule_copied_into_a_project_a_mind_toml_marks_as_its_copy() {
+    let (_dir, workspace, project, ledger) = older();
+    own_rule(&workspace, "git/no-force-push", NO_FORCE_PUSH);
+    put(&workspace, &ledger, &project, "git/no-force-push");
+
+    let (status, _) = Status::of_project(&project, Some(&workspace));
+
+    let rule = status.projects[0]
+        .find(Kind::Rule, "git/no-force-push")
+        .unwrap();
+    assert_eq!(rule.state, State::Installed);
+    assert_eq!(rule.origin.as_deref(), Some(WORKSPACE_ORIGIN));
 }
