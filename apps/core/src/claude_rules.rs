@@ -655,7 +655,7 @@ fn look(path: &Path) -> Found {
 /// this file over one somebody made after the look found none. A write that
 /// fails takes away what it made, so no half of a rule is left for Claude to
 /// read, or to be taken for somebody's later.
-fn create(path: &Path, contents: &[u8]) -> io::Result<()> {
+pub(crate) fn create(path: &Path, contents: &[u8]) -> io::Result<()> {
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent)?;
     }

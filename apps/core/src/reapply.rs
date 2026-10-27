@@ -810,7 +810,7 @@ pub(crate) fn retarget(
     // every copy of it was written with: none for one that is not there.
     let mut compared: Vec<(PathBuf, &Target, Option<Compared>)> = Vec::new();
     for target in &record.targets {
-        let path = install::recorded_copy(project, name, &target.path)?;
+        let path = install::recorded_copy(project, kind, name, &target.path)?;
         let there = fs::symlink_metadata(&path).is_ok();
         let found = there.then(|| compare(&path, record.content_hash.as_deref(), offers));
         compared.push((path, target, found));
