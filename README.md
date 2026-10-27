@@ -1254,9 +1254,8 @@ which names the same folders in a table and was committed with the project,
 or by `.mind/settings.json`, which holds these same keys in JSON. Mindflayer
 still reads either the way it was written, and `mind init` leaves it as it
 is. When a project holds more than one, it reads `settings.toml`, then
-`settings.json`, then `mind.toml`, and warns of the ones it passes over.
-`mind migrate` moves it to a `settings.toml` when you ask, and until then
-its settings are not changed
+`settings.json`, then `mind.toml`. `mind migrate` moves it to a
+`settings.toml` when you ask, and until then its settings are not changed
 ([upgrading](#a-project-made-before-settings)).
 
 A project is listed from the folders its agents read as well (one an older
