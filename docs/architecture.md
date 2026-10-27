@@ -4178,8 +4178,11 @@ nothing in `.claude/skills/deploy`, and dropping that copy's record by name
 would make it Foreign, never updated or removed again, over a change to
 something else. In a project a `mind.toml` marks, the folder it authors in is
 the one it was installed into, so a change there reaches the copy and drops
-its record as before. A record naming no target, which no build has written,
-is dropped by name as records were.
+its record as before. A skill's record naming no target, which only a build
+from before targets wrote, is dropped by name as records were. A rule's
+naming none is one a build writes, for a rule that reaches no agent the
+project names ([installing rules](#installing-rules)), and a change to the
+project's own rule of that route reaches nothing it installed, so it stays.
 
 And only that copy's part of the record (`Ledger::uninstalled_copy`), in one
 transaction: settings can make the folder a project authors in one of its

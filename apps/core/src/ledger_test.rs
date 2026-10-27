@@ -1096,6 +1096,34 @@ fn an_installation_recording_no_copy_is_forgotten_whole_by_any_one() {
 }
 
 #[test]
+fn a_rules_installation_recording_no_copy_is_kept_by_a_change_elsewhere() {
+    let ledger = Ledger::in_memory().unwrap();
+    let rule = InstallRecord {
+        kind: Kind::Rule,
+        ..installation_of("rust/errors", &[])
+    };
+    ledger.installed("collapse", &rule).unwrap();
+
+    assert_eq!(
+        ledger
+            .uninstalled_copy(
+                "collapse",
+                Kind::Rule,
+                "rust/errors",
+                "rules/rust/errors.md"
+            )
+            .unwrap(),
+        Forgotten::Nothing
+    );
+    assert_eq!(
+        ledger
+            .installation("collapse", Kind::Rule, "rust/errors")
+            .unwrap(),
+        Some(rule)
+    );
+}
+
+#[test]
 fn retargeting_an_installation_moves_its_copies_and_keeps_the_rest_of_its_record() {
     let ledger = Ledger::in_memory().unwrap();
     let written = installation_of("deploy", &[(Some("claude"), ".claude/skills/deploy")]);

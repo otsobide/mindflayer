@@ -947,10 +947,15 @@ impl Ledger {
     ///
     /// For a change that reached one copy: the others are still what was
     /// installed, and forgetting the whole installation would leave them with
-    /// no record, never updated or removed again. An installation recording
-    /// no copy at all, which no build has written, is forgotten whole, as
-    /// [`Ledger::uninstalled`] would. One transaction, so an install of the
-    /// same name at the same moment never finds half of this done.
+    /// no record, never updated or removed again. A skill's installation
+    /// recording no copy at all, which only a build from before installations
+    /// had targets wrote, is forgotten whole, as [`Ledger::uninstalled`]
+    /// would. A rule's is one a build writes, for a rule that reaches no
+    /// agent the project names (`install::rules`), never one from before
+    /// targets, since rules were installed only after: a change at some other
+    /// path leaves it what was installed, and it stays. One transaction, so
+    /// an install of the same name at the same moment never finds half of
+    /// this done.
     pub fn uninstalled_copy(
         &self,
         project: &str,
@@ -986,7 +991,7 @@ impl Ledger {
                 |row| row.get(0),
             )
             .map_err(failed)?;
-        let forgotten = if left == 0 {
+        let forgotten = if left == 0 && (copy > 0 || kind != Kind::Rule) {
             transaction
                 .execute("DELETE FROM installations WHERE id = ?1", [id])
                 .map_err(failed)?;

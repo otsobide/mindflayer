@@ -1196,7 +1196,9 @@ pub(crate) fn recorded_copy(
 /// its settings may make it (`"skills": ".claude/skills"`), and the change
 /// reached the copy there: the one in `.agents/skills` is still what was
 /// installed. The installation goes with its last copy. A record from before
-/// installations had targets names none, and is dropped as it was.
+/// installations had targets names none, and is dropped as it was; a rule's
+/// naming none reaches no agent the project names, and stays, since the
+/// change reached nothing it installed.
 ///
 /// In a local project, `at` stops being kept out of git with its record:
 /// what is there now, or is written there next, is its author's, and a line

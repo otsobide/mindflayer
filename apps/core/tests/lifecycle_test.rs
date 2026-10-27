@@ -779,6 +779,68 @@ fn adding_where_an_installed_copy_was_deleted_by_hand_drops_its_record() {
 }
 
 #[test]
+fn adding_a_rule_beside_an_installed_one_that_reaches_no_agent_keeps_its_record() {
+    // A project naming only Codex, given a rule about some files, which only
+    // Claude reads: installed with no target at all.
+    let dir = TempDir::new().unwrap();
+    let (mut workspace, _) = FlayerWorkspace::init(dir.path()).unwrap();
+    let root = dir.path().join("collapse");
+    fs::create_dir(&root).unwrap();
+    let directories = Directories::default().with(Kind::Rule, "rules");
+    let (project, _) =
+        MindProject::init_settings(&root, &[Agent::Codex], Share::Shared, &directories).unwrap();
+    workspace.link(&project).unwrap();
+    let own = workspace.own().directory_for(Kind::Rule).unwrap();
+    write(
+        &own,
+        "rust/errors.md",
+        "---\npaths:\n  - \"src/**/*.rs\"\n---\nReturn errors.\n",
+    );
+    let ledger = workspace.ledger().unwrap();
+    let candidate = install::offered(
+        &workspace,
+        &ledger,
+        &project,
+        Kind::Rule,
+        "rust/errors",
+        None,
+    )
+    .unwrap();
+    install::install(
+        &workspace,
+        &ledger,
+        &project,
+        &candidate,
+        &AgentHomes::default(),
+    )
+    .unwrap();
+    let recorded = ledger
+        .installation("collapse", Kind::Rule, "rust/errors")
+        .unwrap()
+        .unwrap();
+    assert_eq!(recorded.targets, []);
+
+    // Its own of the same route, in the folder it authors in.
+    let added = lifecycle::add(
+        Some(&workspace),
+        &project,
+        Kind::Rule,
+        "rust/errors",
+        "Our own",
+        None,
+    )
+    .unwrap();
+
+    assert_eq!(added.stale.unwrap(), Record::Untouched);
+    assert_eq!(
+        ledger
+            .installation("collapse", Kind::Rule, "rust/errors")
+            .unwrap(),
+        Some(recorded)
+    );
+}
+
+#[test]
 fn adding_touches_no_record_but_one_under_the_name_it_writes() {
     let (_dir, workspace, project, ledger) = installed(&["deploy"]);
 
