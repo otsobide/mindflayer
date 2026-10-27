@@ -7,6 +7,7 @@ use std::path::{Path, PathBuf};
 use mindflayer_core::install::{self, InstallError, Standing};
 use mindflayer_core::ledger::{Ledger, SourceKind};
 use mindflayer_core::lifecycle::{self, Record, Target};
+use mindflayer_core::AgentHomes;
 use mindflayer_core::{
     create, Agent, Catalog, Directories, FlayerWorkspace, Kind, LifecycleError, MindProject,
     Reference, Share,
@@ -482,7 +483,14 @@ fn installed(names: &[&str]) -> (TempDir, FlayerWorkspace, MindProject, Ledger) 
     }
     let ledger = workspace.ledger().unwrap();
     for candidate in install::survey(&workspace, &ledger, &project, Kind::Skill).unwrap() {
-        install::install(&workspace, &ledger, &project, &candidate).unwrap();
+        install::install(
+            &workspace,
+            &ledger,
+            &project,
+            &candidate,
+            &AgentHomes::default(),
+        )
+        .unwrap();
     }
     (dir, workspace, project, ledger)
 }
@@ -531,7 +539,14 @@ fn installed_for_agents(names: &[&str]) -> (TempDir, FlayerWorkspace, MindProjec
     }
     let ledger = workspace.ledger().unwrap();
     for candidate in install::survey(&workspace, &ledger, &project, Kind::Skill).unwrap() {
-        install::install(&workspace, &ledger, &project, &candidate).unwrap();
+        install::install(
+            &workspace,
+            &ledger,
+            &project,
+            &candidate,
+            &AgentHomes::default(),
+        )
+        .unwrap();
     }
     (dir, workspace, project, ledger)
 }
@@ -918,7 +933,14 @@ fn a_change_drops_the_record_of_the_workspace_it_is_given_wherever_that_sits() {
     create(&workspace.own(), Kind::Skill, "deploy", "Ship it").unwrap();
     let ledger = workspace.ledger().unwrap();
     for candidate in install::survey(&workspace, &ledger, &project, Kind::Skill).unwrap() {
-        install::install(&workspace, &ledger, &project, &candidate).unwrap();
+        install::install(
+            &workspace,
+            &ledger,
+            &project,
+            &candidate,
+            &AgentHomes::default(),
+        )
+        .unwrap();
     }
     let edit = lifecycle::start_edit(&find(&project, "deploy").unwrap());
     type_into(edit.file());
@@ -952,7 +974,14 @@ fn a_record_is_kept_under_the_workspaces_spelling_of_a_project_whatever_the_syml
     let recorded = || ledger.installations("../collapse", Kind::Skill).unwrap();
 
     for candidate in install::survey(&through_link, &ledger, &project, Kind::Skill).unwrap() {
-        install::install(&through_link, &ledger, &project, &candidate).unwrap();
+        install::install(
+            &through_link,
+            &ledger,
+            &project,
+            &candidate,
+            &AgentHomes::default(),
+        )
+        .unwrap();
     }
     assert_eq!(recorded(), ["deploy"]);
 

@@ -737,6 +737,47 @@ fn the_install_screen_inside_the_tui_installs_where_each_agent_of_a_v3_project_r
 }
 
 #[test]
+fn every_line_the_tui_runs_and_its_install_screen_keep_out_of_the_agents_folders_it_was_given() {
+    let (dir, _workspace, _ledger) = shelved(&["collapse"], &["deploy"]);
+    // The project's own skills folder stands for an agent's folder for every
+    // project, as a project at the user's home has.
+    let skills = dir.path().join("collapse").join("skills");
+    let lookup = Lookup {
+        agents: AgentHomes {
+            agents_dir: Some(skills.clone()),
+            ..AgentHomes::default()
+        },
+        ..Lookup::default()
+    };
+    let words: Vec<String> = ["flayer", "install", "-p", "collapse", "deploy"]
+        .iter()
+        .map(|word| (*word).to_owned())
+        .collect();
+
+    let done = tui::execute(&words, dir.path(), &lookup, &Watch::new());
+
+    assert!(
+        done.error
+            .as_deref()
+            .is_some_and(|error| error.contains("which more than one agent reads")),
+        "{done:?}"
+    );
+    let view = tui::load(dir.path(), &lookup).unwrap();
+    let mut app = App::new(dir.path().to_path_buf(), view).with_lookup(lookup);
+    press_and_run(&mut app, KeyCode::Char('i'));
+    press_key(&mut app, KeyCode::Right);
+    press_key(&mut app, KeyCode::Char(' '));
+    press_key(&mut app, KeyCode::Char('a'));
+    press_and_run(&mut app, KeyCode::Char('y'));
+    assert!(
+        app.transcript().contains("which more than one agent reads"),
+        "{}",
+        app.transcript()
+    );
+    assert!(!skills.join("deploy").exists());
+}
+
+#[test]
 fn the_install_screen_scrubs_the_ledger_when_it_applies_and_not_when_it_opens() {
     let (dir, workspace, _ledger) = shelved(&["collapse"], &["deploy"]);
     let database = rusqlite::Connection::open(workspace.ledger_path()).unwrap();

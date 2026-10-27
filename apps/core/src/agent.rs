@@ -289,6 +289,20 @@ pub struct AgentHomes {
 }
 
 impl AgentHomes {
+    /// Each folder there is, with who reads it, in report order: the folders
+    /// a copy put inside would reach every project, not one.
+    pub fn folders(&self) -> Vec<(&'static str, &Path)> {
+        [
+            ("Claude Code", &self.claude_config_dir),
+            ("Codex", &self.codex_home),
+            ("OpenCode", &self.opencode_config_dir),
+            ("more than one agent", &self.agents_dir),
+        ]
+        .into_iter()
+        .filter_map(|(reader, folder)| Some((reader, folder.as_deref()?)))
+        .collect()
+    }
+
     /// Where each agent keeps its folder when nothing moves it: the fallback a
     /// front end takes once neither its option nor the agent's own variable
     /// answers.

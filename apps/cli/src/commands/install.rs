@@ -4,7 +4,7 @@
 
 use std::path::Path;
 
-use mindflayer_core::{FlayerWorkspace, Kind, MindProject};
+use mindflayer_core::{AgentHomes, FlayerWorkspace, Kind, MindProject};
 
 use crate::commands::gather::scrubbed;
 use crate::commands::workspace::load_warnings;
@@ -16,12 +16,16 @@ use crate::{CliError, Failure, Outcome};
 /// given to `load`. What the loaded workspaces could not offer is said as
 /// warnings, whether or not the install then works: a loaded workspace that
 /// has gone is why a skill is "not offered", and the error alone cannot say so.
+///
+/// `homes` are the agents' own folders the command line decided, which core
+/// refuses to install into.
 pub(crate) fn install_named(
     workspace: &FlayerWorkspace,
     project: &MindProject,
     name: &str,
     from: Option<&str>,
     directory: &Path,
+    homes: &AgentHomes,
 ) -> Result<Outcome, Failure> {
     use mindflayer_core::install::{self as installing, Installed};
     use mindflayer_core::Excluded;
@@ -53,18 +57,19 @@ pub(crate) fn install_named(
     .map_err(|error| with_warnings(error.into()))?;
     let origin = candidate.origin();
     let into = project.name();
-    let done = installing::install(workspace, &ledger, project, &candidate).map_err(|error| {
-        // What it cleared before it failed comes first, being what it did,
-        // after only what the scrub before it did: on stderr with the error,
-        // the only place a failure prints.
-        let mut told = said.clone().lines();
-        told.extend(cleared(project, error.swept()));
-        told.extend(warnings.iter().cloned());
-        Failure {
-            error: Box::new(error.into()),
-            warnings: told,
-        }
-    })?;
+    let done =
+        installing::install(workspace, &ledger, project, &candidate, homes).map_err(|error| {
+            // What it cleared before it failed comes first, being what it did,
+            // after only what the scrub before it did: on stderr with the error,
+            // the only place a failure prints.
+            let mut told = said.clone().lines();
+            told.extend(cleared(project, error.swept()));
+            told.extend(warnings.iter().cloned());
+            Failure {
+                error: Box::new(error.into()),
+                warnings: told,
+            }
+        })?;
     let unhashed = done.installed.unhashed().map(str::to_owned);
     let mut outcome = match done.installed {
             Installed::Added { name, .. } => {

@@ -14,7 +14,7 @@ use std::time::Duration;
 
 use mindflayer_core::install::{self, Installed, Removed};
 use mindflayer_core::ledger::Ledger;
-use mindflayer_core::{Excluded, FlayerWorkspace, Kind, MindProject};
+use mindflayer_core::{AgentHomes, Excluded, FlayerWorkspace, Kind, MindProject};
 use ratatui::crossterm::event::{self, Event, KeyEventKind};
 use ratatui::DefaultTerminal;
 
@@ -28,8 +28,9 @@ use state::{Pending, Screen, Step, Target};
 /// Built from the ledger as it is ([`open`]), without making one or scrubbing
 /// it: opening the screen and leaving it changes nothing, so it is a read until
 /// something is applied. Only applying opens the ledger to write to
-/// ([`commit`]), which makes it and scrubs it.
-pub fn run(workspace: &FlayerWorkspace) -> Result<Outcome, Failure> {
+/// ([`commit`]), which makes it and scrubs it, and installs nothing into the
+/// agents' own folders, `homes`.
+pub fn run(workspace: &FlayerWorkspace, homes: &AgentHomes) -> Result<Outcome, Failure> {
     let (projects, mut warnings) = registered(workspace);
     warnings.extend(load_warnings(workspace));
     let screen = open(workspace, projects)?;
@@ -57,7 +58,7 @@ pub fn run(workspace: &FlayerWorkspace) -> Result<Outcome, Failure> {
 
     let (screen, step) = outcome.map_err(|source| CliError::Screen { source })?;
     let mut outcome = match step {
-        Step::Apply => commit(workspace, &screen)?,
+        Step::Apply => commit(workspace, &screen, homes)?,
         _ => Outcome {
             stdout: String::from("nothing applied\n"),
             stderr: Vec::new(),
@@ -94,14 +95,18 @@ pub fn open(workspace: &FlayerWorkspace, projects: Vec<MindProject>) -> Result<S
 /// ([`rebuilt`]) before anything is carried out. Scrubbing when the screen
 /// opened was the other way, and is rejected: opening it is a read, and a
 /// read leaves the ledger as it finds it.
-pub fn commit(workspace: &FlayerWorkspace, screen: &Screen) -> Result<Outcome, Failure> {
+pub fn commit(
+    workspace: &FlayerWorkspace,
+    screen: &Screen,
+    homes: &AgentHomes,
+) -> Result<Outcome, Failure> {
     let (ledger, scrub) = workspace.ledger_to_write().map_err(CliError::from)?;
     let said = scrubbed(&scrub);
     let applied = if scrub.sources.is_empty() {
-        apply(workspace, &ledger, screen)
+        apply(workspace, &ledger, screen, homes)
     } else {
         rebuilt(workspace, &ledger, screen).and_then(|(screen, lost)| {
-            let mut outcome = apply(workspace, &ledger, &screen)?;
+            let mut outcome = apply(workspace, &ledger, &screen, homes)?;
             outcome.ok = outcome.ok && lost.is_empty();
             outcome.stderr.splice(0..0, lost);
             Ok(outcome)
@@ -221,10 +226,12 @@ fn drive(terminal: &mut DefaultTerminal, mut screen: Screen) -> Result<(Screen, 
 /// Carry out everything the screen marked, and say what happened.
 ///
 /// With a ledger opened to write: [`commit`] opens it, and scrubs it first.
+/// Nothing goes into the agents' own folders, `homes`.
 pub fn apply(
     workspace: &FlayerWorkspace,
     ledger: &Ledger,
     screen: &Screen,
+    homes: &AgentHomes,
 ) -> Result<Outcome, install::InstallError> {
     let mut stdout = String::new();
     let mut stderr = Vec::new();
@@ -242,10 +249,11 @@ pub fn apply(
                 // One that cannot be installed is said and passed over: the
                 // rest were marked too, and what was already done is reported.
                 // Only the ledger failing stops everything.
-                let result = match install::install(workspace, ledger, project, &entry.candidate) {
-                    Err(install::InstallError::Ledger(error)) => return Err(error.into()),
-                    result => result,
-                };
+                let result =
+                    match install::install(workspace, ledger, project, &entry.candidate, homes) {
+                        Err(install::InstallError::Ledger(error)) => return Err(error.into()),
+                        result => result,
+                    };
                 let done = match result {
                     Ok(done) => done,
                     Err(error) => {

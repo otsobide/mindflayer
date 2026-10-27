@@ -142,7 +142,8 @@ fn applying_installs_what_was_marked_and_reports_it() {
     let mut screen = screen_for(&workspace, &ledger);
     press(&mut screen, &[KeyCode::Right, KeyCode::Char(' ')]);
 
-    let outcome = install_screen::apply(&workspace, &ledger, &screen).unwrap();
+    let outcome =
+        install_screen::apply(&workspace, &ledger, &screen, &AgentHomes::default()).unwrap();
 
     assert!(outcome.ok, "{:?}", outcome.stderr);
     assert!(
@@ -163,7 +164,7 @@ fn an_installed_skill_opens_already_marked_next_time() {
     let (_dir, workspace, ledger) = shelved(&["collapse"], &["deploy"]);
     let mut screen = screen_for(&workspace, &ledger);
     press(&mut screen, &[KeyCode::Right, KeyCode::Char(' ')]);
-    install_screen::apply(&workspace, &ledger, &screen).unwrap();
+    install_screen::apply(&workspace, &ledger, &screen, &AgentHomes::default()).unwrap();
 
     let reopened = screen_for(&workspace, &ledger);
 
@@ -184,13 +185,14 @@ fn unmarking_an_installed_skill_removes_it() {
     let (dir, workspace, ledger) = shelved(&["collapse"], &["deploy"]);
     let mut screen = screen_for(&workspace, &ledger);
     press(&mut screen, &[KeyCode::Right, KeyCode::Char(' ')]);
-    install_screen::apply(&workspace, &ledger, &screen).unwrap();
+    install_screen::apply(&workspace, &ledger, &screen, &AgentHomes::default()).unwrap();
 
     let mut again = screen_for(&workspace, &ledger);
     press(&mut again, &[KeyCode::Right, KeyCode::Char(' ')]);
     assert_eq!(again.counts(), (0, 1));
     assert!(rendered(&again).contains("- remove"));
-    let outcome = install_screen::apply(&workspace, &ledger, &again).unwrap();
+    let outcome =
+        install_screen::apply(&workspace, &ledger, &again, &AgentHomes::default()).unwrap();
 
     assert!(
         outcome.stdout.contains("collapse: removed deploy"),
@@ -325,7 +327,8 @@ fn applying_says_what_an_interrupted_install_left_in_a_project() {
     let mut screen = screen_for(&workspace, &ledger);
     press(&mut screen, &[KeyCode::Right, KeyCode::Char(' ')]);
 
-    let outcome = install_screen::apply(&workspace, &ledger, &screen).unwrap();
+    let outcome =
+        install_screen::apply(&workspace, &ledger, &screen, &AgentHomes::default()).unwrap();
 
     assert!(outcome.ok, "{:?}", outcome.stderr);
     assert!(
@@ -351,7 +354,8 @@ fn applying_says_what_an_install_that_failed_had_cleared() {
     fs::remove_dir_all(&skills).unwrap();
     fs::write(&skills, "not a folder").unwrap();
 
-    let outcome = install_screen::apply(&workspace, &ledger, &screen).unwrap();
+    let outcome =
+        install_screen::apply(&workspace, &ledger, &screen, &AgentHomes::default()).unwrap();
 
     assert!(!outcome.ok);
     assert_eq!(
@@ -499,7 +503,8 @@ fn the_screen_installs_into_every_folder_a_project_marked_by_its_settings_has_ag
     assert!(rendered(&screen).contains("[ ] deploy"));
 
     press(&mut screen, &[KeyCode::Right, KeyCode::Char(' ')]);
-    let outcome = install_screen::apply(&workspace, &ledger, &screen).unwrap();
+    let outcome =
+        install_screen::apply(&workspace, &ledger, &screen, &AgentHomes::default()).unwrap();
 
     assert!(outcome.ok, "{:?}", outcome.stderr);
     assert!(
@@ -517,7 +522,8 @@ fn the_screen_installs_into_every_folder_a_project_marked_by_its_settings_has_ag
 
     // Unticked, both go.
     press(&mut reopened, &[KeyCode::Right, KeyCode::Char(' ')]);
-    let outcome = install_screen::apply(&workspace, &ledger, &reopened).unwrap();
+    let outcome =
+        install_screen::apply(&workspace, &ledger, &reopened, &AgentHomes::default()).unwrap();
     assert!(
         outcome.stdout.contains("alpha: removed deploy"),
         "{}",
@@ -588,7 +594,7 @@ fn opening_the_screen_scrubs_nothing_and_applying_scrubs_first_and_says_so_witho
 
     assert_eq!(tainted(&workspace), 1, "opening the screen is a read");
     press(&mut screen, &[KeyCode::Right, KeyCode::Char(' ')]);
-    let outcome = install_screen::commit(&workspace, &screen).unwrap();
+    let outcome = install_screen::commit(&workspace, &screen, &AgentHomes::default()).unwrap();
 
     assert!(outcome.ok, "{:?}", outcome.stderr);
     assert_eq!(outcome.stderr, [SCRUBBED]);
@@ -648,7 +654,7 @@ fn a_mark_on_a_source_the_scrub_makes_one_with_another_installs_from_the_one_kep
 
     // The row the scrub drops, whose source is gone by the time it installs.
     mark_from(&mut screen, "deploy", "older");
-    let outcome = install_screen::commit(&workspace, &screen).unwrap();
+    let outcome = install_screen::commit(&workspace, &screen, &AgentHomes::default()).unwrap();
 
     assert!(outcome.ok, "{:?}", outcome.stderr);
     assert!(dir.path().join("collapse/skills/deploy/SKILL.md").is_file());
@@ -678,7 +684,7 @@ fn a_mark_on_what_only_the_source_the_scrub_drops_had_is_said_and_left_undone() 
     let mut screen = install_screen::open(&workspace, projects).unwrap();
 
     mark_from(&mut screen, "lint", "older");
-    let outcome = install_screen::commit(&workspace, &screen).unwrap();
+    let outcome = install_screen::commit(&workspace, &screen, &AgentHomes::default()).unwrap();
 
     assert!(!outcome.ok);
     assert_eq!(
@@ -766,4 +772,27 @@ fn a_local_project_outside_git_is_told_nothing_keeps_what_is_installed_out_of_it
     assert_eq!(removed.stdout, "removed deploy from alpha\n");
     assert!(removed.stderr.is_empty(), "{:?}", removed.stderr);
     assert!(!root.join(".claude/skills/deploy").exists());
+}
+
+#[test]
+fn nothing_is_installed_into_a_folder_an_agent_reads_for_every_project() {
+    let (dir, _, _) = shelved(&["beta"], &["deploy"]);
+    with_settings(dir.path(), r#""claude""#);
+    // Claude's folder is said to be the project's own `.claude`, as it is
+    // for a project at the user's home.
+    let claude = dir.path().join("alpha").join(".claude");
+    let given = format!("--claude-config-dir={}", claude.display());
+
+    let failure = flayer(dir.path(), &["install", "-p", "alpha", "deploy", &given]).unwrap_err();
+
+    assert_eq!(
+        failure.error.to_string(),
+        format!(
+            "{} is inside {}, which Claude Code reads for every project, so nothing was \
+             installed: Mindflayer installs into one project at a time",
+            claude.join("skills").join("deploy").display(),
+            claude.display()
+        )
+    );
+    assert!(!claude.exists());
 }

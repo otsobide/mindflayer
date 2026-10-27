@@ -11,6 +11,7 @@ use mindflayer_core::copy;
 use mindflayer_core::gather::{self, Request};
 use mindflayer_core::install::{self, Installed, Removed, Standing};
 use mindflayer_core::ledger::{Ledger, Target};
+use mindflayer_core::AgentHomes;
 use mindflayer_core::{
     Agent, Directories, FlayerWorkspace, Kind, MindProject, Settings, Share, MIND_DIR,
     SETTINGS_FILE,
@@ -87,9 +88,15 @@ fn installing_copies_the_skill_into_the_directory_the_project_named() {
     gather::gather(&workspace, &ledger, &Request::git(url(&source))).unwrap();
 
     let candidates = install::survey(&workspace, &ledger, &project, Kind::Skill).unwrap();
-    let outcome = install::install(&workspace, &ledger, &project, &candidates[0])
-        .unwrap()
-        .installed;
+    let outcome = install::install(
+        &workspace,
+        &ledger,
+        &project,
+        &candidates[0],
+        &AgentHomes::default(),
+    )
+    .unwrap()
+    .installed;
 
     assert!(matches!(outcome, Installed::Added { .. }), "{outcome:?}");
     assert!(root.join(".claude/skills/deploy/SKILL.md").is_file());
@@ -110,7 +117,14 @@ fn a_skills_whole_directory_arrives_with_it() {
     gather::gather(&workspace, &ledger, &Request::git(url(&source))).unwrap();
 
     let candidates = install::survey(&workspace, &ledger, &project, Kind::Skill).unwrap();
-    install::install(&workspace, &ledger, &project, &candidates[0]).unwrap();
+    install::install(
+        &workspace,
+        &ledger,
+        &project,
+        &candidates[0],
+        &AgentHomes::default(),
+    )
+    .unwrap();
 
     assert!(installed_at(&project, "deploy")
         .join("scripts")
@@ -122,7 +136,14 @@ fn a_skills_whole_directory_arrives_with_it() {
 fn a_second_survey_knows_what_is_already_there() {
     let (_dir, workspace, project, ledger) = ready(&["deploy"]);
     let candidates = install::survey(&workspace, &ledger, &project, Kind::Skill).unwrap();
-    install::install(&workspace, &ledger, &project, &candidates[0]).unwrap();
+    install::install(
+        &workspace,
+        &ledger,
+        &project,
+        &candidates[0],
+        &AgentHomes::default(),
+    )
+    .unwrap();
 
     let again = install::survey(&workspace, &ledger, &project, Kind::Skill).unwrap();
 
@@ -135,12 +156,25 @@ fn a_second_survey_knows_what_is_already_there() {
 fn installing_the_same_skill_twice_changes_nothing() {
     let (_dir, workspace, project, ledger) = ready(&["deploy"]);
     let candidates = install::survey(&workspace, &ledger, &project, Kind::Skill).unwrap();
-    install::install(&workspace, &ledger, &project, &candidates[0]).unwrap();
+    install::install(
+        &workspace,
+        &ledger,
+        &project,
+        &candidates[0],
+        &AgentHomes::default(),
+    )
+    .unwrap();
 
     let again = install::survey(&workspace, &ledger, &project, Kind::Skill).unwrap();
-    let outcome = install::install(&workspace, &ledger, &project, &again[0])
-        .unwrap()
-        .installed;
+    let outcome = install::install(
+        &workspace,
+        &ledger,
+        &project,
+        &again[0],
+        &AgentHomes::default(),
+    )
+    .unwrap()
+    .installed;
 
     assert!(
         matches!(outcome, Installed::Unchanged { .. }),
@@ -152,7 +186,14 @@ fn installing_the_same_skill_twice_changes_nothing() {
 fn uninstalling_takes_it_back_out() {
     let (_dir, workspace, project, ledger) = ready(&["deploy"]);
     let candidates = install::survey(&workspace, &ledger, &project, Kind::Skill).unwrap();
-    install::install(&workspace, &ledger, &project, &candidates[0]).unwrap();
+    install::install(
+        &workspace,
+        &ledger,
+        &project,
+        &candidates[0],
+        &AgentHomes::default(),
+    )
+    .unwrap();
 
     let outcome = install::uninstall(&workspace, &ledger, &project, Kind::Skill, "deploy").unwrap();
 
@@ -241,7 +282,14 @@ fn install_from_shelf(
     name: &str,
 ) -> install::Installation {
     let candidate = install::offered(workspace, ledger, project, Kind::Skill, name, None).unwrap();
-    install::install(workspace, ledger, project, &candidate).unwrap()
+    install::install(
+        workspace,
+        ledger,
+        project,
+        &candidate,
+        &AgentHomes::default(),
+    )
+    .unwrap()
 }
 
 #[test]
@@ -348,7 +396,14 @@ fn a_copy_gone_from_one_agents_folder_is_put_back_by_the_next_install() {
     fs::remove_dir_all(&claude).unwrap();
 
     let surveyed = install::survey(&workspace, &ledger, &project, Kind::Skill).unwrap();
-    let again = install::install(&workspace, &ledger, &project, &surveyed[0]).unwrap();
+    let again = install::install(
+        &workspace,
+        &ledger,
+        &project,
+        &surveyed[0],
+        &AgentHomes::default(),
+    )
+    .unwrap();
 
     assert_eq!(surveyed[0].standing, Standing::Installed);
     assert!(
@@ -367,9 +422,15 @@ fn somebodys_skill_in_either_agents_folder_refuses_the_install_and_leaves_the_ot
         fs::write(copies[held].join("SKILL.md"), skill("deploy", "Mine")).unwrap();
 
         let surveyed = install::survey(&workspace, &ledger, &project, Kind::Skill).unwrap();
-        let outcome = install::install(&workspace, &ledger, &project, &surveyed[0])
-            .unwrap()
-            .installed;
+        let outcome = install::install(
+            &workspace,
+            &ledger,
+            &project,
+            &surveyed[0],
+            &AgentHomes::default(),
+        )
+        .unwrap()
+        .installed;
 
         assert_eq!(surveyed[0].standing, Standing::Foreign);
         assert_eq!(
@@ -523,9 +584,15 @@ fn installing_does_not_overwrite_a_hand_written_skill() {
     write_by_hand(&project, "deploy", "Written by a person");
 
     let candidates = install::survey(&workspace, &ledger, &project, Kind::Skill).unwrap();
-    let outcome = install::install(&workspace, &ledger, &project, &candidates[0])
-        .unwrap()
-        .installed;
+    let outcome = install::install(
+        &workspace,
+        &ledger,
+        &project,
+        &candidates[0],
+        &AgentHomes::default(),
+    )
+    .unwrap()
+    .installed;
 
     assert!(matches!(outcome, Installed::Foreign { .. }), "{outcome:?}");
     let kept = fs::read_to_string(installed_at(&project, "deploy").join("SKILL.md")).unwrap();
@@ -567,7 +634,14 @@ fn two_projects_each_keep_their_own_answer() {
     let (two, _) = MindProject::init(&other_root).unwrap();
 
     let candidates = install::survey(&workspace, &ledger, &one, Kind::Skill).unwrap();
-    install::install(&workspace, &ledger, &one, &candidates[0]).unwrap();
+    install::install(
+        &workspace,
+        &ledger,
+        &one,
+        &candidates[0],
+        &AgentHomes::default(),
+    )
+    .unwrap();
 
     assert_eq!(
         install::survey(&workspace, &ledger, &one, Kind::Skill).unwrap()[0].standing,
@@ -584,7 +658,14 @@ fn two_projects_each_keep_their_own_answer() {
 fn the_log_records_both_directions() {
     let (_dir, workspace, project, ledger) = ready(&["deploy"]);
     let candidates = install::survey(&workspace, &ledger, &project, Kind::Skill).unwrap();
-    install::install(&workspace, &ledger, &project, &candidates[0]).unwrap();
+    install::install(
+        &workspace,
+        &ledger,
+        &project,
+        &candidates[0],
+        &AgentHomes::default(),
+    )
+    .unwrap();
     install::uninstall(&workspace, &ledger, &project, Kind::Skill, "deploy").unwrap();
 
     let history = ledger.history(10).unwrap();
@@ -603,7 +684,14 @@ fn a_shelf_entry_whose_files_have_gone_is_named_in_the_error() {
     };
     fs::remove_dir_all(workspace.root().join(&gathered.path)).unwrap();
 
-    let error = install::install(&workspace, &ledger, &project, &candidates[0]).unwrap_err();
+    let error = install::install(
+        &workspace,
+        &ledger,
+        &project,
+        &candidates[0],
+        &AgentHomes::default(),
+    )
+    .unwrap_err();
 
     assert!(error.to_string().contains("deploy"), "{error}");
 }
@@ -639,6 +727,7 @@ fn the_folder_is_named_after_the_skill_rather_than_after_its_shelf_folder() {
         &ledger,
         &project,
         candidate(&candidates, "deploy"),
+        &AgentHomes::default(),
     )
     .unwrap();
 
@@ -678,6 +767,7 @@ fn a_gathered_skill_whose_name_breaks_the_rules_is_offered_but_not_installed() {
         &ledger,
         &project,
         candidate(&candidates, "a--b"),
+        &AgentHomes::default(),
     )
     .unwrap_err();
 
@@ -704,7 +794,14 @@ fn a_skill_with_an_empty_description_is_not_installed() {
     )]);
 
     let candidates = install::survey(&workspace, &ledger, &project, Kind::Skill).unwrap();
-    let error = install::install(&workspace, &ledger, &project, &candidates[0]).unwrap_err();
+    let error = install::install(
+        &workspace,
+        &ledger,
+        &project,
+        &candidates[0],
+        &AgentHomes::default(),
+    )
+    .unwrap_err();
 
     assert_eq!(
         error.to_string(),
@@ -728,6 +825,7 @@ fn a_shelf_copy_that_now_declares_another_name_is_not_installed() {
         &ledger,
         &project,
         candidate(&candidates, "deploy"),
+        &AgentHomes::default(),
     )
     .unwrap_err();
 
@@ -750,9 +848,15 @@ fn what_agents_read_past_does_not_stop_an_install() {
         gathered(&[("skills/deploy/SKILL.md", manifest.as_str())]);
 
     let candidates = install::survey(&workspace, &ledger, &project, Kind::Skill).unwrap();
-    let outcome = install::install(&workspace, &ledger, &project, &candidates[0])
-        .unwrap()
-        .installed;
+    let outcome = install::install(
+        &workspace,
+        &ledger,
+        &project,
+        &candidates[0],
+        &AgentHomes::default(),
+    )
+    .unwrap()
+    .installed;
 
     assert!(matches!(outcome, Installed::Added { .. }), "{outcome:?}");
     // Line endings are the gathering checkout's (CRLF under autocrlf on
@@ -814,7 +918,13 @@ fn install_named(
         name,
         Some("workspace"),
     )?;
-    install::install(workspace, ledger, project, &candidate)
+    install::install(
+        workspace,
+        ledger,
+        project,
+        &candidate,
+        &AgentHomes::default(),
+    )
 }
 
 /// The names directly inside `dir`, sorted.
@@ -1184,7 +1294,14 @@ fn the_workspace_offers_its_own_skills_first_and_installs_them_like_any_other() 
     assert_eq!(offered[0], ("commit-style", String::from("workspace")));
     assert_eq!(offered.len(), 2);
 
-    install::install(&workspace, &ledger, &project, &candidates[0]).unwrap();
+    install::install(
+        &workspace,
+        &ledger,
+        &project,
+        &candidates[0],
+        &AgentHomes::default(),
+    )
+    .unwrap();
 
     assert!(installed_at(&project, "commit-style")
         .join("SKILL.md")
@@ -1309,7 +1426,14 @@ fn a_skill_installed_without_what_is_left_out_is_still_current_and_installs_unch
     install_from_shelf(&workspace, &ledger, &project, "deploy");
 
     let surveyed = install::survey(&workspace, &ledger, &project, Kind::Skill).unwrap();
-    let again = install::install(&workspace, &ledger, &project, &surveyed[0]).unwrap();
+    let again = install::install(
+        &workspace,
+        &ledger,
+        &project,
+        &surveyed[0],
+        &AgentHomes::default(),
+    )
+    .unwrap();
 
     assert!(install::is_current(&workspace, &project, &surveyed[0]));
     assert!(
@@ -1457,7 +1581,14 @@ fn an_exclude_block_that_cannot_be_read_refuses_the_install_with_nothing_written
     let candidate =
         install::offered(&workspace, &ledger, &project, Kind::Skill, "deploy", None).unwrap();
 
-    let refused = install::install(&workspace, &ledger, &project, &candidate).unwrap_err();
+    let refused = install::install(
+        &workspace,
+        &ledger,
+        &project,
+        &candidate,
+        &AgentHomes::default(),
+    )
+    .unwrap_err();
 
     assert!(
         matches!(refused, install::InstallError::Exclude(_)),
@@ -1491,7 +1622,14 @@ fn copies_that_cannot_be_put_in_place_take_their_exclude_entries_back_out() {
     let candidate =
         install::offered(&workspace, &ledger, &project, Kind::Skill, "deploy", None).unwrap();
 
-    let refused = install::install(&workspace, &ledger, &project, &candidate).unwrap_err();
+    let refused = install::install(
+        &workspace,
+        &ledger,
+        &project,
+        &candidate,
+        &AgentHomes::default(),
+    )
+    .unwrap_err();
 
     assert!(
         matches!(refused, install::InstallError::Write { .. }),
@@ -1499,4 +1637,61 @@ fn copies_that_cannot_be_put_in_place_take_their_exclude_entries_back_out() {
     );
     assert!(!agents_copies(&project, "deploy")[0].exists());
     assert_eq!(fs::read_to_string(&file).unwrap(), before);
+}
+
+// ---------------------------------------------------------------------------
+// Never into the agents' own folders
+// ---------------------------------------------------------------------------
+
+#[test]
+fn a_project_at_the_users_home_is_refused_an_install_into_its_agents_own_folders() {
+    // The temporary folder stands for the user's home, and the project is
+    // marked at its root, so its targets are the agents' folders for every
+    // project.
+    let (dir, workspace, _, ledger) = ready(&["deploy"]);
+    let home = dir.path().join("home");
+    fs::create_dir(&home).unwrap();
+    let (project, _) =
+        MindProject::init_settings(&home, &Agent::ALL, Share::Shared, &Directories::default())
+            .unwrap();
+    let candidate =
+        install::offered(&workspace, &ledger, &project, Kind::Skill, "deploy", None).unwrap();
+
+    let refused = install::install(
+        &workspace,
+        &ledger,
+        &project,
+        &candidate,
+        &AgentHomes::defaults_under(&home),
+    )
+    .unwrap_err();
+
+    let install::InstallError::UserScope { path, reader, .. } = &refused else {
+        panic!("{refused}");
+    };
+    assert_eq!(*path, home.join(".agents").join("skills").join("deploy"));
+    assert_eq!(*reader, "more than one agent");
+    assert!(
+        refused
+            .to_string()
+            .contains("Mindflayer installs into one project at a time"),
+        "{refused}"
+    );
+    assert!(!home.join(".agents").exists() && !home.join(".claude").exists());
+    assert!(ledger
+        .installation("home", Kind::Skill, "deploy")
+        .unwrap()
+        .is_none());
+    // Somewhere else under that home is one project like any other.
+    let (dir, workspace, project, ledger) = ready_v3(&["deploy"], &Agent::ALL);
+    let candidate =
+        install::offered(&workspace, &ledger, &project, Kind::Skill, "deploy", None).unwrap();
+    install::install(
+        &workspace,
+        &ledger,
+        &project,
+        &candidate,
+        &AgentHomes::defaults_under(dir.path()),
+    )
+    .unwrap();
 }

@@ -160,7 +160,14 @@ pub(crate) fn run_with(cli: &Cli, lookup: &Lookup, watch: &Watch) -> Result<Outc
         Command::Install { name, from } => {
             let project = project_here(&directory)?;
             let workspace = managing(&project, lookup)?;
-            install_named(&workspace, &project, name, from.as_deref(), &directory)
+            install_named(
+                &workspace,
+                &project,
+                name,
+                from.as_deref(),
+                &directory,
+                &lookup.agents,
+            )
         }
         Command::Uninstall { name } => {
             let project = project_here(&directory)?;
@@ -323,7 +330,9 @@ fn run_flayer(
             // The screen reads until something on it is applied, so it is
             // opened the way a read is: on the default workspace before it
             // is made too, which manages nothing to install into.
-            (None, None) => reading_workspace(directory, lookup, crate::install::run),
+            (None, None) => reading_workspace(directory, lookup, |workspace| {
+                crate::install::run(workspace, &lookup.agents)
+            }),
             (Some(name), Some(project)) => {
                 let workspace = workspace_here(directory, lookup)?;
                 install_named(
@@ -332,6 +341,7 @@ fn run_flayer(
                     name,
                     from.as_deref(),
                     directory,
+                    &lookup.agents,
                 )
             }
             // Half of one: a skill with no project to put it in, or a

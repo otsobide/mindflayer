@@ -21,7 +21,7 @@ use std::time::Duration;
 
 use thiserror::Error;
 
-use crate::agent::Agent;
+use crate::agent::{Agent, AgentHomes};
 use crate::artifact::{self, issue_list, Artifact, ArtifactError, ValidationIssue};
 use crate::catalog::{Catalog, DiscoveryFailure};
 use crate::copy;
@@ -551,11 +551,16 @@ pub fn offered(
 /// reads two of them never finds two versions of one skill. What an
 /// interrupted install left there, or beside a copy, is cleared first and
 /// said ([`Installation::swept`]).
+///
+/// `homes` are the folders the agents read for every project, which the
+/// front end decides: a copy that would land inside one of them is refused
+/// ([`InstallError::UserScope`]).
 pub fn install(
     workspace: &FlayerWorkspace,
     ledger: &Ledger,
     project: &MindProject,
     candidate: &Candidate,
+    homes: &AgentHomes,
 ) -> Result<Installation, InstallError> {
     let kind = candidate.kind();
     let name = candidate.name().to_owned();
@@ -573,6 +578,16 @@ pub fn install(
         .iter()
         .map(|target| copy_at(&target.folder, kind, &name))
         .collect();
+    // A project at the user's home has its agents' own folders for targets:
+    // `.claude/skills` there is Claude's skills for every project, and
+    // `.agents/skills` is the one Codex and OpenCode read everywhere. That is
+    // the user-scope install D-22 leaves for later, behind a `--user` of its
+    // own, so it is refused here rather than done by accident. The targets
+    // cannot tell, being relative to the project, and core has no home to
+    // compare them with: the front end hands it the agents' folders.
+    if let Some(error) = user_scope(homes, &copies) {
+        return Err(error);
+    }
     // Somebody's work in any of them refuses the whole install: one copy
     // written beside it would leave the agents reading both folders two
     // different skills of one name. Looked at before the lock, so a refusal
@@ -812,6 +827,30 @@ pub fn install(
         swept,
         left_out,
         excluded,
+    })
+}
+
+/// The refusal for the first of `copies` inside one of the agents' own
+/// folders, if one is.
+///
+/// Resolved as far as each path exists, so a home reached through a link,
+/// or a project reached through one, is still the folder it is.
+fn user_scope(homes: &AgentHomes, copies: &[PathBuf]) -> Option<InstallError> {
+    let folders: Vec<(&str, &Path, PathBuf)> = homes
+        .folders()
+        .into_iter()
+        .filter_map(|(reader, folder)| Some((reader, folder, resolved(folder)?)))
+        .collect();
+    copies.iter().find_map(|copy| {
+        let at = resolved(copy)?;
+        folders
+            .iter()
+            .find(|(_, _, home)| at.starts_with(home))
+            .map(|(reader, folder, _)| InstallError::UserScope {
+                path: copy.clone(),
+                home: folder.to_path_buf(),
+                reader,
+            })
     })
 }
 
@@ -1372,6 +1411,12 @@ pub enum InstallError {
     Recorded { name: String, route: String },
     #[error("{0}, and nothing was installed, since its copies could not be kept out of git")]
     Exclude(#[from] ExcludeError),
+    #[error("{path} is inside {home}, which {reader} reads for every project, so nothing was installed: Mindflayer installs into one project at a time")]
+    UserScope {
+        path: PathBuf,
+        home: PathBuf,
+        reader: &'static str,
+    },
 }
 
 impl InstallError {

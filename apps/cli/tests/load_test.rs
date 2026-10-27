@@ -611,7 +611,8 @@ fn switching_to_a_loaded_copy_of_an_installed_skill_replaces_it() {
         .map(|(_, _, what)| what)
         .collect();
     assert_eq!(pending, [Pending::Install]);
-    let outcome = install_screen::apply(&workspace, &ledger, &screen).unwrap();
+    let outcome =
+        install_screen::apply(&workspace, &ledger, &screen, &AgentHomes::default()).unwrap();
 
     assert!(
         outcome.stdout.contains("installed deploy"),
@@ -642,7 +643,8 @@ fn a_loaded_skill_that_vanished_does_not_stop_the_rest_of_the_install_screen() {
     );
     fs::remove_dir_all(own_directory_for(&team, Kind::Skill).join("deploy")).unwrap();
 
-    let outcome = install_screen::apply(&workspace, &ledger, &screen).unwrap();
+    let outcome =
+        install_screen::apply(&workspace, &ledger, &screen, &AgentHomes::default()).unwrap();
 
     assert!(!outcome.ok);
     assert!(
