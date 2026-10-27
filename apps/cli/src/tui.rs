@@ -29,7 +29,7 @@ use mindflayer_core::resolve::{self, resolve, Intent, Reason, Resolved};
 use mindflayer_core::workspace::Member as Registered;
 use mindflayer_core::{
     lifecycle, paths, scan, template, AgentHomes, Catalog, FlayerWorkspace, Kind, MindProject,
-    WorkspaceError,
+    ProjectStatus, WorkspaceError,
 };
 use ratatui::crossterm::event::{self, Event, KeyEventKind};
 use ratatui::crossterm::terminal::{self, EnterAlternateScreen};
@@ -542,7 +542,9 @@ pub fn load_project(directory: &Path, lookup: &Lookup) -> Result<View, CliError>
     let root = project.root().to_path_buf();
     Ok(View::Workspace(Workspace {
         name: project.name().to_owned(),
-        // `above`'s templates, the ones `mind add` will find.
+        // `above`'s templates, the ones `mind add` will find, and no
+        // records: it does not link the project, so it says nothing of what
+        // was installed there.
         members: vec![held(
             entry,
             root.clone(),
@@ -685,7 +687,8 @@ fn member(registered: Registered, screen: &FlayerWorkspace, lookup: &Lookup) -> 
 
 /// What one holder holds, read from the disk: a project, or the workspace's
 /// own for the kinds it keeps apart. `workspace` is the one whose templates
-/// count for it, if any.
+/// count for it, if any, and whose ledger says which of a project's copies
+/// were installed, when it links the project.
 fn held(
     entry: String,
     root: PathBuf,
@@ -694,7 +697,27 @@ fn held(
     kinds: &[Kind],
     workspace: Option<&FlayerWorkspace>,
 ) -> Member {
-    let catalog = Catalog::discover_kinds(std::slice::from_ref(project), kinds);
+    // A project's rows say how each artifact stands, from the report
+    // `status` prints, read with the catalog the rows are drawn from rather
+    // than beside it, so the project is read once. The workspace's own are
+    // no project's, and nothing is installed into them. A ledger that cannot
+    // be read is among the catalog's failures, so each project's rows say
+    // it, as the report does once.
+    let (status, catalog) = if own {
+        (
+            None,
+            Catalog::discover_kinds(std::slice::from_ref(project), kinds),
+        )
+    } else {
+        let (status, catalog) = ProjectStatus::read(project, kinds, workspace);
+        (Some(status), catalog)
+    };
+    let standing = |kind: Kind, name: &str| {
+        status
+            .as_ref()
+            .and_then(|status| status.find(kind, name))
+            .map(|held| (held.state, held.agents.clone()))
+    };
     let mut items: Vec<Item> = catalog
         .artifacts()
         .iter()
@@ -711,6 +734,10 @@ fn held(
                 .map(ToString::to_string)
                 .collect(),
             broken: None,
+            state: standing(artifact.kind(), artifact.name()).map(|(state, _)| state),
+            agents: standing(artifact.kind(), artifact.name())
+                .map(|(_, agents)| agents)
+                .unwrap_or_default(),
         })
         .collect();
 
@@ -722,6 +749,7 @@ fn held(
     for failure in catalog.failures() {
         match lifecycle::identify(project, failure.path()) {
             Some((kind, name)) => {
+                let (state, agents) = standing(kind, &name).unzip();
                 let broken = Item {
                     kind,
                     name,
@@ -733,6 +761,8 @@ fn held(
                             .source()
                             .map_or_else(|| failure.to_string(), ToString::to_string),
                     ),
+                    state,
+                    agents: agents.unwrap_or_default(),
                 };
                 // Its name may be listed already, from a copy in the
                 // project's agents' folders. A row is named by its name
@@ -749,6 +779,24 @@ fn held(
                 }
             }
             None => warnings.push(failure.to_string()),
+        }
+    }
+    // An install nothing of which is found is in the report all the same, as
+    // partial, and has a row like the rest: `i` puts it back from there.
+    for held in status.iter().flat_map(|status| &status.artifacts) {
+        if !items
+            .iter()
+            .any(|item| item.kind == held.kind && item.name == held.name)
+        {
+            items.push(Item {
+                kind: held.kind,
+                name: held.name.clone(),
+                summary: String::new(),
+                issues: Vec::new(),
+                broken: None,
+                state: Some(held.state),
+                agents: held.agents.clone(),
+            });
         }
     }
     items.sort_by(|a, b| a.kind.cmp(&b.kind).then_with(|| a.name.cmp(&b.name)));
@@ -779,6 +827,7 @@ fn held(
         elsewhere: false,
         holdings: Ok(Holdings {
             items,
+            agents: status.map(|status| status.agents).unwrap_or_default(),
             warnings,
             directories,
             templates,

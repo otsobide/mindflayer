@@ -146,8 +146,9 @@ impl Catalog {
     /// the project reaches ([`crate::lifecycle::find`]), so what `show`
     /// prints and what `edit` opens are one file. One that no agent reads is
     /// taken in without being compared: it is the source an install delivers
-    /// from, and a source edited since it was delivered is a status to report
-    /// (#36), not a warning on every listing until it is installed again.
+    /// from, and a source edited since it was delivered is for `status` to
+    /// report once it tells an outdated copy from a current one (#48), not a
+    /// warning on every listing until it is installed again.
     fn gather_copies(&mut self, copies: Vec<Artifact>) -> Vec<Artifact> {
         let mut gathered = Vec::new();
         let mut named: BTreeMap<String, Vec<Artifact>> = BTreeMap::new();
@@ -329,6 +330,15 @@ impl Catalog {
             });
             artifact.record(|path| copies.contains(&install::route(&root, path)));
         }
+        self.settle();
+        self
+    }
+
+    /// The same catalog, with a failure met reading something beside it: the
+    /// ledger, read for a report on who put each copy where, which a front
+    /// end then says with discovery's own.
+    pub(crate) fn failing(mut self, failure: DiscoveryFailure) -> Self {
+        self.failures.push(failure);
         self.settle();
         self
     }

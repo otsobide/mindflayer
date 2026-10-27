@@ -199,17 +199,7 @@ pub(crate) fn list(catalog: &Catalog, projects: &[MindProject], level: Level) ->
                 let _ = writeln!(text, "  {WORKSPACE}: {}", directory.display());
             }
         }
-        for project in projects {
-            // Every folder discovery read, as core says: a project marked by
-            // its settings is read in its agents' folders too. A kind the
-            // project keeps no folder for was looked for nowhere.
-            for directory in Kind::ALL
-                .into_iter()
-                .flat_map(|kind| Catalog::folders(project, kind))
-            {
-                let _ = writeln!(text, "  {}: {}", project.name(), directory.display());
-            }
-        }
+        looked_in(&mut text, projects);
         return (text, true);
     }
 
@@ -231,6 +221,23 @@ pub(crate) fn list(catalog: &Catalog, projects: &[MindProject], level: Level) ->
         })
         .collect();
     (table(&rows), true)
+}
+
+/// Where a reading command looked in each of `projects`, a line a folder,
+/// for a report that found nothing to say so.
+///
+/// Every folder discovery read, as core says: a project marked by its
+/// settings is read in its agents' folders too. A kind the project keeps no
+/// folder for was looked for nowhere.
+pub(crate) fn looked_in(text: &mut String, projects: &[MindProject]) {
+    for project in projects {
+        for directory in Kind::ALL
+            .into_iter()
+            .flat_map(|kind| Catalog::folders(project, kind))
+        {
+            let _ = writeln!(text, "  {}: {}", project.name(), directory.display());
+        }
+    }
 }
 
 /// `list` at the workspace level, where an empty result has two very

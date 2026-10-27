@@ -14,7 +14,7 @@ use std::sync::Arc;
 
 use mindflayer_core::gather::{Progress, Watch};
 use mindflayer_core::url::redacted;
-use mindflayer_core::{paths, Kind, Layout, Reason, DEFAULT_SUBDIRECTORY, QUALIFIER};
+use mindflayer_core::{paths, Agent, Kind, Layout, Reason, State, DEFAULT_SUBDIRECTORY, QUALIFIER};
 use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
 use super::minds::{self, Minds};
@@ -144,6 +144,11 @@ impl Member {
 #[derive(Debug, Clone, Default)]
 pub struct Holdings {
     pub items: Vec<Item>,
+    /// The agents the project's settings name, in report order: a slot each
+    /// on every row, so a row's badges line up with the next one's. Empty
+    /// for the workspace's own, and for a project a `mind.toml` marks, which
+    /// names none.
+    pub agents: Vec<Agent>,
     /// Files that could not be read, one line each.
     pub warnings: Vec<String>,
     /// Where each kind lives, relative to the project, so an empty project
@@ -171,6 +176,12 @@ pub struct Item {
     /// Why it cannot be read, when it cannot. Listed anyway, by where it sits,
     /// because a file that does not read is the one most in need of opening.
     pub broken: Option<String>,
+    /// How it stands in its project, as `status` says: none for the
+    /// workspace's own, which is no project's.
+    pub state: Option<State>,
+    /// The agents among the project's that read a copy of it, as `status`
+    /// says.
+    pub agents: Vec<Agent>,
 }
 
 impl Item {
@@ -2256,6 +2267,17 @@ impl Reader {
         lines.push((
             Tone::Info,
             String::from("What the link form offers is what `flayer scan` lists."),
+        ));
+        let legend: Vec<String> = Agent::ALL
+            .iter()
+            .map(|agent| format!("{} {}", super::ui::badge(*agent), agent.name()))
+            .collect();
+        lines.push((
+            Tone::Info,
+            format!(
+                "A project's rows say how each artifact stands, as `flayer status` does, and which of its agents read it: {}.",
+                legend.join(", ")
+            ),
         ));
         Self {
             title: String::from("keys"),

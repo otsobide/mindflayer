@@ -2663,6 +2663,8 @@ dependencies = [
  "mindflayer-core",
  "ratatui",
  "rusqlite",
+ "serde",
+ "serde_json",
  "tempfile",
  "thiserror 2.0.20",
 ]
@@ -2675,6 +2677,7 @@ dependencies = [
  "jsonc-parser",
  "rusqlite",
  "serde",
+ "serde_json",
  "serde_yaml_ng",
  "sha2 0.11.1",
  "tempfile",

@@ -299,6 +299,7 @@ mind templates             # what `add --template` can start from here
 mind list [KIND]           # this project's artifacts; `mind list rules` filters
 mind show <NAME>           # one artifact; `rule:deploy` when a name is ambiguous
 mind validate [KIND|NAME]  # check a kind, one artifact, or everything
+mind status [--json]       # what it holds, from where, for which agents
 mind link / mind unlink    # this project, into or out of the workspace above
 mind load / mind unload <path>...
                            # another workspace's skills, into the one above
@@ -318,6 +319,10 @@ flayer add|edit|rename|remove|templates [-p PROJECT] ...
 flayer list|show|validate [-p PROJECT] ...
                            # the workspace's own and every project's, or one;
                            # validate checks the shelf too
+flayer status [-p PROJECT] [--json]
+                           # what every project holds, or one: installed,
+                           # partial, foreign or authored, for which agents,
+                           # and from where
 flayer scan                # the repositories under it, and which are linked
 flayer link <path>...      # register mind projects with it
 flayer unlink <path>...    # drop them
@@ -773,6 +778,80 @@ or removed from a project that shares its folder. Each of these is a
 `warning:` line, like a skill that cannot be read or a loaded workspace that
 has gone.
 
+## What each project has
+
+`flayer status` says what every project the workspace manages holds: whether
+Mindflayer put each thing there, which agents read it, and where it came from.
+With [the examples loaded](#try-it-with-the-examples), and installed from
+there, `commit-style` and `code-review` into `collapse` and `commit-style` into
+`tanukeys`, a project an older Mindflayer made:
+
+```
+$ cd ~/Projects
+$ flayer status
+collapse  code-review   partial    codex,opencode         load:../src/mindflayer/examples
+collapse  commit-style  installed  claude,codex,opencode  load:../src/mindflayer/examples
+collapse  deploy        authored   -
+collapse  notes         foreign    claude,opencode
+tanukeys  commit-style  installed  -                      load:../src/mindflayer/examples
+```
+
+Each artifact is in one of four states:
+
+| State | Means |
+|---|---|
+| `installed` | Mindflayer put every copy there, and every one it put there is still there. |
+| `partial` | a copy it put there is gone, deleted by hand or by `git clean -X`, or no longer reads; installing it again puts every copy back. Here Claude's copy of `code-review` was deleted. |
+| `foreign` | somebody else's, in a folder an agent reads; Mindflayer never overwrites or deletes it. Here `notes`, kept in `.claude/skills` by hand. |
+| `authored` | the project's own, in a folder it authors in, such as `skills/`. |
+
+Then the agents that read a copy of it, as `--agents` names them: `-` for
+none, as for `deploy`, which `collapse` keeps in `skills/`, a folder no agent
+reads, and for everything in a project whose `.mind` an older Mindflayer
+made, which names no agents. Last, where what was installed came
+from, as `--from` takes it: `workspace`, `load:<path>` or a shelf source's
+address. `mind status` says the same of the project you are in, and `flayer
+status -p tanukeys` of one; as in `list`, the project column is there only
+when there is more than one project to tell apart, and the kind column only
+when there is more than one kind.
+
+A linked project whose directory has gone is listed as `stale`, with the
+reason on stderr, and the rest of the report still prints; the exit status is
+non-zero, as for anything that could not be read.
+
+`--json` prints the same report in the envelope every reading command's
+`--json` will share: the data, the warnings that would have gone to stderr,
+and a version, which moves if a field ever goes or changes meaning. The names
+in it are a contract, spelled as a command line spells them:
+
+```
+$ flayer status -p tanukeys --json
+{
+  "version": 1,
+  "data": {
+    "projects": [
+      {
+        "name": "tanukeys",
+        "entry": "tanukeys",
+        "path": "/home/you/Projects/tanukeys",
+        "agents": [],
+        "stale": null,
+        "artifacts": [
+          {
+            "kind": "skill",
+            "name": "commit-style",
+            "state": "installed",
+            "agents": [],
+            "origin": "load:../src/mindflayer/examples"
+          }
+        ]
+      }
+    ]
+  },
+  "warnings": []
+}
+```
+
 ## The workspace's own skills and rules
 
 A workspace keeps skills and rules of its own, for the projects it manages:
@@ -827,8 +906,8 @@ what the one under the cursor holds.
 ```
  mindflayer  Projects  · found above · 3 on the shelf  · /home/you/Projects
 ┏ Projects (3) ━━━━━━━━━━━━━━━━┓┌ collapse ──────────────────────────────────────────────────────────────┐
-┃  ◆ Projects  2               ┃│>   skill commit-style       How this repo writes commits               │
-┃> collapse  2                 ┃│    rule  git/no-force-push  Never force-push a shared branch           │
+┃  ◆ Projects  2               ┃│>   skill commit-style       installed CC CX OC  How this repo writes co│
+┃> collapse  2                 ┃│    rule  git/no-force-push  authored            Never force-push a shar│
 ┃  tanukeys  1  ✗ 1            ┃│                                                                        │
 ┃  ! old-api                   ┃│                                                                        │
 ┃                              ┃│                                                                        │
@@ -836,6 +915,12 @@ what the one under the cursor holds.
 q quit  ? keys  → open  a add  m minds  l link  u unlink  v validate  g gather  L load  s shelf  i install
 every change is a command, printed when you quit; ? lists them
 ```
+
+Each of a project's rows says what [`flayer status`](#what-each-project-has)
+says of it: its state, then a badge for each agent that reads it, in a column
+of its own (`CC` for Claude Code, `CX` for Codex, `OC` for OpenCode), blank
+where that agent does not. The workspace's own are no project's, and their
+row says neither.
 
 `mind` on its own opens the same screen from inside a project: on that project,
 if a workspace manages it, or on the project alone if none does, where `l`

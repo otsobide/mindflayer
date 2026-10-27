@@ -975,6 +975,75 @@ fn every_copy_installed_into_a_project_is_listed_by_path_whichever_install_wrote
 }
 
 #[test]
+fn every_installation_into_a_project_reads_back_with_its_copies_in_name_order() {
+    let ledger = Ledger::in_memory().unwrap();
+    let deploy = installation_of(
+        "deploy",
+        &[
+            (Some("claude"), ".claude/skills/deploy"),
+            (None, ".agents/skills/deploy"),
+        ],
+    );
+    let audit = InstallRecord {
+        origin: Some(String::from("https://github.com/acme/skills")),
+        source_id: None,
+        ..installation_of("audit", &[(None, ".agents/skills/audit")])
+    };
+    let empty = installation_of("bare", &[]);
+    for record in [&deploy, &audit, &empty] {
+        ledger.installed("collapse", record).unwrap();
+    }
+    ledger
+        .installed(
+            "tanukeys",
+            &installation_of("deploy", &[(None, "skills/deploy")]),
+        )
+        .unwrap();
+
+    let records = ledger.records("collapse", Kind::Skill).unwrap();
+
+    let mut deploy = deploy;
+    deploy.targets.reverse();
+    assert_eq!(records, [audit, empty, deploy]);
+    for record in &records {
+        assert_eq!(
+            ledger
+                .installation("collapse", Kind::Skill, &record.name)
+                .unwrap()
+                .as_ref(),
+            Some(record)
+        );
+    }
+    assert!(ledger.records("collapse", Kind::Rule).unwrap().is_empty());
+    assert!(ledger.records("elsewhere", Kind::Skill).unwrap().is_empty());
+}
+
+#[test]
+fn every_installation_reads_back_without_the_credentials_an_older_build_stored() {
+    let ledger = Ledger::in_memory().unwrap();
+    ledger
+        .installed(
+            "collapse",
+            &installation_of("deploy", &[(None, "skills/deploy")]),
+        )
+        .unwrap();
+    ledger
+        .connection
+        .execute(
+            "UPDATE installations SET origin = 'https://user:ghp_t0ken@github.com/acme/skills'",
+            [],
+        )
+        .unwrap();
+
+    let records = ledger.records("collapse", Kind::Skill).unwrap();
+
+    assert_eq!(
+        records[0].origin.as_deref(),
+        Some("https://github.com/acme/skills")
+    );
+}
+
+#[test]
 fn a_ledger_waits_for_another_writer_as_long_as_a_writer_waits_for_the_workspace() {
     let dir = tempfile::TempDir::new().unwrap();
     let path = dir.path().join(LEDGER_FILE);

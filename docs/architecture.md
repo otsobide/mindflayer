@@ -112,7 +112,8 @@ Two consequences worth stating, because they are what the split buys:
 
 The grammar is in `parse.rs`, the work in `commands.rs` and a module per
 family of commands under `commands/`, and what a command produced, with the
-helpers every report is laid out with, in `render.rs`. `CliError` has
+helpers every report is laid out with and the envelope its JSON goes out in,
+in `render.rs`. `CliError` has
 `error.rs` to itself, `homes.rs` decides where the default workspace's home and
 each agent's own folder are, and gathers them with what `-W` and
 `$MINDFLAYER_WORKSPACE` say (`Lookup`), `progress.rs` says what a gather's
@@ -437,7 +438,10 @@ you are in, against its workspace: the one named or activated, or else the one
 above it. `flayer list`, `show` and
 `validate` read everything (the workspace's own and every project's) or one
 project with `-p`; `flayer validate` reads the shelf as well, labelling what it
-finds there `shelf/<source folder>`. Reads look everywhere; a change needs one
+finds there `shelf/<source folder>`. `flayer status` reads every project, or
+one with `-p`, and `mind status` the one you are in: not the workspace's own,
+which nothing is installed into ([what each project
+has](#what-each-project-has)). Reads look everywhere; a change needs one
 place, and without `-p` that place is the workspace.
 
 There is one implementation of each. `mind add` and `flayer add -p alpha` are
@@ -858,8 +862,9 @@ its marker names, exactly as before.
   there is one more copy of its name, with no agent of its own, so the
   agents an entry lists are still only those that load it, and it is
   compared with no other copy: it is the source an install delivers from,
-  and a source edited since it was delivered is a status to report (#36),
-  not a warning on every listing until it is installed again. Listing it
+  and a source edited since it was delivered is for `status` to report once
+  it tells an outdated copy from a current one (#48), not a warning on every
+  listing until it is installed again. Listing it
   apart, as a second entry of the same name, was turned down: a project
   level `list` has no column to tell the two apart, and a screen naming a
   row by its name alone would aim a change at the agents' copy and reach
@@ -875,8 +880,9 @@ another. Unrecorded, a copy in a folder the project authors in is
 `Installed` only when every copy is. Records are a workspace's own, so a
 project the workspace does not link has none in it, and a ledger that cannot
 be read leaves every copy unrecorded, which nothing changes, rather than
-installed, which an uninstall may delete. No listing hands one over yet,
-since none says who put what where; `flayer status` will (#36).
+installed, which an uninstall may delete. `list`, `show` and `validate`
+hand none over, since none says who put what where; `status` does, and the
+TUI's rows with it ([what each project has](#what-each-project-has)).
 
 Foreign is never touched. A change to a project's own artifacts looks only in
 the folders it authors in (`Catalog::discover_authored`, from
@@ -975,12 +981,54 @@ copies of one skill that differ in a project's agents' folders are collected
 the same way: listed, and said.
 
 The CLI prints those on stderr as warnings and exits non-zero: visible, but not
-in the way of the answer.
+in the way of the answer. Asked for JSON, it puts them in the envelope beside
+the data instead ([JSON, in one envelope](#json-in-one-envelope)).
 
 The distinction the code draws is between a problem and an absence. A project
 with no skills folder yet is not a failure, it is a project nobody has added a
 skill to. A skills folder that exists and cannot be listed is a
 failure.
+
+## JSON, in one envelope
+
+A reading command's `--json` prints what it read inside one envelope,
+whatever the command (`render::json`):
+
+```json
+{"version": 1, "data": ..., "warnings": [...]}
+```
+
+`status` is the first to take it ([what each project
+has](#what-each-project-has)), and every later reading command takes the same
+one rather than a shape of its own: `scan --json` (#39), and the read types
+#61 makes serializable. One shape is one parser for a script, and for the
+panel's backend when it reads through the CLI.
+
+- **The warnings are inside it.** Failures are collected, not raised, in JSON
+  as in text: what a table would say on stderr as `warning:` lines goes into
+  `warnings`, without the prefix, and stderr is left without them, so a
+  script reading stdout misses nothing. The exit status is the text's. A
+  hint, advice for whoever reads the terminal, stays on stderr. An error that
+  stops a command is still text on stderr, `--json` or not, until #61 gives
+  errors codes.
+- **Its names are a contract.** Every type in `data` derives `Serialize` in
+  core, each field by its snake_case name, and `Kind`, `Agent` and `State`
+  are serialized by the word a command line takes for them (`skill`,
+  `opencode`, `partial`), written by hand rather than derived: a derive
+  spells the variant, so `Agent::OpenCode` would print `open_code`, a name no
+  command line or settings file holds, and a rename would change it. A path
+  is text, whatever bytes it holds, so one unprintable path cannot fail the
+  report. A name once printed stays: a field that goes or changes what it
+  holds moves `ENVELOPE_VERSION`, and one added does not, since a reader
+  passes over a key it does not know. A test reads each report back into
+  structs of its own that refuse any field they do not name
+  (`common::enveloped`), so a change shows there before it reaches a script.
+- **Pretty-printed**, two spaces a level, since a person reads it as often as
+  a script does, and `jq` takes either.
+- **The envelope is the CLI's**, in `render.rs` beside the table helpers: how
+  a report is laid out is a front end's to choose. What goes in `data` is
+  core's, which builds and orders it, so the table and the JSON cannot
+  disagree about what is there.
 
 ## How entries are stored
 
@@ -1854,6 +1902,114 @@ something was left alone.
 need a terminal, and being run without one deserves a sentence rather than a
 panic.
 
+## What each project has
+
+`flayer status` answers vision point 1, which skills and rules each project
+has, and from where (`status::Status`). It is built from discovery and the
+ledger together, since neither answers alone. Discovery says what sits in the
+folders a project's agents read and the one it authors in, and which agents
+read each copy; it reads no ledger, so it cannot tell an install from
+somebody's own. The ledger says which copies Mindflayer put where, and from
+where (`Ledger::records`); it cannot see that one has gone since, nor a copy it
+never wrote.
+
+Each artifact a project holds is one entry, as discovery lists it: every copy
+of one name together ([read where its agents
+read](#a-project-marked-by-its-settings-is-read-where-its-agents-read)). Its
+state is one of four (`status::State`):
+
+- **installed**: the ledger records every copy, and every copy it records is
+  found where it was put.
+- **partial**: the ledger records a copy discovery does not find where it was
+  put: deleted since, by hand or by a `git clean -X`, which the ignored copies
+  of a local project are exposed to, or left so it no longer reads, which
+  discovery says beside the report. The next install puts every copy back,
+  since it writes each target.
+- **foreign**: unrecorded, in an agent's folder outside any the project
+  authors in: somebody's, never Mindflayer's to change.
+- **authored**: unrecorded, in a folder the project authors in: its own work.
+
+The state is discovery's answer (`Artifact::provenance`) with the record of
+the install laid over it: installed only when every copy is recorded, and
+partial when the record names one that is not found, even beside a copy the
+project authors of that name. That copy sits where the install wrote nothing,
+or it would be the install's, so the next install puts the gone one back all
+the same, and calling the entry authored would leave an agent reading none
+of it unsaid. Not beside a foreign copy, which is said first: the next
+install of the name is refused over it. The record is
+matched to the entry by the path of a copy it wrote, as discovery marks a copy
+installed, never by name, so an install of a name into one folder neither
+claims nor lends its origin to what somebody keeps under that name in another.
+A recorded copy is missing when discovery did not find it, rather than when
+nothing is at its path: a folder whose `SKILL.md` was deleted, or no longer
+parses, loads in no agent, and the next install replaces it as it replaces
+one that was deleted, where asking the disk would have called it installed
+and reaching nobody.
+
+An install nothing of which is found is still in the report, partial and
+reaching no agent, so that what was installed is said once its every copy has
+gone. Unless the project holds something else by that name: that is then the
+name's one entry, said as what is there, since a row is one name, as in every
+listing, and the name is somebody's now ([an open
+question](#open-questions)).
+
+Beside its state, each entry names the agents among the project's that read
+one of its copies (`Artifact::agents`), which for a partial install are fewer
+than it was installed for, and where what was installed came from, the
+record's origin, as `--from` takes it. Each project names its own agents too,
+from its settings, so a front end can lay its rows out by agent; a project a
+`mind.toml` marks names none, and reaches none as far as a report can say.
+Whether a copy is current, outdated or edited is #47's to tell, once a copy is
+compared with what it came from, and the states it adds (#48) take over from
+partial for a copy that is missing.
+
+- **Every project the workspace links, in its marker's order**, each
+  directory once however many entries point at it, as every screen lists
+  them, and each project's entries by kind and then name, sorted in core. Not
+  the workspace's own, which are no project's and which nothing is installed
+  into.
+- **A stale entry is listed, not left out**, with why it would not open, and
+  said as a failure beside the rest, as `flayer list` says one: it is the
+  entry somebody has to find to unlink it.
+- **Read, not made.** The ledger is opened with `ledger_for_reading`, so a
+  workspace that never installed anything is left without one, and a default
+  workspace nothing has made is reported as one with nothing linked, as
+  every read resolves it. Core opens it, in `ProjectStatus::read`, rather
+  than each front end, which let the CLI refuse a report over a ledger that
+  would not open while the TUI drew its rows without it. A ledger that
+  cannot be opened or read leaves every copy unrecorded, as `with_records`
+  does, and is said once in a report, and on each project's rows in the TUI,
+  never a reason to hide the rest.
+- **`mind status` asks the workspace `mind` consults** (`resolve::consulted`):
+  the one named, activated or above, if it has been made. One that does not
+  link the project, or none at all, leaves it without records, and it is
+  reported all the same, as `mind list` reports a project nothing links, with
+  a hint saying why nothing in it reads as installed. Refusing, as `mind
+  install` refuses without a workspace that manages the project, was turned
+  down: a read has nothing to protect by refusing. So one found that cannot
+  be read is a warning beside the report, as it is beside a change, and the
+  warning says why nothing reads as installed in place of the hint. One `-W`
+  or the activation names that is no workspace still refuses, as it refuses
+  every command: whoever chose it meant that one.
+
+The CLI lays the report out as `list` lays out its own: a project column only
+when its rows come from more than one project, or a stale entry's row, which
+is nothing but its name, needs one; a kind column only when more than one
+kind is in play; the agents comma-separated as `--agents` takes them, so the
+column holds no space for a script splitting on spaces to cut, and `-` for
+none, since reaching no agent is something to say. `--json` prints the
+report as core built it ([JSON, in one envelope](#json-in-one-envelope)).
+
+The TUI's rows show the same report. Each project is read once, through
+`ProjectStatus::read`, which hands back the catalog it read beside the
+report, so a row's summary, its problems and its state come from one
+discovery rather than two. A row shows its state, then a badge in each of the
+project's agents' places, blank where that agent does not read it, so rows
+read down by agent. The two letters (`CC`, `CX`, `OC`) are the screen's, its
+own initials for each agent, since Claude Code and Codex share the first. A
+row of the workspace's own says neither, and an install nothing of which is
+found has a row like the rest, from which `i` puts it back.
+
 ## The TUI
 
 `flayer` on its own opens a screen over the whole workspace. It is not a
@@ -1870,6 +2026,8 @@ same screen on the project it was run in: inside the workspace that manages
 it, where its neighbours and its installs are, or on the project alone when
 none does. Alone, the keys that belong to a workspace say so instead of
 running, and `l` is `mind link`, after which the screen is the workspace's.
+A project's rows say how each artifact stands, as `flayer status` does ([what
+each project has](#what-each-project-has)).
 
 ### Every change is a command line
 
@@ -4106,7 +4264,7 @@ leak into the lifecycle code. Unblocks #33, #45, #62, #93, #94 and #95.
   project's agents' folders are compared on every listing by `hash::tree`,
   which reads each of their files whole: with a copy installed in each
   target, that is every installed skill, on every `list`, `show`,
-  `validate` and refresh of the minds screen. A skill is a few small files,
+  `validate`, `status` and refresh of the TUI. A skill is a few small files,
   so it is accepted for now. The cheaper ways each miss something:
   `copy::same` stops at the first difference but follows links, which a copy
   here may hold to anything; comparing sizes first saves nothing when the
@@ -4115,14 +4273,29 @@ leak into the lifecycle code. Unblocks #33, #45, #62, #93, #94 and #95.
   a foreign copy has none. If a skill's assets make a listing slow, that
   recorded hash, compared where `Catalog::with_records` already reads the
   ledger, is where to start.
-- **A minds screen that lists what it cannot change.** The TUI's project rows
-  come from the same discovery, so a v3 project's row lists the skills in its
+- **A screen that lists what it cannot change.** The TUI's project rows
+  come from the same discovery, so a v3 project's rows list the skills in its
   agents' folders as well. A row is one name, so a change aimed at it reaches
   the project's own copy when it authors one, and is refused (`NotAuthored`)
   when the name sits only in its agents' folders. An own copy that does not
   read takes the row its name has rather than a second one, whose keys would
-  reach it all the same. #36 gives each row its state; until then a row does
-  not say which of its skills are the project's to change.
+  reach it all the same. Each row says its state, so one that is installed
+  or foreign reads as such before a key is pressed, but the keys that change
+  an artifact are still offered on it and refused only once pressed; leaving
+  them out of the footer on such a row would say so sooner.
+- **An install gone under a name somebody keeps.** When every copy of an
+  install has gone and the project holds something else by that name, status
+  says the name as what is there, and nothing of the record, which lingers:
+  the next install of it is refused as foreign when what is there sits where
+  it would write, and `flayer uninstall` forgets the record without touching
+  what is there. While a copy of the install is left, the entry holds it and
+  says partial, even over the project's own copy. A second entry of the same
+  name would say it, at the price of the one name a row the screen and every
+  listing keep to.
+- **Errors outside the envelope.** A command that fails says why as text on
+  stderr, `--json` or not, and prints no envelope, so a script tells failure
+  only by the exit status. #61 gives errors codes, and is where an error
+  joins the envelope, if it does.
 - **An agent's CLI writing the same config file.** The workspace's lock keeps
   Mindflayer's writers apart, not the agents': `claude mcp add` rewriting
   `.mcp.json` between `ConfigFile::edit`'s read and its rename is undone by the

@@ -11,6 +11,7 @@ pub(crate) mod install;
 pub(crate) mod migrate;
 pub(crate) mod project;
 pub(crate) mod read;
+pub(crate) mod status;
 pub(crate) mod workspace;
 
 use std::path::{Path, PathBuf};
@@ -34,6 +35,7 @@ use read::{
     everywhere, everywhere_and_the_shelf, list, list_workspace, one_project, show, validate,
     wanted, Level, Selector,
 };
+use status::{status_here, status_of_project, status_of_workspace};
 use workspace::{load_command, unload_command};
 
 /// Run `mind`.
@@ -156,6 +158,7 @@ pub(crate) fn run_with(cli: &Cli, lookup: &Lookup, watch: &Watch) -> Result<Outc
                 validate(catalog, &selector, level)
             })
         }
+        Command::Status { json } => status_here(project_here(&directory)?, lookup, *json),
         Command::Link => link_here(&directory, lookup),
         Command::Unlink => unlink_here(&directory, lookup),
         Command::Load { workspaces } => {
@@ -407,6 +410,20 @@ fn run_flayer(
                     let (projects, warnings) = managed(workspace);
                     everywhere(workspace, warnings, &projects, kinds, read)
                 }
+            })
+        }
+        // Read as `list` reads, on the default workspace before it is made
+        // too, and from a ledger read without being made: a workspace that
+        // has installed nothing has none, and a report is no reason to
+        // create one.
+        FlayerCommand::Status { project, json } => {
+            reading_workspace(directory, lookup, |workspace| match project {
+                Some(project) => Ok(status_of_project(
+                    workspace,
+                    workspace.pick(project)?,
+                    *json,
+                )),
+                None => Ok(status_of_workspace(workspace, *json)),
             })
         }
         FlayerCommand::Validate { target, project } => {
