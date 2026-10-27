@@ -10,6 +10,7 @@ pub mod ui;
 
 use std::fmt::Write as _;
 use std::io;
+use std::path::Path;
 use std::time::Duration;
 
 use mindflayer_core::install::{self, Installed, Removed};
@@ -237,6 +238,9 @@ pub fn apply(
     let mut stderr = Vec::new();
     // Said once a project, after the warnings, and no reason to fail.
     let mut notes: Vec<String> = Vec::new();
+    // The projects an install was asked of, each told once of the folders
+    // its settings name that no install uses.
+    let mut installing: Vec<&Path> = Vec::new();
     let (mut installed, mut removed) = (0usize, 0usize);
 
     for (target, row, what) in screen.pending() {
@@ -246,6 +250,10 @@ pub fn apply(
 
         match what {
             Pending::Install => {
+                if !installing.contains(&project.root()) {
+                    installing.push(project.root());
+                    stderr.extend(crate::commands::install::misplaced(project));
+                }
                 // One that cannot be installed is said and passed over: the
                 // rest were marked too, and what was already done is reported.
                 // Only the ledger failing stops everything.
