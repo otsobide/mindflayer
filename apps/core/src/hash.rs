@@ -78,10 +78,11 @@ pub fn tree(root: &Path) -> Result<String, io::Error> {
 /// The SHA-256 of a file's contents, as 64 lowercase hex digits.
 ///
 /// For a target that is one file Mindflayer writes whole, as a rule is in
-/// Claude's rules folder (#43), where [`tree`] walks a folder. The bytes
-/// alone, not the file's name, as a copy's own name is not part of its
-/// tree's hash; and handed the bytes rather than a path, so what is hashed
-/// is what was written or read, never a file that changed in between.
+/// Claude's rules folder ([`crate::claude_rules`]), where [`tree`] walks a
+/// folder. The bytes alone, not the file's name, as a copy's own name is not
+/// part of its tree's hash; and handed the bytes rather than a path, so what
+/// is hashed is what was written or read, never a file that changed in
+/// between.
 pub fn bytes(contents: &[u8]) -> String {
     hex(Sha256::new_with_prefix(contents))
 }
