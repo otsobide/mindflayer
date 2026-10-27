@@ -686,7 +686,9 @@ fn the_install_screen_opens_inside_the_tui_and_applies_from_there() {
     let task = press_and_run(&mut app, KeyCode::Char('y'));
 
     assert_eq!(task, Some(Task::ApplyInstall));
-    assert!(dir.path().join("collapse/skills/deploy/SKILL.md").is_file());
+    for copy in copies(&dir.path().join("collapse"), "deploy") {
+        assert!(copy.join("SKILL.md").is_file(), "{}", copy.display());
+    }
     let Mode::Reading(reader) = &app.mode else {
         panic!("{:?}", app.mode);
     };
@@ -739,12 +741,12 @@ fn the_install_screen_inside_the_tui_installs_where_each_agent_of_a_v3_project_r
 #[test]
 fn every_line_the_tui_runs_and_its_install_screen_keep_out_of_the_agents_folders_it_was_given() {
     let (dir, _workspace, _ledger) = shelved(&["collapse"], &["deploy"]);
-    // The project's own skills folder stands for an agent's folder for every
-    // project, as a project at the user's home has.
-    let skills = dir.path().join("collapse").join("skills");
+    // The project's `.agents` stands for the folder several agents read for
+    // every project, as a project at the user's home has.
+    let collapse = dir.path().join("collapse");
     let lookup = Lookup {
         agents: AgentHomes {
-            agents_dir: Some(skills.clone()),
+            agents_dir: Some(collapse.join(".agents")),
             ..AgentHomes::default()
         },
         ..Lookup::default()
@@ -774,7 +776,9 @@ fn every_line_the_tui_runs_and_its_install_screen_keep_out_of_the_agents_folders
         "{}",
         app.transcript()
     );
-    assert!(!skills.join("deploy").exists());
+    for copy in copies(&collapse, "deploy") {
+        assert!(!copy.exists(), "{}", copy.display());
+    }
 }
 
 #[test]
@@ -1609,7 +1613,7 @@ fn mind_with_no_project_offers_to_make_one() {
     let task = press_and_run(&mut app, KeyCode::Enter);
 
     assert_eq!(task, Some(Task::InitProject));
-    assert!(dir.path().join(MIND_DIR).join(MIND_CONFIG).is_file());
+    assert!(dir.path().join(MIND_DIR).join(SETTINGS_FILE).is_file());
     assert_eq!(app.scope(), Scope::Project);
 }
 

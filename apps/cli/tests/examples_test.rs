@@ -180,14 +180,18 @@ fn a_workspace_loads_the_examples_and_installs_commit_style_with_its_reference()
         offered.stdout
     );
     assert!(installed.ok, "{:?}", installed.stderr);
-    let copy = projects.join("collapse/skills/commit-style");
     let source = examples().join("skills/commit-style");
-    for file in ["SKILL.md", "references/examples.md"] {
-        assert_eq!(
-            fs::read(copy.join(file)).unwrap(),
-            fs::read(source.join(file)).unwrap(),
-            "{file}"
-        );
+    // Where the README says the copies are: one for Claude, one Codex and
+    // OpenCode share.
+    for folder in [".claude/skills", ".agents/skills"] {
+        let copy = projects.join("collapse").join(folder).join("commit-style");
+        for file in ["SKILL.md", "references/examples.md"] {
+            assert_eq!(
+                fs::read(copy.join(file)).unwrap(),
+                fs::read(source.join(file)).unwrap(),
+                "{folder}: {file}"
+            );
+        }
     }
 }
 

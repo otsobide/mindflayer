@@ -562,12 +562,15 @@ fn init_can_be_told_where_this_project_keeps_its_skills() {
 
     assert!(outcome.ok);
     assert!(dir.path().join(".claude").join("skills").is_dir());
-    let written = fs::read_to_string(dir.path().join(MIND_DIR).join(MIND_CONFIG)).unwrap();
+    let written = fs::read_to_string(dir.path().join(MIND_DIR).join(SETTINGS_FILE)).unwrap();
+    // The kind that was not mentioned keeps its default, written down too,
+    // since a kind the settings leave out has no folder at all.
     assert!(
-        written.contains(r#"skills = ".claude/skills""#),
+        written.contains(
+            "  \"directories\": {\n    \"skills\": \".claude/skills\",\n    \"rules\": \"rules\"\n  }\n"
+        ),
         "{written}"
     );
-    // The kind that was not mentioned keeps its default.
     assert!(dir.path().join("rules").is_dir());
 }
 

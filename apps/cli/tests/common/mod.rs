@@ -19,7 +19,9 @@ pub use mindflayer_core::gather::{Progress, Watch};
 pub use mindflayer_core::install::Standing;
 pub use mindflayer_core::ledger::Ledger;
 pub use mindflayer_core::{AgentHomes, FlayerWorkspace, Reason};
-pub use mindflayer_core::{Kind, MindProject, FLAYER_CONFIG, FLAYER_DIR, MIND_CONFIG, MIND_DIR};
+pub use mindflayer_core::{
+    Kind, MindProject, FLAYER_CONFIG, FLAYER_DIR, MIND_CONFIG, MIND_DIR, SETTINGS_FILE,
+};
 pub use ratatui::backend::TestBackend;
 pub use ratatui::crossterm::event::KeyCode;
 pub use ratatui::crossterm::event::{KeyEvent, KeyModifiers};
@@ -164,6 +166,22 @@ pub fn directory_for(root: &Path, kind: Kind) -> PathBuf {
         .unwrap()
 }
 
+/// Every copy an install puts of the skill `name` in the project at `root`,
+/// one in each folder core's `install::targets` gives: asked of core as
+/// [`directory_for`] is, so a test reads the same for a project marked by its
+/// settings, whose agents' folders take the copies, and one a `mind.toml`
+/// marks, whose one folder does.
+pub fn copies(root: &Path, name: &str) -> Vec<PathBuf> {
+    let project = MindProject::open(root).expect("an initialized mind project");
+    let targets = mindflayer_core::install::targets(&project, Kind::Skill)
+        .expect("somewhere to install into");
+    assert!(!targets.is_empty(), "{}: no target", root.display());
+    targets
+        .into_iter()
+        .map(|target| target.folder.join(name))
+        .collect()
+}
+
 /// Where the workspace at `root` keeps its own of a kind, asked of the
 /// workspace as [`directory_for`] asks a project.
 pub fn own_directory_for(root: &Path, kind: Kind) -> PathBuf {
@@ -245,6 +263,36 @@ pub fn write_rule(root: &Path, route: &str, contents: &str) {
     let path = directory_for(root, Kind::Rule).join(route);
     fs::create_dir_all(path.parent().unwrap()).expect("create the rule folder");
     fs::write(path, contents).expect("write the rule");
+}
+
+/// The names in `dir`, sorted: what a test holds a folder to when nothing
+/// else may be there.
+pub fn names_in(dir: &Path) -> Vec<String> {
+    let mut names: Vec<String> = fs::read_dir(dir)
+        .unwrap()
+        .map(|entry| entry.unwrap().file_name().to_string_lossy().into_owned())
+        .collect();
+    names.sort();
+    names
+}
+
+/// What git would call untracked in the repository at `work_tree`, as `git
+/// status` lists it: a folder holding only what is ignored is not listed, and
+/// neither is an empty one. Asked of gix in process, with the repository
+/// opened isolated, so neither a `git` binary nor the user's git config has
+/// a say.
+pub fn untracked(work_tree: &Path) -> Vec<String> {
+    let repository = gix::open_opts(work_tree, gix::open::Options::isolated()).unwrap();
+    let index = repository.index_or_empty().unwrap();
+    let options = repository
+        .dirwalk_options()
+        .unwrap()
+        .emit_untracked(gix::dir::walk::EmissionMode::CollapseDirectory);
+    repository
+        .dirwalk_iter(index, None::<&str>, Default::default(), options)
+        .unwrap()
+        .map(|item| item.unwrap().entry.rela_path.to_string())
+        .collect()
 }
 
 /// A git repository holding these files, with one commit.
@@ -482,7 +530,9 @@ pub fn installed(dir: &Path, workspace: &FlayerWorkspace, ledger: &Ledger) {
     let mut screen = screen_for(workspace, ledger);
     press(&mut screen, &[KeyCode::Right, KeyCode::Char(' ')]);
     install_screen::apply(workspace, ledger, &screen, &AgentHomes::default()).unwrap();
-    assert!(dir.join("collapse/skills/deploy/SKILL.md").is_file());
+    for copy in copies(&dir.join("collapse"), "deploy") {
+        assert!(copy.join("SKILL.md").is_file(), "{}", copy.display());
+    }
 }
 
 /// `workspace_with_two`, with a skill of the workspace's own.

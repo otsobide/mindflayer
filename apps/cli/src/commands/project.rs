@@ -10,22 +10,27 @@ use std::path::{Path, PathBuf};
 
 use mindflayer_core::scan::MAX_LISTED;
 use mindflayer_core::{
-    scan, Directories, FlayerWorkspace, Initialization, Kind, MindProject, Registration, Scan,
-    WorkspaceError,
+    scan, Agent, Directories, FlayerWorkspace, Initialization, Kind, MindProject, Registration,
+    Scan, Share, WorkspaceError,
 };
 
 use super::{all_or_nothing, project_here, targets, workspace_for, workspace_here};
 use crate::render::{as_stored, printable, table};
 use crate::{CliError, Failure, Lookup, Outcome};
 
-/// `mind init`: the directory made a mind project.
+/// `mind init`: the directory made a mind project, marked by its settings,
+/// for every agent and kept out of git: what a new project is (D-01).
+///
+/// The folders it authors in are written down, each asked for or else the
+/// default beside the code, since a kind its settings leave out has none.
 pub(crate) fn init_project(
     directory: &Path,
     skills: Option<&Path>,
     rules: Option<&Path>,
 ) -> Result<Outcome, Failure> {
-    let directories = asked_directories(skills, rules);
-    let (project, outcome) = MindProject::init_with(directory, &directories)?;
+    let directories = asked_directories(skills, rules).with_defaults();
+    let (project, outcome) =
+        MindProject::init_settings(directory, &Agent::ALL, Share::Local, &directories)?;
     Ok(Outcome::plain(initialized(
         "mind project",
         project.name(),
