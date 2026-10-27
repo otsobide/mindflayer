@@ -184,12 +184,13 @@ about every file, and reaches Claude Code, Codex and OpenCode alike, through a
 marked block in the project's `AGENTS.md`, the one file all three read. Claude
 reads `AGENTS.md` only where no `CLAUDE.md` or `CLAUDE.local.md` is in the
 project or above it, so where the project's own `CLAUDE.md` is in the way,
-Mindflayer adds an `@AGENTS.md` line to it, between markers, and takes it out
-with the last rule; where it may not edit one (a `CLAUDE.md` above the
-project, a `CLAUDE.local.md`, or one git tracks in a local project), Claude
-gets the rule as a rule file of its own instead, so it reads each rule once.
-Mindflayer never creates a `CLAUDE.md`. A rule that states `paths` is about
-those files only, and only Claude Code honours that: it goes to Claude alone, as
+and does not import `AGENTS.md` already, Mindflayer adds an `@AGENTS.md` line
+to it, between markers, and takes it out with the last rule; where it may not
+edit one (a `CLAUDE.md` above the project, a `CLAUDE.local.md`, or one git
+tracks in a local project), Claude gets the rule as a rule file of its own
+instead, so it reads each rule once. Mindflayer never creates a `CLAUDE.md`.
+A rule that states `paths` is about those files only, and only Claude Code
+honours that: it goes to Claude alone, as
 `.claude/rules/mindflayer/<name>.md`, which Claude loads once it reads a file
 the patterns match, and never into `AGENTS.md`, where every agent would read
 it for every file. Codex and OpenCode read no `.claude/rules`, so a

@@ -3662,14 +3662,17 @@ files](#claudes-rule-files)).
   that file. The walk starts from the project's root resolved, as Claude,
   started there, has its directory from the system. Anything at one of the
   names counts, a link followed, a link to nothing not.
-- **Four reaches.** `claude_md::reach` takes the predicate, the project's
+- **Five reaches.** `claude_md::reach` takes the predicate, the project's
   settings and whether the block was written, and says how Claude gets the
   block. `Reach::Native` when nothing is in the way. `Reach::Same` when one
   of Claude's own names in the project is the `AGENTS.md`, one file through
   a link, as some teams keep the two: Claude reads the block as that file,
   and an import there would bring the file into itself, between markers the
-  block already holds. `Reach::Import` when the project's own `CLAUDE.md`
-  or `.claude/CLAUDE.md` may take the import. `Reach::Fallback`, with its
+  block already holds. `Reach::Imported` when one of the project's own
+  files already imports `AGENTS.md` with a line somebody wrote, as Claude's
+  docs show a `CLAUDE.md` sharing it. `Reach::Import` when the project's
+  own `CLAUDE.md` or `.claude/CLAUDE.md` may take Mindflayer's import, or
+  already holds it. `Reach::Fallback`, with its
   reason, otherwise: no block written, only a `CLAUDE.local.md`, a
   `CLAUDE.md` only above the project, the project's own one tracked by git
   in a local project without `edit_tracked`, one reached through a link, or
@@ -3678,15 +3681,29 @@ files](#claudes-rule-files)).
   import in the same file would have each render take the other's block
   for its own.
 - **Never read twice.** `Reach::mode` is the mode Claude's rule files are
-  rendered in: `Mode::Scoped` for `Native`, `Same` and `Import`, where Claude
-  reads the block once, natively, as its own file, or through an import,
-  which loads a file once and turns the native read off by being in a
-  `CLAUDE.md` (verified); `Mode::Fallback` for every reason Claude reads no
-  block, where its rules folder holds every rule and the block none of them
-  for Claude. No block written is a fallback too, whatever the predicate
-  says: Claude cannot read a block that is not there, and the rules folder
-  then holds the rules about every file that a refused or skipped block
-  would have. So Claude reads a rule in exactly one place.
+  rendered in: `Mode::Scoped` for `Native`, `Same`, `Imported` and `Import`,
+  where Claude reads the block once, natively, as its own file, or through
+  an import, which loads a file once and turns the native read off by being
+  in a `CLAUDE.md` (verified); `Mode::Fallback` for every reason Claude
+  reads no block, where its rules folder holds every rule and the block none
+  of them for Claude. No block written is a fallback too, whatever the
+  predicate says: Claude cannot read a block that is not there, and the
+  rules folder then holds the rules about every file that a refused or
+  skipped block would have. So Claude reads a rule in exactly one place.
+  An import somebody wrote counts as Mindflayer's does, in a file Mindflayer
+  may not edit too: a team's tracked `CLAUDE.md` holding `@AGENTS.md`, in a
+  local project, would otherwise give the fallback, and Claude would read
+  every rule about every file in the block through that line and again in
+  its rules folder. So does one in a `CLAUDE.local.md`, when no file of the
+  project's own can take Mindflayer's, since Claude reads that file as it
+  reads `CLAUDE.md`. Such an import is a line of its own, `@AGENTS.md`, or
+  `@../AGENTS.md` in `.claude/CLAUDE.md`, the line Mindflayer would write,
+  outside a fenced code block, whose imports Claude skips (docs-only), and
+  outside an HTML comment over several lines, which Claude strips. Looking
+  no further is on purpose: a line taken for an import Claude does not
+  follow would keep those rules from Claude altogether, while one missed
+  has Claude read them twice at worst. An `@AGENTS.md` in the middle of a
+  sentence, which Claude follows too, is one missed.
 - **Which file takes the import.** `CLAUDE.md` first, the file the probe
   verified the import in, as `@AGENTS.md`; then `.claude/CLAUDE.md`, as
   `@../AGENTS.md`, since Claude resolves an import from the file holding it
@@ -3700,6 +3717,12 @@ files](#claudes-rule-files)).
   the block even once it may no longer be edited, a tracked `CLAUDE.md`
   committed with the import in it say, since Claude reads it there anyway:
   taking the fallback beside it would have Claude read every rule twice.
+  An import somebody wrote in either file comes before Mindflayer's, which
+  is then wanted nowhere and taken out where it may be, so nothing is
+  written where a team already shares `AGENTS.md` with Claude. One in a
+  `CLAUDE.local.md` comes after every file of the project's own that may
+  take Mindflayer's: it reaches only its owner, and a teammate cloning a
+  shared project needs the import in the file they share.
 - **A block at the top.** The import sits between the markers the block of
   `AGENTS.md` has, read by the same search (`agents_md::locate`) through
   the same lines (`lines`), at the top of the file, an empty line below it,
@@ -4412,8 +4435,11 @@ project's root and every folder above it but `/`, the user memory file left
 out by the file it is. `claude_md::reach` turns it, the project's settings
 and whether the block was written into Native, the import in the project's
 own `CLAUDE.md` or `.claude/CLAUDE.md`, or the fallback with its reason, and
-one more: a `CLAUDE.md` that is the `AGENTS.md` through a link, which Claude
-reads the block as. `claude_md::render` adds the import once, between the
+two more: a `CLAUDE.md` that is the `AGENTS.md` through a link, which Claude
+reads the block as, and an `@AGENTS.md` line somebody already wrote in one
+of Claude's files, which Claude reads the block through, so that a team's
+own import, in a file Mindflayer may not edit too, never leaves Claude
+reading a rule twice. `claude_md::render` adds the import once, between the
 block's markers at the top of the file, and takes it out with the last rule;
 it never makes a `CLAUDE.md` or a `CLAUDE.local.md`, and never edits a file
 above the project, reporting it as the fallback's reason instead ([how

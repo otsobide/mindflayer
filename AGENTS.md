@@ -270,13 +270,14 @@ These are easy to break from a single file without noticing.
     project's root and every folder above it but `/`, the user memory file
     left out. `claude_md::reach` decides Native, the import, or Claude's
     rules folder (`Reach::mode`), never more than one, so Claude reads each
-    rule once. `claude_md::render` never makes a `CLAUDE.md` or a
-    `CLAUDE.local.md`, never edits a file above the project (it is the
-    fallback's reason instead), a link, the user memory file or the
-    `AGENTS.md` itself, edits a file git tracks (`exclude::tracks_file`) in
-    a local project only with `edit_tracked`, and takes the import out with
-    the last rule, giving the file back as it was; one it may no longer
-    take out is left and said.
+    rule once; an `@AGENTS.md` line somebody wrote in one of Claude's files
+    counts as the import, and nothing is written. `claude_md::render` never
+    makes a `CLAUDE.md` or a `CLAUDE.local.md`, never edits a file above
+    the project (it is the fallback's reason instead), a link, the user
+    memory file or the `AGENTS.md` itself, edits a file git tracks
+    (`exclude::tracks_file`) in a local project only with `edit_tracked`,
+    and takes the import out with the last rule, giving the file back as it
+    was; one it may no longer take out is left and said.
   - An entry in a config file somebody else owns (`.mcp.json`,
     `opencode.json`, `.codex/config.toml`) is changed one at a time through
     `config_entry`: JSON and JSONC entries are edited through jsonc-parser's
