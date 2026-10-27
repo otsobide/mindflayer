@@ -108,10 +108,10 @@ impl Catalog {
     ///
     /// For a project marked by its settings, the folder each of its agents
     /// is sent a copy in, then the one it authors in, unless that is one of
-    /// them: one folder named twice is read once, so a skill in it is listed
-    /// once, whatever the ledger says of it. For any other, the one folder its
-    /// marker names. None for a kind it keeps nowhere. What a front end names
-    /// to say where it looked.
+    /// them: one folder named twice, or reached twice through a link, is read
+    /// once, so a skill in it is listed once, whatever the ledger says of it.
+    /// For any other, the one folder its marker names. None for a kind it
+    /// keeps nowhere. What a front end names to say where it looked.
     pub fn folders(project: &MindProject, kind: Kind) -> Vec<PathBuf> {
         read_from(project, kind)
             .into_iter()
@@ -728,19 +728,28 @@ fn read_from(project: &MindProject, kind: Kind) -> Vec<Folder> {
             .collect();
     };
     let agents = &settings.agents;
-    let mut folders: Vec<Folder> = project
-        .targets(kind)
-        .into_iter()
-        .map(|target| {
-            let path = project.root().join(&target.path);
-            Folder {
-                agents: readers(project, kind, &path, agents),
-                path,
-                authored: false,
-                shared: true,
-            }
-        })
-        .collect();
+    let mut folders: Vec<Folder> = Vec::new();
+    for target in project.targets(kind) {
+        let path = project.root().join(&target.path);
+        // Two targets that are one folder on disk, `.claude/skills` linked to
+        // `.agents/skills` so that Claude and Codex share it, are read once,
+        // under the first spelling, as the authored folder is below: read
+        // twice, each skill there would load twice and each failure in it be
+        // said twice. Its readers are both targets' already, since `readers`
+        // matches through the filesystem too.
+        if folders
+            .iter()
+            .any(|folder| same_directory(&folder.path, &path))
+        {
+            continue;
+        }
+        folders.push(Folder {
+            agents: readers(project, kind, &path, agents),
+            path,
+            authored: false,
+            shared: true,
+        });
+    }
     if let Some(authored) = authored {
         match folders
             .iter_mut()

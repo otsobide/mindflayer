@@ -793,6 +793,31 @@ fn one_folder_reached_through_a_link_is_one_copy() {
 
 #[cfg(unix)]
 #[test]
+fn two_agents_folders_that_are_one_on_disk_are_read_once() {
+    let parent = TempDir::new().unwrap();
+    let one = marked(&parent, "alpha", &Agent::ALL, None);
+    let shared = put(&one, ".agents/skills/deploy", &skill_file("deploy"));
+    put(&one, ".agents/skills/broken", "no front matter at all\n");
+    fs::create_dir_all(one.root().join(".claude")).unwrap();
+    std::os::unix::fs::symlink("../.agents/skills", one.root().join(".claude/skills")).unwrap();
+
+    let catalog = Catalog::discover(std::slice::from_ref(&one));
+
+    // Each skill there once, and each failure there said once.
+    assert_eq!(catalog.artifacts().len(), 1);
+    let deploy = &catalog.artifacts()[0];
+    assert_eq!(deploy.path(), shared);
+    assert_eq!(deploy.copies().len(), 1);
+    assert_eq!(deploy.agents(), Agent::ALL);
+    assert_eq!(catalog.failures().len(), 1, "{:?}", catalog.failures());
+    assert_eq!(
+        Catalog::folders(&one, Kind::Skill),
+        [one.root().join(".agents").join("skills")]
+    );
+}
+
+#[cfg(unix)]
+#[test]
 fn a_copy_holding_a_link_is_said_rather_than_followed_to_compare_it() {
     let parent = TempDir::new().unwrap();
     let one = marked(&parent, "alpha", &Agent::ALL, None);
