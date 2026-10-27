@@ -2420,6 +2420,32 @@ fn a_project_installing_where_no_agent_reads_is_marked_and_its_pane_says_why() {
 }
 
 #[test]
+fn a_strip_wraps_by_how_wide_its_words_are_drawn() {
+    let dir = workspace_with_own();
+    let alpha = dir.path().join("alpha");
+    // Each character two columns wide, so a line of as many characters as
+    // the strip has columns would be cut at its border.
+    let folder = format!(".{}", "技".repeat(16));
+    mind(&alpha, &["targets", "set", "skills", &folder, "-y"]).unwrap();
+    let app = tui_in(dir.path());
+
+    for width in [80, 100, 110] {
+        let mut terminal = Terminal::new(TestBackend::new(width, 30)).unwrap();
+        terminal.draw(|frame| tui::ui::draw(&app, frame)).unwrap();
+        let drawn: String = terminal
+            .backend()
+            .buffer()
+            .content()
+            .iter()
+            .map(|cell| cell.symbol())
+            .collect();
+        assert_eq!(drawn.matches('技').count(), 16, "{width}: {drawn}");
+        assert!(drawn.contains("until"), "{width}: {drawn}");
+        assert!(drawn.contains("pointed"), "{width}: {drawn}");
+    }
+}
+
+#[test]
 fn a_strip_is_drawn_on_a_terminal_too_short_for_it() {
     let dir = workspace_with_own();
     let alpha = dir.path().join("alpha");

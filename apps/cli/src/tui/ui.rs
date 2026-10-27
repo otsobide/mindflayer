@@ -561,8 +561,12 @@ pub(crate) const fn badge(agent: Agent) -> &'static str {
     }
 }
 
-/// Break text into lines of at most `room` characters, at spaces where there
+/// Break text into lines at most `room` columns wide, at spaces where there
 /// are any.
+///
+/// Measured in the columns a terminal draws, not in characters: a line as
+/// many characters long as the room, holding some drawn two columns wide,
+/// would otherwise run past the border and be cut there.
 fn wrap(text: &str, room: usize) -> Vec<String> {
     if room == 0 {
         return vec![text.to_owned()];
@@ -570,25 +574,42 @@ fn wrap(text: &str, room: usize) -> Vec<String> {
     let mut lines = Vec::new();
     let mut line = String::new();
     for word in text.split(' ') {
-        let taken = line.chars().count();
-        if taken > 0 && taken + 1 + word.chars().count() > room {
+        let taken = columns(&line);
+        if taken > 0 && taken + 1 + columns(word) > room {
             lines.push(std::mem::take(&mut line));
         }
         if !line.is_empty() {
             line.push(' ');
         }
         line.push_str(word);
-        // A word longer than the room is cut where the room ends.
-        while line.chars().count() > room {
-            let head: String = line.chars().take(room).collect();
-            line = line.chars().skip(room).collect();
-            lines.push(head);
+        // A word wider than the room is cut where the room ends.
+        while columns(&line) > room {
+            let rest = line.split_off(fitting(&line, room));
+            lines.push(std::mem::replace(&mut line, rest));
         }
     }
     if !line.is_empty() {
         lines.push(line);
     }
     lines
+}
+
+/// How many columns a terminal draws `text` in.
+fn columns(text: &str) -> usize {
+    Span::raw(text).width()
+}
+
+/// Where `line` is cut for what comes before to fit in `room` columns: at
+/// least one character in, so one wider than the room still moves on.
+fn fitting(line: &str, room: usize) -> usize {
+    let mut taken = 0;
+    for (at, character) in line.char_indices() {
+        taken += columns(character.encode_utf8(&mut [0; 4]));
+        if taken > room {
+            return if at == 0 { character.len_utf8() } else { at };
+        }
+    }
+    line.len()
 }
 
 /// The keys, most needed first so a narrow terminal cuts the least useful,
