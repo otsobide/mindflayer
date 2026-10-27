@@ -924,14 +924,16 @@ impl MindProject {
     /// The file is read here, not taken from what was read when the project
     /// was opened, so a change is made to the file it is about to write and
     /// not to a copy that may be minutes old, as a workspace's marker is
-    /// edited ([`FlayerWorkspace`]'s `edit_array`). Each key whose value
-    /// changed is edited where it stands (`settings::edited`), so a key this
-    /// build does not know, the order of the keys and the file's layout all
-    /// stay as somebody left them. A changed file is written through a
-    /// temporary and a rename (`replace_file`), so a crash leaves the old
-    /// settings or the new ones; an unchanged one is not written at all, its
-    /// modification time included. What is in memory afterwards is read back
-    /// from the file.
+    /// edited ([`FlayerWorkspace`]'s `edit_array`), through the same
+    /// `rewrite`. Each key whose value changed is edited where it stands, in
+    /// a `settings.toml` through toml_edit as `flayer.toml` is
+    /// (`settings::toml_edited`), so a key this build does not know, the
+    /// order of the keys, the comments and the file's layout all stay as
+    /// somebody left them. A changed file is written through a temporary and
+    /// a rename (`replace_file`), so a crash leaves the old settings or the
+    /// new ones; an unchanged one is not written at all, its modification
+    /// time included. What is in memory afterwards is read back from the
+    /// file.
     ///
     /// A change of `targets` writes the version they need with them
     /// ([`Settings::version_needed`]), up when a kind is named and down when
@@ -965,13 +967,18 @@ impl MindProject {
                 path: self.root.clone(),
             });
         }
-        let path = self.mind_dir().join(SETTINGS_FILE);
+        let path = self.marker_path();
+        let toml = self.marker_file() == MarkerFile::SettingsToml;
         let value = rewrite(&path, |text| {
             let before = crate::settings::parse(&path, text)?;
             let mut wanted = before.clone();
             let value = change(&mut wanted);
             Self::check_change(&path, &before, &mut wanted)?;
-            let edited = crate::settings::edited(&path, text, &before, &wanted)?;
+            let edited = if toml {
+                crate::settings::toml_edited(&path, text, &before, &wanted)?
+            } else {
+                crate::settings::edited(&path, text, &before, &wanted)?
+            };
             Ok((edited, value))
         })?;
         self.config = ProjectConfig::Settings(Settings::read(&path)?);

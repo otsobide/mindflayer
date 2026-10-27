@@ -122,8 +122,13 @@ impl Settings {
     /// ([`MindProject::change_settings`](crate::MindProject::change_settings)),
     /// back down too once no kind is named, so a project whose override
     /// went is one an older build reads again.
+    ///
+    /// A `settings.json`'s rule: a `settings.toml` needs the one version it
+    /// holds, [`SETTINGS_TOML_VERSION`], whatever it says.
     pub fn version_needed(&self) -> u32 {
-        if self.targets.is_empty() {
+        if self.version >= SETTINGS_TOML_VERSION {
+            SETTINGS_TOML_VERSION
+        } else if self.targets.is_empty() {
             SETTINGS_VERSION
         } else {
             TARGETS_VERSION
@@ -459,11 +464,7 @@ impl fmt::Display for ProjectId {
 
 /// `path` as a TOML string spelled with `/`, refused when it is not UTF-8.
 fn toml_path(path: &Path) -> Result<String, WorkspaceError> {
-    paths::to_config_string(path)
-        .map(|written| toml_string(&written))
-        .ok_or_else(|| WorkspaceError::NonUtf8Path {
-            path: path.to_path_buf(),
-        })
+    config_path(path).map(|written| toml_string(&written))
 }
 
 const VERSION: &str = "version";
@@ -641,6 +642,183 @@ pub(crate) fn edited(
             .map_err(|error| refused(error.to_string()))?;
     }
     Ok(text)
+}
+
+/// `text`, the `settings.toml` at `path` holding `before`, changed to hold
+/// `wanted` through toml_edit, as `flayer.toml` is edited, with every byte
+/// that is not a changed value as it was.
+///
+/// Only the keys whose values differ are touched, `directories` and
+/// `targets` an entry at a time: a key this build does not know, the order
+/// the keys are written in, the comments above a key and after its value on
+/// its line, and a value that did not change all stay as the file had them,
+/// so the template's comments and a file somebody laid out by hand are kept.
+/// A changed value is written as toml_edit writes a new one, where the old
+/// one stood. A key the file left out goes in after the others in its table,
+/// and only when what it holds is not what leaving it out reads as:
+/// `edit_tracked` off is not written in by an edit that changes something
+/// else.
+///
+/// The version and the id are refused rather than changed, as in a
+/// `settings.json`: a version moves with a migration, which writes the file
+/// its version describes, and an id names the project for good. A
+/// `settings.toml` is [`SETTINGS_TOML_VERSION`] whatever it sets, so no
+/// edit moves it.
+///
+/// `targets` emptied is taken out whole, its `[targets]` header included,
+/// since leaving it out is what a file that installs where its agents read
+/// says; but for a comment somebody wrote above the header, which keeps the
+/// header, empty, since an empty table says the same and their words stay.
+/// What is taken out of a table takes the comments on its own lines with it.
+pub(crate) fn toml_edited(
+    path: &Path,
+    text: &str,
+    before: &Settings,
+    wanted: &Settings,
+) -> Result<String, WorkspaceError> {
+    let refused = |detail: String| WorkspaceError::Edit {
+        path: path.to_path_buf(),
+        detail,
+    };
+    if wanted.version != before.version {
+        return Err(refused(format!(
+            "`{VERSION}` changes with a migration, never with an edit"
+        )));
+    }
+    if wanted.id != before.id {
+        return Err(refused(format!(
+            "`{ID}` names the project for good, so no edit changes it"
+        )));
+    }
+    let mut document: toml_edit::DocumentMut = text
+        .parse()
+        .map_err(|error: toml_edit::TomlError| refused(error.to_string()))?;
+    let root = document.as_table_mut();
+
+    if wanted.name != before.name {
+        set(root, NAME, wanted.name.as_str().into());
+    }
+    if wanted.agents != before.agents {
+        let agents: toml_edit::Array = wanted.agents.iter().map(|agent| agent.name()).collect();
+        set(root, AGENTS, agents.into());
+    }
+    if wanted.share != before.share {
+        set(root, SHARE, wanted.share.name().into());
+    }
+    if wanted.edit_tracked != before.edit_tracked
+        && (wanted.edit_tracked || root.contains_key(EDIT_TRACKED))
+    {
+        set(root, EDIT_TRACKED, wanted.edit_tracked.into());
+    }
+
+    if wanted.directories != before.directories {
+        edit_entries(
+            path,
+            root,
+            DIRECTORIES,
+            &before.directories.entries(),
+            &wanted.directories.entries(),
+            |directory| Ok(config_path(directory)?.into()),
+        )?;
+    }
+    if wanted.targets != before.targets {
+        if wanted.targets.is_empty() {
+            take_out(root, TARGETS);
+        } else {
+            edit_entries(
+                path,
+                root,
+                TARGETS,
+                &before.targets.entries(),
+                &wanted.targets.entries(),
+                |folders| {
+                    let written = folders
+                        .iter()
+                        .map(|folder| config_path(folder))
+                        .collect::<Result<toml_edit::Array, WorkspaceError>>()?;
+                    Ok(written.into())
+                },
+            )?;
+        }
+    }
+    Ok(document.to_string())
+}
+
+/// `value` written at `key` of `table`, in place of what is there, keeping
+/// the spacing around it and a comment after it on its line; after the
+/// last key when there is none.
+fn set(table: &mut dyn toml_edit::TableLike, key: &str, mut value: toml_edit::Value) {
+    match table.get_mut(key) {
+        Some(toml_edit::Item::Value(old)) => {
+            *value.decor_mut() = old.decor().clone();
+            *old = value;
+        }
+        Some(other) => *other = toml_edit::Item::Value(value),
+        None => {
+            table.insert(key, toml_edit::Item::Value(value));
+        }
+    }
+}
+
+/// The table at `key` of `root` changed from holding `was` to holding
+/// `now`, each entry written by `write`, an entry at a time: one the change
+/// leaves alone, a key this build does not know included, stays where it
+/// is, and one it adds goes after the others. A table the file does not
+/// have is made, as a `[key]` table after the others.
+fn edit_entries<V: PartialEq + ?Sized>(
+    path: &Path,
+    root: &mut toml_edit::Table,
+    key: &str,
+    was: &[(&str, &V)],
+    now: &[(&str, &V)],
+    write: impl Fn(&V) -> Result<toml_edit::Value, WorkspaceError>,
+) -> Result<(), WorkspaceError> {
+    let table = root
+        .entry(key)
+        .or_insert_with(|| toml_edit::Item::Table(toml_edit::Table::new()))
+        .as_table_like_mut()
+        .ok_or_else(|| WorkspaceError::Edit {
+            path: path.to_path_buf(),
+            detail: format!("`{key}` is not a table"),
+        })?;
+    for (name, value) in now {
+        if !was.iter().any(|(old, held)| old == name && held == value) {
+            set(table, name, write(value)?);
+        }
+    }
+    for (name, _) in was {
+        if !now.iter().any(|(new, _)| new == name) {
+            table.remove(name);
+        }
+    }
+    Ok(())
+}
+
+/// The whole of `key` taken out of `root`, but for a table somebody wrote a
+/// comment above, which is emptied and kept with its comment.
+fn take_out(root: &mut toml_edit::Table, key: &str) {
+    let commented = match root.get(key) {
+        Some(toml_edit::Item::Table(table)) => table
+            .decor()
+            .prefix()
+            .and_then(toml_edit::RawString::as_str)
+            .is_some_and(|prefix| prefix.contains('#')),
+        _ => false,
+    };
+    match root.get_mut(key) {
+        Some(toml_edit::Item::Table(table)) if commented => table.clear(),
+        _ => {
+            root.remove(key);
+        }
+    }
+}
+
+/// `path` spelled with `/`, as a settings file holds it, refused when it is
+/// not UTF-8.
+fn config_path(path: &Path) -> Result<String, WorkspaceError> {
+    paths::to_config_string(path).ok_or_else(|| WorkspaceError::NonUtf8Path {
+        path: path.to_path_buf(),
+    })
 }
 
 /// Whether `value`, what a settings file holds under `targets`, reads as

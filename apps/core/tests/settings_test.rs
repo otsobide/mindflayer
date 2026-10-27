@@ -1175,3 +1175,236 @@ fn a_folder_written_outside_by_hand_does_not_stop_a_change_to_something_else() {
         outside.replace("\"share\": \"local\"", "\"share\": \"shared\"")
     );
 }
+
+// ---------------------------------------------------------------------------
+// Changing a settings.toml
+// ---------------------------------------------------------------------------
+
+/// A `settings.toml` somebody laid out by hand: comments of their own, a key
+/// this build does not know, and the keys in an order of their own.
+const TOML_BY_HAND: &str = r#"# Somebody's own notes, kept by every edit.
+name = "collapse"
+servers = { github = ["npx"] }
+version = 5
+agents = ["claude"] # who works here
+id = "0123456789abcdef0123456789abcdef"
+
+# the team's call
+share = "local"
+
+[directories]
+mcp = "mcp"
+skills = "skills"
+"#;
+
+/// A project at `root` marked by [`TOML_BY_HAND`], and where its settings
+/// are.
+fn toml_by_hand(root: &Path) -> (MindProject, PathBuf) {
+    fs::create_dir_all(root.join(MIND_DIR)).unwrap();
+    let path = root.join(MIND_DIR).join(SETTINGS_TOML_FILE);
+    fs::write(&path, TOML_BY_HAND).unwrap();
+    (MindProject::open(root).unwrap(), path)
+}
+
+/// `path`'s modification time, set long ago, so a write would show.
+fn aged(path: &Path) -> SystemTime {
+    let long_ago = SystemTime::UNIX_EPOCH + Duration::from_secs(1_000_000);
+    fs::File::options()
+        .write(true)
+        .open(path)
+        .unwrap()
+        .set_modified(long_ago)
+        .unwrap();
+    long_ago
+}
+
+#[test]
+fn a_change_of_agents_in_toml_keeps_every_comment_an_unknown_key_and_the_key_order() {
+    let dir = TempDir::new().unwrap();
+    let (mut project, path) = toml_by_hand(dir.path());
+
+    project
+        .change_settings(|settings| settings.agents = vec![Agent::Claude, Agent::Codex])
+        .unwrap();
+
+    assert_eq!(
+        fs::read_to_string(&path).unwrap(),
+        TOML_BY_HAND.replace(
+            r#"agents = ["claude"] # who works here"#,
+            r#"agents = ["claude", "codex"] # who works here"#
+        )
+    );
+    assert_eq!(
+        project.settings().unwrap().agents,
+        [Agent::Claude, Agent::Codex]
+    );
+}
+
+#[test]
+fn a_change_of_share_mode_in_toml_keeps_the_comment_above_it() {
+    let dir = TempDir::new().unwrap();
+    let (mut project, path) = toml_by_hand(dir.path());
+
+    project
+        .change_settings(|settings| settings.share = Share::Shared)
+        .unwrap();
+
+    assert_eq!(
+        fs::read_to_string(&path).unwrap(),
+        TOML_BY_HAND.replace(
+            "# the team's call\nshare = \"local\"",
+            "# the team's call\nshare = \"shared\""
+        )
+    );
+}
+
+#[test]
+fn a_change_of_targets_in_toml_adds_a_table_last_at_version_5_and_a_reset_takes_it_out() {
+    let dir = TempDir::new().unwrap();
+    let (mut project, path) = toml_by_hand(dir.path());
+
+    project
+        .change_settings(|settings| {
+            settings.targets = Targets::default().with(Kind::Skill, vec![PathBuf::from(".skills")]);
+        })
+        .unwrap();
+
+    let targeted = format!("{TOML_BY_HAND}\n[targets]\nskills = [\".skills\"]\n");
+    assert_eq!(fs::read_to_string(&path).unwrap(), targeted);
+    assert_eq!(project.settings().unwrap().version, SETTINGS_TOML_VERSION);
+
+    project
+        .change_settings(|settings| settings.targets = Targets::default())
+        .unwrap();
+
+    assert_eq!(fs::read_to_string(&path).unwrap(), TOML_BY_HAND);
+    assert_eq!(project.settings().unwrap().version, SETTINGS_TOML_VERSION);
+}
+
+#[test]
+fn a_reset_of_targets_keeps_a_comment_written_above_them() {
+    let dir = TempDir::new().unwrap();
+    let (mut project, path) = toml_by_hand(dir.path());
+    let commented = format!(
+        "{TOML_BY_HAND}\n# one folder for every agent\n[targets]\nskills = [\".skills\"]\n"
+    );
+    fs::write(&path, &commented).unwrap();
+
+    project
+        .change_settings(|settings| settings.targets = Targets::default())
+        .unwrap();
+
+    assert_eq!(
+        fs::read_to_string(&path).unwrap(),
+        format!("{TOML_BY_HAND}\n# one folder for every agent\n[targets]\n")
+    );
+    assert!(project.settings().unwrap().targets.is_empty());
+}
+
+#[test]
+fn a_change_in_toml_that_changes_nothing_writes_nothing() {
+    let dir = TempDir::new().unwrap();
+    let (mut project, path) = toml_by_hand(dir.path());
+    let long_ago = aged(&path);
+
+    let agents = project
+        .change_settings(|settings| {
+            settings.share = Share::Local;
+            settings.targets = Targets::default();
+            settings.agents.clone()
+        })
+        .unwrap();
+
+    assert_eq!(agents, [Agent::Claude]);
+    assert_eq!(fs::read_to_string(&path).unwrap(), TOML_BY_HAND);
+    assert_eq!(fs::metadata(&path).unwrap().modified().unwrap(), long_ago);
+}
+
+#[test]
+fn a_change_in_toml_adds_a_key_the_file_left_out_only_when_it_has_something_to_say() {
+    let dir = TempDir::new().unwrap();
+    let (mut project, path) = toml_by_hand(dir.path());
+
+    project
+        .change_settings(|settings| settings.name = "renamed".to_owned())
+        .unwrap();
+    let renamed = TOML_BY_HAND.replace(r#"name = "collapse""#, r#"name = "renamed""#);
+    assert_eq!(fs::read_to_string(&path).unwrap(), renamed);
+
+    project
+        .change_settings(|settings| settings.edit_tracked = true)
+        .unwrap();
+    assert_eq!(
+        fs::read_to_string(&path).unwrap(),
+        renamed.replace(
+            "share = \"local\"\n",
+            "share = \"local\"\nedit_tracked = true\n"
+        )
+    );
+    assert!(project.settings().unwrap().edit_tracked);
+}
+
+#[test]
+fn a_change_in_toml_changes_directories_an_entry_at_a_time() {
+    let dir = TempDir::new().unwrap();
+    let (mut project, path) = toml_by_hand(dir.path());
+
+    project
+        .change_settings(|settings| {
+            settings.directories = settings
+                .directories
+                .clone()
+                .without(Kind::Skill)
+                .with(Kind::Rule, "docs/rules");
+        })
+        .unwrap();
+
+    assert_eq!(
+        fs::read_to_string(&path).unwrap(),
+        TOML_BY_HAND.replace(
+            "mcp = \"mcp\"\nskills = \"skills\"\n",
+            "mcp = \"mcp\"\nrules = \"docs/rules\"\n"
+        )
+    );
+    assert_eq!(
+        project.directory_for(Kind::Rule),
+        Some(dir.path().join("docs/rules"))
+    );
+}
+
+#[test]
+fn a_settings_toml_written_new_and_one_changed_since_read_alike() {
+    let dir = TempDir::new().unwrap();
+    let settings = Settings::new("collapse", Agent::ALL.to_vec(), Share::Local, both_beside());
+    let path = toml_project(dir.path(), &settings);
+    let mut project = MindProject::open(dir.path()).unwrap();
+
+    project
+        .change_settings(|settings| {
+            settings.agents = vec![Agent::Claude];
+            settings.share = Share::Shared;
+            settings.edit_tracked = true;
+            settings.targets = Targets::default().with(Kind::Skill, vec![PathBuf::from(".skills")]);
+        })
+        .unwrap();
+
+    let changed = project.settings().unwrap();
+    assert_eq!(changed.agents, [Agent::Claude]);
+    assert_eq!(fs::read_to_string(&path).unwrap(), changed.text().unwrap());
+}
+
+#[test]
+fn a_change_in_toml_of_the_version_or_the_id_is_refused_and_writes_nothing() {
+    let dir = TempDir::new().unwrap();
+    let (mut project, path) = toml_by_hand(dir.path());
+
+    for change in [
+        (|settings: &mut Settings| settings.version = TARGETS_VERSION) as fn(&mut Settings),
+        |settings: &mut Settings| settings.id = mindflayer_core::ProjectId::generate(),
+    ] {
+        let error = project.change_settings(change).unwrap_err();
+
+        assert!(matches!(error, WorkspaceError::Edit { .. }), "{error}");
+        assert_eq!(fs::read_to_string(&path).unwrap(), TOML_BY_HAND);
+    }
+}
