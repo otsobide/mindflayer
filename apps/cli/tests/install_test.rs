@@ -423,8 +423,14 @@ fn a_project_with_an_empty_shelf_is_told_where_skills_come_from() {
 }
 
 /// A project beside the shelf's `beta`, marked by settings that name
-/// `agents` and author skills nowhere, linked to the workspace.
+/// `agents` and author skills nowhere, shared with the team, and linked to
+/// the workspace.
 fn with_settings(dir: &Path, agents: &str) {
+    with_settings_sharing(dir, agents, "shared");
+}
+
+/// [`with_settings`], sharing as `share` says.
+fn with_settings_sharing(dir: &Path, agents: &str, share: &str) {
     let root = dir.join("alpha");
     fs::create_dir_all(root.join(MIND_DIR)).unwrap();
     fs::write(
@@ -435,7 +441,7 @@ fn with_settings(dir: &Path, agents: &str) {
   "id": "0123456789abcdef0123456789abcdef",
   "name": "alpha",
   "agents": [{agents}],
-  "share": "shared",
+  "share": "{share}",
   "directories": {{"rules": "rules"}}
 }}
 "#
@@ -738,4 +744,26 @@ fn installing_a_skill_that_holds_a_claude_plugin_folder_leaves_it_out_and_warns(
     assert!(root.join(".claude/skills/deploy/SKILL.md").is_file());
     assert!(!root.join(".claude/skills/deploy/.claude-plugin").exists());
     assert!(!root.join(".agents/skills/deploy/.claude-plugin").exists());
+}
+
+#[test]
+fn a_local_project_outside_git_is_told_nothing_keeps_what_is_installed_out_of_it() {
+    let (dir, _, _) = shelved(&["beta"], &["deploy"]);
+    with_settings_sharing(dir.path(), r#""claude""#, "local");
+    let root = dir.path().join("alpha");
+
+    let installed = flayer(dir.path(), &["install", "-p", "alpha", "deploy"]).unwrap();
+    let removed = flayer(dir.path(), &["uninstall", "-p", "alpha", "deploy"]).unwrap();
+
+    assert!(installed.ok, "{:?}", installed.stderr);
+    assert_eq!(
+        installed.stderr,
+        vec![format!(
+            "note: {}: not in a git work tree, so nothing keeps what is installed there out of git",
+            root.display()
+        )]
+    );
+    assert_eq!(removed.stdout, "removed deploy from alpha\n");
+    assert!(removed.stderr.is_empty(), "{:?}", removed.stderr);
+    assert!(!root.join(".claude/skills/deploy").exists());
 }

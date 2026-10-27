@@ -24,6 +24,7 @@ pub(crate) fn install_named(
     directory: &Path,
 ) -> Result<Outcome, Failure> {
     use mindflayer_core::install::{self as installing, Installed};
+    use mindflayer_core::Excluded;
 
     let warnings = load_warnings(workspace);
     let (ledger, scrub) = workspace.ledger_to_write().map_err(|error| Failure {
@@ -94,6 +95,12 @@ pub(crate) fn install_named(
             .push(format!("warning: {name} in {into} {}", left_out(left)));
         outcome.ok = false;
     }
+    // A note rather than a warning: a project need not be in git, and
+    // nothing went wrong, but what local mode keeps out of git is then kept
+    // out of nothing.
+    if let Some(note) = done.excluded.as_ref().and_then(Excluded::warning) {
+        outcome.stderr.push(format!("note: {note}"));
+    }
     // Installed and recorded all the same, but without what tells a later
     // edit apart, which is worth a look at what is in the copy.
     if let Some(reason) = unhashed {
@@ -143,6 +150,15 @@ pub(crate) fn left_out(left: &mindflayer_core::install::LeftOut) -> String {
     format!("was installed without its {name}, since {}", left.reason)
 }
 
+/// What to say of a skill taken out of a project whose exclude block could not
+/// be edited to stop naming it.
+pub(crate) fn still(name: &str, project: &str, reason: &str) -> String {
+    format!(
+        "warning: {name} is gone from {project}, but the exclude file still keeps its place out \
+         of git: {reason}"
+    )
+}
+
 /// A path in `project` as somebody standing in it would spell it, or as it
 /// is when it is not in there.
 pub(crate) fn shown(project: &MindProject, path: &Path) -> String {
@@ -174,8 +190,17 @@ pub(crate) fn uninstall_named(
         Err(error) => return Err(failed(error.into(), said)),
     };
     match taken {
-        Removed::Removed { name, .. } => {
-            Ok(said.before(Outcome::plain(format!("removed {name} from {from}\n"))))
+        Removed::Removed {
+            name,
+            still_excluded,
+            ..
+        } => {
+            let mut outcome = Outcome::plain(format!("removed {name} from {from}\n"));
+            if let Some(reason) = still_excluded {
+                outcome.stderr.push(still(&name, from, &reason));
+                outcome.ok = false;
+            }
+            Ok(said.before(outcome))
         }
         Removed::Foreign { name, path } => Ok(said.before(Outcome {
             stdout: String::new(),

@@ -330,6 +330,7 @@ fn installing_into_every_agents_folder_again_changes_nothing_and_uninstalling_ta
         Removed::Removed {
             name: String::from("deploy"),
             paths: vec![agents.clone(), claude.clone()],
+            still_excluded: None,
         }
     );
     assert!(!agents.exists() && !claude.exists());
@@ -418,6 +419,7 @@ fn a_skill_somebody_writes_beside_an_installed_one_in_a_folder_it_was_not_instal
         Removed::Removed {
             name: String::from("deploy"),
             paths: vec![agents.clone()],
+            still_excluded: None,
         }
     );
     assert!(!agents.exists());
@@ -1316,4 +1318,185 @@ fn a_skill_installed_without_what_is_left_out_is_still_current_and_installs_unch
     );
     // Still not all that was offered, so still said.
     assert_eq!(again.left_out.len(), 1);
+}
+
+// ---------------------------------------------------------------------------
+// What keeps a local project's copies out of git
+// ---------------------------------------------------------------------------
+
+/// A shelf holding `deploy`, and a project marked by its settings, sharing
+/// as `share` says, naming every agent, at the root of a git repository of
+/// its own when `in_git`.
+fn local_v3(share: Share, in_git: bool) -> (TempDir, FlayerWorkspace, MindProject, Ledger) {
+    let (dir, workspace, _, ledger) = ready(&["deploy"]);
+    let root = dir.path().join("alpha");
+    fs::create_dir(&root).unwrap();
+    if in_git {
+        gix::init(&root).unwrap();
+    }
+    let (project, _) =
+        MindProject::init_settings(&root, &Agent::ALL, share, &Directories::default()).unwrap();
+    (dir, workspace, project, ledger)
+}
+
+fn exclude_file(project: &MindProject) -> std::path::PathBuf {
+    project.root().join(".git").join("info").join("exclude")
+}
+
+/// Whether gix, reading the exclude file as git does, holds the folder at
+/// `path` in the project's work tree to be ignored.
+fn ignored(project: &MindProject, path: &str) -> bool {
+    let repository = gix::open_opts(project.root(), gix::open::Options::isolated()).unwrap();
+    let index = repository.index_or_empty().unwrap();
+    let mut excludes = repository
+        .excludes(&index, None, Default::default())
+        .unwrap();
+    excludes
+        .at_path(path, Some(gix::index::entry::Mode::DIR))
+        .unwrap()
+        .is_excluded()
+}
+
+#[test]
+fn a_local_install_keeps_every_copy_out_of_git_and_its_uninstall_takes_them_back_in() {
+    let (_dir, workspace, project, ledger) = local_v3(Share::Local, true);
+    let id = project.settings().unwrap().id.as_str().to_owned();
+    let file = exclude_file(&project);
+    let before = fs::read_to_string(&file).unwrap();
+
+    let done = install_from_shelf(&workspace, &ledger, &project, "deploy");
+
+    let [agents, claude] = agents_copies(&project, "deploy");
+    assert!(copy::same(&agents, &claude).unwrap());
+    assert_eq!(
+        ledger
+            .installation("alpha", Kind::Skill, "deploy")
+            .unwrap()
+            .unwrap()
+            .targets
+            .len(),
+        2
+    );
+    assert_eq!(
+        done.excluded,
+        Some(mindflayer_core::Excluded::Written { file: file.clone() })
+    );
+    assert_eq!(
+        fs::read_to_string(&file).unwrap(),
+        format!(
+            "{before}# mindflayer:begin\n# project {id}\n/.agents/skills/deploy/\n\
+             /.claude/skills/deploy/\n# mindflayer:end\n"
+        )
+    );
+    assert!(ignored(&project, ".agents/skills/deploy"));
+    assert!(ignored(&project, ".claude/skills/deploy"));
+
+    let again = install_from_shelf(&workspace, &ledger, &project, "deploy");
+    assert!(
+        matches!(again.installed, Installed::Unchanged { .. }),
+        "{again:?}"
+    );
+    assert_eq!(
+        again.excluded,
+        Some(mindflayer_core::Excluded::Unchanged { file: file.clone() })
+    );
+
+    let removed = install::uninstall(&workspace, &ledger, &project, Kind::Skill, "deploy").unwrap();
+
+    assert!(
+        matches!(
+            removed,
+            Removed::Removed {
+                still_excluded: None,
+                ..
+            }
+        ),
+        "{removed:?}"
+    );
+    assert!(!agents.exists() && !claude.exists());
+    assert_eq!(fs::read_to_string(&file).unwrap(), before);
+    assert!(!ignored(&project, ".claude/skills/deploy"));
+}
+
+#[test]
+fn a_shared_install_leaves_the_exclude_file_alone() {
+    let (_dir, workspace, project, ledger) = local_v3(Share::Shared, true);
+    let file = exclude_file(&project);
+    let before = fs::read(&file).unwrap();
+
+    let done = install_from_shelf(&workspace, &ledger, &project, "deploy");
+    install::uninstall(&workspace, &ledger, &project, Kind::Skill, "deploy").unwrap();
+
+    assert_eq!(done.excluded, None);
+    assert_eq!(fs::read(&file).unwrap(), before);
+}
+
+#[test]
+fn a_local_install_outside_git_says_nothing_keeps_its_copies_out() {
+    let (_dir, workspace, project, ledger) = local_v3(Share::Local, false);
+
+    let done = install_from_shelf(&workspace, &ledger, &project, "deploy");
+
+    let excluded = done.excluded.unwrap();
+    assert!(
+        matches!(excluded, mindflayer_core::Excluded::Outside { .. }),
+        "{excluded:?}"
+    );
+    assert!(excluded
+        .warning()
+        .unwrap()
+        .contains("not in a git work tree"));
+    assert!(agents_copies(&project, "deploy")[1].is_dir());
+}
+
+#[test]
+fn an_exclude_block_that_cannot_be_read_refuses_the_install_with_nothing_written() {
+    let (_dir, workspace, project, ledger) = local_v3(Share::Local, true);
+    let file = exclude_file(&project);
+    fs::write(&file, "# mindflayer:begin\n/mine/\n").unwrap();
+    let candidate =
+        install::offered(&workspace, &ledger, &project, Kind::Skill, "deploy", None).unwrap();
+
+    let refused = install::install(&workspace, &ledger, &project, &candidate).unwrap_err();
+
+    assert!(
+        matches!(refused, install::InstallError::Exclude(_)),
+        "{refused}"
+    );
+    assert!(
+        refused.to_string().contains("nothing was installed"),
+        "{refused}"
+    );
+    for copy in agents_copies(&project, "deploy") {
+        assert!(!copy.exists(), "{}", copy.display());
+    }
+    assert!(ledger
+        .installation("alpha", Kind::Skill, "deploy")
+        .unwrap()
+        .is_none());
+    assert_eq!(
+        fs::read_to_string(&file).unwrap(),
+        "# mindflayer:begin\n/mine/\n"
+    );
+}
+
+#[test]
+fn copies_that_cannot_be_put_in_place_take_their_exclude_entries_back_out() {
+    let (_dir, workspace, project, ledger) = local_v3(Share::Local, true);
+    let file = exclude_file(&project);
+    let before = fs::read_to_string(&file).unwrap();
+    // A file where Claude's folder of skills would be, so no copy goes in.
+    fs::create_dir_all(project.root().join(".claude")).unwrap();
+    fs::write(project.root().join(".claude").join("skills"), "a file").unwrap();
+    let candidate =
+        install::offered(&workspace, &ledger, &project, Kind::Skill, "deploy", None).unwrap();
+
+    let refused = install::install(&workspace, &ledger, &project, &candidate).unwrap_err();
+
+    assert!(
+        matches!(refused, install::InstallError::Write { .. }),
+        "{refused}"
+    );
+    assert!(!agents_copies(&project, "deploy")[0].exists());
+    assert_eq!(fs::read_to_string(&file).unwrap(), before);
 }

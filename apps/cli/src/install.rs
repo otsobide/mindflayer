@@ -14,7 +14,7 @@ use std::time::Duration;
 
 use mindflayer_core::install::{self, Installed, Removed};
 use mindflayer_core::ledger::Ledger;
-use mindflayer_core::{FlayerWorkspace, Kind, MindProject};
+use mindflayer_core::{Excluded, FlayerWorkspace, Kind, MindProject};
 use ratatui::crossterm::event::{self, Event, KeyEventKind};
 use ratatui::DefaultTerminal;
 
@@ -228,6 +228,8 @@ pub fn apply(
 ) -> Result<Outcome, install::InstallError> {
     let mut stdout = String::new();
     let mut stderr = Vec::new();
+    // Said once a project, after the warnings, and no reason to fail.
+    let mut notes: Vec<String> = Vec::new();
     let (mut installed, mut removed) = (0usize, 0usize);
 
     for (target, row, what) in screen.pending() {
@@ -262,6 +264,12 @@ pub fn apply(
                         entry.candidate.name(),
                         crate::commands::install::left_out(left)
                     ));
+                }
+                if let Some(note) = done.excluded.as_ref().and_then(Excluded::warning) {
+                    let note = format!("note: {note}");
+                    if !notes.contains(&note) {
+                        notes.push(note);
+                    }
                 }
                 if let Some(reason) = done.installed.unhashed() {
                     stderr.push(format!(
@@ -299,9 +307,20 @@ pub fn apply(
                     Ok(taken) => taken,
                 };
                 match taken {
-                    Removed::Removed { name, .. } => {
+                    Removed::Removed {
+                        name,
+                        still_excluded,
+                        ..
+                    } => {
                         removed += 1;
                         let _ = writeln!(stdout, "{}: removed {name}", project.name());
+                        if let Some(reason) = still_excluded {
+                            stderr.push(crate::commands::install::still(
+                                &name,
+                                project.name(),
+                                &reason,
+                            ));
+                        }
                     }
                     Removed::Foreign { name, path } => stderr.push(format!(
                         "warning: {}: {name} at {} was not installed by Mindflayer, so it was left alone",
@@ -318,5 +337,6 @@ pub fn apply(
 
     let _ = writeln!(stdout, "\n{} installed, {} removed", installed, removed);
     let ok = stderr.is_empty();
+    stderr.extend(notes);
     Ok(Outcome { stdout, stderr, ok })
 }

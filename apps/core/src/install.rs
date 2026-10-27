@@ -25,11 +25,13 @@ use crate::agent::Agent;
 use crate::artifact::{self, issue_list, Artifact, ArtifactError, ValidationIssue};
 use crate::catalog::{Catalog, DiscoveryFailure};
 use crate::copy;
+use crate::exclude::{self, ExcludeError, Excluded};
 use crate::gather::Scrub;
 use crate::hash;
 use crate::kind::{Kind, Layout};
 use crate::ledger::{Action, Gathered, InstallRecord, Ledger, LedgerError, Outcome, Target};
 use crate::paths;
+use crate::settings::Share;
 use crate::url::redacted;
 use crate::workspace::{same_directory, FlayerWorkspace, MindProject, WorkspaceError};
 
@@ -664,15 +666,46 @@ pub fn install(
         Offer::Workspace { .. } => workspace.root().to_path_buf(),
         Offer::Shelf(_) => from.clone(),
     };
+    // Out of git before anything is written, so a copy in a local project
+    // never shows in `git status`, not even for a moment, as its settings
+    // never do; and a block this cannot edit refuses the install with
+    // nothing written, rather than putting copies one machine has in every
+    // teammate's way. Taken back out if the copies then fail, from where
+    // nothing is left: a line naming an empty place would keep whatever
+    // somebody writes there later out of git without a word.
+    let excluded = match local(project) {
+        Some(key) => Some(exclude::add(
+            project.root(),
+            key,
+            &entries(project, &copies),
+        )?),
+        None => None,
+    };
+    let undo = || {
+        if let Some(key) = local(project) {
+            let gone: Vec<PathBuf> = copies
+                .iter()
+                .filter(|copy| !holds(copy, kind))
+                .cloned()
+                .collect();
+            let _ = exclude::remove(project.root(), key, &entries(project, &gone));
+        }
+    };
     // Built in the project's scratch folder rather than beside a copy, in a
     // folder agents read: neither a copy half made nor one an interrupted
     // run left behind sits where an agent would load it.
     let scratch = project.scratch_dir();
-    let mut stage = copy::Stage::open(&scratch).map_err(|source| InstallError::Write {
-        path: scratch,
-        source,
-        swept: Vec::new(),
-    })?;
+    let mut stage = match copy::Stage::open(&scratch) {
+        Ok(stage) => stage,
+        Err(source) => {
+            undo();
+            return Err(InstallError::Write {
+                path: scratch,
+                source,
+                swept: Vec::new(),
+            });
+        }
+    };
     // Said, since what lands is then not all of what was offered.
     let left_out: Vec<LeftOut> = LEAVE_OUT
         .iter()
@@ -687,11 +720,12 @@ pub fn install(
         // What was cleared on the way goes out with the error rather than
         // with the stage: it was cleared whether or not this copy lands.
         Err(source) => {
+            undo();
             return Err(InstallError::Write {
                 path: copies[0].clone(),
                 source,
                 swept: stage.swept().to_vec(),
-            })
+            });
         }
     };
     let swept = stage.swept().to_vec();
@@ -777,7 +811,30 @@ pub fn install(
         installed,
         swept,
         left_out,
+        excluded,
     })
+}
+
+/// The key of a project's group in the exclude block, when what is installed
+/// into it stays out of git: a local project's (D-02), named by its id, which
+/// stays when the project is renamed or moved. None for a shared one, whose
+/// copies are the team's to commit, and for one a `mind.toml` marks, since a
+/// project from before settings was committed by design.
+fn local(project: &MindProject) -> Option<&str> {
+    project
+        .settings()
+        .filter(|settings| settings.share == Share::Local)
+        .map(|settings| settings.id.as_str())
+}
+
+/// One exclude entry for each of `copies`, a folder each, as the project
+/// spells it.
+fn entries(project: &MindProject, copies: &[PathBuf]) -> Vec<exclude::Entry> {
+    copies
+        .iter()
+        .filter_map(|copy| paths::relative_to(copy, project.root()))
+        .map(exclude::Entry::directory)
+        .collect()
 }
 
 /// The one hash every copy holds ([`hash::tree`]), or why there is none:
@@ -895,9 +952,16 @@ pub fn uninstall(
     let detail = format!("{name} from {}", project.name());
     ledger.log(Action::Uninstall, Some(&entry), Outcome::Ok, Some(&detail))?;
 
+    // After the copies, so none shows in `git status` on its way out; and
+    // said rather than raised when the block cannot be edited, since they
+    // are gone and so is their record.
+    let still_excluded = local(project)
+        .and_then(|key| exclude::remove(project.root(), key, &entries(project, &paths)).err())
+        .map(|error| error.to_string());
     Ok(Removed::Removed {
         name: name.to_owned(),
         paths,
+        still_excluded,
     })
 }
 
@@ -1041,6 +1105,10 @@ pub struct Installation {
     /// What the offer holds that no copy does (`LEAVE_OUT`): said, because
     /// the copies are then not all that was offered.
     pub left_out: Vec<LeftOut>,
+    /// What keeping the copies out of git came to, for a local project; none
+    /// for a project whose copies are committed. [`Excluded::warning`] says
+    /// when nothing keeps them out, outside a git work tree.
+    pub excluded: Option<Excluded>,
 }
 
 impl From<Installed> for Installation {
@@ -1051,6 +1119,7 @@ impl From<Installed> for Installation {
             installed,
             swept: Vec::new(),
             left_out: Vec::new(),
+            excluded: None,
         }
     }
 }
@@ -1059,7 +1128,14 @@ impl From<Installed> for Installation {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Removed {
     /// Every copy its installation recorded is gone, and so is the record.
-    Removed { name: String, paths: Vec<PathBuf> },
+    Removed {
+        name: String,
+        paths: Vec<PathBuf>,
+        /// Why the exclude block of a local project still names them, when it
+        /// could not be edited: a line left there keeps whatever somebody
+        /// writes in that place later out of git, which is worth saying.
+        still_excluded: Option<String>,
+    },
     /// Present, at `path`, but nobody here put it there.
     Foreign { name: String, path: PathBuf },
     /// Nothing of that name to remove.
@@ -1280,6 +1356,8 @@ pub enum InstallError {
     NoTarget { project: String, kind: Kind },
     #[error("{name}: the ledger records a copy at {route}, which is not a folder of the project named after it, so nothing was removed")]
     Recorded { name: String, route: String },
+    #[error("{0}, and nothing was installed, since its copies could not be kept out of git")]
+    Exclude(#[from] ExcludeError),
 }
 
 impl InstallError {
