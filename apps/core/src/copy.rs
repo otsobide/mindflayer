@@ -244,14 +244,171 @@ impl Stage {
     ///
     /// Mutable, because a stage builds one copy at a time in one place.
     pub fn replace(&mut self, from: &Path, to: &Path, within: &Path) -> Result<Change, io::Error> {
-        self.clear_beside(to)?;
-        let old = self.dir.join("old");
-        let change = put(from, to, within, &self.dir.join("new"), &old)?;
-        // The new copy is in place whatever happens here, so an old one that
-        // will not go is litter in the stage, not a failed install: dropping
-        // the stage tries again, and the next run sweeps what that leaves.
-        let _ = fs::remove_dir_all(&old);
-        Ok(change)
+        let changes = self.place(from, std::slice::from_ref(&to.to_path_buf()), within)?;
+        Ok(changes[0])
+    }
+
+    /// [`replace`] for several targets at once, and all of them or none: a
+    /// copy of `from` at each of `to`, every one the same bytes.
+    ///
+    /// Built once, in this stage, and copied from there for each target that
+    /// does not already hold it. Copied from `from` each time, two copies
+    /// could differ when `from` changes in between, a workspace's own skill
+    /// being edited say, and an agent reading both folders (OpenCode reads
+    /// `.agents/skills` and `.claude/skills`) would be handed two versions of
+    /// one skill. Each target is compared with that copy rather than with
+    /// `from`, so one that already holds it is left alone, down to its times,
+    /// and the others are replaced.
+    ///
+    /// Only once every copy is whole is any put in place, a rename each, and
+    /// a target that cannot be put in place takes every one already moved
+    /// back out again: each target is left as it was, the copy it had put
+    /// back where it replaced one. The folder a target goes in, made on the
+    /// way, is left.
+    ///
+    /// The changes come back in the order of `to`, which has to name each
+    /// folder on disk once: two spellings of one folder would be put in
+    /// place twice, and the second rename would find the first's copy there.
+    /// What an interrupted run of an earlier version left beside each target
+    /// is cleared first, as for [`Stage::replace`].
+    pub fn place(
+        &mut self,
+        from: &Path,
+        to: &[PathBuf],
+        within: &Path,
+    ) -> Result<Vec<Change>, io::Error> {
+        for target in to {
+            self.clear_beside(target)?;
+        }
+        let built = self.fresh("new")?;
+        if let Err(error) = tree(from, &built, within) {
+            let _ = fs::remove_dir_all(&built);
+            return Err(error);
+        }
+
+        let mut changes = Vec::with_capacity(to.len());
+        let mut moving = Vec::new();
+        for (index, target) in to.iter().enumerate() {
+            let change = match target.exists() {
+                true if same(&built, target)? => Change::Unchanged,
+                true => Change::Updated,
+                false => Change::Added,
+            };
+            if change != Change::Unchanged {
+                moving.push(index);
+            }
+            changes.push(change);
+        }
+        if moving.is_empty() {
+            self.clear(&[built]);
+            return Ok(changes);
+        }
+
+        // Every copy but the last is copied from what was built, before
+        // anything moves; the last is what was built.
+        let mut copies = Vec::with_capacity(moving.len());
+        for (count, &index) in moving.iter().enumerate() {
+            if count + 1 == moving.len() {
+                copies.push(built.clone());
+                continue;
+            }
+            let copy = self.fresh(&format!("new-{index}"))?;
+            if let Err(error) = tree(&built, &copy, &built) {
+                self.clear(&copies);
+                let _ = fs::remove_dir_all(&copy);
+                let _ = fs::remove_dir_all(&built);
+                return Err(error);
+            }
+            copies.push(copy);
+        }
+
+        let mut placed: Vec<(&Path, Option<PathBuf>)> = Vec::with_capacity(moving.len());
+        for (&index, copy) in moving.iter().zip(&copies) {
+            let target = to[index].as_path();
+            match self.put_in_place(copy, target, index) {
+                Ok(old) => placed.push((target, old)),
+                Err(error) => {
+                    self.take_back(&placed);
+                    self.clear(&copies);
+                    return Err(error);
+                }
+            }
+        }
+        // Every new copy is in place whatever happens here, so an old one
+        // that will not go is litter in the stage, not a failed install:
+        // dropping the stage tries again, and the next run sweeps what that
+        // leaves.
+        for (_, old) in placed {
+            if let Some(old) = old {
+                let _ = fs::remove_dir_all(old);
+            }
+        }
+        Ok(changes)
+    }
+
+    /// Move `copy` to `target`, moving what `target` holds aside into the
+    /// stage first and saying where, so it can be put back or cleared.
+    fn put_in_place(
+        &self,
+        copy: &Path,
+        target: &Path,
+        index: usize,
+    ) -> Result<Option<PathBuf>, io::Error> {
+        // Made here rather than on the way to the copy, which is in the
+        // stage: a project whose skills folder is not there yet, as in a
+        // fresh clone, still gets one.
+        if let Some(parent) = target.parent() {
+            fs::create_dir_all(parent)?;
+        }
+        if !target.exists() {
+            moved(copy, target)?;
+            return Ok(None);
+        }
+        // Moved aside rather than deleted first, as `put` does it: the moment
+        // with neither copy in place lasts from one rename to the next, and a
+        // copy that cannot be put in place can have the old one put back.
+        let old = self.fresh(&format!("old-{index}"))?;
+        moved(target, &old)?;
+        if let Err(error) = moved(copy, target) {
+            let _ = fs::rename(&old, target);
+            return Err(error);
+        }
+        Ok(Some(old))
+    }
+
+    /// Undo what [`Stage::place`] put in place, last first: each new copy
+    /// moved back into the stage, where dropping it clears it, and the copy
+    /// it replaced moved back where it was.
+    ///
+    /// As far as it can: a rename that fails here leaves that target with
+    /// the new copy, or with none, which is no worse than stopping, and the
+    /// error that brought it here is the one said.
+    fn take_back(&self, placed: &[(&Path, Option<PathBuf>)]) {
+        for (index, (target, old)) in placed.iter().enumerate().rev() {
+            if let Ok(undone) = self.fresh(&format!("undone-{index}")) {
+                let _ = fs::rename(target, undone);
+            }
+            if let Some(old) = old {
+                let _ = fs::rename(old, target);
+            }
+        }
+    }
+
+    /// Remove what this stage built, as far as it can.
+    fn clear(&self, built: &[PathBuf]) {
+        for path in built {
+            let _ = fs::remove_dir_all(path);
+        }
+    }
+
+    /// A path in this stage named `name`, cleared of anything an earlier
+    /// replacement through it left there.
+    fn fresh(&self, name: &str) -> Result<PathBuf, io::Error> {
+        let path = self.dir.join(name);
+        if fs::symlink_metadata(&path).is_ok() {
+            fs::remove_dir_all(&path)?;
+        }
+        Ok(path)
     }
 
     /// Remove the `.<name>.mindflayer-new` and `-old` that an interrupted run
