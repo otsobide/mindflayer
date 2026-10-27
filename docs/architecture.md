@@ -2383,13 +2383,14 @@ that is not a command line.
 
 ### What it asks before it writes
 
-The link form offers what `flayer scan` finds under the workspace. A git
-repository that is not a mind project yet can be picked, but making it one
-writes into it, so `mind init` is asked about, not assumed, and a typed path
-that turns out to be a plain directory is asked about the same way. Unlinking
-asks too, and says that nothing on disk is deleted. A command that fails from a
-form leaves the form open with the reason in it, so a typo is fixed where it
-was made rather than typed out again.
+The link form offers what `flayer scan` finds under the workspace, or under
+the folders `flayer minds` was given for the session it opened
+([Scanning](#scanning)). A git repository that is not a mind project yet can
+be picked, but making it one writes into it, so `mind init` is asked about,
+not assumed, and a typed path that turns out to be a plain directory is asked
+about the same way. Unlinking asks too, and says that nothing on disk is
+deleted. A command that fails from a form leaves the form open with the reason
+in it, so a typo is fixed where it was made rather than typed out again.
 
 ### The minds screen
 
