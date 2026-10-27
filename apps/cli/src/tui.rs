@@ -28,8 +28,8 @@ use mindflayer_core::gather::Watch;
 use mindflayer_core::resolve::{self, resolve, Intent, Reason, Resolved};
 use mindflayer_core::workspace::Member as Registered;
 use mindflayer_core::{
-    lifecycle, paths, scan, template, AgentHomes, Catalog, FlayerWorkspace, Kind, MindProject,
-    ProjectStatus, WorkspaceError,
+    lifecycle, paths, scan, template, AgentHomes, Catalog, FlayerWorkspace, Kind, MarkerFile,
+    MindProject, ProjectStatus, WorkspaceError,
 };
 use ratatui::crossterm::event::{self, Event, KeyEventKind};
 use ratatui::crossterm::terminal::{self, EnterAlternateScreen};
@@ -896,6 +896,8 @@ fn held(
                 .map(|settings| settings.agents.clone())
                 .unwrap_or_default(),
             share: settings.map(|settings| settings.share),
+            older: Some(project.marker_file())
+                .filter(|file| !own && *file != MarkerFile::SettingsToml),
             edit_tracked: settings.is_some_and(|settings| settings.edit_tracked),
             targets: settings
                 .and_then(|settings| settings.targets.get(Kind::Skill))
