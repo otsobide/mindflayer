@@ -654,6 +654,15 @@ out with `..`, describes a project whose artifacts are not the project's, and
 that contradicts the one thing a mind project is for. `mind init --skills
 /etc/skills` is refused rather than made, before anything is written.
 
+Nor, in settings, inside `.mind` (`InsideMind`), which is Mindflayer's: the
+marker, the templates and an install's stage. A local project's keeps itself
+out of git, so `mind init --skills .mind/skills` would hide what the project
+wrote from its team without a word, where authoring beside the code is so it
+is committed with it. A shared project is refused the same, since a change to
+its share may make it local later. `init` and `change_settings` refuse it,
+and a settings file somebody wrote that way is still read: only a version 1
+`mind.toml` kept its kinds inside `.mind` on purpose.
+
 Because this changed where a project's artifacts are, the project marker went
 to version 2, and a `mind.toml` written before it is read the way it was
 written: version 1 had no such question, so every kind lived inside `.mind`,

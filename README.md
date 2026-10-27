@@ -933,6 +933,9 @@ mind init --skills docs/skills --rules docs/rules
 
 Both are relative to the project, and have to stay inside it: the artifacts
 are the project's own, so `--skills /etc/skills` is refused rather than made.
+So is a folder inside `.mind`, such as `--skills .mind/skills`: a local
+project's `.mind` keeps itself out of git (below), and would take the
+project's own skills with it.
 `init` never overwrites an existing marker, so a second `mind init --skills
 elsewhere` changes nothing and says so: moving a project's artifacts is not
 something `init` should do behind your back.

@@ -412,6 +412,38 @@ fn a_directory_outside_the_project_is_refused_before_anything_is_made() {
 }
 
 #[test]
+fn a_directory_inside_mind_is_refused_before_anything_is_made() {
+    let dir = TempDir::new().unwrap();
+
+    // Shared too, though git would see its `.mind`: a change may make it
+    // local later.
+    for share in [Share::Local, Share::Shared] {
+        for inside in [
+            ".mind",
+            ".mind/skills",
+            "skills/../.mind/skills",
+            ".MIND/skills",
+        ] {
+            let directories = Directories::default().with(Kind::Skill, inside);
+            let error = MindProject::init_settings(dir.path(), &Agent::ALL, share, &directories)
+                .unwrap_err();
+
+            assert!(
+                matches!(
+                    error,
+                    WorkspaceError::InsideMind {
+                        kind: Kind::Skill,
+                        ..
+                    }
+                ),
+                "{inside}: {error}"
+            );
+        }
+    }
+    assert!(!dir.path().join(MIND_DIR).exists());
+}
+
+#[test]
 fn git_ignores_everything_in_a_local_projects_mind() {
     let dir = TempDir::new().unwrap();
     gix::init(dir.path()).unwrap();
@@ -667,6 +699,30 @@ fn an_edit_that_moves_a_folder_out_of_the_project_is_refused() {
             "{outside}: {error}"
         );
     }
+    assert_eq!(fs::read_to_string(&path).unwrap(), BY_HAND);
+}
+
+#[test]
+fn an_edit_that_moves_a_folder_into_mind_is_refused() {
+    let dir = TempDir::new().unwrap();
+    let (mut project, path) = by_hand(dir.path());
+
+    let error = project
+        .change_settings(|settings| {
+            settings.directories = settings.directories.clone().with(Kind::Rule, ".mind/rules");
+        })
+        .unwrap_err();
+
+    assert!(
+        matches!(
+            error,
+            WorkspaceError::InsideMind {
+                kind: Kind::Rule,
+                ..
+            }
+        ),
+        "{error}"
+    );
     assert_eq!(fs::read_to_string(&path).unwrap(), BY_HAND);
 }
 

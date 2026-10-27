@@ -624,6 +624,20 @@ fn init_refuses_a_directory_outside_the_project() {
 }
 
 #[test]
+fn init_refuses_a_directory_inside_the_mind_that_keeps_itself_out_of_git() {
+    let dir = TempDir::new().unwrap();
+
+    let failure = mind(dir.path(), &["init", "--skills", ".mind/skills"]).unwrap_err();
+
+    assert_eq!(
+        failure.error.to_string(),
+        ".mind/skills: cannot hold a project's skills, because it is inside .mind, which holds \
+         Mindflayer's own files and is kept out of git unless the project is shared"
+    );
+    assert!(!dir.path().join(MIND_DIR).exists(), "nothing was made");
+}
+
+#[test]
 fn a_workspace_sees_a_project_that_keeps_its_skills_elsewhere() {
     let dir = TempDir::new().unwrap();
     flayer(dir.path(), &["init"]).unwrap();

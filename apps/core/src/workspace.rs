@@ -488,13 +488,11 @@ impl MindProject {
         let dir = root.join(MIND_DIR);
 
         for kind in Kind::ALL {
-            if let Some(directory) = directories.get(kind) {
-                if !stays_inside(directory) {
-                    return Err(WorkspaceError::OutsideProject {
-                        path: directory.to_path_buf(),
-                        kind,
-                    });
-                }
+            if let Some(error) = directories
+                .get(kind)
+                .and_then(|directory| misplaced_authored(kind, directory))
+            {
+                return Err(error);
             }
         }
         let settings = Settings::new(
@@ -714,9 +712,10 @@ impl MindProject {
     ///
     /// Refused for a project a `mind.toml` marks, which has no settings until
     /// it is moved to them, when the change touches the version or the id,
-    /// and when it moves a kind's folder out of the project, as `init`
-    /// refuses one: strict when writing, while a folder somebody wrote there
-    /// by hand is still read, and left alone by a change to something else.
+    /// and when it moves a kind's folder out of the project or into its
+    /// `.mind`, as `init` refuses one: strict when writing, while a folder
+    /// somebody wrote there by hand is still read, and left alone by a change
+    /// to something else.
     /// A settings file this build refuses to read is refused here too, and
     /// left as it is.
     ///
@@ -742,17 +741,13 @@ impl MindProject {
         let mut wanted = before.clone();
         let value = change(&mut wanted);
         for kind in Kind::ALL {
-            match wanted.directories.get(kind) {
-                Some(directory)
-                    if before.directories.get(kind) != Some(directory)
-                        && !stays_inside(directory) =>
-                {
-                    return Err(WorkspaceError::OutsideProject {
-                        path: directory.to_path_buf(),
-                        kind,
-                    });
-                }
-                _ => {}
+            if let Some(error) = wanted
+                .directories
+                .get(kind)
+                .filter(|directory| before.directories.get(kind) != Some(*directory))
+                .and_then(|directory| misplaced_authored(kind, directory))
+            {
+                return Err(error);
             }
         }
 
@@ -1665,6 +1660,12 @@ pub enum WorkspaceError {
     NonUtf8Path { path: PathBuf },
     #[error("{path}: cannot hold a project's {kind}s, because it is not inside the project")]
     OutsideProject { path: PathBuf, kind: Kind },
+    #[error(
+        "{path}: cannot hold a project's {kind}s, \
+         because it is inside {MIND_DIR}, which holds Mindflayer's own files \
+         and is kept out of git unless the project is shared"
+    )]
+    InsideMind { path: PathBuf, kind: Kind },
     #[error("{path}: keeps no {kind}s of its own, since its marker names no folder for them")]
     NoDirectory { path: PathBuf, kind: Kind },
     #[error("{path}: has no {SETTINGS_FILE} to change, since a {MIND_CONFIG} marks it")]
@@ -1701,6 +1702,7 @@ impl WorkspaceError {
             | WorkspaceError::NotLoaded { path, .. }
             | WorkspaceError::NonUtf8Path { path }
             | WorkspaceError::OutsideProject { path, .. }
+            | WorkspaceError::InsideMind { path, .. }
             | WorkspaceError::NoDirectory { path, .. }
             | WorkspaceError::NoSettings { path }
             | WorkspaceError::OutsideWorkspace { path, .. }
@@ -2029,6 +2031,31 @@ fn stays_inside(directory: &Path) -> bool {
         paths::normalize(directory).components().next(),
         Some(std::path::Component::Normal(_))
     )
+}
+
+/// Why `directory`, a route from a project's root, cannot be where its
+/// settings say it authors `kind`s: it leads out of the project
+/// ([`stays_inside`]), or into its `.mind`.
+///
+/// `.mind` is Mindflayer's: the marker, the templates, the stage an install
+/// builds in. A local project's keeps itself out of git, so a folder there
+/// would hide what the project wrote from the team without a word, where the
+/// point of authoring beside the code (D-06) is that it is committed with it.
+/// Refused in a shared project too, whose share a change may later make
+/// local. Only when writing settings: a `mind.toml` of version 1 kept every
+/// kind inside `.mind`, and is still read that way.
+fn misplaced_authored(kind: Kind, directory: &Path) -> Option<WorkspaceError> {
+    let path = directory.to_path_buf();
+    if !stays_inside(directory) {
+        return Some(WorkspaceError::OutsideProject { path, kind });
+    }
+    // Without regard to case, as `gathered_overlap` compares, since `.MIND`
+    // is the same folder as `.mind` where the file system ignores case.
+    let inside_mind = matches!(
+        paths::normalize(directory).components().next(),
+        Some(std::path::Component::Normal(first)) if first.eq_ignore_ascii_case(MIND_DIR)
+    );
+    inside_mind.then_some(WorkspaceError::InsideMind { path, kind })
 }
 
 /// Why `directory`, a route from a workspace's root, cannot hold the
