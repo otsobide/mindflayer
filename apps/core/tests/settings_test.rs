@@ -179,6 +179,40 @@ fn a_project_holding_a_settings_toml_is_read_from_it_and_warns_of_each_older_mar
     );
 }
 
+/// What a build from before #29 leaves: its `mind init` asks only whether a
+/// `mind.toml` is there, so it writes one beside a `settings.json`.
+#[test]
+fn a_project_holding_a_settings_json_and_a_mind_toml_is_read_from_the_json_and_warns_of_the_other()
+{
+    let dir = TempDir::new().unwrap();
+    MindProject::init(dir.path()).unwrap();
+    json_project(dir.path(), None);
+    let leftover = dir.path().join(MIND_DIR).join(MIND_CONFIG);
+
+    let project = MindProject::open(dir.path()).unwrap();
+
+    // Read from the settings.json: a mind.toml names no agents.
+    assert_eq!(project.marker_file(), MarkerFile::SettingsJson);
+    let read = project.settings().unwrap();
+    assert_eq!(read.version, SETTINGS_VERSION);
+    assert_eq!(read.agents, [Agent::Claude, Agent::Codex]);
+    let warnings = project.warnings();
+    assert_eq!(
+        warnings,
+        vec![ProjectWarning::Leftover {
+            path: leftover.clone(),
+            read: MarkerFile::SettingsJson,
+        }]
+    );
+    assert_eq!(
+        warnings[0].to_string(),
+        format!(
+            "{}: ignored, since the project is read from the settings.json beside it",
+            leftover.display()
+        )
+    );
+}
+
 #[test]
 fn a_project_marked_by_a_settings_toml_alone_is_found_and_says_nothing_else() {
     let dir = TempDir::new().unwrap();
