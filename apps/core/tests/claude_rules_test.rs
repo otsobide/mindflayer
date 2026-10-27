@@ -430,6 +430,22 @@ fn a_recorded_file_somebody_deleted_is_written_again_or_forgotten() {
     assert!(!fixture.folder().join("deep").exists());
 }
 
+#[test]
+fn the_last_rules_folder_somebody_deleted_takes_mindflayers_folder_with_it() {
+    let fixture = fixture();
+    let rule = fixture.rule("deep/b", "Rule b.\n");
+    let first = fixture.render(&[&rule], Mode::Fallback, &[]).unwrap();
+    fs::remove_dir_all(fixture.folder().join("deep")).unwrap();
+
+    let again = fixture
+        .render(&[], Mode::Fallback, &first.recorded())
+        .unwrap();
+
+    assert_eq!(written(&again), [("deep/b", Written::Gone)]);
+    assert!(!fixture.folder().exists());
+    assert!(fixture.project.root().join(".claude/rules").is_dir());
+}
+
 #[cfg(unix)]
 #[test]
 fn a_link_in_place_of_a_rule_file_is_never_written_through_or_taken_away() {

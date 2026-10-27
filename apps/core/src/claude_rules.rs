@@ -675,10 +675,22 @@ fn create(path: &Path, contents: &[u8]) -> io::Result<()> {
 /// empty, and Claude makes `.claude` itself, so nothing tells whether
 /// Mindflayer made them. Below it, a folder only groups routes, and an empty
 /// one groups nothing.
+///
+/// A folder not there is taken as pruned already, so the climb goes on: a
+/// recorded file found gone may have gone with its whole folder, and the one
+/// above can be empty all the same.
 fn prune(top: &Path, from: &Path) {
     let mut current = Some(from);
     while let Some(folder) = current {
-        if !folder.starts_with(top) || fs::remove_dir(folder).is_err() || folder == top {
+        if !folder.starts_with(top) {
+            break;
+        }
+        match fs::remove_dir(folder) {
+            Ok(()) => {}
+            Err(error) if error.kind() == io::ErrorKind::NotFound => {}
+            Err(_) => break,
+        }
+        if folder == top {
             break;
         }
         current = folder.parent();
