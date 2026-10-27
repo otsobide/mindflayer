@@ -195,8 +195,9 @@ pub(crate) fn scan_workspace(
 
 /// What a scan could not read, and that it stopped early, each as a warning
 /// says it, without the prefix: on stderr beside a table, inside the
-/// envelope beside JSON.
-fn scan_warnings(scan: &Scan) -> Vec<String> {
+/// envelope beside JSON, and in a strip of the minds screen, which says them
+/// in these words rather than its own.
+pub(crate) fn scan_warnings(scan: &Scan) -> Vec<String> {
     let mut warnings: Vec<String> = scan.failures.iter().map(ToString::to_string).collect();
     if scan.truncated {
         warnings.push(format!(

@@ -35,6 +35,7 @@ use ratatui::crossterm::event::{self, Event, KeyEventKind};
 use ratatui::crossterm::terminal::{self, EnterAlternateScreen};
 use ratatui::DefaultTerminal;
 
+use crate::commands::project::scan_warnings;
 use crate::commands::workspace::{load_warnings, same_directory};
 use crate::commands::{consulted, run_flayer_with, run_with};
 use crate::install::state::Screen as InstallScreen;
@@ -522,12 +523,12 @@ pub fn load(directory: &Path, lookup: &Lookup) -> Result<View, CliError> {
 /// opens on.
 pub fn load_under(directory: &Path, lookup: &Lookup, roots: &[PathBuf]) -> Result<View, CliError> {
     Ok(match resolve(&lookup.inputs(directory, Intent::Read))? {
-        Some(resolved) => View::Workspace(workspace_view(
+        Some(resolved) => View::Workspace(Box::new(workspace_view(
             &resolved.workspace,
             resolved.reason,
             lookup,
             roots,
-        )),
+        ))),
         None => View::Nowhere,
     })
 }
@@ -548,19 +549,19 @@ pub fn load_project(directory: &Path, lookup: &Lookup) -> Result<View, CliError>
     let consulted = resolve::consulted(&lookup.inputs(project.root(), Intent::Read), &project)?;
     if let Some(Resolved { workspace, reason }) = &consulted {
         if workspace.is_linked(project.root()) {
-            return Ok(View::Workspace(workspace_view(
+            return Ok(View::Workspace(Box::new(workspace_view(
                 workspace,
                 *reason,
                 lookup,
                 &[],
-            )));
+            ))));
         }
     }
     let above = consulted.map(|resolved| resolved.workspace);
     // `.`, because the commands run from the project itself.
     let entry = String::from(".");
     let root = project.root().to_path_buf();
-    Ok(View::Workspace(Workspace {
+    Ok(View::Workspace(Box::new(Workspace {
         name: project.name().to_owned(),
         // `above`'s templates, the ones `mind add` will find, and no
         // records: it does not link the project, so it says nothing of what
@@ -576,6 +577,7 @@ pub fn load_project(directory: &Path, lookup: &Lookup) -> Result<View, CliError>
         root,
         unlinked: Vec::new(),
         roots: Vec::new(),
+        scan_warnings: Vec::new(),
         shelf: 0,
         // What `mind load` has put into the workspace above, so the load form
         // can show it and unload it from here too.
@@ -586,7 +588,7 @@ pub fn load_project(directory: &Path, lookup: &Lookup) -> Result<View, CliError>
             .or_else(|| lookup.home.clone()),
         reason: None,
         made: true,
-    }))
+    })))
 }
 
 /// A workspace as the screen shows it: its own artifacts first, then every
@@ -619,7 +621,9 @@ fn workspace_view(
         roots: roots.to_vec(),
         ..scan::Request::default()
     };
-    let unlinked = scan(workspace, &request)
+    let scanned = scan(workspace, &request);
+    let scan_warnings = scan_warnings(&scanned);
+    let unlinked = scanned
         .found
         .into_iter()
         .filter(|found| !found.linked)
@@ -634,6 +638,7 @@ fn workspace_view(
         members,
         unlinked,
         roots: roots.to_vec(),
+        scan_warnings,
         shelf: shelf(workspace),
         loaded: loaded(workspace),
         scope: Scope::Workspace,

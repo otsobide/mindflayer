@@ -1043,10 +1043,10 @@ migrate` for a project on its own
 `m`, or `flayer minds` straight from the shell, opens a list of every
 project the workspace links and every repository under it that it does not,
 ticked where it does. `flayer minds ~/Work` looks for those under that folder
-instead, as `flayer scan ~/Work` does. Tick and untick, then `a` applies all
-of it in one go, after saying which repositories `mind init` will write into.
-`link` and `unlink` are all or nothing: if one path is refused, none is
-changed.
+instead, as `flayer scan ~/Work` does, and says below the list what it could
+not read. Tick and untick, then `a` applies all of it in one go, after saying
+which repositories `mind init` will write into. `link` and `unlink` are all or
+nothing: if one path is refused, none is changed.
 
 That is the rule it is built by: **nothing the TUI does is out of reach of a
 command.** A form shows the line it is about to run as you type, and when the

@@ -1080,6 +1080,37 @@ fn minds_screen(app: &App, screen: &Minds, frame: &mut Frame, area: Rect) {
     let inner = block.inner(box_);
     frame.render_widget(block, box_);
 
+    // What the scan missed gets a strip of its own, as a project's unreadable
+    // files do, so a folder typed wrong reads as that rather than as a folder
+    // with nothing in it, and no list scrolls it out of sight. Sized without
+    // `clamp`, which panics on a screen too short for its floor.
+    let warnings = app
+        .workspace()
+        .map_or(&[][..], |workspace| &workspace.scan_warnings[..]);
+    let inner = if warnings.is_empty() {
+        inner
+    } else {
+        let height = u16::try_from(warnings.len() + 2)
+            .unwrap_or(u16::MAX)
+            .min((inner.height / 2).max(3));
+        let parts = Layout::default()
+            .direction(Direction::Vertical)
+            .constraints([Constraint::Min(1), Constraint::Length(height)])
+            .split(inner);
+        let lines: Vec<Line> = warnings
+            .iter()
+            .map(|warning| Line::from(Span::styled(printable(warning), warn())))
+            .collect();
+        let strip = Block::bordered()
+            .title(" What the scan missed ")
+            .border_style(warn());
+        frame.render_widget(
+            Paragraph::new(lines).block(strip).wrap(Wrap { trim: true }),
+            parts[1],
+        );
+        parts[0]
+    };
+
     if screen.rows.is_empty() {
         frame.render_widget(
             Paragraph::new(Span::styled(

@@ -3619,7 +3619,10 @@ given rather than the workspace root, and the TUI keeps them and looks there
 each time it reads the disk again, so a change made from the screen does not
 send it back to the workspace root. It still lists every project the
 workspace links: a folder says where to look for more, not which of its own
-to show.
+to show. What the scan could not read, and that it stopped early, the screen
+says in a strip below the list, in the words `flayer scan` warns with, so a
+folder typed wrong is said there too rather than drawn as one with nothing
+in it.
 
 ## Writers at the same time
 

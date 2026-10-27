@@ -49,7 +49,8 @@ pub enum View {
     /// project for `mind`.
     Nowhere,
     /// A workspace and everything it holds, or one project on its own.
-    Workspace(Workspace),
+    /// Boxed, since `Nowhere` holds nothing and a view is moved whole.
+    Workspace(Box<Workspace>),
 }
 
 /// A workspace as the screen shows it, or a project on its own.
@@ -66,6 +67,11 @@ pub struct Workspace {
     /// Where `unlinked` was looked for: the folders `flayer minds` was
     /// given, none meaning the root.
     pub roots: Vec<PathBuf>,
+    /// What the look for `unlinked` could not read, and that it stopped
+    /// early, in the words `flayer scan` warns with: a folder `flayer minds`
+    /// was given that is not there among them, which would otherwise be an
+    /// empty screen with nothing to say why.
+    pub scan_warnings: Vec<String>,
     /// How many artifacts are on the shelf.
     pub shelf: usize,
     /// The workspaces it loads, in marker order.

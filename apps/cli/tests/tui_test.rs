@@ -331,6 +331,45 @@ fn flayer_minds_given_a_folder_offers_what_is_under_it_beside_every_linked_one()
 }
 
 #[test]
+fn flayer_minds_given_a_folder_that_is_not_there_says_so_beside_what_the_others_hold() {
+    let (dir, work) = candidates_and_a_folder_beside();
+    let missing = work.path().join("wrok");
+
+    let app = tui::minds(
+        dir.path(),
+        &[missing.clone(), work.path().join("plain")],
+        &Lookup::default(),
+    )
+    .unwrap();
+
+    let plain = work.path().join("plain").display().to_string();
+    assert_eq!(minds_rows(&app), vec![plain.as_str(), "alpha", "beta"]);
+    // In the words `flayer scan` warns with.
+    let said = &app.workspace().unwrap().scan_warnings;
+    assert_eq!(said.len(), 1, "{said:?}");
+    assert!(
+        said[0].starts_with(&format!("{}: cannot be listed: ", missing.display())),
+        "{said:?}"
+    );
+    let drawn = tui_drawn(&app);
+    assert!(drawn.contains("What the scan missed"), "{drawn}");
+    assert!(drawn.contains("cannot be listed"), "{drawn}");
+}
+
+#[test]
+fn flayer_minds_given_only_a_folder_that_is_not_there_is_not_an_empty_answer() {
+    let dir = TempDir::new().unwrap();
+    flayer(dir.path(), &["init"]).unwrap();
+
+    let app = tui::minds(dir.path(), &[dir.path().join("wrok")], &Lookup::default()).unwrap();
+
+    assert!(minds_rows(&app).is_empty());
+    let drawn = tui_drawn(&app);
+    assert!(drawn.contains("nothing linked"), "{drawn}");
+    assert!(drawn.contains("cannot be listed"), "{drawn}");
+}
+
+#[test]
 fn applying_the_minds_screen_given_a_folder_links_by_path_and_looks_there_again() {
     let (dir, work) = candidates_and_a_folder_beside();
     let mut app = tui::minds(dir.path(), &[work.path().to_path_buf()], &Lookup::default()).unwrap();
