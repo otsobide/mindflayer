@@ -40,9 +40,11 @@ use std::path::{Component, Path, PathBuf};
 
 use thiserror::Error;
 
+use crate::agent::AgentHomes;
 use crate::artifact::{issue_list, name_issues, Artifact, ArtifactError, Declared};
 use crate::catalog::{report_order, spelled};
 use crate::exclude;
+use crate::install;
 use crate::lines::{self, Line};
 use crate::paths;
 use crate::workspace::{replace_bytes, same_directory, FlayerWorkspace, MindProject};
@@ -221,10 +223,12 @@ impl Section {
 ///
 /// So is a block left in a folder whose `AGENTS.md` the agents of other
 /// projects read too ([`placed`]): `workspace` is the one whose links say
-/// where those are. A render that leaves no block goes ahead there, since it
-/// takes rules away from those agents rather than giving them any. A file
-/// that is a link is written through to what it points at, as a marker
-/// shared by a link is, but only inside the project ([`linked_inside`]).
+/// where those are, and `homes` the agents' own folders, which the front end
+/// decides as it does for an install. A render that leaves no block goes
+/// ahead there, since it takes rules away from those agents rather than
+/// giving them any. A file that is a link is written through to what it
+/// points at, as a marker shared by a link is, but only inside the project
+/// ([`linked_inside`]).
 ///
 /// What the file then holds is checked against what Codex reads of it, and
 /// anything that keeps the rules from Codex is said ([`Warning`]): only
@@ -239,6 +243,7 @@ pub fn render<'a>(
     project: &MindProject,
     rules: impl IntoIterator<Item = &'a Artifact>,
     created: bool,
+    homes: &AgentHomes,
 ) -> Result<Rendered, AgentsMdError> {
     let file = project.root().join(FILE);
     linked_inside(project.root(), &file)?;
@@ -253,7 +258,7 @@ pub fn render<'a>(
     // or before the one at the workspace's root was unlinked, comes out
     // again, and refusing it would keep the very leak the refusal is for.
     if !sections.is_empty() {
-        placed(workspace, project.root())?;
+        placed(workspace, homes, project.root())?;
     }
 
     let read = read(&file)?;
@@ -469,7 +474,21 @@ fn codex_warnings(project: &Path) -> Vec<Warning> {
 /// workspace's own artifacts put nothing in it ([`FlayerWorkspace::own`] is
 /// a holder at that root, not a project), while a project at the root is a
 /// project like any other, and its `AGENTS.md` its own (D-03).
-fn placed(workspace: &FlayerWorkspace, folder: &Path) -> Result<(), AgentsMdError> {
+///
+/// So is a folder inside one of the agents' own, as an install's copy is
+/// ([`crate::install::InstallError::UserScope`]): a project at `$CODEX_HOME`
+/// would write the `AGENTS.md` Codex reads in every project, and one at
+/// `~/.claude` the `.claude/AGENTS.md` Claude finds above every project in
+/// the user's home. Inside rather than equal, for the reason an install
+/// gives: nothing in one of those folders is any one project's.
+fn placed(
+    workspace: &FlayerWorkspace,
+    homes: &AgentHomes,
+    folder: &Path,
+) -> Result<(), AgentsMdError> {
+    if let Some((file, home, reader)) = install::in_agent_home(homes, &[folder.join(FILE)]) {
+        return Err(AgentsMdError::UserScope { file, home, reader });
+    }
     if same_directory(folder, workspace.root()) && !workspace.is_linked(folder) {
         return Err(AgentsMdError::WorkspaceRoot {
             folder: folder.to_path_buf(),
@@ -904,6 +923,15 @@ pub enum AgentsMdError {
     AboveProjects {
         folder: PathBuf,
         projects: Vec<PathBuf>,
+    },
+    #[error(
+        "{file} is inside {home}, which {reader} reads for every project, so no rules are \
+         written into it: Mindflayer gives rules to one project at a time"
+    )]
+    UserScope {
+        file: PathBuf,
+        home: PathBuf,
+        reader: &'static str,
     },
     #[error(
         "{file}: a link to {target}, outside the project, so it is not written through: \

@@ -240,8 +240,9 @@ These are easy to break from a single file without noticing.
     file inside the project; and the file is taken away only when the
     caller says Mindflayer made it and nothing else is left in it. No block
     is left in a workspace's root, unless a project it links is there, nor
-    in a folder above a project it links, whose agents would read it too;
-    a render that takes one out goes ahead there.
+    in a folder above a project it links, whose agents would read it too,
+    nor inside an agent's own folder (`AgentsMdError::UserScope`); a render
+    that takes one out goes ahead there.
   - An entry in a config file somebody else owns (`.mcp.json`,
     `opencode.json`, `.codex/config.toml`) is changed one at a time through
     `config_entry`: JSON and JSONC entries are edited through jsonc-parser's
@@ -435,7 +436,8 @@ These are easy to break from a single file without noticing.
   find. Core takes the answer as `AgentHomes` and never resolves one.
   `Lookup::given` decides them once per command line, into the `Lookup`
   (`Lookup::agents`), and install is the first to take them, to refuse a
-  copy inside one. `tui::execute` hands each line the TUI's own with the
+  copy inside one, as `agents_md::render` takes them to refuse a block of
+  rules there. `tui::execute` hands each line the TUI's own with the
   rest of its `Lookup`, and so does its install screen: a command the TUI
   runs carries none of the four options, so it would decide them again from
   the environment.

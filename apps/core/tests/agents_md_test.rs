@@ -10,11 +10,19 @@ use mindflayer_core::agents_md::{
     self, AgentsMdError, Malformed, Rendered, Warning, Written, BEGIN, CODEX_BUDGET, CODEX_NEAR,
     END,
 };
-use mindflayer_core::{Artifact, FlayerWorkspace, MindProject};
+use mindflayer_core::{AgentHomes, Artifact, FlayerWorkspace, MindProject};
 use tempfile::TempDir;
 
 /// What a team's `AGENTS.md` holds before Mindflayer writes in it.
 const TEAM: &str = "# Working here\n\nRun `make test` before every push.\n";
+
+/// No agent's own folder, as a front end hands over when a test pins them.
+const NO_HOMES: AgentHomes = AgentHomes {
+    claude_config_dir: None,
+    codex_home: None,
+    opencode_config_dir: None,
+    agents_dir: None,
+};
 
 /// A workspace linking one project below it, and a library of rules to
 /// render from, in a git work tree whose root is the workspace's.
@@ -71,6 +79,7 @@ impl Fixture {
             &self.project,
             rules.iter().copied(),
             created,
+            &NO_HOMES,
         )
     }
 
@@ -405,7 +414,7 @@ fn the_workspaces_own_folder_is_refused() {
     let rule = fixture.rule("a", "Rule a.\n");
     let own = fixture.workspace.own();
 
-    let refused = agents_md::render(&fixture.workspace, &own, [&rule], false);
+    let refused = agents_md::render(&fixture.workspace, &own, [&rule], false, &NO_HOMES);
     assert!(
         matches!(&refused, Err(AgentsMdError::WorkspaceRoot { folder }) if folder == fixture.workspace.root()),
         "{refused:?}"
@@ -423,7 +432,7 @@ fn a_project_the_workspace_links_at_its_root_is_given_its_rules() {
     fs::write(&file, "Rule a.\n").unwrap();
     let rule = Artifact::rule(&file, "a".to_owned(), library.path()).unwrap();
 
-    let rendered = agents_md::render(&workspace, &project, [&rule], false).unwrap();
+    let rendered = agents_md::render(&workspace, &project, [&rule], false, &NO_HOMES).unwrap();
     assert!(rendered.created());
     assert_eq!(rendered.file, dir.path().join(agents_md::FILE));
 }
@@ -437,17 +446,19 @@ fn a_project_unlinked_from_the_workspaces_root_is_refused_a_block_and_can_drop_i
     let file = library.path().join("a.md");
     fs::write(&file, "Rule a.\n").unwrap();
     let rule = Artifact::rule(&file, "a".to_owned(), library.path()).unwrap();
-    assert!(agents_md::render(&workspace, &project, [&rule], false)
-        .unwrap()
-        .created());
+    assert!(
+        agents_md::render(&workspace, &project, [&rule], false, &NO_HOMES)
+            .unwrap()
+            .created()
+    );
     workspace.unlink(dir.path()).unwrap();
 
-    let refused = agents_md::render(&workspace, &project, [&rule], true);
+    let refused = agents_md::render(&workspace, &project, [&rule], true, &NO_HOMES);
     assert!(
         matches!(refused, Err(AgentsMdError::WorkspaceRoot { .. })),
         "{refused:?}"
     );
-    let dropped = agents_md::render(&workspace, &project, [], true).unwrap();
+    let dropped = agents_md::render(&workspace, &project, [], true, &NO_HOMES).unwrap();
     assert_eq!(dropped.written, Written::Removed);
     assert!(!dir.path().join(agents_md::FILE).exists());
 }
@@ -472,7 +483,7 @@ fn a_folder_above_a_linked_project_is_refused_and_nothing_is_written() {
 
     // The package below is given its own.
     let below = MindProject::open(&package).unwrap();
-    agents_md::render(&fixture.workspace, &below, [&rule], false).unwrap();
+    agents_md::render(&fixture.workspace, &below, [&rule], false, &NO_HOMES).unwrap();
     assert!(package.join(agents_md::FILE).exists());
 }
 
@@ -509,6 +520,43 @@ fn a_linked_project_gone_from_below_still_keeps_its_folder_above_out() {
     );
 }
 
+#[test]
+fn a_project_at_or_inside_an_agents_own_folder_is_refused_a_block_and_can_drop_its_own() {
+    let fixture = fixture();
+    fs::write(fixture.agents_md(), TEAM).unwrap();
+    let rule = fixture.rule("a", "Rule a.\n");
+    fixture.render(&[&rule], false).unwrap();
+    let at = AgentHomes {
+        codex_home: Some(fixture.project.root().to_path_buf()),
+        ..AgentHomes::default()
+    };
+    let above = AgentHomes {
+        claude_config_dir: Some(fixture.dir.path().to_path_buf()),
+        ..AgentHomes::default()
+    };
+
+    for (homes, reader) in [(&at, "Codex"), (&above, "Claude Code")] {
+        let refused =
+            agents_md::render(&fixture.workspace, &fixture.project, [&rule], false, homes);
+        match refused {
+            Err(AgentsMdError::UserScope {
+                file,
+                home,
+                reader: said,
+            }) => {
+                assert_eq!(file, fixture.agents_md());
+                assert!(fixture.project.root().starts_with(&home), "{home:?}");
+                assert_eq!(said, reader);
+            }
+            other => panic!("{other:?}"),
+        }
+    }
+
+    let dropped = agents_md::render(&fixture.workspace, &fixture.project, [], false, &at).unwrap();
+    assert_eq!(dropped.written, Written::Changed);
+    assert_eq!(fixture.text(), TEAM);
+}
+
 #[cfg(unix)]
 #[test]
 fn a_folder_spelled_through_a_link_is_still_above_what_it_leads_to() {
@@ -521,7 +569,7 @@ fn a_folder_spelled_through_a_link_is_still_above_what_it_leads_to() {
 
     let above = MindProject::open(&through).unwrap();
     let rule = fixture.rule("a", "Rule a.\n");
-    let refused = agents_md::render(&fixture.workspace, &above, [&rule], false);
+    let refused = agents_md::render(&fixture.workspace, &above, [&rule], false, &NO_HOMES);
     assert!(
         matches!(refused, Err(AgentsMdError::AboveProjects { .. })),
         "{refused:?}"
@@ -580,11 +628,13 @@ fn files_from_the_git_root_down_nearing_codexs_budget_are_warned_of() {
     fs::write(middle.join(agents_md::OVERRIDE), "o".repeat(1024)).unwrap();
 
     let small = sized(&fixture, "small", 1024);
-    let rendered = agents_md::render(&fixture.workspace, &project, [&small], false).unwrap();
+    let rendered =
+        agents_md::render(&fixture.workspace, &project, [&small], false, &NO_HOMES).unwrap();
     assert_eq!(rendered.warnings, []);
 
     let large = sized(&fixture, "large", 7 * 1024 + 512);
-    let rendered = agents_md::render(&fixture.workspace, &project, [&large], false).unwrap();
+    let rendered =
+        agents_md::render(&fixture.workspace, &project, [&large], false, &NO_HOMES).unwrap();
     let mine = project.root().join(agents_md::FILE);
     let bytes = 20 * 1024 + 1024 + fs::metadata(&mine).unwrap().len();
     assert!((CODEX_NEAR..=CODEX_BUDGET).contains(&bytes), "{bytes}");
@@ -598,7 +648,8 @@ fn files_from_the_git_root_down_nearing_codexs_budget_are_warned_of() {
     );
 
     let larger = sized(&fixture, "larger", 12 * 1024);
-    let rendered = agents_md::render(&fixture.workspace, &project, [&larger], false).unwrap();
+    let rendered =
+        agents_md::render(&fixture.workspace, &project, [&larger], false, &NO_HOMES).unwrap();
     let bytes = 20 * 1024 + 1024 + fs::metadata(&mine).unwrap().len();
     assert!(bytes > CODEX_BUDGET);
     assert!(

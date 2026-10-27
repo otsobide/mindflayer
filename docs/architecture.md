@@ -3365,7 +3365,9 @@ too, as an empty `$MINDFLAYER_HOME` does; whether the agents agree is an [open
 question](#open-questions).
 
 Installing is the first to take them, to refuse a copy inside one ([never
-into an agent's own folder](#never-into-an-agents-own-folder)). They are
+into an agent's own folder](#never-into-an-agents-own-folder)), and
+rendering a project's rules takes them to refuse a block of them there ([how
+a rule reaches the agents](#how-a-rule-reaches-the-agents)). They are
 decided once per command line, with the workspace to use, into the same
 `Lookup` (`Lookup::given`), which the TUI keeps and hands to every line it
 runs (`tui::execute`) and to its install screen: a line the TUI runs carries
@@ -3474,6 +3476,14 @@ Never force-push a branch somebody else may have pulled.
   before the one at the root was unlinked, is reaching those agents already,
   and refusing to take it out would keep the leak the refusal is there to
   stop.
+- **Never into an agent's own folder.** A block is refused, the same way,
+  in a project at or inside one of the agents' own folders
+  (`AgentsMdError::UserScope`), which the front end hands over as it does
+  for an install ([never into an agent's own
+  folder](#never-into-an-agents-own-folder)): a project at `$CODEX_HOME`
+  would write the `AGENTS.md` Codex reads in every project, one at
+  `~/.config/opencode` OpenCode's, and one at `~/.claude` the
+  `.claude/AGENTS.md` Claude finds above every project in the user's home.
 - **What Codex would miss is said.** Codex reads one file a folder,
   `AGENTS.override.md` before `AGENTS.md`, from the git root down to where it
   starts, and cuts the whole off at 32 KiB (`project_doc_max_bytes`); with no
@@ -4135,9 +4145,9 @@ Carrying it out, #42 renders the block, between those markers and under a
 `<!-- mindflayer:rule <route> -->` for each rule, leaving out a rule that
 states `paths:`. It leaves no block in a folder above a project the
 workspace links, nor in the workspace's own root where no project it links
-is, since the agents of other projects would read an `AGENTS.md` there too,
-and takes out one it finds there; a project at the workspace's root has its
-rules in its own. It warns of the override, the
+is, nor inside an agent's own folder, since the agents of other projects
+would read an `AGENTS.md` there too, and takes out one it finds there; a
+project at the workspace's root has its rules in its own. It warns of the override, the
 budget, and a project in no git work tree, where Codex reads only the
 folder it starts in ([how a rule reaches the
 agents](#how-a-rule-reaches-the-agents)).
