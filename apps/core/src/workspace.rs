@@ -874,13 +874,26 @@ impl MindProject {
             });
         }
         let path = self.mind_dir().join(SETTINGS_FILE);
-        let text = fs::read_to_string(&path).map_err(|source| WorkspaceError::Read {
-            path: path.clone(),
-            source,
+        let value = rewrite(&path, |text| {
+            let before = crate::settings::parse(&path, text)?;
+            let mut wanted = before.clone();
+            let value = change(&mut wanted);
+            Self::check_change(&path, &before, &mut wanted)?;
+            let edited = crate::settings::edited(&path, text, &before, &wanted)?;
+            Ok((edited, value))
         })?;
-        let before = crate::settings::parse(&path, &text)?;
-        let mut wanted = before.clone();
-        let value = change(&mut wanted);
+        self.config = ProjectConfig::Settings(Settings::read(&path)?);
+        Ok(value)
+    }
+
+    /// What [`change_settings`](Self::change_settings) holds `wanted`, the
+    /// settings as a change leaves them, to before it writes them, and the
+    /// version a change of `targets` brings with it.
+    fn check_change(
+        path: &Path,
+        before: &Settings,
+        wanted: &mut Settings,
+    ) -> Result<(), WorkspaceError> {
         // `targets` come with the version a build from before them refuses,
         // and go with it, so a change to them writes the one they need.
         if wanted.targets != before.targets && wanted.version == before.version {
@@ -905,7 +918,7 @@ impl MindProject {
             let folders = targets.unwrap_or_default();
             if targets.is_some() && folders.is_empty() {
                 return Err(WorkspaceError::Edit {
-                    path,
+                    path: path.to_path_buf(),
                     detail: format!(
                         "`targets.{}` would name no folder, which is no place to install anything",
                         kind.folder()
@@ -923,13 +936,7 @@ impl MindProject {
                 });
             }
         }
-
-        let edited = crate::settings::edited(&path, &text, &before, &wanted)?;
-        if edited != text {
-            replace_file(&path, &edited)?;
-        }
-        self.config = ProjectConfig::Settings(Settings::read(&path)?);
-        Ok(value)
+        Ok(())
     }
 
     /// What opening the project found worth saying, for a front end to say:
@@ -1539,29 +1546,19 @@ impl FlayerWorkspace {
     {
         self.refuse_unmade()?;
         let path = self.config_path();
-        let text = fs::read_to_string(&path).map_err(|source| WorkspaceError::Read {
-            path: path.clone(),
-            source,
-        })?;
-        let mut document: toml_edit::DocumentMut =
-            text.parse()
-                .map_err(|error: toml_edit::TomlError| WorkspaceError::Edit {
-                    path: path.clone(),
-                    detail: error.to_string(),
-                })?;
-
-        let value = edit(&mut document).map_err(|detail| WorkspaceError::Edit {
+        let refused = |detail: String| WorkspaceError::Edit {
             path: path.clone(),
             detail,
+        };
+        // An already-registered link and a failed unlink both leave the file
+        // untouched, down to its modification time.
+        let value = rewrite(&path, |text| {
+            let mut document: toml_edit::DocumentMut = text
+                .parse()
+                .map_err(|error: toml_edit::TomlError| refused(error.to_string()))?;
+            let value = edit(&mut document).map_err(refused)?;
+            Ok((document.to_string(), value))
         })?;
-
-        // Only write when the edit changed something. An already-registered
-        // link and a failed unlink both leave the file untouched, down to its
-        // modification time.
-        let rewritten = document.to_string();
-        if rewritten != text {
-            replace_file(&path, &rewritten)?;
-        }
 
         // Re-read, so what is in memory is what is on disk rather than what we
         // believe we wrote.
@@ -2026,6 +2023,34 @@ fn climbs(route: &Path) -> bool {
     route
         .components()
         .any(|component| matches!(component, std::path::Component::ParentDir))
+}
+
+/// Change the marker at `path` in place: read it, hand its text to `edit`,
+/// which gives back the text it is to hold, and write that only when it
+/// differs, through [`replace_file`].
+///
+/// One way for both markers, a workspace's and a project's settings, so
+/// both are changed alike: read here rather than taken from what was read
+/// when their holder was opened, so an edit decides what to do from the
+/// file it is about to write and not from a copy that may be minutes old;
+/// and left alone, its modification time included, when nothing changed.
+/// Parsing is the caller's, since what a marker that does not parse is
+/// refused as is its own to say.
+///
+/// Takes no lock: whoever calls it holds the one that keeps the change apart.
+pub(crate) fn rewrite<T>(
+    path: &Path,
+    edit: impl FnOnce(&str) -> Result<(String, T), WorkspaceError>,
+) -> Result<T, WorkspaceError> {
+    let text = fs::read_to_string(path).map_err(|source| WorkspaceError::Read {
+        path: path.to_path_buf(),
+        source,
+    })?;
+    let (rewritten, value) = edit(&text)?;
+    if rewritten != text {
+        replace_file(path, &rewritten)?;
+    }
+    Ok(value)
 }
 
 /// Replace a file's contents through a temporary file and a rename.
