@@ -774,10 +774,12 @@ impl<'a> Members<'a> {
 
     /// None when the file leaves it out, which is every kind installed where
     /// the project's agents read. Read whatever the version says, a version
-    /// 3 file given `targets` by hand included: somebody wrote them to be
-    /// used, and the only reader that could miss them is a build from
-    /// before them, which a write from this one keeps out by writing the
-    /// version they need.
+    /// 3 `settings.json` given `targets` by hand included: somebody wrote
+    /// them to be used, and the only reader that could miss them is a build
+    /// from before them. Nothing this build does leaves one so: such a file
+    /// is changed by nothing, and `mind migrate` moves what it holds,
+    /// `targets` included, to a `settings.toml` at its own version, which
+    /// no build from before them reads.
     ///
     /// A kind named with no folder is refused rather than read as installed
     /// nowhere: leaving the kind out is how a file says the standard
@@ -786,7 +788,8 @@ impl<'a> Members<'a> {
     /// that defines the key: in a version 3 file, which every build before
     /// it opened with the key read past, one that does not read as targets
     /// is read past still, rather than closing a project those builds
-    /// opened. An edit of `targets` writes it over, at the version it needs.
+    /// opened. The move carries only what reads, so such targets stay
+    /// where they were written, in the `settings.json` it keeps.
     fn targets(&self, version: u32) -> Result<Targets, String> {
         match self.strict_targets() {
             Err(_) if version < TARGETS_VERSION => Ok(Targets::default()),
