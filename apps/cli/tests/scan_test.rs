@@ -48,3 +48,29 @@ fn scan_of_an_empty_workspace_says_so() {
         .stdout
         .starts_with("no mind projects or git repositories under"));
 }
+
+#[test]
+fn scan_spells_each_path_as_link_takes_it_from_where_it_runs() {
+    let dir = workspace_with_two();
+    let sub = dir.path().join("sub");
+    fs::create_dir_all(sub.join("delta")).unwrap();
+    new_project(&sub.join("delta"));
+
+    let outcome = flayer(&sub, &["scan"]).unwrap();
+
+    // What is outside where it ran is spelled whole; what is inside, as a
+    // route from there.
+    let alpha = dir.path().join("alpha").display().to_string();
+    let beta = dir.path().join("beta").display().to_string();
+    let width = alpha.len().max("delta".len());
+    assert_eq!(
+        outcome.stdout.lines().take(3).collect::<Vec<_>>(),
+        vec![
+            format!("{alpha:width$}  linked"),
+            format!("{beta:width$}  linked"),
+            format!("{:width$}  not linked  mind project", "delta"),
+        ]
+    );
+    let linked = flayer(&sub, &["link", "delta"]).unwrap();
+    assert_eq!(linked.stdout, "linked delta as sub/delta\n");
+}

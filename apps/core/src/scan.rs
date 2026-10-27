@@ -9,7 +9,7 @@
 use std::collections::{HashSet, VecDeque};
 use std::fs;
 use std::io;
-use std::path::{Path, PathBuf};
+use std::path::{Component, Path, PathBuf};
 
 use thiserror::Error;
 
@@ -43,14 +43,19 @@ pub struct Request {
     pub roots: Vec<PathBuf>,
     /// How many levels below each root to look; none judges the roots alone.
     pub depth: usize,
+    /// Where each route is spelled from: the directory `flayer link` would be
+    /// run in with it. None means the workspace root, where the TUI runs its
+    /// lines.
+    pub from: Option<PathBuf>,
 }
 
-/// The workspace root, to [`DEFAULT_DEPTH`].
+/// The workspace root, to [`DEFAULT_DEPTH`], spelled from there.
 impl Default for Request {
     fn default() -> Self {
         Request {
             roots: Vec::new(),
             depth: DEFAULT_DEPTH,
+            from: None,
         }
     }
 }
@@ -60,8 +65,9 @@ impl Default for Request {
 pub struct Found {
     /// Where it is.
     pub path: PathBuf,
-    /// The route to it from the workspace root, `/` separated: what
-    /// `flayer link` would be given.
+    /// What `flayer link` would be given for it, run where the request
+    /// spells routes from: the route from there, `/` separated, when it is
+    /// inside, and its path otherwise.
     pub route: String,
     /// A mind project already, rather than a git repository that is not one
     /// yet and would need `mind init` before it can be linked.
@@ -115,6 +121,7 @@ pub fn scan(workspace: &FlayerWorkspace, request: &Request) -> Scan {
     } else {
         roots.push(workspace.root().to_path_buf());
     }
+    let from = request.from.as_deref().unwrap_or(workspace.root());
     let mut scan = Scan {
         roots: roots.clone(),
         depth: request.depth,
@@ -139,7 +146,7 @@ pub fn scan(workspace: &FlayerWorkspace, request: &Request) -> Scan {
                 continue;
             }
         }
-        if let Some(found) = judge(workspace, &root) {
+        if let Some(found) = judge(workspace, &root, from) {
             scan.found.push(found);
         }
         seen.insert(root.clone());
@@ -174,7 +181,7 @@ pub fn scan(workspace: &FlayerWorkspace, request: &Request) -> Scan {
             if !seen.insert(child.clone()) {
                 continue;
             }
-            if let Some(found) = judge(workspace, &child) {
+            if let Some(found) = judge(workspace, &child, from) {
                 scan.found.push(found);
                 continue;
             }
@@ -193,24 +200,36 @@ pub fn scan(workspace: &FlayerWorkspace, request: &Request) -> Scan {
     scan
 }
 
-/// What a directory is to the workspace, if it is anything.
-fn judge(workspace: &FlayerWorkspace, directory: &Path) -> Option<Found> {
+/// What a directory is to the workspace, if it is anything, with its route
+/// spelled from `from`.
+fn judge(workspace: &FlayerWorkspace, directory: &Path, from: &Path) -> Option<Found> {
     let mind = MindProject::is_marked(directory);
     // `exists`, not `is_dir`: a worktree or a submodule has a `.git` file.
     let git = directory.join(".git").exists();
     if !mind && !git {
         return None;
     }
-    let route = paths::relative_to(directory, workspace.root())
-        .as_deref()
-        .and_then(paths::to_config_string)
-        .unwrap_or_else(|| directory.display().to_string());
     Some(Found {
         path: directory.to_path_buf(),
-        route,
+        route: route(directory, from),
         mind,
         linked: workspace.is_linked(directory),
     })
+}
+
+/// What `flayer link` run in `from` would be given for `directory`: the
+/// route from there when it is inside, and its path otherwise.
+///
+/// Not a route that climbs out with `..`, which reads right from one
+/// directory only and grows a `..` for every level between the two: the
+/// path reads the same from anywhere, and is what somebody who pointed the
+/// scan at a folder outside the workspace typed.
+fn route(directory: &Path, from: &Path) -> String {
+    paths::relative_to(directory, from)
+        .filter(|route| route.components().next() != Some(Component::ParentDir))
+        .as_deref()
+        .and_then(paths::to_config_string)
+        .unwrap_or_else(|| directory.display().to_string())
 }
 
 /// The directories directly inside `directory`, in name order, leaving out

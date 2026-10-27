@@ -28,6 +28,7 @@ fn under(workspace: &FlayerWorkspace, roots: &[PathBuf], depth: usize) -> mindfl
         &Request {
             roots: roots.to_vec(),
             depth,
+            ..Request::default()
         },
     )
 }
@@ -340,4 +341,44 @@ fn a_scan_links_nothing() {
         .config()
         .projects
         .is_empty());
+}
+
+#[test]
+fn a_route_is_spelled_from_where_the_scan_is_asked_to_spell_it() {
+    let dir = TempDir::new().unwrap();
+    let (workspace, _) = FlayerWorkspace::init(dir.path()).unwrap();
+    git_repository(&dir.path().join("work/acme/api"));
+    fs::create_dir(dir.path().join("other")).unwrap();
+
+    let spelled = |from: Option<PathBuf>| {
+        let request = Request {
+            from,
+            ..Request::default()
+        };
+        scan(&workspace, &request).found[0].route.clone()
+    };
+
+    assert_eq!(spelled(None), "work/acme/api", "from the workspace root");
+    assert_eq!(spelled(Some(dir.path().join("work"))), "acme/api");
+    // Not `../work/acme/api`, which reads right from one directory only.
+    let elsewhere = spelled(Some(dir.path().join("other")));
+    assert_eq!(
+        elsewhere,
+        dir.path().join("work/acme/api").display().to_string()
+    );
+}
+
+#[test]
+fn a_repository_outside_the_workspace_is_spelled_by_its_path() {
+    let dir = TempDir::new().unwrap();
+    let workspace = workspace_beside(&dir);
+    let root = dir.path().join("work");
+    git_repository(&root.join("alpha"));
+
+    let scan = under(&workspace, &[root.clone()], DEFAULT_DEPTH);
+
+    assert_eq!(
+        routes(&scan.found),
+        vec![root.join("alpha").display().to_string()]
+    );
 }

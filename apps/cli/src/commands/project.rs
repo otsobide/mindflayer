@@ -176,10 +176,11 @@ fn unlinked(removed: &[PathBuf]) -> String {
     })
 }
 
-/// `flayer scan`: every repository under the workspace here, the default
-/// one too before it is made, since what is under it does not wait for that.
-pub(crate) fn scan_workspace(workspace: &FlayerWorkspace) -> Outcome {
-    scanned(workspace, &scan(workspace, &scan::Request::default()))
+/// `flayer scan`: every repository `request` asks for under the workspace
+/// here, the default one too before it is made, since what is under it does
+/// not wait for that.
+pub(crate) fn scan_workspace(workspace: &FlayerWorkspace, request: &scan::Request) -> Outcome {
+    scanned(workspace, &scan(workspace, request))
 }
 
 /// Every repository under a workspace, and whether it is linked yet.
