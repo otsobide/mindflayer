@@ -129,7 +129,7 @@ fn each_artifact_is_installed_partial_foreign_or_authored_with_the_agents_it_rea
     fs::create_dir_all(alpha.root().join("rules")).unwrap();
     fs::write(alpha.root().join("rules/style.md"), "# Say why\n").unwrap();
 
-    let (status, failures) = Status::of_workspace(&workspace, &ledger);
+    let (status, failures) = Status::of_workspace(&workspace);
 
     assert!(failures.is_empty(), "{failures:?}");
     assert_eq!(status.projects.len(), 1);
@@ -185,7 +185,7 @@ fn a_project_a_mind_toml_marks_is_read_from_its_one_folder_and_names_no_agent() 
     record(&ledger, "beta", "deploy", "workspace", &["skills/deploy"]);
     put(&beta, "skills", "review");
 
-    let (status, failures) = Status::of_workspace(&workspace, &ledger);
+    let (status, failures) = Status::of_workspace(&workspace);
 
     assert!(failures.is_empty(), "{failures:?}");
     let project = &status.projects[0];
@@ -213,7 +213,7 @@ fn an_install_gone_under_a_name_somebody_keeps_is_that_names_one_entry_as_what_i
     );
     put(&alpha, ".claude/skills", "deploy");
 
-    let (status, _) = Status::of_workspace(&workspace, &ledger);
+    let (status, _) = Status::of_workspace(&workspace);
 
     assert_eq!(
         status.projects[0].artifacts,
@@ -242,10 +242,10 @@ fn a_copy_gone_from_an_install_beside_the_projects_own_is_partial() {
         "workspace",
         &[".agents/skills/deploy", ".claude/skills/deploy"],
     );
-    let whole = Status::of_workspace(&workspace, &ledger).0;
+    let whole = Status::of_workspace(&workspace).0;
     fs::remove_dir_all(alpha.root().join(".claude/skills/deploy")).unwrap();
 
-    let (status, failures) = Status::of_workspace(&workspace, &ledger);
+    let (status, failures) = Status::of_workspace(&workspace);
 
     assert!(failures.is_empty(), "{failures:?}");
     assert_eq!(
@@ -276,9 +276,8 @@ fn a_stale_entry_is_reported_as_stale_and_the_rest_still_are() {
     put(&alpha, "skills", "review");
     fs::remove_dir_all(old.root()).unwrap();
     let workspace = FlayerWorkspace::open(dir.path()).unwrap();
-    let ledger = workspace.ledger_for_reading().unwrap();
 
-    let (status, failures) = Status::of_workspace(&workspace, &ledger);
+    let (status, failures) = Status::of_workspace(&workspace);
 
     assert_eq!(status.projects.len(), 2);
     assert_eq!(
@@ -308,9 +307,8 @@ fn two_entries_for_one_project_report_it_once() {
     fs::write(&marker, text.replace("\"alpha\"", "\"alpha\", \"./alpha\"")).unwrap();
     let workspace = FlayerWorkspace::open(dir.path()).unwrap();
     assert_eq!(workspace.config().projects.len(), 2);
-    let ledger = workspace.ledger_for_reading().unwrap();
 
-    let (status, _) = Status::of_workspace(&workspace, &ledger);
+    let (status, _) = Status::of_workspace(&workspace);
 
     assert_eq!(status.projects.len(), 1);
     assert_eq!(status.projects[0].entry.as_deref(), Some("alpha"));
@@ -337,7 +335,7 @@ fn a_project_the_workspace_does_not_link_reads_as_nothing_installed() {
         &[".claude/skills/deploy"],
     );
 
-    let (linked, _) = Status::of_project(&loose, Some((&workspace, &ledger)));
+    let (linked, _) = Status::of_project(&loose, Some(&workspace));
     let (alone, _) = Status::of_project(&loose, None);
 
     for status in [&linked, &alone] {
@@ -359,7 +357,9 @@ fn a_project_the_workspace_does_not_link_reads_as_nothing_installed() {
 fn a_ledger_that_cannot_be_read_leaves_every_copy_unrecorded_and_is_said_once() {
     let (dir, mut workspace) = workspace();
     let alpha = marked(&dir, &mut workspace, "alpha", &Agent::ALL);
+    let beta = marked(&dir, &mut workspace, "beta", &Agent::ALL);
     put(&alpha, ".agents/skills", "deploy");
+    put(&beta, "skills", "review");
     let ledger = workspace.ledger().unwrap();
     record(
         &ledger,
@@ -374,7 +374,7 @@ fn a_ledger_that_cannot_be_read_leaves_every_copy_unrecorded_and_is_said_once() 
         .execute_batch("DROP TABLE installation_targets;")
         .unwrap();
 
-    let (status, failures) = Status::of_workspace(&workspace, &ledger);
+    let (status, failures) = Status::of_workspace(&workspace);
 
     assert_eq!(
         states(&status.projects[0]),
@@ -385,10 +385,63 @@ fn a_ledger_that_cannot_be_read_leaves_every_copy_unrecorded_and_is_said_once() 
             None
         )]
     );
+    assert_eq!(
+        states(&status.projects[1]),
+        [("review", State::Authored, &[][..], None)]
+    );
     assert_eq!(failures.len(), 1, "{failures:?}");
     assert!(failures[0]
         .to_string()
         .contains(&path.display().to_string()));
+}
+
+#[test]
+fn a_ledger_that_will_not_open_is_said_and_the_report_still_made() {
+    let (dir, mut workspace) = workspace();
+    let alpha = marked(&dir, &mut workspace, "alpha", &Agent::ALL);
+    let beta = marked(&dir, &mut workspace, "beta", &Agent::ALL);
+    put(&alpha, ".agents/skills", "deploy");
+    put(&beta, "skills", "review");
+    let ledger = workspace.ledger().unwrap();
+    record(
+        &ledger,
+        "alpha",
+        "deploy",
+        "workspace",
+        &[".agents/skills/deploy"],
+    );
+    drop(ledger);
+    let path = workspace.ledger_path();
+    let garbage = "not a database, whatever its name says\n";
+    fs::write(&path, garbage).unwrap();
+
+    let (status, failures) = Status::of_workspace(&workspace);
+    let (alone, failed) = Status::of_project(&alpha, Some(&workspace));
+
+    assert_eq!(
+        states(&status.projects[0]),
+        [(
+            "deploy",
+            State::Foreign,
+            &[Agent::Codex, Agent::OpenCode][..],
+            None
+        )]
+    );
+    assert_eq!(
+        states(&status.projects[1]),
+        [("review", State::Authored, &[][..], None)]
+    );
+    // Linked all the same: what `-p` takes is no record of the ledger's.
+    assert_eq!(status.projects[0].entry.as_deref(), Some("alpha"));
+    assert_eq!(status.projects[1].entry.as_deref(), Some("beta"));
+    assert_eq!(failures.len(), 1, "{failures:?}");
+    assert!(failures[0]
+        .to_string()
+        .contains(&path.display().to_string()));
+    assert_eq!(alone.projects, status.projects[..1]);
+    assert_eq!(failed.len(), 1, "{failed:?}");
+    // Read, so left as it was found.
+    assert_eq!(fs::read_to_string(&path).unwrap(), garbage);
 }
 
 #[test]
@@ -406,8 +459,7 @@ fn reading_a_project_hands_back_the_catalog_it_read_with_the_records_marked() {
         &[".agents/skills/deploy"],
     );
 
-    let (status, catalog) =
-        ProjectStatus::read(&alpha, &[Kind::Skill], Some((&workspace, &ledger)));
+    let (status, catalog) = ProjectStatus::read(&alpha, &[Kind::Skill], Some(&workspace));
 
     let names: Vec<&str> = catalog
         .artifacts()

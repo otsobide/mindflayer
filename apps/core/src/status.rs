@@ -9,6 +9,8 @@
 //! ([`Ledger::records`]); it cannot see that one has gone since, nor a copy
 //! it never wrote.
 //!
+//! [`Ledger::records`]: crate::ledger::Ledger::records
+//!
 //! Core builds and orders the report, so every front end shows the same
 //! states in the same order: the CLI's table and its JSON, and the TUI's rows.
 //! What it serializes to is a contract from the first report on, which is why
@@ -24,7 +26,7 @@ use crate::artifact::{Artifact, Provenance};
 use crate::catalog::{Catalog, DiscoveryFailure};
 use crate::install;
 use crate::kind::Kind;
-use crate::ledger::{InstallRecord, Ledger};
+use crate::ledger::InstallRecord;
 use crate::paths;
 use crate::workspace::{same_directory, FlayerWorkspace, MindProject, WorkspaceError};
 
@@ -144,18 +146,19 @@ pub enum StatusFailure {
 }
 
 impl Status {
-    /// Every project `workspace` links, against what `ledger`, its own,
-    /// records of them.
+    /// Every project `workspace` links, against what its ledger records of
+    /// them.
     ///
     /// Only the linked ones, as `flayer list` reads them: a workspace reports
     /// on what it was told to manage, not on whatever sits below it. Its own
     /// artifacts are no project's, and nothing is installed into them.
-    pub fn of_workspace(
-        workspace: &FlayerWorkspace,
-        ledger: &Ledger,
-    ) -> (Status, Vec<StatusFailure>) {
+    ///
+    /// A ledger that cannot be read fails every project's read the same way,
+    /// about its one file, so it is said once, with the first.
+    pub fn of_workspace(workspace: &FlayerWorkspace) -> (Status, Vec<StatusFailure>) {
         let mut status = Status::default();
         let mut failures = Vec::new();
+        let mut ledger_said = false;
         let mut seen: Vec<PathBuf> = Vec::new();
         for member in workspace.members() {
             // Two spellings of one directory are one project, reported under
@@ -167,9 +170,15 @@ impl Status {
             match member.project {
                 Ok(project) => {
                     let (held, catalog) =
-                        ProjectStatus::read(&project, &Kind::ALL, Some((workspace, ledger)));
+                        ProjectStatus::read(&project, &Kind::ALL, Some(workspace));
                     let (_, found) = catalog.into_parts();
-                    failures.extend(found.into_iter().map(StatusFailure::from));
+                    for failure in found {
+                        let ledger = matches!(failure, DiscoveryFailure::Ledger(_));
+                        if !(ledger && ledger_said) {
+                            failures.push(StatusFailure::from(failure));
+                        }
+                        ledger_said |= ledger;
+                    }
                     status.projects.push(held);
                 }
                 Err(error) => {
@@ -188,17 +197,17 @@ impl Status {
         (status, failures)
     }
 
-    /// One project, against the ledger of the workspace that manages it,
-    /// when one does.
+    /// One project, against the ledger of `workspace` when that one links
+    /// it.
     ///
     /// A project no workspace manages is still reported: what is in it is
     /// still its own or somebody's, and only that nothing records an install
     /// in it is missing, which reads as nothing installed.
     pub fn of_project(
         project: &MindProject,
-        records: Option<(&FlayerWorkspace, &Ledger)>,
+        workspace: Option<&FlayerWorkspace>,
     ) -> (Status, Vec<StatusFailure>) {
-        let (held, catalog) = ProjectStatus::read(project, &Kind::ALL, records);
+        let (held, catalog) = ProjectStatus::read(project, &Kind::ALL, workspace);
         let (_, failures) = catalog.into_parts();
         (
             Status {
@@ -211,9 +220,17 @@ impl Status {
 
 impl ProjectStatus {
     /// Read `project`'s artifacts of `kinds` and say how each stands, against
-    /// what `records`, a workspace and its ledger, say was installed, when the
-    /// workspace links the project: what both reports build each project
-    /// with.
+    /// what `workspace`'s ledger says was installed, when that workspace
+    /// links the project: what both reports and the TUI's rows build each
+    /// project with.
+    ///
+    /// The ledger is opened here, for reading
+    /// ([`FlayerWorkspace::ledger_for_reading`]), rather than handed in, so
+    /// no front end can refuse a report over one that will not open while
+    /// another reports without it. One that cannot be opened or read leaves
+    /// every copy unrecorded, as `with_records` does: foreign or authored,
+    /// which nothing changes, rather than installed, which an uninstall may
+    /// delete.
     ///
     /// The catalog read comes back too, every copy the ledger records marked
     /// installed ([`Catalog::with_records`]) and a ledger that could not be
@@ -223,33 +240,36 @@ impl ProjectStatus {
     pub fn read(
         project: &MindProject,
         kinds: &[Kind],
-        records: Option<(&FlayerWorkspace, &Ledger)>,
+        workspace: Option<&FlayerWorkspace>,
     ) -> (ProjectStatus, Catalog) {
         let root = project.root();
         let mut catalog = Catalog::discover_kinds(std::slice::from_ref(project), kinds);
         let mut entry = None;
         let mut installed: Vec<InstallRecord> = Vec::new();
         // Records are a workspace's own, so a project it does not link has
-        // none there, as `with_records` reads it.
-        if let Some((workspace, ledger)) = records {
-            if let Some(linked) = workspace.linked_as(root) {
-                entry = Some(spelled(linked));
-                let named = install::entry_for_root(workspace, root);
-                let read: Result<Vec<Vec<InstallRecord>>, _> = kinds
+        // none there, as `with_records` reads it, and its ledger is not
+        // opened for it.
+        if let Some((workspace, linked)) =
+            workspace.and_then(|workspace| Some((workspace, workspace.linked_as(root)?)))
+        {
+            entry = Some(spelled(linked));
+            let named = install::entry_for_root(workspace, root);
+            let read = workspace.ledger_for_reading().and_then(|ledger| {
+                let records = kinds
                     .iter()
                     .map(|kind| ledger.records(&named, *kind))
-                    .collect();
-                // A ledger that cannot be read leaves every copy unrecorded,
-                // as `with_records` does, which nothing changes: said once,
-                // rather than again by `with_records` failing on it too.
-                catalog = match read {
-                    Ok(read) => {
-                        installed = read.into_iter().flatten().collect();
-                        catalog.with_records(workspace, ledger)
-                    }
-                    Err(error) => catalog.failing(DiscoveryFailure::Ledger(error)),
-                };
-            }
+                    .collect::<Result<Vec<Vec<InstallRecord>>, _>>()?;
+                Ok((ledger, records))
+            });
+            // Said once, rather than again by `with_records` failing on the
+            // same ledger too.
+            catalog = match read {
+                Ok((ledger, read)) => {
+                    installed = read.into_iter().flatten().collect();
+                    catalog.with_records(workspace, &ledger)
+                }
+                Err(error) => catalog.failing(DiscoveryFailure::Ledger(error)),
+            };
         }
         let mut agents = project
             .settings()

@@ -211,6 +211,41 @@ fn a_project_the_workspace_above_does_not_link_says_so() {
 }
 
 #[test]
+fn a_ledger_that_will_not_open_is_a_warning_beside_the_report() {
+    let (_dir, projects) = workspace_with_everything();
+    let ledger = projects.join(FLAYER_DIR).join("mindflayer.db");
+    fs::write(&ledger, "not a database\n").unwrap();
+
+    let text = flayer(&projects, &["status", "-p", "collapse"]).unwrap();
+    let outcome = flayer(&projects, &["status", "--json"]).unwrap();
+
+    // Nothing reads as installed, so nothing reads as Mindflayer's to change.
+    assert_eq!(
+        text.stdout,
+        "\
+commit-style  foreign   claude,codex,opencode
+deploy        foreign   codex,opencode
+notes         foreign   claude,opencode
+review        authored  -
+"
+    );
+    assert_eq!(text.stderr.len(), 1, "{:?}", text.stderr);
+    let said = ledger.display().to_string();
+    assert!(
+        text.stderr[0].starts_with("warning: ") && text.stderr[0].contains(&said),
+        "{:?}",
+        text.stderr
+    );
+    assert!(!text.ok);
+    let (report, warnings): (Report, _) = enveloped(&outcome);
+    assert_eq!(report.projects.len(), 2);
+    assert_eq!(report.projects[0].entry.as_deref(), Some("collapse"));
+    assert_eq!(warnings.len(), 1, "{warnings:?}");
+    assert!(warnings[0].contains(&said), "{warnings:?}");
+    assert!(!outcome.ok);
+}
+
+#[test]
 fn status_makes_neither_a_ledger_nor_the_default_workspace() {
     let home = TempDir::new().unwrap();
     let elsewhere = TempDir::new().unwrap();

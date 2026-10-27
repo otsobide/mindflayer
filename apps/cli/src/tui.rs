@@ -28,8 +28,8 @@ use mindflayer_core::gather::Watch;
 use mindflayer_core::resolve::{self, resolve, Intent, Reason, Resolved};
 use mindflayer_core::workspace::Member as Registered;
 use mindflayer_core::{
-    lifecycle, paths, scan, template, AgentHomes, Catalog, FlayerWorkspace, Kind, Ledger,
-    MindProject, ProjectStatus, WorkspaceError,
+    lifecycle, paths, scan, template, AgentHomes, Catalog, FlayerWorkspace, Kind, MindProject,
+    ProjectStatus, WorkspaceError,
 };
 use ratatui::crossterm::event::{self, Event, KeyEventKind};
 use ratatui::crossterm::terminal::{self, EnterAlternateScreen};
@@ -543,7 +543,8 @@ pub fn load_project(directory: &Path, lookup: &Lookup) -> Result<View, CliError>
     Ok(View::Workspace(Workspace {
         name: project.name().to_owned(),
         // `above`'s templates, the ones `mind add` will find, and no
-        // records: no workspace links it, so none says what was installed.
+        // records: it does not link the project, so it says nothing of what
+        // was installed there.
         members: vec![held(
             entry,
             root.clone(),
@@ -551,7 +552,6 @@ pub fn load_project(directory: &Path, lookup: &Lookup) -> Result<View, CliError>
             &project,
             &Kind::ALL,
             above.as_ref(),
-            None,
         )],
         root,
         unlinked: Vec::new(),
@@ -579,25 +579,13 @@ fn workspace_view(workspace: &FlayerWorkspace, reason: Reason, lookup: &Lookup) 
         &own,
         &workspace.own_kinds(),
         Some(workspace),
-        None,
     )];
-    // Read without being made, as `flayer status` reads it, for the state
-    // each project's rows show. One that cannot be opened leaves every copy
-    // unrecorded, which nothing changes, and is said on each project's rows,
-    // whose states it leaves unsaid.
-    let ledger = workspace.ledger_for_reading();
-    members.extend(workspace.members().into_iter().map(|registered| {
-        let mut shown = member(
-            registered,
-            workspace,
-            lookup,
-            ledger.as_ref().ok().map(|ledger| (workspace, ledger)),
-        );
-        if let (Err(error), Ok(holdings)) = (&ledger, &mut shown.holdings) {
-            holdings.warnings.push(error.to_string());
-        }
-        shown
-    }));
+    members.extend(
+        workspace
+            .members()
+            .into_iter()
+            .map(|registered| member(registered, workspace, lookup)),
+    );
     let unlinked = scan(workspace)
         .found
         .into_iter()
@@ -666,12 +654,7 @@ fn loaded(workspace: &FlayerWorkspace) -> Vec<LoadedSource> {
 /// read, the row is [`elsewhere`](Member::elsewhere) and its lines say `-W
 /// .`. So its templates are the screen's too, the ones the add form's line
 /// will find.
-fn member(
-    registered: Registered,
-    screen: &FlayerWorkspace,
-    lookup: &Lookup,
-    records: Option<(&FlayerWorkspace, &Ledger)>,
-) -> Member {
+fn member(registered: Registered, screen: &FlayerWorkspace, lookup: &Lookup) -> Member {
     let entry = as_stored(&registered.entry);
     match registered.project {
         Ok(project) => {
@@ -688,7 +671,6 @@ fn member(
                     &project,
                     &Kind::ALL,
                     Some(screen),
-                    records,
                 )
             }
         }
@@ -705,8 +687,8 @@ fn member(
 
 /// What one holder holds, read from the disk: a project, or the workspace's
 /// own for the kinds it keeps apart. `workspace` is the one whose templates
-/// count for it, if any; `records`, a workspace and its ledger, what says
-/// which of a project's copies were installed, when that workspace links it.
+/// count for it, if any, and whose ledger says which of a project's copies
+/// were installed, when it links the project.
 fn held(
     entry: String,
     root: PathBuf,
@@ -714,19 +696,20 @@ fn held(
     project: &MindProject,
     kinds: &[Kind],
     workspace: Option<&FlayerWorkspace>,
-    records: Option<(&FlayerWorkspace, &Ledger)>,
 ) -> Member {
     // A project's rows say how each artifact stands, from the report
     // `status` prints, read with the catalog the rows are drawn from rather
     // than beside it, so the project is read once. The workspace's own are
-    // no project's, and nothing is installed into them.
+    // no project's, and nothing is installed into them. A ledger that cannot
+    // be read is among the catalog's failures, so each project's rows say
+    // it, as the report does once.
     let (status, catalog) = if own {
         (
             None,
             Catalog::discover_kinds(std::slice::from_ref(project), kinds),
         )
     } else {
-        let (status, catalog) = ProjectStatus::read(project, kinds, records);
+        let (status, catalog) = ProjectStatus::read(project, kinds, workspace);
         (Some(status), catalog)
     };
     let standing = |kind: Kind, name: &str| {

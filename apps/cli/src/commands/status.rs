@@ -9,32 +9,28 @@ use mindflayer_core::{Agent, FlayerWorkspace, Kind, MindProject, Status, StatusF
 use super::consulted;
 use super::read::looked_in;
 use crate::render::{json, printable, table};
-use crate::{CliError, Failure, Lookup, Outcome};
+use crate::{Failure, Lookup, Outcome};
 
 /// What the state column says of an entry that would not open.
 const STALE: &str = "stale";
 
 /// `flayer status`: every project the workspace links, against its ledger,
-/// read without being made; as JSON when `as_json`.
-pub(crate) fn status_of_workspace(
-    workspace: &FlayerWorkspace,
-    as_json: bool,
-) -> Result<Outcome, Failure> {
+/// which core reads without making it; as JSON when `as_json`.
+pub(crate) fn status_of_workspace(workspace: &FlayerWorkspace, as_json: bool) -> Outcome {
     // In JSON, a workspace with nothing linked is one with no projects in
     // its data, which a script reads like any other.
     if workspace.config().projects.is_empty() && !as_json {
         // As `flayer list` says it, and for the same reason: a workspace with
         // nothing linked has nothing to report but how to link something.
-        return Ok(Outcome::plain(format!(
+        return Outcome::plain(format!(
             "{} manages no projects yet\n  link one with `flayer link <path>`\n",
             workspace.name()
-        )));
+        ));
     }
-    let ledger = workspace.ledger_for_reading().map_err(CliError::from)?;
-    let (status, failures) = Status::of_workspace(workspace, &ledger);
-    Ok(report(&status, failures, Layout::across(as_json), || {
+    let (status, failures) = Status::of_workspace(workspace);
+    report(&status, failures, Layout::across(as_json), || {
         workspace.projects().0
-    }))
+    })
 }
 
 /// `flayer status -p`: one project the workspace links.
@@ -42,12 +38,9 @@ pub(crate) fn status_of_project(
     workspace: &FlayerWorkspace,
     project: MindProject,
     as_json: bool,
-) -> Result<Outcome, Failure> {
-    let ledger = workspace.ledger_for_reading().map_err(CliError::from)?;
-    let (status, failures) = Status::of_project(&project, Some((workspace, &ledger)));
-    Ok(report(&status, failures, Layout::one(as_json), || {
-        vec![project]
-    }))
+) -> Outcome {
+    let (status, failures) = Status::of_project(&project, Some(workspace));
+    report(&status, failures, Layout::one(as_json), || vec![project])
 }
 
 /// `mind status`: the project at or above here, against the workspace `mind`
@@ -69,7 +62,7 @@ pub(crate) fn status_here(
         .as_ref()
         .filter(|workspace| workspace.is_linked(project.root()))
     {
-        return status_of_project(workspace, project, as_json);
+        return Ok(status_of_project(workspace, project, as_json));
     }
     let (status, failures) = Status::of_project(&project, None);
     let mut outcome = report(&status, failures, Layout::one(as_json), || vec![project]);

@@ -418,8 +418,12 @@ fn run_flayer(
         // create one.
         FlayerCommand::Status { project, json } => {
             reading_workspace(directory, lookup, |workspace| match project {
-                Some(project) => status_of_project(workspace, workspace.pick(project)?, *json),
-                None => status_of_workspace(workspace, *json),
+                Some(project) => Ok(status_of_project(
+                    workspace,
+                    workspace.pick(project)?,
+                    *json,
+                )),
+                None => Ok(status_of_workspace(workspace, *json)),
             })
         }
         FlayerCommand::Validate { target, project } => {

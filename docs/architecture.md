@@ -1974,8 +1974,12 @@ partial for a copy that is missing.
 - **Read, not made.** The ledger is opened with `ledger_for_reading`, so a
   workspace that never installed anything is left without one, and a default
   workspace nothing has made is reported as one with nothing linked, as
-  every read resolves it. A ledger that cannot be read leaves every copy
-  unrecorded, as `with_records` does, and is said once.
+  every read resolves it. Core opens it, in `ProjectStatus::read`, rather
+  than each front end, which let the CLI refuse a report over a ledger that
+  would not open while the TUI drew its rows without it. A ledger that
+  cannot be opened or read leaves every copy unrecorded, as `with_records`
+  does, and is said once in a report, and on each project's rows in the TUI,
+  never a reason to hide the rest.
 - **`mind status` asks the workspace `mind` consults** (`resolve::consulted`):
   the one named, activated or above, if it has been made. One that does not
   link the project, or none at all, leaves it without records, and it is

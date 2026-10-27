@@ -431,6 +431,26 @@ fn enter_on_an_artifact_shows_it_as_mind_show_does() {
 }
 
 #[test]
+fn a_ledger_that_will_not_open_is_said_on_each_projects_rows() {
+    let dir = workspace_with_two();
+    let ledger = dir.path().join(FLAYER_DIR).join("mindflayer.db");
+    fs::write(&ledger, "not a database\n").unwrap();
+    let mut app = tui_in(dir.path());
+
+    let said = ledger.display().to_string();
+    let mut names = Vec::new();
+    for _ in 0..2 {
+        let member = app.member().unwrap();
+        let warnings = &member.holdings.as_ref().unwrap().warnings;
+        assert_eq!(warnings.len(), 1, "{}: {warnings:?}", member.name);
+        assert!(warnings[0].contains(&said), "{warnings:?}");
+        names.push(member.name.clone());
+        press_key(&mut app, KeyCode::Down);
+    }
+    assert_eq!(names, ["alpha", "beta"]);
+}
+
+#[test]
 fn an_invalid_artifact_is_marked_where_it_is_listed() {
     let dir = workspace_with_two();
     write_skill(
