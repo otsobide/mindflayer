@@ -540,6 +540,30 @@ fn a_route_no_skill_can_be_called_says_nothing_of_the_folders_for_skills() {
     assert_eq!(refused.warnings, Vec::<String>::new());
 }
 
+#[test]
+fn a_bare_name_from_a_path_to_a_loaded_workspace_is_found_where_no_skill_can_go() {
+    let (dir, _, _) = shelved(&["beta"], &["lint"]);
+    let alpha = dir.path().join("alpha");
+    fs::create_dir(&alpha).unwrap();
+    gix::init(&alpha).unwrap();
+    installing_in(dir.path(), r#""../shared""#);
+    let team = dir.path().join("team");
+    fs::create_dir(&team).unwrap();
+    flayer(&team, &["init"]).unwrap();
+    flayer(&team, &["add", "rule", "deploy", "Never on a Friday"]).unwrap();
+    flayer(dir.path(), &["load", "team"]).unwrap();
+
+    // A skill's refusal, that alpha has nowhere to put one, keeps the path
+    // from finding the rule no more than a skill offered nowhere would.
+    let done = mind(&alpha, &["install", "deploy", "--from", "../team"]).unwrap();
+
+    assert_eq!(
+        done.stdout,
+        "installed rule deploy into alpha, from load:team\n"
+    );
+    assert!(done.ok && done.stderr.is_empty(), "{done:?}");
+}
+
 /// Change `alpha`'s settings to install skills in `../shared` alone.
 fn installing_in_only(dir: &Path) {
     let path = dir.join("alpha").join(MIND_DIR).join("settings.json");

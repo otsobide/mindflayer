@@ -51,28 +51,19 @@ pub(crate) fn install_named(
         }
     })?;
     let said = scrubbed(&scrub);
-    // As typed first, so a shelf source's address or `workspace` means what
-    // it says; only when that names nothing, as a path to a loaded workspace.
-    let offered = |from: Option<&str>| {
-        installing::offered_typed(workspace, &ledger, project, &reference, from)
-    };
-    let candidate = match (offered(from), from) {
-        (Err(installing::InstallError::NotOffered { .. }), Some(typed)) => {
-            offered(Some(&installing::resolve_from(workspace, directory, typed)))
-        }
-        (result, _) => result,
-    }
-    .map_err(|error| {
-        // What the scrub said goes with an error too: it happened all the
-        // same.
-        let mut told = said.clone().lines();
-        told.extend(loads.iter().cloned());
-        told.extend(misplaced(project, &installing::kinds_named(&reference)));
-        Failure {
-            error: Box::new(error.into()),
-            warnings: told,
-        }
-    })?;
+    let candidate =
+        installing::offered_typed(workspace, &ledger, project, &reference, from, directory)
+            .map_err(|error| {
+                // What the scrub said goes with an error too: it happened all
+                // the same.
+                let mut told = said.clone().lines();
+                told.extend(loads.iter().cloned());
+                told.extend(misplaced(project, &installing::kinds_named(&reference)));
+                Failure {
+                    error: Box::new(error.into()),
+                    warnings: told,
+                }
+            })?;
     let kind = candidate.kind();
     let mut warnings = loads;
     warnings.extend(misplaced(project, &[kind]));

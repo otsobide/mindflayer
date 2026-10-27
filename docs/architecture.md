@@ -1863,7 +1863,11 @@ name to a skill, what every install meant before rules could be installed, was
 turned down: a route would need its qualifier for nothing, and a name both
 kinds offer would quietly install the skill. When no kind offers it, the first
 refusal that says more than that nothing is offered is the one given, so a
-project with nowhere to put a skill is told so, as it was.
+project with nowhere to put a skill is told so, as it was. `--from` is asked
+of each kind as typed, and only when that kind is offered nothing, as a path
+to a loaded workspace (`install::resolve_from`): asked once for every kind,
+the refusal of a project with nowhere to put a skill would hide a rule the
+path offers.
 
 Taking one out reads the ledger instead (`install::uninstall_typed`): a bare
 name is the one kind recorded under it, one recorded as two is refused

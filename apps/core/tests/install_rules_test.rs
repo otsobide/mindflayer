@@ -1261,6 +1261,7 @@ impl Fixture {
             &self.project,
             &Reference::parse(typed),
             None,
+            self.workspace.root(),
         )
     }
 

@@ -650,20 +650,34 @@ pub fn offered(
 /// given: a project with nowhere to put a skill is told so, as before
 /// rules could be installed, rather than sent to gather one. A ledger that
 /// cannot be read is said first, from whichever kind found it.
+///
+/// `from` is taken as typed first, so a shelf source's address or
+/// `workspace` means what it says, and only when that offers a kind nothing,
+/// as a path to a loaded workspace typed from `base` ([`resolve_from`]).
+/// Kind by kind: a kind that cannot go into the project at all refuses
+/// for that, which keeps no other from being found by the path.
 pub fn offered_typed(
     workspace: &FlayerWorkspace,
     ledger: &Ledger,
     project: &MindProject,
     reference: &Reference,
     from: Option<&str>,
+    base: &Path,
 ) -> Result<Candidate, InstallError> {
     let name = reference.name();
+    let resolved = from.map(|from| resolve_from(workspace, base, from));
+    let ask = |kind: Kind| match offered(workspace, ledger, project, kind, name, from) {
+        Err(InstallError::NotOffered { .. }) if resolved.as_deref() != from => {
+            offered(workspace, ledger, project, kind, name, resolved.as_deref())
+        }
+        asked => asked,
+    };
     if let Some(kind) = reference.kind() {
-        return offered(workspace, ledger, project, kind, name, from);
+        return ask(kind);
     }
     let mut asked: Vec<(Kind, Result<Candidate, InstallError>)> = filed_as(name)
         .into_iter()
-        .map(|kind| (kind, offered(workspace, ledger, project, kind, name, from)))
+        .map(|kind| (kind, ask(kind)))
         .collect();
     if let Some(index) = asked
         .iter()
