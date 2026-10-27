@@ -343,6 +343,13 @@ pub fn apply(
                         project.name(),
                         crate::commands::install::shown(project, &path)
                     )),
+                    // Or changed what Mindflayer put there, which the screen
+                    // never forces.
+                    Installed::Edited { paths, .. } => stderr.push(format!(
+                        "warning: {}: {name} was changed since it was installed, at {}, so it was left alone",
+                        project.name(),
+                        crate::commands::install::listed(project, &paths)
+                    )),
                 }
                 stdout.push_str(&crate::commands::install::swept(project, &done.swept));
             }
@@ -397,6 +404,11 @@ pub fn apply(
                         "warning: {}: {name} at {} was not installed by Mindflayer, so it was left alone",
                         project.name(),
                         crate::commands::install::shown(project, &path)
+                    )),
+                    Removed::Edited { paths, .. } => stderr.push(format!(
+                        "warning: {}: {name} was changed since it was installed, at {}, so it was left alone",
+                        project.name(),
+                        crate::commands::install::listed(project, &paths)
                     )),
                     Removed::Absent { .. } => {
                         let _ = writeln!(stdout, "{}: {name} was not there", project.name());

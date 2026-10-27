@@ -247,12 +247,22 @@ pub enum Command {
         /// a shelf source's URL, or a loaded workspace's path or name.
         #[arg(long, value_name = "ORIGIN")]
         from: Option<String>,
+
+        /// Write over a copy changed since it was installed, which is
+        /// otherwise left alone.
+        #[arg(long)]
+        force: bool,
     },
 
     /// Take a skill or a rule Mindflayer installed back out of this project.
     Uninstall {
         /// Its name, or `kind:name` when one name is both.
         name: String,
+
+        /// Take out a copy changed since it was installed too, which is
+        /// otherwise left alone with every other copy.
+        #[arg(long)]
+        force: bool,
     },
 
     /// Change which agents work in this project, and carry what is
@@ -629,6 +639,11 @@ pub enum FlayerCommand {
         /// a shelf source's URL, or a loaded workspace's path or name.
         #[arg(long, value_name = "ORIGIN")]
         from: Option<String>,
+
+        /// Write over a copy changed since it was installed, which is
+        /// otherwise left alone.
+        #[arg(long, requires = "name")]
+        force: bool,
     },
 
     /// Take a skill or a rule Mindflayer installed back out of a project.
@@ -639,6 +654,11 @@ pub enum FlayerCommand {
 
         /// Its name, or `kind:name` when one name is both.
         name: String,
+
+        /// Take out a copy changed since it was installed too, which is
+        /// otherwise left alone with every other copy.
+        #[arg(long)]
+        force: bool,
     },
 
     /// Change which agents work in a project, and carry what is installed

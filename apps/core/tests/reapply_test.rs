@@ -253,7 +253,7 @@ fn a_copy_in_a_folder_an_agent_still_reads_through_a_link_is_kept() {
     let ledger = workspace.ledger().unwrap();
     let candidate =
         install::offered(&workspace, &ledger, &project, Kind::Skill, "deploy", None).unwrap();
-    assert_eq!(candidate.standing, install::Standing::Installed);
+    assert_eq!(candidate.standing, install::Standing::Current);
 }
 
 #[test]

@@ -172,7 +172,7 @@ fn an_installed_skill_opens_already_marked_next_time() {
 
     assert_eq!(
         reopened.targets[0].rows[0].candidate.standing,
-        Standing::Installed
+        Standing::Current
     );
     assert!(rendered(&reopened).contains("[x] deploy"));
     assert_eq!(
@@ -210,6 +210,45 @@ fn unmarking_an_installed_skill_removes_it() {
 }
 
 #[test]
+fn an_installed_skill_whose_copies_are_gone_opens_unmarked_and_marking_it_puts_them_back() {
+    let (dir, workspace, ledger) = shelved(&["collapse"], &["deploy"]);
+    installed(dir.path(), &workspace, &ledger);
+    // What a `git clean -X` does to a local project's copies.
+    let copies = copies(&dir.path().join("collapse"), "deploy");
+    for copy in &copies {
+        fs::remove_dir_all(copy).unwrap();
+    }
+
+    let mut screen = screen_for(&workspace, &ledger);
+    assert_eq!(
+        screen.targets[0].rows[0].candidate.standing,
+        Standing::Missing
+    );
+    let drawn = rendered(&screen);
+    assert!(drawn.contains("[ ] deploy"), "{drawn}");
+    assert!(
+        drawn.contains("a copy gone since it was installed"),
+        "{drawn}"
+    );
+
+    press(&mut screen, &[KeyCode::Right, KeyCode::Char(' ')]);
+    assert_eq!(screen.counts(), (1, 0));
+    let outcome =
+        install_screen::apply(&workspace, &ledger, &screen, &AgentHomes::default()).unwrap();
+
+    assert!(outcome.ok, "{:?}", outcome.stderr);
+    assert!(
+        outcome.stdout.contains("1 installed, 0 removed"),
+        "{}",
+        outcome.stdout
+    );
+    for copy in &copies {
+        assert!(copy.join("SKILL.md").is_file(), "{}", copy.display());
+    }
+    assert!(rendered(&screen_for(&workspace, &ledger)).contains("[x] deploy"));
+}
+
+#[test]
 fn a_skill_written_by_hand_is_shown_but_not_touched() {
     let (dir, workspace, ledger) = shelved(&["collapse"], &["deploy"]);
     // Same name as a shelf entry, but nobody here put it there: in a folder
@@ -234,6 +273,27 @@ fn a_skill_written_by_hand_is_shown_but_not_touched() {
     assert!(after.contains("left alone"), "and it says why:\n{after}");
     let kept = fs::read_to_string(written.join("SKILL.md")).unwrap();
     assert!(kept.contains("Written by a person"));
+}
+
+#[test]
+fn a_skill_changed_since_it_was_installed_is_shown_but_not_touched() {
+    let (dir, workspace, ledger) = shelved(&["collapse"], &["deploy"]);
+    installed(dir.path(), &workspace, &ledger);
+    let manifest = copies(&dir.path().join("collapse"), "deploy")[0].join("SKILL.md");
+    let edited = fs::read_to_string(&manifest).unwrap() + "Ours.\n";
+    fs::write(&manifest, &edited).unwrap();
+
+    let mut screen = screen_for(&workspace, &ledger);
+    let drawn = rendered(&screen);
+    assert!(drawn.contains("[x] deploy"), "shown as present:\n{drawn}");
+    assert!(drawn.contains("changed since it was installed"), "{drawn}");
+
+    press(&mut screen, &[KeyCode::Right, KeyCode::Char(' ')]);
+
+    assert_eq!(screen.counts(), (0, 0), "the box did not move");
+    let after = rendered(&screen);
+    assert!(after.contains("left alone"), "and it says why:\n{after}");
+    assert_eq!(fs::read_to_string(&manifest).unwrap(), edited);
 }
 
 #[test]

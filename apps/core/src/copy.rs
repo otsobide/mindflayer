@@ -337,6 +337,22 @@ impl Stage {
         within: &Path,
         leave_out: &[&str],
     ) -> Result<Vec<Change>, PlaceError> {
+        self.place_over(from, to, within, leave_out, &[])
+    }
+
+    /// [`Stage::place`], replacing each of `to` also named in `over` even
+    /// where it holds the same names and bytes, which it is then said to
+    /// have been updated: for a target its caller knows is not the copy it
+    /// writes though [`same`] says it is, a copy holding a link to the same
+    /// bytes, which [`same`] follows.
+    pub fn place_over(
+        &mut self,
+        from: &Path,
+        to: &[PathBuf],
+        within: &Path,
+        leave_out: &[&str],
+        over: &[PathBuf],
+    ) -> Result<Vec<Change>, PlaceError> {
         for target in to {
             self.clear_beside(target).map_err(PlaceError::at(target))?;
         }
@@ -350,7 +366,11 @@ impl Stage {
         let mut moving = Vec::new();
         for (index, target) in to.iter().enumerate() {
             let change = match target.exists() {
-                true if same(&built, target).map_err(PlaceError::at(target))? => Change::Unchanged,
+                true if !over.contains(target)
+                    && same(&built, target).map_err(PlaceError::at(target))? =>
+                {
+                    Change::Unchanged
+                }
                 true => Change::Updated,
                 false => Change::Added,
             };

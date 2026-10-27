@@ -415,7 +415,7 @@ pub fn new_project(root: &Path) {
 ///
 /// For what such a project does that one marked by its settings does not: a
 /// copy installed in the folder the project authors in, so that a change
-/// made from the project reaches it and drops its record. Made through core
+/// made from the project reaches it. Made through core
 /// rather than `mind init`, so these tests keep such a project whatever
 /// `mind init` writes.
 pub fn older_project(root: &Path) {

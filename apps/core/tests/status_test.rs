@@ -6,8 +6,9 @@ use std::path::PathBuf;
 
 use mindflayer_core::ledger::{InstallRecord, Target};
 use mindflayer_core::{
-    Agent, ArtifactStatus, Directories, FlayerWorkspace, Kind, Ledger, MarkerFile, MindProject,
-    ProjectStatus, Share, State, Status, StatusFailure, Unreached, MIND_DIR, SETTINGS_JSON_FILE,
+    hash, Agent, ArtifactStatus, Directories, FlayerWorkspace, Kind, Ledger, MarkerFile,
+    MindProject, ProjectStatus, Share, State, Status, StatusFailure, Unreached, MIND_DIR,
+    SETTINGS_JSON_FILE,
 };
 use tempfile::TempDir;
 
@@ -41,17 +42,31 @@ fn marked(
 /// Write `name`'s SKILL.md in `folder`, a path below the project.
 fn put(project: &MindProject, folder: &str, name: &str) -> PathBuf {
     let dir = project.root().join(folder).join(name);
-    fs::create_dir_all(&dir).unwrap();
+    write_skill(&dir, name);
+    dir
+}
+
+/// Write `name`'s SKILL.md into the folder `dir`, as [`put`] does.
+fn write_skill(dir: &std::path::Path, name: &str) {
+    fs::create_dir_all(dir).unwrap();
     fs::write(
         dir.join("SKILL.md"),
         format!("---\nname: {name}\ndescription: Does {name} things\n---\n\n# {name}\n"),
     )
     .unwrap();
-    dir
+}
+
+/// The hash of `name` as [`put`] writes it, which is what an install of it
+/// records: a copy that holds it reads as untouched.
+fn written(name: &str) -> String {
+    let dir = TempDir::new().unwrap();
+    write_skill(&dir.path().join(name), name);
+    hash::tree(&dir.path().join(name)).unwrap()
 }
 
 /// Record in `ledger` that `name` came from `origin` into the project the
-/// workspace stores as `project`, with a copy at each of `paths`.
+/// workspace stores as `project`, with a copy at each of `paths` holding
+/// what [`put`] writes.
 fn record(ledger: &Ledger, project: &str, name: &str, origin: &str, paths: &[&str]) {
     ledger
         .installed(
@@ -61,7 +76,7 @@ fn record(ledger: &Ledger, project: &str, name: &str, origin: &str, paths: &[&st
                 name: name.to_owned(),
                 source_id: None,
                 origin: Some(origin.to_owned()),
-                content_hash: None,
+                content_hash: Some(written(name)),
                 targets: paths
                     .iter()
                     .map(|path| Target {
@@ -225,6 +240,43 @@ fn an_install_gone_under_a_name_somebody_keeps_is_that_names_one_entry_as_what_i
             agents: vec![Agent::Claude, Agent::OpenCode],
             origin: None,
         }]
+    );
+}
+
+#[test]
+fn an_install_a_copy_of_which_was_changed_since_is_edited_even_beside_one_gone() {
+    let (dir, mut workspace) = workspace();
+    let alpha = marked(&dir, &mut workspace, "alpha", &Agent::ALL);
+    let ledger = workspace.ledger().unwrap();
+    put(&alpha, ".agents/skills", "deploy");
+    let claude = put(&alpha, ".claude/skills", "deploy");
+    record(
+        &ledger,
+        "alpha",
+        "deploy",
+        "workspace",
+        &[".agents/skills/deploy", ".claude/skills/deploy"],
+    );
+    fs::write(claude.join("notes.md"), "Ours.\n").unwrap();
+
+    let edited = Status::of_workspace(&workspace).0;
+    fs::remove_dir_all(alpha.root().join(".agents/skills/deploy")).unwrap();
+    let gone_too = Status::of_workspace(&workspace).0;
+
+    assert_eq!(
+        states(&edited.projects[0]),
+        [("deploy", State::Edited, &Agent::ALL[..], Some("workspace"))]
+    );
+    // The next install is refused over the edit unless forced, so partial,
+    // which promises one puts the copy back, would say too much.
+    assert_eq!(
+        states(&gone_too.projects[0]),
+        [(
+            "deploy",
+            State::Edited,
+            &[Agent::Claude, Agent::OpenCode][..],
+            Some("workspace")
+        )]
     );
 }
 
@@ -434,6 +486,38 @@ fn a_ledger_that_cannot_be_read_leaves_every_copy_unrecorded_and_is_said_once() 
     assert!(failures[0]
         .to_string()
         .contains(&path.display().to_string()));
+}
+
+#[test]
+fn a_ledger_whose_shelf_cannot_be_read_for_a_standing_is_said() {
+    let (dir, mut workspace) = workspace();
+    let alpha = marked(&dir, &mut workspace, "alpha", &Agent::ALL);
+    put(&alpha, ".agents/skills", "deploy");
+    let ledger = workspace.ledger().unwrap();
+    record(
+        &ledger,
+        "alpha",
+        "deploy",
+        "workspace",
+        &[".agents/skills/deploy"],
+    );
+    // The records read, but not what the shelf offers, which a standing
+    // reads to hold an install to where it came from.
+    let path = workspace.ledger_path();
+    rusqlite::Connection::open(&path)
+        .unwrap()
+        .execute_batch("DROP TABLE artifacts;")
+        .unwrap();
+
+    let (_, failures) = Status::of_workspace(&workspace);
+    let (_, failed) = Status::of_project(&alpha, Some(&workspace));
+
+    for failures in [&failures, &failed] {
+        assert_eq!(failures.len(), 1, "{failures:?}");
+        assert!(failures[0]
+            .to_string()
+            .contains(&path.display().to_string()));
+    }
 }
 
 #[test]

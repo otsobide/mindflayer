@@ -309,52 +309,68 @@ These are easy to break from a single file without noticing.
   install (one installation, a target for each copy it wrote, its origin and
   the `hash::tree` of what it wrote, that hash's one definition) is what
   allows overwriting and deleting. An install writes a copy in every target
-  `install::targets` gives (each folder the project's agents read, or the
-  one a `mind.toml` names), built from one tree and put in place together or
-  not at all (`copy::Stage::place`). Standing is by the path each record
-  names (`Ledger::copies`), never by name: anything unrecorded in any target
-  is `Standing::Foreign`, refuses the whole install with nothing written in
-  any target, and is never touched. An uninstall removes the copies its
-  record names and nothing else. No copy holds a skill's top-level
-  `.claude-plugin` (`install::LeftOut`), and none lands inside an agent's
-  own folder (`InstallError::UserScope`). A v3 project is listed from its
-  agents' folders too, where an unrecorded copy outside the folder it
-  authors in is `Provenance::Foreign` (by the path a record names,
-  `Catalog::with_records`), and a lifecycle change looks only where the
-  project authors (`Catalog::discover_authored`), so it never reaches one.
-  Core's lifecycle changes
-  (`lifecycle::add`, `finish_edit`, `rename` and `remove`) drop any record
-  they would leave behind, only that of the copy the change reached
-  (`Ledger::uninstalled_copy`: a v3 project whose authored folder is also a
-  target keeps the record of its other copies, and a local one stops
-  excluding that copy's place), and return what they did (`lifecycle::Record`, and the `scrub` that opening the ledger ran),
-  which the CLI only renders. A change of a project's agents or targets
-  (`reapply::apply`) moves only what the ledger records: a new folder gets
-  a copy of one whose `hash::tree` is the one recorded, never one over
-  somebody's, and a dropped folder loses a recorded copy only while its
-  hash is the one recorded; one changed since is left there, and its record
-  and exclude entry dropped. A project's move from a `mind.toml`
+  `install::targets` gives (each folder the project's agents read, or the one
+  a `mind.toml` names), built from one tree and put in place together or not
+  at all (`copy::Stage::place`). Standing is by the path each record names
+  (`Ledger::copies`), never by name: anything unrecorded in any target is
+  `Standing::Foreign`, refuses the whole install with nothing written in any
+  target, and is never touched. A recorded copy is told by the hash of what
+  was written there and by what its origin offers now (`install::Standing`,
+  `install::standings`, D-04): `Current`, `Outdated`, `Edited`, `Missing` or
+  `Orphaned`, the first true of edited, orphaned, missing and outdated said
+  over the rest. An `Edited` copy refuses the whole install or uninstall as a
+  foreign one does (`Installed::Edited`, `Removed::Edited`) unless it is
+  forced (`install_with`, `uninstall_with` and `uninstall_typed` given
+  `Edits::Forced`, the CLI's `--force`), and forcing never reaches a copy
+  nothing records; a render keeps an edited section of the block as it holds
+  it. A record with no hash counts as current only while its copy matches its
+  offer byte for byte, and as edited otherwise; the first install over a match
+  stores its hash. An uninstall removes the copies its record names and
+  nothing else. No copy holds a skill's top-level `.claude-plugin`
+  (`install::LeftOut`), and none lands inside an agent's own folder
+  (`InstallError::UserScope`). A v3 project is listed from its agents' folders
+  too, where an unrecorded copy outside the folder it authors in is
+  `Provenance::Foreign` (by the path a record names, `Catalog::with_records`),
+  and a lifecycle change looks only where the project authors
+  (`Catalog::discover_authored`), so it never reaches one. Core's lifecycle
+  changes see to the record of the copy the change reached, and only that
+  copy's (D-04): `finish_edit` keeps it, so the copy reads as edited; `rename`
+  carries it to the new name and place (`Ledger::renamed_copy`, dropping it
+  only when another installation holds the new name); `remove` uninstalls the
+  copy, dropping its record (`Ledger::uninstalled_copy`); and `add` drops a
+  stale record under the name it writes. A v3 project whose authored folder is
+  also a target keeps the record of its other copies, and a local one stops
+  excluding a removed copy's place, or moves the entry with a renamed one.
+  Each returns what it did (`lifecycle::Record`, and the `scrub` that opening
+  the ledger to write ran; an edit only reads it), which the CLI only renders.
+  A change of a project's agents or targets (`reapply::apply`) moves only what
+  the ledger records: a new folder gets a copy of one whose `hash::tree` is
+  the one recorded, never one over somebody's, and a dropped folder loses a
+  recorded copy only while its hash is the one recorded; one changed since is
+  left there, and its record and exclude entry dropped, since no install
+  writes in that folder again. A project's move from a `mind.toml`
   (`migrate::project`) moves its installs the same way, through
   `reapply::retarget`, and holds a record from before hashes to its offer
   (D-04). Being made once, it is refused when the workspace `mind migrate`
   consults cannot be read, never made as if that one recorded nothing.
-  `install::disown` is private to core, so no front end drops a record on its
-  own. A front end adds through `lifecycle::add`, never `create` or
-  `create_from`, which leave a stale record in place. A rule is one
-  installation too: in a project marked by its settings, its targets are
-  its section of the block, recorded as `AGENTS.md`, and its file for
-  Claude, each with a hash of its own (`Target::content_hash`, since the
-  two hold different bytes); in one a `mind.toml` marks, its copy in the
-  rules folder, filed by its route. Installing or uninstalling one renders
-  every rule the project has (`install::rules`), each from the offer it
-  was installed from: a section in the block, or a file at a rule's place
-  for Claude, that the ledger does not record is `Standing::Foreign`, and
-  a block holding such a section refuses the render (`NotRecorded`), as a
-  rule no longer offered does (`NoLongerOffered`). What a project received
-  as rules is listed from the ledger and the block (`status`, D-23), never
-  by discovery, which reads no block, and a front end finds what to change
-  through `lifecycle::find_to_change`, which refuses such a rule as received
-  rather than as nothing.
+  `install::disown` and `install::carry` are private to core, so no front end
+  drops or moves a record on its own. A front end adds through
+  `lifecycle::add`, never `create` or `create_from`, which leave a stale
+  record in place. A rule is one installation too: in a project marked by its
+  settings, its targets are its section of the block, recorded as `AGENTS.md`,
+  and its file for Claude, each with a hash of its own
+  (`Target::content_hash`, since the two hold different bytes); in one a
+  `mind.toml` marks, its copy in the rules folder, filed by its route.
+  Installing or uninstalling one renders every rule the project has
+  (`install::rules`), each from the offer it was installed from: a section in
+  the block, or a file at a rule's place for Claude, that the ledger does not
+  record is `Standing::Foreign`, and a block holding such a section refuses
+  the render (`NotRecorded`), as a rule no longer offered does
+  (`NoLongerOffered`). What a project received as rules is listed from the
+  ledger and the block (`status`, D-23), never by discovery, which reads no
+  block, and a front end finds what to change through
+  `lifecycle::find_to_change`, which refuses such a rule as received rather
+  than as nothing.
 - **Strict when writing, lenient when reading.** A skill's front matter is
   the Agent Skills format. `mind add`, `rename` and `install` refuse a name or
   description that breaks its rules, all through `artifact::strict_issues`
@@ -429,8 +445,8 @@ These are easy to break from a single file without noticing.
   another while it holds it, and a front end never takes it. Reads
   (`FlayerWorkspace::open`, `ledger_for_reading`) never take it. A wait is
   bounded (`lock::WAIT`), ending in a `LockError::Busy` that names the
-  holder's pid, except a record drop's (`install::disown`), which follows a
-  change already made.
+  holder's pid, except a record drop's or carry's (`install::disown`,
+  `install::carry`), which follows a change already made.
 - **A gather never prompts for a credential itself.** Every connection `gix`
   lets a clone configure gets the callback in `gather/credentials.rs`, which
   runs the git-config credential helpers with `gix`'s prompt and askpass

@@ -126,6 +126,14 @@ fn row(entry: &super::state::Row) -> ListItem<'_> {
             "  (not installed by mindflayer)",
             Style::default().fg(Color::DarkGray),
         )),
+        None if entry.edited() => spans.push(Span::styled(
+            "  (changed since it was installed)",
+            Style::default().fg(Color::DarkGray),
+        )),
+        None if entry.missing() => spans.push(Span::styled(
+            "  (a copy gone since it was installed)",
+            Style::default().fg(Color::DarkGray),
+        )),
         None => {}
     }
 
@@ -245,7 +253,7 @@ fn mark(entry: &super::state::Row) -> Color {
     match entry.pending() {
         Some(Pending::Install) => Color::Green,
         Some(Pending::Remove) => Color::Red,
-        None if entry.foreign() => Color::DarkGray,
+        None if entry.foreign() || entry.edited() => Color::DarkGray,
         None => Color::Reset,
     }
 }

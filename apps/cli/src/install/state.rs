@@ -65,6 +65,19 @@ impl Row {
         self.candidate.standing == Standing::Foreign
     }
 
+    /// Mindflayer installed it, and a copy was changed since, so the screen,
+    /// which never forces, neither replaces nor deletes it.
+    pub fn edited(&self) -> bool {
+        self.candidate.standing == Standing::Edited
+    }
+
+    /// Mindflayer installed it, and a copy has gone since: its box opens
+    /// empty, as core says ([`Standing::present`]), and marking it puts every
+    /// copy back.
+    pub fn missing(&self) -> bool {
+        self.candidate.standing == Standing::Missing
+    }
+
     /// Whether it is an offer of the same artifact as `other`: one kind and
     /// one name, which a project holds one of. A skill and a rule of one
     /// name are two.
@@ -420,6 +433,16 @@ fn toggle(target: &mut Target) -> Option<String> {
     if row.foreign() {
         return Some(format!(
             "{} is already in {} and Mindflayer did not put it there, so it is left alone",
+            named(row.candidate.kind(), row.candidate.name()),
+            target.name()
+        ));
+    }
+    // Every offer of the name stands as its one installation, so each of
+    // them is refused alike, and no other can be marked over it.
+    if row.edited() {
+        return Some(format!(
+            "{} in {} was changed since it was installed, so it is left alone; --force on \
+             `flayer install` or `flayer uninstall` reaches it",
             named(row.candidate.kind(), row.candidate.name()),
             target.name()
         ));

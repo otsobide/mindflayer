@@ -8,7 +8,7 @@ fn a_state_is_serialized_as_its_slug() {
 
     assert_eq!(
         serialized,
-        r#"["installed","partial","foreign","authored"]"#
+        r#"["installed","partial","edited","foreign","authored"]"#
     );
 }
 

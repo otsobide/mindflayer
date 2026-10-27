@@ -42,9 +42,9 @@ use crate::catalog::Catalog;
 use crate::copy;
 use crate::exclude::{self, ExcludeError};
 use crate::gather::Scrub;
-use crate::install::{self, Candidate, InstallError, Offer};
+use crate::install::{self, InstallError};
 use crate::kind::{Kind, Layout};
-use crate::ledger::{Action, InstallRecord, Ledger, LedgerError, Moved, Target};
+use crate::ledger::{Action, Ledger, LedgerError, Moved, Target};
 use crate::reapply::{self, Retarget, Why};
 use crate::settings::{Settings, Share, SETTINGS_FILE, SETTINGS_JSON_FILE};
 use crate::workspace::{
@@ -78,7 +78,7 @@ pub struct ProjectPlan {
     pub installations: Vec<Retarget>,
     /// What the project authors itself, in the folders its settings keep
     /// naming: every artifact there that no installation records, left
-    /// where it is, as an edit makes a copy its author's.
+    /// where it is, its author's.
     pub authored: Vec<PathBuf>,
     /// What sits in a folder the project's agents are sent copies to that
     /// Mindflayer did not put there, but for one an installation's copy
@@ -718,13 +718,16 @@ pub(super) fn plan_with(
         let installed = ledger.records(&entry, kind)?;
         // Looked for only when a record has no hash to hold its copies to.
         let offers = if installed.iter().any(|record| record.content_hash.is_none()) {
-            install::survey(workspace, ledger, project, kind)?
+            install::offers(workspace, ledger, kind)?
         } else {
             Vec::new()
         };
         let mut said = Vec::new();
         for record in &installed {
-            let held = offered(workspace, &offers, record);
+            let held: Vec<PathBuf> = install::offered_for(record, &offers)
+                .into_iter()
+                .map(|offer| offer.source(workspace))
+                .collect();
             let retarget = reapply::retarget(project, kind, record, &wanted, Some(&held))?;
             in_place.extend(
                 retarget
@@ -848,32 +851,6 @@ fn authored(config: &MindConfig) -> Directories {
                 directories.with(kind, Path::new(MIND_DIR).join(kind.folder()))
             }
         })
-}
-
-/// Where what `record` installed is offered now, among `offers`: the
-/// folders its copies are held to when it has no hash (D-04).
-///
-/// By the origin it records; a record from before origins were kept names a
-/// shelf source by its id, or else came from the workspace's own or a
-/// loaded workspace's, any of which may be the one, since the record does
-/// not say.
-fn offered(
-    workspace: &FlayerWorkspace,
-    offers: &[Candidate],
-    record: &InstallRecord,
-) -> Vec<PathBuf> {
-    offers
-        .iter()
-        .filter(|candidate| candidate.name() == record.name)
-        .filter(|candidate| match (&record.origin, record.source_id) {
-            (Some(origin), _) => candidate.origin() == *origin,
-            (None, Some(id)) => {
-                matches!(&candidate.offer, Offer::Shelf(gathered) if gathered.source.id == id)
-            }
-            (None, None) => !matches!(candidate.offer, Offer::Shelf(_)),
-        })
-        .map(|candidate| candidate.offer.source(workspace))
-        .collect()
 }
 
 /// What a project that is to be local keeps out of git: an entry for each

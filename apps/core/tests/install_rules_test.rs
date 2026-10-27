@@ -14,7 +14,8 @@ use mindflayer_core::claude_md::{self, Fallback, Reach};
 use mindflayer_core::claude_rules::{self, Warning as FileWarning};
 use mindflayer_core::install::rules::{self, Warning, Withheld};
 use mindflayer_core::install::{
-    self, Candidate, InstallError, Installation, Installed, Removed, Standing, WORKSPACE_ORIGIN,
+    self, Candidate, Edits, InstallError, Installation, Installed, Removed, Standing,
+    WORKSPACE_ORIGIN,
 };
 use mindflayer_core::ledger::{InstallRecord, Target};
 use mindflayer_core::lifecycle;
@@ -287,6 +288,70 @@ fn a_rules_copy_from_before_settings_goes_with_an_uninstall_before_any_render() 
 }
 
 #[test]
+fn a_rules_copy_changed_before_settings_refuses_neither_an_install_nor_an_uninstall() {
+    let (_dir, workspace, project, ledger, _, changed) = moved_to_settings();
+    // The render leaves it, the project's own, forced or not, so it is no
+    // edit of the installation for a change to refuse.
+    assert!(
+        install::standings(&workspace, &ledger, &project, Kind::Rule)
+            .unwrap()
+            .iter()
+            .all(|(_, standing)| *standing != Standing::Edited),
+        "{:?}",
+        install::standings(&workspace, &ledger, &project, Kind::Rule)
+    );
+
+    let candidate = install::offered(
+        &workspace,
+        &ledger,
+        &project,
+        Kind::Rule,
+        "review/tone",
+        None,
+    )
+    .unwrap();
+    let done = install::install(
+        &workspace,
+        &ledger,
+        &project,
+        &candidate,
+        &AgentHomes::default(),
+    )
+    .unwrap();
+
+    assert!(
+        !matches!(done.installed, Installed::Edited { .. }),
+        "{:?}",
+        done.installed
+    );
+    assert!(
+        done.rendered.unwrap().warnings.contains(&Warning::Edited {
+            route: String::from("review/tone"),
+            path: changed.clone(),
+        }),
+        "said as left"
+    );
+    assert_eq!(fs::read_to_string(&changed).unwrap(), "Ours now.\n");
+    let removed = take(&workspace, &ledger, &project, "review/tone").unwrap();
+    assert!(matches!(removed, Removed::Removed { .. }), "{removed:?}");
+    assert_eq!(fs::read_to_string(&changed).unwrap(), "Ours now.\n");
+}
+
+#[test]
+fn an_uninstall_before_any_render_leaves_a_rules_copy_changed_before_settings() {
+    let (_dir, workspace, project, ledger, _, changed) = moved_to_settings();
+
+    let removed = take(&workspace, &ledger, &project, "review/tone").unwrap();
+
+    assert!(matches!(removed, Removed::Removed { .. }), "{removed:?}");
+    assert_eq!(fs::read_to_string(&changed).unwrap(), "Ours now.\n");
+    assert_eq!(
+        ledger.installations("app", Kind::Rule).unwrap(),
+        ["git/no-force-push"]
+    );
+}
+
+#[test]
 fn a_rule_from_a_loaded_workspace_records_where_it_came_from() {
     let (dir, mut workspace, project, ledger) = older();
     let (team, _) = FlayerWorkspace::init(dir.path().join("team")).unwrap();
@@ -464,6 +529,20 @@ impl Fixture {
         )
     }
 
+    /// Take the rule at `route` out, edited since it was installed or not.
+    fn uninstall_forced(&self, route: &str) -> Removed {
+        install::uninstall_with(
+            &self.workspace,
+            &self.ledger,
+            &self.project,
+            Kind::Rule,
+            route,
+            &AgentHomes::default(),
+            Edits::Forced,
+        )
+        .unwrap()
+    }
+
     fn render(&self) -> rules::Rendered {
         rules::render(
             &self.workspace,
@@ -477,6 +556,15 @@ impl Fixture {
 
     fn records(&self) -> Vec<InstallRecord> {
         self.ledger.records("app", Kind::Rule).unwrap()
+    }
+
+    /// How the installation of the rule at `route` stands.
+    fn standing(&self, route: &str) -> Standing {
+        install::standings(&self.workspace, &self.ledger, &self.project, Kind::Rule)
+            .unwrap()
+            .into_iter()
+            .find(|(name, _)| name == route)
+            .map_or(Standing::Absent, |(_, standing)| standing)
     }
 
     fn agents_md(&self) -> PathBuf {
@@ -1112,7 +1200,16 @@ fn rules_no_longer_offered_can_each_be_taken_out_and_the_rest_stay_as_they_are()
         .collect();
     assert_eq!(fixture.records(), others);
 
-    fixture.uninstall("git/no-force-push");
+    // Edited, so taken out only when forced.
+    assert_eq!(
+        fixture.uninstall("git/no-force-push"),
+        Removed::Edited {
+            name: String::from("git/no-force-push"),
+            paths: vec![fixture.agents_md()],
+        }
+    );
+    assert_eq!(fixture.records(), others);
+    fixture.uninstall_forced("git/no-force-push");
 
     assert_eq!(fixture.text(), TEAM);
     assert!(fixture.claude_file("rust/errors").is_file());
@@ -1121,6 +1218,114 @@ fn rules_no_longer_offered_can_each_be_taken_out_and_the_rest_stay_as_they_are()
     fixture.uninstall("rust/errors");
 
     assert!(!fixture.claude_file("rust/errors").exists());
+    assert!(fixture.records().is_empty());
+}
+
+#[test]
+fn a_render_keeps_another_rules_edited_section_as_the_block_holds_it_and_says_so() {
+    let fixture = fixture(Share::Shared, &Agent::ALL);
+    fs::write(fixture.agents_md(), TEAM).unwrap();
+    let tone = fixture.rule("review/tone", TONE);
+    fixture.rule("git/no-force-push", NO_FORCE_PUSH);
+    fixture.install("review/tone");
+    fixture.install("git/no-force-push");
+    let edited = fixture
+        .text()
+        .replace(NO_FORCE_PUSH, "Never force-push, ever.\n");
+    fs::write(fixture.agents_md(), &edited).unwrap();
+    let recorded = fixture.records();
+    // Both offers move on, and only the rule installed is brought up to date.
+    fs::write(&tone, format!("{TONE}Be kind.\n")).unwrap();
+    fixture.rule(
+        "git/no-force-push",
+        "Never force-push anything somebody pulled.\n",
+    );
+
+    let again = fixture.install("review/tone");
+
+    assert_eq!(
+        fixture.text(),
+        format!(
+            "{TEAM}\n<!-- mindflayer:begin -->\n\
+             <!-- mindflayer:rule git/no-force-push -->\nNever force-push, ever.\n\n\
+             <!-- mindflayer:rule review/tone -->\n\
+             Say what a change does before what is wrong with it.\nBe kind.\n\
+             <!-- mindflayer:end -->\n"
+        )
+    );
+    // Its record is what was rendered, so it reads as edited still.
+    assert_eq!(fixture.records()[0], recorded[0]);
+    assert_eq!(fixture.standing("git/no-force-push"), Standing::Edited);
+    let rendered = again.rendered.unwrap();
+    assert_eq!(
+        rendered.warnings_of(Some("review/tone")),
+        [format!(
+            "{}: the section of rule `git/no-force-push` was changed since it was rendered, so \
+             it is left as it is",
+            fixture.agents_md().display()
+        )]
+    );
+
+    // Undone, it is what an earlier render wrote: behind its offer, not
+    // current with it.
+    let kept = fixture.text();
+    let undone = kept.replace("Never force-push, ever.\n", NO_FORCE_PUSH);
+    fs::write(fixture.agents_md(), undone).unwrap();
+    assert_eq!(fixture.standing("git/no-force-push"), Standing::Outdated);
+    fs::write(fixture.agents_md(), kept).unwrap();
+
+    // Forced, it is the offer's again.
+    install::install_with(
+        &fixture.workspace,
+        &fixture.ledger,
+        &fixture.project,
+        &fixture.typed("git/no-force-push").unwrap(),
+        &AgentHomes::default(),
+        Edits::Forced,
+    )
+    .unwrap();
+
+    assert!(fixture
+        .text()
+        .contains("Never force-push anything somebody pulled.\n"));
+    assert_eq!(fixture.standing("git/no-force-push"), Standing::Current);
+    assert_eq!(fixture.standing("review/tone"), Standing::Current);
+}
+
+#[test]
+fn a_forced_change_writes_over_and_takes_away_an_edited_file_for_claude() {
+    let fixture = fixture(Share::Shared, &Agent::ALL);
+    fixture.rule("rust/errors", SCOPED);
+    fixture.install("rust/errors");
+    let file = fixture.claude_file("rust/errors");
+    fs::write(&file, format!("{SCOPED}Unless it is a test.\n")).unwrap();
+
+    assert!(matches!(
+        fixture.install("rust/errors").installed,
+        Installed::Edited { .. }
+    ));
+    install::install_with(
+        &fixture.workspace,
+        &fixture.ledger,
+        &fixture.project,
+        &fixture.typed("rust/errors").unwrap(),
+        &AgentHomes::default(),
+        Edits::Forced,
+    )
+    .unwrap();
+
+    assert_eq!(fs::read_to_string(&file).unwrap(), SCOPED);
+    assert_eq!(fixture.standing("rust/errors"), Standing::Current);
+
+    fs::write(&file, "Ours now.\n").unwrap();
+    assert!(matches!(
+        fixture.uninstall("rust/errors"),
+        Removed::Edited { .. }
+    ));
+    assert!(file.is_file());
+    fixture.uninstall_forced("rust/errors");
+
+    assert!(!file.exists());
     assert!(fixture.records().is_empty());
 }
 
@@ -1222,6 +1427,30 @@ fn status_says_claude_reads_a_rule_by_its_own_file_where_it_reads_no_block() {
 }
 
 #[test]
+fn status_says_a_rule_edited_in_its_section_or_its_file_is_edited() {
+    let fixture = fixture(Share::Shared, &Agent::ALL);
+    fixture.rule("git/no-force-push", NO_FORCE_PUSH);
+    fixture.rule("rust/errors", SCOPED);
+    fixture.install("git/no-force-push");
+    fixture.install("rust/errors");
+
+    let edited = fixture
+        .text()
+        .replace(NO_FORCE_PUSH, "Never force-push, ever.\n");
+    fs::write(fixture.agents_md(), edited).unwrap();
+    fs::write(fixture.claude_file("rust/errors"), "Ours now.\n").unwrap();
+
+    assert_eq!(
+        status_of(&fixture, "git/no-force-push").map(|(state, _, _)| state),
+        Some(State::Edited)
+    );
+    assert_eq!(
+        status_of(&fixture, "rust/errors").map(|(state, _, _)| state),
+        Some(State::Edited)
+    );
+}
+
+#[test]
 fn status_lists_a_rule_copied_into_a_project_a_mind_toml_marks_as_its_copy() {
     let (_dir, workspace, project, ledger) = older();
     own_rule(&workspace, "git/no-force-push", NO_FORCE_PUSH);
@@ -1286,6 +1515,7 @@ impl Fixture {
             &self.project,
             &Reference::parse(typed),
             &AgentHomes::default(),
+            Edits::Kept,
         )
     }
 }

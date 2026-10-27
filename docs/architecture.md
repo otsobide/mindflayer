@@ -77,8 +77,8 @@ no idea a terminal exists.
 
 `mindflayer-cli` parses a command line, asks core for values, and renders them.
 It holds no rules about artifacts: not the name limits, not the front matter
-format, not which folder a kind lives in, not when a change drops the record
-of an install.
+format, not which folder a kind lives in, not what a change does to the
+record of an install.
 
 It ships **two binaries**, `mind` and `flayer`, and they are two entry points
 into one parser rather than one wrapping the other. `flayer <cmd>` and `mind
@@ -367,7 +367,8 @@ so the block and those files never disagree on it.
   listed as a warning and leaves the verdict at `ok`.
   Counted as invalid, a skill installed with nested metadata would fail its
   project's `validate` from then on, and the only way to clear it would be to
-  edit the copy, which disowns it. The TUI's `✗` follows the same line.
+  edit the copy, which leaves it edited, never updated again unless forced.
+  The TUI's `✗` follows the same line.
 
 ### Adding a third kind
 
@@ -955,10 +956,11 @@ one found only in an agent's folder is refused as such
 (`LifecycleError::NotAuthored`) rather than reported missing, since a listing
 has just shown it. Installing writes a copy in each target, and in the
 authored folder only when that is one of them, so what a project authors and
-what it was installed are apart: a change to the first drops no record of the
-second. Settings that author in a target, `"skills": ".claude/skills"`, put
-an installed copy where a change reaches it, and that change drops the
-record of that copy alone ([A record must not outlive the copy it is
+what it was installed are apart: a change to the first touches no record of
+the second. Settings that author in a target, `"skills": ".claude/skills"`,
+put an installed copy where a change reaches it, and that change sees to the
+record of that copy alone: kept through an edit, carried through a rename,
+dropped by a removal ([A record must not outlive the copy it is
 about](#a-record-must-not-outlive-the-copy-it-is-about)).
 
 ### Moving a project to its settings
@@ -1020,17 +1022,17 @@ dry run is.
 - **A record from before hashes is held to its offer.** Most of such a
   project's records were written before schema 3, with no hash, and
   [D-04](#d-04-an-edited-copy-is-detected-not-disowned) reads one as current
-  only while its copy matches its offer byte for byte. So the migration
-  finds the offers (`install::survey`) and hands `retarget` those a record
-  may have come from: by the origin it records, or for a record from before
-  origins by its shelf source's id, or else among the workspace's own and
-  the loaded ones, any of which may be it. A copy matching one is compared
-  as `install::is_current` compares (`copy::same_leaving`), moved, and its
-  record given the hash every copy now holds (`Ledger::migrated`), so the
-  next change of agents compares it as any other; one matching none is
-  edited; with no offer left, it cannot be told, and is left. A change of
-  agents does not look for offers, and reads such a record as one it cannot
-  compare.
+  only while its copy matches its offer byte for byte. So the migration finds
+  the offers (`install::offers`) and hands `retarget` those a record may have
+  come from (`install::offered_for`, which tells every record's standing by
+  the same answer): by the origin it records, or for a record from before
+  origins by its shelf source's id, or else among the workspace's own and the
+  loaded ones, any of which may be it. A copy matching one is compared as
+  `install::is_current` compares (`copy::same_leaving`), moved, and its record
+  given the hash every copy now holds (`Ledger::migrated`), so the next change
+  of agents compares it as any other; one matching none is edited; with no
+  offer left, it cannot be told, and is left. A change of agents does not look
+  for offers, and reads such a record as one it cannot compare.
 - **What the project wrote stays.** Every artifact in a folder the settings
   keep naming that no installation records, rules included, is left where
   it is and said, as what sits unrecorded in a folder its agents are now
@@ -1531,27 +1533,28 @@ command that writes opens the ledger. `FlayerWorkspace::ledger_to_write` is
 the one way to open it for writing: it runs `gather::scrub`, which only core
 can call, and hands back what that took out for the front end to say, the way
 `resolve` with `Intent::Write` is the one way to find a workspace that may be
-created.
-Which commands write is the front end's to know, but what opening to write
-involves is core's, so no front end can write first and scrub after. `gather
-git`, `install` and `uninstall` open it that way, as does `install::disown`,
-through which core's lifecycle changes (`lifecycle::add`, `finish_edit`,
-`rename` and `remove`) drop a record. Each hands back what the scrub took out
-(its result's `scrub`) beside what it did to the record, since a scrub says
-what it found only the first time and a change that dropped it would leave it
-unsaid for good. `rename` opens the ledger once for each name and tells what
-both scrubs found once (`Scrub::absorb`): the second finds only the clones
-the first could not rewrite. So does the install screen, in both screens,
-when what it marked is applied (`install::commit`) rather than as it opens,
-which is a read ([A read leaves the ledger as it finds
+created. Which commands write is the front end's to know, but what opening to
+write involves is core's, so no front end can write first and scrub after.
+`gather git`, `install` and `uninstall` open it that way, as do
+`install::disown` and `install::carry`, through which core's lifecycle changes
+(`lifecycle::add`, `rename` and `remove`) drop or carry a record. Each hands
+back what the scrub took out (its result's `scrub`) beside what it did to the
+record, since a scrub says what it found only the first time and a change that
+dropped it would leave it unsaid for good. `rename` opens the ledger once for
+each name and tells what both scrubs found once (`Scrub::absorb`): the second
+finds only the clones the first could not rewrite. So does the install screen,
+in both screens, when what it marked is applied (`install::commit`) rather
+than as it opens, which is a read ([A read leaves the ledger as it finds
 it](#a-read-leaves-the-ledger-as-it-finds-it)). A scrub can make two sources
 one row, and a mark on the row that went would install from folders the scrub
 removed, or copy the files and then fail to record them. So once a scrub has
 taken out a source, the screen is built again from the scrubbed ledger and
-each mark is made again on the row offering the same name from the same
-place, as the row it became one with does; a mark on what only the row that
-went had gathered is a warning and is not carried out. Scrubbing as the screen
-opened would have spared that, and is rejected: opening it is a read.
+each mark is made again on the row offering the same name from the same place,
+as the row it became one with does; a mark on what only the row that went had
+gathered is a warning and is not carried out. Scrubbing as the screen opened
+would have spared that, and is rejected: opening it is a read. An edit writes
+nothing to the ledger, since it keeps the record as it was, so `finish_edit`
+only reads it (`ledger_for_reading`) and scrubs nothing.
 
 The scrub rewrites the sources whose URL carries a credential, each clone made
 from one, the origin of every installation from one, which schema 3 copied
@@ -1690,7 +1693,12 @@ source that source's origin, and one from the workspace or a load none, since
 version 2 kept nothing to say which; it makes up no hash for a copy nobody
 hashed when it was written, and D-04 says how a missing one reads. Version 4
 fills in nothing: no build before it installed a rule, and a skill's targets
-need no hash of their own. Each step
+need no hash of their own. D-04's states (#47) took no step of their own:
+what tells them apart is the hash each copy was written with, which versions
+3 and 4 keep, and what the place it came from offers now, which is read where
+it is offered rather than kept. A record with no hash is held to its offer
+by the code that reads it (`install::standings`), since a step has no offer
+to fill one in from, and the first install over it stores its hash. Each step
 comes with a fixture of what the version before it wrote
 (`apps/core/tests/fixtures/ledger-v<N>.sql`, dumped from a ledger that build
 made), from which a test migrates, checks every row is kept, and opens the
@@ -1712,9 +1720,13 @@ what each holds, since its section and its file are not the same bytes. An insta
 written; one that cannot be read back is recorded with none rather than not
 at all, since without a record it would be Foreign for good. That is a
 `warning:` and a non-zero exit, and the log's entry says why, rather than a
-plain success: a copy an install left as it was can hold a link somebody
-put there, which `copy::same` follows and the hash refuses, and a record
-with no hash is read as one from before hashes were kept.
+plain success: a record with no hash is read as one from before hashes were
+kept. No install leaves a copy it can tell holds what the hash refuses. A
+link where no install writes one is an edit, which an install that is not
+forced refuses and a forced one writes over, even when it points at the
+same bytes, which `copy::same` follows it to (`Stage::place_over`): left as
+it was, the copy would be recorded with no hash and read as edited still.
+What is left is a copy changed between landing and being read back.
 
 ## Installing
 
@@ -1789,9 +1801,11 @@ not stop `.agents/skills/ship` from being written, and OpenCode is then
 handed two versions of one skill, which nothing says ([an open
 question](#open-questions)). A name installed into one folder does not claim
 what somebody keeps under it in another, as when a project names an agent
-after the install. Every copy there recorded is `Installed`, even if one the
-record names has gone since, and the next install puts it back. A listing
-says the same of a copy in a project's agents' folders
+after the install. Where every copy there is recorded, what each copy the
+record names holds says how the installation stands ([an edited copy is
+left alone](#an-edited-copy-is-left-alone)): one gone since is
+`Standing::Missing`, and the next install puts it back. A listing says the
+same of a copy in a project's agents' folders
 (`Provenance::Foreign`), and no change to the project's own reaches one
 ([read where its agents
 read](#a-project-marked-by-its-settings-is-read-where-its-agents-read)).
@@ -1823,6 +1837,73 @@ A project has one directory per artifact name in each target, so two shelf
 entries offering `commit-style` cannot both be installed. The screen settles
 it by unticking the other rather than letting both apply and the second win: a
 conflict resolved where somebody can see it happening.
+
+### An edited copy is left alone
+
+The record keeps a hash of what was written in each copy
+([D-04](#d-04-an-edited-copy-is-detected-not-disowned)): once for a skill's
+installation, since every copy is staged from one tree, and once a target
+for a rule's section and its file, which hold different bytes. That hash,
+and what the place the record says it came from offers now
+(`install::offered_for`), tell five standings of an installation apart, as
+`install::standings` says of each installation and `survey` of each offer of
+its name:
+
+- **Current**: every copy holds what was written, and the offer holds it
+  still.
+- **Outdated**: every copy holds what was written, and the offer has moved
+  on. An install brings it up to date.
+- **Edited**: a copy holds anything else: a hand edit, `mind edit`, a
+  skill's rename, which rewrites its `name` line, a file added, or a link
+  where a file was, which the hash refuses and no install writes. A rule's
+  rename moves its file as it is, and is no edit: the copy holds what was
+  installed, orphaned while nothing offers it by its new route.
+- **Missing**: a copy the record names is not where it was put, and an
+  install puts it back. Every copy gone is still missing rather than absent:
+  the ledger records it, and `flayer uninstall` forgets it. The install
+  screen opens its box empty all the same (`Standing::present`), saying a
+  copy is gone, so marking it puts every copy back, as it did when every
+  copy gone read as absent: a `git clean -X` takes every copy of a local
+  project at once. Held, the box could only be marked to be taken out, so
+  one with a copy left is taken out with `flayer uninstall`.
+- **Orphaned**: the place it came from no longer offers it. No offer carries
+  it onto the install screen, so `standings` is where it is said.
+
+When more than one holds, edited is said first, then orphaned, missing,
+outdated: an edit is what a change must not undo, an offer gone leaves
+nothing to put back or bring up to date, and a copy put back is put back as
+the offer holds it now. Outdated asks for the offer itself, read where it is
+offered: a skill's copy is compared with it as an install would write it
+(`copy::same_leaving`, without what no copy holds), a rule by the hash of its
+file against the one its record says every copy was rendered from.
+
+An edited copy is treated as a foreign one is. `install` and `uninstall`
+refuse the whole change, nothing written or taken out in any target, and name
+each edited copy (`Installed::Edited`, `Removed::Edited`), unless forced
+(`install_with` and `uninstall_with` given `Edits::Forced`, which `--force`
+asks for). Every copy or none: writing over the untouched copies beside an
+edited one would hand the agents reading both folders two versions of one
+skill. The look is made under the workspace's lock, after the one for
+somebody's, and wherever the record has its copies, since an install records
+its copies afresh and one in a folder it no longer writes would be left with
+no record. Forcing reaches only what the ledger records: a copy nothing
+records stays out of reach whatever is asked. The install screen never
+forces, and holds an edited row's box as it holds a foreign one's.
+
+A rule's copy from before a project had settings, in the folder its
+`mind.toml` named, is not one of the copies told in a project marked by
+them. The next render takes it out while it holds what was copied and
+leaves it, the project's own, when it does not, forced or not ([moving a
+project to its settings](#moving-a-project-to-its-settings)), so an edit
+there refuses nothing: refused, it would be a change `--force` does not
+make either.
+
+A record with no hash, from before version 3 of the ledger or of a copy
+that could not be read back, is held to its offer byte for byte: current
+while its copy matches, edited otherwise, and edited when nothing offers it
+any more. An untouched copy whose offer has moved on then reads the same as
+an edit, and taking it for one is the safe mistake. The first install over a
+copy that matches stores its hash, and from then on it is told as any other.
 
 ### Built where no agent looks
 
@@ -2118,9 +2199,10 @@ How an install uses it:
   A block that cannot be edited then is a `warning:` beside what was done
   (`Removed::Removed`'s `still_excluded`), not a reason to undo it: the
   copies are gone, and only a line naming their empty place is left. A
-  change from the project that reaches an installed copy, in a folder it
-  authors in that is also a target, takes that copy's entry out the same way
-  ([A record must not outlive the copy it is
+  change from the project that removes an installed copy, in a folder it
+  authors in that is also a target, takes that copy's entry out the same
+  way, and one that renames it moves the entry to where it went ([A record
+  must not outlive the copy it is
   about](#a-record-must-not-outlive-the-copy-it-is-about)).
 - **Outside git, a note.** A project outside a git work tree gets its copies
   and a `note:` saying nothing keeps them out of git
@@ -2234,10 +2316,15 @@ unrecorded in a folder it drops; `targets reset` is the same the other way.
   hash is the one recorded and forgotten when it has gone already.
   Otherwise, changed since it was installed or not to be compared (a record
   with no hash, a link), it is left where it is and dropped from the record
-  with its exclude entry: its author's now, as an edit makes a copy, until
-  D-04's states (#47) say more. Deleting it on a guess was turned down, and
-  so was keeping it recorded, which would name a copy in a folder no listing
-  of the project reads and call the installation partial for good. Which
+  with its exclude entry: its author's now. That is not what an edit does to
+  a copy where an agent reads, which stays recorded and reads as edited
+  ([an edited copy is left alone](#an-edited-copy-is-left-alone)): this one
+  is in a folder no agent the project names is sent copies to, which no
+  install writes again. Deleting it on a guess was turned down, and so was
+  keeping it recorded, which would name a copy in a folder no listing of the
+  project reads, call the installation partial or edited for good, and leave
+  it to the next install, which records its copies afresh, to drop all the
+  same. Which
   folder a copy is in is told by the folder on disk, as `install::targets`
   makes two spellings of one folder one target, not by the route recorded:
   a copy recorded in `.agents/skills` stays when codex goes and Claude reads
@@ -2339,6 +2426,11 @@ one its record came from (`install::is_current`), since nothing in a project
 holds a rule's bytes alone to compare. A project offered nothing of the kind
 shown says what core says it cannot take (`install::receives`), or where that
 kind comes from: a rule from the workspace's own or a load, never the shelf.
+A row whose box cannot move says why: somebody's, which nothing of
+Mindflayer's touches, and an install edited since, which the screen never
+forces ([an edited copy is left alone](#an-edited-copy-is-left-alone)); every
+offer of the name stands as its one installation, so none of them can be
+marked over it either.
 
 `try_init` rather than `init`, here and in the TUI: these are the commands that
 need a terminal, and being run without one deserves a sentence rather than a
@@ -2358,7 +2450,7 @@ never wrote.
 Each artifact a project holds is one entry, as discovery lists it: every copy
 of one name together ([read where its agents
 read](#a-project-marked-by-its-settings-is-read-where-its-agents-read)). Its
-state is one of four (`status::State`):
+state is one of five (`status::State`):
 
 - **installed**: the ledger records every copy, and every copy it records is
   found where it was put.
@@ -2367,6 +2459,13 @@ state is one of four (`status::State`):
   of a local project are exposed to, or left so it no longer reads, which
   discovery says beside the report. The next install puts every copy back,
   since it writes each target.
+- **edited**: the ledger records a copy that holds something other than was
+  written there, by its hash: an install's standing of
+  [edited](#an-edited-copy-is-left-alone), told by the same core function
+  an install refuses by (`install::standings`), so the report and a refusal
+  never disagree. A rule is edited in its section of the block or in its
+  file for Claude. Still Mindflayer's install, left alone by every install
+  and uninstall unless forced.
 - **foreign**: unrecorded, in an agent's folder outside any the project
   authors in: somebody's, never Mindflayer's to change.
 - **authored**: unrecorded, in a folder the project authors in: its own work.
@@ -2378,7 +2477,8 @@ project authors of that name. That copy sits where the install wrote nothing,
 or it would be the install's, so the next install puts the gone one back all
 the same, and calling the entry authored would leave an agent reading none
 of it unsaid. Not beside a foreign copy, which is said first: the next
-install of the name is refused over it. The record is
+install of the name is refused over it. Nor beside an edited one, said next,
+for the same reason unless the install is forced. The record is
 matched to the entry by the path of a copy it wrote, as discovery marks a copy
 installed, never by name, so an install of a name into one folder neither
 claims nor lends its origin to what somebody keeps under that name in another.
@@ -2401,9 +2501,9 @@ than it was installed for, and where what was installed came from, the
 record's origin, as `--from` takes it. Each project names its own agents too,
 from its settings, so a front end can lay its rows out by agent; a project a
 `mind.toml` marks names none, and reaches none as far as a report can say.
-Whether a copy is current, outdated or edited is #47's to tell, once a copy is
-compared with what it came from, and the states it adds (#48) take over from
-partial for a copy that is missing.
+Whether an install is outdated or orphaned, which `install::standings` tells
+already, is #48's to say here, with the states it adds taking over from
+installed, and from partial for a copy that is missing.
 
 The rules a project marked by its settings received are no copies discovery
 finds, but sections of the block in its `AGENTS.md` and Claude's files, so
@@ -2413,7 +2513,9 @@ discovery parses no block, since a section is never authored in place but
 rendered from a rule kept elsewhere. A rule is installed while every target
 its record names is found, its route among the block's sections and its file
 for Claude where it was written, and partial while one is not, as a skill's
-copies are; one recorded with none has nothing missing. It reaches Codex and
+copies are; one recorded with none has nothing missing. It is edited, over
+partial, while its section or its file holds something other than was
+rendered there. It reaches Codex and
 OpenCode through the block, and Claude through its own file, or through the
 block where the render gave it none: a render gives Claude every rule as a
 file while Claude reads no block, so a rule in the block with no file of its
@@ -3244,14 +3346,14 @@ moves the start there itself (`resolve::managing` and `resolve::consulted`).
 `mind link` and `unlink` register the project with the workspace resolved;
 `install` and `uninstall` need that workspace to link the project, and are
 refused (`NotManaged`) when it does not (`managing`); `add`, `edit`, `rename`,
-`remove` and `templates` consult it, to drop the record of what they change
+`remove` and `templates` consult it, to see to the record of what they change
 and to lend templates, and only if it is made (`consulted`): a change to a
 project is no reason to write a marker into somebody's home, and a workspace
-made just now would hold nothing to drop or lend. One found above that
+made just now would hold nothing to see to or lend. One found above that
 cannot be read is a `warning:` after the change, since the change is the
-project's and the workspace was only to be told; one named or activated
-that will not open refuses it, as it refuses every other command, because
-whoever chose it meant that one to be told.
+project's and the workspace was only to be told; one named or activated that
+will not open refuses it, as it refuses every other command, because whoever
+chose it meant that one to be told.
 
 With `-W` or an activation, that is the chosen workspace wherever it sits,
 which is how a project linked from beside its workspace is managed from
@@ -3279,7 +3381,7 @@ A project's row runs `mind -C <entry>`, the line somebody in the project would
 type, which consults the project's own workspace. Where that is not the
 workspace on screen, because the project is linked from outside its tree or
 from above a nearer workspace, the row runs `mind -W . -C <entry>` instead
-(`Holder::Elsewhere`), so a change drops the record of the workspace on screen
+(`Holder::Elsewhere`), so a change sees to the record of the workspace on screen
 and the add form offers that workspace's templates, which are the ones its
 line finds. The `-W` is there only where leaving it out would consult another
 workspace, so every other row still teaches the plain project command; a
@@ -3754,14 +3856,15 @@ renderer gives Claude the rules about every file when it reads no block.
   Mindflayer's would remove it with the rule. One changed since it was
   written is `Written::Edited`, left as it is with its record kept, as
   [D-04](#d-04-an-edited-copy-is-detected-not-disowned) has an edited copy;
-  edited back into the rule as it is now, it is current again. A link at a
-  rule's place is somebody's too, since Mindflayer writes none. Rejected:
-  telling them by route alone, which would write over a teammate's change
-  committed into a shared project, as the block still replaces a
-  hand-edited section ([open question](#open-questions)); by the folder,
-  which would take somebody's file there for Mindflayer's; and by a mark in
-  the file, which would no longer be the rule as written, and which a copy
-  made by hand carries along.
+  edited back into the rule as it is now, it is current again. Only a forced
+  install or uninstall of its own rule replaces or takes it away, handing
+  the hash of what it holds now as the one recorded. A link at a rule's
+  place is somebody's too, since Mindflayer writes none. Rejected: telling
+  them by route alone, which would write over a teammate's change committed
+  into a shared project, as the block once replaced a hand-edited section;
+  by the folder, which would take somebody's file there for Mindflayer's;
+  and by a mark in the file, which would no longer be the rule as written,
+  and which a copy made by hand carries along.
 - **Made, replaced, taken away.** A file that is not there is made with
   `create_new`, so one somebody made after the look is never written over,
   and only then is it said to be made (`Written::Created`). One that is
@@ -3980,7 +4083,8 @@ skills ([which kind a name is](#which-kind-a-name-is)).
   line with a project as it is now. Rendering only the rule asked for was
   turned down: the block has no part of its own to write, and leaving the
   other sections as they stand would need each read back from the file,
-  which is what an edit there changes.
+  which is what an edit there changes. A section somebody edited is the one
+  read back and kept (below).
 - **One installation a rule, a hash a target.** Its targets are its
   section, recorded by the file it is in, `AGENTS.md`, and its file for
   Claude, each with the hash of what it holds (schema 4, [why the ledger is
@@ -3989,7 +4093,9 @@ skills ([which kind a name is](#which-kind-a-name-is)).
   rule given neither, one about some files in a project that does not name
   Claude, is recorded with none, and said to reach no agent
   (`Warning::Unreached`). The installation's own hash is of the rule as it
-  was rendered, what #47 compares the offer with.
+  was rendered, what its standing compares the offer with: outdated once
+  the two differ ([an edited copy is left
+  alone](#an-edited-copy-is-left-alone)).
 - **`AGENTS.md` goes only if Mindflayer made it.** Whether the render made
   the file is noted in the ledger (`created_files`) and handed back to the
   next render, so the last rule out takes away a file Mindflayer made and
@@ -4024,6 +4130,19 @@ skills ([which kind a name is](#which-kind-a-name-is)).
   (`InstallError::NotRecorded`). Taking it for this workspace's was turned
   down: two workspaces, each with its own ledger, would take turns taking
   each other's rules out.
+- **An edited section is kept.** A section this workspace rendered whose
+  hash is not the one recorded was edited since, and a render keeps it as
+  the block holds it (`AgentsMd::section`), with its record, so it reads as
+  edited still, and says so (`Warning::Kept`), as Claude's renderer leaves an
+  edited file. What the rule was rendered from stays recorded too, so once
+  the edit is undone it reads as outdated rather than current. Installing or
+  uninstalling that rule is refused, as for any edited copy, unless forced:
+  then its section is rendered from its offer, or taken out, and its file
+  for Claude is written over or taken away. A section that cannot be read
+  back, a line in it that is not UTF-8, refuses the render
+  (`InstallError::Unread`) rather than go with it. Replacing the whole block,
+  as every render did before #47, lost the edit the next time any rule of
+  the project was installed.
 - **A rule no longer offered refuses the render.** A rule whose origin
   offers it no more (deleted from the library, a load gone) cannot be
   rendered, and leaving its section out would take it from every agent,
@@ -4345,44 +4464,66 @@ transcript shows the yes that was given.
 
 ### A record must not outlive the copy it is about
 
-The ledger's record of an installation is what gives the install screen leave
-to overwrite and delete. Remove, rename or edit an installed skill and the copy
-it was about is gone, or is no longer what was installed; a record left behind
-would be inherited by whatever is written there next, and the install screen
-would then delete somebody's work because a box looked untidy. So
-`lifecycle::remove`, `lifecycle::rename` and `lifecycle::finish_edit` drop the
-record, and `lifecycle::add` drops any stale one under the name it writes, as
-`lifecycle::rename` does under the new name. An installed skill that is edited
-becomes its author's.
+The ledger's record of an installation is what gives an install leave to
+overwrite and an uninstall leave to delete. Remove an installed skill and the
+copy it was about is gone; a record left behind would be inherited by
+whatever is written there next, and the install screen would then delete
+somebody's work because a box looked untidy, or, now that a copy gone reads
+as missing, put back what was removed on purpose. So `lifecycle::remove`
+uninstalls the copy it reached, dropping its record, and `lifecycle::add`
+drops any stale one under the name it writes, as `lifecycle::rename` does
+under the new name.
+
+Edit or rename an installed copy and it is still there. Its record stays
+([D-04](#d-04-an-edited-copy-is-detected-not-disowned)), and the hash it
+holds is what tells an edit apart ([an edited copy is left
+alone](#an-edited-copy-is-left-alone)): edited, status says so, and no
+install writes over it, nor uninstall takes it out, unless forced.
+`finish_edit` leaves the record as it is and only reads the ledger to say
+so (`Record::Kept`); `rename` carries it to the new name and place
+(`install::carry`, `Ledger::renamed_copy`), from where it came and with the
+hash of what was written. A skill's rename rewrites its `name` line, which
+reads as the edit it is; a rule's moves its file as it is, so it reads as
+it did, edited only if it was, and otherwise as what was installed, which
+an uninstall takes out unforced. Which of the two it is is told as an
+install tells it, and handed back (`Record::Moved`'s `edited`), so what
+`mind rename` says of the copy is what an install and an uninstall will
+find. Dropping the record, as both once did, made the
+copy its author's: safe, but never updated again and never taken out by the
+uninstall that put it there. Where another installation holds the new name
+already, the renamed copy cannot join it, a name being one installation a
+project, and its record goes instead, as it did (`Record::Dropped`).
 
 Only a record that names the copy the change reached, by its path
-(`install::disown`'s `at`), not every record of that name. A project marked by
-its settings authors in a folder of its own, beside the copies installed for
-its agents: adding, editing, renaming or removing its own `deploy` changes
-nothing in `.claude/skills/deploy`, and dropping that copy's record by name
-would make it Foreign, never updated or removed again, over a change to
-something else. In a project a `mind.toml` marks, the folder it authors in is
-the one it was installed into, so a change there reaches the copy and drops
-its record as before. A skill's record naming no target, which only a build
-from before targets wrote, is dropped by name as records were. A rule's
-naming none is one a build writes, for a rule that reaches no agent the
-project names ([installing rules](#installing-rules)), and a change to the
-project's own rule of that route reaches nothing it installed, so it stays.
+(`install::disown`'s and `install::carry`'s `at`), not every record of that
+name. A project marked by its settings authors in a folder of its own,
+beside the copies installed for its agents: adding, editing, renaming or
+removing its own `deploy` changes nothing in `.claude/skills/deploy`, and
+seeing to that copy's record by name would drop or carry a record over a
+change to something else. In a project a `mind.toml` marks, the folder it
+authors in is the one it was installed into, so a change there reaches the
+copy. A skill's record naming no target, which only a build from before
+targets wrote, is dropped by name as records were. A rule's naming none is
+one a build writes, for a rule that reaches no agent the project names
+([installing rules](#installing-rules)), and a change to the project's own
+rule of that route reaches nothing it installed, so it stays.
 
-And only that copy's part of the record (`Ledger::uninstalled_copy`), in one
-transaction: settings can make the folder a project authors in one of its
-targets, `"skills": ".claude/skills"`, and a change there reaches the copy an
-install put there and no other. The copy in `.agents/skills` is still what
-was installed, so its target stays recorded, for `flayer install` to update
-and `flayer uninstall` to remove; the installation goes with its last copy.
-Dropping it whole would leave that copy Foreign for good, a skill Codex and
-OpenCode go on loading that nothing of Mindflayer's can change again. In a
-local project the place the change reached also leaves the exclude block,
-after the record, as an uninstall takes its entries out after its copies:
-what is there now, or is written there next, is its author's, and a line
-left behind would hide it from `git status`. A block that cannot be edited
-is reported beside the change as a record that cannot be dropped is
-(`InstallError::StillExcluded`).
+And only that copy's part of the record (`Ledger::uninstalled_copy`,
+`Ledger::renamed_copy`), in one transaction: settings can make the folder a
+project authors in one of its targets, `"skills": ".claude/skills"`, and a
+change there reaches the copy an install put there and no other. The copy in
+`.agents/skills` is still what was installed, so its target stays recorded,
+for `flayer install` to update and `flayer uninstall` to remove; the
+installation goes with its last copy, or takes the new name whole when a
+rename reached its last. A renamed copy that leaves others behind is an
+installation of its own under the new name, from the same place. In a local
+project the place a removal reached also leaves the exclude block, after the
+record, as an uninstall takes its entries out after its copies: what is
+written there next is its author's, and a line left behind would hide it
+from `git status`. A rename moves the entry to the copy's new place, which is
+still an install's and kept out of git. A block that cannot be edited is
+reported beside the change as a record that cannot be changed is
+(`InstallError::StillExcluded`, `InstallError::NotExcluded`).
 
 Core applies that rule inside each change. Dropping the record in the CLI
 after the change, as it once did, put a rule outside core, and
@@ -4393,28 +4534,28 @@ needed calls of their own there, and each could have got them wrong. Each
 change returns what it did to the record (`lifecycle::Record`), with what
 opening the ledger to do it scrubbed out ([A URL is kept without its
 credentials](#a-url-is-kept-without-its-credentials)), and the CLI only says
-so; `install::disown`, which does the dropping, is private to core so that
-nothing else can. That keeps a front end from applying the rule
-differently, not from skipping it: `create` and `create_from`, the writers
-`lifecycle::add` is built on, see to no record and stay public for core's
-tests, so a front end adds through `add`. A record that cannot be dropped is
-reported beside the change rather than instead of it, and the CLI prints it
-as a warning: the change has been made, and saying it was not would be false.
+so; `install::disown` and `install::carry`, which change records, are
+private to core so that nothing else can. That keeps a front end from
+applying the rule differently, not from skipping it: `create` and
+`create_from`, the writers `lifecycle::add` is built on, see to no record and
+stay public for core's tests, so a front end adds through `add`. A record
+that cannot be changed is reported beside the change rather than instead of
+it, and the CLI prints it as a warning: the change has been made, and saying
+it was not would be false.
 
 Editing is split in two, because the editor is not core's to run: which one
 comes from `$VISUAL` or `$EDITOR`, and core never reads the environment.
 `lifecycle::start_edit` notes what the file holds, the CLI runs the editor,
-and `lifecycle::finish_edit` decides whether anything changed and what that
-means for the record. The CLI finishes the edit even when the editor fails:
-one that writes the file and then exits non-zero, as vim does on `:cq`, has
-changed the copy all the same, and a record left behind would let `flayer
-uninstall` delete the change. What dropping it scrubbed out of the ledger goes
-with the editor's error, said there or never.
+and `lifecycle::finish_edit` decides whether anything changed and says
+whether an install of it stays recorded. The CLI finishes the edit even when
+the editor fails: one that writes the file and then exits non-zero, as vim
+does on `:cq`, has changed the copy all the same. Nothing is written to the
+ledger either way, so nothing is scrubbed out of it for the error to carry.
 
-The record dropped is the one held by the workspace the command resolved, the
-one its templates come from, and each change is given it for the same reason:
-a workspace beside the project, which a walk up from the project never
-reaches, would keep a record of a copy that has changed. A change takes that
+The record seen to is the one held by the workspace the command resolved,
+the one its templates come from, and each change is given it for the same
+reason: a workspace beside the project, which a walk up from the project
+never reaches, would keep a record of a copy removed. A change takes that
 workspace rather than its ledger, because opening a ledger creates one, and a
 workspace that never installed anything must not get a database because
 something in a project changed; core opens it only when it is there. Another
@@ -4548,8 +4689,8 @@ other, and none of them makes a reader wait for the workspace.
   Core takes it inside each of them (`FlayerWorkspace::lock`), so no front end
   has to remember to. An install looks again at what the project holds once
   it has the lock: the standing it is handed comes from a survey made before,
-  minutes before on the install screen, and a copy an edit has made its
-  author's since is left alone rather than written over and recorded again.
+  minutes before on the install screen, and a copy somebody has written or
+  edited since is left alone rather than written over and recorded again.
   A change to a project's agents or share mode holds it too, from before it
   reads the project's settings until it has written them and carried the
   installs along (`reapply::apply`): the settings are the project's, but
@@ -4563,12 +4704,13 @@ other, and none of them makes a reader wait for the workspace.
   one an older build left take turns there and the second finds nothing to
   do (a read's migration included, which the workspace's lock could not keep
   apart, since readers never take it). Taking that lock as well made every
-  change to an artifact wait behind a gather to drop its record, once the
+  change to an artifact wait behind a gather to see to its record, once the
   change was made, and fail as busy when the gather ran long, leaving the
-  record behind. The scrub takes it only when it has clones to rewrite, the
-  first write after an upgrade from a build that stored a credential, and a
-  record drop then waits for it without a deadline: the change it follows is
-  made, and trying it again would find nothing to change.
+  record as it was. The scrub takes it only when it has clones to rewrite,
+  the first write after an upgrade from a build that stored a credential,
+  and a record dropped or carried then waits for it without a deadline: the
+  change it follows is made, and trying it again would find nothing to
+  change.
 
 How the lock behaves, and why:
 
@@ -4809,10 +4951,31 @@ differs from its installation's in form (a rule's section of the managed
 block in `AGENTS.md` beside its `.claude/rules/mindflayer/<route>.md` file,
 as D-03 has it) shares no one tree with the others, and would need a hash of
 its own on `installation_targets`, added by the schema step that first
-records one. #38 holds a v2 project's records from before hashes to their
-offers when it moves the project to settings, and gives a record whose copy
-matches the hash every copy then holds ([moving a project to its
-settings](#moving-a-project-to-its-settings)).
+records one, which #45 did for rules. #38 holds a v2 project's records from
+before hashes to their offers when it moves the project to settings, and
+gives a record whose copy matches the hash every copy then holds ([moving a
+project to its settings](#moving-a-project-to-its-settings)).
+
+#47 reads the hashes: `Standing` tells an installation current, outdated,
+edited, missing or orphaned ([an edited copy is left
+alone](#an-edited-copy-is-left-alone)), for a skill's copies, a rule's
+section and its file for Claude, and a rule's copy in a project a
+`mind.toml` marks. `install` and `uninstall` refuse an edited copy, the whole
+change with it, unless `--force`; a render keeps an edited section as the
+block holds it, as Claude's rule files were kept; `status` says `edited`;
+and the lifecycle keeps the record through an edit, carries it through a
+rename, and drops it with a removal, which uninstalls the copy ([a record
+must not outlive the copy it is
+about](#a-record-must-not-outlive-the-copy-it-is-about)). A record with no
+hash is held to its offer in code, with no schema step, and the first
+install over a copy that matches stores its hash. A change of agents, or a
+move to settings, still drops the record of an edited copy it leaves in a
+folder no agent the project names is sent copies to: no install writes
+there again, and no listing reads it ([when a project's agents, targets or
+share mode
+change](#when-a-projects-agents-targets-or-share-mode-change)). Bringing an
+outdated or missing copy up to date in one command, and saying the
+outdated and orphaned in `status`, are #48's.
 
 ### D-05: A workspace's library lives in `.mindflayer`
 
@@ -5158,6 +5321,11 @@ just listed.
   wins, because nothing here yet has to choose. Whatever resolves it (a
   workspace-level override, an explicit order in `flayer.toml`) belongs in core
   when it exists, not in a front end.
+- **Forcing from the install screen.** An edited install's box is held on
+  the screen, and only `--force` on the command line writes over or takes
+  out its copies. A key that marks a row to be forced, confirmed as the
+  batch is, would let the screen do what the command line does, most simply
+  once it applies its batch as command lines (#51).
 - **Replaying the install screen.** One install at a time has a command now,
   but what the screen applies is a batch, and its transcript line is
   `flayer install` rather than the `install` and `uninstall` lines it amounts
@@ -5183,16 +5351,18 @@ just listed.
   row waits the whole ten seconds before it is passed over. Holding the lock
   across the batch needs core to apply the batch, which is where #78 plans it.
 - **Changes to an artifact take no lock.** `add`, `edit`, `rename` and
-  `remove` write into a project or the workspace's own folders and then drop a
-  record ([A record must not outlive the copy it is
+  `remove` write into a project or the workspace's own folders and then see
+  to a record ([A record must not outlive the copy it is
   about](#a-record-must-not-outlive-the-copy-it-is-about)), and neither step
   holds the workspace: an edit is made in an editor, for as long as somebody
   keeps it open, and holding the lock that long would keep every other writer
-  waiting. An install that takes the lock after the change finds the copy its
-  author's and leaves it. One already past that look when the change lands
-  writes over it, and the record dropped is then that install's, which leaves
-  its copy unrecorded. Taking the lock for the change itself, where there is
-  no editor to wait for, would close it for `add`, `rename` and `remove`.
+  waiting. An install that takes the lock after the change finds the copy
+  edited, or somebody's, and leaves it. One already past that look when the
+  change lands writes over it: an edit is then lost, and the record a
+  removal drops or a rename carries is that install's, which leaves its copy
+  unrecorded or the renamed one recorded as the install wrote it. Taking the
+  lock for the change itself, where there is no editor to wait for, would
+  close it for `add`, `rename` and `remove`.
 - **Two first writers making one workspace.** `init` makes a marker with
   `create_new` and then fills it, so a second writer making the same
   workspace at that moment (two first commands in a home with no
@@ -5207,15 +5377,6 @@ just listed.
   workspace holds without having asked. #134 left both out, with gathering
   paused; a gathered or published copy of `examples/` would answer it
   without either.
-- **An edited copy that stays managed.** Editing an installed skill makes it
-  its author's, so updates from the shelf stop reaching it: the safe answer,
-  not the best one. A hash of what was installed, kept in the ledger, would let
-  the install screen tell an untouched copy from an edited one, and offer to
-  update the first while leaving the second alone.
-  [D-04](#d-04-an-edited-copy-is-detected-not-disowned) chose that hash, one
-  per target. #30 records it, once per installation since every target is
-  written from one copy, and #47 reads it, in the lifecycle changes that now
-  hold the rule (`lifecycle::finish_edit`, `rename` and `remove`).
 - **Old copies of the ledger.** Each migration leaves a
   `mindflayer.db.v<old>.bak` beside the ledger, and nothing removes one: a
   copy is the way back from a step that went wrong, and when it is no longer
@@ -5229,10 +5390,11 @@ just listed.
   it without them, would close that, at the cost of a way back that is no
   longer the file as it was: two of its sources the rewrite makes one would
   have to be merged in the copy, as the scrub merges them in the ledger.
-- **Disowning from elsewhere.** A change drops the record of the workspace
-  its command resolved, wherever that sits, but not of any other workspace
-  that links the same project: nothing in the project says which workspaces
-  link it, so each of them keeps its stale record. Every workspace linking a
+- **Seeing to a record from elsewhere.** A change sees to the record of the
+  workspace its command resolved, wherever that sits, but not of any other
+  workspace that links the same project: nothing in the project says which
+  workspaces link it, so each of them keeps a stale record of a copy
+  removed, or of one renamed under its old name. Every workspace linking a
   project would have to be findable from the project for that to change. The
   TUI no longer runs into it from inside: a project's row whose own workspace
   is not the one on screen runs `mind -W . -C <entry>`, which consults the
@@ -5457,10 +5619,10 @@ just listed.
   new folder a copy of one the record names that still holds what was
   installed, by its hash. An installation whose every copy was edited, or
   was recorded without a hash, has none, so the new agent gets nothing and
-  that is said; installing it again puts every copy back, the edited one
-  included, written over as an install writes over a recorded copy until
-  #47 tells an edited one apart. Copying from the offer instead would hand
-  the agents two revisions of one skill whenever the offer has moved on.
+  that is said; installing it again is refused over the edited copy, and
+  forced it puts every copy back, the edited one written over. Copying from
+  the offer instead would hand the agents two revisions of one skill
+  whenever the offer has moved on.
 - **Two workspaces, one exclude file.** The workspace's lock keeps one
   workspace's writers apart, and an exclude edit is made under it, but
   projects of one repository linked from two workspaces edit `info/exclude`
@@ -5653,7 +5815,13 @@ just listed.
   installation records is the ledger's, which discovery does not open, and
   a foreign copy has none. If a skill's assets make a listing slow, that
   recorded hash, compared where `Catalog::with_records` already reads the
-  ledger, is where to start.
+  ledger, is where to start. `status`, and so the TUI's rows, reads more:
+  each installation's standing (`install::standings`) hashes every copy its
+  record names again, and compares one of them with the offer it came from,
+  reading both, so that an outdated install can be told from a current one,
+  which only #48 says. Telling an edit alone would need no offer but for a
+  record with no hash; the price was taken so that a report and a refusal
+  are told by one function.
 - **A screen that lists what it cannot change.** The TUI's project rows
   come from the same discovery, so a v3 project's rows list the skills in its
   agents' folders as well. A row is one name, so a change aimed at it reaches
@@ -5698,14 +5866,6 @@ just listed.
   root (`project_root_markers`) or change the budget, none of which
   Mindflayer reads yet. Reading Codex's config, as a doctor check would
   (#96), would make each warning exact for one more case.
-- **A section edited by hand.** A render replaces everything between the
-  markers, so a line somebody wrote in a rule's section is gone at the next
-  one, as Mindflayer's marked blocks have it. Each section's hash is now
-  recorded beside its file's ([installing rules](#installing-rules)), which
-  is what tells an edited section from the one rendered; reading a section
-  back and leaving an edited one be, as Claude's rule files are left
-  ([Claude's rule files](#claudes-rule-files)), is #47's, with the states
-  it adds.
 - **`.claude/rules` above where Claude starts.** Claude reads every
   `AGENTS.md` and `CLAUDE.md` from where it starts up the tree, but whether
   it reads a `.claude/rules` in a folder above, as it reads `.claude/rules`
@@ -5740,15 +5900,16 @@ just listed.
   until it is put back or uninstalled ([installing
   rules](#installing-rules)). Rendering it from its section as the block
   holds it, or from its file for Claude, would let the rest change
-  meanwhile, at the price of a rule no offer stands behind, which #47 calls
-  orphaned.
+  meanwhile, at the price of a rule no offer stands behind, which reads as
+  orphaned (`Standing::Orphaned`).
 - **Every render brings every rule up to date.** A render gives each rule
   as its offer holds it now, so installing one rule updates the sections of
   the others too, where installing a skill touches no other skill. The
   block is one file written whole, and rendering only one rule would mean
-  reading the others back from it. Whether a render should leave an
-  outdated rule as it was until it is updated by name is for #47 and #48
-  to choose, with the states they add.
+  reading the others back from it, as a render now reads back a section
+  somebody edited, and keeps it. Whether it should leave an outdated rule as
+  it was too, until it is updated by name, is for #48 to choose, with the
+  update it adds.
 - **Rules after a change of agents or share mode.** `reapply` carries a
   project's skills along when its agents, targets or share mode change, but
   not its rules: those are rendered again by the next install or uninstall

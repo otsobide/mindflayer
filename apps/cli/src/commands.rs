@@ -173,7 +173,7 @@ pub(crate) fn run_with(cli: &Cli, lookup: &Lookup, watch: &Watch) -> Result<Outc
             let project = project_here(&directory)?;
             unload_command(&directory, project.root(), workspaces, lookup)
         }
-        Command::Install { name, from } => {
+        Command::Install { name, from, force } => {
             let project = project_here(&directory)?;
             let workspace = managing(&project, lookup)?;
             install_named(
@@ -183,12 +183,13 @@ pub(crate) fn run_with(cli: &Cli, lookup: &Lookup, watch: &Watch) -> Result<Outc
                 from.as_deref(),
                 &directory,
                 &lookup.agents,
+                *force,
             )
         }
-        Command::Uninstall { name } => {
+        Command::Uninstall { name, force } => {
             let project = project_here(&directory)?;
             let workspace = managing(&project, lookup)?;
-            uninstall_named(&workspace, &project, name, &lookup.agents)
+            uninstall_named(&workspace, &project, name, &lookup.agents, *force)
         }
         Command::Agents { change, named } => {
             let (change, yes) = agents_change(change.as_ref(), named);
@@ -381,6 +382,7 @@ fn run_flayer(
             project,
             name,
             from,
+            force,
         } => match (name, project) {
             // The screen reads until something on it is applied, so it is
             // opened the way a read is: on the default workspace before it
@@ -397,6 +399,7 @@ fn run_flayer(
                     from.as_deref(),
                     directory,
                     &lookup.agents,
+                    *force,
                 )
             }
             // Half of one: a skill with no project to put it in, or a
@@ -404,9 +407,19 @@ fn run_flayer(
             (Some(_), None) => Err(CliError::InstallWhere.into()),
             (None, Some(_)) => Err(CliError::InstallWhat.into()),
         },
-        FlayerCommand::Uninstall { project, name } => {
+        FlayerCommand::Uninstall {
+            project,
+            name,
+            force,
+        } => {
             let workspace = workspace_here(directory, lookup)?;
-            uninstall_named(&workspace, &workspace.pick(project)?, name, &lookup.agents)
+            uninstall_named(
+                &workspace,
+                &workspace.pick(project)?,
+                name,
+                &lookup.agents,
+                *force,
+            )
         }
 
         // Resolved as a read, on the default workspace before it is made

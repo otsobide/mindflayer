@@ -26,7 +26,7 @@ use crate::agent::Agent;
 use crate::agents_md;
 use crate::artifact::{Artifact, Provenance};
 use crate::catalog::{Catalog, DiscoveryFailure};
-use crate::install;
+use crate::install::{self, Standing};
 use crate::kind::Kind;
 use crate::ledger::{InstallRecord, Target};
 use crate::paths;
@@ -144,8 +144,8 @@ pub struct ArtifactStatus {
 /// How an artifact stands in a project, as far as its copies and the ledger
 /// say.
 ///
-/// The outdated and edited states are #47's and #48's, once installs are
-/// compared with what they came from.
+/// Whether an install is outdated or orphaned, once it is compared with
+/// what the place it came from offers now, is #48's to say.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum State {
     /// Every copy is one the ledger records, and every copy it records is
@@ -156,6 +156,14 @@ pub enum State {
     /// The next install of it puts every copy back. Said over the project's
     /// own copy of the name too, which sits where the install wrote nothing.
     Partial,
+    /// A copy the ledger records holds something other than what was
+    /// installed there, by its hash (D-04): edited by hand or with `mind
+    /// edit`, or a skill renamed, its `name` line rewritten; a rule renamed
+    /// is moved as it is, and holds what it held. Still Mindflayer's
+    /// install, and left alone by every install and uninstall unless forced.
+    /// Said over a copy gone beside it, which the next install would not put
+    /// back without forcing.
+    Edited,
     /// In an agent's folder outside any the project authors in, and recorded
     /// by nothing: somebody's, put there some other way, and never
     /// Mindflayer's to change.
@@ -167,9 +175,10 @@ pub enum State {
 
 impl State {
     /// Every state, in report order.
-    pub const ALL: [State; 4] = [
+    pub const ALL: [State; 5] = [
         State::Installed,
         State::Partial,
+        State::Edited,
         State::Foreign,
         State::Authored,
     ];
@@ -179,6 +188,7 @@ impl State {
         match self {
             State::Installed => "installed",
             State::Partial => "partial",
+            State::Edited => "edited",
             State::Foreign => "foreign",
             State::Authored => "authored",
         }
@@ -325,6 +335,9 @@ impl ProjectStatus {
         let mut catalog = Catalog::discover_kinds(std::slice::from_ref(project), kinds);
         let mut entry = None;
         let mut installed: Vec<InstallRecord> = Vec::new();
+        // Each installation edited since, by kind and name, as core tells
+        // them by the hash of what was written (D-04).
+        let mut edited: Vec<(Kind, String)> = Vec::new();
         // Records are a workspace's own, so a project it does not link has
         // none there, as `with_records` reads it, and its ledger is not
         // opened for it.
@@ -345,7 +358,30 @@ impl ProjectStatus {
             catalog = match read {
                 Ok((ledger, read)) => {
                     installed = read.into_iter().flatten().collect();
-                    catalog.with_records(workspace, &ledger)
+                    // A standing reads the ledger again, for what the shelf
+                    // offers, and one that fails it fails the report as a
+                    // ledger that cannot be read does, said once: never an
+                    // edited install quietly said to be installed.
+                    let mut unread = None;
+                    for &kind in kinds {
+                        match install::standings(workspace, &ledger, project, kind) {
+                            Ok(standings) => edited.extend(
+                                standings
+                                    .into_iter()
+                                    .filter(|(_, standing)| *standing == Standing::Edited)
+                                    .map(|(name, _)| (kind, name)),
+                            ),
+                            Err(error) => {
+                                unread = Some(error);
+                                break;
+                            }
+                        }
+                    }
+                    let catalog = catalog.with_records(workspace, &ledger);
+                    match unread {
+                        Some(error) => catalog.failing(DiscoveryFailure::Ledger(error)),
+                        None => catalog,
+                    }
                 }
                 Err(error) => catalog.failing(DiscoveryFailure::Ledger(error)),
             };
@@ -363,8 +399,8 @@ impl ProjectStatus {
             .into_iter()
             .partition(|record| record.kind == Kind::Rule && project.settings().is_some());
         let received: Vec<String> = rules.iter().map(|record| record.name.clone()).collect();
-        let rendered = rendered(root, &agents, rules);
-        let artifacts = standing(root, catalog.artifacts(), installed, rendered);
+        let rendered = rendered(root, &agents, rules, &edited);
+        let artifacts = standing(root, catalog.artifacts(), installed, rendered, &edited);
         let status = ProjectStatus {
             name: Some(project.name().to_owned()),
             entry,
@@ -409,12 +445,14 @@ impl ProjectStatus {
 /// `rendered` are the rules a project marked by its settings received, as
 /// [`rendered`] reads them, each listed under the same rule: after what
 /// discovery found, and not under a name the project holds something else
-/// by.
+/// by. `edited` are the installations a copy of which holds something other
+/// than was installed, said as edited over installed or partial.
 fn standing(
     root: &Path,
     artifacts: &[Artifact],
     records: Vec<InstallRecord>,
     rendered: Vec<ArtifactStatus>,
+    edited: &[(Kind, String)],
 ) -> Vec<ArtifactStatus> {
     let mut unclaimed = records;
     let mut held: Vec<ArtifactStatus> = Vec::new();
@@ -440,11 +478,17 @@ fn standing(
                 .iter()
                 .any(|target| !routes.contains(&target.path))
         });
+        let changed = record
+            .as_ref()
+            .is_some_and(|record| edited.contains(&(record.kind, record.name.clone())));
         let state = match artifact.provenance() {
             // Somebody's copy in an agent's folder is said first, even beside
             // an install with a copy gone: the next install of the name is
             // refused over it, so partial would promise what it cannot keep.
             Provenance::Foreign => State::Foreign,
+            // And an edit over a copy gone, for the same reason: the next
+            // install is refused over it unless forced.
+            Provenance::Installed | Provenance::Authored if changed => State::Edited,
             // A project's own copy of the name, beside an install of it, does
             // not hide a copy of that install gone. It sits where the install
             // wrote nothing, or it would be the install's, so the next one
@@ -505,8 +549,15 @@ fn standing(
 /// project's own.
 ///
 /// A block that cannot be read holds none of them, and every rule in it
-/// reads as partial: the next render refuses it, saying why.
-fn rendered(root: &Path, agents: &[Agent], records: Vec<InstallRecord>) -> Vec<ArtifactStatus> {
+/// reads as partial: the next render refuses it, saying why. One whose
+/// section or file holds something other than was rendered there is edited,
+/// as `edited` says, over partial.
+fn rendered(
+    root: &Path,
+    agents: &[Agent],
+    records: Vec<InstallRecord>,
+    edited: &[(Kind, String)],
+) -> Vec<ArtifactStatus> {
     if records.is_empty() {
         return Vec::new();
     }
@@ -537,14 +588,17 @@ fn rendered(root: &Path, agents: &[Agent], records: Vec<InstallRecord>) -> Vec<A
                     Agent::Codex | Agent::OpenCode => in_block,
                 })
                 .collect();
+            let state = if edited.contains(&(Kind::Rule, record.name.clone())) {
+                State::Edited
+            } else if missing {
+                State::Partial
+            } else {
+                State::Installed
+            };
             ArtifactStatus {
                 kind: Kind::Rule,
                 name: record.name,
-                state: if missing {
-                    State::Partial
-                } else {
-                    State::Installed
-                },
+                state,
                 agents: reached,
                 origin: record.origin,
             }

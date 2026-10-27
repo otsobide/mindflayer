@@ -455,8 +455,8 @@ fn an_install_looks_again_at_the_copy_once_it_holds_the_workspace() {
     // surveys when it is built.
     let stale =
         install::offered(&workspace, &ledger, &project, Kind::Skill, "deploy", None).unwrap();
-    assert_eq!(stale.standing, Standing::Installed);
-    // Then edited in another terminal, which makes it its author's.
+    assert_eq!(stale.standing, Standing::Current);
+    // Then edited in another terminal, which makes it an edited copy.
     let target = lifecycle::find(&project, &Reference::parse("deploy")).unwrap();
     let edit = lifecycle::start_edit(&target);
     let file = edit.file().to_path_buf();
@@ -464,7 +464,7 @@ fn an_install_looks_again_at_the_copy_once_it_holds_the_workspace() {
     text.push_str("Mine.\n");
     fs::write(&file, text).unwrap();
     let edited = lifecycle::finish_edit(Some(&workspace), &project, edit);
-    assert_eq!(edited.copy.unwrap(), Record::Dropped);
+    assert_eq!(edited.copy.unwrap(), Record::Kept);
 
     let installed = install::install(
         &workspace,
@@ -477,7 +477,7 @@ fn an_install_looks_again_at_the_copy_once_it_holds_the_workspace() {
     .installed;
 
     assert!(
-        matches!(installed, Installed::Foreign { .. }),
+        matches!(installed, Installed::Edited { .. }),
         "{installed:?}"
     );
     assert!(fs::read_to_string(&file).unwrap().ends_with("Mine.\n"));
@@ -674,7 +674,7 @@ fn a_scrub_with_a_clone_to_rewrite_waits_for_the_writer_before_it() {
 }
 
 #[test]
-fn a_change_made_while_the_workspace_is_held_still_drops_its_record() {
+fn a_change_made_while_the_workspace_is_held_still_sees_to_its_record() {
     let (_dir, mut workspace, project) = offering_deploy();
     workspace.link(&project).unwrap();
     let entry = workspace.entry_for(project.root());
@@ -704,10 +704,20 @@ fn a_change_made_while_the_workspace_is_held_still_drops_its_record() {
     fs::write(edit.file(), text).unwrap();
     let edited = lifecycle::finish_edit(Some(&workspace), &project, edit);
 
-    // The edit is made whatever the lock says, so a record drop that waited
-    // for it and gave up would leave the edited copy looking like
-    // Mindflayer's to overwrite.
+    // An edit only reads the record, which it keeps.
     assert!(edited.changed);
-    assert_eq!(edited.copy.unwrap(), Record::Dropped);
+    assert_eq!(edited.copy.unwrap(), Record::Kept);
+    assert_eq!(
+        ledger.installations(entry, Kind::Skill).unwrap(),
+        ["deploy"]
+    );
+
+    let target = lifecycle::find(&project, &Reference::parse("deploy")).unwrap();
+    let removed = lifecycle::remove(Some(&workspace), &project, &target).unwrap();
+
+    // The removal is made whatever the lock says, so a record drop that
+    // waited for it and gave up would leave a record of a copy gone, which
+    // whatever is written there next would inherit.
+    assert_eq!(removed.copy.unwrap(), Record::Dropped);
     assert!(ledger.installations(entry, Kind::Skill).unwrap().is_empty());
 }

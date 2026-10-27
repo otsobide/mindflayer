@@ -34,8 +34,9 @@ use std::path::{Path, PathBuf};
 use thiserror::Error;
 
 use super::{
-    copy_at, kept_by_a_load, local, project_entry, route, same_place, targets, unrecorded,
-    user_scope, Candidate, InstallError, Installation, Installed, Offer, Removed, Standing,
+    copy_at, kept_by_a_load, local, project_entry, route, same_place, standing, targets,
+    unrecorded, user_scope, Candidate, Edits, InstallError, Installation, Installed, Offer,
+    Removed, Standing,
 };
 use crate::agent::{Agent, AgentHomes};
 use crate::agents_md::{self, AgentsMd, AgentsMdError, Section, Written as BlockWritten};
@@ -106,6 +107,7 @@ impl Rendered {
             Warning::Withheld { .. }
             | Warning::Left { .. }
             | Warning::Edited { .. }
+            | Warning::Kept { .. }
             | Warning::Unremoved { .. } => true,
         });
         let block = self.block.iter().flat_map(|block| &block.warnings);
@@ -171,6 +173,12 @@ pub enum Warning {
     /// longer recorded, as a copy changed before a change of agents is.
     #[error("{path}: changed since rule `{route}` was copied there, before the project had settings, so it is left as it is, the project's own")]
     Edited { route: String, path: PathBuf },
+    /// The rule's section in `file` holds something other than what was
+    /// rendered there: somebody's edit, kept as the block holds it, and its
+    /// record with it, so it reads as edited until it is undone, or the rule
+    /// is installed again with `--force` (D-04).
+    #[error("{file}: the section of rule `{route}` was changed since it was rendered, so it is left as it is")]
+    Kept { route: String, file: PathBuf },
     /// Such a copy, still what was copied, that could not be taken out: it
     /// stays recorded, for the next render to take out.
     #[error("{path}: rule `{route}` was copied there before the project had settings, and could not be taken out: {error}")]
@@ -225,19 +233,21 @@ pub(crate) fn survey(
 ) -> Result<Vec<Candidate>, InstallError> {
     let held = Held::read(workspace, ledger, project)?;
     Ok(offers
-        .into_iter()
+        .iter()
         .map(|offer| Candidate {
-            standing: held.standing(project.root(), offer.name()).0,
-            offer,
+            standing: held.standing(workspace, project, offer.name(), &offers).0,
+            offer: offer.clone(),
         })
         .collect())
 }
 
 /// What a project marked by its settings holds of rules: what the ledger
-/// records, and what the block of its `AGENTS.md` holds.
+/// records, and the block of its `AGENTS.md`.
 struct Held {
-    recorded: Vec<String>,
-    block: Vec<String>,
+    recorded: Vec<InstallRecord>,
+    /// The file as it reads now: none when it is not there, or cannot be
+    /// read as one, which a render then refuses, saying why.
+    file: Option<AgentsMd>,
 }
 
 impl Held {
@@ -247,32 +257,57 @@ impl Held {
         project: &MindProject,
     ) -> Result<Held, InstallError> {
         Ok(Held {
-            recorded: ledger.installations(&project_entry(workspace, project), Kind::Rule)?,
-            block: block_routes(project.root()),
+            recorded: ledger.records(&project_entry(workspace, project), Kind::Rule)?,
+            file: block_file(project.root()),
         })
     }
 
-    /// How the rule at `route` stands in the project at `root`, and where
-    /// somebody's is when it is somebody's.
+    /// How the rule at `route` stands in `project`, given every rule offered
+    /// (`offers`), and where somebody's is when it is somebody's.
     ///
-    /// Installed while the ledger records it, whatever is left of it, as a
-    /// skill is: the next render puts back what has gone. Otherwise somebody's
-    /// when the block holds a section for it, which this workspace did not
-    /// write (another workspace linking the project, or a hand that copied a
-    /// marker), or a file is at its place in Claude's folder of Mindflayer's
-    /// rules: written over by nothing, as a copy nothing records is not.
-    fn standing(&self, root: &Path, route: &str) -> (Standing, Option<PathBuf>) {
-        if self.recorded.iter().any(|recorded| recorded == route) {
-            return (Standing::Installed, None);
+    /// While the ledger records it, as its section and its file for Claude
+    /// are found against the hash recorded of each, and as the place it came
+    /// from offers it now ([`Standing`]): the next render puts back what has
+    /// gone, as for a skill. Otherwise somebody's when the block holds a
+    /// section for it, which this workspace did not write (another workspace
+    /// linking the project, or a hand that copied a marker), or a file is at
+    /// its place in Claude's folder of Mindflayer's rules: written over by
+    /// nothing, as a copy nothing records is not.
+    fn standing(
+        &self,
+        workspace: &FlayerWorkspace,
+        project: &MindProject,
+        route: &str,
+        offers: &[Offer],
+    ) -> (Standing, Option<PathBuf>) {
+        if let Some(record) = self.recorded.iter().find(|record| record.name == route) {
+            let offered = super::offered_for(record, offers);
+            let standing =
+                standing::of_rule(workspace, project, record, self.file.as_ref(), &offered);
+            return (standing, None);
         }
-        if self.block.iter().any(|held| held == route) {
-            return (Standing::Foreign, Some(root.join(AGENTS_MD)));
+        match self.foreign(project.root(), route) {
+            Some(path) => (Standing::Foreign, Some(path)),
+            None => (Standing::Absent, None),
+        }
+    }
+
+    /// Where somebody's rule at `route` is in the project at `root`, when
+    /// the ledger records none there and something is: [`Held::standing`]'s
+    /// foreign, without looking at what a recorded one holds.
+    fn foreign(&self, root: &Path, route: &str) -> Option<PathBuf> {
+        if self.recorded.iter().any(|record| record.name == route) {
+            return None;
+        }
+        if self
+            .file
+            .as_ref()
+            .is_some_and(|file| file.routes().contains(&route))
+        {
+            return Some(root.join(AGENTS_MD));
         }
         let file = root.join(claude_rules::file_for(route));
-        if fs::symlink_metadata(&file).is_ok() {
-            return (Standing::Foreign, Some(file));
-        }
-        (Standing::Absent, None)
+        fs::symlink_metadata(&file).is_ok().then_some(file)
     }
 }
 
@@ -280,12 +315,17 @@ impl Held {
 /// no block, or cannot be read as one, which a render then refuses, saying
 /// why.
 pub(crate) fn block_routes(root: &Path) -> Vec<String> {
-    let Ok(bytes) = fs::read(root.join(agents_md::FILE)) else {
-        return Vec::new();
-    };
-    AgentsMd::parse(&bytes)
+    block_file(root)
         .map(|text| text.routes().into_iter().map(str::to_owned).collect())
         .unwrap_or_default()
+}
+
+/// The `AGENTS.md` at `root` as it reads now: none when it is not there, or
+/// cannot be read as a file holding Mindflayer's block, which a render then
+/// refuses, saying why.
+pub(crate) fn block_file(root: &Path) -> Option<AgentsMd> {
+    let bytes = fs::read(root.join(agents_md::FILE)).ok()?;
+    AgentsMd::parse(&bytes).ok()
 }
 
 /// The route the ledger names the rule at `route`'s file for Claude by.
@@ -303,9 +343,10 @@ pub(crate) fn install(
     project: &MindProject,
     candidate: &Candidate,
     homes: &AgentHomes,
+    edits: Edits,
 ) -> Result<Installation, InstallError> {
     if project.settings().is_none() {
-        return copy_in(workspace, ledger, project, candidate, homes);
+        return copy_in(workspace, ledger, project, candidate, homes, edits);
     }
     receives(project)?;
     let root = project.root();
@@ -313,17 +354,21 @@ pub(crate) fn install(
     // Looked at before the lock, so a refusal waits for nobody, and again
     // under it, as an install of a skill looks.
     if candidate.standing == Standing::Foreign {
-        if let (Standing::Foreign, Some(path)) =
-            Held::read(workspace, ledger, project)?.standing(root, &name)
-        {
+        if let Some(path) = Held::read(workspace, ledger, project)?.foreign(root, &name) {
             return Ok(Installed::Foreign { name, path }.into());
         }
     }
     let _lock = workspace.lock().map_err(WorkspaceError::from)?;
-    if let (Standing::Foreign, Some(path)) =
-        Held::read(workspace, ledger, project)?.standing(root, &name)
-    {
+    if let Some(path) = Held::read(workspace, ledger, project)?.foreign(root, &name) {
         return Ok(Installed::Foreign { name, path }.into());
+    }
+    // A section or a file of it somebody changed since it was rendered is
+    // theirs, as a skill's copy is, unless the install is forced.
+    if edits == Edits::Kept {
+        let paths = super::edited(workspace, ledger, project, Kind::Rule, &name)?;
+        if !paths.is_empty() {
+            return Ok(Installed::Edited { name, paths }.into());
+        }
     }
     let entry = project_entry(workspace, project);
     let before = ledger.installation(&entry, Kind::Rule, &name)?;
@@ -333,6 +378,7 @@ pub(crate) fn install(
         project,
         homes,
         Change::Install(candidate),
+        edits,
     )?;
     let after = ledger.installation(&entry, Kind::Rule, &name)?;
     let detail = format!("{name} into {}", project.name());
@@ -384,24 +430,41 @@ pub(crate) fn uninstall(
     project: &MindProject,
     name: &str,
     homes: &AgentHomes,
+    edits: Edits,
 ) -> Result<Removed, InstallError> {
     let root = project.root();
     let _lock = workspace.lock().map_err(WorkspaceError::from)?;
     let entry = project_entry(workspace, project);
     let Some(record) = ledger.installation(&entry, Kind::Rule, name)? else {
         return Ok(
-            match Held::read(workspace, ledger, project)?.standing(root, name) {
-                (Standing::Foreign, Some(path)) => Removed::Foreign {
+            match Held::read(workspace, ledger, project)?.foreign(root, name) {
+                Some(path) => Removed::Foreign {
                     name: name.to_owned(),
                     path,
                 },
-                _ => Removed::Absent {
+                None => Removed::Absent {
                     name: name.to_owned(),
                 },
             },
         );
     };
-    let rendered = render_held(workspace, ledger, project, homes, Change::Uninstall(name))?;
+    if edits == Edits::Kept {
+        let paths = super::edited(workspace, ledger, project, Kind::Rule, name)?;
+        if !paths.is_empty() {
+            return Ok(Removed::Edited {
+                name: name.to_owned(),
+                paths,
+            });
+        }
+    }
+    let rendered = render_held(
+        workspace,
+        ledger,
+        project,
+        homes,
+        Change::Uninstall(name),
+        edits,
+    )?;
     let detail = format!("{name} from {}", project.name());
     ledger.log(Action::Uninstall, Some(&entry), Outcome::Ok, Some(&detail))?;
     Ok(Removed::Removed {
@@ -435,7 +498,15 @@ pub fn render(
         return Ok(None);
     }
     let _lock = workspace.lock().map_err(WorkspaceError::from)?;
-    render_held(workspace, ledger, project, homes, Change::Again).map(Some)
+    render_held(
+        workspace,
+        ledger,
+        project,
+        homes,
+        Change::Again,
+        Edits::Kept,
+    )
+    .map(Some)
 }
 
 /// What a render is for.
@@ -608,12 +679,21 @@ fn withholding(project: &MindProject) -> Option<Withheld> {
 /// After the block is written, a failure of the import or of Claude's rule
 /// files records what was written, and is then raised: the block is in
 /// place, and what Claude reads is as it was until the next render.
+///
+/// A section of another rule somebody changed since it was rendered is kept
+/// as the block holds it, with the hash recorded of what was rendered, so it
+/// reads as edited still (D-04), and said ([`Warning::Kept`]); so is a file
+/// for Claude, by [`claude_rules::render`]. The rule `change` installs or
+/// takes out was refused before this if it was edited, unless `edits`
+/// forces it, and then its file for Claude is written over or taken away as
+/// its section is.
 fn render_held(
     workspace: &FlayerWorkspace,
     ledger: &Ledger,
     project: &MindProject,
     homes: &AgentHomes,
     change: Change<'_>,
+    edits: Edits,
 ) -> Result<Rendered, InstallError> {
     let root = project.root();
     let agents = project
@@ -686,6 +766,8 @@ fn render_held(
     }
     // Each kept rule's section, as the block holds it.
     let mut held = Vec::new();
+    // The rules among them kept for an edit somebody made in their section.
+    let mut edited: Vec<String> = Vec::new();
     if withheld.is_none() {
         agents_md::linked_inside(root, &file)?;
         if let Some(bytes) = read(&file)? {
@@ -727,6 +809,38 @@ fn render_held(
                     record.name.clone(),
                     recorded.unwrap_or_else(|| section.hash()),
                 );
+                held.push(section);
+            }
+            // A rule rendered from its offer keeps its section as the block
+            // holds it while somebody's edit is in it: by the hash recorded,
+            // so one never recorded with one is rendered as it was before
+            // hashes were kept. One gone is put back.
+            for rule in &wanted {
+                let name = rule.name();
+                let recorded = rule.before.as_ref().and_then(|record| {
+                    record
+                        .targets
+                        .iter()
+                        .find(|target| target.path == AGENTS_MD)?
+                        .content_hash
+                        .clone()
+                });
+                let Some(recorded) = recorded else {
+                    continue;
+                };
+                if change.changes(name) || !text.routes().contains(&name) {
+                    continue;
+                }
+                // One that cannot be read back would go with the render.
+                let section = text.section(name).ok_or_else(|| InstallError::Unread {
+                    file: file.clone(),
+                    route: name.to_owned(),
+                })?;
+                if section.hash() == recorded {
+                    continue;
+                }
+                sections.insert(name.to_owned(), recorded);
+                edited.push(name.to_owned());
                 held.push(section);
             }
         }
@@ -813,7 +927,10 @@ fn render_held(
         None => None,
     };
     let written = if withheld.is_none() {
-        let artifacts = wanted.iter().map(|rule| &rule.artifact);
+        let artifacts = wanted
+            .iter()
+            .filter(|rule| !edited.iter().any(|name| name == rule.name()))
+            .map(|rule| &rule.artifact);
         match agents_md::render_keeping(workspace, project, artifacts, held, created, homes) {
             Ok(written) => Some(written),
             Err(error) => {
@@ -848,16 +965,23 @@ fn render_held(
         } else {
             Vec::new()
         };
-        // Not a kept rule's, which no render here writes or takes away.
+        // Not a kept rule's, which no render here writes or takes away. The
+        // rule a forced change is about counts as holding what its file
+        // holds now, so an edit there is written over or taken away as the
+        // file Mindflayer wrote would be; only a file, never a link or a
+        // folder somebody put in its place.
         let recorded: Vec<Recorded> = pending
             .iter()
             .filter(|record| !unoffered.iter().any(|kept| kept.name == record.name))
             .filter_map(|record| {
                 let file = claude_file(&record.name);
                 let target = record.targets.iter().find(|target| target.path == file)?;
+                let forced = (edits == Edits::Forced && change.changes(&record.name))
+                    .then(|| held_file(&root.join(&file)))
+                    .flatten();
                 Some(Recorded {
                     route: record.name.clone(),
-                    hash: target.content_hash.clone()?,
+                    hash: forced.or_else(|| target.content_hash.clone())?,
                 })
             })
             .collect();
@@ -877,6 +1001,16 @@ fn render_held(
                 .collect(),
         ),
         _ => None,
+    };
+    // The rules whose file for Claude was left as somebody edited it.
+    let left_files: Vec<&str> = match &files {
+        Some(Ok(files)) => files
+            .files
+            .iter()
+            .filter(|file| file.written == claude_rules::Written::Edited)
+            .map(|file| file.route.as_str())
+            .collect(),
+        _ => Vec::new(),
     };
     let mut records: Vec<InstallRecord> = wanted
         .iter()
@@ -910,12 +1044,21 @@ fn render_held(
                     content_hash: Some(hash),
                 });
             }
+            // What the rule was rendered from, which an edit left in place
+            // was not rendered from this time: that copy holds what an
+            // earlier render wrote, and once the edit is undone it has to read
+            // as behind the offer, not as current with it.
+            let left = edited.iter().any(|route| route == name) || left_files.contains(&name);
+            let content_hash = match (&rule.before, left) {
+                (Some(before), true) => before.content_hash.clone(),
+                _ => Some(hash::bytes(&rule.bytes)),
+            };
             InstallRecord {
                 kind: Kind::Rule,
                 name: name.to_owned(),
                 source_id: None,
                 origin: Some(rule.origin.clone()),
-                content_hash: Some(hash::bytes(&rule.bytes)),
+                content_hash,
                 targets,
             }
         })
@@ -1102,6 +1245,12 @@ fn render_held(
         }
     }
     warnings.extend(stayed);
+    if written.is_some() {
+        warnings.extend(edited.into_iter().map(|route| Warning::Kept {
+            route,
+            file: file.clone(),
+        }));
+    }
 
     Ok(Rendered {
         block: written,
@@ -1152,6 +1301,16 @@ impl Copied {
     }
 }
 
+/// The hash of what the plain file at `path` holds, `None` for anything
+/// else: nothing there, a link or a folder, or a file that cannot be read.
+fn held_file(path: &Path) -> Option<String> {
+    let metadata = fs::symlink_metadata(path).ok()?;
+    if !metadata.is_file() {
+        return None;
+    }
+    fs::read(path).ok().map(|bytes| hash::bytes(&bytes))
+}
+
 /// The file's bytes, `None` when nothing is there to read.
 fn read(file: &Path) -> Result<Option<Vec<u8>>, InstallError> {
     match fs::read(file) {
@@ -1178,6 +1337,7 @@ fn copy_in(
     project: &MindProject,
     candidate: &Candidate,
     homes: &AgentHomes,
+    edits: Edits,
 ) -> Result<Installation, InstallError> {
     let kind = Kind::Rule;
     let name = candidate.name().to_owned();
@@ -1235,6 +1395,12 @@ fn copy_in(
     let recorded = ledger.copies(&entry, kind)?;
     if let Some(path) = unrecorded(project.root(), kind, &copies, &recorded) {
         return Ok(Installed::Foreign { name, path }.into());
+    }
+    if edits == Edits::Kept {
+        let paths = super::edited(workspace, ledger, project, kind, &name)?;
+        if !paths.is_empty() {
+            return Ok(Installed::Edited { name, paths }.into());
+        }
     }
 
     let rule = Wanted::of(workspace, &candidate.offer, None)?;
