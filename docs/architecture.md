@@ -977,7 +977,11 @@ is.
   taken out; one changed since is left, and its record dropped, its
   author's. A project whose `mind.toml` kept its skills in `.claude/skills`
   keeps its copy there and gains one in `.agents/skills`. Somebody's where a
-  copy would go is left, and said.
+  copy would go is left, and said. A rule's copy is not moved: a rule
+  reaches a project marked by its settings through the block of its
+  `AGENTS.md` and Claude's files, which a render writes, so the copy and its
+  record are left as they are for the next render of the project's rules,
+  which takes the copy out ([installing rules](#installing-rules)).
 - **A record from before hashes is held to its offer.** Most of such a
   project's records were written before schema 3, with no hash, and
   [D-04](#d-04-an-edited-copy-is-detected-not-disowned) reads one as current
@@ -3906,6 +3910,13 @@ line and the screens install rules (#46).
   An unrecorded file there is somebody's, and refuses the install, as for a
   skill; an uninstall removes the file its record names, and the folders
   its route was filed in that this leaves empty, as removing a rule does.
+  Moved to its settings, the project keeps that copy and its record until
+  the next render of its rules, an uninstall's included, which takes the
+  copy out of the folder the project authors in while it holds what was
+  copied, as a change of agents takes out an untouched copy, and leaves one
+  changed since where it is, its author's, its record gone and said
+  (`Warning::Edited`). One that cannot be taken out stays recorded for the
+  render after (`Warning::Unremoved`).
 - **Held by the workspace's lock**, from before the records are read until
   the last is written, as an install of a skill holds it; none of the three
   renderers takes it.

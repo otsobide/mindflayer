@@ -599,7 +599,12 @@ pub(super) fn plan_with(
                     .filter(|path| !recorded.contains(&install::route(root, path))),
             );
         }
-        // Only kinds whose artifacts are a folder each are installed.
+        // Only kinds whose artifacts are a folder each are copied where the
+        // agents read. A rule reaches a project marked by its settings
+        // through the block of its `AGENTS.md` and Claude's files, which a
+        // render writes, not a move; so its copy and record are left as they
+        // are, for the next render of its rules to take the copy out of the
+        // folder the project authors in (`install::rules`).
         let Some((workspace, ledger)) = records else {
             continue;
         };

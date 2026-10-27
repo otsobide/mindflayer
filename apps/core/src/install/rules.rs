@@ -107,6 +107,20 @@ pub enum Warning {
     /// reads such a rule, or one whose block was withheld there.
     #[error("rule `{route}` reaches none of the agents the project names")]
     Unreached { route: String },
+    /// The rule's copy from before the project had settings, in the folder
+    /// it authors in ([`copy_in`]), holds something other than what was
+    /// copied there: left as it is, the project's own from now on, and no
+    /// longer recorded, as a copy changed before a change of agents is.
+    #[error("{path}: changed since rule `{route}` was copied there, before the project had settings, so it is left as it is, the project's own")]
+    Edited { route: String, path: PathBuf },
+    /// Such a copy, still what was copied, that could not be taken out: it
+    /// stays recorded, for the next render to take out.
+    #[error("{path}: rule `{route}` was copied there before the project had settings, and could not be taken out: {error}")]
+    Unremoved {
+        route: String,
+        path: PathBuf,
+        error: String,
+    },
 }
 
 /// Why no block was written into a project's `AGENTS.md`.
@@ -677,6 +691,33 @@ fn render_held(
         claude_md::reach(project, homes, block)?;
     }
 
+    // Copies from before the project had settings: a rule copied into the
+    // folder its `mind.toml` named ([`copy_in`]), whose record a move to
+    // settings carries as it was, for this render to take out
+    // (`migrate::project`). Not a kept rule's, which stays as it is.
+    let going = match change {
+        Change::Uninstall(going) => before.iter().find(|record| record.name == going),
+        _ => None,
+    };
+    let mut copied = Vec::new();
+    for record in wanted
+        .iter()
+        .filter_map(|rule| rule.before.as_ref())
+        .chain(going)
+    {
+        let file = claude_file(&record.name);
+        for target in &record.targets {
+            if target.path == AGENTS_MD || target.path == file {
+                continue;
+            }
+            copied.push(Copied {
+                path: super::recorded_copy(project, Kind::Rule, &record.name, &target.path)?,
+                name: record.name.clone(),
+                target: target.clone(),
+            });
+        }
+    }
+
     let created = ledger.created(&entry, AGENTS_MD)?;
     let there = fs::symlink_metadata(&file).is_ok();
     let making = block && !there;
@@ -865,6 +906,40 @@ fn render_held(
             ..(*record).clone()
         });
     }
+    // Each copy from before the project had settings goes now that the rule
+    // reaches the project's agents as any rule does, while it holds what was
+    // copied: out of the folder the project authors in, as a change of agents
+    // takes an untouched copy out of a folder no agent is sent copies to.
+    // One changed since is left, its author's, and its record goes; one that
+    // could not be taken out stays recorded, for the next render.
+    let mut stayed = Vec::new();
+    for copied in &copied {
+        let error = match copied.take_out() {
+            Ok(()) => continue,
+            Err(Stays::Edited) => {
+                stayed.push(Warning::Edited {
+                    route: copied.name.clone(),
+                    path: copied.path.clone(),
+                });
+                continue;
+            }
+            Err(Stays::Failed(error)) => error,
+        };
+        stayed.push(Warning::Unremoved {
+            route: copied.name.clone(),
+            path: copied.path.clone(),
+            error: error.to_string(),
+        });
+        match records.iter_mut().find(|record| record.name == copied.name) {
+            Some(record) => record.targets.push(copied.target.clone()),
+            None => records.extend(before.iter().find(|record| record.name == copied.name).map(
+                |record| InstallRecord {
+                    targets: vec![copied.target.clone()],
+                    ..record.clone()
+                },
+            )),
+        }
+    }
     let made = match &written {
         Some(written) => match written.written {
             BlockWritten::Created => true,
@@ -962,6 +1037,7 @@ fn render_held(
             });
         }
     }
+    warnings.extend(stayed);
 
     Ok(Rendered {
         block: written,
@@ -971,6 +1047,45 @@ fn render_held(
         still_excluded,
         warnings,
     })
+}
+
+/// A rule's copy from before its project had settings, at `path`, recorded
+/// as `target` of the installation of `name`.
+struct Copied {
+    name: String,
+    target: Target,
+    path: PathBuf,
+}
+
+/// Why a copy from before a project had settings stays where it is.
+enum Stays {
+    /// It holds something other than what was copied, or is not a file.
+    Edited,
+    /// It could not be looked at or taken out.
+    Failed(io::Error),
+}
+
+impl Copied {
+    /// Take the copy out while it holds what was copied, a file and not a
+    /// link, by the hash recorded of it, and the folders its route was filed
+    /// in that this leaves empty, as an uninstall of the copy does; one gone
+    /// already is nothing to take out.
+    fn take_out(&self) -> Result<(), Stays> {
+        let held = match fs::symlink_metadata(&self.path) {
+            Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(()),
+            Err(error) => return Err(Stays::Failed(error)),
+            Ok(metadata) if !metadata.is_file() => return Err(Stays::Edited),
+            Ok(_) => fs::read(&self.path).map_err(Stays::Failed)?,
+        };
+        if self.target.content_hash.as_deref() != Some(hash::bytes(&held).as_str()) {
+            return Err(Stays::Edited);
+        }
+        fs::remove_file(&self.path).map_err(Stays::Failed)?;
+        if let Some(folder) = self.path.ancestors().nth(self.name.split('/').count()) {
+            crate::lifecycle::prune(folder, self.path.parent());
+        }
+        Ok(())
+    }
 }
 
 /// The file's bytes, `None` when nothing is there to read.

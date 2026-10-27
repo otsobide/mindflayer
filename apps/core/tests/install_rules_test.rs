@@ -17,6 +17,7 @@ use mindflayer_core::install::{
     self, InstallError, Installation, Installed, Removed, Standing, WORKSPACE_ORIGIN,
 };
 use mindflayer_core::ledger::{InstallRecord, Target};
+use mindflayer_core::migrate;
 use mindflayer_core::{
     hash, Agent, AgentHomes, Directories, FlayerWorkspace, Kind, Ledger, MindProject, Share, State,
     Status,
@@ -189,6 +190,99 @@ fn a_file_at_a_rules_place_nothing_recorded_is_somebodys_in_a_project_a_mind_tom
     );
     assert_eq!(fs::read_to_string(&copy).unwrap(), "Our own rule.\n");
     assert!(ledger.records("app", Kind::Rule).unwrap().is_empty());
+}
+
+/// A project a `mind.toml` marks, given two rules as copies, one of them
+/// changed by hand since, then moved to settings naming every agent: the
+/// project as it is then, the untouched copy, and the changed one.
+fn moved_to_settings() -> (
+    TempDir,
+    FlayerWorkspace,
+    MindProject,
+    Ledger,
+    PathBuf,
+    PathBuf,
+) {
+    let (dir, workspace, project, ledger) = older();
+    own_rule(&workspace, "git/no-force-push", NO_FORCE_PUSH);
+    own_rule(&workspace, "review/tone", TONE);
+    put(&workspace, &ledger, &project, "git/no-force-push");
+    put(&workspace, &ledger, &project, "review/tone");
+    let untouched = copy_of(&project, "git/no-force-push");
+    let changed = copy_of(&project, "review/tone");
+    fs::write(&changed, "Ours now.\n").unwrap();
+
+    migrate::project(
+        Some(&workspace),
+        &project,
+        &Agent::ALL,
+        Share::Shared,
+        &AgentHomes::default(),
+    )
+    .unwrap()
+    .unwrap();
+    let project = MindProject::open(project.root()).unwrap();
+    // A move to settings leaves a rule's copy, and its record, to the next
+    // render of the project's rules.
+    assert!(untouched.is_file());
+    assert_eq!(
+        ledger.records("app", Kind::Rule).unwrap()[0].targets[0].path,
+        "rules/git/no-force-push.md"
+    );
+    (dir, workspace, project, ledger, untouched, changed)
+}
+
+#[test]
+fn a_rules_copy_from_before_settings_goes_with_the_next_render_unless_changed() {
+    let (_dir, workspace, project, ledger, untouched, changed) = moved_to_settings();
+
+    let rendered = rules::render(&workspace, &ledger, &project, &AgentHomes::default())
+        .unwrap()
+        .unwrap();
+
+    assert!(!untouched.exists());
+    // The folder its route was filed in, emptied, goes with it.
+    assert!(!untouched.parent().unwrap().exists());
+    assert_eq!(fs::read_to_string(&changed).unwrap(), "Ours now.\n");
+    assert!(
+        rendered.warnings.contains(&Warning::Edited {
+            route: String::from("review/tone"),
+            path: changed.clone(),
+        }),
+        "{:?}",
+        rendered.warnings
+    );
+    let text = fs::read_to_string(project.root().join("AGENTS.md")).unwrap();
+    assert!(text.contains("<!-- mindflayer:rule git/no-force-push -->"));
+    assert!(text.contains("<!-- mindflayer:rule review/tone -->"));
+    // Each record names only what the render wrote, the changed copy no
+    // longer among them: it is the project's own.
+    for record in ledger.records("app", Kind::Rule).unwrap() {
+        assert!(
+            record
+                .targets
+                .iter()
+                .all(|target| !target.path.starts_with("rules/")),
+            "{record:?}"
+        );
+    }
+}
+
+#[test]
+fn a_rules_copy_from_before_settings_goes_with_an_uninstall_before_any_render() {
+    let (_dir, workspace, project, ledger, untouched, _) = moved_to_settings();
+
+    let removed = take(&workspace, &ledger, &project, "git/no-force-push").unwrap();
+
+    assert!(
+        matches!(&removed, Removed::Removed { paths, .. } if *paths == [untouched.clone()]),
+        "{removed:?}"
+    );
+    assert!(!untouched.exists());
+    assert_eq!(
+        ledger.installations("app", Kind::Rule).unwrap(),
+        ["review/tone"]
+    );
 }
 
 #[test]
