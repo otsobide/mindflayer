@@ -24,8 +24,9 @@
 //! every agent would read it as one more instruction.
 //!
 //! Everything outside the block is somebody else's and comes back byte for
-//! byte. A block that is not exactly one well-formed block is refused rather
-//! than repaired, as in git's exclude file ([`crate::exclude`]): guessing
+//! byte, but for the empty line just above the begin marker, which is the
+//! block's (`Block::spacer`). A block that is not exactly one well-formed
+//! block is refused rather than repaired, as in git's exclude file ([`crate::exclude`]): guessing
 //! where a missing marker belongs could swallow somebody's text into the
 //! block, and the next render would replace it.
 //!
@@ -89,6 +90,18 @@ pub struct AgentsMd {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct Block {
+    /// The empty line just above the begin marker, when there is one.
+    ///
+    /// A block added after what a file holds is set apart from it by an empty
+    /// line, so that once Claude strips the markers the file's last paragraph
+    /// and the first rule's are still two, as the blank line between two
+    /// sections keeps two rules two; it is also the layout the probe verified
+    /// on Claude (docs/agents.md). Taken for the block's when read, since
+    /// nothing tells it from one written by hand, so that dropping the block
+    /// gives back the file as it was before the block was added. One somebody
+    /// put there goes with the block too: the price of that round trip,
+    /// which leaving it would break for every file Mindflayer added to.
+    spacer: Option<Line>,
     begin: Line,
     /// Every line between the markers, as read or as rendered.
     lines: Vec<Line>,
@@ -631,13 +644,15 @@ impl AgentsMd {
         };
 
         let mut lines = lines.into_iter();
-        let before: Vec<Line> = lines.by_ref().take(begin).collect();
+        let mut before: Vec<Line> = lines.by_ref().take(begin).collect();
+        let spacer = before.pop_if(|line| line.text.is_empty());
         let begin_line = lines.next().expect("the begin marker was found");
         let inside: Vec<Line> = lines.by_ref().take(end - begin - 1).collect();
         let end_line = lines.next().expect("the end marker was found");
         Ok(AgentsMd {
             before,
             block: Some(Block {
+                spacer,
                 begin: begin_line,
                 lines: inside,
                 routes,
@@ -676,8 +691,9 @@ impl AgentsMd {
     /// whole, a line somebody wrote there included; telling an edited section
     /// from the one rendered is for the ledger's record of what was written
     /// (D-04, #45). A file with no block gains one after what it holds, on
-    /// lines of its own. No section drops the block, giving back the file as
-    /// it was before the block was written.
+    /// lines of its own and an empty line apart from it (`Block::spacer`).
+    /// No section drops the block, that empty line included, giving back the
+    /// file as it was before the block was written.
     pub fn set_block(&mut self, sections: &[Section]) -> Result<bool, AgentsMdError> {
         for (index, section) in sections.iter().enumerate() {
             if sections[..index]
@@ -710,7 +726,9 @@ impl AgentsMd {
         // The new block goes on lines of its own, so a last line without a
         // newline gets one, and the end marker goes without one instead: the
         // file still ends the way it did, and dropping the block takes the
-        // newline back.
+        // newline back. The empty line above it comes after anything at all,
+        // a blank last line included: one left out there would read back as
+        // a spacer, and dropping the block would take the file's own.
         let mut close = ending;
         if let Some(last) = self.before.last_mut() {
             if last.end.is_empty() {
@@ -718,7 +736,9 @@ impl AgentsMd {
                 close = b"";
             }
         }
+        let spacer = (!self.before.is_empty()).then(|| Line::new("", ending));
         self.block = Some(Block {
+            spacer,
             begin: Line::new(BEGIN, ending),
             lines,
             routes,
@@ -753,6 +773,7 @@ impl AgentsMd {
         };
         self.before.iter().for_each(&mut emit);
         if let Some(block) = &self.block {
+            block.spacer.iter().for_each(&mut emit);
             emit(&block.begin);
             block.lines.iter().for_each(&mut emit);
             emit(&block.end);

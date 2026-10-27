@@ -191,7 +191,7 @@ fn a_crlf_file_keeps_crlf_through_a_render_a_second_one_and_a_removal() {
     let rendered = fs::read(fixture.agents_md()).unwrap();
     assert_eq!(
         String::from_utf8(rendered.clone()).unwrap(),
-        format!("{before}{BEGIN}\r\n<!-- mindflayer:rule a -->\r\nOne.\r\nTwo.\r\n{END}\r\n")
+        format!("{before}\r\n{BEGIN}\r\n<!-- mindflayer:rule a -->\r\nOne.\r\nTwo.\r\n{END}\r\n")
     );
 
     assert_eq!(

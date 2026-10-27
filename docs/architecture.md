@@ -3388,6 +3388,7 @@ Nothing calls it yet.
 # Working here
 
 Run `make test` before every push.
+
 <!-- mindflayer:begin -->
 <!-- mindflayer:rule commit-style -->
 Write commit messages as `<area>: <imperative summary>`.
@@ -3428,9 +3429,14 @@ Never force-push a branch somebody else may have pulled.
   lies between the markers is replaced, whole, a line somebody wrote there
   included. A new block goes after what the file holds, on lines of its own,
   with the ending the file already uses, so a CRLF file stays CRLF; a last
-  line without a newline gets one, and the end marker goes without.
-  Dropping the block gives the file back exactly as it was before the block
-  was written, and a render that changes nothing writes nothing.
+  line without a newline gets one, and the end marker goes without. An empty
+  line sets it apart from what is above, so that once Claude strips the
+  markers the file's last paragraph and the first rule's are still two, the
+  layout the probe verified ([docs/agents.md](agents.md)). That line is the
+  block's: an empty line just above the begin marker is taken out with it,
+  one somebody wrote there by hand included, since nothing tells the two
+  apart. So dropping the block gives the file back exactly as it was before
+  the block was written, and a render that changes nothing writes nothing.
 - **Refused, never repaired.** A block left open, an end marker closing
   nothing, a second block, a rule's marker outside the block, one route
   twice, and a line written like a marker but none of them (indented, spaced

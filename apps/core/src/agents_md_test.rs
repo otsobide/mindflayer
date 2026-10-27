@@ -70,7 +70,7 @@ fn the_block_goes_after_what_was_there_and_leaves_it_byte_for_byte() {
     let written = String::from_utf8(rendered.clone()).unwrap();
     assert_eq!(
         written,
-        format!("{TEAM}{BEGIN}\n{RULE}a{CLOSE}\nRule a.\n{END}\n")
+        format!("{TEAM}\n{BEGIN}\n{RULE}a{CLOSE}\nRule a.\n{END}\n")
     );
 
     let mut again = AgentsMd::parse(&rendered).unwrap();
@@ -78,6 +78,30 @@ fn the_block_goes_after_what_was_there_and_leaves_it_byte_for_byte() {
     assert_eq!(again.to_bytes(), rendered);
 
     assert_eq!(render(&rendered, &[]), TEAM.as_bytes());
+}
+
+#[test]
+fn a_file_ending_in_a_blank_line_is_still_set_apart_and_given_back_as_it_was() {
+    let before = "Team.\n\n";
+    let rendered = render(before.as_bytes(), &[section("a", "Rule a.")]);
+    assert_eq!(
+        String::from_utf8(rendered.clone()).unwrap(),
+        format!("Team.\n\n\n{BEGIN}\n{RULE}a{CLOSE}\nRule a.\n{END}\n")
+    );
+    assert_eq!(render(&rendered, &[]), before.as_bytes());
+}
+
+#[test]
+fn an_empty_line_above_the_block_goes_with_it_and_a_line_of_spaces_stays() {
+    let block = format!("{BEGIN}\n{RULE}a{CLOSE}\nRule a.\n{END}\n");
+    let spaced = format!("Team.\n\n{block}");
+    let mut again = AgentsMd::parse(spaced.as_bytes()).unwrap();
+    assert!(!again.set_block(&[section("a", "Rule a.")]).unwrap());
+    assert_eq!(text(&again), spaced);
+    assert_eq!(render(spaced.as_bytes(), &[]), b"Team.\n");
+
+    let kept = format!("Team.\n  \n{block}");
+    assert_eq!(render(kept.as_bytes(), &[]), b"Team.\n  \n");
 }
 
 #[test]
@@ -99,7 +123,7 @@ fn a_file_without_a_final_newline_keeps_ending_without_one() {
     let rendered = render(b"Be brief.", &[section("a", "Rule a.")]);
     assert_eq!(
         String::from_utf8(rendered.clone()).unwrap(),
-        format!("Be brief.\n{BEGIN}\n{RULE}a{CLOSE}\nRule a.\n{END}")
+        format!("Be brief.\n\n{BEGIN}\n{RULE}a{CLOSE}\nRule a.\n{END}")
     );
     let again = render(
         &rendered,
@@ -124,7 +148,7 @@ fn a_crlf_file_gets_crlf_lines_and_keeps_its_own() {
     let rendered = render(before.as_bytes(), &[section("a", "One.\nTwo.\n")]);
     assert_eq!(
         String::from_utf8(rendered.clone()).unwrap(),
-        format!("{before}{BEGIN}\r\n{RULE}a{CLOSE}\r\nOne.\r\nTwo.\r\n{END}\r\n")
+        format!("{before}\r\n{BEGIN}\r\n{RULE}a{CLOSE}\r\nOne.\r\nTwo.\r\n{END}\r\n")
     );
 
     let mut again = AgentsMd::parse(&rendered).unwrap();
@@ -137,7 +161,7 @@ fn a_crlf_body_is_written_with_the_files_endings() {
     let rendered = render(b"Team.\n", &[section("a", "One.\r\nTwo.\r\n")]);
     assert_eq!(
         String::from_utf8(rendered).unwrap(),
-        format!("Team.\n{BEGIN}\n{RULE}a{CLOSE}\nOne.\nTwo.\n{END}\n")
+        format!("Team.\n\n{BEGIN}\n{RULE}a{CLOSE}\nOne.\nTwo.\n{END}\n")
     );
 }
 

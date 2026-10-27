@@ -230,8 +230,9 @@ These are easy to break from a single file without noticing.
     still holds `MIND_IGNORE`. And `<!-- mindflayer:begin -->` and
     `<!-- mindflayer:end -->` in a project's root `AGENTS.md` (`agents_md`),
     a section a rule under `<!-- mindflayer:rule <route> -->`: a render
-    replaces the block whole, adds it after what the file holds or drops it
-    and gives the file back as it was, in the file's own line endings. A
+    replaces the block whole, adds it after what the file holds, an empty
+    line apart, or drops it, that line with it, and gives the file back as
+    it was, in the file's own line endings. A
     marker written any other way, a rule's marker outside the block and one
     route twice are refused like a broken block. A missing `AGENTS.md` is
     made with `create_new`, and only then said to be created; one that is
