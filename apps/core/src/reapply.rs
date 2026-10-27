@@ -397,25 +397,37 @@ pub fn apply(
         .flat_map(|retarget| retarget.added.iter().map(|added| added.path.clone()))
         .chain(plan.excluded.iter().cloned())
         .collect();
+    // The lines this adds, which a refusal before the settings are written
+    // takes back out, and only those: a copy in place exists, so telling
+    // them by what is not there yet would leave its line keeping a shared
+    // project's copy out of git, and a line the group held already, for a
+    // copy about to land, was not this change's to take.
+    let mut fresh: Vec<exclude::Entry> = Vec::new();
     if local && !landing.is_empty() {
-        exclude::add(&root, &key, &install::entries(&project, &landing))?;
-    }
-    // Taken back out of what a failure before the settings leaves empty.
-    let undo = |project: &MindProject| {
-        if local && !landing.is_empty() {
-            let gone: Vec<PathBuf> = landing
+        let entries = install::entries(&project, &landing);
+        if let Some(listing) = exclude::listed(&root, &key)? {
+            fresh = entries
                 .iter()
-                .filter(|path| fs::symlink_metadata(path).is_err())
+                .filter(|entry| {
+                    entry
+                        .pattern(&listing.route)
+                        .is_ok_and(|line| !listing.lines.contains(&line))
+                })
                 .cloned()
                 .collect();
-            let _ = exclude::remove(&root, &key, &install::entries(project, &gone));
+        }
+        exclude::add(&root, &key, &entries)?;
+    }
+    let undo = || {
+        if !fresh.is_empty() {
+            let _ = exclude::remove(&root, &key, &fresh);
         }
     };
     let written_ignore = match &plan.ignore {
         Some(Ignore::Write(_)) => match ignore_itself(&project.mind_dir()) {
             Ok(()) => true,
             Err(error) => {
-                undo(&project);
+                undo();
                 return Err(error.into());
             }
         },
@@ -428,7 +440,7 @@ pub fn apply(
         settings.share = after.share;
         settings.edit_tracked = after.edit_tracked;
     }) {
-        undo(&project);
+        undo();
         if written_ignore {
             let _ = fs::remove_file(project.mind_dir().join(".gitignore"));
         }

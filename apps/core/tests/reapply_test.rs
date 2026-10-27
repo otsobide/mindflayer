@@ -504,6 +504,62 @@ fn turning_local_writes_the_gitignore_and_keeps_every_copy_in_place_out_of_git()
     assert!(settings.edit_tracked);
 }
 
+/// Takes write permission away from a folder, and gives it back when
+/// dropped, so that a failed assertion does not leave a temporary folder
+/// that cannot be cleaned up.
+#[cfg(unix)]
+struct ReadOnly(PathBuf);
+
+#[cfg(unix)]
+impl ReadOnly {
+    /// `None` where taking it away keeps nothing out, as for root.
+    fn new(folder: &Path) -> Option<Self> {
+        use std::os::unix::fs::PermissionsExt;
+        fs::set_permissions(folder, fs::Permissions::from_mode(0o555)).unwrap();
+        let read_only = ReadOnly(folder.to_path_buf());
+        let probe = folder.join(".probe");
+        if fs::write(&probe, "").is_ok() {
+            let _ = fs::remove_file(probe);
+            eprintln!("skipped: {} can be written all the same", folder.display());
+            return None;
+        }
+        Some(read_only)
+    }
+}
+
+#[cfg(unix)]
+impl Drop for ReadOnly {
+    fn drop(&mut self) {
+        use std::os::unix::fs::PermissionsExt;
+        let _ = fs::set_permissions(&self.0, fs::Permissions::from_mode(0o755));
+    }
+}
+
+// Unix only: a folder's write permission is what is taken away, and
+// Windows keeps none on a folder.
+#[cfg(unix)]
+#[test]
+fn turning_local_refused_before_the_settings_leaves_the_exclude_file_as_it_was() {
+    let (_dir, workspace, project) = installed(&Agent::ALL, Share::Shared);
+    let exclude = project.root().join(".git").join("info").join("exclude");
+    let before = fs::read_to_string(&exclude).ok();
+    let settings = fs::read(settings_file(&project)).unwrap();
+    // `.mind` that cannot be written refuses its `.gitignore`, after the
+    // entries of the copies in place are written and before the settings.
+    let Some(_read_only) = ReadOnly::new(&project.mind_dir()) else {
+        return;
+    };
+
+    let change = Change::Share {
+        share: Share::Local,
+        edit_tracked: false,
+    };
+    assert!(reapply::apply(Some(&workspace), &project, &change, &AgentHomes::default()).is_err());
+
+    assert_eq!(fs::read_to_string(&exclude).ok(), before);
+    assert_eq!(fs::read(settings_file(&project)).unwrap(), settings);
+}
+
 #[test]
 fn a_gitignore_somebody_changed_is_left_when_the_project_turns_shared() {
     let (_dir, workspace, project) = installed(&[Agent::Claude], Share::Local);
