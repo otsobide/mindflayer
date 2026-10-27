@@ -297,7 +297,9 @@ pub(crate) fn install(
 
 /// Take the rule `name` back out of `project`, which its settings mark:
 /// every other rule it has rendered again without it, and its record
-/// forgotten.
+/// forgotten. One of them no longer offered where it was installed from is
+/// kept as the project holds it, rather than refusing, so each such rule
+/// can be taken out in turn.
 ///
 /// Only one the ledger records: a section in the block nothing records, or
 /// a file at its place in Claude's folder, is somebody's, and left. Refused
@@ -520,13 +522,16 @@ fn withholding(project: &MindProject) -> Option<Withheld> {
 /// Every rule the ledger records is rendered from the offer it was installed
 /// from, as it is now; one no longer offered there refuses the render, since
 /// leaving its section out would take it from every agent, as the block
-/// refuses a rule it cannot read. What can refuse is asked before anything is
-/// written: a block that cannot be read or holds a section nothing records,
-/// a rule taken out whose section is in a block that cannot be edited, a
-/// file or a folder where no rule is written, a `CLAUDE.md` that cannot be
-/// read. What is recorded before the first write is what a render killed
-/// part way leaves for the next one ([`Wanted::pending`]); a block that
-/// cannot be written puts that record back as it was.
+/// refuses a rule it cannot read. An uninstall of another rule keeps it
+/// instead, as the project holds it: its section as the block holds it, its
+/// file for Claude where it is, its record as it was. What can refuse is
+/// asked before anything is written: a block that cannot be read or holds a
+/// section nothing records, a rule taken out whose section is in a block
+/// that cannot be edited, a file or a folder where no rule is written, a
+/// `CLAUDE.md` that cannot be read. What is recorded before the first write
+/// is what a render killed part way leaves for the next one
+/// ([`Wanted::pending`]); a block that cannot be written puts that record
+/// back as it was.
 ///
 /// After the block is written, a failure of the import or of Claude's rule
 /// files records what was written, and is then raised: the block is in
@@ -549,23 +554,32 @@ fn render_held(
 
     let offers = super::offers(workspace, ledger, Kind::Rule)?;
     let mut wanted = Vec::new();
+    // The rules no longer offered that an uninstall of another keeps.
+    let mut unoffered: Vec<&InstallRecord> = Vec::new();
     for record in &before {
         if change.changes(&record.name) {
             continue;
         }
-        let offer = record
-            .origin
-            .as_deref()
-            .and_then(|origin| {
-                offers
-                    .iter()
-                    .find(|offer| offer.name() == record.name && offer.origin() == origin)
-            })
-            .ok_or_else(|| InstallError::NoLongerOffered {
-                name: record.name.clone(),
-                origin: record.origin.clone(),
-            })?;
-        wanted.push(Wanted::of(workspace, offer, Some(record.clone()))?);
+        let offer = record.origin.as_deref().and_then(|origin| {
+            offers
+                .iter()
+                .find(|offer| offer.name() == record.name && offer.origin() == origin)
+        });
+        match (offer, change) {
+            (Some(offer), _) => wanted.push(Wanted::of(workspace, offer, Some(record.clone()))?),
+            // Taking one rule out is no reason to take another out with it,
+            // and refusing would leave two rules no longer offered each
+            // keeping the other from being taken out, with nothing else that
+            // drops a rule's record: the one kept stays as the project holds
+            // it, for its own uninstall to take out.
+            (None, Change::Uninstall(_)) => unoffered.push(record),
+            (None, _) => {
+                return Err(InstallError::NoLongerOffered {
+                    name: record.name.clone(),
+                    origin: record.origin.clone(),
+                })
+            }
+        }
     }
     if let Change::Install(candidate) = change {
         let record = before
@@ -598,7 +612,8 @@ fn render_held(
             });
         }
     }
-    let block = withheld.is_none() && !sections.is_empty();
+    // Each kept rule's section, as the block holds it.
+    let mut held = Vec::new();
     if withheld.is_none() {
         agents_md::linked_inside(root, &file)?;
         if let Some(bytes) = read(&file)? {
@@ -619,11 +634,35 @@ fn render_held(
                     route: route.to_owned(),
                 });
             }
-        }
-        if block {
-            if let Some(refused) = agents_md::misplaced(workspace, homes, root, &file) {
-                return Err(AgentsMdError::from(refused).into());
+            for record in &unoffered {
+                if !text.routes().contains(&record.name.as_str()) {
+                    continue;
+                }
+                // One that cannot be read back would go with the render, so
+                // it refuses the render, as a rule not kept does.
+                let section =
+                    text.section(&record.name)
+                        .ok_or_else(|| InstallError::NoLongerOffered {
+                            name: record.name.clone(),
+                            origin: record.origin.clone(),
+                        })?;
+                let recorded = record
+                    .targets
+                    .iter()
+                    .find(|target| target.path == AGENTS_MD)
+                    .and_then(|target| target.content_hash.clone());
+                sections.insert(
+                    record.name.clone(),
+                    recorded.unwrap_or_else(|| section.hash()),
+                );
+                held.push(section);
             }
+        }
+    }
+    let block = withheld.is_none() && !sections.is_empty();
+    if block {
+        if let Some(refused) = agents_md::misplaced(workspace, homes, root, &file) {
+            return Err(AgentsMdError::from(refused).into());
         }
     }
     if claude && !wanted.is_empty() {
@@ -645,6 +684,7 @@ fn render_held(
         .iter()
         .map(|rule| rule.pending(root, claude))
         .collect();
+    pending.extend(unoffered.iter().map(|&record| record.clone()));
     if let Change::Uninstall(going) = change {
         // Kept until the render is done, so one killed part way leaves the
         // rule recorded, for the uninstall to be run again.
@@ -675,7 +715,7 @@ fn render_held(
     };
     let written = if withheld.is_none() {
         let artifacts = wanted.iter().map(|rule| &rule.artifact);
-        match agents_md::render(workspace, project, artifacts, created, homes) {
+        match agents_md::render_keeping(workspace, project, artifacts, held, created, homes) {
             Ok(written) => Some(written),
             Err(error) => {
                 if let Some(key) = key.filter(|_| making && excluding) {
@@ -709,8 +749,10 @@ fn render_held(
         } else {
             Vec::new()
         };
+        // Not a kept rule's, which no render here writes or takes away.
         let recorded: Vec<Recorded> = pending
             .iter()
+            .filter(|record| !unoffered.iter().any(|kept| kept.name == record.name))
             .filter_map(|record| {
                 let file = claude_file(&record.name);
                 let target = record.targets.iter().find(|target| target.path == file)?;
@@ -798,6 +840,30 @@ fn render_held(
                 });
             }
         }
+    }
+    // A rule kept as the project holds it keeps its record as it was, but
+    // for a section the block no longer holds.
+    for record in &unoffered {
+        let mut targets: Vec<Target> = record
+            .targets
+            .iter()
+            .filter(|target| target.path != AGENTS_MD)
+            .cloned()
+            .collect();
+        if let (true, Some(hash)) = (
+            rendered_routes.contains(&record.name),
+            sections.get(&record.name),
+        ) {
+            targets.push(Target {
+                agent: None,
+                path: AGENTS_MD.to_owned(),
+                content_hash: Some(hash.clone()),
+            });
+        }
+        records.push(InstallRecord {
+            targets,
+            ..(*record).clone()
+        });
     }
     let made = match &written {
         Some(written) => match written.written {

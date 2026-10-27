@@ -202,6 +202,34 @@ fn bytes_that_are_not_utf8_survive_a_render_and_a_removal() {
 }
 
 #[test]
+fn a_section_reads_back_as_the_one_rendered_and_an_edit_with_it() {
+    let sections = [
+        section("a", "Rule a.\n\nIts second paragraph.\n"),
+        section("c/d", "Rule d.\r\n"),
+    ];
+    let rendered = render(TEAM.as_bytes(), &sections);
+    let file = AgentsMd::parse(&rendered).unwrap();
+
+    assert_eq!(file.section("a"), Some(sections[0].clone()));
+    assert_eq!(file.section("c/d"), Some(sections[1].clone()));
+    assert_eq!(file.section("b"), None);
+    assert_eq!(AgentsMd::parse(TEAM.as_bytes()).unwrap().section("a"), None);
+
+    let edited = String::from_utf8(rendered)
+        .unwrap()
+        .replace("Rule d.", "Rule d, edited by hand.");
+    let file = AgentsMd::parse(edited.as_bytes()).unwrap();
+    assert_eq!(
+        file.section("c/d"),
+        Some(section("c/d", "Rule d, edited by hand."))
+    );
+    let mut unreadable = edited.into_bytes();
+    let at = unreadable.windows(4).position(|w| w == b"hand").unwrap();
+    unreadable[at] = 0xff;
+    assert_eq!(AgentsMd::parse(&unreadable).unwrap().section("c/d"), None);
+}
+
+#[test]
 fn the_block_is_replaced_whole_and_its_routes_read_back() {
     let before = format!(
         "{TEAM}{BEGIN}\n{RULE}a{CLOSE}\nRule a, edited by hand.\nA line of somebody's.\n{END}\n"

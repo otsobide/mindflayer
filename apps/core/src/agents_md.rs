@@ -266,6 +266,23 @@ pub fn render<'a>(
     created: bool,
     homes: &AgentHomes,
 ) -> Result<Rendered, AgentsMdError> {
+    render_keeping(workspace, project, rules, Vec::new(), created, homes)
+}
+
+/// [`render`], with `kept` among the sections, each as it is handed in: the
+/// section the block holds of a rule its caller can no longer read from
+/// where it was installed from, and keeps as the project holds it
+/// ([`AgentsMd::section`]) rather than take it away with a change to some
+/// other rule. In the order of their routes with the rest, which is the
+/// order a listing gives the rules ([`report_order`]).
+pub(crate) fn render_keeping<'a>(
+    workspace: &FlayerWorkspace,
+    project: &MindProject,
+    rules: impl IntoIterator<Item = &'a Artifact>,
+    kept: Vec<Section>,
+    created: bool,
+    homes: &AgentHomes,
+) -> Result<Rendered, AgentsMdError> {
     let file = project.root().join(FILE);
     linked_inside(project.root(), &file)?;
     let mut rules: Vec<&Artifact> = rules.into_iter().collect();
@@ -273,6 +290,10 @@ pub fn render<'a>(
     let mut sections = Vec::new();
     for rule in rules {
         sections.extend(Section::of(rule)?);
+    }
+    if !kept.is_empty() {
+        sections.extend(kept);
+        sections.sort_by(|a, b| a.route.cmp(&b.route));
     }
     // Only a render that leaves a block is held to where it is: one that
     // drops it is how a block put there before a project was linked below,
@@ -713,6 +734,28 @@ impl AgentsMd {
             .flat_map(|block| &block.routes)
             .map(String::as_str)
             .collect()
+    }
+
+    /// The section the block holds for the rule at `route`, as written
+    /// there, an edit included: `None` when the block holds none, or a line
+    /// of it that is not UTF-8, which no section is rendered from.
+    ///
+    /// Its lines run from its marker to the next one, or to the end of the
+    /// block, less the blank lines [`Section::new`] leaves out, the one
+    /// between two sections among them, so a section read back is the one
+    /// that was rendered.
+    pub fn section(&self, route: &str) -> Option<Section> {
+        let block = self.block.as_ref()?;
+        let mut lines = block
+            .lines
+            .iter()
+            .skip_while(|line| marker(&line.text) != Marker::Rule(route));
+        lines.next()?;
+        let body: Vec<&str> = lines
+            .take_while(|line| marker(&line.text) == Marker::Text)
+            .map(|line| std::str::from_utf8(&line.text).ok())
+            .collect::<Option<_>>()?;
+        Section::new(route, &body.join("\n")).ok()
     }
 
     /// Whether the file holds Mindflayer's block.

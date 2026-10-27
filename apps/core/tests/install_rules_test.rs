@@ -975,6 +975,61 @@ fn a_rule_no_longer_offered_refuses_the_render_until_it_is_taken_out() {
 }
 
 #[test]
+fn rules_no_longer_offered_can_each_be_taken_out_and_the_rest_stay_as_they_are() {
+    let fixture = fixture(Share::Shared, &Agent::ALL);
+    fs::write(fixture.agents_md(), TEAM).unwrap();
+    let sources = [
+        fixture.rule("review/tone", TONE),
+        fixture.rule("git/no-force-push", NO_FORCE_PUSH),
+        fixture.rule("rust/errors", SCOPED),
+    ];
+    for route in ["review/tone", "git/no-force-push", "rust/errors"] {
+        fixture.install(route);
+    }
+    for source in sources {
+        fs::remove_file(source).unwrap();
+    }
+    // Edited by hand, which the block kept as the project holds it keeps.
+    let edited = fixture
+        .text()
+        .replace(NO_FORCE_PUSH, "Never force-push, ever.\n");
+    fs::write(fixture.agents_md(), &edited).unwrap();
+    let recorded = fixture.records();
+
+    fixture.uninstall("review/tone");
+
+    assert_eq!(
+        fixture.text(),
+        format!(
+            "{TEAM}\n<!-- mindflayer:begin -->\n\
+             <!-- mindflayer:rule git/no-force-push -->\nNever force-push, ever.\n\
+             <!-- mindflayer:end -->\n"
+        )
+    );
+    assert_eq!(
+        fs::read_to_string(fixture.claude_file("rust/errors")).unwrap(),
+        SCOPED
+    );
+    let others: Vec<InstallRecord> = recorded
+        .iter()
+        .filter(|record| record.name != "review/tone")
+        .cloned()
+        .collect();
+    assert_eq!(fixture.records(), others);
+
+    fixture.uninstall("git/no-force-push");
+
+    assert_eq!(fixture.text(), TEAM);
+    assert!(fixture.claude_file("rust/errors").is_file());
+    assert_eq!(fixture.records(), others[1..]);
+
+    fixture.uninstall("rust/errors");
+
+    assert!(!fixture.claude_file("rust/errors").exists());
+    assert!(fixture.records().is_empty());
+}
+
+#[test]
 fn a_block_that_cannot_be_read_refuses_the_install_with_nothing_recorded() {
     let fixture = fixture(Share::Shared, &Agent::ALL);
     fixture.rule("git/no-force-push", NO_FORCE_PUSH);

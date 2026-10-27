@@ -3873,7 +3873,13 @@ line and the screens install rules (#46).
   rendered, and leaving its section out would take it from every agent,
   which is what the block refuses a rule it cannot read for. So the render
   is refused (`NoLongerOffered`) until it is put back, or uninstalled,
-  which renders the rest without it.
+  which renders the rest without it. An uninstall of another rule goes
+  ahead past it, keeping it as the project holds it: its section as the
+  block holds it (`AgentsMd::section`), an edit included, its file for
+  Claude where it is, and its record as it was. Taking one rule out is no
+  reason to take another, and refusing would leave two rules no longer
+  offered each keeping the other in, with nothing else that drops a rule's
+  record.
 - **Refused before anything is written.** What can refuse is asked first:
   a block that cannot be read or holds somebody's section, a place no rule
   is written (`agents_md::misplaced`), an `AGENTS.md` linked out of the
