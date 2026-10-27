@@ -3,7 +3,7 @@
 Guidance for coding agents working in this repository.
 
 Mindflayer manages the skills and rules coding agents read, the way git manages
-code. A **mind project** (`.mind/settings.json`) holds artifacts beside its
+code. A **mind project** (`.mind/settings.toml`) holds artifacts beside its
 code; a **flayer workspace** (`.mindflayer/flayer.toml`) links mind projects,
 holds artifacts of its own, gathers skills from git onto a shelf and installs
 them into projects. `README.md` is the user-facing surface.
@@ -72,23 +72,22 @@ asked.
 Three crates in one Cargo workspace, and the panel they serve, each an app
 under `apps/` with its own `Makefile`:
 
-- `apps/core` (`mindflayer-core`): the engine. Projects, a project's
-  settings (`settings`, the v3 marker), workspaces, which
-  workspace a command uses (`resolve`), the shell code that activates one
-  (`activate`), kinds, the agents and where each kind goes for them
-  (`agent`), the catalog, gathering (`gix`), the SQLite ledger,
-  installing, keeping installs out of git (`exclude`), a project's rules
-  rendered into the block of its `AGENTS.md` (`agents_md`) and into
-  Claude's rules folder (`claude_rules`), whether Claude reads that block
-  and the `@AGENTS.md` import in a project's `CLAUDE.md` that makes it
-  (`claude_md`), installing a rule through those three, or as a copy into
-  a project a `mind.toml` marks (`install::rules`), changing a project's
-  agents or
-  share mode and carrying its installs along
+- `apps/core` (`mindflayer-core`): the engine. Projects, a project's settings
+  (`settings`, the marker from v3 on), workspaces, which workspace a command
+  uses (`resolve`), the shell code that activates one (`activate`), kinds, the
+  agents and where each kind goes for them (`agent`), the catalog, gathering
+  (`gix`), the SQLite ledger, installing, keeping installs out of git
+  (`exclude`), a project's rules rendered into the block of its `AGENTS.md`
+  (`agents_md`) and into Claude's rules folder (`claude_rules`), whether
+  Claude reads that block and the `@AGENTS.md` import in a project's
+  `CLAUDE.md` that makes it (`claude_md`), installing a rule through those
+  three, or as a copy into a project a `mind.toml` marks (`install::rules`),
+  changing a project's agents or share mode and carrying its installs along
   (`reapply`), what each project holds, from where and for which agents
   (`status`), creating and changing artifacts, and moving a workspace's own
-  into its library and a project from its `mind.toml` to settings
-  (`migrate`). Its only I/O is files, and it never reads the environment.
+  into its library and a project from its `mind.toml` or `settings.json` to a
+  `settings.toml` (`migrate`). Its only I/O is files, and it never reads the
+  environment.
 - `apps/cli` (`mindflayer-cli`): the binaries `mind` (`src/main.rs`) and
   `flayer` (`src/bin/flayer.rs`), and the TUI. `src/lib.rs` only re-exports
   the public API. The parsers are in `src/parse.rs`. `src/commands.rs`
@@ -196,17 +195,21 @@ These are easy to break from a single file without noticing.
   and a non-zero exit, never a reason to hide the rest. An absence (no
   `skills/` folder yet) is not a failure.
 - **Never overwrite what somebody wrote.**
-  - New markers are written from string templates so their comments survive.
-    Edits go through `toml_edit` (`edit_array`, or `edit_marker_held` for a
-    writer that holds the lock already) and a temp file of their own
-    (`replace_file`, named for the run) plus a rename.
-  - A project's `.mind/settings.json`, which has no comments to keep, is
-    serialized (`Settings::text`) and made with `create_new`. It is changed
-    only through `MindProject::change_settings`, which reads the file again
-    and edits each key whose value changed, `directories` an entry at a time,
-    through `config_entry`, as an agent's config file is (below), then
-    `replace_file`: a key this build does not know, the key order and a
-    hand-made layout survive, and nothing is written when nothing changed.
+  - New markers are written from string templates so their comments survive:
+    `flayer.toml`, and a project's `.mind/settings.toml` (`Settings::text`),
+    made with `create_new`. Edits go through `toml_edit` and one `rewrite`,
+    which reads the file again, hands its text to the edit and writes back
+    only what changed through a temp file of its own (`replace_file`, named
+    for the run) plus a rename: `edit_array`, or `edit_marker_held` for a
+    writer that holds the lock already, and `MindProject::change_settings`,
+    which edits each key whose value changed where it stands
+    (`settings::edited`), `directories` and `targets` an entry at a time,
+    keeping the comment on a changed value's line: comments, a key this
+    build does not know, the key order and a hand-made layout survive, and
+    nothing is written when nothing changed. Only a `settings.toml` is
+    changed (`MindProject::changeable`): a `settings.json`, read as it was
+    written, is refused with a pointer to `mind migrate`, and `config_entry`
+    is never used to edit a project's settings.
     Its agents, targets and share mode change through `reapply::apply`
     (`mind agents`, `mind targets`, `mind share`), which carries what is
     installed along with them.
@@ -216,11 +219,11 @@ These are easy to break from a single file without noticing.
     dry runs without `--yes`.
     A migration of the library moves nothing a project holds, refuses as a
     whole, and keeps the marker it rewrites as `flayer.toml.v<version>`
-    (`create_new`). A project's (`migrate::project`) writes its settings
-    with `create_new`, keeps its `mind.toml` as
-    `.mind/tmp/mind.toml.v<version>`, never runs git (it says `git rm -r
-    --cached .mind` instead), and puts back every step it took when a later
-    one fails.
+    (`create_new`). A project's (`migrate::project`) writes its
+    `settings.toml` with `create_new`, keeps the `mind.toml` or
+    `settings.json` it replaces as `.mind/tmp/<name>.v<version>`, never runs
+    git (it says `git rm -r --cached .mind` instead), and puts back every
+    step it took when a later one fails.
   - A file somebody else owns is edited only inside Mindflayer's marked
     blocks or, in an agent's config file, which can carry no marks, one entry
     at a time (next bullet). Every byte outside them is kept, and a malformed
@@ -330,7 +333,7 @@ These are easy to break from a single file without noticing.
   a copy of one whose `hash::tree` is the one recorded, never one over
   somebody's, and a dropped folder loses a recorded copy only while its
   hash is the one recorded; one changed since is left there, and its record
-  and exclude entry dropped. A project's move to settings
+  and exclude entry dropped. A project's move from a `mind.toml`
   (`migrate::project`) moves its installs the same way, through
   `reapply::retarget`, and holds a record from before hashes to its offer
   (D-04). Being made once, it is refused when the workspace `mind migrate`
@@ -409,8 +412,10 @@ These are easy to break from a single file without noticing.
   `install::rules::render`, `gather::gather`,
   `gather::scrub`, which `FlayerWorkspace::ledger_to_write` runs, when it has
   clones to rewrite, `migrate::library`, from its plan to its rewrite of
-  the marker, `migrate::project`, from before it reads the project again
-  until its ledger is written, and `reapply::apply`, from before it reads a
+  the marker, `migrate::project`, for a move from a `mind.toml`, from before
+  it reads the project again until its ledger is written (a move from a
+  `settings.json` moves no copy, and takes none), and `reapply::apply`,
+  from before it reads a
   project's settings until their change and every copy it carries along are
   written. A new
   writer takes it the same way, inside core; `config_entry::ConfigFile`,
@@ -440,15 +445,16 @@ These are easy to break from a single file without noticing.
   `flayer.toml`, so bumping one never makes older builds refuse the other)
   and the ledger uses SQLite's `user_version`. A project's marker is
   `mind.toml` up to `MIND_TOML_VERSION`, which only `MindProject::init` still
-  writes, for tests of such a project, and `settings.json` from
-  `SETTINGS_VERSION`, which `mind init` writes (`MindProject::init_asked`,
-  which fills in each folder it was not told about), and from
-  `TARGETS_VERSION` when they name `targets`, which an older build would read
-  past: a settings file is written at the lowest version that reads it as it
-  means (`Settings::version_needed`), and a change of `targets` brings it
-  along. Either makes a directory a project (`MindProject::is_marked`), and
-  the settings win when both are there. See `DIRECTORIES_VERSION` for how a
-  v1 `mind.toml` is still read, and `SETTINGS_VERSION` for why a kind a
+  writes, for tests of such a project; `settings.json` at `SETTINGS_VERSION`,
+  or `TARGETS_VERSION` when it names `targets`, which an older build would
+  read past, read as written and changed by nothing but `mind migrate`; and
+  `settings.toml` at `SETTINGS_TOML_VERSION` whatever it sets, which `mind
+  init` writes (`MindProject::init_asked`, which fills in each folder it was
+  not told about). Each version is written in one file
+  (`MarkerFile::of_version`), and one found in another is refused. Any of the
+  three makes a directory a project (`MindProject::is_marked`), and the
+  newest wins when more than one is there. See `DIRECTORIES_VERSION` for how
+  a v1 `mind.toml` is still read, and `SETTINGS_VERSION` for why a kind a
   settings file does not name has no folder (`directory_for` is `None`).
   Anything from a newer version is refused. A format change must keep
   reading old files the way they were written, and move one forward only
@@ -584,7 +590,9 @@ These are easy to break from a single file without noticing.
   of git rather than saying on stderr that nothing does, and where an install
   puts its copies is asked of core (`common::copies`). A test about what a
   project an older Mindflayer made does, a copy installed in the folder it
-  authors in, makes one with `common::older_project`. What git would list is
+  authors in, makes one with `common::older_project`, and one about a
+  project a `settings.json` marks with `common::json_project`, which writes
+  the file as a version 3 `mind init` did. What git would list is
   asked of gix too (`common::untracked`), and a core fixture has git track
   its files by writing the index with gix (`common::indexed`). A core test
   about which `CLAUDE.md` Claude finds first holds its temporary folder to
