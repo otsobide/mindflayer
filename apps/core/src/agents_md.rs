@@ -206,9 +206,11 @@ impl Section {
 /// until the next render. The caller collects the refusal, as it does any
 /// other one project's failure.
 ///
-/// So is a folder whose `AGENTS.md` the agents of other projects read too
-/// ([`placed`]): `workspace` is the one whose links say where those are. A
-/// file that is a link is written through to what it points at, as a marker
+/// So is a block left in a folder whose `AGENTS.md` the agents of other
+/// projects read too ([`placed`]): `workspace` is the one whose links say
+/// where those are. A render that leaves no block goes ahead there, since it
+/// takes rules away from those agents rather than giving them any. A file
+/// that is a link is written through to what it points at, as a marker
 /// shared by a link is, but only inside the project ([`linked_inside`]).
 ///
 /// What the file then holds is checked against what Codex reads of it, and
@@ -225,7 +227,6 @@ pub fn render<'a>(
     rules: impl IntoIterator<Item = &'a Artifact>,
     created: bool,
 ) -> Result<Rendered, AgentsMdError> {
-    placed(workspace, project.root())?;
     let file = project.root().join(FILE);
     linked_inside(project.root(), &file)?;
     let mut rules: Vec<&Artifact> = rules.into_iter().collect();
@@ -233,6 +234,13 @@ pub fn render<'a>(
     let mut sections = Vec::new();
     for rule in rules {
         sections.extend(Section::of(rule)?);
+    }
+    // Only a render that leaves a block is held to where it is: one that
+    // drops it is how a block put there before a project was linked below,
+    // or before the one at the workspace's root was unlinked, comes out
+    // again, and refusing it would keep the very leak the refusal is for.
+    if !sections.is_empty() {
+        placed(workspace, project.root())?;
     }
 
     let read = read(&file)?;
@@ -434,8 +442,8 @@ fn codex_warnings(project: &Path) -> Vec<Warning> {
     warnings
 }
 
-/// Refuse `folder` as a place for an `AGENTS.md` when agents beyond its own
-/// project's would read one there.
+/// Refuse `folder` as a place for a block of rules when agents beyond its own
+/// project's would read an `AGENTS.md` there.
 ///
 /// Claude reads every `AGENTS.md` from where it starts up to the root, and
 /// OpenCode V2 up to the home directory, so one in a folder above a project

@@ -237,9 +237,10 @@ These are easy to break from a single file without noticing.
     made with `create_new`, and only then said to be created; one that is
     there goes through `replace_bytes`, written through a link only to a
     file inside the project; and the file is taken away only when the
-    caller says Mindflayer made it and nothing else is left in it. None is
-    written in a workspace's root, unless a project it links is there, nor
-    in a folder above a project it links, whose agents would read it too.
+    caller says Mindflayer made it and nothing else is left in it. No block
+    is left in a workspace's root, unless a project it links is there, nor
+    in a folder above a project it links, whose agents would read it too;
+    a render that takes one out goes ahead there.
   - An entry in a config file somebody else owns (`.mcp.json`,
     `opencode.json`, `.codex/config.toml`) is changed one at a time through
     `config_entry`: JSON and JSONC entries are edited through jsonc-parser's

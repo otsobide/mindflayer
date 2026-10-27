@@ -3459,11 +3459,15 @@ Never force-push a branch somebody else may have pulled.
   it starts up toward `/`, and OpenCode V2 up to the home directory, so rules
   rendered into a folder above a project the workspace links would reach
   that project too, beside its own: a monorepo's root, above its packages.
-  Such a folder is refused, a stale entry's included, and so is the
+  A block is refused in such a folder, a stale entry's included, and in the
   workspace's own root unless a project it links is there. The workspace
   puts nothing in its own directory (`FlayerWorkspace::own` is a holder at
   that root, not a project), while a project at the root is a project like
-  any other, and its `AGENTS.md` its own.
+  any other, and its `AGENTS.md` its own. A render that leaves no block goes
+  ahead in either: a block written before a project was linked below it, or
+  before the one at the root was unlinked, is reaching those agents already,
+  and refusing to take it out would keep the leak the refusal is there to
+  stop.
 - **What Codex would miss is said.** Codex reads one file a folder,
   `AGENTS.override.md` before `AGENTS.md`, from the git root down to where it
   starts, and cuts the whole off at 32 KiB (`project_doc_max_bytes`); with no
@@ -4123,10 +4127,11 @@ Unblocks #17, #42, #43, #44 and #45.
 
 Carrying it out, #42 renders the block, between those markers and under a
 `<!-- mindflayer:rule <route> -->` for each rule, leaving out a rule that
-states `paths:`. It refuses a folder above a project the workspace links,
-and the workspace's own root where no project it links is, since the agents
-of other projects would read an `AGENTS.md` there too; a project at the
-workspace's root has its rules in its own. It warns of the override, the
+states `paths:`. It leaves no block in a folder above a project the
+workspace links, nor in the workspace's own root where no project it links
+is, since the agents of other projects would read an `AGENTS.md` there too,
+and takes out one it finds there; a project at the workspace's root has its
+rules in its own. It warns of the override, the
 budget, and a project in no git work tree, where Codex reads only the
 folder it starts in ([how a rule reaches the
 agents](#how-a-rule-reaches-the-agents)).

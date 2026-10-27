@@ -429,16 +429,27 @@ fn a_project_the_workspace_links_at_its_root_is_given_its_rules() {
 }
 
 #[test]
-fn an_unlinked_project_at_the_workspaces_root_is_refused() {
+fn a_project_unlinked_from_the_workspaces_root_is_refused_a_block_and_can_drop_its_own() {
     let dir = TempDir::new().unwrap();
-    let (workspace, _) = FlayerWorkspace::init(dir.path()).unwrap();
-    let (project, _) = MindProject::init(dir.path()).unwrap();
+    let (mut workspace, _) = FlayerWorkspace::init(dir.path()).unwrap();
+    let project = linked(&mut workspace, dir.path());
+    let library = TempDir::new().unwrap();
+    let file = library.path().join("a.md");
+    fs::write(&file, "Rule a.\n").unwrap();
+    let rule = Artifact::rule(&file, "a".to_owned(), library.path()).unwrap();
+    assert!(agents_md::render(&workspace, &project, [&rule], false)
+        .unwrap()
+        .created());
+    workspace.unlink(dir.path()).unwrap();
 
-    let refused = agents_md::render(&workspace, &project, [], false);
+    let refused = agents_md::render(&workspace, &project, [&rule], true);
     assert!(
         matches!(refused, Err(AgentsMdError::WorkspaceRoot { .. })),
         "{refused:?}"
     );
+    let dropped = agents_md::render(&workspace, &project, [], true).unwrap();
+    assert_eq!(dropped.written, Written::Removed);
+    assert!(!dir.path().join(agents_md::FILE).exists());
 }
 
 #[test]
@@ -466,13 +477,32 @@ fn a_folder_above_a_linked_project_is_refused_and_nothing_is_written() {
 }
 
 #[test]
+fn a_block_above_a_project_linked_since_can_still_be_taken_out() {
+    let mut fixture = fixture();
+    fs::write(fixture.agents_md(), TEAM).unwrap();
+    let rule = fixture.rule("a", "Rule a.\n");
+    fixture.render(&[&rule], false).unwrap();
+    linked(&mut fixture.workspace, &fixture.project.root().join("web"));
+
+    let refused = fixture.render(&[&rule], false);
+    assert!(
+        matches!(refused, Err(AgentsMdError::AboveProjects { .. })),
+        "{refused:?}"
+    );
+    let dropped = fixture.render(&[], false).unwrap();
+    assert_eq!(dropped.written, Written::Changed);
+    assert_eq!(fixture.text(), TEAM);
+}
+
+#[test]
 fn a_linked_project_gone_from_below_still_keeps_its_folder_above_out() {
     let mut fixture = fixture();
     let package = fixture.project.root().join("web");
     linked(&mut fixture.workspace, &package);
     fs::remove_dir_all(&package).unwrap();
+    let rule = fixture.rule("a", "Rule a.\n");
 
-    let refused = fixture.render(&[], false);
+    let refused = fixture.render(&[&rule], false);
     assert!(
         matches!(refused, Err(AgentsMdError::AboveProjects { .. })),
         "{refused:?}"
@@ -490,7 +520,8 @@ fn a_folder_spelled_through_a_link_is_still_above_what_it_leads_to() {
     std::os::unix::fs::symlink(elsewhere.path(), &through).unwrap();
 
     let above = MindProject::open(&through).unwrap();
-    let refused = agents_md::render(&fixture.workspace, &above, [], false);
+    let rule = fixture.rule("a", "Rule a.\n");
+    let refused = agents_md::render(&fixture.workspace, &above, [&rule], false);
     assert!(
         matches!(refused, Err(AgentsMdError::AboveProjects { .. })),
         "{refused:?}"
