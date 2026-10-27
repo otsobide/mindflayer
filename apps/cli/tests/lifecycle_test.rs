@@ -211,7 +211,7 @@ fn add_from_a_template_that_is_not_there_says_which_are() {
 
 #[test]
 fn a_removed_install_leaves_no_record_for_what_is_written_there_next() {
-    let (dir, workspace, ledger) = shelved(&["collapse"], &["deploy"]);
+    let (dir, workspace, ledger) = shelved_older(&["collapse"], &["deploy"]);
     installed(dir.path(), &workspace, &ledger);
     let project = dir.path().join("collapse");
 
@@ -234,7 +234,7 @@ fn a_removed_install_leaves_no_record_for_what_is_written_there_next() {
 
 #[test]
 fn removing_an_install_scrubs_the_ledger_it_drops_the_record_from_and_says_so() {
-    let (dir, workspace, ledger) = shelved(&["collapse"], &["deploy"]);
+    let (dir, workspace, ledger) = shelved_older(&["collapse"], &["deploy"]);
     installed(dir.path(), &workspace, &ledger);
     // What an older build could have left in the same file.
     rusqlite::Connection::open(workspace.ledger_path())
@@ -267,7 +267,7 @@ fn removing_an_install_scrubs_the_ledger_it_drops_the_record_from_and_says_so() 
 #[cfg(unix)]
 #[test]
 fn an_editor_that_writes_and_then_fails_still_says_what_the_scrub_took_out() {
-    let (dir, workspace, ledger) = shelved(&["collapse"], &["deploy"]);
+    let (dir, workspace, ledger) = shelved_older(&["collapse"], &["deploy"]);
     installed(dir.path(), &workspace, &ledger);
     rusqlite::Connection::open(workspace.ledger_path())
         .unwrap()
@@ -308,7 +308,7 @@ fn an_editor_that_writes_and_then_fails_still_says_what_the_scrub_took_out() {
 #[cfg(unix)]
 #[test]
 fn an_installed_skill_that_is_edited_is_yours_from_then_on() {
-    let (dir, workspace, ledger) = shelved(&["collapse"], &["deploy"]);
+    let (dir, workspace, ledger) = shelved_older(&["collapse"], &["deploy"]);
     installed(dir.path(), &workspace, &ledger);
 
     let outcome = mind(
@@ -328,7 +328,7 @@ fn an_installed_skill_that_is_edited_is_yours_from_then_on() {
 #[cfg(unix)]
 #[test]
 fn an_installed_skill_is_yours_when_the_editor_writes_it_and_then_fails() {
-    let (dir, workspace, ledger) = shelved(&["collapse"], &["deploy"]);
+    let (dir, workspace, ledger) = shelved_older(&["collapse"], &["deploy"]);
     installed(dir.path(), &workspace, &ledger);
     let project = dir.path().join("collapse");
 
@@ -359,9 +359,10 @@ fn an_installed_skill_is_yours_when_the_editor_writes_it_and_then_fails() {
     );
 }
 
-/// `hub`, a workspace, and `collapse`, a project it links from beside it
-/// rather than from above: walking up from the project never reaches it.
-fn linked_from_beside() -> (TempDir, PathBuf, PathBuf) {
+/// `hub`, a workspace, and `collapse`, a project `make` makes, which the
+/// workspace links from beside it rather than from above: walking up from the
+/// project never reaches it.
+fn linked_from_beside(make: fn(&Path)) -> (TempDir, PathBuf, PathBuf) {
     let dir = TempDir::new().unwrap();
     let hub = dir.path().join("hub");
     let project = dir.path().join("collapse");
@@ -369,15 +370,16 @@ fn linked_from_beside() -> (TempDir, PathBuf, PathBuf) {
         fs::create_dir(root).unwrap();
     }
     flayer(&hub, &["init"]).unwrap();
-    mind(&project, &["init"]).unwrap();
+    make(&project);
     flayer(&hub, &["link", "../collapse"]).unwrap();
     (dir, hub, project)
 }
 
 /// `linked_from_beside`, with the workspace's own `deploy` installed into
-/// the project.
+/// the project, one an older Mindflayer made, so the copy is in the folder
+/// it authors in, where a change from the workspace reaches it.
 fn installed_from_beside() -> (TempDir, PathBuf, PathBuf) {
-    let (dir, hub, project) = linked_from_beside();
+    let (dir, hub, project) = linked_from_beside(older_project);
     flayer(&hub, &["add", "skill", "deploy", "Ship it"]).unwrap();
     flayer(&hub, &["install", "-p", "collapse", "deploy"]).unwrap();
     (dir, hub, project)
@@ -407,7 +409,9 @@ fn a_workspace_beside_a_project_drops_its_record_when_flayer_edits_the_copy() {
     let left = flayer(&hub, &["uninstall", "-p", "collapse", "deploy"]).unwrap();
     assert_eq!(
         left.stderr,
-        vec!["warning: deploy in collapse was not installed by Mindflayer, so it was left alone"]
+        vec![
+            "warning: deploy at skills/deploy in collapse was not installed by Mindflayer, so it was left alone"
+        ]
     );
     assert!(project.join("skills/deploy/SKILL.md").is_file());
 }
@@ -419,7 +423,9 @@ fn mind_drops_the_record_of_the_workspace_in_your_home_when_that_manages_the_pro
     let elsewhere = TempDir::new().unwrap();
     let project = elsewhere.path().join("collapse");
     fs::create_dir(&project).unwrap();
-    mind(&project, &["init"]).unwrap();
+    // Made as an older Mindflayer made it, so the copy installed is in the
+    // folder it authors in, where `mind edit` reaches it.
+    older_project(&project);
     flayer_at_home(elsewhere.path(), home.path(), &["link", "collapse"]).unwrap();
     flayer_at_home(
         elsewhere.path(),
@@ -444,7 +450,7 @@ fn mind_drops_the_record_of_the_workspace_in_your_home_when_that_manages_the_pro
 
 #[test]
 fn a_workspace_beside_a_project_offers_it_the_workspaces_templates() {
-    let (_dir, hub, project) = linked_from_beside();
+    let (_dir, hub, project) = linked_from_beside(new_project);
     let template = hub.join(".mindflayer/templates/runbook/SKILL.md");
     fs::create_dir_all(template.parent().unwrap()).unwrap();
     fs::write(&template, "---\n---\n\n# {{name}}\n\nThe hub's runbook.\n").unwrap();
@@ -509,4 +515,77 @@ fn mind_add_from_a_template_refuses_when_the_workspace_that_lends_it_cannot_be_r
     // stand in for it.
     assert!(matches!(*failure.error, CliError::Workspace(_)));
     assert!(!alpha.join("skills/deploy").exists());
+}
+
+/// Write `contents` at `route` below `root`, wherever that is.
+fn put(root: &Path, route: &str, contents: &str) {
+    let path = root.join(route);
+    fs::create_dir_all(path.parent().unwrap()).unwrap();
+    fs::write(path, contents).unwrap();
+}
+
+#[test]
+fn a_skill_only_in_an_agents_folder_is_not_changed_from_a_project() {
+    let dir = TempDir::new().unwrap();
+    let directories = mindflayer_core::Directories::default().with(Kind::Skill, "skills");
+    MindProject::init_settings(
+        dir.path(),
+        &mindflayer_core::Agent::ALL,
+        mindflayer_core::Share::Shared,
+        &directories,
+    )
+    .unwrap();
+    put(
+        dir.path(),
+        ".claude/skills/review/SKILL.md",
+        &skill_file("review", "Reads the diff"),
+    );
+
+    let failure = mind(dir.path(), &["rename", "review", "audit"]).unwrap_err();
+
+    assert!(
+        failure
+            .error
+            .to_string()
+            .contains("in a folder this project's agents read and it does not author in"),
+        "{}",
+        failure.error
+    );
+    assert!(dir.path().join(".claude/skills/review/SKILL.md").is_file());
+    assert!(!dir.path().join(".claude/skills/audit").exists());
+}
+
+#[test]
+fn a_name_the_project_authors_and_its_agents_read_is_one_row_whose_change_reaches_only_its_own() {
+    let dir = TempDir::new().unwrap();
+    let directories = mindflayer_core::Directories::default().with(Kind::Skill, "skills");
+    MindProject::init_settings(
+        dir.path(),
+        &mindflayer_core::Agent::ALL,
+        mindflayer_core::Share::Shared,
+        &directories,
+    )
+    .unwrap();
+    let deploy = skill_file("deploy", "My own source");
+    put(dir.path(), "skills/deploy/SKILL.md", &deploy);
+    put(dir.path(), ".claude/skills/deploy/SKILL.md", &deploy);
+
+    // One row, so the words a screen runs for it name one thing: the
+    // project's own, the copy the row reads as.
+    let listed = mind(dir.path(), &["list"]).unwrap();
+    assert_eq!(listed.stdout, "deploy  My own source\n");
+    let shown = mind(dir.path(), &["show", "skill:deploy"]).unwrap();
+    let own = dir.path().join("skills/deploy/SKILL.md");
+    assert!(
+        shown.stdout.contains(&own.display().to_string()),
+        "{}",
+        shown.stdout
+    );
+
+    mind(dir.path(), &["remove", "--yes", "skill:deploy"]).unwrap();
+
+    assert!(!dir.path().join("skills/deploy").exists());
+    assert!(dir.path().join(".claude/skills/deploy/SKILL.md").is_file());
+    let left = mind(dir.path(), &["list"]).unwrap();
+    assert_eq!(left.stdout, "deploy  My own source\n");
 }

@@ -91,6 +91,7 @@ fn a_lookup_hands_core_what_it_holds() {
         flag: path("/named"),
         activated: path("/activated"),
         home: path("/home"),
+        agents: AgentHomes::default(),
     };
 
     let inputs = lookup.inputs(Path::new("/start"), Intent::Write);
@@ -105,11 +106,25 @@ fn a_lookup_hands_core_what_it_holds() {
 #[test]
 fn given_takes_the_command_line_first() {
     // As for `default_home`, only what the environment cannot change.
-    let lookup = Lookup::given(Some(""), Some("/named"));
+    let none = Some(String::new());
+    let agents = AgentHomeOptions {
+        claude_config_dir: none.clone(),
+        codex_home: Some(String::from("/codex")),
+        opencode_config_dir: none.clone(),
+        agents_dir: none,
+    };
+    let lookup = Lookup::given(Some(""), Some("/named"), &agents);
 
     assert_eq!(lookup.home, None);
     assert_eq!(lookup.flag, path("/named"));
     assert_eq!(lookup.activated, None);
+    assert_eq!(
+        lookup.agents,
+        AgentHomes {
+            codex_home: path("/codex"),
+            ..AgentHomes::default()
+        }
+    );
 }
 
 // ---------------------------------------------------------------------------

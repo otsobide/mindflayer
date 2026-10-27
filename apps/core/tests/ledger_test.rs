@@ -11,6 +11,7 @@ use mindflayer_core::gather::{self, Request};
 use mindflayer_core::hash;
 use mindflayer_core::install::{self, Installed, Offer};
 use mindflayer_core::ledger::{backup_path, InstallRecord, Target, SCHEMA_VERSION};
+use mindflayer_core::AgentHomes;
 use mindflayer_core::{FlayerWorkspace, Kind, Ledger, MindProject, LEDGER_FILE};
 use rusqlite::types::Value;
 use rusqlite::Connection;
@@ -38,7 +39,14 @@ fn three_places() -> (TempDir, FlayerWorkspace, MindProject, Ledger) {
 /// Install the one thing called `name` that is offered to `project`.
 fn install(workspace: &FlayerWorkspace, ledger: &Ledger, project: &MindProject, name: &str) {
     let candidate = install::offered(workspace, ledger, project, Kind::Skill, name, None).unwrap();
-    install::install(workspace, ledger, project, &candidate).unwrap();
+    install::install(
+        workspace,
+        ledger,
+        project,
+        &candidate,
+        &AgentHomes::default(),
+    )
+    .unwrap();
 }
 
 #[test]
@@ -213,9 +221,15 @@ fn a_copy_that_cannot_be_hashed_is_recorded_without_a_hash_and_said() {
 
     let candidate =
         install::offered(&workspace, &ledger, &project, Kind::Skill, "notes", None).unwrap();
-    let done = install::install(&workspace, &ledger, &project, &candidate)
-        .unwrap()
-        .installed;
+    let done = install::install(
+        &workspace,
+        &ledger,
+        &project,
+        &candidate,
+        &AgentHomes::default(),
+    )
+    .unwrap()
+    .installed;
 
     assert!(matches!(done, Installed::Unchanged { .. }), "{done:?}");
     let reason = done.unhashed().unwrap();

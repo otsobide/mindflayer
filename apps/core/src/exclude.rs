@@ -9,9 +9,10 @@
 //!
 //! ```text
 //! # mindflayer:begin
-//! # project packages/app
+//! # project 4f9c2a7e1b3d5f60a8c4e2b6d0f1a3c5
 //! /packages/app/.agents/skills/commit-style/
-//! # project packages/web
+//! /packages/app/.claude/skills/commit-style/
+//! # project 0123456789abcdef0123456789abcdef
 //! /packages/web/.agents/skills/review/
 //! # mindflayer:end
 //! ```
@@ -47,8 +48,9 @@ const CRLF: &[u8] = b"\r\n";
 /// Keep `entries` of the project at `project` out of git, in the group
 /// headed `key`.
 ///
-/// `key` is whatever names the project for good: its id, or until projects
-/// have one, its route. It is only compared, never parsed.
+/// `key` is whatever names the project for good, which for an install is
+/// the id its settings hold: it stays when the project is renamed or moved.
+/// It is only compared, never parsed.
 pub fn add(project: &Path, key: &str, entries: &[Entry]) -> Result<Excluded, ExcludeError> {
     change(project, key, entries, ExcludeFile::add)
 }
@@ -57,6 +59,50 @@ pub fn add(project: &Path, key: &str, entries: &[Entry]) -> Result<Excluded, Exc
 /// its group when that empties it.
 pub fn remove(project: &Path, key: &str, entries: &[Entry]) -> Result<Excluded, ExcludeError> {
     change(project, key, entries, ExcludeFile::remove)
+}
+
+/// Drop the group headed `key` whole, whatever it holds: for a project that
+/// stops keeping what is installed into it out of git, as one that turns
+/// shared does (D-02).
+///
+/// Every line, not only those of the copies one workspace's ledger records:
+/// a group is keyed by the project, and several workspaces can install into
+/// one project, each line naming a copy that is now the team's to commit.
+pub fn forget(project: &Path, key: &str) -> Result<Excluded, ExcludeError> {
+    change(project, key, &[], |file, key, _| file.forget(key))
+}
+
+/// What the group headed `key` holds, in the exclude file git reads for the
+/// work tree `project` is in: `None` outside a git work tree. A file, a
+/// block or a group that is not there holds nothing.
+///
+/// For a front end to say what [`forget`] would take out, and which of the
+/// lines an [`Entry`] would write are there already, before anything is
+/// changed. A block that cannot be read is refused, as an edit refuses it.
+pub fn listed(project: &Path, key: &str) -> Result<Option<Listing>, ExcludeError> {
+    check(key, &[])?;
+    let Some(location) = locate(project)? else {
+        return Ok(None);
+    };
+    let file = read(&location.file)?;
+    Ok(Some(Listing {
+        lines: file.lines_of(key),
+        file: location.file,
+        route: location.route,
+    }))
+}
+
+/// What one project's group holds, and where: [`listed`].
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Listing {
+    /// The exclude file, which need not exist yet.
+    pub file: PathBuf,
+    /// The project's directory relative to the work tree root, as
+    /// [`Location`] has it: what [`Entry::pattern`] is given to write a
+    /// line the group would hold.
+    pub route: PathBuf,
+    /// Every line of the group but its header and blank ones, as written.
+    pub lines: Vec<String>,
 }
 
 /// What [`add`] or [`remove`] did.
@@ -111,6 +157,61 @@ pub struct Location {
 /// pointing somewhere else must not send one project's entries into another
 /// repository's file.
 pub fn locate(project: &Path) -> Result<Option<Location>, ExcludeError> {
+    let Some((repository, route)) = discover(project)? else {
+        return Ok(None);
+    };
+    // A linked worktree names its common dir from its own git dir, as
+    // `../..`, and that is how gix hands it back. Normalized, so what a
+    // front end reports is the file a person would go and open.
+    Ok(Some(Location {
+        file: paths::normalize(&repository.common_dir().join("info").join("exclude")),
+        route,
+    }))
+}
+
+/// Whether git tracks anything inside `folder`, a route from the project at
+/// `project`: whether the index of the work tree holding the project names
+/// a file there. Never, outside a git work tree.
+///
+/// For a front end to say what no ignore rule does: a rule keeps out of git
+/// only what git does not track yet, so a `.mind` committed by design, as a
+/// `mind.toml` project's was, stays in the index once a `.gitignore` asks
+/// for it to be left out, until somebody runs `git rm --cached` on it. Read
+/// from the index with gix, the repository opened as [`locate`] opens it,
+/// and never written: Mindflayer runs no git command, and taking a team's
+/// files out of the index is not its to do.
+pub fn tracks(project: &Path, folder: &Path) -> Result<bool, ExcludeError> {
+    let Some((repository, route)) = discover(project)? else {
+        return Ok(false);
+    };
+    let unreadable = |detail: String| ExcludeError::Repository {
+        project: project.to_path_buf(),
+        detail,
+    };
+    let index = repository
+        .index_or_empty()
+        .map_err(|error| unreadable(error.to_string()))?;
+    // Slash separated and ending in one, as the index spells a folder's
+    // files, so `.mind` does not take in a `.mindflayer` beside it.
+    let inside = paths::normalize(&route.join(folder));
+    let Some(mut prefix) = paths::to_config_string(&inside) else {
+        return Err(unreadable(format!(
+            "{} is not valid UTF-8, so the index cannot be searched for it",
+            inside.display()
+        )));
+    };
+    prefix.push('/');
+    Ok(index
+        .prefixed_entries(prefix.as_bytes().into())
+        .is_some_and(|entries| !entries.is_empty()))
+}
+
+/// The repository whose work tree holds `project`, and where in that work
+/// tree the project is: `None` when no work tree holds it.
+///
+/// Opened isolated, reading neither the environment nor the user's git
+/// config, for the reason [`locate`] gives.
+fn discover(project: &Path) -> Result<Option<(gix::Repository, PathBuf)>, ExcludeError> {
     let repository =
         match gix::discover_opts(project, Default::default(), gix::open::Options::isolated()) {
             Ok(repository) => repository,
@@ -134,13 +235,7 @@ pub fn locate(project: &Path) -> Result<Option<Location>, ExcludeError> {
         project: project.to_path_buf(),
         worktree: worktree.to_path_buf(),
     })?;
-    // A linked worktree names its common dir from its own git dir, as
-    // `../..`, and that is how gix hands it back. Normalized, so what a
-    // front end reports is the file a person would go and open.
-    Ok(Some(Location {
-        file: paths::normalize(&repository.common_dir().join("info").join("exclude")),
-        route,
-    }))
+    Ok(Some((repository, route)))
 }
 
 /// Where `project` sits below `worktree`, or `None` when it is not below it.
@@ -199,20 +294,7 @@ fn change(
         .map(|entry| entry.pattern(&location.route))
         .collect::<Result<Vec<_>, _>>()?;
 
-    let bytes = match fs::read(&location.file) {
-        Ok(bytes) => bytes,
-        Err(error) if error.kind() == io::ErrorKind::NotFound => Vec::new(),
-        Err(source) => {
-            return Err(ExcludeError::Read {
-                path: location.file,
-                source,
-            })
-        }
-    };
-    let mut file = ExcludeFile::parse(&bytes).map_err(|problem| ExcludeError::Malformed {
-        file: location.file.clone(),
-        problem,
-    })?;
+    let mut file = read(&location.file)?;
     if !edit(&mut file, key, &patterns)? {
         return Ok(Excluded::Unchanged {
             file: location.file,
@@ -229,6 +311,25 @@ fn change(
         .map_err(|(path, source)| ExcludeError::Write { path, source })?;
     Ok(Excluded::Written {
         file: location.file,
+    })
+}
+
+/// The exclude file at `path`, read and parsed: an absent one is an empty
+/// one, and a block that cannot be read is refused.
+fn read(path: &Path) -> Result<ExcludeFile, ExcludeError> {
+    let bytes = match fs::read(path) {
+        Ok(bytes) => bytes,
+        Err(error) if error.kind() == io::ErrorKind::NotFound => Vec::new(),
+        Err(source) => {
+            return Err(ExcludeError::Read {
+                path: path.to_path_buf(),
+                source,
+            })
+        }
+    };
+    ExcludeFile::parse(&bytes).map_err(|problem| ExcludeError::Malformed {
+        file: path.to_path_buf(),
+        problem,
     })
 }
 
@@ -553,6 +654,49 @@ impl ExcludeFile {
         if group.lines.iter().all(Line::is_blank) {
             block.groups.remove(index);
         }
+        self.tidy();
+        Ok(true)
+    }
+
+    /// Take `key`'s group out whole, its header and every line under it,
+    /// dropping the block when no group is left. Whether anything changed.
+    pub fn forget(&mut self, key: &str) -> Result<bool, ExcludeError> {
+        check(key, &[])?;
+        let Some(block) = self.block.as_mut() else {
+            return Ok(false);
+        };
+        let Some(index) = block
+            .groups
+            .iter()
+            .position(|group| group.key == key.as_bytes())
+        else {
+            return Ok(false);
+        };
+        block.groups.remove(index);
+        self.tidy();
+        Ok(true)
+    }
+
+    /// Every line of `key`'s group but blank ones, as written: none when
+    /// there is no such group. Bytes that are not UTF-8 are shown as
+    /// replacement characters, being for a person to read.
+    pub fn lines_of(&self, key: &str) -> Vec<String> {
+        self.block
+            .iter()
+            .flat_map(|block| &block.groups)
+            .filter(|group| group.key == key.as_bytes())
+            .flat_map(|group| &group.lines)
+            .filter(|line| !line.is_blank())
+            .map(|line| String::from_utf8_lossy(&line.text).into_owned())
+            .collect()
+    }
+
+    /// Drop the block once it holds no group and nothing somebody else put
+    /// in it, giving back the file as it was before the block was written.
+    fn tidy(&mut self) {
+        let Some(block) = &self.block else {
+            return;
+        };
         if block.groups.is_empty() && block.loose.iter().all(Line::is_blank) {
             // An end marker without a newline is the file's last line, so the
             // file ended without one and still does once the block is gone.
@@ -564,7 +708,6 @@ impl ExcludeFile {
                 last.end = b"";
             }
         }
-        Ok(true)
     }
 
     /// The file as it is to be written.

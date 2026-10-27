@@ -6,9 +6,10 @@ use std::path::{Path, PathBuf};
 use std::time::{Duration, SystemTime};
 
 use mindflayer_core::{
-    create, scan, Agent, Catalog, CreateError, Directories, FlayerWorkspace, Initialization, Kind,
-    MindProject, ProjectWarning, Settings, Share, WorkspaceError, MIND_CONFIG, MIND_DIR,
-    MIND_IGNORE, SETTINGS_FILE,
+    create, scan, Agent, AgentTarget, Catalog, CreateError, Directories, FlayerWorkspace,
+    Initialization, Kind, MindProject, Misplaced, MisplacedTarget, ProjectWarning, Settings, Share,
+    Targets, WorkspaceError, MIND_CONFIG, MIND_DIR, MIND_IGNORE, SETTINGS_FILE, SETTINGS_VERSION,
+    TARGETS_VERSION,
 };
 use tempfile::TempDir;
 
@@ -94,7 +95,7 @@ fn a_scan_takes_a_project_marked_by_its_settings_for_a_project() {
     fs::create_dir(dir.path().join("alpha")).unwrap();
     settings_project(&dir.path().join("alpha"), skills_beside());
 
-    let scan = scan(&workspace);
+    let scan = scan(&workspace, &scan::Request::default());
 
     assert_eq!(scan.found.len(), 1);
     assert_eq!(scan.found[0].route, "alpha");
@@ -159,6 +160,238 @@ fn adding_a_kind_the_settings_name_no_folder_for_is_refused_before_anything_is_m
         )
     );
     assert!(!dir.path().join("rules").exists());
+}
+
+#[test]
+fn a_project_marked_by_its_settings_goes_where_the_table_sends_its_agents() {
+    let dir = TempDir::new().unwrap();
+    let claude = dir.path().join("claude");
+    let (alone, _) =
+        MindProject::init_settings(&claude, &[Agent::Claude], Share::Local, &skills_beside())
+            .unwrap();
+    settings_project(dir.path(), skills_beside());
+    let every = MindProject::open(dir.path()).unwrap();
+
+    assert_eq!(
+        alone.targets(Kind::Skill),
+        [AgentTarget {
+            path: Path::new(".claude").join("skills"),
+            agents: vec![Agent::Claude],
+        }]
+    );
+    let paths: Vec<PathBuf> = every
+        .targets(Kind::Skill)
+        .into_iter()
+        .map(|target| target.path)
+        .collect();
+    assert_eq!(
+        paths,
+        [
+            Path::new(".agents").join("skills"),
+            Path::new(".claude").join("skills")
+        ]
+    );
+    assert_eq!(every.targets(Kind::Rule), []);
+}
+
+/// A project at `root` whose settings, written by hand, install skills in
+/// `folders`, for Claude and Codex.
+fn targeting(root: &Path, folders: &[&str]) -> MindProject {
+    let mind = root.join(MIND_DIR);
+    fs::create_dir_all(&mind).unwrap();
+    let listed: Vec<String> = folders.iter().map(|folder| format!("{folder:?}")).collect();
+    fs::write(
+        mind.join(SETTINGS_FILE),
+        format!(
+            "{{\"version\": 4, \"id\": \"0123456789abcdef0123456789abcdef\", \"name\": \"collapse\", \
+             \"agents\": [\"claude\", \"codex\"], \"share\": \"local\", \
+             \"targets\": {{\"skills\": [{}]}}}}\n",
+            listed.join(", ")
+        ),
+    )
+    .unwrap();
+    MindProject::open(root).unwrap()
+}
+
+#[test]
+fn targets_in_the_settings_send_a_kind_there_for_every_agent_in_place_of_their_folders() {
+    let dir = TempDir::new().unwrap();
+
+    let project = targeting(dir.path(), &["./.skills/", "tools/skills"]);
+
+    assert_eq!(
+        project.targets(Kind::Skill),
+        [
+            AgentTarget {
+                path: PathBuf::from(".skills"),
+                agents: vec![Agent::Claude, Agent::Codex],
+            },
+            AgentTarget {
+                path: Path::new("tools").join("skills"),
+                agents: vec![Agent::Claude, Agent::Codex],
+            },
+        ]
+    );
+    assert_eq!(project.targets(Kind::Rule), []);
+    assert!(project.misplaced_targets().is_empty());
+}
+
+#[test]
+fn a_target_outside_the_project_inside_mind_or_absolute_is_passed_over_and_said() {
+    let dir = TempDir::new().unwrap();
+    let elsewhere = TempDir::new().unwrap();
+    let absolute = elsewhere.path().join("skills");
+    let absolute = absolute.to_str().unwrap();
+
+    let project = targeting(
+        dir.path(),
+        &[
+            ".skills",
+            "../shared",
+            ".mind/skills",
+            absolute,
+            ".",
+            "nested/.mindflayer/skills",
+            ".git",
+            "vendor/lib/.GIT/skills",
+        ],
+    );
+
+    assert_eq!(
+        project.targets(Kind::Skill),
+        [AgentTarget {
+            path: PathBuf::from(".skills"),
+            agents: vec![Agent::Claude, Agent::Codex],
+        }]
+    );
+    let settings = dir.path().join(MIND_DIR).join(SETTINGS_FILE);
+    let misplaced = |folder: &str, why| MisplacedTarget {
+        settings: settings.clone(),
+        kind: Kind::Skill,
+        folder: PathBuf::from(folder),
+        why,
+    };
+    let said = project.misplaced_targets();
+    assert_eq!(
+        said,
+        [
+            misplaced("../shared", Misplaced::Outside),
+            misplaced(".mind/skills", Misplaced::InsideMind),
+            misplaced(absolute, Misplaced::Outside),
+            misplaced(".", Misplaced::Outside),
+            misplaced("nested/.mindflayer/skills", Misplaced::InsideWorkspace),
+            misplaced(".git", Misplaced::InsideGit),
+            misplaced("vendor/lib/.GIT/skills", Misplaced::InsideGit),
+        ]
+    );
+    assert_eq!(
+        said[0].to_string(),
+        format!(
+            "{}: ../shared is no folder to install skills in, because it is not inside the \
+             project, so nothing is installed there",
+            settings.display()
+        )
+    );
+    assert!(
+        said[1]
+            .to_string()
+            .contains("because it is inside .mind, which holds Mindflayer's own files"),
+        "{}",
+        said[1]
+    );
+    assert!(
+        said[5]
+            .to_string()
+            .contains("because it is inside .git, which holds a repository's own files"),
+        "{}",
+        said[5]
+    );
+}
+
+#[test]
+fn a_kind_every_target_of_which_is_passed_over_goes_nowhere() {
+    let dir = TempDir::new().unwrap();
+
+    let project = targeting(dir.path(), &["../shared"]);
+
+    assert_eq!(project.targets(Kind::Skill), []);
+}
+
+#[test]
+fn an_edit_sending_a_kind_where_no_install_may_go_is_refused_and_writes_nothing() {
+    let dir = TempDir::new().unwrap();
+    let elsewhere = TempDir::new().unwrap();
+    let (mut project, path) = by_hand(dir.path());
+
+    for (kind, folders, why) in [
+        (
+            Kind::Skill,
+            vec![".skills", "../shared"],
+            Misplaced::Outside,
+        ),
+        (Kind::Skill, vec![".mind/skills"], Misplaced::InsideMind),
+        (Kind::Skill, vec![".git"], Misplaced::InsideGit),
+        (
+            Kind::Skill,
+            vec![elsewhere.path().to_str().unwrap()],
+            Misplaced::Outside,
+        ),
+        (Kind::Rule, vec![".rules"], Misplaced::NotInstalled),
+    ] {
+        let folders: Vec<PathBuf> = folders.into_iter().map(PathBuf::from).collect();
+        let error = project
+            .change_settings(|settings| {
+                settings.targets = Targets::default().with(kind, folders.clone());
+            })
+            .unwrap_err();
+        assert!(
+            matches!(&error, WorkspaceError::Target { kind: refused, why: said, .. }
+                if *refused == kind && *said == why),
+            "{error}"
+        );
+    }
+    let none = project
+        .change_settings(|settings| {
+            settings.targets = Targets::default().with(Kind::Skill, Vec::new());
+        })
+        .unwrap_err();
+    assert!(matches!(none, WorkspaceError::Edit { .. }), "{none}");
+    assert_eq!(fs::read_to_string(&path).unwrap(), BY_HAND);
+
+    let outside = project
+        .change_settings(|settings| {
+            settings.targets =
+                Targets::default().with(Kind::Skill, vec![PathBuf::from("../shared")]);
+        })
+        .unwrap_err();
+    assert_eq!(
+        outside.to_string(),
+        "../shared: cannot be where a project's skills are installed, because it is not inside \
+         the project"
+    );
+}
+
+#[test]
+fn a_target_written_outside_by_hand_does_not_stop_a_change_to_something_else() {
+    let dir = TempDir::new().unwrap();
+    let mut project = targeting(dir.path(), &["../shared"]);
+
+    project
+        .change_settings(|settings| settings.agents = vec![Agent::Codex])
+        .unwrap();
+
+    assert_eq!(project.settings().unwrap().agents, [Agent::Codex]);
+    assert_eq!(project.misplaced_targets().len(), 1);
+}
+
+#[test]
+fn a_project_a_mind_toml_marks_names_no_agents_to_go_to() {
+    let dir = TempDir::new().unwrap();
+    let (project, _) = MindProject::init(dir.path()).unwrap();
+
+    for kind in Kind::ALL {
+        assert_eq!(project.targets(kind), []);
+    }
 }
 
 /// Every kind beside the code, as a new project names them by default.
@@ -279,6 +512,22 @@ fn a_new_project_naming_no_directories_makes_no_folder() {
 }
 
 #[test]
+fn a_project_made_as_mind_init_makes_one_gives_each_kind_not_asked_for_its_default() {
+    let dir = TempDir::new().unwrap();
+    let asked = Directories::default().with(Kind::Skill, "docs/skills");
+
+    let (project, _) =
+        MindProject::init_asked(dir.path(), &Agent::ALL, Share::Local, &asked).unwrap();
+
+    assert_eq!(
+        project.settings().unwrap().directories,
+        asked.with(Kind::Rule, "rules")
+    );
+    assert!(dir.path().join("docs").join("skills").is_dir());
+    assert!(dir.path().join("rules").is_dir());
+}
+
+#[test]
 fn a_gitignore_somebody_wrote_is_left_as_they_left_it() {
     let dir = TempDir::new().unwrap();
     fs::create_dir(dir.path().join(MIND_DIR)).unwrap();
@@ -354,6 +603,38 @@ fn a_directory_outside_the_project_is_refused_before_anything_is_made() {
 }
 
 #[test]
+fn a_directory_inside_mind_is_refused_before_anything_is_made() {
+    let dir = TempDir::new().unwrap();
+
+    // Shared too, though git would see its `.mind`: a change may make it
+    // local later.
+    for share in [Share::Local, Share::Shared] {
+        for inside in [
+            ".mind",
+            ".mind/skills",
+            "skills/../.mind/skills",
+            ".MIND/skills",
+        ] {
+            let directories = Directories::default().with(Kind::Skill, inside);
+            let error = MindProject::init_settings(dir.path(), &Agent::ALL, share, &directories)
+                .unwrap_err();
+
+            assert!(
+                matches!(
+                    error,
+                    WorkspaceError::InsideMind {
+                        kind: Kind::Skill,
+                        ..
+                    }
+                ),
+                "{inside}: {error}"
+            );
+        }
+    }
+    assert!(!dir.path().join(MIND_DIR).exists());
+}
+
+#[test]
 fn git_ignores_everything_in_a_local_projects_mind() {
     let dir = TempDir::new().unwrap();
     gix::init(dir.path()).unwrap();
@@ -382,7 +663,7 @@ fn git_sees_a_shared_projects_settings() {
 /// another in `directories`, which is written on one line.
 const BY_HAND: &str = r#"{
     "name": "collapse",
-    "targets": {"skills": [".skills"]},
+    "servers": {"github": ["npx"]},
     "version": 3,
     "agents": ["claude"],
     "id": "0123456789abcdef0123456789abcdef",
@@ -525,6 +806,113 @@ fn an_edit_names_a_folder_in_settings_that_named_none() {
 }
 
 #[test]
+fn an_edit_of_targets_writes_them_last_and_the_version_they_need() {
+    let dir = TempDir::new().unwrap();
+    let (mut project, path) = by_hand(dir.path());
+
+    project
+        .change_settings(|settings| {
+            settings.targets = Targets::default().with(Kind::Skill, vec![PathBuf::from(".skills")]);
+        })
+        .unwrap();
+
+    assert_eq!(
+        fs::read_to_string(&path).unwrap(),
+        BY_HAND.replace(r#""version": 3"#, r#""version": 4"#).replace(
+            "\"skills\": \"skills\"}\n}",
+            "\"skills\": \"skills\"},\n    \"targets\": {\n        \"skills\": [\".skills\"]\n    }\n}"
+        )
+    );
+    let settings = project.settings().unwrap();
+    assert_eq!(settings.version, TARGETS_VERSION);
+    assert_eq!(
+        settings.targets.get(Kind::Skill),
+        Some(&[PathBuf::from(".skills")][..])
+    );
+}
+
+#[test]
+fn an_edit_that_names_no_kind_any_more_takes_targets_and_their_version_out() {
+    let dir = TempDir::new().unwrap();
+    let (mut project, path) = by_hand(dir.path());
+    project
+        .change_settings(|settings| {
+            settings.targets = Targets::default().with(Kind::Skill, vec![PathBuf::from(".skills")]);
+        })
+        .unwrap();
+
+    project
+        .change_settings(|settings| settings.targets = Targets::default())
+        .unwrap();
+
+    assert_eq!(fs::read_to_string(&path).unwrap(), BY_HAND);
+    assert_eq!(project.settings().unwrap().version, SETTINGS_VERSION);
+}
+
+#[test]
+fn an_edit_of_something_else_leaves_targets_written_by_hand_and_their_version() {
+    let dir = TempDir::new().unwrap();
+    let (mut project, path) = by_hand(dir.path());
+    let hand = BY_HAND.replace(
+        "\"version\": 3,",
+        "\"version\": 3,\n    \"targets\": {\"skills\": [\".skills\"]},",
+    );
+    fs::write(&path, &hand).unwrap();
+
+    project
+        .change_settings(|settings| settings.agents = vec![Agent::Codex])
+        .unwrap();
+
+    assert_eq!(
+        fs::read_to_string(&path).unwrap(),
+        hand.replace(r#""agents": ["claude"]"#, r#""agents": ["codex"]"#)
+    );
+}
+
+#[test]
+fn a_version_3_file_whose_targets_do_not_read_opens_and_an_edit_of_them_writes_them_over() {
+    for unread in [
+        r#"{"skills": []}"#,
+        r#"[".skills"]"#,
+        r#"{"skills": ".skills"}"#,
+    ] {
+        let dir = TempDir::new().unwrap();
+        let (_, path) = by_hand(dir.path());
+        let hand = BY_HAND.replace(
+            "\"version\": 3,",
+            &format!("\"version\": 3,\n    \"targets\": {unread},"),
+        );
+        fs::write(&path, &hand).unwrap();
+
+        // Opened as every build before targets opened it, the key read past.
+        let mut project = MindProject::open(dir.path()).unwrap();
+        assert!(project.settings().unwrap().targets.is_empty(), "{unread}");
+        project
+            .change_settings(|settings| settings.agents = vec![Agent::Codex])
+            .unwrap();
+        assert_eq!(
+            fs::read_to_string(&path).unwrap(),
+            hand.replace(r#""agents": ["claude"]"#, r#""agents": ["codex"]"#),
+            "{unread}"
+        );
+
+        project
+            .change_settings(|settings| {
+                settings.targets =
+                    Targets::default().with(Kind::Skill, vec![PathBuf::from(".skills")]);
+            })
+            .unwrap();
+        let settings = project.settings().unwrap();
+        assert_eq!(settings.version, TARGETS_VERSION, "{unread}");
+        assert_eq!(
+            settings.targets.get(Kind::Skill),
+            Some(&[PathBuf::from(".skills")][..]),
+            "{unread}"
+        );
+    }
+}
+
+#[test]
 fn an_edit_of_the_version_or_the_id_is_refused_and_writes_nothing() {
     let dir = TempDir::new().unwrap();
     let (mut project, path) = by_hand(dir.path());
@@ -555,6 +943,8 @@ fn a_project_a_mind_toml_marks_has_no_settings_to_change() {
         matches!(error, WorkspaceError::NoSettings { .. }),
         "{error}"
     );
+    // Sent to what gives it settings, since `mind init` leaves its marker.
+    assert!(error.to_string().contains("`mind migrate`"), "{error}");
     assert!(!dir.path().join(MIND_DIR).join(SETTINGS_FILE).exists());
 }
 
@@ -609,6 +999,30 @@ fn an_edit_that_moves_a_folder_out_of_the_project_is_refused() {
             "{outside}: {error}"
         );
     }
+    assert_eq!(fs::read_to_string(&path).unwrap(), BY_HAND);
+}
+
+#[test]
+fn an_edit_that_moves_a_folder_into_mind_is_refused() {
+    let dir = TempDir::new().unwrap();
+    let (mut project, path) = by_hand(dir.path());
+
+    let error = project
+        .change_settings(|settings| {
+            settings.directories = settings.directories.clone().with(Kind::Rule, ".mind/rules");
+        })
+        .unwrap_err();
+
+    assert!(
+        matches!(
+            error,
+            WorkspaceError::InsideMind {
+                kind: Kind::Rule,
+                ..
+            }
+        ),
+        "{error}"
+    );
     assert_eq!(fs::read_to_string(&path).unwrap(), BY_HAND);
 }
 

@@ -7,8 +7,9 @@
 use std::path::PathBuf;
 
 use clap::builder::{PossibleValuesParser, TypedValueParser};
-use clap::{Args, Parser, Subcommand};
-use mindflayer_core::{Kind, Shell, DEFAULT_SUBDIRECTORY};
+use clap::{ArgGroup, Args, Parser, Subcommand};
+use mindflayer_core::scan::DEFAULT_DEPTH;
+use mindflayer_core::{Agent, Kind, Share, Shell, DEFAULT_SUBDIRECTORY};
 
 /// Manage the agent skills in a mind project.
 //
@@ -93,6 +94,31 @@ pub struct AgentHomeOptions {
 pub enum Command {
     /// Create a mind project here.
     Init {
+        /// The agents that work in this project, comma-separated [default:
+        /// claude,codex,opencode].
+        ///
+        /// What is installed into the project is put where each of them
+        /// reads it.
+        //
+        // Every agent by default, so a project made without thinking about
+        // it reaches whichever one is opened in it. The default is spelled
+        // in the text because clap would show it space-separated, which is
+        // not how the option takes it.
+        #[arg(
+            long,
+            value_name = "AGENTS",
+            value_delimiter = ',',
+            value_parser = agents(),
+            default_values_t = Agent::ALL,
+            hide_default_value = true
+        )]
+        agents: Vec<Agent>,
+
+        /// Leave `.mind` for the team to commit, and what is installed into
+        /// the project with it, rather than keeping both out of git.
+        #[arg(long)]
+        shared: bool,
+
         /// Where this project keeps its skills [default: `skills`].
         ///
         /// Relative to the project. Point it wherever the agents that read
@@ -177,6 +203,16 @@ pub enum Command {
         target: Option<String>,
     },
 
+    /// Say what this project holds: whether each artifact was installed,
+    /// is partly gone, is somebody's or is the project's own, which agents
+    /// read it, and where what was installed came from.
+    Status {
+        /// Print it as JSON, in the envelope every reading command's --json
+        /// shares.
+        #[arg(long)]
+        json: bool,
+    },
+
     /// Register this project with the flayer workspace above it.
     Link,
 
@@ -215,6 +251,63 @@ pub enum Command {
     Uninstall {
         /// The skill's name.
         name: String,
+    },
+
+    /// Change which agents work in this project, and carry what is
+    /// installed into it along: a copy wherever an agent it now names
+    /// reads, and none left where no agent it names does.
+    ///
+    /// `mind agents claude codex` names exactly those; `add` and `remove`
+    /// change the ones it names. Without --yes nothing changes, and the
+    /// command says what would.
+    //
+    // The usage is spelled out because clap's would offer agents before
+    // `add` too, which it then refuses.
+    #[command(
+        subcommand_negates_reqs = true,
+        override_usage = "mind agents [OPTIONS] <AGENT>...\n       mind agents <add|remove> [OPTIONS] <AGENT>..."
+    )]
+    Agents {
+        #[command(subcommand)]
+        change: Option<AgentsChange>,
+
+        #[command(flatten)]
+        named: AgentNames,
+    },
+
+    /// Keep what is installed into this project to this checkout, or leave
+    /// it for the team to commit, with `.mind` itself.
+    ///
+    /// Without --yes nothing changes, and the command says what would.
+    Share {
+        #[command(flatten)]
+        mode: ShareMode,
+    },
+
+    /// Install a kind into folders of this project's own, for every agent
+    /// it names, instead of where each agent reads, or send it back there,
+    /// and carry what is installed along.
+    ///
+    /// A folder no agent reads reaches one only once it is pointed there.
+    /// Without --yes nothing changes, and the command says what would.
+    Targets {
+        #[command(subcommand)]
+        change: TargetsChange,
+    },
+
+    /// Bring this project, made by an older Mindflayer and marked by a
+    /// mind.toml, to settings, and what is installed into it to where its
+    /// agents read.
+    ///
+    /// Without --yes nothing changes, and the command says what would.
+    Migrate {
+        #[command(flatten)]
+        settings: Migrated,
+
+        /// Make the change. Without this nothing changes, and the command
+        /// says what would.
+        #[arg(short, long)]
+        yes: bool,
     },
 
     /// Open the TUI on this project. What `mind` does on its own.
@@ -426,6 +519,20 @@ pub enum FlayerCommand {
         project: Option<String>,
     },
 
+    /// Say what every managed project holds: whether each artifact was
+    /// installed, is partly gone, is somebody's or is the project's own,
+    /// which agents read it, and where what was installed came from.
+    Status {
+        /// Only this project.
+        #[arg(short, long, value_name = "PROJECT")]
+        project: Option<String>,
+
+        /// Print it as JSON, in the envelope every reading command's --json
+        /// shares.
+        #[arg(long)]
+        json: bool,
+    },
+
     /// Register one or more mind projects with this workspace.
     Link {
         /// Each project's directory, the one holding `.mind`.
@@ -463,10 +570,37 @@ pub enum FlayerCommand {
 
     /// Open the minds screen: every mind project and repository under this
     /// workspace, ticked where it is linked, to link and unlink in one pass.
-    Minds,
+    ///
+    /// Given folders, it looks for what to link under those instead, as
+    /// `flayer scan` does, and still lists every project the workspace links.
+    Minds {
+        /// Each folder to look under, itself included [default: the
+        /// workspace's root].
+        #[arg(value_name = "DIR")]
+        roots: Vec<PathBuf>,
+    },
 
-    /// Look under this workspace for projects and repositories to link.
-    Scan,
+    /// Look for projects and repositories to link: under this workspace, or
+    /// under each folder given.
+    ///
+    /// It links nothing, and prints each path as `flayer link` run from here
+    /// takes it.
+    Scan {
+        /// Each folder to look under, itself included [default: the
+        /// workspace's root].
+        #[arg(value_name = "DIR")]
+        roots: Vec<PathBuf>,
+
+        /// How many levels below each folder to look. However deep, a scan
+        /// that has listed too many folders stops, and says so.
+        #[arg(long, value_name = "N", default_value_t = DEFAULT_DEPTH)]
+        depth: usize,
+
+        /// Print it as JSON, in the envelope every reading command's --json
+        /// shares.
+        #[arg(long)]
+        json: bool,
+    },
 
     /// Collect artifacts from elsewhere onto this workspace's shelf.
     #[command(subcommand)]
@@ -501,20 +635,90 @@ pub enum FlayerCommand {
         name: String,
     },
 
-    /// Bring a workspace made by an older Mindflayer into the layout a new
-    /// one has.
+    /// Change which agents work in a project, and carry what is installed
+    /// into it along, as `mind agents` does there.
     ///
     /// Without --yes nothing changes, and the command says what would.
+    #[command(
+        subcommand_negates_reqs = true,
+        override_usage = "flayer agents -p <PROJECT> [OPTIONS] <AGENT>...\n       flayer agents -p <PROJECT> <add|remove> [OPTIONS] <AGENT>..."
+    )]
+    Agents {
+        /// The project, by name or path. Needed, and taken on either side of
+        /// `add` or `remove`.
+        #[arg(short, long, value_name = "PROJECT", global = true)]
+        project: Option<String>,
+
+        #[command(subcommand)]
+        change: Option<AgentsChange>,
+
+        #[command(flatten)]
+        named: AgentNames,
+    },
+
+    /// Keep what is installed into a project to this checkout, or leave it
+    /// for the team to commit, as `mind share` does there.
+    ///
+    /// Without --yes nothing changes, and the command says what would.
+    Share {
+        /// The project, by name or path.
+        #[arg(short, long, value_name = "PROJECT")]
+        project: String,
+
+        #[command(flatten)]
+        mode: ShareMode,
+    },
+
+    /// Install a kind into folders of a project's own, or send it back to
+    /// where each agent reads, as `mind targets` does there.
+    ///
+    /// Without --yes nothing changes, and the command says what would.
+    #[command(
+        override_usage = "flayer targets -p <PROJECT> set [OPTIONS] <KIND> <DIR>...\n       flayer targets -p <PROJECT> reset [OPTIONS] <KIND>"
+    )]
+    Targets {
+        /// The project, by name or path. Needed, and taken on either side of
+        /// `set` or `reset`.
+        #[arg(short, long, value_name = "PROJECT", global = true)]
+        project: Option<String>,
+
+        #[command(subcommand)]
+        change: TargetsChange,
+    },
+
+    /// Bring a workspace made by an older Mindflayer, or the projects it
+    /// links, into the layout a new one has.
+    ///
+    /// Without --yes nothing changes, and the command says what would.
+    //
+    // A flag per migration rather than a bare `migrate` that does all of
+    // them, so the next one is asked for by name and never run by a line
+    // typed for this one; and one at a time, so a line says which it runs.
+    // Not required as a group, so a line naming none is told what there is
+    // to migrate rather than shown clap's usage.
+    #[command(group(
+        ArgGroup::new("what")
+            .args(["library", "project", "all_projects"])
+            .multiple(false)
+    ))]
     Migrate {
         /// Move the workspace's own skills and rules from the folders its
         /// flayer.toml names into its library, `.mindflayer/library`, and
         /// point flayer.toml there, keeping it as it was beside it.
-        //
-        // Required, and the only one so far: a flag per migration rather than
-        // a bare `migrate` that does all of them, so the next one is asked for
-        // by name and never run by a line typed for this one.
-        #[arg(long, required = true)]
+        #[arg(long, conflicts_with_all = ["agents", "local", "shared"])]
         library: bool,
+
+        /// Move one project the workspace links, by name or path, from its
+        /// mind.toml to settings, as `mind migrate` does there.
+        #[arg(short, long, value_name = "PROJECT")]
+        project: Option<String>,
+
+        /// Move every project the workspace links that a mind.toml marks.
+        #[arg(long)]
+        all_projects: bool,
+
+        #[command(flatten)]
+        settings: Migrated,
 
         /// Make the change. Without this nothing changes, and the command
         /// says what would.
@@ -527,6 +731,132 @@ pub enum FlayerCommand {
     /// What `flayer` does on its own. Everything it changes, it changes by
     /// running one of these commands, and it prints them when it closes.
     Tui,
+}
+
+/// How `agents` changes the agents a project names, when it does not name
+/// them all.
+#[derive(Debug, Subcommand)]
+pub enum AgentsChange {
+    /// Name these agents as well.
+    Add(AgentNames),
+    /// Stop naming these agents.
+    #[command(alias = "rm")]
+    Remove(AgentNames),
+}
+
+/// The agents an `agents` line names, and whether to go ahead.
+#[derive(Debug, Args)]
+pub struct AgentNames {
+    /// Each agent: claude, codex or opencode, space or comma-separated.
+    #[arg(
+        required = true,
+        value_name = "AGENT",
+        value_delimiter = ',',
+        value_parser = agents()
+    )]
+    pub agents: Vec<Agent>,
+
+    /// Make the change. Without this nothing changes, and the command says
+    /// what would.
+    #[arg(short, long)]
+    pub yes: bool,
+}
+
+/// How `targets` changes where a project installs a kind.
+#[derive(Debug, Subcommand)]
+pub enum TargetsChange {
+    /// Install a kind in these folders, for every agent the project names,
+    /// in place of where it went.
+    Set {
+        /// The kind: `skills`.
+        #[arg(value_name = "KIND")]
+        kind: Kind,
+
+        /// Each folder, relative to the project: inside it, and outside
+        /// `.mind`.
+        #[arg(required = true, value_name = "DIR")]
+        folders: Vec<String>,
+
+        /// Make the change. Without this nothing changes, and the command
+        /// says what would.
+        #[arg(short, long)]
+        yes: bool,
+    },
+    /// Install a kind where each agent the project names reads it again.
+    Reset {
+        /// The kind: `skills`.
+        #[arg(value_name = "KIND")]
+        kind: Kind,
+
+        /// Make the change. Without this nothing changes, and the command
+        /// says what would.
+        #[arg(short, long)]
+        yes: bool,
+    },
+}
+
+/// What a project's settings are to say once it is moved from its
+/// `mind.toml`, which says neither: the agents that work in it, and whether
+/// what is installed into it is the team's.
+#[derive(Debug, Args)]
+pub struct Migrated {
+    /// The agents that work in the project, comma-separated [default:
+    /// claude,codex,opencode].
+    ///
+    /// What is installed into it is copied where each of them reads it.
+    #[arg(
+        long,
+        value_name = "AGENTS",
+        value_delimiter = ',',
+        value_parser = agents(),
+        default_values_t = Agent::ALL,
+        hide_default_value = true
+    )]
+    pub agents: Vec<Agent>,
+
+    /// Keep `.mind`, and what is installed into the project, out of git for
+    /// this checkout.
+    #[arg(long, conflicts_with = "shared")]
+    pub local: bool,
+
+    /// Leave `.mind`, and what is installed into the project, for the team
+    /// to commit, as a project from before settings was [default].
+    //
+    // The default spelled out as a flag too, so a line can say it.
+    #[arg(long)]
+    pub shared: bool,
+}
+
+impl Migrated {
+    /// The share mode asked for: shared unless `--local`, since a project
+    /// from before settings was committed by design (D-02).
+    pub fn share(&self) -> Share {
+        if self.local {
+            Share::Local
+        } else {
+            Share::Shared
+        }
+    }
+}
+
+/// What `share` sets: the share mode, and whether a tracked file may be
+/// edited, written together.
+#[derive(Debug, Args)]
+pub struct ShareMode {
+    /// `local`, kept out of git for this checkout alone, or `shared`, left
+    /// for the team to commit.
+    #[arg(value_name = "MODE", value_parser = shares())]
+    pub share: Share,
+
+    /// Let a file git tracks (AGENTS.md, CLAUDE.md, an MCP config) be edited
+    /// to reach an agent in a local project. Off unless given.
+    #[arg(long)]
+    pub edit_tracked: bool,
+
+    /// Make the change. Without this nothing changes, and the command says
+    /// what would.
+    #[arg(short, long)]
+    pub yes: bool,
 }
 
 /// Where a gather takes artifacts from.
@@ -561,4 +891,18 @@ pub enum GatherCommand {
 fn shells() -> impl TypedValueParser<Value = Shell> {
     PossibleValuesParser::new(Shell::ALL.map(Shell::name))
         .map(|name| name.parse::<Shell>().expect("every listed shell parses"))
+}
+
+/// What `--agents` takes, each from core's list, for the reason `--shell`
+/// does.
+fn agents() -> impl TypedValueParser<Value = Agent> {
+    PossibleValuesParser::new(Agent::ALL.map(Agent::name))
+        .map(|name| name.parse::<Agent>().expect("every listed agent parses"))
+}
+
+/// What `share` takes, each share mode by the word its settings spell it
+/// with, for the reason `--shell` takes core's list.
+fn shares() -> impl TypedValueParser<Value = Share> {
+    PossibleValuesParser::new(Share::ALL.map(Share::name))
+        .map(|name| Share::named(&name).expect("every listed share mode is one"))
 }

@@ -110,9 +110,10 @@ fn the_helpers_pin_the_default_home_the_workspace_and_every_agent_home_to_none()
         assert_eq!(home, &empty);
         assert_eq!(workspace, &empty);
         assert_eq!(agents, &pinned);
-        let lookup = Lookup::given(home.as_deref(), workspace.as_deref());
+        let lookup = Lookup::given(home.as_deref(), workspace.as_deref(), agents);
         assert_eq!(lookup.home, None);
         assert_eq!(lookup.activated, None);
+        assert_eq!(lookup.agents, AgentHomes::default());
         assert_eq!(agent_homes(agents), AgentHomes::default());
     }
 }

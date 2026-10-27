@@ -1,6 +1,8 @@
 //! Keeping a project's paths out of git through `info/exclude`, checked
 //! against what gix, reading the file the way git does, reports as ignored.
 
+mod common;
+
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -257,6 +259,66 @@ fn two_projects_install_and_uninstall_independently() {
 }
 
 #[test]
+fn a_projects_group_is_listed_and_forgotten_whole_and_no_other() {
+    let repo = repository();
+    let file = exclude_file(repo.path());
+    let before = fs::read(&file).unwrap();
+    let app = project(repo.path(), "packages/app");
+    let web = project(repo.path(), "packages/web");
+    exclude::add(&app, "app", &[skill("one"), skill("two")]).unwrap();
+    exclude::add(&web, "web", &[skill("review")]).unwrap();
+
+    let listed = exclude::listed(&app, "app").unwrap().unwrap();
+    assert_eq!(listed.file, file);
+    assert_eq!(listed.route, PathBuf::from("packages/app"));
+    assert_eq!(
+        listed.lines,
+        [
+            "/packages/app/.agents/skills/one/",
+            "/packages/app/.agents/skills/two/"
+        ]
+    );
+    // What an entry would write there is what the listing holds.
+    assert_eq!(
+        skill("one").pattern(&listed.route).unwrap(),
+        listed.lines[0]
+    );
+
+    let forgotten = exclude::forget(&app, "app").unwrap();
+    assert_eq!(forgotten, Excluded::Written { file: file.clone() });
+    assert!(exclude::listed(&app, "app")
+        .unwrap()
+        .unwrap()
+        .lines
+        .is_empty());
+    assert!(!ignored(repo.path(), "packages/app/.agents/skills/one/"));
+    assert!(ignored(repo.path(), "packages/web/.agents/skills/review/"));
+    assert_eq!(
+        exclude::forget(&app, "app").unwrap(),
+        Excluded::Unchanged { file: file.clone() }
+    );
+
+    exclude::forget(&web, "web").unwrap();
+    assert_eq!(fs::read(&file).unwrap(), before);
+}
+
+#[test]
+fn outside_a_repository_nothing_is_listed_or_forgotten() {
+    let dir = TempDir::new().unwrap();
+    let alone = project(dir.path(), "alone");
+    assert_eq!(exclude::locate(&alone).unwrap(), None);
+
+    assert_eq!(exclude::listed(&alone, "alone").unwrap(), None);
+    assert_eq!(
+        exclude::forget(&alone, "alone").unwrap(),
+        Excluded::Outside {
+            project: alone.clone()
+        }
+    );
+    assert_eq!(fs::read_dir(&alone).unwrap().count(), 0);
+}
+
+#[test]
 fn a_project_outside_any_repository_gets_a_warning_and_nothing_is_written() {
     let dir = TempDir::new().unwrap();
     let alone = project(dir.path(), "alone");
@@ -319,6 +381,8 @@ fn a_malformed_block_is_a_failure_and_nothing_is_written() {
         )
     );
     assert!(exclude::remove(repo.path(), ".", &[skill("one")]).is_err());
+    assert!(exclude::forget(repo.path(), ".").is_err());
+    assert!(exclude::listed(repo.path(), ".").is_err());
     assert_eq!(fs::read(&file).unwrap(), before);
 }
 
@@ -391,4 +455,50 @@ fn a_linked_worktree_keeps_its_entries_in_the_common_dir() {
         &linked,
         "packages/app/.agents/skills/commit-style/"
     ));
+}
+
+/// Put every file under `work_tree` in its repository's index, as `git add
+/// -A` would.
+fn indexed(work_tree: &Path) {
+    let repository = gix::open_opts(work_tree, gix::open::Options::isolated()).unwrap();
+    let tree = common::write_tree(&repository, work_tree);
+    let mut index = repository.index_from_tree(&tree).unwrap();
+    index.write(Default::default()).unwrap();
+}
+
+#[test]
+fn a_folder_is_tracked_when_the_index_names_a_file_inside_it() {
+    let repo = repository();
+    let app = project(repo.path(), "packages/app");
+    project(&app, ".mind");
+    fs::write(app.join(".mind/mind.toml"), "version = 2\n").unwrap();
+    project(&app, ".mindflayer");
+    fs::write(app.join(".mindflayer/flayer.toml"), "version = 2\n").unwrap();
+    let web = project(repo.path(), "packages/web");
+    project(&web, ".mindy");
+    fs::write(web.join(".mindy/notes"), "Mine").unwrap();
+    indexed(repo.path());
+    // Made after the index was written, so git does not track it.
+    let late = project(repo.path(), "packages/late");
+    project(&late, ".mind");
+    fs::write(late.join(".mind/mind.toml"), "version = 2\n").unwrap();
+
+    assert!(exclude::tracks(&app, Path::new(".mind")).unwrap());
+    assert!(exclude::tracks(repo.path(), Path::new("packages/app/.mind")).unwrap());
+    // A folder whose name only starts the same is another folder.
+    assert!(!exclude::tracks(&web, Path::new(".mind")).unwrap());
+    assert!(!exclude::tracks(&late, Path::new(".mind")).unwrap());
+}
+
+#[test]
+fn nothing_is_tracked_outside_a_work_tree_or_in_a_repository_with_no_index() {
+    let outside = TempDir::new().unwrap();
+    project(outside.path(), ".mind");
+    fs::write(outside.path().join(".mind/mind.toml"), "").unwrap();
+    assert!(!exclude::tracks(outside.path(), Path::new(".mind")).unwrap());
+
+    let repo = repository();
+    project(repo.path(), ".mind");
+    fs::write(repo.path().join(".mind/mind.toml"), "").unwrap();
+    assert!(!exclude::tracks(repo.path(), Path::new(".mind")).unwrap());
 }

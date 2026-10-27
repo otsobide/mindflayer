@@ -1,8 +1,9 @@
 //! What core knows about the agents that read what Mindflayer manages.
 //!
 //! Which agents there are ([`Agent`]), where each kind goes in a project for
-//! each of them to read it ([`TargetTable`]), and where each keeps what it
-//! reads for every project ([`AgentHomes`]). The checks that will need those
+//! each of them to read it ([`TargetTable`]), every folder in a project each
+//! reads it from, whoever put it there ([`Agent::reads`]), and where each
+//! keeps what it reads for every project ([`AgentHomes`]). The checks that will need those
 //! last folders (Claude's user memory, Codex's config, the skills in
 //! `~/.agents`) are handed them rather than looking them up.
 //!
@@ -15,6 +16,7 @@ use std::fmt;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
+use serde::{Serialize, Serializer};
 use thiserror::Error;
 
 use crate::kind::Kind;
@@ -56,11 +58,70 @@ impl Agent {
             Agent::OpenCode => "opencode",
         }
     }
+
+    /// Every folder in a project this agent reads `kind` from, whoever put
+    /// what is there, each relative to the project's root.
+    ///
+    /// Not the [`TargetTable`], which says where Mindflayer puts a copy for
+    /// the agent: one folder for each, where this is every folder it reads,
+    /// which can be more. OpenCode reads `.claude/skills` as well as
+    /// `.agents/skills`, and is sent a copy only in the second. A listing
+    /// asks this which agents see a skill wherever it sits; an install asks
+    /// the table where to write. Folded into one, either OpenCode would be
+    /// sent a second copy it does not need, or a listing would say it misses
+    /// the skills in Claude's folder, which it reads.
+    ///
+    /// Pure, as the table is, and resting on the same facts in
+    /// `docs/agents.md`: a change here that disagrees with them starts
+    /// there. Nothing at user scope, which is no project's.
+    pub fn reads(self, kind: Kind) -> Vec<PathBuf> {
+        read(kind, self)
+    }
+}
+
+/// Where `agent` reads `kind` in a project, in path order.
+///
+/// One arm per pair with no wildcard, as [`standard`]'s, so a new kind or a
+/// new agent does not compile until somebody has said what it reads.
+fn read(kind: Kind, agent: Agent) -> Vec<PathBuf> {
+    // Joined a folder at a time, as `standard` joins them, so a folder here
+    // and the same folder in the table are equal paths on Windows too.
+    let skills = |folder: &str| Path::new(folder).join("skills");
+    match (kind, agent) {
+        // Verified on Claude Code 2.1.309, which does not read
+        // `.agents/skills`.
+        (Kind::Skill, Agent::Claude) => vec![skills(".claude")],
+        // Docs-only. Not `.codex/skills`, read only in a trusted project, so
+        // it says nothing of what Codex sees in any other.
+        (Kind::Skill, Agent::Codex) => vec![skills(".agents")],
+        // Docs-only, for V1 and V2 alike. V1 can switch `.claude/skills` off
+        // (`OPENCODE_DISABLE_CLAUDE_CODE`), which nothing in a project shows,
+        // so it is read here as the default reads it.
+        (Kind::Skill, Agent::OpenCode) => {
+            vec![skills(".agents"), skills(".claude"), skills(".opencode")]
+        }
+        // A rule reaches an agent through `AGENTS.md`, or Claude's rule files
+        // (D-03), which M2 puts in this and the target table together. Claude
+        // does read `.claude/rules`, but how far down, and what a rule there
+        // is to Mindflayer, is M2's to say; until then no folder of rules is
+        // said to be read, so no listing claims an agent sees a rule.
+        (Kind::Rule, Agent::Claude | Agent::Codex | Agent::OpenCode) => Vec::new(),
+    }
 }
 
 impl fmt::Display for Agent {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_str(self.name())
+    }
+}
+
+/// By its name, the one `--agents` and a project's settings take, rather
+/// than derived: a derive would spell `OpenCode` as `open_code`, a name no
+/// command line or settings file holds, and what a JSON report calls an
+/// agent is a contract from the first report on.
+impl Serialize for Agent {
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        serializer.serialize_str(self.name())
     }
 }
 
@@ -98,35 +159,37 @@ impl fmt::Display for UnknownAgent {
 /// Where each kind goes in a project for each agent.
 ///
 /// One table in core, so no front end ever spells an agent's folder: an
-/// install (#34) asks it where to put a copy for each agent a project names,
-/// and a check asks it where to look.
+/// install asks it where to put a copy for each agent a project names
+/// ([`install::targets`](crate::install::targets)), and a check asks it where
+/// to look.
 ///
 /// A value rather than a function a caller reaches for, because the
 /// standard layout is only the default: a project's settings may put a kind
-/// somewhere else for every agent (#40), and a caller handed the table then
-/// follows that without changing. The project hands it on, in core: which
-/// table applies is its settings' to say, so an install takes the table from
-/// the project it installs into (#34), and no front end calls
+/// somewhere else for every agent ([`overriding`](TargetTable::overriding)),
+/// and a caller handed the table then follows that without changing. The project hands it on, in core: which
+/// table applies is its settings' to say, so a caller asks the project
+/// ([`MindProject::targets`](crate::MindProject::targets)), as an install
+/// does, and no front end calls
 /// [`standard`](TargetTable::standard) and picks one those settings would
 /// contradict.
 ///
 /// Where a kind goes for an agent is where its copy is put for that agent,
 /// not proof the agent reads it there: the standard layout is built from
 /// what each one reads, but an override's folder reaches an agent only once
-/// the agent is pointed at it, which is #40's status check to say.
+/// the agent is pointed at it, which is for a project's status to say.
 ///
-/// One location per kind and agent for now, which is all the standard layout
-/// needs, kept private so it can grow into the list of folders per kind the
-/// override names when #40 lands, without a caller noticing. A pair with
-/// none is a kind that reaches that agent some other way, or not at all,
-/// which is every rule for now: D-03 puts rules in a block of `AGENTS.md`,
-/// which M2 adds here, as M6 adds MCP servers.
+/// A list of locations per kind and agent, kept private: the standard
+/// layout needs one, and an override names as many folders as it likes,
+/// each for every agent ([`overriding`](TargetTable::overriding)). A pair
+/// with none is a kind that reaches that agent some other way, or not at
+/// all, which is every rule for now: D-03 puts rules in a block of
+/// `AGENTS.md`, which M2 adds here, as M6 adds MCP servers.
 ///
 /// Pure: no entry is looked for on disk, and every location is relative to
 /// a project's root.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TargetTable {
-    locations: BTreeMap<(Kind, Agent), PathBuf>,
+    locations: BTreeMap<(Kind, Agent), Vec<PathBuf>>,
 }
 
 impl TargetTable {
@@ -147,17 +210,40 @@ impl TargetTable {
         let locations = Kind::ALL
             .into_iter()
             .flat_map(|kind| Agent::ALL.into_iter().map(move |agent| (kind, agent)))
-            .filter_map(|(kind, agent)| Some(((kind, agent), standard(kind, agent)?)))
+            .filter_map(|(kind, agent)| Some(((kind, agent), vec![standard(kind, agent)?])))
             .collect();
         TargetTable { locations }
+    }
+
+    /// This table with `kind` sent to `folders`, for every agent, in place of
+    /// wherever it sent it: what a project's settings make of it when they
+    /// say where a kind is installed (the owner's amendment to D-07).
+    ///
+    /// For every agent alike, rather than a folder per agent: the override
+    /// is one place every agent the project names shares (one `.skills` for
+    /// all three, say), and two agents sent to one folder get one copy, as
+    /// Codex and OpenCode share `.agents/skills` in the standard layout. A
+    /// folder per agent would be a second table to write by hand, which the
+    /// standard one already is. No folder at all sends the kind nowhere.
+    ///
+    /// Pure, and unchecked: whether each folder is one an install may use
+    /// (inside the project, outside `.mind`) is the project's to say, which
+    /// hands over only those
+    /// ([`MindProject::targets`](crate::MindProject::targets)).
+    pub fn overriding(mut self, kind: Kind, folders: &[PathBuf]) -> TargetTable {
+        for agent in Agent::ALL {
+            self.locations.insert((kind, agent), folders.to_vec());
+        }
+        self
     }
 
     /// Where `kind` goes for `agents`: one target per location, each with
     /// the agents it is for, so two agents sent to one folder get one copy.
     ///
     /// Sorted here, by location and then by agent in report order, so every
-    /// front end lists them alike; an agent named twice is served once, and
-    /// one the kind does not reach adds nothing.
+    /// front end lists them alike; an agent named twice is served once, one
+    /// location named twice for an agent is one target, and an agent the
+    /// kind does not reach adds nothing.
     ///
     /// Pure, as the table is: nothing is read on disk, and every location
     /// comes from the table it is called on, which for
@@ -166,7 +252,7 @@ impl TargetTable {
     pub fn targets(&self, kind: Kind, agents: &[Agent]) -> Vec<AgentTarget> {
         let mut served: BTreeMap<&Path, BTreeSet<Agent>> = BTreeMap::new();
         for &agent in agents {
-            if let Some(location) = self.locations.get(&(kind, agent)) {
+            for location in self.locations.get(&(kind, agent)).into_iter().flatten() {
                 served.entry(location).or_default().insert(agent);
             }
         }
@@ -205,7 +291,7 @@ pub struct AgentTarget {
     /// The agents asked about that the table sends here, each once, in report
     /// order. Never empty: a location none of them is sent to is not one of
     /// their targets. Under the standard table these are agents that read the
-    /// location; under an override (#40) they need not be.
+    /// location; under an override they need not be.
     pub agents: Vec<Agent>,
 }
 
@@ -238,6 +324,20 @@ pub struct AgentHomes {
 }
 
 impl AgentHomes {
+    /// Each folder there is, with who reads it, in report order: the folders
+    /// a copy put inside would reach every project, not one.
+    pub fn folders(&self) -> Vec<(&'static str, &Path)> {
+        [
+            ("Claude Code", &self.claude_config_dir),
+            ("Codex", &self.codex_home),
+            ("OpenCode", &self.opencode_config_dir),
+            ("more than one agent", &self.agents_dir),
+        ]
+        .into_iter()
+        .filter_map(|(reader, folder)| Some((reader, folder.as_deref()?)))
+        .collect()
+    }
+
     /// Where each agent keeps its folder when nothing moves it: the fallback a
     /// front end takes once neither its option nor the agent's own variable
     /// answers.

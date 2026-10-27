@@ -29,18 +29,20 @@ pub mod lifecycle;
 pub mod lock;
 pub mod migrate;
 pub mod paths;
+pub mod reapply;
 pub mod resolve;
 pub mod rule;
 pub mod scan;
 pub mod settings;
 pub mod skill;
+pub mod status;
 pub mod template;
 pub mod url;
 pub mod workspace;
 
 pub use activate::{ActivateError, Shell, UnknownShell};
 pub use agent::{Agent, AgentHomes, AgentTarget, TargetTable, UnknownAgent};
-pub use artifact::{Artifact, ArtifactError, Declared, ValidationIssue};
+pub use artifact::{Artifact, ArtifactCopy, ArtifactError, Declared, Provenance, ValidationIssue};
 pub use catalog::{Catalog, DiscoveryFailure, Reference, QUALIFIER};
 pub use create::{create, create_from, CreateError};
 pub use exclude::{ExcludeError, ExcludeFile, Excluded};
@@ -51,18 +53,20 @@ pub use kind::{Kind, Layout, UnknownKind};
 pub use ledger::{Ledger, LedgerError, SourceKind, LEDGER_FILE};
 pub use lifecycle::{LifecycleError, Target};
 pub use lock::{LockError, WorkspaceLock};
+pub use reapply::{Change, ReapplyError};
 pub use resolve::{resolve, resolve_except, Inputs, Intent, Reason, ResolveError, Resolved};
 pub use rule::{Lenient, RuleManifest};
 pub use scan::{scan, Found, Scan, ScanFailure};
-pub use settings::{ProjectId, Settings, Share, SETTINGS_FILE};
+pub use settings::{ProjectId, Settings, Share, Targets, SETTINGS_FILE};
 pub use skill::{
     Compatibility, Metadata, SkillManifest, MAX_COMPATIBILITY_LEN, MAX_DESCRIPTION_LEN,
     MAX_NAME_SEGMENT_LEN,
 };
+pub use status::{ArtifactStatus, ProjectStatus, State, Status, StatusFailure, Unreached};
 pub use template::{Template, TemplateError, TEMPLATES_DIR};
 pub use workspace::{
     Directories, FlayerConfig, FlayerWorkspace, Initialization, Loaded, Marker, Member, MindConfig,
-    MindProject, ProjectConfig, ProjectWarning, Registration, WorkspaceError, CACHE_DIR,
-    DIRECTORIES_VERSION, FLAYER_CONFIG, FLAYER_DIR, LIBRARY_DIR, MIND_CONFIG, MIND_DIR,
-    MIND_IGNORE, SETTINGS_VERSION,
+    MindProject, Misplaced, MisplacedTarget, ProjectConfig, ProjectWarning, Registration,
+    WorkspaceError, CACHE_DIR, DIRECTORIES_VERSION, FLAYER_CONFIG, FLAYER_DIR, LIBRARY_DIR,
+    MIND_CONFIG, MIND_DIR, MIND_IGNORE, SETTINGS_VERSION, TARGETS_VERSION,
 };

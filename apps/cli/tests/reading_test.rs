@@ -562,26 +562,31 @@ fn init_can_be_told_where_this_project_keeps_its_skills() {
 
     assert!(outcome.ok);
     assert!(dir.path().join(".claude").join("skills").is_dir());
-    let written = fs::read_to_string(dir.path().join(MIND_DIR).join(MIND_CONFIG)).unwrap();
+    let written = fs::read_to_string(dir.path().join(MIND_DIR).join(SETTINGS_FILE)).unwrap();
+    // The kind that was not mentioned keeps its default, written down too,
+    // since a kind the settings leave out has no folder at all.
     assert!(
-        written.contains(r#"skills = ".claude/skills""#),
+        written.contains(
+            "  \"directories\": {\n    \"skills\": \".claude/skills\",\n    \"rules\": \"rules\"\n  }\n"
+        ),
         "{written}"
     );
-    // The kind that was not mentioned keeps its default.
     assert!(dir.path().join("rules").is_dir());
 }
 
 #[test]
 fn listing_reads_from_where_the_project_says_its_skills_are() {
     let dir = TempDir::new().unwrap();
-    mind(dir.path(), &["init", "--skills", ".claude/skills"]).unwrap();
+    // A folder no agent reads, so only the settings lead the listing there:
+    // `.claude/skills` would be read for Claude whatever they said.
+    mind(dir.path(), &["init", "--skills", "docs/skills"]).unwrap();
     write_skill(dir.path(), "deploy", &skill_file("deploy", "Ship it"));
 
     let outcome = mind(dir.path(), &["list", "skills"]).unwrap();
 
     assert_eq!(outcome.stdout, "deploy  Ship it\n");
     // And it really is the configured folder that was read.
-    assert!(dir.path().join(".claude/skills/deploy/SKILL.md").is_file());
+    assert!(dir.path().join("docs/skills/deploy/SKILL.md").is_file());
 }
 
 #[test]
@@ -619,12 +624,27 @@ fn init_refuses_a_directory_outside_the_project() {
 }
 
 #[test]
+fn init_refuses_a_directory_inside_the_mind_that_keeps_itself_out_of_git() {
+    let dir = TempDir::new().unwrap();
+
+    let failure = mind(dir.path(), &["init", "--skills", ".mind/skills"]).unwrap_err();
+
+    assert_eq!(
+        failure.error.to_string(),
+        ".mind/skills: cannot hold a project's skills, because it is inside .mind, which holds \
+         Mindflayer's own files and is kept out of git unless the project is shared"
+    );
+    assert!(!dir.path().join(MIND_DIR).exists(), "nothing was made");
+}
+
+#[test]
 fn a_workspace_sees_a_project_that_keeps_its_skills_elsewhere() {
     let dir = TempDir::new().unwrap();
     flayer(dir.path(), &["init"]).unwrap();
     let project = dir.path().join("collapse");
     fs::create_dir(&project).unwrap();
-    mind(&project, &["init", "--skills", ".claude/skills"]).unwrap();
+    // Not `.claude/skills`, which Claude's folder would reach anyway.
+    mind(&project, &["init", "--skills", "docs/skills"]).unwrap();
     write_skill(&project, "deploy", &skill_file("deploy", "Ship it"));
     flayer(dir.path(), &["link", "collapse"]).unwrap();
 
@@ -632,4 +652,101 @@ fn a_workspace_sees_a_project_that_keeps_its_skills_elsewhere() {
 
     // The workspace reads the project's own answer rather than assuming one.
     assert!(outcome.stdout.contains("deploy"), "{}", outcome.stdout);
+}
+
+// ---------------------------------------------------------------------------
+// A project marked by its settings
+// ---------------------------------------------------------------------------
+
+/// Write `contents` at `route` below `root`, wherever that is.
+fn put(root: &Path, route: &str, contents: &str) {
+    let path = root.join(route);
+    fs::create_dir_all(path.parent().unwrap()).unwrap();
+    fs::write(path, contents).unwrap();
+}
+
+/// A project in `dir`, marked by its settings, naming every agent and
+/// authoring skills in `skills/`.
+fn marked(dir: &Path) -> MindProject {
+    let directories = mindflayer_core::Directories::default().with(Kind::Skill, "skills");
+    MindProject::init_settings(
+        dir,
+        &mindflayer_core::Agent::ALL,
+        mindflayer_core::Share::Shared,
+        &directories,
+    )
+    .unwrap()
+    .0
+}
+
+#[test]
+fn a_skill_in_both_agents_folders_is_listed_once() {
+    let dir = TempDir::new().unwrap();
+    marked(dir.path());
+    let deploy = skill_file("deploy", "Ship it");
+    put(dir.path(), ".agents/skills/deploy/SKILL.md", &deploy);
+    put(dir.path(), ".claude/skills/deploy/SKILL.md", &deploy);
+
+    let outcome = mind(dir.path(), &["list"]).unwrap();
+
+    assert_eq!(outcome.stdout, "deploy  Ship it\n");
+    assert!(
+        outcome.ok && outcome.stderr.is_empty(),
+        "{:?}",
+        outcome.stderr
+    );
+}
+
+#[test]
+fn copies_that_differ_are_a_warning_and_validate_counts_them() {
+    let dir = TempDir::new().unwrap();
+    marked(dir.path());
+    put(
+        dir.path(),
+        ".agents/skills/deploy/SKILL.md",
+        &skill_file("deploy", "Ship it"),
+    );
+    put(
+        dir.path(),
+        ".claude/skills/deploy/SKILL.md",
+        &skill_file("deploy", "Ship it otherwise"),
+    );
+    let warning = format!(
+        "warning: the copies of `deploy` at {} and {} differ, so the agents reading them do not \
+         all load the same skill",
+        dir.path().join(".agents/skills/deploy").display(),
+        dir.path().join(".claude/skills/deploy").display()
+    );
+
+    let listed = mind(dir.path(), &["list"]).unwrap();
+    let checked = mind(dir.path(), &["validate"]).unwrap();
+
+    assert_eq!(listed.stdout, "deploy  Ship it\n");
+    assert_eq!(listed.stderr, std::slice::from_ref(&warning));
+    assert!(!listed.ok);
+    assert_eq!(
+        checked.stdout,
+        "deploy: ok\n\n1 skill checked, 0 invalid, 1 with copies that differ\n"
+    );
+    assert_eq!(checked.stderr, [warning]);
+    assert!(!checked.ok);
+}
+
+#[test]
+fn an_empty_project_marked_by_its_settings_says_every_folder_it_looked_in() {
+    let dir = TempDir::new().unwrap();
+    let project = marked(dir.path());
+
+    let outcome = mind(dir.path(), &["list"]).unwrap();
+
+    let name = project.name();
+    assert_eq!(
+        outcome.stdout,
+        format!(
+            "nothing found\n  {name}: {}\n  {name}: {}\n  {name}: {}\n",
+            dir.path().join(".agents").join("skills").display(),
+            dir.path().join(".claude").join("skills").display(),
+            dir.path().join("skills").display()
+        )
+    );
 }

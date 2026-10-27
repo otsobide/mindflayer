@@ -875,6 +875,336 @@ fn forgetting_an_installation_forgets_its_copies() {
 }
 
 #[test]
+fn forgetting_one_copy_keeps_the_installation_until_its_last_copy_goes() {
+    let ledger = Ledger::in_memory().unwrap();
+    let written = installation_of(
+        "deploy",
+        &[
+            (None, ".agents/skills/deploy"),
+            (Some("claude"), ".claude/skills/deploy"),
+        ],
+    );
+    ledger.installed("collapse", &written).unwrap();
+
+    let forgot = |path| {
+        ledger
+            .uninstalled_copy("collapse", Kind::Skill, "deploy", path)
+            .unwrap()
+    };
+    assert_eq!(forgot("skills/deploy"), Forgotten::Nothing);
+    assert_eq!(forgot(".claude/skills/deploy"), Forgotten::Copy);
+    assert_eq!(
+        ledger
+            .installation("collapse", Kind::Skill, "deploy")
+            .unwrap(),
+        Some(InstallRecord {
+            targets: written.targets[..1].to_vec(),
+            ..written.clone()
+        })
+    );
+    assert_eq!(forgot(".claude/skills/deploy"), Forgotten::Nothing);
+    assert_eq!(forgot(".agents/skills/deploy"), Forgotten::Installation);
+    assert!(ledger
+        .installation("collapse", Kind::Skill, "deploy")
+        .unwrap()
+        .is_none());
+    assert_eq!(forgot(".agents/skills/deploy"), Forgotten::Nothing);
+}
+
+#[test]
+fn an_installation_recording_no_copy_is_forgotten_whole_by_any_one() {
+    let ledger = Ledger::in_memory().unwrap();
+    ledger
+        .installed("collapse", &installation_of("deploy", &[]))
+        .unwrap();
+
+    assert_eq!(
+        ledger
+            .uninstalled_copy("collapse", Kind::Skill, "deploy", "skills/deploy")
+            .unwrap(),
+        Forgotten::Installation
+    );
+    assert!(ledger
+        .installations("collapse", Kind::Skill)
+        .unwrap()
+        .is_empty());
+}
+
+#[test]
+fn retargeting_an_installation_moves_its_copies_and_keeps_the_rest_of_its_record() {
+    let ledger = Ledger::in_memory().unwrap();
+    let written = installation_of("deploy", &[(Some("claude"), ".claude/skills/deploy")]);
+    ledger.installed("collapse", &written).unwrap();
+    let when = |ledger: &Ledger| -> i64 {
+        ledger
+            .connection
+            .query_row("SELECT installed_at FROM installations", [], |row| {
+                row.get(0)
+            })
+            .unwrap()
+    };
+    let installed_at = when(&ledger);
+    let moved = installation_of("deploy", &[(None, ".agents/skills/deploy")]).targets;
+
+    assert!(ledger
+        .retargeted("collapse", Kind::Skill, "deploy", &moved)
+        .unwrap());
+
+    assert_eq!(
+        ledger
+            .installation("collapse", Kind::Skill, "deploy")
+            .unwrap(),
+        Some(InstallRecord {
+            targets: moved,
+            ..written
+        })
+    );
+    // Not installed again: it is the same installation, from when it was.
+    assert_eq!(when(&ledger), installed_at);
+}
+
+#[test]
+fn retargeting_an_installation_to_no_copy_forgets_it_and_one_never_made_is_nothing() {
+    let ledger = Ledger::in_memory().unwrap();
+    ledger
+        .installed(
+            "collapse",
+            &installation_of("deploy", &[(None, ".agents/skills/deploy")]),
+        )
+        .unwrap();
+
+    assert!(ledger
+        .retargeted("collapse", Kind::Skill, "deploy", &[])
+        .unwrap());
+    assert!(ledger
+        .installations("collapse", Kind::Skill)
+        .unwrap()
+        .is_empty());
+    assert!(!ledger
+        .retargeted("collapse", Kind::Skill, "deploy", &[])
+        .unwrap());
+    assert!(!ledger
+        .retargeted(
+            "collapse",
+            Kind::Skill,
+            "review",
+            &installation_of("review", &[(None, ".agents/skills/review")]).targets,
+        )
+        .unwrap());
+    assert!(ledger
+        .installations("collapse", Kind::Skill)
+        .unwrap()
+        .is_empty());
+}
+
+#[test]
+fn a_migrated_project_moves_every_installation_fills_a_missing_hash_and_logs_it_at_once() {
+    let ledger = Ledger::in_memory().unwrap();
+    let hashed = installation_of("deploy", &[(None, "skills/deploy")]);
+    let unhashed = InstallRecord {
+        content_hash: None,
+        origin: None,
+        ..installation_of("review", &[(None, "skills/review")])
+    };
+    ledger.installed("collapse", &hashed).unwrap();
+    ledger.installed("collapse", &unhashed).unwrap();
+    let moved = |name: &str, hash: Option<&str>| Moved {
+        kind: Kind::Skill,
+        name: name.to_owned(),
+        targets: installation_of(name, &[(Some("claude"), &format!(".claude/skills/{name}"))])
+            .targets,
+        content_hash: hash.map(str::to_owned),
+    };
+
+    ledger
+        .migrated(
+            "collapse",
+            &[
+                moved("deploy", Some("ffff")),
+                moved("review", Some("abcd")),
+                moved("gone", Some("0000")),
+            ],
+            &[(Action::Install, String::from("collapse moved to settings"))],
+        )
+        .unwrap();
+
+    let record = |name: &str| {
+        ledger
+            .installation("collapse", Kind::Skill, name)
+            .unwrap()
+            .unwrap()
+    };
+    // A hash it had is kept: what was installed, not what is there now.
+    assert_eq!(record("deploy").content_hash.as_deref(), Some("e3b0c442"));
+    assert_eq!(record("review").content_hash.as_deref(), Some("abcd"));
+    assert_eq!(
+        record("review").targets,
+        moved("review", None).targets,
+        "{:?}",
+        record("review")
+    );
+    assert!(ledger
+        .installation("collapse", Kind::Skill, "gone")
+        .unwrap()
+        .is_none());
+    let history = ledger.history(5).unwrap();
+    assert_eq!(history.len(), 1);
+    assert_eq!(history[0].target.as_deref(), Some("collapse"));
+    assert_eq!(
+        history[0].detail.as_deref(),
+        Some("collapse moved to settings")
+    );
+}
+
+#[test]
+fn a_migration_the_ledger_cannot_finish_records_none_of_it() {
+    let ledger = Ledger::in_memory().unwrap();
+    ledger
+        .installed(
+            "collapse",
+            &installation_of("deploy", &[(None, "skills/deploy")]),
+        )
+        .unwrap();
+    // Two copies at one path break the table's uniqueness, after the first
+    // installation's copies were written.
+    let twice = Target {
+        agent: None,
+        path: String::from(".agents/skills/deploy"),
+    };
+
+    let failed = ledger.migrated(
+        "collapse",
+        &[Moved {
+            kind: Kind::Skill,
+            name: String::from("deploy"),
+            targets: vec![twice.clone(), twice],
+            content_hash: None,
+        }],
+        &[(Action::Install, String::from("collapse moved"))],
+    );
+
+    assert!(failed.is_err());
+    assert_eq!(
+        ledger.copies("collapse", Kind::Skill).unwrap(),
+        ["skills/deploy"]
+    );
+    assert!(ledger.history(5).unwrap().is_empty());
+}
+
+#[test]
+fn every_copy_installed_into_a_project_is_listed_by_path_whichever_install_wrote_it() {
+    let ledger = Ledger::in_memory().unwrap();
+    ledger
+        .installed(
+            "collapse",
+            &installation_of(
+                "deploy",
+                &[
+                    (Some("claude"), ".claude/skills/deploy"),
+                    (None, ".agents/skills/deploy"),
+                ],
+            ),
+        )
+        .unwrap();
+    ledger
+        .installed(
+            "collapse",
+            &installation_of("audit", &[(None, ".agents/skills/audit")]),
+        )
+        .unwrap();
+    ledger
+        .installed(
+            "tanukeys",
+            &installation_of("deploy", &[(None, "skills/deploy")]),
+        )
+        .unwrap();
+
+    assert_eq!(
+        ledger.copies("collapse", Kind::Skill).unwrap(),
+        [
+            ".agents/skills/audit",
+            ".agents/skills/deploy",
+            ".claude/skills/deploy"
+        ]
+    );
+    assert_eq!(
+        ledger.copies("tanukeys", Kind::Skill).unwrap(),
+        ["skills/deploy"]
+    );
+    assert!(ledger.copies("collapse", Kind::Rule).unwrap().is_empty());
+    assert!(ledger.copies("elsewhere", Kind::Skill).unwrap().is_empty());
+}
+
+#[test]
+fn every_installation_into_a_project_reads_back_with_its_copies_in_name_order() {
+    let ledger = Ledger::in_memory().unwrap();
+    let deploy = installation_of(
+        "deploy",
+        &[
+            (Some("claude"), ".claude/skills/deploy"),
+            (None, ".agents/skills/deploy"),
+        ],
+    );
+    let audit = InstallRecord {
+        origin: Some(String::from("https://github.com/acme/skills")),
+        source_id: None,
+        ..installation_of("audit", &[(None, ".agents/skills/audit")])
+    };
+    let empty = installation_of("bare", &[]);
+    for record in [&deploy, &audit, &empty] {
+        ledger.installed("collapse", record).unwrap();
+    }
+    ledger
+        .installed(
+            "tanukeys",
+            &installation_of("deploy", &[(None, "skills/deploy")]),
+        )
+        .unwrap();
+
+    let records = ledger.records("collapse", Kind::Skill).unwrap();
+
+    let mut deploy = deploy;
+    deploy.targets.reverse();
+    assert_eq!(records, [audit, empty, deploy]);
+    for record in &records {
+        assert_eq!(
+            ledger
+                .installation("collapse", Kind::Skill, &record.name)
+                .unwrap()
+                .as_ref(),
+            Some(record)
+        );
+    }
+    assert!(ledger.records("collapse", Kind::Rule).unwrap().is_empty());
+    assert!(ledger.records("elsewhere", Kind::Skill).unwrap().is_empty());
+}
+
+#[test]
+fn every_installation_reads_back_without_the_credentials_an_older_build_stored() {
+    let ledger = Ledger::in_memory().unwrap();
+    ledger
+        .installed(
+            "collapse",
+            &installation_of("deploy", &[(None, "skills/deploy")]),
+        )
+        .unwrap();
+    ledger
+        .connection
+        .execute(
+            "UPDATE installations SET origin = 'https://user:ghp_t0ken@github.com/acme/skills'",
+            [],
+        )
+        .unwrap();
+
+    let records = ledger.records("collapse", Kind::Skill).unwrap();
+
+    assert_eq!(
+        records[0].origin.as_deref(),
+        Some("https://github.com/acme/skills")
+    );
+}
+
+#[test]
 fn a_ledger_waits_for_another_writer_as_long_as_a_writer_waits_for_the_workspace() {
     let dir = tempfile::TempDir::new().unwrap();
     let path = dir.path().join(LEDGER_FILE);

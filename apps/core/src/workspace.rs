@@ -1,9 +1,9 @@
 //! The two levels Mindflayer works at.
 //!
 //! A **mind project** is a directory carrying a `.mind`, the way a repository
-//! carries a `.git`: it holds skills and rules beside the code, in the
-//! directories its marker names (`skills/<name>/SKILL.md` and `rules/` by
-//! default), and it travels with the code it belongs to.
+//! carries a `.git`: its marker says which agents work in it, and it authors
+//! skills and rules beside the code, in the directories the marker names
+//! (`skills/<name>/SKILL.md` and `rules/` by default).
 //!
 //! A **flayer workspace** sits above them, carrying a `.mindflayer` that
 //! references the mind projects it manages, so their artifacts can be listed
@@ -25,16 +25,17 @@ use std::time::Duration;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
-use crate::agent::Agent;
+use crate::agent::{Agent, AgentTarget, TargetTable};
 use crate::gather::{self, Scrub};
-use crate::kind::Kind;
+use crate::kind::{Kind, Layout};
 use crate::ledger::{Ledger, LedgerError, LEDGER_FILE};
 use crate::lock::{self, LockError, WorkspaceLock};
 use crate::paths;
 use crate::settings::{Settings, Share, SETTINGS_FILE};
 
-/// The newest version of a project's marker this build reads: version 3, a
-/// `.mind/settings.json` ([`SETTINGS_VERSION`]).
+/// The newest version of a project's marker this build reads: version 4, a
+/// `.mind/settings.json` that may say where installs land
+/// ([`TARGETS_VERSION`]).
 ///
 /// Refusing to read a version from the future is what lets the format change
 /// later without an old binary silently misreading a newer project. The
@@ -42,15 +43,14 @@ use crate::settings::{Settings, Share, SETTINGS_FILE};
 /// [`FLAYER_FORMAT_VERSION`]: shared, a change to either format would be a new
 /// version of both, and an older build would refuse a workspace that had not
 /// changed at all.
-pub const MIND_FORMAT_VERSION: u32 = 3;
+pub const MIND_FORMAT_VERSION: u32 = 4;
 
-/// The newest version a `mind.toml` holds, and the one `init` still writes
-/// into a new project: what came before [`SETTINGS_VERSION`].
+/// The newest version a `mind.toml` holds: what came before
+/// [`SETTINGS_VERSION`], and what [`MindProject::init`] still writes.
 ///
 /// Not [`MIND_FORMAT_VERSION`], which is the newest a project's marker holds
-/// in either file. A new project is written as version 2 until `mind init`
-/// writes settings (#35): this build reads a version it does not make yet,
-/// so no project a command of its makes is one an older build cannot read.
+/// in either file: a new project is marked by its settings, which an older
+/// build finds no project in, rather than one it misreads.
 pub const MIND_TOML_VERSION: u32 = 2;
 
 /// The layout version written into new `flayer.toml` markers, and the newest
@@ -75,7 +75,23 @@ pub const DIRECTORIES_VERSION: u32 = 2;
 /// a kind the marker names no folder for has none
 /// ([`MindProject::directory_for`]), where a `mind.toml` from version 2 gives
 /// it the default beside the code.
+///
+/// What `mind init` writes, and what a settings file stays while it says
+/// nothing of where installs land ([`Settings::version_needed`]).
 pub const SETTINGS_VERSION: u32 = 3;
+
+/// The first [`MIND_FORMAT_VERSION`] whose settings may say where what is
+/// installed into the project lands (`targets`), in place of the folders its
+/// agents read.
+///
+/// A version of its own, where a key the format does not define is
+/// otherwise read past: a build from before it would read past `targets`
+/// too, and install into the standard folders without a word, where the
+/// settings send copies elsewhere. Written only by a file that sets them,
+/// so a project that does not stays one every build since
+/// [`SETTINGS_VERSION`] reads. Nothing else in the file changes meaning, so
+/// it is read as a version 3 file is, with `targets` beside.
+pub const TARGETS_VERSION: u32 = 4;
 
 /// The directory a mind project is identified by.
 pub const MIND_DIR: &str = ".mind";
@@ -131,9 +147,8 @@ pub enum Marker {
 }
 
 impl Marker {
-    /// The newest version of this marker this build reads. For a workspace,
-    /// also the one it writes; a new project is still written as
-    /// [`MIND_TOML_VERSION`].
+    /// The newest version of this marker this build reads, and the one
+    /// `flayer init` and `mind init` write into a new one.
     pub const fn version(self) -> u32 {
         match self {
             Marker::Project => MIND_FORMAT_VERSION,
@@ -279,6 +294,20 @@ impl Directories {
         self.resolved_with(Directories::default_for)
     }
 
+    /// Every kind named: one this leaves out at a project's default beside
+    /// the code ([`default_for`](Self::default_for)), and any key this build
+    /// does not recognise carried along.
+    ///
+    /// What a new project's settings are given to author in
+    /// ([`MindProject::init_asked`]). In settings a kind left out has no
+    /// folder at all ([`SETTINGS_VERSION`]), so the `skills/` and `rules/` a
+    /// new project still gets by default (D-06) are written down rather than
+    /// left to a default. Crate-private, so that no front end spells the
+    /// folders or decides when they are filled in.
+    pub(crate) fn with_defaults(self) -> Self {
+        self.filled(Directories::default_for)
+    }
+
     /// The same, with `default` answering for a kind nothing names: a
     /// project's default or a workspace's.
     fn resolved_with(&self, default: fn(Kind) -> PathBuf) -> Vec<(Kind, PathBuf)> {
@@ -353,6 +382,67 @@ pub enum ProjectWarning {
     Leftover { path: PathBuf },
 }
 
+/// A folder a project's settings name as where a kind is installed that no
+/// install uses: read, said, and passed over, rather than a reason to refuse
+/// everything else the settings say ([`MindProject::misplaced_targets`]).
+#[derive(Debug, Clone, PartialEq, Eq, Error)]
+#[error(
+    "{settings}: {folder} is no folder to install {kind}s in, because {because}, \
+     so nothing is installed there",
+    because = .why.because(*.kind)
+)]
+pub struct MisplacedTarget {
+    /// The settings file that names it.
+    pub settings: PathBuf,
+    pub kind: Kind,
+    /// As the settings spell it, relative to the project's root.
+    pub folder: PathBuf,
+    pub why: Misplaced,
+}
+
+/// Why a folder a project's settings name is no place to install a kind in.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Misplaced {
+    /// It leads out of the project, or is its root: an absolute path, one
+    /// climbing out with `..`, or `.`. What is installed is one project's,
+    /// and a copy anywhere else is no project's, or another's.
+    Outside,
+    /// It is inside `.mind`, Mindflayer's own folder, which no agent reads
+    /// and a local project keeps out of git.
+    InsideMind,
+    /// It is inside a `.mindflayer`, a workspace's own folder, which no
+    /// agent reads and whose shelf and cache gathering replaces.
+    InsideWorkspace,
+    /// It is inside a `.git`, a repository's own folder, which no agent
+    /// reads and git owns: a copy there would sit among its refs and hooks,
+    /// under a name git may mean to use.
+    InsideGit,
+    /// The kind is not installed into a project as a folder an artifact:
+    /// rules, which D-03 gives a block of `AGENTS.md`, for M2 to say where.
+    NotInstalled,
+}
+
+impl Misplaced {
+    /// Why, as a clause after "because".
+    pub fn because(self, kind: Kind) -> String {
+        match self {
+            Misplaced::Outside => String::from("it is not inside the project"),
+            Misplaced::InsideMind => format!(
+                "it is inside {MIND_DIR}, which holds Mindflayer's own files and no agent reads"
+            ),
+            Misplaced::InsideWorkspace => format!(
+                "it is inside {FLAYER_DIR}, which holds a workspace's own files and no agent reads"
+            ),
+            Misplaced::InsideGit => format!(
+                "it is inside {GIT_DIR}, which holds a repository's own files and no agent reads"
+            ),
+            Misplaced::NotInstalled => {
+                format!("{kind}s are not installed into a project as folders yet")
+            }
+        }
+    }
+}
+
 /// A directory holding skills, identified by its `.mind`.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct MindProject {
@@ -364,7 +454,14 @@ pub struct MindProject {
 
 impl MindProject {
     /// Create `.mind` and the folders its artifacts live in, under `root`,
-    /// with every kind in its default place.
+    /// with every kind in its default place, marked by a `mind.toml` at
+    /// [`MIND_TOML_VERSION`]: the project an older Mindflayer made.
+    ///
+    /// No front end makes one since `mind init` writes settings
+    /// ([`init_asked`](Self::init_asked)). It stays for what has to
+    /// start from such a project, since each one made before is still read
+    /// the way it was written: the tests of how it is read, and of what a
+    /// copy installed where it authors does.
     pub fn init(root: impl AsRef<Path>) -> Result<(Self, Initialization), WorkspaceError> {
         Self::init_with(root, &Directories::default())
     }
@@ -423,6 +520,24 @@ impl MindProject {
         ))
     }
 
+    /// Make `root` a project as `mind init` does:
+    /// [`init_settings`](Self::init_settings), with each kind in the folder
+    /// `asked` names, or else at its default beside the code.
+    ///
+    /// The fill is core's, not the front end's, because which folders a new
+    /// project gets is a rule (D-06: `skills/` and `rules/` unless told
+    /// otherwise), and a front end handing `init_settings` only what it was
+    /// asked would make a project with no folder for the rest. That one
+    /// takes its folders as given, for what needs a project that keeps none.
+    pub fn init_asked(
+        root: impl AsRef<Path>,
+        agents: &[Agent],
+        share: Share,
+        asked: &Directories,
+    ) -> Result<(Self, Initialization), WorkspaceError> {
+        Self::init_settings(root, agents, share, &asked.clone().with_defaults())
+    }
+
     /// Make `root` a project marked by its settings ([`SETTINGS_VERSION`]):
     /// `.mind/settings.json`, a `.mind/.gitignore` holding `*` unless the
     /// project is [shared](Share::Shared), and the folder of each kind
@@ -450,13 +565,11 @@ impl MindProject {
         let dir = root.join(MIND_DIR);
 
         for kind in Kind::ALL {
-            if let Some(directory) = directories.get(kind) {
-                if !stays_inside(directory) {
-                    return Err(WorkspaceError::OutsideProject {
-                        path: directory.to_path_buf(),
-                        kind,
-                    });
-                }
+            if let Some(error) = directories
+                .get(kind)
+                .and_then(|directory| misplaced_authored(kind, directory))
+            {
+                return Err(error);
             }
         }
         let settings = Settings::new(
@@ -625,6 +738,62 @@ impl MindProject {
             })
     }
 
+    /// Where `kind` goes in the project for each agent its settings name
+    /// ([`TargetTable::targets`]), whether or not a folder is there yet;
+    /// none for a project a `mind.toml` marks, which names no agents.
+    ///
+    /// The project hands its table on, rather than a caller reaching for
+    /// [`TargetTable::standard`]: which table applies is the settings' to
+    /// say. The standard one, overridden for each kind the settings name
+    /// `targets` for ([`TargetTable::overriding`]) with every folder an
+    /// install may use, and only those: a folder written there by hand that
+    /// leads out of the project, or into `.mind`, is passed over and said
+    /// ([`misplaced_targets`](Self::misplaced_targets)). A kind all of whose
+    /// folders are passed over goes nowhere, rather than back to the
+    /// standard folders, which the settings said not to use.
+    pub fn targets(&self, kind: Kind) -> Vec<AgentTarget> {
+        self.settings().map_or_else(Vec::new, |settings| {
+            let mut table = TargetTable::standard();
+            if let Some(folders) = settings.targets.get(kind) {
+                let placed: Vec<PathBuf> = folders
+                    .iter()
+                    .filter(|folder| misplaced_target(kind, folder).is_none())
+                    .map(|folder| paths::normalize(folder))
+                    .collect();
+                table = table.overriding(kind, &placed);
+            }
+            table.targets(kind, &settings.agents)
+        })
+    }
+
+    /// Every folder the project's settings name in `targets` that no install
+    /// uses, kind by kind in report order, each folder in the order written:
+    /// a failure collected rather than raised, for a front end to say where
+    /// it installs or reports, since the rest of the settings still stand.
+    pub fn misplaced_targets(&self) -> Vec<MisplacedTarget> {
+        let Some(settings) = self.settings() else {
+            return Vec::new();
+        };
+        let path = self.mind_dir().join(SETTINGS_FILE);
+        Kind::ALL
+            .into_iter()
+            .flat_map(|kind| {
+                settings
+                    .targets
+                    .get(kind)
+                    .unwrap_or_default()
+                    .iter()
+                    .filter_map(move |folder| Some((kind, folder, misplaced_target(kind, folder)?)))
+            })
+            .map(|(kind, folder, why)| MisplacedTarget {
+                settings: path.clone(),
+                kind,
+                folder: folder.clone(),
+                why,
+            })
+            .collect()
+    }
+
     /// The project's declared name.
     pub fn name(&self) -> &str {
         self.config.name()
@@ -645,6 +814,18 @@ impl MindProject {
         }
     }
 
+    /// This project as it would be read with `settings` for its marker,
+    /// nothing written: for asking where it would install, and what it would
+    /// read, before a change to its settings is made
+    /// ([`crate::reapply`]).
+    pub(crate) fn with_settings(&self, settings: Settings) -> Self {
+        Self {
+            root: self.root.clone(),
+            config: ProjectConfig::Settings(settings),
+            leftover: self.leftover.clone(),
+        }
+    }
+
     /// Change the project's settings as `change` changes a copy of them, and
     /// write back only what it changed.
     ///
@@ -660,18 +841,29 @@ impl MindProject {
     /// modification time included. What is in memory afterwards is read back
     /// from the file.
     ///
+    /// A change of `targets` writes the version they need with them
+    /// ([`Settings::version_needed`]), up when a kind is named and down when
+    /// none is any more, which is the one version an edit changes.
+    ///
     /// Refused for a project a `mind.toml` marks, which has no settings until
     /// it is moved to them, when the change touches the version or the id,
-    /// and when it moves a kind's folder out of the project, as `init`
-    /// refuses one: strict when writing, while a folder somebody wrote there
-    /// by hand is still read, and left alone by a change to something else.
+    /// and when it moves a kind's folder out of the project or into its
+    /// `.mind`, as `init` refuses one, or sends a kind's installs to a folder
+    /// no install would use: strict when writing, while a folder somebody
+    /// wrote there by hand is still read, and left alone by a change to
+    /// something else.
     /// A settings file this build refuses to read is refused here too, and
     /// left as it is.
     ///
-    /// Takes no lock. The settings are the project's, which has none of its
-    /// own, and a workspace's would keep out only that workspace's writers,
-    /// while several may link the project; what its first caller holds is
-    /// that caller's to decide (an open question).
+    /// Takes no lock, as `config_entry::ConfigFile` takes none: its caller
+    /// holds the one that keeps its change apart. A change to the agents or
+    /// the share mode carries what is installed along, which is the writing
+    /// of a workspace's copies, ledger and exclude entries, so
+    /// [`crate::reapply::apply`] holds the lock of the workspace that links
+    /// the project from before it reads the settings until all of it is
+    /// written. A lock of the project's own, in `.mind`, would keep out the
+    /// writers of a second workspace linking it too, but not their installs,
+    /// which go by that workspace's lock (an open question).
     pub fn change_settings<T>(
         &mut self,
         change: impl FnOnce(&mut Settings) -> T,
@@ -689,18 +881,46 @@ impl MindProject {
         let before = crate::settings::parse(&path, &text)?;
         let mut wanted = before.clone();
         let value = change(&mut wanted);
+        // `targets` come with the version a build from before them refuses,
+        // and go with it, so a change to them writes the one they need.
+        if wanted.targets != before.targets && wanted.version == before.version {
+            wanted.version = wanted.version_needed();
+        }
         for kind in Kind::ALL {
-            match wanted.directories.get(kind) {
-                Some(directory)
-                    if before.directories.get(kind) != Some(directory)
-                        && !stays_inside(directory) =>
-                {
-                    return Err(WorkspaceError::OutsideProject {
-                        path: directory.to_path_buf(),
-                        kind,
-                    });
-                }
-                _ => {}
+            if let Some(error) = wanted
+                .directories
+                .get(kind)
+                .filter(|directory| before.directories.get(kind) != Some(*directory))
+                .and_then(|directory| misplaced_authored(kind, directory))
+            {
+                return Err(error);
+            }
+            // Strict when writing, as for a folder authored in: a kind whose
+            // targets change is refused any folder no install would use, and
+            // a list with none, which the settings read as malformed.
+            let targets = wanted.targets.get(kind);
+            if targets == before.targets.get(kind) {
+                continue;
+            }
+            let folders = targets.unwrap_or_default();
+            if targets.is_some() && folders.is_empty() {
+                return Err(WorkspaceError::Edit {
+                    path,
+                    detail: format!(
+                        "`targets.{}` would name no folder, which is no place to install anything",
+                        kind.folder()
+                    ),
+                });
+            }
+            if let Some((folder, why)) = folders
+                .iter()
+                .find_map(|folder| Some((folder, misplaced_target(kind, folder)?)))
+            {
+                return Err(WorkspaceError::Target {
+                    path: folder.clone(),
+                    kind,
+                    why,
+                });
             }
         }
 
@@ -1471,11 +1691,20 @@ impl FlayerWorkspace {
     /// `link` uses), so a project registered as `./collapse` is linked when
     /// asked about as `collapse`.
     pub fn is_linked(&self, root: &Path) -> bool {
+        self.linked_as(root).is_some()
+    }
+
+    /// The first registered entry that points at the directory `root`, as
+    /// the marker spells it, matched as [`is_linked`](Self::is_linked)
+    /// matches: what a report names the project by, and what `-p` and
+    /// `unlink` are given.
+    pub(crate) fn linked_as(&self, root: &Path) -> Option<&Path> {
         let target = paths::normalize(root);
         self.config
             .projects
             .iter()
-            .any(|entry| points_at(&self.root, entry, &target))
+            .find(|entry| points_at(&self.root, entry, &target))
+            .map(PathBuf::as_path)
     }
 
     /// The directory `root` names, spelled the way this workspace's entry
@@ -1613,9 +1842,32 @@ pub enum WorkspaceError {
     NonUtf8Path { path: PathBuf },
     #[error("{path}: cannot hold a project's {kind}s, because it is not inside the project")]
     OutsideProject { path: PathBuf, kind: Kind },
+    #[error(
+        "{path}: cannot hold a project's {kind}s, \
+         because it is inside {MIND_DIR}, which holds Mindflayer's own files \
+         and is kept out of git unless the project is shared"
+    )]
+    InsideMind { path: PathBuf, kind: Kind },
     #[error("{path}: keeps no {kind}s of its own, since its marker names no folder for them")]
     NoDirectory { path: PathBuf, kind: Kind },
-    #[error("{path}: has no {SETTINGS_FILE} to change, since a {MIND_CONFIG} marks it")]
+    /// A folder a change to a project's settings would send a kind's
+    /// installs to that no install would use ([`Misplaced`]).
+    #[error(
+        "{path}: cannot be where a project's {kind}s are installed, because {because}",
+        because = .why.because(*.kind)
+    )]
+    Target {
+        path: PathBuf,
+        kind: Kind,
+        why: Misplaced,
+    },
+    /// Pointing at the migration rather than at `mind init`, which never
+    /// rewrites a marker: what such a project lacks is what moving it to
+    /// settings gives it, as it was committed by design.
+    #[error(
+        "{path}: has no {SETTINGS_FILE} to change, since a {MIND_CONFIG} marks it; \
+         `mind migrate` moves it to one"
+    )]
     NoSettings { path: PathBuf },
     #[error("{path}: cannot hold the workspace's {kind}s, because it is not inside the workspace")]
     OutsideWorkspace { path: PathBuf, kind: Kind },
@@ -1649,7 +1901,9 @@ impl WorkspaceError {
             | WorkspaceError::NotLoaded { path, .. }
             | WorkspaceError::NonUtf8Path { path }
             | WorkspaceError::OutsideProject { path, .. }
+            | WorkspaceError::InsideMind { path, .. }
             | WorkspaceError::NoDirectory { path, .. }
+            | WorkspaceError::Target { path, .. }
             | WorkspaceError::NoSettings { path }
             | WorkspaceError::OutsideWorkspace { path, .. }
             | WorkspaceError::OverlapsGathered { path, .. } => path,
@@ -1707,7 +1961,7 @@ fn create_dir(path: &Path) -> Result<(), WorkspaceError> {
 /// Give the `.mind` at `dir` the `.gitignore` that keeps it out of git,
 /// unless it has one. `create_new`, so one somebody changed is left as they
 /// left it.
-fn ignore_itself(dir: &Path) -> Result<(), WorkspaceError> {
+pub(crate) fn ignore_itself(dir: &Path) -> Result<(), WorkspaceError> {
     match write_new(&dir.join(".gitignore"), MIND_IGNORE) {
         Err(WorkspaceError::Create { source, .. })
             if source.kind() == io::ErrorKind::AlreadyExists =>
@@ -1722,7 +1976,7 @@ fn ignore_itself(dir: &Path) -> Result<(), WorkspaceError> {
 ///
 /// `create_new` rather than a prior `exists()` check: the check and the write
 /// are one operation, so nothing that appears in between is overwritten.
-fn write_new(path: &Path, contents: &str) -> Result<(), WorkspaceError> {
+pub(crate) fn write_new(path: &Path, contents: &str) -> Result<(), WorkspaceError> {
     use std::io::Write as _;
 
     let mut file = fs::OpenOptions::new()
@@ -1960,8 +2214,8 @@ fn directory_lines(resolved: Vec<(Kind, PathBuf)>) -> String {
 
 /// Whether a kind's directory stays inside what it belongs to.
 ///
-/// A mind project is meant to be committed, and its artifacts with it, so a
-/// kind's directory has to be somewhere inside it; a workspace's own
+/// What a mind project authors is the project's, written beside its code, so
+/// a kind's directory has to be somewhere inside it; a workspace's own
 /// artifacts belong to it the same way. Anything else describes artifacts
 /// that are not the holder's, and `mind init --skills /etc` should say so
 /// rather than making the folder.
@@ -1978,6 +2232,81 @@ fn stays_inside(directory: &Path) -> bool {
         Some(std::path::Component::Normal(_))
     )
 }
+
+/// Why `directory`, a route from a project's root, cannot be where its
+/// settings say it authors `kind`s: it leads out of the project
+/// ([`stays_inside`]), or into its `.mind`.
+///
+/// `.mind` is Mindflayer's: the marker, the templates, the stage an install
+/// builds in. A local project's keeps itself out of git, so a folder there
+/// would hide what the project wrote from the team without a word, where the
+/// point of authoring beside the code (D-06) is that it is committed with it.
+/// Refused in a shared project too, whose share a change may later make
+/// local. Only when writing settings: a `mind.toml` of version 1 kept every
+/// kind inside `.mind`, and is still read that way.
+pub(crate) fn misplaced_authored(kind: Kind, directory: &Path) -> Option<WorkspaceError> {
+    let path = directory.to_path_buf();
+    if !stays_inside(directory) {
+        return Some(WorkspaceError::OutsideProject { path, kind });
+    }
+    starts_in(directory, MIND_DIR).then_some(WorkspaceError::InsideMind { path, kind })
+}
+
+/// Whether `directory`, a route from a project's root, starts in the folder
+/// named `folder`, without regard to case, as `gathered_overlap` compares,
+/// since `.MIND` is the same folder as `.mind` where the file system ignores
+/// case.
+fn starts_in(directory: &Path, folder: &str) -> bool {
+    matches!(
+        paths::normalize(directory).components().next(),
+        Some(std::path::Component::Normal(first)) if first.eq_ignore_ascii_case(folder)
+    )
+}
+
+/// Why `folder`, a route from a project's root that its settings name in
+/// `targets`, is no place to install `kind`s in, if it is not.
+///
+/// Inside the project, as a folder it authors in is, so a copy is that
+/// project's and not some other's, or nobody's: the copies go where the
+/// project's agents are pointed, which only the project can promise. Not in
+/// `.mind`, which no agent reads and a local project keeps out of git, nor
+/// in a `.mindflayer`, which no agent reads either, and whose shelf and
+/// cache gathering replaces and deletes by names of its own: a workspace at
+/// the project's root keeps both there. Nor in a `.git`, the project's or
+/// that of a repository nested in it, which no agent reads and git owns: a
+/// skill named `logs` or `worktrees` would be written where git keeps its
+/// own, and a shared project's settings would send it there in every clone.
+/// Only a kind installed as a folder an artifact has targets at all; a rule
+/// reaches agents through `AGENTS.md` (D-03), which M2 puts in the target
+/// table.
+///
+/// What install refuses of any target, an agent's own folder and one a
+/// loaded workspace keeps as its own, it refuses of these too, when it
+/// knows the homes and the loads, which settings do not.
+pub(crate) fn misplaced_target(kind: Kind, folder: &Path) -> Option<Misplaced> {
+    if !matches!(kind.layout(), Layout::Directory { .. }) {
+        return Some(Misplaced::NotInstalled);
+    }
+    if !stays_inside(folder) {
+        return Some(Misplaced::Outside);
+    }
+    if starts_in(folder, MIND_DIR) {
+        return Some(Misplaced::InsideMind);
+    }
+    let parts = paths::normalize(folder);
+    let named = |name: &str| {
+        parts
+            .components()
+            .any(|part| part.as_os_str().eq_ignore_ascii_case(name))
+    };
+    if named(FLAYER_DIR) {
+        return Some(Misplaced::InsideWorkspace);
+    }
+    named(GIT_DIR).then_some(Misplaced::InsideGit)
+}
+
+/// A repository's own folder, which no install may write in.
+const GIT_DIR: &str = ".git";
 
 /// Why `directory`, a route from a workspace's root, cannot hold the
 /// workspace's own `kind`s: it leads out of the workspace, or it overlaps

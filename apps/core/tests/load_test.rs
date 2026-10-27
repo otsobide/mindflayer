@@ -8,6 +8,7 @@ mod common;
 
 use mindflayer_core::install::{self, InstallError, Installed, Offer, Standing};
 use mindflayer_core::ledger::Ledger;
+use mindflayer_core::AgentHomes;
 use mindflayer_core::{
     resolve_except, FlayerWorkspace, Inputs, Intent, Kind, MindProject, Registration, ResolveError,
     WorkspaceError, FLAYER_CONFIG, FLAYER_DIR,
@@ -264,9 +265,15 @@ fn installing_a_loaded_skill_copies_it_and_a_later_edit_there_updates_it() {
 
     let candidate =
         install::offered(&target, &ledger, &project, Kind::Skill, "deploy", None).unwrap();
-    let first = install::install(&target, &ledger, &project, &candidate)
-        .unwrap()
-        .installed;
+    let first = install::install(
+        &target,
+        &ledger,
+        &project,
+        &candidate,
+        &AgentHomes::default(),
+    )
+    .unwrap()
+    .installed;
     assert!(matches!(first, Installed::Added { .. }), "{first:?}");
     assert!(installed_at(&project, "deploy").join("SKILL.md").is_file());
 
@@ -282,9 +289,15 @@ fn installing_a_loaded_skill_copies_it_and_a_later_edit_there_updates_it() {
     let candidate =
         install::offered(&target, &ledger, &project, Kind::Skill, "deploy", None).unwrap();
     assert_eq!(candidate.standing, Standing::Installed);
-    let second = install::install(&target, &ledger, &project, &candidate)
-        .unwrap()
-        .installed;
+    let second = install::install(
+        &target,
+        &ledger,
+        &project,
+        &candidate,
+        &AgentHomes::default(),
+    )
+    .unwrap()
+    .installed;
 
     assert!(matches!(second, Installed::Updated { .. }), "{second:?}");
     let copied = fs::read_to_string(installed_at(&project, "deploy").join("SKILL.md")).unwrap();
@@ -373,7 +386,14 @@ fn a_loaded_skill_whose_folder_went_away_says_to_unload_it() {
     )
     .unwrap();
 
-    let error = install::install(&target, &ledger, &project, &candidate).unwrap_err();
+    let error = install::install(
+        &target,
+        &ledger,
+        &project,
+        &candidate,
+        &AgentHomes::default(),
+    )
+    .unwrap_err();
 
     assert!(matches!(error, InstallError::Gone { .. }), "{error}");
     // By its root, which `flayer unload` reads the same from anywhere.
@@ -409,9 +429,15 @@ fn a_loaded_workspace_that_is_the_project_itself_is_never_copied_onto_itself() {
     // the loaded workspace's own files on uninstall.
     candidate.standing = Standing::Installed;
 
-    let outcome = install::install(&target, &ledger, &project, &candidate)
-        .unwrap()
-        .installed;
+    let outcome = install::install(
+        &target,
+        &ledger,
+        &project,
+        &candidate,
+        &AgentHomes::default(),
+    )
+    .unwrap()
+    .installed;
 
     assert!(
         matches!(outcome, Installed::Unchanged { .. }),
@@ -488,7 +514,14 @@ fn install_and_uninstall_refuse_a_name_that_is_not_one_folder_whatever_offers_it
         *name = String::from("..");
     }
 
-    let installing = install::install(&target, &ledger, &project, &candidate).unwrap_err();
+    let installing = install::install(
+        &target,
+        &ledger,
+        &project,
+        &candidate,
+        &AgentHomes::default(),
+    )
+    .unwrap_err();
     let removing = install::uninstall(&target, &ledger, &project, Kind::Skill, "..").unwrap_err();
 
     assert!(
@@ -521,7 +554,14 @@ fn a_loaded_workspace_inside_the_folder_it_would_install_into_is_not_deleted() {
         install::offered(&target, &ledger, &project, Kind::Skill, "deploy", None).unwrap();
     candidate.standing = Standing::Absent;
 
-    let error = install::install(&target, &ledger, &project, &candidate).unwrap_err();
+    let error = install::install(
+        &target,
+        &ledger,
+        &project,
+        &candidate,
+        &AgentHomes::default(),
+    )
+    .unwrap_err();
 
     assert!(matches!(error, InstallError::Overlaps { .. }), "{error}");
     assert!(
@@ -548,9 +588,15 @@ fn a_folder_started_by_hand_without_a_manifest_is_somebody_elses() {
     let candidate =
         install::offered(&target, &ledger, &project, Kind::Skill, "deploy", None).unwrap();
     assert_eq!(candidate.standing, Standing::Foreign);
-    let outcome = install::install(&target, &ledger, &project, &candidate)
-        .unwrap()
-        .installed;
+    let outcome = install::install(
+        &target,
+        &ledger,
+        &project,
+        &candidate,
+        &AgentHomes::default(),
+    )
+    .unwrap()
+    .installed;
 
     assert!(matches!(outcome, Installed::Foreign { .. }), "{outcome:?}");
     assert_eq!(fs::read_to_string(&notes).unwrap(), "my draft");
@@ -576,14 +622,28 @@ fn a_link_out_of_the_loaded_workspace_is_refused_not_copied() {
     let candidate =
         install::offered(&target, &ledger, &project, Kind::Skill, "deploy", None).unwrap();
 
-    let error = install::install(&target, &ledger, &project, &candidate).unwrap_err();
+    let error = install::install(
+        &target,
+        &ledger,
+        &project,
+        &candidate,
+        &AgentHomes::default(),
+    )
+    .unwrap_err();
 
     assert!(matches!(error, InstallError::Write { .. }), "{error}");
     assert!(error.to_string().contains("outside"), "{error}");
     assert!(!installed_at(&project, "deploy").join("config.env").exists());
 
     fs::remove_file(skill.join("config.env")).unwrap();
-    install::install(&target, &ledger, &project, &candidate).unwrap();
+    install::install(
+        &target,
+        &ledger,
+        &project,
+        &candidate,
+        &AgentHomes::default(),
+    )
+    .unwrap();
     let copied = installed_at(&project, "deploy").join("shared.md");
     assert!(copied.is_file() && !copied.is_symlink());
 }
@@ -734,7 +794,7 @@ fn what_a_loaded_workspace_keeps_in_a_projects_folder_is_never_overwritten_or_re
     target.link(&project).unwrap();
     let ledger = Ledger::in_memory().unwrap();
     let ours = install::offered(&target, &ledger, &project, Kind::Skill, "x", None).unwrap();
-    install::install(&target, &ledger, &project, &ours).unwrap();
+    install::install(&target, &ledger, &project, &ours, &AgentHomes::default()).unwrap();
     let (lib, _) = FlayerWorkspace::init_with(project.root(), &common::beside()).unwrap();
     let own = installed_at(&project, "x").join("SKILL.md");
     let edited = fs::read_to_string(&own).unwrap() + "\nlib's own edit\n";
@@ -750,7 +810,8 @@ fn what_a_loaded_workspace_keeps_in_a_projects_folder_is_never_overwritten_or_re
         Some("workspace"),
     )
     .unwrap();
-    let installing = install::install(&target, &ledger, &project, &again).unwrap_err();
+    let installing =
+        install::install(&target, &ledger, &project, &again, &AgentHomes::default()).unwrap_err();
     let removing = install::uninstall(&target, &ledger, &project, Kind::Skill, "x").unwrap_err();
 
     assert!(
@@ -776,7 +837,14 @@ fn a_refused_update_leaves_the_installed_copy_as_it_was() {
     let ledger = Ledger::in_memory().unwrap();
     let candidate =
         install::offered(&target, &ledger, &project, Kind::Skill, "deploy", None).unwrap();
-    install::install(&target, &ledger, &project, &candidate).unwrap();
+    install::install(
+        &target,
+        &ledger,
+        &project,
+        &candidate,
+        &AgentHomes::default(),
+    )
+    .unwrap();
     let installed = installed_at(&project, "deploy");
     let before = fs::read_to_string(installed.join("SKILL.md")).unwrap();
     // The teammate adds a link out of their workspace, and edits the skill.
@@ -791,7 +859,14 @@ fn a_refused_update_leaves_the_installed_copy_as_it_was() {
     let candidate =
         install::offered(&target, &ledger, &project, Kind::Skill, "deploy", None).unwrap();
 
-    install::install(&target, &ledger, &project, &candidate).unwrap_err();
+    install::install(
+        &target,
+        &ledger,
+        &project,
+        &candidate,
+        &AgentHomes::default(),
+    )
+    .unwrap_err();
 
     assert_eq!(
         fs::read_to_string(installed.join("SKILL.md")).unwrap(),
@@ -822,14 +897,28 @@ fn a_refused_first_install_leaves_nothing_so_it_can_be_tried_again() {
     let candidate =
         install::offered(&target, &ledger, &project, Kind::Skill, "deploy", None).unwrap();
 
-    install::install(&target, &ledger, &project, &candidate).unwrap_err();
+    install::install(
+        &target,
+        &ledger,
+        &project,
+        &candidate,
+        &AgentHomes::default(),
+    )
+    .unwrap_err();
     assert!(!installed_at(&project, "deploy").exists());
 
     fs::remove_file(&link).unwrap();
     let candidate =
         install::offered(&target, &ledger, &project, Kind::Skill, "deploy", None).unwrap();
     assert_eq!(candidate.standing, Standing::Absent);
-    install::install(&target, &ledger, &project, &candidate).unwrap();
+    install::install(
+        &target,
+        &ledger,
+        &project,
+        &candidate,
+        &AgentHomes::default(),
+    )
+    .unwrap();
 }
 
 #[cfg(unix)]
@@ -857,7 +946,14 @@ fn a_link_inside_the_skill_itself_is_followed_wherever_the_skills_folder_lives()
     let candidate =
         install::offered(&target, &ledger, &project, Kind::Skill, "deploy", None).unwrap();
 
-    install::install(&target, &ledger, &project, &candidate).unwrap();
+    install::install(
+        &target,
+        &ledger,
+        &project,
+        &candidate,
+        &AgentHomes::default(),
+    )
+    .unwrap();
 
     let copied = installed_at(&project, "deploy").join("latest.md");
     assert_eq!(fs::read_to_string(copied).unwrap(), "v2");
@@ -881,7 +977,14 @@ fn directories_linking_to_each_other_are_refused_not_copied_forever() {
     let candidate =
         install::offered(&target, &ledger, &project, Kind::Skill, "deploy", None).unwrap();
 
-    let error = install::install(&target, &ledger, &project, &candidate).unwrap_err();
+    let error = install::install(
+        &target,
+        &ledger,
+        &project,
+        &candidate,
+        &AgentHomes::default(),
+    )
+    .unwrap_err();
 
     assert!(error.to_string().contains("links back into"), "{error}");
     assert!(!installed_at(&project, "deploy").exists());
@@ -903,7 +1006,14 @@ fn nothing_is_installed_into_the_folder_a_loaded_workspace_keeps_its_own_in() {
     let candidate =
         install::offered(&target, &ledger, &project, Kind::Skill, "lint", None).unwrap();
 
-    let error = install::install(&target, &ledger, &project, &candidate).unwrap_err();
+    let error = install::install(
+        &target,
+        &ledger,
+        &project,
+        &candidate,
+        &AgentHomes::default(),
+    )
+    .unwrap_err();
 
     assert!(matches!(error, InstallError::KeptByALoad { .. }), "{error}");
     assert!(error.to_string().contains("flayer unload"), "{error}");

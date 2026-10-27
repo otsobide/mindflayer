@@ -15,7 +15,7 @@ fn target_and_team() -> (TempDir, PathBuf, PathBuf) {
     fs::create_dir_all(target.join("collapse")).unwrap();
     fs::create_dir_all(&team).unwrap();
     flayer(&target, &["init"]).unwrap();
-    mind(&target.join("collapse"), &["init"]).unwrap();
+    new_project(&target.join("collapse"));
     flayer(&target, &["link", "collapse"]).unwrap();
     flayer(&team, &["init"]).unwrap();
     flayer(&team, &["add", "skill", "deploy", "Ship the service"]).unwrap();
@@ -205,7 +205,9 @@ fn a_loaded_skill_is_on_the_shelf_listing_and_installs_like_any_other() {
         outcome.stdout,
         "installed deploy into collapse, from load:../team\n"
     );
-    assert!(target.join("collapse/skills/deploy/SKILL.md").is_file());
+    for copy in copies(&target.join("collapse"), "deploy") {
+        assert!(copy.join("SKILL.md").is_file(), "{}", copy.display());
+    }
 
     // Read live: changed there, updated here by installing again.
     let source = own_directory_for(&team, Kind::Skill).join("deploy/SKILL.md");
@@ -611,15 +613,18 @@ fn switching_to_a_loaded_copy_of_an_installed_skill_replaces_it() {
         .map(|(_, _, what)| what)
         .collect();
     assert_eq!(pending, [Pending::Install]);
-    let outcome = install_screen::apply(&workspace, &ledger, &screen).unwrap();
+    let outcome =
+        install_screen::apply(&workspace, &ledger, &screen, &AgentHomes::default()).unwrap();
 
     assert!(
         outcome.stdout.contains("installed deploy"),
         "{}",
         outcome.stdout
     );
-    let copied = fs::read_to_string(target.join("collapse/skills/deploy/SKILL.md")).unwrap();
-    assert!(copied.contains("Ship the service"), "{copied}");
+    for copy in copies(&target.join("collapse"), "deploy") {
+        let copied = fs::read_to_string(copy.join("SKILL.md")).unwrap();
+        assert!(copied.contains("Ship the service"), "{copied}");
+    }
 }
 
 #[test]
@@ -642,7 +647,8 @@ fn a_loaded_skill_that_vanished_does_not_stop_the_rest_of_the_install_screen() {
     );
     fs::remove_dir_all(own_directory_for(&team, Kind::Skill).join("deploy")).unwrap();
 
-    let outcome = install_screen::apply(&workspace, &ledger, &screen).unwrap();
+    let outcome =
+        install_screen::apply(&workspace, &ledger, &screen, &AgentHomes::default()).unwrap();
 
     assert!(!outcome.ok);
     assert!(
@@ -709,7 +715,15 @@ fn a_shelf_source_and_a_loaded_workspace_at_one_path_are_each_picked_by_their_ow
     let url = repo.path().to_string_lossy().into_owned();
     flayer(&target, &["gather", "git", &url]).unwrap();
     flayer(&target, &["load", &url]).unwrap();
-    let skill = target.join("collapse/skills/deploy/SKILL.md");
+    let skills: Vec<PathBuf> = copies(&target.join("collapse"), "deploy")
+        .into_iter()
+        .map(|copy| copy.join("SKILL.md"))
+        .collect();
+    let all_hold = |text: &str| {
+        skills
+            .iter()
+            .all(|skill| fs::read_to_string(skill).unwrap().contains(text))
+    };
 
     let shelf = flayer(
         &target,
@@ -721,7 +735,7 @@ fn a_shelf_source_and_a_loaded_workspace_at_one_path_are_each_picked_by_their_ow
         "{}",
         shelf.stdout
     );
-    assert!(fs::read_to_string(&skill).unwrap().contains("Gathered"));
+    assert!(all_hold("Gathered"));
 
     let loaded = flayer(
         &target,
@@ -736,7 +750,7 @@ fn a_shelf_source_and_a_loaded_workspace_at_one_path_are_each_picked_by_their_ow
     )
     .unwrap();
     assert!(loaded.stdout.contains("from load:"), "{}", loaded.stdout);
-    assert!(fs::read_to_string(&skill).unwrap().contains("Loaded"));
+    assert!(all_hold("Loaded"));
 }
 
 #[cfg(unix)]

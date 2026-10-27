@@ -11,13 +11,17 @@ pub(crate) mod install;
 pub(crate) mod migrate;
 pub(crate) mod project;
 pub(crate) mod read;
+pub(crate) mod settings;
+pub(crate) mod status;
 pub(crate) mod workspace;
 
 use std::path::{Path, PathBuf};
 
 use mindflayer_core::gather::Watch;
 use mindflayer_core::resolve::{self, resolve, Intent};
-use mindflayer_core::{paths, Catalog, FlayerWorkspace, MindProject, Reference};
+use mindflayer_core::{
+    paths, scan, Catalog, Change, FlayerWorkspace, MindProject, Reference, Share,
+};
 
 use crate::homes::Lookup;
 use crate::{tui, Cli, CliError, Command, Failure, FlayerCli, FlayerCommand, Outcome};
@@ -25,7 +29,7 @@ use activate::{activate_command, which_command};
 use artifact::{add_to, edit_in, remove_from, rename_in, templates_of};
 use gather::run_gather;
 use install::{install_named, uninstall_named};
-use migrate::migrate_library;
+use migrate::{migrate_all, migrate_here, migrate_library, migrate_one, Asked};
 use project::{
     init_project, init_workspace, link_here, link_projects, scan_workspace, unlink_here,
     unlink_projects,
@@ -34,6 +38,8 @@ use read::{
     everywhere, everywhere_and_the_shelf, list, list_workspace, one_project, show, validate,
     wanted, Level, Selector,
 };
+use settings::{agents_change, change_here, change_of, targets_change};
+use status::{status_here, status_of_project, status_of_workspace};
 use workspace::{load_command, unload_command};
 
 /// Run `mind`.
@@ -50,7 +56,11 @@ pub fn run(cli: &Cli) -> Result<Outcome, Failure> {
 pub fn run_watched(cli: &Cli, watch: &Watch) -> Result<Outcome, Failure> {
     run_with(
         cli,
-        &Lookup::given(cli.home.as_deref(), cli.workspace.as_deref()),
+        &Lookup::given(
+            cli.home.as_deref(),
+            cli.workspace.as_deref(),
+            &cli.agent_homes,
+        ),
         watch,
     )
 }
@@ -68,9 +78,18 @@ pub(crate) fn run_with(cli: &Cli, lookup: &Lookup, watch: &Watch) -> Result<Outc
             lookup,
             watch,
         ),
-        Command::Init { skills, rules } => {
-            init_project(&directory, skills.as_deref(), rules.as_deref())
-        }
+        Command::Init {
+            agents,
+            shared,
+            skills,
+            rules,
+        } => init_project(
+            &directory,
+            agents,
+            if *shared { Share::Shared } else { Share::Local },
+            skills.as_deref(),
+            rules.as_deref(),
+        ),
         Command::Add {
             kind,
             name,
@@ -143,6 +162,7 @@ pub(crate) fn run_with(cli: &Cli, lookup: &Lookup, watch: &Watch) -> Result<Outc
                 validate(catalog, &selector, level)
             })
         }
+        Command::Status { json } => status_here(project_here(&directory)?, lookup, *json),
         Command::Link => link_here(&directory, lookup),
         Command::Unlink => unlink_here(&directory, lookup),
         Command::Load { workspaces } => {
@@ -156,13 +176,46 @@ pub(crate) fn run_with(cli: &Cli, lookup: &Lookup, watch: &Watch) -> Result<Outc
         Command::Install { name, from } => {
             let project = project_here(&directory)?;
             let workspace = managing(&project, lookup)?;
-            install_named(&workspace, &project, name, from.as_deref(), &directory)
+            install_named(
+                &workspace,
+                &project,
+                name,
+                from.as_deref(),
+                &directory,
+                &lookup.agents,
+            )
         }
         Command::Uninstall { name } => {
             let project = project_here(&directory)?;
             let workspace = managing(&project, lookup)?;
             uninstall_named(&workspace, &project, name)
         }
+        Command::Agents { change, named } => {
+            let (change, yes) = agents_change(change.as_ref(), named);
+            change_here(&project_here(&directory)?, &change, yes, lookup)
+        }
+        Command::Share { mode } => change_here(
+            &project_here(&directory)?,
+            &Change::Share {
+                share: mode.share,
+                edit_tracked: mode.edit_tracked,
+            },
+            mode.yes,
+            lookup,
+        ),
+        Command::Targets { change } => {
+            let (change, yes) = targets_change(change);
+            change_here(&project_here(&directory)?, &change, yes, lookup)
+        }
+        Command::Migrate { settings, yes } => migrate_here(
+            &project_here(&directory)?,
+            &Asked {
+                agents: &settings.agents,
+                share: settings.share(),
+                yes: *yes,
+            },
+            lookup,
+        ),
         Command::Tui => tui::run_project(&directory, lookup),
     }
 }
@@ -177,7 +230,11 @@ pub fn run_flayer_cli(cli: &FlayerCli) -> Result<Outcome, Failure> {
 pub fn run_flayer_cli_watched(cli: &FlayerCli, watch: &Watch) -> Result<Outcome, Failure> {
     run_flayer_with(
         cli,
-        &Lookup::given(cli.home.as_deref(), cli.workspace.as_deref()),
+        &Lookup::given(
+            cli.home.as_deref(),
+            cli.workspace.as_deref(),
+            &cli.agent_homes,
+        ),
         watch,
     )
 }
@@ -298,11 +355,24 @@ fn run_flayer(
         }
 
         // A screen, so it opens as one: on the default workspace before it
-        // is made too, which its first change makes.
-        FlayerCommand::Minds => tui::run_minds(directory, lookup),
+        // is made too, which its first change makes. Its folders are taken
+        // from here as `scan` takes them.
+        FlayerCommand::Minds { roots } => {
+            tui::run_minds(directory, &targets(directory, roots)?, lookup)
+        }
 
-        FlayerCommand::Scan => {
-            reading_workspace(directory, lookup, |workspace| Ok(scan_workspace(workspace)))
+        // Each folder taken from here as `link` takes a path, and each path
+        // found spelled as `flayer link` run here would take it, so a line of
+        // the report is a line to type.
+        FlayerCommand::Scan { roots, depth, json } => {
+            let request = scan::Request {
+                roots: targets(directory, roots)?,
+                depth: *depth,
+                from: Some(typed(directory, Path::new(""))?),
+            };
+            reading_workspace(directory, lookup, |workspace| {
+                Ok(scan_workspace(workspace, &request, *json))
+            })
         }
 
         FlayerCommand::Gather(command) => run_gather(command, directory, lookup, watch),
@@ -315,7 +385,9 @@ fn run_flayer(
             // The screen reads until something on it is applied, so it is
             // opened the way a read is: on the default workspace before it
             // is made too, which manages nothing to install into.
-            (None, None) => reading_workspace(directory, lookup, crate::install::run),
+            (None, None) => reading_workspace(directory, lookup, |workspace| {
+                crate::install::run(workspace, &lookup.agents)
+            }),
             (Some(name), Some(project)) => {
                 let workspace = workspace_here(directory, lookup)?;
                 install_named(
@@ -324,6 +396,7 @@ fn run_flayer(
                     name,
                     from.as_deref(),
                     directory,
+                    &lookup.agents,
                 )
             }
             // Half of one: a skill with no project to put it in, or a
@@ -338,13 +411,78 @@ fn run_flayer(
 
         // Resolved as a read, on the default workspace before it is made
         // too: a workspace made for the occasion keeps its own in its
-        // library from the start, and has nothing to move.
-        FlayerCommand::Migrate { library: _, yes } => {
-            reading_workspace(directory, lookup, |workspace| {
-                migrate_library(workspace, *yes)
-            })
+        // library from the start, and links no project to move.
+        FlayerCommand::Migrate {
+            library,
+            project,
+            all_projects,
+            settings,
+            yes,
+        } => {
+            let asked = Asked {
+                agents: &settings.agents,
+                share: settings.share(),
+                yes: *yes,
+            };
+            match (library, project, all_projects) {
+                (true, _, _) => reading_workspace(directory, lookup, |workspace| {
+                    migrate_library(workspace, *yes)
+                }),
+                (_, Some(project), _) => reading_workspace(directory, lookup, |workspace| {
+                    migrate_one(workspace, &workspace.pick(project)?, &asked, &lookup.agents)
+                }),
+                (_, _, true) => reading_workspace(directory, lookup, |workspace| {
+                    migrate_all(workspace, &asked, &lookup.agents)
+                }),
+                (false, None, false) => Err(CliError::MigrateWhat.into()),
+            }
         }
 
+        // `-p` is the project's whichever side of `add` or `remove` it is
+        // typed, which clap can take only as an option it does not require.
+        FlayerCommand::Agents {
+            project,
+            change,
+            named,
+        } => {
+            let project = project.as_deref().ok_or(CliError::AgentsWhere)?;
+            let workspace = workspace_here(directory, lookup)?;
+            let (change, yes) = agents_change(change.as_ref(), named);
+            change_of(
+                &workspace,
+                &workspace.pick(project)?,
+                &change,
+                yes,
+                &lookup.agents,
+            )
+        }
+        FlayerCommand::Share { project, mode } => {
+            let workspace = workspace_here(directory, lookup)?;
+            change_of(
+                &workspace,
+                &workspace.pick(project)?,
+                &Change::Share {
+                    share: mode.share,
+                    edit_tracked: mode.edit_tracked,
+                },
+                mode.yes,
+                &lookup.agents,
+            )
+        }
+        // `-p` is the project's on either side of `set` or `reset`, as for
+        // `agents`.
+        FlayerCommand::Targets { project, change } => {
+            let project = project.as_deref().ok_or(CliError::TargetsWhere)?;
+            let workspace = workspace_here(directory, lookup)?;
+            let (change, yes) = targets_change(change);
+            change_of(
+                &workspace,
+                &workspace.pick(project)?,
+                &change,
+                yes,
+                &lookup.agents,
+            )
+        }
         FlayerCommand::Tui => tui::run(directory, lookup),
 
         FlayerCommand::List { kind, project } => {
@@ -380,6 +518,20 @@ fn run_flayer(
                     let (projects, warnings) = managed(workspace);
                     everywhere(workspace, warnings, &projects, kinds, read)
                 }
+            })
+        }
+        // Read as `list` reads, on the default workspace before it is made
+        // too, and from a ledger read without being made: a workspace that
+        // has installed nothing has none, and a report is no reason to
+        // create one.
+        FlayerCommand::Status { project, json } => {
+            reading_workspace(directory, lookup, |workspace| match project {
+                Some(project) => Ok(status_of_project(
+                    workspace,
+                    workspace.pick(project)?,
+                    *json,
+                )),
+                None => Ok(status_of_workspace(workspace, *json)),
             })
         }
         FlayerCommand::Validate { target, project } => {

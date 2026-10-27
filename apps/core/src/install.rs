@@ -9,6 +9,10 @@
 //! hand is neither overwritten nor deleted, whatever a caller asks for, and it
 //! is told so rather than being obeyed quietly. Which of the two a file is, is
 //! what [`crate::ledger`] remembers.
+//!
+//! Where in the project is its agents' to say: a copy in each folder one of
+//! them reads ([`targets`]), written together and recorded as one
+//! installation, so that every agent the project names runs the same skill.
 
 use std::fs;
 use std::io;
@@ -17,16 +21,21 @@ use std::time::Duration;
 
 use thiserror::Error;
 
+use crate::agent::{Agent, AgentHomes};
 use crate::artifact::{self, issue_list, Artifact, ArtifactError, ValidationIssue};
 use crate::catalog::{Catalog, DiscoveryFailure};
 use crate::copy;
+use crate::exclude::{self, ExcludeError, Excluded};
 use crate::gather::Scrub;
 use crate::hash;
 use crate::kind::{Kind, Layout};
-use crate::ledger::{Action, Gathered, InstallRecord, Ledger, LedgerError, Outcome, Target};
+use crate::ledger::{
+    Action, Forgotten, Gathered, InstallRecord, Ledger, LedgerError, Outcome, Target,
+};
 use crate::paths;
+use crate::settings::Share;
 use crate::url::redacted;
-use crate::workspace::{FlayerWorkspace, MindProject, WorkspaceError};
+use crate::workspace::{same_directory, FlayerWorkspace, MindProject, WorkspaceError};
 
 /// How one shelf entry stands with respect to one project.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -147,7 +156,7 @@ impl Offer {
     }
 
     /// The directory it is copied from.
-    fn source(&self, workspace: &FlayerWorkspace) -> PathBuf {
+    pub(crate) fn source(&self, workspace: &FlayerWorkspace) -> PathBuf {
         match self {
             Offer::Shelf(gathered) => workspace.root().join(&gathered.path),
             Offer::Workspace { path, .. } | Offer::Loaded { path, .. } => path.clone(),
@@ -192,6 +201,127 @@ pub fn is_folder_name(name: &str) -> bool {
         (components.next(), components.next()),
         (Some(Component::Normal(_)), None)
     ) && !name.contains(['/', '\\'])
+}
+
+/// What an install leaves out of every copy it writes, from the top of the
+/// artifact, and why: a `.claude-plugin` folder, by which Claude would load
+/// the skill as a plugin, with whatever hooks and MCP servers it declares
+/// (docs-only, in `docs/agents.md`, so it is left out whatever Claude does
+/// with it).
+///
+/// A skill is instructions an agent reads when it chooses to; a plugin's
+/// hooks run commands on their own and its servers are started for it, which
+/// installing a skill must not turn on behind anybody's back. Left out of
+/// every install, whichever agents the project names: a folder a project's
+/// `targets` name may be Claude's too. Only at the top, where Claude
+/// looks for one: a skill that teaches plugin writing can ship one further
+/// down as an example, and it is the skill's like any other file.
+const LEAVE_OUT: [(&str, &str); 1] = [(
+    ".claude-plugin",
+    "Claude would load the skill as a plugin, with the hooks and MCP servers it declares",
+)];
+
+/// The names [`LEAVE_OUT`] leaves out, as the copy takes them.
+pub(crate) fn left_out_names() -> [&'static str; LEAVE_OUT.len()] {
+    LEAVE_OUT.map(|(name, _)| name)
+}
+
+/// Something an offer holds that an install left out of every copy.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LeftOut {
+    /// Where it is in the offer.
+    pub path: PathBuf,
+    /// Why no copy holds it, as a clause a front end can say after its name.
+    pub reason: &'static str,
+}
+
+/// One folder of a project's that an install of a kind puts a copy in, under
+/// the artifact's name.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct InstallTarget {
+    /// The folder, under the project's root, whether or not it is there yet.
+    pub folder: PathBuf,
+    /// The agents the copy is for, in report order: none for the folder a
+    /// `mind.toml` names, which is no one agent's.
+    pub agents: Vec<Agent>,
+}
+
+impl InstallTarget {
+    /// The agent the ledger says a copy here is for ([`agent_of`]).
+    fn agent(&self) -> Option<String> {
+        agent_of(&self.agents)
+    }
+}
+
+/// The agent the ledger says a copy for `agents` is for: the one agent it is
+/// for, or none for a copy two agents share, or no agent owns.
+pub(crate) fn agent_of(agents: &[Agent]) -> Option<String> {
+    match agents {
+        [agent] => Some(agent.name().to_owned()),
+        _ => None,
+    }
+}
+
+/// Where an install of `kind` into `project` puts a copy: each folder the
+/// target table sends one of the agents its settings name to
+/// ([`MindProject::targets`], D-07), or, for a project a `mind.toml` marks,
+/// which names no agents, the one folder that marker names for it.
+///
+/// Not a project's own folder from its settings' `directories`, which is
+/// what it authors in (D-06): what the workspace offers goes where the agents
+/// read, and what the project writes itself stays where it writes it.
+///
+/// Two targets that are one folder on disk, `.claude/skills` linked to
+/// `.agents/skills` so that Claude and Codex share it, are one target, under
+/// the first spelling and for the agents of both, as discovery reads them
+/// once: two copies put in place in one folder would find each other there.
+///
+/// Settings that name `targets` for the kind put a copy in each folder they
+/// name an install may use, for every agent they name, and nowhere else: a
+/// folder they name that leads out of the project, or into `.mind`, is
+/// passed over ([`MindProject::misplaced_targets`] says which).
+///
+/// Refused when there is nowhere to put one: a settings file naming no agent
+/// that is sent `kind` (`NoTarget`), or naming only folders for it that no
+/// install may use (`NoUsableTarget`), or a `mind.toml` naming no folder for
+/// it (`NoDirectory`).
+pub fn targets(project: &MindProject, kind: Kind) -> Result<Vec<InstallTarget>, InstallError> {
+    if project.settings().is_none() {
+        return Ok(vec![InstallTarget {
+            folder: project.required_directory(kind)?,
+            agents: Vec::new(),
+        }]);
+    }
+    let mut targets: Vec<InstallTarget> = Vec::new();
+    for target in project.targets(kind) {
+        let folder = project.root().join(&target.path);
+        match targets
+            .iter_mut()
+            .find(|seen| same_directory(&seen.folder, &folder))
+        {
+            Some(seen) => {
+                seen.agents.extend(target.agents);
+                seen.agents.sort();
+                seen.agents.dedup();
+            }
+            None => targets.push(InstallTarget {
+                folder,
+                agents: target.agents,
+            }),
+        }
+    }
+    if targets.is_empty() {
+        let overridden = project.settings().is_some_and(|settings| {
+            !settings.agents.is_empty() && settings.targets.get(kind).is_some()
+        });
+        let project = project.name().to_owned();
+        return Err(if overridden {
+            InstallError::NoUsableTarget { project, kind }
+        } else {
+            InstallError::NoTarget { project, kind }
+        });
+    }
+    Ok(targets)
 }
 
 /// One thing that can be installed, seen from one project.
@@ -338,7 +468,7 @@ pub enum LoadFailure {
 /// that is in neither does not appear: it is not a thing this command can
 /// offer to do anything about.
 ///
-/// A project whose marker names no folder for `kind` is offered nothing,
+/// A project with nowhere to put `kind` ([`targets`]) is offered nothing,
 /// rather than refused: nothing can be put there, and the screen surveys
 /// every project a workspace links, where a refusal for one would hide the
 /// rest. Asking for one by name ([`offered`]) is refused.
@@ -348,11 +478,11 @@ pub fn survey(
     project: &MindProject,
     kind: Kind,
 ) -> Result<Vec<Candidate>, InstallError> {
-    let Some(directory) = project.directory_for(kind) else {
+    let Ok(targets) = targets(project, kind) else {
         return Ok(Vec::new());
     };
     let entry = project_entry(workspace, project);
-    let ours = ledger.installations(&entry, kind)?;
+    let recorded = ledger.copies(&entry, kind)?;
 
     // The workspace's own come first: what it keeps for its projects before
     // what it gathered from elsewhere. Only kinds that are a directory each,
@@ -386,7 +516,8 @@ pub fn survey(
                 offer,
                 standing: Standing::Absent,
             };
-            candidate.standing = standing(&directory, kind, candidate.name(), &ours);
+            candidate.standing =
+                standing(project.root(), &targets, kind, candidate.name(), &recorded);
             candidate
         })
         .collect();
@@ -397,10 +528,10 @@ pub fn survey(
 /// can be offered.
 ///
 /// `from` is needed only when two places offer the same name: a project has
-/// one directory of that name, and which of the two goes in it is not
-/// something to guess.
+/// one directory of that name in each folder it is installed in, and which
+/// of the two goes there is not something to guess.
 ///
-/// A project that keeps no folder for `kind` is refused here, where
+/// A project with nowhere to put `kind` ([`targets`]) is refused here, where
 /// [`survey`] offers it nothing: "not offered" would send somebody to gather
 /// what could never be installed there anyway.
 pub fn offered(
@@ -411,7 +542,7 @@ pub fn offered(
     name: &str,
     from: Option<&str>,
 ) -> Result<Candidate, InstallError> {
-    project.required_directory(kind)?;
+    targets(project, kind)?;
     let mut matching: Vec<Candidate> = survey(workspace, ledger, project, kind)?
         .into_iter()
         .filter(|candidate| candidate.name() == name)
@@ -430,16 +561,24 @@ pub fn offered(
     }
 }
 
-/// Copy one shelf entry into a project.
+/// Copy one shelf entry into a project: a copy in each of its [`targets`],
+/// recorded as one installation with a target for each.
 ///
-/// The copy is built in the project's scratch folder, and what an interrupted
-/// install left there, or beside the copy, is cleared first and said
-/// ([`Installation::swept`]).
+/// The copies are built in the project's scratch folder and put in place
+/// together, all of them or none (`copy::Stage::place`), so an agent that
+/// reads two of them never finds two versions of one skill. What an
+/// interrupted install left there, or beside a copy, is cleared first and
+/// said ([`Installation::swept`]).
+///
+/// `homes` are the folders the agents read for every project, which the
+/// front end decides: a copy that would land inside one of them is refused
+/// ([`InstallError::UserScope`]).
 pub fn install(
     workspace: &FlayerWorkspace,
     ledger: &Ledger,
     project: &MindProject,
     candidate: &Candidate,
+    homes: &AgentHomes,
 ) -> Result<Installation, InstallError> {
     let kind = candidate.kind();
     let name = candidate.name().to_owned();
@@ -448,12 +587,38 @@ pub fn install(
     if !is_folder_name(&name) {
         return Err(InstallError::UnsafeName { name });
     }
+    // The folder is named after the artifact, not after the folder it had on
+    // the shelf: inside a project a skill's directory has to match its
+    // declared name, which is what `validate` checks and what an agent uses to
+    // find it.
+    let targets = targets(project, kind)?;
+    let copies: Vec<PathBuf> = targets
+        .iter()
+        .map(|target| copy_at(&target.folder, kind, &name))
+        .collect();
+    // A project at the user's home has its agents' own folders for targets:
+    // `.claude/skills` there is Claude's skills for every project, and
+    // `.agents/skills` is the one Codex and OpenCode read everywhere. That is
+    // the user-scope install D-22 leaves for later, behind a `--user` of its
+    // own, so it is refused here rather than done by accident. The targets
+    // cannot tell, being relative to the project, and core has no home to
+    // compare them with: the front end hands it the agents' folders.
+    if let Some(error) = user_scope(homes, &copies) {
+        return Err(error);
+    }
+    // Somebody's work in any of them refuses the whole install: one copy
+    // written beside it would leave the agents reading both folders two
+    // different skills of one name. Looked at before the lock, so a refusal
+    // waits for nobody, and again under it below.
     if candidate.standing == Standing::Foreign {
-        return Ok(Installed::Foreign { name }.into());
+        let recorded = ledger.copies(&entry, kind)?;
+        if let Some(path) = unrecorded(project.root(), kind, &copies, &recorded) {
+            return Ok(Installed::Foreign { name, path }.into());
+        }
     }
     // Held until the record is written, so that what the ledger says was
     // installed is the copy that is there: two installs of one name at once
-    // would otherwise each record theirs, and the copy left would be
+    // would otherwise each record theirs, and the copies left would be
     // whichever moved into place last.
     let _lock = workspace.lock().map_err(WorkspaceError::from)?;
 
@@ -472,35 +637,37 @@ pub fn install(
             },
         });
     }
-    // The folder is named after the artifact, not after the folder it had on
-    // the shelf: inside a project a skill's directory has to match its
-    // declared name, which is what `validate` checks and what an agent uses to
-    // find it.
-    let directory = project.required_directory(kind)?;
-    let to = directory.join(&name);
 
-    // A loaded workspace can be the project itself, keeping its own in the
-    // project's folder: then what would be copied is what is already there.
-    // Nothing is written, and above all nothing is recorded: a record would
-    // let `uninstall` delete the loaded workspace's own files.
-    if same_place(&from, &to) {
+    // A loaded workspace can be the project itself, keeping its own in a
+    // folder the install writes in: then what would be copied is already
+    // there. Nothing is written, and above all nothing is recorded: a record
+    // would let `uninstall` delete the loaded workspace's own files.
+    if let Some(to) = copies.iter().find(|to| same_place(&from, to)) {
         return Ok(Installed::Unchanged {
             name,
-            path: to,
+            paths: vec![to.clone()],
             unhashed: None,
         }
         .into());
     }
-    // One inside the other is worse: replacing `to` starts by deleting it,
-    // and with it `from`, or copies `from` into itself.
-    if overlaps(&from, &to) {
-        return Err(InstallError::Overlaps { from, to });
-    }
-    // And never over what a loaded workspace keeps as its own: a project can
-    // be the workspace it loads, sharing a folder, and a record from before
-    // the load would otherwise let this overwrite it.
-    if let Some(loaded) = kept_by_a_load(workspace, kind, &to) {
-        return Err(InstallError::KeptByALoad { path: to, loaded });
+    for to in &copies {
+        // One inside the other is worse: replacing `to` starts by deleting
+        // it, and with it `from`, or copies `from` into itself.
+        if overlaps(&from, to) {
+            return Err(InstallError::Overlaps {
+                from,
+                to: to.clone(),
+            });
+        }
+        // And never over what a loaded workspace keeps as its own: a project
+        // can be the workspace it loads, sharing a folder, and a record from
+        // before the load would otherwise let this overwrite it.
+        if let Some(loaded) = kept_by_a_load(workspace, kind, to) {
+            return Err(InstallError::KeptByALoad {
+                path: to.clone(),
+                loaded,
+            });
+        }
     }
 
     // Strict, where gathering was lenient: the copy is what the project's
@@ -515,14 +682,14 @@ pub fn install(
 
     // Looked at again under the lock, before anything is written. The
     // candidate's standing is from a survey made before it was held, minutes
-    // before on the install screen, and since then an edit may have made the
+    // before on the install screen, and since then an edit may have made a
     // copy its author's and dropped its record, or somebody may have written
     // a folder of that name by hand. Only a turn to Foreign changes what
     // happens here, and that one must: it is somebody's work, never written
     // over.
-    let ours = ledger.installations(&entry, kind)?;
-    if standing(&directory, kind, &name, &ours) == Standing::Foreign {
-        return Ok(Installed::Foreign { name }.into());
+    let recorded = ledger.copies(&entry, kind)?;
+    if let Some(path) = unrecorded(project.root(), kind, &copies, &recorded) {
+        return Ok(Installed::Foreign { name, path }.into());
     }
 
     // Links are followed only inside where the artifact comes from: the
@@ -532,42 +699,86 @@ pub fn install(
         Offer::Workspace { .. } => workspace.root().to_path_buf(),
         Offer::Shelf(_) => from.clone(),
     };
-    // Built in the project's scratch folder rather than beside `to`, which is
-    // a folder agents read: neither a copy half made nor one an interrupted
+    // Out of git before anything is written, so a copy in a local project
+    // never shows in `git status`, not even for a moment, as its settings
+    // never do; and a block this cannot edit refuses the install with
+    // nothing written, rather than putting copies one machine has in every
+    // teammate's way. Taken back out if the copies then fail, from where
+    // nothing is left: a line naming an empty place would keep whatever
+    // somebody writes there later out of git without a word.
+    let excluded = match local(project) {
+        Some(key) => Some(exclude::add(
+            project.root(),
+            key,
+            &entries(project, &copies),
+        )?),
+        None => None,
+    };
+    let undo = || {
+        if let Some(key) = local(project) {
+            let gone: Vec<PathBuf> = copies
+                .iter()
+                .filter(|copy| !holds(copy, kind))
+                .cloned()
+                .collect();
+            let _ = exclude::remove(project.root(), key, &entries(project, &gone));
+        }
+    };
+    // Built in the project's scratch folder rather than beside a copy, in a
+    // folder agents read: neither a copy half made nor one an interrupted
     // run left behind sits where an agent would load it.
     let scratch = project.scratch_dir();
-    let mut stage = copy::Stage::open(&scratch).map_err(|source| InstallError::Write {
-        path: scratch,
-        source,
-        swept: Vec::new(),
-    })?;
-    let change = match stage.replace(&from, &to, &within) {
-        Ok(change) => change,
+    let mut stage = match copy::Stage::open(&scratch) {
+        Ok(stage) => stage,
+        Err(source) => {
+            undo();
+            return Err(InstallError::Write {
+                path: scratch,
+                source,
+                swept: Vec::new(),
+            });
+        }
+    };
+    // Said, since what lands is then not all of what was offered.
+    let left_out: Vec<LeftOut> = LEAVE_OUT
+        .iter()
+        .map(|(name, reason)| LeftOut {
+            path: from.join(name),
+            reason,
+        })
+        .filter(|left| fs::symlink_metadata(&left.path).is_ok())
+        .collect();
+    let changes = match stage.place(&from, &copies, &within, &left_out_names()) {
+        Ok(changes) => changes,
         // What was cleared on the way goes out with the error rather than
         // with the stage: it was cleared whether or not this copy lands.
-        Err(source) => {
+        Err(copy::PlaceError { target, source }) => {
+            undo();
             return Err(InstallError::Write {
-                path: to,
+                // The target it failed at, since the error may not say: or
+                // the first, as with one target, when it failed building the
+                // copy, which is no target's doing.
+                path: target.unwrap_or_else(|| copies[0].clone()),
                 source,
                 swept: stage.swept().to_vec(),
-            })
+            });
         }
     };
     let swept = stage.swept().to_vec();
     // Cleared before the ledger is written rather than after, so the scratch
     // folder is held for no longer than the copy takes.
     drop(stage);
-    // Of the copy as it now stands, not of where it came from: what was
-    // written is what a later look at the copy is compared with, and the
+    // Of the copies as they now stand, not of where they came from: what was
+    // written is what a later look at a copy is compared with, and the
     // source may hold links the copy resolved. A copy that cannot be read
     // back is recorded all the same, with no hash, since without a record it
     // would be Foreign for good, and D-04 reads a record with no hash as it
     // reads one from before hashes were kept. That is said, in what this
     // returns and in the log: a copy left as it was can hold a link somebody
     // put there, which `copy::same` follows and the hash refuses.
-    let (content_hash, unhashed) = match hash::tree(&to) {
+    let (content_hash, unhashed) = match one_hash(&copies) {
         Ok(hash) => (Some(hash), None),
-        Err(error) => (None, Some(error.to_string())),
+        Err(reason) => (None, Some(reason)),
     };
 
     // A source to point at only for what was gathered: the workspace's own
@@ -585,38 +796,129 @@ pub fn install(
             source_id,
             origin: Some(candidate.origin()),
             content_hash,
-            // One copy, in the folder the project's marker names, which is no
-            // one agent's: a copy in each agent's folder is #34's to write.
-            targets: vec![Target {
-                agent: None,
-                path: route(project.root(), &to),
-            }],
+            targets: targets
+                .iter()
+                .zip(&copies)
+                .map(|(target, to)| Target {
+                    agent: target.agent(),
+                    path: route(project.root(), to),
+                })
+                .collect(),
         },
     )?;
     let mut detail = format!("{name} into {}", project.name());
+    for left in &left_out {
+        if let Some(name) = left.path.file_name() {
+            detail.push_str(&format!(", without {}", name.to_string_lossy()));
+        }
+    }
     if let Some(reason) = &unhashed {
         detail.push_str(&format!(", recorded without a hash: {reason}"));
     }
     ledger.log(Action::Install, Some(&entry), Outcome::Ok, Some(&detail))?;
 
-    let installed = match change {
-        copy::Change::Added => Installed::Added {
+    // One change for the installation, as it is recorded once: added when
+    // every copy is new, unchanged when none is, and updated otherwise, a
+    // copy put back in one folder beside one that was current included.
+    let paths = copies;
+    let installed = if changes
+        .iter()
+        .all(|change| *change == copy::Change::Unchanged)
+    {
+        Installed::Unchanged {
             name,
-            path: to,
+            paths,
             unhashed,
-        },
-        copy::Change::Updated => Installed::Updated {
+        }
+    } else if changes.iter().all(|change| *change == copy::Change::Added) {
+        Installed::Added {
             name,
-            path: to,
+            paths,
             unhashed,
-        },
-        copy::Change::Unchanged => Installed::Unchanged {
+        }
+    } else {
+        Installed::Updated {
             name,
-            path: to,
+            paths,
             unhashed,
-        },
+        }
     };
-    Ok(Installation { installed, swept })
+    Ok(Installation {
+        installed,
+        swept,
+        left_out,
+        excluded,
+    })
+}
+
+/// The refusal for the first of `copies` inside one of the agents' own
+/// folders, if one is.
+///
+/// Resolved as far as each path exists, so a home reached through a link,
+/// or a project reached through one, is still the folder it is.
+pub(crate) fn user_scope(homes: &AgentHomes, copies: &[PathBuf]) -> Option<InstallError> {
+    let folders: Vec<(&str, &Path, PathBuf)> = homes
+        .folders()
+        .into_iter()
+        .filter_map(|(reader, folder)| Some((reader, folder, resolved(folder)?)))
+        .collect();
+    copies.iter().find_map(|copy| {
+        let at = resolved(copy)?;
+        folders
+            .iter()
+            .find(|(_, _, home)| at.starts_with(home))
+            .map(|(reader, folder, _)| InstallError::UserScope {
+                path: copy.clone(),
+                home: folder.to_path_buf(),
+                reader,
+            })
+    })
+}
+
+/// The key of a project's group in the exclude block, when what is installed
+/// into it stays out of git: a local project's (D-02), named by its id, which
+/// stays when the project is renamed or moved. None for a shared one, whose
+/// copies are the team's to commit, and for one a `mind.toml` marks, since a
+/// project from before settings was committed by design.
+fn local(project: &MindProject) -> Option<&str> {
+    project
+        .settings()
+        .filter(|settings| settings.share == Share::Local)
+        .map(|settings| settings.id.as_str())
+}
+
+/// One exclude entry for each of `copies`, a folder each, as the project
+/// spells it.
+pub(crate) fn entries(project: &MindProject, copies: &[PathBuf]) -> Vec<exclude::Entry> {
+    copies
+        .iter()
+        .filter_map(|copy| paths::relative_to(copy, project.root()))
+        .map(exclude::Entry::directory)
+        .collect()
+}
+
+/// The one hash every copy holds ([`hash::tree`]), or why there is none:
+/// a copy that cannot be hashed, or, should one change while the others are
+/// read, copies that do not hold the same.
+pub(crate) fn one_hash(copies: &[PathBuf]) -> Result<String, String> {
+    let mut found: Option<(String, &Path)> = None;
+    for copy in copies {
+        let hash = hash::tree(copy).map_err(|error| error.to_string())?;
+        match &found {
+            Some((first, at)) if *first != hash => {
+                return Err(format!(
+                    "{} does not hold what {} does",
+                    copy.display(),
+                    at.display()
+                ))
+            }
+            Some(_) => {}
+            None => found = Some((hash, copy)),
+        }
+    }
+    found
+        .map(|(hash, _)| hash)
+        .ok_or_else(|| String::from("no copy was written"))
 }
 
 /// What stops the artifact at `from` from being installed as `name`:
@@ -644,10 +946,13 @@ fn unfit(kind: Kind, from: &Path, name: &str) -> Result<Vec<ValidationIssue>, In
         .map_or_else(Vec::new, |manifest| artifact::strict_issues(manifest, name)))
 }
 
-/// Take one artifact back out of a project.
+/// Take one artifact back out of a project: every copy its installation
+/// recorded, wherever the project would install it now.
 ///
-/// Only if the ledger says Mindflayer put it there. Anything else is reported
-/// and left where it is.
+/// Only if the ledger says Mindflayer put it there, and only the copies it
+/// says Mindflayer wrote: a folder of that name in a target the record does
+/// not name is somebody's, and stays. Anything else is reported and left
+/// where it is.
 pub fn uninstall(
     workspace: &FlayerWorkspace,
     ledger: &Ledger,
@@ -660,56 +965,116 @@ pub fn uninstall(
             name: name.to_owned(),
         });
     }
-    let directory = project.required_directory(kind)?;
     // Held from before the record is read until it is dropped, for the
     // reason `install` holds it: an install of the same name at the same
-    // moment comes wholly before this or wholly after it. Between the copy
-    // going and its record going, it would leave a copy with no record, which
-    // Mindflayer would never touch again.
+    // moment comes wholly before this or wholly after it. Between the copies
+    // going and their record going, it would leave a copy with no record,
+    // which Mindflayer would never touch again.
     let _lock = workspace.lock().map_err(WorkspaceError::from)?;
     let entry = project_entry(workspace, project);
-    let ours = ledger.installations(&entry, kind)?;
-    if !ours.iter().any(|installed| installed == name) {
-        return Ok(if holds(&directory, kind, name) {
-            Removed::Foreign {
+    let Some(record) = ledger.installation(&entry, kind, name)? else {
+        // Nowhere to look is nothing there: a project with no targets now
+        // holds nothing an install would have written.
+        let held = targets(project, kind)
+            .unwrap_or_default()
+            .into_iter()
+            .map(|target| copy_at(&target.folder, kind, name))
+            .find(|copy| holds(copy, kind));
+        return Ok(match held {
+            Some(path) => Removed::Foreign {
                 name: name.to_owned(),
-            }
-        } else {
-            Removed::Absent {
+                path,
+            },
+            None => Removed::Absent {
                 name: name.to_owned(),
-            }
+            },
         });
-    }
+    };
 
-    let path = directory.join(name);
-    if let Some(loaded) = kept_by_a_load(workspace, kind, &path) {
-        return Err(InstallError::KeptByALoad { path, loaded });
+    let mut paths = Vec::with_capacity(record.targets.len());
+    for target in &record.targets {
+        let path = recorded_copy(project, name, &target.path)?;
+        if let Some(loaded) = kept_by_a_load(workspace, kind, &path) {
+            return Err(InstallError::KeptByALoad { path, loaded });
+        }
+        paths.push(path);
     }
-    if path.exists() {
-        std::fs::remove_dir_all(&path).map_err(|source| InstallError::Write {
-            path: path.clone(),
-            source,
-            swept: Vec::new(),
-        })?;
+    for path in &paths {
+        if path.exists() {
+            std::fs::remove_dir_all(path).map_err(|source| InstallError::Write {
+                path: path.clone(),
+                source,
+                swept: Vec::new(),
+            })?;
+        }
     }
     ledger.uninstalled(&entry, kind, name)?;
     let detail = format!("{name} from {}", project.name());
     ledger.log(Action::Uninstall, Some(&entry), Outcome::Ok, Some(&detail))?;
 
+    // After the copies, so none shows in `git status` on its way out; and
+    // said rather than raised when the block cannot be edited, since they
+    // are gone and so is their record.
+    let still_excluded = local(project)
+        .and_then(|key| exclude::remove(project.root(), key, &entries(project, &paths)).err())
+        .map(|error| error.to_string());
     Ok(Removed::Removed {
         name: name.to_owned(),
-        path,
+        paths,
+        still_excluded,
     })
 }
 
-/// Drop the record that Mindflayer installed `name` into `project`, saying
-/// whether there was one.
+/// Where in `project` a target of `name`'s installation recorded at `route`
+/// is, as long as that is a folder of the project named after it.
+///
+/// The ledger is the workspace's own, but a removal deletes whatever this
+/// says, so a route that climbs out of the project, starts over at a root, or
+/// ends in another name is refused rather than followed: before records had
+/// targets, a removal was only ever `name` joined onto a folder of the
+/// project's.
+pub(crate) fn recorded_copy(
+    project: &MindProject,
+    name: &str,
+    route: &str,
+) -> Result<PathBuf, InstallError> {
+    let path = Path::new(route);
+    let inside = path
+        .components()
+        .all(|component| matches!(component, Component::Normal(_)));
+    if !inside || path.file_name() != Some(std::ffi::OsStr::new(name)) {
+        return Err(InstallError::Recorded {
+            name: name.to_owned(),
+            route: route.to_owned(),
+        });
+    }
+    Ok(project.root().join(path))
+}
+
+/// Drop the record that Mindflayer installed `name` into `project`, when it
+/// names a copy at `at`, saying whether there was one.
 ///
 /// For when what is in the project stops being what was installed: it was
 /// removed, renamed or edited by hand, or something new was written under a
 /// name an old record still claims. The record is what gives the install
 /// screen leave to overwrite and delete, so it must not outlive the copy it
 /// was about: whatever somebody writes there next would inherit it.
+///
+/// Only a record of a copy at `at`, the place the change reached, and only
+/// that copy's part of it ([`Ledger::uninstalled_copy`]): a project marked by
+/// its settings authors in a folder of its own, beside the copies installed
+/// for its agents, and a change there leaves those copies what was installed.
+/// Dropping their record by name would make them Foreign, never updated or
+/// removed again, over a change to something else. So would dropping the
+/// whole installation when the folder it authors in is also a target, which
+/// its settings may make it (`"skills": ".claude/skills"`), and the change
+/// reached the copy there: the one in `.agents/skills` is still what was
+/// installed. The installation goes with its last copy. A record from before
+/// installations had targets names none, and is dropped as it was.
+///
+/// In a local project, `at` stops being kept out of git with its record:
+/// what is there now, or is written there next, is its author's, and a line
+/// left in the exclude block would hide it from `git status` without a word.
 ///
 /// Only the changes in [`crate::lifecycle`] call it, each when its change
 /// calls for it. Public, it would let a front end drop a record on a rule of
@@ -731,6 +1096,7 @@ pub(crate) fn disown(
     project: &MindProject,
     kind: Kind,
     name: &str,
+    at: &Path,
 ) -> Result<Disowned, InstallError> {
     // Only a workspace that manages the project keeps records about it, and
     // one that has never installed anything has no ledger: this must not
@@ -744,52 +1110,81 @@ pub(crate) fn disown(
     // trying the change again would find nothing to change.
     let (ledger, scrub) = workspace.ledger_to_write_waiting(Duration::MAX)?;
     let entry = project_entry(workspace, project);
-    let dropped = ledger.uninstalled(&entry, kind, name)?;
-    if dropped {
-        let detail = format!(
+    let reached = route(project.root(), at);
+    let detail = match ledger.uninstalled_copy(&entry, kind, name, &reached)? {
+        Forgotten::Nothing => {
+            return Ok(Disowned {
+                scrub,
+                ..Disowned::default()
+            })
+        }
+        Forgotten::Copy => format!(
+            "{name}'s copy at {reached} from {}, which no longer holds what was installed there",
+            project.name()
+        ),
+        Forgotten::Installation => format!(
             "{name} from {}, which no longer holds the copy that was installed",
             project.name()
-        );
-        ledger.log(Action::Uninstall, Some(&entry), Outcome::Ok, Some(&detail))?;
-    }
-    Ok(Disowned { dropped, scrub })
+        ),
+    };
+    ledger.log(Action::Uninstall, Some(&entry), Outcome::Ok, Some(&detail))?;
+    // After the record, as an uninstall takes its entries out after the
+    // copies; and handed back rather than raised, since the record is gone.
+    let still_excluded = local(project).and_then(|key| {
+        exclude::remove(project.root(), key, &entries(project, &[at.to_path_buf()]))
+            .err()
+            .map(|source| InstallError::StillExcluded {
+                path: at.to_path_buf(),
+                source,
+            })
+    });
+    Ok(Disowned {
+        dropped: true,
+        scrub,
+        still_excluded,
+    })
 }
 
 /// What [`disown`] did.
 #[derive(Debug, Default)]
 pub(crate) struct Disowned {
-    /// Whether there was a record, which is now gone.
+    /// Whether there was a record of the copy, which is now gone.
     pub dropped: bool,
     /// What opening the ledger to write took out of it, for the front end to
     /// say; nothing when there was no ledger to open.
     pub scrub: Scrub,
+    /// Why the exclude block of a local project still keeps the copy's place
+    /// out of git, when it could not be edited.
+    pub still_excluded: Option<InstallError>,
 }
 
 /// What installing one artifact did.
 ///
-/// Each that leaves a copy says whether the copy could be hashed
-/// (`unhashed`): one that could not is recorded all the same, and said
-/// rather than recorded quietly, since a record with no hash is read the
-/// way one from before hashes were kept is.
+/// Each that leaves copies names every one of them (`paths`), one for each
+/// target, in the order [`targets`] gives them, and says whether they could
+/// be hashed (`unhashed`): copies that could not are recorded all the same,
+/// and said rather than recorded quietly, since a record with no hash is
+/// read the way one from before hashes were kept is.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Installed {
     Added {
         name: String,
-        path: PathBuf,
+        paths: Vec<PathBuf>,
         unhashed: Option<String>,
     },
     Updated {
         name: String,
-        path: PathBuf,
+        paths: Vec<PathBuf>,
         unhashed: Option<String>,
     },
     Unchanged {
         name: String,
-        path: PathBuf,
+        paths: Vec<PathBuf>,
         unhashed: Option<String>,
     },
-    /// Something of that name is already there and is not ours to replace.
-    Foreign { name: String },
+    /// Something of that name is already in one of the targets, at `path`,
+    /// and is not ours to replace, so nothing was written in any of them.
+    Foreign { name: String, path: PathBuf },
 }
 
 impl Installed {
@@ -815,15 +1210,24 @@ pub struct Installation {
     /// where earlier versions staged. Said rather than cleared quietly,
     /// because each is an install that did not finish.
     pub swept: Vec<PathBuf>,
+    /// What the offer holds that no copy does (`LEAVE_OUT`): said, because
+    /// the copies are then not all that was offered.
+    pub left_out: Vec<LeftOut>,
+    /// What keeping the copies out of git came to, for a local project; none
+    /// for a project whose copies are committed. [`Excluded::warning`] says
+    /// when nothing keeps them out, outside a git work tree.
+    pub excluded: Option<Excluded>,
 }
 
 impl From<Installed> for Installation {
     /// An installation that never reached the scratch folder, and so cleared
-    /// nothing in it.
+    /// nothing in it and copied nothing.
     fn from(installed: Installed) -> Self {
         Installation {
             installed,
             swept: Vec::new(),
+            left_out: Vec::new(),
+            excluded: None,
         }
     }
 }
@@ -831,42 +1235,81 @@ impl From<Installed> for Installation {
 /// What uninstalling one artifact did.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Removed {
+    /// Every copy its installation recorded is gone, and so is the record.
     Removed {
         name: String,
-        path: PathBuf,
+        paths: Vec<PathBuf>,
+        /// Why the exclude block of a local project still names them, when it
+        /// could not be edited: a line left there keeps whatever somebody
+        /// writes in that place later out of git, which is worth saying.
+        still_excluded: Option<String>,
     },
-    /// Present, but nobody here put it there.
-    Foreign {
-        name: String,
-    },
+    /// Present, at `path`, but nobody here put it there.
+    Foreign { name: String, path: PathBuf },
     /// Nothing of that name to remove.
-    Absent {
-        name: String,
-    },
+    Absent { name: String },
 }
 
-/// How `name` stands in a project's `directory`, given the names the ledger
-/// says Mindflayer installed there (`ours`).
-fn standing(directory: &Path, kind: Kind, name: &str, ours: &[String]) -> Standing {
-    if !holds(directory, kind, name) {
-        Standing::Absent
-    } else if ours.iter().any(|installed| installed == name) {
+/// How `name` stands in a project whose root is `root` and which installs
+/// into `targets`, given every copy the ledger records Mindflayer writing
+/// there (`recorded`, as [`Ledger::copies`] spells them).
+///
+/// Foreign when any target holds something of that name the ledger does not
+/// record, whatever the others hold: installing would write beside it, and
+/// uninstalling would take away the copies the agents reading both folders
+/// share with it. Installed when every copy there is recorded, even if one a
+/// record names has gone since, which the next install puts back.
+fn standing(
+    root: &Path,
+    targets: &[InstallTarget],
+    kind: Kind,
+    name: &str,
+    recorded: &[String],
+) -> Standing {
+    let copies: Vec<PathBuf> = targets
+        .iter()
+        .map(|target| copy_at(&target.folder, kind, name))
+        .collect();
+    if unrecorded(root, kind, &copies, recorded).is_some() {
+        Standing::Foreign
+    } else if copies.iter().any(|copy| holds(copy, kind)) {
         Standing::Installed
     } else {
-        Standing::Foreign
+        Standing::Absent
     }
 }
 
-/// Whether a project's directory already holds an artifact of that name.
-fn holds(directory: &Path, kind: Kind, name: &str) -> bool {
+/// The first of `copies` that is there and that `recorded` does not name,
+/// if one is: somebody's work.
+///
+/// By the copy's path, as a listing marks installed copies
+/// (`Catalog::with_records`), not by its name: an installation of a name
+/// into one folder does not make what somebody keeps under that name in
+/// another folder Mindflayer's to write over.
+fn unrecorded(root: &Path, kind: Kind, copies: &[PathBuf], recorded: &[String]) -> Option<PathBuf> {
+    copies
+        .iter()
+        .find(|copy| holds(copy, kind) && !recorded.contains(&route(root, copy)))
+        .cloned()
+}
+
+/// Where a copy of `name` goes in `folder`: a folder of that name for a kind
+/// that is one, a file for a kind that is files.
+pub(crate) fn copy_at(folder: &Path, kind: Kind, name: &str) -> PathBuf {
+    match kind.layout() {
+        Layout::Directory { .. } => folder.join(name),
+        Layout::Files { extension } => folder.join(format!("{name}.{extension}")),
+    }
+}
+
+/// Whether something is at `copy`, where an install would write.
+pub(crate) fn holds(copy: &Path, kind: Kind) -> bool {
     match kind.layout() {
         // Anything by that name, not only a finished artifact: a folder of
         // notes somebody started by hand is theirs, and installing over it
         // would delete them.
-        crate::kind::Layout::Directory { .. } => directory.join(name).exists(),
-        crate::kind::Layout::Files { extension } => {
-            directory.join(format!("{name}.{extension}")).is_file()
-        }
+        Layout::Directory { .. } => copy.exists(),
+        Layout::Files { .. } => copy.is_file(),
     }
 }
 
@@ -878,12 +1321,18 @@ fn holds(directory: &Path, kind: Kind, name: &str) -> bool {
 /// project: `mind` run inside it and `flayer -p` must read and write one
 /// record, whichever symlinks either went through.
 fn project_entry(workspace: &FlayerWorkspace, project: &MindProject) -> String {
-    route(workspace.root(), &workspace.spelling_of(project.root()))
+    entry_for_root(workspace, project.root())
+}
+
+/// [`project_entry`], for a project known only by its root, as an artifact
+/// knows the one it was found in.
+pub(crate) fn entry_for_root(workspace: &FlayerWorkspace, root: &Path) -> String {
+    route(workspace.root(), &workspace.spelling_of(root))
 }
 
 /// A path below another, `/` separated, or the path itself when there is no
 /// route between them.
-fn route(base: &Path, target: &Path) -> String {
+pub(crate) fn route(base: &Path, target: &Path) -> String {
     paths::relative_to(target, base)
         .as_deref()
         .and_then(paths::to_config_string)
@@ -930,7 +1379,11 @@ fn resolved(path: &Path) -> Option<PathBuf> {
 /// workspace keeping both in one folder has nothing in it Mindflayer may
 /// write or remove, from the first install on; otherwise an install today
 /// is the loaded workspace's own tomorrow, and can never be updated again.
-fn kept_by_a_load(workspace: &FlayerWorkspace, kind: Kind, path: &Path) -> Option<PathBuf> {
+pub(crate) fn kept_by_a_load(
+    workspace: &FlayerWorkspace,
+    kind: Kind,
+    path: &Path,
+) -> Option<PathBuf> {
     let at = resolved(path)?;
     workspace.loads().into_iter().find_map(|loaded| {
         let source = loaded.workspace.ok()?;
@@ -940,20 +1393,30 @@ fn kept_by_a_load(workspace: &FlayerWorkspace, kind: Kind, path: &Path) -> Optio
 }
 
 /// Whether `candidate` is the copy `project` holds: the same names and bytes
-/// as the folder there. For telling which of two offers of one name is the
-/// one installed, which a record from before schema 3 does not say for what
-/// came from a workspace rather than the shelf, and which an edit since may
-/// have made neither.
+/// as the folder there, but for what an install leaves out (`LEAVE_OUT`).
+/// For telling which of two offers of one name is the one installed, which
+/// a record from before schema 3 does not say for what came from a workspace
+/// rather than the shelf, and which an edit since may have made neither.
+///
+/// Compared with the first copy the project holds of it: an install writes
+/// every copy from one tree, so any of them is what was installed, and one
+/// edited since is no longer any offer's.
 pub fn is_current(
     workspace: &FlayerWorkspace,
     project: &MindProject,
     candidate: &Candidate,
 ) -> bool {
-    let Some(directory) = project.directory_for(candidate.kind()) else {
+    let Ok(targets) = targets(project, candidate.kind()) else {
         return false;
     };
-    let at = directory.join(candidate.name());
-    at.is_dir() && copy::same(&candidate.source(workspace), &at).unwrap_or(false)
+    targets
+        .iter()
+        .map(|target| target.folder.join(candidate.name()))
+        .find(|at| at.is_dir())
+        .is_some_and(|at| {
+            copy::same_leaving(&candidate.source(workspace), &at, &left_out_names())
+                .unwrap_or(false)
+        })
 }
 
 /// Why an install or an uninstall could not happen at all.
@@ -1001,6 +1464,26 @@ pub enum InstallError {
     NotOffered { name: String, from: Option<String> },
     #[error("`{name}` is offered by more than one place ({}), so say which with --from", .origins.join(", "))]
     OfferedTwice { name: String, origins: Vec<String> },
+    #[error("{project} names no agent in its settings that {kind}s are installed for, so none can be installed into it")]
+    NoTarget { project: String, kind: Kind },
+    #[error("none of the folders {project}'s settings name for its {kind}s is one an install may use, so none can be installed into it")]
+    NoUsableTarget { project: String, kind: Kind },
+    #[error("{name}: the ledger records a copy at {route}, which is not a folder of the project named after it, so nothing was removed")]
+    Recorded { name: String, route: String },
+    #[error("{0}, and nothing was installed, since its copies could not be kept out of git")]
+    Exclude(#[from] ExcludeError),
+    #[error("{path}: its record of being installed was dropped, but the exclude file still keeps it out of git: {source}")]
+    StillExcluded {
+        path: PathBuf,
+        #[source]
+        source: ExcludeError,
+    },
+    #[error("{path} is inside {home}, which {reader} reads for every project, so nothing was installed: Mindflayer installs into one project at a time")]
+    UserScope {
+        path: PathBuf,
+        home: PathBuf,
+        reader: &'static str,
+    },
 }
 
 impl InstallError {

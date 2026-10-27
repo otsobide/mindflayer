@@ -159,7 +159,7 @@ fn a_refusal_names_the_marker_that_is_newer() {
 
 // Written against each marker's own constant, so that a check holding one
 // marker to the other's version fails: the second does, both ways round, now
-// that a project's marker reads up to 3 and a workspace's up to 2.
+// that a project's marker reads up to 4 and a workspace's up to 2.
 
 #[test]
 fn a_newer_project_marker_is_refused_while_a_current_workspace_marker_is_read() {
@@ -338,6 +338,31 @@ fn a_version_2_marker_still_keeps_each_kind_where_it_says_or_beside_the_code() {
     assert_eq!(
         project.directory_for(Kind::Rule),
         Some(dir.path().join("rules"))
+    );
+}
+
+#[test]
+fn with_defaults_names_every_kind_and_keeps_what_was_named() {
+    let named = Directories::default()
+        .with(Kind::Skill, ".claude/skills")
+        .with_key("servers", "mcp");
+
+    let filled = named.with_defaults();
+
+    assert_eq!(
+        filled.entries(),
+        [
+            ("skills", Path::new(".claude/skills")),
+            ("rules", Path::new("rules")),
+            ("servers", Path::new("mcp")),
+        ]
+    );
+    assert_eq!(
+        Directories::default().with_defaults().entries(),
+        [
+            ("skills", Path::new("skills")),
+            ("rules", Path::new("rules"))
+        ]
     );
 }
 

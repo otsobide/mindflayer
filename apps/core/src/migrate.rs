@@ -16,6 +16,12 @@
 //! moved: the copy is still compared with the offer, found wherever the
 //! marker now says. A workspace that loads this one names its root, not its
 //! folders, and reads them through its marker as well.
+//!
+//! A project an older Mindflayer made is the other thing to bring up to
+//! date: [`project_plan`] and [`project`] move it from its `mind.toml` to
+//! settings, and what is installed into it to where its agents read.
+
+mod project;
 
 use std::fs;
 use std::io;
@@ -24,11 +30,17 @@ use std::path::{Path, PathBuf};
 use thiserror::Error;
 
 use crate::catalog::{Catalog, DiscoveryFailure};
+use crate::exclude::ExcludeError;
+use crate::install::InstallError;
 use crate::kind::Kind;
+use crate::ledger::LedgerError;
 use crate::paths;
 use crate::workspace::{
     misplaced_own, Directories, FlayerWorkspace, MindProject, WorkspaceError, FLAYER_CONFIG,
+    MIND_CONFIG,
 };
+
+pub use project::{project, project_plan, ProjectFailure, ProjectMigrated, ProjectPlan, Stranded};
 
 /// What moving the workspace's own into its library would do, and what would
 /// stop it.
@@ -125,6 +137,20 @@ pub enum Refusal {
     Unlisted(DiscoveryFailure),
     #[error("{0}, so which of the workspace's own are that project's cannot be told")]
     Unreadable(WorkspaceError),
+    /// A folder a project's `mind.toml` keeps a kind in that its settings
+    /// cannot name ([`project_plan`]): inside `.mind`, where a version 1
+    /// project kept every kind it named no folder for, or outside the
+    /// project.
+    #[error("{0}, so the project's settings cannot name it; move what is there and name the folder in {MIND_CONFIG} first")]
+    Authored(WorkspaceError),
+    /// A project to be moved to settings naming no agent, which would have
+    /// nowhere to put what is installed into it.
+    #[error("{project} would name no agent, and what is installed into it would reach none")]
+    NoAgent { project: String },
+    /// A copy a project's move would put where an install refuses to put
+    /// one, or take from there.
+    #[error("{0}")]
+    Install(InstallError),
 }
 
 /// What [`library`] did.
@@ -142,6 +168,12 @@ pub struct Migrated {
 pub enum MigrateError {
     #[error(transparent)]
     Workspace(#[from] WorkspaceError),
+    #[error(transparent)]
+    Ledger(#[from] LedgerError),
+    #[error(transparent)]
+    Install(#[from] InstallError),
+    #[error(transparent)]
+    Exclude(#[from] ExcludeError),
     #[error("nothing moved: {}", .0.iter().map(ToString::to_string).collect::<Vec<_>>().join("; "))]
     Refused(Vec<Refusal>),
     #[error("{path}: the marker cannot be kept as it was: {source}")]
@@ -168,6 +200,16 @@ pub enum MigrateError {
         source: Box<WorkspaceError>,
         stranded: Vec<Move>,
     },
+    /// A step of moving a project to its settings failed, and what it had
+    /// written was put back, but for what `stranded` names
+    /// ([`MigrateError::left_behind`]).
+    #[error("{failure}; nothing was migrated")]
+    Project {
+        /// Boxed, for the reason `Marker`'s source is.
+        #[source]
+        failure: Box<ProjectFailure>,
+        stranded: Vec<Stranded>,
+    },
 }
 
 impl MigrateError {
@@ -178,6 +220,16 @@ impl MigrateError {
     pub fn stranded(&self) -> &[Move] {
         match self {
             MigrateError::Move { stranded, .. } | MigrateError::Marker { stranded, .. } => stranded,
+            _ => &[],
+        }
+    }
+
+    /// What a project's move that failed could not put back as it was, for
+    /// a front end to say: the `mind.toml` marks the project again but for
+    /// what is named here.
+    pub fn left_behind(&self) -> &[Stranded] {
+        match self {
+            MigrateError::Project { stranded, .. } => stranded,
             _ => &[],
         }
     }

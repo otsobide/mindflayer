@@ -10,11 +10,12 @@ pub mod ui;
 
 use std::fmt::Write as _;
 use std::io;
+use std::path::Path;
 use std::time::Duration;
 
 use mindflayer_core::install::{self, Installed, Removed};
 use mindflayer_core::ledger::Ledger;
-use mindflayer_core::{FlayerWorkspace, Kind, MindProject};
+use mindflayer_core::{AgentHomes, Excluded, FlayerWorkspace, Kind, MindProject};
 use ratatui::crossterm::event::{self, Event, KeyEventKind};
 use ratatui::DefaultTerminal;
 
@@ -28,8 +29,9 @@ use state::{Pending, Screen, Step, Target};
 /// Built from the ledger as it is ([`open`]), without making one or scrubbing
 /// it: opening the screen and leaving it changes nothing, so it is a read until
 /// something is applied. Only applying opens the ledger to write to
-/// ([`commit`]), which makes it and scrubs it.
-pub fn run(workspace: &FlayerWorkspace) -> Result<Outcome, Failure> {
+/// ([`commit`]), which makes it and scrubs it, and installs nothing into the
+/// agents' own folders, `homes`.
+pub fn run(workspace: &FlayerWorkspace, homes: &AgentHomes) -> Result<Outcome, Failure> {
     let (projects, mut warnings) = registered(workspace);
     warnings.extend(load_warnings(workspace));
     let screen = open(workspace, projects)?;
@@ -57,7 +59,7 @@ pub fn run(workspace: &FlayerWorkspace) -> Result<Outcome, Failure> {
 
     let (screen, step) = outcome.map_err(|source| CliError::Screen { source })?;
     let mut outcome = match step {
-        Step::Apply => commit(workspace, &screen)?,
+        Step::Apply => commit(workspace, &screen, homes)?,
         _ => Outcome {
             stdout: String::from("nothing applied\n"),
             stderr: Vec::new(),
@@ -94,14 +96,18 @@ pub fn open(workspace: &FlayerWorkspace, projects: Vec<MindProject>) -> Result<S
 /// ([`rebuilt`]) before anything is carried out. Scrubbing when the screen
 /// opened was the other way, and is rejected: opening it is a read, and a
 /// read leaves the ledger as it finds it.
-pub fn commit(workspace: &FlayerWorkspace, screen: &Screen) -> Result<Outcome, Failure> {
+pub fn commit(
+    workspace: &FlayerWorkspace,
+    screen: &Screen,
+    homes: &AgentHomes,
+) -> Result<Outcome, Failure> {
     let (ledger, scrub) = workspace.ledger_to_write().map_err(CliError::from)?;
     let said = scrubbed(&scrub);
     let applied = if scrub.sources.is_empty() {
-        apply(workspace, &ledger, screen)
+        apply(workspace, &ledger, screen, homes)
     } else {
         rebuilt(workspace, &ledger, screen).and_then(|(screen, lost)| {
-            let mut outcome = apply(workspace, &ledger, &screen)?;
+            let mut outcome = apply(workspace, &ledger, &screen, homes)?;
             outcome.ok = outcome.ok && lost.is_empty();
             outcome.stderr.splice(0..0, lost);
             Ok(outcome)
@@ -221,13 +227,20 @@ fn drive(terminal: &mut DefaultTerminal, mut screen: Screen) -> Result<(Screen, 
 /// Carry out everything the screen marked, and say what happened.
 ///
 /// With a ledger opened to write: [`commit`] opens it, and scrubs it first.
+/// Nothing goes into the agents' own folders, `homes`.
 pub fn apply(
     workspace: &FlayerWorkspace,
     ledger: &Ledger,
     screen: &Screen,
+    homes: &AgentHomes,
 ) -> Result<Outcome, install::InstallError> {
     let mut stdout = String::new();
     let mut stderr = Vec::new();
+    // Said once a project, after the warnings, and no reason to fail.
+    let mut notes: Vec<String> = Vec::new();
+    // The projects an install was asked of, each told once of the folders
+    // its settings name that no install uses.
+    let mut installing: Vec<&Path> = Vec::new();
     let (mut installed, mut removed) = (0usize, 0usize);
 
     for (target, row, what) in screen.pending() {
@@ -237,13 +250,18 @@ pub fn apply(
 
         match what {
             Pending::Install => {
+                if !installing.contains(&project.root()) {
+                    installing.push(project.root());
+                    stderr.extend(crate::commands::install::misplaced(project));
+                }
                 // One that cannot be installed is said and passed over: the
                 // rest were marked too, and what was already done is reported.
                 // Only the ledger failing stops everything.
-                let result = match install::install(workspace, ledger, project, &entry.candidate) {
-                    Err(install::InstallError::Ledger(error)) => return Err(error.into()),
-                    result => result,
-                };
+                let result =
+                    match install::install(workspace, ledger, project, &entry.candidate, homes) {
+                        Err(install::InstallError::Ledger(error)) => return Err(error.into()),
+                        result => result,
+                    };
                 let done = match result {
                     Ok(done) => done,
                     Err(error) => {
@@ -255,6 +273,20 @@ pub fn apply(
                         continue;
                     }
                 };
+                for left in &done.left_out {
+                    stderr.push(format!(
+                        "warning: {}: {} {}",
+                        project.name(),
+                        entry.candidate.name(),
+                        crate::commands::install::left_out(left)
+                    ));
+                }
+                if let Some(note) = done.excluded.as_ref().and_then(Excluded::warning) {
+                    let note = format!("note: {note}");
+                    if !notes.contains(&note) {
+                        notes.push(note);
+                    }
+                }
                 if let Some(reason) = done.installed.unhashed() {
                     stderr.push(format!(
                         "warning: {}: {} was recorded without a hash of what it holds: {reason}",
@@ -271,9 +303,10 @@ pub fn apply(
                         let _ = writeln!(stdout, "{}: {name} was already current", project.name());
                     }
                     // Refused rather than obeyed: somebody wrote that file.
-                    Installed::Foreign { name } => stderr.push(format!(
-                        "warning: {}: {name} is already there and Mindflayer did not put it there, so it was left alone",
-                        project.name()
+                    Installed::Foreign { name, path } => stderr.push(format!(
+                        "warning: {}: {name} is already at {} and Mindflayer did not put it there, so it was left alone",
+                        project.name(),
+                        crate::commands::install::shown(project, &path)
                     )),
                 }
                 stdout.push_str(&crate::commands::install::swept(project, &done.swept));
@@ -290,13 +323,25 @@ pub fn apply(
                     Ok(taken) => taken,
                 };
                 match taken {
-                    Removed::Removed { name, .. } => {
+                    Removed::Removed {
+                        name,
+                        still_excluded,
+                        ..
+                    } => {
                         removed += 1;
                         let _ = writeln!(stdout, "{}: removed {name}", project.name());
+                        if let Some(reason) = still_excluded {
+                            stderr.push(crate::commands::install::still(
+                                &name,
+                                project.name(),
+                                &reason,
+                            ));
+                        }
                     }
-                    Removed::Foreign { name } => stderr.push(format!(
-                        "warning: {}: {name} was not installed by Mindflayer, so it was left alone",
-                        project.name()
+                    Removed::Foreign { name, path } => stderr.push(format!(
+                        "warning: {}: {name} at {} was not installed by Mindflayer, so it was left alone",
+                        project.name(),
+                        crate::commands::install::shown(project, &path)
                     )),
                     Removed::Absent { name } => {
                         let _ = writeln!(stdout, "{}: {name} was not there", project.name());
@@ -308,5 +353,6 @@ pub fn apply(
 
     let _ = writeln!(stdout, "\n{} installed, {} removed", installed, removed);
     let ok = stderr.is_empty();
+    stderr.extend(notes);
     Ok(Outcome { stdout, stderr, ok })
 }

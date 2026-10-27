@@ -78,7 +78,9 @@ pub enum Record {
     /// the one consulted does not manage the project, or it installed nothing
     /// under that name) or the change gave no reason to touch it.
     Untouched,
-    /// The record was dropped, and what is there now is its author's.
+    /// The record of the copy the change reached was dropped, and what is
+    /// there now is its author's. Copies the same install wrote in other
+    /// folders, which the change did not reach, are still recorded.
     Dropped,
 }
 
@@ -116,7 +118,7 @@ pub fn add(
         Some(template) => create_from(project, kind, name, description, template),
     }?;
     let mut scrub = Scrub::default();
-    let stale = disowned(workspace, project, kind, name, &mut scrub);
+    let stale = disowned(workspace, project, kind, name, artifact.path(), &mut scrub);
     Ok(Added {
         artifact,
         stale,
@@ -131,11 +133,19 @@ pub fn add(
 /// folder disagrees with what it declares. More than one match is an error
 /// rather than a choice made quietly: changing the wrong artifact is not
 /// something to guess about.
+///
+/// Only in the folders the project authors in
+/// ([`Catalog::discover_authored`]): a listing also shows what sits in its
+/// agents' folders, an install's copies or somebody's own, and none of those
+/// is the project's to edit, rename or remove. One named that is there and
+/// nowhere the project authors is refused as such
+/// ([`LifecycleError::NotAuthored`]), rather than as nothing at all, since a
+/// listing has just shown it.
 pub fn find(project: &MindProject, reference: &Reference) -> Result<Target, LifecycleError> {
     let kinds = reference
         .kind()
         .map_or_else(|| Kind::ALL.to_vec(), |kind| vec![kind]);
-    let catalog = Catalog::discover_kinds(std::slice::from_ref(project), &kinds);
+    let catalog = Catalog::discover_authored(std::slice::from_ref(project), &kinds);
 
     let mut found: Vec<Target> = catalog
         .find(reference)
@@ -155,7 +165,7 @@ pub fn find(project: &MindProject, reference: &Reference) -> Result<Target, Life
     // found to be fixed or removed.
     let name = reference.name();
     if name.split('/').all(install::is_folder_name) {
-        for kind in kinds {
+        for &kind in &kinds {
             let Some(path) = place(project, kind, name) else {
                 continue;
             };
@@ -173,9 +183,18 @@ pub fn find(project: &MindProject, reference: &Reference) -> Result<Target, Life
     }
 
     match found.len() {
-        0 => Err(LifecycleError::NotFound {
-            typed: reference.typed().to_owned(),
-        }),
+        0 => {
+            let listed = Catalog::discover_kinds(std::slice::from_ref(project), &kinds);
+            Err(match listed.find(reference).first() {
+                Some(artifact) => LifecycleError::NotAuthored {
+                    typed: reference.typed().to_owned(),
+                    path: artifact.path().to_path_buf(),
+                },
+                None => LifecycleError::NotFound {
+                    typed: reference.typed().to_owned(),
+                },
+            })
+        }
         1 => Ok(found.remove(0)),
         _ => Err(LifecycleError::Ambiguous {
             typed: reference.typed().to_owned(),
@@ -255,6 +274,9 @@ pub fn identify(project: &MindProject, file: &Path) -> Option<(Kind, String)> {
 pub struct Edit {
     kind: Kind,
     name: String,
+    /// The artifact, which is what a record names: a skill's directory, or
+    /// a rule's file.
+    path: PathBuf,
     file: PathBuf,
     before: Option<Vec<u8>>,
 }
@@ -286,6 +308,7 @@ pub fn start_edit(target: &Target) -> Edit {
     Edit {
         kind: target.kind,
         name: target.name.clone(),
+        path: target.path.clone(),
         before: fs::read(&file).ok(),
         file,
     }
@@ -305,7 +328,9 @@ pub fn finish_edit(
     let changed = fs::read(&edit.file).ok() != edit.before;
     let mut scrub = Scrub::default();
     let copy = if changed {
-        disowned(workspace, project, edit.kind, &edit.name, &mut scrub)
+        disowned(
+            workspace, project, edit.kind, &edit.name, &edit.path, &mut scrub,
+        )
     } else {
         Ok(Record::Untouched)
     };
@@ -371,7 +396,14 @@ pub fn remove(
         }
     }
     let mut scrub = Scrub::default();
-    let copy = disowned(workspace, project, target.kind, &target.name, &mut scrub);
+    let copy = disowned(
+        workspace,
+        project,
+        target.kind,
+        &target.name,
+        &target.path,
+        &mut scrub,
+    );
     Ok(Removed { copy, scrub })
 }
 
@@ -425,8 +457,22 @@ pub fn rename(
         Kind::Rule => rename_rule(project, target, &directory, to),
     }?;
     let mut scrub = Scrub::default();
-    let copy = disowned(workspace, project, target.kind, &target.name, &mut scrub);
-    let stale = disowned(workspace, project, target.kind, &renamed.name, &mut scrub);
+    let copy = disowned(
+        workspace,
+        project,
+        target.kind,
+        &target.name,
+        &target.path,
+        &mut scrub,
+    );
+    let stale = disowned(
+        workspace,
+        project,
+        target.kind,
+        &renamed.name,
+        &renamed.path,
+        &mut scrub,
+    );
     Ok(Renamed {
         target: renamed,
         copy,
@@ -641,20 +687,25 @@ fn holds(kind: Kind, path: &Path) -> bool {
     file_of(kind, path).is_file()
 }
 
-/// Drop the record `workspace` keeps of an install of `name` into `project`,
-/// adding what opening the ledger to do it scrubbed out of it to `scrub`.
+/// Drop the record `workspace` keeps of an install of `name` into `project`
+/// that names the copy at `at`, the one the change reached, adding what
+/// opening the ledger to do it scrubbed out of it to `scrub`.
 fn disowned(
     workspace: Option<&FlayerWorkspace>,
     project: &MindProject,
     kind: Kind,
     name: &str,
+    at: &Path,
     scrub: &mut Scrub,
 ) -> Result<Record, InstallError> {
     let Some(workspace) = workspace else {
         return Ok(Record::Untouched);
     };
-    let disowned = install::disown(workspace, project, kind, name)?;
+    let disowned = install::disown(workspace, project, kind, name, at)?;
     scrub.absorb(disowned.scrub);
+    if let Some(error) = disowned.still_excluded {
+        return Err(error);
+    }
     Ok(if disowned.dropped {
         Record::Dropped
     } else {
@@ -667,6 +718,10 @@ fn disowned(
 pub enum LifecycleError {
     #[error("nothing named `{typed}` here")]
     NotFound { typed: String },
+    /// Listed, from a folder the project's agents read, but in none the
+    /// project authors in: installed there, or somebody's own.
+    #[error("`{typed}` is at {path}, in a folder this project's agents read and it does not author in, so it is not changed from here")]
+    NotAuthored { typed: String, path: PathBuf },
     #[error("`{typed}` names more than one thing ({}), so say which: by kind, as in `skill:name`, or by folder", .matches.join(", "))]
     Ambiguous { typed: String, matches: Vec<String> },
     #[error("{}", issue_list(.issues))]

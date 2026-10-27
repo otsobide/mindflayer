@@ -9,6 +9,7 @@ use std::thread;
 use std::time::{Duration, Instant};
 
 use common::*;
+use mindflayer_core::{Agent, Share};
 use tui::state::Step as TuiStep;
 
 // ---------------------------------------------------------------------------
@@ -121,7 +122,11 @@ fn a_repository_is_made_a_mind_project_only_when_that_is_confirmed() {
             path: String::from("gamma")
         })
     );
-    assert!(dir.path().join("gamma").join(MIND_DIR).is_dir());
+    // What `mind init` makes anywhere: settings kept out of git.
+    assert_eq!(
+        names_in(&dir.path().join("gamma").join(MIND_DIR)),
+        [".gitignore", SETTINGS_FILE]
+    );
     assert!(registry(dir.path()).contains("\"gamma\""));
     let transcript = app.transcript();
     assert!(
@@ -203,6 +208,17 @@ fn applying_the_minds_screen_links_and_unlinks_in_one_pass() {
     let drawn = tui_drawn(&app);
     assert!(drawn.contains("Link 2 and unlink 1?"), "{drawn}");
     assert!(drawn.contains("repo is not a mind project yet"), "{drawn}");
+    let Mode::Confirming(confirm) = &app.mode else {
+        panic!("{:?}", app.mode)
+    };
+    assert!(
+        confirm
+            .question
+            .iter()
+            .any(|line| line.contains("(a .mind kept out of git, and empty skills/ and rules/)")),
+        "{:?}",
+        confirm.question
+    );
     assert!(!registry(dir.path()).contains("\"gamma\""), "nothing yet");
 
     let task = press_and_run(&mut app, KeyCode::Char('y'));
@@ -220,7 +236,11 @@ fn applying_the_minds_screen_links_and_unlinks_in_one_pass() {
     assert!(registry.contains("\"repo\""), "{registry}");
     assert!(registry.contains("\"beta\""), "{registry}");
     assert!(!registry.contains("\"alpha\""), "{registry}");
-    assert!(dir.path().join("repo").join(MIND_DIR).is_dir());
+    // What `mind init` makes anywhere: settings kept out of git.
+    assert_eq!(
+        names_in(&dir.path().join("repo").join(MIND_DIR)),
+        [".gitignore", SETTINGS_FILE]
+    );
     let transcript = app.transcript();
     assert!(transcript.contains("$ mind -C repo init\n"), "{transcript}");
     assert!(
@@ -261,18 +281,128 @@ fn applying_an_untouched_minds_screen_asks_nothing() {
 #[test]
 fn flayer_minds_is_a_command_at_both_spellings() {
     let direct = FlayerCli::try_parse_from(["flayer", "minds"]).unwrap();
-    let nested = Cli::try_parse_from(["mind", "flayer", "minds"]).unwrap();
+    let nested = Cli::try_parse_from(["mind", "flayer", "minds", "work"]).unwrap();
 
     assert!(matches!(
         direct.command,
-        Some(mindflayer_cli::FlayerCommand::Minds)
+        Some(mindflayer_cli::FlayerCommand::Minds { ref roots }) if roots.is_empty()
     ));
     assert!(matches!(
         nested.command,
         Some(mindflayer_cli::Command::Flayer {
-            command: Some(mindflayer_cli::FlayerCommand::Minds)
-        })
+            command: Some(mindflayer_cli::FlayerCommand::Minds { ref roots })
+        }) if roots == &[PathBuf::from("work")]
     ));
+}
+
+/// `workspace_with_candidates`, and beside it `work`, a folder holding
+/// `acme/delta`, a mind project, and `plain`, a git repository: what
+/// `flayer minds <work>` offers.
+fn candidates_and_a_folder_beside() -> (TempDir, TempDir) {
+    let dir = workspace_with_candidates();
+    let work = TempDir::new().unwrap();
+    let delta = work.path().join("acme/delta");
+    fs::create_dir_all(&delta).unwrap();
+    new_project(&delta);
+    fs::create_dir_all(work.path().join("plain/.git")).unwrap();
+    (dir, work)
+}
+
+#[test]
+fn flayer_minds_given_a_folder_offers_what_is_under_it_beside_every_linked_one() {
+    let (dir, work) = candidates_and_a_folder_beside();
+
+    let app = tui::minds(dir.path(), &[work.path().to_path_buf()], &Lookup::default()).unwrap();
+
+    // By path, since the lines run from the workspace root, outside the
+    // folder; and not `gamma` or `repo`, under the workspace it was not
+    // told to look under.
+    let delta = work.path().join("acme/delta").display().to_string();
+    let plain = work.path().join("plain").display().to_string();
+    assert_eq!(
+        minds_rows(&app),
+        vec![delta.as_str(), plain.as_str(), "alpha", "beta"]
+    );
+    let drawn = tui_drawn(&app);
+    assert!(
+        drawn.contains(&format!("found under {}", work.path().display())),
+        "{drawn}"
+    );
+}
+
+#[test]
+fn flayer_minds_given_a_folder_that_is_not_there_says_so_beside_what_the_others_hold() {
+    let (dir, work) = candidates_and_a_folder_beside();
+    let missing = work.path().join("wrok");
+
+    let app = tui::minds(
+        dir.path(),
+        &[missing.clone(), work.path().join("plain")],
+        &Lookup::default(),
+    )
+    .unwrap();
+
+    let plain = work.path().join("plain").display().to_string();
+    assert_eq!(minds_rows(&app), vec![plain.as_str(), "alpha", "beta"]);
+    // In the words `flayer scan` warns with.
+    let said = &app.workspace().unwrap().scan_warnings;
+    assert_eq!(said.len(), 1, "{said:?}");
+    assert!(
+        said[0].starts_with(&format!("{}: cannot be listed: ", missing.display())),
+        "{said:?}"
+    );
+    let drawn = tui_drawn(&app);
+    assert!(drawn.contains("What the scan missed"), "{drawn}");
+    assert!(drawn.contains("cannot be listed"), "{drawn}");
+}
+
+#[test]
+fn flayer_minds_given_only_a_folder_that_is_not_there_is_not_an_empty_answer() {
+    let dir = TempDir::new().unwrap();
+    flayer(dir.path(), &["init"]).unwrap();
+
+    let app = tui::minds(dir.path(), &[dir.path().join("wrok")], &Lookup::default()).unwrap();
+
+    assert!(minds_rows(&app).is_empty());
+    let drawn = tui_drawn(&app);
+    assert!(drawn.contains("nothing linked"), "{drawn}");
+    assert!(drawn.contains("cannot be listed"), "{drawn}");
+}
+
+#[test]
+fn applying_the_minds_screen_given_a_folder_links_by_path_and_looks_there_again() {
+    let (dir, work) = candidates_and_a_folder_beside();
+    let mut app = tui::minds(dir.path(), &[work.path().to_path_buf()], &Lookup::default()).unwrap();
+    let delta = work.path().join("acme/delta");
+    let spelled = delta.display().to_string();
+
+    press_key(&mut app, KeyCode::Char(' '));
+    press_key(&mut app, KeyCode::Char('a'));
+    let task = press_and_run(&mut app, KeyCode::Char('y'));
+
+    assert_eq!(
+        task,
+        Some(Task::Minds {
+            init: Vec::new(),
+            link: vec![spelled.clone()],
+            unlink: Vec::new(),
+        })
+    );
+    assert!(FlayerWorkspace::open(dir.path()).unwrap().is_linked(&delta));
+    let transcript = app.transcript();
+    assert!(
+        transcript.contains(&format!("$ flayer link {spelled}\n")),
+        "{transcript}"
+    );
+    // Read again under the same folder: `plain` is still offered, and
+    // `gamma`, under the workspace, still is not.
+    press_key(&mut app, KeyCode::Esc);
+    press_key(&mut app, KeyCode::Char('m'));
+    let rows = minds_rows(&app);
+    let plain = work.path().join("plain").display().to_string();
+    assert!(rows.contains(&plain.as_str()), "{rows:?}");
+    assert!(!rows.contains(&"gamma"), "{rows:?}");
+    assert_eq!(rows.len(), 4, "{rows:?}");
 }
 
 #[test]
@@ -412,6 +542,26 @@ fn enter_on_an_artifact_shows_it_as_mind_show_does() {
 }
 
 #[test]
+fn a_ledger_that_will_not_open_is_said_on_each_projects_rows() {
+    let dir = workspace_with_two();
+    let ledger = dir.path().join(FLAYER_DIR).join("mindflayer.db");
+    fs::write(&ledger, "not a database\n").unwrap();
+    let mut app = tui_in(dir.path());
+
+    let said = ledger.display().to_string();
+    let mut names = Vec::new();
+    for _ in 0..2 {
+        let member = app.member().unwrap();
+        let warnings = &member.holdings.as_ref().unwrap().warnings;
+        assert_eq!(warnings.len(), 1, "{}: {warnings:?}", member.name);
+        assert!(warnings[0].contains(&said), "{warnings:?}");
+        names.push(member.name.clone());
+        press_key(&mut app, KeyCode::Down);
+    }
+    assert_eq!(names, ["alpha", "beta"]);
+}
+
+#[test]
 fn an_invalid_artifact_is_marked_where_it_is_listed() {
     let dir = workspace_with_two();
     write_skill(
@@ -425,6 +575,60 @@ fn an_invalid_artifact_is_marked_where_it_is_listed() {
 
     assert!(drawn.contains("✗"), "{drawn}");
     assert!(drawn.contains("the directory is `deploy`"), "{drawn}");
+}
+
+#[test]
+fn a_projects_rows_say_how_each_artifact_stands_and_which_agents_read_it() {
+    let dir = TempDir::new().unwrap();
+    flayer(dir.path(), &["init"]).unwrap();
+    let collapse = dir.path().join("collapse");
+    fs::create_dir(&collapse).unwrap();
+    new_project(&collapse);
+    flayer(dir.path(), &["link", "collapse"]).unwrap();
+    flayer(
+        dir.path(),
+        &["add", "skill", "commit-style", "How commits are written"],
+    )
+    .unwrap();
+    flayer(dir.path(), &["install", "-p", "collapse", "commit-style"]).unwrap();
+    flayer(dir.path(), &["add", "skill", "deploy", "Ship the service"]).unwrap();
+    flayer(dir.path(), &["install", "-p", "collapse", "deploy"]).unwrap();
+    fs::remove_dir_all(collapse.join(".claude/skills/deploy")).unwrap();
+    mind(&collapse, &["add", "skill", "review", "Review a change"]).unwrap();
+    let notes = collapse.join(".claude/skills/notes");
+    fs::create_dir_all(&notes).unwrap();
+    fs::write(notes.join("SKILL.md"), skill_file("notes", "My own notes")).unwrap();
+    let mut app = tui_in(dir.path());
+
+    let drawn = tui_drawn(&app);
+    press_key(&mut app, KeyCode::Up);
+    let own = tui_drawn(&app);
+
+    // What `flayer status -p collapse` says, a row each: the state, then a
+    // badge in each agent's place where that agent reads it.
+    for row in [
+        "skill commit-style  installed CC CX OC  How commits are written",
+        "skill deploy        partial      CX OC  Ship the service",
+        "skill notes         foreign   CC    OC  My own notes",
+        "skill review        authored            Review a change",
+    ] {
+        assert!(drawn.contains(row), "{row}\n{drawn}");
+    }
+    let status = flayer(dir.path(), &["status", "-p", "collapse"]).unwrap();
+    assert_eq!(
+        status.stdout,
+        "\
+commit-style  installed  claude,codex,opencode  workspace
+deploy        partial    codex,opencode         workspace
+notes         foreign    claude,opencode
+review        authored   -
+"
+    );
+    // The workspace's own are no project's, and say nothing of the kind.
+    assert!(
+        own.contains("skill commit-style  How commits are written"),
+        "{own}"
+    );
 }
 
 #[test]
@@ -686,7 +890,9 @@ fn the_install_screen_opens_inside_the_tui_and_applies_from_there() {
     let task = press_and_run(&mut app, KeyCode::Char('y'));
 
     assert_eq!(task, Some(Task::ApplyInstall));
-    assert!(dir.path().join("collapse/skills/deploy/SKILL.md").is_file());
+    for copy in copies(&dir.path().join("collapse"), "deploy") {
+        assert!(copy.join("SKILL.md").is_file(), "{}", copy.display());
+    }
     let Mode::Reading(reader) = &app.mode else {
         panic!("{:?}", app.mode);
     };
@@ -697,6 +903,86 @@ fn the_install_screen_opens_inside_the_tui_and_applies_from_there() {
     assert!(app
         .transcript()
         .contains("$ flayer install\ncollapse: installed deploy"));
+}
+
+#[test]
+fn the_install_screen_inside_the_tui_installs_where_each_agent_of_a_v3_project_reads() {
+    let (dir, _workspace, _ledger) = shelved(&[], &["deploy"]);
+    let root = dir.path().join("alpha");
+    fs::create_dir_all(root.join(MIND_DIR)).unwrap();
+    fs::write(
+        root.join(MIND_DIR).join("settings.json"),
+        r#"{
+  "version": 3,
+  "id": "0123456789abcdef0123456789abcdef",
+  "name": "alpha",
+  "agents": ["claude", "codex", "opencode"],
+  "share": "shared",
+  "directories": {}
+}
+"#,
+    )
+    .unwrap();
+    flayer(dir.path(), &["link", "alpha"]).unwrap();
+    let mut app = tui_in(dir.path());
+
+    press_and_run(&mut app, KeyCode::Char('i'));
+    assert!(tui_drawn(&app).contains("Skills in alpha"));
+    press_key(&mut app, KeyCode::Right);
+    press_key(&mut app, KeyCode::Char(' '));
+    press_key(&mut app, KeyCode::Char('a'));
+    let task = press_and_run(&mut app, KeyCode::Char('y'));
+
+    assert_eq!(task, Some(Task::ApplyInstall));
+    let claude = fs::read(root.join(".claude/skills/deploy/SKILL.md")).unwrap();
+    let agents = fs::read(root.join(".agents/skills/deploy/SKILL.md")).unwrap();
+    assert_eq!(claude, agents);
+    assert!(app
+        .transcript()
+        .contains("$ flayer install\nalpha: installed deploy"));
+}
+
+#[test]
+fn every_line_the_tui_runs_and_its_install_screen_keep_out_of_the_agents_folders_it_was_given() {
+    let (dir, _workspace, _ledger) = shelved(&["collapse"], &["deploy"]);
+    // The project's `.agents` stands for the folder several agents read for
+    // every project, as a project at the user's home has.
+    let collapse = dir.path().join("collapse");
+    let lookup = Lookup {
+        agents: AgentHomes {
+            agents_dir: Some(collapse.join(".agents")),
+            ..AgentHomes::default()
+        },
+        ..Lookup::default()
+    };
+    let words: Vec<String> = ["flayer", "install", "-p", "collapse", "deploy"]
+        .iter()
+        .map(|word| (*word).to_owned())
+        .collect();
+
+    let done = tui::execute(&words, dir.path(), &lookup, &Watch::new());
+
+    assert!(
+        done.error
+            .as_deref()
+            .is_some_and(|error| error.contains("which more than one agent reads")),
+        "{done:?}"
+    );
+    let view = tui::load(dir.path(), &lookup).unwrap();
+    let mut app = App::new(dir.path().to_path_buf(), view).with_lookup(lookup);
+    press_and_run(&mut app, KeyCode::Char('i'));
+    press_key(&mut app, KeyCode::Right);
+    press_key(&mut app, KeyCode::Char(' '));
+    press_key(&mut app, KeyCode::Char('a'));
+    press_and_run(&mut app, KeyCode::Char('y'));
+    assert!(
+        app.transcript().contains("which more than one agent reads"),
+        "{}",
+        app.transcript()
+    );
+    for copy in copies(&collapse, "deploy") {
+        assert!(!copy.exists(), "{}", copy.display());
+    }
 }
 
 #[test]
@@ -878,6 +1164,34 @@ fn every_task_the_tui_runs_is_a_line_the_binaries_accept() {
             description: awkward.clone(),
             template: Some(String::from("-weird")),
         },
+        Task::Settings {
+            holder: Holder::Project(String::from("alpha")),
+            agents: Some(AgentsLine::Named(vec![Agent::Codex, Agent::OpenCode])),
+            share: None,
+            edit_tracked: false,
+        },
+        Task::Settings {
+            holder: Holder::Elsewhere(String::from("-odd")),
+            agents: Some(AgentsLine::Removed(vec![Agent::Claude])),
+            share: Some(Share::Local),
+            edit_tracked: true,
+        },
+        Task::Settings {
+            holder: Holder::Project(String::from(".")),
+            agents: None,
+            share: Some(Share::Shared),
+            edit_tracked: false,
+        },
+        Task::Targets {
+            holder: Holder::Project(String::from("alpha")),
+            kind: Kind::Skill,
+            folders: Some(vec![String::from(".skills"), String::from("-odd")]),
+        },
+        Task::Targets {
+            holder: Holder::Elsewhere(String::from("-odd")),
+            kind: Kind::Skill,
+            folders: None,
+        },
     ];
 
     for task in &tasks {
@@ -898,6 +1212,43 @@ fn every_task_the_tui_runs_is_a_line_the_binaries_accept() {
         panic!("{line:?}");
     };
     assert_eq!(description, awkward);
+}
+
+#[test]
+fn the_agents_and_share_toggles_parse_back_into_what_they_were() {
+    let task = Task::Settings {
+        holder: Holder::Elsewhere(String::from("../collapse")),
+        agents: Some(AgentsLine::Named(vec![Agent::OpenCode, Agent::Claude])),
+        share: Some(Share::Local),
+        edit_tracked: true,
+    };
+    let lines = task.commands();
+    assert_eq!(
+        task.describe(),
+        "mind -W . -C ../collapse agents --yes opencode claude && \
+         mind -W . -C ../collapse share --yes --edit-tracked local"
+    );
+
+    let agents = Cli::try_parse_from(&lines[0]).unwrap();
+    assert_eq!(agents.directory, Some(PathBuf::from("../collapse")));
+    assert_eq!(agents.workspace.as_deref(), Some("."));
+    let Some(mindflayer_cli::Command::Agents {
+        change: None,
+        named,
+    }) = agents.command
+    else {
+        panic!("{:?}", lines[0]);
+    };
+    assert_eq!(named.agents, [Agent::OpenCode, Agent::Claude]);
+    assert!(named.yes);
+
+    let share = Cli::try_parse_from(&lines[1]).unwrap();
+    let Some(mindflayer_cli::Command::Share { mode }) = share.command else {
+        panic!("{:?}", lines[1]);
+    };
+    assert_eq!(mode.share, Share::Local);
+    assert!(mode.edit_tracked);
+    assert!(mode.yes);
 }
 
 // ---------------------------------------------------------------------------
@@ -1175,7 +1526,7 @@ fn flayer_minds_opens_on_the_default_workspace_without_making_it() {
     fs::create_dir(&alpha).unwrap();
     mind(&alpha, &["init"]).unwrap();
 
-    let app = tui::minds(elsewhere.path(), &Lookup::at_home(Some(home.path()))).unwrap();
+    let app = tui::minds(elsewhere.path(), &[], &Lookup::at_home(Some(home.path()))).unwrap();
 
     assert_eq!(minds_rows(&app), vec!["alpha"]);
     assert!(!home.path().join(FLAYER_DIR).exists());
@@ -1185,7 +1536,7 @@ fn flayer_minds_opens_on_the_default_workspace_without_making_it() {
 fn flayer_minds_with_no_workspace_and_no_default_says_so() {
     let elsewhere = TempDir::new().unwrap();
 
-    let error = tui::minds(elsewhere.path(), &Lookup::default()).unwrap_err();
+    let error = tui::minds(elsewhere.path(), &[], &Lookup::default()).unwrap_err();
 
     assert!(matches!(error, CliError::NotInWorkspace(_)), "{error}");
 }
@@ -1195,7 +1546,7 @@ fn flayer_minds_opens_on_the_default_workspace_not_on_one_above_its_home() {
     let (_outer, home) = home_inside_a_workspace();
     let elsewhere = TempDir::new().unwrap();
 
-    let app = tui::minds(elsewhere.path(), &Lookup::at_home(Some(&home))).unwrap();
+    let app = tui::minds(elsewhere.path(), &[], &Lookup::at_home(Some(&home))).unwrap();
 
     // Not `alpha`, `beta` and `h/gamma`: those are the workspace above.
     assert_eq!(minds_rows(&app), vec!["gamma"]);
@@ -1348,6 +1699,42 @@ fn a_skill_that_cannot_be_read_is_listed_where_it_can_be_dealt_with() {
     assert!(!dir.path().join("alpha/skills/broken").exists());
 }
 
+#[test]
+fn a_projects_own_skill_that_cannot_be_read_takes_the_row_its_agents_copy_has() {
+    let dir = TempDir::new().unwrap();
+    flayer(dir.path(), &["init"]).unwrap();
+    let alpha = dir.path().join("alpha");
+    fs::create_dir(&alpha).unwrap();
+    let directories = mindflayer_core::Directories::default().with(Kind::Skill, "skills");
+    MindProject::init_settings(
+        &alpha,
+        &mindflayer_core::Agent::ALL,
+        mindflayer_core::Share::Shared,
+        &directories,
+    )
+    .unwrap();
+    flayer(dir.path(), &["link", "alpha"]).unwrap();
+    write_skill(&alpha, "deploy", "no front matter at all\n");
+    let claudes = alpha.join(".claude/skills/deploy");
+    fs::create_dir_all(&claudes).unwrap();
+    fs::write(claudes.join("SKILL.md"), skill_file("deploy", "Ship it")).unwrap();
+    let mut app = tui_in(dir.path());
+
+    // One row, the project's own, which is what `d` on it removes.
+    press_key(&mut app, KeyCode::Right);
+    let items = &app.member().unwrap().holdings.as_ref().unwrap().items;
+    let rows: Vec<(&str, bool)> = items
+        .iter()
+        .map(|item| (item.name.as_str(), item.broken.is_some()))
+        .collect();
+    assert_eq!(rows, [("deploy", true)]);
+    press_key(&mut app, KeyCode::Char('d'));
+    press_and_run(&mut app, KeyCode::Char('y'));
+
+    assert!(!alpha.join("skills/deploy").exists());
+    assert!(claudes.join("SKILL.md").is_file());
+}
+
 // ---------------------------------------------------------------------------
 // Both levels, in the TUI
 // ---------------------------------------------------------------------------
@@ -1495,7 +1882,7 @@ fn mind_with_no_project_offers_to_make_one() {
     let task = press_and_run(&mut app, KeyCode::Enter);
 
     assert_eq!(task, Some(Task::InitProject));
-    assert!(dir.path().join(MIND_DIR).join(MIND_CONFIG).is_file());
+    assert!(dir.path().join(MIND_DIR).join(SETTINGS_FILE).is_file());
     assert_eq!(app.scope(), Scope::Project);
 }
 
@@ -1598,7 +1985,9 @@ fn settle_until(app: &mut App, until: impl Fn(&App) -> bool) {
 
 /// Under one directory: `outer`, a workspace, and `hub` beside it, which
 /// links `collapse`, a project under neither, and has installed its own
-/// `hub-skill` there.
+/// `hub-skill` there. The project is made as an older Mindflayer made it,
+/// so the copy is in the folder it authors in, where a line run on it
+/// reaches it and drops the record of the workspace it consulted.
 fn hub_beside_outer() -> (TempDir, PathBuf, PathBuf, PathBuf) {
     let dir = TempDir::new().unwrap();
     let (outer, hub, collapse) = (
@@ -1611,7 +2000,7 @@ fn hub_beside_outer() -> (TempDir, PathBuf, PathBuf, PathBuf) {
     }
     flayer(&outer, &["init"]).unwrap();
     flayer(&hub, &["init"]).unwrap();
-    mind(&collapse, &["init"]).unwrap();
+    older_project(&collapse);
     flayer(&hub, &["link", "../collapse"]).unwrap();
     flayer(&hub, &["add", "skill", "hub-skill", "The hub's"]).unwrap();
     flayer(&hub, &["install", "-p", "collapse", "hub-skill"]).unwrap();
@@ -1675,16 +2064,18 @@ fn the_header_says_why_the_workspace_on_screen_is_the_one_shown() {
     });
 
     let header = |drawn: &str| drawn.lines().next().unwrap_or_default().to_owned();
+    // The hub links collapse, which an older Mindflayer made, so what the
+    // header says of that comes between the hub's name and why it is shown.
     assert!(
         header(&found).contains("outer  · found above · "),
         "{found}"
     );
     assert!(
-        header(&named).contains("hub  · named with -W · "),
+        header(&named).contains(" hub  · ") && header(&named).contains("  · named with -W · "),
         "{named}"
     );
     assert!(
-        header(&activated).contains("hub  · activated · "),
+        header(&activated).contains(" hub  · ") && header(&activated).contains("  · activated · "),
         "{activated}"
     );
 }
@@ -1700,6 +2091,54 @@ fn the_header_of_a_project_on_its_own_gives_no_reason() {
     assert!(
         header.contains("· a project no workspace manages  · "),
         "{drawn}"
+    );
+}
+
+#[test]
+fn the_header_flags_projects_a_mind_toml_marks_with_the_command_that_moves_them() {
+    let dir = workspace_with_two();
+    let header = |dir: &Path| {
+        tui_drawn(&tui_in(dir))
+            .lines()
+            .next()
+            .unwrap_or_default()
+            .to_owned()
+    };
+    assert!(
+        !header(dir.path()).contains("mind.toml"),
+        "{}",
+        header(dir.path())
+    );
+
+    for name in ["old", "older"] {
+        let root = dir.path().join(name);
+        fs::create_dir(&root).unwrap();
+        older_project(&root);
+        flayer(dir.path(), &["link", name]).unwrap();
+    }
+
+    let flagged = header(dir.path());
+    assert!(
+        flagged.contains("  · 2 projects marked by mind.toml: `flayer migrate --all-projects`  · "),
+        "{flagged}"
+    );
+    // A project on its own is told what moves it from where it is.
+    let alone = TempDir::new().unwrap();
+    older_project(alone.path());
+    let own = tui_drawn(&mind_tui_in(alone.path()));
+    assert!(
+        own.lines()
+            .next()
+            .unwrap_or_default()
+            .contains("  · marked by mind.toml: `mind migrate`  · "),
+        "{own}"
+    );
+
+    flayer(dir.path(), &["migrate", "--all-projects", "--yes"]).unwrap();
+    assert!(
+        !header(dir.path()).contains("mind.toml"),
+        "{}",
+        header(dir.path())
     );
 }
 
@@ -1799,4 +2238,370 @@ fn a_project_under_the_workspace_on_screen_keeps_the_plain_line() {
         app.member().map(|member| member.holder()),
         Some(Holder::Project(String::from("alpha")))
     );
+}
+
+// ---------------------------------------------------------------------------
+// A project's agents and sharing
+// ---------------------------------------------------------------------------
+
+#[test]
+fn t_on_a_project_opens_its_agents_and_share_toggles_and_runs_the_command() {
+    let dir = workspace_with_own();
+    flayer(dir.path(), &["install", "-p", "alpha", "commit-style"]).unwrap();
+    let mut app = tui_in(dir.path());
+    assert_eq!(app.member().unwrap().name, "alpha");
+
+    press_key(&mut app, KeyCode::Char('t'));
+    let Mode::Settings(form) = &app.mode else {
+        panic!("{:?}", app.mode)
+    };
+    // Ticked as the project's settings say: `mind init` names every agent.
+    assert!(form.ticked.iter().all(|(_, ticked)| *ticked));
+    let drawn = tui_drawn(&app);
+    assert!(drawn.contains("Agents and sharing for alpha"), "{drawn}");
+    assert!(drawn.contains("[local]"), "{drawn}");
+
+    // Untick Claude: the form shows the line it would run, as typed.
+    press_key(&mut app, KeyCode::Char(' '));
+    let drawn = tui_drawn(&app);
+    assert!(
+        drawn.contains("mind -C alpha agents --yes codex opencode"),
+        "{drawn}"
+    );
+
+    let task = press_and_run(&mut app, KeyCode::Enter);
+
+    assert_eq!(
+        task,
+        Some(Task::Settings {
+            holder: Holder::Project(String::from("alpha")),
+            agents: Some(AgentsLine::Named(vec![Agent::Codex, Agent::OpenCode])),
+            share: None,
+            edit_tracked: false,
+        })
+    );
+    // What it said, to read in full: the copy Claude read is gone.
+    let Mode::Reading(reader) = &app.mode else {
+        panic!("{:?}", app.mode)
+    };
+    let said: Vec<&str> = reader.lines.iter().map(|(_, line)| line.as_str()).collect();
+    assert!(
+        said.contains(&"removed commit-style from .claude/skills/commit-style"),
+        "{said:?}"
+    );
+    let alpha = dir.path().join("alpha");
+    assert!(!alpha.join(".claude/skills/commit-style").exists());
+    assert_eq!(
+        MindProject::open(&alpha)
+            .unwrap()
+            .settings()
+            .unwrap()
+            .agents,
+        [Agent::Codex, Agent::OpenCode]
+    );
+    assert!(app
+        .transcript()
+        .starts_with("$ mind -C alpha agents --yes codex opencode\n"));
+}
+
+#[test]
+fn the_share_toggle_runs_mind_share_and_nothing_toggled_runs_nothing() {
+    let dir = workspace_with_two();
+    let mut app = tui_in(dir.path());
+    press_key(&mut app, KeyCode::Char('t'));
+
+    // Applied as it opened, there is nothing to run.
+    assert_eq!(press_key(&mut app, KeyCode::Enter), TuiStep::Stay);
+    assert!(tui_drawn(&app).contains("nothing toggled yet"));
+
+    for _ in 0..Agent::ALL.len() {
+        press_key(&mut app, KeyCode::Down);
+    }
+    press_key(&mut app, KeyCode::Right);
+    let task = press_and_run(&mut app, KeyCode::Enter).unwrap();
+
+    assert_eq!(task.describe(), "mind -C alpha share --yes shared");
+    assert_eq!(
+        MindProject::open(dir.path().join("alpha"))
+            .unwrap()
+            .settings()
+            .unwrap()
+            .share,
+        Share::Shared
+    );
+}
+
+#[test]
+fn unticking_every_agent_is_refused_by_the_command_in_the_form() {
+    let dir = workspace_with_two();
+    let mut app = tui_in(dir.path());
+    press_key(&mut app, KeyCode::Char('t'));
+    for _ in 0..Agent::ALL.len() {
+        press_key(&mut app, KeyCode::Char(' '));
+        press_key(&mut app, KeyCode::Down);
+    }
+
+    let task = press_and_run(&mut app, KeyCode::Enter).unwrap();
+
+    assert_eq!(
+        task.describe(),
+        "mind -C alpha agents remove --yes claude codex opencode"
+    );
+    // The command's own refusal, in the form, where it can be put right.
+    let Mode::Settings(form) = &app.mode else {
+        panic!("{:?}", app.mode)
+    };
+    let error = form.error.as_deref().unwrap_or_default();
+    assert!(error.contains("would name no agent"), "{error}");
+}
+
+#[test]
+fn t_on_the_workspaces_own_row_or_an_older_project_says_why_not() {
+    let dir = workspace_with_two();
+    let old = dir.path().join("old");
+    fs::create_dir(&old).unwrap();
+    older_project(&old);
+    flayer(dir.path(), &["link", "old"]).unwrap();
+    let mut app = tui_in(dir.path());
+
+    press_key(&mut app, KeyCode::Up);
+    assert!(app.member().unwrap().own);
+    press_key(&mut app, KeyCode::Char('t'));
+    assert!(matches!(app.mode, Mode::Browse));
+    assert!(app
+        .message
+        .as_ref()
+        .unwrap()
+        .text
+        .contains("reach agents by being installed"));
+
+    while app.member().unwrap().name != "old" {
+        press_key(&mut app, KeyCode::Down);
+    }
+    press_key(&mut app, KeyCode::Char('t'));
+    assert!(matches!(app.mode, Mode::Browse));
+    assert!(app
+        .message
+        .as_ref()
+        .unwrap()
+        .text
+        .contains("`mind migrate`"));
+}
+
+// ---------------------------------------------------------------------------
+// Where a project installs skills
+// ---------------------------------------------------------------------------
+
+#[test]
+fn a_project_installing_where_no_agent_reads_is_marked_and_its_pane_says_why() {
+    let dir = workspace_with_own();
+    let alpha = dir.path().join("alpha");
+    mind(&alpha, &["targets", "set", "skills", ".skills", "-y"]).unwrap();
+    flayer(dir.path(), &["install", "-p", "alpha", "commit-style"]).unwrap();
+
+    let app = tui_in(dir.path());
+
+    let holdings = app.member().unwrap().holdings.as_ref().unwrap();
+    assert_eq!(
+        holdings.unreached,
+        [String::from(
+            "claude, codex and opencode read none of the folders alpha installs skills in \
+             (.skills), so none of them sees what is installed there until pointed at one"
+        )]
+    );
+    let drawn = tui_drawn(&app);
+    assert!(drawn.contains("alpha  2  ⚠"), "{drawn}");
+    assert!(drawn.contains("Not seen by every agent"), "{drawn}");
+    // Wrapped whole, to the end that says what to do.
+    assert!(drawn.contains("│one "), "{drawn}");
+    // Its neighbour installs where its agents read, and is not marked.
+    assert!(drawn.contains("beta  1 "), "{drawn}");
+    assert!(!drawn.contains("beta  1  ⚠"), "{drawn}");
+}
+
+#[test]
+fn a_strip_wraps_by_how_wide_its_words_are_drawn() {
+    let dir = workspace_with_own();
+    let alpha = dir.path().join("alpha");
+    // Each character two columns wide, so a line of as many characters as
+    // the strip has columns would be cut at its border.
+    let folder = format!(".{}", "技".repeat(16));
+    mind(&alpha, &["targets", "set", "skills", &folder, "-y"]).unwrap();
+    let app = tui_in(dir.path());
+
+    for width in [80, 100, 110] {
+        let mut terminal = Terminal::new(TestBackend::new(width, 30)).unwrap();
+        terminal.draw(|frame| tui::ui::draw(&app, frame)).unwrap();
+        let drawn: String = terminal
+            .backend()
+            .buffer()
+            .content()
+            .iter()
+            .map(|cell| cell.symbol())
+            .collect();
+        assert_eq!(drawn.matches('技').count(), 16, "{width}: {drawn}");
+        assert!(drawn.contains("until"), "{width}: {drawn}");
+        assert!(drawn.contains("pointed"), "{width}: {drawn}");
+    }
+}
+
+#[test]
+fn a_strip_is_drawn_on_a_terminal_too_short_for_it() {
+    let dir = workspace_with_own();
+    let alpha = dir.path().join("alpha");
+    mind(&alpha, &["targets", "set", "skills", ".skills", "-y"]).unwrap();
+    let app = tui_in(dir.path());
+    assert!(!app
+        .member()
+        .unwrap()
+        .holdings
+        .as_ref()
+        .unwrap()
+        .unreached
+        .is_empty());
+
+    // Its pane shorter than the three rows a strip takes at least, which
+    // must not end the process.
+    for height in 1..10 {
+        let mut terminal = Terminal::new(TestBackend::new(110, height)).unwrap();
+        terminal.draw(|frame| tui::ui::draw(&app, frame)).unwrap();
+    }
+}
+
+#[test]
+fn capital_t_on_a_project_opens_where_it_installs_skills_and_runs_targets_set() {
+    let dir = workspace_with_own();
+    flayer(dir.path(), &["install", "-p", "alpha", "commit-style"]).unwrap();
+    let mut app = tui_in(dir.path());
+    assert_eq!(app.member().unwrap().name, "alpha");
+
+    press_key(&mut app, KeyCode::Char('T'));
+    let Mode::Targets(form) = &app.mode else {
+        panic!("{:?}", app.mode)
+    };
+    // Empty: the project installs where its agents read.
+    assert_eq!(form.folders.text(), "");
+    assert!(tui_drawn(&app).contains("Where alpha installs skills"));
+
+    type_text(&mut app, ".skills");
+    let drawn = tui_drawn(&app);
+    assert!(
+        drawn.contains("mind -C alpha targets set --yes skills .skills"),
+        "{drawn}"
+    );
+    let task = press_and_run(&mut app, KeyCode::Enter);
+
+    assert_eq!(
+        task,
+        Some(Task::Targets {
+            holder: Holder::Project(String::from("alpha")),
+            kind: Kind::Skill,
+            folders: Some(vec![String::from(".skills")]),
+        })
+    );
+    // What it said, to read in full: the copies moved.
+    let Mode::Reading(reader) = &app.mode else {
+        panic!("{:?}", app.mode)
+    };
+    let said: Vec<&str> = reader.lines.iter().map(|(_, line)| line.as_str()).collect();
+    assert!(
+        said.contains(&"removed commit-style from .claude/skills/commit-style"),
+        "{said:?}"
+    );
+    let alpha = dir.path().join("alpha");
+    assert!(alpha.join(".skills/commit-style/SKILL.md").is_file());
+    assert!(app
+        .transcript()
+        .starts_with("$ mind -C alpha targets set --yes skills .skills\n"));
+
+    // Back on the project, its row and its pane say no agent sees it.
+    press_key(&mut app, KeyCode::Esc);
+    let holdings = app.member().unwrap().holdings.as_ref().unwrap();
+    assert_eq!(holdings.targets, Some(vec![String::from(".skills")]));
+    assert_eq!(
+        holdings.unreached,
+        [String::from(
+            "claude, codex and opencode read none of the folders alpha installs skills in \
+             (.skills), so none of them sees what is installed there until pointed at one"
+        )]
+    );
+    assert!(tui_drawn(&app).contains("alpha  2  ⚠"));
+}
+
+#[test]
+fn clearing_the_folders_runs_targets_reset_and_leaving_them_runs_nothing() {
+    let dir = workspace_with_own();
+    mind(
+        &dir.path().join("alpha"),
+        &["targets", "set", "skills", ".skills", "-y"],
+    )
+    .unwrap();
+    let mut app = tui_in(dir.path());
+    press_key(&mut app, KeyCode::Char('T'));
+    let Mode::Targets(form) = &app.mode else {
+        panic!("{:?}", app.mode)
+    };
+    assert_eq!(form.folders.text(), ".skills");
+
+    // As it opened, there is nothing to run.
+    assert_eq!(press_key(&mut app, KeyCode::Enter), TuiStep::Stay);
+    assert!(tui_drawn(&app).contains("nothing changed yet"));
+
+    for _ in 0..".skills".len() {
+        press_key(&mut app, KeyCode::Backspace);
+    }
+    let task = press_and_run(&mut app, KeyCode::Enter).unwrap();
+
+    assert_eq!(task.describe(), "mind -C alpha targets reset --yes skills");
+    let settings = MindProject::open(dir.path().join("alpha")).unwrap();
+    assert!(settings.settings().unwrap().targets.is_empty());
+}
+
+#[test]
+fn a_folder_no_install_may_use_is_refused_by_the_command_in_the_form() {
+    let dir = workspace_with_two();
+    let mut app = tui_in(dir.path());
+    press_key(&mut app, KeyCode::Char('T'));
+    type_text(&mut app, "../shared");
+
+    press_and_run(&mut app, KeyCode::Enter).unwrap();
+
+    let Mode::Targets(form) = &app.mode else {
+        panic!("{:?}", app.mode)
+    };
+    let error = form.error.as_deref().unwrap_or_default();
+    assert!(error.contains("is not inside the project"), "{error}");
+}
+
+#[test]
+fn capital_t_on_the_workspaces_own_row_or_an_older_project_says_why_not() {
+    let dir = workspace_with_two();
+    let old = dir.path().join("old");
+    fs::create_dir(&old).unwrap();
+    older_project(&old);
+    flayer(dir.path(), &["link", "old"]).unwrap();
+    let mut app = tui_in(dir.path());
+
+    press_key(&mut app, KeyCode::Up);
+    assert!(app.member().unwrap().own);
+    press_key(&mut app, KeyCode::Char('T'));
+    assert!(matches!(app.mode, Mode::Browse));
+    assert!(app
+        .message
+        .as_ref()
+        .unwrap()
+        .text
+        .contains("reach agents by being installed"));
+
+    while app.member().unwrap().name != "old" {
+        press_key(&mut app, KeyCode::Down);
+    }
+    press_key(&mut app, KeyCode::Char('T'));
+    assert!(matches!(app.mode, Mode::Browse));
+    assert!(app
+        .message
+        .as_ref()
+        .unwrap()
+        .text
+        .contains("`mind migrate`"));
 }

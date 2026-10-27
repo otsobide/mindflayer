@@ -20,6 +20,27 @@ fn each_agents_default_folder_is_its_own_in_the_users_home() {
 }
 
 #[test]
+fn the_agents_folders_are_listed_with_who_reads_each_and_none_that_is_not_given() {
+    let user = Path::new("/home/user");
+    let homes = AgentHomes {
+        codex_home: None,
+        ..AgentHomes::defaults_under(user)
+    };
+
+    let folders = homes.folders();
+
+    assert_eq!(
+        folders,
+        [
+            ("Claude Code", user.join(".claude").as_path()),
+            ("OpenCode", user.join(".config").join("opencode").as_path()),
+            ("more than one agent", user.join(".agents").as_path()),
+        ]
+    );
+    assert!(AgentHomes::default().folders().is_empty());
+}
+
+#[test]
 fn an_agent_is_named_by_its_binary_and_shown_the_same_way() {
     let names: Vec<&str> = Agent::ALL.iter().map(|agent| agent.name()).collect();
     assert_eq!(names, ["claude", "codex", "opencode"]);
@@ -139,16 +160,10 @@ fn a_rule_reaches_no_agent_through_a_folder_yet() {
 }
 
 #[test]
-fn agents_sharing_a_location_another_table_names_get_one_target() {
-    // What a project's settings could make of the table (#40): one folder
-    // for every agent is one copy, for all three, whether or not any of them
-    // reads it.
-    let table = TargetTable {
-        locations: Agent::ALL
-            .into_iter()
-            .map(|agent| ((Kind::Skill, agent), PathBuf::from(".skills")))
-            .collect(),
-    };
+fn agents_an_override_sends_to_one_folder_get_one_target() {
+    // What a project's settings make of the table: one folder for every
+    // agent is one copy, for all three, whether or not any of them reads it.
+    let table = TargetTable::standard().overriding(Kind::Skill, &[PathBuf::from(".skills")]);
 
     assert_eq!(
         table.targets(Kind::Skill, &Agent::ALL),
@@ -157,6 +172,64 @@ fn agents_sharing_a_location_another_table_names_get_one_target() {
             agents: Agent::ALL.to_vec(),
         }]
     );
+    assert_eq!(
+        table.targets(Kind::Skill, &[Agent::Codex]),
+        [AgentTarget {
+            path: PathBuf::from(".skills"),
+            agents: vec![Agent::Codex],
+        }]
+    );
+}
+
+#[test]
+fn an_override_of_several_folders_sends_every_agent_to_each_once() {
+    let folders = [
+        PathBuf::from(".skills"),
+        claude_skills(),
+        PathBuf::from(".skills"),
+    ];
+    let table = TargetTable::standard().overriding(Kind::Skill, &folders);
+
+    assert_eq!(
+        table.targets(Kind::Skill, &[Agent::Codex, Agent::Claude]),
+        [
+            AgentTarget {
+                path: claude_skills(),
+                agents: vec![Agent::Claude, Agent::Codex],
+            },
+            AgentTarget {
+                path: PathBuf::from(".skills"),
+                agents: vec![Agent::Claude, Agent::Codex],
+            },
+        ]
+    );
+}
+
+#[test]
+fn an_override_of_one_kind_leaves_the_others_where_the_table_sent_them() {
+    let standard = TargetTable::standard();
+    let table = standard
+        .clone()
+        .overriding(Kind::Rule, &[PathBuf::from(".rules")]);
+
+    assert_eq!(
+        table.targets(Kind::Skill, &Agent::ALL),
+        standard.targets(Kind::Skill, &Agent::ALL)
+    );
+    assert_eq!(
+        table.targets(Kind::Rule, &[Agent::Claude]),
+        [AgentTarget {
+            path: PathBuf::from(".rules"),
+            agents: vec![Agent::Claude],
+        }]
+    );
+}
+
+#[test]
+fn an_override_of_no_folder_sends_the_kind_nowhere() {
+    let table = TargetTable::standard().overriding(Kind::Skill, &[]);
+
+    assert_eq!(table.targets(Kind::Skill, &Agent::ALL), []);
 }
 
 #[test]
@@ -187,4 +260,79 @@ fn the_standard_table_never_targets_codexs_old_folders_or_a_users_own() {
             );
         }
     }
+}
+
+#[test]
+fn claude_and_codex_each_read_skills_in_one_folder_of_their_own() {
+    assert_eq!(Agent::Claude.reads(Kind::Skill), [claude_skills()]);
+    assert_eq!(Agent::Codex.reads(Kind::Skill), [agents_skills()]);
+}
+
+#[test]
+fn opencode_reads_claudes_skills_as_well_as_the_folder_it_is_sent_a_copy_in() {
+    // More than the table sends it: what it reads is not where it is
+    // written for.
+    assert_eq!(
+        Agent::OpenCode.reads(Kind::Skill),
+        [
+            agents_skills(),
+            claude_skills(),
+            Path::new(".opencode").join("skills")
+        ]
+    );
+    assert_eq!(
+        TargetTable::standard().targets(Kind::Skill, &[Agent::OpenCode]),
+        [AgentTarget {
+            path: agents_skills(),
+            agents: vec![Agent::OpenCode],
+        }]
+    );
+}
+
+#[test]
+fn every_agent_reads_each_place_the_standard_table_sends_it() {
+    let table = TargetTable::standard();
+    for kind in Kind::ALL {
+        for agent in Agent::ALL {
+            for target in table.targets(kind, &[agent]) {
+                assert!(
+                    agent.reads(kind).contains(&target.path),
+                    "{agent} is sent {kind} copies in {}, which it does not read",
+                    target.path.display()
+                );
+            }
+        }
+    }
+}
+
+#[test]
+fn no_agent_is_said_to_read_outside_the_project_or_codexs_trusted_folder() {
+    let codex_skills = Path::new(".codex").join("skills");
+    for kind in Kind::ALL {
+        for agent in Agent::ALL {
+            for path in agent.reads(kind) {
+                assert!(
+                    path.components()
+                        .all(|part| matches!(part, Component::Normal(name) if name != "~")),
+                    "{agent} reads {kind} at {}, outside the project",
+                    path.display()
+                );
+                assert_ne!(path, codex_skills, "{agent} reads {kind} only when trusted");
+            }
+        }
+    }
+}
+
+#[test]
+fn no_agent_is_said_to_read_a_folder_of_rules_yet() {
+    for agent in Agent::ALL {
+        assert_eq!(agent.reads(Kind::Rule), Vec::<PathBuf>::new());
+    }
+}
+
+#[test]
+fn an_agent_is_serialized_as_the_name_its_settings_take() {
+    let serialized = serde_json::to_string(&Agent::ALL).unwrap();
+
+    assert_eq!(serialized, r#"["claude","codex","opencode"]"#);
 }

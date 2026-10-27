@@ -20,8 +20,11 @@ use mindflayer_core::ledger::{Action, Outcome, SourceKind};
 use mindflayer_core::lifecycle::{self, Record};
 use mindflayer_core::lock::{HOLDER_FILE, WAIT};
 use mindflayer_core::migrate;
+use mindflayer_core::reapply::{self, Change};
+use mindflayer_core::AgentHomes;
 use mindflayer_core::{
-    FlayerWorkspace, Kind, Ledger, LockError, MindProject, Reference, WorkspaceError, LEDGER_FILE,
+    Agent, Directories, FlayerWorkspace, Kind, Ledger, LockError, MindProject, Reference, Share,
+    WorkspaceError, LEDGER_FILE,
 };
 use tempfile::TempDir;
 
@@ -419,7 +422,14 @@ fn an_install_waits_for_the_writer_before_it() {
     let (installing, into) = (workspace.clone(), project.clone());
 
     waits_for_the_writer_before_it(&workspace, move || {
-        install::install(&installing, &ledger, &into, &candidate).unwrap();
+        install::install(
+            &installing,
+            &ledger,
+            &into,
+            &candidate,
+            &AgentHomes::default(),
+        )
+        .unwrap();
     });
 
     let copy = project.directory_for(Kind::Skill).unwrap().join("deploy");
@@ -433,7 +443,14 @@ fn an_install_looks_again_at_the_copy_once_it_holds_the_workspace() {
     let (ledger, _) = workspace.ledger_to_write().unwrap();
     let candidate =
         install::offered(&workspace, &ledger, &project, Kind::Skill, "deploy", None).unwrap();
-    install::install(&workspace, &ledger, &project, &candidate).unwrap();
+    install::install(
+        &workspace,
+        &ledger,
+        &project,
+        &candidate,
+        &AgentHomes::default(),
+    )
+    .unwrap();
     // Surveyed while the copy was Mindflayer's, as the install screen
     // surveys when it is built.
     let stale =
@@ -449,9 +466,15 @@ fn an_install_looks_again_at_the_copy_once_it_holds_the_workspace() {
     let edited = lifecycle::finish_edit(Some(&workspace), &project, edit);
     assert_eq!(edited.copy.unwrap(), Record::Dropped);
 
-    let installed = install::install(&workspace, &ledger, &project, &stale)
-        .unwrap()
-        .installed;
+    let installed = install::install(
+        &workspace,
+        &ledger,
+        &project,
+        &stale,
+        &AgentHomes::default(),
+    )
+    .unwrap()
+    .installed;
 
     assert!(
         matches!(installed, Installed::Foreign { .. }),
@@ -466,7 +489,14 @@ fn an_uninstall_waits_for_the_writer_before_it() {
     let ledger = Ledger::in_memory().unwrap();
     let candidate =
         install::offered(&workspace, &ledger, &project, Kind::Skill, "deploy", None).unwrap();
-    install::install(&workspace, &ledger, &project, &candidate).unwrap();
+    install::install(
+        &workspace,
+        &ledger,
+        &project,
+        &candidate,
+        &AgentHomes::default(),
+    )
+    .unwrap();
     let (uninstalling, from) = (workspace.clone(), project.clone());
 
     waits_for_the_writer_before_it(&workspace, move || {
@@ -480,6 +510,40 @@ fn an_uninstall_waits_for_the_writer_before_it() {
         .unwrap()
         .join("deploy")
         .exists());
+}
+
+#[test]
+fn a_change_to_a_projects_agents_waits_for_the_writer_before_it() {
+    let (dir, mut workspace, _) = offering_deploy();
+    let root = dir.path().join("beta");
+    fs::create_dir(&root).unwrap();
+    let (project, _) = MindProject::init_settings(
+        &root,
+        &[Agent::Claude],
+        Share::Shared,
+        &Directories::default(),
+    )
+    .unwrap();
+    workspace.link(&project).unwrap();
+    let (changing, of) = (workspace.clone(), project.clone());
+
+    // Held by another writer, an install say, which would otherwise put a
+    // copy where the settings no longer send one.
+    waits_for_the_writer_before_it(&workspace, move || {
+        reapply::apply(
+            Some(&changing),
+            &of,
+            &Change::AddAgents(vec![Agent::Codex]),
+            &AgentHomes::default(),
+        )
+        .unwrap();
+    });
+
+    let changed = MindProject::open(project.root()).unwrap();
+    assert_eq!(
+        changed.settings().unwrap().agents,
+        [Agent::Claude, Agent::Codex]
+    );
 }
 
 #[test]
@@ -611,7 +675,14 @@ fn a_change_made_while_the_workspace_is_held_still_drops_its_record() {
     let (ledger, _) = workspace.ledger_to_write().unwrap();
     let candidate =
         install::offered(&workspace, &ledger, &project, Kind::Skill, "deploy", None).unwrap();
-    install::install(&workspace, &ledger, &project, &candidate).unwrap();
+    install::install(
+        &workspace,
+        &ledger,
+        &project,
+        &candidate,
+        &AgentHomes::default(),
+    )
+    .unwrap();
     assert_eq!(
         ledger.installations(entry, Kind::Skill).unwrap(),
         ["deploy"]

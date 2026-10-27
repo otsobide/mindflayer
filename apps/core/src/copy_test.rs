@@ -217,6 +217,133 @@ fn a_copy_that_fails_leaves_the_target_and_its_folder_as_they_were() {
     assert!(names(stage.path()).is_empty(), "{:?}", names(stage.path()));
 }
 
+/// Where a project's two agents' folders would hold `deploy`.
+fn two_targets(dir: &TempDir) -> Vec<PathBuf> {
+    let project = dir.path().join("project");
+    vec![
+        project.join(".agents").join("skills").join("deploy"),
+        project.join(".claude").join("skills").join("deploy"),
+    ]
+}
+
+#[test]
+fn placing_puts_one_copy_at_every_target_and_nothing_beside_any() {
+    let (dir, from, _, scratch) = fixture();
+    let targets = two_targets(&dir);
+    let mut stage = Stage::open(&scratch).unwrap();
+
+    let changes = stage.place(&from, &targets, &from, &[]).unwrap();
+
+    assert_eq!(changes, [Change::Added, Change::Added]);
+    for target in &targets {
+        assert!(same(&from, target).unwrap(), "{}", target.display());
+        assert_eq!(names(target.parent().unwrap()), ["deploy"]);
+    }
+    assert!(names(stage.path()).is_empty(), "{:?}", names(stage.path()));
+}
+
+#[test]
+fn placing_again_replaces_only_the_targets_that_differ() {
+    let (dir, from, _, scratch) = fixture();
+    let targets = two_targets(&dir);
+    let mut stage = Stage::open(&scratch).unwrap();
+    stage.place(&from, &targets, &from, &[]).unwrap();
+    fs::write(targets[1].join("SKILL.md"), "edited").unwrap();
+
+    let changes = stage.place(&from, &targets, &from, &[]).unwrap();
+
+    assert_eq!(changes, [Change::Unchanged, Change::Updated]);
+    assert!(same(&targets[0], &targets[1]).unwrap());
+    fs::write(from.join("SKILL.md"), "second").unwrap();
+    let changes = stage.place(&from, &targets, &from, &[]).unwrap();
+    assert_eq!(changes, [Change::Updated, Change::Updated]);
+    assert_eq!(
+        fs::read_to_string(targets[0].join("SKILL.md")).unwrap(),
+        "second"
+    );
+    assert!(names(stage.path()).is_empty(), "{:?}", names(stage.path()));
+}
+
+#[test]
+fn what_is_left_out_at_the_top_is_in_no_copy_and_compares_as_absent() {
+    let (dir, from, _, scratch) = fixture();
+    let targets = two_targets(&dir);
+    fs::create_dir_all(from.join(".claude-plugin")).unwrap();
+    fs::write(from.join(".claude-plugin").join("plugin.json"), "{}").unwrap();
+    // Further down, the same name is the skill's own.
+    fs::create_dir_all(from.join("scripts").join(".claude-plugin")).unwrap();
+    let mut stage = Stage::open(&scratch).unwrap();
+
+    let changes = stage
+        .place(&from, &targets, &from, &[".claude-plugin"])
+        .unwrap();
+
+    assert_eq!(changes, [Change::Added, Change::Added]);
+    for target in &targets {
+        assert!(!target.join(".claude-plugin").exists());
+        assert!(target.join("scripts").join(".claude-plugin").is_dir());
+        assert!(same_leaving(&from, target, &[".claude-plugin"]).unwrap());
+        assert!(!same(&from, target).unwrap());
+    }
+    let again = stage
+        .place(&from, &targets, &from, &[".claude-plugin"])
+        .unwrap();
+    assert_eq!(again, [Change::Unchanged, Change::Unchanged]);
+    // A target holding the name is not what leaving it out copies.
+    fs::create_dir_all(targets[0].join(".claude-plugin")).unwrap();
+    assert!(!same_leaving(&from, &targets[0], &[".claude-plugin"]).unwrap());
+}
+
+#[cfg(unix)]
+#[test]
+fn what_is_left_out_is_never_read_so_a_link_in_it_refuses_nothing() {
+    let (dir, from, _, scratch) = fixture();
+    let targets = two_targets(&dir);
+    fs::write(dir.path().join("private.env"), "SECRET").unwrap();
+    fs::create_dir_all(from.join(".claude-plugin")).unwrap();
+    std::os::unix::fs::symlink(
+        dir.path().join("private.env"),
+        from.join(".claude-plugin").join("hooks.json"),
+    )
+    .unwrap();
+
+    let changes = Stage::open(&scratch)
+        .unwrap()
+        .place(&from, &targets, &from, &[".claude-plugin"])
+        .unwrap();
+
+    assert_eq!(changes, [Change::Added, Change::Added]);
+}
+
+#[test]
+fn a_target_that_cannot_be_put_in_place_leaves_every_target_as_it_was() {
+    let (dir, from, _, scratch) = fixture();
+    let mut targets = two_targets(&dir);
+    let mut stage = Stage::open(&scratch).unwrap();
+    stage
+        .place(&from, &targets[..1], &from, &[])
+        .expect("the first target holds the first version");
+    // A folder no copy can go in, since a file has its name.
+    let blocked = dir.path().join("project").join("blocked");
+    fs::write(&blocked, "a file").unwrap();
+    targets.push(blocked.join("deploy"));
+    fs::write(from.join("SKILL.md"), "second").unwrap();
+
+    let error = stage.place(&from, &targets, &from, &[]).unwrap_err();
+
+    assert_eq!(error.target.as_ref(), Some(&targets[2]));
+    // Put back, the one it replaced and the one it added alike.
+    assert_eq!(
+        fs::read_to_string(targets[0].join("SKILL.md")).unwrap(),
+        "first"
+    );
+    assert_eq!(names(targets[0].parent().unwrap()), ["deploy"]);
+    assert!(!targets[1].exists());
+    assert_eq!(fs::read_to_string(&blocked).unwrap(), "a file");
+    drop(stage);
+    assert!(stages(&scratch).is_empty(), "{:?}", stages(&scratch));
+}
+
 #[test]
 fn a_rename_that_fails_says_what_it_was_moving_where() {
     let dir = TempDir::new().unwrap();

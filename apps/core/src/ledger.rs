@@ -175,6 +175,31 @@ pub struct Target {
     pub path: String,
 }
 
+/// Where one installation's copies are once its project has moved from a
+/// `mind.toml` to its settings ([`Ledger::migrated`]).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Moved {
+    pub kind: Kind,
+    pub name: String,
+    /// Every copy it has now, in place of those it recorded; none forgets it.
+    pub targets: Vec<Target>,
+    /// What every one of them holds ([`crate::hash::tree`]), for a record
+    /// from before hashes were kept, which the migration found current by
+    /// its offer: kept only where the record has none.
+    pub content_hash: Option<String>,
+}
+
+/// What [`Ledger::uninstalled_copy`] forgot.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Forgotten {
+    /// No installation of that name records a copy there.
+    Nothing,
+    /// The copy, from an installation that still records others.
+    Copy,
+    /// The installation, whose last copy it was, or which recorded none.
+    Installation,
+}
+
 /// One line of the action log.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Entry {
@@ -837,6 +862,139 @@ impl Ledger {
             .map_err(|source| self.failed("forgetting an installation", source))
     }
 
+    /// Forget the copy an installation of `name` wrote at `path`, and the
+    /// installation once it records no other, saying which went.
+    ///
+    /// For a change that reached one copy: the others are still what was
+    /// installed, and forgetting the whole installation would leave them with
+    /// no record, never updated or removed again. An installation recording
+    /// no copy at all, which no build has written, is forgotten whole, as
+    /// [`Ledger::uninstalled`] would. One transaction, so an install of the
+    /// same name at the same moment never finds half of this done.
+    pub fn uninstalled_copy(
+        &self,
+        project: &str,
+        kind: Kind,
+        name: &str,
+        path: &str,
+    ) -> Result<Forgotten, LedgerError> {
+        let failed = |source| self.failed("forgetting an installed copy", source);
+        let transaction = self.connection.unchecked_transaction().map_err(failed)?;
+        let Some(id) = transaction
+            .query_row(
+                "SELECT id FROM installations
+                  WHERE project = ?1 AND kind = ?2 AND name = ?3",
+                rusqlite::params![project, kind.slug(), name],
+                |row| row.get::<_, i64>(0),
+            )
+            .optional()
+            .map_err(failed)?
+        else {
+            return Ok(Forgotten::Nothing);
+        };
+        let copy = transaction
+            .execute(
+                "DELETE FROM installation_targets
+                  WHERE installation_id = ?1 AND path = ?2",
+                rusqlite::params![id, path],
+            )
+            .map_err(failed)?;
+        let left: i64 = transaction
+            .query_row(
+                "SELECT count(*) FROM installation_targets WHERE installation_id = ?1",
+                [id],
+                |row| row.get(0),
+            )
+            .map_err(failed)?;
+        let forgotten = if left == 0 {
+            transaction
+                .execute("DELETE FROM installations WHERE id = ?1", [id])
+                .map_err(failed)?;
+            Forgotten::Installation
+        } else if copy > 0 {
+            Forgotten::Copy
+        } else {
+            Forgotten::Nothing
+        };
+        transaction.commit().map_err(failed)?;
+        Ok(forgotten)
+    }
+
+    /// Record that the installation of `name` has its copies at `targets`
+    /// now, in place of those it recorded, and forget it when `targets` is
+    /// empty. Whether there was one.
+    ///
+    /// For copies that moved without the installation changing: a project
+    /// that names another agent is given a copy where that agent reads, and
+    /// one that stops naming an agent loses the copy there, while what was
+    /// installed, from where, its hash and when stay what they were. Writing
+    /// the whole record again ([`Ledger::installed`]) would say it was
+    /// installed just now. One transaction, so an install of the same name
+    /// at the same moment never finds half of this done.
+    pub fn retargeted(
+        &self,
+        project: &str,
+        kind: Kind,
+        name: &str,
+        targets: &[Target],
+    ) -> Result<bool, LedgerError> {
+        let failed = |source| self.failed("recording where an installation's copies are", source);
+        let transaction = self.connection.unchecked_transaction().map_err(failed)?;
+        if retarget_in(&transaction, project, kind, name, targets)
+            .map_err(failed)?
+            .is_none()
+        {
+            return Ok(false);
+        }
+        transaction.commit().map_err(failed)?;
+        Ok(true)
+    }
+
+    /// Record where each of a project's installations has its copies once
+    /// the project has moved from a `mind.toml` to its settings, a hash for
+    /// each record that had none and was found current, and `log`, each
+    /// line a log entry about the project.
+    ///
+    /// All of it in one transaction, where [`Ledger::retargeted`] takes one
+    /// an installation: a migration is all or nothing for its project, and
+    /// one that fails here puts the project's `mind.toml` back, so a ledger
+    /// left with some installations moved would name copies where that
+    /// marker installs none. An installation it does not record any more is
+    /// passed over, as `retargeted` finds nothing to do for one.
+    pub fn migrated(
+        &self,
+        project: &str,
+        moved: &[Moved],
+        log: &[(Action, String)],
+    ) -> Result<(), LedgerError> {
+        let failed = |source| self.failed("recording a project's move to its settings", source);
+        let transaction = self.connection.unchecked_transaction().map_err(failed)?;
+        for one in moved {
+            let id = retarget_in(&transaction, project, one.kind, &one.name, &one.targets)
+                .map_err(failed)?;
+            if let (Some(id), Some(hash)) = (id, &one.content_hash) {
+                transaction
+                    .execute(
+                        "UPDATE installations SET content_hash = ?1
+                          WHERE id = ?2 AND content_hash IS NULL",
+                        rusqlite::params![hash, id],
+                    )
+                    .map_err(failed)?;
+            }
+        }
+        for (action, detail) in log {
+            insert_log(
+                &transaction,
+                *action,
+                Some(project),
+                Outcome::Ok,
+                Some(detail),
+            )
+            .map_err(failed)?;
+        }
+        transaction.commit().map_err(failed)
+    }
+
     /// The names this ledger says Mindflayer put into a project.
     ///
     /// What separates an artifact this tool installed from one somebody wrote
@@ -854,6 +1012,97 @@ impl Ledger {
             .map_err(|source| self.failed("reading installations", source))?;
         rows.collect::<Result<Vec<String>, _>>()
             .map_err(|source| self.failed("reading installations", source))
+    }
+
+    /// Every installation into a project of `kind`, each read as
+    /// [`Ledger::installation`] reads one, in name order.
+    ///
+    /// For a report on everything a project was given, which has to name
+    /// what was installed even where no copy of it is left to find, and asks
+    /// once rather than once a name.
+    pub fn records(&self, project: &str, kind: Kind) -> Result<Vec<InstallRecord>, LedgerError> {
+        let failed = |source| self.failed("reading the installations", source);
+        let mut statement = self
+            .connection
+            .prepare(
+                "SELECT installations.id, installations.name, installations.source_id,
+                        installations.origin, installations.content_hash,
+                        installation_targets.agent, installation_targets.path
+                   FROM installations
+                   LEFT JOIN installation_targets
+                     ON installation_targets.installation_id = installations.id
+                  WHERE installations.project = ?1 AND installations.kind = ?2
+                  ORDER BY installations.name, installation_targets.path",
+            )
+            .map_err(failed)?;
+        let rows = statement
+            .query_map(rusqlite::params![project, kind.slug()], |row| {
+                Ok((
+                    row.get::<_, i64>(0)?,
+                    row.get::<_, String>(1)?,
+                    row.get::<_, Option<i64>>(2)?,
+                    row.get::<_, Option<String>>(3)?,
+                    row.get::<_, Option<String>>(4)?,
+                    row.get::<_, Option<String>>(5)?,
+                    row.get::<_, Option<String>>(6)?,
+                ))
+            })
+            .map_err(failed)?;
+        let mut records: Vec<(i64, InstallRecord)> = Vec::new();
+        for row in rows {
+            let (id, name, source_id, origin, content_hash, agent, path) = row.map_err(failed)?;
+            // One row a copy, an installation's together, since a name is
+            // one installation a project and the rows come in name order.
+            if records.last().is_none_or(|(last, _)| *last != id) {
+                records.push((
+                    id,
+                    InstallRecord {
+                        kind,
+                        name,
+                        source_id,
+                        // Out as every URL comes out, as `installation` has it.
+                        origin: origin.map(|text| redacted(&text).into_owned()),
+                        content_hash,
+                        targets: Vec::new(),
+                    },
+                ));
+            }
+            // None for an installation recording no copy, which the join
+            // still gives a row.
+            if let (Some(path), Some((_, record))) = (path, records.last_mut()) {
+                record.targets.push(Target { agent, path });
+            }
+        }
+        Ok(records.into_iter().map(|(_, record)| record).collect())
+    }
+
+    /// Every copy this ledger says Mindflayer wrote into a project for
+    /// `kind`, whichever installation wrote it, by path relative to the
+    /// project, `/` separated, in path order.
+    ///
+    /// By copy rather than by name, for a listing that has to say which of
+    /// the folders holding a skill hold Mindflayer's copy: a name alone
+    /// would claim a copy somebody keeps in one agent's folder because
+    /// Mindflayer installed one of that name into another's. One query
+    /// rather than one per installation, since a listing asks it of every
+    /// project.
+    pub fn copies(&self, project: &str, kind: Kind) -> Result<Vec<String>, LedgerError> {
+        let failed = |source| self.failed("reading the copies installed", source);
+        let mut statement = self
+            .connection
+            .prepare(
+                "SELECT installation_targets.path
+                   FROM installation_targets
+                   JOIN installations
+                     ON installations.id = installation_targets.installation_id
+                  WHERE installations.project = ?1 AND installations.kind = ?2
+                  ORDER BY installation_targets.path",
+            )
+            .map_err(failed)?;
+        let rows = statement
+            .query_map(rusqlite::params![project, kind.slug()], |row| row.get(0))
+            .map_err(failed)?;
+        rows.collect::<Result<Vec<String>, _>>().map_err(failed)
     }
 
     /// The sources whose stored URL still carries credentials, which only a
@@ -1078,21 +1327,7 @@ impl Ledger {
         outcome: Outcome,
         detail: Option<&str>,
     ) -> Result<(), LedgerError> {
-        let target = target.map(redacted);
-        let detail = detail.map(redacted);
-        self.connection
-            .execute(
-                "INSERT INTO actions (at, action, target, outcome, detail)
-                 VALUES (?1, ?2, ?3, ?4, ?5)",
-                rusqlite::params![
-                    now(),
-                    action.slug(),
-                    target.as_deref(),
-                    outcome.slug(),
-                    detail.as_deref()
-                ],
-            )
-            .map(|_| ())
+        insert_log(&self.connection, action, target, outcome, detail)
             .map_err(|source| self.failed("writing to the action log", source))
     }
 
@@ -1130,6 +1365,72 @@ impl Ledger {
             source,
         }
     }
+}
+
+/// Give the installation of `name` the copies `targets` in place of those
+/// it records, or forget it when `targets` is empty, through `connection`,
+/// which a caller holds a transaction on: its id, or `None` when nothing
+/// records it.
+fn retarget_in(
+    connection: &Connection,
+    project: &str,
+    kind: Kind,
+    name: &str,
+    targets: &[Target],
+) -> rusqlite::Result<Option<i64>> {
+    let Some(id) = connection
+        .query_row(
+            "SELECT id FROM installations
+              WHERE project = ?1 AND kind = ?2 AND name = ?3",
+            rusqlite::params![project, kind.slug(), name],
+            |row| row.get::<_, i64>(0),
+        )
+        .optional()?
+    else {
+        return Ok(None);
+    };
+    if targets.is_empty() {
+        connection.execute("DELETE FROM installations WHERE id = ?1", [id])?;
+        return Ok(Some(id));
+    }
+    connection.execute(
+        "DELETE FROM installation_targets WHERE installation_id = ?1",
+        [id],
+    )?;
+    for target in targets {
+        connection.execute(
+            "INSERT INTO installation_targets (installation_id, agent, path)
+             VALUES (?1, ?2, ?3)",
+            rusqlite::params![id, target.agent, target.path],
+        )?;
+    }
+    Ok(Some(id))
+}
+
+/// Append one entry to the action log through `connection`, every URL in
+/// what it is about and what it says [`redacted`], as [`Ledger::log`] does.
+fn insert_log(
+    connection: &Connection,
+    action: Action,
+    target: Option<&str>,
+    outcome: Outcome,
+    detail: Option<&str>,
+) -> rusqlite::Result<()> {
+    let target = target.map(redacted);
+    let detail = detail.map(redacted);
+    connection
+        .execute(
+            "INSERT INTO actions (at, action, target, outcome, detail)
+             VALUES (?1, ?2, ?3, ?4, ?5)",
+            rusqlite::params![
+                now(),
+                action.slug(),
+                target.as_deref(),
+                outcome.slug(),
+                detail.as_deref()
+            ],
+        )
+        .map(|_| ())
 }
 
 /// One joined row, before its slugs mean anything.

@@ -28,12 +28,15 @@ use mindflayer_core::gather::Watch;
 use mindflayer_core::resolve::{self, resolve, Intent, Reason, Resolved};
 use mindflayer_core::workspace::Member as Registered;
 use mindflayer_core::{
-    lifecycle, paths, scan, template, Catalog, FlayerWorkspace, Kind, MindProject, WorkspaceError,
+    lifecycle, paths, scan, template, AgentHomes, Catalog, FlayerWorkspace, Kind, MindProject,
+    ProjectStatus, WorkspaceError,
 };
 use ratatui::crossterm::event::{self, Event, KeyEventKind};
 use ratatui::crossterm::terminal::{self, EnterAlternateScreen};
 use ratatui::DefaultTerminal;
 
+use crate::commands::project::scan_warnings;
+use crate::commands::status::unread;
 use crate::commands::workspace::{load_warnings, same_directory};
 use crate::commands::{consulted, run_flayer_with, run_with};
 use crate::install::state::Screen as InstallScreen;
@@ -68,25 +71,28 @@ pub fn run(directory: &Path, lookup: &Lookup) -> Result<Outcome, Failure> {
 }
 
 /// Open the TUI straight onto the minds screen: what `flayer minds` does.
-pub fn run_minds(directory: &Path, lookup: &Lookup) -> Result<Outcome, Failure> {
+pub fn run_minds(directory: &Path, roots: &[PathBuf], lookup: &Lookup) -> Result<Outcome, Failure> {
     if !io::stdout().is_terminal() {
         return Err(CliError::NotATerminal.into());
     }
-    open(minds(directory, lookup)?, "flayer minds")
+    open(minds(directory, roots, lookup)?, "flayer minds")
 }
 
 /// The TUI `flayer minds` opens from `directory`: on the minds screen of the
-/// workspace the TUI itself would open there.
+/// workspace the TUI itself would open there, offering what is under
+/// `roots`, absolute, or under the workspace root when there are none.
 ///
 /// Read from `directory` rather than from the root of a workspace found
 /// first: the default workspace before it is made has no marker to stop a
 /// walk up from its root, which would carry on to any workspace above it.
-pub fn minds(directory: &Path, lookup: &Lookup) -> Result<App, CliError> {
-    let view = load(directory, lookup)?;
+pub fn minds(directory: &Path, roots: &[PathBuf], lookup: &Lookup) -> Result<App, CliError> {
+    let view = load_under(directory, lookup, roots)?;
     if matches!(view, View::Nowhere) {
         return Err(CliError::NotInWorkspace(directory.to_path_buf()));
     }
-    let mut app = App::new(directory.to_path_buf(), view).with_lookup(lookup.clone());
+    let mut app = App::new(directory.to_path_buf(), view)
+        .with_lookup(lookup.clone())
+        .with_roots(roots.to_vec());
     if let Some(workspace) = app.workspace() {
         app.mode = Mode::Minds(minds::Minds::of(workspace));
     }
@@ -264,7 +270,7 @@ fn start(app: &mut App, task: Task) {
 fn conclude(app: &mut App, task: &Task, performed: Performed) {
     let view = task.reloads().then(|| {
         match app.opened {
-            Scope::Workspace => load(&app.directory, &app.lookup),
+            Scope::Workspace => load_under(&app.directory, &app.lookup, &app.roots),
             Scope::Project => load_project(&app.directory, &app.lookup),
         }
         .map_err(|error| error.to_string())
@@ -281,7 +287,9 @@ pub fn perform(task: &Task, app: &App) -> Performed {
             app.workspace().is_some_and(|workspace| !workspace.made),
         ),
         Task::ApplyInstall => match &app.mode {
-            Mode::Installing(screen) => Performed::Ran(vec![apply_install(&base, screen)]),
+            Mode::Installing(screen) => {
+                Performed::Ran(vec![apply_install(&base, screen, &app.lookup.agents)])
+            }
             _ => Performed::Ran(Vec::new()),
         },
         // Asked about rather than failed: `flayer link` would refuse it, and
@@ -362,7 +370,7 @@ pub fn execute(words: &[String], base: &Path, lookup: &Lookup, watch: &Watch) ->
                 base.join(named)
             }),
             activated: None,
-            home: lookup.home.clone(),
+            ..lookup.clone()
         },
         None => lookup.clone(),
     };
@@ -420,7 +428,9 @@ fn draws(command: Option<&FlayerCommand>) -> bool {
     matches!(
         command,
         None | Some(
-            FlayerCommand::Tui | FlayerCommand::Minds | FlayerCommand::Install { name: None, .. }
+            FlayerCommand::Tui
+                | FlayerCommand::Minds { .. }
+                | FlayerCommand::Install { name: None, .. }
         )
     )
 }
@@ -464,13 +474,14 @@ fn open_install(base: &Path, unmade: bool) -> Performed {
 }
 
 /// Carry out what the install screen marked, the way `flayer install` does:
-/// through [`install::commit`], which scrubs the ledger first.
-fn apply_install(base: &Path, screen: &InstallScreen) -> Done {
+/// through [`install::commit`], which scrubs the ledger first, with the
+/// agents' own folders the TUI was opened with, as every line it runs has.
+fn apply_install(base: &Path, screen: &InstallScreen, homes: &AgentHomes) -> Done {
     let command = String::from("flayer install");
     let applied = FlayerWorkspace::open(base)
         .map_err(Failure::from)
         .and_then(|workspace| {
-            let mut outcome = install::commit(&workspace, screen)?;
+            let mut outcome = install::commit(&workspace, screen, homes)?;
             let warnings = load_warnings(&workspace);
             outcome.ok = outcome.ok && warnings.is_empty();
             outcome.stderr.extend(warnings);
@@ -505,10 +516,20 @@ fn apply_install(base: &Path, screen: &InstallScreen) -> Done {
 /// screen is, and that runs a command that writes, which makes it the way it
 /// would from the shell.
 pub fn load(directory: &Path, lookup: &Lookup) -> Result<View, CliError> {
+    load_under(directory, lookup, &[])
+}
+
+/// What [`load`] shows, with what could be linked looked for under `roots`,
+/// absolute, rather than under the workspace root: what `flayer minds DIR`
+/// opens on.
+pub fn load_under(directory: &Path, lookup: &Lookup, roots: &[PathBuf]) -> Result<View, CliError> {
     Ok(match resolve(&lookup.inputs(directory, Intent::Read))? {
-        Some(resolved) => {
-            View::Workspace(workspace_view(&resolved.workspace, resolved.reason, lookup))
-        }
+        Some(resolved) => View::Workspace(Box::new(workspace_view(
+            &resolved.workspace,
+            resolved.reason,
+            lookup,
+            roots,
+        ))),
         None => View::Nowhere,
     })
 }
@@ -529,16 +550,23 @@ pub fn load_project(directory: &Path, lookup: &Lookup) -> Result<View, CliError>
     let consulted = resolve::consulted(&lookup.inputs(project.root(), Intent::Read), &project)?;
     if let Some(Resolved { workspace, reason }) = &consulted {
         if workspace.is_linked(project.root()) {
-            return Ok(View::Workspace(workspace_view(workspace, *reason, lookup)));
+            return Ok(View::Workspace(Box::new(workspace_view(
+                workspace,
+                *reason,
+                lookup,
+                &[],
+            ))));
         }
     }
     let above = consulted.map(|resolved| resolved.workspace);
     // `.`, because the commands run from the project itself.
     let entry = String::from(".");
     let root = project.root().to_path_buf();
-    Ok(View::Workspace(Workspace {
+    Ok(View::Workspace(Box::new(Workspace {
         name: project.name().to_owned(),
-        // `above`'s templates, the ones `mind add` will find.
+        // `above`'s templates, the ones `mind add` will find, and no
+        // records: it does not link the project, so it says nothing of what
+        // was installed there.
         members: vec![held(
             entry,
             root.clone(),
@@ -549,6 +577,8 @@ pub fn load_project(directory: &Path, lookup: &Lookup) -> Result<View, CliError>
         )],
         root,
         unlinked: Vec::new(),
+        roots: Vec::new(),
+        scan_warnings: Vec::new(),
         shelf: 0,
         // What `mind load` has put into the workspace above, so the load form
         // can show it and unload it from here too.
@@ -559,12 +589,18 @@ pub fn load_project(directory: &Path, lookup: &Lookup) -> Result<View, CliError>
             .or_else(|| lookup.home.clone()),
         reason: None,
         made: true,
-    }))
+    })))
 }
 
 /// A workspace as the screen shows it: its own artifacts first, then every
-/// project it manages.
-fn workspace_view(workspace: &FlayerWorkspace, reason: Reason, lookup: &Lookup) -> Workspace {
+/// project it manages, and what could be linked under `roots`, or under its
+/// root when there are none.
+fn workspace_view(
+    workspace: &FlayerWorkspace,
+    reason: Reason,
+    lookup: &Lookup,
+    roots: &[PathBuf],
+) -> Workspace {
     let own = workspace.own();
     let mut members = vec![held(
         String::new(),
@@ -580,7 +616,15 @@ fn workspace_view(workspace: &FlayerWorkspace, reason: Reason, lookup: &Lookup) 
             .into_iter()
             .map(|registered| member(registered, workspace, lookup)),
     );
-    let unlinked = scan(workspace)
+    // Spelled from the workspace root, the default, where the TUI runs its
+    // lines.
+    let request = scan::Request {
+        roots: roots.to_vec(),
+        ..scan::Request::default()
+    };
+    let scanned = scan(workspace, &request);
+    let scan_warnings = scan_warnings(&scanned);
+    let unlinked = scanned
         .found
         .into_iter()
         .filter(|found| !found.linked)
@@ -594,6 +638,8 @@ fn workspace_view(workspace: &FlayerWorkspace, reason: Reason, lookup: &Lookup) 
         root: workspace.root().to_path_buf(),
         members,
         unlinked,
+        roots: roots.to_vec(),
+        scan_warnings,
         shelf: shelf(workspace),
         loaded: loaded(workspace),
         scope: Scope::Workspace,
@@ -681,7 +727,8 @@ fn member(registered: Registered, screen: &FlayerWorkspace, lookup: &Lookup) -> 
 
 /// What one holder holds, read from the disk: a project, or the workspace's
 /// own for the kinds it keeps apart. `workspace` is the one whose templates
-/// count for it, if any.
+/// count for it, if any, and whose ledger says which of a project's copies
+/// were installed, when it links the project.
 fn held(
     entry: String,
     root: PathBuf,
@@ -690,7 +737,27 @@ fn held(
     kinds: &[Kind],
     workspace: Option<&FlayerWorkspace>,
 ) -> Member {
-    let catalog = Catalog::discover_kinds(std::slice::from_ref(project), kinds);
+    // A project's rows say how each artifact stands, from the report
+    // `status` prints, read with the catalog the rows are drawn from rather
+    // than beside it, so the project is read once. The workspace's own are
+    // no project's, and nothing is installed into them. A ledger that cannot
+    // be read is among the catalog's failures, so each project's rows say
+    // it, as the report does once.
+    let (status, catalog) = if own {
+        (
+            None,
+            Catalog::discover_kinds(std::slice::from_ref(project), kinds),
+        )
+    } else {
+        let (status, catalog) = ProjectStatus::read(project, kinds, workspace);
+        (Some(status), catalog)
+    };
+    let standing = |kind: Kind, name: &str| {
+        status
+            .as_ref()
+            .and_then(|status| status.find(kind, name))
+            .map(|held| (held.state, held.agents.clone()))
+    };
     let mut items: Vec<Item> = catalog
         .artifacts()
         .iter()
@@ -707,6 +774,10 @@ fn held(
                 .map(ToString::to_string)
                 .collect(),
             broken: None,
+            state: standing(artifact.kind(), artifact.name()).map(|(state, _)| state),
+            agents: standing(artifact.kind(), artifact.name())
+                .map(|(_, agents)| agents)
+                .unwrap_or_default(),
         })
         .collect();
 
@@ -717,19 +788,55 @@ fn held(
     let mut warnings = Vec::new();
     for failure in catalog.failures() {
         match lifecycle::identify(project, failure.path()) {
-            Some((kind, name)) => items.push(Item {
-                kind,
-                name,
+            Some((kind, name)) => {
+                let (state, agents) = standing(kind, &name).unzip();
+                let broken = Item {
+                    kind,
+                    name,
+                    summary: String::new(),
+                    issues: Vec::new(),
+                    // The reason without the path, which the row already says.
+                    broken: Some(
+                        failure
+                            .source()
+                            .map_or_else(|| failure.to_string(), ToString::to_string),
+                    ),
+                    state,
+                    agents: agents.unwrap_or_default(),
+                };
+                // Its name may be listed already, from a copy in the
+                // project's agents' folders. A row is named by its name
+                // alone, and a change to that name reaches the project's own
+                // copy, this one, so the row is this one's: a second row of
+                // the same name would aim a key at the agents' copy and
+                // reach this.
+                match items
+                    .iter_mut()
+                    .find(|item| item.kind == broken.kind && item.name == broken.name)
+                {
+                    Some(item) => *item = broken,
+                    None => items.push(broken),
+                }
+            }
+            None => warnings.push(failure.to_string()),
+        }
+    }
+    // An install nothing of which is found is in the report all the same, as
+    // partial, and has a row like the rest: `i` puts it back from there.
+    for held in status.iter().flat_map(|status| &status.artifacts) {
+        if !items
+            .iter()
+            .any(|item| item.kind == held.kind && item.name == held.name)
+        {
+            items.push(Item {
+                kind: held.kind,
+                name: held.name.clone(),
                 summary: String::new(),
                 issues: Vec::new(),
-                // The reason without the path, which the row already says.
-                broken: Some(
-                    failure
-                        .source()
-                        .map_or_else(|| failure.to_string(), ToString::to_string),
-                ),
-            }),
-            None => warnings.push(failure.to_string()),
+                broken: None,
+                state: Some(held.state),
+                agents: held.agents.clone(),
+            });
         }
     }
     items.sort_by(|a, b| a.kind.cmp(&b.kind).then_with(|| a.name.cmp(&b.name)));
@@ -752,6 +859,21 @@ fn held(
         }
     };
 
+    let settings = project.settings().filter(|_| !own);
+    // What `status` warns of, said in its words: the folders no install
+    // uses first, then the agents that read none of the rest.
+    let mut unreached: Vec<String> = project
+        .misplaced_targets()
+        .iter()
+        .filter(|_| !own)
+        .map(ToString::to_string)
+        .collect();
+    unreached.extend(status.iter().flat_map(|status| {
+        status
+            .unreached
+            .iter()
+            .map(|unreached| unread(project.name(), unreached, false))
+    }));
     Member {
         entry,
         root,
@@ -760,6 +882,26 @@ fn held(
         elsewhere: false,
         holdings: Ok(Holdings {
             items,
+            agents: status.map(|status| status.agents).unwrap_or_default(),
+            // The workspace's own have no settings, whatever a project at its
+            // root says: they reach agents by being installed.
+            named: settings
+                .map(|settings| settings.agents.clone())
+                .unwrap_or_default(),
+            share: settings.map(|settings| settings.share),
+            edit_tracked: settings.is_some_and(|settings| settings.edit_tracked),
+            targets: settings
+                .and_then(|settings| settings.targets.get(Kind::Skill))
+                .map(|folders| {
+                    folders
+                        .iter()
+                        .map(|folder| {
+                            paths::to_config_string(folder)
+                                .unwrap_or_else(|| folder.display().to_string())
+                        })
+                        .collect()
+                }),
+            unreached,
             warnings,
             directories,
             templates,

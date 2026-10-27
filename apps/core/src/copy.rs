@@ -27,9 +27,25 @@ use std::sync::atomic::{AtomicU64, Ordering};
 /// be committed. A link back into a directory already being copied is
 /// refused too, rather than copied until the path is too long.
 pub fn tree(from: &Path, to: &Path, within: &Path) -> Result<(), io::Error> {
+    tree_leaving(from, to, within, &[])
+}
+
+/// [`tree`], without whatever is named `leave_out` directly inside `from`.
+///
+/// Left out rather than copied and then deleted, so what is left out is
+/// never read: a link in it pointing out of `within` does not refuse a copy
+/// that would never have held it. Only at the top, where a name means what
+/// the caller left it out for; further down the same name is somebody's
+/// file like any other.
+fn tree_leaving(
+    from: &Path,
+    to: &Path,
+    within: &Path,
+    leave_out: &[&str],
+) -> Result<(), io::Error> {
     let bounds = [fs::canonicalize(within)?, fs::canonicalize(from)?];
     let mut path = Vec::new();
-    copy_tree(from, to, &bounds, &mut path)
+    copy_tree(from, to, &bounds, &mut path, leave_out)
 }
 
 fn copy_tree(
@@ -37,11 +53,15 @@ fn copy_tree(
     to: &Path,
     bounds: &[PathBuf; 2],
     path: &mut Vec<PathBuf>,
+    leave_out: &[&str],
 ) -> Result<(), io::Error> {
     path.push(fs::canonicalize(from)?);
     fs::create_dir_all(to)?;
     for entry in fs::read_dir(from)? {
         let entry = entry?;
+        if leave_out.iter().any(|name| entry.file_name() == *name) {
+            continue;
+        }
         let source = entry.path();
         let target = to.join(entry.file_name());
         let kind = entry.file_type()?;
@@ -62,12 +82,12 @@ fn copy_tree(
                         source.display()
                     )));
                 }
-                copy_tree(&pointed, &target, bounds, path)?;
+                copy_tree(&pointed, &target, bounds, path, &[])?;
             } else {
                 fs::copy(&pointed, &target)?;
             }
         } else if kind.is_dir() {
-            copy_tree(&source, &target, bounds, path)?;
+            copy_tree(&source, &target, bounds, path, &[])?;
         } else {
             fs::copy(&source, &target)?;
         }
@@ -197,6 +217,37 @@ pub struct Stage {
     _lock: Option<File>,
 }
 
+/// Why [`Stage::place`] put no copy in place, and at which target.
+///
+/// The target is said apart from the error because the error often does not
+/// name it: making the folder a copy goes in fails with what the filesystem
+/// says, which names no path, and with several targets the caller cannot
+/// tell which one was broken.
+#[derive(Debug)]
+pub struct PlaceError {
+    /// The target it failed at, as `to` names it: one that could not be
+    /// cleared beside, compared or put in place. None when the copy itself
+    /// could not be built, which is no target's doing.
+    pub target: Option<PathBuf>,
+    pub source: io::Error,
+}
+
+impl PlaceError {
+    fn at(target: &Path) -> impl FnOnce(io::Error) -> PlaceError + '_ {
+        move |source| PlaceError {
+            target: Some(target.to_path_buf()),
+            source,
+        }
+    }
+
+    fn building(source: io::Error) -> PlaceError {
+        PlaceError {
+            target: None,
+            source,
+        }
+    }
+}
+
 /// The `.gitignore` a scratch folder is given, so nothing staged in it is
 /// committed: `*`, as a Python venv ignores itself, inside the folder it is
 /// about rather than in a team's `.gitignore`.
@@ -244,14 +295,182 @@ impl Stage {
     ///
     /// Mutable, because a stage builds one copy at a time in one place.
     pub fn replace(&mut self, from: &Path, to: &Path, within: &Path) -> Result<Change, io::Error> {
-        self.clear_beside(to)?;
-        let old = self.dir.join("old");
-        let change = put(from, to, within, &self.dir.join("new"), &old)?;
-        // The new copy is in place whatever happens here, so an old one that
-        // will not go is litter in the stage, not a failed install: dropping
-        // the stage tries again, and the next run sweeps what that leaves.
-        let _ = fs::remove_dir_all(&old);
-        Ok(change)
+        let changes = self
+            .place(from, std::slice::from_ref(&to.to_path_buf()), within, &[])
+            .map_err(|error| error.source)?;
+        Ok(changes[0])
+    }
+
+    /// [`replace`] for several targets at once, and all of them or none: a
+    /// copy of `from` at each of `to`, every one the same bytes.
+    ///
+    /// Built once, in this stage, and copied from there for each target that
+    /// does not already hold it. Copied from `from` each time, two copies
+    /// could differ when `from` changes in between, a workspace's own skill
+    /// being edited say, and an agent reading both folders (OpenCode reads
+    /// `.agents/skills` and `.claude/skills`) would be handed two versions of
+    /// one skill. Each target is compared with that copy rather than with
+    /// `from`, so one that already holds it is left alone, down to its times,
+    /// and the others are replaced.
+    ///
+    /// Only once every copy is whole is any put in place, a rename each, and
+    /// a target that cannot be put in place takes every one already moved
+    /// back out again: each target is left as it was, the copy it had put
+    /// back where it replaced one. The folder a target goes in, made on the
+    /// way, is left.
+    ///
+    /// What is named `leave_out` directly inside `from` goes into none of
+    /// the copies and is never read, as `tree_leaving` leaves it out: which
+    /// names, and why, is the caller's to say.
+    ///
+    /// The changes come back in the order of `to`, which has to name each
+    /// folder on disk once: two spellings of one folder would be put in
+    /// place twice, and the second rename would find the first's copy there.
+    /// What an interrupted run of an earlier version left beside each target
+    /// is cleared first, as for [`Stage::replace`].
+    ///
+    /// A failure says which target it was at ([`PlaceError::target`]).
+    pub fn place(
+        &mut self,
+        from: &Path,
+        to: &[PathBuf],
+        within: &Path,
+        leave_out: &[&str],
+    ) -> Result<Vec<Change>, PlaceError> {
+        for target in to {
+            self.clear_beside(target).map_err(PlaceError::at(target))?;
+        }
+        let built = self.fresh("new").map_err(PlaceError::building)?;
+        if let Err(error) = tree_leaving(from, &built, within, leave_out) {
+            let _ = fs::remove_dir_all(&built);
+            return Err(PlaceError::building(error));
+        }
+
+        let mut changes = Vec::with_capacity(to.len());
+        let mut moving = Vec::new();
+        for (index, target) in to.iter().enumerate() {
+            let change = match target.exists() {
+                true if same(&built, target).map_err(PlaceError::at(target))? => Change::Unchanged,
+                true => Change::Updated,
+                false => Change::Added,
+            };
+            if change != Change::Unchanged {
+                moving.push(index);
+            }
+            changes.push(change);
+        }
+        if moving.is_empty() {
+            self.clear(&[built]);
+            return Ok(changes);
+        }
+
+        // Every copy but the last is copied from what was built, before
+        // anything moves; the last is what was built.
+        let mut copies = Vec::with_capacity(moving.len());
+        for (count, &index) in moving.iter().enumerate() {
+            if count + 1 == moving.len() {
+                copies.push(built.clone());
+                continue;
+            }
+            let copy = self
+                .fresh(&format!("new-{index}"))
+                .map_err(PlaceError::building)?;
+            if let Err(error) = tree(&built, &copy, &built) {
+                self.clear(&copies);
+                let _ = fs::remove_dir_all(&copy);
+                let _ = fs::remove_dir_all(&built);
+                return Err(PlaceError::building(error));
+            }
+            copies.push(copy);
+        }
+
+        let mut placed: Vec<(&Path, Option<PathBuf>)> = Vec::with_capacity(moving.len());
+        for (&index, copy) in moving.iter().zip(&copies) {
+            let target = to[index].as_path();
+            match self.put_in_place(copy, target, index) {
+                Ok(old) => placed.push((target, old)),
+                Err(error) => {
+                    self.take_back(&placed);
+                    self.clear(&copies);
+                    return Err(PlaceError::at(target)(error));
+                }
+            }
+        }
+        // Every new copy is in place whatever happens here, so an old one
+        // that will not go is litter in the stage, not a failed install:
+        // dropping the stage tries again, and the next run sweeps what that
+        // leaves.
+        for (_, old) in placed {
+            if let Some(old) = old {
+                let _ = fs::remove_dir_all(old);
+            }
+        }
+        Ok(changes)
+    }
+
+    /// Move `copy` to `target`, moving what `target` holds aside into the
+    /// stage first and saying where, so it can be put back or cleared.
+    fn put_in_place(
+        &self,
+        copy: &Path,
+        target: &Path,
+        index: usize,
+    ) -> Result<Option<PathBuf>, io::Error> {
+        // Made here rather than on the way to the copy, which is in the
+        // stage: a project whose skills folder is not there yet, as in a
+        // fresh clone, still gets one.
+        if let Some(parent) = target.parent() {
+            fs::create_dir_all(parent)?;
+        }
+        if !target.exists() {
+            moved(copy, target)?;
+            return Ok(None);
+        }
+        // Moved aside rather than deleted first, as `put` does it: the moment
+        // with neither copy in place lasts from one rename to the next, and a
+        // copy that cannot be put in place can have the old one put back.
+        let old = self.fresh(&format!("old-{index}"))?;
+        moved(target, &old)?;
+        if let Err(error) = moved(copy, target) {
+            let _ = fs::rename(&old, target);
+            return Err(error);
+        }
+        Ok(Some(old))
+    }
+
+    /// Undo what [`Stage::place`] put in place, last first: each new copy
+    /// moved back into the stage, where dropping it clears it, and the copy
+    /// it replaced moved back where it was.
+    ///
+    /// As far as it can: a rename that fails here leaves that target with
+    /// the new copy, or with none, which is no worse than stopping, and the
+    /// error that brought it here is the one said.
+    fn take_back(&self, placed: &[(&Path, Option<PathBuf>)]) {
+        for (index, (target, old)) in placed.iter().enumerate().rev() {
+            if let Ok(undone) = self.fresh(&format!("undone-{index}")) {
+                let _ = fs::rename(target, undone);
+            }
+            if let Some(old) = old {
+                let _ = fs::rename(old, target);
+            }
+        }
+    }
+
+    /// Remove what this stage built, as far as it can.
+    fn clear(&self, built: &[PathBuf]) {
+        for path in built {
+            let _ = fs::remove_dir_all(path);
+        }
+    }
+
+    /// A path in this stage named `name`, cleared of anything an earlier
+    /// replacement through it left there.
+    fn fresh(&self, name: &str) -> Result<PathBuf, io::Error> {
+        let path = self.dir.join(name);
+        if fs::symlink_metadata(&path).is_ok() {
+            fs::remove_dir_all(&path)?;
+        }
+        Ok(path)
     }
 
     /// Remove the `.<name>.mindflayer-new` and `-old` that an interrupted run
@@ -439,7 +658,17 @@ pub enum Change {
 
 /// Whether two directories hold the same names and the same bytes.
 pub fn same(a: &Path, b: &Path) -> Result<bool, io::Error> {
-    let (left, right) = (listing(a)?, listing(b)?);
+    same_leaving(a, b, &[])
+}
+
+/// Whether `b` holds what a copy of `a` leaving out `leave_out` would
+/// ([`Stage::place`]): the same names and bytes, but for what is named
+/// `leave_out` directly inside `a`. Only `a`'s are passed over, so a `b`
+/// that holds one of those names is not that copy.
+pub fn same_leaving(a: &Path, b: &Path, leave_out: &[&str]) -> Result<bool, io::Error> {
+    let mut left = listing(a)?;
+    left.retain(|name| !leave_out.iter().any(|left_out| name == *left_out));
+    let right = listing(b)?;
     if left != right {
         return Ok(false);
     }

@@ -3,8 +3,10 @@
 //!
 //! Which agents read it, whether what is installed into it is shared with the
 //! team or kept to this checkout (D-02), whether a team file git tracks may
-//! be edited, and where the project authors artifacts of its own (D-06),
-//! beside an id that names it for good and the name it is shown by (D-09).
+//! be edited, where the project authors artifacts of its own (D-06), and,
+//! when not in the folders its agents read, where what is installed into it
+//! lands (the owner's amendment to D-07), beside an id that names it for
+//! good and the name it is shown by (D-09).
 //! These describe the files physically in the project, and several
 //! workspaces may link one project, so they live in the project rather than
 //! in any one workspace's `flayer.toml`, where two workspaces could disagree
@@ -18,17 +20,25 @@
 //! they would refuse.
 //!
 //! A key this build does not know is carried rather than refused: read past,
-//! and kept by an edit, where it was. The format grows (a project's own
-//! install targets, #40, are the next key), and a project configured by a
-//! newer Mindflayer is still a project, as it is for unknown front matter.
+//! and kept by an edit, where it was. The format grows, and a project
+//! configured by a newer Mindflayer is still a project, as it is for unknown
+//! front matter. A key that changes what an older build would do with the
+//! project is the exception, and comes with a version of its own, which
+//! that build refuses: `targets` ([`TARGETS_VERSION`]).
 
+use std::collections::BTreeMap;
 use std::fmt;
-use std::path::Path;
+use std::path::{Path, PathBuf};
+
+use serde::{Serialize, Serializer};
 
 use crate::agent::Agent;
 use crate::config_entry::{self, Edit, Format, Value};
+use crate::kind::Kind;
 use crate::paths;
-use crate::workspace::{check_version, Directories, Marker, WorkspaceError, SETTINGS_VERSION};
+use crate::workspace::{
+    check_version, Directories, Marker, WorkspaceError, SETTINGS_VERSION, TARGETS_VERSION,
+};
 
 /// The marker file of a v3 project, inside its `.mind`.
 pub const SETTINGS_FILE: &str = "settings.json";
@@ -39,8 +49,10 @@ pub const SETTINGS_FILE: &str = "settings.json";
 /// left in the file, and an edit leaves it there.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Settings {
-    /// The layout version the file was written with:
-    /// [`SETTINGS_VERSION`] or, refused, one this build does not know.
+    /// The layout version the file was written with: [`SETTINGS_VERSION`],
+    /// or [`TARGETS_VERSION`] for one that says where installs land
+    /// ([`Settings::version_needed`]); one this build does not know is
+    /// refused.
     pub version: u32,
     /// What names the project whatever it is called and wherever it is.
     pub id: ProjectId,
@@ -61,6 +73,11 @@ pub struct Settings {
     /// A kind it does not name has no such folder: never a default, so a
     /// kind added later is not given a folder at the root nobody asked for.
     pub directories: Directories,
+    /// Where what is installed into the project lands, for a kind it names,
+    /// in place of the folders each agent reads (`TargetTable::standard`).
+    /// A kind it leaves out, every kind in a new project, goes where its
+    /// agents read.
+    pub targets: Targets,
 }
 
 impl Settings {
@@ -81,16 +98,39 @@ impl Settings {
             share,
             edit_tracked: false,
             directories,
+            targets: Targets::default(),
+        }
+    }
+
+    /// The lowest version that reads these settings as they mean:
+    /// [`TARGETS_VERSION`] when they say where a kind is installed, and
+    /// [`SETTINGS_VERSION`] otherwise.
+    ///
+    /// Not the newest this build writes for every file: a project that never
+    /// sets `targets` stays one every build since settings reads, while one
+    /// that sets them is refused by a build from before them, which would
+    /// read past the key and install into the standard folders without a
+    /// word. An edit of `targets` brings the version with it
+    /// ([`MindProject::change_settings`](crate::MindProject::change_settings)),
+    /// back down too once no kind is named, so a project whose override
+    /// went is one an older build reads again.
+    pub fn version_needed(&self) -> u32 {
+        if self.targets.is_empty() {
+            SETTINGS_VERSION
+        } else {
+            TARGETS_VERSION
         }
     }
 
     /// Read the settings file at `path`.
     ///
     /// Refused when it is not strict JSON, when a key the format defines is
-    /// missing or holds the wrong thing, and when its version is not
-    /// [`SETTINGS_VERSION`]: a newer one as written by a newer Mindflayer, an
-    /// older one as no settings file at all, since versions 1 and 2 are
-    /// `mind.toml`'s. A key this build does not know is read past.
+    /// missing or holds the wrong thing (but for `targets` in a version 3
+    /// file, read past then as before them), and when its version is neither
+    /// [`SETTINGS_VERSION`] nor [`TARGETS_VERSION`]: a newer one as written
+    /// by a newer Mindflayer, an older one as no settings file at all, since
+    /// versions 1 and 2 are `mind.toml`'s. A key this build does not know is
+    /// read past.
     pub fn read(path: &Path) -> Result<Self, WorkspaceError> {
         let text = std::fs::read_to_string(path).map_err(|source| WorkspaceError::Read {
             path: path.to_path_buf(),
@@ -101,7 +141,8 @@ impl Settings {
 
     /// The text of a new settings file holding these: pretty-printed, two
     /// spaces a level, ending in a newline, the keys in the order the format
-    /// lists them.
+    /// lists them, and `targets` only when it names a kind, since leaving it
+    /// out says the same.
     ///
     /// Written as `config_entry` lays out what an edit inserts, so a file
     /// written new and one an edit has changed since read alike. Refused for
@@ -110,6 +151,7 @@ impl Settings {
         let members = self
             .members()?
             .into_iter()
+            .filter(|(key, _)| *key != TARGETS || !self.targets.is_empty())
             .map(|(key, value)| (key.to_owned(), value));
         Ok(config_entry::json_text(&Value::Object(members.collect()))
             .expect("settings hold nothing JSON cannot write"))
@@ -129,7 +171,30 @@ impl Settings {
             (SHARE, Value::from(self.share.name())),
             (EDIT_TRACKED, Value::Bool(self.edit_tracked)),
             (DIRECTORIES, Value::Object(self.directory_members()?)),
+            (TARGETS, Value::Object(self.target_members()?)),
         ])
+    }
+
+    /// The entries of `targets`, in the order [`directory_members`] gives
+    /// its own, each a list of paths spelled with `/`.
+    ///
+    /// [`directory_members`]: Self::directory_members
+    fn target_members(&self) -> Result<Vec<(String, Value)>, WorkspaceError> {
+        self.targets
+            .entries()
+            .into_iter()
+            .map(|(key, folders)| {
+                let written = folders
+                    .iter()
+                    .map(|folder| {
+                        paths::to_config_string(folder).ok_or_else(|| WorkspaceError::NonUtf8Path {
+                            path: folder.clone(),
+                        })
+                    })
+                    .collect::<Result<Vec<String>, WorkspaceError>>()?;
+                Ok((key.to_owned(), Value::array(written)))
+            })
+            .collect()
     }
 
     /// The entries of `directories`, the kinds this build knows first, in
@@ -155,9 +220,8 @@ impl Settings {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Share {
     /// Installed copies and entries stay out of git, through a block of
-    /// `info/exclude`, once installs read the share mode (#34), and `.mind`
-    /// itself does through a `.gitignore` of its own (D-01). What a new
-    /// project is.
+    /// `info/exclude` an install keeps, and `.mind` itself does through a
+    /// `.gitignore` of its own (D-01). What a new project is.
     Local,
     /// Written for the team to commit: nothing is kept out of git, the
     /// project's settings included.
@@ -165,6 +229,9 @@ pub enum Share {
 }
 
 impl Share {
+    /// Both, in the order a front end lists them.
+    pub const ALL: [Share; 2] = [Share::Local, Share::Shared];
+
     /// How the settings file spells it.
     pub const fn name(self) -> &'static str {
         match self {
@@ -173,16 +240,79 @@ impl Share {
         }
     }
 
-    fn named(word: &str) -> Option<Share> {
-        [Share::Local, Share::Shared]
-            .into_iter()
-            .find(|share| share.name() == word)
+    /// The one spelled `word`, as the settings file and a command line
+    /// spell it.
+    pub fn named(word: &str) -> Option<Share> {
+        Share::ALL.into_iter().find(|share| share.name() == word)
     }
 }
 
 impl fmt::Display for Share {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_str(self.name())
+    }
+}
+
+/// Where a project's settings install each kind they name, in place of the
+/// folders its agents read: `"targets": {"skills": [".skills"]}` sends every
+/// skill installed into the project to `.skills`, for every agent it names.
+///
+/// Keyed by the kind's folder name, as [`Directories`] is, and a key this
+/// build does not know is carried for the same reason. Each folder is as the
+/// file spells it, relative to the project's root: whether an install may
+/// use it is the project's to say when it hands its targets on
+/// ([`MindProject::targets`](crate::MindProject::targets)), so a folder
+/// written by hand that leads out of the project is read, said, and used for
+/// nothing, rather than refusing every other thing the file says.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct Targets(BTreeMap<String, Vec<PathBuf>>);
+
+impl Targets {
+    /// The folders `kind` is installed in, if the settings name any.
+    pub fn get(&self, kind: Kind) -> Option<&[PathBuf]> {
+        self.0.get(kind.folder()).map(Vec::as_slice)
+    }
+
+    /// Say that `kind` is installed in `folders`.
+    pub fn with(mut self, kind: Kind, folders: Vec<PathBuf>) -> Self {
+        self.0.insert(kind.folder().to_owned(), folders);
+        self
+    }
+
+    /// Say nothing of where `kind` is installed, so it goes where the
+    /// project's agents read.
+    pub fn without(mut self, kind: Kind) -> Self {
+        self.0.remove(kind.folder());
+        self
+    }
+
+    /// Whether no kind is named, which is every kind installed where the
+    /// agents read.
+    pub fn is_empty(&self) -> bool {
+        self.0.is_empty()
+    }
+
+    /// Say where whatever `key` names is installed, a key this build may not
+    /// know included.
+    fn with_key(mut self, key: &str, folders: Vec<PathBuf>) -> Self {
+        self.0.insert(key.to_owned(), folders);
+        self
+    }
+
+    /// Every entry, the kinds this build knows first, in report order, then
+    /// any other key in name order, as [`Directories`] lists its own.
+    pub(crate) fn entries(&self) -> Vec<(&str, &[PathBuf])> {
+        let known = Kind::ALL
+            .into_iter()
+            .filter_map(|kind| self.0.get_key_value(kind.folder()));
+        let other = self
+            .0
+            .iter()
+            .filter(|(key, _)| Kind::ALL.iter().all(|kind| kind.folder() != key.as_str()));
+        known
+            .chain(other)
+            .map(|(key, folders)| (key.as_str(), folders.as_slice()))
+            .collect()
     }
 }
 
@@ -227,6 +357,14 @@ impl ProjectId {
     }
 }
 
+/// As its text, the one spelling settings hold it in and an exclude group
+/// names it by, rather than as a struct around it.
+impl Serialize for ProjectId {
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        serializer.serialize_str(&self.0)
+    }
+}
+
 impl fmt::Display for ProjectId {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_str(&self.0)
@@ -240,6 +378,7 @@ const AGENTS: &str = "agents";
 const SHARE: &str = "share";
 const EDIT_TRACKED: &str = "edit_tracked";
 const DIRECTORIES: &str = "directories";
+const TARGETS: &str = "targets";
 
 /// The settings `text` holds, read from the file at `path`, which errors name.
 ///
@@ -283,7 +422,14 @@ pub(crate) fn parse(path: &Path, text: &str) -> Result<Settings, WorkspaceError>
 ///
 /// The version and the id are refused rather than changed: a version moves
 /// with a migration, which writes the file its version describes, and an id
-/// names the project for good.
+/// names the project for good. The one version an edit writes is the one a
+/// change of `targets` brings with it ([`Settings::version_needed`]), since
+/// that key is what the version says an older build cannot read.
+///
+/// `targets` emptied is taken out whole rather than left as `{}`, since
+/// leaving it out is what a file that installs where its agents read says;
+/// `targets` that a version 3 file holds and that were read past for not
+/// reading as targets are written over whole.
 pub(crate) fn edited(
     path: &Path,
     text: &str,
@@ -294,7 +440,9 @@ pub(crate) fn edited(
         path: path.to_path_buf(),
         detail,
     };
-    if wanted.version != before.version {
+    let follows_targets =
+        wanted.targets != before.targets && wanted.version == wanted.version_needed();
+    if wanted.version != before.version && !follows_targets {
         return Err(refused(format!(
             "`{VERSION}` changes with a migration, never with an edit"
         )));
@@ -308,6 +456,22 @@ pub(crate) fn edited(
     let mut edits: Vec<(Vec<String>, Edit)> = Vec::new();
     for ((key, was), (_, now)) in before.members()?.into_iter().zip(wanted.members()?) {
         if was == now {
+            continue;
+        }
+        let found = config_entry::get(Format::Json, text, &[key])
+            .map_err(|error| refused(error.to_string()))?;
+        let present = found.is_some();
+        if key == TARGETS && matches!(&now, Value::Object(now) if now.is_empty()) {
+            if present {
+                edits.push((vec![key.to_owned()], Edit::Remove));
+            }
+            continue;
+        }
+        // Written over whole when what the file holds does not read as
+        // targets, which a version 3 file's read past: an entry at a time
+        // would edit inside something that is no list of folders a kind.
+        if key == TARGETS && found.is_some_and(|found| !reads_as_targets(found)) {
+            edits.push((vec![key.to_owned()], Edit::Replace(now)));
             continue;
         }
         if let (Value::Object(was), Value::Object(now)) = (&was, &now) {
@@ -329,9 +493,6 @@ pub(crate) fn edited(
             }
             continue;
         }
-        let present = config_entry::get(Format::Json, text, &[key])
-            .map_err(|error| refused(error.to_string()))?
-            .is_some();
         let edit = if present {
             Edit::Replace(now)
         } else {
@@ -349,6 +510,14 @@ pub(crate) fn edited(
     Ok(text)
 }
 
+/// Whether `value`, what a settings file holds under `targets`, reads as
+/// them at the version that defines the key.
+fn reads_as_targets(value: Value) -> bool {
+    Members(&[(TARGETS.to_owned(), value)])
+        .strict_targets()
+        .is_ok()
+}
+
 /// The members of a settings file's object, read a key at a time.
 struct Members<'a>(&'a [(String, Value)]);
 
@@ -362,6 +531,7 @@ impl<'a> Members<'a> {
             share: self.share()?,
             edit_tracked: self.edit_tracked()?,
             directories: self.directories()?,
+            targets: self.targets(version)?,
         })
     }
 
@@ -466,6 +636,60 @@ impl<'a> Members<'a> {
             directories = directories.with_key(key, directory);
         }
         Ok(directories)
+    }
+
+    /// None when the file leaves it out, which is every kind installed where
+    /// the project's agents read. Read whatever the version says, a version
+    /// 3 file given `targets` by hand included: somebody wrote them to be
+    /// used, and the only reader that could miss them is a build from
+    /// before them, which a write from this one keeps out by writing the
+    /// version they need.
+    ///
+    /// A kind named with no folder is refused rather than read as installed
+    /// nowhere: leaving the kind out is how a file says the standard
+    /// folders, and a project that installs a kind nowhere is one an install
+    /// can only refuse. Refused only from [`TARGETS_VERSION`], the version
+    /// that defines the key: in a version 3 file, which every build before
+    /// it opened with the key read past, one that does not read as targets
+    /// is read past still, rather than closing a project those builds
+    /// opened. An edit of `targets` writes it over, at the version it needs.
+    fn targets(&self, version: u32) -> Result<Targets, String> {
+        match self.strict_targets() {
+            Err(_) if version < TARGETS_VERSION => Ok(Targets::default()),
+            read => read,
+        }
+    }
+
+    /// `targets`, held to what the key holds.
+    fn strict_targets(&self) -> Result<Targets, String> {
+        let entries = match self.get(TARGETS)? {
+            None => return Ok(Targets::default()),
+            Some(Value::Object(entries)) => entries,
+            Some(_) => return Err(format!("`{TARGETS}` is not an object")),
+        };
+        let entries = Members(entries);
+        let mut targets = Targets::default();
+        for (key, _) in entries.0 {
+            let not_a_list = || format!("`{TARGETS}.{key}` is not a list of folders");
+            let Value::Array(folders) = entries.required(key)? else {
+                return Err(not_a_list());
+            };
+            if folders.is_empty() {
+                return Err(format!(
+                    "`{TARGETS}.{key}` names no folder; leave `{key}` out to install them \
+                     where the project's agents read"
+                ));
+            }
+            let folders = folders
+                .iter()
+                .map(|folder| match folder {
+                    Value::String(folder) => Ok(PathBuf::from(folder)),
+                    _ => Err(not_a_list()),
+                })
+                .collect::<Result<Vec<PathBuf>, String>>()?;
+            targets = targets.with_key(key, folders);
+        }
+        Ok(targets)
     }
 }
 

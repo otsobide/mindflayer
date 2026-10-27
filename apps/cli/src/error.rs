@@ -85,6 +85,16 @@ pub enum CliError {
     Refused(mindflayer_core::migrate::Refusal),
     #[error(transparent)]
     Migrate(#[from] mindflayer_core::migrate::MigrateError),
+    #[error("nothing moved: what the workspace records of the project decides which of its copies move, and it cannot be read: {0}")]
+    MigrateUnrecorded(Box<CliError>),
+    #[error("say what to migrate: --library moves the workspace's own into its library, -p <project> moves a project it links from its mind.toml to settings, and --all-projects moves every one")]
+    MigrateWhat,
+    #[error(transparent)]
+    Reapply(#[from] mindflayer_core::ReapplyError),
+    #[error("say which project's agents to change (`flayer agents -p <project> <agent>...`); the workspace's own reach agents by being installed")]
+    AgentsWhere,
+    #[error("say which project's targets to change (`flayer targets -p <project> set <kind> <dir>...`); the workspace's own reach agents by being installed")]
+    TargetsWhere,
     #[error("`{editor}` could not be started: {source}")]
     Editor {
         editor: String,

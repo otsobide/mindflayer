@@ -126,6 +126,7 @@ fn a_home_workspace_migrates_and_what_it_installed_stays_current() {
     assert!(home_path.join("skills/x/SKILL.md").is_file());
 
     let migrated = run(&["migrate", "--library", "--yes"]).unwrap();
+    let status = run(&["status", "-p", "alpha"]).unwrap();
     let installed = run(&["install", "-p", "alpha", "x"]).unwrap();
 
     assert!(
@@ -141,9 +142,14 @@ fn a_home_workspace_migrates_and_what_it_installed_stays_current() {
         .join(".mindflayer/library/skills/x/SKILL.md")
         .is_file());
     assert!(!home_path.join("skills").exists());
-    // Recorded, unchanged, and still the copy of what the workspace offers.
-    // `install` saying so stands in for `flayer status` (#36), which the
-    // issue names but is not there yet; that check belongs here once it is.
+    // Recorded, from the workspace, in every folder alpha's agents read; and
+    // still the copy of what the workspace offers, which only `install` says
+    // until status tells an outdated copy from a current one (#47).
+    assert_eq!(
+        status.stdout,
+        "x  installed  claude,codex,opencode  workspace\n"
+    );
+    assert!(status.ok, "{status:?}");
     assert_eq!(installed.stdout, "x in alpha was already current\n");
     assert!(installed.ok, "{installed:?}");
 }
@@ -253,10 +259,16 @@ fn what_an_unlinked_project_at_the_root_keeps_is_said_to_be_the_workspaces_no_mo
 #[test]
 fn migrate_is_told_what_to_migrate() {
     let dir = TempDir::new().unwrap();
+    beside(dir.path());
 
-    let error = FlayerCli::try_parse_from(line("flayer", &["migrate"], dir.path())).unwrap_err();
+    let failure = flayer(dir.path(), &["migrate"]).unwrap_err();
 
-    assert!(error.to_string().contains("--library"), "{error}");
+    let said = failure.error.to_string();
+    assert!(
+        said.starts_with("say what to migrate: --library "),
+        "{said}"
+    );
+    assert!(dir.path().join("skills").is_dir(), "nothing moved");
 }
 
 #[test]

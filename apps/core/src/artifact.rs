@@ -8,6 +8,7 @@ use std::path::{Path, PathBuf};
 
 use thiserror::Error;
 
+use crate::agent::Agent;
 use crate::frontmatter::{self, FrontMatterError};
 use crate::kind::{Kind, Layout};
 use crate::rule::{Lenient, RuleManifest};
@@ -47,6 +48,13 @@ impl Declared {
 /// The body is not held: it is the bulk of the file and a listing never shows
 /// it. What a listing does show (one line saying what the thing is) is
 /// captured at load, because the file had to be read anyway.
+///
+/// Usually one copy, at [`path`](Self::path). A project marked by its
+/// settings can hold one skill in several of its agents' folders, an
+/// install's copies or a user's own, as well as in the folder it authors
+/// in, and discovery lists those as one artifact ([`crate::Catalog`]): what
+/// it declares is read from the first copy, the project's own when it has
+/// one, and every copy is still [validated](Self::validate) where it is.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Artifact {
     name: String,
@@ -54,6 +62,108 @@ pub struct Artifact {
     project: PathBuf,
     declared: Declared,
     summary: Option<String>,
+    /// How the copy at `path` stands where it is.
+    placement: Placement,
+    /// Every other copy, in the order discovery found them.
+    others: Vec<ArtifactCopy>,
+    /// Whether the copies its project's agents read do not all hold the
+    /// same names and bytes.
+    differ: bool,
+}
+
+/// Who reads a copy where it sits, and who put it there.
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct Placement {
+    agents: Vec<Agent>,
+    authored: bool,
+    installed: bool,
+}
+
+impl Placement {
+    /// A copy in a folder its holder keeps artifacts in, which no agent is
+    /// said to read and nothing says was installed: what every artifact was
+    /// before a project named its agents, and what one loaded on its own is
+    /// until discovery says otherwise.
+    fn authored() -> Self {
+        Placement {
+            agents: Vec::new(),
+            authored: true,
+            installed: false,
+        }
+    }
+
+    fn provenance(&self) -> Provenance {
+        if self.installed {
+            Provenance::Installed
+        } else if self.authored {
+            Provenance::Authored
+        } else {
+            Provenance::Foreign
+        }
+    }
+}
+
+/// One copy of an artifact: where it is, which agents read it there, who put
+/// it there, and what is wrong with it there.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ArtifactCopy {
+    path: PathBuf,
+    placement: Placement,
+    issues: Vec<ValidationIssue>,
+}
+
+impl ArtifactCopy {
+    /// The directory a skill is, or the file a rule is.
+    pub fn path(&self) -> &Path {
+        &self.path
+    }
+
+    /// The agents among the project's that read it where it sits, each once,
+    /// in report order: none for a project that names no agents, and none in
+    /// a folder none of them reads.
+    pub fn agents(&self) -> &[Agent] {
+        &self.placement.agents
+    }
+
+    /// Whether it sits in a folder its holder keeps artifacts in: a folder a
+    /// project or a workspace authors in, or a workspace's shelf, rather than
+    /// only a folder an agent reads.
+    pub fn is_authored(&self) -> bool {
+        self.placement.authored
+    }
+
+    /// Whether the ledger the copies were checked against records
+    /// Mindflayer putting it there; never, when they were checked against
+    /// none.
+    pub fn is_installed(&self) -> bool {
+        self.placement.installed
+    }
+
+    /// Who put it there, as far as anything says.
+    pub fn provenance(&self) -> Provenance {
+        self.placement.provenance()
+    }
+
+    /// Everything wrong with it, judged on this copy's own file and folder.
+    pub fn issues(&self) -> &[ValidationIssue] {
+        &self.issues
+    }
+}
+
+/// Who put a copy where it is, as far as its folder and the ledger say.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Provenance {
+    /// The ledger records Mindflayer putting it there.
+    Installed,
+    /// In a folder its holder keeps artifacts in, and recorded by nothing:
+    /// the holder's own work. A workspace's own artifacts and what it
+    /// gathered onto its shelf read the same way, though nothing asks it of
+    /// them.
+    Authored,
+    /// In an agent's folder, outside any its holder authors in, and recorded
+    /// by nothing: somebody's, put there some other way, and never
+    /// Mindflayer's to change.
+    Foreign,
 }
 
 impl Artifact {
@@ -85,6 +195,9 @@ impl Artifact {
             project: project.into(),
             declared: Declared::Skill(manifest),
             summary,
+            placement: Placement::authored(),
+            others: Vec::new(),
+            differ: false,
         })
     }
 
@@ -111,6 +224,9 @@ impl Artifact {
             project: project.into(),
             declared: Declared::Rule(manifest),
             summary: opening_line(body),
+            placement: Placement::authored(),
+            others: Vec::new(),
+            differ: false,
         })
     }
 
@@ -138,9 +254,111 @@ impl Artifact {
         )
     }
 
-    /// The directory a skill is, or the file a rule is.
+    /// The directory a skill is, or the file a rule is: its first copy's,
+    /// when it has several.
     pub fn path(&self) -> &Path {
         &self.path
+    }
+
+    /// Every copy, the one at [`path`](Self::path) first, each with what is
+    /// wrong with it where it is.
+    pub fn copies(&self) -> Vec<ArtifactCopy> {
+        let first = ArtifactCopy {
+            path: self.path.clone(),
+            placement: self.placement.clone(),
+            issues: self.issues(),
+        };
+        std::iter::once(first)
+            .chain(self.others.iter().cloned())
+            .collect()
+    }
+
+    /// Every agent among the project's that reads some copy of it, each once,
+    /// in report order.
+    pub fn agents(&self) -> Vec<Agent> {
+        let mut agents: Vec<Agent> = self
+            .placements()
+            .flat_map(|placement| placement.agents.iter().copied())
+            .collect();
+        agents.sort();
+        agents.dedup();
+        agents
+    }
+
+    /// Who put it there, over every copy: installed when the ledger records
+    /// every one, and otherwise what the copies it does not record say, since
+    /// those are somebody's: authored when one of them sits in a folder its
+    /// holder authors in, and foreign when none does.
+    pub fn provenance(&self) -> Provenance {
+        let unrecorded: Vec<&Placement> = self
+            .placements()
+            .filter(|placement| !placement.installed)
+            .collect();
+        if unrecorded.is_empty() {
+            Provenance::Installed
+        } else if unrecorded.iter().any(|placement| placement.authored) {
+            Provenance::Authored
+        } else {
+            Provenance::Foreign
+        }
+    }
+
+    /// Whether the copies its project's agents read do not all hold the
+    /// same names and bytes: then the agents reading them do not all load
+    /// the same thing. Claude and Codex each read one of the standard
+    /// folders, and OpenCode, reading both, loads whichever it takes.
+    /// Discovery says so as a failure too. A copy no agent reads, the
+    /// project's own source, is compared with none.
+    pub fn copies_differ(&self) -> bool {
+        self.differ
+    }
+
+    /// How each copy stands, the first first.
+    fn placements(&self) -> impl Iterator<Item = &Placement> {
+        std::iter::once(&self.placement).chain(self.others.iter().map(|copy| &copy.placement))
+    }
+
+    /// Say who reads the copy at `path` and whether it sits in a folder its
+    /// holder authors in: discovery's to say, once it has loaded the copy
+    /// from a folder it knows that of.
+    pub(crate) fn placed(&mut self, agents: Vec<Agent>, authored: bool) {
+        self.placement.agents = agents;
+        self.placement.authored = authored;
+    }
+
+    /// Whether the copy at [`path`](Self::path) sits in a folder its holder
+    /// authors in: what discovery puts first among copies of one name.
+    pub(crate) fn first_is_authored(&self) -> bool {
+        self.placement.authored
+    }
+
+    /// Whether one of the project's agents reads the copy at
+    /// [`path`](Self::path): what discovery compares with the others.
+    pub(crate) fn first_is_read(&self) -> bool {
+        !self.placement.agents.is_empty()
+    }
+
+    /// Take `other`, loaded under the same name from another place, as one
+    /// more copy of this one, judged as it is there; `differs` when it does
+    /// not hold what the first copy an agent reads holds.
+    pub(crate) fn take_copy(&mut self, other: Artifact, differs: bool) {
+        let issues = other.issues();
+        self.others.push(ArtifactCopy {
+            path: other.path,
+            placement: other.placement,
+            issues,
+        });
+        self.others.extend(other.others);
+        self.differ |= differs || other.differ;
+    }
+
+    /// Mark as installed each copy `recorded` says Mindflayer put where it
+    /// is, and every other as not.
+    pub(crate) fn record(&mut self, recorded: impl Fn(&Path) -> bool) {
+        self.placement.installed = recorded(&self.path);
+        for copy in &mut self.others {
+            copy.placement.installed = recorded(&copy.path);
+        }
     }
 
     /// The root of the mind project this was found in.
@@ -219,7 +437,24 @@ impl Artifact {
     /// Pure: every fact it judges was captured when the file was read, so
     /// checking cannot fail on its own and a caller never has to handle an
     /// error from asking whether something is valid.
+    ///
+    /// Every copy is judged on its own file and folder, and what one of the
+    /// others has that the first does not is added after the first's: an
+    /// agent loads the copy in the folder it reads, so a copy listed under
+    /// one name is no reason to check only one. [`copies`](Self::copies)
+    /// says which copy has what.
     pub fn validate(&self) -> Vec<ValidationIssue> {
+        let mut issues = self.issues();
+        for issue in self.others.iter().flat_map(|copy| &copy.issues) {
+            if !issues.contains(issue) {
+                issues.push(issue.clone());
+            }
+        }
+        issues
+    }
+
+    /// Everything wrong with the copy at `path`.
+    fn issues(&self) -> Vec<ValidationIssue> {
         match &self.declared {
             Declared::Skill(manifest) => skill_issues(
                 manifest,

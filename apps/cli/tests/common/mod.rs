@@ -10,7 +10,9 @@ pub use clap::Parser;
 pub use mindflayer_cli::install::state::{Focus, Screen, Step};
 pub use mindflayer_cli::install::{self as install_screen, ui};
 pub use mindflayer_cli::tui;
-pub use mindflayer_cli::tui::state::{App, Done, Holder, Mode, Runner, Scope, Task, View};
+pub use mindflayer_cli::tui::state::{
+    AgentsLine, App, Done, Holder, Mode, Runner, Scope, Task, View,
+};
 pub use mindflayer_cli::{
     agent_homes, default_home, run, run_flayer_cli, run_flayer_cli_watched, run_watched,
     AgentHomeOptions, Cli, CliError, Failure, FlayerCli, Lookup, Outcome,
@@ -19,7 +21,9 @@ pub use mindflayer_core::gather::{Progress, Watch};
 pub use mindflayer_core::install::Standing;
 pub use mindflayer_core::ledger::Ledger;
 pub use mindflayer_core::{AgentHomes, FlayerWorkspace, Reason};
-pub use mindflayer_core::{Kind, MindProject, FLAYER_CONFIG, FLAYER_DIR, MIND_CONFIG, MIND_DIR};
+pub use mindflayer_core::{
+    Kind, MindProject, FLAYER_CONFIG, FLAYER_DIR, MIND_CONFIG, MIND_DIR, SETTINGS_FILE,
+};
 pub use ratatui::backend::TestBackend;
 pub use ratatui::crossterm::event::KeyCode;
 pub use ratatui::crossterm::event::{KeyEvent, KeyModifiers};
@@ -153,6 +157,28 @@ pub fn flayer(dir: &Path, args: &[&str]) -> Result<Outcome, Failure> {
     run_flayer_cli(&parsed_flayer(dir, args))
 }
 
+/// What every reading command's `--json` prints, read back field by field:
+/// nothing else is allowed in it, so a field renamed or added fails here
+/// before it reaches a script that reads it.
+#[derive(Debug, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Envelope {
+    pub version: u32,
+    pub data: serde_json::Value,
+    pub warnings: Vec<String>,
+}
+
+/// The envelope a `--json` outcome printed, its version held to the one this
+/// suite was written against, and its data read as `T`.
+pub fn enveloped<T: serde::de::DeserializeOwned>(outcome: &Outcome) -> (T, Vec<String>) {
+    let envelope: Envelope = serde_json::from_str(&outcome.stdout)
+        .unwrap_or_else(|error| panic!("not the envelope: {error}\n{}", outcome.stdout));
+    assert_eq!(envelope.version, 1, "{}", outcome.stdout);
+    let data = serde_json::from_value(envelope.data)
+        .unwrap_or_else(|error| panic!("not the data asked for: {error}\n{}", outcome.stdout));
+    (data, envelope.warnings)
+}
+
 /// Write a skill into an already initialized mind project.
 /// Where an initialized project keeps a kind, asked of the project itself
 /// rather than assumed, so a test that moves one still writes to the right
@@ -162,6 +188,22 @@ pub fn directory_for(root: &Path, kind: Kind) -> PathBuf {
         .expect("an initialized mind project")
         .directory_for(kind)
         .unwrap()
+}
+
+/// Every copy an install puts of the skill `name` in the project at `root`,
+/// one in each folder core's `install::targets` gives: asked of core as
+/// [`directory_for`] is, so a test reads the same for a project marked by its
+/// settings, whose agents' folders take the copies, and one a `mind.toml`
+/// marks, whose one folder does.
+pub fn copies(root: &Path, name: &str) -> Vec<PathBuf> {
+    let project = MindProject::open(root).expect("an initialized mind project");
+    let targets = mindflayer_core::install::targets(&project, Kind::Skill)
+        .expect("somewhere to install into");
+    assert!(!targets.is_empty(), "{}: no target", root.display());
+    targets
+        .into_iter()
+        .map(|target| target.folder.join(name))
+        .collect()
 }
 
 /// Where the workspace at `root` keeps its own of a kind, asked of the
@@ -191,7 +233,7 @@ pub fn workspace_with_two() -> TempDir {
     for name in ["alpha", "beta"] {
         let root = dir.path().join(name);
         fs::create_dir(&root).unwrap();
-        mind(&root, &["init"]).unwrap();
+        new_project(&root);
         write_skill(&root, name, &skill_file(name, "A skill"));
         flayer(dir.path(), &["link", name]).unwrap();
     }
@@ -205,7 +247,7 @@ pub fn workspace_with_two_unlinked() -> TempDir {
     for name in ["gamma", "delta"] {
         let root = dir.path().join(name);
         fs::create_dir(&root).unwrap();
-        mind(&root, &["init"]).unwrap();
+        new_project(&root);
     }
     dir
 }
@@ -245,6 +287,36 @@ pub fn write_rule(root: &Path, route: &str, contents: &str) {
     let path = directory_for(root, Kind::Rule).join(route);
     fs::create_dir_all(path.parent().unwrap()).expect("create the rule folder");
     fs::write(path, contents).expect("write the rule");
+}
+
+/// The names in `dir`, sorted: what a test holds a folder to when nothing
+/// else may be there.
+pub fn names_in(dir: &Path) -> Vec<String> {
+    let mut names: Vec<String> = fs::read_dir(dir)
+        .unwrap()
+        .map(|entry| entry.unwrap().file_name().to_string_lossy().into_owned())
+        .collect();
+    names.sort();
+    names
+}
+
+/// What git would call untracked in the repository at `work_tree`, as `git
+/// status` lists it: a folder holding only what is ignored is not listed, and
+/// neither is an empty one. Asked of gix in process, with the repository
+/// opened isolated, so neither a `git` binary nor the user's git config has
+/// a say.
+pub fn untracked(work_tree: &Path) -> Vec<String> {
+    let repository = gix::open_opts(work_tree, gix::open::Options::isolated()).unwrap();
+    let index = repository.index_or_empty().unwrap();
+    let options = repository
+        .dirwalk_options()
+        .unwrap()
+        .emit_untracked(gix::dir::walk::EmissionMode::CollapseDirectory);
+    repository
+        .dirwalk_iter(index, None::<&str>, Default::default(), options)
+        .unwrap()
+        .map(|item| item.unwrap().entry.rela_path.to_string())
+        .collect()
 }
 
 /// A git repository holding these files, with one commit.
@@ -315,14 +387,54 @@ pub fn write_tree(repo: &gix::Repository, dir: &Path) -> gix::ObjectId {
         .detach()
 }
 
+/// Make `root`, a folder, a mind project as a person would: a git
+/// repository, given `mind init`.
+///
+/// A repository because a project usually is one, and because a local
+/// project's install keeps its copies out of git through the repository's
+/// exclude file: outside one, every install would say on stderr that nothing
+/// does, and each test reading stderr would have to read past it.
+pub fn new_project(root: &Path) {
+    gix::init(root).expect("initialize a repository");
+    mind(root, &["init"]).unwrap();
+}
+
+/// Make `root`, a folder, a project the way a version 2 `mind init` did:
+/// marked by a `mind.toml`, and authoring in `skills/` and `rules/`, which
+/// is where an install puts its copy too.
+///
+/// For what such a project does that one marked by its settings does not: a
+/// copy installed in the folder the project authors in, so that a change
+/// made from the project reaches it and drops its record. Made through core
+/// rather than `mind init`, so these tests keep such a project whatever
+/// `mind init` writes.
+pub fn older_project(root: &Path) {
+    MindProject::init(root).expect("mark a project with a mind.toml");
+}
+
 /// A workspace with `projects` linked and a shelf holding `skills`.
 pub fn shelved(projects: &[&str], skills: &[&str]) -> (TempDir, FlayerWorkspace, Ledger) {
+    shelved_with(projects, skills, new_project)
+}
+
+/// [`shelved`], each project made the way an older Mindflayer made it
+/// ([`older_project`]).
+pub fn shelved_older(projects: &[&str], skills: &[&str]) -> (TempDir, FlayerWorkspace, Ledger) {
+    shelved_with(projects, skills, older_project)
+}
+
+/// [`shelved`], each project made by `make`.
+fn shelved_with(
+    projects: &[&str],
+    skills: &[&str],
+    make: fn(&Path),
+) -> (TempDir, FlayerWorkspace, Ledger) {
     let dir = TempDir::new().unwrap();
     flayer(dir.path(), &["init"]).unwrap();
     for name in projects {
         let root = dir.path().join(name);
         fs::create_dir(&root).unwrap();
-        mind(&root, &["init"]).unwrap();
+        make(&root);
         flayer(dir.path(), &["link", name]).unwrap();
     }
 
@@ -432,7 +544,7 @@ pub fn workspace_with_candidates() -> TempDir {
     let dir = workspace_with_two();
     let gamma = dir.path().join("gamma");
     fs::create_dir(&gamma).unwrap();
-    mind(&gamma, &["init"]).unwrap();
+    new_project(&gamma);
     fs::create_dir_all(dir.path().join("repo/.git")).unwrap();
     dir
 }
@@ -441,8 +553,10 @@ pub fn workspace_with_candidates() -> TempDir {
 pub fn installed(dir: &Path, workspace: &FlayerWorkspace, ledger: &Ledger) {
     let mut screen = screen_for(workspace, ledger);
     press(&mut screen, &[KeyCode::Right, KeyCode::Char(' ')]);
-    install_screen::apply(workspace, ledger, &screen).unwrap();
-    assert!(dir.join("collapse/skills/deploy/SKILL.md").is_file());
+    install_screen::apply(workspace, ledger, &screen, &AgentHomes::default()).unwrap();
+    for copy in copies(&dir.join("collapse"), "deploy") {
+        assert!(copy.join("SKILL.md").is_file(), "{}", copy.display());
+    }
 }
 
 /// `workspace_with_two`, with a skill of the workspace's own.

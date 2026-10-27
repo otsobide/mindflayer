@@ -6,7 +6,7 @@
 //! command it is about to run, as it is typed. The install screen, when it is
 //! open, draws itself. Nothing here decides anything; [`super::state`] does.
 
-use mindflayer_core::{Kind, Reason};
+use mindflayer_core::{Agent, Kind, Reason, Share, State};
 use ratatui::layout::{Constraint, Direction, Layout, Rect};
 use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
@@ -16,11 +16,12 @@ use ratatui::Frame;
 use super::minds::{self, Minds};
 use super::state::{
     AddField, AddForm, App, Confirm, Focus, GatherForm, Input, Item, LinkForm, LoadForm, Member,
-    Mode, Reader, RenameForm, Running, Scope, Task, Tone, View, Workspace, GATHER_FIELDS,
+    Mode, Reader, RenameForm, Running, Scope, SettingsForm, TargetsForm, Task, Tone, View,
+    Workspace, GATHER_FIELDS,
 };
 use crate::install::ui::{centred, pane, selected};
 use crate::progress::said;
-use crate::render::printable;
+use crate::render::{plural, printable};
 
 /// How wide a form's labels are, so the values line up.
 const LABEL: u16 = 13;
@@ -44,6 +45,8 @@ pub fn draw(app: &App, frame: &mut Frame) {
             Mode::Confirming(confirm) => confirming(confirm, frame, area),
             Mode::Reading(reader) => reading(reader, frame, area),
             Mode::Minds(screen) => minds_screen(app, screen, frame, area),
+            Mode::Settings(form) => setting(app, form, frame, area),
+            Mode::Targets(form) => targeting(app, form, frame, area),
             Mode::Browse | Mode::Installing(_) => {}
         }
     }
@@ -164,7 +167,7 @@ fn header(workspace: &Workspace, frame: &mut Frame, area: Rect) {
         Some(why) => format!("{why} · {shelf}"),
         None => shelf,
     };
-    let line = Line::from(vec![
+    let mut spans = vec![
         Span::styled(
             " mindflayer ",
             Style::default()
@@ -174,12 +177,45 @@ fn header(workspace: &Workspace, frame: &mut Frame, area: Rect) {
         ),
         Span::raw(" "),
         Span::styled(printable(&workspace.name), bold()),
+    ];
+    if let Some(older) = older(workspace) {
+        spans.push(Span::styled("  · ", dim()));
+        spans.push(Span::styled(older, Style::default().fg(Color::Yellow)));
+    }
+    spans.extend([
         Span::styled(format!("  · {shelf}  · "), dim()),
         // Last, because it is the one thing that can be long, and what a
         // narrow terminal cuts off the end of should be the least needed.
         Span::styled(printable(&workspace.root.display().to_string()), dim()),
     ]);
-    frame.render_widget(Paragraph::new(line), area);
+    frame.render_widget(Paragraph::new(Line::from(spans)), area);
+}
+
+/// What the header says of projects an older Mindflayer made, marked by a
+/// `mind.toml`, with the command that moves them to settings: until then
+/// their installs reach only the folder that marker names, and nothing else
+/// on screen tells them apart before a toggle refuses one. Early in the
+/// line, so a narrow terminal keeps it. None when there are none.
+fn older(workspace: &Workspace) -> Option<String> {
+    let count = workspace
+        .members
+        .iter()
+        .filter(|member| {
+            !member.own
+                && member
+                    .holdings
+                    .as_ref()
+                    .is_ok_and(|holdings| holdings.share.is_none())
+        })
+        .count();
+    match (workspace.scope, count) {
+        (_, 0) => None,
+        (Scope::Project, _) => Some(String::from("marked by mind.toml: `mind migrate`")),
+        (Scope::Workspace, count) => Some(format!(
+            "{} marked by mind.toml: `flayer migrate --all-projects`",
+            plural(count, "project")
+        )),
+    }
 }
 
 /// The left column: every registered entry, with how many artifacts it holds
@@ -199,7 +235,11 @@ fn projects(app: &App, workspace: &Workspace, frame: &mut Frame, area: Rect) {
         ];
         if !workspace.unlinked.is_empty() {
             text.push(Line::from(Span::styled(
-                format!("{} found under here", workspace.unlinked.len()),
+                format!(
+                    "{} found under {}",
+                    workspace.unlinked.len(),
+                    looked_under(workspace)
+                ),
                 dim(),
             )));
         }
@@ -255,6 +295,11 @@ fn project_row(member: &Member) -> ListItem<'_> {
                     Style::default().fg(Color::Red),
                 ));
             }
+            // Installs some of its agents do not see: not a problem with an
+            // artifact, so a mark of its own, which the strip beside says.
+            if !holdings.unreached.is_empty() {
+                spans.push(Span::styled("  ⚠", warn()));
+            }
             spans
         }
     };
@@ -266,9 +311,12 @@ fn holdings(app: &App, workspace: &Workspace, frame: &mut Frame, area: Rect) {
     let focused = app.focus == Focus::Items;
     let Some(member) = app.member() else {
         let text = if workspace.unlinked.is_empty() {
-            "nothing linked; l links a project by its path"
+            String::from("nothing linked; l links a project by its path")
         } else {
-            "nothing linked; l picks from what is under this workspace"
+            format!(
+                "nothing linked; l picks from what is under {}",
+                looked_under(workspace)
+            )
         };
         frame.render_widget(
             Paragraph::new(Span::styled(text, dim()))
@@ -314,19 +362,44 @@ fn holdings(app: &App, workspace: &Workspace, frame: &mut Frame, area: Rect) {
     };
 
     // Unreadable files get a strip of their own, so they cannot be scrolled
-    // out of sight by the artifacts that did read.
-    let (list_area, warning_area) = if holdings.warnings.is_empty() {
-        (area, None)
-    } else {
-        let height = u16::try_from(holdings.warnings.len() + 2)
+    // out of sight by the artifacts that did read, and so do installs some
+    // of the project's agents do not see.
+    let strips: Vec<(&str, &[String])> = [
+        (" Could not be read ", holdings.warnings.as_slice()),
+        (" Not seen by every agent ", holdings.unreached.as_slice()),
+    ]
+    .into_iter()
+    .filter(|(_, lines)| !lines.is_empty())
+    .collect();
+    // Wrapped here, and the strip as tall as what that gives, so the end of
+    // a sentence, which says what to do, is not cut off.
+    let room = usize::from(area.width.saturating_sub(2));
+    let strips: Vec<(&str, Vec<String>)> = strips
+        .into_iter()
+        .map(|(title, said)| {
+            let wrapped = said
+                .iter()
+                .flat_map(|line| wrap(&printable(line), room))
+                .collect();
+            (title, wrapped)
+        })
+        .collect();
+    // At most half the pane, and at least a line between its borders while
+    // the pane has room for one: a pane shorter than that gets what it has,
+    // since a lower bound above the upper one panics.
+    let most = area.height / 2;
+    let mut constraints = vec![Constraint::Min(3)];
+    for (_, lines) in &strips {
+        let height = u16::try_from(lines.len() + 2)
             .unwrap_or(u16::MAX)
-            .clamp(3, area.height / 2);
-        let parts = Layout::default()
-            .direction(Direction::Vertical)
-            .constraints([Constraint::Min(3), Constraint::Length(height)])
-            .split(area);
-        (parts[0], Some(parts[1]))
-    };
+            .clamp(3.min(most), most);
+        constraints.push(Constraint::Length(height));
+    }
+    let parts = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints(constraints)
+        .split(area);
+    let list_area = parts[0];
 
     if holdings.items.is_empty() {
         let mut text = vec![Line::from("nothing here yet"), Line::from("")];
@@ -360,7 +433,7 @@ fn holdings(app: &App, workspace: &Workspace, frame: &mut Frame, area: Rect) {
         let rows: Vec<ListItem> = holdings
             .items
             .iter()
-            .map(|item| item_row(item, width, room))
+            .map(|item| item_row(item, &holdings.agents, width, room))
             .collect();
         let mut state = ListState::default();
         state.select(Some(app.item));
@@ -371,19 +444,13 @@ fn holdings(app: &App, workspace: &Workspace, frame: &mut Frame, area: Rect) {
         frame.render_stateful_widget(list, list_area, &mut state);
     }
 
-    if let Some(warning_area) = warning_area {
-        let lines: Vec<Line> = holdings
-            .warnings
+    for ((title, said), strip) in strips.iter().zip(parts.iter().skip(1)) {
+        let lines: Vec<Line> = said
             .iter()
-            .map(|warning| Line::from(Span::styled(printable(warning), warn())))
+            .map(|line| Line::from(Span::styled(line.clone(), warn())))
             .collect();
-        let block = Block::bordered()
-            .title(" Could not be read ")
-            .border_style(warn());
-        frame.render_widget(
-            Paragraph::new(lines).block(block).wrap(Wrap { trim: true }),
-            warning_area,
-        );
+        let block = Block::bordered().title(*title).border_style(warn());
+        frame.render_widget(Paragraph::new(lines).block(block), *strip);
     }
 }
 
@@ -391,11 +458,12 @@ fn holdings(app: &App, workspace: &Workspace, frame: &mut Frame, area: Rect) {
 /// it rather than as rows of their own.
 const ISSUE_INDENT: &str = "        ";
 
-/// One artifact: its kind, its name, what it is for, and, underneath, what
+/// One artifact: its kind, its name, how it stands in its project and which
+/// of `agents`, the project's, read it, what it is for, and, underneath, what
 /// `validate` would say about it, right beside the thing it is about, wrapped
 /// to `room` rather than cut off, because the end of a reason is usually the
 /// part that says what to do.
-fn item_row(item: &Item, width: usize, room: usize) -> ListItem<'_> {
+fn item_row<'a>(item: &'a Item, agents: &[Agent], width: usize, room: usize) -> ListItem<'a> {
     let name = printable(&item.name);
     let padding = width.saturating_sub(name.chars().count());
     let red = Style::default().fg(Color::Red);
@@ -415,13 +483,32 @@ fn item_row(item: &Item, width: usize, room: usize) -> ListItem<'_> {
             Span::styled(printable(&item.summary), Style::default().fg(Color::Gray)),
         ),
     };
-    let mut lines = vec![Line::from(vec![
+    let mut spans = vec![
         mark,
         Span::styled(format!("{:<5} ", item.kind.slug()), dim()),
         Span::styled(format!("{name}{}", " ".repeat(padding)), bold()),
         Span::raw("  "),
-        summary,
-    ])];
+    ];
+    // What `status` says of it, before what it is for: a row of the
+    // workspace's own, which is no project's, says nothing of the kind.
+    if let Some(state) = item.state {
+        let widest = State::ALL
+            .iter()
+            .map(|state| state.slug().len())
+            .max()
+            .unwrap_or(0);
+        spans.push(Span::styled(
+            format!("{:<widest$}", state.slug()),
+            state_style(state),
+        ));
+        spans.push(Span::raw(" "));
+        if !agents.is_empty() {
+            spans.extend(badges(agents, &item.agents));
+            spans.push(Span::raw("  "));
+        }
+    }
+    spans.push(summary);
+    let mut lines = vec![Line::from(spans)];
     for issue in item.broken.iter().chain(&item.issues) {
         for part in wrap(&printable(issue), room) {
             lines.push(Line::from(Span::styled(
@@ -433,8 +520,53 @@ fn item_row(item: &Item, width: usize, room: usize) -> ListItem<'_> {
     ListItem::new(lines)
 }
 
-/// Break text into lines of at most `room` characters, at spaces where there
+/// What a state looks like: green for what Mindflayer installed whole,
+/// yellow for an install partly gone, which the next install puts back, and
+/// magenta for somebody's, which no key of Mindflayer's changes.
+fn state_style(state: State) -> Style {
+    match state {
+        State::Installed => Style::default().fg(Color::Green),
+        State::Partial => warn(),
+        State::Foreign => Style::default().fg(Color::Magenta),
+        State::Authored => Style::default(),
+    }
+}
+
+/// A badge for each of `slots`, the agents a project names, in its place
+/// whether or not the artifact reaches it: shown where it is among `reached`,
+/// blank where it is not, so a column of rows reads down by agent.
+fn badges(slots: &[Agent], reached: &[Agent]) -> Vec<Span<'static>> {
+    let mut spans = Vec::new();
+    for (index, agent) in slots.iter().enumerate() {
+        if index > 0 {
+            spans.push(Span::raw(" "));
+        }
+        let label = badge(*agent);
+        spans.push(if reached.contains(agent) {
+            Span::styled(label, bold().fg(Color::Cyan))
+        } else {
+            Span::raw(" ".repeat(label.chars().count()))
+        });
+    }
+    spans
+}
+
+/// The two letters a row shows for an agent: its own initials rather than
+/// its first, which Claude Code and Codex share.
+pub(crate) const fn badge(agent: Agent) -> &'static str {
+    match agent {
+        Agent::Claude => "CC",
+        Agent::Codex => "CX",
+        Agent::OpenCode => "OC",
+    }
+}
+
+/// Break text into lines at most `room` columns wide, at spaces where there
 /// are any.
+///
+/// Measured in the columns a terminal draws, not in characters: a line as
+/// many characters long as the room, holding some drawn two columns wide,
+/// would otherwise run past the border and be cut there.
 fn wrap(text: &str, room: usize) -> Vec<String> {
     if room == 0 {
         return vec![text.to_owned()];
@@ -442,25 +574,42 @@ fn wrap(text: &str, room: usize) -> Vec<String> {
     let mut lines = Vec::new();
     let mut line = String::new();
     for word in text.split(' ') {
-        let taken = line.chars().count();
-        if taken > 0 && taken + 1 + word.chars().count() > room {
+        let taken = columns(&line);
+        if taken > 0 && taken + 1 + columns(word) > room {
             lines.push(std::mem::take(&mut line));
         }
         if !line.is_empty() {
             line.push(' ');
         }
         line.push_str(word);
-        // A word longer than the room is cut where the room ends.
-        while line.chars().count() > room {
-            let head: String = line.chars().take(room).collect();
-            line = line.chars().skip(room).collect();
-            lines.push(head);
+        // A word wider than the room is cut where the room ends.
+        while columns(&line) > room {
+            let rest = line.split_off(fitting(&line, room));
+            lines.push(std::mem::replace(&mut line, rest));
         }
     }
     if !line.is_empty() {
         lines.push(line);
     }
     lines
+}
+
+/// How many columns a terminal draws `text` in.
+fn columns(text: &str) -> usize {
+    Span::raw(text).width()
+}
+
+/// Where `line` is cut for what comes before to fit in `room` columns: at
+/// least one character in, so one wider than the room still moves on.
+fn fitting(line: &str, room: usize) -> usize {
+    let mut taken = 0;
+    for (at, character) in line.char_indices() {
+        taken += columns(character.encode_utf8(&mut [0; 4]));
+        if taken > room {
+            return if at == 0 { character.len_utf8() } else { at };
+        }
+    }
+    line.len()
 }
 
 /// The keys, most needed first so a narrow terminal cuts the least useful,
@@ -473,10 +622,10 @@ fn footer(app: &App, frame: &mut Frame, area: Rect) {
             "q quit  ? keys  enter show  e edit  r rename  d delete  a add  ← back  v validate"
         }
         (Focus::Projects, Scope::Workspace) => {
-            "q quit  ? keys  → open  a add  m minds  l link  u unlink  v validate  g gather  L load  s shelf  i install"
+            "q quit  ? keys  → open  a add  m minds  l link  u unlink  v validate  g gather  L load  s shelf  i install  t agents  T targets"
         }
         (Focus::Projects, Scope::Project) => {
-            "q quit  ? keys  → open  a add  v validate  l link it to the workspace above  L load"
+            "q quit  ? keys  → open  a add  v validate  l link it to the workspace above  L load  t agents  T targets"
         }
     };
     let second = match &app.message {
@@ -574,6 +723,106 @@ fn renaming(app: &App, form: &RenameForm, frame: &mut Frame, area: Rect) {
     keys(frame, rows[4], "enter rename   esc cancel");
 }
 
+/// Where one project installs skills, typed, and what applying it would run.
+fn targeting(app: &App, form: &TargetsForm, frame: &mut Frame, area: Rect) {
+    let project = app
+        .workspace()
+        .and_then(|workspace| workspace.members.get(form.member))
+        .map_or_else(String::new, |member| printable(&member.name));
+    let inner = popup(
+        frame,
+        area,
+        &format!("Where {project} installs {}s", form.kind),
+        90,
+        8,
+    );
+    let rows = lines(inner, 6);
+
+    input(
+        frame,
+        rows[0],
+        &format!("{}s go in", form.kind),
+        &form.folders,
+        true,
+    );
+    for (row, hint) in [
+        "folders in the project, a space between each; none for where its agents read",
+        "an agent sees a folder of the project's own only once it is pointed there",
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        let line = Line::from(vec![
+            Span::raw(" ".repeat(usize::from(LABEL))),
+            Span::styled(hint, dim()),
+        ]);
+        frame.render_widget(Paragraph::new(line), rows[row + 1]);
+    }
+    runs(frame, rows[3], app.targets_task(form).as_ref());
+    error(frame, rows[4], form.error.as_deref());
+    keys(frame, rows[5], "enter apply   esc cancel");
+}
+
+/// The agents and share toggles of one project, and what applying them
+/// would run.
+fn setting(app: &App, form: &SettingsForm, frame: &mut Frame, area: Rect) {
+    let project = app
+        .workspace()
+        .and_then(|workspace| workspace.members.get(form.member))
+        .map_or_else(String::new, |member| printable(&member.name));
+    let fields = SettingsForm::FIELDS;
+    let height = u16::try_from(fields).unwrap_or(5) + 6;
+    let inner = popup(
+        frame,
+        area,
+        &format!("Agents and sharing for {project}"),
+        90,
+        height,
+    );
+    let rows = lines(inner, fields + 4);
+
+    for (at, (agent, ticked)) in form.ticked.iter().enumerate() {
+        let line = Line::from(vec![
+            label(agent.name(), form.field == at),
+            tick(*ticked),
+            Span::styled(format!("  {}", badge(*agent)), dim()),
+        ]);
+        frame.render_widget(Paragraph::new(line), rows[at]);
+    }
+    let share = SettingsForm::share_field();
+    let modes: Vec<(String, bool)> = Share::ALL
+        .iter()
+        .map(|mode| (mode.name().to_owned(), *mode == form.share))
+        .collect();
+    choices(frame, rows[share], "share", &modes, form.field == share);
+    let line = Line::from(vec![
+        label("edit tracked", form.field == share + 1),
+        tick(form.edit_tracked),
+        Span::styled(
+            "  a file git tracks may be edited to reach an agent, when local",
+            dim(),
+        ),
+    ]);
+    frame.render_widget(Paragraph::new(line), rows[share + 1]);
+
+    runs(frame, rows[fields + 1], app.settings_task(form).as_ref());
+    error(frame, rows[fields + 2], form.error.as_deref());
+    keys(
+        frame,
+        rows[fields + 3],
+        "enter apply   ↑↓ move   space tick   ←→ share   esc cancel",
+    );
+}
+
+/// A box, ticked or not.
+fn tick(ticked: bool) -> Span<'static> {
+    if ticked {
+        Span::styled("[x]", bold().fg(Color::Cyan))
+    } else {
+        Span::styled("[ ]", dim())
+    }
+}
+
 /// A labelled line of choices, the chosen one bracketed.
 fn choices(frame: &mut Frame, area: Rect, name: &str, offered: &[(String, bool)], focused: bool) {
     let mut line = vec![label(name, focused)];
@@ -618,7 +867,10 @@ fn linking(app: &App, form: &LinkForm, frame: &mut Frame, area: Rect) {
     if workspace.unlinked.is_empty() {
         frame.render_widget(
             Paragraph::new(Span::styled(
-                "nothing unlinked found under this workspace; type a path",
+                format!(
+                    "nothing unlinked found under {}; type a path",
+                    looked_under(workspace)
+                ),
                 dim(),
             )),
             rows[2],
@@ -855,6 +1107,20 @@ fn reading(reader: &Reader, frame: &mut Frame, area: Rect) {
     );
 }
 
+/// Where the screen looked for what could be linked, as its texts name it:
+/// the workspace, or the folders `flayer minds` was given.
+fn looked_under(workspace: &Workspace) -> String {
+    if workspace.roots.is_empty() {
+        return String::from("this workspace");
+    }
+    let roots: Vec<String> = workspace
+        .roots
+        .iter()
+        .map(|root| printable(&root.display().to_string()))
+        .collect();
+    roots.join(", ")
+}
+
 /// The minds screen: every directory the workspace manages or could, ticked
 /// where it does, over everything below the header.
 fn minds_screen(app: &App, screen: &Minds, frame: &mut Frame, area: Rect) {
@@ -869,6 +1135,16 @@ fn minds_screen(app: &App, screen: &Minds, frame: &mut Frame, area: Rect) {
     let name = app
         .workspace()
         .map_or_else(String::new, |workspace| printable(&workspace.name));
+    // Where it looked, when that is not the workspace the title names.
+    let under = app
+        .workspace()
+        .filter(|workspace| !workspace.roots.is_empty())
+        .map_or_else(String::new, |workspace| {
+            format!(", found under {}", looked_under(workspace))
+        });
+    let looked = app
+        .workspace()
+        .map_or_else(|| String::from("this workspace"), looked_under);
     let (link, init, unlink) = screen.counts();
     let waiting = match (link, unlink) {
         (0, 0) => String::from("nothing marked"),
@@ -880,7 +1156,7 @@ fn minds_screen(app: &App, screen: &Minds, frame: &mut Frame, area: Rect) {
     let block = Block::bordered()
         .border_type(BorderType::Thick)
         .border_style(Style::default().fg(Color::Cyan))
-        .title(format!(" Minds in {name} "))
+        .title(format!(" Minds in {name}{under} "))
         .title_bottom(
             Line::from(format!(
                 " ↑↓ move   space tick   a apply   esc back · {waiting} "
@@ -890,10 +1166,43 @@ fn minds_screen(app: &App, screen: &Minds, frame: &mut Frame, area: Rect) {
     let inner = block.inner(box_);
     frame.render_widget(block, box_);
 
+    // What the scan missed gets a strip of its own, as a project's unreadable
+    // files do, so a folder typed wrong reads as that rather than as a folder
+    // with nothing in it, and no list scrolls it out of sight. Sized without
+    // `clamp`, which panics on a screen too short for its floor.
+    let warnings = app
+        .workspace()
+        .map_or(&[][..], |workspace| &workspace.scan_warnings[..]);
+    let inner = if warnings.is_empty() {
+        inner
+    } else {
+        let height = u16::try_from(warnings.len() + 2)
+            .unwrap_or(u16::MAX)
+            .min((inner.height / 2).max(3));
+        let parts = Layout::default()
+            .direction(Direction::Vertical)
+            .constraints([Constraint::Min(1), Constraint::Length(height)])
+            .split(inner);
+        let lines: Vec<Line> = warnings
+            .iter()
+            .map(|warning| Line::from(Span::styled(printable(warning), warn())))
+            .collect();
+        let strip = Block::bordered()
+            .title(" What the scan missed ")
+            .border_style(warn());
+        frame.render_widget(
+            Paragraph::new(lines).block(strip).wrap(Wrap { trim: true }),
+            parts[1],
+        );
+        parts[0]
+    };
+
     if screen.rows.is_empty() {
         frame.render_widget(
             Paragraph::new(Span::styled(
-                "nothing linked, and no repository under this workspace; l links one by its path",
+                format!(
+                    "nothing linked, and no repository under {looked}; l links one by its path"
+                ),
                 dim(),
             ))
             .wrap(Wrap { trim: true }),
