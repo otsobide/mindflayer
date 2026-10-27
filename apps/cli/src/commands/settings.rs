@@ -138,25 +138,10 @@ fn change_project(
     for line in cleared(project, &applied.swept) {
         let _ = writeln!(outcome.stdout, "  {line}");
     }
-    let into = project.name();
     for retarget in &plan.installations {
-        for left in &retarget.left {
-            let name = &retarget.name;
-            let at = shown(project, &left.path);
-            let warning = match &left.why {
-                Why::Foreign => format!(
-                    "warning: {into} already has a {name} at {at} that Mindflayer did not put \
-                     there, so it was left alone, and {name} was not copied there"
-                ),
-                Why::Unsourced => format!(
-                    "warning: {name} was not copied to {at}: no copy of it in {into} still holds \
-                     what was installed"
-                ),
-                Why::Edited | Why::Uncompared(_) => continue,
-            };
-            outcome.stderr.push(warning);
-            outcome.ok = false;
-        }
+        let warnings = not_copied(project, retarget);
+        outcome.ok &= warnings.is_empty();
+        outcome.stderr.extend(warnings);
     }
     for failure in &applied.failures {
         outcome.stderr.push(format!("warning: {failure}"));
@@ -164,6 +149,33 @@ fn change_project(
     }
     outcome.stderr.extend(outside(project, plan));
     Ok(said.before(outcome))
+}
+
+/// A warning for each folder an agent the project names reads that an
+/// installation was not copied to, once the change is made: over somebody's
+/// skill, or for want of a copy to make it from. In a dry run each is a line
+/// of what would happen instead ([`moved`]).
+pub(crate) fn not_copied(project: &MindProject, retarget: &Retarget) -> Vec<String> {
+    let into = project.name();
+    let name = &retarget.name;
+    retarget
+        .left
+        .iter()
+        .filter_map(|left| {
+            let at = shown(project, &left.path);
+            match &left.why {
+                Why::Foreign => Some(format!(
+                    "warning: {into} already has a {name} at {at} that Mindflayer did not put \
+                     there, so it was left alone, and {name} was not copied there"
+                )),
+                Why::Unsourced => Some(format!(
+                    "warning: {name} was not copied to {at}: no copy of it in {into} still holds \
+                     what was installed"
+                )),
+                Why::Edited | Why::Uncompared(_) => None,
+            }
+        })
+        .collect()
 }
 
 /// What a change that changes nothing says: what the project is already.
@@ -281,8 +293,15 @@ fn report(project: &MindProject, plan: &Plan, done: bool) -> String {
 }
 
 /// The lines for one installation's copies. In a dry run a copy left out
-/// of a new folder is one of them; made, it is a warning instead.
-fn moved(text: &mut String, project: &MindProject, retarget: &Retarget, done: bool, local: bool) {
+/// of a new folder is one of them; made, it is a warning instead
+/// ([`not_copied`]).
+pub(crate) fn moved(
+    text: &mut String,
+    project: &MindProject,
+    retarget: &Retarget,
+    done: bool,
+    local: bool,
+) {
     let would = |now: &'static str, then: &'static str| if done { now } else { then };
     let name = &retarget.name;
     for added in &retarget.added {
@@ -351,7 +370,13 @@ fn moved(text: &mut String, project: &MindProject, retarget: &Retarget, done: bo
 /// What a local project outside every git work tree is told, as an install
 /// there tells it: a note, since nothing went wrong.
 fn outside(project: &MindProject, plan: &Plan) -> Option<String> {
-    plan.outside
+    outside_note(project, plan.outside)
+}
+
+/// The note [`outside`] gives, for a plan that says it keeps something out
+/// of git where nothing can (`outside`).
+pub(crate) fn outside_note(project: &MindProject, outside: bool) -> Option<String> {
+    outside
         .then(|| {
             Excluded::Outside {
                 project: project.root().to_path_buf(),
@@ -364,7 +389,7 @@ fn outside(project: &MindProject, plan: &Plan) -> Option<String> {
 
 /// Agents as `--agents` takes them, comma-separated, so the line holds no
 /// space for a script splitting on spaces to cut.
-fn agents(agents: &[Agent]) -> String {
+pub(crate) fn agents(agents: &[Agent]) -> String {
     agents
         .iter()
         .map(|agent| agent.name())
