@@ -593,6 +593,38 @@ fn a_second_migration_finds_nothing_to_do_and_writes_nothing() {
 }
 
 #[test]
+fn a_moved_project_has_nothing_to_plan_even_when_the_ledger_cannot_be_read() {
+    let (_dir, workspace, project) = older(&["deploy"], &Directories::default());
+    migrated(&workspace, &project, &Agent::ALL, Share::Shared);
+    // A ledger a newer Mindflayer wrote is refused: a dry run says what the
+    // real one will, which never opens it for a project with nothing to move.
+    rusqlite::Connection::open(workspace.ledger_path())
+        .unwrap()
+        .pragma_update(None, "user_version", 99)
+        .unwrap();
+    let moved = MindProject::open(project.root()).unwrap();
+
+    let planned = migrate::project_plan(
+        Some(&workspace),
+        &moved,
+        &Agent::ALL,
+        Share::Shared,
+        &AgentHomes::default(),
+    )
+    .unwrap();
+    let done = migrate::project(
+        Some(&workspace),
+        &moved,
+        &Agent::ALL,
+        Share::Shared,
+        &AgentHomes::default(),
+    )
+    .unwrap();
+
+    assert!(planned.is_none() && done.is_none());
+}
+
+#[test]
 fn a_migration_that_fails_part_way_puts_back_everything_it_wrote() {
     let (dir, workspace, project) = older(&["deploy", "review"], &Directories::default());
     // Where the settings would go, so writing them fails once every copy

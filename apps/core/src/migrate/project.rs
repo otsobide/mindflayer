@@ -116,6 +116,11 @@ pub fn project_plan(
     share: Share,
     homes: &AgentHomes,
 ) -> Result<Option<ProjectPlan>, MigrateError> {
+    // Before the ledger is opened, as `project` asks, so a ledger that
+    // cannot be read fails neither for a project with nothing to move.
+    if project.settings().is_some() {
+        return Ok(None);
+    }
     let linked = linking(workspace, project);
     let ledger = match linked {
         Some(workspace) => Some(workspace.ledger_for_reading()?),
