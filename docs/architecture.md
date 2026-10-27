@@ -1530,10 +1530,11 @@ command that writes to it makes it; a read never does, and changes an existing
 one only to migrate it ([A read leaves the ledger as it finds
 it](#a-read-leaves-the-ledger-as-it-finds-it)).
 
-Four things are recorded: the **sources** gathered from, the **artifacts** on
+Five things are recorded: the **sources** gathered from, the **artifacts** on
 the shelf and which source each came from, the **installations** (which skill
-Mindflayer put into which project, from where, every copy it wrote and a hash
-of what it wrote), and an **action log**. The log keeps failures too: a log
+or rule Mindflayer put into which project, from where, every copy it wrote and
+a hash of what it wrote), the **files Mindflayer made** in a project, which it
+may take away again, and an **action log**. The log keeps failures too: a log
 of only what worked cannot answer the question anybody opens it with.
 Timestamps are Unix seconds, which needs no date library and which SQLite
 renders with `datetime(at, 'unixepoch')`.
@@ -1549,7 +1550,7 @@ A source's shelf folder is stored rather than derived: two URLs can reduce to
 the same readable name, and where a source's files went is a fact about the
 past that must not move when the naming rule changes.
 
-The schema has had three versions, each a block in `Ledger::migrate` and a
+The schema has had four versions, each a block in `Ledger::migrate` and a
 constant beside it:
 
 1. `sources`, `artifacts` and `actions`: what was gathered, from where, and
@@ -1564,6 +1565,14 @@ constant beside it:
    ([D-04](#d-04-an-edited-copy-is-detected-not-disowned)). The
    installation's own path moved into its one target, so a copy's path is
    kept in one place (#30).
+4. A `content_hash` of each target's own, for a kind whose copies hold
+   different bytes: a rule's section of the block in `AGENTS.md` and its
+   file for Claude ([installing rules](#installing-rules)), each of which
+   can be edited apart from the other. A skill's targets leave it empty,
+   every one holding the tree the installation's hash names. And
+   `created_files`, each file Mindflayer made in a project rather than
+   wrote into, so the block goes with the last rule and the file with it
+   only when Mindflayer made it (#45).
 
 An older ledger is migrated step by step, so one made two versions ago ends
 where one made today begins, and two rules hold for every step:
@@ -1599,7 +1608,9 @@ the code that spells it now: a later change to the spelling would otherwise
 change what an earlier step wrote. Version 3 gives an installation from a
 source that source's origin, and one from the workspace or a load none, since
 version 2 kept nothing to say which; it makes up no hash for a copy nobody
-hashed when it was written, and D-04 says how a missing one reads. Each step
+hashed when it was written, and D-04 says how a missing one reads. Version 4
+fills in nothing: no build before it installed a rule, and a skill's targets
+need no hash of their own. Each step
 comes with a fixture of what the version before it wrote
 (`apps/core/tests/fixtures/ledger-v<N>.sql`, dumped from a ledger that build
 made), from which a test migrates, checks every row is kept, and opens the
@@ -1613,10 +1624,11 @@ alike in every agent's folder, since the copy's own folder is not part of it.
 Folders count, so two copies hash alike exactly when `copy::same` calls them
 the same. A link is refused rather than followed: Mindflayer never writes one
 into a copy, since `copy::tree` copies what a link points at, and following
-one could read anything. It is kept once per installation, not once per
-target: every target is written from one copy, so one hash is what each is
-compared with, and a copy somebody edited is the one whose own hash no longer
-matches it. An install records the hash of the copy as it stands once
+one could read anything. For a skill it is kept once per installation, not
+once per target: every target is written from one copy, so one hash is what
+each is compared with, and a copy somebody edited is the one whose own hash no
+longer matches it. A rule's targets each keep their own, `hash::bytes` of
+what each holds, since its section and its file are not the same bytes. An install records the hash of the copy as it stands once
 written; one that cannot be read back is recorded with none rather than not
 at all, since without a record it would be Foreign for good. That is a
 `warning:` and a non-zero exit, and the log's entry says why, rather than a

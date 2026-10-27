@@ -802,6 +802,8 @@ pub fn install(
                 .map(|(target, to)| Target {
                     agent: target.agent(),
                     path: route(project.root(), to),
+                    // Every copy holds the tree `content_hash` names.
+                    content_hash: None,
                 })
                 .collect(),
         },

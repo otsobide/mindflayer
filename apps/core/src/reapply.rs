@@ -258,6 +258,8 @@ impl Added {
         Target {
             agent: install::agent_of(&self.agents),
             path: install::route(root, &self.path),
+            // A skill's copy, holding the tree its installation's hash names.
+            content_hash: None,
         }
     }
 }
@@ -533,6 +535,7 @@ pub fn apply(
                     kept.push(Target {
                         agent: recorded_agent(retarget, &root, &path),
                         path: install::route(&root, &path),
+                        content_hash: None,
                     });
                     applied
                         .failures
@@ -841,6 +844,7 @@ pub(crate) fn retarget(
                 retarget.kept.push(Target {
                     agent: install::agent_of(&now.agents),
                     path: route,
+                    content_hash: None,
                 });
             }
             continue;

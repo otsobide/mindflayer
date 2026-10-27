@@ -90,6 +90,7 @@ fn target(agent: Option<&str>, path: &str) -> Target {
     Target {
         agent: agent.map(str::to_owned),
         path: path.to_owned(),
+        content_hash: None,
     }
 }
 

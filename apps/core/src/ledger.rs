@@ -34,7 +34,7 @@ use crate::url::{carries_credentials, redacted};
 /// Refused if the file on disk is newer, for the same reason a marker file is:
 /// an old binary silently misreading a newer database is the failure that has
 /// no error message.
-pub const SCHEMA_VERSION: u32 = 3;
+pub const SCHEMA_VERSION: u32 = 4;
 
 /// The file name, under `.mindflayer/`.
 pub const LEDGER_FILE: &str = "mindflayer.db";
@@ -173,6 +173,12 @@ pub struct Target {
     pub agent: Option<String>,
     /// Where the copy is, relative to the project, `/` separated.
     pub path: String,
+    /// What this copy holds, when it is not what the installation's
+    /// `content_hash` names: a rule's section in `AGENTS.md` and its file
+    /// for Claude hold different bytes, each with a hash of its own. `None`
+    /// for a skill's copies, every one of which holds the tree the
+    /// installation's hash names.
+    pub content_hash: Option<String>,
 }
 
 /// Where one installation's copies are once its project has moved from a
@@ -431,6 +437,11 @@ impl Ledger {
             transaction
                 .execute_batch(SCHEMA_V3)
                 .map_err(|source| self.failed("giving installations their targets", source))?;
+        }
+        if found < 4 {
+            transaction.execute_batch(SCHEMA_V4).map_err(|source| {
+                self.failed("giving each copy a hash and noting the files made", source)
+            })?;
         }
 
         transaction
@@ -778,15 +789,7 @@ impl Ledger {
                 [id],
             )
             .map_err(failed)?;
-        for target in &installation.targets {
-            transaction
-                .execute(
-                    "INSERT INTO installation_targets (installation_id, agent, path)
-                     VALUES (?1, ?2, ?3)",
-                    rusqlite::params![id, target.agent, target.path],
-                )
-                .map_err(failed)?;
-        }
+        insert_targets(&transaction, id, &installation.targets).map_err(failed)?;
         transaction.commit().map_err(failed)
     }
 
@@ -826,7 +829,7 @@ impl Ledger {
         let mut statement = self
             .connection
             .prepare(
-                "SELECT agent, path FROM installation_targets
+                "SELECT agent, path, content_hash FROM installation_targets
                   WHERE installation_id = ?1 ORDER BY path",
             )
             .map_err(failed)?;
@@ -835,6 +838,7 @@ impl Ledger {
                 Ok(Target {
                     agent: row.get(0)?,
                     path: row.get(1)?,
+                    content_hash: row.get(2)?,
                 })
             })
             .map_err(failed)?
@@ -1027,7 +1031,8 @@ impl Ledger {
             .prepare(
                 "SELECT installations.id, installations.name, installations.source_id,
                         installations.origin, installations.content_hash,
-                        installation_targets.agent, installation_targets.path
+                        installation_targets.agent, installation_targets.path,
+                        installation_targets.content_hash
                    FROM installations
                    LEFT JOIN installation_targets
                      ON installation_targets.installation_id = installations.id
@@ -1045,12 +1050,14 @@ impl Ledger {
                     row.get::<_, Option<String>>(4)?,
                     row.get::<_, Option<String>>(5)?,
                     row.get::<_, Option<String>>(6)?,
+                    row.get::<_, Option<String>>(7)?,
                 ))
             })
             .map_err(failed)?;
         let mut records: Vec<(i64, InstallRecord)> = Vec::new();
         for row in rows {
-            let (id, name, source_id, origin, content_hash, agent, path) = row.map_err(failed)?;
+            let (id, name, source_id, origin, content_hash, agent, path, held) =
+                row.map_err(failed)?;
             // One row a copy, an installation's together, since a name is
             // one installation a project and the rows come in name order.
             if records.last().is_none_or(|(last, _)| *last != id) {
@@ -1070,7 +1077,11 @@ impl Ledger {
             // None for an installation recording no copy, which the join
             // still gives a row.
             if let (Some(path), Some((_, record))) = (path, records.last_mut()) {
-                record.targets.push(Target { agent, path });
+                record.targets.push(Target {
+                    agent,
+                    path,
+                    content_hash: held,
+                });
             }
         }
         Ok(records.into_iter().map(|(_, record)| record).collect())
@@ -1078,7 +1089,8 @@ impl Ledger {
 
     /// Every copy this ledger says Mindflayer wrote into a project for
     /// `kind`, whichever installation wrote it, by path relative to the
-    /// project, `/` separated, in path order.
+    /// project, `/` separated, in path order, each once: the rules of a
+    /// project share its `AGENTS.md`, a section each.
     ///
     /// By copy rather than by name, for a listing that has to say which of
     /// the folders holding a skill hold Mindflayer's copy: a name alone
@@ -1091,7 +1103,7 @@ impl Ledger {
         let mut statement = self
             .connection
             .prepare(
-                "SELECT installation_targets.path
+                "SELECT DISTINCT installation_targets.path
                    FROM installation_targets
                    JOIN installations
                      ON installations.id = installation_targets.installation_id
@@ -1103,6 +1115,31 @@ impl Ledger {
             .query_map(rusqlite::params![project, kind.slug()], |row| row.get(0))
             .map_err(failed)?;
         rows.collect::<Result<Vec<String>, _>>().map_err(failed)
+    }
+
+    /// Whether Mindflayer made the file at `path`, a route from the project,
+    /// rather than wrote into one that was there: what a render was told
+    /// when it made it ([`crate::agents_md::Written::Created`]), kept until
+    /// the file stops being Mindflayer's.
+    pub fn created(&self, project: &str, path: &str) -> Result<bool, LedgerError> {
+        self.connection
+            .query_row(
+                "SELECT 1 FROM created_files WHERE project = ?1 AND path = ?2",
+                rusqlite::params![project, path],
+                |_| Ok(()),
+            )
+            .optional()
+            .map(|found| found.is_some())
+            .map_err(|source| self.failed("reading which files Mindflayer made", source))
+    }
+
+    /// Record whether Mindflayer made the file at `path`, a route from the
+    /// project: kept when it did, forgotten when it did not or the file has
+    /// stopped being Mindflayer's. A file noted twice keeps the time it was
+    /// first noted.
+    pub fn set_created(&self, project: &str, path: &str, created: bool) -> Result<(), LedgerError> {
+        set_created_in(&self.connection, project, path, created)
+            .map_err(|source| self.failed("noting which files Mindflayer made", source))
     }
 
     /// The sources whose stored URL still carries credentials, which only a
@@ -1397,14 +1434,45 @@ fn retarget_in(
         "DELETE FROM installation_targets WHERE installation_id = ?1",
         [id],
     )?;
+    insert_targets(connection, id, targets)?;
+    Ok(Some(id))
+}
+
+/// Record `targets` as the copies of the installation `id`, through
+/// `connection`, which a caller holds a transaction on, and which holds none
+/// of them yet.
+fn insert_targets(connection: &Connection, id: i64, targets: &[Target]) -> rusqlite::Result<()> {
     for target in targets {
         connection.execute(
-            "INSERT INTO installation_targets (installation_id, agent, path)
-             VALUES (?1, ?2, ?3)",
-            rusqlite::params![id, target.agent, target.path],
+            "INSERT INTO installation_targets (installation_id, agent, path, content_hash)
+             VALUES (?1, ?2, ?3, ?4)",
+            rusqlite::params![id, target.agent, target.path, target.content_hash],
         )?;
     }
-    Ok(Some(id))
+    Ok(())
+}
+
+/// [`Ledger::set_created`], through `connection`, which may hold a
+/// transaction a caller keeps it in.
+fn set_created_in(
+    connection: &Connection,
+    project: &str,
+    path: &str,
+    created: bool,
+) -> rusqlite::Result<()> {
+    if created {
+        connection.execute(
+            "INSERT INTO created_files (project, path, created_at) VALUES (?1, ?2, ?3)
+             ON CONFLICT (project, path) DO NOTHING",
+            rusqlite::params![project, path, now()],
+        )?;
+    } else {
+        connection.execute(
+            "DELETE FROM created_files WHERE project = ?1 AND path = ?2",
+            rusqlite::params![project, path],
+        )?;
+    }
+    Ok(())
 }
 
 /// Append one entry to the action log through `connection`, every URL in
@@ -1810,6 +1878,38 @@ UPDATE installations
                    FROM sources s
                   WHERE s.id = installations.source_id)
  WHERE source_id IS NOT NULL;
+";
+
+/// The fourth schema: what installing a rule writes (#45).
+///
+/// A rule reaches a project marked by its settings as a section of the block
+/// in its `AGENTS.md` and, for Claude, as a file in
+/// `.claude/rules/mindflayer`, which hold different bytes: the section is the
+/// rule without its front matter, the file the rule as written. So a target
+/// gains a `content_hash` of its own, which is what tells a section or a file
+/// edited since from the one written (D-04). A skill's copies leave it empty:
+/// every one of them holds the tree the installation's `content_hash` names,
+/// which is why version 3 kept one hash an installation.
+///
+/// `created_files` names each file Mindflayer made in a project, by its
+/// route from the project, rather than wrote into: an `AGENTS.md` that was
+/// not there until a rule was installed. The block is taken out of a file
+/// with the last rule, and only a file Mindflayer made goes with it, so
+/// whether it made the file is kept until then. A table of its own rather
+/// than a column of an installation's, since one file serves every rule of
+/// the project, and outlives each of them but the last.
+///
+/// Nothing older is filled in: no build before this one installed a rule,
+/// and every target it recorded is a skill's.
+const SCHEMA_V4: &str = "
+ALTER TABLE installation_targets ADD COLUMN content_hash TEXT;
+
+CREATE TABLE created_files (
+    project    TEXT    NOT NULL,
+    path       TEXT    NOT NULL,
+    created_at INTEGER NOT NULL,
+    UNIQUE (project, path)
+);
 ";
 
 #[cfg(test)]

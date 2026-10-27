@@ -339,6 +339,7 @@ fn a_project_whose_settings_install_skills_in_one_folder_gets_one_copy_there_alo
         [Target {
             agent: None,
             path: String::from(".skills/deploy"),
+            content_hash: None,
         }]
     );
     let surveyed = install::survey(&workspace, &ledger, &project, Kind::Skill).unwrap();
@@ -420,10 +421,12 @@ fn installing_into_a_project_marked_by_its_settings_puts_one_copy_where_each_age
             Target {
                 agent: None,
                 path: String::from(".agents/skills/deploy"),
+                content_hash: None,
             },
             Target {
                 agent: Some(String::from("claude")),
                 path: String::from(".claude/skills/deploy"),
+                content_hash: None,
             },
         ]
     );
@@ -447,6 +450,7 @@ fn a_project_naming_one_agent_gets_the_one_copy_that_agent_reads() {
         [Target {
             agent: Some(String::from("codex")),
             path: String::from(".agents/skills/deploy"),
+            content_hash: None,
         }]
     );
 }
@@ -613,6 +617,7 @@ fn two_agents_folders_that_are_one_on_disk_get_one_copy() {
         [Target {
             agent: None,
             path: String::from(".agents/skills/deploy"),
+            content_hash: None,
         }]
     );
 }
@@ -634,6 +639,7 @@ fn a_record_naming_a_copy_outside_the_project_is_refused_rather_than_removed() {
                 targets: vec![Target {
                     agent: None,
                     path: String::from("../deploy"),
+                    content_hash: None,
                 }],
             },
         )

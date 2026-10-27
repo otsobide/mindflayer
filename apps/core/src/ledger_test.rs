@@ -754,9 +754,74 @@ fn installation_of(name: &str, targets: &[(Option<&str>, &str)]) -> InstallRecor
             .map(|(agent, path)| Target {
                 agent: agent.map(str::to_owned),
                 path: (*path).to_owned(),
+                content_hash: None,
             })
             .collect(),
     }
+}
+
+#[test]
+fn each_copy_reads_back_with_the_hash_of_its_own_it_was_given() {
+    let ledger = Ledger::in_memory().unwrap();
+    let mut written = installation_of(
+        "git/no-force-push",
+        &[
+            (None, "AGENTS.md"),
+            (
+                Some("claude"),
+                ".claude/rules/mindflayer/git/no-force-push.md",
+            ),
+        ],
+    );
+    written.kind = Kind::Rule;
+    written.targets[0].content_hash = Some(String::from("section"));
+    written.targets[1].content_hash = Some(String::from("file"));
+
+    ledger.installed("collapse", &written).unwrap();
+
+    let read = ledger
+        .installation("collapse", Kind::Rule, "git/no-force-push")
+        .unwrap()
+        .unwrap();
+    // By path, as every copy reads back.
+    let mut expected = written;
+    expected.targets.reverse();
+    assert_eq!(read, expected);
+    assert_eq!(ledger.records("collapse", Kind::Rule).unwrap(), [expected]);
+}
+
+#[test]
+fn a_file_shared_by_several_installations_is_one_copy() {
+    let ledger = Ledger::in_memory().unwrap();
+    for name in ["commit-style", "review"] {
+        let mut rule = installation_of(name, &[(None, "AGENTS.md")]);
+        rule.kind = Kind::Rule;
+        ledger.installed("collapse", &rule).unwrap();
+    }
+
+    assert_eq!(
+        ledger.copies("collapse", Kind::Rule).unwrap(),
+        ["AGENTS.md"]
+    );
+}
+
+#[test]
+fn whether_mindflayer_made_a_file_is_kept_per_project_until_it_is_forgotten() {
+    let ledger = Ledger::in_memory().unwrap();
+    assert!(!ledger.created("collapse", "AGENTS.md").unwrap());
+
+    ledger.set_created("collapse", "AGENTS.md", true).unwrap();
+    // Noted twice is noted once.
+    ledger.set_created("collapse", "AGENTS.md", true).unwrap();
+
+    assert!(ledger.created("collapse", "AGENTS.md").unwrap());
+    assert!(!ledger.created("tanukeys", "AGENTS.md").unwrap());
+    assert!(!ledger.created("collapse", "CLAUDE.md").unwrap());
+
+    ledger.set_created("collapse", "AGENTS.md", false).unwrap();
+    assert!(!ledger.created("collapse", "AGENTS.md").unwrap());
+    // Forgetting what was never noted is nothing to do.
+    ledger.set_created("tanukeys", "AGENTS.md", false).unwrap();
 }
 
 #[test]
@@ -1070,6 +1135,7 @@ fn a_migration_the_ledger_cannot_finish_records_none_of_it() {
     let twice = Target {
         agent: None,
         path: String::from(".agents/skills/deploy"),
+        content_hash: None,
     };
 
     let failed = ledger.migrated(
