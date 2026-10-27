@@ -25,6 +25,8 @@
 use std::fmt;
 use std::path::Path;
 
+use serde::{Serialize, Serializer};
+
 use crate::agent::Agent;
 use crate::config_entry::{self, Edit, Format, Value};
 use crate::paths;
@@ -226,6 +228,14 @@ impl ProjectId {
 
     pub fn as_str(&self) -> &str {
         &self.0
+    }
+}
+
+/// As its text, the one spelling settings hold it in and an exclude group
+/// names it by, rather than as a struct around it.
+impl Serialize for ProjectId {
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        serializer.serialize_str(&self.0)
     }
 }
 
