@@ -1445,3 +1445,63 @@ fn a_bare_name_nothing_records_says_whose_is_there_of_either_kind() {
     );
     assert_eq!(fixture.text(), theirs);
 }
+
+#[test]
+fn a_render_says_what_each_renderer_found_once_in_one_list() {
+    // In no git work tree: what a local project keeps out of git is kept out
+    // of nothing, which the block and Claude's files each find.
+    let dir = TempDir::new().unwrap();
+    let (mut workspace, _) = FlayerWorkspace::init(dir.path()).unwrap();
+    let root = dir.path().join("app");
+    fs::create_dir_all(&root).unwrap();
+    let (project, _) =
+        MindProject::init_settings(&root, &Agent::ALL, Share::Local, &Directories::default())
+            .unwrap();
+    workspace.link(&project).unwrap();
+    let ledger = workspace.ledger().unwrap();
+    own_rule(&workspace, "git/no-force-push", NO_FORCE_PUSH);
+    own_rule(&workspace, "rust/errors", SCOPED);
+    put(&workspace, &ledger, &project, "git/no-force-push");
+    let candidate = install::offered(
+        &workspace,
+        &ledger,
+        &project,
+        Kind::Rule,
+        "rust/errors",
+        None,
+    )
+    .unwrap();
+
+    let rendered = install::install(
+        &workspace,
+        &ledger,
+        &project,
+        &candidate,
+        &AgentHomes::default(),
+    )
+    .unwrap()
+    .rendered
+    .unwrap();
+
+    assert_eq!(
+        rendered.all_warnings(),
+        [
+            format!(
+                "{}: in no git work tree, so Codex reads its AGENTS.md only when started in that \
+                 folder itself",
+                project.root().display()
+            ),
+            String::from(
+                "rule `rust/errors` states `paths`, so it reaches claude only: codex and \
+                 opencode read no .claude/rules"
+            ),
+        ]
+    );
+    assert_eq!(
+        rendered.notes(),
+        [format!(
+            "{}: not in a git work tree, so nothing keeps what is installed there out of git",
+            project.root().display()
+        )]
+    );
+}

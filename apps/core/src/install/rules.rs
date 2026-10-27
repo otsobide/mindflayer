@@ -84,6 +84,46 @@ pub struct Rendered {
     pub warnings: Vec<Warning>,
 }
 
+impl Rendered {
+    /// Everything the render has to warn of, each as a front end says it
+    /// after `warning: `: the rules as a whole first ([`Warning`]), which
+    /// say which agents read none of them, then the block's, the import's
+    /// and Claude's files' in the order they were rendered.
+    ///
+    /// Gathered here rather than by each front end, so none says one
+    /// renderer's warnings and forgets another's. Not `still_excluded`,
+    /// which an uninstall says of the rule it took out
+    /// ([`Removed::Removed`]), and an install of the project.
+    pub fn all_warnings(&self) -> Vec<String> {
+        let block = self.block.iter().flat_map(|block| &block.warnings);
+        self.warnings
+            .iter()
+            .map(ToString::to_string)
+            .chain(block.map(ToString::to_string))
+            .chain(self.import.warnings.iter().map(ToString::to_string))
+            .chain(self.files.warnings.iter().map(ToString::to_string))
+            .collect()
+    }
+
+    /// What nothing went wrong with but is worth knowing, each as a front
+    /// end says it after `note: `: that what the render kept out of git is
+    /// kept out of nothing, outside a git work tree ([`Excluded::warning`]).
+    /// Once, though the block and Claude's files each find it.
+    pub fn notes(&self) -> Vec<String> {
+        let mut notes: Vec<String> = Vec::new();
+        for note in [&self.excluded, &self.files.excluded]
+            .into_iter()
+            .flatten()
+            .filter_map(Excluded::warning)
+        {
+            if !notes.contains(&note) {
+                notes.push(note);
+            }
+        }
+        notes
+    }
+}
+
 /// Something a render of a project's rules has to say, which kept nothing
 /// from being written.
 #[derive(Debug, Clone, PartialEq, Eq, Error)]
