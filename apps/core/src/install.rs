@@ -13,6 +13,10 @@
 //! Where in the project is its agents' to say: a copy in each folder one of
 //! them reads ([`targets`]), written together and recorded as one
 //! installation, so that every agent the project names runs the same skill.
+//! A rule is no folder: it reaches a project marked by its settings as a
+//! section of the block in its `AGENTS.md`, rendered with every other rule
+//! the project has, and one a `mind.toml` marks as a copy of its file
+//! ([`rules`]).
 
 use std::fs;
 use std::io;
@@ -22,8 +26,11 @@ use std::time::Duration;
 use thiserror::Error;
 
 use crate::agent::{Agent, AgentHomes};
+use crate::agents_md::AgentsMdError;
 use crate::artifact::{self, issue_list, name_issues, Artifact, ArtifactError, ValidationIssue};
 use crate::catalog::{Catalog, DiscoveryFailure};
+use crate::claude_md::ClaudeMdError;
+use crate::claude_rules::ClaudeRulesError;
 use crate::copy;
 use crate::exclude::{self, ExcludeError, Excluded};
 use crate::gather::Scrub;
@@ -526,6 +533,15 @@ pub fn survey(
     project: &MindProject,
     kind: Kind,
 ) -> Result<Vec<Candidate>, InstallError> {
+    // A rule reaches a project marked by its settings through the block of
+    // its `AGENTS.md` rather than as a copy in a folder (D-03), so how one
+    // stands there is told by the ledger and that block.
+    if kind == Kind::Rule && project.settings().is_some() {
+        if rules::receives(project).is_err() {
+            return Ok(Vec::new());
+        }
+        return rules::survey(workspace, ledger, project, offers(workspace, ledger, kind)?);
+    }
     let Ok(targets) = targets(project, kind) else {
         return Ok(Vec::new());
     };
@@ -599,7 +615,7 @@ pub fn offered(
     name: &str,
     from: Option<&str>,
 ) -> Result<Candidate, InstallError> {
-    targets(project, kind)?;
+    receives(project, kind)?;
     let mut matching: Vec<Candidate> = survey(workspace, ledger, project, kind)?
         .into_iter()
         .filter(|candidate| candidate.name() == name)
@@ -616,6 +632,17 @@ pub fn offered(
             origins: matching.iter().map(Candidate::origin).collect(),
         }),
     }
+}
+
+/// Refuse `project` when an install of `kind` has nowhere to go in it: no
+/// [`targets`] for a kind copied into a folder, and for a rule into a
+/// project marked by its settings, which goes into its `AGENTS.md`, no agent
+/// to read it ([`rules::receives`]).
+fn receives(project: &MindProject, kind: Kind) -> Result<(), InstallError> {
+    if kind == Kind::Rule && project.settings().is_some() {
+        return rules::receives(project);
+    }
+    targets(project, kind).map(drop)
 }
 
 /// Copy one shelf entry into a project: a copy in each of its [`targets`],
@@ -909,6 +936,7 @@ pub fn install(
         swept,
         left_out,
         excluded,
+        rendered: None,
     })
 }
 
@@ -1039,8 +1067,9 @@ pub fn uninstall(
     homes: &AgentHomes,
 ) -> Result<Removed, InstallError> {
     installable_name(kind, name)?;
-    // Unused until a kind needs them on the way out.
-    let _ = homes;
+    if kind == Kind::Rule && project.settings().is_some() {
+        return rules::uninstall(workspace, ledger, project, name, homes);
+    }
     // Held from before the record is read until it is dropped, for the
     // reason `install` holds it: an install of the same name at the same
     // moment comes wholly before this or wholly after it. Between the copies
@@ -1103,6 +1132,7 @@ pub fn uninstall(
         name: name.to_owned(),
         paths,
         still_excluded,
+        rendered: None,
     })
 }
 
@@ -1304,6 +1334,12 @@ pub struct Installation {
     /// for a project whose copies are committed. [`Excluded::warning`] says
     /// when nothing keeps them out, outside a git work tree.
     pub excluded: Option<Excluded>,
+    /// What rendering the project's rules did, for a rule installed into a
+    /// project marked by its settings ([`rules::Rendered`]): every rule it
+    /// has is rendered with the one installed, and what there is to say of
+    /// any of them is said here. None for a skill, and for a rule copied
+    /// into a project a `mind.toml` marks.
+    pub rendered: Option<rules::Rendered>,
 }
 
 impl From<Installed> for Installation {
@@ -1315,6 +1351,7 @@ impl From<Installed> for Installation {
             swept: Vec::new(),
             left_out: Vec::new(),
             excluded: None,
+            rendered: None,
         }
     }
 }
@@ -1330,6 +1367,11 @@ pub enum Removed {
         /// could not be edited: a line left there keeps whatever somebody
         /// writes in that place later out of git, which is worth saying.
         still_excluded: Option<String>,
+        /// What rendering the project's rules without it did, for a rule
+        /// taken out of a project marked by its settings, as
+        /// [`Installation::rendered`] says for one installed. Boxed, being
+        /// far larger than what the other two say.
+        rendered: Option<Box<rules::Rendered>>,
     },
     /// Present, at `path`, but nobody here put it there.
     Foreign { name: String, path: PathBuf },
@@ -1545,7 +1587,19 @@ pub enum InstallError {
         target: PathBuf,
         within: PathBuf,
     },
-
+    #[error("rule `{name}` was installed from {}, which no longer offers it, so the project's rules are not rendered: put it back there, or uninstall it", .origin.as_deref().unwrap_or("a place not recorded"))]
+    NoLongerOffered {
+        name: String,
+        origin: Option<String>,
+    },
+    #[error("{file}: its block holds rule `{route}`, which this workspace did not install there, so the project's rules are not rendered: uninstall it from the workspace that did, or take its section out by hand")]
+    NotRecorded { file: PathBuf, route: String },
+    #[error(transparent)]
+    AgentsMd(#[from] AgentsMdError),
+    #[error(transparent)]
+    ClaudeMd(#[from] ClaudeMdError),
+    #[error(transparent)]
+    ClaudeRules(#[from] ClaudeRulesError),
     #[error("`{name}` cannot be installed: {}", issue_list(.issues))]
     Unfit {
         name: String,

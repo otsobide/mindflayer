@@ -493,6 +493,7 @@ fn installing_into_every_agents_folder_again_changes_nothing_and_uninstalling_ta
             name: String::from("deploy"),
             paths: vec![agents.clone(), claude.clone()],
             still_excluded: None,
+            rendered: None,
         }
     );
     assert!(!agents.exists() && !claude.exists());
@@ -610,6 +611,7 @@ fn a_skill_somebody_writes_beside_an_installed_one_in_a_folder_it_was_not_instal
             name: String::from("deploy"),
             paths: vec![agents.clone()],
             still_excluded: None,
+            rendered: None,
         }
     );
     assert!(!agents.exists());

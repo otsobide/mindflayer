@@ -601,7 +601,7 @@ fn is_below(path: &Path, folder: &Path) -> bool {
 /// own, which would undo what somebody linked on purpose. A link to nothing
 /// is let by: there is nothing to read, and `create_new` makes nothing
 /// through it.
-fn linked_inside(project: &Path, file: &Path) -> Result<(), AgentsMdError> {
+pub(crate) fn linked_inside(project: &Path, file: &Path) -> Result<(), AgentsMdError> {
     let is_link = fs::symlink_metadata(file).is_ok_and(|metadata| metadata.is_symlink());
     if !is_link {
         return Ok(());

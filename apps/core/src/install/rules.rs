@@ -1,34 +1,230 @@
 //! Installing a rule into a project, and taking it back out.
 //!
-//! A project a `mind.toml` marks is given a rule as a copy of its file, in
-//! the folder its marker names, filed by its route as the library files it,
-//! folders and all: such a project names no agents, and was given its rules
-//! as files before rules had any other way in. What is Mindflayer's is what
-//! the ledger records, as for a skill: one installation a rule, with a target
-//! for its copy and the hash of what it holds, so an unrecorded file at a
-//! rule's place is somebody's, never written over or taken away.
+//! A project marked by its settings is given its rules as sections of a
+//! block in its `AGENTS.md` ([`crate::agents_md`]), the one file Claude Code,
+//! Codex and OpenCode all read (D-03), and Claude reads that block natively,
+//! through an import in the project's own `CLAUDE.md`
+//! ([`crate::claude_md`]), or not at all, when its own rule files carry every
+//! rule instead ([`crate::claude_rules`]). The block is one file, written
+//! whole, so a project's rules are rendered together: installing one, or
+//! taking one out, renders every rule the project has, each from where it was
+//! installed from, as it is there now. A project a `mind.toml` marks has no
+//! block: a rule is copied into the folder its marker names, filed by its
+//! route, as a skill is copied into its folder.
+//!
+//! What is Mindflayer's is what the ledger records, as for a skill: one
+//! installation a rule, with a target for its section, named by the file it
+//! is in, and one for its file for Claude, each with the hash of what it
+//! holds, and whether Mindflayer made the `AGENTS.md`, so that the file goes
+//! with the last rule only when it was Mindflayer's to begin with. A
+//! section in the block that the ledger does not record is somebody's, as a
+//! copy nothing records is, and no render writes over it.
+//!
+//! In a local project (D-02), an `AGENTS.md` Mindflayer made is kept out of
+//! git, and one git tracks is written only with `edit_tracked`: otherwise no
+//! block is written, Claude gets every rule from its own rule files, and the
+//! agents that read rules only in the block are said to miss them
+//! ([`Warning::Withheld`]).
 
+use std::collections::BTreeMap;
 use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
 
+use thiserror::Error;
+
 use super::{
-    copy_at, kept_by_a_load, project_entry, route, same_place, targets, unrecorded, user_scope,
-    Candidate, InstallError, Installation, Installed, Offer, Standing,
+    copy_at, kept_by_a_load, local, project_entry, route, same_place, targets, unrecorded,
+    user_scope, Candidate, InstallError, Installation, Installed, Offer, Removed, Standing,
 };
-use crate::agent::AgentHomes;
-use crate::artifact::{Artifact, ArtifactError};
-use crate::claude_rules;
+use crate::agent::{Agent, AgentHomes};
+use crate::agents_md::{self, AgentsMd, AgentsMdError, Section, Written as BlockWritten};
+use crate::artifact::Artifact;
+use crate::claude_md;
+use crate::claude_rules::{self, Mode, Recorded};
 use crate::copy;
+use crate::exclude::{self, Excluded};
 use crate::hash;
 use crate::kind::Kind;
 use crate::ledger::{Action, InstallRecord, Ledger, Outcome, Target};
 use crate::paths;
+use crate::settings::Share;
 use crate::workspace::{replace_bytes_unresolved, FlayerWorkspace, MindProject, WorkspaceError};
 
-/// Install `candidate`, a rule, into `project`: copied into the folder its
-/// marker names. A project marked by its settings has no such folder among
-/// its targets, and is refused ([`InstallError::NoTarget`]).
+/// How the ledger names a project's `AGENTS.md`: its route from the project,
+/// as it names every copy.
+const AGENTS_MD: &str = agents_md::FILE;
+
+/// What rendering a project's rules did: to the block, to the import, and to
+/// Claude's rule files, and what there is to say of any of it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Rendered {
+    /// What rendering the block of `AGENTS.md` did, or `None` when it was
+    /// withheld from the file ([`Warning::Withheld`]).
+    pub block: Option<agents_md::Rendered>,
+    /// How Claude reaches the block ([`claude_md::Rendered::reach`]), and
+    /// what that did to the project's own `CLAUDE.md` files.
+    pub import: claude_md::Rendered,
+    /// What Claude's rule files came to: every rule's in fallback mode, only
+    /// those about some files otherwise, and none for a project that does not
+    /// name Claude.
+    pub files: claude_rules::Rendered,
+    /// What keeping an `AGENTS.md` Mindflayer made out of git did, in a local
+    /// project; `None` where nothing had to be. [`Excluded::warning`] says
+    /// when nothing keeps it out, outside a git work tree.
+    pub excluded: Option<Excluded>,
+    /// Why the exclude block still names a file that stopped being
+    /// Mindflayer's, an `AGENTS.md` or a rule's file for Claude, when it
+    /// could not be edited: a line left there keeps whatever is in that place
+    /// out of git.
+    pub still_excluded: Option<String>,
+    /// What there is to say about the rules as a whole, beside what each
+    /// renderer says ([`agents_md::Rendered::warnings`],
+    /// [`claude_md::Rendered::warnings`], [`claude_rules::Rendered::warnings`]).
+    pub warnings: Vec<Warning>,
+}
+
+/// Something a render of a project's rules has to say, which kept nothing
+/// from being written.
+#[derive(Debug, Clone, PartialEq, Eq, Error)]
+pub enum Warning {
+    /// No block was written into `file`, for `why`, so `missed`, the agents
+    /// the project names that read rules only there, read none of them.
+    /// Claude, when it is named, has every rule from its own rule files.
+    #[error("{file}: {why}, so no rules are written there{}", missing(.missed))]
+    Withheld {
+        file: PathBuf,
+        why: Withheld,
+        missed: Vec<Agent>,
+    },
+    /// `file` holds a block of rules written before, which is no longer
+    /// rendered, for `why`, and is left as it is: the agents that read the
+    /// file read the rules it held then.
+    #[error("{file}: holds Mindflayer's block of rules, no longer rendered, and is left as it is: {why}")]
+    Left { file: PathBuf, why: Withheld },
+    /// The rule reaches none of the agents the project names: one about some
+    /// files only in a project that does not name Claude, the one agent that
+    /// reads such a rule, or one whose block was withheld there.
+    #[error("rule `{route}` reaches none of the agents the project names")]
+    Unreached { route: String },
+}
+
+/// Why no block was written into a project's `AGENTS.md`.
+#[derive(Debug, Clone, PartialEq, Eq, Error)]
+pub enum Withheld {
+    /// Git tracks it, in a local project that does not set `edit_tracked`
+    /// (D-02).
+    #[error("git tracks it, and the project is local without edit_tracked")]
+    Tracked,
+    /// Whether git tracks it cannot be told, so it is left as if it did.
+    #[error("whether git tracks it cannot be told ({0})")]
+    Untold(String),
+}
+
+/// ", and codex and opencode read none of them", or nothing for no agent.
+fn missing(missed: &[Agent]) -> String {
+    let names: Vec<&str> = missed.iter().map(|agent| agent.name()).collect();
+    match names.split_last() {
+        None => String::new(),
+        Some((last, [])) => format!(", and {last} reads none of them"),
+        Some((last, rest)) => format!(", and {} and {last} read none of them", rest.join(", ")),
+    }
+}
+
+/// Refuse a project marked by its settings that names no agent: the block
+/// reaches each agent it names, and there is none to reach.
+pub(crate) fn receives(project: &MindProject) -> Result<(), InstallError> {
+    match project.settings() {
+        Some(settings) if settings.agents.is_empty() => Err(InstallError::NoTarget {
+            project: project.name().to_owned(),
+            kind: Kind::Rule,
+        }),
+        _ => Ok(()),
+    }
+}
+
+/// `offers`, each with how it stands in `project`, which its settings mark:
+/// [`Held::standing`].
+pub(crate) fn survey(
+    workspace: &FlayerWorkspace,
+    ledger: &Ledger,
+    project: &MindProject,
+    offers: Vec<Offer>,
+) -> Result<Vec<Candidate>, InstallError> {
+    let held = Held::read(workspace, ledger, project)?;
+    Ok(offers
+        .into_iter()
+        .map(|offer| Candidate {
+            standing: held.standing(project.root(), offer.name()).0,
+            offer,
+        })
+        .collect())
+}
+
+/// What a project marked by its settings holds of rules: what the ledger
+/// records, and what the block of its `AGENTS.md` holds.
+struct Held {
+    recorded: Vec<String>,
+    block: Vec<String>,
+}
+
+impl Held {
+    fn read(
+        workspace: &FlayerWorkspace,
+        ledger: &Ledger,
+        project: &MindProject,
+    ) -> Result<Held, InstallError> {
+        Ok(Held {
+            recorded: ledger.installations(&project_entry(workspace, project), Kind::Rule)?,
+            block: block_routes(project.root()),
+        })
+    }
+
+    /// How the rule at `route` stands in the project at `root`, and where
+    /// somebody's is when it is somebody's.
+    ///
+    /// Installed while the ledger records it, whatever is left of it, as a
+    /// skill is: the next render puts back what has gone. Otherwise somebody's
+    /// when the block holds a section for it, which this workspace did not
+    /// write (another workspace linking the project, or a hand that copied a
+    /// marker), or a file is at its place in Claude's folder of Mindflayer's
+    /// rules: written over by nothing, as a copy nothing records is not.
+    fn standing(&self, root: &Path, route: &str) -> (Standing, Option<PathBuf>) {
+        if self.recorded.iter().any(|recorded| recorded == route) {
+            return (Standing::Installed, None);
+        }
+        if self.block.iter().any(|held| held == route) {
+            return (Standing::Foreign, Some(root.join(AGENTS_MD)));
+        }
+        let file = root.join(claude_rules::file_for(route));
+        if fs::symlink_metadata(&file).is_ok() {
+            return (Standing::Foreign, Some(file));
+        }
+        (Standing::Absent, None)
+    }
+}
+
+/// The routes the block in the `AGENTS.md` at `root` holds: none when it has
+/// no block, or cannot be read as one, which a render then refuses, saying
+/// why.
+pub(crate) fn block_routes(root: &Path) -> Vec<String> {
+    let Ok(bytes) = fs::read(root.join(agents_md::FILE)) else {
+        return Vec::new();
+    };
+    AgentsMd::parse(&bytes)
+        .map(|text| text.routes().into_iter().map(str::to_owned).collect())
+        .unwrap_or_default()
+}
+
+/// The route the ledger names the rule at `route`'s file for Claude by.
+pub(crate) fn claude_file(route: &str) -> String {
+    let file = claude_rules::file_for(route);
+    paths::to_config_string(&file).unwrap_or_else(|| file.display().to_string())
+}
+
+/// Install `candidate`, a rule, into `project`: rendered with every other
+/// rule the project has into a project marked by its settings, copied into
+/// one a `mind.toml` marks.
 pub(crate) fn install(
     workspace: &FlayerWorkspace,
     ledger: &Ledger,
@@ -36,33 +232,236 @@ pub(crate) fn install(
     candidate: &Candidate,
     homes: &AgentHomes,
 ) -> Result<Installation, InstallError> {
-    copy_in(workspace, ledger, project, candidate, homes)
+    if project.settings().is_none() {
+        return copy_in(workspace, ledger, project, candidate, homes);
+    }
+    receives(project)?;
+    let root = project.root();
+    let name = candidate.name().to_owned();
+    // Looked at before the lock, so a refusal waits for nobody, and again
+    // under it, as an install of a skill looks.
+    if candidate.standing == Standing::Foreign {
+        if let (Standing::Foreign, Some(path)) =
+            Held::read(workspace, ledger, project)?.standing(root, &name)
+        {
+            return Ok(Installed::Foreign { name, path }.into());
+        }
+    }
+    let _lock = workspace.lock().map_err(WorkspaceError::from)?;
+    if let (Standing::Foreign, Some(path)) =
+        Held::read(workspace, ledger, project)?.standing(root, &name)
+    {
+        return Ok(Installed::Foreign { name, path }.into());
+    }
+    let entry = project_entry(workspace, project);
+    let before = ledger.installation(&entry, Kind::Rule, &name)?;
+    let rendered = render_held(
+        workspace,
+        ledger,
+        project,
+        homes,
+        Change::Install(candidate),
+    )?;
+    let after = ledger.installation(&entry, Kind::Rule, &name)?;
+    let detail = format!("{name} into {}", project.name());
+    ledger.log(Action::Install, Some(&entry), Outcome::Ok, Some(&detail))?;
+
+    let targets = after.map(|record| record.targets).unwrap_or_default();
+    let paths = targets
+        .iter()
+        .map(|target| root.join(&target.path))
+        .collect();
+    let installed = match before {
+        None => Installed::Added {
+            name,
+            paths,
+            unhashed: None,
+        },
+        // What each of its copies holds, by the hash recorded of each.
+        Some(before) if before.targets == targets => Installed::Unchanged {
+            name,
+            paths,
+            unhashed: None,
+        },
+        Some(_) => Installed::Updated {
+            name,
+            paths,
+            unhashed: None,
+        },
+    };
+    Ok(Installation {
+        rendered: Some(rendered),
+        ..Installation::from(installed)
+    })
 }
 
-/// One rule an install gives the project: what it is read from.
+/// Take the rule `name` back out of `project`, which its settings mark:
+/// every other rule it has rendered again without it, and its record
+/// forgotten.
+///
+/// Only one the ledger records: a section in the block nothing records, or
+/// a file at its place in Claude's folder, is somebody's, and left.
+pub(crate) fn uninstall(
+    workspace: &FlayerWorkspace,
+    ledger: &Ledger,
+    project: &MindProject,
+    name: &str,
+    homes: &AgentHomes,
+) -> Result<Removed, InstallError> {
+    let root = project.root();
+    let _lock = workspace.lock().map_err(WorkspaceError::from)?;
+    let entry = project_entry(workspace, project);
+    let Some(record) = ledger.installation(&entry, Kind::Rule, name)? else {
+        return Ok(
+            match Held::read(workspace, ledger, project)?.standing(root, name) {
+                (Standing::Foreign, Some(path)) => Removed::Foreign {
+                    name: name.to_owned(),
+                    path,
+                },
+                _ => Removed::Absent {
+                    name: name.to_owned(),
+                },
+            },
+        );
+    };
+    let rendered = render_held(workspace, ledger, project, homes, Change::Uninstall(name))?;
+    let detail = format!("{name} from {}", project.name());
+    ledger.log(Action::Uninstall, Some(&entry), Outcome::Ok, Some(&detail))?;
+    Ok(Removed::Removed {
+        name: name.to_owned(),
+        paths: record
+            .targets
+            .iter()
+            .map(|target| root.join(&target.path))
+            .collect(),
+        still_excluded: rendered.still_excluded.clone(),
+        rendered: Some(Box::new(rendered)),
+    })
+}
+
+/// Render `project`'s rules again, each from where it was installed from, as
+/// it is there now, for a front end to bring the block, the import and
+/// Claude's rule files in line with the project as it is: its agents, how
+/// it shares, the `CLAUDE.md` files in and above it. `None` for a project a
+/// `mind.toml` marks, whose rules are copies that nothing renders.
+///
+/// `homes` are the agents' own folders, which the front end decides, as for
+/// [`super::install`]. Holds the workspace's lock throughout, as an install
+/// does.
+pub fn render(
+    workspace: &FlayerWorkspace,
+    ledger: &Ledger,
+    project: &MindProject,
+    homes: &AgentHomes,
+) -> Result<Option<Rendered>, InstallError> {
+    if project.settings().is_none() {
+        return Ok(None);
+    }
+    let _lock = workspace.lock().map_err(WorkspaceError::from)?;
+    render_held(workspace, ledger, project, homes, Change::Again).map(Some)
+}
+
+/// What a render is for.
+#[derive(Clone, Copy)]
+enum Change<'a> {
+    /// Giving the project this rule too, or again.
+    Install(&'a Candidate),
+    /// Taking this one out.
+    Uninstall(&'a str),
+    /// Neither: rendering what the project has, as it is now.
+    Again,
+}
+
+impl Change<'_> {
+    /// Whether the rule `name`, recorded before, is the one this changes,
+    /// and so is not rendered from its record.
+    fn changes(&self, name: &str) -> bool {
+        match self {
+            Change::Install(candidate) => candidate.name() == name,
+            Change::Uninstall(going) => *going == name,
+            Change::Again => false,
+        }
+    }
+}
+
+/// One rule a render gives the project: what it is rendered from, and what
+/// was recorded of it before.
 struct Wanted {
-    /// The rule's file as written, which a copy holds whole.
+    artifact: Artifact,
+    /// The rule's file as written, which its file for Claude holds whole.
     bytes: Vec<u8>,
     origin: String,
+    before: Option<InstallRecord>,
 }
 
 impl Wanted {
     /// The rule `offer` stands for, read where it is offered from.
-    fn of(workspace: &FlayerWorkspace, offer: &Offer) -> Result<Wanted, InstallError> {
+    fn of(
+        workspace: &FlayerWorkspace,
+        offer: &Offer,
+        before: Option<InstallRecord>,
+    ) -> Result<Wanted, InstallError> {
         let path = offer.source(workspace);
         let within = within(workspace, offer, &path);
         inside(&path, &within)?;
         let artifact = Artifact::rule(&path, offer.name().to_owned(), &within)?;
         let bytes = fs::read(artifact.file()).map_err(|source| {
-            InstallError::Artifact(ArtifactError::Read {
+            InstallError::Artifact(crate::artifact::ArtifactError::Read {
                 path: artifact.file(),
                 source,
             })
         })?;
         Ok(Wanted {
+            artifact,
             bytes,
             origin: offer.origin(),
+            before,
         })
+    }
+
+    fn name(&self) -> &str {
+        self.artifact.name()
+    }
+
+    /// What is recorded of it before anything is written: what was recorded
+    /// already, and a file for Claude the render may make, by the hash of
+    /// what it would hold, while nothing is at its place.
+    ///
+    /// So a render killed after it made the file, and before it recorded
+    /// what it made, leaves a file the next one knows for Mindflayer's,
+    /// rather than one it takes for somebody's and leaves where Claude reads
+    /// it. A record of a file that is not made after all says nothing wrong:
+    /// the next render makes it, or forgets it, as it does any recorded file
+    /// found gone.
+    fn pending(&self, root: &Path, claude: bool) -> InstallRecord {
+        let mut targets = self
+            .before
+            .as_ref()
+            .map(|record| record.targets.clone())
+            .unwrap_or_default();
+        let file = claude_file(self.name());
+        if claude
+            && !targets.iter().any(|target| target.path == file)
+            && fs::symlink_metadata(root.join(&file)).is_err()
+        {
+            targets.push(Target {
+                agent: Some(Agent::Claude.name().to_owned()),
+                path: file,
+                content_hash: Some(hash::bytes(&self.bytes)),
+            });
+        }
+        InstallRecord {
+            kind: Kind::Rule,
+            name: self.name().to_owned(),
+            source_id: None,
+            origin: Some(self.origin.clone()),
+            content_hash: self
+                .before
+                .as_ref()
+                .and_then(|record| record.content_hash.clone())
+                .or_else(|| Some(hash::bytes(&self.bytes))),
+            targets,
+        }
     }
 }
 
@@ -78,8 +477,8 @@ fn within(workspace: &FlayerWorkspace, offer: &Offer, path: &Path) -> PathBuf {
 
 /// Refuse the rule at `path` when it is a link, or reached through one, that
 /// leads out of `within`, where it is offered from: what it leads to would
-/// go into the project's instructions, and a credential is how such a file
-/// ends up there, as a skill's copy refuses one.
+/// go into every agent's instructions in the project, and a credential is
+/// how such a file ends up there, as a skill's copy refuses one.
 fn inside(path: &Path, within: &Path) -> Result<(), InstallError> {
     let (Ok(real), Ok(root)) = (fs::canonicalize(path), fs::canonicalize(within)) else {
         // Nothing to follow: reading it says what is wrong.
@@ -93,6 +492,414 @@ fn inside(path: &Path, within: &Path) -> Result<(), InstallError> {
             target: real,
             within: within.to_path_buf(),
         })
+    }
+}
+
+/// Whether a local project may write a block into its `AGENTS.md`: always
+/// in a shared one or with `edit_tracked`, and otherwise while git does not
+/// track the file (D-02). `None` when it may, the reason when not.
+fn withholding(project: &MindProject) -> Option<Withheld> {
+    let settings = project.settings()?;
+    if settings.share == Share::Shared || settings.edit_tracked {
+        return None;
+    }
+    match exclude::tracks_file(project.root(), Path::new(AGENTS_MD)) {
+        Ok(false) => None,
+        Ok(true) => Some(Withheld::Tracked),
+        Err(error) => Some(Withheld::Untold(error.to_string())),
+    }
+}
+
+/// Render the rules of `project`, which its settings mark, as `change` asks,
+/// with the workspace's lock held: the block, the import, Claude's rule
+/// files, and the record of each.
+///
+/// Every rule the ledger records is rendered from the offer it was installed
+/// from, as it is now; one no longer offered there refuses the render, since
+/// leaving its section out would take it from every agent, as the block
+/// refuses a rule it cannot read. What can refuse is asked before anything is
+/// written: a block that cannot be read or holds a section nothing records,
+/// a file or a folder where no rule is written, a `CLAUDE.md` that cannot be
+/// read. What is recorded before the first write is what a render killed
+/// part way leaves for the next one ([`Wanted::pending`]); a block that
+/// cannot be written puts that record back as it was.
+///
+/// After the block is written, a failure of the import or of Claude's rule
+/// files records what was written, and is then raised: the block is in
+/// place, and what Claude reads is as it was until the next render.
+fn render_held(
+    workspace: &FlayerWorkspace,
+    ledger: &Ledger,
+    project: &MindProject,
+    homes: &AgentHomes,
+    change: Change<'_>,
+) -> Result<Rendered, InstallError> {
+    let root = project.root();
+    let agents = project
+        .settings()
+        .map(|settings| settings.agents.clone())
+        .unwrap_or_default();
+    let claude = agents.contains(&Agent::Claude);
+    let entry = project_entry(workspace, project);
+    let before = ledger.records(&entry, Kind::Rule)?;
+
+    let offers = super::offers(workspace, ledger, Kind::Rule)?;
+    let mut wanted = Vec::new();
+    for record in &before {
+        if change.changes(&record.name) {
+            continue;
+        }
+        let offer = record
+            .origin
+            .as_deref()
+            .and_then(|origin| {
+                offers
+                    .iter()
+                    .find(|offer| offer.name() == record.name && offer.origin() == origin)
+            })
+            .ok_or_else(|| InstallError::NoLongerOffered {
+                name: record.name.clone(),
+                origin: record.origin.clone(),
+            })?;
+        wanted.push(Wanted::of(workspace, offer, Some(record.clone()))?);
+    }
+    if let Change::Install(candidate) = change {
+        let record = before
+            .iter()
+            .find(|record| record.name == candidate.name())
+            .cloned();
+        wanted.push(Wanted::of(workspace, &candidate.offer, record)?);
+    }
+
+    // What the block will hold, each section's hash by its route, worked out
+    // as the block's render works it out, before anything is written.
+    let mut sections: BTreeMap<String, String> = BTreeMap::new();
+    for rule in &wanted {
+        if let Some(section) = Section::of(&rule.artifact)? {
+            sections.insert(section.route().to_owned(), section.hash());
+        }
+    }
+    let file = root.join(AGENTS_MD);
+    let withheld = withholding(project);
+    let block = withheld.is_none() && !sections.is_empty();
+    if withheld.is_none() {
+        agents_md::linked_inside(root, &file)?;
+        if let Some(bytes) = read(&file)? {
+            let text = AgentsMd::parse(&bytes).map_err(|problem| AgentsMdError::Malformed {
+                file: file.clone(),
+                problem,
+            })?;
+            // A section nothing here records is somebody's: another
+            // workspace that links the project rendered it, or a hand put it
+            // there. Rendering the block whole would take it out.
+            if let Some(route) = text
+                .routes()
+                .into_iter()
+                .find(|route| !before.iter().any(|record| record.name == *route))
+            {
+                return Err(InstallError::NotRecorded {
+                    file,
+                    route: route.to_owned(),
+                });
+            }
+        }
+        if block {
+            if let Some(refused) = agents_md::misplaced(workspace, homes, root, &file) {
+                return Err(AgentsMdError::from(refused).into());
+            }
+        }
+    }
+    if claude && !wanted.is_empty() {
+        let folder = root.join(claude_rules::folder());
+        if let Some(refused) = agents_md::misplaced(workspace, homes, root, &folder) {
+            return Err(claude_rules::ClaudeRulesError::from(refused).into());
+        }
+    }
+    if claude {
+        // Reads each `CLAUDE.md` the render would, and refuses one it
+        // could not write the import into, before the block is written.
+        claude_md::reach(project, homes, block)?;
+    }
+
+    let created = ledger.created(&entry, AGENTS_MD)?;
+    let there = fs::symlink_metadata(&file).is_ok();
+    let making = block && !there;
+    let mut pending: Vec<InstallRecord> = wanted
+        .iter()
+        .map(|rule| rule.pending(root, claude))
+        .collect();
+    if let Change::Uninstall(going) = change {
+        // Kept until the render is done, so one killed part way leaves the
+        // rule recorded, for the uninstall to be run again.
+        pending.extend(before.iter().find(|record| record.name == going).cloned());
+    }
+    ledger.rendered(
+        &entry,
+        Kind::Rule,
+        &pending,
+        &[(AGENTS_MD, created || making)],
+    )?;
+    let undo = || ledger.rendered(&entry, Kind::Rule, &before, &[(AGENTS_MD, created)]);
+
+    // An `AGENTS.md` Mindflayer makes is kept out of git before it is made,
+    // as an install's copies are; one somebody had is theirs to commit.
+    let key = local(project);
+    let excluding = withheld.is_none() && (making || (created && there));
+    let agents_entry = [exclude::Entry::file(AGENTS_MD)];
+    let excluded = match key.filter(|_| excluding) {
+        Some(key) => match exclude::add(root, key, &agents_entry) {
+            Ok(excluded) => Some(excluded),
+            Err(error) => {
+                undo()?;
+                return Err(error.into());
+            }
+        },
+        None => None,
+    };
+    let written = if withheld.is_none() {
+        let artifacts = wanted.iter().map(|rule| &rule.artifact);
+        match agents_md::render(workspace, project, artifacts, created, homes) {
+            Ok(written) => Some(written),
+            Err(error) => {
+                if let Some(key) = key.filter(|_| making && excluding) {
+                    let _ = exclude::remove(root, key, &agents_entry);
+                }
+                undo()?;
+                return Err(error.into());
+            }
+        }
+    } else {
+        None
+    };
+    let rendered_routes: Vec<String> = written
+        .as_ref()
+        .map(|written| written.routes.clone())
+        .unwrap_or_default();
+
+    // The import, and then Claude's rule files, in the mode the import says:
+    // every rule there while Claude reads no block, only those about some
+    // files while it does. A project that does not name Claude has its
+    // import and its files taken out.
+    let import = claude_md::render(project, homes, claude && !rendered_routes.is_empty());
+    let files = import.as_ref().ok().map(|import| {
+        let mode = if claude {
+            import.reach.mode()
+        } else {
+            Mode::Scoped
+        };
+        let asked: Vec<&Artifact> = if claude {
+            wanted.iter().map(|rule| &rule.artifact).collect()
+        } else {
+            Vec::new()
+        };
+        let recorded: Vec<Recorded> = pending
+            .iter()
+            .filter_map(|record| {
+                let file = claude_file(&record.name);
+                let target = record.targets.iter().find(|target| target.path == file)?;
+                Some(Recorded {
+                    route: record.name.clone(),
+                    hash: target.content_hash.clone()?,
+                })
+            })
+            .collect();
+        claude_rules::render(workspace, project, asked, mode, &recorded, homes)
+    });
+
+    // What is recorded now: each rule with the section the block holds and
+    // the file Claude's folder keeps of it, each by the hash of what it
+    // holds, and the rule taken out forgotten. While the import or the files
+    // failed, each rule's file is recorded as it was.
+    let kept: Option<BTreeMap<String, String>> = match &files {
+        Some(Ok(files)) => Some(
+            files
+                .recorded()
+                .into_iter()
+                .map(|kept| (kept.route, kept.hash))
+                .collect(),
+        ),
+        _ => None,
+    };
+    let mut records: Vec<InstallRecord> = wanted
+        .iter()
+        .zip(&pending)
+        .map(|(rule, pending)| {
+            let name = rule.name();
+            let mut targets = Vec::new();
+            if let (true, Some(hash)) = (
+                rendered_routes.iter().any(|route| route == name),
+                sections.get(name),
+            ) {
+                targets.push(Target {
+                    agent: None,
+                    path: AGENTS_MD.to_owned(),
+                    content_hash: Some(hash.clone()),
+                });
+            }
+            let file = claude_file(name);
+            let hash = match &kept {
+                Some(kept) => kept.get(name).cloned(),
+                None => pending
+                    .targets
+                    .iter()
+                    .find(|target| target.path == file)
+                    .and_then(|target| target.content_hash.clone()),
+            };
+            if let Some(hash) = hash {
+                targets.push(Target {
+                    agent: Some(Agent::Claude.name().to_owned()),
+                    path: file,
+                    content_hash: Some(hash),
+                });
+            }
+            InstallRecord {
+                kind: Kind::Rule,
+                name: name.to_owned(),
+                source_id: None,
+                origin: Some(rule.origin.clone()),
+                content_hash: Some(hash::bytes(&rule.bytes)),
+                targets,
+            }
+        })
+        .collect();
+    // A rule being taken out keeps its file for Claude recorded while
+    // Claude's files were not rendered, so the uninstall run again takes
+    // the file away rather than finding it somebody's.
+    if let (Change::Uninstall(going), None) = (change, &kept) {
+        let file = claude_file(going);
+        if let Some(record) = pending.iter().find(|record| record.name == going) {
+            let targets: Vec<Target> = record
+                .targets
+                .iter()
+                .filter(|target| target.path == file)
+                .cloned()
+                .collect();
+            if !targets.is_empty() {
+                records.push(InstallRecord {
+                    targets,
+                    ..record.clone()
+                });
+            }
+        }
+    }
+    let made = match &written {
+        Some(written) => match written.written {
+            BlockWritten::Created => true,
+            BlockWritten::Removed => false,
+            // A file left with no block holds only what somebody wrote in
+            // it, and is theirs from then on.
+            BlockWritten::Changed | BlockWritten::Unchanged => {
+                created && !written.routes.is_empty()
+            }
+        },
+        // Tracked by git: somebody committed it, so it is the team's.
+        None => created && !matches!(withheld, Some(Withheld::Tracked)),
+    };
+    ledger.rendered(&entry, Kind::Rule, &records, &[(AGENTS_MD, made)])?;
+
+    // Out of git last, what stopped being Mindflayer's: an `AGENTS.md` it
+    // no longer counts as its own, and the file for Claude of a rule taken
+    // out that was left where it is (changed since, or not to be removed),
+    // which is its author's now, as a copy edited since is.
+    let mut gone: Vec<exclude::Entry> = Vec::new();
+    if !made && (created || excluding) {
+        gone.extend(agents_entry.iter().cloned());
+    }
+    if let (Change::Uninstall(going), Some(kept)) = (change, &kept) {
+        if kept.contains_key(going) {
+            gone.push(exclude::Entry::file(claude_rules::file_for(going)));
+        }
+    }
+    let unexcluded = key
+        .filter(|_| !gone.is_empty())
+        .and_then(|key| exclude::remove(root, key, &gone).err())
+        .map(|error| error.to_string());
+    let still: Vec<String> = match &files {
+        Some(Ok(files)) => files.still_excluded.clone(),
+        _ => None,
+    }
+    .into_iter()
+    .chain(unexcluded)
+    .collect();
+    let still_excluded = (!still.is_empty()).then(|| still.join("; "));
+
+    let import = import?;
+    let mut files = files.expect("rendered once the import was")?;
+    // A file recorded only because the render might make it, and not made,
+    // is nothing to report as gone: it was never there.
+    files.files.retain(|file| {
+        file.written != claude_rules::Written::Gone
+            || before.iter().any(|record| {
+                record.name == file.route
+                    && record
+                        .targets
+                        .iter()
+                        .any(|target| target.path == claude_file(&record.name))
+            })
+    });
+
+    let mut warnings = Vec::new();
+    if let Some(why) = withheld {
+        // A block written before the file could no longer be edited, a
+        // project turned local after a team committed it say, is left with
+        // the rules it held, as an import left in a `CLAUDE.md` is.
+        if !block_routes(root).is_empty() {
+            warnings.push(Warning::Left {
+                file: file.clone(),
+                why: why.clone(),
+            });
+        }
+        let missed: Vec<Agent> = agents
+            .iter()
+            .copied()
+            .filter(|agent| *agent != Agent::Claude)
+            .collect();
+        if !missed.is_empty() {
+            warnings.push(Warning::Withheld {
+                file: file.clone(),
+                why,
+                missed,
+            });
+        }
+    }
+    // A rule reaches an agent through the block, Claude among them while it
+    // reads the block, or through its file for Claude.
+    let reads_block = claude && import.reach.mode() == Mode::Scoped;
+    for record in &records {
+        let file = claude_file(&record.name);
+        let in_block = record.targets.iter().any(|target| target.path == AGENTS_MD);
+        let in_file = record.targets.iter().any(|target| target.path == file);
+        let reached = agents.iter().any(|agent| match agent {
+            Agent::Claude => in_file || (in_block && reads_block),
+            Agent::Codex | Agent::OpenCode => in_block,
+        });
+        if !reached {
+            warnings.push(Warning::Unreached {
+                route: record.name.clone(),
+            });
+        }
+    }
+
+    Ok(Rendered {
+        block: written,
+        import,
+        files,
+        excluded,
+        still_excluded,
+        warnings,
+    })
+}
+
+/// The file's bytes, `None` when nothing is there to read.
+fn read(file: &Path) -> Result<Option<Vec<u8>>, InstallError> {
+    match fs::read(file) {
+        Ok(bytes) => Ok(Some(bytes)),
+        Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(None),
+        Err(source) => Err(AgentsMdError::Read {
+            path: file.to_path_buf(),
+            source,
+        }
+        .into()),
     }
 }
 
@@ -168,7 +975,7 @@ fn copy_in(
         return Ok(Installed::Foreign { name, path }.into());
     }
 
-    let rule = Wanted::of(workspace, &candidate.offer)?;
+    let rule = Wanted::of(workspace, &candidate.offer, None)?;
     let mut changes = Vec::with_capacity(copies.len());
     for to in &copies {
         changes.push(put(to, &rule.bytes)?);
@@ -247,3 +1054,7 @@ fn put(to: &Path, bytes: &[u8]) -> Result<copy::Change, InstallError> {
         }
     }
 }
+
+#[cfg(test)]
+#[path = "rules_test.rs"]
+mod tests;
