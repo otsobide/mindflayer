@@ -1505,3 +1505,59 @@ fn a_render_says_what_each_renderer_found_once_in_one_list() {
         )]
     );
 }
+
+#[test]
+fn the_offer_of_a_rule_a_project_holds_is_the_one_its_record_came_from() {
+    let fixture = fixture(Share::Shared, &Agent::ALL);
+    fixture.rule("review/tone", TONE);
+    let (mut workspace, team) = (
+        FlayerWorkspace::open(fixture.workspace.root()).unwrap(),
+        FlayerWorkspace::init(fixture.dir.path().join("team"))
+            .unwrap()
+            .0,
+    );
+    own_rule(&team, "review/tone", "Be kind.\n");
+    workspace.load(&team).unwrap();
+    let from = |origin: &str| {
+        install::offered(
+            &workspace,
+            &fixture.ledger,
+            &fixture.project,
+            Kind::Rule,
+            "review/tone",
+            Some(origin),
+        )
+        .unwrap()
+    };
+    let current = |candidate: &Candidate| {
+        install::is_current(&workspace, &fixture.ledger, &fixture.project, candidate)
+    };
+    assert!(!current(&from(WORKSPACE_ORIGIN)));
+
+    install::install(
+        &workspace,
+        &fixture.ledger,
+        &fixture.project,
+        &from("load:team"),
+        &AgentHomes::default(),
+    )
+    .unwrap();
+
+    assert!(current(&from("load:team")));
+    assert!(!current(&from(WORKSPACE_ORIGIN)));
+}
+
+#[test]
+fn a_project_whose_settings_name_no_agent_receives_neither_kind() {
+    let named = fixture(Share::Shared, &[Agent::Codex]);
+    let none = fixture(Share::Shared, &[]);
+
+    for kind in Kind::ALL {
+        assert!(install::receives(&named.project, kind).is_ok(), "{kind}");
+        let refused = install::receives(&none.project, kind).unwrap_err();
+        assert!(
+            matches!(&refused, InstallError::NoTarget { kind: refused, .. } if *refused == kind),
+            "{refused:?}"
+        );
+    }
+}

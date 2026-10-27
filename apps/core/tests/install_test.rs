@@ -1599,7 +1599,12 @@ fn a_skill_installed_without_what_is_left_out_is_still_current_and_installs_unch
     )
     .unwrap();
 
-    assert!(install::is_current(&workspace, &project, &surveyed[0]));
+    assert!(install::is_current(
+        &workspace,
+        &ledger,
+        &project,
+        &surveyed[0]
+    ));
     assert!(
         matches!(again.installed, Installed::Unchanged { .. }),
         "{again:?}"

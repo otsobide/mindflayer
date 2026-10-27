@@ -771,8 +771,9 @@ fn filed_as(name: &str) -> Vec<Kind> {
 /// Refuse `project` when an install of `kind` has nowhere to go in it: no
 /// [`targets`] for a kind copied into a folder, and for a rule into a
 /// project marked by its settings, which goes into its `AGENTS.md`, no agent
-/// to read it ([`rules::receives`]).
-fn receives(project: &MindProject, kind: Kind) -> Result<(), InstallError> {
+/// to read it ([`rules::receives`]). What a front end says in place of the
+/// offers of `kind`, which [`survey`] leaves empty for such a project.
+pub fn receives(project: &MindProject, kind: Kind) -> Result<(), InstallError> {
     if kind == Kind::Rule && project.settings().is_some() {
         return rules::receives(project);
     }
@@ -1676,20 +1677,40 @@ pub(crate) fn kept_by_a_load(
     })
 }
 
-/// Whether `candidate` is the copy `project` holds: the same names and bytes
-/// as the folder there, but for what an install leaves out (`LEAVE_OUT`).
-/// For telling which of two offers of one name is the one installed, which
-/// a record from before schema 3 does not say for what came from a workspace
-/// rather than the shelf, and which an edit since may have made neither.
+/// Whether `candidate` is the one `project` holds of its name. For telling
+/// which of two offers of one name is the one installed.
 ///
-/// Compared with the first copy the project holds of it: an install writes
+/// A skill is the copy there when it has the same names and bytes as the
+/// folder, but for what an install leaves out (`LEAVE_OUT`): a record from
+/// before schema 3 does not say where what came from a workspace rather than
+/// the shelf came from, and an edit since may have made it neither. It is
+/// compared with the first copy the project holds of it: an install writes
 /// every copy from one tree, so any of them is what was installed, and one
 /// edited since is no longer any offer's.
+///
+/// A rule is the one the ledger records it was installed from. Every record
+/// of one says where it came from, and nothing in a project marked by its
+/// settings holds a rule's bytes alone to compare: its section is rendered,
+/// and Claude may have no file of it.
 pub fn is_current(
     workspace: &FlayerWorkspace,
+    ledger: &Ledger,
     project: &MindProject,
     candidate: &Candidate,
 ) -> bool {
+    // Matched on the kind, so a third one has to say how it is told.
+    match candidate.kind() {
+        Kind::Skill => {}
+        Kind::Rule => {
+            let entry = project_entry(workspace, project);
+            return ledger
+                .installation(&entry, Kind::Rule, candidate.name())
+                .ok()
+                .flatten()
+                .and_then(|record| record.origin)
+                .is_some_and(|origin| origin == candidate.origin());
+        }
+    }
     let Ok(targets) = targets(project, candidate.kind()) else {
         return false;
     };

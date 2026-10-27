@@ -192,7 +192,7 @@ pub fn build(
         let mut target = Target::new(project, candidates);
         // Which of several offers of one name is the copy the project holds.
         let project = target.project.clone();
-        target.settle(|candidate| install::is_current(workspace, &project, candidate));
+        target.settle(|candidate| install::is_current(workspace, ledger, &project, candidate));
         targets.push(target);
     }
     Ok(Screen::new(targets))
