@@ -8,16 +8,21 @@ use mindflayer_core::{Agent, FlayerWorkspace, Kind, MindProject, Status, StatusF
 
 use super::consulted;
 use super::read::looked_in;
-use crate::render::{printable, table};
+use crate::render::{json, printable, table};
 use crate::{CliError, Failure, Lookup, Outcome};
 
 /// What the state column says of an entry that would not open.
 const STALE: &str = "stale";
 
 /// `flayer status`: every project the workspace links, against its ledger,
-/// read without being made.
-pub(crate) fn status_of_workspace(workspace: &FlayerWorkspace) -> Result<Outcome, Failure> {
-    if workspace.config().projects.is_empty() {
+/// read without being made; as JSON when `as_json`.
+pub(crate) fn status_of_workspace(
+    workspace: &FlayerWorkspace,
+    as_json: bool,
+) -> Result<Outcome, Failure> {
+    // In JSON, a workspace with nothing linked is one with no projects in
+    // its data, which a script reads like any other.
+    if workspace.config().projects.is_empty() && !as_json {
         // As `flayer list` says it, and for the same reason: a workspace with
         // nothing linked has nothing to report but how to link something.
         return Ok(Outcome::plain(format!(
@@ -27,17 +32,22 @@ pub(crate) fn status_of_workspace(workspace: &FlayerWorkspace) -> Result<Outcome
     }
     let ledger = workspace.ledger_for_reading().map_err(CliError::from)?;
     let (status, failures) = Status::of_workspace(workspace, &ledger);
-    Ok(report(&status, failures, true, || workspace.projects().0))
+    Ok(report(&status, failures, Layout::across(as_json), || {
+        workspace.projects().0
+    }))
 }
 
 /// `flayer status -p`: one project the workspace links.
 pub(crate) fn status_of_project(
     workspace: &FlayerWorkspace,
     project: MindProject,
+    as_json: bool,
 ) -> Result<Outcome, Failure> {
     let ledger = workspace.ledger_for_reading().map_err(CliError::from)?;
     let (status, failures) = Status::of_project(&project, Some((workspace, &ledger)));
-    Ok(report(&status, failures, false, || vec![project]))
+    Ok(report(&status, failures, Layout::one(as_json), || {
+        vec![project]
+    }))
 }
 
 /// `mind status`: the project at or above here, against the workspace `mind`
@@ -46,16 +56,23 @@ pub(crate) fn status_of_project(
 /// A project nothing links is still reported, as `mind list` reads one: what
 /// is in it is its own or somebody's all the same, and the hint says why
 /// nothing in it reads as installed.
-pub(crate) fn status_here(project: MindProject, lookup: &Lookup) -> Result<Outcome, Failure> {
+///
+/// The hint goes to stderr in JSON too: it is advice for whoever reads the
+/// terminal, not something the data leaves out.
+pub(crate) fn status_here(
+    project: MindProject,
+    lookup: &Lookup,
+    as_json: bool,
+) -> Result<Outcome, Failure> {
     let workspace = consulted(&project, lookup)?;
     if let Some(workspace) = workspace
         .as_ref()
         .filter(|workspace| workspace.is_linked(project.root()))
     {
-        return status_of_project(workspace, project);
+        return status_of_project(workspace, project, as_json);
     }
     let (status, failures) = Status::of_project(&project, None);
-    let mut outcome = report(&status, failures, false, || vec![project]);
+    let mut outcome = report(&status, failures, Layout::one(as_json), || vec![project]);
     outcome.stderr.push(match workspace {
         Some(workspace) => format!(
             "hint: the workspace at {} does not link this project, so nothing in it reads as installed; \
@@ -69,17 +86,49 @@ pub(crate) fn status_here(project: MindProject, lookup: &Lookup) -> Result<Outco
     Ok(outcome)
 }
 
-/// The report as a table, with what could not be read said on stderr.
+/// How a report is laid out.
+#[derive(Clone, Copy)]
+enum Layout {
+    /// As a table: `across` when it is about every project a workspace
+    /// links, where a project column can tell rows apart.
+    Table { across: bool },
+    /// As JSON, in the envelope.
+    Json,
+}
+
+impl Layout {
+    fn across(as_json: bool) -> Self {
+        if as_json {
+            Layout::Json
+        } else {
+            Layout::Table { across: true }
+        }
+    }
+
+    fn one(as_json: bool) -> Self {
+        if as_json {
+            Layout::Json
+        } else {
+            Layout::Table { across: false }
+        }
+    }
+}
+
+/// The report laid out, with what could not be read said: on stderr beside
+/// a table, inside the envelope beside JSON.
 ///
-/// `across` is whether it is about every project a workspace links, where a
-/// project column can tell rows apart; `looked` gives the projects it read,
-/// asked only to say where it looked when it found nothing.
+/// `looked` gives the projects it read, asked only for a table that found
+/// nothing, to say where it looked.
 fn report(
     status: &Status,
     failures: Vec<StatusFailure>,
-    across: bool,
+    layout: Layout,
     looked: impl FnOnce() -> Vec<MindProject>,
 ) -> Outcome {
+    let across = match layout {
+        Layout::Json => return json(status, failures.iter().map(ToString::to_string).collect()),
+        Layout::Table { across } => across,
+    };
     let stderr: Vec<String> = failures
         .iter()
         .map(|failure| format!("warning: {failure}"))

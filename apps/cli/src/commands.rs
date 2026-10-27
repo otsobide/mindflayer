@@ -158,7 +158,7 @@ pub(crate) fn run_with(cli: &Cli, lookup: &Lookup, watch: &Watch) -> Result<Outc
                 validate(catalog, &selector, level)
             })
         }
-        Command::Status => status_here(project_here(&directory)?, lookup),
+        Command::Status { json } => status_here(project_here(&directory)?, lookup, *json),
         Command::Link => link_here(&directory, lookup),
         Command::Unlink => unlink_here(&directory, lookup),
         Command::Load { workspaces } => {
@@ -416,10 +416,10 @@ fn run_flayer(
         // too, and from a ledger read without being made: a workspace that
         // has installed nothing has none, and a report is no reason to
         // create one.
-        FlayerCommand::Status { project } => {
+        FlayerCommand::Status { project, json } => {
             reading_workspace(directory, lookup, |workspace| match project {
-                Some(project) => status_of_project(workspace, workspace.pick(project)?),
-                None => status_of_workspace(workspace),
+                Some(project) => status_of_project(workspace, workspace.pick(project)?, *json),
+                None => status_of_workspace(workspace, *json),
             })
         }
         FlayerCommand::Validate { target, project } => {

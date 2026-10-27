@@ -34,6 +34,11 @@ mindflayer-core = { path = "../core" }
 clap = { version = "4", features = ["derive"] }
 thiserror = "2"
 ratatui = "0.30.2"
+# What a reading command's `--json` prints: core's types derive Serialize, and
+# the envelope around them is laid out here, as a table is. The versions the
+# server already builds.
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
 
 [dev-dependencies]
 # `dirwalk`, to ask in process what git would list as untracked in a project

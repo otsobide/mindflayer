@@ -155,6 +155,28 @@ pub fn flayer(dir: &Path, args: &[&str]) -> Result<Outcome, Failure> {
     run_flayer_cli(&parsed_flayer(dir, args))
 }
 
+/// What every reading command's `--json` prints, read back field by field:
+/// nothing else is allowed in it, so a field renamed or added fails here
+/// before it reaches a script that reads it.
+#[derive(Debug, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Envelope {
+    pub version: u32,
+    pub data: serde_json::Value,
+    pub warnings: Vec<String>,
+}
+
+/// The envelope a `--json` outcome printed, its version held to the one this
+/// suite was written against, and its data read as `T`.
+pub fn enveloped<T: serde::de::DeserializeOwned>(outcome: &Outcome) -> (T, Vec<String>) {
+    let envelope: Envelope = serde_json::from_str(&outcome.stdout)
+        .unwrap_or_else(|error| panic!("not the envelope: {error}\n{}", outcome.stdout));
+    assert_eq!(envelope.version, 1, "{}", outcome.stdout);
+    let data = serde_json::from_value(envelope.data)
+        .unwrap_or_else(|error| panic!("not the data asked for: {error}\n{}", outcome.stdout));
+    (data, envelope.warnings)
+}
+
 /// Write a skill into an already initialized mind project.
 /// Where an initialized project keeps a kind, asked of the project itself
 /// rather than assumed, so a test that moves one still writes to the right

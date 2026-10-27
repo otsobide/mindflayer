@@ -10,6 +10,7 @@ use std::path::Path;
 use std::process::ExitCode;
 
 use mindflayer_core::{paths, ArtifactError, ResolveError, ValidationIssue, WorkspaceError};
+use serde::Serialize;
 
 use crate::CliError;
 
@@ -116,6 +117,53 @@ impl From<ResolveError> for Failure {
 impl From<ArtifactError> for Failure {
     fn from(error: ArtifactError) -> Self {
         CliError::from(error).into()
+    }
+}
+
+/// The version of what every reading command's `--json` prints around what
+/// it read ([`json`]).
+///
+/// It moves when a field of the envelope goes or changes what it holds, and
+/// not when one is added, which a reader passes over. What a command puts in
+/// `data` is held to the same rule: every name in it is a contract, which is
+/// why core spells each kind, agent and state as a command line takes it.
+pub const ENVELOPE_VERSION: u32 = 1;
+
+/// What every reading command's `--json` prints:
+/// `{"version": 1, "data": ..., "warnings": [...]}`.
+///
+/// One shape for every command, so a script reads each the same way, and the
+/// warnings inside it beside the data rather than on stderr alone: failures
+/// are collected, not raised, in JSON as in text.
+#[derive(Serialize)]
+struct Envelope<'a, T: Serialize> {
+    version: u32,
+    data: &'a T,
+    warnings: Vec<String>,
+}
+
+/// `data` in the envelope, with what the command would have said on stderr
+/// as `warning:` lines in its `warnings`, without the prefix, and the exit
+/// status the text would have had.
+///
+/// Pretty-printed, two spaces a level, since a person reads it as often as a
+/// script does, and `jq` takes either.
+pub(crate) fn json<T: Serialize>(data: &T, warnings: Vec<String>) -> Outcome {
+    let ok = warnings.is_empty();
+    let envelope = Envelope {
+        version: ENVELOPE_VERSION,
+        data,
+        warnings,
+    };
+    // A report is strings, numbers and lists of them, and maps keyed by
+    // field names, and every path in one is serialized as text whatever
+    // bytes it holds: nothing in it can fail to serialize.
+    let mut stdout = serde_json::to_string_pretty(&envelope).expect("a report serializes");
+    stdout.push('\n');
+    Outcome {
+        stdout,
+        stderr: Vec::new(),
+        ok,
     }
 }
 

@@ -4,6 +4,7 @@
 mod common;
 
 use common::*;
+use serde::Deserialize;
 
 /// Under one directory: `Projects`, a workspace with a skill of its own,
 /// `commit-style`, linking `collapse`, marked by its settings, and `legacy`,
@@ -253,4 +254,154 @@ fn projects_that_hold_nothing_say_where_status_looked() {
             at("rules"),
         )
     );
+}
+
+/// What `status --json` holds, field by field: nothing else is allowed, so
+/// a name changed in core fails here first. Every name is a contract.
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct Report {
+    projects: Vec<Project>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct Project {
+    name: Option<String>,
+    entry: Option<String>,
+    path: String,
+    agents: Vec<String>,
+    stale: Option<String>,
+    artifacts: Vec<Held>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct Held {
+    kind: String,
+    name: String,
+    state: String,
+    agents: Vec<String>,
+    origin: Option<String>,
+}
+
+/// Each artifact in a report, a line of words as the table spells them, so
+/// the JSON and the text can be held to the same entries.
+fn words(report: &Report) -> Vec<String> {
+    report
+        .projects
+        .iter()
+        .flat_map(|project| {
+            project.artifacts.iter().map(move |held| {
+                let agents = if held.agents.is_empty() {
+                    String::from("-")
+                } else {
+                    held.agents.join(",")
+                };
+                [
+                    project.name.as_deref().unwrap_or("?"),
+                    &held.name,
+                    &held.state,
+                    &agents,
+                    held.origin.as_deref().unwrap_or(""),
+                ]
+                .join(" ")
+                .trim_end()
+                .to_owned()
+            })
+        })
+        .collect()
+}
+
+#[test]
+fn status_as_json_holds_the_same_entries_as_the_table() {
+    let (_dir, projects) = workspace_with_everything();
+
+    let text = flayer(&projects, &["status"]).unwrap();
+    let outcome = flayer(&projects, &["status", "--json"]).unwrap();
+
+    let (report, warnings): (Report, _) = enveloped(&outcome);
+    let table: Vec<String> = text
+        .stdout
+        .lines()
+        .map(|line| line.split_whitespace().collect::<Vec<_>>().join(" "))
+        .collect();
+    assert_eq!(words(&report), table);
+    assert!(warnings.is_empty());
+    assert!(outcome.stderr.is_empty(), "{:?}", outcome.stderr);
+    assert!(outcome.ok);
+
+    let collapse = &report.projects[0];
+    assert_eq!(collapse.name.as_deref(), Some("collapse"));
+    assert_eq!(collapse.entry.as_deref(), Some("collapse"));
+    assert_eq!(
+        collapse.path,
+        projects.join("collapse").display().to_string()
+    );
+    assert_eq!(collapse.agents, ["claude", "codex", "opencode"]);
+    assert_eq!(collapse.stale, None);
+    let kinds: Vec<&str> = collapse
+        .artifacts
+        .iter()
+        .map(|held| held.kind.as_str())
+        .collect();
+    assert_eq!(kinds, ["skill"; 4]);
+    let legacy = &report.projects[1];
+    assert!(legacy.agents.is_empty());
+}
+
+#[test]
+fn a_stale_entry_in_json_says_why_in_its_data_and_its_warnings() {
+    let (_dir, projects) = workspace_with_everything();
+    let old = projects.join("old-api");
+    fs::create_dir(&old).unwrap();
+    new_project(&old);
+    flayer(&projects, &["link", "old-api"]).unwrap();
+    fs::remove_dir_all(&old).unwrap();
+
+    let text = flayer(&projects, &["status"]).unwrap();
+    let outcome = flayer(&projects, &["status", "--json"]).unwrap();
+
+    let (report, warnings): (Report, _) = enveloped(&outcome);
+    let stale = &report.projects[2];
+    assert_eq!(stale.name, None);
+    assert_eq!(stale.entry.as_deref(), Some("old-api"));
+    assert!(stale.artifacts.is_empty());
+    let reason = stale.stale.as_deref().unwrap();
+    assert_eq!(warnings, [reason]);
+    assert_eq!(text.stderr, [format!("warning: {reason}")]);
+    // The rest are there all the same, and the exit says something was not.
+    assert_eq!(report.projects.len(), 3);
+    assert_eq!(report.projects[0].artifacts.len(), 4);
+    assert!(outcome.stderr.is_empty(), "{:?}", outcome.stderr);
+    assert!(!outcome.ok);
+}
+
+#[test]
+fn mind_status_as_json_reports_its_one_project() {
+    let (_dir, projects) = workspace_with_everything();
+
+    let here = mind(&projects.join("legacy"), &["status", "--json"]).unwrap();
+    let named = flayer(&projects, &["status", "-p", "legacy", "--json"]).unwrap();
+
+    assert_eq!(here, named);
+    let (report, _): (Report, _) = enveloped(&here);
+    assert_eq!(report.projects.len(), 1);
+    assert_eq!(
+        words(&report),
+        ["legacy commit-style installed - workspace"]
+    );
+}
+
+#[test]
+fn a_workspace_with_nothing_linked_is_an_empty_report_in_json() {
+    let dir = TempDir::new().unwrap();
+    flayer(dir.path(), &["init"]).unwrap();
+
+    let outcome = flayer(dir.path(), &["status", "--json"]).unwrap();
+
+    let (report, warnings): (Report, _) = enveloped(&outcome);
+    assert!(report.projects.is_empty());
+    assert!(warnings.is_empty());
+    assert!(outcome.ok);
 }

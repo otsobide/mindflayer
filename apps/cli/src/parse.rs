@@ -205,7 +205,12 @@ pub enum Command {
     /// Say what this project holds: whether each artifact was installed,
     /// is partly gone, is somebody's or is the project's own, which agents
     /// read it, and where what was installed came from.
-    Status,
+    Status {
+        /// Print it as JSON, in the envelope every reading command's --json
+        /// shares.
+        #[arg(long)]
+        json: bool,
+    },
 
     /// Register this project with the flayer workspace above it.
     Link,
@@ -463,6 +468,11 @@ pub enum FlayerCommand {
         /// Only this project.
         #[arg(short, long, value_name = "PROJECT")]
         project: Option<String>,
+
+        /// Print it as JSON, in the envelope every reading command's --json
+        /// shares.
+        #[arg(long)]
+        json: bool,
     },
 
     /// Register one or more mind projects with this workspace.
