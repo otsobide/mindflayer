@@ -78,8 +78,9 @@ under `apps/` with its own `Makefile`:
   (`activate`), kinds, the agents and where each kind goes for them
   (`agent`), the catalog, gathering (`gix`), the SQLite ledger,
   installing, keeping installs out of git (`exclude`), a project's rules
-  rendered into the block of its `AGENTS.md` (`agents_md`), changing a
-  project's agents or share mode and carrying its installs along
+  rendered into the block of its `AGENTS.md` (`agents_md`) and into
+  Claude's rules folder (`claude_rules`), changing a project's agents or
+  share mode and carrying its installs along
   (`reapply`), what each project holds, from where and for which agents
   (`status`), creating and changing artifacts, and moving a workspace's own
   into its library and a project from its `mind.toml` to settings
@@ -220,7 +221,8 @@ These are easy to break from a single file without noticing.
     `$GIT_COMMON_DIR/info/exclude` (`exclude`), where an edit rewrites only its
     own project's `# project <key>` group: an install writes one entry per
     copy for a local project, keyed by its id, before the copies land, and
-    never opens the file for a shared project or one a `mind.toml` marks. A
+    a render of Claude's rule files one per file, and neither opens the file
+    for a shared project or one a `mind.toml` marks. A
     project turning shared has its whole group forgotten (`exclude::forget`),
     and one turning local an entry written for each copy in place. A team's
     `.gitignore` and `core.excludesFile` are never edited; the `.gitignore`s
@@ -243,6 +245,20 @@ These are easy to break from a single file without noticing.
     in a folder above a project it links, whose agents would read it too,
     nor inside an agent's own folder (`AgentsMdError::UserScope`); a render
     that takes one out goes ahead there.
+  - Claude's rule files, `.claude/rules/mindflayer/<route>.md`
+    (`claude_rules`), hold a rule as written, front matter included. Until
+    the ledger records them (#45), a render is handed what an earlier one
+    returned (`claude_rules::Recorded`: each file's route and its
+    `hash::bytes`), and a file is Mindflayer's only while it holds exactly
+    that: only such a file is replaced or taken away. A file nothing
+    recorded, even one holding the rule, or one changed since, is left
+    exactly as it is and said, and so is a link at a rule's place. A new
+    file is made with `create_new`; one replaced goes through
+    `replace_bytes_unresolved`, whose temporary ends in `.tmp`, which
+    Claude never loads; emptied folders go up to and including `mindflayer`
+    and no further. A render asked for a rule is refused wherever the block
+    is (`agents_md::misplaced`), and both renderers ask
+    `RuleManifest::is_scoped` which rules are about some files only.
   - An entry in a config file somebody else owns (`.mcp.json`,
     `opencode.json`, `.codex/config.toml`) is changed one at a time through
     `config_entry`: JSON and JSONC entries are edited through jsonc-parser's
@@ -324,7 +340,10 @@ These are easy to break from a single file without noticing.
   - An `AGENTS.md` that is a link leading out of its project is refused
     (`agents_md`), since a repository can link it to the user's own
     `~/.codex/AGENTS.md`; one to a file inside the project is written
-    through.
+    through. So is a rule file whose folders lead out of the project
+    through a link (`claude_rules`), written or taken away, since `.claude`
+    can be a link to the user's own `~/.claude`; the file itself is never
+    followed.
   - URLs are stored, logged and shown without credentials. `url::redacted`
     is the one function that takes them out: the ledger applies it to every
     URL it writes and reads, `GitError` to what it says, `git::scrub` to a
@@ -346,7 +365,8 @@ These are easy to break from a single file without noticing.
   project's settings until their change and every copy it carries along are
   written. A new
   writer takes it the same way, inside core; `config_entry::ConfigFile`,
-  `agents_md::render` and `MindProject::change_settings` take none, since
+  `agents_md::render`, `claude_rules::render` and
+  `MindProject::change_settings` take none, since
   the writers that call them hold it. A second workspace linking the same
   project is kept out by neither lock, an open question in
   `docs/architecture.md`.
@@ -436,11 +456,11 @@ These are easy to break from a single file without noticing.
   find. Core takes the answer as `AgentHomes` and never resolves one.
   `Lookup::given` decides them once per command line, into the `Lookup`
   (`Lookup::agents`), and install is the first to take them, to refuse a
-  copy inside one, as `agents_md::render` takes them to refuse a block of
-  rules there. `tui::execute` hands each line the TUI's own with the
-  rest of its `Lookup`, and so does its install screen: a command the TUI
-  runs carries none of the four options, so it would decide them again from
-  the environment.
+  copy inside one, as `agents_md::render` and `claude_rules::render` take
+  them to refuse rules there. `tui::execute` hands each line the TUI's own
+  with the rest of its `Lookup`, and so does its install screen: a command
+  the TUI runs carries none of the four options, so it would decide them
+  again from the environment.
 - **The server holds no rules.** `apps/server` carries JSON between the
   browser and a `Backend`, whose `Query`, `Task` and `Outcome` are associated
   types, and depends on no mindflayer crate (`tests/crate_test.rs` checks it

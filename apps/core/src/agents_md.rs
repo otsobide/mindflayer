@@ -124,20 +124,21 @@ pub struct Section {
 impl Section {
     /// The section for `rule`, or `None` for a rule about some files only.
     ///
-    /// A rule whose front matter states `paths` goes to Claude's rules
-    /// folder alone (D-03, #43), where Claude loads it once one of those
-    /// files is read: in `AGENTS.md` every agent would read it for every
-    /// file. A `paths` written in a shape that is not read is ignored, as
-    /// everywhere else ([`crate::rule::Lenient`]), so the rule is about every
-    /// file and has its section. The body is what an agent is given,
-    /// [`Artifact::contents`], read from the file as it is now.
+    /// A rule whose front matter states `paths`
+    /// ([`RuleManifest::is_scoped`](crate::rule::RuleManifest::is_scoped))
+    /// goes to Claude's rules folder alone (D-03, [`crate::claude_rules`]),
+    /// where Claude loads it once one of those files is read: in `AGENTS.md`
+    /// every agent would read it for every file. A `paths` written in a shape
+    /// that is not read says nothing, so that rule has its section. The body
+    /// is what an agent is given, [`Artifact::contents`], read from the file
+    /// as it is now.
     pub fn of(rule: &Artifact) -> Result<Option<Self>, AgentsMdError> {
         let Declared::Rule(manifest) = rule.declared() else {
             return Err(AgentsMdError::NotARule {
                 name: rule.qualified_name(),
             });
         };
-        if manifest.paths.stated().is_some() {
+        if manifest.is_scoped() {
             return Ok(None);
         }
         let body = rule.contents()?;
@@ -222,7 +223,7 @@ impl Section {
 /// other one project's failure.
 ///
 /// So is a block left in a folder whose `AGENTS.md` the agents of other
-/// projects read too ([`placed`]): `workspace` is the one whose links say
+/// projects read too ([`misplaced`]): `workspace` is the one whose links say
 /// where those are, and `homes` the agents' own folders, which the front end
 /// decides as it does for an install. A render that leaves no block goes
 /// ahead there, since it takes rules away from those agents rather than
@@ -258,7 +259,9 @@ pub fn render<'a>(
     // or before the one at the workspace's root was unlinked, comes out
     // again, and refusing it would keep the very leak the refusal is for.
     if !sections.is_empty() {
-        placed(workspace, homes, project.root())?;
+        if let Some(refused) = misplaced(workspace, homes, project.root(), &file) {
+            return Err(refused.into());
+        }
     }
 
     let read = read(&file)?;
@@ -460,8 +463,8 @@ fn codex_warnings(project: &Path) -> Vec<Warning> {
     warnings
 }
 
-/// Refuse `folder` as a place for a block of rules when agents beyond its own
-/// project's would read an `AGENTS.md` there.
+/// Why `file` is no place for rules rendered for the project at `folder`,
+/// when agents beyond that project's would read them there.
 ///
 /// Claude reads every `AGENTS.md` from where it starts up to the root, and
 /// OpenCode V2 up to the home directory, so one in a folder above a project
@@ -475,22 +478,26 @@ fn codex_warnings(project: &Path) -> Vec<Warning> {
 /// a holder at that root, not a project), while a project at the root is a
 /// project like any other, and its `AGENTS.md` its own (D-03).
 ///
-/// So is a folder inside one of the agents' own, as an install's copy is
-/// ([`crate::install::InstallError::UserScope`]): a project at `$CODEX_HOME`
-/// would write the `AGENTS.md` Codex reads in every project, and one at
-/// `~/.claude` the `.claude/AGENTS.md` Claude finds above every project in
-/// the user's home. Inside rather than equal, for the reason an install
-/// gives: nothing in one of those folders is any one project's.
-fn placed(
+/// So is a `file` inside one of the agents' own folders, as an install's
+/// copy is ([`crate::install::InstallError::UserScope`]): a project at
+/// `$CODEX_HOME` would write the `AGENTS.md` Codex reads in every project,
+/// and one at `~/.claude` the `.claude/AGENTS.md` Claude finds above every
+/// project in the user's home. Inside rather than equal, for the reason an
+/// install gives: nothing in one of those folders is any one project's.
+///
+/// Every renderer of a project's rules asks this of the file it would
+/// write, so none of them leaves rules where the others refuse to.
+pub(crate) fn misplaced(
     workspace: &FlayerWorkspace,
     homes: &AgentHomes,
     folder: &Path,
-) -> Result<(), AgentsMdError> {
-    if let Some((file, home, reader)) = install::in_agent_home(homes, &[folder.join(FILE)]) {
-        return Err(AgentsMdError::UserScope { file, home, reader });
+    file: &Path,
+) -> Option<Misplaced> {
+    if let Some((file, home, reader)) = install::in_agent_home(homes, &[file.to_path_buf()]) {
+        return Some(Misplaced::UserScope { file, home, reader });
     }
     if same_directory(folder, workspace.root()) && !workspace.is_linked(folder) {
-        return Err(AgentsMdError::WorkspaceRoot {
+        return Some(Misplaced::WorkspaceRoot {
             folder: folder.to_path_buf(),
         });
     }
@@ -501,12 +508,45 @@ fn placed(
         .filter(|root| is_below(root, folder))
         .collect();
     if !below.is_empty() {
-        return Err(AgentsMdError::AboveProjects {
+        return Some(Misplaced::AboveProjects {
             folder: folder.to_path_buf(),
             projects: below,
         });
     }
-    Ok(())
+    None
+}
+
+/// Why rules are not written where a project would have them: what
+/// [`misplaced`] finds, for each renderer to refuse in words of its own.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum Misplaced {
+    /// The file is inside the folder `reader` reads for every project.
+    UserScope {
+        file: PathBuf,
+        home: PathBuf,
+        reader: &'static str,
+    },
+    /// The project is at the workspace's root, which links no project there.
+    WorkspaceRoot { folder: PathBuf },
+    /// The project is above these, which the workspace links.
+    AboveProjects {
+        folder: PathBuf,
+        projects: Vec<PathBuf>,
+    },
+}
+
+impl From<Misplaced> for AgentsMdError {
+    fn from(misplaced: Misplaced) -> Self {
+        match misplaced {
+            Misplaced::UserScope { file, home, reader } => {
+                AgentsMdError::UserScope { file, home, reader }
+            }
+            Misplaced::WorkspaceRoot { folder } => AgentsMdError::WorkspaceRoot { folder },
+            Misplaced::AboveProjects { folder, projects } => {
+                AgentsMdError::AboveProjects { folder, projects }
+            }
+        }
+    }
 }
 
 /// Whether `path` is inside `folder` and not `folder` itself: by the route
