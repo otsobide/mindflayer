@@ -233,6 +233,32 @@ fn a_removed_install_leaves_no_record_for_what_is_written_there_next() {
 }
 
 #[test]
+fn an_installed_skill_that_is_renamed_stays_installed_under_its_new_name() {
+    let (dir, workspace, ledger) = shelved_older(&["collapse"], &["deploy"]);
+    installed(dir.path(), &workspace, &ledger);
+    let project = dir.path().join("collapse");
+
+    let outcome = mind(&project, &["rename", "deploy", "ship"]).unwrap();
+
+    assert!(
+        outcome.stdout.ends_with(
+            "  it was installed by `flayer install`, and stays so under its new name; renamed, \
+             it is left alone by `flayer install` and `flayer uninstall` unless they are forced\n"
+        ),
+        "{}",
+        outcome.stdout
+    );
+    // Its name line is not what was installed, so it is taken out only when
+    // that is forced.
+    let refused = mind(&project, &["uninstall", "ship"]).unwrap();
+    assert!(!refused.ok);
+    assert!(project.join("skills/ship/SKILL.md").is_file());
+    let forced = mind(&project, &["uninstall", "ship", "--force"]).unwrap();
+    assert_eq!(forced.stdout, "removed ship from collapse\n");
+    assert!(!project.join("skills/ship").exists());
+}
+
+#[test]
 fn removing_an_install_scrubs_the_ledger_it_drops_the_record_from_and_says_so() {
     let (dir, workspace, ledger) = shelved_older(&["collapse"], &["deploy"]);
     installed(dir.path(), &workspace, &ledger);
@@ -266,7 +292,7 @@ fn removing_an_install_scrubs_the_ledger_it_drops_the_record_from_and_says_so() 
 
 #[cfg(unix)]
 #[test]
-fn an_editor_that_writes_and_then_fails_still_says_what_the_scrub_took_out() {
+fn an_editor_that_writes_and_then_fails_leaves_the_ledger_for_the_next_write_to_scrub() {
     let (dir, workspace, ledger) = shelved_older(&["collapse"], &["deploy"]);
     installed(dir.path(), &workspace, &ledger);
     rusqlite::Connection::open(workspace.ledger_path())
@@ -288,26 +314,20 @@ fn an_editor_that_writes_and_then_fails_still_says_what_the_scrub_took_out() {
     )
     .unwrap_err();
 
-    // Said only this once, so said with the error rather than not at all.
+    // An edit keeps the record as it was, so it writes nothing to the
+    // ledger, and leaves its scrub to the next command that does.
     assert!(
         matches!(*failure.error, CliError::EditorFailed { .. }),
         "{}",
         failure.error
     );
-    assert_eq!(
-        failure.warnings,
-        [
-            "note: https://example.com/acme/skills: the user name, password or token an older \
-             Mindflayer stored in this URL is taken out; gathering it again needs a git \
-             credential helper that has it"
-        ]
-    );
-    assert_eq!(ledger.tainted_sources().unwrap(), []);
+    assert!(failure.warnings.is_empty(), "{:?}", failure.warnings);
+    assert_eq!(ledger.tainted_sources().unwrap().len(), 1);
 }
 
 #[cfg(unix)]
 #[test]
-fn an_installed_skill_that_is_edited_is_yours_from_then_on() {
+fn an_installed_skill_that_is_edited_stays_installed_and_reads_as_edited() {
     let (dir, workspace, ledger) = shelved_older(&["collapse"], &["deploy"]);
     installed(dir.path(), &workspace, &ledger);
 
@@ -317,17 +337,24 @@ fn an_installed_skill_that_is_edited_is_yours_from_then_on() {
     )
     .unwrap();
 
-    assert!(outcome.stdout.contains("it is yours"), "{}", outcome.stdout);
+    assert!(
+        outcome.stdout.ends_with(
+            "  it was installed by `flayer install`, and stays so; edited, it is left alone by \
+             `flayer install` and `flayer uninstall` unless they are forced\n"
+        ),
+        "{}",
+        outcome.stdout
+    );
     let screen = screen_for(&workspace, &ledger);
     assert_eq!(
         screen.targets[0].rows[0].candidate.standing,
-        Standing::Foreign
+        Standing::Edited
     );
 }
 
 #[cfg(unix)]
 #[test]
-fn an_installed_skill_is_yours_when_the_editor_writes_it_and_then_fails() {
+fn an_installed_skill_reads_as_edited_when_the_editor_writes_it_and_then_fails() {
     let (dir, workspace, ledger) = shelved_older(&["collapse"], &["deploy"]);
     installed(dir.path(), &workspace, &ledger);
     let project = dir.path().join("collapse");
@@ -355,7 +382,7 @@ fn an_installed_skill_is_yours_when_the_editor_writes_it_and_then_fails() {
     let screen = screen_for(&workspace, &ledger);
     assert_eq!(
         screen.targets[0].rows[0].candidate.standing,
-        Standing::Foreign
+        Standing::Edited
     );
 }
 
@@ -387,7 +414,7 @@ fn installed_from_beside() -> (TempDir, PathBuf, PathBuf) {
 
 #[cfg(unix)]
 #[test]
-fn a_workspace_beside_a_project_drops_its_record_when_flayer_edits_the_copy() {
+fn a_workspace_beside_a_project_keeps_its_record_when_flayer_edits_the_copy() {
     let (_dir, hub, project) = installed_from_beside();
 
     let outcome = flayer(
@@ -405,12 +432,13 @@ fn a_workspace_beside_a_project_drops_its_record_when_flayer_edits_the_copy() {
 
     // Walking up from the project never reaches the workspace; the one the
     // command runs in is the one asked.
-    assert!(outcome.stdout.contains("it is yours"), "{}", outcome.stdout);
+    assert!(outcome.stdout.contains("stays so"), "{}", outcome.stdout);
     let left = flayer(&hub, &["uninstall", "-p", "collapse", "deploy"]).unwrap();
     assert_eq!(
         left.stderr,
         vec![
-            "warning: deploy at skills/deploy in collapse was not installed by Mindflayer, so it was left alone"
+            "warning: deploy in collapse was changed since it was installed, at skills/deploy, \
+             so it was left alone; --force takes it out"
         ]
     );
     assert!(project.join("skills/deploy/SKILL.md").is_file());
@@ -418,7 +446,7 @@ fn a_workspace_beside_a_project_drops_its_record_when_flayer_edits_the_copy() {
 
 #[cfg(unix)]
 #[test]
-fn mind_drops_the_record_of_the_workspace_in_your_home_when_that_manages_the_project() {
+fn mind_keeps_the_record_of_the_workspace_in_your_home_when_that_manages_the_project() {
     let home = TempDir::new().unwrap();
     let elsewhere = TempDir::new().unwrap();
     let project = elsewhere.path().join("collapse");
@@ -442,7 +470,7 @@ fn mind_drops_the_record_of_the_workspace_in_your_home_when_that_manages_the_pro
     )
     .unwrap();
 
-    assert!(outcome.stdout.contains("it is yours"), "{}", outcome.stdout);
+    assert!(outcome.stdout.contains("stays so"), "{}", outcome.stdout);
     let left = mind_at_home(&project, home.path(), &["uninstall", "deploy"]).unwrap();
     assert!(!left.ok);
     assert!(project.join("skills/deploy/SKILL.md").is_file());

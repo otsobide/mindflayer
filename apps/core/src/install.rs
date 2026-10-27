@@ -37,7 +37,7 @@ use crate::gather::Scrub;
 use crate::hash;
 use crate::kind::{Kind, Layout};
 use crate::ledger::{
-    Action, Forgotten, Gathered, InstallRecord, Ledger, LedgerError, Outcome, Target,
+    Action, Carried, Forgotten, Gathered, InstallRecord, Ledger, LedgerError, Outcome, Target,
 };
 use crate::paths;
 use crate::settings::Share;
@@ -1067,11 +1067,10 @@ pub fn install_with(
 
     // Looked at again under the lock, before anything is written. The
     // candidate's standing is from a survey made before it was held, minutes
-    // before on the install screen, and since then an edit may have made a
-    // copy its author's and dropped its record, or somebody may have written
-    // a folder of that name by hand. Only a turn to Foreign changes what
-    // happens here, and that one must: it is somebody's work, never written
-    // over.
+    // before on the install screen, and since then somebody may have written
+    // a folder of that name by hand, or edited a copy. Only a turn to Foreign
+    // or to Edited changes what happens here, and that one must: it is
+    // somebody's work, never written over unless forced.
     let recorded = ledger.copies(&entry, kind)?;
     if let Some(path) = unrecorded(project.root(), kind, &copies, &recorded) {
         return Ok(Installed::Foreign { name, path }.into());
@@ -1519,11 +1518,14 @@ pub(crate) fn recorded_copy(
 /// Drop the record that Mindflayer installed `name` into `project`, when it
 /// names a copy at `at`, saying whether there was one.
 ///
-/// For when what is in the project stops being what was installed: it was
-/// removed, renamed or edited by hand, or something new was written under a
-/// name an old record still claims. The record is what gives the install
-/// screen leave to overwrite and delete, so it must not outlive the copy it
-/// was about: whatever somebody writes there next would inherit it.
+/// For when what is in the project stops being a copy that was installed:
+/// it was removed, which uninstalls it, or something new was written under a
+/// name an old record still claims, which outlived its copy. The record is
+/// what gives an install leave to overwrite and an uninstall leave to
+/// delete, so it must not outlive the copy it was about: whatever somebody
+/// writes there next would inherit it. A copy edited or renamed is still
+/// there, and keeps its record ([`carry`]), which tells the edit apart
+/// (D-04).
 ///
 /// Only a record of a copy at `at`, the place the change reached, and only
 /// that copy's part of it ([`Ledger::uninstalled_copy`]): a project marked by
@@ -1610,6 +1612,137 @@ pub(crate) fn disown(
         scrub,
         still_excluded,
     })
+}
+
+/// Carry the record of the copy of `name` at `at` in `project`, which a
+/// rename moved to `to_at` and called `to_name`, along with it
+/// ([`Ledger::renamed_copy`]), saying what became of it.
+///
+/// For a rename of an installed copy: it is what was installed, renamed,
+/// which leaves it holding something other than was written there, an edit
+/// in all but name. So it stays Mindflayer's, as an edit leaves a copy, and
+/// reads as edited (D-04): never written over or deleted unless forced, and
+/// never left out of a listing of what the project was given. Dropping its
+/// record, as a rename once did, made it somebody's that nobody can take
+/// out again. Where another installation holds `to_name` already, the copy
+/// cannot join it, and its record goes instead, as [`disown`] would drop it.
+///
+/// In a local project its place in the exclude block moves with it while it
+/// is recorded, and goes while it is not: a line naming the place it left
+/// would keep whatever is written there next out of git.
+///
+/// The workspace and the ledger are found and opened as for [`disown`], and
+/// only by the changes in [`crate::lifecycle`].
+pub(crate) fn carry(
+    workspace: &FlayerWorkspace,
+    project: &MindProject,
+    kind: Kind,
+    name: &str,
+    at: &Path,
+    (to_name, to_at): (&str, &Path),
+) -> Result<Carry, InstallError> {
+    if !workspace.is_linked(project.root()) || !workspace.ledger_path().is_file() {
+        return Ok(Carry::default());
+    }
+    let (ledger, scrub) = workspace.ledger_to_write_waiting(Duration::MAX)?;
+    let entry = project_entry(workspace, project);
+    let (from, to) = (route(project.root(), at), route(project.root(), to_at));
+    let carried = ledger.renamed_copy(&entry, kind, name, &from, to_name, &to)?;
+    let (action, detail) = match carried {
+        Carried::Nothing => {
+            return Ok(Carry {
+                scrub,
+                ..Carry::default()
+            })
+        }
+        Carried::Moved => (
+            Action::Install,
+            format!(
+                "{name}'s copy at {from} in {}, renamed {to_name} at {to}",
+                project.name()
+            ),
+        ),
+        Carried::Forgotten => (
+            Action::Uninstall,
+            format!(
+                "{name}'s copy at {from} from {}, renamed onto {to_name}, which is installed already",
+                project.name()
+            ),
+        ),
+    };
+    ledger.log(action, Some(&entry), Outcome::Ok, Some(&detail))?;
+    // After the record, as an install keeps its copies out of git before
+    // they land and an uninstall takes them back in after they go: the copy
+    // has moved already. Said rather than raised, since the record has too.
+    let left = entries(project, &[at.to_path_buf()]);
+    let unexcluded = local(project).and_then(|key| {
+        if carried == Carried::Moved {
+            if let Err(source) = exclude::add(
+                project.root(),
+                key,
+                &entries(project, &[to_at.to_path_buf()]),
+            ) {
+                return Some(InstallError::NotExcluded {
+                    path: to_at.to_path_buf(),
+                    source,
+                });
+            }
+        }
+        exclude::remove(project.root(), key, &left)
+            .err()
+            .map(|source| InstallError::StillExcluded {
+                path: at.to_path_buf(),
+                source,
+            })
+    });
+    Ok(Carry {
+        carried,
+        scrub,
+        unexcluded,
+    })
+}
+
+/// What [`carry`] did.
+#[derive(Debug)]
+pub(crate) struct Carry {
+    pub carried: Carried,
+    /// What opening the ledger to write took out of it, for the front end to
+    /// say; nothing when there was no ledger to open.
+    pub scrub: Scrub,
+    /// Why the exclude block of a local project does not say what is
+    /// Mindflayer's now, when it could not be edited.
+    pub unexcluded: Option<InstallError>,
+}
+
+impl Default for Carry {
+    fn default() -> Self {
+        Carry {
+            carried: Carried::Nothing,
+            scrub: Scrub::default(),
+            unexcluded: None,
+        }
+    }
+}
+
+/// Whether `workspace`'s ledger records a copy of `name` at `at` in
+/// `project`: read, never written, for a change that leaves the record as it
+/// is and says so. False for a workspace that does not manage the project,
+/// and one with no ledger, which is not made to look.
+pub(crate) fn recorded_at(
+    workspace: &FlayerWorkspace,
+    project: &MindProject,
+    kind: Kind,
+    name: &str,
+    at: &Path,
+) -> Result<bool, InstallError> {
+    if !workspace.is_linked(project.root()) || !workspace.ledger_path().is_file() {
+        return Ok(false);
+    }
+    let ledger = workspace.ledger_for_reading()?;
+    let reached = route(project.root(), at);
+    Ok(ledger
+        .installation(&project_entry(workspace, project), kind, name)?
+        .is_some_and(|record| record.targets.iter().any(|target| target.path == reached)))
 }
 
 /// What [`disown`] did.
@@ -2035,6 +2168,12 @@ pub enum InstallError {
     Exclude(#[from] ExcludeError),
     #[error("{path}: its record of being installed was dropped, but the exclude file still keeps it out of git: {source}")]
     StillExcluded {
+        path: PathBuf,
+        #[source]
+        source: ExcludeError,
+    },
+    #[error("{path}: renamed, and still recorded as installed, but the exclude file cannot keep it out of git: {source}")]
+    NotExcluded {
         path: PathBuf,
         #[source]
         source: ExcludeError,

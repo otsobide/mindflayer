@@ -5,10 +5,10 @@
 //! `mind add` and `flayer add -p alpha` are one function given one project,
 //! and `flayer add` is the same function given the workspace. Each also takes
 //! the workspace the command resolved and hands it to core: its templates are
-//! among those `add` starts from, and core's lifecycle drops its record of
-//! what it installed when a change would leave that record outliving the
-//! copy. Here that is only said, along with what opening the ledger to do it
-//! scrubbed out of it.
+//! among those `add` starts from, and core's lifecycle sees to its record of
+//! what it installed: kept through an edit, carried through a rename, and
+//! dropped when the copy goes. Here that is only said, along with what
+//! opening the ledger to do it scrubbed out of it.
 
 use std::fmt::Write as _;
 use std::path::Path;
@@ -49,11 +49,7 @@ pub(crate) fn add_to(
         added.artifact.name(),
         added.artifact.file().display()
     ));
-    recorded(
-        &mut outcome,
-        added.stale,
-        "an old record said `flayer install` had put one of that name here; it is gone",
-    );
+    recorded(&mut outcome, added.stale, stale);
     Ok(scrubbed(&added.scrub).before(outcome))
 }
 
@@ -69,15 +65,10 @@ pub(crate) fn edit_in(
     let editor = editor.map_or_else(default_editor, str::to_owned);
     let opened = open_in_editor(&editor, edit.file());
     // Finished whatever the editor came to. One that writes the file and then
-    // exits non-zero, as vim does on `:cq`, has changed the copy all the same,
-    // and a record left behind would let `flayer uninstall` delete the change.
+    // exits non-zero, as vim does on `:cq`, has changed the copy all the same.
     let finished = lifecycle::finish_edit(workspace, holder, edit);
     if let Err(error) = opened {
         let mut failure = Failure::from(error);
-        // What the scrub said goes with an error too: it happened all the same.
-        failure
-            .warnings
-            .splice(0..0, scrubbed(&finished.scrub).lines());
         if let Err(error) = finished.copy {
             failure.warnings.push(format!("warning: {error}"));
         }
@@ -85,12 +76,15 @@ pub(crate) fn edit_in(
     }
 
     let mut outcome = edited(holder, &target, finished.changed);
-    recorded(
-        &mut outcome,
-        finished.copy,
-        "it had been installed from the shelf; edited, it is yours, and `flayer install` leaves it alone",
-    );
-    Ok(scrubbed(&finished.scrub).before(outcome))
+    recorded(&mut outcome, finished.copy, |record| {
+        (record == Record::Kept).then(|| {
+            String::from(
+                "it was installed by `flayer install`, and stays so; edited, it is left alone by \
+                 `flayer install` and `flayer uninstall` unless they are forced",
+            )
+        })
+    });
+    Ok(outcome)
 }
 
 pub(crate) fn rename_in(
@@ -109,16 +103,19 @@ pub(crate) fn rename_in(
         renamed.target.name,
         renamed.target.path.display()
     ));
-    recorded(
-        &mut outcome,
-        renamed.copy,
-        "it had been installed from the shelf; renamed, it is yours, and `flayer install` leaves it alone",
-    );
-    recorded(
-        &mut outcome,
-        renamed.stale,
-        "an old record said `flayer install` had put one of that name here; it is gone",
-    );
+    let to = renamed.target.name.clone();
+    recorded(&mut outcome, renamed.copy, |record| match record {
+        Record::Moved => Some(String::from(
+            "it was installed by `flayer install`, and stays so under its new name; renamed, it \
+             is left alone by `flayer install` and `flayer uninstall` unless they are forced",
+        )),
+        Record::Dropped => Some(format!(
+            "it had been installed, but `{to}` is installed already; renamed, it is yours, and \
+             `flayer install` leaves it alone"
+        )),
+        Record::Untouched | Record::Kept => None,
+    });
+    recorded(&mut outcome, renamed.stale, stale);
     Ok(scrubbed(&renamed.scrub).before(outcome))
 }
 
@@ -147,11 +144,13 @@ pub(crate) fn remove_from(
         target.name,
         target.path.display()
     ));
-    recorded(
-        &mut outcome,
-        removed.copy,
-        "it had been installed from the shelf; `flayer install` can put it back",
-    );
+    recorded(&mut outcome, removed.copy, |record| {
+        (record == Record::Dropped).then(|| {
+            String::from(
+                "it had been installed, and is uninstalled with it; `flayer install` can put it back",
+            )
+        })
+    });
     Ok(scrubbed(&removed.scrub).before(outcome))
 }
 
@@ -263,20 +262,35 @@ fn edited(project: &MindProject, target: &Target, changed: bool) -> Outcome {
 }
 
 /// Say what a change did to a record that `flayer install` put something
-/// into the project, when it did anything.
+/// into the project, when `why` has something to say of it.
 ///
 /// A record that could not be changed is a warning rather than an error, as
 /// core reports it: the change it was about has already been made, and
 /// reporting it as not made would be false.
-fn recorded(outcome: &mut Outcome, record: Result<Record, InstallError>, why: &str) {
+fn recorded(
+    outcome: &mut Outcome,
+    record: Result<Record, InstallError>,
+    why: impl Fn(Record) -> Option<String>,
+) {
     match record {
-        Ok(Record::Dropped) => {
-            let _ = writeln!(outcome.stdout, "  {why}");
+        Ok(record) => {
+            if let Some(why) = why(record) {
+                let _ = writeln!(outcome.stdout, "  {why}");
+            }
         }
-        Ok(Record::Untouched) => {}
         Err(error) => {
             outcome.stderr.push(format!("warning: {error}"));
             outcome.ok = false;
         }
     }
+}
+
+/// What to say of a record of an install under the name a change wrote,
+/// whose copy had gone, and which the change dropped.
+fn stale(record: Record) -> Option<String> {
+    (record == Record::Dropped).then(|| {
+        String::from(
+            "an old record said `flayer install` had put one of that name here; it is gone",
+        )
+    })
 }

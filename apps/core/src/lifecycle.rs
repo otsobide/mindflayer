@@ -8,16 +8,21 @@
 //!
 //! Each change also sees to the ledger's record of what was installed under
 //! the names it touches, and says in its result what it did ([`Record`]). The
-//! rule is one, and it lives here rather than in a front end, so that no
-//! front end can apply it differently. Only one that changes things through
-//! these functions gets it, though: [`create`] and [`create_from`], the
-//! writers [`add`] is built on, see to no record, and a front end that added
-//! with them would leave a stale one in place.
+//! rule is D-04's: an installed copy that is edited or renamed stays
+//! recorded, and reads as edited, never written over or deleted unless
+//! forced; one that is removed is uninstalled, its record going with it; and
+//! one added where a record outlived its copy drops that record. It lives
+//! here rather than in a front end, so that no front end can apply it
+//! differently. Only one that changes things through these functions gets
+//! it, though: [`create`] and [`create_from`], the writers [`add`] is built
+//! on, see to no record, and a front end that added with them would leave a
+//! stale one in place.
 //!
-//! Seeing to a record opens the ledger to write, which scrubs it first
-//! ([`FlayerWorkspace::ledger_to_write`]), so each result also hands back what
-//! that took out ([`Scrub`]) for the front end to say. Said nowhere, it would
-//! go unsaid for good: a scrub says what it found only the first time.
+//! Changing a record opens the ledger to write, which scrubs it first
+//! ([`FlayerWorkspace::ledger_to_write`]), so each result that may also hands
+//! back what that took out ([`Scrub`]) for the front end to say. Said
+//! nowhere, it would go unsaid for good: a scrub says what it found only the
+//! first time. An edit changes none, and only reads the ledger.
 
 use std::fs;
 use std::io;
@@ -32,6 +37,7 @@ use crate::frontmatter;
 use crate::gather::Scrub;
 use crate::install::{self, InstallError};
 use crate::kind::{Kind, Layout};
+use crate::ledger::Carried;
 use crate::paths;
 use crate::skill::SkillManifest;
 use crate::template::Template;
@@ -65,9 +71,12 @@ impl Target {
 /// What a change did to the ledger's record that Mindflayer installed what
 /// is under one name.
 ///
-/// That record is what gives the install screen leave to overwrite and
-/// delete, so it must not outlive the copy it was about: whatever somebody
-/// writes there next would inherit it.
+/// That record is what gives an install leave to overwrite and an uninstall
+/// leave to delete, so it must not outlive the copy it was about: whatever
+/// somebody writes there next would inherit it. While the copy is there,
+/// edited or renamed, it stays: the hash it holds tells the edit apart, and
+/// what was installed is still said, still taken out when it is uninstalled
+/// with `--force` (D-04).
 ///
 /// A change reports it as `Result<Record, InstallError>` beside what it made
 /// rather than failing with it: by the time the record is seen to, the change
@@ -78,9 +87,18 @@ pub enum Record {
     /// the one consulted does not manage the project, or it installed nothing
     /// under that name) or the change gave no reason to touch it.
     Untouched,
-    /// The record of the copy the change reached was dropped, and what is
-    /// there now is its author's. Copies the same install wrote in other
-    /// folders, which the change did not reach, are still recorded.
+    /// The copy the change reached is recorded, and stays so as it was: an
+    /// edit leaves it holding something other than what was installed, which
+    /// reads as edited.
+    Kept,
+    /// The record of the copy the change reached names it under its new name
+    /// and place, from where it came: renamed, it reads as edited.
+    Moved,
+    /// The record of the copy the change reached was dropped: it was
+    /// removed, and so uninstalled; or the record outlived its copy; or a
+    /// rename put it under a name installed from elsewhere, and what is there
+    /// now is its author's. Copies the same install wrote in other folders,
+    /// which the change did not reach, are still recorded.
     Dropped,
 }
 
@@ -334,13 +352,11 @@ impl Edit {
 pub struct Edited {
     /// Whether the file is any different from when the edit started.
     pub changed: bool,
-    /// The record of the copy edited, dropped when it changed: it is no longer
-    /// what was installed, so the install screen must not take it for its
-    /// own to overwrite.
+    /// The record of the copy edited, kept when it changed and was
+    /// installed: it holds something other than what was installed now,
+    /// which is what tells an edit apart, so no install writes over it and
+    /// no uninstall takes it out unless forced.
     pub copy: Result<Record, InstallError>,
-    /// What opening the ledger to drop that record scrubbed out of it;
-    /// nothing when the file did not change, since the ledger was not opened.
-    pub scrub: Scrub,
 }
 
 /// Start editing `target`, noting what its file holds now.
@@ -356,8 +372,14 @@ pub fn start_edit(target: &Target) -> Edit {
 }
 
 /// Finish an edit of an artifact in `project` once the editor has closed,
-/// dropping the record of an install of it when the file changed.
-/// `workspace` is the one consulted, as for [`add`].
+/// saying whether the file changed and whether an install of it stays
+/// recorded. `workspace` is the one consulted, as for [`add`].
+///
+/// The record stays as it was (D-04). Dropping it, as an edit once did,
+/// made the copy somebody's that no update could reach and no uninstall
+/// could take out; kept, its hash is what tells the edit apart, and every
+/// install and uninstall leaves the copy alone unless forced. So the ledger
+/// is only read, to say so, never written.
 ///
 /// A front end finishes the edit whether or not the editor succeeded: one
 /// that wrote the file before it failed has changed the copy all the same.
@@ -367,19 +389,20 @@ pub fn finish_edit(
     edit: Edit,
 ) -> Edited {
     let changed = fs::read(&edit.file).ok() != edit.before;
-    let mut scrub = Scrub::default();
-    let copy = if changed {
-        disowned(
-            workspace, project, edit.kind, &edit.name, &edit.path, &mut scrub,
+    let copy = match workspace.filter(|_| changed) {
+        None => Ok(Record::Untouched),
+        Some(workspace) => install::recorded_at(
+            workspace, project, edit.kind, &edit.name, &edit.path,
         )
-    } else {
-        Ok(Record::Untouched)
+        .map(|recorded| {
+            if recorded {
+                Record::Kept
+            } else {
+                Record::Untouched
+            }
+        }),
     };
-    Edited {
-        changed,
-        copy,
-        scrub,
-    }
+    Edited { changed, copy }
 }
 
 /// How many files removing it would delete.
@@ -405,16 +428,19 @@ pub fn files(target: &Target) -> usize {
 /// What removing an artifact did to the record of an install of it.
 #[derive(Debug)]
 pub struct Removed {
-    /// Dropped when the copy had been installed: it is gone, and the record
-    /// would be inherited by whatever is written under its name next.
+    /// Dropped when the copy had been installed: removing it uninstalls it,
+    /// and the record would be inherited by whatever is written under its
+    /// name next. Left in place, it would read as a copy missing, which the
+    /// next install would put back.
     pub copy: Result<Record, InstallError>,
     /// What opening the ledger to see to that record scrubbed out of it.
     pub scrub: Scrub,
 }
 
 /// Delete an artifact: a skill's whole directory, or a rule's file and any
-/// folder it leaves empty. Then drop the record of an install of it.
-/// `workspace` is the one consulted, as for [`add`].
+/// folder it leaves empty. Then drop the record of an install of it, as an
+/// uninstall of that copy would. `workspace` is the one consulted, as for
+/// [`add`].
 pub fn remove(
     workspace: Option<&FlayerWorkspace>,
     project: &MindProject,
@@ -454,8 +480,9 @@ pub fn remove(
 pub struct Renamed {
     /// The artifact under its new name.
     pub target: Target,
-    /// The record of the copy under its old name, dropped: renamed, it is no
-    /// longer what was installed.
+    /// The record of the copy under its old name, carried to its new name and
+    /// place: renamed, it reads as edited, and stays what was installed. Or
+    /// dropped, where another installation holds the new name already.
     pub copy: Result<Record, InstallError>,
     /// A record under the new name, from an install that is no longer there:
     /// stale, and left in place it would make what was just renamed look like
@@ -476,8 +503,9 @@ pub struct Renamed {
 /// byte for byte, and the result is parsed back to make sure the one line
 /// changed what it was meant to and nothing else.
 ///
-/// Then the records under both names are dropped. `workspace` is the one
-/// consulted, as for [`add`].
+/// Then a stale record under the new name is dropped, and the record of the
+/// copy renamed carried along with it. `workspace` is the one consulted, as
+/// for [`add`].
 pub fn rename(
     workspace: Option<&FlayerWorkspace>,
     project: &MindProject,
@@ -498,20 +526,22 @@ pub fn rename(
         Kind::Rule => rename_rule(project, target, &directory, to),
     }?;
     let mut scrub = Scrub::default();
-    let copy = disowned(
-        workspace,
-        project,
-        target.kind,
-        &target.name,
-        &target.path,
-        &mut scrub,
-    );
+    // The stale one first: a record of an install gone from the new place
+    // would hold the new name, and the copy could not be carried to it.
     let stale = disowned(
         workspace,
         project,
         target.kind,
         &renamed.name,
         &renamed.path,
+        &mut scrub,
+    );
+    let copy = carried(
+        workspace,
+        project,
+        target.kind,
+        (&target.name, &target.path),
+        (&renamed.name, &renamed.path),
         &mut scrub,
     );
     Ok(Renamed {
@@ -752,6 +782,33 @@ fn disowned(
         Record::Dropped
     } else {
         Record::Untouched
+    })
+}
+
+/// Carry the record `workspace` keeps of an install of `name` into `project`
+/// that names the copy at `at` along to `to`, a name and the place a rename
+/// moved it to, adding what opening the ledger to do it scrubbed out of it to
+/// `scrub`.
+fn carried(
+    workspace: Option<&FlayerWorkspace>,
+    project: &MindProject,
+    kind: Kind,
+    (name, at): (&str, &Path),
+    to: (&str, &Path),
+    scrub: &mut Scrub,
+) -> Result<Record, InstallError> {
+    let Some(workspace) = workspace else {
+        return Ok(Record::Untouched);
+    };
+    let carry = install::carry(workspace, project, kind, name, at, to)?;
+    scrub.absorb(carry.scrub);
+    if let Some(error) = carry.unexcluded {
+        return Err(error);
+    }
+    Ok(match carry.carried {
+        Carried::Nothing => Record::Untouched,
+        Carried::Moved => Record::Moved,
+        Carried::Forgotten => Record::Dropped,
     })
 }
 
