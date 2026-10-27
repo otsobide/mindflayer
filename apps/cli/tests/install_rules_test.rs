@@ -176,6 +176,14 @@ fn a_rule_about_some_files_reaches_claude_alone_and_says_so() {
         fs::read_to_string(alpha.join(".claude/rules/mindflayer/style/comments.md")).unwrap(),
         SCOPED
     );
+
+    // Said of the rule it is about: another going in or out after it says
+    // nothing of it, which `status` says whenever asked.
+    let other = flayer(dir.path(), &["install", "-p", "alpha", "git/commits"]).unwrap();
+    let out = flayer(dir.path(), &["uninstall", "-p", "alpha", "git/commits"]).unwrap();
+
+    quiet(&other);
+    quiet(&out);
 }
 
 #[test]

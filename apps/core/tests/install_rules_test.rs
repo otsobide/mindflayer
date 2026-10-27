@@ -1484,20 +1484,26 @@ fn a_render_says_what_each_renderer_found_once_in_one_list() {
     .rendered
     .unwrap();
 
-    assert_eq!(
-        rendered.all_warnings(),
-        [
-            format!(
-                "{}: in no git work tree, so Codex reads its AGENTS.md only when started in that \
-                 folder itself",
-                project.root().display()
-            ),
-            String::from(
-                "rule `rust/errors` states `paths`, so it reaches claude only: codex and \
-                 opencode read no .claude/rules"
-            ),
-        ]
+    let no_git_root = format!(
+        "{}: in no git work tree, so Codex reads its AGENTS.md only when started in that folder \
+         itself",
+        project.root().display()
     );
+    let claude_only = String::from(
+        "rule `rust/errors` states `paths`, so it reaches claude only: codex and opencode read \
+         no .claude/rules",
+    );
+    assert_eq!(
+        rendered.warnings_of(Some("rust/errors")),
+        [no_git_root.clone(), claude_only.clone()]
+    );
+    // What is true of a rule whatever the render is said of the one changed,
+    // and of every one by a render that changed none.
+    assert_eq!(
+        rendered.warnings_of(Some("git/no-force-push")),
+        std::slice::from_ref(&no_git_root)
+    );
+    assert_eq!(rendered.warnings_of(None), [no_git_root, claude_only]);
     assert_eq!(
         rendered.notes(),
         [format!(

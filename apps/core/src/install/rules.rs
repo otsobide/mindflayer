@@ -85,23 +85,41 @@ pub struct Rendered {
 }
 
 impl Rendered {
-    /// Everything the render has to warn of, each as a front end says it
-    /// after `warning: `: the rules as a whole first ([`Warning`]), which
-    /// say which agents read none of them, then the block's, the import's
-    /// and Claude's files' in the order they were rendered.
+    /// Everything a render made for a change of the rule `changed` has to
+    /// warn of, each as a front end says it after `warning: `: the rules as
+    /// a whole first ([`Warning`]), which say which agents read none of
+    /// them, then the block's, the import's and Claude's files' in the order
+    /// they were rendered. Every one, for a render that changed no rule.
     ///
     /// Gathered here rather than by each front end, so none says one
-    /// renderer's warnings and forgets another's. Not `still_excluded`,
-    /// which an uninstall says of the rule it took out
-    /// ([`Removed::Removed`]), and an install of the project.
-    pub fn all_warnings(&self) -> Vec<String> {
+    /// renderer's warnings and forgets another's. Not what is true of
+    /// another rule whatever the render: that it reaches Claude alone, or no
+    /// agent. That was said when it went in, `status` says it whenever
+    /// asked, and saying it again would make an install of one rule warn,
+    /// and fail, for another. Nor `still_excluded`, which an uninstall says
+    /// of the rule it took out ([`Removed::Removed`]), and an install of the
+    /// project.
+    pub fn warnings_of(&self, changed: Option<&str>) -> Vec<String> {
+        let other = |route: &str| changed.is_some_and(|changed| changed != route);
+        let rules = self.warnings.iter().filter(|warning| match warning {
+            Warning::Unreached { route } => !other(route),
+            Warning::Withheld { .. }
+            | Warning::Left { .. }
+            | Warning::Edited { .. }
+            | Warning::Unremoved { .. } => true,
+        });
         let block = self.block.iter().flat_map(|block| &block.warnings);
-        self.warnings
-            .iter()
+        let files = self.files.warnings.iter().filter(|warning| match warning {
+            claude_rules::Warning::ClaudeOnly { route, .. } => !other(route),
+            claude_rules::Warning::Foreign { .. }
+            | claude_rules::Warning::Edited { .. }
+            | claude_rules::Warning::Failed { .. } => true,
+        });
+        rules
             .map(ToString::to_string)
             .chain(block.map(ToString::to_string))
             .chain(self.import.warnings.iter().map(ToString::to_string))
-            .chain(self.files.warnings.iter().map(ToString::to_string))
+            .chain(files.map(ToString::to_string))
             .collect()
     }
 

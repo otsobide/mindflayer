@@ -126,7 +126,7 @@ pub(crate) fn install_named(
     // Installed, and what the project's rules came to on the way, which can
     // leave some of its agents reading none of them.
     if let Some(rendered) = &done.rendered {
-        let (warned, notes) = render_said(rendered, None);
+        let (warned, notes) = render_said(rendered, candidate.name(), None);
         if !warned.is_empty() {
             outcome.ok = false;
         }
@@ -172,18 +172,20 @@ pub(crate) fn named(kind: Kind, name: &str) -> String {
     }
 }
 
-/// What rendering a project's rules has to say ([`Rendered::all_warnings`]
-/// and [`Rendered::notes`]), as `warning:` and `note:` lines: each warning
-/// said of `project` when one is given, as the install screen says every
-/// line of the project it is about. A note names its project already.
+/// What rendering a project's rules for a change of the rule `changed` has
+/// to say ([`Rendered::warnings_of`] and [`Rendered::notes`]), as `warning:`
+/// and `note:` lines: each warning said of `project` when one is given, as
+/// the install screen says every line of the project it is about. A note
+/// names its project already.
 pub(crate) fn render_said(
     rendered: &Rendered,
+    changed: &str,
     project: Option<&str>,
 ) -> (Vec<String>, Vec<String>) {
     let of = project.map_or_else(String::new, |project| format!("{project}: "));
     (
         rendered
-            .all_warnings()
+            .warnings_of(Some(changed))
             .iter()
             .map(|warning| format!("warning: {of}{warning}"))
             .collect(),
@@ -299,15 +301,15 @@ pub(crate) fn uninstall_named(
             rendered,
             ..
         } => {
+            // What the rules left come to without it.
+            let (warned, notes) = rendered
+                .map(|rendered| render_said(&rendered, &name, None))
+                .unwrap_or_default();
             let name = named(kind, &name);
             let mut outcome = Outcome::plain(format!("removed {name} from {from}\n"));
-            // What the rules left come to without it.
-            if let Some(rendered) = rendered {
-                let (warned, notes) = render_said(&rendered, None);
-                outcome.ok = warned.is_empty();
-                outcome.stderr.extend(warned);
-                outcome.stderr.extend(notes);
-            }
+            outcome.ok = warned.is_empty();
+            outcome.stderr.extend(warned);
+            outcome.stderr.extend(notes);
             if let Some(reason) = still_excluded {
                 outcome.stderr.push(still(&name, from, &reason));
                 outcome.ok = false;

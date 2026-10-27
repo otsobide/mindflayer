@@ -306,7 +306,8 @@ pub fn apply(
                 // What the project's rules came to, rendered with the one
                 // installed: said of the project, as each line here is.
                 if let Some(rendered) = &done.rendered {
-                    let (warned, said) = render_said(rendered, Some(project.name()));
+                    let (warned, said) =
+                        render_said(rendered, entry.candidate.name(), Some(project.name()));
                     stderr.extend(warned);
                     if let Some(reason) = &rendered.still_excluded {
                         stderr.push(format!(
@@ -372,7 +373,11 @@ pub fn apply(
                         let _ = writeln!(stdout, "{}: removed {name}", project.name());
                         // What the rules left came to without it.
                         if let Some(rendered) = rendered {
-                            let (warned, said) = render_said(&rendered, Some(project.name()));
+                            let (warned, said) = render_said(
+                                &rendered,
+                                entry.candidate.name(),
+                                Some(project.name()),
+                            );
                             stderr.extend(warned);
                             for note in said {
                                 if !notes.contains(&note) {
