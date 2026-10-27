@@ -596,3 +596,23 @@ fn a_project_in_no_git_work_tree_counts_only_its_own_file_against_the_budget() {
         rendered.warnings
     );
 }
+
+#[cfg(unix)]
+#[test]
+fn a_file_codex_would_read_that_cannot_be_looked_at_is_said() {
+    let fixture = fixture();
+    // A link to itself, at the git root: neither there nor not.
+    let looped = fixture.dir.path().join(agents_md::OVERRIDE);
+    std::os::unix::fs::symlink(agents_md::OVERRIDE, &looped).unwrap();
+    let rule = fixture.rule("a", "Rule a.\n");
+
+    let rendered = fixture.render(&[&rule], false).unwrap();
+    assert_eq!(rendered.written, Written::Created);
+    match &rendered.warnings[..] {
+        [Warning::Unmeasured { project, detail }] => {
+            assert_eq!(project, fixture.project.root());
+            assert!(detail.contains(&looped.display().to_string()), "{detail}");
+        }
+        other => panic!("{other:?}"),
+    }
+}
