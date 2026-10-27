@@ -5,7 +5,10 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use mindflayer_core::scan::{Request, DEFAULT_DEPTH, MAX_LISTED};
-use mindflayer_core::{scan, FlayerWorkspace, Found, MindProject, FLAYER_CONFIG, FLAYER_DIR};
+use mindflayer_core::{
+    scan, Agent, Directories, FlayerWorkspace, Found, MindProject, ScanFailure, Share,
+    FLAYER_CONFIG, FLAYER_DIR, MIND_DIR, SETTINGS_FILE,
+};
 use tempfile::TempDir;
 
 /// A git repository, as far as a scan can tell: a directory with a `.git`.
@@ -249,7 +252,7 @@ fn a_root_named_that_is_not_there_is_a_failure_beside_what_the_others_hold() {
         let scan = under(&workspace, &[missing.clone(), root.clone()], depth);
 
         assert_eq!(scan.failures.len(), 1, "{:?}", scan.failures);
-        assert_eq!(scan.failures[0].path, missing);
+        assert_eq!(scan.failures[0].path(), missing);
         assert!(
             scan.failures[0].to_string().contains("cannot be listed"),
             "{}",
@@ -381,4 +384,66 @@ fn a_repository_outside_the_workspace_is_spelled_by_its_path() {
         routes(&scan.found),
         vec![root.join("alpha").display().to_string()]
     );
+}
+
+#[test]
+fn a_project_marked_by_its_settings_is_found_with_its_id() {
+    let dir = TempDir::new().unwrap();
+    let (workspace, _) = FlayerWorkspace::init(dir.path()).unwrap();
+    fs::create_dir(dir.path().join("alpha")).unwrap();
+    let (alpha, _) = MindProject::init_asked(
+        dir.path().join("alpha"),
+        &Agent::ALL,
+        Share::Local,
+        &Directories::default(),
+    )
+    .unwrap();
+    // Marked by a `mind.toml`, which names no id.
+    fs::create_dir(dir.path().join("older")).unwrap();
+    MindProject::init(dir.path().join("older")).unwrap();
+    git_repository(&dir.path().join("plain"));
+
+    let scan = scan(&workspace, &Request::default());
+
+    let ids: Vec<(&str, Option<&str>)> = scan
+        .found
+        .iter()
+        .map(|found| {
+            (
+                found.route.as_str(),
+                found.id.as_ref().map(|id| id.as_str()),
+            )
+        })
+        .collect();
+    let id = alpha.settings().unwrap().id.as_str();
+    assert_eq!(
+        ids,
+        vec![("alpha", Some(id)), ("older", None), ("plain", None)]
+    );
+    assert!(scan.failures.is_empty(), "{:?}", scan.failures);
+}
+
+#[test]
+fn a_project_whose_settings_will_not_open_is_found_without_an_id_and_said() {
+    let dir = TempDir::new().unwrap();
+    let (workspace, _) = FlayerWorkspace::init(dir.path()).unwrap();
+    let settings = dir.path().join("alpha").join(MIND_DIR).join(SETTINGS_FILE);
+    fs::create_dir_all(settings.parent().unwrap()).unwrap();
+    fs::write(&settings, "{ not json\n").unwrap();
+    git_repository(&dir.path().join("beta"));
+
+    let scan = scan(&workspace, &Request::default());
+
+    // Still a mind project, as its marker says, and the one beside it is
+    // still found.
+    assert_eq!(routes(&scan.found), vec!["alpha", "beta"]);
+    assert!(scan.found[0].mind);
+    assert_eq!(scan.found[0].id, None);
+    assert_eq!(scan.failures.len(), 1, "{:?}", scan.failures);
+    assert!(
+        matches!(scan.failures[0], ScanFailure::Unread(_)),
+        "{:?}",
+        scan.failures
+    );
+    assert_eq!(scan.failures[0].path(), settings);
 }

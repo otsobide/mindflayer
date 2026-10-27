@@ -14,7 +14,8 @@ use std::path::{Component, Path, PathBuf};
 use thiserror::Error;
 
 use crate::paths;
-use crate::workspace::{FlayerWorkspace, MindProject};
+use crate::settings::ProjectId;
+use crate::workspace::{FlayerWorkspace, MindProject, WorkspaceError};
 
 /// How far below each root a scan looks unless it is told otherwise.
 ///
@@ -69,6 +70,11 @@ pub struct Found {
     /// spells routes from: the route from there, `/` separated, when it is
     /// inside, and its path otherwise.
     pub route: String,
+    /// The id its settings name it by (D-09), whatever it is called and
+    /// wherever it is: none for a git repository that is not a project yet,
+    /// for a project a `mind.toml` still marks, which has none, and for one
+    /// whose marker would not open, which is a failure beside it.
+    pub id: Option<ProjectId>,
     /// A mind project already, rather than a git repository that is not one
     /// yet and would need `mind init` before it can be linked.
     pub mind: bool,
@@ -86,8 +92,8 @@ pub struct Scan {
     pub depth: usize,
     /// Ordered by route.
     pub found: Vec<Found>,
-    /// Folders that could not be listed. One unreadable folder must not hide
-    /// the repositories beside it.
+    /// Folders that could not be listed, and markers that would not open.
+    /// One unreadable folder must not hide the repositories beside it.
     pub failures: Vec<ScanFailure>,
     /// It stopped at [`MAX_LISTED`] before looking everywhere.
     pub truncated: bool,
@@ -142,11 +148,12 @@ pub fn scan(workspace: &FlayerWorkspace, request: &Request) -> Scan {
         // never an empty answer.
         if named {
             if let Err(source) = fs::metadata(&root) {
-                scan.failures.push(ScanFailure { path: root, source });
+                scan.failures
+                    .push(ScanFailure::Unlisted { path: root, source });
                 continue;
             }
         }
-        if let Some(found) = judge(workspace, &root, from) {
+        if let Some(found) = judge(workspace, &root, from, &mut scan.failures) {
             scan.found.push(found);
         }
         seen.insert(root.clone());
@@ -170,7 +177,7 @@ pub fn scan(workspace: &FlayerWorkspace, request: &Request) -> Scan {
                 continue;
             }
             Err(source) => {
-                scan.failures.push(ScanFailure {
+                scan.failures.push(ScanFailure::Unlisted {
                     path: directory,
                     source,
                 });
@@ -181,7 +188,7 @@ pub fn scan(workspace: &FlayerWorkspace, request: &Request) -> Scan {
             if !seen.insert(child.clone()) {
                 continue;
             }
-            if let Some(found) = judge(workspace, &child, from) {
+            if let Some(found) = judge(workspace, &child, from, &mut scan.failures) {
                 scan.found.push(found);
                 continue;
             }
@@ -196,22 +203,43 @@ pub fn scan(workspace: &FlayerWorkspace, request: &Request) -> Scan {
     }
 
     scan.found.sort_by(|a, b| a.route.cmp(&b.route));
-    scan.failures.sort_by(|a, b| a.path.cmp(&b.path));
+    scan.failures.sort_by(|a, b| a.path().cmp(b.path()));
     scan
 }
 
 /// What a directory is to the workspace, if it is anything, with its route
-/// spelled from `from`.
-fn judge(workspace: &FlayerWorkspace, directory: &Path, from: &Path) -> Option<Found> {
+/// spelled from `from`, and a failure in `failures` when its marker would not
+/// open.
+///
+/// A project whose marker would not open is listed all the same: its marker
+/// still says it is one, and `flayer link`, refusing it, says why again.
+fn judge(
+    workspace: &FlayerWorkspace,
+    directory: &Path,
+    from: &Path,
+    failures: &mut Vec<ScanFailure>,
+) -> Option<Found> {
     let mind = MindProject::is_marked(directory);
     // `exists`, not `is_dir`: a worktree or a submodule has a `.git` file.
     let git = directory.join(".git").exists();
     if !mind && !git {
         return None;
     }
+    let id = if mind {
+        match MindProject::open(directory) {
+            Ok(project) => project.settings().map(|settings| settings.id.clone()),
+            Err(error) => {
+                failures.push(ScanFailure::Unread(error));
+                None
+            }
+        }
+    } else {
+        None
+    };
     Some(Found {
         path: directory.to_path_buf(),
         route: route(directory, from),
+        id,
         mind,
         linked: workspace.is_linked(directory),
     })
@@ -255,11 +283,28 @@ fn subdirectories(directory: &Path) -> Result<Vec<PathBuf>, io::Error> {
     Ok(found)
 }
 
-/// A folder a scan could not list.
+/// What a scan could not read on its way, collected rather than raised.
 #[derive(Debug, Error)]
-#[error("{path}: cannot be listed: {source}")]
-pub struct ScanFailure {
-    pub path: PathBuf,
-    #[source]
-    pub source: io::Error,
+pub enum ScanFailure {
+    /// A folder it could not list, so nothing below it was seen: a root
+    /// named that is not there among them.
+    #[error("{path}: cannot be listed: {source}")]
+    Unlisted {
+        path: PathBuf,
+        #[source]
+        source: io::Error,
+    },
+    /// A project whose marker would not open, listed without an id.
+    #[error(transparent)]
+    Unread(WorkspaceError),
+}
+
+impl ScanFailure {
+    /// The folder, or the marker, it is about.
+    pub fn path(&self) -> &Path {
+        match self {
+            ScanFailure::Unlisted { path, .. } => path,
+            ScanFailure::Unread(error) => error.path(),
+        }
+    }
 }
