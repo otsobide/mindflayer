@@ -212,8 +212,8 @@ pub fn is_folder_name(name: &str) -> bool {
 /// A skill is instructions an agent reads when it chooses to; a plugin's
 /// hooks run commands on their own and its servers are started for it, which
 /// installing a skill must not turn on behind anybody's back. Left out of
-/// every install, whichever agents the project names: an agent folder an
-/// override names (#40) may be Claude's too. Only at the top, where Claude
+/// every install, whichever agents the project names: a folder a project's
+/// `targets` name may be Claude's too. Only at the top, where Claude
 /// looks for one: a skill that teaches plugin writing can ship one further
 /// down as an example, and it is the skill's like any other file.
 const LEAVE_OUT: [(&str, &str); 1] = [(
@@ -276,9 +276,15 @@ pub(crate) fn agent_of(agents: &[Agent]) -> Option<String> {
 /// the first spelling and for the agents of both, as discovery reads them
 /// once: two copies put in place in one folder would find each other there.
 ///
+/// Settings that name `targets` for the kind put a copy in each folder they
+/// name an install may use, for every agent they name, and nowhere else: a
+/// folder they name that leads out of the project, or into `.mind`, is
+/// passed over ([`MindProject::misplaced_targets`] says which).
+///
 /// Refused when there is nowhere to put one: a settings file naming no agent
-/// that is sent `kind` (`NoTarget`), or a `mind.toml` naming no folder for it
-/// (`NoDirectory`).
+/// that is sent `kind` (`NoTarget`), or naming only folders for it that no
+/// install may use (`NoUsableTarget`), or a `mind.toml` naming no folder for
+/// it (`NoDirectory`).
 pub fn targets(project: &MindProject, kind: Kind) -> Result<Vec<InstallTarget>, InstallError> {
     if project.settings().is_none() {
         return Ok(vec![InstallTarget {
@@ -305,9 +311,14 @@ pub fn targets(project: &MindProject, kind: Kind) -> Result<Vec<InstallTarget>, 
         }
     }
     if targets.is_empty() {
-        return Err(InstallError::NoTarget {
-            project: project.name().to_owned(),
-            kind,
+        let overridden = project.settings().is_some_and(|settings| {
+            !settings.agents.is_empty() && settings.targets.get(kind).is_some()
+        });
+        let project = project.name().to_owned();
+        return Err(if overridden {
+            InstallError::NoUsableTarget { project, kind }
+        } else {
+            InstallError::NoTarget { project, kind }
         });
     }
     Ok(targets)
@@ -1455,6 +1466,8 @@ pub enum InstallError {
     OfferedTwice { name: String, origins: Vec<String> },
     #[error("{project} names no agent in its settings that {kind}s are installed for, so none can be installed into it")]
     NoTarget { project: String, kind: Kind },
+    #[error("none of the folders {project}'s settings name for its {kind}s is one an install may use, so none can be installed into it")]
+    NoUsableTarget { project: String, kind: Kind },
     #[error("{name}: the ledger records a copy at {route}, which is not a folder of the project named after it, so nothing was removed")]
     Recorded { name: String, route: String },
     #[error("{0}, and nothing was installed, since its copies could not be kept out of git")]

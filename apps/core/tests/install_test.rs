@@ -13,7 +13,7 @@ use mindflayer_core::install::{self, Installed, Removed, Standing};
 use mindflayer_core::ledger::{Ledger, Target};
 use mindflayer_core::AgentHomes;
 use mindflayer_core::{
-    Agent, Directories, FlayerWorkspace, Kind, MindProject, Settings, Share, MIND_DIR,
+    Agent, Directories, FlayerWorkspace, Kind, MindProject, Settings, Share, Targets, MIND_DIR,
     SETTINGS_FILE,
 };
 use tempfile::TempDir;
@@ -290,6 +290,100 @@ fn install_from_shelf(
         &AgentHomes::default(),
     )
     .unwrap()
+}
+
+/// [`ready_v3`], with every agent, installing skills in `folders` instead
+/// of where the agents read.
+fn ready_with_targets(
+    names: &[&str],
+    folders: &[&str],
+) -> (TempDir, FlayerWorkspace, MindProject, Ledger) {
+    let (dir, workspace, mut project, ledger) = ready_v3(names, &Agent::ALL);
+    project
+        .change_settings(|settings| {
+            settings.targets = Targets::default().with(
+                Kind::Skill,
+                folders.iter().map(std::path::PathBuf::from).collect(),
+            );
+        })
+        .unwrap();
+    (dir, workspace, project, ledger)
+}
+
+#[test]
+fn a_project_whose_settings_install_skills_in_one_folder_gets_one_copy_there_alone() {
+    let (_dir, workspace, project, ledger) = ready_with_targets(&["deploy"], &[".skills"]);
+
+    let done = install_from_shelf(&workspace, &ledger, &project, "deploy");
+
+    let skills = project.root().join(".skills").join("deploy");
+    assert_eq!(
+        done.installed,
+        Installed::Added {
+            name: String::from("deploy"),
+            paths: vec![skills.clone()],
+            unhashed: None,
+        }
+    );
+    assert!(skills.join("SKILL.md").is_file());
+    for standard in agents_copies(&project, "deploy") {
+        assert!(!standard.exists(), "{}", standard.display());
+    }
+    let record = ledger
+        .installation("alpha", Kind::Skill, "deploy")
+        .unwrap()
+        .unwrap();
+    // One copy for all three agents, so no one agent's.
+    assert_eq!(
+        record.targets,
+        [Target {
+            agent: None,
+            path: String::from(".skills/deploy"),
+        }]
+    );
+    let surveyed = install::survey(&workspace, &ledger, &project, Kind::Skill).unwrap();
+    assert_eq!(surveyed[0].standing, Standing::Installed);
+}
+
+#[test]
+fn a_target_no_install_may_use_gets_no_copy_while_the_others_do() {
+    let (dir, workspace, project, ledger) = ready_with_targets(&["deploy"], &[".skills"]);
+    let path = project.root().join(MIND_DIR).join(SETTINGS_FILE);
+    let text = fs::read_to_string(&path).unwrap().replace(
+        "[\".skills\"]",
+        "[\".skills\", \"../shared\", \".mind/skills\"]",
+    );
+    fs::write(&path, text).unwrap();
+    let project = MindProject::open(project.root()).unwrap();
+
+    install_from_shelf(&workspace, &ledger, &project, "deploy");
+
+    assert!(project.root().join(".skills/deploy/SKILL.md").is_file());
+    assert!(!dir.path().join("shared").exists());
+    assert!(!project.root().join(".mind/skills").exists());
+    assert_eq!(project.misplaced_targets().len(), 2);
+}
+
+#[test]
+fn a_project_installing_skills_only_where_no_install_may_go_is_offered_nothing() {
+    let (_dir, workspace, project, ledger) = ready_with_targets(&["deploy"], &[".skills"]);
+    let path = project.root().join(MIND_DIR).join(SETTINGS_FILE);
+    let text = fs::read_to_string(&path)
+        .unwrap()
+        .replace("[\".skills\"]", "[\"../shared\"]");
+    fs::write(&path, text).unwrap();
+    let project = MindProject::open(project.root()).unwrap();
+
+    let candidates = install::survey(&workspace, &ledger, &project, Kind::Skill).unwrap();
+    let refused =
+        install::offered(&workspace, &ledger, &project, Kind::Skill, "deploy", None).unwrap_err();
+
+    assert!(candidates.is_empty(), "{candidates:?}");
+    assert_eq!(
+        refused.to_string(),
+        "none of the folders alpha's settings name for its skills is one an install may use, so \
+         none can be installed into it"
+    );
 }
 
 #[test]

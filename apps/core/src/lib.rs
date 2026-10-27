@@ -66,7 +66,7 @@ pub use status::{ArtifactStatus, ProjectStatus, State, Status, StatusFailure};
 pub use template::{Template, TemplateError, TEMPLATES_DIR};
 pub use workspace::{
     Directories, FlayerConfig, FlayerWorkspace, Initialization, Loaded, Marker, Member, MindConfig,
-    MindProject, ProjectConfig, ProjectWarning, Registration, WorkspaceError, CACHE_DIR,
-    DIRECTORIES_VERSION, FLAYER_CONFIG, FLAYER_DIR, LIBRARY_DIR, MIND_CONFIG, MIND_DIR,
-    MIND_IGNORE, SETTINGS_VERSION, TARGETS_VERSION,
+    MindProject, Misplaced, MisplacedTarget, ProjectConfig, ProjectWarning, Registration,
+    WorkspaceError, CACHE_DIR, DIRECTORIES_VERSION, FLAYER_CONFIG, FLAYER_DIR, LIBRARY_DIR,
+    MIND_CONFIG, MIND_DIR, MIND_IGNORE, SETTINGS_VERSION, TARGETS_VERSION,
 };

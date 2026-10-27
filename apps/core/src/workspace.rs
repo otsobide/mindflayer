@@ -27,7 +27,7 @@ use thiserror::Error;
 
 use crate::agent::{Agent, AgentTarget, TargetTable};
 use crate::gather::{self, Scrub};
-use crate::kind::Kind;
+use crate::kind::{Kind, Layout};
 use crate::ledger::{Ledger, LedgerError, LEDGER_FILE};
 use crate::lock::{self, LockError, WorkspaceLock};
 use crate::paths;
@@ -382,6 +382,60 @@ pub enum ProjectWarning {
     Leftover { path: PathBuf },
 }
 
+/// A folder a project's settings name as where a kind is installed that no
+/// install uses: read, said, and passed over, rather than a reason to refuse
+/// everything else the settings say ([`MindProject::misplaced_targets`]).
+#[derive(Debug, Clone, PartialEq, Eq, Error)]
+#[error(
+    "{settings}: {folder} is no folder to install {kind}s in, because {because}, \
+     so nothing is installed there",
+    because = .why.because(*.kind)
+)]
+pub struct MisplacedTarget {
+    /// The settings file that names it.
+    pub settings: PathBuf,
+    pub kind: Kind,
+    /// As the settings spell it, relative to the project's root.
+    pub folder: PathBuf,
+    pub why: Misplaced,
+}
+
+/// Why a folder a project's settings name is no place to install a kind in.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Misplaced {
+    /// It leads out of the project, or is its root: an absolute path, one
+    /// climbing out with `..`, or `.`. What is installed is one project's,
+    /// and a copy anywhere else is no project's, or another's.
+    Outside,
+    /// It is inside `.mind`, Mindflayer's own folder, which no agent reads
+    /// and a local project keeps out of git.
+    InsideMind,
+    /// It is inside a `.mindflayer`, a workspace's own folder, which no
+    /// agent reads and whose shelf and cache gathering replaces.
+    InsideWorkspace,
+    /// The kind is not installed into a project as a folder an artifact:
+    /// rules, which D-03 gives a block of `AGENTS.md`, for M2 to say where.
+    NotInstalled,
+}
+
+impl Misplaced {
+    /// Why, as a clause after "because".
+    pub fn because(self, kind: Kind) -> String {
+        match self {
+            Misplaced::Outside => String::from("it is not inside the project"),
+            Misplaced::InsideMind => format!(
+                "it is inside {MIND_DIR}, which holds Mindflayer's own files and no agent reads"
+            ),
+            Misplaced::InsideWorkspace => format!(
+                "it is inside {FLAYER_DIR}, which holds a workspace's own files and no agent reads"
+            ),
+            Misplaced::NotInstalled => {
+                format!("{kind}s are not installed into a project as folders yet")
+            }
+        }
+    }
+}
+
 /// A directory holding skills, identified by its `.mind`.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct MindProject {
@@ -683,12 +737,54 @@ impl MindProject {
     ///
     /// The project hands its table on, rather than a caller reaching for
     /// [`TargetTable::standard`]: which table applies is the settings' to
-    /// say, so a caller asking here follows an override once #40 reads one
-    /// from them, without changing. Until then they say the standard one.
+    /// say. The standard one, overridden for each kind the settings name
+    /// `targets` for ([`TargetTable::overriding`]) with every folder an
+    /// install may use, and only those: a folder written there by hand that
+    /// leads out of the project, or into `.mind`, is passed over and said
+    /// ([`misplaced_targets`](Self::misplaced_targets)). A kind all of whose
+    /// folders are passed over goes nowhere, rather than back to the
+    /// standard folders, which the settings said not to use.
     pub fn targets(&self, kind: Kind) -> Vec<AgentTarget> {
         self.settings().map_or_else(Vec::new, |settings| {
-            TargetTable::standard().targets(kind, &settings.agents)
+            let mut table = TargetTable::standard();
+            if let Some(folders) = settings.targets.get(kind) {
+                let placed: Vec<PathBuf> = folders
+                    .iter()
+                    .filter(|folder| misplaced_target(kind, folder).is_none())
+                    .map(|folder| paths::normalize(folder))
+                    .collect();
+                table = table.overriding(kind, &placed);
+            }
+            table.targets(kind, &settings.agents)
         })
+    }
+
+    /// Every folder the project's settings name in `targets` that no install
+    /// uses, kind by kind in report order, each folder in the order written:
+    /// a failure collected rather than raised, for a front end to say where
+    /// it installs or reports, since the rest of the settings still stand.
+    pub fn misplaced_targets(&self) -> Vec<MisplacedTarget> {
+        let Some(settings) = self.settings() else {
+            return Vec::new();
+        };
+        let path = self.mind_dir().join(SETTINGS_FILE);
+        Kind::ALL
+            .into_iter()
+            .flat_map(|kind| {
+                settings
+                    .targets
+                    .get(kind)
+                    .unwrap_or_default()
+                    .iter()
+                    .filter_map(move |folder| Some((kind, folder, misplaced_target(kind, folder)?)))
+            })
+            .map(|(kind, folder, why)| MisplacedTarget {
+                settings: path.clone(),
+                kind,
+                folder: folder.clone(),
+                why,
+            })
+            .collect()
     }
 
     /// The project's declared name.
@@ -745,9 +841,10 @@ impl MindProject {
     /// Refused for a project a `mind.toml` marks, which has no settings until
     /// it is moved to them, when the change touches the version or the id,
     /// and when it moves a kind's folder out of the project or into its
-    /// `.mind`, as `init` refuses one: strict when writing, while a folder
-    /// somebody wrote there by hand is still read, and left alone by a change
-    /// to something else.
+    /// `.mind`, as `init` refuses one, or sends a kind's installs to a folder
+    /// no install would use: strict when writing, while a folder somebody
+    /// wrote there by hand is still read, and left alone by a change to
+    /// something else.
     /// A settings file this build refuses to read is refused here too, and
     /// left as it is.
     ///
@@ -790,6 +887,33 @@ impl MindProject {
                 .and_then(|directory| misplaced_authored(kind, directory))
             {
                 return Err(error);
+            }
+            // Strict when writing, as for a folder authored in: a kind whose
+            // targets change is refused any folder no install would use, and
+            // a list with none, which the settings read as malformed.
+            let targets = wanted.targets.get(kind);
+            if targets == before.targets.get(kind) {
+                continue;
+            }
+            let folders = targets.unwrap_or_default();
+            if targets.is_some() && folders.is_empty() {
+                return Err(WorkspaceError::Edit {
+                    path,
+                    detail: format!(
+                        "`targets.{}` would name no folder, which is no place to install anything",
+                        kind.folder()
+                    ),
+                });
+            }
+            if let Some((folder, why)) = folders
+                .iter()
+                .find_map(|folder| Some((folder, misplaced_target(kind, folder)?)))
+            {
+                return Err(WorkspaceError::Target {
+                    path: folder.clone(),
+                    kind,
+                    why,
+                });
             }
         }
 
@@ -1719,6 +1843,17 @@ pub enum WorkspaceError {
     InsideMind { path: PathBuf, kind: Kind },
     #[error("{path}: keeps no {kind}s of its own, since its marker names no folder for them")]
     NoDirectory { path: PathBuf, kind: Kind },
+    /// A folder a change to a project's settings would send a kind's
+    /// installs to that no install would use ([`Misplaced`]).
+    #[error(
+        "{path}: cannot be where a project's {kind}s are installed, because {because}",
+        because = .why.because(*.kind)
+    )]
+    Target {
+        path: PathBuf,
+        kind: Kind,
+        why: Misplaced,
+    },
     /// Pointing at the migration rather than at `mind init`, which never
     /// rewrites a marker: what such a project lacks is what moving it to
     /// settings gives it, as it was committed by design.
@@ -1761,6 +1896,7 @@ impl WorkspaceError {
             | WorkspaceError::OutsideProject { path, .. }
             | WorkspaceError::InsideMind { path, .. }
             | WorkspaceError::NoDirectory { path, .. }
+            | WorkspaceError::Target { path, .. }
             | WorkspaceError::NoSettings { path }
             | WorkspaceError::OutsideWorkspace { path, .. }
             | WorkspaceError::OverlapsGathered { path, .. } => path,
@@ -2106,13 +2242,50 @@ pub(crate) fn misplaced_authored(kind: Kind, directory: &Path) -> Option<Workspa
     if !stays_inside(directory) {
         return Some(WorkspaceError::OutsideProject { path, kind });
     }
-    // Without regard to case, as `gathered_overlap` compares, since `.MIND`
-    // is the same folder as `.mind` where the file system ignores case.
-    let inside_mind = matches!(
+    starts_in(directory, MIND_DIR).then_some(WorkspaceError::InsideMind { path, kind })
+}
+
+/// Whether `directory`, a route from a project's root, starts in the folder
+/// named `folder`, without regard to case, as `gathered_overlap` compares,
+/// since `.MIND` is the same folder as `.mind` where the file system ignores
+/// case.
+fn starts_in(directory: &Path, folder: &str) -> bool {
+    matches!(
         paths::normalize(directory).components().next(),
-        Some(std::path::Component::Normal(first)) if first.eq_ignore_ascii_case(MIND_DIR)
-    );
-    inside_mind.then_some(WorkspaceError::InsideMind { path, kind })
+        Some(std::path::Component::Normal(first)) if first.eq_ignore_ascii_case(folder)
+    )
+}
+
+/// Why `folder`, a route from a project's root that its settings name in
+/// `targets`, is no place to install `kind`s in, if it is not.
+///
+/// Inside the project, as a folder it authors in is, so a copy is that
+/// project's and not some other's, or nobody's: the copies go where the
+/// project's agents are pointed, which only the project can promise. Not in
+/// `.mind`, which no agent reads and a local project keeps out of git, nor
+/// in a `.mindflayer`, which no agent reads either, and whose shelf and
+/// cache gathering replaces and deletes by names of its own: a workspace at
+/// the project's root keeps both there. Only a kind installed as a folder
+/// an artifact has targets at all; a rule reaches agents through
+/// `AGENTS.md` (D-03), which M2 puts in the target table.
+///
+/// What install refuses of any target, an agent's own folder and one a
+/// loaded workspace keeps as its own, it refuses of these too, when it
+/// knows the homes and the loads, which settings do not.
+pub(crate) fn misplaced_target(kind: Kind, folder: &Path) -> Option<Misplaced> {
+    if !matches!(kind.layout(), Layout::Directory { .. }) {
+        return Some(Misplaced::NotInstalled);
+    }
+    if !stays_inside(folder) {
+        return Some(Misplaced::Outside);
+    }
+    if starts_in(folder, MIND_DIR) {
+        return Some(Misplaced::InsideMind);
+    }
+    paths::normalize(folder)
+        .components()
+        .any(|part| part.as_os_str().eq_ignore_ascii_case(FLAYER_DIR))
+        .then_some(Misplaced::InsideWorkspace)
 }
 
 /// Why `directory`, a route from a workspace's root, cannot hold the
