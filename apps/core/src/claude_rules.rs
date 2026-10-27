@@ -545,8 +545,10 @@ fn named(route: &str) -> Result<String, ClaudeRulesError> {
 /// file's own is resolved, as far as it is there, and refused when it leads
 /// out (`agents_md::linked_inside` refuses an `AGENTS.md` the same way). A
 /// link that stays inside the project is followed: where a project keeps its
-/// `.claude` is its own business. The file itself is never followed
-/// ([`look`]).
+/// `.claude` is its own business. Its exclude entry still names the route
+/// through the link, which git does not follow, so in a local project such a
+/// file is not kept out (docs/architecture.md, open questions, as for an
+/// install's copy). The file itself is never followed ([`look`]).
 fn inside(real: &Path, file: &Path) -> Result<(), ClaudeRulesError> {
     let Some(folder) = file.parent() else {
         return Ok(());

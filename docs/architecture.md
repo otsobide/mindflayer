@@ -3590,7 +3590,10 @@ renderer gives Claude the rules about every file when it reads no block.
   written. The entries of files taken away, found gone, or that failed to
   land come out last, and a block that cannot be edited then is said
   (`Rendered::still_excluded`), not raised. Somebody's file at a rule's
-  place gets no entry, and keeps whatever entry it had.
+  place gets no entry, and keeps whatever entry it had. An entry names the
+  route through `.claude`, not the folder on disk, and git follows no link,
+  so a file reached through a link inside the project is not kept out
+  ([open question](#open-questions)).
 - **Never where the block is refused.** A render asked for a rule is refused
   wherever `agents_md::misplaced` refuses the block: above a project the
   workspace links, at the workspace's root where it links none, and inside
@@ -3605,7 +3608,8 @@ renderer gives Claude the rules about every file when it reads no block.
   (`ClaudeRulesError::LinkedOut`): `.claude` linked to the user's own
   `~/.claude` would give every project these rules, and a removal through
   it would take a file out of somebody else's folder. A link that stays
-  inside the project is followed.
+  inside the project is followed, though in a local project the file's
+  exclude entry then misses it (above).
 - **What misses a rule is said.** A rule that states `paths` reaches Claude
   alone, in either mode, and `Warning::ClaudeOnly` names the project's
   agents that read no `.claude/rules`: Codex and OpenCode, unless the
@@ -4905,7 +4909,12 @@ leak into the lifecycle code. Unblocks #33, #45, #62, #93, #94 and #95.
   An install into a linked folder writes such a line too, and so does a
   change that respells a kept copy's record. Writing the entry by the folder
   on disk would keep it out, at the price of a line an uninstall has to work
-  out again from the filesystem rather than from the record.
+  out again from the filesystem rather than from the record. Claude's rule
+  files meet it too: a link inside the project on the way to one, `.claude`
+  linked to `config/claude`, is followed, while the entry names
+  `.claude/rules/mindflayer/<route>.md`, so in a local project the file
+  shows as untracked. Their entries are spelled from the route, as an
+  install's are from the record, and one answer should serve both.
 - **Agents changed by hand.** `mind agents` carries what is installed along
   (#37), and `mind targets` (#40), but the settings are JSON anybody can
   edit. An install after such an edit replaces its record's targets with the
