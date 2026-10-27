@@ -332,10 +332,12 @@ flayer status [-p PROJECT] [--json]
                            # what every project holds, or one: installed,
                            # partial, foreign or authored, for which agents,
                            # and from where
-flayer scan                # the repositories under it, and which are linked
+flayer scan [DIR...] [--depth N] [--json]
+                           # the repositories under it, or under each DIR,
+                           # and which are linked
 flayer link <path>...      # register mind projects with it
 flayer unlink <path>...    # drop them
-flayer minds               # a screen for linking and unlinking many at once
+flayer minds [DIR...]      # a screen for linking and unlinking many at once
 flayer load <path>...      # offer another workspace's own skills, read live
 flayer unload <path>...    # stop offering them
 
@@ -409,6 +411,73 @@ absolute path is stored instead. Linking the same project twice changes
 nothing and says so, naming the spelling already in the file. `unlink` removes
 every entry pointing at the project, and still works on one whose directory has
 moved away, which is exactly the entry worth removing.
+
+`flayer scan` finds what there is to tell it about: every mind project and git
+repository under the workspace, three levels down, and whether each is linked
+yet. It links nothing.
+
+```
+$ cd ~/Projects && flayer scan
+collapse  linked
+notes     not linked  git repository, not a mind project yet
+tanukeys  not linked  mind project
+
+  link one with `flayer link <path>`
+  a repository needs `mind -C <path> init` before it can be linked
+```
+
+Name a folder, or several, and it looks under those instead; `--depth` says
+how many levels below each. Every path is spelled the way `flayer link` takes
+it from where you ran the scan, so a line of the report is a line to type: a
+route from here, or the whole path of one outside.
+
+```
+$ flayer scan ~/Work
+/home/you/Work/acme/api  not linked  git repository, not a mind project yet
+/home/you/Work/acme/web  not linked  mind project
+
+  link one with `flayer link <path>`
+  a repository needs `mind -C <path> init` before it can be linked
+```
+
+Hidden folders, symlinks, `node_modules` and `target` are never entered, nor
+is a repository it finds, whose folders are its own, so a folder at the top of
+your home does not turn into a crawl of the disk; a scan that still lists too
+many folders stops and says so. `flayer minds ~/Work` opens [the minds
+screen](#the-tui) on what is there, and `--json` prints the report in the
+envelope [`status --json`](#what-each-project-has) uses, with the id each
+project's settings name it by:
+
+```
+$ flayer scan ~/Work --depth 2 --json
+{
+  "version": 1,
+  "data": {
+    "roots": [
+      "/home/you/Work"
+    ],
+    "depth": 2,
+    "found": [
+      {
+        "path": "/home/you/Work/acme/api",
+        "route": "/home/you/Work/acme/api",
+        "id": null,
+        "mind": false,
+        "linked": false
+      },
+      {
+        "path": "/home/you/Work/acme/web",
+        "route": "/home/you/Work/acme/web",
+        "id": "f4a29f5daaf5bc789c4b5d6b13174f48",
+        "mind": true,
+        "linked": false
+      }
+    ],
+    "truncated": false
+  },
+  "warnings": []
+}
+```
 
 ```
 $ mind validate
@@ -973,9 +1042,11 @@ migrate` for a project on its own
 
 `m`, or `flayer minds` straight from the shell, opens a list of every
 project the workspace links and every repository under it that it does not,
-ticked where it does. Tick and untick, then `a` applies all of it in one go,
-after saying which repositories `mind init` will write into. `link` and
-`unlink` are all or nothing: if one path is refused, none is changed.
+ticked where it does. `flayer minds ~/Work` looks for those under that folder
+instead, as `flayer scan ~/Work` does. Tick and untick, then `a` applies all
+of it in one go, after saying which repositories `mind init` will write into.
+`link` and `unlink` are all or nothing: if one path is refused, none is
+changed.
 
 That is the rule it is built by: **nothing the TUI does is out of reach of a
 command.** A form shows the line it is about to run as you type, and when the
