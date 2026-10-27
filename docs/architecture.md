@@ -3914,13 +3914,15 @@ skills ([which kind a name is](#which-kind-a-name-is)).
   rule from its rule files, since the reach of no block is the fallback,
   and the agents that read rules only in the block, Codex and OpenCode
   among those the project names, are said to read none of them
-  (`Warning::Withheld`). A block written there before, by a project shared
-  then, is left as it is, and said (`Warning::Left`), as an import left in
-  a tracked `CLAUDE.md` is. A rule whose section it holds is not
-  uninstalled meanwhile (`InstallError::Withheld`): its section would stay,
-  with no record, and the next render that may edit the file would take
-  this workspace's own section for somebody's. Sharing the project, setting
-  `edit_tracked`, or taking the section out by hand lets it go.
+  (`Warning::Withheld`), while the project has a rule the block would have
+  held: with none left, or only rules about some files, which reach Claude
+  alone anyway, nothing is missed. A block written there before, by a
+  project shared then, is left as it is, and said (`Warning::Left`), as an
+  import left in a tracked `CLAUDE.md` is. A rule whose section it holds is
+  not uninstalled meanwhile (`InstallError::Withheld`): its section would
+  stay, with no record, and the next render that may edit the file would
+  take this workspace's own section for somebody's. Sharing the project,
+  setting `edit_tracked`, or taking the section out by hand lets it go.
 - **Somebody's section is never written over.** A section in the block
   that the ledger does not record was written by another workspace that
   links the project, or by a hand that copied a marker, and rendering the

@@ -1070,7 +1070,13 @@ fn render_held(
             .copied()
             .filter(|agent| *agent != Agent::Claude)
             .collect();
-        if !missed.is_empty() {
+        // Said only of a render that holds a rule the block would have held:
+        // one with no rule left misses nothing, and one whose rules are all
+        // about some files says of each that it reaches Claude alone. A rule
+        // kept as the project holds it counts, since what it is about cannot
+        // be read where it is offered no longer.
+        let missing = !sections.is_empty() || !unoffered.is_empty();
+        if missing && !missed.is_empty() {
             warnings.push(Warning::Withheld {
                 file: file.clone(),
                 why,

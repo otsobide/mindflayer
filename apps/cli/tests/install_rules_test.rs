@@ -150,6 +150,14 @@ fn a_tracked_agents_md_in_a_local_project_is_left_alone_and_the_agents_it_misses
         "{:?}",
         untracked(&alpha)
     );
+
+    // With the last rule gone no agent misses any, so nothing is said.
+    let removed = flayer(dir.path(), &["uninstall", "-p", "alpha", "git/commits"]).unwrap();
+
+    assert_eq!(removed.stdout, "removed rule git/commits from alpha\n");
+    quiet(&removed);
+    assert_eq!(fs::read_to_string(alpha.join("AGENTS.md")).unwrap(), TEAM);
+    assert!(!file.exists());
 }
 
 #[test]
