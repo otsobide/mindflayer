@@ -2102,7 +2102,12 @@ unrecorded in a folder it drops; `targets reset` is the same the other way.
   folder a copy is in is told by the folder on disk, as `install::targets`
   makes two spellings of one folder one target, not by the route recorded:
   a copy recorded in `.agents/skills` stays when codex goes and Claude reads
-  it through a `.claude/skills` linked there.
+  it through a `.claude/skills` linked there. It is recorded from then on by
+  the spelling it is sent copies to (`Retarget::respelled`), its exclude
+  entry with it, since that is the one discovery reads it by and an install
+  looks for its record by: left under the old one, as it once was,
+  Mindflayer's own copy read as somebody's, and `targets reset` with the
+  agents still linked to `.skills` made the next install refuse it.
 - **Somebody's is left, and said.** A folder where a new copy would go that
   holds something unrecorded is not written over, so that agent reads it
   rather than what was installed: a warning, as an install refused over
@@ -4608,6 +4613,15 @@ leak into the lifecycle code. Unblocks #33, #45, #62, #93, #94 and #95.
   keeps a group of lines pointing where it was, which removing its entries by
   their new route never matches. Rewriting a project's whole group from what
   the ledger says it has installed would heal it.
+- **A copy kept out of git through a link.** An exclude entry names a copy
+  by the route its record names, so an uninstall takes out the line it
+  finds, and git does not follow a link: a copy in `.skills`, recorded as
+  `.agents/skills/<name>` because the agents read it through links there, is
+  kept out of git by a line that matches nothing, and shows as untracked.
+  An install into a linked folder writes such a line too, and so does a
+  change that respells a kept copy's record. Writing the entry by the folder
+  on disk would keep it out, at the price of a line an uninstall has to work
+  out again from the filesystem rather than from the record.
 - **Agents changed by hand.** `mind agents` carries what is installed along
   (#37), and `mind targets` (#40), but the settings are JSON anybody can
   edit. An install after such an edit replaces its record's targets with the

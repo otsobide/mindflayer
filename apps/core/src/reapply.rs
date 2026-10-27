@@ -225,6 +225,10 @@ pub struct Retarget {
     /// Each copy the record names that stays where it is, with the agent
     /// the ledger says it is for now.
     pub(crate) kept: Vec<Target>,
+    /// Each of those the record named by another spelling of its folder, as
+    /// it was named and as it is from now on: one copy on disk, whose
+    /// exclude entry follows its record.
+    pub(crate) respelled: Vec<(PathBuf, PathBuf)>,
     /// What the record names now, to tell whether it changes.
     pub(crate) recorded: Vec<Target>,
 }
@@ -440,10 +444,18 @@ pub fn apply(
     let root = project.root().to_path_buf();
     let key = plan.after.id.as_str().to_owned();
     let local = plan.after.share == Share::Local;
+    // A copy recorded by a new spelling is kept out of git by it too, so
+    // that what an uninstall takes out of the group by its record is there.
     let landing: Vec<PathBuf> = plan
         .installations
         .iter()
-        .flat_map(|retarget| retarget.added.iter().map(|added| added.path.clone()))
+        .flat_map(|retarget| {
+            retarget
+                .added
+                .iter()
+                .map(|added| added.path.clone())
+                .chain(retarget.respelled.iter().map(|(_, now)| now.clone()))
+        })
         .chain(plan.excluded.iter().cloned())
         .collect();
     // The lines this adds, which a refusal before the settings are written
@@ -537,6 +549,7 @@ pub fn apply(
         }
         gone.extend(retarget.removed.iter().cloned());
         gone.extend(retarget.forgotten.iter().cloned());
+        gone.extend(retarget.respelled.iter().map(|(was, _)| was.clone()));
         gone.extend(
             retarget
                 .left
@@ -782,6 +795,7 @@ pub(crate) fn retarget(
         left: Vec::new(),
         source: None,
         kept: Vec::new(),
+        respelled: Vec::new(),
         recorded: record.targets.clone(),
     };
     let wanted: Vec<(PathBuf, &InstallTarget)> = wanted
@@ -810,12 +824,25 @@ pub(crate) fn retarget(
     // name `.agents/skills` where the settings, changed, now send Claude to
     // the `.claude/skills` linked to it. Compared by route, that copy would
     // be taken out of the very folder Claude reads.
+    //
+    // Recorded from then on by the spelling it is sent copies to, which is
+    // the one discovery reads it by and an install looks for its record by:
+    // left under the old one, Mindflayer's own copy would read as somebody's,
+    // and the next install would refuse it. Two spellings recorded of one
+    // copy become one record of it.
     for (path, target, found) in compared {
-        if let Some((_, now)) = wanted.iter().find(|(_, now)| in_folder(&path, &now.folder)) {
-            retarget.kept.push(Target {
-                agent: install::agent_of(&now.agents),
-                path: target.path.clone(),
-            });
+        if let Some((now_path, now)) = wanted.iter().find(|(_, now)| in_folder(&path, &now.folder))
+        {
+            let route = install::route(project.root(), now_path);
+            if route != target.path {
+                retarget.respelled.push((path.clone(), now_path.clone()));
+            }
+            if !retarget.kept.iter().any(|kept| kept.path == route) {
+                retarget.kept.push(Target {
+                    agent: install::agent_of(&now.agents),
+                    path: route,
+                });
+            }
             continue;
         }
         match found {

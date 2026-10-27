@@ -252,11 +252,10 @@ fn status_warns_that_no_agent_reads_the_targets_once_they_are_set() {
     }
 }
 
+/// Point every agent of the project at `root` at its `.skills`, as the
+/// README does: each folder they read made a link there.
 #[cfg(unix)]
-#[test]
-fn an_agent_pointed_at_the_target_by_a_link_reads_it() {
-    let (_dir, root) = installed();
-    mind(&root, &["targets", "set", "skills", ".skills", "-y"]).unwrap();
+fn link_the_agents_to_skills(root: &Path) {
     for folder in [".claude", ".agents"] {
         let skills = root.join(folder).join("skills");
         if skills.exists() {
@@ -265,6 +264,14 @@ fn an_agent_pointed_at_the_target_by_a_link_reads_it() {
         fs::create_dir_all(root.join(folder)).unwrap();
         std::os::unix::fs::symlink(root.join(".skills"), &skills).unwrap();
     }
+}
+
+#[cfg(unix)]
+#[test]
+fn an_agent_pointed_at_the_target_by_a_link_reads_it() {
+    let (_dir, root) = installed();
+    mind(&root, &["targets", "set", "skills", ".skills", "-y"]).unwrap();
+    link_the_agents_to_skills(&root);
 
     let status = mind(&root, &["status"]).unwrap();
 
@@ -274,6 +281,35 @@ fn an_agent_pointed_at_the_target_by_a_link_reads_it() {
     );
     assert!(status.stderr.is_empty(), "{:?}", status.stderr);
     assert!(status.ok);
+}
+
+#[cfg(unix)]
+#[test]
+fn resetting_with_the_links_still_there_keeps_the_copy_mindflayers() {
+    let (dir, root) = installed();
+    mind(&root, &["targets", "set", "skills", ".skills", "-y"]).unwrap();
+    link_the_agents_to_skills(&root);
+
+    let done = mind(&root, &["targets", "reset", "skills", "--yes"]).unwrap();
+
+    assert!(done.ok, "{:?}", done.stderr);
+    // The copy stays where the agents read it, recorded by the spelling
+    // they are sent copies to now, which is the one discovery reads.
+    assert!(root.join(".skills/deploy/SKILL.md").is_file());
+    assert_eq!(recorded(dir.path()), [".agents/skills/deploy"]);
+    let status = mind(&root, &["status"]).unwrap();
+    assert_eq!(
+        status.stdout,
+        "deploy  installed  claude,codex,opencode  workspace\n"
+    );
+    assert!(status.stderr.is_empty(), "{:?}", status.stderr);
+
+    let source = own_directory_for(dir.path(), Kind::Skill).join("deploy/SKILL.md");
+    let edited = fs::read_to_string(&source).unwrap() + "\nOne more step.\n";
+    fs::write(&source, edited).unwrap();
+    let again = flayer(dir.path(), &["install", "-p", "collapse", "deploy"]).unwrap();
+    assert_eq!(again.stdout, "updated deploy in collapse, from workspace\n");
+    assert!(again.ok, "{:?}", again.stderr);
 }
 
 #[test]

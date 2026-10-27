@@ -240,12 +240,19 @@ fn a_copy_in_a_folder_an_agent_still_reads_through_a_link_is_kept() {
         reapply::apply(Some(&workspace), &project, &change, &AgentHomes::default()).unwrap();
     assert!(applied.failures.is_empty(), "{:?}", applied.failures);
     assert!(claudes(&project, "deploy").join("SKILL.md").is_file());
-    // Still recorded, under the spelling it was, now for Claude alone.
+    // Still recorded, now for Claude alone, and by the spelling Claude is
+    // sent copies to, which is the one it is looked for by: under the old
+    // one, the copy would read as somebody's. Kept out of git by it too.
     assert_eq!(
         targets(&workspace),
-        [target(Some("claude"), ".agents/skills/deploy")]
+        [target(Some("claude"), ".claude/skills/deploy")]
     );
-    assert_eq!(excluded(&project), ["/.agents/skills/deploy/"]);
+    assert_eq!(excluded(&project), ["/.claude/skills/deploy/"]);
+    let project = reopened(&project);
+    let ledger = workspace.ledger().unwrap();
+    let candidate =
+        install::offered(&workspace, &ledger, &project, Kind::Skill, "deploy", None).unwrap();
+    assert_eq!(candidate.standing, install::Standing::Installed);
 }
 
 #[test]
