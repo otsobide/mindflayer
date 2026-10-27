@@ -252,7 +252,7 @@ pub fn apply(
             Pending::Install => {
                 if !installing.contains(&project.root()) {
                     installing.push(project.root());
-                    stderr.extend(crate::commands::install::misplaced(project));
+                    stderr.extend(crate::commands::install::misplaced(project, &[Kind::Skill]));
                 }
                 // One that cannot be installed is said and passed over: the
                 // rest were marked too, and what was already done is reported.

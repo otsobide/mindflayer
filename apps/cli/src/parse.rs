@@ -235,10 +235,11 @@ pub enum Command {
         workspaces: Vec<PathBuf>,
     },
 
-    /// Put a skill into this project: one of the workspace's own, or one
-    /// from its shelf.
+    /// Put a skill or a rule into this project: one of the workspace's own,
+    /// a loaded workspace's, or one from its shelf.
     Install {
-        /// The skill's name.
+        /// Its name: a skill's, or a rule's route like `git/commits`;
+        /// `skill:<name>` or `rule:<route>` when one name is both.
         name: String,
 
         /// Where it comes from, when two places offer that name: `workspace`,
@@ -247,9 +248,9 @@ pub enum Command {
         from: Option<String>,
     },
 
-    /// Take a skill Mindflayer installed back out of this project.
+    /// Take a skill or a rule Mindflayer installed back out of this project.
     Uninstall {
-        /// The skill's name.
+        /// Its name, or `kind:name` when one name is both.
         name: String,
     },
 
@@ -606,17 +607,19 @@ pub enum FlayerCommand {
     #[command(subcommand)]
     Gather(GatherCommand),
 
-    /// Put skills into the projects this workspace manages: the workspace's
-    /// own, or its shelf's.
+    /// Put skills and rules into the projects this workspace manages: the
+    /// workspace's own, a loaded workspace's, or its shelf's.
     ///
-    /// On its own it opens a screen for all of them at once. Given a skill and
+    /// On its own it opens a screen for all of them at once. Given a name and
     /// a project, it installs that one without one.
     Install {
         /// The project to install into.
         #[arg(short, long, value_name = "PROJECT")]
         project: Option<String>,
 
-        /// The skill's name [default: open the screen].
+        /// Its name: a skill's, or a rule's route like `git/commits`;
+        /// `skill:<name>` or `rule:<route>` when one name is both [default:
+        /// open the screen].
         name: Option<String>,
 
         /// Where it comes from, when two places offer that name: `workspace`,
@@ -625,13 +628,13 @@ pub enum FlayerCommand {
         from: Option<String>,
     },
 
-    /// Take a skill Mindflayer installed back out of a project.
+    /// Take a skill or a rule Mindflayer installed back out of a project.
     Uninstall {
         /// The project to take it out of.
         #[arg(short, long, value_name = "PROJECT")]
         project: String,
 
-        /// The skill's name.
+        /// Its name, or `kind:name` when one name is both.
         name: String,
     },
 
