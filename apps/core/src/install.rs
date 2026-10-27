@@ -29,7 +29,9 @@ use crate::exclude::{self, ExcludeError, Excluded};
 use crate::gather::Scrub;
 use crate::hash;
 use crate::kind::{Kind, Layout};
-use crate::ledger::{Action, Gathered, InstallRecord, Ledger, LedgerError, Outcome, Target};
+use crate::ledger::{
+    Action, Forgotten, Gathered, InstallRecord, Ledger, LedgerError, Outcome, Target,
+};
 use crate::paths;
 use crate::settings::Share;
 use crate::url::redacted;
@@ -1035,12 +1037,21 @@ fn recorded_copy(project: &MindProject, name: &str, route: &str) -> Result<PathB
 /// screen leave to overwrite and delete, so it must not outlive the copy it
 /// was about: whatever somebody writes there next would inherit it.
 ///
-/// Only a record of a copy at `at`, the place the change reached: a project
-/// marked by its settings authors in a folder of its own, beside the copies
-/// installed for its agents, and a change there leaves those copies what was
-/// installed. Dropping their record by name would make them Foreign, never
-/// updated or removed again, over a change to something else. A record from
-/// before installations had targets names none, and is dropped as it was.
+/// Only a record of a copy at `at`, the place the change reached, and only
+/// that copy's part of it ([`Ledger::uninstalled_copy`]): a project marked by
+/// its settings authors in a folder of its own, beside the copies installed
+/// for its agents, and a change there leaves those copies what was installed.
+/// Dropping their record by name would make them Foreign, never updated or
+/// removed again, over a change to something else. So would dropping the
+/// whole installation when the folder it authors in is also a target, which
+/// its settings may make it (`"skills": ".claude/skills"`), and the change
+/// reached the copy there: the one in `.agents/skills` is still what was
+/// installed. The installation goes with its last copy. A record from before
+/// installations had targets names none, and is dropped as it was.
+///
+/// In a local project, `at` stops being kept out of git with its record:
+/// what is there now, or is written there next, is its author's, and a line
+/// left in the exclude block would hide it from `git status` without a word.
 ///
 /// Only the changes in [`crate::lifecycle`] call it, each when its change
 /// calls for it. Public, it would let a front end drop a record on a rule of
@@ -1076,31 +1087,52 @@ pub(crate) fn disown(
     // trying the change again would find nothing to change.
     let (ledger, scrub) = workspace.ledger_to_write_waiting(Duration::MAX)?;
     let entry = project_entry(workspace, project);
-    let at = route(project.root(), at);
-    let reached = ledger
-        .installation(&entry, kind, name)?
-        .is_some_and(|record| {
-            record.targets.is_empty() || record.targets.iter().any(|target| target.path == at)
-        });
-    let dropped = reached && ledger.uninstalled(&entry, kind, name)?;
-    if dropped {
-        let detail = format!(
+    let reached = route(project.root(), at);
+    let detail = match ledger.uninstalled_copy(&entry, kind, name, &reached)? {
+        Forgotten::Nothing => {
+            return Ok(Disowned {
+                scrub,
+                ..Disowned::default()
+            })
+        }
+        Forgotten::Copy => format!(
+            "{name}'s copy at {reached} from {}, which no longer holds what was installed there",
+            project.name()
+        ),
+        Forgotten::Installation => format!(
             "{name} from {}, which no longer holds the copy that was installed",
             project.name()
-        );
-        ledger.log(Action::Uninstall, Some(&entry), Outcome::Ok, Some(&detail))?;
-    }
-    Ok(Disowned { dropped, scrub })
+        ),
+    };
+    ledger.log(Action::Uninstall, Some(&entry), Outcome::Ok, Some(&detail))?;
+    // After the record, as an uninstall takes its entries out after the
+    // copies; and handed back rather than raised, since the record is gone.
+    let still_excluded = local(project).and_then(|key| {
+        exclude::remove(project.root(), key, &entries(project, &[at.to_path_buf()]))
+            .err()
+            .map(|source| InstallError::StillExcluded {
+                path: at.to_path_buf(),
+                source,
+            })
+    });
+    Ok(Disowned {
+        dropped: true,
+        scrub,
+        still_excluded,
+    })
 }
 
 /// What [`disown`] did.
 #[derive(Debug, Default)]
 pub(crate) struct Disowned {
-    /// Whether there was a record, which is now gone.
+    /// Whether there was a record of the copy, which is now gone.
     pub dropped: bool,
     /// What opening the ledger to write took out of it, for the front end to
     /// say; nothing when there was no ledger to open.
     pub scrub: Scrub,
+    /// Why the exclude block of a local project still keeps the copy's place
+    /// out of git, when it could not be edited.
+    pub still_excluded: Option<InstallError>,
 }
 
 /// What installing one artifact did.
@@ -1411,6 +1443,12 @@ pub enum InstallError {
     Recorded { name: String, route: String },
     #[error("{0}, and nothing was installed, since its copies could not be kept out of git")]
     Exclude(#[from] ExcludeError),
+    #[error("{path}: its record of being installed was dropped, but the exclude file still keeps it out of git: {source}")]
+    StillExcluded {
+        path: PathBuf,
+        #[source]
+        source: ExcludeError,
+    },
     #[error("{path} is inside {home}, which {reader} reads for every project, so nothing was installed: Mindflayer installs into one project at a time")]
     UserScope {
         path: PathBuf,

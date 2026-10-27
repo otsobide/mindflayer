@@ -78,7 +78,9 @@ pub enum Record {
     /// the one consulted does not manage the project, or it installed nothing
     /// under that name) or the change gave no reason to touch it.
     Untouched,
-    /// The record was dropped, and what is there now is its author's.
+    /// The record of the copy the change reached was dropped, and what is
+    /// there now is its author's. Copies the same install wrote in other
+    /// folders, which the change did not reach, are still recorded.
     Dropped,
 }
 
@@ -701,6 +703,9 @@ fn disowned(
     };
     let disowned = install::disown(workspace, project, kind, name, at)?;
     scrub.absorb(disowned.scrub);
+    if let Some(error) = disowned.still_excluded {
+        return Err(error);
+    }
     Ok(if disowned.dropped {
         Record::Dropped
     } else {
