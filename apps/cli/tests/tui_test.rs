@@ -1182,6 +1182,16 @@ fn every_task_the_tui_runs_is_a_line_the_binaries_accept() {
             share: Some(Share::Shared),
             edit_tracked: false,
         },
+        Task::Targets {
+            holder: Holder::Project(String::from("alpha")),
+            kind: Kind::Skill,
+            folders: Some(vec![String::from(".skills"), String::from("-odd")]),
+        },
+        Task::Targets {
+            holder: Holder::Elsewhere(String::from("-odd")),
+            kind: Kind::Skill,
+            folders: None,
+        },
     ];
 
     for task in &tasks {
@@ -2369,6 +2379,224 @@ fn t_on_the_workspaces_own_row_or_an_older_project_says_why_not() {
         press_key(&mut app, KeyCode::Down);
     }
     press_key(&mut app, KeyCode::Char('t'));
+    assert!(matches!(app.mode, Mode::Browse));
+    assert!(app
+        .message
+        .as_ref()
+        .unwrap()
+        .text
+        .contains("`mind migrate`"));
+}
+
+// ---------------------------------------------------------------------------
+// Where a project installs skills
+// ---------------------------------------------------------------------------
+
+#[test]
+fn a_project_installing_where_no_agent_reads_is_marked_and_its_pane_says_why() {
+    let dir = workspace_with_own();
+    let alpha = dir.path().join("alpha");
+    mind(&alpha, &["targets", "set", "skills", ".skills", "-y"]).unwrap();
+    flayer(dir.path(), &["install", "-p", "alpha", "commit-style"]).unwrap();
+
+    let app = tui_in(dir.path());
+
+    let holdings = app.member().unwrap().holdings.as_ref().unwrap();
+    assert_eq!(
+        holdings.unreached,
+        [String::from(
+            "claude, codex and opencode read none of the folders alpha installs skills in \
+             (.skills), so none of them sees what is installed there until pointed at one"
+        )]
+    );
+    let drawn = tui_drawn(&app);
+    assert!(drawn.contains("alpha  2  ⚠"), "{drawn}");
+    assert!(drawn.contains("Not seen by every agent"), "{drawn}");
+    // Wrapped whole, to the end that says what to do.
+    assert!(drawn.contains("│one "), "{drawn}");
+    // Its neighbour installs where its agents read, and is not marked.
+    assert!(drawn.contains("beta  1 "), "{drawn}");
+    assert!(!drawn.contains("beta  1  ⚠"), "{drawn}");
+}
+
+#[test]
+fn a_strip_wraps_by_how_wide_its_words_are_drawn() {
+    let dir = workspace_with_own();
+    let alpha = dir.path().join("alpha");
+    // Each character two columns wide, so a line of as many characters as
+    // the strip has columns would be cut at its border.
+    let folder = format!(".{}", "技".repeat(16));
+    mind(&alpha, &["targets", "set", "skills", &folder, "-y"]).unwrap();
+    let app = tui_in(dir.path());
+
+    for width in [80, 100, 110] {
+        let mut terminal = Terminal::new(TestBackend::new(width, 30)).unwrap();
+        terminal.draw(|frame| tui::ui::draw(&app, frame)).unwrap();
+        let drawn: String = terminal
+            .backend()
+            .buffer()
+            .content()
+            .iter()
+            .map(|cell| cell.symbol())
+            .collect();
+        assert_eq!(drawn.matches('技').count(), 16, "{width}: {drawn}");
+        assert!(drawn.contains("until"), "{width}: {drawn}");
+        assert!(drawn.contains("pointed"), "{width}: {drawn}");
+    }
+}
+
+#[test]
+fn a_strip_is_drawn_on_a_terminal_too_short_for_it() {
+    let dir = workspace_with_own();
+    let alpha = dir.path().join("alpha");
+    mind(&alpha, &["targets", "set", "skills", ".skills", "-y"]).unwrap();
+    let app = tui_in(dir.path());
+    assert!(!app
+        .member()
+        .unwrap()
+        .holdings
+        .as_ref()
+        .unwrap()
+        .unreached
+        .is_empty());
+
+    // Its pane shorter than the three rows a strip takes at least, which
+    // must not end the process.
+    for height in 1..10 {
+        let mut terminal = Terminal::new(TestBackend::new(110, height)).unwrap();
+        terminal.draw(|frame| tui::ui::draw(&app, frame)).unwrap();
+    }
+}
+
+#[test]
+fn capital_t_on_a_project_opens_where_it_installs_skills_and_runs_targets_set() {
+    let dir = workspace_with_own();
+    flayer(dir.path(), &["install", "-p", "alpha", "commit-style"]).unwrap();
+    let mut app = tui_in(dir.path());
+    assert_eq!(app.member().unwrap().name, "alpha");
+
+    press_key(&mut app, KeyCode::Char('T'));
+    let Mode::Targets(form) = &app.mode else {
+        panic!("{:?}", app.mode)
+    };
+    // Empty: the project installs where its agents read.
+    assert_eq!(form.folders.text(), "");
+    assert!(tui_drawn(&app).contains("Where alpha installs skills"));
+
+    type_text(&mut app, ".skills");
+    let drawn = tui_drawn(&app);
+    assert!(
+        drawn.contains("mind -C alpha targets set --yes skills .skills"),
+        "{drawn}"
+    );
+    let task = press_and_run(&mut app, KeyCode::Enter);
+
+    assert_eq!(
+        task,
+        Some(Task::Targets {
+            holder: Holder::Project(String::from("alpha")),
+            kind: Kind::Skill,
+            folders: Some(vec![String::from(".skills")]),
+        })
+    );
+    // What it said, to read in full: the copies moved.
+    let Mode::Reading(reader) = &app.mode else {
+        panic!("{:?}", app.mode)
+    };
+    let said: Vec<&str> = reader.lines.iter().map(|(_, line)| line.as_str()).collect();
+    assert!(
+        said.contains(&"removed commit-style from .claude/skills/commit-style"),
+        "{said:?}"
+    );
+    let alpha = dir.path().join("alpha");
+    assert!(alpha.join(".skills/commit-style/SKILL.md").is_file());
+    assert!(app
+        .transcript()
+        .starts_with("$ mind -C alpha targets set --yes skills .skills\n"));
+
+    // Back on the project, its row and its pane say no agent sees it.
+    press_key(&mut app, KeyCode::Esc);
+    let holdings = app.member().unwrap().holdings.as_ref().unwrap();
+    assert_eq!(holdings.targets, Some(vec![String::from(".skills")]));
+    assert_eq!(
+        holdings.unreached,
+        [String::from(
+            "claude, codex and opencode read none of the folders alpha installs skills in \
+             (.skills), so none of them sees what is installed there until pointed at one"
+        )]
+    );
+    assert!(tui_drawn(&app).contains("alpha  2  ⚠"));
+}
+
+#[test]
+fn clearing_the_folders_runs_targets_reset_and_leaving_them_runs_nothing() {
+    let dir = workspace_with_own();
+    mind(
+        &dir.path().join("alpha"),
+        &["targets", "set", "skills", ".skills", "-y"],
+    )
+    .unwrap();
+    let mut app = tui_in(dir.path());
+    press_key(&mut app, KeyCode::Char('T'));
+    let Mode::Targets(form) = &app.mode else {
+        panic!("{:?}", app.mode)
+    };
+    assert_eq!(form.folders.text(), ".skills");
+
+    // As it opened, there is nothing to run.
+    assert_eq!(press_key(&mut app, KeyCode::Enter), TuiStep::Stay);
+    assert!(tui_drawn(&app).contains("nothing changed yet"));
+
+    for _ in 0..".skills".len() {
+        press_key(&mut app, KeyCode::Backspace);
+    }
+    let task = press_and_run(&mut app, KeyCode::Enter).unwrap();
+
+    assert_eq!(task.describe(), "mind -C alpha targets reset --yes skills");
+    let settings = MindProject::open(dir.path().join("alpha")).unwrap();
+    assert!(settings.settings().unwrap().targets.is_empty());
+}
+
+#[test]
+fn a_folder_no_install_may_use_is_refused_by_the_command_in_the_form() {
+    let dir = workspace_with_two();
+    let mut app = tui_in(dir.path());
+    press_key(&mut app, KeyCode::Char('T'));
+    type_text(&mut app, "../shared");
+
+    press_and_run(&mut app, KeyCode::Enter).unwrap();
+
+    let Mode::Targets(form) = &app.mode else {
+        panic!("{:?}", app.mode)
+    };
+    let error = form.error.as_deref().unwrap_or_default();
+    assert!(error.contains("is not inside the project"), "{error}");
+}
+
+#[test]
+fn capital_t_on_the_workspaces_own_row_or_an_older_project_says_why_not() {
+    let dir = workspace_with_two();
+    let old = dir.path().join("old");
+    fs::create_dir(&old).unwrap();
+    older_project(&old);
+    flayer(dir.path(), &["link", "old"]).unwrap();
+    let mut app = tui_in(dir.path());
+
+    press_key(&mut app, KeyCode::Up);
+    assert!(app.member().unwrap().own);
+    press_key(&mut app, KeyCode::Char('T'));
+    assert!(matches!(app.mode, Mode::Browse));
+    assert!(app
+        .message
+        .as_ref()
+        .unwrap()
+        .text
+        .contains("reach agents by being installed"));
+
+    while app.member().unwrap().name != "old" {
+        press_key(&mut app, KeyCode::Down);
+    }
+    press_key(&mut app, KeyCode::Char('T'));
     assert!(matches!(app.mode, Mode::Browse));
     assert!(app
         .message

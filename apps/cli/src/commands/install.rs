@@ -16,6 +16,9 @@ use crate::{CliError, Failure, Outcome};
 /// given to `load`. What the loaded workspaces could not offer is said as
 /// warnings, whether or not the install then works: a loaded workspace that
 /// has gone is why a skill is "not offered", and the error alone cannot say so.
+/// So is each folder the project's settings name for skills that no install
+/// uses ([`MindProject::misplaced_targets`]): no copy went there, and an
+/// install refused for want of any other is refused for that.
 ///
 /// `homes` are the agents' own folders the command line decided, which core
 /// refuses to install into.
@@ -30,7 +33,8 @@ pub(crate) fn install_named(
     use mindflayer_core::install::{self as installing, Installed};
     use mindflayer_core::Excluded;
 
-    let warnings = load_warnings(workspace);
+    let mut warnings = load_warnings(workspace);
+    warnings.extend(misplaced(project));
     let (ledger, scrub) = workspace.ledger_to_write().map_err(|error| Failure {
         error: Box::new(error.into()),
         warnings: warnings.clone(),
@@ -119,6 +123,17 @@ pub(crate) fn install_named(
         outcome.ok = false;
     }
     Ok(said.before(outcome))
+}
+
+/// A warning for each folder `project`'s settings name for skills that no
+/// install uses, the one kind installed for now.
+pub(crate) fn misplaced(project: &MindProject) -> Vec<String> {
+    project
+        .misplaced_targets()
+        .iter()
+        .filter(|misplaced| misplaced.kind == Kind::Skill)
+        .map(|misplaced| format!("warning: {misplaced}"))
+        .collect()
 }
 
 /// A line for each thing interrupted installs had left in `project` that

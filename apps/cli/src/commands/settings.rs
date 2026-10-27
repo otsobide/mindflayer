@@ -1,18 +1,24 @@
 //! The commands that change a project's settings and carry what is
-//! installed into it along: `agents` and `share`, at either level.
+//! installed into it along: `agents`, `share` and `targets`, at either
+//! level.
 //!
 //! Core's [`reapply`] decides everything, what moves and what is left; here
 //! it is said, as what would happen without `--yes` and as what did with it.
 
 use std::fmt::Write as _;
+use std::path::PathBuf;
 
 use mindflayer_core::reapply::{self, Change, Ignore, Plan, Retarget, Why};
-use mindflayer_core::{Agent, AgentHomes, Excluded, FlayerWorkspace, MindProject, Share};
+use mindflayer_core::{
+    paths, Agent, AgentHomes, Excluded, FlayerWorkspace, Kind, MindProject, Settings, Share,
+};
 
 use super::consulted;
 use super::gather::scrubbed;
 use super::install::{cleared, shown};
-use crate::{AgentNames, AgentsChange, CliError, Failure, Lookup, Outcome};
+use super::status::unread;
+use crate::render::printable;
+use crate::{AgentNames, AgentsChange, CliError, Failure, Lookup, Outcome, TargetsChange};
 
 /// The change an `agents` line asks for, and whether it said `--yes`,
 /// before or after `add` or `remove`.
@@ -30,7 +36,30 @@ pub(crate) fn agents_change(change: Option<&AgentsChange>, named: &AgentNames) -
     }
 }
 
-/// `mind agents` and `mind share`: the change to the project at or above
+/// The change a `targets` line asks for, and whether it said `--yes`.
+///
+/// The folders as typed, relative to the project: core spells them as the
+/// settings will, and refuses one no install may use.
+pub(crate) fn targets_change(change: &TargetsChange) -> (Change, bool) {
+    match change {
+        TargetsChange::Set { kind, folders, yes } => (
+            Change::Targets {
+                kind: *kind,
+                folders: Some(folders.iter().map(PathBuf::from).collect()),
+            },
+            *yes,
+        ),
+        TargetsChange::Reset { kind, yes } => (
+            Change::Targets {
+                kind: *kind,
+                folders: None,
+            },
+            *yes,
+        ),
+    }
+}
+
+/// `mind agents`, `mind share` and `mind targets`: the change to the project at or above
 /// here, carried through the workspace `mind` consults about it when that
 /// one links it.
 ///
@@ -86,8 +115,9 @@ pub(crate) fn change_here(
     result
 }
 
-/// `flayer agents -p` and `flayer share -p`: the change to one project the
-/// workspace manages, carrying what its ledger records along.
+/// `flayer agents -p`, `flayer share -p` and `flayer targets -p`: the change
+/// to one project the workspace manages, carrying what its ledger records
+/// along.
 pub(crate) fn change_of(
     workspace: &FlayerWorkspace,
     project: &MindProject,
@@ -108,6 +138,11 @@ const NOTHING: &str = "nothing to change";
 /// saying yes. Made, a copy left out of a folder an agent the project now
 /// names reads, over somebody's skill or for want of one to copy, is a
 /// warning, as an install refused over somebody's is.
+///
+/// Either way, a kind the project would install only where some of its
+/// agents do not read is a note: it is what was asked for, and the folder
+/// reaches them once they are pointed at it, which `status` warns of until
+/// they are.
 fn change_project(
     workspace: Option<&FlayerWorkspace>,
     project: &MindProject,
@@ -125,6 +160,7 @@ fn change_project(
             .stdout
             .push_str("nothing changed: add --yes to go ahead\n");
         outcome.stderr.extend(outside(project, &plan));
+        outcome.stderr.extend(unreached(project, &plan, false));
         return Ok(outcome);
     }
 
@@ -148,7 +184,17 @@ fn change_project(
         outcome.ok = false;
     }
     outcome.stderr.extend(outside(project, plan));
+    outcome.stderr.extend(unreached(project, plan, true));
     Ok(said.before(outcome))
+}
+
+/// A note for each kind the project, as the change leaves it, installs only
+/// where some of its agents do not read.
+fn unreached(project: &MindProject, plan: &Plan, done: bool) -> Vec<String> {
+    plan.unreached
+        .iter()
+        .map(|unreached| format!("note: {}", unread(project.name(), unreached, !done)))
+        .collect()
 }
 
 /// A warning for each folder an agent the project names reads that an
@@ -191,10 +237,35 @@ fn nothing(project: &MindProject, change: &Change, plan: &Plan) -> String {
                 ""
             }
         ),
-        _ => format!(
+        Change::Targets { kind, folders } => match folders {
+            Some(_) => format!(
+                "{NOTHING}: {name} installs {kind}s in {} already\n",
+                targets(&plan.after, *kind)
+            ),
+            None => format!("{NOTHING}: {name} installs {kind}s where its agents read already\n"),
+        },
+        Change::Agents(_) | Change::AddAgents(_) | Change::RemoveAgents(_) => format!(
             "{NOTHING}: {name} names {} already\n",
             agents(&plan.after.agents)
         ),
+    }
+}
+
+/// Where `settings` install `kind`, as a line says it: each folder they name,
+/// comma-separated as the agents are, or the folders each agent reads.
+fn targets(settings: &Settings, kind: Kind) -> String {
+    match settings.targets.get(kind) {
+        Some(folders) => folders
+            .iter()
+            .map(|folder| {
+                printable(
+                    &paths::to_config_string(folder)
+                        .unwrap_or_else(|| folder.display().to_string()),
+                )
+            })
+            .collect::<Vec<_>>()
+            .join(","),
+        None => String::from("the folders its agents read"),
     }
 }
 
@@ -232,6 +303,34 @@ fn report(project: &MindProject, plan: &Plan, done: bool) -> String {
             would("set", "would set"),
             after.edit_tracked,
             before.edit_tracked
+        );
+    }
+    for kind in Kind::ALL {
+        if before.targets.get(kind) != after.targets.get(kind) {
+            let _ = writeln!(
+                text,
+                "{} the targets of {kind}s to {} in {name}, where they were {}",
+                would("set", "would set"),
+                targets(after, kind),
+                targets(before, kind)
+            );
+        }
+    }
+    // The one version a change moves, with `targets`: said, since a build
+    // from before them then refuses the project, which a team sharing it
+    // has to know.
+    if before.version != after.version {
+        let _ = writeln!(
+            text,
+            "{} version to {} in {name}, where it was {}{}",
+            would("set", "would set"),
+            after.version,
+            before.version,
+            if after.version > before.version {
+                ", so a Mindflayer from before targets refuses it"
+            } else {
+                ""
+            }
         );
     }
     match &plan.ignore {
@@ -398,7 +497,7 @@ pub(crate) fn agents(agents: &[Agent]) -> String {
 }
 
 /// Agents as a sentence says them: `codex`, `codex and opencode`.
-fn spoken(agents: &[Agent]) -> String {
+pub(crate) fn spoken(agents: &[Agent]) -> String {
     match agents {
         [] => String::new(),
         [one] => one.name().to_owned(),

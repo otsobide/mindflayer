@@ -29,7 +29,7 @@ pub use error::CliError;
 pub use homes::{agent_homes, default_home, Lookup};
 pub use parse::{
     AgentHomeOptions, AgentNames, AgentsChange, Cli, Command, FlayerCli, FlayerCommand,
-    GatherCommand, Migrated, ShareMode,
+    GatherCommand, Migrated, ShareMode, TargetsChange,
 };
 pub use progress::ProgressLine;
 pub use render::{Failure, Outcome};

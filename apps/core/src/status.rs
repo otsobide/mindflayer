@@ -28,7 +28,9 @@ use crate::install;
 use crate::kind::Kind;
 use crate::ledger::InstallRecord;
 use crate::paths;
-use crate::workspace::{same_directory, FlayerWorkspace, MindProject, WorkspaceError};
+use crate::workspace::{
+    same_directory, FlayerWorkspace, MindProject, MisplacedTarget, WorkspaceError,
+};
 
 /// What every project a report covers holds.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize)]
@@ -57,8 +59,34 @@ pub struct ProjectStatus {
     /// listed rather than left out, since it is the one somebody has to find
     /// to unlink it.
     pub stale: Option<String>,
+    /// Each kind installed somewhere none of some of its agents reads, by
+    /// kind in report order: what a project's `targets` can leave, since a
+    /// folder of its own reaches an agent only once that agent is pointed at
+    /// it. None under the folders each agent reads, which is every project
+    /// whose settings name no `targets`.
+    pub unreached: Vec<Unreached>,
     /// Everything it holds, grouped by kind and ordered by name.
     pub artifacts: Vec<ArtifactStatus>,
+}
+
+/// A kind a project installs only in folders some of its agents do not read,
+/// and those agents.
+///
+/// Told by where each agent reads ([`Agent::reads`]), matched by spelling and
+/// then on disk, so a `.claude/skills` linked to the project's `.skills` is
+/// Claude reading it: pointing an agent at a folder is up to whoever keeps
+/// the project, and a link is one way the report can see. An agent told
+/// some other way, by a setting of its own, is beyond what docs/agents.md
+/// says it reads, and is still said here.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct Unreached {
+    pub kind: Kind,
+    /// Every folder the kind is installed in, as a route from the project,
+    /// with `/` whatever the platform, in the order an install writes them.
+    pub targets: Vec<String>,
+    /// The agents among the project's that read none of them, in report
+    /// order. Never empty.
+    pub agents: Vec<Agent>,
 }
 
 /// One artifact a project holds, and how it stands.
@@ -143,6 +171,11 @@ pub enum StatusFailure {
     /// What discovery could not read in a project, or the ledger.
     #[error(transparent)]
     Discovery(#[from] DiscoveryFailure),
+    /// A folder a project's settings name in `targets` that no install uses,
+    /// said wherever the project is reported, since the report reads its
+    /// installs as going everywhere else they name.
+    #[error(transparent)]
+    Target(#[from] MisplacedTarget),
 }
 
 impl Status {
@@ -179,6 +212,12 @@ impl Status {
                         }
                         ledger_said |= ledger;
                     }
+                    failures.extend(
+                        project
+                            .misplaced_targets()
+                            .into_iter()
+                            .map(StatusFailure::from),
+                    );
                     status.projects.push(held);
                 }
                 Err(error) => {
@@ -188,6 +227,7 @@ impl Status {
                         path: member.root,
                         agents: Vec::new(),
                         stale: Some(error.to_string()),
+                        unreached: Vec::new(),
                         artifacts: Vec::new(),
                     });
                     failures.push(StatusFailure::Stale(error));
@@ -209,11 +249,16 @@ impl Status {
     ) -> (Status, Vec<StatusFailure>) {
         let (held, catalog) = ProjectStatus::read(project, &Kind::ALL, workspace);
         let (_, failures) = catalog.into_parts();
+        let misplaced = project.misplaced_targets().into_iter();
         (
             Status {
                 projects: vec![held],
             },
-            failures.into_iter().map(StatusFailure::from).collect(),
+            failures
+                .into_iter()
+                .map(StatusFailure::from)
+                .chain(misplaced.map(StatusFailure::from))
+                .collect(),
         )
     }
 }
@@ -281,8 +326,9 @@ impl ProjectStatus {
             name: Some(project.name().to_owned()),
             entry,
             path: root.to_path_buf(),
-            agents,
             stale: None,
+            unreached: unreached(project, kinds, &agents),
+            agents,
             artifacts: standing(root, catalog.artifacts(), installed),
         };
         (status, catalog)
@@ -382,6 +428,47 @@ fn standing(
     }
     held.sort_by(|a, b| a.kind.cmp(&b.kind).then_with(|| a.name.cmp(&b.name)));
     held
+}
+
+/// Each of `kinds` that `project` installs only in folders some of `agents`,
+/// its own, do not read, with those agents.
+///
+/// From where an install of each would put its copies
+/// ([`install::targets`]), so two spellings of one folder are one, and a kind
+/// installed nowhere, every rule for now, is passed over: nothing of it
+/// reaches any agent through a folder, which is not this to say.
+pub(crate) fn unreached(project: &MindProject, kinds: &[Kind], agents: &[Agent]) -> Vec<Unreached> {
+    let root = project.root();
+    kinds
+        .iter()
+        .filter_map(|&kind| {
+            let targets = install::targets(project, kind).ok()?;
+            let missed: Vec<Agent> = agents
+                .iter()
+                .copied()
+                .filter(|agent| {
+                    !targets.iter().any(|target| {
+                        agent
+                            .reads(kind)
+                            .iter()
+                            .any(|read| same_directory(&root.join(read), &target.folder))
+                    })
+                })
+                .collect();
+            (!missed.is_empty()).then(|| Unreached {
+                kind,
+                targets: targets
+                    .iter()
+                    .map(|target| {
+                        let route = paths::relative_to(&target.folder, root)
+                            .unwrap_or_else(|| target.folder.clone());
+                        spelled(&route)
+                    })
+                    .collect(),
+                agents: missed,
+            })
+        })
+        .collect()
 }
 
 /// A registry entry as the marker spells it, with `/` whatever the platform.

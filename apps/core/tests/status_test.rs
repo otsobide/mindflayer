@@ -7,7 +7,7 @@ use std::path::PathBuf;
 use mindflayer_core::ledger::{InstallRecord, Target};
 use mindflayer_core::{
     Agent, ArtifactStatus, Directories, FlayerWorkspace, Kind, Ledger, MindProject, ProjectStatus,
-    Share, State, Status, StatusFailure,
+    Share, State, Status, StatusFailure, Unreached,
 };
 use tempfile::TempDir;
 
@@ -475,4 +475,114 @@ fn reading_a_project_hands_back_the_catalog_it_read_with_the_records_marked() {
     );
     assert_eq!(status.find(Kind::Rule, "deploy"), None);
     assert!(catalog.artifacts()[0].copies()[0].is_installed());
+}
+
+/// `project`, its settings changed to install skills in `folders`.
+fn installing_in(project: &mut MindProject, folders: &[&str]) {
+    project
+        .change_settings(|settings| {
+            settings.targets = mindflayer_core::Targets::default()
+                .with(Kind::Skill, folders.iter().map(PathBuf::from).collect());
+        })
+        .unwrap();
+}
+
+#[test]
+fn a_project_installing_where_no_agent_reads_says_which_agents_read_none_of_it() {
+    let (dir, mut workspace) = workspace();
+    let mut alpha = marked(&dir, &mut workspace, "alpha", &Agent::ALL);
+    installing_in(&mut alpha, &[".skills"]);
+    let ledger = workspace.ledger().unwrap();
+    put(&alpha, ".skills", "deploy");
+    record(&ledger, "alpha", "deploy", "workspace", &[".skills/deploy"]);
+
+    let (status, failures) = Status::of_workspace(&workspace);
+
+    assert!(failures.is_empty(), "{failures:?}");
+    let alpha = &status.projects[0];
+    assert_eq!(
+        alpha.unreached,
+        [Unreached {
+            kind: Kind::Skill,
+            targets: vec![String::from(".skills")],
+            agents: Agent::ALL.to_vec(),
+        }]
+    );
+    // Installed, and reaching no agent.
+    assert_eq!(
+        states(alpha),
+        [("deploy", State::Installed, &[][..], Some("workspace"))]
+    );
+}
+
+#[test]
+fn an_agent_reading_one_of_the_targets_is_reached_and_one_pointed_there_by_a_link_too() {
+    let (dir, mut workspace) = workspace();
+    let mut alpha = marked(&dir, &mut workspace, "alpha", &Agent::ALL);
+    installing_in(&mut alpha, &[".skills", ".claude/skills"]);
+
+    let (status, _) = Status::of_project(&alpha, Some(&workspace));
+
+    // OpenCode reads Claude's folder too, so only Codex misses out.
+    assert_eq!(
+        status.projects[0].unreached,
+        [Unreached {
+            kind: Kind::Skill,
+            targets: vec![String::from(".claude/skills"), String::from(".skills")],
+            agents: vec![Agent::Codex],
+        }]
+    );
+
+    #[cfg(unix)]
+    {
+        fs::create_dir_all(alpha.root().join(".skills")).unwrap();
+        fs::create_dir_all(alpha.root().join(".agents")).unwrap();
+        std::os::unix::fs::symlink(
+            alpha.root().join(".skills"),
+            alpha.root().join(".agents").join("skills"),
+        )
+        .unwrap();
+
+        let (status, _) = Status::of_project(&alpha, Some(&workspace));
+
+        assert_eq!(status.projects[0].unreached, []);
+    }
+}
+
+#[test]
+fn a_project_installing_where_its_agents_read_has_nothing_unreached() {
+    let (dir, mut workspace) = workspace();
+    marked(&dir, &mut workspace, "alpha", &Agent::ALL);
+
+    let (status, _) = Status::of_workspace(&workspace);
+
+    assert_eq!(status.projects[0].unreached, []);
+}
+
+#[test]
+fn a_target_no_install_may_use_is_a_failure_beside_the_report() {
+    let (dir, mut workspace) = workspace();
+    let alpha = marked(&dir, &mut workspace, "alpha", &Agent::ALL);
+    let path = alpha.root().join(".mind").join("settings.json");
+    let text = fs::read_to_string(&path).unwrap().replacen(
+        "{\n",
+        "{\n  \"targets\": {\"skills\": [\".skills\", \"../shared\"]},\n",
+        1,
+    );
+    fs::write(&path, text).unwrap();
+
+    let (status, failures) = Status::of_workspace(&workspace);
+    let alpha = MindProject::open(alpha.root()).unwrap();
+    let (_, alone) = Status::of_project(&alpha, Some(&workspace));
+
+    for failures in [&failures, &alone] {
+        assert_eq!(failures.len(), 1, "{failures:?}");
+        assert!(
+            matches!(&failures[0], StatusFailure::Target(misplaced)
+                if misplaced.folder.as_path() == std::path::Path::new("../shared")),
+            "{}",
+            failures[0]
+        );
+    }
+    assert_eq!(status.projects[0].unreached[0].targets, [".skills"]);
 }

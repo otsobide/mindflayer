@@ -102,7 +102,7 @@ fn a_project_authoring_nothing_writes_an_empty_directories() {
 }
 
 #[test]
-fn a_version_4_settings_file_is_refused_naming_the_project_marker() {
+fn a_version_5_settings_file_is_refused_naming_the_project_marker() {
     let text = with_member(&format!("\"version\": {}", MIND_FORMAT_VERSION + 1));
 
     let error = parse(path(), &text).unwrap_err();
@@ -112,24 +112,24 @@ fn a_version_4_settings_file_is_refused_naming_the_project_marker() {
             error,
             WorkspaceError::Version {
                 marker: Marker::Project,
-                found: 4,
+                found: 5,
                 ..
             }
         ),
         "{error}"
     );
     assert!(
-        error.to_string().contains("project marker version 4"),
+        error.to_string().contains("project marker version 5"),
         "{error}"
     );
 }
 
 #[test]
 fn a_newer_version_is_refused_for_being_newer_whatever_else_the_file_holds() {
-    let error = parse(path(), "{\"version\": 4, \"agents\": \"everyone\"}").unwrap_err();
+    let error = parse(path(), "{\"version\": 5, \"agents\": \"everyone\"}").unwrap_err();
 
     assert!(
-        matches!(error, WorkspaceError::Version { found: 4, .. }),
+        matches!(error, WorkspaceError::Version { found: 5, .. }),
         "{error}"
     );
 }
@@ -165,9 +165,84 @@ fn edit_tracked_left_out_is_off() {
 
 #[test]
 fn a_key_this_build_does_not_know_is_read_past() {
-    let text = with_member(r#""targets": {"skills": [".skills"]}"#);
+    let text = with_member(r#""servers": {"github": ["npx"]}"#);
 
     assert_eq!(parse(path(), &text).unwrap(), standard());
+}
+
+/// [`standard`], installing skills in `.skills` alone, at the version that
+/// needs.
+fn in_skills() -> Settings {
+    Settings {
+        version: TARGETS_VERSION,
+        targets: Targets::default().with(Kind::Skill, vec![PathBuf::from(".skills")]),
+        ..standard()
+    }
+}
+
+#[test]
+fn targets_are_written_last_a_list_of_folders_a_kind_and_read_back() {
+    let text = in_skills().text().unwrap();
+
+    assert!(text.starts_with("{\n  \"version\": 4,\n"), "{text}");
+    assert!(
+        text.ends_with(
+            "  \"directories\": {\n    \"skills\": \"skills\",\n    \"rules\": \"rules\"\n  },\n  \
+             \"targets\": {\n    \"skills\": [\".skills\"]\n  }\n}\n"
+        ),
+        "{text}"
+    );
+    assert_eq!(parse(path(), &text).unwrap(), in_skills());
+}
+
+#[test]
+fn settings_without_targets_write_none_and_need_only_version_3() {
+    let text = standard().text().unwrap();
+
+    assert!(!text.contains("targets"), "{text}");
+    assert_eq!(standard().version_needed(), SETTINGS_VERSION);
+    assert_eq!(in_skills().version_needed(), TARGETS_VERSION);
+}
+
+#[test]
+fn a_version_4_file_is_read_with_or_without_targets() {
+    let without = with_member("\"version\": 4");
+    let with = format!(
+        "{},\n  \"targets\": {{\"skills\": [\".skills\", \"tools/skills\"]}}\n}}\n",
+        without.trim_end().trim_end_matches('}').trim_end()
+    );
+
+    assert_eq!(parse(path(), &without).unwrap().version, TARGETS_VERSION);
+    assert_eq!(
+        parse(path(), &with).unwrap().targets.get(Kind::Skill),
+        Some(&[PathBuf::from(".skills"), PathBuf::from("tools/skills")][..])
+    );
+}
+
+#[test]
+fn targets_written_into_a_version_3_file_by_hand_are_read_all_the_same() {
+    let text = with_member(r#""targets": {"skills": [".skills"]}"#);
+
+    let settings = parse(path(), &text).unwrap();
+
+    assert_eq!(settings.version, SETTINGS_VERSION);
+    assert_eq!(
+        settings.targets.get(Kind::Skill),
+        Some(&[PathBuf::from(".skills")][..])
+    );
+}
+
+#[test]
+fn a_target_key_this_build_does_not_know_is_carried() {
+    let text = in_skills().text().unwrap().replace(
+        "[\".skills\"]\n",
+        "[\".skills\"],\n    \"mcp\": [\".mcp\"]\n",
+    );
+
+    let settings = parse(path(), &text).unwrap();
+
+    assert_eq!(settings.targets.get(Kind::Rule), None);
+    assert_eq!(settings.text().unwrap(), text);
 }
 
 #[test]
@@ -230,6 +305,51 @@ fn each_key_the_format_defines_is_held_to_what_it_holds() {
         (r#""version": 3.5"#, "`version` is not a version number"),
     ] {
         assert_eq!(refusal(&with_member(member)), expected, "{member}");
+    }
+}
+
+/// `targets` that do not read as targets: each member, with what a version
+/// 4 file holding it is refused for.
+const UNREAD_TARGETS: [(&str, &str); 5] = [
+    (r#""targets": [".skills"]"#, "`targets` is not an object"),
+    (
+        r#""targets": {"skills": ".skills"}"#,
+        "`targets.skills` is not a list of folders",
+    ),
+    (
+        r#""targets": {"skills": [".skills", 1]}"#,
+        "`targets.skills` is not a list of folders",
+    ),
+    (
+        r#""targets": {"skills": []}"#,
+        "`targets.skills` names no folder; leave `skills` out to install them where the \
+         project's agents read",
+    ),
+    (
+        r#""targets": {"skills": ["a"], "skills": ["b"]}"#,
+        "`skills` is written more than once, so which one is meant cannot be told",
+    ),
+];
+
+#[test]
+fn targets_in_a_version_4_file_are_held_to_what_they_hold() {
+    for (member, expected) in UNREAD_TARGETS {
+        let text = with_member(member).replace("\"version\": 3", "\"version\": 4");
+
+        assert_eq!(refusal(&text), expected, "{member}");
+    }
+}
+
+#[test]
+fn targets_a_version_3_file_holds_that_do_not_read_are_read_past() {
+    // Every build before targets opened such a file, reading the key past,
+    // so this one opens it too, installing where the agents read.
+    for (member, _) in UNREAD_TARGETS {
+        assert_eq!(
+            parse(path(), &with_member(member)).unwrap(),
+            standard(),
+            "{member}"
+        );
     }
 }
 

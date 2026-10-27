@@ -1,10 +1,12 @@
-//! Changing which agents work in a project, or whether what is installed
-//! into it is the team's, and carrying what was installed along.
+//! Changing which agents work in a project, where what is installed into it
+//! lands, or whether that is the team's, and carrying what was installed
+//! along.
 //!
-//! A project's agents decide where an install puts its copies (D-07), and
-//! its share mode whether they are kept out of git (D-02), so a change to
-//! either is a change to what is installed as much as to `.mind/settings.json`
-//! (D-09). [`plan`] says what a [`Change`] would do, writing nothing, and
+//! A project's agents decide where an install puts its copies (D-07), unless
+//! its `targets` say where instead (the owner's amendment to D-07), and its
+//! share mode whether they are kept out of git (D-02), so a change to any of
+//! them is a change to what is installed as much as to
+//! `.mind/settings.json` (D-09). [`plan`] says what a [`Change`] would do, writing nothing, and
 //! [`apply`] does it: the settings edited where they stand
 //! ([`MindProject::change_settings`]), each installation given a copy in
 //! every folder an agent the project now names is sent one, and Mindflayer's
@@ -40,9 +42,12 @@ use crate::hash;
 use crate::install::{self, InstallError, InstallTarget};
 use crate::kind::{Kind, Layout};
 use crate::ledger::{Action, InstallRecord, Ledger, LedgerError, Outcome, Target};
+use crate::paths;
 use crate::settings::{Settings, Share};
+use crate::status::{self, Unreached};
 use crate::workspace::{
-    ignore_itself, same_directory, FlayerWorkspace, MindProject, WorkspaceError, MIND_IGNORE,
+    ignore_itself, misplaced_target, same_directory, FlayerWorkspace, MindProject, WorkspaceError,
+    MIND_IGNORE,
 };
 
 /// What a change asks of a project's settings.
@@ -59,6 +64,17 @@ pub enum Change {
     /// agent: the two settings the share mode is, written together, so a
     /// command that sets one says what it leaves the other as.
     Share { share: Share, edit_tracked: bool },
+    /// Install `kind` in these folders, relative to the project's root, for
+    /// every agent it names, in place of wherever it went; `None` sends it
+    /// back to the folders each agent reads.
+    ///
+    /// The whole list, rather than a folder added or taken away: what a
+    /// kind is installed in is short, and one line saying all of it reads
+    /// as what the settings will say, as `Agents` does.
+    Targets {
+        kind: Kind,
+        folders: Option<Vec<PathBuf>>,
+    },
 }
 
 impl Change {
@@ -86,6 +102,27 @@ impl Change {
             } => {
                 after.share = *share;
                 after.edit_tracked = *edit_tracked;
+            }
+            // Each folder once, in the order given, as the settings will
+            // spell it: `./.skills/` and `.skills` are one folder, and a
+            // second spelling would be one more line to read.
+            Change::Targets { kind, folders } => {
+                let targets = std::mem::take(&mut after.targets);
+                after.targets = match folders {
+                    Some(folders) => {
+                        let mut kept: Vec<PathBuf> = Vec::new();
+                        for folder in folders.iter().map(|folder| paths::normalize(folder)) {
+                            if !kept.contains(&folder) {
+                                kept.push(folder);
+                            }
+                        }
+                        targets.with(*kind, kept)
+                    }
+                    None => targets.without(*kind),
+                };
+                if after.targets != before.targets {
+                    after.version = after.version_needed();
+                }
             }
         }
         after
@@ -132,6 +169,12 @@ pub struct Plan {
     /// Whether the change would keep something out of git in a project no
     /// git work tree holds, where nothing does: for a front end to say.
     pub outside: bool,
+    /// Each kind the project, as the change leaves it, would install only in
+    /// folders some of its agents do not read, as its status says
+    /// ([`ProjectStatus::unreached`](crate::ProjectStatus::unreached)): for a
+    /// front end to say when the change is made, rather than first when the
+    /// project is next reported.
+    pub unreached: Vec<Unreached>,
 }
 
 impl Plan {
@@ -182,6 +225,10 @@ pub struct Retarget {
     /// Each copy the record names that stays where it is, with the agent
     /// the ledger says it is for now.
     pub(crate) kept: Vec<Target>,
+    /// Each of those the record named by another spelling of its folder, as
+    /// it was named and as it is from now on: one copy on disk, whose
+    /// exclude entry follows its record.
+    pub(crate) respelled: Vec<(PathBuf, PathBuf)>,
     /// What the record names now, to tell whether it changes.
     pub(crate) recorded: Vec<Target>,
 }
@@ -310,6 +357,11 @@ pub enum ReapplyError {
     /// asked for by name, not a side of changing the agents.
     #[error("{project} would name no agent, and what is installed into it would reach none, so its last agent is not removed; `flayer uninstall` takes out what it has")]
     NoAgent { project: String },
+    /// Installing a kind in no folder at all would take every copy of it out
+    /// of the project, an uninstall's to do; sending it back to the folders
+    /// its agents read is a reset.
+    #[error("{project} would install its {kind}s in no folder; name one, or reset them to go where its agents read")]
+    NoFolder { project: String, kind: Kind },
 }
 
 /// What `change` would do to `project`, against what `workspace` records
@@ -318,9 +370,10 @@ pub enum ReapplyError {
 ///
 /// Refused as [`apply`] would refuse it, so a dry run says what the real one
 /// will: a project a `mind.toml` marks, which has no settings until it is
-/// moved to them; a change that leaves it naming no agent; a copy that would
-/// land inside one of `homes` or in a folder a loaded workspace keeps as its
-/// own; and a record naming a copy outside the project.
+/// moved to them; a change that leaves it naming no agent; one that would
+/// install a kind in no folder, or in one no install may use; a copy that
+/// would land inside one of `homes` or in a folder a loaded workspace keeps
+/// as its own; and a record naming a copy outside the project.
 pub fn plan(
     workspace: Option<&FlayerWorkspace>,
     project: &MindProject,
@@ -391,10 +444,18 @@ pub fn apply(
     let root = project.root().to_path_buf();
     let key = plan.after.id.as_str().to_owned();
     let local = plan.after.share == Share::Local;
+    // A copy recorded by a new spelling is kept out of git by it too, so
+    // that what an uninstall takes out of the group by its record is there.
     let landing: Vec<PathBuf> = plan
         .installations
         .iter()
-        .flat_map(|retarget| retarget.added.iter().map(|added| added.path.clone()))
+        .flat_map(|retarget| {
+            retarget
+                .added
+                .iter()
+                .map(|added| added.path.clone())
+                .chain(retarget.respelled.iter().map(|(_, now)| now.clone()))
+        })
         .chain(plan.excluded.iter().cloned())
         .collect();
     // The lines this adds, which a refusal before the settings are written
@@ -439,6 +500,7 @@ pub fn apply(
         settings.agents = after.agents.clone();
         settings.share = after.share;
         settings.edit_tracked = after.edit_tracked;
+        settings.targets = after.targets.clone();
     }) {
         undo();
         if written_ignore {
@@ -487,6 +549,7 @@ pub fn apply(
         }
         gone.extend(retarget.removed.iter().cloned());
         gone.extend(retarget.forgotten.iter().cloned());
+        gone.extend(retarget.respelled.iter().map(|(was, _)| was.clone()));
         gone.extend(
             retarget
                 .left
@@ -560,6 +623,32 @@ fn plan_with(
         return Err(ReapplyError::NoAgent {
             project: project.name().to_owned(),
         });
+    }
+    // Strict when writing: refused here, before the settings are, as
+    // `change_settings` would refuse it after the exclude file was edited.
+    if let Change::Targets {
+        kind,
+        folders: Some(_),
+    } = change
+    {
+        let folders = after.targets.get(*kind).unwrap_or_default();
+        if folders.is_empty() {
+            return Err(ReapplyError::NoFolder {
+                project: project.name().to_owned(),
+                kind: *kind,
+            });
+        }
+        if let Some((folder, why)) = folders
+            .iter()
+            .find_map(|folder| Some((folder, misplaced_target(*kind, folder)?)))
+        {
+            return Err(WorkspaceError::Target {
+                path: folder.clone(),
+                kind: *kind,
+                why,
+            }
+            .into());
+        }
     }
     let changed = project.with_settings(after.clone());
     let root = project.root();
@@ -658,6 +747,10 @@ fn plan_with(
     } else {
         None
     };
+    let mut named = after.agents.clone();
+    named.sort();
+    named.dedup();
+    let unreached = status::unreached(&changed, &kinds, &named);
     let mut plan = Plan {
         before,
         after,
@@ -669,6 +762,7 @@ fn plan_with(
         unexcluded: Vec::new(),
         exclude_file: None,
         outside: false,
+        unreached,
     };
     exclusions(project, change, &in_place, &mut plan)?;
     Ok(plan)
@@ -701,6 +795,7 @@ pub(crate) fn retarget(
         left: Vec::new(),
         source: None,
         kept: Vec::new(),
+        respelled: Vec::new(),
         recorded: record.targets.clone(),
     };
     let wanted: Vec<(PathBuf, &InstallTarget)> = wanted
@@ -729,12 +824,25 @@ pub(crate) fn retarget(
     // name `.agents/skills` where the settings, changed, now send Claude to
     // the `.claude/skills` linked to it. Compared by route, that copy would
     // be taken out of the very folder Claude reads.
+    //
+    // Recorded from then on by the spelling it is sent copies to, which is
+    // the one discovery reads it by and an install looks for its record by:
+    // left under the old one, Mindflayer's own copy would read as somebody's,
+    // and the next install would refuse it. Two spellings recorded of one
+    // copy become one record of it.
     for (path, target, found) in compared {
-        if let Some((_, now)) = wanted.iter().find(|(_, now)| in_folder(&path, &now.folder)) {
-            retarget.kept.push(Target {
-                agent: install::agent_of(&now.agents),
-                path: target.path.clone(),
-            });
+        if let Some((now_path, now)) = wanted.iter().find(|(_, now)| in_folder(&path, &now.folder))
+        {
+            let route = install::route(project.root(), now_path);
+            if route != target.path {
+                retarget.respelled.push((path.clone(), now_path.clone()));
+            }
+            if !retarget.kept.iter().any(|kept| kept.path == route) {
+                retarget.kept.push(Target {
+                    agent: install::agent_of(&now.agents),
+                    path: route,
+                });
+            }
             continue;
         }
         match found {

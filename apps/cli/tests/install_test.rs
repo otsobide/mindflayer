@@ -463,6 +463,109 @@ fn with_settings_sharing(dir: &Path, agents: &str, share: &str) {
     flayer(dir, &["link", "alpha"]).unwrap();
 }
 
+/// A project beside the shelf's `beta`, marked by settings that name every
+/// agent and install skills in `targets`, shared, and linked.
+fn installing_in(dir: &Path, targets: &str) {
+    let root = dir.join("alpha");
+    fs::create_dir_all(root.join(MIND_DIR)).unwrap();
+    fs::write(
+        root.join(MIND_DIR).join("settings.json"),
+        format!(
+            r#"{{
+  "version": 4,
+  "id": "0123456789abcdef0123456789abcdef",
+  "name": "alpha",
+  "agents": ["claude", "codex", "opencode"],
+  "share": "shared",
+  "targets": {{"skills": [{targets}]}}
+}}
+"#
+        ),
+    )
+    .unwrap();
+    flayer(dir, &["link", "alpha"]).unwrap();
+}
+
+#[test]
+fn an_install_says_each_target_no_install_may_use_and_installs_in_the_others() {
+    let (dir, _, _) = shelved(&["beta"], &["deploy"]);
+    installing_in(dir.path(), r#"".skills", "../shared""#);
+    let settings = dir
+        .path()
+        .join("alpha")
+        .join(MIND_DIR)
+        .join("settings.json");
+    let misplaced = format!(
+        "warning: {}: ../shared is no folder to install skills in, because it is not inside the \
+         project, so nothing is installed there",
+        settings.display()
+    );
+
+    let done = flayer(dir.path(), &["install", "-p", "alpha", "deploy"]).unwrap();
+
+    assert!(
+        done.stdout.starts_with("installed deploy into alpha"),
+        "{}",
+        done.stdout
+    );
+    assert_eq!(done.stderr, std::slice::from_ref(&misplaced));
+    assert!(!done.ok);
+    assert!(dir.path().join("alpha/.skills/deploy/SKILL.md").is_file());
+    assert!(!dir.path().join("shared").exists());
+
+    // Refused for want of any other, it says why.
+    installing_in_only(dir.path());
+    let refused = flayer(dir.path(), &["install", "-p", "alpha", "deploy"]).unwrap_err();
+    assert_eq!(
+        refused.error.to_string(),
+        "none of the folders alpha's settings name for its skills is one an install may use, so \
+         none can be installed into it"
+    );
+    assert_eq!(refused.warnings, [misplaced]);
+}
+
+/// Change `alpha`'s settings to install skills in `../shared` alone.
+fn installing_in_only(dir: &Path) {
+    let path = dir.join("alpha").join(MIND_DIR).join("settings.json");
+    let text = fs::read_to_string(&path)
+        .unwrap()
+        .replace(r#"".skills", "#, "");
+    fs::write(path, text).unwrap();
+}
+
+#[test]
+fn the_screen_says_each_target_no_install_may_use_once_a_project() {
+    let (dir, _, _) = shelved(&["beta"], &["deploy", "lint"]);
+    installing_in(dir.path(), r#"".skills", ".mind/skills""#);
+    let workspace = FlayerWorkspace::locate(dir.path()).unwrap().unwrap();
+    let ledger = workspace.ledger().unwrap();
+    let mut screen = screen_for(&workspace, &ledger);
+    screen.cursor = listed(&screen, "alpha");
+
+    press(
+        &mut screen,
+        &[
+            KeyCode::Right,
+            KeyCode::Char(' '),
+            KeyCode::Down,
+            KeyCode::Char(' '),
+        ],
+    );
+    let outcome =
+        install_screen::apply(&workspace, &ledger, &screen, &AgentHomes::default()).unwrap();
+
+    let said: Vec<&String> = outcome
+        .stderr
+        .iter()
+        .filter(|line| line.contains(".mind/skills is no folder to install skills in"))
+        .collect();
+    assert_eq!(said.len(), 1, "{:?}", outcome.stderr);
+    assert!(!outcome.ok);
+    assert!(outcome.stdout.contains("alpha: installed deploy"));
+    assert!(outcome.stdout.contains("alpha: installed lint"));
+    assert!(dir.path().join("alpha/.skills/lint/SKILL.md").is_file());
+}
+
 /// Where the screen lists the project called `name`.
 fn listed(screen: &Screen, name: &str) -> usize {
     screen

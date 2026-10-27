@@ -16,8 +16,8 @@ use ratatui::Frame;
 use super::minds::{self, Minds};
 use super::state::{
     AddField, AddForm, App, Confirm, Focus, GatherForm, Input, Item, LinkForm, LoadForm, Member,
-    Mode, Reader, RenameForm, Running, Scope, SettingsForm, Task, Tone, View, Workspace,
-    GATHER_FIELDS,
+    Mode, Reader, RenameForm, Running, Scope, SettingsForm, TargetsForm, Task, Tone, View,
+    Workspace, GATHER_FIELDS,
 };
 use crate::install::ui::{centred, pane, selected};
 use crate::progress::said;
@@ -46,6 +46,7 @@ pub fn draw(app: &App, frame: &mut Frame) {
             Mode::Reading(reader) => reading(reader, frame, area),
             Mode::Minds(screen) => minds_screen(app, screen, frame, area),
             Mode::Settings(form) => setting(app, form, frame, area),
+            Mode::Targets(form) => targeting(app, form, frame, area),
             Mode::Browse | Mode::Installing(_) => {}
         }
     }
@@ -294,6 +295,11 @@ fn project_row(member: &Member) -> ListItem<'_> {
                     Style::default().fg(Color::Red),
                 ));
             }
+            // Installs some of its agents do not see: not a problem with an
+            // artifact, so a mark of its own, which the strip beside says.
+            if !holdings.unreached.is_empty() {
+                spans.push(Span::styled("  ⚠", warn()));
+            }
             spans
         }
     };
@@ -356,19 +362,44 @@ fn holdings(app: &App, workspace: &Workspace, frame: &mut Frame, area: Rect) {
     };
 
     // Unreadable files get a strip of their own, so they cannot be scrolled
-    // out of sight by the artifacts that did read.
-    let (list_area, warning_area) = if holdings.warnings.is_empty() {
-        (area, None)
-    } else {
-        let height = u16::try_from(holdings.warnings.len() + 2)
+    // out of sight by the artifacts that did read, and so do installs some
+    // of the project's agents do not see.
+    let strips: Vec<(&str, &[String])> = [
+        (" Could not be read ", holdings.warnings.as_slice()),
+        (" Not seen by every agent ", holdings.unreached.as_slice()),
+    ]
+    .into_iter()
+    .filter(|(_, lines)| !lines.is_empty())
+    .collect();
+    // Wrapped here, and the strip as tall as what that gives, so the end of
+    // a sentence, which says what to do, is not cut off.
+    let room = usize::from(area.width.saturating_sub(2));
+    let strips: Vec<(&str, Vec<String>)> = strips
+        .into_iter()
+        .map(|(title, said)| {
+            let wrapped = said
+                .iter()
+                .flat_map(|line| wrap(&printable(line), room))
+                .collect();
+            (title, wrapped)
+        })
+        .collect();
+    // At most half the pane, and at least a line between its borders while
+    // the pane has room for one: a pane shorter than that gets what it has,
+    // since a lower bound above the upper one panics.
+    let most = area.height / 2;
+    let mut constraints = vec![Constraint::Min(3)];
+    for (_, lines) in &strips {
+        let height = u16::try_from(lines.len() + 2)
             .unwrap_or(u16::MAX)
-            .clamp(3, area.height / 2);
-        let parts = Layout::default()
-            .direction(Direction::Vertical)
-            .constraints([Constraint::Min(3), Constraint::Length(height)])
-            .split(area);
-        (parts[0], Some(parts[1]))
-    };
+            .clamp(3.min(most), most);
+        constraints.push(Constraint::Length(height));
+    }
+    let parts = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints(constraints)
+        .split(area);
+    let list_area = parts[0];
 
     if holdings.items.is_empty() {
         let mut text = vec![Line::from("nothing here yet"), Line::from("")];
@@ -413,19 +444,13 @@ fn holdings(app: &App, workspace: &Workspace, frame: &mut Frame, area: Rect) {
         frame.render_stateful_widget(list, list_area, &mut state);
     }
 
-    if let Some(warning_area) = warning_area {
-        let lines: Vec<Line> = holdings
-            .warnings
+    for ((title, said), strip) in strips.iter().zip(parts.iter().skip(1)) {
+        let lines: Vec<Line> = said
             .iter()
-            .map(|warning| Line::from(Span::styled(printable(warning), warn())))
+            .map(|line| Line::from(Span::styled(line.clone(), warn())))
             .collect();
-        let block = Block::bordered()
-            .title(" Could not be read ")
-            .border_style(warn());
-        frame.render_widget(
-            Paragraph::new(lines).block(block).wrap(Wrap { trim: true }),
-            warning_area,
-        );
+        let block = Block::bordered().title(*title).border_style(warn());
+        frame.render_widget(Paragraph::new(lines).block(block), *strip);
     }
 }
 
@@ -536,8 +561,12 @@ pub(crate) const fn badge(agent: Agent) -> &'static str {
     }
 }
 
-/// Break text into lines of at most `room` characters, at spaces where there
+/// Break text into lines at most `room` columns wide, at spaces where there
 /// are any.
+///
+/// Measured in the columns a terminal draws, not in characters: a line as
+/// many characters long as the room, holding some drawn two columns wide,
+/// would otherwise run past the border and be cut there.
 fn wrap(text: &str, room: usize) -> Vec<String> {
     if room == 0 {
         return vec![text.to_owned()];
@@ -545,25 +574,42 @@ fn wrap(text: &str, room: usize) -> Vec<String> {
     let mut lines = Vec::new();
     let mut line = String::new();
     for word in text.split(' ') {
-        let taken = line.chars().count();
-        if taken > 0 && taken + 1 + word.chars().count() > room {
+        let taken = columns(&line);
+        if taken > 0 && taken + 1 + columns(word) > room {
             lines.push(std::mem::take(&mut line));
         }
         if !line.is_empty() {
             line.push(' ');
         }
         line.push_str(word);
-        // A word longer than the room is cut where the room ends.
-        while line.chars().count() > room {
-            let head: String = line.chars().take(room).collect();
-            line = line.chars().skip(room).collect();
-            lines.push(head);
+        // A word wider than the room is cut where the room ends.
+        while columns(&line) > room {
+            let rest = line.split_off(fitting(&line, room));
+            lines.push(std::mem::replace(&mut line, rest));
         }
     }
     if !line.is_empty() {
         lines.push(line);
     }
     lines
+}
+
+/// How many columns a terminal draws `text` in.
+fn columns(text: &str) -> usize {
+    Span::raw(text).width()
+}
+
+/// Where `line` is cut for what comes before to fit in `room` columns: at
+/// least one character in, so one wider than the room still moves on.
+fn fitting(line: &str, room: usize) -> usize {
+    let mut taken = 0;
+    for (at, character) in line.char_indices() {
+        taken += columns(character.encode_utf8(&mut [0; 4]));
+        if taken > room {
+            return if at == 0 { character.len_utf8() } else { at };
+        }
+    }
+    line.len()
 }
 
 /// The keys, most needed first so a narrow terminal cuts the least useful,
@@ -576,10 +622,10 @@ fn footer(app: &App, frame: &mut Frame, area: Rect) {
             "q quit  ? keys  enter show  e edit  r rename  d delete  a add  ← back  v validate"
         }
         (Focus::Projects, Scope::Workspace) => {
-            "q quit  ? keys  → open  a add  m minds  l link  u unlink  v validate  g gather  L load  s shelf  i install  t agents"
+            "q quit  ? keys  → open  a add  m minds  l link  u unlink  v validate  g gather  L load  s shelf  i install  t agents  T targets"
         }
         (Focus::Projects, Scope::Project) => {
-            "q quit  ? keys  → open  a add  v validate  l link it to the workspace above  L load  t agents"
+            "q quit  ? keys  → open  a add  v validate  l link it to the workspace above  L load  t agents  T targets"
         }
     };
     let second = match &app.message {
@@ -675,6 +721,46 @@ fn renaming(app: &App, form: &RenameForm, frame: &mut Frame, area: Rect) {
     runs(frame, rows[2], app.rename_task(form).as_ref());
     error(frame, rows[3], form.error.as_deref());
     keys(frame, rows[4], "enter rename   esc cancel");
+}
+
+/// Where one project installs skills, typed, and what applying it would run.
+fn targeting(app: &App, form: &TargetsForm, frame: &mut Frame, area: Rect) {
+    let project = app
+        .workspace()
+        .and_then(|workspace| workspace.members.get(form.member))
+        .map_or_else(String::new, |member| printable(&member.name));
+    let inner = popup(
+        frame,
+        area,
+        &format!("Where {project} installs {}s", form.kind),
+        90,
+        8,
+    );
+    let rows = lines(inner, 6);
+
+    input(
+        frame,
+        rows[0],
+        &format!("{}s go in", form.kind),
+        &form.folders,
+        true,
+    );
+    for (row, hint) in [
+        "folders in the project, a space between each; none for where its agents read",
+        "an agent sees a folder of the project's own only once it is pointed there",
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        let line = Line::from(vec![
+            Span::raw(" ".repeat(usize::from(LABEL))),
+            Span::styled(hint, dim()),
+        ]);
+        frame.render_widget(Paragraph::new(line), rows[row + 1]);
+    }
+    runs(frame, rows[3], app.targets_task(form).as_ref());
+    error(frame, rows[4], form.error.as_deref());
+    keys(frame, rows[5], "enter apply   esc cancel");
 }
 
 /// The agents and share toggles of one project, and what applying them

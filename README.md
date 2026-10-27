@@ -312,6 +312,10 @@ mind agents [add|remove] <AGENT>... [--yes]
 mind share local|shared [--edit-tracked] [--yes]
                            # keep installs to this checkout, or leave them
                            # for the team to commit; without --yes, the same
+mind targets set <KIND> <DIR>... [--yes]
+mind targets reset <KIND> [--yes]
+                           # install a kind in folders of the project's own,
+                           # or back where its agents read; the same again
 mind migrate [--agents AGENTS] [--local|--shared] [--yes]
                            # move a project an older Mindflayer made to
                            # settings, and its installs where its agents read
@@ -347,8 +351,9 @@ flayer install             # a screen for putting skills into its projects
 flayer install -p PROJECT <SKILL> [--from ORIGIN]
                            # one, without the screen
 flayer uninstall -p PROJECT <SKILL>
-flayer agents|share -p PROJECT ...
-                           # mind's agents and share, for one of its projects
+flayer agents|share|targets -p PROJECT ...
+                           # mind's agents, share and targets, for one of its
+                           # projects
 flayer migrate --library [--yes]
                            # move its own skills and rules into its library;
                            # without --yes, say what would move
@@ -899,7 +904,10 @@ when there is more than one kind.
 
 A linked project whose directory has gone is listed as `stale`, with the
 reason on stderr, and the rest of the report still prints; the exit status is
-non-zero, as for anything that could not be read.
+non-zero, as for anything that could not be read. So is a project that
+[installs where some of its agents do not read](#installing-somewhere-else):
+a warning names the agents that read none of its folders, and `unreached` in
+the JSON says the same.
 
 `--json` prints the same report in the envelope every reading command's
 `--json` will share: the data, the warnings that would have gone to stderr,
@@ -918,6 +926,7 @@ $ flayer status -p tanukeys --json
         "path": "/home/you/Projects/tanukeys",
         "agents": [],
         "stale": null,
+        "unreached": [],
         "artifacts": [
           {
             "kind": "skill",
@@ -1021,6 +1030,7 @@ Every key runs a command you could have typed, through the same parser:
 | `l` | link a project | `flayer link <path>` |
 | `u` | unlink the project | `flayer unlink <path>` |
 | `t` | toggle the project's agents and share mode, then apply | `mind -C <project> agents --yes <agent>...`, `mind -C <project> share --yes local\|shared` |
+| `T` | type the folders the project installs skills in, or clear them for where its agents read | `mind -C <project> targets set --yes skills <dir>...`, `mind -C <project> targets reset --yes skills` |
 | `v` | validate everything | `flayer validate` |
 | `g` | gather from a git repository, showing how far it has got; `esc` stops it, until it starts placing | `flayer gather git <url>` |
 | `L` | load another workspace's own skills; enter on a loaded one unloads it | `flayer load <path>`, `flayer unload <path>` |
@@ -1098,8 +1108,10 @@ that work in the project, and so where what is installed into it goes
 this checkout or left for the team to commit; `edit_tracked` whether a file
 the team tracks may be edited to reach an agent; `directories` where the
 project keeps the skills and rules it writes itself; and the `id` names the
-project wherever it moves. Point the directories wherever the agents already
-look, and Mindflayer follows:
+project wherever it moves. A project that installs somewhere other than where
+its agents read says where in `targets` too ([installing somewhere
+else](#installing-somewhere-else)). Point the directories wherever the agents
+already look, and Mindflayer follows:
 
 ```bash
 mind init --skills .claude/skills
@@ -1223,6 +1235,73 @@ and `flayer share -p collapse ...` do the same from the workspace, and `t` in
 [the TUI](#the-tui) toggles them for the project under the cursor. A project
 no workspace links still changes its settings, which are its own, and is told
 that nothing installed in it was carried along.
+
+### Installing somewhere else
+
+The folders each agent reads are the default, since that is where every
+agent finds a skill without being told. A project that keeps one folder of
+skills for every agent says so in its settings, and what is installed into it
+goes there instead, one copy for all of them:
+
+```
+$ mind targets set skills .skills
+would set the targets of skills to .skills in collapse, where they were the folders its agents read
+would set version to 4 in collapse, where it was 3, so a Mindflayer from before targets refuses it
+would copy commit-style to .skills/commit-style, for claude, codex and opencode, kept out of git
+would remove commit-style from .agents/skills/commit-style
+would remove commit-style from .claude/skills/commit-style
+nothing changed: add --yes to go ahead
+note: claude, codex and opencode would read none of the folders collapse would install skills in (.skills), so none of them would see what is installed there until pointed at one
+$ mind targets set skills .skills --yes
+set the targets of skills to .skills in collapse, where they were the folders its agents read
+set version to 4 in collapse, where it was 3, so a Mindflayer from before targets refuses it
+copied commit-style to .skills/commit-style, for claude, codex and opencode, kept out of git
+removed commit-style from .agents/skills/commit-style
+removed commit-style from .claude/skills/commit-style
+note: claude, codex and opencode read none of the folders collapse installs skills in (.skills), so none of them sees what is installed there until pointed at one
+```
+
+The settings then hold `"targets": {"skills": [".skills"]}`, and name as many
+folders as you give it, each relative to the project. A folder that leads out
+of the project, an absolute one, or one inside `.mind` or `.git` is refused,
+and one written there by hand is given no copy and said by `status`, by an
+install and in the TUI.
+Copies move as they do for [a change of agents](#changing-its-agents-or-how-it-shares):
+only Mindflayer's untouched ones, never over somebody's, and a dry run first.
+
+No agent reads `.skills` until it is pointed there, so `status` warns until
+it is. A link from a folder the agent reads is one way, and one the report
+sees:
+
+```
+$ mind status
+commit-style  installed  -  workspace
+warning: claude, codex and opencode read none of the folders collapse installs skills in (.skills), so none of them sees what is installed there until pointed at one
+$ rm -r .claude/skills .agents/skills
+$ ln -s ../.skills .claude/skills && ln -s ../.skills .agents/skills
+$ mind status
+commit-style  installed  claude,codex,opencode  workspace
+```
+
+`targets` comes with version 4 of the settings, which a Mindflayer from
+before it refuses rather than installing into the standard folders behind
+your back; a project that never sets it stays at version 3. `mind targets
+reset` sends the kind back to where each agent reads, and the version with
+it. With the links taken out again, and somebody's `notes` kept in
+`.skills`, it leaves `notes` where it is:
+
+```
+$ mind targets reset skills --yes
+set the targets of skills to the folders its agents read in collapse, where they were .skills
+set version to 3 in collapse, where it was 4
+copied commit-style to .agents/skills/commit-style, for codex and opencode, kept out of git
+copied commit-style to .claude/skills/commit-style, for claude, kept out of git
+removed commit-style from .skills/commit-style
+left .skills/notes where it is: Mindflayer did not install it
+```
+
+`flayer targets -p collapse ...` does the same from the workspace, and `T` in
+[the TUI](#the-tui) types the folders for the project under the cursor.
 
 ## What a skill looks like
 
