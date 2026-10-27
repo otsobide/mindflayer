@@ -19,18 +19,19 @@ use crate::render::{as_stored, printable, table};
 use crate::{CliError, Failure, Lookup, Outcome};
 
 /// `mind init`: the directory made a mind project, marked by its settings,
-/// for every agent and kept out of git: what a new project is (D-01).
+/// for `agents`, and shared with the team or kept out of git (D-01).
 ///
 /// The folders it authors in are written down, each asked for or else the
 /// default beside the code, since a kind its settings leave out has none.
 pub(crate) fn init_project(
     directory: &Path,
+    agents: &[Agent],
+    share: Share,
     skills: Option<&Path>,
     rules: Option<&Path>,
 ) -> Result<Outcome, Failure> {
     let directories = asked_directories(skills, rules).with_defaults();
-    let (project, outcome) =
-        MindProject::init_settings(directory, &Agent::ALL, Share::Local, &directories)?;
+    let (project, outcome) = MindProject::init_settings(directory, agents, share, &directories)?;
     Ok(Outcome::plain(initialized(
         "mind project",
         project.name(),

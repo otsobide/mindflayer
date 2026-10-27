@@ -8,7 +8,7 @@ use std::path::PathBuf;
 
 use clap::builder::{PossibleValuesParser, TypedValueParser};
 use clap::{Args, Parser, Subcommand};
-use mindflayer_core::{Kind, Shell, DEFAULT_SUBDIRECTORY};
+use mindflayer_core::{Agent, Kind, Shell, DEFAULT_SUBDIRECTORY};
 
 /// Manage the agent skills in a mind project.
 //
@@ -93,6 +93,31 @@ pub struct AgentHomeOptions {
 pub enum Command {
     /// Create a mind project here.
     Init {
+        /// The agents that work in this project, comma-separated [default:
+        /// claude,codex,opencode].
+        ///
+        /// What is installed into the project is put where each of them
+        /// reads it.
+        //
+        // Every agent by default, so a project made without thinking about
+        // it reaches whichever one is opened in it. The default is spelled
+        // in the text because clap would show it space-separated, which is
+        // not how the option takes it.
+        #[arg(
+            long,
+            value_name = "AGENTS",
+            value_delimiter = ',',
+            value_parser = agents(),
+            default_values_t = Agent::ALL,
+            hide_default_value = true
+        )]
+        agents: Vec<Agent>,
+
+        /// Leave `.mind` for the team to commit, and what is installed into
+        /// the project with it, rather than keeping both out of git.
+        #[arg(long)]
+        shared: bool,
+
         /// Where this project keeps its skills [default: `skills`].
         ///
         /// Relative to the project. Point it wherever the agents that read
@@ -561,4 +586,11 @@ pub enum GatherCommand {
 fn shells() -> impl TypedValueParser<Value = Shell> {
     PossibleValuesParser::new(Shell::ALL.map(Shell::name))
         .map(|name| name.parse::<Shell>().expect("every listed shell parses"))
+}
+
+/// What `--agents` takes, each from core's list, for the reason `--shell`
+/// does.
+fn agents() -> impl TypedValueParser<Value = Agent> {
+    PossibleValuesParser::new(Agent::ALL.map(Agent::name))
+        .map(|name| name.parse::<Agent>().expect("every listed agent parses"))
 }

@@ -95,6 +95,57 @@ fn mind_init_writes_settings_kept_out_of_git_and_empty_folders_that_git_does_not
 }
 
 #[test]
+fn mind_init_shared_writes_no_gitignore_so_git_lists_its_settings() {
+    let parent = TempDir::new().unwrap();
+    let root = parent.path().join("collapse");
+    fs::create_dir(&root).unwrap();
+    gix::init(&root).unwrap();
+
+    mind(&root, &["init", "--shared"]).unwrap();
+
+    assert_eq!(names_in(&root.join(MIND_DIR)), ["settings.json"]);
+    let project = MindProject::open(&root).unwrap();
+    assert_eq!(
+        project.settings().unwrap().share,
+        mindflayer_core::Share::Shared
+    );
+    // The team's to commit: the one thing git has to offer.
+    assert_eq!(untracked(&root), [".mind"]);
+}
+
+#[test]
+fn mind_init_writes_the_agents_it_is_given_in_the_order_given() {
+    let dir = TempDir::new().unwrap();
+
+    mind(dir.path(), &["init", "--agents", "opencode,claude"]).unwrap();
+
+    let written = fs::read_to_string(dir.path().join(MIND_DIR).join(SETTINGS_FILE)).unwrap();
+    assert!(
+        written.contains("\n  \"agents\": [\"opencode\", \"claude\"],\n"),
+        "{written}"
+    );
+}
+
+#[test]
+fn mind_init_refuses_an_agent_it_does_not_know_before_writing_anything() {
+    let dir = TempDir::new().unwrap();
+
+    let error = Cli::try_parse_from(line(
+        "mind",
+        &["init", "--agents", "claude,cursor"],
+        dir.path(),
+    ))
+    .unwrap_err();
+
+    let said = error.to_string();
+    assert!(
+        said.contains("'cursor'") && said.contains("[possible values: claude, codex, opencode]"),
+        "{said}"
+    );
+    assert!(!dir.path().join(MIND_DIR).exists());
+}
+
+#[test]
 fn flayer_init_makes_the_workspace_in_the_directory_it_is_given() {
     let dir = TempDir::new().unwrap();
     let writing = dir.path().join("flayers/writing");
