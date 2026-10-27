@@ -170,6 +170,10 @@ pub struct Holdings {
     pub share: Option<Share>,
     /// Whether its settings let a tracked file be edited to reach an agent.
     pub edit_tracked: bool,
+    /// What it installs that some of its agents do not see, as `status` says
+    /// it: each kind installed only where some of them do not read, and each
+    /// folder its settings name that no install uses.
+    pub unreached: Vec<String>,
     /// Files that could not be read, one line each.
     pub warnings: Vec<String>,
     /// Where each kind lives, relative to the project, so an empty project

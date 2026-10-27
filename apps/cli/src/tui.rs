@@ -36,6 +36,7 @@ use ratatui::crossterm::terminal::{self, EnterAlternateScreen};
 use ratatui::DefaultTerminal;
 
 use crate::commands::project::scan_warnings;
+use crate::commands::status::unread;
 use crate::commands::workspace::{load_warnings, same_directory};
 use crate::commands::{consulted, run_flayer_with, run_with};
 use crate::install::state::Screen as InstallScreen;
@@ -859,6 +860,20 @@ fn held(
     };
 
     let settings = project.settings().filter(|_| !own);
+    // What `status` warns of, said in its words: the folders no install
+    // uses first, then the agents that read none of the rest.
+    let mut unreached: Vec<String> = project
+        .misplaced_targets()
+        .iter()
+        .filter(|_| !own)
+        .map(ToString::to_string)
+        .collect();
+    unreached.extend(status.iter().flat_map(|status| {
+        status
+            .unreached
+            .iter()
+            .map(|unreached| unread(project.name(), unreached, false))
+    }));
     Member {
         entry,
         root,
@@ -875,6 +890,7 @@ fn held(
                 .unwrap_or_default(),
             share: settings.map(|settings| settings.share),
             edit_tracked: settings.is_some_and(|settings| settings.edit_tracked),
+            unreached,
             warnings,
             directories,
             templates,

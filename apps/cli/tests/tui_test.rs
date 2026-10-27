@@ -2377,3 +2377,34 @@ fn t_on_the_workspaces_own_row_or_an_older_project_says_why_not() {
         .text
         .contains("`mind migrate`"));
 }
+
+// ---------------------------------------------------------------------------
+// Where a project installs skills
+// ---------------------------------------------------------------------------
+
+#[test]
+fn a_project_installing_where_no_agent_reads_is_marked_and_its_pane_says_why() {
+    let dir = workspace_with_own();
+    let alpha = dir.path().join("alpha");
+    mind(&alpha, &["targets", "set", "skills", ".skills", "-y"]).unwrap();
+    flayer(dir.path(), &["install", "-p", "alpha", "commit-style"]).unwrap();
+
+    let app = tui_in(dir.path());
+
+    let holdings = app.member().unwrap().holdings.as_ref().unwrap();
+    assert_eq!(
+        holdings.unreached,
+        [String::from(
+            "claude, codex and opencode read none of the folders alpha installs skills in \
+             (.skills), so none of them sees what is installed there until pointed at one"
+        )]
+    );
+    let drawn = tui_drawn(&app);
+    assert!(drawn.contains("alpha  2  ⚠"), "{drawn}");
+    assert!(drawn.contains("Not seen by every agent"), "{drawn}");
+    // Wrapped whole, to the end that says what to do.
+    assert!(drawn.contains("│one "), "{drawn}");
+    // Its neighbour installs where its agents read, and is not marked.
+    assert!(drawn.contains("beta  1 "), "{drawn}");
+    assert!(!drawn.contains("beta  1  ⚠"), "{drawn}");
+}

@@ -294,6 +294,11 @@ fn project_row(member: &Member) -> ListItem<'_> {
                     Style::default().fg(Color::Red),
                 ));
             }
+            // Installs some of its agents do not see: not a problem with an
+            // artifact, so a mark of its own, which the strip beside says.
+            if !holdings.unreached.is_empty() {
+                spans.push(Span::styled("  ⚠", warn()));
+            }
             spans
         }
     };
@@ -356,19 +361,40 @@ fn holdings(app: &App, workspace: &Workspace, frame: &mut Frame, area: Rect) {
     };
 
     // Unreadable files get a strip of their own, so they cannot be scrolled
-    // out of sight by the artifacts that did read.
-    let (list_area, warning_area) = if holdings.warnings.is_empty() {
-        (area, None)
-    } else {
-        let height = u16::try_from(holdings.warnings.len() + 2)
+    // out of sight by the artifacts that did read, and so do installs some
+    // of the project's agents do not see.
+    let strips: Vec<(&str, &[String])> = [
+        (" Could not be read ", holdings.warnings.as_slice()),
+        (" Not seen by every agent ", holdings.unreached.as_slice()),
+    ]
+    .into_iter()
+    .filter(|(_, lines)| !lines.is_empty())
+    .collect();
+    // Wrapped here, and the strip as tall as what that gives, so the end of
+    // a sentence, which says what to do, is not cut off.
+    let room = usize::from(area.width.saturating_sub(2));
+    let strips: Vec<(&str, Vec<String>)> = strips
+        .into_iter()
+        .map(|(title, said)| {
+            let wrapped = said
+                .iter()
+                .flat_map(|line| wrap(&printable(line), room))
+                .collect();
+            (title, wrapped)
+        })
+        .collect();
+    let mut constraints = vec![Constraint::Min(3)];
+    for (_, lines) in &strips {
+        let height = u16::try_from(lines.len() + 2)
             .unwrap_or(u16::MAX)
             .clamp(3, area.height / 2);
-        let parts = Layout::default()
-            .direction(Direction::Vertical)
-            .constraints([Constraint::Min(3), Constraint::Length(height)])
-            .split(area);
-        (parts[0], Some(parts[1]))
-    };
+        constraints.push(Constraint::Length(height));
+    }
+    let parts = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints(constraints)
+        .split(area);
+    let list_area = parts[0];
 
     if holdings.items.is_empty() {
         let mut text = vec![Line::from("nothing here yet"), Line::from("")];
@@ -413,19 +439,13 @@ fn holdings(app: &App, workspace: &Workspace, frame: &mut Frame, area: Rect) {
         frame.render_stateful_widget(list, list_area, &mut state);
     }
 
-    if let Some(warning_area) = warning_area {
-        let lines: Vec<Line> = holdings
-            .warnings
+    for ((title, said), strip) in strips.iter().zip(parts.iter().skip(1)) {
+        let lines: Vec<Line> = said
             .iter()
-            .map(|warning| Line::from(Span::styled(printable(warning), warn())))
+            .map(|line| Line::from(Span::styled(line.clone(), warn())))
             .collect();
-        let block = Block::bordered()
-            .title(" Could not be read ")
-            .border_style(warn());
-        frame.render_widget(
-            Paragraph::new(lines).block(block).wrap(Wrap { trim: true }),
-            warning_area,
-        );
+        let block = Block::bordered().title(*title).border_style(warn());
+        frame.render_widget(Paragraph::new(lines).block(block), *strip);
     }
 }
 
