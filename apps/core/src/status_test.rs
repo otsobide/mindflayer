@@ -31,6 +31,7 @@ fn a_report_serializes_every_field_by_the_name_it_is_held_to() {
                 name: Some(String::from("collapse")),
                 entry: Some(String::from("collapse")),
                 path: PathBuf::from("/work/collapse"),
+                marker: Some(MarkerFile::SettingsJson),
                 agents: vec![Agent::Claude, Agent::OpenCode],
                 stale: None,
                 unreached: vec![Unreached {
@@ -64,6 +65,7 @@ fn a_report_serializes_every_field_by_the_name_it_is_held_to() {
                 name: None,
                 entry: Some(String::from("../old-api")),
                 path: PathBuf::from("/old-api"),
+                marker: None,
                 agents: Vec::new(),
                 stale: Some(String::from("gone")),
                 unreached: Vec::new(),
@@ -80,7 +82,7 @@ fn a_report_serializes_every_field_by_the_name_it_is_held_to() {
         concat!(
             r#"{"projects":["#,
             r#"{"name":"collapse","entry":"collapse","path":"/work/collapse","#,
-            r#""agents":["claude","opencode"],"stale":null,"#,
+            r#""marker":"settings.json","agents":["claude","opencode"],"stale":null,"#,
             r#""unreached":[{"kind":"skill","targets":[".skills"],"agents":["claude"]}],"#,
             r#""missed":[{"kind":"rule","name":"rust/errors","agents":["opencode"]}],"#,
             r#""artifacts":["#,
@@ -88,7 +90,7 @@ fn a_report_serializes_every_field_by_the_name_it_is_held_to() {
             r#""agents":["opencode"],"origin":"workspace"},"#,
             r#"{"kind":"rule","name":"rust/errors","state":"installed","#,
             r#""agents":["claude"],"origin":"workspace"}]},"#,
-            r#"{"name":null,"entry":"../old-api","path":"/old-api","#,
+            r#"{"name":null,"entry":"../old-api","path":"/old-api","marker":null,"#,
             r#""agents":[],"stale":"gone","unreached":[],"missed":[],"artifacts":[]}]}"#,
         )
     );

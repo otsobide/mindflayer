@@ -232,6 +232,15 @@ impl fmt::Display for MarkerFile {
     }
 }
 
+/// By its name, as a report says it (`ProjectStatus::marker`), rather than
+/// derived from the variant: the spelling a reader finds in `.mind`, which a
+/// renamed variant cannot change.
+impl Serialize for MarkerFile {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        serializer.serialize_str(self.name())
+    }
+}
+
 /// What an `init` actually did.
 ///
 /// Initialising twice is not an error, and never overwrites the marker: the

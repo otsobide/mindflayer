@@ -61,6 +61,11 @@ notes         foreign    claude,opencode
 review        authored   -
 ";
 
+/// What a report says of `legacy`, which the `mind.toml` an older
+/// Mindflayer wrote marks.
+const LEGACY: &str =
+    "hint: legacy is marked by a mind.toml, which `mind migrate` moves to a settings.toml";
+
 #[test]
 fn status_says_what_every_project_holds_from_where_and_for_which_agents() {
     let (_dir, projects) = workspace_with_everything();
@@ -77,7 +82,7 @@ collapse  review        authored   -
 legacy    commit-style  installed  -                      workspace
 "
     );
-    assert!(outcome.stderr.is_empty(), "{:?}", outcome.stderr);
+    assert_eq!(outcome.stderr, [LEGACY]);
     assert!(outcome.ok);
 }
 
@@ -105,6 +110,36 @@ fn a_project_an_older_mindflayer_made_reaches_no_agent_it_names() {
 }
 
 #[test]
+fn a_project_a_settings_json_marks_is_reported_with_a_hint_to_move_it() {
+    let dir = TempDir::new().unwrap();
+    flayer(dir.path(), &["init"]).unwrap();
+    let json = dir.path().join("json");
+    fs::create_dir(&json).unwrap();
+    json_project(&json);
+    flayer(dir.path(), &["link", "json"]).unwrap();
+    mind(&json, &["add", "skill", "review", "Review a change"]).unwrap();
+    let hint =
+        "hint: json is marked by a settings.json, which `mind migrate` moves to a settings.toml";
+
+    let across = flayer(dir.path(), &["status"]).unwrap();
+    let here = mind(&json, &["status"]).unwrap();
+    let as_json = flayer(dir.path(), &["status", "-p", "json", "--json"]).unwrap();
+
+    // Its agents say nothing of it: a settings.json names them as a
+    // settings.toml does.
+    assert_eq!(across.stdout, "review  authored  -\n");
+    assert_eq!(across.stderr, [hint]);
+    assert!(across.ok);
+    assert_eq!(here, across);
+    let (report, warnings): (Report, _) = enveloped(&as_json);
+    assert_eq!(report.projects[0].marker.as_deref(), Some("settings.json"));
+    assert_eq!(report.projects[0].agents, ["claude", "codex", "opencode"]);
+    assert!(warnings.is_empty(), "{warnings:?}");
+    assert_eq!(as_json.stderr, [hint]);
+    assert!(as_json.ok);
+}
+
+#[test]
 fn a_stale_entry_is_listed_as_stale_and_the_rest_still_print() {
     let (_dir, projects) = workspace_with_everything();
     let old = projects.join("old-api");
@@ -126,12 +161,13 @@ legacy    commit-style  installed  -                      workspace
 old-api                 stale
 "
     );
-    assert_eq!(outcome.stderr.len(), 1, "{:?}", outcome.stderr);
+    assert_eq!(outcome.stderr.len(), 2, "{:?}", outcome.stderr);
     assert!(
         outcome.stderr[0].starts_with("warning: ") && outcome.stderr[0].contains("old-api"),
         "{:?}",
         outcome.stderr
     );
+    assert_eq!(outcome.stderr[1], LEGACY);
     assert!(!outcome.ok);
 }
 
@@ -355,6 +391,7 @@ struct Project {
     name: Option<String>,
     entry: Option<String>,
     path: String,
+    marker: Option<String>,
     agents: Vec<String>,
     stale: Option<String>,
     unreached: Vec<Unreached>,
@@ -431,7 +468,8 @@ fn status_as_json_holds_the_same_entries_as_the_table() {
         .collect();
     assert_eq!(words(&report), table);
     assert!(warnings.is_empty());
-    assert!(outcome.stderr.is_empty(), "{:?}", outcome.stderr);
+    // A hint, which is no warning, so on stderr beside the JSON as well.
+    assert_eq!(outcome.stderr, [LEGACY]);
     assert!(outcome.ok);
 
     let collapse = &report.projects[0];
@@ -441,6 +479,7 @@ fn status_as_json_holds_the_same_entries_as_the_table() {
         collapse.path,
         projects.join("collapse").display().to_string()
     );
+    assert_eq!(collapse.marker.as_deref(), Some("settings.toml"));
     assert_eq!(collapse.agents, ["claude", "codex", "opencode"]);
     assert_eq!(collapse.stale, None);
     assert_eq!(collapse.unreached, []);
@@ -452,6 +491,7 @@ fn status_as_json_holds_the_same_entries_as_the_table() {
         .collect();
     assert_eq!(kinds, ["skill"; 4]);
     let legacy = &report.projects[1];
+    assert_eq!(legacy.marker.as_deref(), Some("mind.toml"));
     assert!(legacy.agents.is_empty());
 }
 
@@ -472,13 +512,17 @@ fn a_stale_entry_in_json_says_why_in_its_data_and_its_warnings() {
     assert_eq!(stale.name, None);
     assert_eq!(stale.entry.as_deref(), Some("old-api"));
     assert!(stale.artifacts.is_empty());
+    assert_eq!(stale.marker, None);
     let reason = stale.stale.as_deref().unwrap();
     assert_eq!(warnings, [reason]);
-    assert_eq!(text.stderr, [format!("warning: {reason}")]);
+    assert_eq!(
+        text.stderr,
+        [format!("warning: {reason}"), LEGACY.to_owned()]
+    );
     // The rest are there all the same, and the exit says something was not.
     assert_eq!(report.projects.len(), 3);
     assert_eq!(report.projects[0].artifacts.len(), 4);
-    assert!(outcome.stderr.is_empty(), "{:?}", outcome.stderr);
+    assert_eq!(outcome.stderr, [LEGACY]);
     assert!(!outcome.ok);
 }
 
