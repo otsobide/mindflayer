@@ -489,6 +489,38 @@ fn a_ledger_that_cannot_be_read_leaves_every_copy_unrecorded_and_is_said_once() 
 }
 
 #[test]
+fn a_ledger_whose_shelf_cannot_be_read_for_a_standing_is_said() {
+    let (dir, mut workspace) = workspace();
+    let alpha = marked(&dir, &mut workspace, "alpha", &Agent::ALL);
+    put(&alpha, ".agents/skills", "deploy");
+    let ledger = workspace.ledger().unwrap();
+    record(
+        &ledger,
+        "alpha",
+        "deploy",
+        "workspace",
+        &[".agents/skills/deploy"],
+    );
+    // The records read, but not what the shelf offers, which a standing
+    // reads to hold an install to where it came from.
+    let path = workspace.ledger_path();
+    rusqlite::Connection::open(&path)
+        .unwrap()
+        .execute_batch("DROP TABLE artifacts;")
+        .unwrap();
+
+    let (_, failures) = Status::of_workspace(&workspace);
+    let (_, failed) = Status::of_project(&alpha, Some(&workspace));
+
+    for failures in [&failures, &failed] {
+        assert_eq!(failures.len(), 1, "{failures:?}");
+        assert!(failures[0]
+            .to_string()
+            .contains(&path.display().to_string()));
+    }
+}
+
+#[test]
 fn a_ledger_that_will_not_open_is_said_and_the_report_still_made() {
     let (dir, mut workspace) = workspace();
     let alpha = marked(&dir, &mut workspace, "alpha", &Agent::ALL);

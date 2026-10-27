@@ -356,20 +356,30 @@ impl ProjectStatus {
             catalog = match read {
                 Ok((ledger, read)) => {
                     installed = read.into_iter().flatten().collect();
-                    // What could not be read here was read above, and
-                    // failed there if it failed: the ledger is the one
-                    // thing a standing reads that a listing does not.
+                    // A standing reads the ledger again, for what the shelf
+                    // offers, and one that fails it fails the report as a
+                    // ledger that cannot be read does, said once: never an
+                    // edited install quietly said to be installed.
+                    let mut unread = None;
                     for &kind in kinds {
-                        let standings = install::standings(workspace, &ledger, project, kind)
-                            .unwrap_or_default();
-                        edited.extend(
-                            standings
-                                .into_iter()
-                                .filter(|(_, standing)| *standing == Standing::Edited)
-                                .map(|(name, _)| (kind, name)),
-                        );
+                        match install::standings(workspace, &ledger, project, kind) {
+                            Ok(standings) => edited.extend(
+                                standings
+                                    .into_iter()
+                                    .filter(|(_, standing)| *standing == Standing::Edited)
+                                    .map(|(name, _)| (kind, name)),
+                            ),
+                            Err(error) => {
+                                unread = Some(error);
+                                break;
+                            }
+                        }
                     }
-                    catalog.with_records(workspace, &ledger)
+                    let catalog = catalog.with_records(workspace, &ledger);
+                    match unread {
+                        Some(error) => catalog.failing(DiscoveryFailure::Ledger(error)),
+                        None => catalog,
+                    }
                 }
                 Err(error) => catalog.failing(DiscoveryFailure::Ledger(error)),
             };

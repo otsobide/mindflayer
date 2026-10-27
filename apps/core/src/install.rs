@@ -625,12 +625,16 @@ pub fn survey(
 ///
 /// A rule in a project marked by its settings is told by its section in the
 /// block of `AGENTS.md` and its file for Claude, as for a survey.
+///
+/// Only the ledger can fail it, read for the records and for what the
+/// shelf offers, so that is what it says: a report reads that ledger too,
+/// and says a failure of it once, as discovery's.
 pub fn standings(
     workspace: &FlayerWorkspace,
     ledger: &Ledger,
     project: &MindProject,
     kind: Kind,
-) -> Result<Vec<(String, Standing)>, InstallError> {
+) -> Result<Vec<(String, Standing)>, LedgerError> {
     let records = ledger.records(&project_entry(workspace, project), kind)?;
     if records.is_empty() {
         return Ok(Vec::new());
@@ -664,7 +668,7 @@ pub(crate) fn offers(
     workspace: &FlayerWorkspace,
     ledger: &Ledger,
     kind: Kind,
-) -> Result<Vec<Offer>, InstallError> {
+) -> Result<Vec<Offer>, LedgerError> {
     // The workspace's own come first: what it keeps for its projects before
     // what it gathered from elsewhere.
     let mut offers = Vec::new();
