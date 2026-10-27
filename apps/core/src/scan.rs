@@ -1,11 +1,12 @@
-//! Finding the repositories under a workspace that it could manage.
+//! Finding the repositories a workspace could manage: under the workspace, or
+//! under any folder somebody points it at.
 //!
 //! A workspace manages what it was told to, never what merely sits inside it,
 //! so nothing here links anything. It answers the question that comes just
-//! before a link: which directories under the workspace are mind projects, or
-//! git repositories that could become one, and which are linked already.
+//! before a link: which directories are mind projects, or git repositories
+//! that could become one, and which are linked already.
 
-use std::collections::VecDeque;
+use std::collections::{HashSet, VecDeque};
 use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
@@ -15,27 +16,50 @@ use thiserror::Error;
 use crate::paths;
 use crate::workspace::{FlayerWorkspace, MindProject};
 
-/// How far below the workspace root a scan looks.
+/// How far below each root a scan looks unless it is told otherwise.
 ///
 /// Three levels reaches `repo`, `org/repo` and `github.com/org/repo` from a
-/// workspace at the top, which is how people lay repositories out. Deeper than
-/// that is somebody's source tree rather than a place repositories are kept.
-pub const MAX_DEPTH: usize = 3;
+/// folder at the top, which is how people lay repositories out. Deeper than
+/// that is somebody's source tree rather than a place repositories are kept;
+/// a scan told to go further is still held to [`MAX_LISTED`].
+pub const DEFAULT_DEPTH: usize = 3;
 
-/// How many directories a scan lists before it stops.
+/// How many directories a scan lists before it stops, whatever its depth and
+/// however many roots it has.
 ///
-/// A workspace at the root of a home directory must not turn into a crawl of
-/// the disk. A scan that stops early says so rather than passing for complete.
+/// A folder at the root of a home directory must not turn into a crawl of the
+/// disk. A scan that stops early says so rather than passing for complete.
 pub const MAX_LISTED: usize = 4096;
 
 /// Folders that are never a place repositories are kept, and are often huge.
 const SKIPPED: [&str; 2] = ["node_modules", "target"];
 
+/// What a scan is asked to look through.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Request {
+    /// The folders to look under, absolute: a front end makes what it was
+    /// typed so, from the directory the command works in, as it does the
+    /// paths `link` is given. None means the workspace root.
+    pub roots: Vec<PathBuf>,
+    /// How many levels below each root to look; none judges the roots alone.
+    pub depth: usize,
+}
+
+/// The workspace root, to [`DEFAULT_DEPTH`].
+impl Default for Request {
+    fn default() -> Self {
+        Request {
+            roots: Vec::new(),
+            depth: DEFAULT_DEPTH,
+        }
+    }
+}
+
 /// A directory a workspace could manage.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Found {
     /// Where it is.
-    pub root: PathBuf,
+    pub path: PathBuf,
     /// The route to it from the workspace root, `/` separated: what
     /// `flayer link` would be given.
     pub route: String,
@@ -47,8 +71,13 @@ pub struct Found {
 }
 
 /// What a scan found.
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub struct Scan {
+    /// Where it looked, each once, in the order it was given them: the
+    /// workspace root when it was given none.
+    pub roots: Vec<PathBuf>,
+    /// How many levels below each root it looked.
+    pub depth: usize,
     /// Ordered by route.
     pub found: Vec<Found>,
     /// Folders that could not be listed. One unreadable folder must not hide
@@ -58,29 +87,68 @@ pub struct Scan {
     pub truncated: bool,
 }
 
-/// Look under a workspace for mind projects and git repositories.
+/// Look for mind projects and git repositories under the roots `request`
+/// names, or under the workspace root when it names none.
 ///
-/// A repository is a leaf: the scan does not look inside one, because its
-/// folders are its own and a repository nested in another is its submodule,
-/// managed with it. Hidden folders and symlinked ones are not entered either:
-/// the first are tooling, and the second can loop.
-pub fn scan(workspace: &FlayerWorkspace) -> Scan {
-    let root = workspace.root();
-    let mut scan = Scan::default();
+/// Every root is a candidate itself, and is looked inside even when it is a
+/// repository, since it is where somebody said the others are kept. Below a
+/// root a repository is a leaf: the scan does not look inside one, because
+/// its folders are its own and a repository nested in another is its
+/// submodule, managed with it. Hidden folders and symlinked ones are not
+/// entered either: the first are tooling, and the second can loop. A root is
+/// entered whatever it is called and however it is reached, because somebody
+/// named it.
+pub fn scan(workspace: &FlayerWorkspace, request: &Request) -> Scan {
+    // A root somebody named that is not there is a typo worth a warning; the
+    // workspace root not being there is an absence, since the default
+    // workspace before it is made can be read in a home nobody has created
+    // yet.
+    let named = !request.roots.is_empty();
+    let mut roots: Vec<PathBuf> = Vec::new();
+    if named {
+        for root in &request.roots {
+            let root = paths::normalize(root);
+            if !roots.contains(&root) {
+                roots.push(root);
+            }
+        }
+    } else {
+        roots.push(workspace.root().to_path_buf());
+    }
+    let mut scan = Scan {
+        roots: roots.clone(),
+        depth: request.depth,
+        found: Vec::new(),
+        failures: Vec::new(),
+        truncated: false,
+    };
 
-    // The workspace root is a candidate too: a workspace can manage the
-    // project it sits in. Unlike every other repository it is still looked
-    // inside, because it is also where the others are kept.
-    if let Some(found) = judge(workspace, root) {
-        scan.found.push(found);
+    // Every root starts the walk at once rather than one after another, so
+    // the budget is spent breadth first across all of them: when it runs out
+    // it is the deepest folders that went unseen, never a whole second root
+    // behind a first that filled it. A folder two roots reach, one inside
+    // the other, is looked at once.
+    let mut seen: HashSet<PathBuf> = HashSet::new();
+    let mut pending: VecDeque<(PathBuf, usize)> = VecDeque::new();
+    for root in roots {
+        // Said even when the scan lists nothing, at depth 0, so a typo is
+        // never an empty answer.
+        if named {
+            if let Err(source) = fs::metadata(&root) {
+                scan.failures.push(ScanFailure { path: root, source });
+                continue;
+            }
+        }
+        if let Some(found) = judge(workspace, &root) {
+            scan.found.push(found);
+        }
+        seen.insert(root.clone());
+        pending.push_back((root, 0));
     }
 
-    // Breadth first, so that when the budget runs out it is the deepest
-    // folders that went unseen rather than a whole neighbouring tree.
-    let mut pending = VecDeque::from([(root.to_path_buf(), 0usize)]);
     let mut listed = 0usize;
     while let Some((directory, depth)) = pending.pop_front() {
-        if depth >= MAX_DEPTH {
+        if depth >= request.depth {
             continue;
         }
         if listed == MAX_LISTED {
@@ -91,10 +159,9 @@ pub fn scan(workspace: &FlayerWorkspace) -> Scan {
 
         let children = match subdirectories(&directory) {
             Ok(children) => children,
-            // A root that is not there holds nothing, which is an absence
-            // and not a failure: the default workspace before it is made can
-            // be read in a home nobody has created yet.
-            Err(source) if depth == 0 && source.kind() == io::ErrorKind::NotFound => continue,
+            Err(source) if !named && depth == 0 && source.kind() == io::ErrorKind::NotFound => {
+                continue;
+            }
             Err(source) => {
                 scan.failures.push(ScanFailure {
                     path: directory,
@@ -104,6 +171,9 @@ pub fn scan(workspace: &FlayerWorkspace) -> Scan {
             }
         };
         for child in children {
+            if !seen.insert(child.clone()) {
+                continue;
+            }
             if let Some(found) = judge(workspace, &child) {
                 scan.found.push(found);
                 continue;
@@ -136,7 +206,7 @@ fn judge(workspace: &FlayerWorkspace, directory: &Path) -> Option<Found> {
         .and_then(paths::to_config_string)
         .unwrap_or_else(|| directory.display().to_string());
     Some(Found {
-        root: directory.to_path_buf(),
+        path: directory.to_path_buf(),
         route,
         mind,
         linked: workspace.is_linked(directory),

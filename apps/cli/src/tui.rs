@@ -586,7 +586,7 @@ fn workspace_view(workspace: &FlayerWorkspace, reason: Reason, lookup: &Lookup) 
             .into_iter()
             .map(|registered| member(registered, workspace, lookup)),
     );
-    let unlinked = scan(workspace)
+    let unlinked = scan(workspace, &scan::Request::default())
         .found
         .into_iter()
         .filter(|found| !found.linked)
