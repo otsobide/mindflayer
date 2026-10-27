@@ -14,13 +14,14 @@ use mindflayer_core::claude_md::{self, Fallback, Reach};
 use mindflayer_core::claude_rules::{self, Warning as FileWarning};
 use mindflayer_core::install::rules::{self, Warning, Withheld};
 use mindflayer_core::install::{
-    self, InstallError, Installation, Installed, Removed, Standing, WORKSPACE_ORIGIN,
+    self, Candidate, InstallError, Installation, Installed, Removed, Standing, WORKSPACE_ORIGIN,
 };
 use mindflayer_core::ledger::{InstallRecord, Target};
+use mindflayer_core::lifecycle;
 use mindflayer_core::migrate;
 use mindflayer_core::{
-    hash, Agent, AgentHomes, Directories, FlayerWorkspace, Kind, Ledger, MindProject, Share, State,
-    Status,
+    hash, Agent, AgentHomes, Directories, FlayerWorkspace, Kind, Ledger, LifecycleError,
+    MindProject, Missed, Reference, Share, State, Status,
 };
 use tempfile::TempDir;
 
@@ -1233,4 +1234,462 @@ fn status_lists_a_rule_copied_into_a_project_a_mind_toml_marks_as_its_copy() {
         .unwrap();
     assert_eq!(rule.state, State::Installed);
     assert_eq!(rule.origin.as_deref(), Some(WORKSPACE_ORIGIN));
+}
+
+impl Fixture {
+    /// The workspace's own skill `name`.
+    fn skill(&self, name: &str) {
+        let folder = self
+            .workspace
+            .own()
+            .directory_for(Kind::Skill)
+            .unwrap()
+            .join(name);
+        fs::create_dir_all(&folder).unwrap();
+        fs::write(
+            folder.join("SKILL.md"),
+            format!("---\nname: {name}\ndescription: What {name} does\n---\n\nSteps.\n"),
+        )
+        .unwrap();
+    }
+
+    /// What `typed` names among what the project is offered.
+    fn typed(&self, typed: &str) -> Result<Candidate, InstallError> {
+        install::offered_typed(
+            &self.workspace,
+            &self.ledger,
+            &self.project,
+            &Reference::parse(typed),
+            None,
+            self.workspace.root(),
+        )
+    }
+
+    /// Install what `typed` names, as a command line would.
+    fn install_typed(&self, typed: &str) -> Installation {
+        let candidate = self.typed(typed).unwrap();
+        install::install(
+            &self.workspace,
+            &self.ledger,
+            &self.project,
+            &candidate,
+            &AgentHomes::default(),
+        )
+        .unwrap()
+    }
+
+    /// Take out what `typed` names, as a command line would.
+    fn uninstall_typed(&self, typed: &str) -> Result<(Kind, Removed), InstallError> {
+        install::uninstall_typed(
+            &self.workspace,
+            &self.ledger,
+            &self.project,
+            &Reference::parse(typed),
+            &AgentHomes::default(),
+        )
+    }
+}
+
+#[test]
+fn a_name_typed_bare_is_of_the_one_kind_that_offers_it() {
+    let fixture = fixture(Share::Shared, &Agent::ALL);
+    fixture.skill("deploy");
+    fixture.rule("git/no-force-push", NO_FORCE_PUSH);
+    fixture.rule("deploy-notes", NO_FORCE_PUSH);
+
+    let rule = fixture.typed("git/no-force-push").unwrap();
+    let skill = fixture.typed("deploy").unwrap();
+    let also_rule = fixture.typed("deploy-notes").unwrap();
+
+    assert_eq!(
+        (rule.kind(), rule.name()),
+        (Kind::Rule, "git/no-force-push")
+    );
+    assert_eq!((skill.kind(), skill.name()), (Kind::Skill, "deploy"));
+    assert_eq!(also_rule.kind(), Kind::Rule);
+    let nothing = fixture.typed("nothing").unwrap_err();
+    assert!(
+        matches!(&nothing, InstallError::NotOffered { name, .. } if name == "nothing"),
+        "{nothing:?}"
+    );
+}
+
+#[test]
+fn a_name_two_kinds_offer_is_installed_only_as_the_kind_it_is_qualified_with() {
+    let fixture = fixture(Share::Shared, &Agent::ALL);
+    fixture.skill("deploy");
+    fixture.rule("deploy", NO_FORCE_PUSH);
+
+    let refused = fixture.typed("deploy").unwrap_err();
+
+    assert!(
+        matches!(&refused, InstallError::OfferedAsKinds { kinds, .. } if kinds == &Kind::ALL),
+        "{refused:?}"
+    );
+    assert_eq!(
+        refused.to_string(),
+        "`deploy` is offered as a skill and as a rule, so say which: `skill:deploy` or `rule:deploy`"
+    );
+    assert_eq!(fixture.typed("rule:deploy").unwrap().kind(), Kind::Rule);
+    assert_eq!(fixture.typed("skill:deploy").unwrap().kind(), Kind::Skill);
+
+    fixture.install_typed("rule:deploy");
+
+    assert!(fixture.text().contains("<!-- mindflayer:rule deploy -->"));
+    assert!(!fixture
+        .project
+        .root()
+        .join(".claude/skills/deploy")
+        .exists());
+}
+
+#[test]
+fn a_project_no_kind_can_go_into_is_told_so_rather_than_sent_to_gather() {
+    let fixture = fixture(Share::Shared, &[]);
+    fixture.rule("git/no-force-push", NO_FORCE_PUSH);
+
+    let refused = fixture.typed("deploy").unwrap_err();
+
+    assert!(
+        matches!(
+            &refused,
+            InstallError::NoTarget {
+                kind: Kind::Skill,
+                ..
+            }
+        ),
+        "{refused:?}"
+    );
+}
+
+#[test]
+fn a_bare_name_is_taken_out_as_the_one_kind_installed_under_it() {
+    let fixture = fixture(Share::Shared, &Agent::ALL);
+    fixture.skill("deploy");
+    fixture.rule("deploy", NO_FORCE_PUSH);
+    fixture.install_typed("rule:deploy");
+
+    let (kind, removed) = fixture.uninstall_typed("deploy").unwrap();
+
+    assert_eq!(kind, Kind::Rule);
+    assert!(
+        matches!(&removed, Removed::Removed { name, .. } if name == "deploy"),
+        "{removed:?}"
+    );
+    assert!(!fixture.agents_md().exists());
+    assert!(fixture.records().is_empty());
+}
+
+#[test]
+fn a_bare_name_installed_as_two_kinds_is_taken_out_only_once_qualified() {
+    let fixture = fixture(Share::Shared, &Agent::ALL);
+    fixture.skill("deploy");
+    fixture.rule("deploy", NO_FORCE_PUSH);
+    fixture.install_typed("rule:deploy");
+    fixture.install_typed("skill:deploy");
+
+    let refused = fixture.uninstall_typed("deploy").unwrap_err();
+
+    assert_eq!(
+        refused.to_string(),
+        "`deploy` is installed as a skill and as a rule, so say which: `skill:deploy` or `rule:deploy`"
+    );
+    assert!(fixture.text().contains("<!-- mindflayer:rule deploy -->"));
+    let (kind, _) = fixture.uninstall_typed("skill:deploy").unwrap();
+    assert_eq!(kind, Kind::Skill);
+    assert!(!fixture
+        .project
+        .root()
+        .join(".claude/skills/deploy")
+        .exists());
+    assert!(fixture.text().contains("<!-- mindflayer:rule deploy -->"));
+}
+
+#[test]
+fn a_bare_name_nothing_records_says_whose_is_there_of_either_kind() {
+    let fixture = fixture(Share::Shared, &Agent::ALL);
+    let theirs = format!(
+        "{TEAM}\n<!-- mindflayer:begin -->\n<!-- mindflayer:rule review/tone -->\nTheirs.\n<!-- mindflayer:end -->\n"
+    );
+    fs::write(fixture.agents_md(), &theirs).unwrap();
+    let skill = fixture.project.root().join(".claude/skills/notes");
+    fs::create_dir_all(&skill).unwrap();
+    fs::write(skill.join("SKILL.md"), "Mine.\n").unwrap();
+
+    assert_eq!(
+        fixture.uninstall_typed("review/tone").unwrap(),
+        (
+            Kind::Rule,
+            Removed::Foreign {
+                name: String::from("review/tone"),
+                path: fixture.agents_md(),
+            }
+        )
+    );
+    assert_eq!(
+        fixture.uninstall_typed("notes").unwrap(),
+        (
+            Kind::Skill,
+            Removed::Foreign {
+                name: String::from("notes"),
+                path: skill,
+            }
+        )
+    );
+    assert_eq!(
+        fixture.uninstall_typed("nothing").unwrap(),
+        (
+            Kind::Skill,
+            Removed::Absent {
+                name: String::from("nothing"),
+            }
+        )
+    );
+    assert_eq!(fixture.text(), theirs);
+}
+
+#[test]
+fn a_render_says_what_each_renderer_found_once_in_one_list() {
+    // In no git work tree: what a local project keeps out of git is kept out
+    // of nothing, which the block and Claude's files each find.
+    let dir = TempDir::new().unwrap();
+    let (mut workspace, _) = FlayerWorkspace::init(dir.path()).unwrap();
+    let root = dir.path().join("app");
+    fs::create_dir_all(&root).unwrap();
+    let (project, _) =
+        MindProject::init_settings(&root, &Agent::ALL, Share::Local, &Directories::default())
+            .unwrap();
+    workspace.link(&project).unwrap();
+    let ledger = workspace.ledger().unwrap();
+    own_rule(&workspace, "git/no-force-push", NO_FORCE_PUSH);
+    own_rule(&workspace, "rust/errors", SCOPED);
+    put(&workspace, &ledger, &project, "git/no-force-push");
+    let candidate = install::offered(
+        &workspace,
+        &ledger,
+        &project,
+        Kind::Rule,
+        "rust/errors",
+        None,
+    )
+    .unwrap();
+
+    let rendered = install::install(
+        &workspace,
+        &ledger,
+        &project,
+        &candidate,
+        &AgentHomes::default(),
+    )
+    .unwrap()
+    .rendered
+    .unwrap();
+
+    let no_git_root = format!(
+        "{}: in no git work tree, so Codex reads its AGENTS.md only when started in that folder \
+         itself",
+        project.root().display()
+    );
+    let claude_only = String::from(
+        "rule `rust/errors` states `paths`, so it reaches claude only: codex and opencode read \
+         no .claude/rules",
+    );
+    assert_eq!(
+        rendered.warnings_of(Some("rust/errors")),
+        [no_git_root.clone(), claude_only.clone()]
+    );
+    // What is true of a rule whatever the render is said of the one changed,
+    // and of every one by a render that changed none.
+    assert_eq!(
+        rendered.warnings_of(Some("git/no-force-push")),
+        std::slice::from_ref(&no_git_root)
+    );
+    assert_eq!(rendered.warnings_of(None), [no_git_root, claude_only]);
+    assert_eq!(
+        rendered.notes(),
+        [format!(
+            "{}: not in a git work tree, so nothing keeps what is installed there out of git",
+            project.root().display()
+        )]
+    );
+}
+
+#[test]
+fn the_offer_of_a_rule_a_project_holds_is_the_one_its_record_came_from() {
+    let fixture = fixture(Share::Shared, &Agent::ALL);
+    fixture.rule("review/tone", TONE);
+    let (mut workspace, team) = (
+        FlayerWorkspace::open(fixture.workspace.root()).unwrap(),
+        FlayerWorkspace::init(fixture.dir.path().join("team"))
+            .unwrap()
+            .0,
+    );
+    own_rule(&team, "review/tone", "Be kind.\n");
+    workspace.load(&team).unwrap();
+    let from = |origin: &str| {
+        install::offered(
+            &workspace,
+            &fixture.ledger,
+            &fixture.project,
+            Kind::Rule,
+            "review/tone",
+            Some(origin),
+        )
+        .unwrap()
+    };
+    let current = |candidate: &Candidate| {
+        install::is_current(&workspace, &fixture.ledger, &fixture.project, candidate)
+    };
+    assert!(!current(&from(WORKSPACE_ORIGIN)));
+
+    install::install(
+        &workspace,
+        &fixture.ledger,
+        &fixture.project,
+        &from("load:team"),
+        &AgentHomes::default(),
+    )
+    .unwrap();
+
+    assert!(current(&from("load:team")));
+    assert!(!current(&from(WORKSPACE_ORIGIN)));
+}
+
+#[test]
+fn a_project_whose_settings_name_no_agent_receives_neither_kind() {
+    let named = fixture(Share::Shared, &[Agent::Codex]);
+    let none = fixture(Share::Shared, &[]);
+
+    for kind in Kind::ALL {
+        assert!(install::receives(&named.project, kind).is_ok(), "{kind}");
+        let refused = install::receives(&none.project, kind).unwrap_err();
+        assert!(
+            matches!(&refused, InstallError::NoTarget { kind: refused, .. } if *refused == kind),
+            "{refused:?}"
+        );
+    }
+}
+
+/// What status says each rule the fixture's project received misses.
+fn missed_in(fixture: &Fixture) -> Vec<Missed> {
+    let (status, failures) = Status::of_project(&fixture.project, Some(&fixture.workspace));
+    assert!(failures.is_empty(), "{failures:?}");
+    status.projects[0].missed.clone()
+}
+
+#[test]
+fn status_says_which_agents_read_a_rule_it_received_nowhere() {
+    let fixture = fixture(Share::Shared, &Agent::ALL);
+    fixture.rule("git/no-force-push", NO_FORCE_PUSH);
+    fixture.rule("rust/errors", SCOPED);
+    fixture.install("git/no-force-push");
+    fixture.install("rust/errors");
+
+    assert_eq!(
+        missed_in(&fixture),
+        [Missed {
+            kind: Kind::Rule,
+            name: String::from("rust/errors"),
+            agents: vec![Agent::Codex, Agent::OpenCode],
+        }]
+    );
+
+    // Partial says a section gone already: no agent reads it, and that is
+    // not said twice.
+    fs::remove_file(fixture.agents_md()).unwrap();
+
+    assert_eq!(
+        missed_in(&fixture)
+            .iter()
+            .map(|missed| missed.name.as_str())
+            .collect::<Vec<_>>(),
+        ["rust/errors"]
+    );
+}
+
+#[test]
+fn status_says_the_agents_a_block_withheld_from_a_tracked_agents_md_misses() {
+    let fixture = fixture(Share::Local, &Agent::ALL);
+    fs::write(fixture.agents_md(), TEAM).unwrap();
+    common::indexed(fixture.dir.path());
+    fixture.rule("git/no-force-push", NO_FORCE_PUSH);
+    fixture.install("git/no-force-push");
+
+    assert_eq!(
+        status_of(&fixture, "git/no-force-push").map(|(state, agents, _)| (state, agents)),
+        Some((State::Installed, vec![Agent::Claude]))
+    );
+    assert_eq!(
+        missed_in(&fixture),
+        [Missed {
+            kind: Kind::Rule,
+            name: String::from("git/no-force-push"),
+            agents: vec![Agent::Codex, Agent::OpenCode],
+        }]
+    );
+}
+
+#[test]
+fn status_says_nothing_missed_of_a_rule_a_project_a_mind_toml_marks_holds() {
+    let (_dir, workspace, project, ledger) = older();
+    own_rule(&workspace, "git/no-force-push", NO_FORCE_PUSH);
+    put(&workspace, &ledger, &project, "git/no-force-push");
+
+    let (status, _) = Status::of_project(&project, Some(&workspace));
+
+    assert_eq!(status.projects[0].missed, []);
+}
+
+#[test]
+fn a_change_aimed_at_a_rule_the_project_received_is_refused_as_received() {
+    let fixture = fixture(Share::Shared, &Agent::ALL);
+    fixture.rule("git/no-force-push", NO_FORCE_PUSH);
+    fixture.install("git/no-force-push");
+    let find = |typed: &str| {
+        lifecycle::find_to_change(
+            Some(&fixture.workspace),
+            &fixture.project,
+            &Reference::parse(typed),
+        )
+        .unwrap_err()
+    };
+
+    let received = find("git/no-force-push");
+    let qualified = find("rule:git/no-force-push");
+    let as_a_skill = find("skill:git/no-force-push");
+    let nothing = find("nothing");
+
+    assert!(
+        matches!(&received, LifecycleError::Received { typed, project }
+            if typed == "git/no-force-push" && project == "app"),
+        "{received:?}"
+    );
+    assert_eq!(
+        received.to_string(),
+        "`git/no-force-push` is a rule app received, rendered from where it was installed from \
+         rather than kept in it, so it is not changed from here: uninstall it, or change it \
+         where it is offered and install it again"
+    );
+    assert!(
+        matches!(qualified, LifecycleError::Received { .. }),
+        "{qualified:?}"
+    );
+    assert!(
+        matches!(as_a_skill, LifecycleError::NotFound { .. }),
+        "{as_a_skill:?}"
+    );
+    assert!(
+        matches!(nothing, LifecycleError::NotFound { .. }),
+        "{nothing:?}"
+    );
+    // Without the workspace whose ledger says so, nothing says it was
+    // received.
+    assert!(matches!(
+        lifecycle::find_to_change(
+            None,
+            &fixture.project,
+            &Reference::parse("git/no-force-push")
+        ),
+        Err(LifecycleError::NotFound { .. })
+    ));
 }

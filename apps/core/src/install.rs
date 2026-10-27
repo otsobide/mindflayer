@@ -28,7 +28,7 @@ use thiserror::Error;
 use crate::agent::{Agent, AgentHomes};
 use crate::agents_md::AgentsMdError;
 use crate::artifact::{self, issue_list, name_issues, Artifact, ArtifactError, ValidationIssue};
-use crate::catalog::{Catalog, DiscoveryFailure};
+use crate::catalog::{Catalog, DiscoveryFailure, Reference, QUALIFIER};
 use crate::claude_md::ClaudeMdError;
 use crate::claude_rules::ClaudeRulesError;
 use crate::copy;
@@ -416,18 +416,16 @@ pub fn loaded_offers(workspace: &FlayerWorkspace, kind: Kind) -> Vec<Offer> {
     from_loads(workspace, &[kind]).offers
 }
 
-/// Every skill the workspaces `workspace` loads offer, and every reason
-/// something was not offered: a loaded workspace that cannot be opened, an
-/// artifact in one that cannot be read, a name that is not one folder name.
-/// Failures collected, not raised, like every discovery.
+/// Everything the workspaces `workspace` loads offer, of every kind, and
+/// every reason something was not offered: a loaded workspace that cannot
+/// be opened, an artifact in one that cannot be read, a name no copy can be
+/// filed under. Failures collected, not raised, like every discovery.
 ///
-/// Skills, the kind every front end lists and counts from a load today. A
-/// load offers its rules too, through [`loaded_offers`] and [`survey`],
-/// which install them; the listings this answers take them with the command
-/// line and the screens that install them (#46), so that what a load says it
-/// offers is what those let somebody install.
+/// Every kind, as [`survey`] offers every kind to install, so what a load
+/// is said to offer, in `flayer load`, `flayer gather list` and the TUI, is
+/// what the command line and the install screen let somebody install.
 pub fn offered_by_loads(workspace: &FlayerWorkspace) -> Loads {
-    from_loads(workspace, &[Kind::Skill])
+    from_loads(workspace, &Kind::ALL)
 }
 
 /// The two above. No ledger: listing what a load offers is reading, and must
@@ -634,11 +632,174 @@ pub fn offered(
     }
 }
 
+/// The one candidate `reference` names among what `project` can be offered:
+/// of the kind it is qualified with (`rule:git/commits`), or, typed bare, of
+/// the one kind that offers its name, as [`offered`] finds one of a kind.
+///
+/// A bare name that more than one kind offers is refused
+/// ([`InstallError::OfferedAsKinds`]), for the qualifier to say which, as
+/// `mind show` refuses one: a skill and a rule of one name are two things,
+/// and which of them goes in is not something to guess. A kind offering
+/// the name from two places counts as offering it, and says so itself
+/// ([`InstallError::OfferedTwice`]) when no other kind does.
+///
+/// Only the kinds a copy could be filed under that name are asked
+/// ([`is_installable_name`]), so `git/commits`, which no skill can be
+/// called, is a rule's however it is typed. When no kind offers it, the
+/// first refusal that says more than that nothing is offered is the one
+/// given: a project with nowhere to put a skill is told so, as before
+/// rules could be installed, rather than sent to gather one. A ledger that
+/// cannot be read is said first, from whichever kind found it.
+///
+/// `from` is taken as typed first, so a shelf source's address or
+/// `workspace` means what it says, and only when that offers a kind nothing,
+/// as a path to a loaded workspace typed from `base` ([`resolve_from`]).
+/// Kind by kind: a kind that cannot go into the project at all refuses
+/// for that, which keeps no other from being found by the path.
+pub fn offered_typed(
+    workspace: &FlayerWorkspace,
+    ledger: &Ledger,
+    project: &MindProject,
+    reference: &Reference,
+    from: Option<&str>,
+    base: &Path,
+) -> Result<Candidate, InstallError> {
+    let name = reference.name();
+    let resolved = from.map(|from| resolve_from(workspace, base, from));
+    let ask = |kind: Kind| match offered(workspace, ledger, project, kind, name, from) {
+        Err(InstallError::NotOffered { .. }) if resolved.as_deref() != from => {
+            offered(workspace, ledger, project, kind, name, resolved.as_deref())
+        }
+        asked => asked,
+    };
+    if let Some(kind) = reference.kind() {
+        return ask(kind);
+    }
+    let mut asked: Vec<(Kind, Result<Candidate, InstallError>)> = filed_as(name)
+        .into_iter()
+        .map(|kind| (kind, ask(kind)))
+        .collect();
+    if let Some(index) = asked
+        .iter()
+        .position(|(_, asked)| matches!(asked, Err(InstallError::Ledger(_))))
+    {
+        return asked.swap_remove(index).1;
+    }
+    let offering = |asked: &Result<Candidate, InstallError>| {
+        matches!(asked, Ok(_) | Err(InstallError::OfferedTwice { .. }))
+    };
+    let kinds: Vec<Kind> = asked
+        .iter()
+        .filter(|(_, asked)| offering(asked))
+        .map(|(kind, _)| *kind)
+        .collect();
+    if kinds.len() > 1 {
+        return Err(InstallError::OfferedAsKinds {
+            name: name.to_owned(),
+            kinds,
+        });
+    }
+    let index = asked
+        .iter()
+        .position(|(_, asked)| offering(asked))
+        .or_else(|| {
+            asked
+                .iter()
+                .position(|(_, asked)| !matches!(asked, Err(InstallError::NotOffered { .. })))
+        })
+        .unwrap_or(0);
+    asked.swap_remove(index).1
+}
+
+/// Take what `reference` names back out of `project`, and say which kind it
+/// was: the kind it is qualified with, or, typed bare, the one kind the
+/// ledger records an installation of that name of, as [`uninstall`] takes
+/// one of a kind out.
+///
+/// A bare name the ledger records as more than one kind is refused
+/// ([`InstallError::InstalledAsKinds`]), for the qualifier to say which:
+/// taking both out would be twice what was asked. One it records as none
+/// changes nothing whichever kind it is taken for, so each kind it could be
+/// filed as is asked what is there, and somebody's of either is said
+/// ([`Removed::Foreign`]) before the absence the first kind finds: the name
+/// was typed because something by it is somewhere.
+pub fn uninstall_typed(
+    workspace: &FlayerWorkspace,
+    ledger: &Ledger,
+    project: &MindProject,
+    reference: &Reference,
+    homes: &AgentHomes,
+) -> Result<(Kind, Removed), InstallError> {
+    let name = reference.name();
+    let kind = match reference.kind() {
+        Some(kind) => kind,
+        None => {
+            let entry = project_entry(workspace, project);
+            let kinds = filed_as(name);
+            let mut recorded = Vec::new();
+            for &kind in &kinds {
+                if ledger.installation(&entry, kind, name)?.is_some() {
+                    recorded.push(kind);
+                }
+            }
+            match recorded[..] {
+                [kind] => kind,
+                [] => {
+                    let mut absent = None;
+                    for kind in kinds {
+                        let removed = uninstall(workspace, ledger, project, kind, name, homes)?;
+                        if matches!(removed, Removed::Foreign { .. }) {
+                            return Ok((kind, removed));
+                        }
+                        absent.get_or_insert((kind, removed));
+                    }
+                    return Ok(absent.expect("a name is asked of one kind at least"));
+                }
+                _ => {
+                    return Err(InstallError::InstalledAsKinds {
+                        name: name.to_owned(),
+                        kinds: recorded,
+                    })
+                }
+            }
+        }
+    };
+    uninstall(workspace, ledger, project, kind, name, homes).map(|removed| (kind, removed))
+}
+
+/// The kinds `reference` could name: the one it is qualified with, or,
+/// typed bare, those a copy could be filed as under its name, which
+/// [`offered_typed`] and [`uninstall_typed`] ask of it. For a front end to
+/// say what is true of each before it is known which one is meant, without
+/// deciding for itself what a name can be: a route like `git/commits` is a
+/// rule's whatever the folders for skills hold.
+pub fn kinds_named(reference: &Reference) -> Vec<Kind> {
+    reference
+        .kind()
+        .map_or_else(|| filed_as(reference.name()), |kind| vec![kind])
+}
+
+/// The kinds a copy could be filed as under `name` ([`is_installable_name`]),
+/// or every kind when none could, so that what is asked of them refuses the
+/// name, saying why.
+fn filed_as(name: &str) -> Vec<Kind> {
+    let kinds: Vec<Kind> = Kind::ALL
+        .into_iter()
+        .filter(|&kind| is_installable_name(kind, name))
+        .collect();
+    if kinds.is_empty() {
+        Kind::ALL.to_vec()
+    } else {
+        kinds
+    }
+}
+
 /// Refuse `project` when an install of `kind` has nowhere to go in it: no
 /// [`targets`] for a kind copied into a folder, and for a rule into a
 /// project marked by its settings, which goes into its `AGENTS.md`, no agent
-/// to read it ([`rules::receives`]).
-fn receives(project: &MindProject, kind: Kind) -> Result<(), InstallError> {
+/// to read it ([`rules::receives`]). What a front end says in place of the
+/// offers of `kind`, which [`survey`] leaves empty for such a project.
+pub fn receives(project: &MindProject, kind: Kind) -> Result<(), InstallError> {
     if kind == Kind::Rule && project.settings().is_some() {
         return rules::receives(project);
     }
@@ -1542,20 +1703,40 @@ pub(crate) fn kept_by_a_load(
     })
 }
 
-/// Whether `candidate` is the copy `project` holds: the same names and bytes
-/// as the folder there, but for what an install leaves out (`LEAVE_OUT`).
-/// For telling which of two offers of one name is the one installed, which
-/// a record from before schema 3 does not say for what came from a workspace
-/// rather than the shelf, and which an edit since may have made neither.
+/// Whether `candidate` is the one `project` holds of its name. For telling
+/// which of two offers of one name is the one installed.
 ///
-/// Compared with the first copy the project holds of it: an install writes
+/// A skill is the copy there when it has the same names and bytes as the
+/// folder, but for what an install leaves out (`LEAVE_OUT`): a record from
+/// before schema 3 does not say where what came from a workspace rather than
+/// the shelf came from, and an edit since may have made it neither. It is
+/// compared with the first copy the project holds of it: an install writes
 /// every copy from one tree, so any of them is what was installed, and one
 /// edited since is no longer any offer's.
+///
+/// A rule is the one the ledger records it was installed from. Every record
+/// of one says where it came from, and nothing in a project marked by its
+/// settings holds a rule's bytes alone to compare: its section is rendered,
+/// and Claude may have no file of it.
 pub fn is_current(
     workspace: &FlayerWorkspace,
+    ledger: &Ledger,
     project: &MindProject,
     candidate: &Candidate,
 ) -> bool {
+    // Matched on the kind, so a third one has to say how it is told.
+    match candidate.kind() {
+        Kind::Skill => {}
+        Kind::Rule => {
+            let entry = project_entry(workspace, project);
+            return ledger
+                .installation(&entry, Kind::Rule, candidate.name())
+                .ok()
+                .flatten()
+                .and_then(|record| record.origin)
+                .is_some_and(|origin| origin == candidate.origin());
+        }
+    }
     let Ok(targets) = targets(project, candidate.kind()) else {
         return false;
     };
@@ -1641,6 +1822,10 @@ pub enum InstallError {
     NotOffered { name: String, from: Option<String> },
     #[error("`{name}` is offered by more than one place ({}), so say which with --from", .origins.join(", "))]
     OfferedTwice { name: String, origins: Vec<String> },
+    #[error("`{name}` is offered as {}, so say which: {}", as_kinds(.kinds), qualified(.name, .kinds))]
+    OfferedAsKinds { name: String, kinds: Vec<Kind> },
+    #[error("`{name}` is installed as {}, so say which: {}", as_kinds(.kinds), qualified(.name, .kinds))]
+    InstalledAsKinds { name: String, kinds: Vec<Kind> },
     #[error("{project} names no agent in its settings that {kind}s are installed for, so none can be installed into it")]
     NoTarget { project: String, kind: Kind },
     #[error("none of the folders {project}'s settings name for its {kind}s is one an install may use, so none can be installed into it")]
@@ -1677,5 +1862,29 @@ impl InstallError {
             InstallError::Write { swept, .. } => swept,
             _ => &[],
         }
+    }
+}
+
+/// "a skill and as a rule": the kinds a name is, as a refusal says them.
+fn as_kinds(kinds: &[Kind]) -> String {
+    let each: Vec<String> = kinds.iter().map(|kind| format!("a {kind}")).collect();
+    match each.split_last() {
+        Some((last, [])) => last.clone(),
+        Some((last, rest)) => format!("{} and as {last}", rest.join(", as ")),
+        None => String::new(),
+    }
+}
+
+/// "`skill:deploy` or `rule:deploy`": what to type for each, with the
+/// qualifier a [`Reference`] reads.
+fn qualified(name: &str, kinds: &[Kind]) -> String {
+    let each: Vec<String> = kinds
+        .iter()
+        .map(|kind| format!("`{}{QUALIFIER}{name}`", kind.slug()))
+        .collect();
+    match each.split_last() {
+        Some((last, [])) => last.clone(),
+        Some((last, rest)) => format!("{} or {last}", rest.join(", ")),
+        None => String::new(),
     }
 }

@@ -358,6 +358,7 @@ struct Project {
     agents: Vec<String>,
     stale: Option<String>,
     unreached: Vec<Unreached>,
+    missed: Vec<Missed>,
     artifacts: Vec<Held>,
 }
 
@@ -366,6 +367,14 @@ struct Project {
 struct Unreached {
     kind: String,
     targets: Vec<String>,
+    agents: Vec<String>,
+}
+
+#[derive(Debug, Deserialize, PartialEq)]
+#[serde(deny_unknown_fields)]
+struct Missed {
+    kind: String,
+    name: String,
     agents: Vec<String>,
 }
 
@@ -435,6 +444,7 @@ fn status_as_json_holds_the_same_entries_as_the_table() {
     assert_eq!(collapse.agents, ["claude", "codex", "opencode"]);
     assert_eq!(collapse.stale, None);
     assert_eq!(collapse.unreached, []);
+    assert_eq!(collapse.missed, []);
     let kinds: Vec<&str> = collapse
         .artifacts
         .iter()
@@ -583,4 +593,56 @@ fn status_says_a_target_no_install_may_use_and_the_one_agent_its_others_miss() {
         ]
     );
     assert!(!status.ok);
+}
+
+#[test]
+fn status_lists_the_rules_a_project_received_and_warns_of_one_some_agents_read_nowhere() {
+    let dir = TempDir::new().unwrap();
+    flayer(dir.path(), &["init"]).unwrap();
+    let alpha = dir.path().join("alpha");
+    fs::create_dir(&alpha).unwrap();
+    new_project(&alpha);
+    flayer(dir.path(), &["link", "alpha"]).unwrap();
+    flayer(
+        dir.path(),
+        &[
+            "add",
+            "rule",
+            "git/commits",
+            "Commit one coherent step at a time",
+        ],
+    )
+    .unwrap();
+    let scoped = own_directory_for(dir.path(), Kind::Rule).join("style/comments.md");
+    fs::create_dir_all(scoped.parent().unwrap()).unwrap();
+    fs::write(
+        &scoped,
+        "---\npaths:\n  - \"**/*.rs\"\n---\n\n# Comments say why, not what\n",
+    )
+    .unwrap();
+    flayer(dir.path(), &["install", "-p", "alpha", "git/commits"]).unwrap();
+    flayer(dir.path(), &["install", "-p", "alpha", "style/comments"]).unwrap();
+    let unseen = "codex and opencode do not read rule `style/comments` in alpha";
+
+    let here = mind(&alpha, &["status"]).unwrap();
+    let json = flayer(dir.path(), &["status", "-p", "alpha", "--json"]).unwrap();
+
+    assert_eq!(
+        here.stdout,
+        "git/commits     installed  claude,codex,opencode  workspace\n\
+         style/comments  installed  claude                 workspace\n"
+    );
+    assert_eq!(here.stderr, [format!("warning: {unseen}")]);
+    assert!(!here.ok);
+    let (report, warnings): (Report, _) = enveloped(&json);
+    assert_eq!(warnings, [unseen]);
+    assert_eq!(
+        report.projects[0].missed,
+        [Missed {
+            kind: String::from("rule"),
+            name: String::from("style/comments"),
+            agents: vec![String::from("codex"), String::from("opencode")],
+        }]
+    );
+    assert!(!json.ok);
 }

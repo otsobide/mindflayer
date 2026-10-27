@@ -195,8 +195,8 @@ honours that: it goes to Claude alone, as
 the patterns match, and never into `AGENTS.md`, where every agent would read
 it for every file. Codex and OpenCode read no `.claude/rules`, so a
 path-scoped rule does not reach them, and Mindflayer says so for each one it
-writes. Rules cannot be installed into a project yet; this is where they will
-go.
+writes. A rule goes there when it is [installed](#installing-into-a-project),
+as a skill does.
 
 Those are the defaults, and a project can say otherwise: see [where a project
 keeps its artifacts](#where-a-project-keeps-its-artifacts).
@@ -284,19 +284,23 @@ projects, and install from it:
 ```
 $ cd ~/Projects
 $ flayer load ~/src/mindflayer/examples
-loaded examples as ../src/mindflayer/examples: 2 skills to install
+loaded examples as ../src/mindflayer/examples: 2 skills and 2 rules to install
   into the workspace at /home/you/Projects
 
 $ flayer install -p collapse commit-style
 installed commit-style into collapse, from load:../src/mindflayer/examples
+$ flayer install -p collapse git/commits
+installed rule git/commits into collapse, from load:../src/mindflayer/examples
 ```
 
 `collapse/.claude/skills/commit-style` now holds the skill and the
 `references/examples.md` it carries, for Claude Code, and
-`collapse/.agents/skills/commit-style` the same for Codex and OpenCode, both
-kept out of git. Only the skills are offered, because a rule cannot be
-installed yet: the two rules are there to read, and to copy into a project by
-hand. `flayer -W ~/src/mindflayer/examples validate` says all four are ok.
+`collapse/.agents/skills/commit-style` the same for Codex and OpenCode.
+`collapse/AGENTS.md` holds the rule, in a block of Mindflayer's that all
+three read, and all of it is kept out of git. `style/comments` installs the
+same way, but it states which files it is about, so it goes to Claude Code
+alone, and the install says so. `flayer -W ~/src/mindflayer/examples
+validate` says all four are ok.
 
 ## Commands
 
@@ -321,10 +325,12 @@ mind validate [KIND|NAME]  # check a kind, one artifact, or everything
 mind status [--json]       # what it holds, from where, for which agents
 mind link / mind unlink    # this project, into or out of the workspace above
 mind load / mind unload <path>...
-                           # another workspace's skills, into the one above
-mind install <SKILL> [--from ORIGIN]
-                           # put a skill in: the workspace's own, or the shelf's
-mind uninstall <SKILL>     # take one Mindflayer installed back out
+                           # another workspace's skills and rules, into the
+                           # one above
+mind install <NAME> [--from ORIGIN]
+                           # put a skill or a rule in: the workspace's own, a
+                           # loaded workspace's, or the shelf's
+mind uninstall <NAME>      # take one Mindflayer installed back out
 mind agents [add|remove] <AGENT>... [--yes]
                            # which agents work here, carrying what is
                            # installed along; without --yes, say what would
@@ -361,15 +367,17 @@ flayer scan [DIR...] [--depth N] [--json]
 flayer link <path>...      # register mind projects with it
 flayer unlink <path>...    # drop them
 flayer minds [DIR...]      # a screen for linking and unlinking many at once
-flayer load <path>...      # offer another workspace's own skills, read live
+flayer load <path>...      # offer another workspace's own skills and rules,
+                           # read live
 flayer unload <path>...    # stop offering them
 
 flayer gather git <URL>    # collect skills from a repository onto the shelf
 flayer gather list         # what is on the shelf or loaded, and where from
-flayer install             # a screen for putting skills into its projects
-flayer install -p PROJECT <SKILL> [--from ORIGIN]
+flayer install             # a screen for putting skills and rules into its
+                           # projects
+flayer install -p PROJECT <NAME> [--from ORIGIN]
                            # one, without the screen
-flayer uninstall -p PROJECT <SKILL>
+flayer uninstall -p PROJECT <NAME>
 flayer agents|share|targets -p PROJECT ...
                            # mind's agents, share and targets, for one of its
                            # projects
@@ -413,7 +421,8 @@ when only one kind is in play, the project column when only one project is:
 the same rule in both cases.
 
 A name is bare until it needs qualifying. When one name belongs to two kinds,
-`mind show deploy` shows both and `mind show rule:deploy` picks one.
+`mind show deploy` shows both and `mind show rule:deploy` picks one; `mind
+install deploy` and `mind uninstall deploy` refuse it, saying which to type.
 
 The qualifier is a **colon**, not a slash, because a rule's name is already a
 route: `rules/skills/naming.md` is the rule `skills/naming`, and a slash
@@ -761,8 +770,9 @@ on one machine, not programs on two.
 
 ## Installing into a project
 
-`flayer install` opens a screen. Projects on the left, the shelf on the right,
-ticked where that project already holds the skill:
+`flayer install` opens a screen. Projects on the left, and on the right what
+can be installed into the one under the cursor, one kind at a time, ticked
+where that project already holds it:
 
 ```
 ┌ Projects ──────────┐┏ Skills in collapse ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
@@ -771,14 +781,15 @@ ticked where that project already holds the skill:
 │                    │┃> [x] deploy  + install                           ┃
 │                    │┃      Ship the service to staging  [acme/skills]  ┃
 └────────────────────┘┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
-↑↓ skill   space mark   ←/esc back   a apply   q quit
+↑↓ skill   space mark   tab rules   ←/esc back   a apply   q quit
 1 to install, 0 to remove
 ```
 
-Move down the projects and the right column follows. `→` or `enter` goes into
-the skills, `space` ticks and unticks, `←` or `esc` comes back. Nothing touches
-a file until `a`, which asks first and then does everything at once: installs
-and removals together.
+Move down the projects and the right column follows. `tab` shows the rules in
+it instead, and the skills again (`shift+tab` goes the other way). `→` or
+`enter` goes into the column, `space` ticks and unticks, `←` or `esc` comes
+back. Nothing touches a file until `a`, which asks first and then does
+everything at once, of both kinds: installs and removals together.
 
 Each project keeps its own ticks, so one pass across the list is one plan for
 the whole workspace. The number beside a project is how many of its boxes you
@@ -786,8 +797,11 @@ have moved.
 
 **Unticking removes.** A skill is copied wherever the project's agents read it
 ([below](#where-a-project-keeps-its-artifacts)), or into the directory a
-`mind.toml` names, and unticking it deletes those copies again. With one
-exception, which is the rule the whole command works by:
+`mind.toml` names, and unticking it deletes those copies again. A rule is
+written into the project's `AGENTS.md`, and into Claude's own rule files
+where Claude needs it there ([the two kinds](#the-two-kinds)), and unticking
+it takes it back out of both. With one exception, which is the rule the whole
+command works by:
 
 > Mindflayer only manages what it installed.
 
@@ -796,13 +810,16 @@ there, is shown ticked and marked `(not installed by mindflayer)`. It cannot be
 unticked and it is never overwritten or deleted: somebody wrote it. The ledger
 is what knows the difference. One in any of the folders an install would write
 refuses the whole install, and the others are left alone too, so the agents
-never read two different skills of one name.
+never read two different skills of one name. So is a rule whose section in
+`AGENTS.md` Mindflayer did not write there: another workspace linking the
+project did, or a hand that copied a marker.
 
 Two shelves can offer `commit-style`, but a project has one directory of that
 name, so ticking one unticks the other rather than letting both apply and the
-second win quietly.
+second win quietly. A skill and a rule of one name are two things, and keep a
+box each.
 
-The screen offers the workspace's own skills too, first and marked
+The screen offers the workspace's own skills and rules too, first and marked
 `[workspace]`: that is how something written once for every project reaches
 the ones that want it.
 
@@ -812,14 +829,42 @@ the ones that want it.
 mind install commit-style                  # into the project you are in
 flayer install -p collapse commit-style    # into one the workspace manages
 mind install deploy --from workspace       # when two places offer one name
+mind install git/commits                   # a rule, by its route
+mind install rule:deploy                   # when a skill and a rule share it
 mind uninstall commit-style
 ```
 
-The same rule holds: a skill somebody wrote is never overwritten or removed,
-and says so. `--from` takes `workspace`, a shelf source's URL, or a loaded workspace's path
-or name, and is only
-needed when two places offer the same name: which of the two lands in the
-project's one folder of that name is not something to guess.
+The same rule holds: a skill or a rule somebody wrote is never overwritten or
+removed, and says so. `--from` takes `workspace`, a shelf source's URL, or a
+loaded workspace's path or name, and is only needed when two places offer the
+same name: which of the two lands in the project's one folder of that name is
+not something to guess.
+
+A rule's line says it is one, since a route reads like a path. One about some
+files only reaches Claude alone, and the install says so, as
+[`status`](#what-each-project-has) does whenever asked; a name a skill and a
+rule share needs its kind:
+
+```
+$ mind install git/commits
+installed rule git/commits into collapse, from workspace
+$ mind install style/comments
+installed rule style/comments into collapse, from workspace
+warning: rule `style/comments` states `paths`, so it reaches claude only: codex and opencode read no .claude/rules
+$ mind install deploy
+error: `deploy` is offered as a skill and as a rule, so say which: `skill:deploy` or `rule:deploy`
+$ mind install rule:deploy
+installed rule deploy into collapse, from workspace
+```
+
+A rule the project received is not one of its own, but rendered from where it
+was installed from, so `mind edit`, `rename` and `remove` leave it and say
+how to take it out:
+
+```
+$ mind remove git/commits --yes
+error: `git/commits` is a rule collapse received, rendered from where it was installed from rather than kept in it, so it is not changed from here: uninstall it, or change it where it is offered and install it again
+```
 
 ### Built out of sight
 
@@ -866,23 +911,23 @@ above it, or else [the one in your home](#the-workspace-in-your-home). The last
 line always says which.
 
 What it records is where the workspace is, in the `loaded` list of your
-`flayer.toml`, and its skills are **read from there every time**: edit one in
-`skills-equipo` and the next `mf install` of it updates the copy in `api`, with
-nothing to load again. `flayer gather list` and the install screen show loaded
-skills beside the shelf's, as coming from `load:<path>`, which is also what
-`--from` takes, as do the path you gave `load`, from wherever you type it, and
-the workspace's name. Only a loaded workspace's own are offered, never what it
-loads in turn. `flayer unload <path>` forgets it; what was already installed
-from it stays where it is. `mind load <path>` does the same from inside a
-project, into the workspace above it.
+`flayer.toml`, and its skills and rules are **read from there every time**:
+edit one in `skills-equipo` and the next `mf install` of it updates the copy
+in `api`, with nothing to load again. `flayer gather list` and the install
+screen show what it offers beside the shelf's, as coming from `load:<path>`,
+which is also what `--from` takes, as do the path you gave `load`, from
+wherever you type it, and the workspace's name. Only a loaded workspace's own
+are offered, never what it loads in turn. `flayer unload <path>` forgets it;
+what was already installed from it stays where it is. `mind load <path>` does
+the same from inside a project, into the workspace above it.
 
 A loaded workspace is usually somebody else's, so what it offers is read with
 suspicion: a skill whose declared name is not one plain folder name (`..`,
-`a/b`, an absolute path) is not offered, a symlink pointing out of the loaded
-workspace is not followed, and nothing it keeps as its own is ever overwritten
-or removed from a project that shares its folder. Each of these is a
-`warning:` line, like a skill that cannot be read or a loaded workspace that
-has gone.
+`a/b`, an absolute path) is not offered, and neither is a rule filed under a
+route no rule may be named; a symlink pointing out of the loaded workspace is
+not followed, and nothing it keeps as its own is ever overwritten or removed
+from a project that shares its folder. Each of these is a `warning:` line,
+like a skill that cannot be read or a loaded workspace that has gone.
 
 ## What each project has
 
@@ -921,12 +966,27 @@ status -p tanukeys` of one; as in `list`, the project column is there only
 when there is more than one project to tell apart, and the kind column only
 when there is more than one kind.
 
+A rule the project received is read from what was installed and from its
+`AGENTS.md`, and its agents are the ones it reaches: all of the project's
+through the block, Claude alone for one about some files, which goes to
+Claude's own rule files and nowhere else. One some of the project's agents
+read nowhere is said, as for `collapse` given `git/commits` and
+`style/comments` [above](#without-the-screen):
+
+```
+$ mind status
+git/commits     installed  claude,codex,opencode  workspace
+style/comments  installed  claude                 workspace
+warning: codex and opencode do not read rule `style/comments` in collapse
+```
+
 A linked project whose directory has gone is listed as `stale`, with the
 reason on stderr, and the rest of the report still prints; the exit status is
 non-zero, as for anything that could not be read. So is a project that
 [installs where some of its agents do not read](#installing-somewhere-else):
 a warning names the agents that read none of its folders, and `unreached` in
-the JSON says the same.
+the JSON says the same; and one given a rule some of its agents read nowhere,
+which `missed` in the JSON says.
 
 `--json` prints the same report in the envelope every reading command's
 `--json` will share: the data, the warnings that would have gone to stderr,
@@ -946,6 +1006,7 @@ $ flayer status -p tanukeys --json
         "agents": [],
         "stale": null,
         "unreached": [],
+        "missed": [],
         "artifacts": [
           {
             "kind": "skill",
@@ -1000,12 +1061,12 @@ migrate --library` [moves them](#upgrading). Either way nothing is made until
 the first one is added.
 
 A project holds what is in its own folders, because that is what its agents
-read, so the workspace's skills reach a project by being installed into it
-(`mind install`, `flayer install`, or the install screen) and are managed there
-like anything else Mindflayer installed. Every command that changes an
-artifact works on the workspace's own the same way it works on a project's:
-`flayer edit`, `flayer rename`, `flayer remove`, and `-p <project>` for one of
-its projects instead.
+read, so the workspace's skills and rules reach a project by being installed
+into it (`mind install`, `flayer install`, or the install screen) and are
+managed there like anything else Mindflayer installed. Every command that
+changes an artifact works on the workspace's own the same way it works on a
+project's: `flayer edit`, `flayer rename`, `flayer remove`, and `-p <project>`
+for one of its projects instead.
 
 ## The TUI
 
@@ -1052,9 +1113,9 @@ Every key runs a command you could have typed, through the same parser:
 | `T` | type the folders the project installs skills in, or clear them for where its agents read | `mind -C <project> targets set --yes skills <dir>...`, `mind -C <project> targets reset --yes skills` |
 | `v` | validate everything | `flayer validate` |
 | `g` | gather from a git repository, showing how far it has got; `esc` stops it, until it starts placing | `flayer gather git <url>` |
-| `L` | load another workspace's own skills; enter on a loaded one unloads it | `flayer load <path>`, `flayer unload <path>` |
+| `L` | load another workspace's own skills and rules; enter on a loaded one unloads it | `flayer load <path>`, `flayer unload <path>` |
 | `s` | what is on the shelf | `flayer gather list` |
-| `i` | install from the workspace's own, a loaded workspace, or the shelf | `flayer install` |
+| `i` | install skills and rules from the workspace's own, a loaded workspace, or the shelf; `tab` switches between them | `flayer install` |
 | `R` | read the disk again | nothing: it changes nothing |
 
 A project whose own commands would reach another workspace (linked from
@@ -1202,6 +1263,17 @@ with a warning, since Claude would load the skill as a plugin, hooks and MCP
 servers included. And a project at your home is refused an install, since its
 `.claude/skills` and `.agents/skills` are the ones every project reads.
 
+A rule goes into the block in the project's `AGENTS.md` instead ([the two
+kinds](#the-two-kinds)), rendered there with every other rule the project
+has. An `AGENTS.md` Mindflayer makes for it is kept out of git by the same
+block in a local project, and goes with the last rule; one that was there is
+yours, and keeps everything outside the block. A local project writes into
+one git tracks only with `edit_tracked` (`mind share local --edit-tracked`):
+without it, Claude gets each rule from a file of its own in
+`.claude/rules/mindflayer`, and the install warns that Codex and OpenCode read
+none of them. A project an older Mindflayer made is given a copy of the rule
+in the folder its `mind.toml` names, filed by its route.
+
 ### Changing its agents, or how it shares
 
 When a project starts using Codex, stops using Claude, or moves between local
@@ -1234,7 +1306,9 @@ what was installed; one in a folder no agent reads any more is left and
 said, as `notes` is above. Running the same command again changes nothing
 once it is done. A project has to name at least one agent, so removing the
 last is refused, and so is a project an older Mindflayer made, marked by a
-`mind.toml`, which `mind migrate` moves to settings first.
+`mind.toml`, which `mind migrate` moves to settings first. Its rules follow
+later, at the next install or uninstall of one, which renders every rule the
+project has for the agents and the share mode it has then.
 
 `mind share` sets the share mode, and `edit_tracked` with it, off unless
 `--edit-tracked` is given:

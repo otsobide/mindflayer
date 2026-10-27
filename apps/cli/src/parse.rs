@@ -219,8 +219,9 @@ pub enum Command {
     /// Drop this project from the flayer workspace above it.
     Unlink,
 
-    /// Offer other flayer workspaces' own skills to the workspace above this
-    /// project, read live from where they are; on its own, list what it loads.
+    /// Offer other flayer workspaces' own skills and rules to the workspace
+    /// above this project, read live from where they are; on its own, list
+    /// what it loads.
     Load {
         /// Each workspace's directory, the one holding `.mindflayer`
         /// [default: list the loaded ones].
@@ -235,10 +236,11 @@ pub enum Command {
         workspaces: Vec<PathBuf>,
     },
 
-    /// Put a skill into this project: one of the workspace's own, or one
-    /// from its shelf.
+    /// Put a skill or a rule into this project: one of the workspace's own,
+    /// a loaded workspace's, or one from its shelf.
     Install {
-        /// The skill's name.
+        /// Its name: a skill's, or a rule's route like `git/commits`;
+        /// `skill:<name>` or `rule:<route>` when one name is both.
         name: String,
 
         /// Where it comes from, when two places offer that name: `workspace`,
@@ -247,9 +249,9 @@ pub enum Command {
         from: Option<String>,
     },
 
-    /// Take a skill Mindflayer installed back out of this project.
+    /// Take a skill or a rule Mindflayer installed back out of this project.
     Uninstall {
-        /// The skill's name.
+        /// Its name, or `kind:name` when one name is both.
         name: String,
     },
 
@@ -547,13 +549,14 @@ pub enum FlayerCommand {
         projects: Vec<PathBuf>,
     },
 
-    /// Offer other flayer workspaces' own skills to this workspace's projects,
-    /// read live from where they are.
+    /// Offer other flayer workspaces' own skills and rules to this
+    /// workspace's projects, read live from where they are.
     ///
     /// Into the workspace at or above here that is not one being loaded, or
     /// else the default one in your home: so `flayer load .` from inside a
-    /// workspace full of skills loads it into the one that manages you. On its
-    /// own, it lists what this workspace loads and what each offers.
+    /// workspace full of skills and rules loads it into the one that manages
+    /// you. On its own, it lists what this workspace loads and what each
+    /// offers.
     Load {
         /// Each workspace's directory, the one holding `.mindflayer`
         /// [default: list the loaded ones].
@@ -561,7 +564,7 @@ pub enum FlayerCommand {
         workspaces: Vec<PathBuf>,
     },
 
-    /// Stop offering a loaded workspace's skills.
+    /// Stop offering a loaded workspace's skills and rules.
     Unload {
         /// Each workspace's directory, as loaded. It need not still exist.
         #[arg(required = true, value_name = "WORKSPACE")]
@@ -606,17 +609,19 @@ pub enum FlayerCommand {
     #[command(subcommand)]
     Gather(GatherCommand),
 
-    /// Put skills into the projects this workspace manages: the workspace's
-    /// own, or its shelf's.
+    /// Put skills and rules into the projects this workspace manages: the
+    /// workspace's own, a loaded workspace's, or its shelf's.
     ///
-    /// On its own it opens a screen for all of them at once. Given a skill and
+    /// On its own it opens a screen for all of them at once. Given a name and
     /// a project, it installs that one without one.
     Install {
         /// The project to install into.
         #[arg(short, long, value_name = "PROJECT")]
         project: Option<String>,
 
-        /// The skill's name [default: open the screen].
+        /// Its name: a skill's, or a rule's route like `git/commits`;
+        /// `skill:<name>` or `rule:<route>` when one name is both [default:
+        /// open the screen].
         name: Option<String>,
 
         /// Where it comes from, when two places offer that name: `workspace`,
@@ -625,13 +630,13 @@ pub enum FlayerCommand {
         from: Option<String>,
     },
 
-    /// Take a skill Mindflayer installed back out of a project.
+    /// Take a skill or a rule Mindflayer installed back out of a project.
     Uninstall {
         /// The project to take it out of.
         #[arg(short, long, value_name = "PROJECT")]
         project: String,
 
-        /// The skill's name.
+        /// Its name, or `kind:name` when one name is both.
         name: String,
     },
 

@@ -67,8 +67,30 @@ pub struct ProjectStatus {
     /// it. None under the folders each agent reads, which is every project
     /// whose settings name no `targets`.
     pub unreached: Vec<Unreached>,
+    /// Each rule it received that some of its agents read nowhere, all of it
+    /// there as it was installed, in the order of `artifacts`: one about
+    /// some files only, which Claude alone reads, or one Codex and OpenCode
+    /// read nowhere because no block could be written for them.
+    ///
+    /// Said of each rule rather than of its kind, as `unreached` says a
+    /// skill's: a skill reaches the agents that read the folders its kind is
+    /// installed in, the same for every skill, while a rule reaches the ones
+    /// what it states and where its block may go let it. One partly gone is
+    /// partial already, which says so.
+    pub missed: Vec<Missed>,
     /// Everything it holds, grouped by kind and ordered by name.
     pub artifacts: Vec<ArtifactStatus>,
+}
+
+/// One artifact a project received that some of its agents read nowhere,
+/// and those agents.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct Missed {
+    pub kind: Kind,
+    pub name: String,
+    /// The agents among the project's that read it nowhere, in report
+    /// order. Never empty.
+    pub agents: Vec<Agent>,
 }
 
 /// A kind a project installs only in folders some of its agents do not read,
@@ -230,6 +252,7 @@ impl Status {
                         agents: Vec::new(),
                         stale: Some(error.to_string()),
                         unreached: Vec::new(),
+                        missed: Vec::new(),
                         artifacts: Vec::new(),
                     });
                     failures.push(StatusFailure::Stale(error));
@@ -330,15 +353,18 @@ impl ProjectStatus {
         let (rules, installed): (Vec<InstallRecord>, Vec<InstallRecord>) = installed
             .into_iter()
             .partition(|record| record.kind == Kind::Rule && project.settings().is_some());
+        let received: Vec<String> = rules.iter().map(|record| record.name.clone()).collect();
         let rendered = rendered(root, &agents, rules);
+        let artifacts = standing(root, catalog.artifacts(), installed, rendered);
         let status = ProjectStatus {
             name: Some(project.name().to_owned()),
             entry,
             path: root.to_path_buf(),
             stale: None,
             unreached: unreached(project, kinds, &agents),
+            missed: missed(&agents, &artifacts, &received),
             agents,
-            artifacts: standing(root, catalog.artifacts(), installed, rendered),
+            artifacts,
         };
         (status, catalog)
     }
@@ -512,6 +538,35 @@ fn rendered(root: &Path, agents: &[Agent], records: Vec<InstallRecord>) -> Vec<A
                 agents: reached,
                 origin: record.origin,
             }
+        })
+        .collect()
+}
+
+/// Each of `artifacts` that is one of the rules a project marked by its
+/// settings `received`, installed whole, with the agents among `agents`,
+/// its own, that read it nowhere ([`ProjectStatus::missed`]).
+///
+/// From the rows as the report lists them, so what is said of a rule is
+/// what its row says it reaches.
+fn missed(agents: &[Agent], artifacts: &[ArtifactStatus], received: &[String]) -> Vec<Missed> {
+    artifacts
+        .iter()
+        .filter(|held| {
+            held.kind == Kind::Rule
+                && held.state == State::Installed
+                && received.contains(&held.name)
+        })
+        .filter_map(|held| {
+            let agents: Vec<Agent> = agents
+                .iter()
+                .copied()
+                .filter(|agent| !held.agents.contains(agent))
+                .collect();
+            (!agents.is_empty()).then(|| Missed {
+                kind: held.kind,
+                name: held.name.clone(),
+                agents,
+            })
         })
         .collect()
 }

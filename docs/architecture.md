@@ -32,8 +32,9 @@ workspace (`examples/.mindflayer/flayer.toml`) holding two skills and two
 rules of its own, so there is something to install while gathering is
 paused. A workspace rather than files the binaries embed or `flayer init`
 copies in, because [loading](#loading-a-third-place-read-live) already offers
-one's own skills to any other, read live from the clone: the examples take
-the path a team's workspace takes, and need no command of their own.
+one's own skills and rules to any other, read live from the clone: the
+examples take the path a team's workspace takes, and need no command of their
+own.
 
 Its `[directories]` are spelled out, so it reads the same whatever a new
 workspace defaults to
@@ -47,8 +48,9 @@ its own, such as `.claude` or `.agents`, not in one called `skills` or
 `apps/cli/tests/examples_test.rs` uses the folder where it is rather than a
 copy, since that folder is what a person loads. It holds every example to
 `validate` with neither a problem nor a warning, installs `commit-style` with
-the reference it carries, checks that nothing it ran wrote into the folder,
-and finds the README's walk-through in the output of the commands it shows.
+the reference it carries and both rules where the README says they go, checks
+that nothing it ran wrote into the folder, and finds the README's walk-through
+in the output of the commands it shows.
 An example whose summary changes changes the README with it.
 
 ### No em dash in what the repository says
@@ -1840,11 +1842,43 @@ installation records its origin, in the spelling `--from` takes; one from the
 shelf also points at the source it came from, and one of the workspace's own
 at none, because it came from nowhere but the workspace.
 
-`mind install <skill>` and `flayer install -p <project> <skill>` install one
-without the screen, through `install::offered`: the one candidate of that name,
-or an error naming every place that offers it when there is more than one;
-`--from` then says which, because which of two lands in the project's one folder
-of that name is not something to guess.
+`mind install <name>` and `flayer install -p <project> <name>` install one
+without the screen, through `install::offered_typed`: the one candidate of that
+name, or an error naming every place that offers it when there is more than
+one; `--from` then says which, because which of two lands in the project's one
+folder of that name is not something to guess.
+
+### Which kind a name is
+
+A name is typed bare or after its kind, `rule:git/commits`, with the colon
+every command takes ([why a qualifier uses a
+colon](#why-a-qualifier-uses-a-colon)), and core reads it (`Reference`).
+Bare, it is the one kind that offers it (`install::offered_typed`), asked
+only of the kinds a copy could be filed under that name
+(`install::is_installable_name`), so `git/commits`, which no skill can be
+called, is a rule's however it is typed. A name two kinds offer is refused
+(`InstallError::OfferedAsKinds`), naming what to type for each, as `mind show`
+refuses one: a skill and a rule of one name are two things. Defaulting a bare
+name to a skill, what every install meant before rules could be installed, was
+turned down: a route would need its qualifier for nothing, and a name both
+kinds offer would quietly install the skill. When no kind offers it, the first
+refusal that says more than that nothing is offered is the one given, so a
+project with nowhere to put a skill is told so, as it was. `--from` is asked
+of each kind as typed, and only when that kind is offered nothing, as a path
+to a loaded workspace (`install::resolve_from`): asked once for every kind,
+the refusal of a project with nowhere to put a skill would hide a rule the
+path offers.
+
+Taking one out reads the ledger instead (`install::uninstall_typed`): a bare
+name is the one kind recorded under it, one recorded as two is refused
+(`InstallError::InstalledAsKinds`), since taking both out would be twice what
+was asked, and one recorded as neither changes nothing whichever kind it is
+taken for, so each kind it could be says what is there, somebody's of either
+before the first's absence.
+
+A line about installing says a rule as `rule <route>`, as `add` and `remove`
+say one, and a skill by its name alone, as every such line did before: a
+route reads like a path, and one name can be both.
 
 ### What no copy holds
 
@@ -1935,7 +1969,10 @@ installing's trust in the name a `SKILL.md` declares under strain. So:
 - **A name must be one folder name** (`install::is_folder_name`). It is joined
   onto the project's folder, and replacing starts with deleting: `..` would
   delete the project, an absolute path anything at all. Such an artifact is
-  not offered from anywhere, and `install`/`uninstall` refuse it outright.
+  not offered from anywhere, and `install`/`uninstall` refuse it outright. A
+  rule's route is held to the rules every name is instead
+  (`install::is_installable_name`), so it never climbs out of the folder it
+  is filed in.
 - **Symlinks are followed only inside where the artifact comes from**
   (`copy::tree`'s `within`): the loaded workspace, the workspace's own root,
   the clone being gathered. One pointing out is refused, not copied, because
@@ -1950,10 +1987,12 @@ installing's trust in the name a `SKILL.md` declares under strain. So:
   any path there, not only one with a manifest, so a folder of notes started
   by hand is never replaced.
 
-What a load cannot offer (a workspace that has gone, an artifact that cannot
-be read, a name that is refused) is collected by `install::offered_by_loads`
-and said as `warning:` lines wherever offers are shown or used, and the
-install screen reports a row it could not apply and carries on with the rest.
+What a load offers is every kind, and what it cannot offer (a workspace that
+has gone, an artifact that cannot be read, a name that is refused) is
+collected by `install::offered_by_loads` and said as `warning:` lines wherever
+offers are shown or used, so what `flayer load`, `gather list` and the TUI
+count is what can be installed. The install screen reports a row it could not
+apply and carries on with the rest.
 Two spellings of one loaded directory are one source; `load_all`,
 `unload_all` and `unlink_all` rewrite the marker once, for all of the paths or
 none.
@@ -2194,9 +2233,9 @@ unrecorded in a folder it drops; `targets reset` is the same the other way.
 
 ### The screen, and why it is three files
 
-`flayer install` is a two-column screen: projects on the left, the shelf as
-seen from the project under the cursor on the right. It is split so that only
-one of its three parts needs a terminal:
+`flayer install` is a two-column screen: projects on the left, and on the
+right what can be installed, as seen from the project under the cursor. It is
+split so that only one of its three parts needs a terminal:
 
 - `install/state.rs`: what a key does. Marking a box is a statement of intent
   and touches nothing; it is a plain state machine a test drives by pressing
@@ -2212,6 +2251,19 @@ Everything marked is applied in one batch, and what that batch did is printed
 afterwards as an ordinary `Outcome`, so a report from the screen reads like a
 report from any other command, warnings on stderr and a non-zero exit when
 something was left alone.
+
+The right column holds every kind's offers, filtered to one kind at a time:
+`tab` shows the next (`Screen::kind`), skills first, and a project's marks of
+every kind are applied together. A filter rather than a column a kind, so the
+screen keeps two columns however many kinds there are; and rather than every
+kind in one list, where a skill and a rule of one name would sit side by side
+as two boxes for what reads as one thing. A row is one kind and name, so
+ticking one offer unticks another of the same kind and name, and leaves a
+rule of a skill's name alone. Which offer of a rule the project holds is the
+one its record came from (`install::is_current`), since nothing in a project
+holds a rule's bytes alone to compare. A project offered nothing of the kind
+shown says what core says it cannot take (`install::receives`), or where that
+kind comes from: a rule from the workspace's own or a load, never the shelf.
 
 `try_init` rather than `init`, here and in the TUI: these are the commands that
 need a terminal, and being run without one deserves a sentence rather than a
@@ -2296,6 +2348,16 @@ cannot be read holds none of them, and the next render says why. A rule
 copied into a project a `mind.toml` marks is discovered as its copy, as a
 skill is. A name the project authors a rule of too keeps the one entry
 discovery gives it, as a skill's does.
+
+Each rule a project marked by its settings received that some of its agents
+read nowhere is named in `missed`, with those agents, and is a warning beside
+the report too: one about some files, which Claude alone reads, or one Codex
+and OpenCode read nowhere because its block could not be written. Of each
+rule rather than of its kind, as `unreached` says a skill's: a skill reaches
+the agents that read the folders its kind goes to, the same for every skill,
+while a rule reaches the ones what it states, and where its block may go, let
+it. Only one installed whole, from the rows as the report lists them: one
+partly gone is partial already, which says so.
 
 Each project also names, in `unreached`, every kind it installs only in
 folders some of its agents do not read, with those agents: what a project's
@@ -2408,7 +2470,7 @@ root rather than against wherever the process started. What the screen was
 opened with is passed along rather than spelled: its home, and the `-W` or
 activation that chose its workspace (`tui::execute`), as they were given to
 `flayer` itself. A command that opens a screen of its own
-(`flayer`, `flayer tui`, `flayer minds`, `flayer install` with no skill named,
+(`flayer`, `flayer tui`, `flayer minds`, `flayer install` with nothing named,
 `mind`, `mind tui`) is refused if it ever reaches that path, rather than drawn
 inside this one.
 
@@ -3813,9 +3875,9 @@ workspace's own rules and from a load's, by the route it is filed under:
 held to the rules every name is, as the block holds it (`name_issues`),
 rather than to one folder name, and two places offering one route are
 refused as for a skill (`OfferedTwice`), `--from` saying which. A rule is
-never gathered (#111), so the shelf offers none. The front ends still list
-and count only skills from a load (`offered_by_loads`), until the command
-line and the screens install rules (#46).
+never gathered (#111), so the shelf offers none. The command line, the
+install screen and what a load is said to offer take rules as they take
+skills ([which kind a name is](#which-kind-a-name-is)).
 
 - **One render for every rule.** The block is one file, written whole, so
   a project marked by its settings is given its rules together: installing
@@ -3856,13 +3918,15 @@ line and the screens install rules (#46).
   rule from its rule files, since the reach of no block is the fallback,
   and the agents that read rules only in the block, Codex and OpenCode
   among those the project names, are said to read none of them
-  (`Warning::Withheld`). A block written there before, by a project shared
-  then, is left as it is, and said (`Warning::Left`), as an import left in
-  a tracked `CLAUDE.md` is. A rule whose section it holds is not
-  uninstalled meanwhile (`InstallError::Withheld`): its section would stay,
-  with no record, and the next render that may edit the file would take
-  this workspace's own section for somebody's. Sharing the project, setting
-  `edit_tracked`, or taking the section out by hand lets it go.
+  (`Warning::Withheld`), while the project has a rule the block would have
+  held: with none left, or only rules about some files, which reach Claude
+  alone anyway, nothing is missed. A block written there before, by a
+  project shared then, is left as it is, and said (`Warning::Left`), as an
+  import left in a tracked `CLAUDE.md` is. A rule whose section it holds is
+  not uninstalled meanwhile (`InstallError::Withheld`): its section would
+  stay, with no record, and the next render that may edit the file would
+  take this workspace's own section for somebody's. Sharing the project,
+  setting `edit_tracked`, or taking the section out by hand lets it go.
 - **Somebody's section is never written over.** A section in the block
   that the ledger does not record was written by another workspace that
   links the project, or by a hand that copied a marker, and rendering the
@@ -3920,6 +3984,13 @@ line and the screens install rules (#46).
 - **Held by the workspace's lock**, from before the records are read until
   the last is written, as an install of a skill holds it; none of the three
   renderers takes it.
+- **A change says what it found, once.** What the three renderers and the
+  render as a whole have to warn of is gathered in core
+  (`Rendered::warnings_of`), so no front end says one renderer's and forgets
+  another's. Not what holds of another rule than the one installed or taken
+  out whatever the render, that it reaches Claude alone or no agent: that
+  was said when the rule went in, `status` says it whenever asked, and saying
+  it on every render made installing one rule warn, and fail, for another.
 
 ## One entry of a config file somebody else owns
 
@@ -4156,9 +4227,14 @@ fixed. A template is looked up by one folder name for the same reason, since
 not something to guess about. Both looks are only in the folders the project
 authors in (`Catalog::discover_authored`): a listing also shows what sits in
 a project's agents' folders, and none of that is the project's to change, so
-a name found only there is refused (`NotAuthored`). The TUI lists unreadable files in the same way,
-by the name their place gives them (`lifecycle::identify`), so they can be
-reached with a key rather than only read about in a warning.
+a name found only there is refused (`NotAuthored`). So is a rule the project
+only received, a section of its block, never authored in place
+([D-23](#d-23-what-a-project-received-is-an-installed-view)): a front end
+finds what to change through `lifecycle::find_to_change`, which refuses one
+the ledger records as received (`Received`), saying how to take it out. The
+TUI lists unreadable files in the same way, by the name their place gives
+them (`lifecycle::identify`), so they can be reached with a key rather than
+only read about in a warning.
 
 ### Rename rewrites one line
 
@@ -4967,7 +5043,11 @@ Carrying it out, #45 lists the rules a project marked by its settings
 received in `status`, from the ledger and the block of its `AGENTS.md`, and
 never through discovery ([what each project has](#what-each-project-has)).
 A lifecycle change finds no section, since it looks only where the project
-authors; saying so with a hint to uninstall is the front ends' (#46).
+authors, and #46 says so with a hint to uninstall: the front ends find what
+to change through `lifecycle::find_to_change`, which refuses a name the
+project authors nothing of but the ledger records as a rule it received
+(`LifecycleError::Received`), where "nothing named" would deny what `status`
+just listed.
 
 ## Open questions
 
@@ -5017,13 +5097,6 @@ authors; saying so with a hint to uninstall is the front ends' (#46).
   `.mindflayer` yet) finds a marker it cannot read, or fails to create one.
   Writing the marker whole under a name of its own and linking it into place
   would let the second find it whole.
-- **Rules from the command line.** Core installs a rule as it installs a
-  skill ([installing rules](#installing-rules)), but `mind install`,
-  `flayer install` and the install screen still take skills only, and what
-  a load is said to offer counts its skills (`offered_by_loads`), so [the
-  examples'](#the-examples-are-a-workspace) two rules are listed and
-  validated but offered by no front end. #46 brings rules to each, with
-  `rule:` to say which kind a name is.
 - **Examples outside a clone.** The examples are a folder in the repository,
   so only somebody with a clone has them to load; a binary that arrives some
   other way, as a release would, has none. Embedding them in the binary, or

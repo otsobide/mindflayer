@@ -84,6 +84,64 @@ pub struct Rendered {
     pub warnings: Vec<Warning>,
 }
 
+impl Rendered {
+    /// Everything a render made for a change of the rule `changed` has to
+    /// warn of, each as a front end says it after `warning: `: the rules as
+    /// a whole first ([`Warning`]), which say which agents read none of
+    /// them, then the block's, the import's and Claude's files' in the order
+    /// they were rendered. Every one, for a render that changed no rule.
+    ///
+    /// Gathered here rather than by each front end, so none says one
+    /// renderer's warnings and forgets another's. Not what is true of
+    /// another rule whatever the render: that it reaches Claude alone, or no
+    /// agent. That was said when it went in, `status` says it whenever
+    /// asked, and saying it again would make an install of one rule warn,
+    /// and fail, for another. Nor `still_excluded`, which an uninstall says
+    /// of the rule it took out ([`Removed::Removed`]), and an install of the
+    /// project.
+    pub fn warnings_of(&self, changed: Option<&str>) -> Vec<String> {
+        let other = |route: &str| changed.is_some_and(|changed| changed != route);
+        let rules = self.warnings.iter().filter(|warning| match warning {
+            Warning::Unreached { route } => !other(route),
+            Warning::Withheld { .. }
+            | Warning::Left { .. }
+            | Warning::Edited { .. }
+            | Warning::Unremoved { .. } => true,
+        });
+        let block = self.block.iter().flat_map(|block| &block.warnings);
+        let files = self.files.warnings.iter().filter(|warning| match warning {
+            claude_rules::Warning::ClaudeOnly { route, .. } => !other(route),
+            claude_rules::Warning::Foreign { .. }
+            | claude_rules::Warning::Edited { .. }
+            | claude_rules::Warning::Failed { .. } => true,
+        });
+        rules
+            .map(ToString::to_string)
+            .chain(block.map(ToString::to_string))
+            .chain(self.import.warnings.iter().map(ToString::to_string))
+            .chain(files.map(ToString::to_string))
+            .collect()
+    }
+
+    /// What nothing went wrong with but is worth knowing, each as a front
+    /// end says it after `note: `: that what the render kept out of git is
+    /// kept out of nothing, outside a git work tree ([`Excluded::warning`]).
+    /// Once, though the block and Claude's files each find it.
+    pub fn notes(&self) -> Vec<String> {
+        let mut notes: Vec<String> = Vec::new();
+        for note in [&self.excluded, &self.files.excluded]
+            .into_iter()
+            .flatten()
+            .filter_map(Excluded::warning)
+        {
+            if !notes.contains(&note) {
+                notes.push(note);
+            }
+        }
+        notes
+    }
+}
+
 /// Something a render of a project's rules has to say, which kept nothing
 /// from being written.
 #[derive(Debug, Clone, PartialEq, Eq, Error)]
@@ -1012,7 +1070,13 @@ fn render_held(
             .copied()
             .filter(|agent| *agent != Agent::Claude)
             .collect();
-        if !missed.is_empty() {
+        // Said only of a render that holds a rule the block would have held:
+        // one with no rule left misses nothing, and one whose rules are all
+        // about some files says of each that it reaches Claude alone. A rule
+        // kept as the project holds it counts, since what it is about cannot
+        // be read where it is offered no longer.
+        let missing = !sections.is_empty() || !unoffered.is_empty();
+        if missing && !missed.is_empty() {
             warnings.push(Warning::Withheld {
                 file: file.clone(),
                 why,

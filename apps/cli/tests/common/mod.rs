@@ -387,6 +387,15 @@ pub fn write_tree(repo: &gix::Repository, dir: &Path) -> gix::ObjectId {
         .detach()
 }
 
+/// Put every file under `work_tree`, a repository, in its index, as `git
+/// add` would: what git then tracks, without a commit.
+pub fn indexed(work_tree: &Path) {
+    let repository = gix::open_opts(work_tree, gix::open::Options::isolated()).unwrap();
+    let tree = write_tree(&repository, work_tree);
+    let mut index = repository.index_from_tree(&tree).unwrap();
+    index.write(Default::default()).unwrap();
+}
+
 /// Make `root`, a folder, a mind project as a person would: a git
 /// repository, given `mind init`.
 ///

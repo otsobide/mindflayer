@@ -5,7 +5,7 @@
 //! a table naming no more than its rows need to be told apart.
 
 use mindflayer_core::{
-    Agent, FlayerWorkspace, Kind, MindProject, Status, StatusFailure, Unreached,
+    Agent, FlayerWorkspace, Kind, MindProject, Missed, Status, StatusFailure, Unreached,
 };
 
 use super::consulted;
@@ -136,13 +136,15 @@ impl Layout {
 }
 
 /// What a report could not read, each as a warning says it, without the
-/// prefix, and then each kind a project installs only where some of its
-/// agents do not read.
+/// prefix, then each kind a project installs only where some of its agents
+/// do not read, and each rule it received that some of them read nowhere.
 ///
 /// A warning, and a non-zero exit, though the project is read whole: what
 /// is installed there reaches those agents no more than if it had gone,
 /// which is what a report is asked to say. Pointing them at the folder, or
-/// `targets reset`, ends it.
+/// `targets reset`, ends the first; the second is what a rule about some
+/// files is, or a local project's tracked `AGENTS.md` keeps from Codex and
+/// OpenCode, which sharing the project or `edit_tracked` ends.
 fn said(status: &Status, failures: &[StatusFailure]) -> Vec<String> {
     let mut said: Vec<String> = failures.iter().map(ToString::to_string).collect();
     for project in &status.projects {
@@ -157,8 +159,30 @@ fn said(status: &Status, failures: &[StatusFailure]) -> Vec<String> {
                 .iter()
                 .map(|unreached| unread(&printable(name), unreached, false)),
         );
+        said.extend(
+            project
+                .missed
+                .iter()
+                .map(|missed| unseen(&printable(name), missed)),
+        );
     }
     said
+}
+
+/// What is said of `missed`, something `project` received that some of its
+/// agents read nowhere: by `status`, and by the TUI's pane of the project.
+pub(crate) fn unseen(project: &str, missed: &Missed) -> String {
+    let does = if missed.agents.len() == 1 {
+        "does"
+    } else {
+        "do"
+    };
+    format!(
+        "{} {does} not read {} `{}` in {project}",
+        spoken(&missed.agents),
+        missed.kind,
+        printable(&missed.name)
+    )
 }
 
 /// What is said of `unreached`, a kind `project` installs only in folders
