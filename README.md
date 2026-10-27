@@ -825,6 +825,11 @@ it tells: a copy edited by hand or with `mind edit`, a file added to it, or a
 rule's section of `AGENTS.md` rewritten. Only `--force` on [the command
 line](#without-the-screen) writes over it or takes it out.
 
+An install with a copy gone since, deleted by hand or by a `git clean -X`,
+opens unticked and marked `(a copy gone since it was installed)`: ticking it
+puts every copy back. One that still has a copy left is taken out on [the
+command line](#without-the-screen), with `uninstall`.
+
 Two shelves can offer `commit-style`, but a project has one directory of that
 name, so ticking one unticks the other rather than letting both apply and the
 second win quietly. A skill and a rule of one name are two things, and keep a

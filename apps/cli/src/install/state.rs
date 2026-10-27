@@ -71,6 +71,13 @@ impl Row {
         self.candidate.standing == Standing::Edited
     }
 
+    /// Mindflayer installed it, and a copy has gone since: its box opens
+    /// empty, as core says ([`Standing::present`]), and marking it puts every
+    /// copy back.
+    pub fn missing(&self) -> bool {
+        self.candidate.standing == Standing::Missing
+    }
+
     /// Whether it is an offer of the same artifact as `other`: one kind and
     /// one name, which a project holds one of. A skill and a rule of one
     /// name are two.

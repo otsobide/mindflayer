@@ -130,6 +130,10 @@ fn row(entry: &super::state::Row) -> ListItem<'_> {
             "  (changed since it was installed)",
             Style::default().fg(Color::DarkGray),
         )),
+        None if entry.missing() => spans.push(Span::styled(
+            "  (a copy gone since it was installed)",
+            Style::default().fg(Color::DarkGray),
+        )),
         None => {}
     }
 

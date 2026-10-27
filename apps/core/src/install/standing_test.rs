@@ -57,5 +57,19 @@ fn only_somebodys_work_and_an_edit_are_not_mindflayers_to_change() {
     assert!(!Standing::Edited.ours());
     assert!(!Standing::Foreign.ours());
     assert!(!Standing::Absent.present());
-    assert!(Standing::Missing.present());
+}
+
+#[test]
+fn an_installation_with_a_copy_gone_is_not_shown_as_held() {
+    // Its box opens empty, for marking it to put every copy back.
+    assert!(!Standing::Missing.present());
+    for standing in [
+        Standing::Current,
+        Standing::Outdated,
+        Standing::Edited,
+        Standing::Orphaned,
+        Standing::Foreign,
+    ] {
+        assert!(standing.present(), "{standing:?}");
+    }
 }

@@ -1858,7 +1858,12 @@ its name:
   and no install writes.
 - **Missing**: a copy the record names is not where it was put, and an
   install puts it back. Every copy gone is still missing rather than absent:
-  the ledger records it, and `flayer uninstall` forgets it.
+  the ledger records it, and `flayer uninstall` forgets it. The install
+  screen opens its box empty all the same (`Standing::present`), saying a
+  copy is gone, so marking it puts every copy back, as it did when every
+  copy gone read as absent: a `git clean -X` takes every copy of a local
+  project at once. Held, the box could only be marked to be taken out, so
+  one with a copy left is taken out with `flayer uninstall`.
 - **Orphaned**: the place it came from no longer offers it. No offer carries
   it onto the install screen, so `standings` is where it is said.
 
