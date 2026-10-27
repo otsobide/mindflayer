@@ -484,7 +484,7 @@ fn unlinking_asks_first_and_forgets_without_deleting() {
     let dir = workspace_with_two();
     let mut app = tui_in(dir.path());
 
-    press_key(&mut app, KeyCode::Char('u'));
+    press_key(&mut app, KeyCode::Char('U'));
     assert!(tui_drawn(&app).contains("Unlink alpha?"));
     let task = press_and_run(&mut app, KeyCode::Char('y'));
 
@@ -500,6 +500,94 @@ fn unlinking_asks_first_and_forgets_without_deleting() {
 }
 
 #[test]
+fn u_updates_the_project_or_the_artifact_under_the_cursor_and_shows_what_it_said() {
+    let dir = workspace_with_own();
+    flayer(dir.path(), &["install", "-p", "alpha", "commit-style"]).unwrap();
+    flayer(dir.path(), &["install", "-p", "beta", "commit-style"]).unwrap();
+    let manifest = own_directory_for(dir.path(), Kind::Skill).join("commit-style/SKILL.md");
+    let since = fs::read_to_string(&manifest).unwrap() + "Since.\n";
+    fs::write(&manifest, &since).unwrap();
+    let mut app = tui_in(dir.path());
+
+    let project = press_and_run(&mut app, KeyCode::Char('u'));
+    let read = tui_drawn(&app);
+    press_key(&mut app, KeyCode::Esc);
+    press_key(&mut app, KeyCode::Down);
+    press_key(&mut app, KeyCode::Right);
+    // Past beta's own skill, `beta`, to what it was given.
+    press_key(&mut app, KeyCode::Down);
+    let artifact = press_and_run(&mut app, KeyCode::Char('u'));
+
+    assert_eq!(
+        project,
+        Some(Task::Update {
+            holder: Holder::Project(String::from("alpha")),
+            reference: None,
+        })
+    );
+    assert_eq!(project.unwrap().describe(), "mind -C alpha update --yes");
+    assert!(
+        read.contains("updated commit-style in alpha, from workspace"),
+        "{read}"
+    );
+    let artifact = artifact.unwrap();
+    assert_eq!(
+        artifact,
+        Task::Update {
+            holder: Holder::Project(String::from("beta")),
+            reference: Some(String::from("skill:commit-style")),
+        }
+    );
+    assert_eq!(
+        artifact.describe(),
+        "mind -C beta update --yes skill:commit-style"
+    );
+    for project in ["alpha", "beta"] {
+        for copy in copies(&dir.path().join(project), "commit-style") {
+            assert_eq!(fs::read_to_string(copy.join("SKILL.md")).unwrap(), since);
+        }
+    }
+    assert!(app
+        .transcript()
+        .contains("$ mind -C alpha update --yes\nupdated commit-style in alpha, from workspace\n"));
+}
+
+#[test]
+fn u_on_the_workspaces_own_row_updates_every_project_it_links() {
+    let dir = workspace_with_own();
+    let mut app = tui_in(dir.path());
+    press_key(&mut app, KeyCode::Up);
+
+    let Some(task) = press_and_run(&mut app, KeyCode::Char('u')) else {
+        panic!("u runs a command");
+    };
+
+    assert_eq!(task.describe(), "flayer update --all --yes");
+    assert!(
+        tui_drawn(&app).contains("nothing to update in alpha and beta"),
+        "{}",
+        tui_drawn(&app)
+    );
+}
+
+#[test]
+fn u_on_a_project_that_cannot_be_opened_says_so_and_runs_nothing() {
+    let dir = workspace_with_two();
+    fs::remove_dir_all(dir.path().join("alpha")).unwrap();
+    let mut app = tui_in(dir.path());
+
+    assert_eq!(
+        press_key(&mut app, KeyCode::Char('u')),
+        tui::state::Step::Stay
+    );
+    assert!(
+        tui_drawn(&app).contains("alpha cannot be opened, so nothing in it can be updated"),
+        "{}",
+        tui_drawn(&app)
+    );
+}
+
+#[test]
 fn a_stale_entry_is_shown_where_it_can_be_unlinked() {
     let dir = workspace_with_two();
     fs::remove_dir_all(dir.path().join("alpha")).unwrap();
@@ -509,7 +597,7 @@ fn a_stale_entry_is_shown_where_it_can_be_unlinked() {
     assert!(drawn.contains("! alpha"), "{drawn}");
     assert!(drawn.contains("cannot be opened"), "{drawn}");
 
-    press_key(&mut app, KeyCode::Char('u'));
+    press_key(&mut app, KeyCode::Char('U'));
     press_and_run(&mut app, KeyCode::Char('y'));
 
     assert!(!registry(dir.path()).contains("\"alpha\""));
@@ -1232,6 +1320,18 @@ fn every_task_the_tui_runs_is_a_line_the_binaries_accept() {
             kind: Kind::Skill,
             folders: None,
         },
+        Task::Update {
+            holder: Holder::Project(String::from("alpha")),
+            reference: None,
+        },
+        Task::Update {
+            holder: Holder::Elsewhere(String::from("-odd")),
+            reference: Some(String::from("rule:git/no-force-push")),
+        },
+        Task::Update {
+            holder: Holder::Workspace,
+            reference: Some(String::from("skill:commit-style")),
+        },
     ];
 
     for task in &tasks {
@@ -1830,7 +1930,7 @@ fn the_workspaces_row_has_nothing_to_unlink() {
     press_key(&mut app, KeyCode::Up);
 
     assert_eq!(
-        press_key(&mut app, KeyCode::Char('u')),
+        press_key(&mut app, KeyCode::Char('U')),
         tui::state::Step::Stay
     );
     assert!(matches!(app.mode, Mode::Browse));
@@ -1869,7 +1969,7 @@ fn mind_opens_a_project_on_its_own_with_what_only_a_workspace_has_explained() {
 
     assert_eq!(app.scope(), Scope::Project);
     assert!(tui_drawn(&app).contains("a project no workspace manages"));
-    for key in ['g', 's', 'i', 'u'] {
+    for key in ['g', 's', 'i', 'u', 'U'] {
         assert_eq!(
             press_key(&mut app, KeyCode::Char(key)),
             tui::state::Step::Stay

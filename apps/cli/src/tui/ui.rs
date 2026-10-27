@@ -350,7 +350,7 @@ fn holdings(app: &App, workspace: &Workspace, frame: &mut Frame, area: Rect) {
                 Line::from(printable(error)),
                 Line::from(""),
                 Line::from(Span::styled(
-                    "u unlinks it; nothing on disk is touched",
+                    "U unlinks it; nothing on disk is touched",
                     dim(),
                 )),
             ];
@@ -625,11 +625,14 @@ fn footer(app: &App, frame: &mut Frame, area: Rect) {
     // Only the keys that do something here: a project on its own has no
     // registry, shelf or installs to offer keys for.
     let keys = match (app.focus, app.scope()) {
-        (Focus::Items, _) => {
+        (Focus::Items, Scope::Workspace) => {
+            "q quit  ? keys  enter show  e edit  r rename  d delete  u update  a add  ← back  v validate"
+        }
+        (Focus::Items, Scope::Project) => {
             "q quit  ? keys  enter show  e edit  r rename  d delete  a add  ← back  v validate"
         }
         (Focus::Projects, Scope::Workspace) => {
-            "q quit  ? keys  → open  a add  m minds  l link  u unlink  v validate  g gather  L load  s shelf  i install  t agents  T targets"
+            "q quit  ? keys  → open  a add  u update  m minds  l link  U unlink  v validate  g gather  L load  s shelf  i install  t agents  T targets"
         }
         (Focus::Projects, Scope::Project) => {
             "q quit  ? keys  → open  a add  v validate  l link it to the workspace above  L load  t agents  T targets"
