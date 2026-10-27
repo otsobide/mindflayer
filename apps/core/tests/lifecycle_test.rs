@@ -739,7 +739,7 @@ fn editing_or_renaming_the_copy_in_a_folder_the_project_authors_in_keeps_every_r
     .unwrap();
 
     assert_eq!(edited.copy.unwrap(), Record::Kept);
-    assert_eq!(renamed.copy.unwrap(), Record::Moved);
+    assert_eq!(renamed.copy.unwrap(), Record::Moved { edited: true });
     assert_eq!(
         ledger.copies("collapse", Kind::Skill).unwrap(),
         [
@@ -794,7 +794,7 @@ fn a_renamed_copy_in_a_local_project_is_kept_out_of_git_where_it_went() {
     )
     .unwrap();
 
-    assert_eq!(renamed.copy.unwrap(), Record::Moved);
+    assert_eq!(renamed.copy.unwrap(), Record::Moved { edited: true });
     assert_eq!(
         excluded(&project),
         ["/.agents/skills/audit/", "/.claude/skills/review/"]
@@ -894,7 +894,7 @@ fn an_installed_rules_copy_edited_or_renamed_keeps_its_record() {
 
     // A rule's name is its route, never in its file: renamed, it holds what
     // it held, the edit and all, and nothing offers it by its new route.
-    assert_eq!(renamed.copy.unwrap(), Record::Moved);
+    assert_eq!(renamed.copy.unwrap(), Record::Moved { edited: true });
     let record = ledger
         .installation("collapse", Kind::Rule, "git/never-force-push")
         .unwrap()
@@ -914,7 +914,7 @@ fn an_installed_rules_copy_edited_or_renamed_keeps_its_record() {
 fn a_renamed_rules_copy_nobody_edited_is_orphaned_and_taken_out_unforced() {
     let (_dir, workspace, project, ledger) = installed_rule();
 
-    lifecycle::rename(
+    let renamed = lifecycle::rename(
         Some(&workspace),
         &project,
         &find(&project, "git/no-force-push").unwrap(),
@@ -922,6 +922,8 @@ fn a_renamed_rules_copy_nobody_edited_is_orphaned_and_taken_out_unforced() {
     )
     .unwrap();
 
+    // Moved as it was, so it holds what was installed, and says so.
+    assert_eq!(renamed.copy.unwrap(), Record::Moved { edited: false });
     assert_eq!(
         rule_standings(&workspace, &ledger, &project),
         [(String::from("git/never-force-push"), Standing::Orphaned)]
@@ -1171,7 +1173,7 @@ fn renaming_an_installed_copy_carries_its_record_and_reads_as_edited() {
     )
     .unwrap();
 
-    assert_eq!(renamed.copy.unwrap(), Record::Moved);
+    assert_eq!(renamed.copy.unwrap(), Record::Moved { edited: true });
     assert_eq!(renamed.stale.unwrap(), Record::Untouched);
     assert_eq!(records(&ledger), ["ship"]);
     let record = ledger
@@ -1203,7 +1205,7 @@ fn renaming_onto_a_name_an_old_record_claims_drops_that_record_too() {
     // Left in place, it would make what was just renamed look like the
     // workspace's own `ship` as it was installed, to overwrite.
     assert_eq!(renamed.stale.unwrap(), Record::Dropped);
-    assert_eq!(renamed.copy.unwrap(), Record::Moved);
+    assert_eq!(renamed.copy.unwrap(), Record::Moved { edited: true });
     assert_eq!(
         standing(&workspace, &ledger, &project, "ship"),
         Standing::Edited
@@ -1303,7 +1305,7 @@ fn a_rename_tells_once_of_a_clone_neither_of_its_scrubs_could_rewrite() {
     )
     .unwrap();
 
-    assert_eq!(renamed.copy.unwrap(), Record::Moved);
+    assert_eq!(renamed.copy.unwrap(), Record::Moved { edited: true });
     // The ledger was opened once for each name, and both scrubs failed on the
     // same clone.
     let failed: Vec<&str> = renamed

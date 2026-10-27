@@ -9,7 +9,8 @@
 //! Each change also sees to the ledger's record of what was installed under
 //! the names it touches, and says in its result what it did ([`Record`]). The
 //! rule is D-04's: an installed copy that is edited or renamed stays
-//! recorded, and reads as edited, never written over or deleted unless
+//! recorded, told by the hash of what was written, and an edit, a skill's
+//! rename among them, reads as edited, never written over or deleted unless
 //! forced; one that is removed is uninstalled, its record going with it; and
 //! one added where a record outlived its copy drops that record. It lives
 //! here rather than in a front end, so that no front end can apply it
@@ -74,9 +75,9 @@ impl Target {
 /// That record is what gives an install leave to overwrite and an uninstall
 /// leave to delete, so it must not outlive the copy it was about: whatever
 /// somebody writes there next would inherit it. While the copy is there,
-/// edited or renamed, it stays: the hash it holds tells the edit apart, and
-/// what was installed is still said, still taken out when it is uninstalled
-/// with `--force` (D-04).
+/// edited or renamed, it stays: the hash it holds tells an edit apart, and
+/// what was installed is still said, still taken out when it is uninstalled,
+/// with `--force` once it holds an edit (D-04).
 ///
 /// A change reports it as `Result<Record, InstallError>` beside what it made
 /// rather than failing with it: by the time the record is seen to, the change
@@ -92,8 +93,13 @@ pub enum Record {
     /// reads as edited.
     Kept,
     /// The record of the copy the change reached names it under its new name
-    /// and place, from where it came: renamed, it reads as edited.
-    Moved,
+    /// and place, from where it came. `edited` says whether the copy now
+    /// holds something other than was installed, and so is left alone by an
+    /// install and an uninstall unless forced: a skill's, whose `name` line
+    /// the rename rewrote, always; a rule's, whose file was moved as it was,
+    /// only when it was edited before, and otherwise it is what was
+    /// installed, which an uninstall takes out unforced.
+    Moved { edited: bool },
     /// The record of the copy the change reached was dropped: it was
     /// removed, and so uninstalled; or the record outlived its copy; or a
     /// rename put it under a name installed from elsewhere, and what is there
@@ -481,8 +487,9 @@ pub struct Renamed {
     /// The artifact under its new name.
     pub target: Target,
     /// The record of the copy under its old name, carried to its new name and
-    /// place: renamed, it reads as edited, and stays what was installed. Or
-    /// dropped, where another installation holds the new name already.
+    /// place, saying whether it reads as edited now ([`Record::Moved`]): it
+    /// stays what was installed. Or dropped, where another installation
+    /// holds the new name already.
     pub copy: Result<Record, InstallError>,
     /// A record under the new name, from an install that is no longer there:
     /// stale, and left in place it would make what was just renamed look like
@@ -807,7 +814,9 @@ fn carried(
     }
     Ok(match carry.carried {
         Carried::Nothing => Record::Untouched,
-        Carried::Moved => Record::Moved,
+        Carried::Moved => Record::Moved {
+            edited: carry.edited,
+        },
         Carried::Forgotten => Record::Dropped,
     })
 }

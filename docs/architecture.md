@@ -1854,8 +1854,10 @@ its name:
 - **Outdated**: every copy holds what was written, and the offer has moved
   on. An install brings it up to date.
 - **Edited**: a copy holds anything else: a hand edit, `mind edit`, a
-  rename, a file added, or a link where a file was, which the hash refuses
-  and no install writes.
+  skill's rename, which rewrites its `name` line, a file added, or a link
+  where a file was, which the hash refuses and no install writes. A rule's
+  rename moves its file as it is, and is no edit: the copy holds what was
+  installed, orphaned while nothing offers it by its new route.
 - **Missing**: a copy the record names is not where it was put, and an
   install puts it back. Every copy gone is still missing rather than absent:
   the ledger records it, and `flayer uninstall` forgets it. The install
@@ -4472,17 +4474,21 @@ uninstalls the copy it reached, dropping its record, and `lifecycle::add`
 drops any stale one under the name it writes, as `lifecycle::rename` does
 under the new name.
 
-Edit or rename an installed copy and it is still there, holding something
-other than was installed: an edit. Its record stays
+Edit or rename an installed copy and it is still there. Its record stays
 ([D-04](#d-04-an-edited-copy-is-detected-not-disowned)), and the hash it
-holds is what tells the edit apart ([an edited copy is left
-alone](#an-edited-copy-is-left-alone)): status says edited, and no install
-writes over it, nor uninstall takes it out, unless forced. `finish_edit`
-leaves the record as it is and only reads the ledger to say so
-(`Record::Kept`); `rename` carries it to the new name and place
-(`install::carry`, `Ledger::renamed_copy`, `Record::Moved`), from where it
-came and with the hash of what was written, so the name line it rewrote
-reads as the edit it is. Dropping the record, as both once did, made the
+holds is what tells an edit apart ([an edited copy is left
+alone](#an-edited-copy-is-left-alone)): edited, status says so, and no
+install writes over it, nor uninstall takes it out, unless forced.
+`finish_edit` leaves the record as it is and only reads the ledger to say
+so (`Record::Kept`); `rename` carries it to the new name and place
+(`install::carry`, `Ledger::renamed_copy`), from where it came and with the
+hash of what was written. A skill's rename rewrites its `name` line, which
+reads as the edit it is; a rule's moves its file as it is, so it reads as
+it did, edited only if it was, and otherwise as what was installed, which
+an uninstall takes out unforced. Which of the two it is is told as an
+install tells it, and handed back (`Record::Moved`'s `edited`), so what
+`mind rename` says of the copy is what an install and an uninstall will
+find. Dropping the record, as both once did, made the
 copy its author's: safe, but never updated again and never taken out by the
 uninstall that put it there. Where another installation holds the new name
 already, the renamed copy cannot join it, a name being one installation a

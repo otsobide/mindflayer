@@ -105,9 +105,15 @@ pub(crate) fn rename_in(
     ));
     let to = renamed.target.name.clone();
     recorded(&mut outcome, renamed.copy, |record| match record {
-        Record::Moved => Some(String::from(
+        Record::Moved { edited: true } => Some(String::from(
             "it was installed by `flayer install`, and stays so under its new name; renamed, it \
              is left alone by `flayer install` and `flayer uninstall` unless they are forced",
+        )),
+        // A rule's rename moves its file as it is, so nothing in it reads
+        // as an edit, and the uninstall that put it there takes it out.
+        Record::Moved { edited: false } => Some(String::from(
+            "it was installed by `flayer install`, and stays so under its new name; renamed, it \
+             still holds what was installed, and `flayer uninstall` takes it out",
         )),
         Record::Dropped => Some(format!(
             "it had been installed, but `{to}` is installed already; renamed, it is yours, and \

@@ -158,9 +158,11 @@ pub enum State {
     Partial,
     /// A copy the ledger records holds something other than what was
     /// installed there, by its hash (D-04): edited by hand or with `mind
-    /// edit`, or renamed. Still Mindflayer's install, and left alone by every
-    /// install and uninstall unless forced. Said over a copy gone beside it,
-    /// which the next install would not put back without forcing.
+    /// edit`, or a skill renamed, its `name` line rewritten; a rule renamed
+    /// is moved as it is, and holds what it held. Still Mindflayer's
+    /// install, and left alone by every install and uninstall unless forced.
+    /// Said over a copy gone beside it, which the next install would not put
+    /// back without forcing.
     Edited,
     /// In an agent's folder outside any the project authors in, and recorded
     /// by nothing: somebody's, put there some other way, and never

@@ -1634,14 +1634,19 @@ pub(crate) fn disown(
 /// rename moved to `to_at` and called `to_name`, along with it
 /// ([`Ledger::renamed_copy`]), saying what became of it.
 ///
-/// For a rename of an installed copy: it is what was installed, renamed,
-/// which leaves it holding something other than was written there, an edit
-/// in all but name. So it stays Mindflayer's, as an edit leaves a copy, and
-/// reads as edited (D-04): never written over or deleted unless forced, and
-/// never left out of a listing of what the project was given. Dropping its
-/// record, as a rename once did, made it somebody's that nobody can take
-/// out again. Where another installation holds `to_name` already, the copy
-/// cannot join it, and its record goes instead, as [`disown`] would drop it.
+/// For a rename of an installed copy: it is what was installed, renamed, so
+/// it stays Mindflayer's, as an edit leaves a copy, told by the hash of what
+/// was written (D-04), and never left out of a listing of what the project
+/// was given. A skill's rename rewrites the `name` line of its manifest, an
+/// edit in all but name, so it reads as edited: never written over or
+/// deleted unless forced. A rule's moves its file and changes not a byte,
+/// so it reads as it did: edited only if it was, and otherwise as what was
+/// installed, orphaned while nothing offers it by its new route, which an
+/// uninstall takes out unforced. Which of the two it is comes back
+/// ([`Carry::edited`]), for the front end to say. Dropping its record, as a
+/// rename once did, made it somebody's that nobody can take out again.
+/// Where another installation holds `to_name` already, the copy cannot join
+/// it, and its record goes instead, as [`disown`] would drop it.
 ///
 /// In a local project its place in the exclude block moves with it while it
 /// is recorded, and goes while it is not: a line naming the place it left
@@ -1687,6 +1692,10 @@ pub(crate) fn carry(
         ),
     };
     ledger.log(action, Some(&entry), Outcome::Ok, Some(&detail))?;
+    // Told as any change of it is told, so what the front end says of it is
+    // what an install and an uninstall will find.
+    let edited = carried == Carried::Moved
+        && !edited(workspace, &ledger, project, kind, to_name)?.is_empty();
     // After the record, as an install keeps its copies out of git before
     // they land and an uninstall takes them back in after they go: the copy
     // has moved already. Said rather than raised, since the record has too.
@@ -1713,6 +1722,7 @@ pub(crate) fn carry(
     });
     Ok(Carry {
         carried,
+        edited,
         scrub,
         unexcluded,
     })
@@ -1722,6 +1732,10 @@ pub(crate) fn carry(
 #[derive(Debug)]
 pub(crate) struct Carry {
     pub carried: Carried,
+    /// Whether the copy carried, under its new name, holds something other
+    /// than was installed, and so is left alone unless forced: a renamed
+    /// skill always, a renamed rule only when it was edited before.
+    pub edited: bool,
     /// What opening the ledger to write took out of it, for the front end to
     /// say; nothing when there was no ledger to open.
     pub scrub: Scrub,
@@ -1734,6 +1748,7 @@ impl Default for Carry {
     fn default() -> Self {
         Carry {
             carried: Carried::Nothing,
+            edited: false,
             scrub: Scrub::default(),
             unexcluded: None,
         }

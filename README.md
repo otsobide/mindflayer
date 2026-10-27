@@ -986,7 +986,7 @@ Each artifact is in one of five states:
 |---|---|
 | `installed` | Mindflayer put every copy there, and every one it put there is still there. |
 | `partial` | a copy it put there is gone, deleted by hand or by `git clean -X`, or no longer reads; installing it again puts every copy back. Here Claude's copy of `code-review` was deleted. |
-| `edited` | a copy it put there holds something else now, edited by hand or with `mind edit`, or renamed; still Mindflayer's install, but no install writes over it and no uninstall takes it out without `--force`. |
+| `edited` | a copy it put there holds something else now, edited by hand or with `mind edit`, or a skill renamed with `mind rename`; still Mindflayer's install, but no install writes over it and no uninstall takes it out without `--force`. |
 | `foreign` | somebody else's, in a folder an agent reads; Mindflayer never overwrites or deletes it. Here `notes`, kept in `.claude/skills` by hand. |
 | `authored` | the project's own, in a folder it authors in, such as `skills/`. |
 
@@ -1648,7 +1648,9 @@ the project writes in too (one whose `--skills` is an agent's folder, or a
 project an older Mindflayer made, whose one folder takes the copy), the
 change reaches it. Edited or renamed, it stays Mindflayer's install, and
 [`status`](#what-each-project-has) says it is edited: no install writes over
-it and no uninstall takes it out unless forced. Removed, it is uninstalled,
+it and no uninstall takes it out unless forced. A rule renamed in a project
+a `mind.toml` marks is moved as it is, so it still holds what was installed,
+and `uninstall` takes it out unforced, as `rename` says. Removed, it is uninstalled,
 so a skill you write later under the same name does not inherit a record
 that was about something else. In `app`, made with `mind init --skills
 .claude/skills` and linked:

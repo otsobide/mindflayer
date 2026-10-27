@@ -259,6 +259,38 @@ fn an_installed_skill_that_is_renamed_stays_installed_under_its_new_name() {
 }
 
 #[test]
+fn an_installed_rule_that_is_renamed_still_holds_what_was_installed_and_says_so() {
+    let dir = TempDir::new().unwrap();
+    flayer(dir.path(), &["init"]).unwrap();
+    let project = dir.path().join("collapse");
+    fs::create_dir(&project).unwrap();
+    older_project(&project);
+    flayer(dir.path(), &["link", "collapse"]).unwrap();
+    let own = dir.path().join(".mindflayer/library/rules/git");
+    fs::create_dir_all(&own).unwrap();
+    fs::write(own.join("no-force-push.md"), "Never force-push.\n").unwrap();
+    mind(&project, &["install", "git/no-force-push"]).unwrap();
+
+    let outcome = mind(&project, &["rename", "git/no-force-push", "git/no-push"]).unwrap();
+
+    // A rule's rename moves its file as it is, so nothing in it is an edit.
+    assert!(
+        outcome.stdout.ends_with(
+            "  it was installed by `flayer install`, and stays so under its new name; renamed, \
+             it still holds what was installed, and `flayer uninstall` takes it out\n"
+        ),
+        "{}",
+        outcome.stdout
+    );
+    let status = mind(&project, &["status"]).unwrap().stdout;
+    assert!(status.contains("git/no-push  installed"), "{status}");
+    let removed = mind(&project, &["uninstall", "git/no-push"]).unwrap();
+    assert!(removed.ok, "{:?}", removed.stderr);
+    assert_eq!(removed.stdout, "removed rule git/no-push from collapse\n");
+    assert!(!project.join("rules/git/no-push.md").exists());
+}
+
+#[test]
 fn removing_an_install_scrubs_the_ledger_it_drops_the_record_from_and_says_so() {
     let (dir, workspace, ledger) = shelved_older(&["collapse"], &["deploy"]);
     installed(dir.path(), &workspace, &ledger);
