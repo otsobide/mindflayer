@@ -164,6 +164,9 @@ pub enum Share {
 }
 
 impl Share {
+    /// Both, in the order a front end lists them.
+    pub const ALL: [Share; 2] = [Share::Local, Share::Shared];
+
     /// How the settings file spells it.
     pub const fn name(self) -> &'static str {
         match self {
@@ -172,10 +175,10 @@ impl Share {
         }
     }
 
-    fn named(word: &str) -> Option<Share> {
-        [Share::Local, Share::Shared]
-            .into_iter()
-            .find(|share| share.name() == word)
+    /// The one spelled `word`, as the settings file and a command line
+    /// spell it.
+    pub fn named(word: &str) -> Option<Share> {
+        Share::ALL.into_iter().find(|share| share.name() == word)
     }
 }
 
