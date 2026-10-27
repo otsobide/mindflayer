@@ -326,7 +326,11 @@ while an empty `paths` says nothing an agent could act on.
 `Artifact::contents` is the body without the front matter, for a rule as for a
 skill. It is what a renderer puts in front of an agent, so the fences are never
 pasted into `AGENTS.md`, and what `show` prints below the description and the
-`paths` a rule declares.
+`paths` a rule declares. Claude's rule files are the one place a rule goes
+whole, fences and all, since Claude reads `paths` from them ([Claude's rule
+files](#claudes-rule-files)). Whether a rule is about some files only is
+`RuleManifest::is_scoped`'s to say, `paths` stated in the shape it is read in,
+so the block and those files never disagree on it.
 
 ### Strict when writing, lenient when reading
 
@@ -1941,8 +1945,9 @@ A project in local mode
 installed into it out of git, through a block of anchored entries in
 `$GIT_COMMON_DIR/info/exclude` that `exclude` keeps. Which paths to exclude
 is the installing side's to choose, and `exclude` only writes them down: an
-install of a skill names one entry for each copy (#43 and #45 will for rules,
-#94 for MCP config).
+install of a skill names one entry for each copy, a render of Claude's rule
+files one for each file ([Claude's rule files](#claudes-rule-files)), and #45
+will for the rest of what rules write, #94 for MCP config.
 
 ```
 # mindflayer:begin
@@ -3381,10 +3386,11 @@ A rule reaches a project's agents as a section of a block in the project's
 root `AGENTS.md` ([D-03](#d-03-rules-reach-every-agent-through-agentsmd)):
 the one file of a project that Claude Code, Codex and OpenCode all read, and
 Codex has no way to include another ([docs/agents.md](agents.md)).
-`agents_md::render` writes it. Which rules a project is given, when, and the
-record of what was written are #45's; whether Claude reads the file at all,
-or needs an `@AGENTS.md` import in its `CLAUDE.md`, is #44's predicate.
-Nothing calls it yet.
+`agents_md::render` writes it, and `claude_rules::render` the rules Claude
+alone is given ([Claude's rule files](#claudes-rule-files)). Which rules a
+project is given, when, and the record of what was written are #45's;
+whether Claude reads the file at all, or needs an `@AGENTS.md` import in its
+`CLAUDE.md`, is #44's predicate. Nothing calls either yet.
 
 ```markdown
 # Working here
@@ -3413,11 +3419,13 @@ Never force-push a branch somebody else may have pulled.
   One blank line separates two sections, which keeps two rules two
   paragraphs once Claude has stripped the markers. They come in the order
   `list` gives them (`catalog::report_order`), by name. A rule that states
-  `paths` has no section: it goes to `.claude/rules/mindflayer` alone (#43),
-  where Claude loads it only once one of those files is read, while in the
-  block every agent would read it for every file. A `paths` in a shape
-  nothing reads says nothing, as everywhere else, so that rule has its
-  section.
+  `paths` has no section: it goes to `.claude/rules/mindflayer` alone
+  ([Claude's rule files](#claudes-rule-files)), where Claude loads it only
+  once one of those files is read, while in the block every agent would read
+  it for every file. A `paths` in a shape nothing reads says nothing, as
+  everywhere else, so that rule has its section. Both renderers ask
+  `RuleManifest::is_scoped`, so they never disagree on which rules those
+  are.
 - **Strict when writing.** A route is held to the rules every name is
   (`name_issues`), which also keeps its marker one that reads back as
   itself: lowercase words joined by single hyphens and slashes hold no space
@@ -3497,6 +3505,116 @@ Never force-push a branch somebody else may have pulled.
   OpenCode, and what to change is in files that are not Mindflayer's. A
   repository or a file that cannot be looked at is said the same way, rather
   than turning a render already written into a failure.
+
+### Claude's rule files
+
+Only Claude reads a project's `.claude/rules`, at any depth, and only Claude
+honours a rule's `paths`, loading such a rule once it reads a file they
+match (verified on 2.1.309, [docs/agents.md](agents.md)). So a rule about
+some files only reaches its project as a file there, which
+`claude_rules::render` writes, and has no section in the block. The same
+renderer gives Claude the rules about every file when it reads no block.
+
+```text
+.claude/rules/mindflayer/rust/errors.md          a rule that states paths
+.claude/rules/mindflayer/git/no-force-push.md    one that does not, in fallback mode
+```
+
+- **Two modes, chosen by the caller.** `Mode::Scoped` writes only the rules
+  that state `paths`, for a project whose Claude reads the block, natively or
+  through #44's import. `Mode::Fallback` writes every rule, for one whose
+  Claude reads no block. Which applies comes from #44's predicate alone,
+  never from whether a block was written: in fallback mode the block may
+  still be written for Codex and OpenCode, and Claude, reading none of it,
+  reads each rule once and misses none. A file left from the other mode goes
+  once its rule is no longer taken, unless somebody changed it since: that
+  one stays, and is said, like any edited file.
+- **The rule as written.** A file holds the rule's bytes, front matter
+  included, where the block holds `Artifact::contents`: Claude takes `paths`
+  from it and strips the rest before the rule reaches the model (docs-only),
+  and a file that is the rule byte for byte is one somebody can open and
+  recognise. A `paths` in a shape nothing reads makes a rule about every
+  file here as in the block, and its front matter is still kept as written.
+- **A folder of Mindflayer's own.** `mindflayer` keeps the files apart from
+  rules somebody keeps in `.claude/rules` by hand, so no route names one of
+  theirs. Below it a file is filed by its route, folders and all, as in the
+  library; a route is held to the name rules (`name_issues`), so it never
+  climbs out, and neither does a recorded one.
+- **What is Mindflayer's is what the caller recorded.** The ledger records
+  rule files only with #45, so the renderer is handed what an earlier render
+  returned (`Rendered::recorded`): each file's route, and the hash of what it
+  held (`hash::bytes`, the SHA-256 of the bytes, beside `hash::tree` for a
+  folder). A file is Mindflayer's while it holds exactly that: replaced when
+  its rule changes, taken away when its rule is no longer asked for.
+  Anything else at a rule's place is somebody's, never written over or taken
+  away. A file nothing recorded is `Written::Foreign`, and its rule is not
+  written, even when it holds the rule byte for byte, since taking it for
+  Mindflayer's would remove it with the rule. One changed since it was
+  written is `Written::Edited`, left as it is with its record kept, as
+  [D-04](#d-04-an-edited-copy-is-detected-not-disowned) has an edited copy;
+  edited back into the rule as it is now, it is current again. A link at a
+  rule's place is somebody's too, since Mindflayer writes none. Rejected:
+  telling them by route alone, which would write over a teammate's change
+  committed into a shared project, as the block still replaces a
+  hand-edited section ([open question](#open-questions)); by the folder,
+  which would take somebody's file there for Mindflayer's; and by a mark in
+  the file, which would no longer be the rule as written, and which a copy
+  made by hand carries along.
+- **Made, replaced, taken away.** A file that is not there is made with
+  `create_new`, so one somebody made after the look is never written over,
+  and only then is it said to be made (`Written::Created`). One that is
+  Mindflayer's is replaced through a temporary beside it and a rename, never
+  through a link (`replace_bytes_unresolved`): the temporary's name ends in
+  `.tmp`, which Claude's `**/*.md` does not load, so it is no rule staged
+  where Claude looks. One that already holds the rule is not written at all.
+  Every file is written before any is taken away, so a renamed rule is never
+  missing from the folder between its old file and its new. Taking away the
+  last file takes the folders it leaves empty, up to and including
+  `mindflayer`, and not `.claude/rules` or `.claude`, which may be
+  somebody's even when empty; a recorded file found gone (`Written::Gone`)
+  leaves its folders to go the same way.
+- **Refused whole, or failed file by file.** A rule that is not a rule, one
+  that cannot be read or is named no name, two rules of one name and a
+  recorded route that is no name refuse the whole render before anything is
+  written, as the block's render refuses them. A file that cannot be looked
+  at, written or taken away is only its rule's failure
+  (`claude_rules::Warning::Failed`): each file stands on its own, and the
+  caller has to hear of every file that was written, to record it.
+- **Kept out of git in a local project.** One exclude entry a file, in the
+  project's group keyed by its id ([what keeps an install out of
+  git](#what-keeps-an-install-out-of-git)), all written before any file
+  lands; a block that cannot be edited refuses the render with nothing
+  written. The entries of files taken away, found gone, or that failed to
+  land come out last, and a block that cannot be edited then is said
+  (`Rendered::still_excluded`), not raised. Somebody's file at a rule's
+  place gets no entry, and keeps whatever entry it had.
+- **Never where the block is refused.** A render asked for a rule is refused
+  wherever `agents_md::misplaced` refuses the block: above a project the
+  workspace links, at the workspace's root where it links none, and inside
+  an agent's own folder. For a project at the user's home that folder is
+  `~/.claude` itself, whose `rules` Claude reads in every project. A render
+  that only takes files away goes ahead, so rules left there can come out.
+  Whether Claude reads a `.claude/rules` in a folder above where it starts is
+  not recorded, so above a project is refused as for `AGENTS.md`, which at
+  worst is too cautious (an [open question](#open-questions)).
+- **Never out through a link.** A link on the way to a rule's file that
+  leads out of the project is refused, writing or taking away
+  (`ClaudeRulesError::LinkedOut`): `.claude` linked to the user's own
+  `~/.claude` would give every project these rules, and a removal through
+  it would take a file out of somebody else's folder. A link that stays
+  inside the project is followed.
+- **What misses a rule is said.** A rule that states `paths` reaches Claude
+  alone, in either mode, and `Warning::ClaudeOnly` names the project's
+  agents that read no `.claude/rules`: Codex and OpenCode, unless the
+  project names fewer, and both for a project a `mind.toml` marks, which
+  names none (docs-only for both agents; were either to read the folder,
+  the warning would be too cautious, never wrong about Claude). Which agents
+  read the folder is a match with an arm an agent and no wildcard, so a new
+  agent says whether it does before it compiles. `Agent::reads` still names
+  no folder of rules, so no listing takes these files for somebody's before
+  #45 records them.
+- **No lock of its own.** As `agents_md::render`, it takes none: its caller
+  holds the workspace's.
 
 ## One entry of a config file somebody else owns
 
@@ -4107,7 +4225,9 @@ whole group, one turning local gains both ([when a project's agents, targets
 or share mode change](#when-a-projects-agents-targets-or-share-mode-change)).
 #38 moves
 a v2 project to settings shared unless `--local` ([moving a project to its
-settings](#moving-a-project-to-its-settings)).
+settings](#moving-a-project-to-its-settings)). #43 keeps Claude's rule files
+out of git the same way, an entry a file ([Claude's rule
+files](#claudes-rule-files)).
 
 ### D-03: Rules reach every agent through `AGENTS.md`
 
@@ -4152,6 +4272,16 @@ project at the workspace's root has its rules in its own. It warns of the overri
 budget, and a project in no git work tree, where Codex reads only the
 folder it starts in ([how a rule reaches the
 agents](#how-a-rule-reaches-the-agents)).
+
+#43 writes a rule that states `paths:` as
+`.claude/rules/mindflayer/<route>.md`, front matter kept, and every rule there
+in the fallback mode #44's predicate chooses, never because a block was or was
+not written. It says that such a rule reaches Claude alone, naming the
+project's agents it misses. What is Mindflayer's there is what its caller
+recorded of an earlier render, each file's hash among it, so a file nothing
+recorded, or one changed since, is never written over or taken away. It is
+refused where the block is, and through a link out of the project ([Claude's
+rule files](#claudes-rule-files)).
 
 ### D-04: An edited copy is detected, not disowned
 
@@ -4549,7 +4679,8 @@ leak into the lifecycle code. Unblocks #33, #45, #62, #93, #94 and #95.
   [D-03](#d-03-rules-reach-every-agent-through-agentsmd) answers it: a rule
   reaches a project as its section of a managed block in `AGENTS.md`, with
   `.claude/rules/mindflayer` as Claude's fallback. #42 renders the block
-  ([how a rule reaches the agents](#how-a-rule-reaches-the-agents)), and #45
+  ([how a rule reaches the agents](#how-a-rule-reaches-the-agents)), #43
+  Claude's rule files ([Claude's rule files](#claudes-rule-files)), and #45
   carries it out.
   Until then [the examples'](#the-examples-are-a-workspace) two rules are
   listed and validated, but a load offers only their skills.
@@ -5001,7 +5132,34 @@ leak into the lifecycle code. Unblocks #33, #45, #62, #93, #94 and #95.
   wrote, a hash for each section beside a copy's
   ([D-04](#d-04-an-edited-copy-is-detected-not-disowned)), is what would
   tell an edited section from the one rendered and leave it be, and #45 is
-  where that record is kept.
+  where that record is kept. Claude's rule files already tell one apart, by
+  the hash their caller hands back of each ([Claude's rule
+  files](#claudes-rule-files)); a section would need a hash of its own.
+- **`.claude/rules` above where Claude starts.** Claude reads every
+  `AGENTS.md` and `CLAUDE.md` from where it starts up the tree, but whether
+  it reads a `.claude/rules` in a folder above, as it reads `.claude/rules`
+  at any depth below, is in neither [docs/agents.md](agents.md) nor the
+  probe. Claude's rule files are refused above a project the workspace links
+  as the block is, which at worst keeps rules from a project above others
+  that Claude would not have read in them anyway. A probe check with a rule
+  one folder above the start directory would settle it, and let that one
+  refusal go if Claude reads no such folder.
+- **A project that authors rules in `.claude/rules`.** A project may keep
+  its own rules where Claude reads them, and its listing then reads
+  `.claude/rules/mindflayer` as its own rules, named `mindflayer/<route>`,
+  which a lifecycle change can rename or remove. Nothing is lost, since a
+  render writes a file it recorded again where it finds none, and never
+  writes over one it did not record; but the listing shows Mindflayer's
+  files as the project's. Leaving out the `mindflayer` folder where a project
+  authors in `.claude/rules`, as a listing tells installed copies from
+  authored ones once #45 records them, would keep the two apart.
+- **A render stopped part way.** A render that writes some files and is
+  killed before its caller records them leaves files no record names, which
+  the next render takes for somebody's: left alone, with their rules not
+  written, until somebody removes them. Each file is whole, made with
+  `create_new` and replaced by a rename, so nothing half written is left,
+  only unrecorded. Recording what a render is about to write before it
+  writes, as #45 may, would close it.
 - **A link made while `AGENTS.md` is written.** A link in place of the file
   is looked at before the read, and one leading out of the project is
   refused; a link made in the moment between that look and the rename is
