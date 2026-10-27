@@ -1,8 +1,9 @@
 //! Drawing the install screen.
 //!
 //! Two columns: the projects a workspace manages, and, for whichever project
-//! the cursor is on, every shelf entry, ticked when that project already
-//! holds it. Nothing here decides anything; [`super::state`] does.
+//! the cursor is on, everything of the kind shown that can be installed,
+//! ticked when that project already holds it. Nothing here decides anything;
+//! [`super::state`] does.
 
 use ratatui::layout::{Constraint, Direction, Layout, Rect};
 use ratatui::style::{Color, Modifier, Style};
@@ -10,7 +11,9 @@ use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, BorderType, Clear, List, ListItem, ListState, Paragraph, Wrap};
 use ratatui::Frame;
 
-use super::state::{Focus, Pending, Screen, Target};
+use mindflayer_core::Kind;
+
+use super::state::{nothing, Focus, Pending, Screen, Target};
 
 /// Draw the whole screen.
 pub fn draw(screen: &Screen, frame: &mut Frame) {
@@ -25,7 +28,7 @@ pub fn draw(screen: &Screen, frame: &mut Frame) {
         .split(rows[0]);
 
     projects(screen, frame, columns[0]);
-    skills(screen, frame, columns[1]);
+    offers(screen, frame, columns[1]);
     footer(screen, frame, rows[1]);
 
     if screen.confirming {
@@ -61,23 +64,23 @@ fn projects(screen: &Screen, frame: &mut Frame, area: Rect) {
     frame.render_stateful_widget(list, area, &mut state);
 }
 
-/// The right column: the shelf, seen from the project on the left.
-fn skills(screen: &Screen, frame: &mut Frame, area: Rect) {
-    let focused = screen.focus == Focus::Skills;
+/// The right column: what can be installed of the kind shown, seen from the
+/// project on the left.
+fn offers(screen: &Screen, frame: &mut Frame, area: Rect) {
+    let focused = screen.focus == Focus::Offers;
     let Some(target) = screen.current() else {
-        let empty =
-            Paragraph::new("this workspace manages no projects yet").block(pane("Skills", focused));
+        let empty = Paragraph::new("this workspace manages no projects yet")
+            .block(pane(plural(screen.kind), focused));
         frame.render_widget(empty, area);
         return;
     };
 
-    let heading = title(target);
-    if target.rows.is_empty() {
-        let said = target.unreachable().unwrap_or_else(|| {
-            String::from(
-                "nothing on the shelf; `flayer gather git <url>`, `flayer load <path>` or `flayer add skill` first",
-            )
-        });
+    let heading = title(screen.kind, target);
+    let shown = target.shown(screen.kind);
+    if shown.is_empty() {
+        let said = target
+            .unreachable(screen.kind)
+            .unwrap_or_else(|| first(screen.kind).to_owned());
         let empty = Paragraph::new(said)
             .wrap(Wrap { trim: true })
             .block(pane(&heading, focused));
@@ -85,9 +88,12 @@ fn skills(screen: &Screen, frame: &mut Frame, area: Rect) {
         return;
     }
 
-    let items: Vec<ListItem> = target.rows.iter().map(row).collect();
+    let items: Vec<ListItem> = shown
+        .iter()
+        .map(|&index| row(&target.rows[index]))
+        .collect();
     let mut state = ListState::default();
-    state.select(Some(target.cursor));
+    state.select(shown.iter().position(|&index| index == target.cursor));
     let list = List::new(items)
         .block(pane(&heading, focused))
         .highlight_style(selected(focused))
@@ -95,7 +101,7 @@ fn skills(screen: &Screen, frame: &mut Frame, area: Rect) {
     frame.render_stateful_widget(list, area, &mut state);
 }
 
-/// One shelf entry: its box, its name, what it is for, and where it came from.
+/// One offer: its box, its name, what it is for, and where it came from.
 fn row(entry: &super::state::Row) -> ListItem<'_> {
     let box_ = if entry.checked { "[x] " } else { "[ ] " };
     let mut spans = vec![
@@ -137,9 +143,14 @@ fn row(entry: &super::state::Row) -> ListItem<'_> {
 
 /// The keys, what is waiting, and whatever the last key had to say.
 fn footer(screen: &Screen, frame: &mut Frame, area: Rect) {
+    let (kind, next) = (screen.kind, screen.next_kind(false));
     let keys = match screen.focus {
-        Focus::Projects => "↑↓ project   →/enter skills   a apply   q quit",
-        Focus::Skills => "↑↓ skill   space mark   ←/esc back   a apply   q quit",
+        Focus::Projects => {
+            format!("↑↓ project   →/enter {kind}s   tab {next}s   a apply   q quit")
+        }
+        Focus::Offers => {
+            format!("↑↓ {kind}   space mark   tab {next}s   ←/esc back   a apply   q quit")
+        }
     };
     let (install, remove) = screen.counts();
     let waiting = if install == 0 && remove == 0 {
@@ -168,7 +179,7 @@ fn confirm(screen: &Screen, frame: &mut Frame, area: Rect) {
         Line::from(format!("Install {install}, remove {remove}?")),
         Line::from(""),
         Line::from(Span::styled(
-            "removals delete the skill's directory from the project",
+            "removals take what Mindflayer installed back out",
             Style::default().fg(Color::Red),
         )),
         Line::from(""),
@@ -183,8 +194,28 @@ fn confirm(screen: &Screen, frame: &mut Frame, area: Rect) {
     frame.render_widget(Paragraph::new(text).block(block), box_);
 }
 
-fn title(target: &Target) -> String {
-    format!("Skills in {}", target.name())
+fn title(kind: Kind, target: &Target) -> String {
+    format!("{} in {}", plural(kind), target.name())
+}
+
+/// What a column of `kind` is called.
+fn plural(kind: Kind) -> &'static str {
+    // Matched on the kind, so a third one has to say what it is called.
+    match kind {
+        Kind::Skill => "Skills",
+        Kind::Rule => "Rules",
+    }
+}
+
+/// What to do first, for a project offered nothing of `kind`: where that
+/// kind comes from, as [`nothing`] says, with the commands that bring some.
+fn first(kind: Kind) -> String {
+    // Matched on the kind, so a third one has to say what brings it.
+    let commands = match kind {
+        Kind::Skill => "`flayer gather git <url>`, `flayer load <path>` or `flayer add skill`",
+        Kind::Rule => "`flayer load <path>` or `flayer add rule`",
+    };
+    format!("{}; {commands} first", nothing(kind))
 }
 
 /// A bordered pane, drawn heavier when the keyboard is in it.

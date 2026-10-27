@@ -2673,7 +2673,7 @@ impl Reader {
                 &[],
             ),
             ("s", "what is on the shelf", &["flayer gather list"]),
-            ("i", "install from the shelf", &["flayer install"]),
+            ("i", "install skills and rules", &["flayer install"]),
             (
                 "m",
                 "which minds the workspace manages, ticked",

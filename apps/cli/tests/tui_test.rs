@@ -943,6 +943,46 @@ fn the_install_screen_inside_the_tui_installs_where_each_agent_of_a_v3_project_r
 }
 
 #[test]
+fn a_rule_ticked_on_the_install_screen_inside_the_tui_is_installed_from_there() {
+    let (dir, _workspace, _ledger) = shelved(&["collapse"], &["deploy"]);
+    flayer(
+        dir.path(),
+        &[
+            "add",
+            "rule",
+            "git/commits",
+            "Commit one coherent step at a time",
+        ],
+    )
+    .unwrap();
+    let mut app = tui_in(dir.path());
+
+    press_and_run(&mut app, KeyCode::Char('i'));
+    press_key(&mut app, KeyCode::Tab);
+    let rules = tui_drawn(&app);
+    press_key(&mut app, KeyCode::Right);
+    press_key(&mut app, KeyCode::Char(' '));
+    let ticked = tui_drawn(&app);
+    press_key(&mut app, KeyCode::Char('a'));
+    let task = press_and_run(&mut app, KeyCode::Char('y'));
+
+    assert!(rules.contains("Rules in collapse"), "{rules}");
+    assert!(rules.contains("[ ] git/commits"), "{rules}");
+    assert!(ticked.contains("[x] git/commits  + install"), "{ticked}");
+    assert!(ticked.contains("1 to install, 0 to remove"), "{ticked}");
+    assert_eq!(task, Some(Task::ApplyInstall));
+    assert!(fs::read_to_string(dir.path().join("collapse/AGENTS.md"))
+        .unwrap()
+        .contains("<!-- mindflayer:rule git/commits -->\n# Commit one coherent step at a time\n"));
+    assert!(
+        app.transcript()
+            .contains("$ flayer install\ncollapse: installed rule git/commits\n"),
+        "{}",
+        app.transcript()
+    );
+}
+
+#[test]
 fn every_line_the_tui_runs_and_its_install_screen_keep_out_of_the_agents_folders_it_was_given() {
     let (dir, _workspace, _ledger) = shelved(&["collapse"], &["deploy"]);
     // The project's `.agents` stands for the folder several agents read for

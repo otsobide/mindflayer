@@ -45,14 +45,14 @@ fn right_enters_the_skills_and_left_comes_back() {
     let mut screen = screen_for(&workspace, &ledger);
 
     press(&mut screen, &[KeyCode::Right]);
-    assert_eq!(screen.focus, Focus::Skills);
+    assert_eq!(screen.focus, Focus::Offers);
     // The footer says what the keys do here, and it is not what it said there.
     assert!(rendered(&screen).contains("space mark"));
 
     press(&mut screen, &[KeyCode::Left]);
     assert_eq!(screen.focus, Focus::Projects);
     press(&mut screen, &[KeyCode::Enter]);
-    assert_eq!(screen.focus, Focus::Skills, "enter does what right does");
+    assert_eq!(screen.focus, Focus::Offers, "enter does what right does");
     press(&mut screen, &[KeyCode::Esc]);
     assert_eq!(screen.focus, Focus::Projects, "esc does what left does");
 }
@@ -910,4 +910,174 @@ fn nothing_is_installed_into_a_folder_an_agent_reads_for_every_project() {
         )
     );
     assert!(!claude.exists());
+}
+
+// ---------------------------------------------------------------------------
+// Rules on the screen: the same column, one kind at a time
+// ---------------------------------------------------------------------------
+
+/// `shelved`, with `git/commits` a rule of the workspace's own.
+fn with_a_rule(projects: &[&str]) -> (TempDir, FlayerWorkspace, Ledger) {
+    let (dir, workspace, ledger) = shelved(projects, &["deploy"]);
+    flayer(
+        dir.path(),
+        &[
+            "add",
+            "rule",
+            "git/commits",
+            "Commit one coherent step at a time",
+        ],
+    )
+    .unwrap();
+    (dir, workspace, ledger)
+}
+
+#[test]
+fn tab_shows_the_rules_in_the_column_the_skills_were_in_and_back() {
+    let (_dir, workspace, ledger) = with_a_rule(&["collapse"]);
+    let mut screen = screen_for(&workspace, &ledger);
+
+    let skills = rendered(&screen);
+    press(&mut screen, &[KeyCode::Tab]);
+    let rules = rendered(&screen);
+    press(&mut screen, &[KeyCode::Tab]);
+
+    assert!(skills.contains("Skills in collapse"), "{skills}");
+    assert!(skills.contains("[ ] deploy"), "{skills}");
+    assert!(!skills.contains("git/commits"), "{skills}");
+    assert!(skills.contains("tab rules"), "{skills}");
+    assert!(rules.contains("Rules in collapse"), "{rules}");
+    assert!(rules.contains("[ ] git/commits"), "{rules}");
+    assert!(
+        rules.contains("Commit one coherent step at a time"),
+        "{rules}"
+    );
+    assert!(!rules.contains("deploy"), "{rules}");
+    assert!(rules.contains("tab skills"), "{rules}");
+    assert_eq!(screen.kind, Kind::Skill, "round again past the last");
+    press(&mut screen, &[KeyCode::BackTab]);
+    assert_eq!(screen.kind, Kind::Rule, "shift+tab goes the other way");
+}
+
+#[test]
+fn a_rule_ticked_on_the_screen_is_installed_and_unticked_is_taken_out() {
+    let (dir, workspace, ledger) = with_a_rule(&["collapse"]);
+    let collapse = dir.path().join("collapse");
+    let mut screen = screen_for(&workspace, &ledger);
+    press(
+        &mut screen,
+        &[KeyCode::Tab, KeyCode::Right, KeyCode::Char(' ')],
+    );
+    assert_eq!(screen.counts(), (1, 0));
+
+    let outcome =
+        install_screen::apply(&workspace, &ledger, &screen, &AgentHomes::default()).unwrap();
+
+    assert_eq!(
+        outcome.stdout,
+        "collapse: installed rule git/commits\n\n1 installed, 0 removed\n"
+    );
+    assert!(outcome.ok && outcome.stderr.is_empty(), "{outcome:?}");
+    assert_eq!(
+        fs::read_to_string(collapse.join("AGENTS.md")).unwrap(),
+        "<!-- mindflayer:begin -->\n<!-- mindflayer:rule git/commits -->\n\
+         # Commit one coherent step at a time\n<!-- mindflayer:end -->\n"
+    );
+
+    let mut again = screen_for(&workspace, &ledger);
+    press(&mut again, &[KeyCode::Tab]);
+    assert!(rendered(&again).contains("[x] git/commits"));
+    press(&mut again, &[KeyCode::Right, KeyCode::Char(' ')]);
+    let outcome =
+        install_screen::apply(&workspace, &ledger, &again, &AgentHomes::default()).unwrap();
+
+    assert_eq!(
+        outcome.stdout,
+        "collapse: removed rule git/commits\n\n0 installed, 1 removed\n"
+    );
+    assert!(!collapse.join("AGENTS.md").exists());
+}
+
+#[test]
+fn a_skill_and_a_rule_of_one_name_each_keep_a_box_of_their_own() {
+    let (dir, workspace, ledger) = shelved(&["collapse"], &["deploy"]);
+    flayer(dir.path(), &["add", "rule", "deploy", "Never on a Friday"]).unwrap();
+    let mut screen = screen_for(&workspace, &ledger);
+
+    press(
+        &mut screen,
+        &[
+            KeyCode::Right,
+            KeyCode::Char(' '),
+            KeyCode::Tab,
+            KeyCode::Char(' '),
+        ],
+    );
+
+    assert_eq!(screen.counts(), (2, 0));
+    assert_eq!(screen.message, None, "neither displaced the other");
+    let outcome =
+        install_screen::apply(&workspace, &ledger, &screen, &AgentHomes::default()).unwrap();
+    assert_eq!(
+        outcome.stdout,
+        "collapse: installed deploy\ncollapse: installed rule deploy\n\n2 installed, 0 removed\n"
+    );
+}
+
+#[test]
+fn a_project_offered_no_rules_is_told_where_rules_come_from() {
+    let (_dir, workspace, ledger) = shelved(&["collapse"], &["deploy"]);
+    let mut screen = screen_for(&workspace, &ledger);
+
+    press(&mut screen, &[KeyCode::Tab]);
+    let drawn = rendered(&screen);
+    press(&mut screen, &[KeyCode::Right]);
+
+    // Wrapped where the column ends.
+    assert!(
+        drawn.contains("no rules to install: none of the workspace's own, and none"),
+        "{drawn}"
+    );
+    assert!(
+        drawn.contains("loaded; `flayer load <path>` or `flayer add rule` first"),
+        "{drawn}"
+    );
+    assert_eq!(screen.focus, Focus::Projects);
+    assert_eq!(
+        screen.message.as_deref(),
+        Some("no rules to install: none of the workspace's own, and none loaded")
+    );
+}
+
+#[test]
+fn a_rule_reaching_claude_alone_is_said_of_its_project_when_applied() {
+    let (dir, workspace, ledger) = shelved(&["collapse"], &["deploy"]);
+    let rules = own_directory_for(dir.path(), Kind::Rule).join("style");
+    fs::create_dir_all(&rules).unwrap();
+    fs::write(
+        rules.join("comments.md"),
+        "---\npaths:\n  - \"**/*.rs\"\n---\n\n# Comments say why, not what\n",
+    )
+    .unwrap();
+    let mut screen = screen_for(&workspace, &ledger);
+    press(
+        &mut screen,
+        &[KeyCode::Tab, KeyCode::Right, KeyCode::Char(' ')],
+    );
+
+    let outcome =
+        install_screen::apply(&workspace, &ledger, &screen, &AgentHomes::default()).unwrap();
+
+    assert_eq!(
+        outcome.stdout,
+        "collapse: installed rule style/comments\n\n1 installed, 0 removed\n"
+    );
+    assert_eq!(
+        outcome.stderr,
+        [
+            "warning: collapse: rule `style/comments` states `paths`, so it reaches claude only: \
+          codex and opencode read no .claude/rules"
+        ]
+    );
+    assert!(!outcome.ok);
 }

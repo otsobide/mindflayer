@@ -1,4 +1,4 @@
-//! `flayer install`: the screen for putting shelf skills into projects.
+//! `flayer install`: the screen for putting skills and rules into projects.
 //!
 //! The screen only marks boxes. Everything marked is carried out in one batch
 //! when you say so, and what that batch did is printed afterwards as an
@@ -20,6 +20,7 @@ use ratatui::crossterm::event::{self, Event, KeyEventKind};
 use ratatui::DefaultTerminal;
 
 use crate::commands::gather::scrubbed;
+use crate::commands::install::{named, render_said};
 use crate::commands::workspace::load_warnings;
 use crate::{CliError, Failure, Outcome};
 use state::{Pending, Screen, Step, Target};
@@ -123,8 +124,8 @@ pub fn commit(
 }
 
 /// `screen` built again from `ledger`, with each mark made again on the row
-/// offering the same name from the same place, and a warning for each mark
-/// left with no such row.
+/// offering the same kind and name from the same place, and a warning for
+/// each mark left with no such row.
 ///
 /// Carried by name and origin rather than by the source row, which a scrub
 /// can make one with another: the origin is shown without credentials before
@@ -148,17 +149,26 @@ fn rebuilt(
             let Some(pending) = row.pending() else {
                 continue;
             };
-            let (name, origin) = (row.candidate.name(), row.candidate.origin());
+            let (kind, name, origin) = (
+                row.candidate.kind(),
+                row.candidate.name(),
+                row.candidate.origin(),
+            );
             let carried = now
                 .rows
                 .iter()
-                .position(|row| row.candidate.name() == name && row.candidate.origin() == origin)
+                .position(|row| {
+                    row.candidate.kind() == kind
+                        && row.candidate.name() == name
+                        && row.candidate.origin() == origin
+                })
                 .is_some_and(|index| now.mark(index, pending == Pending::Install));
             if !carried {
                 lost.push(format!(
-                    "warning: {}: {name} from {origin} is no longer on the shelf once the ledger \
+                    "warning: {}: {} from {origin} is no longer on the shelf once the ledger \
                      was scrubbed, so it was left as it was",
-                    was.name()
+                    was.name(),
+                    named(kind, name)
                 ));
             }
         }
@@ -176,7 +186,8 @@ pub fn registered(workspace: &FlayerWorkspace) -> (Vec<MindProject>, Vec<String>
     (projects, warnings)
 }
 
-/// Ask core how each shelf entry stands with each project.
+/// Ask core how everything of every kind that can be installed stands with
+/// each project.
 ///
 /// Public because it and [`apply`] are the two ends of this feature that do
 /// not need a terminal: a test builds a screen, presses the keys a person
@@ -188,7 +199,10 @@ pub fn build(
 ) -> Result<Screen, install::InstallError> {
     let mut targets = Vec::new();
     for project in projects {
-        let candidates = install::survey(workspace, ledger, &project, Kind::Skill)?;
+        let mut candidates = Vec::new();
+        for kind in Kind::ALL {
+            candidates.extend(install::survey(workspace, ledger, &project, kind)?);
+        }
         let mut target = Target::new(project, candidates);
         // Which of several offers of one name is the copy the project holds.
         let project = target.project.clone();
@@ -238,21 +252,22 @@ pub fn apply(
     let mut stderr = Vec::new();
     // Said once a project, after the warnings, and no reason to fail.
     let mut notes: Vec<String> = Vec::new();
-    // The projects an install was asked of, each told once of the folders
-    // its settings name that no install uses.
-    let mut installing: Vec<&Path> = Vec::new();
+    // The projects and kinds an install was asked of, each told once of the
+    // folders its settings name for the kind that no install uses.
+    let mut installing: Vec<(&Path, Kind)> = Vec::new();
     let (mut installed, mut removed) = (0usize, 0usize);
 
     for (target, row, what) in screen.pending() {
         let target = &screen.targets[target];
         let entry = &target.rows[row];
         let project = &target.project;
+        let kind = entry.candidate.kind();
 
         match what {
             Pending::Install => {
-                if !installing.contains(&project.root()) {
-                    installing.push(project.root());
-                    stderr.extend(crate::commands::install::misplaced(project, &[Kind::Skill]));
+                if !installing.contains(&(project.root(), kind)) {
+                    installing.push((project.root(), kind));
+                    stderr.extend(crate::commands::install::misplaced(project, &[kind]));
                 }
                 // One that cannot be installed is said and passed over: the
                 // rest were marked too, and what was already done is reported.
@@ -273,37 +288,56 @@ pub fn apply(
                         continue;
                     }
                 };
+                let name = named(kind, entry.candidate.name());
                 for left in &done.left_out {
                     stderr.push(format!(
-                        "warning: {}: {} {}",
+                        "warning: {}: {name} {}",
                         project.name(),
-                        entry.candidate.name(),
                         crate::commands::install::left_out(left)
                     ));
                 }
-                if let Some(note) = done.excluded.as_ref().and_then(Excluded::warning) {
-                    let note = format!("note: {note}");
+                let mut noted: Vec<String> = Vec::new();
+                noted.extend(
+                    done.excluded
+                        .as_ref()
+                        .and_then(Excluded::warning)
+                        .map(|note| format!("note: {note}")),
+                );
+                // What the project's rules came to, rendered with the one
+                // installed: said of the project, as each line here is.
+                if let Some(rendered) = &done.rendered {
+                    let (warned, said) = render_said(rendered, Some(project.name()));
+                    stderr.extend(warned);
+                    if let Some(reason) = &rendered.still_excluded {
+                        stderr.push(format!(
+                            "warning: {}: the exclude file still keeps out of git a file that \
+                             is no longer Mindflayer's: {reason}",
+                            project.name()
+                        ));
+                    }
+                    noted.extend(said);
+                }
+                for note in noted {
                     if !notes.contains(&note) {
                         notes.push(note);
                     }
                 }
                 if let Some(reason) = done.installed.unhashed() {
                     stderr.push(format!(
-                        "warning: {}: {} was recorded without a hash of what it holds: {reason}",
+                        "warning: {}: {name} was recorded without a hash of what it holds: {reason}",
                         project.name(),
-                        entry.candidate.name()
                     ));
                 }
                 match done.installed {
-                    Installed::Added { name, .. } | Installed::Updated { name, .. } => {
+                    Installed::Added { .. } | Installed::Updated { .. } => {
                         installed += 1;
                         let _ = writeln!(stdout, "{}: installed {name}", project.name());
                     }
-                    Installed::Unchanged { name, .. } => {
+                    Installed::Unchanged { .. } => {
                         let _ = writeln!(stdout, "{}: {name} was already current", project.name());
                     }
                     // Refused rather than obeyed: somebody wrote that file.
-                    Installed::Foreign { name, path } => stderr.push(format!(
+                    Installed::Foreign { path, .. } => stderr.push(format!(
                         "warning: {}: {name} is already at {} and Mindflayer did not put it there, so it was left alone",
                         project.name(),
                         crate::commands::install::shown(project, &path)
@@ -312,13 +346,12 @@ pub fn apply(
                 stdout.push_str(&crate::commands::install::swept(project, &done.swept));
             }
             Pending::Remove => {
-                let name = entry.candidate.name();
                 let taken = match install::uninstall(
                     workspace,
                     ledger,
                     project,
-                    Kind::Skill,
-                    name,
+                    kind,
+                    entry.candidate.name(),
                     homes,
                 ) {
                     Err(install::InstallError::Ledger(error)) => return Err(error.into()),
@@ -328,14 +361,25 @@ pub fn apply(
                     }
                     Ok(taken) => taken,
                 };
+                let name = named(kind, entry.candidate.name());
                 match taken {
                     Removed::Removed {
-                        name,
                         still_excluded,
+                        rendered,
                         ..
                     } => {
                         removed += 1;
                         let _ = writeln!(stdout, "{}: removed {name}", project.name());
+                        // What the rules left came to without it.
+                        if let Some(rendered) = rendered {
+                            let (warned, said) = render_said(&rendered, Some(project.name()));
+                            stderr.extend(warned);
+                            for note in said {
+                                if !notes.contains(&note) {
+                                    notes.push(note);
+                                }
+                            }
+                        }
                         if let Some(reason) = still_excluded {
                             stderr.push(crate::commands::install::still(
                                 &name,
@@ -344,12 +388,12 @@ pub fn apply(
                             ));
                         }
                     }
-                    Removed::Foreign { name, path } => stderr.push(format!(
+                    Removed::Foreign { path, .. } => stderr.push(format!(
                         "warning: {}: {name} at {} was not installed by Mindflayer, so it was left alone",
                         project.name(),
                         crate::commands::install::shown(project, &path)
                     )),
-                    Removed::Absent { name } => {
+                    Removed::Absent { .. } => {
                         let _ = writeln!(stdout, "{}: {name} was not there", project.name());
                     }
                 }

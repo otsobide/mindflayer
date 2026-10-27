@@ -126,7 +126,7 @@ pub(crate) fn install_named(
     // Installed, and what the project's rules came to on the way, which can
     // leave some of its agents reading none of them.
     if let Some(rendered) = &done.rendered {
-        let (warned, notes) = render_said(rendered);
+        let (warned, notes) = render_said(rendered, None);
         if !warned.is_empty() {
             outcome.ok = false;
         }
@@ -173,13 +173,19 @@ pub(crate) fn named(kind: Kind, name: &str) -> String {
 }
 
 /// What rendering a project's rules has to say ([`Rendered::all_warnings`]
-/// and [`Rendered::notes`]), as `warning:` and `note:` lines.
-pub(crate) fn render_said(rendered: &Rendered) -> (Vec<String>, Vec<String>) {
+/// and [`Rendered::notes`]), as `warning:` and `note:` lines: each warning
+/// said of `project` when one is given, as the install screen says every
+/// line of the project it is about. A note names its project already.
+pub(crate) fn render_said(
+    rendered: &Rendered,
+    project: Option<&str>,
+) -> (Vec<String>, Vec<String>) {
+    let of = project.map_or_else(String::new, |project| format!("{project}: "));
     (
         rendered
             .all_warnings()
             .iter()
-            .map(|warning| format!("warning: {warning}"))
+            .map(|warning| format!("warning: {of}{warning}"))
             .collect(),
         rendered
             .notes()
@@ -297,7 +303,7 @@ pub(crate) fn uninstall_named(
             let mut outcome = Outcome::plain(format!("removed {name} from {from}\n"));
             // What the rules left come to without it.
             if let Some(rendered) = rendered {
-                let (warned, notes) = render_said(&rendered);
+                let (warned, notes) = render_said(&rendered, None);
                 outcome.ok = warned.is_empty();
                 outcome.stderr.extend(warned);
                 outcome.stderr.extend(notes);
