@@ -819,6 +819,7 @@ fn held(
         }
     };
 
+    let settings = project.settings().filter(|_| !own);
     Member {
         entry,
         root,
@@ -828,6 +829,13 @@ fn held(
         holdings: Ok(Holdings {
             items,
             agents: status.map(|status| status.agents).unwrap_or_default(),
+            // The workspace's own have no settings, whatever a project at its
+            // root says: they reach agents by being installed.
+            named: settings
+                .map(|settings| settings.agents.clone())
+                .unwrap_or_default(),
+            share: settings.map(|settings| settings.share),
+            edit_tracked: settings.is_some_and(|settings| settings.edit_tracked),
             warnings,
             directories,
             templates,
