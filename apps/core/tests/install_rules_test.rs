@@ -288,6 +288,70 @@ fn a_rules_copy_from_before_settings_goes_with_an_uninstall_before_any_render() 
 }
 
 #[test]
+fn a_rules_copy_changed_before_settings_refuses_neither_an_install_nor_an_uninstall() {
+    let (_dir, workspace, project, ledger, _, changed) = moved_to_settings();
+    // The render leaves it, the project's own, forced or not, so it is no
+    // edit of the installation for a change to refuse.
+    assert!(
+        install::standings(&workspace, &ledger, &project, Kind::Rule)
+            .unwrap()
+            .iter()
+            .all(|(_, standing)| *standing != Standing::Edited),
+        "{:?}",
+        install::standings(&workspace, &ledger, &project, Kind::Rule)
+    );
+
+    let candidate = install::offered(
+        &workspace,
+        &ledger,
+        &project,
+        Kind::Rule,
+        "review/tone",
+        None,
+    )
+    .unwrap();
+    let done = install::install(
+        &workspace,
+        &ledger,
+        &project,
+        &candidate,
+        &AgentHomes::default(),
+    )
+    .unwrap();
+
+    assert!(
+        !matches!(done.installed, Installed::Edited { .. }),
+        "{:?}",
+        done.installed
+    );
+    assert!(
+        done.rendered.unwrap().warnings.contains(&Warning::Edited {
+            route: String::from("review/tone"),
+            path: changed.clone(),
+        }),
+        "said as left"
+    );
+    assert_eq!(fs::read_to_string(&changed).unwrap(), "Ours now.\n");
+    let removed = take(&workspace, &ledger, &project, "review/tone").unwrap();
+    assert!(matches!(removed, Removed::Removed { .. }), "{removed:?}");
+    assert_eq!(fs::read_to_string(&changed).unwrap(), "Ours now.\n");
+}
+
+#[test]
+fn an_uninstall_before_any_render_leaves_a_rules_copy_changed_before_settings() {
+    let (_dir, workspace, project, ledger, _, changed) = moved_to_settings();
+
+    let removed = take(&workspace, &ledger, &project, "review/tone").unwrap();
+
+    assert!(matches!(removed, Removed::Removed { .. }), "{removed:?}");
+    assert_eq!(fs::read_to_string(&changed).unwrap(), "Ours now.\n");
+    assert_eq!(
+        ledger.installations("app", Kind::Rule).unwrap(),
+        ["git/no-force-push"]
+    );
+}
+
+#[test]
 fn a_rule_from_a_loaded_workspace_records_where_it_came_from() {
     let (dir, mut workspace, project, ledger) = older();
     let (team, _) = FlayerWorkspace::init(dir.path().join("team")).unwrap();

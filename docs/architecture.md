@@ -1881,6 +1881,14 @@ no record. Forcing reaches only what the ledger records: a copy nothing
 records stays out of reach whatever is asked. The install screen never
 forces, and holds an edited row's box as it holds a foreign one's.
 
+A rule's copy from before a project had settings, in the folder its
+`mind.toml` named, is not one of the copies told in a project marked by
+them. The next render takes it out while it holds what was copied and
+leaves it, the project's own, when it does not, forced or not ([moving a
+project to its settings](#moving-a-project-to-its-settings)), so an edit
+there refuses nothing: refused, it would be a change `--force` does not
+make either.
+
 A record with no hash, from before version 3 of the ledger or of a copy
 that could not be read back, is held to its offer byte for byte: current
 while its copy matches, edited otherwise, and edited when nothing offers it

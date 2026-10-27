@@ -156,6 +156,13 @@ pub(crate) fn of_skill(
 /// A section that cannot be read back, and anything at a file's place that
 /// is not a file, are edited: something is there, and it is not what was
 /// written.
+///
+/// In a project marked by its settings, a copy from before it had them, in
+/// the folder its `mind.toml` named, is not looked at. The next render takes
+/// it out while it holds what was copied and leaves it, the project's own,
+/// when it does not ([`super::rules`]'s `Copied::take_out`), forced or not:
+/// an edit there is nothing a change refuses or writes over, so telling it
+/// as edited would refuse a change that `--force` would not make either.
 pub(crate) fn rule_copies(
     workspace: &FlayerWorkspace,
     project: &MindProject,
@@ -164,9 +171,12 @@ pub(crate) fn rule_copies(
     offered: &[&Offer],
 ) -> Vec<Looked> {
     let name = &record.name;
+    let rendered = project.settings().is_some();
+    let file = super::rules::claude_file(name);
     record
         .targets
         .iter()
+        .filter(|target| !rendered || target.path == agents_md::FILE || target.path == file)
         .map(|target| {
             if target.path == agents_md::FILE {
                 let path = project.root().join(agents_md::FILE);
