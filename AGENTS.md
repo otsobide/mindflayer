@@ -270,7 +270,8 @@ These are easy to break from a single file without noticing.
   and exclude entry dropped. A project's move to settings
   (`migrate::project`) moves its installs the same way, through
   `reapply::retarget`, and holds a record from before hashes to its offer
-  (D-04).
+  (D-04). Being made once, it is refused when the workspace `mind migrate`
+  consults cannot be read, never made as if that one recorded nothing.
   `install::disown` is private to core, so no front end drops a record on its
   own. A front end adds through `lifecycle::add`, never `create` or
   `create_from`, which leave a stale record in place.
