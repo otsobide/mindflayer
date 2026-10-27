@@ -687,6 +687,32 @@ fn a_tracked_agents_md_in_a_shared_project_takes_the_block() {
 }
 
 #[test]
+fn a_tracked_agents_md_in_a_local_project_with_edit_tracked_takes_the_block() {
+    let mut fixture = fixture(Share::Local, &Agent::ALL);
+    fixture
+        .project
+        .change_settings(|settings| settings.edit_tracked = true)
+        .unwrap();
+    fs::write(fixture.agents_md(), TEAM).unwrap();
+    common::indexed(fixture.dir.path());
+    fixture.rule("git/no-force-push", NO_FORCE_PUSH);
+
+    let done = fixture.install("git/no-force-push");
+
+    assert!(fixture.text().starts_with(TEAM));
+    assert!(fixture
+        .text()
+        .contains("<!-- mindflayer:rule git/no-force-push -->"));
+    let rendered = done.rendered.unwrap();
+    assert_eq!(rendered.block.unwrap().written, agents_md::Written::Changed);
+    assert!(rendered.warnings.is_empty(), "{:?}", rendered.warnings);
+    // The team's file, which git tracks: never Mindflayer's, never kept out.
+    assert!(!fixture.ledger.created("app", "AGENTS.md").unwrap());
+    assert_eq!(rendered.excluded, None);
+    assert!(!fixture.ignored("AGENTS.md"));
+}
+
+#[test]
 fn a_block_left_in_a_file_that_can_no_longer_be_edited_is_said() {
     let mut fixture = fixture(Share::Shared, &Agent::ALL);
     fs::write(fixture.agents_md(), TEAM).unwrap();
