@@ -300,7 +300,10 @@ pub(crate) fn install(
 /// forgotten.
 ///
 /// Only one the ledger records: a section in the block nothing records, or
-/// a file at its place in Claude's folder, is somebody's, and left.
+/// a file at its place in Claude's folder, is somebody's, and left. Refused
+/// while its section is in a block no render may edit
+/// ([`InstallError::Withheld`]), which would keep the section with no record
+/// of it.
 pub(crate) fn uninstall(
     workspace: &FlayerWorkspace,
     ledger: &Ledger,
@@ -519,7 +522,8 @@ fn withholding(project: &MindProject) -> Option<Withheld> {
 /// leaving its section out would take it from every agent, as the block
 /// refuses a rule it cannot read. What can refuse is asked before anything is
 /// written: a block that cannot be read or holds a section nothing records,
-/// a file or a folder where no rule is written, a `CLAUDE.md` that cannot be
+/// a rule taken out whose section is in a block that cannot be edited, a
+/// file or a folder where no rule is written, a `CLAUDE.md` that cannot be
 /// read. What is recorded before the first write is what a render killed
 /// part way leaves for the next one ([`Wanted::pending`]); a block that
 /// cannot be written puts that record back as it was.
@@ -581,6 +585,19 @@ fn render_held(
     }
     let file = root.join(AGENTS_MD);
     let withheld = withholding(project);
+    // A section in a block no render can edit stays there whatever an
+    // uninstall does, and forgetting its record would leave the next render
+    // that can edit the file taking this workspace's own section for
+    // somebody's ([`InstallError::NotRecorded`]).
+    if let (Change::Uninstall(going), Some(why)) = (change, &withheld) {
+        if block_routes(root).iter().any(|route| route == going) {
+            return Err(InstallError::Withheld {
+                file,
+                route: going.to_owned(),
+                why: why.clone(),
+            });
+        }
+    }
     let block = withheld.is_none() && !sections.is_empty();
     if withheld.is_none() {
         agents_md::linked_inside(root, &file)?;

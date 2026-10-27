@@ -3854,7 +3854,11 @@ line and the screens install rules (#46).
   among those the project names, are said to read none of them
   (`Warning::Withheld`). A block written there before, by a project shared
   then, is left as it is, and said (`Warning::Left`), as an import left in
-  a tracked `CLAUDE.md` is.
+  a tracked `CLAUDE.md` is. A rule whose section it holds is not
+  uninstalled meanwhile (`InstallError::Withheld`): its section would stay,
+  with no record, and the next render that may edit the file would take
+  this workspace's own section for somebody's. Sharing the project, setting
+  `edit_tracked`, or taking the section out by hand lets it go.
 - **Somebody's section is never written over.** A section in the block
   that the ledger does not record was written by another workspace that
   links the project, or by a hand that copied a marker, and rendering the

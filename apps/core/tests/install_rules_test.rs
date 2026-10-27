@@ -355,6 +355,10 @@ impl Fixture {
     }
 
     fn uninstall(&self, route: &str) -> Removed {
+        self.try_uninstall(route).unwrap()
+    }
+
+    fn try_uninstall(&self, route: &str) -> Result<Removed, InstallError> {
         install::uninstall(
             &self.workspace,
             &self.ledger,
@@ -363,7 +367,6 @@ impl Fixture {
             route,
             &AgentHomes::default(),
         )
-        .unwrap()
     }
 
     fn render(&self) -> rules::Rendered {
@@ -738,6 +741,42 @@ fn a_block_left_in_a_file_that_can_no_longer_be_edited_is_said() {
     );
     assert_eq!(rendered.import.reach, Reach::Fallback(Fallback::NoBlock));
     assert!(fixture.claude_file("git/no-force-push").is_file());
+}
+
+#[test]
+fn a_rule_whose_section_is_in_a_block_that_cannot_be_edited_is_not_uninstalled() {
+    let mut fixture = fixture(Share::Shared, &Agent::ALL);
+    fs::write(fixture.agents_md(), TEAM).unwrap();
+    fixture.rule("git/no-force-push", NO_FORCE_PUSH);
+    fixture.install("git/no-force-push");
+    common::indexed(fixture.dir.path());
+    fixture
+        .project
+        .change_settings(|settings| settings.share = Share::Local)
+        .unwrap();
+    let before = fixture.text();
+
+    let refused = fixture.try_uninstall("git/no-force-push").unwrap_err();
+
+    assert!(
+        matches!(&refused, InstallError::Withheld { route, why: Withheld::Tracked, .. }
+            if route == "git/no-force-push"),
+        "{refused:?}"
+    );
+    assert_eq!(fixture.text(), before);
+    assert_eq!(fixture.records().len(), 1);
+
+    // Shared again, the section is still this workspace's to render, and
+    // the rule its to take out.
+    fixture
+        .project
+        .change_settings(|settings| settings.share = Share::Shared)
+        .unwrap();
+    fixture.render();
+    fixture.uninstall("git/no-force-push");
+
+    assert_eq!(fixture.text(), TEAM);
+    assert!(fixture.records().is_empty());
 }
 
 #[test]

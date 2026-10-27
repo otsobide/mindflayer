@@ -1605,6 +1605,12 @@ pub enum InstallError {
     },
     #[error("{file}: its block holds rule `{route}`, which this workspace did not install there, so the project's rules are not rendered: uninstall it from the workspace that did, or take its section out by hand")]
     NotRecorded { file: PathBuf, route: String },
+    #[error("{file}: holds rule `{route}` in Mindflayer's block, which cannot be edited ({why}), so the rule is not uninstalled: share the project or set edit_tracked, or take its section out by hand")]
+    Withheld {
+        file: PathBuf,
+        route: String,
+        why: rules::Withheld,
+    },
     #[error(transparent)]
     AgentsMd(#[from] AgentsMdError),
     #[error(transparent)]
