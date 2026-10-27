@@ -601,7 +601,7 @@ fn a_copy_holding_a_link_is_left_alone_until_an_install_is_forced_to_write_over_
         .file_type()
         .is_symlink());
     let status = mind(&alpha, &["status"]).unwrap().stdout;
-    assert!(status.contains("commit-style  installed"), "{status}");
+    assert!(status.contains("commit-style  current"), "{status}");
 }
 
 #[test]
@@ -692,7 +692,7 @@ fn a_copy_changed_since_it_was_installed_is_written_over_only_with_force() {
             "updated commit-style in alpha, from workspace\n"
         );
         assert_eq!(fs::read_to_string(&manifest).unwrap(), written);
-        status("installed");
+        status("current");
     }
 }
 

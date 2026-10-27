@@ -523,15 +523,17 @@ fn item_row<'a>(item: &'a Item, agents: &[Agent], width: usize, room: usize) -> 
     ListItem::new(lines)
 }
 
-/// What a state looks like: green for what Mindflayer installed whole,
-/// yellow for an install partly gone, which the next install puts back,
-/// cyan for one somebody edited, which no install writes over unless forced,
-/// and magenta for somebody's, which no key of Mindflayer's changes.
+/// What a state looks like: green for what Mindflayer installed whole and
+/// current, yellow for one an update brings up to date or puts back, cyan
+/// for one somebody edited, which nothing writes over unless forced, red for
+/// one nothing offers any more, and magenta for somebody's, which no key of
+/// Mindflayer's changes.
 fn state_style(state: State) -> Style {
     match state {
-        State::Installed => Style::default().fg(Color::Green),
-        State::Partial => warn(),
+        State::Current => Style::default().fg(Color::Green),
+        State::Outdated | State::Missing => warn(),
         State::Edited => Style::default().fg(Color::Cyan),
+        State::Orphaned => Style::default().fg(Color::Red),
         State::Foreign => Style::default().fg(Color::Magenta),
         State::Authored => Style::default(),
     }

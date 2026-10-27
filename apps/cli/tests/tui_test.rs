@@ -607,10 +607,10 @@ fn a_projects_rows_say_how_each_artifact_stands_and_which_agents_read_it() {
     // What `flayer status -p collapse` says, a row each: the state, then a
     // badge in each agent's place where that agent reads it.
     for row in [
-        "skill commit-style  installed CC CX OC  How commits are written",
-        "skill deploy        partial      CX OC  Ship the service",
-        "skill notes         foreign   CC    OC  My own notes",
-        "skill review        authored            Review a change",
+        "skill commit-style  current  CC CX OC  How commits are written",
+        "skill deploy        missing     CX OC  Ship the service",
+        "skill notes         foreign  CC    OC  My own notes",
+        "skill review        authored           Review a change",
     ] {
         assert!(drawn.contains(row), "{row}\n{drawn}");
     }
@@ -618,10 +618,10 @@ fn a_projects_rows_say_how_each_artifact_stands_and_which_agents_read_it() {
     assert_eq!(
         status.stdout,
         "\
-commit-style  installed  claude,codex,opencode  workspace
-deploy        partial    codex,opencode         workspace
-notes         foreign    claude,opencode
-review        authored   -
+commit-style  current   claude,codex,opencode  workspace
+deploy        missing   codex,opencode         workspace
+notes         foreign   claude,opencode
+review        authored  -
 "
     );
     // The workspace's own are no project's, and say nothing of the kind.

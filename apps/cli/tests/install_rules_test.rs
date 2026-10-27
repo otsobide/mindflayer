@@ -365,6 +365,6 @@ fn a_route_two_places_offer_is_installed_from_the_one_from_names() {
         .contains("<!-- mindflayer:rule git/commits -->\n# Commit as the team does\n"));
     assert_eq!(
         mind(&alpha, &["status"]).unwrap().stdout,
-        "git/commits  installed  claude,codex,opencode  load:team\n"
+        "git/commits  current  claude,codex,opencode  load:team\n"
     );
 }

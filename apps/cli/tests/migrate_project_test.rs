@@ -124,9 +124,9 @@ fn mind_migrate_says_what_it_would_move_then_moves_it_and_then_has_nothing_to_do
     let status = mind(&root, &["status"]).unwrap();
     assert_eq!(
         status.stdout,
-        "deploy  installed  claude,codex,opencode  workspace\n\
-         notes   authored   -\n\
-         review  installed  claude,codex,opencode  workspace\n"
+        "deploy  current   claude,codex,opencode  workspace\n\
+         notes   authored  -\n\
+         review  current   claude,codex,opencode  workspace\n"
     );
 
     let again = mind(&root, &["migrate", "--yes"]).unwrap();
@@ -577,7 +577,7 @@ fn mind_migrate_moves_a_settings_json_to_a_settings_toml_saying_the_same() {
     assert_eq!(recorded(dir.path(), "collapse"), copies);
     assert_eq!(
         mind(&root, &["status"]).unwrap().stdout,
-        "deploy  installed  claude,codex,opencode  workspace\n"
+        "deploy  current  claude,codex,opencode  workspace\n"
     );
     // Local still, so git is offered nothing.
     assert!(untracked(&root).is_empty(), "{:?}", untracked(&root));

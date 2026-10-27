@@ -1373,7 +1373,7 @@ fn status_lists_the_rules_a_project_received_from_the_ledger_and_the_block() {
     assert_eq!(
         status_of(&fixture, "git/no-force-push"),
         Some((
-            State::Installed,
+            State::Current,
             Agent::ALL.to_vec(),
             Some(String::from(WORKSPACE_ORIGIN))
         ))
@@ -1381,7 +1381,7 @@ fn status_lists_the_rules_a_project_received_from_the_ledger_and_the_block() {
     assert_eq!(
         status_of(&fixture, "rust/errors"),
         Some((
-            State::Installed,
+            State::Current,
             vec![Agent::Claude],
             Some(String::from(WORKSPACE_ORIGIN))
         ))
@@ -1393,14 +1393,14 @@ fn status_lists_the_rules_a_project_received_from_the_ledger_and_the_block() {
     assert_eq!(
         status_of(&fixture, "git/no-force-push"),
         Some((
-            State::Partial,
+            State::Missing,
             Vec::new(),
             Some(String::from(WORKSPACE_ORIGIN))
         ))
     );
     assert_eq!(
         status_of(&fixture, "rust/errors").map(|(state, ..)| state),
-        Some(State::Installed)
+        Some(State::Current)
     );
 }
 
@@ -1413,7 +1413,7 @@ fn status_says_claude_reads_a_rule_by_its_own_file_where_it_reads_no_block() {
 
     assert_eq!(
         status_of(&fixture, "git/no-force-push").map(|(state, agents, _)| (state, agents)),
-        Some((State::Installed, Agent::ALL.to_vec()))
+        Some((State::Current, Agent::ALL.to_vec()))
     );
 
     // Claude's file gone, Claude reads the rule nowhere: the block is not
@@ -1422,7 +1422,30 @@ fn status_says_claude_reads_a_rule_by_its_own_file_where_it_reads_no_block() {
 
     assert_eq!(
         status_of(&fixture, "git/no-force-push").map(|(state, agents, _)| (state, agents)),
-        Some((State::Partial, vec![Agent::Codex, Agent::OpenCode]))
+        Some((State::Missing, vec![Agent::Codex, Agent::OpenCode]))
+    );
+}
+
+#[test]
+fn status_says_a_rule_outdated_once_its_offer_changes_and_orphaned_once_it_goes() {
+    let fixture = fixture(Share::Shared, &Agent::ALL);
+    let offered = fixture.rule("git/no-force-push", NO_FORCE_PUSH);
+    fixture.install("git/no-force-push");
+
+    fs::write(&offered, "Never force-push, ever.\n").unwrap();
+    let outdated = status_of(&fixture, "git/no-force-push");
+    fs::remove_file(&offered).unwrap();
+    let orphaned = status_of(&fixture, "git/no-force-push");
+
+    // Every agent still reads what was rendered, until it is brought up to
+    // date or taken out.
+    assert_eq!(
+        outdated.map(|(state, agents, _)| (state, agents)),
+        Some((State::Outdated, Agent::ALL.to_vec()))
+    );
+    assert_eq!(
+        orphaned.map(|(state, agents, _)| (state, agents)),
+        Some((State::Orphaned, Agent::ALL.to_vec()))
     );
 }
 
@@ -1461,7 +1484,7 @@ fn status_lists_a_rule_copied_into_a_project_a_mind_toml_marks_as_its_copy() {
     let rule = status.projects[0]
         .find(Kind::Rule, "git/no-force-push")
         .unwrap();
-    assert_eq!(rule.state, State::Installed);
+    assert_eq!(rule.state, State::Current);
     assert_eq!(rule.origin.as_deref(), Some(WORKSPACE_ORIGIN));
 }
 
@@ -1847,7 +1870,7 @@ fn status_says_the_agents_a_block_withheld_from_a_tracked_agents_md_misses() {
 
     assert_eq!(
         status_of(&fixture, "git/no-force-push").map(|(state, agents, _)| (state, agents)),
-        Some((State::Installed, vec![Agent::Claude]))
+        Some((State::Current, vec![Agent::Claude]))
     );
     assert_eq!(
         missed_in(&fixture),

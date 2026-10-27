@@ -55,10 +55,10 @@ fn workspace_with_everything() -> (TempDir, PathBuf) {
 
 /// What `collapse` holds, as a report about it alone lays it out.
 const COLLAPSE: &str = "\
-commit-style  installed  claude,codex,opencode  workspace
-deploy        partial    codex,opencode         load:../team
-notes         foreign    claude,opencode
-review        authored   -
+commit-style  current   claude,codex,opencode  workspace
+deploy        missing   codex,opencode         load:../team
+notes         foreign   claude,opencode
+review        authored  -
 ";
 
 /// What a report says of `legacy`, which the `mind.toml` an older
@@ -75,11 +75,11 @@ fn status_says_what_every_project_holds_from_where_and_for_which_agents() {
     assert_eq!(
         outcome.stdout,
         "\
-collapse  commit-style  installed  claude,codex,opencode  workspace
-collapse  deploy        partial    codex,opencode         load:../team
-collapse  notes         foreign    claude,opencode
-collapse  review        authored   -
-legacy    commit-style  installed  -                      workspace
+collapse  commit-style  current   claude,codex,opencode  workspace
+collapse  deploy        missing   codex,opencode         load:../team
+collapse  notes         foreign   claude,opencode
+collapse  review        authored  -
+legacy    commit-style  current   -                      workspace
 "
     );
     assert_eq!(outcome.stderr, [LEGACY]);
@@ -106,7 +106,7 @@ fn a_project_an_older_mindflayer_made_reaches_no_agent_it_names() {
 
     let outcome = flayer(&projects, &["status", "-p", "legacy"]).unwrap();
 
-    assert_eq!(outcome.stdout, "commit-style  installed  -  workspace\n");
+    assert_eq!(outcome.stdout, "commit-style  current  -  workspace\n");
 }
 
 #[test]
@@ -153,11 +153,11 @@ fn a_stale_entry_is_listed_as_stale_and_the_rest_still_print() {
     assert_eq!(
         outcome.stdout,
         "\
-collapse  commit-style  installed  claude,codex,opencode  workspace
-collapse  deploy        partial    codex,opencode         load:../team
-collapse  notes         foreign    claude,opencode
-collapse  review        authored   -
-legacy    commit-style  installed  -                      workspace
+collapse  commit-style  current   claude,codex,opencode  workspace
+collapse  deploy        missing   codex,opencode         load:../team
+collapse  notes         foreign   claude,opencode
+collapse  review        authored  -
+legacy    commit-style  current   -                      workspace
 old-api                 stale
 "
     );
@@ -536,10 +536,7 @@ fn mind_status_as_json_reports_its_one_project() {
     assert_eq!(here, named);
     let (report, _): (Report, _) = enveloped(&here);
     assert_eq!(report.projects.len(), 1);
-    assert_eq!(
-        words(&report),
-        ["legacy commit-style installed - workspace"]
-    );
+    assert_eq!(words(&report), ["legacy commit-style current - workspace"]);
 }
 
 #[test]
@@ -584,7 +581,7 @@ fn status_warns_of_a_kind_installed_where_none_of_the_projects_agents_reads() {
     let across = flayer(dir.path(), &["status"]).unwrap();
     let json = flayer(dir.path(), &["status", "--json"]).unwrap();
 
-    assert_eq!(here.stdout, "deploy  installed  -  workspace\n");
+    assert_eq!(here.stdout, "deploy  current  -  workspace\n");
     for outcome in [&here, &across] {
         assert_eq!(outcome.stderr, [format!("warning: {unread}")]);
         assert!(!outcome.ok);
@@ -615,7 +612,7 @@ fn status_says_a_target_no_install_may_use_and_the_one_agent_its_others_miss() {
 
     assert_eq!(
         status.stdout,
-        "deploy  installed  claude,opencode  workspace\n"
+        "deploy  current  claude,opencode  workspace\n"
     );
     assert_eq!(
         status.stderr,
@@ -669,8 +666,8 @@ fn status_lists_the_rules_a_project_received_and_warns_of_one_some_agents_read_n
 
     assert_eq!(
         here.stdout,
-        "git/commits     installed  claude,codex,opencode  workspace\n\
-         style/comments  installed  claude                 workspace\n"
+        "git/commits     current  claude,codex,opencode  workspace\n\
+         style/comments  current  claude                 workspace\n"
     );
     assert_eq!(here.stderr, [format!("warning: {unseen}")]);
     assert!(!here.ok);
@@ -708,7 +705,7 @@ fn status_says_an_installed_skill_edited_with_mind_edit_is_edited() {
     let before = flayer(dir.path(), &["status", "-p", "collapse"]).unwrap();
     assert_eq!(
         before.stdout,
-        "commit-style  installed  claude,codex,opencode  workspace\n"
+        "commit-style  current  claude,codex,opencode  workspace\n"
     );
 
     mind(

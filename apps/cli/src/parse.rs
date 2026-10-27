@@ -203,9 +203,10 @@ pub enum Command {
         target: Option<String>,
     },
 
-    /// Say what this project holds: whether each artifact was installed,
-    /// is partly gone, is somebody's or is the project's own, which agents
-    /// read it, and where what was installed came from.
+    /// Say what this project holds: whether what Mindflayer installed is
+    /// current, outdated, edited, missing or orphaned, what is somebody's
+    /// and what is the project's own, which agents read each, and where
+    /// what was installed came from.
     Status {
         /// Print it as JSON, in the envelope every reading command's --json
         /// shares.
@@ -532,9 +533,10 @@ pub enum FlayerCommand {
         project: Option<String>,
     },
 
-    /// Say what every managed project holds: whether each artifact was
-    /// installed, is partly gone, is somebody's or is the project's own,
-    /// which agents read it, and where what was installed came from.
+    /// Say what every managed project holds: whether what Mindflayer
+    /// installed is current, outdated, edited, missing or orphaned, what is
+    /// somebody's and what is the project's own, which agents read each,
+    /// and where what was installed came from.
     Status {
         /// Only this project.
         #[arg(short, long, value_name = "PROJECT")]

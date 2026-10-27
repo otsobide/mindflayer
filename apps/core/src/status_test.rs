@@ -8,7 +8,7 @@ fn a_state_is_serialized_as_its_slug() {
 
     assert_eq!(
         serialized,
-        r#"["installed","partial","edited","foreign","authored"]"#
+        r#"["current","outdated","edited","missing","orphaned","foreign","authored"]"#
     );
 }
 
@@ -48,14 +48,14 @@ fn a_report_serializes_every_field_by_the_name_it_is_held_to() {
                     ArtifactStatus {
                         kind: Kind::Skill,
                         name: String::from("deploy"),
-                        state: State::Partial,
+                        state: State::Missing,
                         agents: vec![Agent::OpenCode],
                         origin: Some(String::from("workspace")),
                     },
                     ArtifactStatus {
                         kind: Kind::Rule,
                         name: String::from("rust/errors"),
-                        state: State::Installed,
+                        state: State::Current,
                         agents: vec![Agent::Claude],
                         origin: Some(String::from("workspace")),
                     },
@@ -86,9 +86,9 @@ fn a_report_serializes_every_field_by_the_name_it_is_held_to() {
             r#""unreached":[{"kind":"skill","targets":[".skills"],"agents":["claude"]}],"#,
             r#""missed":[{"kind":"rule","name":"rust/errors","agents":["opencode"]}],"#,
             r#""artifacts":["#,
-            r#"{"kind":"skill","name":"deploy","state":"partial","#,
+            r#"{"kind":"skill","name":"deploy","state":"missing","#,
             r#""agents":["opencode"],"origin":"workspace"},"#,
-            r#"{"kind":"rule","name":"rust/errors","state":"installed","#,
+            r#"{"kind":"rule","name":"rust/errors","state":"current","#,
             r#""agents":["claude"],"origin":"workspace"}]},"#,
             r#"{"name":null,"entry":"../old-api","path":"/old-api","marker":null,"#,
             r#""agents":[],"stale":"gone","unreached":[],"missed":[],"artifacts":[]}]}"#,

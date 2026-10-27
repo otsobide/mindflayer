@@ -244,7 +244,7 @@ fn status_warns_that_no_agent_reads_the_targets_once_they_are_set() {
     let here = mind(&root, &["status"]).unwrap();
     let across = flayer(dir.path(), &["status"]).unwrap();
 
-    assert_eq!(here.stdout, "deploy  installed  -  workspace\n");
+    assert_eq!(here.stdout, "deploy  current  -  workspace\n");
     for outcome in [&here, &across] {
         assert_eq!(outcome.stderr, [format!("warning: {UNREAD}")]);
         assert!(!outcome.ok);
@@ -276,7 +276,7 @@ fn an_agent_pointed_at_the_target_by_a_link_reads_it() {
 
     assert_eq!(
         status.stdout,
-        "deploy  installed  claude,codex,opencode  workspace\n"
+        "deploy  current  claude,codex,opencode  workspace\n"
     );
     assert!(status.stderr.is_empty(), "{:?}", status.stderr);
     assert!(status.ok);
@@ -299,7 +299,7 @@ fn resetting_with_the_links_still_there_keeps_the_copy_mindflayers() {
     let status = mind(&root, &["status"]).unwrap();
     assert_eq!(
         status.stdout,
-        "deploy  installed  claude,codex,opencode  workspace\n"
+        "deploy  current  claude,codex,opencode  workspace\n"
     );
     assert!(status.stderr.is_empty(), "{:?}", status.stderr);
 

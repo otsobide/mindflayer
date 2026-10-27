@@ -822,7 +822,7 @@ fn held(
         }
     }
     // An install nothing of which is found is in the report all the same, as
-    // partial, and has a row like the rest: `i` puts it back from there.
+    // missing, and has a row like the rest: `i` puts it back from there.
     for held in status.iter().flat_map(|status| &status.artifacts) {
         if !items
             .iter()
