@@ -38,13 +38,27 @@ fn a_report_serializes_every_field_by_the_name_it_is_held_to() {
                     targets: vec![String::from(".skills")],
                     agents: vec![Agent::Claude],
                 }],
-                artifacts: vec![ArtifactStatus {
-                    kind: Kind::Skill,
-                    name: String::from("deploy"),
-                    state: State::Partial,
+                missed: vec![Missed {
+                    kind: Kind::Rule,
+                    name: String::from("rust/errors"),
                     agents: vec![Agent::OpenCode],
-                    origin: Some(String::from("workspace")),
                 }],
+                artifacts: vec![
+                    ArtifactStatus {
+                        kind: Kind::Skill,
+                        name: String::from("deploy"),
+                        state: State::Partial,
+                        agents: vec![Agent::OpenCode],
+                        origin: Some(String::from("workspace")),
+                    },
+                    ArtifactStatus {
+                        kind: Kind::Rule,
+                        name: String::from("rust/errors"),
+                        state: State::Installed,
+                        agents: vec![Agent::Claude],
+                        origin: Some(String::from("workspace")),
+                    },
+                ],
             },
             ProjectStatus {
                 name: None,
@@ -53,6 +67,7 @@ fn a_report_serializes_every_field_by_the_name_it_is_held_to() {
                 agents: Vec::new(),
                 stale: Some(String::from("gone")),
                 unreached: Vec::new(),
+                missed: Vec::new(),
                 artifacts: Vec::new(),
             },
         ],
@@ -67,11 +82,14 @@ fn a_report_serializes_every_field_by_the_name_it_is_held_to() {
             r#"{"name":"collapse","entry":"collapse","path":"/work/collapse","#,
             r#""agents":["claude","opencode"],"stale":null,"#,
             r#""unreached":[{"kind":"skill","targets":[".skills"],"agents":["claude"]}],"#,
+            r#""missed":[{"kind":"rule","name":"rust/errors","agents":["opencode"]}],"#,
             r#""artifacts":["#,
             r#"{"kind":"skill","name":"deploy","state":"partial","#,
-            r#""agents":["opencode"],"origin":"workspace"}]},"#,
+            r#""agents":["opencode"],"origin":"workspace"},"#,
+            r#"{"kind":"rule","name":"rust/errors","state":"installed","#,
+            r#""agents":["claude"],"origin":"workspace"}]},"#,
             r#"{"name":null,"entry":"../old-api","path":"/old-api","#,
-            r#""agents":[],"stale":"gone","unreached":[],"artifacts":[]}]}"#,
+            r#""agents":[],"stale":"gone","unreached":[],"missed":[],"artifacts":[]}]}"#,
         )
     );
 }

@@ -19,8 +19,8 @@ use mindflayer_core::install::{
 use mindflayer_core::ledger::{InstallRecord, Target};
 use mindflayer_core::migrate;
 use mindflayer_core::{
-    hash, Agent, AgentHomes, Directories, FlayerWorkspace, Kind, Ledger, MindProject, Reference,
-    Share, State, Status,
+    hash, Agent, AgentHomes, Directories, FlayerWorkspace, Kind, Ledger, MindProject, Missed,
+    Reference, Share, State, Status,
 };
 use tempfile::TempDir;
 
@@ -1560,4 +1560,74 @@ fn a_project_whose_settings_name_no_agent_receives_neither_kind() {
             "{refused:?}"
         );
     }
+}
+
+/// What status says each rule the fixture's project received misses.
+fn missed_in(fixture: &Fixture) -> Vec<Missed> {
+    let (status, failures) = Status::of_project(&fixture.project, Some(&fixture.workspace));
+    assert!(failures.is_empty(), "{failures:?}");
+    status.projects[0].missed.clone()
+}
+
+#[test]
+fn status_says_which_agents_read_a_rule_it_received_nowhere() {
+    let fixture = fixture(Share::Shared, &Agent::ALL);
+    fixture.rule("git/no-force-push", NO_FORCE_PUSH);
+    fixture.rule("rust/errors", SCOPED);
+    fixture.install("git/no-force-push");
+    fixture.install("rust/errors");
+
+    assert_eq!(
+        missed_in(&fixture),
+        [Missed {
+            kind: Kind::Rule,
+            name: String::from("rust/errors"),
+            agents: vec![Agent::Codex, Agent::OpenCode],
+        }]
+    );
+
+    // Partial says a section gone already: no agent reads it, and that is
+    // not said twice.
+    fs::remove_file(fixture.agents_md()).unwrap();
+
+    assert_eq!(
+        missed_in(&fixture)
+            .iter()
+            .map(|missed| missed.name.as_str())
+            .collect::<Vec<_>>(),
+        ["rust/errors"]
+    );
+}
+
+#[test]
+fn status_says_the_agents_a_block_withheld_from_a_tracked_agents_md_misses() {
+    let fixture = fixture(Share::Local, &Agent::ALL);
+    fs::write(fixture.agents_md(), TEAM).unwrap();
+    common::indexed(fixture.dir.path());
+    fixture.rule("git/no-force-push", NO_FORCE_PUSH);
+    fixture.install("git/no-force-push");
+
+    assert_eq!(
+        status_of(&fixture, "git/no-force-push").map(|(state, agents, _)| (state, agents)),
+        Some((State::Installed, vec![Agent::Claude]))
+    );
+    assert_eq!(
+        missed_in(&fixture),
+        [Missed {
+            kind: Kind::Rule,
+            name: String::from("git/no-force-push"),
+            agents: vec![Agent::Codex, Agent::OpenCode],
+        }]
+    );
+}
+
+#[test]
+fn status_says_nothing_missed_of_a_rule_a_project_a_mind_toml_marks_holds() {
+    let (_dir, workspace, project, ledger) = older();
+    own_rule(&workspace, "git/no-force-push", NO_FORCE_PUSH);
+    put(&workspace, &ledger, &project, "git/no-force-push");
+
+    let (status, _) = Status::of_project(&project, Some(&workspace));
+
+    assert_eq!(status.projects[0].missed, []);
 }

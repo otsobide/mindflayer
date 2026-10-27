@@ -2460,6 +2460,30 @@ fn a_project_installing_where_no_agent_reads_is_marked_and_its_pane_says_why() {
 }
 
 #[test]
+fn a_project_given_a_rule_some_of_its_agents_read_nowhere_is_marked_and_its_pane_says_so() {
+    let dir = workspace_with_own();
+    let scoped = own_directory_for(dir.path(), Kind::Rule).join("style/comments.md");
+    fs::create_dir_all(scoped.parent().unwrap()).unwrap();
+    fs::write(
+        &scoped,
+        "---\npaths:\n  - \"**/*.rs\"\n---\n\n# Comments say why, not what\n",
+    )
+    .unwrap();
+    flayer(dir.path(), &["install", "-p", "alpha", "style/comments"]).unwrap();
+
+    let app = tui_in(dir.path());
+
+    let holdings = app.member().unwrap().holdings.as_ref().unwrap();
+    assert_eq!(
+        holdings.unreached,
+        ["codex and opencode do not read rule `style/comments` in alpha"]
+    );
+    let drawn = tui_drawn(&app);
+    assert!(drawn.contains("⚠"), "{drawn}");
+    assert!(drawn.contains("Not seen by every agent"), "{drawn}");
+}
+
+#[test]
 fn a_strip_wraps_by_how_wide_its_words_are_drawn() {
     let dir = workspace_with_own();
     let alpha = dir.path().join("alpha");

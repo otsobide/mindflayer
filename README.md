@@ -950,6 +950,7 @@ $ flayer status -p tanukeys --json
         "agents": [],
         "stale": null,
         "unreached": [],
+        "missed": [],
         "artifacts": [
           {
             "kind": "skill",

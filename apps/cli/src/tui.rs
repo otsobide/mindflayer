@@ -36,7 +36,7 @@ use ratatui::crossterm::terminal::{self, EnterAlternateScreen};
 use ratatui::DefaultTerminal;
 
 use crate::commands::project::scan_warnings;
-use crate::commands::status::unread;
+use crate::commands::status::{unread, unseen};
 use crate::commands::workspace::{load_warnings, same_directory};
 use crate::commands::{consulted, run_flayer_with, run_with};
 use crate::install::state::Screen as InstallScreen;
@@ -861,7 +861,8 @@ fn held(
 
     let settings = project.settings().filter(|_| !own);
     // What `status` warns of, said in its words: the folders no install
-    // uses first, then the agents that read none of the rest.
+    // uses first, then the agents that read none of the rest, then each rule
+    // some of them read nowhere.
     let mut unreached: Vec<String> = project
         .misplaced_targets()
         .iter()
@@ -873,6 +874,12 @@ fn held(
             .unreached
             .iter()
             .map(|unreached| unread(project.name(), unreached, false))
+    }));
+    unreached.extend(status.iter().flat_map(|status| {
+        status
+            .missed
+            .iter()
+            .map(|missed| unseen(project.name(), missed))
     }));
     Member {
         entry,

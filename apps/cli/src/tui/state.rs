@@ -175,8 +175,9 @@ pub struct Holdings {
     /// read, and for the workspace's own, which have no settings.
     pub targets: Option<Vec<String>>,
     /// What it installs that some of its agents do not see, as `status` says
-    /// it: each kind installed only where some of them do not read, and each
-    /// folder its settings name that no install uses.
+    /// it: each folder its settings name that no install uses, each kind
+    /// installed only where some of them do not read, and each rule some of
+    /// them read nowhere.
     pub unreached: Vec<String>,
     /// Files that could not be read, one line each.
     pub warnings: Vec<String>,
