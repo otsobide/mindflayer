@@ -31,8 +31,9 @@
 //! earlier render ([`Recorded`]): each file's route, and the hash of what it
 //! held ([`hash::bytes`]). A file is Mindflayer's while it holds exactly
 //! that, and anything else at a rule's place is somebody's, written over
-//! and taken away by nothing. Keeping the record is the caller's (#45), as
-//! is deciding which rules a project is given and when.
+//! and taken away by nothing. Keeping the record is the caller's
+//! ([`crate::install::rules`], in the ledger), as is deciding which rules a
+//! project is given and when.
 //!
 //! A local project keeps the files out of git (D-02), one entry each in its
 //! group of the exclude block ([`crate::exclude`]), written before they land
@@ -100,9 +101,9 @@ pub enum Mode {
 /// A rule file an earlier render left Mindflayer's: its route, and the hash
 /// of what it held ([`hash::bytes`]).
 ///
-/// What the caller keeps (#45), from [`Rendered::recorded`], and hands back
-/// to the next render, which takes a file as Mindflayer's only while it
-/// holds what was recorded.
+/// What the caller keeps ([`crate::install::rules`]), from
+/// [`Rendered::recorded`], and hands back to the next render, which takes a
+/// file as Mindflayer's only while it holds what was recorded.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Recorded {
     pub route: String,
@@ -498,9 +499,9 @@ fn missed(project: &MindProject) -> Vec<Agent> {
 /// all, [`Warning::ClaudeOnly`] would be too cautious, never wrong about
 /// Claude. One arm an agent with no wildcard, so a new agent does not
 /// compile until somebody has said whether it reads them. Not
-/// [`Agent::reads`], which says no folder of rules is read until the
-/// ledger records what is written there (#45), so no listing takes these
-/// files for somebody's.
+/// [`Agent::reads`], which says no folder of rules is read: what is
+/// written there is listed from the ledger, as its rule's target, so no
+/// listing takes these files for somebody's.
 fn reads_rule_files(agent: Agent) -> bool {
     match agent {
         Agent::Claude => true,

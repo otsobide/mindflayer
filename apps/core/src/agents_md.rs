@@ -31,9 +31,9 @@
 //! block, and the next render would replace it.
 //!
 //! Which rules a project is given, and when, is the caller's to decide, and
-//! so is keeping a record of what was written (#45); whether Claude reads the
-//! file at all, natively or through an import, is [`crate::claude_md`]'s.
-//! This only renders what it is handed.
+//! so is keeping a record of what was written ([`crate::install::rules`]);
+//! whether Claude reads the file at all, natively or through an import, is
+//! [`crate::claude_md`]'s. This only renders what it is handed.
 
 use std::fs;
 use std::io::{self, Write as _};
@@ -227,9 +227,10 @@ impl Section {
 /// The block holds those sections and nothing else afterwards. A file that
 /// is not there is made with `create_new`, so one somebody made meanwhile is
 /// never written over, and only then is [`Written::Created`] said: the
-/// caller keeps that (#45) and hands it back as `created` on a later render,
-/// so that when no rule is left the file goes too, unless somebody has
-/// written something in it since. Mindflayer takes away only a file it made.
+/// caller keeps that ([`crate::install::rules`], in the ledger) and hands
+/// it back as `created` on a later render, so that when no rule is left
+/// the file goes too, unless somebody has written something in it since.
+/// Mindflayer takes away only a file it made.
 /// A file that is there is replaced whole through a temporary and a rename
 /// ([`replace_bytes`]), every byte outside the block as it was, and one that
 /// already holds what was asked is not written at all, modification time
@@ -336,8 +337,9 @@ pub struct Rendered {
     pub file: PathBuf,
     pub written: Written,
     /// The route of each rule the block holds, in its order: none when there
-    /// is no block. What the caller records as written (#45), since a rule
-    /// declaring `paths` is handed in and given no section.
+    /// is no block. What the caller records as written
+    /// ([`crate::install::rules`]), since a rule declaring `paths` is handed
+    /// in and given no section.
     pub routes: Vec<String>,
     /// What keeps the block from reaching Codex, or will, in the order
     /// [`Warning`] lists them.
@@ -730,8 +732,9 @@ impl AgentsMd {
     /// Everything between the markers is Mindflayer's, so it is replaced
     /// whole, a line somebody wrote there included; telling an edited section
     /// from the one rendered is for the ledger's record of what was written
-    /// (D-04, #45). A file with no block gains one after what it holds, on
-    /// lines of its own and an empty line apart from it (`Block::spacer`).
+    /// ([`Section::hash`], D-04). A file with no block gains one after what
+    /// it holds, on lines of its own and an empty line apart from it
+    /// (`Block::spacer`).
     /// No section drops the block, that empty line included, giving back the
     /// file as it was before the block was written.
     pub fn set_block(&mut self, sections: &[Section]) -> Result<bool, AgentsMdError> {
