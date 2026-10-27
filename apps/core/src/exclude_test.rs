@@ -175,6 +175,46 @@ fn one_projects_edits_never_touch_anothers_lines() {
 }
 
 #[test]
+fn forgetting_a_group_takes_every_line_of_it_and_no_other_groups() {
+    let mut file = ExcludeFile::parse(TEMPLATE.as_bytes()).unwrap();
+    file.add("a", &patterns(&["/a/one/", "/a/two/"])).unwrap();
+    file.add("b", &patterns(&["/b/one/"])).unwrap();
+
+    assert!(file.forget("a").unwrap());
+    assert_eq!(
+        text(&file),
+        format!("{TEMPLATE}# mindflayer:begin\n# project b\n/b/one/\n# mindflayer:end\n")
+    );
+
+    // The last group takes the block with it, giving back the file as it was.
+    assert!(file.forget("b").unwrap());
+    assert_eq!(text(&file), TEMPLATE);
+    assert!(!file.forget("b").unwrap());
+}
+
+#[test]
+fn forgetting_the_last_group_keeps_a_block_somebody_wrote_in() {
+    let before = "# mindflayer:begin\n/kept/\n# project a\n/a/\n# mindflayer:end\n";
+    let mut file = ExcludeFile::parse(before.as_bytes()).unwrap();
+    assert!(file.forget("a").unwrap());
+    assert_eq!(
+        text(&file),
+        "# mindflayer:begin\n/kept/\n# mindflayer:end\n"
+    );
+}
+
+#[test]
+fn a_groups_lines_are_read_as_written_without_its_blanks() {
+    let before =
+        "# mindflayer:begin\n# project a\n/a/\n\n/b/\n# project b\n/c/\n# mindflayer:end\n";
+    let file = ExcludeFile::parse(before.as_bytes()).unwrap();
+    assert_eq!(file.lines_of("a"), patterns(&["/a/", "/b/"]));
+    assert_eq!(file.lines_of("b"), patterns(&["/c/"]));
+    assert!(file.lines_of("c").is_empty());
+    assert!(ExcludeFile::parse(b"").unwrap().lines_of("a").is_empty());
+}
+
+#[test]
 fn the_same_pattern_in_two_groups_is_each_groups_own() {
     // Two projects can want one path kept out: removing it from one must
     // leave it excluded for the other.
