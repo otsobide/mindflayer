@@ -202,6 +202,11 @@ pub enum Command {
         target: Option<String>,
     },
 
+    /// Say what this project holds: whether each artifact was installed,
+    /// is partly gone, is somebody's or is the project's own, which agents
+    /// read it, and where what was installed came from.
+    Status,
+
     /// Register this project with the flayer workspace above it.
     Link,
 
@@ -446,6 +451,15 @@ pub enum FlayerCommand {
         /// A kind (`rules`), or one artifact by name [default: everything].
         target: Option<String>,
 
+        /// Only this project.
+        #[arg(short, long, value_name = "PROJECT")]
+        project: Option<String>,
+    },
+
+    /// Say what every managed project holds: whether each artifact was
+    /// installed, is partly gone, is somebody's or is the project's own,
+    /// which agents read it, and where what was installed came from.
+    Status {
         /// Only this project.
         #[arg(short, long, value_name = "PROJECT")]
         project: Option<String>,
