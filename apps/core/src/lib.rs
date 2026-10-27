@@ -16,6 +16,7 @@ pub mod agent;
 pub mod agents_md;
 pub mod artifact;
 pub mod catalog;
+pub mod claude_md;
 pub mod claude_rules;
 pub mod config_entry;
 pub mod copy;
