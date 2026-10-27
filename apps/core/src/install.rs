@@ -753,6 +753,18 @@ pub fn uninstall_typed(
     uninstall(workspace, ledger, project, kind, name, homes).map(|removed| (kind, removed))
 }
 
+/// The kinds `reference` could name: the one it is qualified with, or,
+/// typed bare, those a copy could be filed as under its name, which
+/// [`offered_typed`] and [`uninstall_typed`] ask of it. For a front end to
+/// say what is true of each before it is known which one is meant, without
+/// deciding for itself what a name can be: a route like `git/commits` is a
+/// rule's whatever the folders for skills hold.
+pub fn kinds_named(reference: &Reference) -> Vec<Kind> {
+    reference
+        .kind()
+        .map_or_else(|| filed_as(reference.name()), |kind| vec![kind])
+}
+
 /// The kinds a copy could be filed as under `name` ([`is_installable_name`]),
 /// or every kind when none could, so that what is asked of them refuses the
 /// name, saying why.

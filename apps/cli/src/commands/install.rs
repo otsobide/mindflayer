@@ -22,7 +22,10 @@ use crate::{CliError, Failure, Outcome};
 /// So is each folder the project's settings name for the kind that no install
 /// uses ([`MindProject::misplaced_targets`]): no copy went there, and an
 /// install refused for want of any other is refused for that. Every kind the
-/// name could be, when it is refused before it is known which.
+/// name could be, as core says ([`kinds_named`]), when it is refused before
+/// it is known which.
+///
+/// [`kinds_named`]: mindflayer_core::install::kinds_named
 ///
 /// `homes` are the agents' own folders the command line decided, which core
 /// refuses to install into.
@@ -41,7 +44,7 @@ pub(crate) fn install_named(
     let loads = load_warnings(workspace);
     let (ledger, scrub) = workspace.ledger_to_write().map_err(|error| {
         let mut warnings = loads.clone();
-        warnings.extend(misplaced(project, &kinds(&reference)));
+        warnings.extend(misplaced(project, &installing::kinds_named(&reference)));
         Failure {
             error: Box::new(error.into()),
             warnings,
@@ -64,7 +67,7 @@ pub(crate) fn install_named(
         // same.
         let mut told = said.clone().lines();
         told.extend(loads.iter().cloned());
-        told.extend(misplaced(project, &kinds(&reference)));
+        told.extend(misplaced(project, &installing::kinds_named(&reference)));
         Failure {
             error: Box::new(error.into()),
             warnings: told,
@@ -195,14 +198,6 @@ pub(crate) fn render_said(
             .map(|note| format!("note: {note}"))
             .collect(),
     )
-}
-
-/// The kinds `reference` names: the one it is qualified with, or every
-/// kind, before it is known which a bare name is.
-fn kinds(reference: &Reference) -> Vec<Kind> {
-    reference
-        .kind()
-        .map_or_else(|| Kind::ALL.to_vec(), |kind| vec![kind])
 }
 
 /// A warning for each folder `project`'s settings name for one of `kinds`

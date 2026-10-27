@@ -524,6 +524,22 @@ fn an_install_says_each_target_no_install_may_use_and_installs_in_the_others() {
     assert_eq!(refused.warnings, [misplaced]);
 }
 
+#[test]
+fn a_route_no_skill_can_be_called_says_nothing_of_the_folders_for_skills() {
+    let (dir, _, _) = shelved(&["beta"], &["deploy"]);
+    installing_in(dir.path(), r#"".skills", "../shared""#);
+
+    let refused = flayer(dir.path(), &["install", "-p", "alpha", "git/commits"]).unwrap_err();
+
+    // A rule's however it is typed, and none is offered.
+    assert_eq!(
+        refused.error.to_string(),
+        "nothing called `git/commits` can be installed: gather it, load a workspace that has it \
+         with `flayer load`, or add it to the workspace with `flayer add`"
+    );
+    assert_eq!(refused.warnings, Vec::<String>::new());
+}
+
 /// Change `alpha`'s settings to install skills in `../shared` alone.
 fn installing_in_only(dir: &Path) {
     let path = dir.join("alpha").join(MIND_DIR).join("settings.json");
