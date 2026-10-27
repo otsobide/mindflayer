@@ -875,6 +875,62 @@ fn forgetting_an_installation_forgets_its_copies() {
 }
 
 #[test]
+fn forgetting_one_copy_keeps_the_installation_until_its_last_copy_goes() {
+    let ledger = Ledger::in_memory().unwrap();
+    let written = installation_of(
+        "deploy",
+        &[
+            (None, ".agents/skills/deploy"),
+            (Some("claude"), ".claude/skills/deploy"),
+        ],
+    );
+    ledger.installed("collapse", &written).unwrap();
+
+    let forgot = |path| {
+        ledger
+            .uninstalled_copy("collapse", Kind::Skill, "deploy", path)
+            .unwrap()
+    };
+    assert_eq!(forgot("skills/deploy"), Forgotten::Nothing);
+    assert_eq!(forgot(".claude/skills/deploy"), Forgotten::Copy);
+    assert_eq!(
+        ledger
+            .installation("collapse", Kind::Skill, "deploy")
+            .unwrap(),
+        Some(InstallRecord {
+            targets: written.targets[..1].to_vec(),
+            ..written.clone()
+        })
+    );
+    assert_eq!(forgot(".claude/skills/deploy"), Forgotten::Nothing);
+    assert_eq!(forgot(".agents/skills/deploy"), Forgotten::Installation);
+    assert!(ledger
+        .installation("collapse", Kind::Skill, "deploy")
+        .unwrap()
+        .is_none());
+    assert_eq!(forgot(".agents/skills/deploy"), Forgotten::Nothing);
+}
+
+#[test]
+fn an_installation_recording_no_copy_is_forgotten_whole_by_any_one() {
+    let ledger = Ledger::in_memory().unwrap();
+    ledger
+        .installed("collapse", &installation_of("deploy", &[]))
+        .unwrap();
+
+    assert_eq!(
+        ledger
+            .uninstalled_copy("collapse", Kind::Skill, "deploy", "skills/deploy")
+            .unwrap(),
+        Forgotten::Installation
+    );
+    assert!(ledger
+        .installations("collapse", Kind::Skill)
+        .unwrap()
+        .is_empty());
+}
+
+#[test]
 fn every_copy_installed_into_a_project_is_listed_by_path_whichever_install_wrote_it() {
     let ledger = Ledger::in_memory().unwrap();
     ledger
