@@ -35,14 +35,15 @@
 
 use std::fs;
 use std::io::{self, Write as _};
-use std::path::{Path, PathBuf};
+use std::path::{Component, Path, PathBuf};
 
 use thiserror::Error;
 
 use crate::artifact::{issue_list, name_issues, Artifact, ArtifactError, Declared};
-use crate::catalog::report_order;
+use crate::catalog::{report_order, spelled};
 use crate::lines::{self, Line};
-use crate::workspace::{replace_bytes, MindProject};
+use crate::paths;
+use crate::workspace::{replace_bytes, same_directory, FlayerWorkspace, MindProject};
 
 /// The file the block is rendered into, at a project's root.
 pub const FILE: &str = "AGENTS.md";
@@ -192,14 +193,19 @@ impl Section {
 /// until the next render. The caller collects the refusal, as it does any
 /// other one project's failure.
 ///
+/// So is a folder whose `AGENTS.md` the agents of other projects read too
+/// ([`placed`]): `workspace` is the one whose links say where those are.
+///
 /// Takes no lock: the caller holds the workspace's, as one calling
 /// [`crate::config_entry::ConfigFile`] does, and the lock is not
 /// re-entrant.
 pub fn render<'a>(
+    workspace: &FlayerWorkspace,
     project: &MindProject,
     rules: impl IntoIterator<Item = &'a Artifact>,
     created: bool,
 ) -> Result<Rendered, AgentsMdError> {
+    placed(workspace, project.root())?;
     let file = project.root().join(FILE);
     let mut rules: Vec<&Artifact> = rules.into_iter().collect();
     rules.sort_by(|a, b| report_order(a, b));
@@ -280,6 +286,61 @@ pub enum Written {
     /// It already held what was asked, or was not there and was asked to
     /// hold nothing, and was left as it was.
     Unchanged,
+}
+
+/// Refuse `folder` as a place for an `AGENTS.md` when agents beyond its own
+/// project's would read one there.
+///
+/// Claude reads every `AGENTS.md` from where it starts up to the root, and
+/// OpenCode V2 up to the home directory, so one in a folder above a project
+/// is read in that project too (docs/agents.md, docs-only for reading more
+/// than one): rules rendered into a monorepo's root would reach every
+/// package linked below it, beside the package's own. So a folder above a
+/// project the workspace links is refused, a stale entry's included, since
+/// its project may only have moved for a moment. So is the workspace's own
+/// root, unless a project it links is there: `flayer init` and the
+/// workspace's own artifacts put nothing in it ([`FlayerWorkspace::own`] is
+/// a holder at that root, not a project), while a project at the root is a
+/// project like any other, and its `AGENTS.md` its own (D-03).
+fn placed(workspace: &FlayerWorkspace, folder: &Path) -> Result<(), AgentsMdError> {
+    if same_directory(folder, workspace.root()) && !workspace.is_linked(folder) {
+        return Err(AgentsMdError::WorkspaceRoot {
+            folder: folder.to_path_buf(),
+        });
+    }
+    let below: Vec<PathBuf> = workspace
+        .members()
+        .into_iter()
+        .map(|member| member.root)
+        .filter(|root| is_below(root, folder))
+        .collect();
+    if !below.is_empty() {
+        return Err(AgentsMdError::AboveProjects {
+            folder: folder.to_path_buf(),
+            projects: below,
+        });
+    }
+    Ok(())
+}
+
+/// Whether `path` is inside `folder` and not `folder` itself: by the route
+/// from one to the other, then through the filesystem, so a spelling through
+/// a link is still below what it leads into.
+fn is_below(path: &Path, folder: &Path) -> bool {
+    let down = |route: PathBuf| {
+        route
+            .components()
+            .all(|component| matches!(component, Component::Normal(_)))
+    };
+    if paths::relative_to(path, folder).is_some_and(down) {
+        return true;
+    }
+    match (fs::canonicalize(path), fs::canonicalize(folder)) {
+        (Ok(path), Ok(folder)) => path
+            .strip_prefix(&folder)
+            .is_ok_and(|route| route.components().next().is_some()),
+        _ => false,
+    }
 }
 
 /// The file's bytes, `None` when it is not there.
@@ -622,6 +683,20 @@ pub enum AgentsMdError {
     Twice { route: String },
     #[error("`{name}` is not a rule, so it has no section in AGENTS.md")]
     NotARule { name: String },
+    #[error(
+        "{folder}: the workspace's own folder, where it links no project, so no AGENTS.md \
+         is written there: the agents of every project below would read it"
+    )]
+    WorkspaceRoot { folder: PathBuf },
+    #[error(
+        "{folder}: above {}, which the workspace links, so no AGENTS.md is written there: \
+         their agents would read it too",
+        spelled(.projects)
+    )]
+    AboveProjects {
+        folder: PathBuf,
+        projects: Vec<PathBuf>,
+    },
     #[error(transparent)]
     Rule(#[from] ArtifactError),
     #[error("{path}: cannot be read: {source}")]

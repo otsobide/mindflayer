@@ -7,29 +7,39 @@ use std::fs;
 use std::path::PathBuf;
 
 use mindflayer_core::agents_md::{self, AgentsMdError, Malformed, Rendered, Written, BEGIN, END};
-use mindflayer_core::{Artifact, MindProject};
+use mindflayer_core::{Artifact, FlayerWorkspace, MindProject};
 use tempfile::TempDir;
 
 /// What a team's `AGENTS.md` holds before Mindflayer writes in it.
 const TEAM: &str = "# Working here\n\nRun `make test` before every push.\n";
 
-/// A project, and a library of rules beside it to render from.
+/// A workspace linking one project below it, and a library of rules to
+/// render from.
 struct Fixture {
     _dir: TempDir,
+    workspace: FlayerWorkspace,
     project: MindProject,
     library: PathBuf,
 }
 
 fn fixture() -> Fixture {
     let dir = TempDir::new().unwrap();
-    let root = dir.path().join("app");
-    fs::create_dir_all(&root).unwrap();
-    let (project, _) = MindProject::init(&root).unwrap();
+    let (mut workspace, _) = FlayerWorkspace::init(dir.path()).unwrap();
+    let project = linked(&mut workspace, &dir.path().join("app"));
     Fixture {
         library: dir.path().join("library"),
         _dir: dir,
+        workspace,
         project,
     }
+}
+
+/// A project made at `root` and linked by `workspace`.
+fn linked(workspace: &mut FlayerWorkspace, root: &std::path::Path) -> MindProject {
+    fs::create_dir_all(root).unwrap();
+    let (project, _) = MindProject::init(root).unwrap();
+    workspace.link(&project).unwrap();
+    project
 }
 
 impl Fixture {
@@ -46,7 +56,12 @@ impl Fixture {
     }
 
     fn render(&self, rules: &[&Artifact], created: bool) -> Result<Rendered, AgentsMdError> {
-        agents_md::render(&self.project, rules.iter().copied(), created)
+        agents_md::render(
+            &self.workspace,
+            &self.project,
+            rules.iter().copied(),
+            created,
+        )
     }
 
     fn text(&self) -> String {
@@ -351,4 +366,102 @@ fn a_skill_has_no_section() {
         "{refused:?}"
     );
     assert!(!fixture.agents_md().exists());
+}
+
+#[test]
+fn the_workspaces_own_folder_is_refused() {
+    let fixture = fixture();
+    let rule = fixture.rule("a", "Rule a.\n");
+    let own = fixture.workspace.own();
+
+    let refused = agents_md::render(&fixture.workspace, &own, [&rule], false);
+    assert!(
+        matches!(&refused, Err(AgentsMdError::WorkspaceRoot { folder }) if folder == fixture.workspace.root()),
+        "{refused:?}"
+    );
+    assert!(!fixture.workspace.root().join(agents_md::FILE).exists());
+}
+
+#[test]
+fn a_project_the_workspace_links_at_its_root_is_given_its_rules() {
+    let dir = TempDir::new().unwrap();
+    let (mut workspace, _) = FlayerWorkspace::init(dir.path()).unwrap();
+    let project = linked(&mut workspace, dir.path());
+    let library = TempDir::new().unwrap();
+    let file = library.path().join("a.md");
+    fs::write(&file, "Rule a.\n").unwrap();
+    let rule = Artifact::rule(&file, "a".to_owned(), library.path()).unwrap();
+
+    let rendered = agents_md::render(&workspace, &project, [&rule], false).unwrap();
+    assert!(rendered.created());
+    assert_eq!(rendered.file, dir.path().join(agents_md::FILE));
+}
+
+#[test]
+fn an_unlinked_project_at_the_workspaces_root_is_refused() {
+    let dir = TempDir::new().unwrap();
+    let (workspace, _) = FlayerWorkspace::init(dir.path()).unwrap();
+    let (project, _) = MindProject::init(dir.path()).unwrap();
+
+    let refused = agents_md::render(&workspace, &project, [], false);
+    assert!(
+        matches!(refused, Err(AgentsMdError::WorkspaceRoot { .. })),
+        "{refused:?}"
+    );
+}
+
+#[test]
+fn a_folder_above_a_linked_project_is_refused_and_nothing_is_written() {
+    let mut fixture = fixture();
+    let root = fixture.project.root().to_path_buf();
+    let package = root.join("packages").join("web");
+    linked(&mut fixture.workspace, &package);
+    fs::write(fixture.agents_md(), TEAM).unwrap();
+    let rule = fixture.rule("a", "Rule a.\n");
+
+    match fixture.render(&[&rule], false) {
+        Err(AgentsMdError::AboveProjects { folder, projects }) => {
+            assert_eq!(folder, root);
+            assert_eq!(projects, std::slice::from_ref(&package));
+        }
+        other => panic!("{other:?}"),
+    }
+    assert_eq!(fixture.text(), TEAM);
+
+    // The package below is given its own.
+    let below = MindProject::open(&package).unwrap();
+    agents_md::render(&fixture.workspace, &below, [&rule], false).unwrap();
+    assert!(package.join(agents_md::FILE).exists());
+}
+
+#[test]
+fn a_linked_project_gone_from_below_still_keeps_its_folder_above_out() {
+    let mut fixture = fixture();
+    let package = fixture.project.root().join("web");
+    linked(&mut fixture.workspace, &package);
+    fs::remove_dir_all(&package).unwrap();
+
+    let refused = fixture.render(&[], false);
+    assert!(
+        matches!(refused, Err(AgentsMdError::AboveProjects { .. })),
+        "{refused:?}"
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn a_folder_spelled_through_a_link_is_still_above_what_it_leads_to() {
+    let mut fixture = fixture();
+    let elsewhere = TempDir::new().unwrap();
+    linked(&mut fixture.workspace, &elsewhere.path().join("app"));
+    MindProject::init(elsewhere.path()).unwrap();
+    let through = fixture.workspace.root().join("through");
+    std::os::unix::fs::symlink(elsewhere.path(), &through).unwrap();
+
+    let above = MindProject::open(&through).unwrap();
+    let refused = agents_md::render(&fixture.workspace, &above, [], false);
+    assert!(
+        matches!(refused, Err(AgentsMdError::AboveProjects { .. })),
+        "{refused:?}"
+    );
 }

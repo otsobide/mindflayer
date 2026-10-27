@@ -695,7 +695,7 @@ pub(crate) fn report_order(a: &Artifact, b: &Artifact) -> std::cmp::Ordering {
 }
 
 /// `a`, `a and b`, `a, b and c`.
-fn spelled(paths: &[PathBuf]) -> String {
+pub(crate) fn spelled(paths: &[PathBuf]) -> String {
     let shown: Vec<String> = paths
         .iter()
         .map(|path| path.display().to_string())
