@@ -277,3 +277,10 @@ fn no_agent_is_said_to_read_a_folder_of_rules_yet() {
         assert_eq!(agent.reads(Kind::Rule), Vec::<PathBuf>::new());
     }
 }
+
+#[test]
+fn an_agent_is_serialized_as_the_name_its_settings_take() {
+    let serialized = serde_json::to_string(&Agent::ALL).unwrap();
+
+    assert_eq!(serialized, r#"["claude","codex","opencode"]"#);
+}

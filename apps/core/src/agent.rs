@@ -16,6 +16,7 @@ use std::fmt;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
+use serde::{Serialize, Serializer};
 use thiserror::Error;
 
 use crate::kind::Kind;
@@ -111,6 +112,16 @@ fn read(kind: Kind, agent: Agent) -> Vec<PathBuf> {
 impl fmt::Display for Agent {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_str(self.name())
+    }
+}
+
+/// By its name, the one `--agents` and a project's settings take, rather
+/// than derived: a derive would spell `OpenCode` as `open_code`, a name no
+/// command line or settings file holds, and what a JSON report calls an
+/// agent is a contract from the first report on.
+impl Serialize for Agent {
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        serializer.serialize_str(self.name())
     }
 }
 

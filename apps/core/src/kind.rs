@@ -4,6 +4,7 @@
 use std::fmt;
 use std::str::FromStr;
 
+use serde::{Serialize, Serializer};
 use thiserror::Error;
 
 /// A kind of artifact.
@@ -66,6 +67,16 @@ impl Kind {
 impl fmt::Display for Kind {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_str(self.slug())
+    }
+}
+
+/// By its slug, the word a command line takes (`skill`), rather than
+/// derived: a derive spells the variant, and what a JSON report calls a kind
+/// is a contract that renaming a variant must not break, and the one
+/// spelling a script and a command line share.
+impl Serialize for Kind {
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        serializer.serialize_str(self.slug())
     }
 }
 
