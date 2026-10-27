@@ -5,6 +5,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use mindflayer_core::migrate::{self, Left, Move, Refusal};
+use mindflayer_core::AgentHomes;
 use mindflayer_core::{create, Catalog, FlayerWorkspace, Kind, MindProject};
 use tempfile::TempDir;
 
@@ -515,7 +516,14 @@ fn an_installed_skill_is_still_current_once_its_source_has_moved() {
         )
         .unwrap()
     };
-    install::install(&workspace, &ledger, &project, &offered(&workspace)).unwrap();
+    install::install(
+        &workspace,
+        &ledger,
+        &project,
+        &offered(&workspace),
+        &AgentHomes::default(),
+    )
+    .unwrap();
     let recorded = ledger
         .installation("alpha", Kind::Skill, "commit-style")
         .unwrap();
@@ -532,7 +540,14 @@ fn an_installed_skill_is_still_current_once_its_source_has_moved() {
             .unwrap(),
         recorded
     );
-    let again = install::install(&workspace, &ledger, &project, &candidate).unwrap();
+    let again = install::install(
+        &workspace,
+        &ledger,
+        &project,
+        &candidate,
+        &AgentHomes::default(),
+    )
+    .unwrap();
     assert!(
         matches!(again.installed, Installed::Unchanged { .. }),
         "{:?}",

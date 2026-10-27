@@ -175,6 +175,17 @@ pub struct Target {
     pub path: String,
 }
 
+/// What [`Ledger::uninstalled_copy`] forgot.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Forgotten {
+    /// No installation of that name records a copy there.
+    Nothing,
+    /// The copy, from an installation that still records others.
+    Copy,
+    /// The installation, whose last copy it was, or which recorded none.
+    Installation,
+}
+
 /// One line of the action log.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Entry {
@@ -835,6 +846,64 @@ impl Ledger {
             )
             .map(|rows| rows > 0)
             .map_err(|source| self.failed("forgetting an installation", source))
+    }
+
+    /// Forget the copy an installation of `name` wrote at `path`, and the
+    /// installation once it records no other, saying which went.
+    ///
+    /// For a change that reached one copy: the others are still what was
+    /// installed, and forgetting the whole installation would leave them with
+    /// no record, never updated or removed again. An installation recording
+    /// no copy at all, which no build has written, is forgotten whole, as
+    /// [`Ledger::uninstalled`] would. One transaction, so an install of the
+    /// same name at the same moment never finds half of this done.
+    pub fn uninstalled_copy(
+        &self,
+        project: &str,
+        kind: Kind,
+        name: &str,
+        path: &str,
+    ) -> Result<Forgotten, LedgerError> {
+        let failed = |source| self.failed("forgetting an installed copy", source);
+        let transaction = self.connection.unchecked_transaction().map_err(failed)?;
+        let Some(id) = transaction
+            .query_row(
+                "SELECT id FROM installations
+                  WHERE project = ?1 AND kind = ?2 AND name = ?3",
+                rusqlite::params![project, kind.slug(), name],
+                |row| row.get::<_, i64>(0),
+            )
+            .optional()
+            .map_err(failed)?
+        else {
+            return Ok(Forgotten::Nothing);
+        };
+        let copy = transaction
+            .execute(
+                "DELETE FROM installation_targets
+                  WHERE installation_id = ?1 AND path = ?2",
+                rusqlite::params![id, path],
+            )
+            .map_err(failed)?;
+        let left: i64 = transaction
+            .query_row(
+                "SELECT count(*) FROM installation_targets WHERE installation_id = ?1",
+                [id],
+                |row| row.get(0),
+            )
+            .map_err(failed)?;
+        let forgotten = if left == 0 {
+            transaction
+                .execute("DELETE FROM installations WHERE id = ?1", [id])
+                .map_err(failed)?;
+            Forgotten::Installation
+        } else if copy > 0 {
+            Forgotten::Copy
+        } else {
+            Forgotten::Nothing
+        };
+        transaction.commit().map_err(failed)?;
+        Ok(forgotten)
     }
 
     /// The names this ledger says Mindflayer put into a project.

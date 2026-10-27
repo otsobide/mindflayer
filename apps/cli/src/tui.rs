@@ -28,7 +28,8 @@ use mindflayer_core::gather::Watch;
 use mindflayer_core::resolve::{self, resolve, Intent, Reason, Resolved};
 use mindflayer_core::workspace::Member as Registered;
 use mindflayer_core::{
-    lifecycle, paths, scan, template, Catalog, FlayerWorkspace, Kind, MindProject, WorkspaceError,
+    lifecycle, paths, scan, template, AgentHomes, Catalog, FlayerWorkspace, Kind, MindProject,
+    WorkspaceError,
 };
 use ratatui::crossterm::event::{self, Event, KeyEventKind};
 use ratatui::crossterm::terminal::{self, EnterAlternateScreen};
@@ -281,7 +282,9 @@ pub fn perform(task: &Task, app: &App) -> Performed {
             app.workspace().is_some_and(|workspace| !workspace.made),
         ),
         Task::ApplyInstall => match &app.mode {
-            Mode::Installing(screen) => Performed::Ran(vec![apply_install(&base, screen)]),
+            Mode::Installing(screen) => {
+                Performed::Ran(vec![apply_install(&base, screen, &app.lookup.agents)])
+            }
             _ => Performed::Ran(Vec::new()),
         },
         // Asked about rather than failed: `flayer link` would refuse it, and
@@ -362,7 +365,7 @@ pub fn execute(words: &[String], base: &Path, lookup: &Lookup, watch: &Watch) ->
                 base.join(named)
             }),
             activated: None,
-            home: lookup.home.clone(),
+            ..lookup.clone()
         },
         None => lookup.clone(),
     };
@@ -464,13 +467,14 @@ fn open_install(base: &Path, unmade: bool) -> Performed {
 }
 
 /// Carry out what the install screen marked, the way `flayer install` does:
-/// through [`install::commit`], which scrubs the ledger first.
-fn apply_install(base: &Path, screen: &InstallScreen) -> Done {
+/// through [`install::commit`], which scrubs the ledger first, with the
+/// agents' own folders the TUI was opened with, as every line it runs has.
+fn apply_install(base: &Path, screen: &InstallScreen, homes: &AgentHomes) -> Done {
     let command = String::from("flayer install");
     let applied = FlayerWorkspace::open(base)
         .map_err(Failure::from)
         .and_then(|workspace| {
-            let mut outcome = install::commit(&workspace, screen)?;
+            let mut outcome = install::commit(&workspace, screen, homes)?;
             let warnings = load_warnings(&workspace);
             outcome.ok = outcome.ok && warnings.is_empty();
             outcome.stderr.extend(warnings);

@@ -142,7 +142,8 @@ fn applying_installs_what_was_marked_and_reports_it() {
     let mut screen = screen_for(&workspace, &ledger);
     press(&mut screen, &[KeyCode::Right, KeyCode::Char(' ')]);
 
-    let outcome = install_screen::apply(&workspace, &ledger, &screen).unwrap();
+    let outcome =
+        install_screen::apply(&workspace, &ledger, &screen, &AgentHomes::default()).unwrap();
 
     assert!(outcome.ok, "{:?}", outcome.stderr);
     assert!(
@@ -163,7 +164,7 @@ fn an_installed_skill_opens_already_marked_next_time() {
     let (_dir, workspace, ledger) = shelved(&["collapse"], &["deploy"]);
     let mut screen = screen_for(&workspace, &ledger);
     press(&mut screen, &[KeyCode::Right, KeyCode::Char(' ')]);
-    install_screen::apply(&workspace, &ledger, &screen).unwrap();
+    install_screen::apply(&workspace, &ledger, &screen, &AgentHomes::default()).unwrap();
 
     let reopened = screen_for(&workspace, &ledger);
 
@@ -184,13 +185,14 @@ fn unmarking_an_installed_skill_removes_it() {
     let (dir, workspace, ledger) = shelved(&["collapse"], &["deploy"]);
     let mut screen = screen_for(&workspace, &ledger);
     press(&mut screen, &[KeyCode::Right, KeyCode::Char(' ')]);
-    install_screen::apply(&workspace, &ledger, &screen).unwrap();
+    install_screen::apply(&workspace, &ledger, &screen, &AgentHomes::default()).unwrap();
 
     let mut again = screen_for(&workspace, &ledger);
     press(&mut again, &[KeyCode::Right, KeyCode::Char(' ')]);
     assert_eq!(again.counts(), (0, 1));
     assert!(rendered(&again).contains("- remove"));
-    let outcome = install_screen::apply(&workspace, &ledger, &again).unwrap();
+    let outcome =
+        install_screen::apply(&workspace, &ledger, &again, &AgentHomes::default()).unwrap();
 
     assert!(
         outcome.stdout.contains("collapse: removed deploy"),
@@ -325,7 +327,8 @@ fn applying_says_what_an_interrupted_install_left_in_a_project() {
     let mut screen = screen_for(&workspace, &ledger);
     press(&mut screen, &[KeyCode::Right, KeyCode::Char(' ')]);
 
-    let outcome = install_screen::apply(&workspace, &ledger, &screen).unwrap();
+    let outcome =
+        install_screen::apply(&workspace, &ledger, &screen, &AgentHomes::default()).unwrap();
 
     assert!(outcome.ok, "{:?}", outcome.stderr);
     assert!(
@@ -351,7 +354,8 @@ fn applying_says_what_an_install_that_failed_had_cleared() {
     fs::remove_dir_all(&skills).unwrap();
     fs::write(&skills, "not a folder").unwrap();
 
-    let outcome = install_screen::apply(&workspace, &ledger, &screen).unwrap();
+    let outcome =
+        install_screen::apply(&workspace, &ledger, &screen, &AgentHomes::default()).unwrap();
 
     assert!(!outcome.ok);
     assert_eq!(
@@ -422,57 +426,135 @@ fn a_project_with_an_empty_shelf_is_told_where_skills_come_from() {
     assert!(rendered(&screen).contains("nothing on the shelf"));
 }
 
-#[test]
-fn a_project_whose_settings_name_no_skills_folder_is_said_and_hides_no_other() {
-    let (dir, _, _) = shelved(&["beta"], &["deploy"]);
-    let root = dir.path().join("alpha");
+/// A project beside the shelf's `beta`, marked by settings that name
+/// `agents` and author skills nowhere, shared with the team, and linked to
+/// the workspace.
+fn with_settings(dir: &Path, agents: &str) {
+    with_settings_sharing(dir, agents, "shared");
+}
+
+/// [`with_settings`], sharing as `share` says.
+fn with_settings_sharing(dir: &Path, agents: &str, share: &str) {
+    let root = dir.join("alpha");
     fs::create_dir_all(root.join(MIND_DIR)).unwrap();
     fs::write(
         root.join(MIND_DIR).join("settings.json"),
-        r#"{
+        format!(
+            r#"{{
   "version": 3,
   "id": "0123456789abcdef0123456789abcdef",
   "name": "alpha",
-  "agents": ["claude"],
-  "share": "local",
-  "directories": {"rules": "rules"}
-}
-"#,
+  "agents": [{agents}],
+  "share": "{share}",
+  "directories": {{"rules": "rules"}}
+}}
+"#
+        ),
     )
     .unwrap();
-    flayer(dir.path(), &["link", "alpha"]).unwrap();
+    flayer(dir, &["link", "alpha"]).unwrap();
+}
+
+/// Where the screen lists the project called `name`.
+fn listed(screen: &Screen, name: &str) -> usize {
+    screen
+        .targets
+        .iter()
+        .position(|target| target.name() == name)
+        .unwrap_or_else(|| panic!("{name} is not listed"))
+}
+
+#[test]
+fn a_project_whose_settings_name_no_agent_is_said_and_hides_no_other() {
+    let (dir, _, _) = shelved(&["beta"], &["deploy"]);
+    with_settings(dir.path(), "");
     let workspace = FlayerWorkspace::locate(dir.path()).unwrap().unwrap();
     let ledger = workspace.ledger().unwrap();
 
     let mut screen = screen_for(&workspace, &ledger);
 
-    let names: Vec<String> = screen
-        .targets
-        .iter()
-        .map(|target| target.name().to_owned())
-        .collect();
-    assert_eq!(names.len(), 2, "{names:?}");
-    let at = |name: &str| names.iter().position(|named| named == name).unwrap();
-    screen.cursor = at("alpha");
+    assert_eq!(screen.targets.len(), 2);
+    screen.cursor = listed(&screen, "alpha");
     let drawn = rendered(&screen);
-    assert!(
-        drawn.contains("alpha keeps no skills of its own"),
-        "{drawn}"
-    );
+    assert!(drawn.contains("alpha names no agent"), "{drawn}");
     assert!(!drawn.contains("nothing on the shelf"), "{drawn}");
     press(&mut screen, &[KeyCode::Right]);
     assert_eq!(screen.focus, Focus::Projects);
-    assert!(
-        screen
-            .message
-            .as_deref()
-            .is_some_and(|message| message.contains("keeps no skills of its own")),
-        "{:?}",
-        screen.message
+    assert_eq!(
+        screen.message.as_deref(),
+        Some(
+            "alpha names no agent in its settings that skills are installed for, so none can \
+             be installed into it"
+        )
     );
-    screen.cursor = at("beta");
+    screen.cursor = listed(&screen, "beta");
     assert!(rendered(&screen).contains("[ ] deploy"));
-    assert!(!root.join("skills").exists());
+    assert!(!dir.path().join("alpha/skills").exists());
+}
+
+#[test]
+fn the_screen_installs_into_every_folder_a_project_marked_by_its_settings_has_agents_read() {
+    let (dir, _, _) = shelved(&["beta"], &["deploy"]);
+    with_settings(dir.path(), r#""claude", "codex""#);
+    let workspace = FlayerWorkspace::locate(dir.path()).unwrap().unwrap();
+    let ledger = workspace.ledger().unwrap();
+    let mut screen = screen_for(&workspace, &ledger);
+    screen.cursor = listed(&screen, "alpha");
+    assert!(rendered(&screen).contains("[ ] deploy"));
+
+    press(&mut screen, &[KeyCode::Right, KeyCode::Char(' ')]);
+    let outcome =
+        install_screen::apply(&workspace, &ledger, &screen, &AgentHomes::default()).unwrap();
+
+    assert!(outcome.ok, "{:?}", outcome.stderr);
+    assert!(
+        outcome.stdout.contains("alpha: installed deploy"),
+        "{}",
+        outcome.stdout
+    );
+    let root = dir.path().join("alpha");
+    let claude = fs::read(root.join(".claude/skills/deploy/SKILL.md")).unwrap();
+    let agents = fs::read(root.join(".agents/skills/deploy/SKILL.md")).unwrap();
+    assert_eq!(claude, agents);
+    let mut reopened = screen_for(&workspace, &ledger);
+    reopened.cursor = listed(&reopened, "alpha");
+    assert!(rendered(&reopened).contains("[x] deploy"));
+
+    // Unticked, both go.
+    press(&mut reopened, &[KeyCode::Right, KeyCode::Char(' ')]);
+    let outcome =
+        install_screen::apply(&workspace, &ledger, &reopened, &AgentHomes::default()).unwrap();
+    assert!(
+        outcome.stdout.contains("alpha: removed deploy"),
+        "{}",
+        outcome.stdout
+    );
+    assert!(!root.join(".claude/skills/deploy").exists());
+    assert!(!root.join(".agents/skills/deploy").exists());
+}
+
+#[test]
+fn a_skill_somebody_keeps_in_one_agents_folder_is_left_alone_from_the_screen() {
+    let (dir, _, _) = shelved(&["beta"], &["deploy"]);
+    with_settings(dir.path(), r#""claude", "codex""#);
+    let root = dir.path().join("alpha");
+    fs::create_dir_all(root.join(".claude/skills/deploy")).unwrap();
+    fs::write(
+        root.join(".claude/skills/deploy/SKILL.md"),
+        skill_file("deploy", "Written by a person"),
+    )
+    .unwrap();
+    let workspace = FlayerWorkspace::locate(dir.path()).unwrap().unwrap();
+    let ledger = workspace.ledger().unwrap();
+
+    let mut screen = screen_for(&workspace, &ledger);
+    screen.cursor = listed(&screen, "alpha");
+
+    let drawn = rendered(&screen);
+    assert!(drawn.contains("not installed by mindflayer"), "{drawn}");
+    press(&mut screen, &[KeyCode::Right, KeyCode::Char(' ')]);
+    assert_eq!(screen.counts(), (0, 0));
+    assert!(!root.join(".agents/skills/deploy").exists());
 }
 
 /// Put a token into the URL of every source on the shelf, the way a Mindflayer
@@ -512,7 +594,7 @@ fn opening_the_screen_scrubs_nothing_and_applying_scrubs_first_and_says_so_witho
 
     assert_eq!(tainted(&workspace), 1, "opening the screen is a read");
     press(&mut screen, &[KeyCode::Right, KeyCode::Char(' ')]);
-    let outcome = install_screen::commit(&workspace, &screen).unwrap();
+    let outcome = install_screen::commit(&workspace, &screen, &AgentHomes::default()).unwrap();
 
     assert!(outcome.ok, "{:?}", outcome.stderr);
     assert_eq!(outcome.stderr, [SCRUBBED]);
@@ -572,7 +654,7 @@ fn a_mark_on_a_source_the_scrub_makes_one_with_another_installs_from_the_one_kep
 
     // The row the scrub drops, whose source is gone by the time it installs.
     mark_from(&mut screen, "deploy", "older");
-    let outcome = install_screen::commit(&workspace, &screen).unwrap();
+    let outcome = install_screen::commit(&workspace, &screen, &AgentHomes::default()).unwrap();
 
     assert!(outcome.ok, "{:?}", outcome.stderr);
     assert!(dir.path().join("collapse/skills/deploy/SKILL.md").is_file());
@@ -602,7 +684,7 @@ fn a_mark_on_what_only_the_source_the_scrub_drops_had_is_said_and_left_undone() 
     let mut screen = install_screen::open(&workspace, projects).unwrap();
 
     mark_from(&mut screen, "lint", "older");
-    let outcome = install_screen::commit(&workspace, &screen).unwrap();
+    let outcome = install_screen::commit(&workspace, &screen, &AgentHomes::default()).unwrap();
 
     assert!(!outcome.ok);
     assert_eq!(
@@ -633,4 +715,84 @@ fn installing_and_uninstalling_one_skill_scrub_the_ledger_first() {
     let removed = mind(&dir.path().join("collapse"), &["uninstall", "deploy"]).unwrap();
     assert!(removed.ok, "{:?}", removed.stderr);
     assert_eq!(removed.stderr, [SCRUBBED]);
+}
+
+#[test]
+fn installing_a_skill_that_holds_a_claude_plugin_folder_leaves_it_out_and_warns() {
+    let dir = TempDir::new().unwrap();
+    flayer(dir.path(), &["init"]).unwrap();
+    with_settings(dir.path(), r#""claude", "codex""#);
+    let source = repository(&[
+        (
+            "skills/deploy/SKILL.md",
+            &skill_file("deploy", "Ship the service"),
+        ),
+        ("skills/deploy/.claude-plugin/plugin.json", "{}"),
+    ]);
+    let url = source.path().to_string_lossy().into_owned();
+    flayer(dir.path(), &["gather", "git", &url]).unwrap();
+
+    let outcome = flayer(dir.path(), &["install", "-p", "alpha", "deploy"]).unwrap();
+
+    assert_eq!(
+        outcome.stdout,
+        format!("installed deploy into alpha, from {url}\n")
+    );
+    assert_eq!(
+        outcome.stderr,
+        vec![
+            "warning: deploy in alpha was installed without its .claude-plugin, since Claude \
+             would load the skill as a plugin, with the hooks and MCP servers it declares"
+        ]
+    );
+    assert!(!outcome.ok);
+    let root = dir.path().join("alpha");
+    assert!(root.join(".claude/skills/deploy/SKILL.md").is_file());
+    assert!(!root.join(".claude/skills/deploy/.claude-plugin").exists());
+    assert!(!root.join(".agents/skills/deploy/.claude-plugin").exists());
+}
+
+#[test]
+fn a_local_project_outside_git_is_told_nothing_keeps_what_is_installed_out_of_it() {
+    let (dir, _, _) = shelved(&["beta"], &["deploy"]);
+    with_settings_sharing(dir.path(), r#""claude""#, "local");
+    let root = dir.path().join("alpha");
+
+    let installed = flayer(dir.path(), &["install", "-p", "alpha", "deploy"]).unwrap();
+    let removed = flayer(dir.path(), &["uninstall", "-p", "alpha", "deploy"]).unwrap();
+
+    assert!(installed.ok, "{:?}", installed.stderr);
+    assert_eq!(
+        installed.stderr,
+        vec![format!(
+            "note: {}: not in a git work tree, so nothing keeps what is installed there out of git",
+            root.display()
+        )]
+    );
+    assert_eq!(removed.stdout, "removed deploy from alpha\n");
+    assert!(removed.stderr.is_empty(), "{:?}", removed.stderr);
+    assert!(!root.join(".claude/skills/deploy").exists());
+}
+
+#[test]
+fn nothing_is_installed_into_a_folder_an_agent_reads_for_every_project() {
+    let (dir, _, _) = shelved(&["beta"], &["deploy"]);
+    with_settings(dir.path(), r#""claude""#);
+    // Claude's folder is said to be the project's own `.claude`, as it is
+    // for a project at the user's home.
+    let claude = dir.path().join("alpha").join(".claude");
+    let given = format!("--claude-config-dir={}", claude.display());
+
+    let failure = flayer(dir.path(), &["install", "-p", "alpha", "deploy", &given]).unwrap_err();
+
+    assert_eq!(
+        failure.error.to_string(),
+        format!(
+            "{} is inside {}, which Claude Code reads for every project, so nothing was \
+             installed: Mindflayer installs into one project at a time",
+            claude.join("skills").join("deploy").display(),
+            claude.display()
+        )
+    );
+    assert!(!claude.exists());
 }

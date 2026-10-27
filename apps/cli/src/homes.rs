@@ -12,12 +12,15 @@ use mindflayer_core::{AgentHomes, Inputs, Intent};
 
 use crate::AgentHomeOptions;
 
-/// What a command line says about which workspace to use, apart from where
-/// the command starts: gathered here and handed to core's `resolve`, which
-/// alone decides what it adds up to.
+/// What a command line says about where things are outside the directory it
+/// works in: which workspace to use, gathered here and handed to core's
+/// `resolve`, which alone decides what it adds up to, and where each agent
+/// keeps its own folder.
 ///
 /// Decided once per command line. The TUI keeps its own and hands it to every
-/// line it runs, so none of them looks again and finds something else.
+/// line it runs, so none of them looks again and finds something else: the
+/// lines it runs carry none of the options, and deciding again would read the
+/// environment the TUI was opened in, or a test's real agent folders.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct Lookup {
     /// The workspace `-W` names, as given: empty when given empty.
@@ -26,14 +29,18 @@ pub struct Lookup {
     pub activated: Option<PathBuf>,
     /// Where the default workspace lives ([`default_home`]).
     pub home: Option<PathBuf>,
+    /// Where each agent keeps what it reads for every project
+    /// ([`agent_homes`]); none of them unless given.
+    pub agents: AgentHomes,
 }
 
 impl Lookup {
-    /// What a command line gave as `--home` and `-W`, with the environment
-    /// for what it left out.
-    pub fn given(home: Option<&str>, workspace: Option<&str>) -> Self {
+    /// What a command line gave as `--home`, `-W` and the four agent homes,
+    /// with the environment for what it left out.
+    pub fn given(home: Option<&str>, workspace: Option<&str>, agents: &AgentHomeOptions) -> Self {
         Self {
             home: default_home(home),
+            agents: agent_homes(agents),
             ..Self::chosen(workspace, &variable)
         }
     }
@@ -52,7 +59,7 @@ impl Lookup {
                 Some(_) => None,
                 None => variable(WORKSPACE_VARIABLE).map(PathBuf::from),
             },
-            home: None,
+            ..Self::default()
         }
     }
 

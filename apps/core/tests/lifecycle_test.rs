@@ -7,6 +7,7 @@ use std::path::{Path, PathBuf};
 use mindflayer_core::install::{self, InstallError, Standing};
 use mindflayer_core::ledger::{Ledger, SourceKind};
 use mindflayer_core::lifecycle::{self, Record, Target};
+use mindflayer_core::AgentHomes;
 use mindflayer_core::{
     create, Agent, Catalog, Directories, FlayerWorkspace, Kind, LifecycleError, MindProject,
     Reference, Share,
@@ -482,7 +483,14 @@ fn installed(names: &[&str]) -> (TempDir, FlayerWorkspace, MindProject, Ledger) 
     }
     let ledger = workspace.ledger().unwrap();
     for candidate in install::survey(&workspace, &ledger, &project, Kind::Skill).unwrap() {
-        install::install(&workspace, &ledger, &project, &candidate).unwrap();
+        install::install(
+            &workspace,
+            &ledger,
+            &project,
+            &candidate,
+            &AgentHomes::default(),
+        )
+        .unwrap();
     }
     (dir, workspace, project, ledger)
 }
@@ -512,6 +520,223 @@ fn type_into(file: &Path) {
     let mut text = fs::read_to_string(file).unwrap();
     text.push_str("Mine.\n");
     fs::write(file, text).unwrap();
+}
+
+/// A workspace with its own `names`, and a project marked by its settings,
+/// naming every agent and authoring skills in `skills`, linked to it, with
+/// each of the workspace's installed for its agents.
+fn installed_for_agents(names: &[&str]) -> (TempDir, FlayerWorkspace, MindProject, Ledger) {
+    installed_authoring_in("skills", Share::Shared, names)
+}
+
+/// [`installed_for_agents`], for a project at the root of a git repository
+/// of its own that authors skills in `folder` and shares as `share` says.
+fn installed_authoring_in(
+    folder: &str,
+    share: Share,
+    names: &[&str],
+) -> (TempDir, FlayerWorkspace, MindProject, Ledger) {
+    let dir = TempDir::new().unwrap();
+    let (mut workspace, _) = FlayerWorkspace::init(dir.path()).unwrap();
+    let root = dir.path().join("collapse");
+    fs::create_dir(&root).unwrap();
+    gix::init(&root).unwrap();
+    let directories = Directories::default().with(Kind::Skill, folder);
+    let (project, _) = MindProject::init_settings(&root, &Agent::ALL, share, &directories).unwrap();
+    workspace.link(&project).unwrap();
+    for name in names {
+        create(&workspace.own(), Kind::Skill, name, "From the workspace").unwrap();
+    }
+    let ledger = workspace.ledger().unwrap();
+    for candidate in install::survey(&workspace, &ledger, &project, Kind::Skill).unwrap() {
+        install::install(
+            &workspace,
+            &ledger,
+            &project,
+            &candidate,
+            &AgentHomes::default(),
+        )
+        .unwrap();
+    }
+    (dir, workspace, project, ledger)
+}
+
+#[test]
+fn what_a_project_authors_beside_its_agents_copies_leaves_their_record_alone() {
+    let (dir, workspace, project, ledger) = installed_for_agents(&["deploy"]);
+    let installed = dir.path().join("collapse/.claude/skills/deploy");
+    assert!(installed.is_dir());
+
+    // Its own of the same name, in the folder it authors in.
+    let added = lifecycle::add(
+        Some(&workspace),
+        &project,
+        Kind::Skill,
+        "deploy",
+        "Our own",
+        None,
+    )
+    .unwrap();
+    assert_eq!(added.stale.unwrap(), Record::Untouched);
+    let edit = lifecycle::start_edit(&find(&project, "deploy").unwrap());
+    type_into(edit.file());
+    let edited = lifecycle::finish_edit(Some(&workspace), &project, edit);
+    assert_eq!(edited.copy.unwrap(), Record::Untouched);
+    let renamed = lifecycle::rename(
+        Some(&workspace),
+        &project,
+        &find(&project, "deploy").unwrap(),
+        "ship",
+    )
+    .unwrap();
+    assert_eq!(renamed.copy.unwrap(), Record::Untouched);
+    let removed =
+        lifecycle::remove(Some(&workspace), &project, &find(&project, "ship").unwrap()).unwrap();
+    assert_eq!(removed.copy.unwrap(), Record::Untouched);
+
+    // The copies installed for its agents are still Mindflayer's to manage.
+    assert_eq!(records(&ledger), ["deploy"]);
+    assert_eq!(
+        standing(&workspace, &ledger, &project, "deploy"),
+        Standing::Installed
+    );
+    assert!(installed.join("SKILL.md").is_file());
+}
+
+/// The routes the exclude block keeps out of git for the project.
+fn excluded(project: &MindProject) -> Vec<String> {
+    fs::read_to_string(project.root().join(".git/info/exclude"))
+        .unwrap()
+        .lines()
+        .filter(|line| line.starts_with('/'))
+        .map(str::to_owned)
+        .collect()
+}
+
+#[test]
+fn removing_the_copy_in_a_folder_the_project_authors_in_leaves_the_others_installed() {
+    // Claude's folder is the one it authors in, so an install's copy there
+    // is one a change from the project reaches.
+    let (dir, workspace, project, ledger) =
+        installed_authoring_in(".claude/skills", Share::Local, &["deploy"]);
+    let reached = dir.path().join("collapse/.claude/skills/deploy");
+    let other = dir.path().join("collapse/.agents/skills/deploy");
+    assert!(reached.is_dir() && other.is_dir());
+
+    let removed = lifecycle::remove(
+        Some(&workspace),
+        &project,
+        &find(&project, "deploy").unwrap(),
+    )
+    .unwrap();
+
+    assert_eq!(removed.copy.unwrap(), Record::Dropped);
+    assert!(!reached.exists());
+    // The copy nobody touched is still Mindflayer's, and so still out of git;
+    // the place the change emptied is not.
+    let record = ledger
+        .installation("collapse", Kind::Skill, "deploy")
+        .unwrap()
+        .unwrap();
+    let routes: Vec<&str> = record.targets.iter().map(|t| t.path.as_str()).collect();
+    assert_eq!(routes, [".agents/skills/deploy"]);
+    assert_eq!(excluded(&project), ["/.agents/skills/deploy/"]);
+    assert_eq!(
+        standing(&workspace, &ledger, &project, "deploy"),
+        Standing::Installed
+    );
+
+    // What the project writes there next is its own, in git's sight, and
+    // refuses an install rather than being written over.
+    let added = lifecycle::add(
+        Some(&workspace),
+        &project,
+        Kind::Skill,
+        "deploy",
+        "Our own",
+        None,
+    )
+    .unwrap();
+    assert_eq!(added.stale.unwrap(), Record::Untouched);
+    assert_eq!(
+        standing(&workspace, &ledger, &project, "deploy"),
+        Standing::Foreign
+    );
+
+    // And the copy left can still be taken out, without the project's own.
+    let uninstalled =
+        install::uninstall(&workspace, &ledger, &project, Kind::Skill, "deploy").unwrap();
+    assert!(
+        matches!(uninstalled, install::Removed::Removed { .. }),
+        "{uninstalled:?}"
+    );
+    assert!(!other.exists());
+    assert!(reached.join("SKILL.md").is_file());
+    assert!(excluded(&project).is_empty());
+}
+
+#[test]
+fn an_exclude_block_that_cannot_be_edited_is_reported_and_the_copys_record_still_goes() {
+    let (_dir, workspace, project, ledger) =
+        installed_authoring_in(".claude/skills", Share::Local, &["deploy"]);
+    let file = project.root().join(".git/info/exclude");
+    let mut text = fs::read_to_string(&file).unwrap();
+    text.push_str("# mindflayer:begin\n");
+    fs::write(&file, &text).unwrap();
+
+    let removed = lifecycle::remove(
+        Some(&workspace),
+        &project,
+        &find(&project, "deploy").unwrap(),
+    )
+    .unwrap();
+
+    let Err(error) = removed.copy else {
+        panic!("{:?}", removed.copy);
+    };
+    assert!(
+        matches!(error, InstallError::StillExcluded { .. }),
+        "{error}"
+    );
+    assert!(error.to_string().contains("was dropped"), "{error}");
+    assert_eq!(
+        ledger.copies("collapse", Kind::Skill).unwrap(),
+        [".agents/skills/deploy"]
+    );
+    assert_eq!(fs::read_to_string(&file).unwrap(), text);
+}
+
+#[test]
+fn editing_or_renaming_the_copy_in_a_folder_the_project_authors_in_keeps_the_others() {
+    let (dir, workspace, project, ledger) =
+        installed_authoring_in(".claude/skills", Share::Shared, &["deploy", "audit"]);
+
+    let edit = lifecycle::start_edit(&find(&project, "deploy").unwrap());
+    type_into(edit.file());
+    let edited = lifecycle::finish_edit(Some(&workspace), &project, edit);
+    let renamed = lifecycle::rename(
+        Some(&workspace),
+        &project,
+        &find(&project, "audit").unwrap(),
+        "review",
+    )
+    .unwrap();
+
+    assert_eq!(edited.copy.unwrap(), Record::Dropped);
+    assert_eq!(renamed.copy.unwrap(), Record::Dropped);
+    assert_eq!(
+        ledger.copies("collapse", Kind::Skill).unwrap(),
+        [".agents/skills/audit", ".agents/skills/deploy"]
+    );
+    // Nothing a shared project installs is kept out of git.
+    assert!(excluded(&project).is_empty());
+    assert!(dir.path().join("collapse/.agents/skills/audit").is_dir());
+    let uninstalled =
+        install::uninstall(&workspace, &ledger, &project, Kind::Skill, "audit").unwrap();
+    assert!(
+        matches!(uninstalled, install::Removed::Removed { .. }),
+        "{uninstalled:?}"
+    );
 }
 
 #[test]
@@ -642,7 +867,8 @@ fn an_edit_that_changes_an_installed_copy_drops_its_record() {
     assert_eq!(
         install::uninstall(&workspace, &ledger, &project, Kind::Skill, "deploy").unwrap(),
         install::Removed::Foreign {
-            name: String::from("deploy")
+            name: String::from("deploy"),
+            path: project.root().join("skills").join("deploy"),
         }
     );
     assert!(dir.path().join("collapse/skills/deploy/SKILL.md").is_file());
@@ -853,7 +1079,14 @@ fn a_change_drops_the_record_of_the_workspace_it_is_given_wherever_that_sits() {
     create(&workspace.own(), Kind::Skill, "deploy", "Ship it").unwrap();
     let ledger = workspace.ledger().unwrap();
     for candidate in install::survey(&workspace, &ledger, &project, Kind::Skill).unwrap() {
-        install::install(&workspace, &ledger, &project, &candidate).unwrap();
+        install::install(
+            &workspace,
+            &ledger,
+            &project,
+            &candidate,
+            &AgentHomes::default(),
+        )
+        .unwrap();
     }
     let edit = lifecycle::start_edit(&find(&project, "deploy").unwrap());
     type_into(edit.file());
@@ -887,7 +1120,14 @@ fn a_record_is_kept_under_the_workspaces_spelling_of_a_project_whatever_the_syml
     let recorded = || ledger.installations("../collapse", Kind::Skill).unwrap();
 
     for candidate in install::survey(&through_link, &ledger, &project, Kind::Skill).unwrap() {
-        install::install(&through_link, &ledger, &project, &candidate).unwrap();
+        install::install(
+            &through_link,
+            &ledger,
+            &project,
+            &candidate,
+            &AgentHomes::default(),
+        )
+        .unwrap();
     }
     assert_eq!(recorded(), ["deploy"]);
 

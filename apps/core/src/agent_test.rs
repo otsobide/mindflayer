@@ -20,6 +20,27 @@ fn each_agents_default_folder_is_its_own_in_the_users_home() {
 }
 
 #[test]
+fn the_agents_folders_are_listed_with_who_reads_each_and_none_that_is_not_given() {
+    let user = Path::new("/home/user");
+    let homes = AgentHomes {
+        codex_home: None,
+        ..AgentHomes::defaults_under(user)
+    };
+
+    let folders = homes.folders();
+
+    assert_eq!(
+        folders,
+        [
+            ("Claude Code", user.join(".claude").as_path()),
+            ("OpenCode", user.join(".config").join("opencode").as_path()),
+            ("more than one agent", user.join(".agents").as_path()),
+        ]
+    );
+    assert!(AgentHomes::default().folders().is_empty());
+}
+
+#[test]
 fn an_agent_is_named_by_its_binary_and_shown_the_same_way() {
     let names: Vec<&str> = Agent::ALL.iter().map(|agent| agent.name()).collect();
     assert_eq!(names, ["claude", "codex", "opencode"]);

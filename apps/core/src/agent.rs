@@ -148,8 +148,9 @@ impl fmt::Display for UnknownAgent {
 /// Where each kind goes in a project for each agent.
 ///
 /// One table in core, so no front end ever spells an agent's folder: an
-/// install (#34) asks it where to put a copy for each agent a project names,
-/// and a check asks it where to look.
+/// install asks it where to put a copy for each agent a project names
+/// ([`install::targets`](crate::install::targets)), and a check asks it where
+/// to look.
 ///
 /// A value rather than a function a caller reaches for, because the
 /// standard layout is only the default: a project's settings may put a kind
@@ -157,7 +158,7 @@ impl fmt::Display for UnknownAgent {
 /// follows that without changing. The project hands it on, in core: which
 /// table applies is its settings' to say, so a caller asks the project
 /// ([`MindProject::targets`](crate::MindProject::targets)), as an install
-/// will (#34), and no front end calls
+/// does, and no front end calls
 /// [`standard`](TargetTable::standard) and picks one those settings would
 /// contradict.
 ///
@@ -289,6 +290,20 @@ pub struct AgentHomes {
 }
 
 impl AgentHomes {
+    /// Each folder there is, with who reads it, in report order: the folders
+    /// a copy put inside would reach every project, not one.
+    pub fn folders(&self) -> Vec<(&'static str, &Path)> {
+        [
+            ("Claude Code", &self.claude_config_dir),
+            ("Codex", &self.codex_home),
+            ("OpenCode", &self.opencode_config_dir),
+            ("more than one agent", &self.agents_dir),
+        ]
+        .into_iter()
+        .filter_map(|(reader, folder)| Some((reader, folder.as_deref()?)))
+        .collect()
+    }
+
     /// Where each agent keeps its folder when nothing moves it: the fallback a
     /// front end takes once neither its option nor the agent's own variable
     /// answers.

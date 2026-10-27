@@ -396,9 +396,10 @@ be read at all is a warning on stderr and does not hide the ones next to it.
 
 Each agent also reads a folder that belongs to no project: Claude Code its
 configuration folder, Codex its home, OpenCode its configuration folder, and
-more than one of them the skills in `~/.agents`. Checks to come will look
-there; no command reads them yet. Each is taken from its option, then from the
-variable the agent itself reads, then from its folder in your home:
+more than one of them the skills in `~/.agents`. An install never puts a copy
+inside one of them, since a skill there reaches every project; checks to come
+will look in them too. Each is taken from its option, then from the variable
+the agent itself reads, then from its folder in your home:
 
 | Option | Then | Then |
 |---|---|---|
@@ -651,8 +652,9 @@ Each project keeps its own ticks, so one pass across the list is one plan for
 the whole workspace. The number beside a project is how many of its boxes you
 have moved.
 
-**Unticking removes.** A skill is copied into the directory that project's
-marker names, and unticking it deletes that directory again. With one
+**Unticking removes.** A skill is copied wherever the project's agents read it
+([below](#where-a-project-keeps-its-artifacts)), or into the directory a
+`mind.toml` names, and unticking it deletes those copies again. With one
 exception, which is the rule the whole command works by:
 
 > Mindflayer only manages what it installed.
@@ -660,7 +662,9 @@ exception, which is the rule the whole command works by:
 A skill already in the project that Mindflayer did not put there is shown
 ticked and marked `(not installed by mindflayer)`. It cannot be unticked and it
 is never overwritten or deleted: somebody wrote it. The ledger is what knows
-the difference.
+the difference. One in any of the folders an install would write refuses the
+whole install, and the others are left alone too, so the agents never read two
+different skills of one name.
 
 Two shelves can offer `commit-style`, but a project has one directory of that
 name, so ticking one unticks the other rather than letting both apply and the
@@ -689,9 +693,10 @@ project's one folder of that name is not something to guess.
 
 An install never writes beside the copy it replaces, where an agent reading the
 skills folder would find it. It builds the copy in `.mind/tmp`, a folder that
-ignores itself, and moves it into place once it is whole, so the skills folder
-holds the old copy, the new one or, for the instant between two renames of an
-update, neither, and never part of either. Two installs at once each build in a
+ignores itself, and moves it into place once it is whole (every copy of it,
+when the project's agents read two folders), so the skills folder holds the
+old copy, the new one or, for the instant between two renames of an update,
+neither, and never part of either. Two installs at once each build in a
 folder of their own there. One that is stopped halfway leaves its work there
 too, and the next install clears it and says so, as it does the hidden
 `.<name>.mindflayer-new` an older version left beside a skill:
@@ -919,6 +924,32 @@ contents `list` and `validate` warn, since the agents would not all load the
 same skill. Mindflayer changes only what sits in the folders the project
 authors in, so `mind edit`, `rename` and `remove` reach the project's own copy
 and leave a skill in an agent's folder alone.
+
+What is installed into such a project goes where its agents read, never into
+the folder it authors in: one copy in `.claude/skills` for Claude, one in
+`.agents/skills` that Codex and OpenCode share, the same bytes, put in place
+together or not at all, and recorded as one installation. A local project
+keeps them out of git with a block of its own in the repository's
+`.git/info/exclude`, never in your `.gitignore`, written before the copies
+land and taken out after they go; a shared one leaves them for the team to
+commit:
+
+```
+$ flayer install -p collapse commit-style
+installed commit-style into collapse, from workspace
+$ tail -5 collapse/.git/info/exclude
+# mindflayer:begin
+# project 4f9c2a7e1b3d5f60a8c4e2b6d0f1a3c5
+/.agents/skills/commit-style/
+/.claude/skills/commit-style/
+# mindflayer:end
+```
+
+Outside a git repository a local install says nothing keeps its copies out
+of git, as a `note:`. A skill's own `.claude-plugin` folder goes into no copy,
+with a warning, since Claude would load the skill as a plugin, hooks and MCP
+servers included. And a project at your home is refused an install, since its
+`.claude/skills` and `.agents/skills` are the ones every project reads.
 
 ## What a skill looks like
 

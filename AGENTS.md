@@ -89,8 +89,9 @@ under `apps/` with its own `Makefile`:
   validate), `gather`, `install` and `migrate` (migrate --library).
   `src/render.rs` holds `Outcome`, `Failure` and the table helpers,
   `src/error.rs` holds `CliError`, and `src/homes.rs` decides the default
-  home and the agent homes, and gathers `-W` and `$MINDFLAYER_WORKSPACE`
-  into a `Lookup`. `src/tui/` and `src/install/` are the two screens.
+  home and the agent homes, and gathers them with `-W` and
+  `$MINDFLAYER_WORKSPACE` into a `Lookup`. `src/tui/` and `src/install/` are
+  the two screens.
 - `apps/server` (`mindflayer-server`): the local server behind the web
   panel, a library no binary runs yet. `src/backend.rs` is the `Backend`
   trait, `src/server.rs` binds and routes, `src/auth.rs` holds the token's
@@ -132,10 +133,10 @@ These are easy to break from a single file without noticing.
   disagree with this one. No front end spells an agent's folder or calls
   `TargetTable::standard`: which table applies is the project's, in core, the
   standard one until #40 reads an override from its settings, so code that
-  needs one asks the project (`MindProject::targets`), as discovery does and
-  an install will (#34). Where an agent reads (`Agent::reads`) is kept apart
-  from where it is sent a copy: OpenCode reads `.claude/skills` and is sent
-  nothing there. Which folders a project is read from is core's too
+  needs one asks the project (`MindProject::targets`), as discovery and an
+  install (`install::targets`) do. Where an agent reads (`Agent::reads`) is
+  kept apart from where it is sent a copy: OpenCode reads `.claude/skills` and
+  is sent nothing there. Which folders a project is read from is core's too
   (`Catalog::folders`).
 - **Two binaries, one parser.** `flayer <cmd>` is `mind flayer <cmd>`, and
   both reach the same function. `mind add` and `flayer add` (with or without
@@ -186,10 +187,13 @@ These are easy to break from a single file without noticing.
     block is refused, not repaired. The blocks:
     `# mindflayer:begin`/`# mindflayer:end` in
     `$GIT_COMMON_DIR/info/exclude` (`exclude`), where an edit rewrites only its
-    own project's `# project <key>` group. A team's `.gitignore` and
-    `core.excludesFile` are never edited; the `.gitignore`s Mindflayer writes
-    are `.mind/tmp`'s and a local project's `.mind`'s own (`MIND_IGNORE`),
-    each inside a folder it owns, made with `create_new`.
+    own project's `# project <key>` group: an install writes one entry per
+    copy for a local project, keyed by its id, before the copies land, and
+    never opens the file for a shared project or one a `mind.toml` marks. A
+    team's `.gitignore` and `core.excludesFile` are never edited; the
+    `.gitignore`s Mindflayer writes are `.mind/tmp`'s and a local project's
+    `.mind`'s own (`MIND_IGNORE`), each inside a folder it owns, made with
+    `create_new`.
   - An entry in a config file somebody else owns (`.mcp.json`,
     `opencode.json`, `.codex/config.toml`) is changed one at a time through
     `config_entry`: JSON and JSONC entries are edited through jsonc-parser's
@@ -209,16 +213,27 @@ These are easy to break from a single file without noticing.
 - **Mindflayer only manages what it installed.** The ledger's record of an
   install (one installation, a target for each copy it wrote, its origin and
   the `hash::tree` of what it wrote, that hash's one definition) is what
-  allows overwriting and deleting. An unrecorded artifact is
-  `Standing::Foreign` and is never touched. A v3 project is listed from its
+  allows overwriting and deleting. An install writes a copy in every target
+  `install::targets` gives (each folder the project's agents read, or the
+  one a `mind.toml` names), built from one tree and put in place together or
+  not at all (`copy::Stage::place`). Standing is by the path each record
+  names (`Ledger::copies`), never by name: anything unrecorded in any target
+  is `Standing::Foreign`, refuses the whole install with nothing written in
+  any target, and is never touched. An uninstall removes the copies its
+  record names and nothing else. No copy holds a skill's top-level
+  `.claude-plugin` (`install::LeftOut`), and none lands inside an agent's
+  own folder (`InstallError::UserScope`). A v3 project is listed from its
   agents' folders too, where an unrecorded copy outside the folder it
   authors in is `Provenance::Foreign` (by the path a record names,
   `Catalog::with_records`), and a lifecycle change looks only where the
   project authors (`Catalog::discover_authored`), so it never reaches one.
   Core's lifecycle changes
   (`lifecycle::add`, `finish_edit`, `rename` and `remove`) drop any record
-  they would leave behind and return what they did (`lifecycle::Record`, and
-  the `scrub` that opening the ledger ran), which the CLI only renders.
+  they would leave behind, only that of the copy the change reached
+  (`Ledger::uninstalled_copy`: a v3 project whose authored folder is also a
+  target keeps the record of its other copies, and a local one stops
+  excluding that copy's place), and return what they did (`lifecycle::Record`, and the `scrub` that opening the ledger ran),
+  which the CLI only renders.
   `install::disown` is private to core, so no front end drops a record on its
   own. A front end adds through `lifecycle::add`, never `create` or
   `create_from`, which leave a stale record in place.
@@ -299,8 +314,8 @@ These are easy to break from a single file without noticing.
     in old rows in its own SQL, not through today's code, and adds a fixture
     of what the version before it wrote
     (`apps/core/tests/fixtures/ledger-v<N>.sql`) for a test to migrate.
-- **Nothing is staged where agents look.** An install builds its copy in a
-  `copy::Stage` under the project's `.mind/tmp` and renames it into place.
+- **Nothing is staged where agents look.** An install builds its copies in a
+  `copy::Stage` under the project's `.mind/tmp` and renames them into place.
   A temporary beside an installed copy is a skill an agent may load, so never
   write one there. The next install sweeps what an interrupted one left in
   `.mind/tmp`, only when the stage lock says no other run is going, clears the
@@ -342,11 +357,13 @@ These are easy to break from a single file without noticing.
   `$OPENCODE_CONFIG_DIR`, then `~/.claude`, `~/.codex`, `~/.config/opencode`
   or `~/.agents`; empty means none. Those folder names are core's
   (`AgentHomes::defaults_under`), and only the user's home is the CLI's to
-  find. Core takes the answer as `AgentHomes` and never resolves one. No
-  command calls `agent_homes` yet, and the first that does also makes
-  `tui::execute` hand each command the TUI's own, as it hands them its
-  `Lookup`: a command the TUI runs carries none of the four options, so it
-  would decide them again from the environment.
+  find. Core takes the answer as `AgentHomes` and never resolves one.
+  `Lookup::given` decides them once per command line, into the `Lookup`
+  (`Lookup::agents`), and install is the first to take them, to refuse a
+  copy inside one. `tui::execute` hands each line the TUI's own with the
+  rest of its `Lookup`, and so does its install screen: a command the TUI
+  runs carries none of the four options, so it would decide them again from
+  the environment.
 - **The server holds no rules.** `apps/server` carries JSON between the
   browser and a `Backend`, whose `Query`, `Task` and `Outcome` are associated
   types, and depends on no mindflayer crate (`tests/crate_test.rs` checks it
@@ -408,9 +425,10 @@ These are easy to break from a single file without noticing.
   options empty (`common::PINNED`), so no command they run can reach or
   create the real home workspace, use an activated one or read a real agent
   folder. A command a TUI test runs gets only the TUI's own `Lookup`, the one
-  the test chose, and none of the agent-home options (see "So do the agent
-  homes"). A test that spawns a binary (`common::spawn`) clears those
-  variables (`common::CLEARED`), sets only the ones it is about, and sets
+  the test chose, agent homes included (none, from `Lookup::default`), and
+  none of the agent-home options (see "So do the agent homes"). A test that
+  spawns a binary (`common::spawn`) clears those variables
+  (`common::CLEARED`), sets only the ones it is about, and sets
   `HOME` (`USERPROFILE` on Windows) to a temp dir. Not to empty: the standard
   library then falls back to the account's real home. Keep it that way.
 - Git sources are built in-process with `gix` (`common::repository`): no
