@@ -354,12 +354,14 @@ fn run_flayer(
         // is made too, which its first change makes.
         FlayerCommand::Minds => tui::run_minds(directory, lookup),
 
-        // Each path spelled as `flayer link` run here would take it, so a
-        // line of the report is a line to type.
-        FlayerCommand::Scan => {
+        // Each folder taken from here as `link` takes a path, and each path
+        // found spelled as `flayer link` run here would take it, so a line of
+        // the report is a line to type.
+        FlayerCommand::Scan { roots, depth } => {
             let request = scan::Request {
+                roots: targets(directory, roots)?,
+                depth: *depth,
                 from: Some(typed(directory, Path::new(""))?),
-                ..scan::Request::default()
             };
             reading_workspace(directory, lookup, |workspace| {
                 Ok(scan_workspace(workspace, &request))
