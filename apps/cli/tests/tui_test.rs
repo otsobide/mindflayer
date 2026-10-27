@@ -121,7 +121,11 @@ fn a_repository_is_made_a_mind_project_only_when_that_is_confirmed() {
             path: String::from("gamma")
         })
     );
-    assert!(dir.path().join("gamma").join(MIND_DIR).is_dir());
+    // What `mind init` makes anywhere: settings kept out of git.
+    assert_eq!(
+        names_in(&dir.path().join("gamma").join(MIND_DIR)),
+        [".gitignore", SETTINGS_FILE]
+    );
     assert!(registry(dir.path()).contains("\"gamma\""));
     let transcript = app.transcript();
     assert!(
@@ -203,6 +207,17 @@ fn applying_the_minds_screen_links_and_unlinks_in_one_pass() {
     let drawn = tui_drawn(&app);
     assert!(drawn.contains("Link 2 and unlink 1?"), "{drawn}");
     assert!(drawn.contains("repo is not a mind project yet"), "{drawn}");
+    let Mode::Confirming(confirm) = &app.mode else {
+        panic!("{:?}", app.mode)
+    };
+    assert!(
+        confirm
+            .question
+            .iter()
+            .any(|line| line.contains("(a .mind kept out of git, and empty skills/ and rules/)")),
+        "{:?}",
+        confirm.question
+    );
     assert!(!registry(dir.path()).contains("\"gamma\""), "nothing yet");
 
     let task = press_and_run(&mut app, KeyCode::Char('y'));
@@ -220,7 +235,11 @@ fn applying_the_minds_screen_links_and_unlinks_in_one_pass() {
     assert!(registry.contains("\"repo\""), "{registry}");
     assert!(registry.contains("\"beta\""), "{registry}");
     assert!(!registry.contains("\"alpha\""), "{registry}");
-    assert!(dir.path().join("repo").join(MIND_DIR).is_dir());
+    // What `mind init` makes anywhere: settings kept out of git.
+    assert_eq!(
+        names_in(&dir.path().join("repo").join(MIND_DIR)),
+        [".gitignore", SETTINGS_FILE]
+    );
     let transcript = app.transcript();
     assert!(transcript.contains("$ mind -C repo init\n"), "{transcript}");
     assert!(
