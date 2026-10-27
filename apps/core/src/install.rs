@@ -1365,7 +1365,7 @@ fn overlaps(from: &Path, to: &Path) -> bool {
 }
 
 /// A path made canonical as far as it exists, with the rest appended.
-fn resolved(path: &Path) -> Option<PathBuf> {
+pub(crate) fn resolved(path: &Path) -> Option<PathBuf> {
     let mut missing = Vec::new();
     let mut existing = path;
     loop {

@@ -34,7 +34,9 @@
 //!
 //! A local project keeps the files out of git (D-02), one entry each in its
 //! group of the exclude block ([`crate::exclude`]), written before they land
-//! and taken out after they go, as an install's copies are.
+//! and taken out after they go, as an install's copies are. And none is
+//! written where the block of `AGENTS.md` would be refused
+//! ([`crate::agents_md::misplaced`]), nor through a link out of the project.
 
 use std::collections::BTreeMap;
 use std::fs;
@@ -43,12 +45,14 @@ use std::path::{Path, PathBuf};
 
 use thiserror::Error;
 
+use crate::agent::AgentHomes;
+use crate::agents_md::{self, Misplaced};
 use crate::artifact::{issue_list, name_issues, Artifact, ArtifactError, Declared};
-use crate::catalog::report_order;
+use crate::catalog::{report_order, spelled};
 use crate::exclude::{self, ExcludeError, Excluded};
 use crate::hash;
 use crate::install;
-use crate::workspace::{replace_bytes_unresolved, MindProject};
+use crate::workspace::{replace_bytes_unresolved, FlayerWorkspace, MindProject};
 
 /// The folders, from a project's root, the files go in.
 const FOLDER: [&str; 3] = [".claude", "rules", "mindflayer"];
@@ -228,8 +232,16 @@ pub enum Warning {
 ///
 /// A rule that is not a rule, cannot be read or is named no name, two rules
 /// of one name, and a route recorded that is no name are refused before
-/// anything is written, as the block of `AGENTS.md` refuses them. A file
-/// that cannot be looked at, written or taken away is the one rule's
+/// anything is written, as the block of `AGENTS.md` refuses them. So is a
+/// rule file a link on its way would put outside the project ([`inside`]),
+/// and any file at all where the agents of other projects would read it too
+/// ([`agents_md::misplaced`]): above a project the workspace links, at the
+/// workspace's root where it links none, or inside one of the agents' own
+/// folders, which `homes` names. `workspace` is the one whose links say
+/// where those are. A render asked for no rule goes ahead there, since
+/// taking rules away from those agents is what the refusal is for.
+///
+/// A file that cannot be looked at, written or taken away is the one rule's
 /// failure, collected ([`Warning::Failed`]) while every other file is
 /// rendered: each file stands on its own, and the caller has to be told of
 /// each one that was written, to record it.
@@ -237,10 +249,12 @@ pub enum Warning {
 /// Takes no lock: the caller holds the workspace's, as one calling
 /// [`crate::agents_md::render`] does, and the lock is not re-entrant.
 pub fn render<'a>(
+    workspace: &FlayerWorkspace,
     project: &MindProject,
     rules: impl IntoIterator<Item = &'a Artifact>,
     mode: Mode,
     recorded: &[Recorded],
+    homes: &AgentHomes,
 ) -> Result<Rendered, ClaudeRulesError> {
     let root = project.root();
     let mut rules: Vec<&Artifact> = rules.into_iter().collect();
@@ -276,6 +290,24 @@ pub fn render<'a>(
     let mut routes: Vec<&String> = asked.keys().chain(owned.keys()).collect();
     routes.sort();
     routes.dedup();
+    let top = root.join(folder());
+    let real = fs::canonicalize(root).map_err(|source| ClaudeRulesError::Read {
+        path: root.to_path_buf(),
+        source,
+    })?;
+    for route in &routes {
+        inside(&real, &root.join(file_for(route)))?;
+    }
+    // Only a render asked for a rule is held to where it is: one that only
+    // takes files away is how rules written before a project was linked
+    // below, or before the one at the workspace's root was unlinked, come
+    // out again, and refusing it would keep the very leak the refusal is
+    // for.
+    if !asked.is_empty() {
+        if let Some(misplaced) = agents_md::misplaced(workspace, homes, root, &top) {
+            return Err(misplaced.into());
+        }
+    }
     let plans: Vec<(String, PathBuf, Plan)> = routes
         .into_iter()
         .map(|route| {
@@ -303,7 +335,6 @@ pub fn render<'a>(
 
     // Every file written before any is taken away, so a rule renamed is
     // never missing from Claude's folder between its old file and its new.
-    let top = root.join(folder());
     let mut files = Vec::new();
     let mut warnings = Vec::new();
     let mut removals = Vec::new();
@@ -425,6 +456,32 @@ fn named(route: &str) -> Result<String, ClaudeRulesError> {
             route: route.to_owned(),
             problem: issue_list(&issues),
         })
+    }
+}
+
+/// Refuse `file` when a link on its way would put it outside the project
+/// whose root is `real`, canonical.
+///
+/// A repository can hold `.claude` as a link to the user's own `~/.claude`,
+/// whose `rules` Claude reads in every project, or `.claude/rules` as one to
+/// another repository's: written through, this project's rules would reach
+/// projects that are not this one, and a removal would take a file out of
+/// somebody else's folder. So every folder from the project down to the
+/// file's own is resolved, as far as it is there, and refused when it leads
+/// out (`agents_md::linked_inside` refuses an `AGENTS.md` the same way). A
+/// link that stays inside the project is followed: where a project keeps its
+/// `.claude` is its own business. The file itself is never followed
+/// ([`look`]).
+fn inside(real: &Path, file: &Path) -> Result<(), ClaudeRulesError> {
+    let Some(folder) = file.parent() else {
+        return Ok(());
+    };
+    match install::resolved(folder) {
+        Some(target) if !target.starts_with(real) => Err(ClaudeRulesError::LinkedOut {
+            folder: folder.to_path_buf(),
+            target,
+        }),
+        _ => Ok(()),
     }
 }
 
@@ -574,6 +631,54 @@ pub enum ClaudeRulesError {
     Rule(#[from] ArtifactError),
     #[error("{0}, so no rule file was written, since none could be kept out of git")]
     Exclude(#[from] ExcludeError),
+    #[error(
+        "{folder}: the workspace's own folder, where it links no project, so no rule files \
+         are written in its .claude/rules: the agents of every project below would read them"
+    )]
+    WorkspaceRoot { folder: PathBuf },
+    #[error(
+        "{folder}: above {}, which the workspace links, so no rule files are written in its \
+         .claude/rules: their agents would read them too",
+        spelled(.projects)
+    )]
+    AboveProjects {
+        folder: PathBuf,
+        projects: Vec<PathBuf>,
+    },
+    #[error(
+        "{file} is inside {home}, which {reader} reads for every project, so no rules are \
+         written into it: Mindflayer gives rules to one project at a time"
+    )]
+    UserScope {
+        file: PathBuf,
+        home: PathBuf,
+        reader: &'static str,
+    },
+    #[error(
+        "{folder}: leads through a link to {target}, outside the project, so no rule file is \
+         written or taken away there: what it leads to is not the project's"
+    )]
+    LinkedOut { folder: PathBuf, target: PathBuf },
+    #[error("{path}: cannot be read: {source}")]
+    Read {
+        path: PathBuf,
+        #[source]
+        source: io::Error,
+    },
+}
+
+impl From<Misplaced> for ClaudeRulesError {
+    fn from(misplaced: Misplaced) -> Self {
+        match misplaced {
+            Misplaced::UserScope { file, home, reader } => {
+                ClaudeRulesError::UserScope { file, home, reader }
+            }
+            Misplaced::WorkspaceRoot { folder } => ClaudeRulesError::WorkspaceRoot { folder },
+            Misplaced::AboveProjects { folder, projects } => {
+                ClaudeRulesError::AboveProjects { folder, projects }
+            }
+        }
+    }
 }
 
 #[cfg(test)]

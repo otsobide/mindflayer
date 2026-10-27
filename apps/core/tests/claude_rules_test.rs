@@ -72,7 +72,14 @@ impl Fixture {
         mode: Mode,
         recorded: &[Recorded],
     ) -> Result<Rendered, ClaudeRulesError> {
-        claude_rules::render(&self.project, rules.iter().copied(), mode, recorded)
+        claude_rules::render(
+            &self.workspace,
+            &self.project,
+            rules.iter().copied(),
+            mode,
+            recorded,
+            &AgentHomes::default(),
+        )
     }
 
     /// `.claude/rules/mindflayer` in the project.
@@ -691,4 +698,135 @@ fn a_file_that_fails_to_land_takes_its_exclude_entry_back_out() {
              /app/.claude/rules/mindflayer/review/tone.md\n# mindflayer:end\n"
         )
     );
+}
+
+#[test]
+fn the_workspaces_own_folder_is_refused() {
+    let fixture = fixture();
+    let rule = fixture.rule("a", "Rule a.\n");
+    let own = fixture.workspace.own();
+
+    let refused = claude_rules::render(
+        &fixture.workspace,
+        &own,
+        [&rule],
+        Mode::Fallback,
+        &[],
+        &AgentHomes::default(),
+    );
+
+    assert!(
+        matches!(&refused, Err(ClaudeRulesError::WorkspaceRoot { folder }) if folder == fixture.workspace.root()),
+        "{refused:?}"
+    );
+    assert!(!fixture.dir.path().join(".claude").exists());
+}
+
+#[test]
+fn a_folder_above_a_linked_project_is_refused_and_can_still_have_its_files_taken_out() {
+    let mut fixture = fixture();
+    let rule = fixture.rule("a", "Rule a.\n");
+    let first = fixture.render(&[&rule], Mode::Fallback, &[]).unwrap();
+    let package = fixture.project.root().join("packages").join("web");
+    fs::create_dir_all(&package).unwrap();
+    let (below, _) = MindProject::init(&package).unwrap();
+    fixture.workspace.link(&below).unwrap();
+
+    let refused = fixture.render(&[&rule], Mode::Fallback, &first.recorded());
+    match refused {
+        Err(ClaudeRulesError::AboveProjects { folder, projects }) => {
+            assert_eq!(folder, fixture.project.root());
+            assert_eq!(projects, [package]);
+        }
+        other => panic!("{other:?}"),
+    }
+    assert_eq!(fixture.files(), ["a.md"]);
+
+    let dropped = fixture
+        .render(&[], Mode::Fallback, &first.recorded())
+        .unwrap();
+    assert_eq!(written(&dropped), [("a", Written::Removed)]);
+    assert!(!fixture.folder().exists());
+}
+
+#[test]
+fn a_project_whose_rules_folder_is_an_agents_own_is_refused() {
+    let fixture = fixture();
+    let rule = fixture.rule("a", "Rule a.\n");
+    let root = fixture.project.root();
+    // The project at the user's home, whose `.claude` is Claude's own, and
+    // one at Codex's own folder.
+    let claudes = AgentHomes {
+        claude_config_dir: Some(root.join(".claude")),
+        ..AgentHomes::default()
+    };
+    let codexs = AgentHomes {
+        codex_home: Some(root.to_path_buf()),
+        ..AgentHomes::default()
+    };
+
+    for (homes, reader) in [(&claudes, "Claude Code"), (&codexs, "Codex")] {
+        let refused = claude_rules::render(
+            &fixture.workspace,
+            &fixture.project,
+            [&rule],
+            Mode::Fallback,
+            &[],
+            homes,
+        );
+        match refused {
+            Err(ClaudeRulesError::UserScope {
+                file, reader: said, ..
+            }) => {
+                assert_eq!(file, fixture.folder());
+                assert_eq!(said, reader);
+            }
+            other => panic!("{other:?}"),
+        }
+    }
+    assert!(!fixture.folder().exists());
+}
+
+#[cfg(unix)]
+#[test]
+fn a_link_out_of_the_project_is_refused_and_nothing_is_written_or_taken_away_there() {
+    let fixture = fixture();
+    let outside = TempDir::new().unwrap();
+    let theirs = outside.path().join("rules").join("mindflayer").join("a.md");
+    fs::create_dir_all(theirs.parent().unwrap()).unwrap();
+    fs::write(&theirs, "Rule a.\n").unwrap();
+    std::os::unix::fs::symlink(outside.path(), fixture.project.root().join(".claude")).unwrap();
+    let rule = fixture.rule("b", "Rule b.\n");
+    let recorded = [Recorded {
+        route: "a".to_owned(),
+        hash: hash::bytes(b"Rule a.\n"),
+    }];
+
+    for rules in [vec![&rule], vec![]] {
+        let refused = fixture.render(&rules, Mode::Fallback, &recorded);
+        match refused {
+            Err(ClaudeRulesError::LinkedOut { folder, target }) => {
+                assert_eq!(folder, fixture.folder());
+                assert!(target.starts_with(fs::canonicalize(outside.path()).unwrap()));
+            }
+            other => panic!("{other:?}"),
+        }
+    }
+    assert!(theirs.exists());
+    assert!(!outside.path().join("rules/mindflayer/b.md").exists());
+}
+
+#[cfg(unix)]
+#[test]
+fn a_link_inside_the_project_is_followed() {
+    let fixture = fixture();
+    let kept = fixture.project.root().join("config").join("claude");
+    fs::create_dir_all(&kept).unwrap();
+    std::os::unix::fs::symlink("config/claude", fixture.project.root().join(".claude")).unwrap();
+    let rule = fixture.rule("a", "Rule a.\n");
+
+    let rendered = fixture.render(&[&rule], Mode::Fallback, &[]).unwrap();
+
+    assert_eq!(written(&rendered), [("a", Written::Created)]);
+    assert!(kept.join("rules/mindflayer/a.md").is_file());
 }
