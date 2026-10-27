@@ -564,7 +564,7 @@ pub fn survey(
 /// the order [`survey`] gives it: the workspace's own, what it loads, the
 /// shelf. Nothing whose name no copy can be filed under
 /// ([`is_installable_name`]).
-fn offers(
+pub(crate) fn offers(
     workspace: &FlayerWorkspace,
     ledger: &Ledger,
     kind: Kind,
@@ -593,6 +593,26 @@ fn offers(
 
     offers.retain(|offer| is_installable_name(kind, offer.name()));
     Ok(offers)
+}
+
+/// Where what `record` installed is offered now, among `offers`: what its
+/// copies are held to when it has no hash, and what tells whether the place
+/// it came from offers something else by now (D-04).
+///
+/// By the origin it records; a record from before origins were kept names a
+/// shelf source by its id, or else came from the workspace's own or a
+/// loaded workspace's, any of which may be the one, since the record does
+/// not say.
+pub(crate) fn offered_for<'a>(record: &InstallRecord, offers: &'a [Offer]) -> Vec<&'a Offer> {
+    offers
+        .iter()
+        .filter(|offer| offer.kind() == record.kind && offer.name() == record.name)
+        .filter(|offer| match (&record.origin, record.source_id) {
+            (Some(origin), _) => offer.origin() == *origin,
+            (None, Some(id)) => matches!(offer, Offer::Shelf(gathered) if gathered.source.id == id),
+            (None, None) => !matches!(offer, Offer::Shelf(_)),
+        })
+        .collect()
 }
 
 /// The one candidate called `name` that `from` names, among what `project`
