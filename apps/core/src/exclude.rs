@@ -9,9 +9,10 @@
 //!
 //! ```text
 //! # mindflayer:begin
-//! # project packages/app
+//! # project 4f9c2a7e1b3d5f60a8c4e2b6d0f1a3c5
 //! /packages/app/.agents/skills/commit-style/
-//! # project packages/web
+//! /packages/app/.claude/skills/commit-style/
+//! # project 0123456789abcdef0123456789abcdef
 //! /packages/web/.agents/skills/review/
 //! # mindflayer:end
 //! ```
@@ -47,8 +48,9 @@ const CRLF: &[u8] = b"\r\n";
 /// Keep `entries` of the project at `project` out of git, in the group
 /// headed `key`.
 ///
-/// `key` is whatever names the project for good: its id, or until projects
-/// have one, its route. It is only compared, never parsed.
+/// `key` is whatever names the project for good, which for an install is
+/// the id its settings hold: it stays when the project is renamed or moved.
+/// It is only compared, never parsed.
 pub fn add(project: &Path, key: &str, entries: &[Entry]) -> Result<Excluded, ExcludeError> {
     change(project, key, entries, ExcludeFile::add)
 }
