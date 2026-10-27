@@ -228,6 +228,47 @@ fn an_install_gone_under_a_name_somebody_keeps_is_that_names_one_entry_as_what_i
 }
 
 #[test]
+fn a_copy_gone_from_an_install_beside_the_projects_own_is_partial() {
+    let (dir, mut workspace) = workspace();
+    let alpha = marked(&dir, &mut workspace, "alpha", &Agent::ALL);
+    let ledger = workspace.ledger().unwrap();
+    put(&alpha, "skills", "deploy");
+    put(&alpha, ".agents/skills", "deploy");
+    put(&alpha, ".claude/skills", "deploy");
+    record(
+        &ledger,
+        "alpha",
+        "deploy",
+        "workspace",
+        &[".agents/skills/deploy", ".claude/skills/deploy"],
+    );
+    let whole = Status::of_workspace(&workspace, &ledger).0;
+    fs::remove_dir_all(alpha.root().join(".claude/skills/deploy")).unwrap();
+
+    let (status, failures) = Status::of_workspace(&workspace, &ledger);
+
+    assert!(failures.is_empty(), "{failures:?}");
+    assert_eq!(
+        states(&whole.projects[0]),
+        [(
+            "deploy",
+            State::Authored,
+            &Agent::ALL[..],
+            Some("workspace")
+        )]
+    );
+    assert_eq!(
+        states(&status.projects[0]),
+        [(
+            "deploy",
+            State::Partial,
+            &[Agent::Codex, Agent::OpenCode][..],
+            Some("workspace")
+        )]
+    );
+}
+
+#[test]
 fn a_stale_entry_is_reported_as_stale_and_the_rest_still_are() {
     let (dir, mut workspace) = workspace();
     let alpha = marked(&dir, &mut workspace, "alpha", &Agent::ALL);

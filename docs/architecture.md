@@ -1931,7 +1931,12 @@ state is one of four (`status::State`):
 
 The state is discovery's answer (`Artifact::provenance`) with the record of
 the install laid over it: installed only when every copy is recorded, and
-then partial when the record names one that is not found. The record is
+partial when the record names one that is not found, even beside a copy the
+project authors of that name. That copy sits where the install wrote nothing,
+or it would be the install's, so the next install puts the gone one back all
+the same, and calling the entry authored would leave an agent reading none
+of it unsaid. Not beside a foreign copy, which is said first: the next
+install of the name is refused over it. The record is
 matched to the entry by the path of a copy it wrote, as discovery marks a copy
 installed, never by name, so an install of a name into one folder neither
 claims nor lends its origin to what somebody keeps under that name in another.
@@ -4273,10 +4278,12 @@ leak into the lifecycle code. Unblocks #33, #45, #62, #93, #94 and #95.
 - **An install gone under a name somebody keeps.** When every copy of an
   install has gone and the project holds something else by that name, status
   says the name as what is there, and nothing of the record, which lingers:
-  the next install of it is refused as foreign, and `flayer uninstall`
-  forgets the record without touching what is there. A second entry of the
-  same name would say it, at the price of the one name a row the screen and
-  every listing keep to.
+  the next install of it is refused as foreign when what is there sits where
+  it would write, and `flayer uninstall` forgets the record without touching
+  what is there. While a copy of the install is left, the entry holds it and
+  says partial, even over the project's own copy. A second entry of the same
+  name would say it, at the price of the one name a row the screen and every
+  listing keep to.
 - **Errors outside the envelope.** A command that fails says why as text on
   stderr, `--json` or not, and prints no envelope, so a script tells failure
   only by the exit status. #61 gives errors codes, and is where an error

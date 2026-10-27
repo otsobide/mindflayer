@@ -91,7 +91,8 @@ pub enum State {
     Installed,
     /// The ledger records a copy that is not found where it was put any
     /// more: deleted since, by hand or by `git clean -X`, or left unreadable.
-    /// The next install of it puts every copy back.
+    /// The next install of it puts every copy back. Said over the project's
+    /// own copy of the name too, which sits where the install wrote nothing.
     Partial,
     /// In an agent's folder outside any the project authors in, and recorded
     /// by nothing: somebody's, put there some other way, and never
@@ -284,8 +285,9 @@ impl ProjectStatus {
 /// path as discovery marks a copy installed, not by name, so an install of
 /// one name never claims what somebody keeps under it elsewhere. Its state is
 /// what discovery says of its copies ([`Artifact::provenance`]): installed
-/// only when the ledger records every one, and then partial when the record
-/// names a copy discovery did not find where it was put.
+/// only when the ledger records every one, and partial when the record names
+/// a copy discovery did not find where it was put, whether the rest are all
+/// recorded or the project authors a copy of its own beside them.
 ///
 /// A record no copy is found of is an install every copy of which is gone,
 /// listed as partial with no agent, so that what was installed is said even
@@ -315,20 +317,25 @@ fn standing(
                         .any(|target| routes.contains(&target.path))
             })
             .map(|index| unclaimed.remove(index));
+        let missing = record.as_ref().is_some_and(|record| {
+            record
+                .targets
+                .iter()
+                .any(|target| !routes.contains(&target.path))
+        });
         let state = match artifact.provenance() {
-            Provenance::Installed
-                if record.as_ref().is_some_and(|record| {
-                    record
-                        .targets
-                        .iter()
-                        .any(|target| !routes.contains(&target.path))
-                }) =>
-            {
-                State::Partial
-            }
+            // Somebody's copy in an agent's folder is said first, even beside
+            // an install with a copy gone: the next install of the name is
+            // refused over it, so partial would promise what it cannot keep.
+            Provenance::Foreign => State::Foreign,
+            // A project's own copy of the name, beside an install of it, does
+            // not hide a copy of that install gone. It sits where the install
+            // wrote nothing, or it would be the install's, so the next one
+            // puts the copy back all the same; and an agent left reading none
+            // would otherwise go unsaid.
+            Provenance::Installed | Provenance::Authored if missing => State::Partial,
             Provenance::Installed => State::Installed,
             Provenance::Authored => State::Authored,
-            Provenance::Foreign => State::Foreign,
         };
         held.push(ArtifactStatus {
             kind: artifact.kind(),
