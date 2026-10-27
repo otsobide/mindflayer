@@ -77,10 +77,11 @@ under `apps/` with its own `Makefile`:
   workspace a command uses (`resolve`), the shell code that activates one
   (`activate`), kinds, the agents and where each kind goes for them
   (`agent`), the catalog, gathering (`gix`), the SQLite ledger,
-  installing, keeping installs out of git (`exclude`), what each project
-  holds, from where and for which agents (`status`), creating and changing
-  artifacts, and moving a workspace's own into its library (`migrate`). Its
-  only I/O is files, and it never reads the environment.
+  installing, keeping installs out of git (`exclude`), changing a project's
+  agents or share mode and carrying its installs along (`reapply`), what
+  each project holds, from where and for which agents (`status`), creating
+  and changing artifacts, and moving a workspace's own into its library
+  (`migrate`). Its only I/O is files, and it never reads the environment.
 - `apps/cli` (`mindflayer-cli`): the binaries `mind` (`src/main.rs`) and
   `flayer` (`src/bin/flayer.rs`), and the TUI. `src/lib.rs` only re-exports
   the public API. The parsers are in `src/parse.rs`. `src/commands.rs`
@@ -88,8 +89,8 @@ under `apps/` with its own `Makefile`:
   commands has a file under `src/commands/`: `project` (init, link, unlink,
   scan), `workspace` (load, unload), `activate` (activate, which),
   `artifact` (add, edit, rename, remove, templates), `read` (list, show,
-  validate), `status`, `gather`, `install` and `migrate` (migrate
-  --library). `src/render.rs` holds `Outcome`, `Failure`, the table helpers
+  validate), `status`, `settings` (agents, share), `gather`, `install` and
+  `migrate` (migrate --library). `src/render.rs` holds `Outcome`, `Failure`, the table helpers
   and the envelope every `--json` prints (`json`),
   `src/error.rs` holds `CliError`, and `src/homes.rs` decides the default
   home and the agent homes, and gathers them with `-W` and
@@ -192,9 +193,12 @@ These are easy to break from a single file without noticing.
     through `config_entry`, as an agent's config file is (below), then
     `replace_file`: a key this build does not know, the key order and a
     hand-made layout survive, and nothing is written when nothing changed.
+    Its agents and share mode change through `reapply::apply` (`mind agents`,
+    `mind share`), which carries what is installed along with them.
   - Creation uses `create_new` or `create_dir`.
   - `rename` rewrites only the `name:` line (`frontmatter::with_key`).
-  - `remove` and `flayer migrate --library` are dry runs without `--yes`.
+  - `remove`, `flayer migrate --library`, `agents` and `share` are dry runs
+    without `--yes`.
     A migration moves nothing a project holds, refuses as a whole, and keeps
     the marker it rewrites as `flayer.toml.v<version>` (`create_new`).
   - A file somebody else owns is edited only inside Mindflayer's marked
@@ -206,10 +210,13 @@ These are easy to break from a single file without noticing.
     own project's `# project <key>` group: an install writes one entry per
     copy for a local project, keyed by its id, before the copies land, and
     never opens the file for a shared project or one a `mind.toml` marks. A
-    team's `.gitignore` and `core.excludesFile` are never edited; the
-    `.gitignore`s Mindflayer writes are `.mind/tmp`'s and a local project's
-    `.mind`'s own (`MIND_IGNORE`), each inside a folder it owns, made with
-    `create_new`.
+    project turning shared has its whole group forgotten (`exclude::forget`),
+    and one turning local an entry written for each copy in place. A team's
+    `.gitignore` and `core.excludesFile` are never edited; the `.gitignore`s
+    Mindflayer writes are `.mind/tmp`'s and a local project's `.mind`'s own
+    (`MIND_IGNORE`), each inside a folder it owns, made with `create_new`,
+    and the second is removed, when the project turns shared, only while it
+    still holds `MIND_IGNORE`.
   - An entry in a config file somebody else owns (`.mcp.json`,
     `opencode.json`, `.codex/config.toml`) is changed one at a time through
     `config_entry`: JSON and JSONC entries are edited through jsonc-parser's
@@ -249,7 +256,12 @@ These are easy to break from a single file without noticing.
   (`Ledger::uninstalled_copy`: a v3 project whose authored folder is also a
   target keeps the record of its other copies, and a local one stops
   excluding that copy's place), and return what they did (`lifecycle::Record`, and the `scrub` that opening the ledger ran),
-  which the CLI only renders.
+  which the CLI only renders. A change of a project's agents
+  (`reapply::apply`) moves only what the ledger records: a new folder gets
+  a copy of one whose `hash::tree` is the one recorded, never one over
+  somebody's, and a dropped folder loses a recorded copy only while its
+  hash is the one recorded; one changed since is left there, and its record
+  and exclude entry dropped.
   `install::disown` is private to core, so no front end drops a record on its
   own. A front end adds through `lifecycle::add`, never `create` or
   `create_from`, which leave a stale record in place.
@@ -290,12 +302,13 @@ These are easy to break from a single file without noticing.
   workspace's `.mindflayer/lock` (`FlayerWorkspace::lock`) while they change
   it: `edit_array`, `install::install` and `uninstall`, `gather::gather`,
   `gather::scrub`, which `FlayerWorkspace::ledger_to_write` runs, when it has
-  clones to rewrite, and `migrate::library`, from its plan to its rewrite of
-  the marker. A new writer takes it the same way, inside core;
-  `config_entry::ConfigFile` takes none, since the writers that call it hold
-  it. `MindProject::change_settings` takes none yet: a project's settings are
-  not the workspace's, and which lock keeps their writers apart is an open
-  question in `docs/architecture.md` for its first caller (#37) to settle.
+  clones to rewrite, `migrate::library`, from its plan to its rewrite of
+  the marker, and `reapply::apply`, from before it reads a project's settings
+  until their change and every copy it carries along are written. A new
+  writer takes it the same way, inside core; `config_entry::ConfigFile` and
+  `MindProject::change_settings` take none, since the writers that call them
+  hold it. A second workspace linking the same project is kept out by
+  neither lock, an open question in `docs/architecture.md`.
   Opening the ledger takes no lock: a schema migration keeps itself apart
   in its own transaction. The lock is not re-entrant: a writer never calls
   another while it holds it, and a front end never takes it. Reads

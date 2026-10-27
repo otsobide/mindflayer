@@ -906,6 +906,63 @@ impl Ledger {
         Ok(forgotten)
     }
 
+    /// Record that the installation of `name` has its copies at `targets`
+    /// now, in place of those it recorded, and forget it when `targets` is
+    /// empty. Whether there was one.
+    ///
+    /// For copies that moved without the installation changing: a project
+    /// that names another agent is given a copy where that agent reads, and
+    /// one that stops naming an agent loses the copy there, while what was
+    /// installed, from where, its hash and when stay what they were. Writing
+    /// the whole record again ([`Ledger::installed`]) would say it was
+    /// installed just now. One transaction, so an install of the same name
+    /// at the same moment never finds half of this done.
+    pub fn retargeted(
+        &self,
+        project: &str,
+        kind: Kind,
+        name: &str,
+        targets: &[Target],
+    ) -> Result<bool, LedgerError> {
+        let failed = |source| self.failed("recording where an installation's copies are", source);
+        let transaction = self.connection.unchecked_transaction().map_err(failed)?;
+        let Some(id) = transaction
+            .query_row(
+                "SELECT id FROM installations
+                  WHERE project = ?1 AND kind = ?2 AND name = ?3",
+                rusqlite::params![project, kind.slug(), name],
+                |row| row.get::<_, i64>(0),
+            )
+            .optional()
+            .map_err(failed)?
+        else {
+            return Ok(false);
+        };
+        if targets.is_empty() {
+            transaction
+                .execute("DELETE FROM installations WHERE id = ?1", [id])
+                .map_err(failed)?;
+        } else {
+            transaction
+                .execute(
+                    "DELETE FROM installation_targets WHERE installation_id = ?1",
+                    [id],
+                )
+                .map_err(failed)?;
+            for target in targets {
+                transaction
+                    .execute(
+                        "INSERT INTO installation_targets (installation_id, agent, path)
+                         VALUES (?1, ?2, ?3)",
+                        rusqlite::params![id, target.agent, target.path],
+                    )
+                    .map_err(failed)?;
+            }
+        }
+        transaction.commit().map_err(failed)?;
+        Ok(true)
+    }
+
     /// The names this ledger says Mindflayer put into a project.
     ///
     /// What separates an artifact this tool installed from one somebody wrote

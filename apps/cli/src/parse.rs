@@ -8,7 +8,7 @@ use std::path::PathBuf;
 
 use clap::builder::{PossibleValuesParser, TypedValueParser};
 use clap::{Args, Parser, Subcommand};
-use mindflayer_core::{Agent, Kind, Shell, DEFAULT_SUBDIRECTORY};
+use mindflayer_core::{Agent, Kind, Share, Shell, DEFAULT_SUBDIRECTORY};
 
 /// Manage the agent skills in a mind project.
 //
@@ -250,6 +250,37 @@ pub enum Command {
     Uninstall {
         /// The skill's name.
         name: String,
+    },
+
+    /// Change which agents work in this project, and carry what is
+    /// installed into it along: a copy wherever an agent it now names
+    /// reads, and none left where no agent it names does.
+    ///
+    /// `mind agents claude codex` names exactly those; `add` and `remove`
+    /// change the ones it names. Without --yes nothing changes, and the
+    /// command says what would.
+    //
+    // The usage is spelled out because clap's would offer agents before
+    // `add` too, which it then refuses.
+    #[command(
+        subcommand_negates_reqs = true,
+        override_usage = "mind agents [OPTIONS] <AGENT>...\n       mind agents <add|remove> [OPTIONS] <AGENT>..."
+    )]
+    Agents {
+        #[command(subcommand)]
+        change: Option<AgentsChange>,
+
+        #[command(flatten)]
+        named: AgentNames,
+    },
+
+    /// Keep what is installed into this project to this checkout, or leave
+    /// it for the team to commit, with `.mind` itself.
+    ///
+    /// Without --yes nothing changes, and the command says what would.
+    Share {
+        #[command(flatten)]
+        mode: ShareMode,
     },
 
     /// Open the TUI on this project. What `mind` does on its own.
@@ -550,6 +581,40 @@ pub enum FlayerCommand {
         name: String,
     },
 
+    /// Change which agents work in a project, and carry what is installed
+    /// into it along, as `mind agents` does there.
+    ///
+    /// Without --yes nothing changes, and the command says what would.
+    #[command(
+        subcommand_negates_reqs = true,
+        override_usage = "flayer agents -p <PROJECT> [OPTIONS] <AGENT>...\n       flayer agents -p <PROJECT> <add|remove> [OPTIONS] <AGENT>..."
+    )]
+    Agents {
+        /// The project, by name or path. Needed, and taken on either side of
+        /// `add` or `remove`.
+        #[arg(short, long, value_name = "PROJECT", global = true)]
+        project: Option<String>,
+
+        #[command(subcommand)]
+        change: Option<AgentsChange>,
+
+        #[command(flatten)]
+        named: AgentNames,
+    },
+
+    /// Keep what is installed into a project to this checkout, or leave it
+    /// for the team to commit, as `mind share` does there.
+    ///
+    /// Without --yes nothing changes, and the command says what would.
+    Share {
+        /// The project, by name or path.
+        #[arg(short, long, value_name = "PROJECT")]
+        project: String,
+
+        #[command(flatten)]
+        mode: ShareMode,
+    },
+
     /// Bring a workspace made by an older Mindflayer into the layout a new
     /// one has.
     ///
@@ -576,6 +641,55 @@ pub enum FlayerCommand {
     /// What `flayer` does on its own. Everything it changes, it changes by
     /// running one of these commands, and it prints them when it closes.
     Tui,
+}
+
+/// How `agents` changes the agents a project names, when it does not name
+/// them all.
+#[derive(Debug, Subcommand)]
+pub enum AgentsChange {
+    /// Name these agents as well.
+    Add(AgentNames),
+    /// Stop naming these agents.
+    #[command(alias = "rm")]
+    Remove(AgentNames),
+}
+
+/// The agents an `agents` line names, and whether to go ahead.
+#[derive(Debug, Args)]
+pub struct AgentNames {
+    /// Each agent: claude, codex or opencode, space or comma-separated.
+    #[arg(
+        required = true,
+        value_name = "AGENT",
+        value_delimiter = ',',
+        value_parser = agents()
+    )]
+    pub agents: Vec<Agent>,
+
+    /// Make the change. Without this nothing changes, and the command says
+    /// what would.
+    #[arg(short, long)]
+    pub yes: bool,
+}
+
+/// What `share` sets: the share mode, and whether a tracked file may be
+/// edited, written together.
+#[derive(Debug, Args)]
+pub struct ShareMode {
+    /// `local`, kept out of git for this checkout alone, or `shared`, left
+    /// for the team to commit.
+    #[arg(value_name = "MODE", value_parser = shares())]
+    pub share: Share,
+
+    /// Let a file git tracks (AGENTS.md, CLAUDE.md, an MCP config) be edited
+    /// to reach an agent in a local project. Off unless given.
+    #[arg(long)]
+    pub edit_tracked: bool,
+
+    /// Make the change. Without this nothing changes, and the command says
+    /// what would.
+    #[arg(short, long)]
+    pub yes: bool,
 }
 
 /// Where a gather takes artifacts from.
@@ -617,4 +731,11 @@ fn shells() -> impl TypedValueParser<Value = Shell> {
 fn agents() -> impl TypedValueParser<Value = Agent> {
     PossibleValuesParser::new(Agent::ALL.map(Agent::name))
         .map(|name| name.parse::<Agent>().expect("every listed agent parses"))
+}
+
+/// What `share` takes, each share mode by the word its settings spell it
+/// with, for the reason `--shell` takes core's list.
+fn shares() -> impl TypedValueParser<Value = Share> {
+    PossibleValuesParser::new(Share::ALL.map(Share::name))
+        .map(|name| Share::named(&name).expect("every listed share mode is one"))
 }

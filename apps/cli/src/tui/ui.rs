@@ -6,7 +6,7 @@
 //! command it is about to run, as it is typed. The install screen, when it is
 //! open, draws itself. Nothing here decides anything; [`super::state`] does.
 
-use mindflayer_core::{Agent, Kind, Reason, State};
+use mindflayer_core::{Agent, Kind, Reason, Share, State};
 use ratatui::layout::{Constraint, Direction, Layout, Rect};
 use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
@@ -16,7 +16,8 @@ use ratatui::Frame;
 use super::minds::{self, Minds};
 use super::state::{
     AddField, AddForm, App, Confirm, Focus, GatherForm, Input, Item, LinkForm, LoadForm, Member,
-    Mode, Reader, RenameForm, Running, Scope, Task, Tone, View, Workspace, GATHER_FIELDS,
+    Mode, Reader, RenameForm, Running, Scope, SettingsForm, Task, Tone, View, Workspace,
+    GATHER_FIELDS,
 };
 use crate::install::ui::{centred, pane, selected};
 use crate::progress::said;
@@ -44,6 +45,7 @@ pub fn draw(app: &App, frame: &mut Frame) {
             Mode::Confirming(confirm) => confirming(confirm, frame, area),
             Mode::Reading(reader) => reading(reader, frame, area),
             Mode::Minds(screen) => minds_screen(app, screen, frame, area),
+            Mode::Settings(form) => setting(app, form, frame, area),
             Mode::Browse | Mode::Installing(_) => {}
         }
     }
@@ -534,10 +536,10 @@ fn footer(app: &App, frame: &mut Frame, area: Rect) {
             "q quit  ? keys  enter show  e edit  r rename  d delete  a add  ← back  v validate"
         }
         (Focus::Projects, Scope::Workspace) => {
-            "q quit  ? keys  → open  a add  m minds  l link  u unlink  v validate  g gather  L load  s shelf  i install"
+            "q quit  ? keys  → open  a add  m minds  l link  u unlink  v validate  g gather  L load  s shelf  i install  t agents"
         }
         (Focus::Projects, Scope::Project) => {
-            "q quit  ? keys  → open  a add  v validate  l link it to the workspace above  L load"
+            "q quit  ? keys  → open  a add  v validate  l link it to the workspace above  L load  t agents"
         }
     };
     let second = match &app.message {
@@ -633,6 +635,66 @@ fn renaming(app: &App, form: &RenameForm, frame: &mut Frame, area: Rect) {
     runs(frame, rows[2], app.rename_task(form).as_ref());
     error(frame, rows[3], form.error.as_deref());
     keys(frame, rows[4], "enter rename   esc cancel");
+}
+
+/// The agents and share toggles of one project, and what applying them
+/// would run.
+fn setting(app: &App, form: &SettingsForm, frame: &mut Frame, area: Rect) {
+    let project = app
+        .workspace()
+        .and_then(|workspace| workspace.members.get(form.member))
+        .map_or_else(String::new, |member| printable(&member.name));
+    let fields = SettingsForm::FIELDS;
+    let height = u16::try_from(fields).unwrap_or(5) + 6;
+    let inner = popup(
+        frame,
+        area,
+        &format!("Agents and sharing for {project}"),
+        90,
+        height,
+    );
+    let rows = lines(inner, fields + 4);
+
+    for (at, (agent, ticked)) in form.ticked.iter().enumerate() {
+        let line = Line::from(vec![
+            label(agent.name(), form.field == at),
+            tick(*ticked),
+            Span::styled(format!("  {}", badge(*agent)), dim()),
+        ]);
+        frame.render_widget(Paragraph::new(line), rows[at]);
+    }
+    let share = SettingsForm::share_field();
+    let modes: Vec<(String, bool)> = Share::ALL
+        .iter()
+        .map(|mode| (mode.name().to_owned(), *mode == form.share))
+        .collect();
+    choices(frame, rows[share], "share", &modes, form.field == share);
+    let line = Line::from(vec![
+        label("edit tracked", form.field == share + 1),
+        tick(form.edit_tracked),
+        Span::styled(
+            "  a file git tracks may be edited to reach an agent, when local",
+            dim(),
+        ),
+    ]);
+    frame.render_widget(Paragraph::new(line), rows[share + 1]);
+
+    runs(frame, rows[fields + 1], app.settings_task(form).as_ref());
+    error(frame, rows[fields + 2], form.error.as_deref());
+    keys(
+        frame,
+        rows[fields + 3],
+        "enter apply   ↑↓ move   space tick   ←→ share   esc cancel",
+    );
+}
+
+/// A box, ticked or not.
+fn tick(ticked: bool) -> Span<'static> {
+    if ticked {
+        Span::styled("[x]", bold().fg(Color::Cyan))
+    } else {
+        Span::styled("[ ]", dim())
+    }
 }
 
 /// A labelled line of choices, the chosen one bracketed.

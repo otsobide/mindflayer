@@ -645,6 +645,8 @@ fn a_project_a_mind_toml_marks_has_no_settings_to_change() {
         matches!(error, WorkspaceError::NoSettings { .. }),
         "{error}"
     );
+    // Sent to what gives it settings, since `mind init` leaves its marker.
+    assert!(error.to_string().contains("`mind migrate`"), "{error}");
     assert!(!dir.path().join(MIND_DIR).join(SETTINGS_FILE).exists());
 }
 

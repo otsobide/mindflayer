@@ -257,6 +257,66 @@ fn two_projects_install_and_uninstall_independently() {
 }
 
 #[test]
+fn a_projects_group_is_listed_and_forgotten_whole_and_no_other() {
+    let repo = repository();
+    let file = exclude_file(repo.path());
+    let before = fs::read(&file).unwrap();
+    let app = project(repo.path(), "packages/app");
+    let web = project(repo.path(), "packages/web");
+    exclude::add(&app, "app", &[skill("one"), skill("two")]).unwrap();
+    exclude::add(&web, "web", &[skill("review")]).unwrap();
+
+    let listed = exclude::listed(&app, "app").unwrap().unwrap();
+    assert_eq!(listed.file, file);
+    assert_eq!(listed.route, PathBuf::from("packages/app"));
+    assert_eq!(
+        listed.lines,
+        [
+            "/packages/app/.agents/skills/one/",
+            "/packages/app/.agents/skills/two/"
+        ]
+    );
+    // What an entry would write there is what the listing holds.
+    assert_eq!(
+        skill("one").pattern(&listed.route).unwrap(),
+        listed.lines[0]
+    );
+
+    let forgotten = exclude::forget(&app, "app").unwrap();
+    assert_eq!(forgotten, Excluded::Written { file: file.clone() });
+    assert!(exclude::listed(&app, "app")
+        .unwrap()
+        .unwrap()
+        .lines
+        .is_empty());
+    assert!(!ignored(repo.path(), "packages/app/.agents/skills/one/"));
+    assert!(ignored(repo.path(), "packages/web/.agents/skills/review/"));
+    assert_eq!(
+        exclude::forget(&app, "app").unwrap(),
+        Excluded::Unchanged { file: file.clone() }
+    );
+
+    exclude::forget(&web, "web").unwrap();
+    assert_eq!(fs::read(&file).unwrap(), before);
+}
+
+#[test]
+fn outside_a_repository_nothing_is_listed_or_forgotten() {
+    let dir = TempDir::new().unwrap();
+    let alone = project(dir.path(), "alone");
+    assert_eq!(exclude::locate(&alone).unwrap(), None);
+
+    assert_eq!(exclude::listed(&alone, "alone").unwrap(), None);
+    assert_eq!(
+        exclude::forget(&alone, "alone").unwrap(),
+        Excluded::Outside {
+            project: alone.clone()
+        }
+    );
+    assert_eq!(fs::read_dir(&alone).unwrap().count(), 0);
+}
+
+#[test]
 fn a_project_outside_any_repository_gets_a_warning_and_nothing_is_written() {
     let dir = TempDir::new().unwrap();
     let alone = project(dir.path(), "alone");
@@ -319,6 +379,8 @@ fn a_malformed_block_is_a_failure_and_nothing_is_written() {
         )
     );
     assert!(exclude::remove(repo.path(), ".", &[skill("one")]).is_err());
+    assert!(exclude::forget(repo.path(), ".").is_err());
+    assert!(exclude::listed(repo.path(), ".").is_err());
     assert_eq!(fs::read(&file).unwrap(), before);
 }
 

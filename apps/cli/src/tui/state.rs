@@ -14,7 +14,9 @@ use std::sync::Arc;
 
 use mindflayer_core::gather::{Progress, Watch};
 use mindflayer_core::url::redacted;
-use mindflayer_core::{paths, Agent, Kind, Layout, Reason, State, DEFAULT_SUBDIRECTORY, QUALIFIER};
+use mindflayer_core::{
+    paths, Agent, Kind, Layout, Reason, Share, State, DEFAULT_SUBDIRECTORY, QUALIFIER,
+};
 use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
 use super::minds::{self, Minds};
@@ -149,6 +151,15 @@ pub struct Holdings {
     /// for the workspace's own, and for a project a `mind.toml` marks, which
     /// names none.
     pub agents: Vec<Agent>,
+    /// The same, in the order its settings name them, which the toggles
+    /// keep for the agents they keep.
+    pub named: Vec<Agent>,
+    /// Whether what is installed into it is the team's or this checkout's,
+    /// as its settings say: none for the workspace's own, and for a project
+    /// a `mind.toml` marks, which has no settings to change.
+    pub share: Option<Share>,
+    /// Whether its settings let a tracked file be edited to reach an agent.
+    pub edit_tracked: bool,
     /// Files that could not be read, one line each.
     pub warnings: Vec<String>,
     /// Where each kind lives, relative to the project, so an empty project
@@ -218,6 +229,17 @@ pub struct Unlinked {
 // ---------------------------------------------------------------------------
 // What a key can ask for
 // ---------------------------------------------------------------------------
+
+/// What an `agents` line says, as the toggles have it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum AgentsLine {
+    /// `agents --yes <agent>...`: exactly these.
+    Named(Vec<Agent>),
+    /// `agents remove --yes <agent>...`: none of these, every one the
+    /// project names, which is how a line asks for no agent at all, since
+    /// naming none is not one. The command refuses it, with its own reason.
+    Removed(Vec<Agent>),
+}
 
 /// Which level a task runs at: what holds the artifacts it is about.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -310,6 +332,17 @@ pub enum Task {
         url: String,
         folder: String,
         reference: Option<String>,
+    },
+    /// `… agents --yes <agent>...`, then `… share --yes <mode>
+    /// [--edit-tracked]`, each only when what it sets changes: what the
+    /// agents and share toggles amount to.
+    Settings {
+        holder: Holder,
+        /// The agents to name, when they change.
+        agents: Option<AgentsLine>,
+        /// The share mode, when it or `edit_tracked` changes.
+        share: Option<Share>,
+        edit_tracked: bool,
     },
     /// Open the install screen, which is what `flayer install` opens.
     OpenInstall,
@@ -408,6 +441,38 @@ impl Task {
                 }
                 vec![words(&head, &[url])]
             }
+            // The agents first, so a project turning local finds the copies
+            // they bring already kept out of git, and one turning shared
+            // finds them in the group it lets go of; either order ends the
+            // same.
+            Task::Settings {
+                holder,
+                agents,
+                share,
+                edit_tracked,
+            } => {
+                let mut lines = Vec::new();
+                let words = |agents: &[Agent]| -> Vec<&'static str> {
+                    agents.iter().map(|agent| agent.name()).collect()
+                };
+                match agents {
+                    Some(AgentsLine::Named(agents)) => {
+                        lines.push(at(holder, &["agents", "--yes"], &words(agents)));
+                    }
+                    Some(AgentsLine::Removed(agents)) => {
+                        lines.push(at(holder, &["agents", "remove", "--yes"], &words(agents)));
+                    }
+                    None => {}
+                }
+                if let Some(share) = share {
+                    let mut command = vec!["share", "--yes"];
+                    if *edit_tracked {
+                        command.push("--edit-tracked");
+                    }
+                    lines.push(at(holder, &command, &[share.name()]));
+                }
+                lines
+            }
             Task::OpenInstall | Task::ApplyInstall => vec![words(&["flayer", "install"], &[])],
             Task::Refresh => Vec::new(),
         }
@@ -434,6 +499,7 @@ impl Task {
                 | Task::Remove { .. }
                 | Task::Gather { .. }
                 | Task::Minds { .. }
+                | Task::Settings { .. }
                 | Task::ApplyInstall
         )
     }
@@ -792,6 +858,8 @@ pub enum Mode {
     Installing(InstallScreen),
     /// Which minds the workspace manages, ticked, to change in one pass.
     Minds(Minds),
+    /// A project's agents and share mode, toggled, to change in one pass.
+    Settings(SettingsForm),
 }
 
 /// The whole TUI.
@@ -1024,6 +1092,7 @@ impl App {
             Mode::Reading(reader) => reading(reader, key),
             Mode::Installing(screen) => self.installing(screen, key),
             Mode::Minds(screen) => self.in_minds(screen, key),
+            Mode::Settings(form) => self.setting(form, key),
         };
         self.mode = mode;
         step
@@ -1051,6 +1120,7 @@ impl App {
             KeyCode::Char('R') => return (Mode::Browse, Step::Run(Task::Refresh)),
             KeyCode::Char(key @ ('e' | 'r' | 'd')) => return self.on_item(key),
             KeyCode::Char('a') => return self.start_adding(),
+            KeyCode::Char('t') => return self.start_settings(),
             KeyCode::Char('v') => {
                 let holder = match self.scope() {
                     Scope::Workspace => Holder::Workspace,
@@ -1295,6 +1365,81 @@ impl App {
             back: Box::new(Mode::Browse),
         };
         (Mode::Confirming(confirm), Step::Stay)
+    }
+
+    /// `t`: the agents and share toggles of the project under the cursor,
+    /// from either column, as `a` adds to it from either.
+    fn start_settings(&mut self) -> (Mode, Step) {
+        let refusal = match self.member() {
+            None => String::from("link a project first; l links one"),
+            Some(member) if member.own => String::from(
+                "these are the workspace's own, which reach agents by being installed into a project",
+            ),
+            Some(member) => match &member.holdings {
+                Err(_) => format!(
+                    "{} cannot be opened, so its agents cannot be changed",
+                    member.name
+                ),
+                Ok(holdings) => match holdings.share {
+                    Some(share) => {
+                        let form = SettingsForm::new(
+                            self.cursor,
+                            &holdings.named,
+                            share,
+                            holdings.edit_tracked,
+                        );
+                        return (Mode::Settings(form), Step::Stay);
+                    }
+                    None => format!(
+                        "{} is marked by a mind.toml, which names no agents; `mind migrate` moves it to settings",
+                        member.name
+                    ),
+                },
+            },
+        };
+        self.message = Some(Message::info(refusal));
+        (Mode::Browse, Step::Stay)
+    }
+
+    fn setting(&mut self, mut form: SettingsForm, key: KeyEvent) -> (Mode, Step) {
+        form.error = None;
+        let last = SettingsForm::FIELDS - 1;
+        match key.code {
+            KeyCode::Esc => return (Mode::Browse, Step::Stay),
+            KeyCode::Enter => {
+                return match self.settings_task(&form) {
+                    Some(task) => (Mode::Settings(form), Step::Run(task)),
+                    None if self.member_of(form.member).is_none() => (Mode::Browse, Step::Stay),
+                    None => {
+                        form.error = Some(String::from(
+                            "nothing toggled yet: space ticks an agent, ←→ picks the share mode",
+                        ));
+                        (Mode::Settings(form), Step::Stay)
+                    }
+                };
+            }
+            KeyCode::Down | KeyCode::Tab | KeyCode::Char('j') => {
+                form.field = (form.field + 1).min(last);
+            }
+            KeyCode::Up | KeyCode::BackTab | KeyCode::Char('k') => {
+                form.field = form.field.saturating_sub(1);
+            }
+            KeyCode::Char(' ') | KeyCode::Left | KeyCode::Right => form.toggle(key.code),
+            _ => {}
+        }
+        (Mode::Settings(form), Step::Stay)
+    }
+
+    /// The member at `at`, if the screen still has one there.
+    fn member_of(&self, at: usize) -> Option<&Member> {
+        self.workspace()?.members.get(at)
+    }
+
+    /// What the agents and share toggles would run, if they were applied
+    /// now: nothing while they say what the project says already.
+    pub fn settings_task(&self, form: &SettingsForm) -> Option<Task> {
+        let member = self.member_of(form.member)?;
+        form.task(member.holder())
     }
 
     fn adding(&mut self, mut form: AddForm, key: KeyEvent) -> (Mode, Step) {
@@ -1628,7 +1773,7 @@ impl App {
                 | Task::Minds { .. },
                 _,
             )
-            | (Task::Gather { .. }, None) => {
+            | (Task::Gather { .. } | Task::Settings { .. }, None) => {
                 self.mode = Mode::Reading(Reader::of(&dones));
             }
             (_, Some(error)) => {
@@ -1698,6 +1843,7 @@ impl App {
             Mode::Linking(form) => &mut form.error,
             Mode::Loading(form) => &mut form.error,
             Mode::Gathering(form) => &mut form.error,
+            Mode::Settings(form) => &mut form.error,
             _ => return false,
         };
         *slot = Some(error.to_owned());
@@ -2101,6 +2247,124 @@ impl GatherForm {
     }
 }
 
+/// A project's agents and share mode, toggled: what `t` opens.
+#[derive(Debug, Clone)]
+pub struct SettingsForm {
+    /// The project it is for.
+    pub member: usize,
+    /// Every agent, in report order, and whether it is ticked.
+    pub ticked: Vec<(Agent, bool)>,
+    pub share: Share,
+    pub edit_tracked: bool,
+    /// Which line the keyboard is on: an agent's, then the share mode's,
+    /// then `edit_tracked`'s ([`SettingsForm::FIELDS`] in all).
+    pub field: usize,
+    pub error: Option<String>,
+    /// What the project names now, in its own order, which a change keeps
+    /// for the agents it keeps.
+    named: Vec<Agent>,
+    was: (Share, bool),
+}
+
+impl SettingsForm {
+    /// A line for each agent, the share mode and `edit_tracked`.
+    pub const FIELDS: usize = Agent::ALL.len() + 2;
+
+    /// Opens on the first agent, each ticked as the project names it.
+    pub fn new(member: usize, named: &[Agent], share: Share, edit_tracked: bool) -> Self {
+        Self {
+            member,
+            ticked: Agent::ALL
+                .iter()
+                .map(|agent| (*agent, named.contains(agent)))
+                .collect(),
+            share,
+            edit_tracked,
+            field: 0,
+            error: None,
+            named: named.to_vec(),
+            was: (share, edit_tracked),
+        }
+    }
+
+    /// The line of the share mode, after the agents'.
+    pub const fn share_field() -> usize {
+        Agent::ALL.len()
+    }
+
+    /// What a key does to the line the keyboard is on: space ticks an agent
+    /// or `edit_tracked`, and on the share mode, it and ← → pick the other.
+    fn toggle(&mut self, key: KeyCode) {
+        let share = Self::share_field();
+        match self.field {
+            at if at < share && key == KeyCode::Char(' ') => {
+                if let Some((_, ticked)) = self.ticked.get_mut(at) {
+                    *ticked = !*ticked;
+                }
+            }
+            at if at == share => {
+                self.share = match self.share {
+                    Share::Local => Share::Shared,
+                    Share::Shared => Share::Local,
+                };
+            }
+            at if at == share + 1 && key == KeyCode::Char(' ') => {
+                self.edit_tracked = !self.edit_tracked;
+            }
+            _ => {}
+        }
+    }
+
+    /// The agents ticked: those the project names already in its own order,
+    /// then the rest in report order, so naming one more does not reorder
+    /// what the settings say.
+    pub fn agents(&self) -> Vec<Agent> {
+        let ticked: Vec<Agent> = self
+            .ticked
+            .iter()
+            .filter(|(_, ticked)| *ticked)
+            .map(|(agent, _)| *agent)
+            .collect();
+        let mut agents: Vec<Agent> = self
+            .named
+            .iter()
+            .filter(|agent| ticked.contains(agent))
+            .copied()
+            .collect();
+        agents.extend(
+            ticked
+                .into_iter()
+                .filter(|agent| !self.named.contains(agent)),
+        );
+        agents.dedup();
+        agents
+    }
+
+    /// The task the toggles amount to for `holder`: none while they say
+    /// what the project says already. Unticking every agent is a task like
+    /// any other, which the command refuses, so the reason is core's.
+    fn task(&self, holder: Holder) -> Option<Task> {
+        let agents = self.agents();
+        let mut named = self.named.clone();
+        named.dedup();
+        let agents = match agents {
+            _ if agents == named => None,
+            none if none.is_empty() => Some(AgentsLine::Removed(named)),
+            some => Some(AgentsLine::Named(some)),
+        };
+        let share = ((self.share, self.edit_tracked) != self.was).then_some(self.share);
+        if agents.is_none() && share.is_none() {
+            return None;
+        }
+        Some(Task::Settings {
+            holder,
+            agents,
+            share,
+            edit_tracked: self.edit_tracked,
+        })
+    }
+}
+
 /// A yes or no before something that writes.
 #[derive(Debug)]
 pub struct Confirm {
@@ -2170,7 +2434,7 @@ impl Reader {
 
     /// Every key, and the command it runs.
     pub fn help() -> Self {
-        let rows: [(&str, &str, &[&str]); 16] = [
+        let rows: [(&str, &str, &[&str]); 17] = [
             (
                 "a",
                 "add a skill or a rule",
@@ -2205,6 +2469,14 @@ impl Reader {
                 ],
             ),
             ("u", "unlink the project", &["flayer unlink <path>"]),
+            (
+                "t",
+                "the project's agents and sharing, toggled",
+                &[
+                    "mind -C <project> agents --yes <agent>...",
+                    "mind -C <project> share --yes local|shared [--edit-tracked]",
+                ],
+            ),
             (
                 "L",
                 "load another workspace's own skills, read live from there",

@@ -931,6 +931,73 @@ fn an_installation_recording_no_copy_is_forgotten_whole_by_any_one() {
 }
 
 #[test]
+fn retargeting_an_installation_moves_its_copies_and_keeps_the_rest_of_its_record() {
+    let ledger = Ledger::in_memory().unwrap();
+    let written = installation_of("deploy", &[(Some("claude"), ".claude/skills/deploy")]);
+    ledger.installed("collapse", &written).unwrap();
+    let when = |ledger: &Ledger| -> i64 {
+        ledger
+            .connection
+            .query_row("SELECT installed_at FROM installations", [], |row| {
+                row.get(0)
+            })
+            .unwrap()
+    };
+    let installed_at = when(&ledger);
+    let moved = installation_of("deploy", &[(None, ".agents/skills/deploy")]).targets;
+
+    assert!(ledger
+        .retargeted("collapse", Kind::Skill, "deploy", &moved)
+        .unwrap());
+
+    assert_eq!(
+        ledger
+            .installation("collapse", Kind::Skill, "deploy")
+            .unwrap(),
+        Some(InstallRecord {
+            targets: moved,
+            ..written
+        })
+    );
+    // Not installed again: it is the same installation, from when it was.
+    assert_eq!(when(&ledger), installed_at);
+}
+
+#[test]
+fn retargeting_an_installation_to_no_copy_forgets_it_and_one_never_made_is_nothing() {
+    let ledger = Ledger::in_memory().unwrap();
+    ledger
+        .installed(
+            "collapse",
+            &installation_of("deploy", &[(None, ".agents/skills/deploy")]),
+        )
+        .unwrap();
+
+    assert!(ledger
+        .retargeted("collapse", Kind::Skill, "deploy", &[])
+        .unwrap());
+    assert!(ledger
+        .installations("collapse", Kind::Skill)
+        .unwrap()
+        .is_empty());
+    assert!(!ledger
+        .retargeted("collapse", Kind::Skill, "deploy", &[])
+        .unwrap());
+    assert!(!ledger
+        .retargeted(
+            "collapse",
+            Kind::Skill,
+            "review",
+            &installation_of("review", &[(None, ".agents/skills/review")]).targets,
+        )
+        .unwrap());
+    assert!(ledger
+        .installations("collapse", Kind::Skill)
+        .unwrap()
+        .is_empty());
+}
+
+#[test]
 fn every_copy_installed_into_a_project_is_listed_by_path_whichever_install_wrote_it() {
     let ledger = Ledger::in_memory().unwrap();
     ledger

@@ -20,9 +20,11 @@ use mindflayer_core::ledger::{Action, Outcome, SourceKind};
 use mindflayer_core::lifecycle::{self, Record};
 use mindflayer_core::lock::{HOLDER_FILE, WAIT};
 use mindflayer_core::migrate;
+use mindflayer_core::reapply::{self, Change};
 use mindflayer_core::AgentHomes;
 use mindflayer_core::{
-    FlayerWorkspace, Kind, Ledger, LockError, MindProject, Reference, WorkspaceError, LEDGER_FILE,
+    Agent, Directories, FlayerWorkspace, Kind, Ledger, LockError, MindProject, Reference, Share,
+    WorkspaceError, LEDGER_FILE,
 };
 use tempfile::TempDir;
 
@@ -508,6 +510,40 @@ fn an_uninstall_waits_for_the_writer_before_it() {
         .unwrap()
         .join("deploy")
         .exists());
+}
+
+#[test]
+fn a_change_to_a_projects_agents_waits_for_the_writer_before_it() {
+    let (dir, mut workspace, _) = offering_deploy();
+    let root = dir.path().join("beta");
+    fs::create_dir(&root).unwrap();
+    let (project, _) = MindProject::init_settings(
+        &root,
+        &[Agent::Claude],
+        Share::Shared,
+        &Directories::default(),
+    )
+    .unwrap();
+    workspace.link(&project).unwrap();
+    let (changing, of) = (workspace.clone(), project.clone());
+
+    // Held by another writer, an install say, which would otherwise put a
+    // copy where the settings no longer send one.
+    waits_for_the_writer_before_it(&workspace, move || {
+        reapply::apply(
+            Some(&changing),
+            &of,
+            &Change::AddAgents(vec![Agent::Codex]),
+            &AgentHomes::default(),
+        )
+        .unwrap();
+    });
+
+    let changed = MindProject::open(project.root()).unwrap();
+    assert_eq!(
+        changed.settings().unwrap().agents,
+        [Agent::Claude, Agent::Codex]
+    );
 }
 
 #[test]

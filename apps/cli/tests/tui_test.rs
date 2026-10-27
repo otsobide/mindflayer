@@ -9,6 +9,7 @@ use std::thread;
 use std::time::{Duration, Instant};
 
 use common::*;
+use mindflayer_core::{Agent, Share};
 use tui::state::Step as TuiStep;
 
 // ---------------------------------------------------------------------------
@@ -1053,6 +1054,24 @@ fn every_task_the_tui_runs_is_a_line_the_binaries_accept() {
             description: awkward.clone(),
             template: Some(String::from("-weird")),
         },
+        Task::Settings {
+            holder: Holder::Project(String::from("alpha")),
+            agents: Some(AgentsLine::Named(vec![Agent::Codex, Agent::OpenCode])),
+            share: None,
+            edit_tracked: false,
+        },
+        Task::Settings {
+            holder: Holder::Elsewhere(String::from("-odd")),
+            agents: Some(AgentsLine::Removed(vec![Agent::Claude])),
+            share: Some(Share::Local),
+            edit_tracked: true,
+        },
+        Task::Settings {
+            holder: Holder::Project(String::from(".")),
+            agents: None,
+            share: Some(Share::Shared),
+            edit_tracked: false,
+        },
     ];
 
     for task in &tasks {
@@ -1073,6 +1092,43 @@ fn every_task_the_tui_runs_is_a_line_the_binaries_accept() {
         panic!("{line:?}");
     };
     assert_eq!(description, awkward);
+}
+
+#[test]
+fn the_agents_and_share_toggles_parse_back_into_what_they_were() {
+    let task = Task::Settings {
+        holder: Holder::Elsewhere(String::from("../collapse")),
+        agents: Some(AgentsLine::Named(vec![Agent::OpenCode, Agent::Claude])),
+        share: Some(Share::Local),
+        edit_tracked: true,
+    };
+    let lines = task.commands();
+    assert_eq!(
+        task.describe(),
+        "mind -W . -C ../collapse agents --yes opencode claude && \
+         mind -W . -C ../collapse share --yes --edit-tracked local"
+    );
+
+    let agents = Cli::try_parse_from(&lines[0]).unwrap();
+    assert_eq!(agents.directory, Some(PathBuf::from("../collapse")));
+    assert_eq!(agents.workspace.as_deref(), Some("."));
+    let Some(mindflayer_cli::Command::Agents {
+        change: None,
+        named,
+    }) = agents.command
+    else {
+        panic!("{:?}", lines[0]);
+    };
+    assert_eq!(named.agents, [Agent::OpenCode, Agent::Claude]);
+    assert!(named.yes);
+
+    let share = Cli::try_parse_from(&lines[1]).unwrap();
+    let Some(mindflayer_cli::Command::Share { mode }) = share.command else {
+        panic!("{:?}", lines[1]);
+    };
+    assert_eq!(mode.share, Share::Local);
+    assert!(mode.edit_tracked);
+    assert!(mode.yes);
 }
 
 // ---------------------------------------------------------------------------
@@ -2012,4 +2068,152 @@ fn a_project_under_the_workspace_on_screen_keeps_the_plain_line() {
         app.member().map(|member| member.holder()),
         Some(Holder::Project(String::from("alpha")))
     );
+}
+
+// ---------------------------------------------------------------------------
+// A project's agents and sharing
+// ---------------------------------------------------------------------------
+
+#[test]
+fn t_on_a_project_opens_its_agents_and_share_toggles_and_runs_the_command() {
+    let dir = workspace_with_own();
+    flayer(dir.path(), &["install", "-p", "alpha", "commit-style"]).unwrap();
+    let mut app = tui_in(dir.path());
+    assert_eq!(app.member().unwrap().name, "alpha");
+
+    press_key(&mut app, KeyCode::Char('t'));
+    let Mode::Settings(form) = &app.mode else {
+        panic!("{:?}", app.mode)
+    };
+    // Ticked as the project's settings say: `mind init` names every agent.
+    assert!(form.ticked.iter().all(|(_, ticked)| *ticked));
+    let drawn = tui_drawn(&app);
+    assert!(drawn.contains("Agents and sharing for alpha"), "{drawn}");
+    assert!(drawn.contains("[local]"), "{drawn}");
+
+    // Untick Claude: the form shows the line it would run, as typed.
+    press_key(&mut app, KeyCode::Char(' '));
+    let drawn = tui_drawn(&app);
+    assert!(
+        drawn.contains("mind -C alpha agents --yes codex opencode"),
+        "{drawn}"
+    );
+
+    let task = press_and_run(&mut app, KeyCode::Enter);
+
+    assert_eq!(
+        task,
+        Some(Task::Settings {
+            holder: Holder::Project(String::from("alpha")),
+            agents: Some(AgentsLine::Named(vec![Agent::Codex, Agent::OpenCode])),
+            share: None,
+            edit_tracked: false,
+        })
+    );
+    // What it said, to read in full: the copy Claude read is gone.
+    let Mode::Reading(reader) = &app.mode else {
+        panic!("{:?}", app.mode)
+    };
+    let said: Vec<&str> = reader.lines.iter().map(|(_, line)| line.as_str()).collect();
+    assert!(
+        said.contains(&"removed commit-style from .claude/skills/commit-style"),
+        "{said:?}"
+    );
+    let alpha = dir.path().join("alpha");
+    assert!(!alpha.join(".claude/skills/commit-style").exists());
+    assert_eq!(
+        MindProject::open(&alpha)
+            .unwrap()
+            .settings()
+            .unwrap()
+            .agents,
+        [Agent::Codex, Agent::OpenCode]
+    );
+    assert!(app
+        .transcript()
+        .starts_with("$ mind -C alpha agents --yes codex opencode\n"));
+}
+
+#[test]
+fn the_share_toggle_runs_mind_share_and_nothing_toggled_runs_nothing() {
+    let dir = workspace_with_two();
+    let mut app = tui_in(dir.path());
+    press_key(&mut app, KeyCode::Char('t'));
+
+    // Applied as it opened, there is nothing to run.
+    assert_eq!(press_key(&mut app, KeyCode::Enter), TuiStep::Stay);
+    assert!(tui_drawn(&app).contains("nothing toggled yet"));
+
+    for _ in 0..Agent::ALL.len() {
+        press_key(&mut app, KeyCode::Down);
+    }
+    press_key(&mut app, KeyCode::Right);
+    let task = press_and_run(&mut app, KeyCode::Enter).unwrap();
+
+    assert_eq!(task.describe(), "mind -C alpha share --yes shared");
+    assert_eq!(
+        MindProject::open(dir.path().join("alpha"))
+            .unwrap()
+            .settings()
+            .unwrap()
+            .share,
+        Share::Shared
+    );
+}
+
+#[test]
+fn unticking_every_agent_is_refused_by_the_command_in_the_form() {
+    let dir = workspace_with_two();
+    let mut app = tui_in(dir.path());
+    press_key(&mut app, KeyCode::Char('t'));
+    for _ in 0..Agent::ALL.len() {
+        press_key(&mut app, KeyCode::Char(' '));
+        press_key(&mut app, KeyCode::Down);
+    }
+
+    let task = press_and_run(&mut app, KeyCode::Enter).unwrap();
+
+    assert_eq!(
+        task.describe(),
+        "mind -C alpha agents remove --yes claude codex opencode"
+    );
+    // The command's own refusal, in the form, where it can be put right.
+    let Mode::Settings(form) = &app.mode else {
+        panic!("{:?}", app.mode)
+    };
+    let error = form.error.as_deref().unwrap_or_default();
+    assert!(error.contains("would name no agent"), "{error}");
+}
+
+#[test]
+fn t_on_the_workspaces_own_row_or_an_older_project_says_why_not() {
+    let dir = workspace_with_two();
+    let old = dir.path().join("old");
+    fs::create_dir(&old).unwrap();
+    older_project(&old);
+    flayer(dir.path(), &["link", "old"]).unwrap();
+    let mut app = tui_in(dir.path());
+
+    press_key(&mut app, KeyCode::Up);
+    assert!(app.member().unwrap().own);
+    press_key(&mut app, KeyCode::Char('t'));
+    assert!(matches!(app.mode, Mode::Browse));
+    assert!(app
+        .message
+        .as_ref()
+        .unwrap()
+        .text
+        .contains("reach agents by being installed"));
+
+    while app.member().unwrap().name != "old" {
+        press_key(&mut app, KeyCode::Down);
+    }
+    press_key(&mut app, KeyCode::Char('t'));
+    assert!(matches!(app.mode, Mode::Browse));
+    assert!(app
+        .message
+        .as_ref()
+        .unwrap()
+        .text
+        .contains("`mind migrate`"));
 }
