@@ -646,30 +646,44 @@ fn an_authored_folder_that_is_an_agents_folder_is_read_once() {
 }
 
 #[test]
-fn a_skill_authored_where_no_agent_reads_is_an_artifact_of_its_own() {
+fn a_skill_authored_where_no_agent_reads_is_one_more_copy_of_its_name() {
     let parent = TempDir::new().unwrap();
     let one = marked(&parent, "alpha", &Agent::ALL, Some("skills"));
-    let authored = put(&one, "skills/deploy", &skill_file("deploy"));
+    let authored = put(
+        &one,
+        "skills/deploy",
+        "---\nname: deploy\ndescription: Edited since it was installed\n---\n",
+    );
     let claudes = put(&one, ".claude/skills/deploy", &skill_file("deploy"));
 
     let catalog = Catalog::discover(std::slice::from_ref(&one));
 
-    // The project's own, which reaches no agent until it is installed, is
-    // not an agent's copy of it, however alike the two are.
-    let found: Vec<(&Path, Vec<Agent>, Provenance)> = catalog
-        .artifacts()
+    // One entry, read as the project's own, which is what a change from the
+    // project reaches. It reaches no agent until it is installed, so the
+    // agents are those of the copy in Claude's folder, and the two are not
+    // compared: a source edited since is no warning.
+    assert!(catalog.failures().is_empty(), "{:?}", catalog.failures());
+    assert_eq!(catalog.artifacts().len(), 1);
+    let deploy = &catalog.artifacts()[0];
+    assert_eq!(deploy.path(), authored);
+    assert_eq!(deploy.summary(), Some("Edited since it was installed"));
+    assert_eq!(deploy.agents(), [Agent::Claude, Agent::OpenCode]);
+    assert!(!deploy.copies_differ());
+    assert_eq!(deploy.provenance(), Provenance::Authored);
+    let copies = deploy.copies();
+    let found: Vec<(&Path, &[Agent], bool)> = copies
         .iter()
-        .map(|artifact| (artifact.path(), artifact.agents(), artifact.provenance()))
+        .map(|copy| (copy.path(), copy.agents(), copy.is_authored()))
         .collect();
     assert_eq!(
         found,
         [
+            (authored.as_path(), &[][..], true),
             (
                 claudes.as_path(),
-                vec![Agent::Claude, Agent::OpenCode],
-                Provenance::Foreign
+                &[Agent::Claude, Agent::OpenCode][..],
+                false
             ),
-            (authored.as_path(), vec![], Provenance::Authored),
         ]
     );
     assert_eq!(
@@ -680,6 +694,31 @@ fn a_skill_authored_where_no_agent_reads_is_an_artifact_of_its_own() {
             one.root().join("skills")
         ]
     );
+}
+
+#[test]
+fn only_the_copies_an_agent_reads_are_compared_beside_the_projects_own() {
+    let parent = TempDir::new().unwrap();
+    let one = marked(&parent, "alpha", &Agent::ALL, Some("skills"));
+    let authored = put(&one, "skills/deploy", &skill_file("deploy"));
+    let shared = put(&one, ".agents/skills/deploy", &skill_file("deploy"));
+    let claudes = put(
+        &one,
+        ".claude/skills/deploy",
+        "---\nname: deploy\ndescription: Does it another way\n---\n",
+    );
+
+    let catalog = Catalog::discover(std::slice::from_ref(&one));
+
+    assert_eq!(catalog.artifacts().len(), 1);
+    let deploy = &catalog.artifacts()[0];
+    assert_eq!(deploy.path(), authored);
+    assert!(deploy.copies_differ());
+    assert_eq!(catalog.failures().len(), 1, "{:?}", catalog.failures());
+    match &catalog.failures()[0] {
+        DiscoveryFailure::Diverged { paths, .. } => assert_eq!(paths, &[shared, claudes]),
+        other => panic!("{other:?}"),
+    }
 }
 
 #[test]

@@ -45,12 +45,12 @@ impl Catalog {
     /// their folders, whoever put it there, so that is what is listed: an
     /// install's copies, and a skill somebody keeps there by hand, which
     /// nothing records and so is [foreign](crate::Provenance::Foreign). Every
-    /// copy of one name in the agents' folders is one artifact, with each
-    /// agent that reads a copy ([`Artifact::agents`]), and copies that do not
-    /// hold the same are a failure ([`DiscoveryFailure::Diverged`]); one the
-    /// project authors where none of them reads is an artifact of its own.
-    /// Every other project is read from the one folder its marker names, as
-    /// before.
+    /// copy of one name is one artifact, with each agent that reads a copy
+    /// ([`Artifact::agents`]), and copies they read that do not hold the same
+    /// are a failure ([`DiscoveryFailure::Diverged`]); one the project
+    /// authors where none of them reads is one more copy, read by no agent
+    /// and compared with none. Every other project is read from the one
+    /// folder its marker names, as before.
     pub fn discover_kinds(projects: &[MindProject], kinds: &[Kind]) -> Self {
         Self::discover_in(projects, kinds, Reach::Agents)
     }
@@ -138,9 +138,16 @@ impl Catalog {
     }
 
     /// One artifact for each name among `copies`, all of one kind in one
-    /// project, read from folders its agents read: its first copy by path,
-    /// with every other taken in, and a failure when they do not all hold
-    /// the same.
+    /// project, read from its folders: the copy the project authors first,
+    /// when it authors one, then the rest by path, with a failure when the
+    /// copies its agents read do not all hold the same.
+    ///
+    /// The project's own copy leads because it is the one a change made from
+    /// the project reaches ([`crate::lifecycle::find`]), so what `show`
+    /// prints and what `edit` opens are one file. One that no agent reads is
+    /// taken in without being compared: it is the source an install delivers
+    /// from, and a source edited since it was delivered is a status to report
+    /// (#36), not a warning on every listing until it is installed again.
     fn gather_copies(&mut self, copies: Vec<Artifact>) -> Vec<Artifact> {
         let mut gathered = Vec::new();
         let mut named: BTreeMap<String, Vec<Artifact>> = BTreeMap::new();
@@ -148,17 +155,30 @@ impl Catalog {
             named.entry(copy.name().to_owned()).or_default().push(copy);
         }
         for (name, mut copies) in named {
-            copies.sort_by(|a, b| a.path().cmp(b.path()));
+            copies.sort_by(|a, b| {
+                b.first_is_authored()
+                    .cmp(&a.first_is_authored())
+                    .then_with(|| a.path().cmp(b.path()))
+            });
             let mut copies = copies.into_iter();
             let Some(mut first) = copies.next() else {
                 continue;
             };
+            // Every copy an agent reads, each compared with the first of them.
+            let mut read = Vec::new();
+            if first.first_is_read() {
+                read.push(first.path().to_path_buf());
+            }
             let mut hashed = None;
-            let mut paths = vec![first.path().to_path_buf()];
             let mut differ = false;
             for other in copies {
-                paths.push(other.path().to_path_buf());
-                let differs = self.differs(&name, first.path(), &mut hashed, other.path());
+                let mut differs = false;
+                if other.first_is_read() {
+                    if let Some(base) = read.first() {
+                        differs = self.differs(&name, base, &mut hashed, other.path());
+                    }
+                    read.push(other.path().to_path_buf());
+                }
                 differ |= differs;
                 first.take_copy(other, differs);
             }
@@ -166,7 +186,7 @@ impl Catalog {
                 self.failures.push(DiscoveryFailure::Diverged {
                     kind: first.kind(),
                     name,
-                    paths,
+                    paths: read,
                 });
             }
             gathered.push(first);
@@ -175,7 +195,8 @@ impl Catalog {
     }
 
     /// Whether the copy at `other` holds other names or bytes than the one at
-    /// `first`, whose hash is `hashed` once worked out.
+    /// `first`, whose hash is `hashed` once worked out: both copies the
+    /// project's agents read.
     ///
     /// By [`hash::tree`], what an install records of what it wrote, rather
     /// than by following both trees side by side: it refuses a link rather
@@ -607,7 +628,9 @@ pub enum DiscoveryFailure {
     Diverged {
         kind: Kind,
         name: String,
-        /// Every copy, the one listed first.
+        /// Every copy an agent reads, in the order the artifact lists them:
+        /// not the project's own where no agent reads, which is not
+        /// compared.
         paths: Vec<PathBuf>,
     },
     /// The ledger, read to say which copies were installed, could not be.
@@ -625,8 +648,8 @@ pub enum DiscoveryFailure {
 }
 
 impl DiscoveryFailure {
-    /// The path the failure is about: the copy listed, for copies that
-    /// differ.
+    /// The path the failure is about: the first copy an agent reads, for
+    /// copies that differ.
     pub fn path(&self) -> &Path {
         match self {
             DiscoveryFailure::Directory { path, .. }
@@ -684,8 +707,8 @@ struct Folder {
     /// Whether the project's marker names it for the kind.
     authored: bool,
     /// Whether a copy here of one name is one copy of a single artifact
-    /// with every other of that name in such a folder: a folder its agents
-    /// are sent copies in, or one they read.
+    /// with every other of that name in such a folder: every folder of a
+    /// project whose agents are sent the kind somewhere.
     shared: bool,
 }
 
@@ -725,10 +748,14 @@ fn read_from(project: &MindProject, kind: Kind) -> Vec<Folder> {
         {
             Some(folder) => folder.authored = true,
             None => {
-                let agents = readers(project, kind, &authored, agents);
+                // One more copy of each name it shares with the targets,
+                // read by no agent unless one reads here: the project's own
+                // source and what its agents load of it are one entry. Not
+                // for a kind sent nowhere, rules today, which stay one
+                // artifact a file as in any other project.
                 folders.push(Folder {
-                    shared: !agents.is_empty(),
-                    agents,
+                    shared: !folders.is_empty(),
+                    agents: readers(project, kind, &authored, agents),
                     path: authored,
                     authored: true,
                 });

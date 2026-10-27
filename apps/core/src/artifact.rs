@@ -51,9 +51,10 @@ impl Declared {
 ///
 /// Usually one copy, at [`path`](Self::path). A project marked by its
 /// settings can hold one skill in several of its agents' folders, an
-/// install's copies or a user's own, and discovery lists those as one
-/// artifact ([`crate::Catalog`]): what it declares is read from the first
-/// copy, and every copy is still [validated](Self::validate) where it is.
+/// install's copies or a user's own, as well as in the folder it authors
+/// in, and discovery lists those as one artifact ([`crate::Catalog`]): what
+/// it declares is read from the first copy, the project's own when it has
+/// one, and every copy is still [validated](Self::validate) where it is.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Artifact {
     name: String,
@@ -65,7 +66,8 @@ pub struct Artifact {
     placement: Placement,
     /// Every other copy, in the order discovery found them.
     others: Vec<ArtifactCopy>,
-    /// Whether its copies do not all hold the same names and bytes.
+    /// Whether the copies its project's agents read do not all hold the
+    /// same names and bytes.
     differ: bool,
 }
 
@@ -301,10 +303,12 @@ impl Artifact {
         }
     }
 
-    /// Whether its copies do not all hold the same names and bytes: then the
-    /// agents reading them do not all load the same thing. Claude and Codex
-    /// each read one of the standard folders, and OpenCode, reading both,
-    /// loads whichever it takes. Discovery says so as a failure too.
+    /// Whether the copies its project's agents read do not all hold the
+    /// same names and bytes: then the agents reading them do not all load
+    /// the same thing. Claude and Codex each read one of the standard
+    /// folders, and OpenCode, reading both, loads whichever it takes.
+    /// Discovery says so as a failure too. A copy no agent reads, the
+    /// project's own source, is compared with none.
     pub fn copies_differ(&self) -> bool {
         self.differ
     }
@@ -322,9 +326,21 @@ impl Artifact {
         self.placement.authored = authored;
     }
 
+    /// Whether the copy at [`path`](Self::path) sits in a folder its holder
+    /// authors in: what discovery puts first among copies of one name.
+    pub(crate) fn first_is_authored(&self) -> bool {
+        self.placement.authored
+    }
+
+    /// Whether one of the project's agents reads the copy at
+    /// [`path`](Self::path): what discovery compares with the others.
+    pub(crate) fn first_is_read(&self) -> bool {
+        !self.placement.agents.is_empty()
+    }
+
     /// Take `other`, loaded under the same name from another place, as one
     /// more copy of this one, judged as it is there; `differs` when it does
-    /// not hold what the first copy holds.
+    /// not hold what the first copy an agent reads holds.
     pub(crate) fn take_copy(&mut self, other: Artifact, differs: bool) {
         let issues = other.issues();
         self.others.push(ArtifactCopy {

@@ -548,3 +548,38 @@ fn a_skill_only_in_an_agents_folder_is_not_changed_from_a_project() {
     assert!(dir.path().join(".claude/skills/review/SKILL.md").is_file());
     assert!(!dir.path().join(".claude/skills/audit").exists());
 }
+
+#[test]
+fn a_name_the_project_authors_and_its_agents_read_is_one_row_whose_change_reaches_only_its_own() {
+    let dir = TempDir::new().unwrap();
+    let directories = mindflayer_core::Directories::default().with(Kind::Skill, "skills");
+    MindProject::init_settings(
+        dir.path(),
+        &mindflayer_core::Agent::ALL,
+        mindflayer_core::Share::Shared,
+        &directories,
+    )
+    .unwrap();
+    let deploy = skill_file("deploy", "My own source");
+    put(dir.path(), "skills/deploy/SKILL.md", &deploy);
+    put(dir.path(), ".claude/skills/deploy/SKILL.md", &deploy);
+
+    // One row, so the words a screen runs for it name one thing: the
+    // project's own, the copy the row reads as.
+    let listed = mind(dir.path(), &["list"]).unwrap();
+    assert_eq!(listed.stdout, "deploy  My own source\n");
+    let shown = mind(dir.path(), &["show", "skill:deploy"]).unwrap();
+    let own = dir.path().join("skills/deploy/SKILL.md");
+    assert!(
+        shown.stdout.contains(&own.display().to_string()),
+        "{}",
+        shown.stdout
+    );
+
+    mind(dir.path(), &["remove", "--yes", "skill:deploy"]).unwrap();
+
+    assert!(!dir.path().join("skills/deploy").exists());
+    assert!(dir.path().join(".claude/skills/deploy/SKILL.md").is_file());
+    let left = mind(dir.path(), &["list"]).unwrap();
+    assert_eq!(left.stdout, "deploy  My own source\n");
+}
