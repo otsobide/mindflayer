@@ -154,18 +154,32 @@ pub(crate) struct Asked<'a> {
 ///
 /// A project nothing links is moved all the same, since its marker is its
 /// own, with a hint saying nothing installed was carried along, as `mind
-/// agents` says it. A workspace found that cannot be read is a warning
-/// beside the move; one `-W` or the activation names that is no workspace
+/// agents` says it. One `-W` or the activation names that is no workspace
 /// refuses it, as it refuses every command.
+///
+/// So does a workspace found that cannot be read, in a dry run too, where
+/// `mind agents` goes ahead beside a warning and can be run again. What it
+/// records decides which copies move, and the move is made once: made
+/// without it, nothing is left to carry them once settings mark the
+/// project, and a copy recorded without a hash, which only the move holds
+/// to its offer (D-04), is dropped the next time the agents change, as one
+/// nothing can compare. A project its settings mark has nothing to move, so
+/// for that one it is still a warning.
 pub(crate) fn migrate_here(
     project: &MindProject,
     asked: &Asked,
     lookup: &Lookup,
 ) -> Result<Outcome, Failure> {
-    let (workspace, unread) = match consulted(project, lookup) {
-        Ok(workspace) => (workspace, None),
+    let workspace = match consulted(project, lookup) {
+        Ok(workspace) => workspace,
         Err(error @ CliError::Chosen { .. }) => return Err(error.into()),
-        Err(error) => (None, Some(format!("warning: {error}"))),
+        Err(error) if project.settings().is_some() => {
+            let mut outcome = finished(None, project, asked);
+            outcome.stderr.push(format!("warning: {error}"));
+            outcome.ok = false;
+            return Ok(outcome);
+        }
+        Err(error) => return Err(CliError::MigrateUnrecorded(Box::new(error)).into()),
     };
     let result = laid_out(workspace.as_ref(), project, asked, &lookup.agents);
     let carried = if asked.yes {
@@ -173,33 +187,25 @@ pub(crate) fn migrate_here(
     } else {
         "would be carried along"
     };
-    // Only beside a move made or laid out, and not when the workspace could
-    // not be read, whose warning says why.
-    let hint = match (&result, &workspace, &unread) {
-        (Ok(Some(_)), Some(workspace), _) if !workspace.is_linked(project.root()) => Some(format!(
+    // Only beside a move made or laid out.
+    let hint = match (&result, &workspace) {
+        (Ok(Some(_)), Some(workspace)) if !workspace.is_linked(project.root()) => Some(format!(
             "hint: the workspace at {} does not link this project, so nothing installed in \
                  it {carried}; `mind link` links it",
             workspace.root().display()
         )),
-        (Ok(Some(_)), None, None) => Some(format!(
+        (Ok(Some(_)), None) => Some(format!(
             "hint: no workspace links this project, so nothing installed in it {carried}"
         )),
         _ => None,
     };
-    let unreadable = unread.is_some();
-    let said: Vec<String> = unread.into_iter().chain(hint).collect();
     match result {
         Ok(outcome) => {
             let mut outcome = finished(outcome, project, asked);
-            outcome.ok &= !unreadable;
-            outcome.stderr.extend(said);
+            outcome.stderr.extend(hint);
             Ok(outcome)
         }
-        Err(stopped) => {
-            let mut failure = stopped.failure();
-            failure.warnings.extend(said);
-            Err(failure)
-        }
+        Err(stopped) => Err(stopped.failure()),
     }
 }
 

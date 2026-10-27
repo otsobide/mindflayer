@@ -1492,7 +1492,9 @@ still marked by its `mind.toml`. Nothing is moved while there is a reason
 not to, every reason said at once: a `mind.toml.v2` an earlier migration
 kept, or a project from the first Mindflayer that keeps its skills inside
 `.mind`, where settings cannot name them. Move them out and name their
-folder in `mind.toml`, and such a project moves.
+folder in `mind.toml`, and such a project moves. Nor while the workspace
+that installed into it cannot be read, since what it records is what says
+which copies to carry.
 
 ## Roadmap
 

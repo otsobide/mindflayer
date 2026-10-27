@@ -1022,7 +1022,13 @@ is.
   ([D-09](#d-09-project-settings-live-in-the-project)), so in a project no
   workspace `mind` consults links, `mind migrate` writes its settings and
   moves no copy, and says with a `hint:` that nothing installed was carried
-  along, as `mind agents` says it.
+  along, as `mind agents` says it. Not so one whose workspace cannot be
+  read, which is refused, in a dry run too, where a change of agents goes
+  ahead beside a `warning:`. That change can be run again; the move is made
+  once, and what the workspace records decides which copies it carries.
+  Made without them, nothing carries those copies once settings mark the
+  project, and one recorded without a hash, which only the move holds to
+  its offer, is dropped the next time its agents change.
 - **One migration a line.** `flayer migrate` takes `--library`, `-p` or
   `--all-projects`, one at a time, for the reason `--library` is a flag of
   its own ([above](#moving-them-into-the-library)), and a line naming none is

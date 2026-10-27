@@ -385,6 +385,49 @@ fn a_project_no_workspace_links_is_moved_and_told_nothing_was_carried() {
 }
 
 #[test]
+fn a_project_whose_workspace_cannot_be_read_is_not_moved() {
+    let dir = workspace();
+    let root = older_in(dir.path(), "collapse", &["deploy"]);
+    let config = dir.path().join(FLAYER_DIR).join(FLAYER_CONFIG);
+    let written = fs::read_to_string(&config).unwrap();
+    fs::write(&config, format!("{written}garbage = [\n")).unwrap();
+    let before = fs::read(marker(&root)).unwrap();
+
+    // Its records say deploy is the workspace's: moved without them, the
+    // copy would be left as the project's own, and nothing carry it later.
+    for line in [&["migrate"][..], &["migrate", "--yes"]] {
+        let failure = mind(&root, line).unwrap_err();
+
+        assert!(
+            failure.error.to_string().starts_with(
+                "nothing moved: what the workspace records of the project decides which of its \
+                 copies move, and it cannot be read: "
+            ),
+            "{}",
+            failure.error
+        );
+        assert!(failure.warnings.is_empty(), "{:?}", failure.warnings);
+    }
+    assert_eq!(fs::read(marker(&root)).unwrap(), before);
+    assert!(!settings(&root).exists());
+    assert!(root.join("skills").join("deploy").is_dir());
+
+    fs::write(&config, written).unwrap();
+    mind(&root, &["migrate", "--yes"]).unwrap();
+    // Once it is, a moved project has nothing to read it for.
+    let broken = fs::read_to_string(&config).unwrap();
+    fs::write(&config, format!("{broken}garbage = [\n")).unwrap();
+    let again = mind(&root, &["migrate", "--yes"]).unwrap();
+    assert_eq!(
+        again.stdout,
+        "nothing to migrate: collapse is marked by its settings already\n"
+    );
+    assert_eq!(again.stderr.len(), 1, "{:?}", again.stderr);
+    assert!(again.stderr[0].starts_with("warning: "));
+    assert!(!again.ok);
+}
+
+#[test]
 fn a_migration_refused_says_every_reason_and_changes_nothing() {
     let dir = TempDir::new().unwrap();
     let root = dir.path().join("ancient");
