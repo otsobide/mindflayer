@@ -1983,6 +1983,8 @@ pub enum InstallError {
     },
     #[error("{file}: its block holds rule `{route}`, which this workspace did not install there, so the project's rules are not rendered: uninstall it from the workspace that did, or take its section out by hand")]
     NotRecorded { file: PathBuf, route: String },
+    #[error("{file}: the section of rule `{route}` was changed since it was rendered and cannot be read back, so the project's rules are not rendered: put it right by hand, or install the rule again with --force")]
+    Unread { file: PathBuf, route: String },
     #[error("{file}: holds rule `{route}` in Mindflayer's block, which cannot be edited ({why}), so the rule is not uninstalled: share the project or set edit_tracked, or take its section out by hand")]
     Withheld {
         file: PathBuf,

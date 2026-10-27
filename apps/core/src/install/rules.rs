@@ -107,6 +107,7 @@ impl Rendered {
             Warning::Withheld { .. }
             | Warning::Left { .. }
             | Warning::Edited { .. }
+            | Warning::Kept { .. }
             | Warning::Unremoved { .. } => true,
         });
         let block = self.block.iter().flat_map(|block| &block.warnings);
@@ -172,6 +173,12 @@ pub enum Warning {
     /// longer recorded, as a copy changed before a change of agents is.
     #[error("{path}: changed since rule `{route}` was copied there, before the project had settings, so it is left as it is, the project's own")]
     Edited { route: String, path: PathBuf },
+    /// The rule's section in `file` holds something other than what was
+    /// rendered there: somebody's edit, kept as the block holds it, and its
+    /// record with it, so it reads as edited until it is undone, or the rule
+    /// is installed again with `--force` (D-04).
+    #[error("{file}: the section of rule `{route}` was changed since it was rendered, so it is left as it is")]
+    Kept { route: String, file: PathBuf },
     /// Such a copy, still what was copied, that could not be taken out: it
     /// stays recorded, for the next render to take out.
     #[error("{path}: rule `{route}` was copied there before the project had settings, and could not be taken out: {error}")]
@@ -371,6 +378,7 @@ pub(crate) fn install(
         project,
         homes,
         Change::Install(candidate),
+        edits,
     )?;
     let after = ledger.installation(&entry, Kind::Rule, &name)?;
     let detail = format!("{name} into {}", project.name());
@@ -449,7 +457,14 @@ pub(crate) fn uninstall(
             });
         }
     }
-    let rendered = render_held(workspace, ledger, project, homes, Change::Uninstall(name))?;
+    let rendered = render_held(
+        workspace,
+        ledger,
+        project,
+        homes,
+        Change::Uninstall(name),
+        edits,
+    )?;
     let detail = format!("{name} from {}", project.name());
     ledger.log(Action::Uninstall, Some(&entry), Outcome::Ok, Some(&detail))?;
     Ok(Removed::Removed {
@@ -483,7 +498,15 @@ pub fn render(
         return Ok(None);
     }
     let _lock = workspace.lock().map_err(WorkspaceError::from)?;
-    render_held(workspace, ledger, project, homes, Change::Again).map(Some)
+    render_held(
+        workspace,
+        ledger,
+        project,
+        homes,
+        Change::Again,
+        Edits::Kept,
+    )
+    .map(Some)
 }
 
 /// What a render is for.
@@ -656,12 +679,21 @@ fn withholding(project: &MindProject) -> Option<Withheld> {
 /// After the block is written, a failure of the import or of Claude's rule
 /// files records what was written, and is then raised: the block is in
 /// place, and what Claude reads is as it was until the next render.
+///
+/// A section of another rule somebody changed since it was rendered is kept
+/// as the block holds it, with the hash recorded of what was rendered, so it
+/// reads as edited still (D-04), and said ([`Warning::Kept`]); so is a file
+/// for Claude, by [`claude_rules::render`]. The rule `change` installs or
+/// takes out was refused before this if it was edited, unless `edits`
+/// forces it, and then its file for Claude is written over or taken away as
+/// its section is.
 fn render_held(
     workspace: &FlayerWorkspace,
     ledger: &Ledger,
     project: &MindProject,
     homes: &AgentHomes,
     change: Change<'_>,
+    edits: Edits,
 ) -> Result<Rendered, InstallError> {
     let root = project.root();
     let agents = project
@@ -734,6 +766,8 @@ fn render_held(
     }
     // Each kept rule's section, as the block holds it.
     let mut held = Vec::new();
+    // The rules among them kept for an edit somebody made in their section.
+    let mut edited: Vec<String> = Vec::new();
     if withheld.is_none() {
         agents_md::linked_inside(root, &file)?;
         if let Some(bytes) = read(&file)? {
@@ -775,6 +809,38 @@ fn render_held(
                     record.name.clone(),
                     recorded.unwrap_or_else(|| section.hash()),
                 );
+                held.push(section);
+            }
+            // A rule rendered from its offer keeps its section as the block
+            // holds it while somebody's edit is in it: by the hash recorded,
+            // so one never recorded with one is rendered as it was before
+            // hashes were kept. One gone is put back.
+            for rule in &wanted {
+                let name = rule.name();
+                let recorded = rule.before.as_ref().and_then(|record| {
+                    record
+                        .targets
+                        .iter()
+                        .find(|target| target.path == AGENTS_MD)?
+                        .content_hash
+                        .clone()
+                });
+                let Some(recorded) = recorded else {
+                    continue;
+                };
+                if change.changes(name) || !text.routes().contains(&name) {
+                    continue;
+                }
+                // One that cannot be read back would go with the render.
+                let section = text.section(name).ok_or_else(|| InstallError::Unread {
+                    file: file.clone(),
+                    route: name.to_owned(),
+                })?;
+                if section.hash() == recorded {
+                    continue;
+                }
+                sections.insert(name.to_owned(), recorded);
+                edited.push(name.to_owned());
                 held.push(section);
             }
         }
@@ -861,7 +927,10 @@ fn render_held(
         None => None,
     };
     let written = if withheld.is_none() {
-        let artifacts = wanted.iter().map(|rule| &rule.artifact);
+        let artifacts = wanted
+            .iter()
+            .filter(|rule| !edited.iter().any(|name| name == rule.name()))
+            .map(|rule| &rule.artifact);
         match agents_md::render_keeping(workspace, project, artifacts, held, created, homes) {
             Ok(written) => Some(written),
             Err(error) => {
@@ -896,16 +965,23 @@ fn render_held(
         } else {
             Vec::new()
         };
-        // Not a kept rule's, which no render here writes or takes away.
+        // Not a kept rule's, which no render here writes or takes away. The
+        // rule a forced change is about counts as holding what its file
+        // holds now, so an edit there is written over or taken away as the
+        // file Mindflayer wrote would be; only a file, never a link or a
+        // folder somebody put in its place.
         let recorded: Vec<Recorded> = pending
             .iter()
             .filter(|record| !unoffered.iter().any(|kept| kept.name == record.name))
             .filter_map(|record| {
                 let file = claude_file(&record.name);
                 let target = record.targets.iter().find(|target| target.path == file)?;
+                let forced = (edits == Edits::Forced && change.changes(&record.name))
+                    .then(|| held_file(&root.join(&file)))
+                    .flatten();
                 Some(Recorded {
                     route: record.name.clone(),
-                    hash: target.content_hash.clone()?,
+                    hash: forced.or_else(|| target.content_hash.clone())?,
                 })
             })
             .collect();
@@ -925,6 +1001,16 @@ fn render_held(
                 .collect(),
         ),
         _ => None,
+    };
+    // The rules whose file for Claude was left as somebody edited it.
+    let left_files: Vec<&str> = match &files {
+        Some(Ok(files)) => files
+            .files
+            .iter()
+            .filter(|file| file.written == claude_rules::Written::Edited)
+            .map(|file| file.route.as_str())
+            .collect(),
+        _ => Vec::new(),
     };
     let mut records: Vec<InstallRecord> = wanted
         .iter()
@@ -958,12 +1044,21 @@ fn render_held(
                     content_hash: Some(hash),
                 });
             }
+            // What the rule was rendered from, which an edit left in place
+            // was not rendered from this time: that copy holds what an
+            // earlier render wrote, and once the edit is undone it has to read
+            // as behind the offer, not as current with it.
+            let left = edited.iter().any(|route| route == name) || left_files.contains(&name);
+            let content_hash = match (&rule.before, left) {
+                (Some(before), true) => before.content_hash.clone(),
+                _ => Some(hash::bytes(&rule.bytes)),
+            };
             InstallRecord {
                 kind: Kind::Rule,
                 name: name.to_owned(),
                 source_id: None,
                 origin: Some(rule.origin.clone()),
-                content_hash: Some(hash::bytes(&rule.bytes)),
+                content_hash,
                 targets,
             }
         })
@@ -1150,6 +1245,12 @@ fn render_held(
         }
     }
     warnings.extend(stayed);
+    if written.is_some() {
+        warnings.extend(edited.into_iter().map(|route| Warning::Kept {
+            route,
+            file: file.clone(),
+        }));
+    }
 
     Ok(Rendered {
         block: written,
@@ -1198,6 +1299,16 @@ impl Copied {
         }
         Ok(())
     }
+}
+
+/// The hash of what the plain file at `path` holds, `None` for anything
+/// else: nothing there, a link or a folder, or a file that cannot be read.
+fn held_file(path: &Path) -> Option<String> {
+    let metadata = fs::symlink_metadata(path).ok()?;
+    if !metadata.is_file() {
+        return None;
+    }
+    fs::read(path).ok().map(|bytes| hash::bytes(&bytes))
 }
 
 /// The file's bytes, `None` when nothing is there to read.

@@ -494,6 +494,15 @@ impl Fixture {
         self.ledger.records("app", Kind::Rule).unwrap()
     }
 
+    /// How the installation of the rule at `route` stands.
+    fn standing(&self, route: &str) -> Standing {
+        install::standings(&self.workspace, &self.ledger, &self.project, Kind::Rule)
+            .unwrap()
+            .into_iter()
+            .find(|(name, _)| name == route)
+            .map_or(Standing::Absent, |(_, standing)| standing)
+    }
+
     fn agents_md(&self) -> PathBuf {
         self.project.root().join("AGENTS.md")
     }
@@ -1145,6 +1154,114 @@ fn rules_no_longer_offered_can_each_be_taken_out_and_the_rest_stay_as_they_are()
     fixture.uninstall("rust/errors");
 
     assert!(!fixture.claude_file("rust/errors").exists());
+    assert!(fixture.records().is_empty());
+}
+
+#[test]
+fn a_render_keeps_another_rules_edited_section_as_the_block_holds_it_and_says_so() {
+    let fixture = fixture(Share::Shared, &Agent::ALL);
+    fs::write(fixture.agents_md(), TEAM).unwrap();
+    let tone = fixture.rule("review/tone", TONE);
+    fixture.rule("git/no-force-push", NO_FORCE_PUSH);
+    fixture.install("review/tone");
+    fixture.install("git/no-force-push");
+    let edited = fixture
+        .text()
+        .replace(NO_FORCE_PUSH, "Never force-push, ever.\n");
+    fs::write(fixture.agents_md(), &edited).unwrap();
+    let recorded = fixture.records();
+    // Both offers move on, and only the rule installed is brought up to date.
+    fs::write(&tone, format!("{TONE}Be kind.\n")).unwrap();
+    fixture.rule(
+        "git/no-force-push",
+        "Never force-push anything somebody pulled.\n",
+    );
+
+    let again = fixture.install("review/tone");
+
+    assert_eq!(
+        fixture.text(),
+        format!(
+            "{TEAM}\n<!-- mindflayer:begin -->\n\
+             <!-- mindflayer:rule git/no-force-push -->\nNever force-push, ever.\n\n\
+             <!-- mindflayer:rule review/tone -->\n\
+             Say what a change does before what is wrong with it.\nBe kind.\n\
+             <!-- mindflayer:end -->\n"
+        )
+    );
+    // Its record is what was rendered, so it reads as edited still.
+    assert_eq!(fixture.records()[0], recorded[0]);
+    assert_eq!(fixture.standing("git/no-force-push"), Standing::Edited);
+    let rendered = again.rendered.unwrap();
+    assert_eq!(
+        rendered.warnings_of(Some("review/tone")),
+        [format!(
+            "{}: the section of rule `git/no-force-push` was changed since it was rendered, so \
+             it is left as it is",
+            fixture.agents_md().display()
+        )]
+    );
+
+    // Undone, it is what an earlier render wrote: behind its offer, not
+    // current with it.
+    let kept = fixture.text();
+    let undone = kept.replace("Never force-push, ever.\n", NO_FORCE_PUSH);
+    fs::write(fixture.agents_md(), undone).unwrap();
+    assert_eq!(fixture.standing("git/no-force-push"), Standing::Outdated);
+    fs::write(fixture.agents_md(), kept).unwrap();
+
+    // Forced, it is the offer's again.
+    install::install_with(
+        &fixture.workspace,
+        &fixture.ledger,
+        &fixture.project,
+        &fixture.typed("git/no-force-push").unwrap(),
+        &AgentHomes::default(),
+        Edits::Forced,
+    )
+    .unwrap();
+
+    assert!(fixture
+        .text()
+        .contains("Never force-push anything somebody pulled.\n"));
+    assert_eq!(fixture.standing("git/no-force-push"), Standing::Current);
+    assert_eq!(fixture.standing("review/tone"), Standing::Current);
+}
+
+#[test]
+fn a_forced_change_writes_over_and_takes_away_an_edited_file_for_claude() {
+    let fixture = fixture(Share::Shared, &Agent::ALL);
+    fixture.rule("rust/errors", SCOPED);
+    fixture.install("rust/errors");
+    let file = fixture.claude_file("rust/errors");
+    fs::write(&file, format!("{SCOPED}Unless it is a test.\n")).unwrap();
+
+    assert!(matches!(
+        fixture.install("rust/errors").installed,
+        Installed::Edited { .. }
+    ));
+    install::install_with(
+        &fixture.workspace,
+        &fixture.ledger,
+        &fixture.project,
+        &fixture.typed("rust/errors").unwrap(),
+        &AgentHomes::default(),
+        Edits::Forced,
+    )
+    .unwrap();
+
+    assert_eq!(fs::read_to_string(&file).unwrap(), SCOPED);
+    assert_eq!(fixture.standing("rust/errors"), Standing::Current);
+
+    fs::write(&file, "Ours now.\n").unwrap();
+    assert!(matches!(
+        fixture.uninstall("rust/errors"),
+        Removed::Edited { .. }
+    ));
+    assert!(file.is_file());
+    fixture.uninstall_forced("rust/errors");
+
+    assert!(!file.exists());
     assert!(fixture.records().is_empty());
 }
 
