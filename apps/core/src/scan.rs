@@ -11,6 +11,7 @@ use std::fs;
 use std::io;
 use std::path::{Component, Path, PathBuf};
 
+use serde::Serialize;
 use thiserror::Error;
 
 use crate::paths;
@@ -62,9 +63,13 @@ impl Default for Request {
 }
 
 /// A directory a workspace could manage.
-#[derive(Debug, Clone, PartialEq, Eq)]
+///
+/// What it serializes to is a contract, as a status report's is: each field
+/// by its name.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct Found {
     /// Where it is.
+    #[serde(serialize_with = "paths::lossy")]
     pub path: PathBuf,
     /// What `flayer link` would be given for it, run where the request
     /// spells routes from: the route from there, `/` separated, when it is
@@ -83,10 +88,11 @@ pub struct Found {
 }
 
 /// What a scan found.
-#[derive(Debug)]
+#[derive(Debug, Serialize)]
 pub struct Scan {
     /// Where it looked, each once, in the order it was given them: the
     /// workspace root when it was given none.
+    #[serde(serialize_with = "paths::lossy_all")]
     pub roots: Vec<PathBuf>,
     /// How many levels below each root it looked.
     pub depth: usize,
@@ -94,6 +100,10 @@ pub struct Scan {
     pub found: Vec<Found>,
     /// Folders that could not be listed, and markers that would not open.
     /// One unreadable folder must not hide the repositories beside it.
+    ///
+    /// Not serialized: a front end says them as its warnings, which in JSON
+    /// are the envelope's, beside the data rather than in it.
+    #[serde(skip)]
     pub failures: Vec<ScanFailure>,
     /// It stopped at [`MAX_LISTED`] before looking everywhere.
     pub truncated: bool,
@@ -308,3 +318,7 @@ impl ScanFailure {
         }
     }
 }
+
+#[cfg(test)]
+#[path = "scan_test.rs"]
+mod tests;

@@ -115,6 +115,14 @@ pub(crate) fn lossy<S: Serializer>(path: &Path, serializer: S) -> Result<S::Ok, 
     serializer.serialize_str(&path.to_string_lossy())
 }
 
+/// Each of `paths` as [`lossy`] writes one.
+pub(crate) fn lossy_all<S: Serializer>(
+    paths: &[PathBuf],
+    serializer: S,
+) -> Result<S::Ok, S::Error> {
+    serializer.collect_seq(paths.iter().map(|path| path.to_string_lossy()))
+}
+
 #[cfg(test)]
 #[path = "paths_test.rs"]
 mod tests;
