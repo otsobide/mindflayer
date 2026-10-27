@@ -303,8 +303,8 @@ These are easy to break from a single file without noticing.
   and the ledger uses SQLite's `user_version`. A project's marker is
   `mind.toml` up to `MIND_TOML_VERSION`, which only `MindProject::init` still
   writes, for tests of such a project, and `settings.json` from
-  `SETTINGS_VERSION`, which `mind init` writes (`MindProject::init_settings`,
-  its folders filled in by `Directories::with_defaults`); either makes a
+  `SETTINGS_VERSION`, which `mind init` writes (`MindProject::init_asked`,
+  which fills in each folder it was not told about); either makes a
   directory a project (`MindProject::is_marked`), and the settings win when
   both are there. See `DIRECTORIES_VERSION` for how a v1 `mind.toml` is
   still read, and `SETTINGS_VERSION` for why a kind a settings file does not

@@ -642,9 +642,12 @@ unknown front matter keys are.
 "where do this project's skills go" then lives in the file somebody opens
 rather than in a function they have to find. In settings it is also the only
 way to have the folder at all, since a kind they leave out has none (below), so
-`mind init` fills in each kind it was not told about with its default
-(`Directories::with_defaults`), in core, which spells the folders, before
-handing them to `MindProject::init_settings`.
+`mind init` hands core only the folders it was told about, and core gives each
+other kind its default (`MindProject::init_asked`). Which folders a new project
+gets is a rule ([D-06](#d-06-projects-keep-authoring-beside-the-code)), and a
+front end that filled them in itself could disagree with this one;
+`MindProject::init_settings` takes its folders as given, for what needs a
+project that keeps none.
 
 A directory has to be inside the project. An absolute path, or one that climbs
 out with `..`, describes a project whose artifacts are not the project's, and

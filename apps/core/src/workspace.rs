@@ -282,12 +282,13 @@ impl Directories {
     /// the code ([`default_for`](Self::default_for)), and any key this build
     /// does not recognise carried along.
     ///
-    /// What a new project's settings are given to author in. In settings a
-    /// kind left out has no folder at all ([`SETTINGS_VERSION`]), so the
-    /// `skills/` and `rules/` a new project still gets by default (D-06) are
-    /// written down rather than left to a default, here in core so that no
-    /// front end spells the folders.
-    pub fn with_defaults(self) -> Self {
+    /// What a new project's settings are given to author in
+    /// ([`MindProject::init_asked`]). In settings a kind left out has no
+    /// folder at all ([`SETTINGS_VERSION`]), so the `skills/` and `rules/` a
+    /// new project still gets by default (D-06) are written down rather than
+    /// left to a default. Crate-private, so that no front end spells the
+    /// folders or decides when they are filled in.
+    pub(crate) fn with_defaults(self) -> Self {
         self.filled(Directories::default_for)
     }
 
@@ -380,7 +381,7 @@ impl MindProject {
     /// [`MIND_TOML_VERSION`]: the project an older Mindflayer made.
     ///
     /// No front end makes one since `mind init` writes settings
-    /// ([`init_settings`](Self::init_settings)). It stays for what has to
+    /// ([`init_asked`](Self::init_asked)). It stays for what has to
     /// start from such a project, since each one made before is still read
     /// the way it was written: the tests of how it is read, and of what a
     /// copy installed where it authors does.
@@ -442,11 +443,29 @@ impl MindProject {
         ))
     }
 
-    /// Make `root` a project marked by its settings ([`SETTINGS_VERSION`]),
-    /// as `mind init` does: `.mind/settings.json`, a `.mind/.gitignore`
-    /// holding `*` unless the project is [shared](Share::Shared), and the
-    /// folder of each kind `directories` names. A kind it leaves out has no
-    /// folder, and none is made for it.
+    /// Make `root` a project as `mind init` does:
+    /// [`init_settings`](Self::init_settings), with each kind in the folder
+    /// `asked` names, or else at its default beside the code.
+    ///
+    /// The fill is core's, not the front end's, because which folders a new
+    /// project gets is a rule (D-06: `skills/` and `rules/` unless told
+    /// otherwise), and a front end handing `init_settings` only what it was
+    /// asked would make a project with no folder for the rest. That one
+    /// takes its folders as given, for what needs a project that keeps none.
+    pub fn init_asked(
+        root: impl AsRef<Path>,
+        agents: &[Agent],
+        share: Share,
+        asked: &Directories,
+    ) -> Result<(Self, Initialization), WorkspaceError> {
+        Self::init_settings(root, agents, share, &asked.clone().with_defaults())
+    }
+
+    /// Make `root` a project marked by its settings ([`SETTINGS_VERSION`]):
+    /// `.mind/settings.json`, a `.mind/.gitignore` holding `*` unless the
+    /// project is [shared](Share::Shared), and the folder of each kind
+    /// `directories` names. A kind it leaves out has no folder, and none is
+    /// made for it.
     ///
     /// The `.gitignore` is the venv's way of keeping a folder out of git
     /// (D-01): inside the folder it is about, so it needs no repository yet,

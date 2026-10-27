@@ -321,6 +321,22 @@ fn a_new_project_naming_no_directories_makes_no_folder() {
 }
 
 #[test]
+fn a_project_made_as_mind_init_makes_one_gives_each_kind_not_asked_for_its_default() {
+    let dir = TempDir::new().unwrap();
+    let asked = Directories::default().with(Kind::Skill, "docs/skills");
+
+    let (project, _) =
+        MindProject::init_asked(dir.path(), &Agent::ALL, Share::Local, &asked).unwrap();
+
+    assert_eq!(
+        project.settings().unwrap().directories,
+        asked.with(Kind::Rule, "rules")
+    );
+    assert!(dir.path().join("docs").join("skills").is_dir());
+    assert!(dir.path().join("rules").is_dir());
+}
+
+#[test]
 fn a_gitignore_somebody_wrote_is_left_as_they_left_it() {
     let dir = TempDir::new().unwrap();
     fs::create_dir(dir.path().join(MIND_DIR)).unwrap();

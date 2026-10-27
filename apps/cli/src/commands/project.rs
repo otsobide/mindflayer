@@ -21,8 +21,8 @@ use crate::{CliError, Failure, Lookup, Outcome};
 /// `mind init`: the directory made a mind project, marked by its settings,
 /// for `agents`, and shared with the team or kept out of git (D-01).
 ///
-/// The folders it authors in are written down, each asked for or else the
-/// default beside the code, since a kind its settings leave out has none.
+/// Only the folders it was asked for are passed: core fills in the rest,
+/// since which folders a new project gets is a rule (D-06).
 pub(crate) fn init_project(
     directory: &Path,
     agents: &[Agent],
@@ -30,8 +30,8 @@ pub(crate) fn init_project(
     skills: Option<&Path>,
     rules: Option<&Path>,
 ) -> Result<Outcome, Failure> {
-    let directories = asked_directories(skills, rules).with_defaults();
-    let (project, outcome) = MindProject::init_settings(directory, agents, share, &directories)?;
+    let directories = asked_directories(skills, rules);
+    let (project, outcome) = MindProject::init_asked(directory, agents, share, &directories)?;
     Ok(Outcome::plain(initialized(
         "mind project",
         project.name(),
