@@ -560,12 +560,12 @@ fn a_skill_of_the_workspaces_installs_at_either_level() {
 
 #[cfg(unix)]
 #[test]
-fn a_copy_that_cannot_be_hashed_is_installed_and_said() {
+fn a_copy_holding_a_link_is_left_alone_until_an_install_is_forced_to_write_over_it() {
     let dir = workspace_with_own();
     let alpha = dir.path().join("alpha");
     mind(&alpha, &["install", "commit-style"]).unwrap();
-    // A file in the copy swapped for a link to the same bytes, which
-    // installing again leaves where it is and the hash refuses.
+    // A file in the copy swapped for a link to the same bytes, which the
+    // hash refuses.
     let file = copies(&alpha, "commit-style")[0].join("SKILL.md");
     let elsewhere = dir.path().join("SKILL.md");
     fs::rename(&file, &elsewhere).unwrap();
@@ -589,20 +589,19 @@ fn a_copy_that_cannot_be_hashed_is_installed_and_said() {
     assert!(!refused.ok);
     let again = mind(&alpha, &["install", "commit-style", "--force"]).unwrap();
 
-    assert_eq!(again.stdout, "commit-style in alpha was already current\n");
-    assert_eq!(again.stderr.len(), 1, "{:?}", again.stderr);
-    let said = &again.stderr[0];
-    assert!(
-        said.starts_with(
-            "warning: commit-style in alpha was recorded without a hash of what it holds: "
-        ),
-        "{said}"
+    // Written over, as it says, though the link led to the same bytes.
+    assert_eq!(
+        again.stdout,
+        "updated commit-style in alpha, from workspace\n"
     );
-    assert!(
-        said.ends_with("SKILL.md is neither a file nor a folder, so it is not hashed"),
-        "{said}"
-    );
-    assert!(!again.ok);
+    assert!(again.stderr.is_empty(), "{:?}", again.stderr);
+    assert!(again.ok);
+    assert!(!fs::symlink_metadata(&file)
+        .unwrap()
+        .file_type()
+        .is_symlink());
+    let status = mind(&alpha, &["status"]).unwrap().stdout;
+    assert!(status.contains("commit-style  installed"), "{status}");
 }
 
 #[test]

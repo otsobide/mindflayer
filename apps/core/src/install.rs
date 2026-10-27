@@ -1079,12 +1079,23 @@ pub fn install_with(
     // unless the install is forced: wherever the record has it, since an
     // install records its copies afresh, and one it did not write over
     // would be left with no record.
-    if edits == Edits::Kept {
-        let paths = edited(workspace, ledger, project, kind, &name)?;
-        if !paths.is_empty() {
-            return Ok(Installed::Edited { name, paths }.into());
+    let edited = edited(workspace, ledger, project, kind, &name)?;
+    if edits == Edits::Kept && !edited.is_empty() {
+        return Ok(Installed::Edited {
+            name,
+            paths: edited,
         }
+        .into());
     }
+    // Forced, each of them is written over even where it reads as holding
+    // what is offered: a link to the same bytes does to `copy::same`, which
+    // follows it, but it is no copy an install writes, and left in place it
+    // would read as edited still, recorded with no hash.
+    let over: Vec<PathBuf> = copies
+        .iter()
+        .filter(|copy| edited.iter().any(|path| same_place(copy, path)))
+        .cloned()
+        .collect();
 
     // Links are followed only inside where the artifact comes from: the
     // workspace that keeps it, or the shelf folder it was gathered into.
@@ -1142,7 +1153,7 @@ pub fn install_with(
         })
         .filter(|left| fs::symlink_metadata(&left.path).is_ok())
         .collect();
-    let changes = match stage.place(&from, &copies, &within, &left_out_names()) {
+    let changes = match stage.place_over(&from, &copies, &within, &left_out_names(), &over) {
         Ok(changes) => changes,
         // What was cleared on the way goes out with the error rather than
         // with the stage: it was cleared whether or not this copy lands.
@@ -1168,8 +1179,9 @@ pub fn install_with(
     // back is recorded all the same, with no hash, since without a record it
     // would be Foreign for good, and D-04 reads a record with no hash as it
     // reads one from before hashes were kept. That is said, in what this
-    // returns and in the log: a copy left as it was can hold a link somebody
-    // put there, which `copy::same` follows and the hash refuses.
+    // returns and in the log: no copy left as it was holds what the hash
+    // refuses, a link being an edit, written over when forced, but one can
+    // change between landing and being read back.
     let (content_hash, unhashed) = match one_hash(&copies) {
         Ok(hash) => (Some(hash), None),
         Err(reason) => (None, Some(reason)),

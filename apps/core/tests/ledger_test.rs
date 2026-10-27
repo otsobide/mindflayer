@@ -209,16 +209,18 @@ fn installing_again_records_the_hash_of_whatever_is_there_now() {
 
 #[cfg(unix)]
 #[test]
-fn a_copy_that_cannot_be_hashed_is_recorded_without_a_hash_and_said() {
+fn a_forced_install_writes_over_a_copy_holding_a_link_and_records_its_hash() {
     let (dir, workspace, project, ledger) = three_places();
     install(&workspace, &ledger, &project, "notes");
-    // A file in the copy swapped for a link to the same bytes, which
-    // `copy::same` follows, so installing again leaves the copy as it is.
-    let file = project
-        .directory_for(Kind::Skill)
+    let hashed = ledger
+        .installation("collapse", Kind::Skill, "notes")
         .unwrap()
-        .join("notes")
-        .join("SKILL.md");
+        .unwrap()
+        .content_hash;
+    // A file in the copy swapped for a link to the same bytes, which
+    // `copy::same` follows and the hash refuses.
+    let copy = project.directory_for(Kind::Skill).unwrap().join("notes");
+    let file = copy.join("SKILL.md");
     let elsewhere = dir.path().join("SKILL.md");
     std::fs::rename(&file, &elsewhere).unwrap();
     std::os::unix::fs::symlink(&elsewhere, &file).unwrap();
@@ -248,22 +250,23 @@ fn a_copy_that_cannot_be_hashed_is_recorded_without_a_hash_and_said() {
     .unwrap()
     .installed;
 
-    assert!(matches!(done, Installed::Unchanged { .. }), "{done:?}");
-    let reason = done.unhashed().unwrap();
-    assert!(reason.contains("neither a file nor a folder"), "{reason}");
+    // Written over, though it held the same bytes: left as it was, it
+    // would be recorded with no hash and read as edited still.
+    assert!(matches!(done, Installed::Updated { .. }), "{done:?}");
+    assert_eq!(done.unhashed(), None);
+    assert!(!std::fs::symlink_metadata(&file)
+        .unwrap()
+        .file_type()
+        .is_symlink());
     let recorded = ledger
         .installation("collapse", Kind::Skill, "notes")
         .unwrap()
         .unwrap();
-    assert_eq!(recorded.content_hash, None);
-    let logged = &ledger.history(1).unwrap()[0];
-    assert_eq!(logged.outcome, "ok");
-    assert!(
-        logged
-            .detail
-            .as_deref()
-            .is_some_and(|detail| detail.contains("recorded without a hash")),
-        "{logged:?}"
+    assert_eq!(recorded.content_hash, hashed);
+    assert_eq!(recorded.content_hash, Some(hash::tree(&copy).unwrap()));
+    assert_eq!(
+        install::standings(&workspace, &ledger, &project, Kind::Skill).unwrap(),
+        [(String::from("notes"), install::Standing::Current)]
     );
 }
 

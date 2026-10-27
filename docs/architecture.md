@@ -1720,11 +1720,13 @@ what each holds, since its section and its file are not the same bytes. An insta
 written; one that cannot be read back is recorded with none rather than not
 at all, since without a record it would be Foreign for good. That is a
 `warning:` and a non-zero exit, and the log's entry says why, rather than a
-plain success: a copy an install left as it was can hold a link somebody
-put there, which `copy::same` follows and the hash refuses, and a record
-with no hash is read as one from before hashes were kept. Only a forced
-install leaves one so: a link where no install writes one is an edit, and an
-install that is not forced refuses it.
+plain success: a record with no hash is read as one from before hashes were
+kept. No install leaves a copy it can tell holds what the hash refuses. A
+link where no install writes one is an edit, which an install that is not
+forced refuses and a forced one writes over, even when it points at the
+same bytes, which `copy::same` follows it to (`Stage::place_over`): left as
+it was, the copy would be recorded with no hash and read as edited still.
+What is left is a copy changed between landing and being read back.
 
 ## Installing
 
