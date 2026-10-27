@@ -312,6 +312,9 @@ mind agents [add|remove] <AGENT>... [--yes]
 mind share local|shared [--edit-tracked] [--yes]
                            # keep installs to this checkout, or leave them
                            # for the team to commit; without --yes, the same
+mind migrate [--agents AGENTS] [--local|--shared] [--yes]
+                           # move a project an older Mindflayer made to
+                           # settings, and its installs where its agents read
 
 flayer                     # the TUI: everything below, a key each
 flayer init [PATH] [--skills DIR] [--rules DIR]
@@ -347,6 +350,8 @@ flayer agents|share -p PROJECT ...
 flayer migrate --library [--yes]
                            # move its own skills and rules into its library;
                            # without --yes, say what would move
+flayer migrate -p PROJECT|--all-projects [--agents AGENTS] [--local] [--yes]
+                           # mind migrate, for one of its projects or every one
 
 mind flayer <cmd>          # the long way round; `flayer <cmd>` is the shortcut
 mind ls / flayer ls        # alias for list; `flayer gather ls` for gather list
@@ -960,7 +965,11 @@ outside the workspace's tree, or with a nearer workspace above it) runs `mind
 rather than on the one the project would find by itself. `flayer -W <dir>` opens the screen on the
 workspace it names, and every line it runs uses that one; so does an
 activated workspace. The header says which it is showing and why: `named
-with -W`, `activated`, `found above`, or `default workspace`.
+with -W`, `activated`, `found above`, or `default workspace`. It also counts
+the projects an older Mindflayer made, still marked by a `mind.toml`, and
+names the command that moves them, `flayer migrate --all-projects`, or `mind
+migrate` for a project on its own
+([upgrading](#a-project-made-before-settings)).
 
 `m`, or `flayer minds` straight from the shell, opens a list of every
 project the workspace links and every repository under it that it does not,
@@ -1050,7 +1059,8 @@ project with it, so that every clone gets the same.
 A project an older Mindflayer made is marked by `.mind/mind.toml` instead,
 which names the same folders in a table and was committed with the project.
 Mindflayer still reads it the way it was written, `mind init` leaves it as it
-is, and when a project holds both it reads `settings.json`.
+is, and when a project holds both it reads `settings.json`. `mind migrate`
+moves it to settings when you ask ([upgrading](#a-project-made-before-settings)).
 
 A project is listed from the folders its agents read as well (one an older
 Mindflayer made, from the one folder its `mind.toml` names):
@@ -1408,6 +1418,80 @@ from there stays installed and recorded, so `flayer uninstall` still takes it
 out, but nothing offers it to `flayer install` any more. A move that fails puts back what had moved, and leaves
 `flayer.toml` as it was. To undo a migration that worked, put `flayer.toml.v2`
 in place of `flayer.toml` and move the artifacts back.
+
+### A project made before settings
+
+A project an older Mindflayer made is marked by `.mind/mind.toml`, which
+names the folders it authors in and nothing else: no agents, so whatever was
+installed into it went into its `skills/` beside its own, and no share mode,
+since its `.mind` was committed by design. It keeps working that way until
+you move it to settings. On its own the command changes nothing and says
+what `--yes` would do:
+
+```
+$ mind migrate
+would write .mind/settings.json for collapse: agents claude,codex,opencode, share shared
+would move .mind/mind.toml to .mind/tmp/mind.toml.v2, as it is
+would copy commit-style to .agents/skills/commit-style, for codex and opencode
+would copy commit-style to .claude/skills/commit-style, for claude
+would remove commit-style from skills/commit-style
+would leave skills/deploy where it is: the project's own
+nothing changed: add --yes to go ahead
+$ mind migrate --yes
+wrote .mind/settings.json for collapse: agents claude,codex,opencode, share shared
+moved .mind/mind.toml to .mind/tmp/mind.toml.v2, as it was
+copied commit-style to .agents/skills/commit-style, for codex and opencode
+copied commit-style to .claude/skills/commit-style, for claude
+removed commit-style from skills/commit-style
+left skills/deploy where it is: the project's own
+```
+
+The settings keep the name and the folders `mind.toml` gave, name every
+agent unless `--agents` says fewer, and leave the project shared, as it was
+committed, unless `--local`. `mind.toml` goes to `.mind/tmp/mind.toml.v2`,
+which the folder's own `.gitignore` keeps out of git even in a shared
+project. What the workspace installed is copied where each agent reads, the
+same bytes, and taken out of `skills/`, but only while it still holds what
+was installed: a copy you edited stays where it is, becomes yours and is
+said, as what you wrote yourself is. A copy already where an agent reads,
+in a project whose `mind.toml` kept its skills in `.claude/skills`, stays
+where it is, and somebody's skill where a new copy would go is never
+written over. Run again, it has nothing to do:
+
+```
+$ mind migrate --yes
+nothing to migrate: collapse is marked by its settings already
+```
+
+`flayer migrate -p tanukeys` does the same from the workspace, and `flayer
+migrate --all-projects` does it for every project the workspace links that a
+`mind.toml` marks, each on its own: without `--yes` it lists every one and
+writes nothing, and with it one that cannot be moved is said and the others
+go ahead. `flayer migrate` alone says which of the three to ask for, and
+[the TUI](#the-tui)'s header counts the projects still marked by a
+`mind.toml`, naming the command.
+
+`--local` keeps `.mind` and the copies out of git, as `mind init` does for
+a new project. A `.gitignore` keeps out only what git does not track yet,
+though, and a `.mind` that was committed stays tracked, so the command says
+how to stop that and leaves it to you:
+
+```
+$ flayer migrate -p tanukeys --local --agents claude --yes
+wrote .mind/settings.json for tanukeys: agents claude, share local
+moved .mind/mind.toml to .mind/tmp/mind.toml.v2, as it was
+wrote .mind/.gitignore, keeping .mind out of git
+copied commit-style to .claude/skills/commit-style, for claude, kept out of git
+removed commit-style from skills/commit-style
+hint: git tracks /home/you/Projects/tanukeys/.mind, and a .gitignore keeps out only what git does not track; `git rm -r --cached .mind` in /home/you/Projects/tanukeys stops that, and leaves the files where they are
+```
+
+A project is moved whole or not at all: one that something stops part way,
+a folder that cannot be written, say, has what was done put back, and is
+still marked by its `mind.toml`. Nothing is moved while there is a reason
+not to, every reason said at once: a `mind.toml.v2` an earlier migration
+kept, or a project from the first Mindflayer, which kept its skills inside
+`.mind`, where settings cannot name them.
 
 ## Roadmap
 
