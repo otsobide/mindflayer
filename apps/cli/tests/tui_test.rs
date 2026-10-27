@@ -700,6 +700,43 @@ fn the_install_screen_opens_inside_the_tui_and_applies_from_there() {
 }
 
 #[test]
+fn the_install_screen_inside_the_tui_installs_where_each_agent_of_a_v3_project_reads() {
+    let (dir, _workspace, _ledger) = shelved(&[], &["deploy"]);
+    let root = dir.path().join("alpha");
+    fs::create_dir_all(root.join(MIND_DIR)).unwrap();
+    fs::write(
+        root.join(MIND_DIR).join("settings.json"),
+        r#"{
+  "version": 3,
+  "id": "0123456789abcdef0123456789abcdef",
+  "name": "alpha",
+  "agents": ["claude", "codex", "opencode"],
+  "share": "shared",
+  "directories": {}
+}
+"#,
+    )
+    .unwrap();
+    flayer(dir.path(), &["link", "alpha"]).unwrap();
+    let mut app = tui_in(dir.path());
+
+    press_and_run(&mut app, KeyCode::Char('i'));
+    assert!(tui_drawn(&app).contains("Skills in alpha"));
+    press_key(&mut app, KeyCode::Right);
+    press_key(&mut app, KeyCode::Char(' '));
+    press_key(&mut app, KeyCode::Char('a'));
+    let task = press_and_run(&mut app, KeyCode::Char('y'));
+
+    assert_eq!(task, Some(Task::ApplyInstall));
+    let claude = fs::read(root.join(".claude/skills/deploy/SKILL.md")).unwrap();
+    let agents = fs::read(root.join(".agents/skills/deploy/SKILL.md")).unwrap();
+    assert_eq!(claude, agents);
+    assert!(app
+        .transcript()
+        .contains("$ flayer install\nalpha: installed deploy"));
+}
+
+#[test]
 fn the_install_screen_scrubs_the_ledger_when_it_applies_and_not_when_it_opens() {
     let (dir, workspace, _ledger) = shelved(&["collapse"], &["deploy"]);
     let database = rusqlite::Connection::open(workspace.ledger_path()).unwrap();
