@@ -966,13 +966,20 @@ fn unfit(kind: Kind, from: &Path, name: &str) -> Result<Vec<ValidationIssue>, In
 /// says Mindflayer wrote: a folder of that name in a target the record does
 /// not name is somebody's, and stays. Anything else is reported and left
 /// where it is.
+///
+/// `homes` are the agents' own folders, which the front end decides as it
+/// does for [`install`]: taking one thing out can change how the rest reach
+/// the agents.
 pub fn uninstall(
     workspace: &FlayerWorkspace,
     ledger: &Ledger,
     project: &MindProject,
     kind: Kind,
     name: &str,
+    homes: &AgentHomes,
 ) -> Result<Removed, InstallError> {
+    // Unused until a kind needs them on the way out.
+    let _ = homes;
     if !is_folder_name(name) {
         return Err(InstallError::UnsafeName {
             name: name.to_owned(),

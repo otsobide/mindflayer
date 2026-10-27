@@ -195,7 +195,15 @@ fn uninstalling_takes_it_back_out() {
     )
     .unwrap();
 
-    let outcome = install::uninstall(&workspace, &ledger, &project, Kind::Skill, "deploy").unwrap();
+    let outcome = install::uninstall(
+        &workspace,
+        &ledger,
+        &project,
+        Kind::Skill,
+        "deploy",
+        &AgentHomes::default(),
+    )
+    .unwrap();
 
     assert!(matches!(outcome, Removed::Removed { .. }), "{outcome:?}");
     assert!(!installed_at(&project, "deploy").exists());
@@ -468,7 +476,15 @@ fn installing_into_every_agents_folder_again_changes_nothing_and_uninstalling_ta
     let surveyed = install::survey(&workspace, &ledger, &project, Kind::Skill).unwrap();
     assert_eq!(surveyed[0].standing, Standing::Installed);
 
-    let removed = install::uninstall(&workspace, &ledger, &project, Kind::Skill, "deploy").unwrap();
+    let removed = install::uninstall(
+        &workspace,
+        &ledger,
+        &project,
+        Kind::Skill,
+        "deploy",
+        &AgentHomes::default(),
+    )
+    .unwrap();
 
     let [agents, claude] = agents_copies(&project, "deploy");
     assert_eq!(
@@ -547,8 +563,15 @@ fn somebodys_skill_in_either_agents_folder_refuses_the_install_and_leaves_the_ot
             .unwrap()
             .is_none());
         // Nor is it taken out, from either folder.
-        let removed =
-            install::uninstall(&workspace, &ledger, &project, Kind::Skill, "deploy").unwrap();
+        let removed = install::uninstall(
+            &workspace,
+            &ledger,
+            &project,
+            Kind::Skill,
+            "deploy",
+            &AgentHomes::default(),
+        )
+        .unwrap();
         assert!(matches!(removed, Removed::Foreign { .. }), "{removed:?}");
         assert!(copies[held].join("SKILL.md").is_file());
     }
@@ -569,7 +592,15 @@ fn a_skill_somebody_writes_beside_an_installed_one_in_a_folder_it_was_not_instal
         .unwrap();
 
     let surveyed = install::survey(&workspace, &ledger, &project, Kind::Skill).unwrap();
-    let removed = install::uninstall(&workspace, &ledger, &project, Kind::Skill, "deploy").unwrap();
+    let removed = install::uninstall(
+        &workspace,
+        &ledger,
+        &project,
+        Kind::Skill,
+        "deploy",
+        &AgentHomes::default(),
+    )
+    .unwrap();
 
     assert_eq!(surveyed[0].standing, Standing::Foreign);
     // Only what the installation wrote goes.
@@ -645,8 +676,15 @@ fn a_record_naming_a_copy_outside_the_project_is_refused_rather_than_removed() {
         )
         .unwrap();
 
-    let refused =
-        install::uninstall(&workspace, &ledger, &project, Kind::Skill, "deploy").unwrap_err();
+    let refused = install::uninstall(
+        &workspace,
+        &ledger,
+        &project,
+        Kind::Skill,
+        "deploy",
+        &AgentHomes::default(),
+    )
+    .unwrap_err();
 
     assert!(
         matches!(refused, install::InstallError::Recorded { .. }),
@@ -704,7 +742,15 @@ fn uninstalling_does_not_delete_a_hand_written_skill() {
     let (_dir, workspace, project, ledger) = ready(&["deploy"]);
     write_by_hand(&project, "deploy", "Written by a person");
 
-    let outcome = install::uninstall(&workspace, &ledger, &project, Kind::Skill, "deploy").unwrap();
+    let outcome = install::uninstall(
+        &workspace,
+        &ledger,
+        &project,
+        Kind::Skill,
+        "deploy",
+        &AgentHomes::default(),
+    )
+    .unwrap();
 
     assert!(matches!(outcome, Removed::Foreign { .. }), "{outcome:?}");
     assert!(
@@ -717,7 +763,15 @@ fn uninstalling_does_not_delete_a_hand_written_skill() {
 fn uninstalling_something_that_is_not_there_says_so() {
     let (_dir, workspace, project, ledger) = ready(&["deploy"]);
 
-    let outcome = install::uninstall(&workspace, &ledger, &project, Kind::Skill, "deploy").unwrap();
+    let outcome = install::uninstall(
+        &workspace,
+        &ledger,
+        &project,
+        Kind::Skill,
+        "deploy",
+        &AgentHomes::default(),
+    )
+    .unwrap();
 
     assert!(matches!(outcome, Removed::Absent { .. }), "{outcome:?}");
 }
@@ -766,7 +820,15 @@ fn the_log_records_both_directions() {
         &AgentHomes::default(),
     )
     .unwrap();
-    install::uninstall(&workspace, &ledger, &project, Kind::Skill, "deploy").unwrap();
+    install::uninstall(
+        &workspace,
+        &ledger,
+        &project,
+        Kind::Skill,
+        "deploy",
+        &AgentHomes::default(),
+    )
+    .unwrap();
 
     let history = ledger.history(10).unwrap();
     let actions: Vec<&str> = history.iter().map(|entry| entry.action.as_str()).collect();
@@ -1625,7 +1687,15 @@ fn a_local_install_keeps_every_copy_out_of_git_and_its_uninstall_takes_them_back
         Some(mindflayer_core::Excluded::Unchanged { file: file.clone() })
     );
 
-    let removed = install::uninstall(&workspace, &ledger, &project, Kind::Skill, "deploy").unwrap();
+    let removed = install::uninstall(
+        &workspace,
+        &ledger,
+        &project,
+        Kind::Skill,
+        "deploy",
+        &AgentHomes::default(),
+    )
+    .unwrap();
 
     assert!(
         matches!(
@@ -1649,7 +1719,15 @@ fn a_shared_install_leaves_the_exclude_file_alone() {
     let before = fs::read(&file).unwrap();
 
     let done = install_from_shelf(&workspace, &ledger, &project, "deploy");
-    install::uninstall(&workspace, &ledger, &project, Kind::Skill, "deploy").unwrap();
+    install::uninstall(
+        &workspace,
+        &ledger,
+        &project,
+        Kind::Skill,
+        "deploy",
+        &AgentHomes::default(),
+    )
+    .unwrap();
 
     assert_eq!(done.excluded, None);
     assert_eq!(fs::read(&file).unwrap(), before);

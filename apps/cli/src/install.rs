@@ -313,8 +313,14 @@ pub fn apply(
             }
             Pending::Remove => {
                 let name = entry.candidate.name();
-                let taken = match install::uninstall(workspace, ledger, project, Kind::Skill, name)
-                {
+                let taken = match install::uninstall(
+                    workspace,
+                    ledger,
+                    project,
+                    Kind::Skill,
+                    name,
+                    homes,
+                ) {
                     Err(install::InstallError::Ledger(error)) => return Err(error.into()),
                     Err(error) => {
                         stderr.push(format!("warning: {}: {error}", project.name()));

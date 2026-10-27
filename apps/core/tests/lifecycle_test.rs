@@ -664,8 +664,15 @@ fn removing_the_copy_in_a_folder_the_project_authors_in_leaves_the_others_instal
     );
 
     // And the copy left can still be taken out, without the project's own.
-    let uninstalled =
-        install::uninstall(&workspace, &ledger, &project, Kind::Skill, "deploy").unwrap();
+    let uninstalled = install::uninstall(
+        &workspace,
+        &ledger,
+        &project,
+        Kind::Skill,
+        "deploy",
+        &AgentHomes::default(),
+    )
+    .unwrap();
     assert!(
         matches!(uninstalled, install::Removed::Removed { .. }),
         "{uninstalled:?}"
@@ -731,8 +738,15 @@ fn editing_or_renaming_the_copy_in_a_folder_the_project_authors_in_keeps_the_oth
     // Nothing a shared project installs is kept out of git.
     assert!(excluded(&project).is_empty());
     assert!(dir.path().join("collapse/.agents/skills/audit").is_dir());
-    let uninstalled =
-        install::uninstall(&workspace, &ledger, &project, Kind::Skill, "audit").unwrap();
+    let uninstalled = install::uninstall(
+        &workspace,
+        &ledger,
+        &project,
+        Kind::Skill,
+        "audit",
+        &AgentHomes::default(),
+    )
+    .unwrap();
     assert!(
         matches!(uninstalled, install::Removed::Removed { .. }),
         "{uninstalled:?}"
@@ -865,7 +879,15 @@ fn an_edit_that_changes_an_installed_copy_drops_its_record() {
         Standing::Foreign
     );
     assert_eq!(
-        install::uninstall(&workspace, &ledger, &project, Kind::Skill, "deploy").unwrap(),
+        install::uninstall(
+            &workspace,
+            &ledger,
+            &project,
+            Kind::Skill,
+            "deploy",
+            &AgentHomes::default()
+        )
+        .unwrap(),
         install::Removed::Foreign {
             name: String::from("deploy"),
             path: project.root().join("skills").join("deploy"),
