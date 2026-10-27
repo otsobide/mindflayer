@@ -3,18 +3,19 @@
 Guidance for coding agents working in this repository.
 
 Mindflayer manages the skills and rules coding agents read, the way git manages
-code. A **mind project** (`.mind/mind.toml`) holds artifacts beside its code; a
-**flayer workspace** (`.mindflayer/flayer.toml`) links mind projects, holds
-artifacts of its own, gathers skills from git onto a shelf and installs them
-into projects. `README.md` is the user-facing surface. `docs/architecture.md`
-records why each mechanism is the way it is: read the section for whatever you
-are about to change before changing it, and keep it true afterwards. Its
-"Decisions" section holds what the owner already chose for the roadmap, and the
-one choice still pending: read it before changing a format, installing, MCP,
-credentials or the server, and carry a decision out rather than reopen it.
-`docs/agents.md` records where Claude Code, Codex and OpenCode read skills and
-rules, each fact verified on the binary or docs-only with a fallback: an agent
-path in code cites it, and a change that disagrees with it starts there.
+code. A **mind project** (`.mind/settings.json`) holds artifacts beside its
+code; a **flayer workspace** (`.mindflayer/flayer.toml`) links mind projects,
+holds artifacts of its own, gathers skills from git onto a shelf and installs
+them into projects. `README.md` is the user-facing surface.
+`docs/architecture.md` records why each mechanism is the way it is: read the
+section for whatever you are about to change before changing it, and keep it
+true afterwards. Its "Decisions" section holds what the owner already chose for
+the roadmap, and the one choice still pending: read it before changing a
+format, installing, MCP, credentials or the server, and carry a decision out
+rather than reopen it. `docs/agents.md` records where Claude Code, Codex and
+OpenCode read skills and rules, each fact verified on the binary or docs-only
+with a fallback: an agent path in code cites it, and a change that disagrees
+with it starts there.
 
 ## Commands
 
@@ -300,14 +301,16 @@ These are easy to break from a single file without noticing.
   (`MIND_FORMAT_VERSION` for a project's, `FLAYER_FORMAT_VERSION` for
   `flayer.toml`, so bumping one never makes older builds refuse the other)
   and the ledger uses SQLite's `user_version`. A project's marker is
-  `mind.toml` up to `MIND_TOML_VERSION`, which `mind init` still writes, and
-  `settings.json` from `SETTINGS_VERSION`; either makes a directory a
-  project (`MindProject::is_marked`), and the settings win when both are
-  there. See `DIRECTORIES_VERSION` for how a v1 `mind.toml` is still read,
-  and `SETTINGS_VERSION` for why a kind a settings file does not name has no
-  folder (`directory_for` is `None`). Anything from a newer version is
-  refused. A format change must keep reading old files the way they were
-  written.
+  `mind.toml` up to `MIND_TOML_VERSION`, which only `MindProject::init` still
+  writes, for tests of such a project, and `settings.json` from
+  `SETTINGS_VERSION`, which `mind init` writes (`MindProject::init_settings`,
+  its folders filled in by `Directories::with_defaults`); either makes a
+  directory a project (`MindProject::is_marked`), and the settings win when
+  both are there. See `DIRECTORIES_VERSION` for how a v1 `mind.toml` is
+  still read, and `SETTINGS_VERSION` for why a kind a settings file does not
+  name has no folder (`directory_for` is `None`). Anything from a newer
+  version is refused. A format change must keep reading old files the way
+  they were written.
   - A ledger schema step is one more block in `Ledger::migrate`, which takes
     the write lock, copies the file to `mindflayer.db.v<old>.bak`
     (`Ledger::back_up`) and runs every step in one transaction. A step fills
@@ -432,7 +435,13 @@ These are easy to break from a single file without noticing.
   `HOME` (`USERPROFILE` on Windows) to a temp dir. Not to empty: the standard
   library then falls back to the account's real home. Keep it that way.
 - Git sources are built in-process with `gix` (`common::repository`): no
-  network and no `git` binary.
+  network and no `git` binary. A CLI fixture's project is a repository given
+  `mind init` (`common::new_project`), so a local install keeps its copies out
+  of git rather than saying on stderr that nothing does, and where an install
+  puts its copies is asked of core (`common::copies`). A test about what a
+  project an older Mindflayer made does, a copy installed in the folder it
+  authors in, makes one with `common::older_project`. What git would list is
+  asked of gix too (`common::untracked`).
 - Tests that run a shell (`apps/cli/tests/shells_test.rs`, Linux only) start
   it with no startup file and an environment holding only a `PATH`, a
   temporary `HOME` and what the test sets, so no `MINDFLAYER_*` variable or
