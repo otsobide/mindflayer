@@ -808,7 +808,9 @@ is read from the one folder its marker names, exactly as before.
   `warning:` and a non-zero exit, like anything else discovery could not make
   one thing of. `validate` counts them apart from unreadable files
   (`DiscoveryFailure::is_unreadable`). A copy that cannot be hashed is said
-  too (`Uncompared`), and is not taken to differ.
+  too (`Uncompared`), and is not taken to differ. Comparing reads every file
+  of each copy compared, on every listing, where discovery otherwise reads
+  only `SKILL.md` ([an open question](#open-questions)).
 - **Each copy is validated.** `Artifact::validate` judges every copy on its
   own file and folder, adding what another has to what the first has, since
   an agent loads the copy in the folder it reads: one copy filed under a
@@ -3841,6 +3843,19 @@ leak into the lifecycle code. Unblocks #33, #45, #62, #93, #94 and #95.
   every folder `Agent::reads` names would list the rest as well, from folders
   no install of Mindflayer's reaches. Doctor (#96) is the other place a skill
   only there could be reported.
+- **Listing reads every copy it compares.** Copies of one name in a v3
+  project's agents' folders are compared on every listing by `hash::tree`,
+  which reads each of their files whole: once #34 writes a copy in each
+  target, that is every installed skill, on every `list`, `show`,
+  `validate` and refresh of the minds screen. A skill is a few small files,
+  so it is accepted for now. The cheaper ways each miss something:
+  `copy::same` stops at the first difference but follows links, which a copy
+  here may hold to anything; comparing sizes first saves nothing when the
+  copies are alike, which after an install they are; and the hash an
+  installation records is the ledger's, which discovery does not open, and
+  a foreign copy has none. If a skill's assets make a listing slow, that
+  recorded hash, compared where `Catalog::with_records` already reads the
+  ledger, is where to start.
 - **A minds screen that lists what it cannot change.** The TUI's project rows
   come from the same discovery, so a v3 project's row lists the skills in its
   agents' folders as well. A row is one name, so a change aimed at it reaches
