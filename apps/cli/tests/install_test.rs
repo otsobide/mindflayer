@@ -1081,3 +1081,57 @@ fn a_rule_reaching_claude_alone_is_said_of_its_project_when_applied() {
     );
     assert!(!outcome.ok);
 }
+
+#[test]
+fn what_is_true_of_a_projects_rules_as_a_whole_is_said_once_when_several_are_applied() {
+    let (dir, workspace, ledger) = with_a_rule(&["collapse"]);
+    let collapse = dir.path().join("collapse");
+    let rules = own_directory_for(dir.path(), Kind::Rule).join("review");
+    fs::create_dir_all(&rules).unwrap();
+    fs::write(rules.join("tone.md"), "# Say what a change does first\n").unwrap();
+    fs::write(collapse.join("AGENTS.md"), "# Working here\n").unwrap();
+    indexed(&collapse);
+    let tracked = format!(
+        "warning: collapse: {}: git tracks it, and the project is local without edit_tracked, \
+         so no rules are written there, and codex and opencode read none of them",
+        collapse.join("AGENTS.md").display()
+    );
+    let mut screen = screen_for(&workspace, &ledger);
+    press(
+        &mut screen,
+        &[
+            KeyCode::Tab,
+            KeyCode::Right,
+            KeyCode::Char(' '),
+            KeyCode::Down,
+            KeyCode::Char(' '),
+        ],
+    );
+    assert_eq!(screen.counts(), (2, 0));
+
+    let outcome =
+        install_screen::apply(&workspace, &ledger, &screen, &AgentHomes::default()).unwrap();
+
+    assert_eq!(
+        outcome.stdout,
+        "collapse: installed rule git/commits\ncollapse: installed rule review/tone\n\n\
+         2 installed, 0 removed\n"
+    );
+    assert_eq!(outcome.stderr, std::slice::from_ref(&tracked));
+    assert!(!outcome.ok);
+
+    let mut again = screen_for(&workspace, &ledger);
+    press(
+        &mut again,
+        &[KeyCode::Tab, KeyCode::Right, KeyCode::Char(' ')],
+    );
+    let outcome =
+        install_screen::apply(&workspace, &ledger, &again, &AgentHomes::default()).unwrap();
+
+    // One rule is left, which codex and opencode still miss.
+    assert_eq!(
+        outcome.stdout,
+        "collapse: removed rule git/commits\n\n0 installed, 1 removed\n"
+    );
+    assert_eq!(outcome.stderr, [tracked]);
+}

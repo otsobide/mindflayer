@@ -308,7 +308,7 @@ pub fn apply(
                 if let Some(rendered) = &done.rendered {
                     let (warned, said) =
                         render_said(rendered, entry.candidate.name(), Some(project.name()));
-                    stderr.extend(warned);
+                    once(&mut stderr, warned);
                     if let Some(reason) = &rendered.still_excluded {
                         stderr.push(format!(
                             "warning: {}: the exclude file still keeps out of git a file that \
@@ -378,7 +378,7 @@ pub fn apply(
                                 entry.candidate.name(),
                                 Some(project.name()),
                             );
-                            stderr.extend(warned);
+                            once(&mut stderr, warned);
                             for note in said {
                                 if !notes.contains(&note) {
                                     notes.push(note);
@@ -410,4 +410,17 @@ pub fn apply(
     let ok = stderr.is_empty();
     stderr.extend(notes);
     Ok(Outcome { stdout, stderr, ok })
+}
+
+/// Add each of `warned`, what a render of a project's rules said, to
+/// `stderr` unless it is there already. Every rule ticked in one project
+/// renders all of its rules, so what is true of them as a whole, an
+/// `AGENTS.md` git tracks say, would otherwise be said once a rule. What is
+/// said of one rule names it, and so is said of each.
+fn once(stderr: &mut Vec<String>, warned: Vec<String>) {
+    for warning in warned {
+        if !stderr.contains(&warning) {
+            stderr.push(warning);
+        }
+    }
 }
