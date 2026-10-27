@@ -252,6 +252,26 @@ fn a_link_in_place_of_a_file_mindflayer_made_is_emptied_not_taken_away() {
 
 #[cfg(unix)]
 #[test]
+fn a_link_out_of_the_project_is_refused_and_what_it_points_at_left_alone() {
+    let fixture = fixture();
+    let outside = TempDir::new().unwrap();
+    let theirs = outside.path().join("AGENTS.md");
+    fs::write(&theirs, TEAM).unwrap();
+    std::os::unix::fs::symlink(&theirs, fixture.agents_md()).unwrap();
+    let rule = fixture.rule("a", "Rule a.\n");
+
+    match fixture.render(&[&rule], false) {
+        Err(AgentsMdError::LinkedOut { file, target }) => {
+            assert_eq!(file, fixture.agents_md());
+            assert_eq!(target, fs::canonicalize(&theirs).unwrap());
+        }
+        other => panic!("{other:?}"),
+    }
+    assert_eq!(fs::read_to_string(&theirs).unwrap(), TEAM);
+}
+
+#[cfg(unix)]
+#[test]
 fn a_link_to_nothing_in_place_of_the_file_is_never_written_through() {
     let fixture = fixture();
     std::os::unix::fs::symlink("NOTES.md", fixture.agents_md()).unwrap();

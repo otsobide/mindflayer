@@ -194,7 +194,9 @@ impl Section {
 /// other one project's failure.
 ///
 /// So is a folder whose `AGENTS.md` the agents of other projects read too
-/// ([`placed`]): `workspace` is the one whose links say where those are.
+/// ([`placed`]): `workspace` is the one whose links say where those are. A
+/// file that is a link is written through to what it points at, as a marker
+/// shared by a link is, but only inside the project ([`linked_inside`]).
 ///
 /// Takes no lock: the caller holds the workspace's, as one calling
 /// [`crate::config_entry::ConfigFile`] does, and the lock is not
@@ -207,6 +209,7 @@ pub fn render<'a>(
 ) -> Result<Rendered, AgentsMdError> {
     placed(workspace, project.root())?;
     let file = project.root().join(FILE);
+    linked_inside(project.root(), &file)?;
     let mut rules: Vec<&Artifact> = rules.into_iter().collect();
     rules.sort_by(|a, b| report_order(a, b));
     let mut sections = Vec::new();
@@ -340,6 +343,39 @@ fn is_below(path: &Path, folder: &Path) -> bool {
             .strip_prefix(&folder)
             .is_ok_and(|route| route.components().next().is_some()),
         _ => false,
+    }
+}
+
+/// Refuse an `AGENTS.md` that is a link to a file outside `project`.
+///
+/// One that is a link to a file in the project, `AGENTS.md` to `CLAUDE.md`
+/// as some teams keep the two, is written through, as [`replace_bytes`]
+/// follows a link to the file it names rather than replacing the link. One
+/// leading out is not: a repository can hold a link to the user's own
+/// `~/.codex/AGENTS.md`, which every project would then be given this one's
+/// rules through. Refused rather than replaced by a file of the project's
+/// own, which would undo what somebody linked on purpose. A link to nothing
+/// is let by: there is nothing to read, and `create_new` makes nothing
+/// through it.
+fn linked_inside(project: &Path, file: &Path) -> Result<(), AgentsMdError> {
+    let is_link = fs::symlink_metadata(file).is_ok_and(|metadata| metadata.is_symlink());
+    if !is_link {
+        return Ok(());
+    }
+    let Ok(target) = fs::canonicalize(file) else {
+        return Ok(());
+    };
+    let root = fs::canonicalize(project).map_err(|source| AgentsMdError::Read {
+        path: project.to_path_buf(),
+        source,
+    })?;
+    if target.starts_with(&root) {
+        Ok(())
+    } else {
+        Err(AgentsMdError::LinkedOut {
+            file: file.to_path_buf(),
+            target,
+        })
     }
 }
 
@@ -697,6 +733,11 @@ pub enum AgentsMdError {
         folder: PathBuf,
         projects: Vec<PathBuf>,
     },
+    #[error(
+        "{file}: a link to {target}, outside the project, so it is not written through: \
+         what it points at is not the project's to change"
+    )]
+    LinkedOut { file: PathBuf, target: PathBuf },
     #[error(transparent)]
     Rule(#[from] ArtifactError),
     #[error("{path}: cannot be read: {source}")]
