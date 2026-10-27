@@ -184,3 +184,17 @@ fn front_matter_is_read_through_a_byte_order_mark_and_crlf() {
     assert_eq!(manifest.paths.stated(), Some(&vec![String::from("src/**")]));
     assert_eq!(body, "Body\r\n");
 }
+
+#[test]
+fn a_rule_is_scoped_only_by_paths_written_as_they_are_read() {
+    let scoped = |source: &str| RuleManifest::read(source).0.is_scoped();
+
+    assert!(scoped("---\npaths:\n  - \"src/**/*.rs\"\n---\nBody\n"));
+    assert!(scoped("---\npaths: src/**/*.rs\n---\nBody\n"));
+    // Nothing stated, or stated in a shape nothing reads: about every file.
+    assert!(!scoped("Body\n"));
+    assert!(!scoped("---\ndescription: Only this\n---\nBody\n"));
+    assert!(!scoped("---\npaths:\n---\nBody\n"));
+    assert!(!scoped("---\npaths: 7\n---\nBody\n"));
+    assert!(!scoped("---\npaths:\n  - 7\n---\nBody\n"));
+}

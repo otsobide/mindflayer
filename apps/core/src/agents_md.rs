@@ -124,20 +124,20 @@ pub struct Section {
 impl Section {
     /// The section for `rule`, or `None` for a rule about some files only.
     ///
-    /// A rule whose front matter states `paths` goes to Claude's rules
-    /// folder alone (D-03, #43), where Claude loads it once one of those
-    /// files is read: in `AGENTS.md` every agent would read it for every
-    /// file. A `paths` written in a shape that is not read is ignored, as
-    /// everywhere else ([`crate::rule::Lenient`]), so the rule is about every
-    /// file and has its section. The body is what an agent is given,
-    /// [`Artifact::contents`], read from the file as it is now.
+    /// A rule whose front matter states `paths`
+    /// ([`RuleManifest::is_scoped`](crate::rule::RuleManifest::is_scoped))
+    /// goes to Claude's rules folder alone (D-03, #43), where Claude loads it
+    /// once one of those files is read: in `AGENTS.md` every agent would read
+    /// it for every file. A `paths` written in a shape that is not read says
+    /// nothing, so that rule has its section. The body is what an agent is
+    /// given, [`Artifact::contents`], read from the file as it is now.
     pub fn of(rule: &Artifact) -> Result<Option<Self>, AgentsMdError> {
         let Declared::Rule(manifest) = rule.declared() else {
             return Err(AgentsMdError::NotARule {
                 name: rule.qualified_name(),
             });
         };
-        if manifest.paths.stated().is_some() {
+        if manifest.is_scoped() {
             return Ok(None);
         }
         let body = rule.contents()?;
