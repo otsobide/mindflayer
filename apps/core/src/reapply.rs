@@ -44,6 +44,7 @@ use crate::kind::{Kind, Layout};
 use crate::ledger::{Action, InstallRecord, Ledger, LedgerError, Outcome, Target};
 use crate::paths;
 use crate::settings::{Settings, Share};
+use crate::status::{self, Unreached};
 use crate::workspace::{
     ignore_itself, misplaced_target, same_directory, FlayerWorkspace, MindProject, WorkspaceError,
     MIND_IGNORE,
@@ -168,6 +169,12 @@ pub struct Plan {
     /// Whether the change would keep something out of git in a project no
     /// git work tree holds, where nothing does: for a front end to say.
     pub outside: bool,
+    /// Each kind the project, as the change leaves it, would install only in
+    /// folders some of its agents do not read, as its status says
+    /// ([`ProjectStatus::unreached`](crate::ProjectStatus::unreached)): for a
+    /// front end to say when the change is made, rather than first when the
+    /// project is next reported.
+    pub unreached: Vec<Unreached>,
 }
 
 impl Plan {
@@ -727,6 +734,10 @@ fn plan_with(
     } else {
         None
     };
+    let mut named = after.agents.clone();
+    named.sort();
+    named.dedup();
+    let unreached = status::unreached(&changed, &kinds, &named);
     let mut plan = Plan {
         before,
         after,
@@ -738,6 +749,7 @@ fn plan_with(
         unexcluded: Vec::new(),
         exclude_file: None,
         outside: false,
+        unreached,
     };
     exclusions(project, change, &in_place, &mut plan)?;
     Ok(plan)

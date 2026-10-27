@@ -736,6 +736,15 @@ fn setting_targets_moves_each_installation_there_and_out_of_the_agents_folders()
 
     assert!(applied.failures.is_empty(), "{:?}", applied.failures);
     assert_eq!(applied.plan, plan);
+    // No agent reads `.skills` until somebody points it there.
+    assert_eq!(
+        plan.unreached,
+        [mindflayer_core::Unreached {
+            kind: Kind::Skill,
+            targets: vec![String::from(".skills")],
+            agents: Agent::ALL.to_vec(),
+        }]
+    );
     let moved = &plan.installations[0];
     assert_eq!(moved.added.len(), 1);
     assert_eq!(moved.added[0].path, in_skills(&project, "deploy"));
@@ -789,6 +798,7 @@ fn resetting_targets_moves_copies_back_and_leaves_somebodys_where_it_is_said() {
 
     assert!(applied.failures.is_empty(), "{:?}", applied.failures);
     let plan = &applied.plan;
+    assert_eq!(plan.unreached, []);
     assert_eq!(
         plan.installations[0].removed,
         [in_skills(&project, "deploy")]

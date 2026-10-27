@@ -437,7 +437,7 @@ fn standing(
 /// ([`install::targets`]), so two spellings of one folder are one, and a kind
 /// installed nowhere, every rule for now, is passed over: nothing of it
 /// reaches any agent through a folder, which is not this to say.
-fn unreached(project: &MindProject, kinds: &[Kind], agents: &[Agent]) -> Vec<Unreached> {
+pub(crate) fn unreached(project: &MindProject, kinds: &[Kind], agents: &[Agent]) -> Vec<Unreached> {
     let root = project.root();
     kinds
         .iter()
