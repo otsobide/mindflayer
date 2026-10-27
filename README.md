@@ -946,6 +946,7 @@ collapse  commit-style  installed  claude,codex,opencode  load:../src/mindflayer
 collapse  deploy        authored   -
 collapse  notes         foreign    claude,opencode
 tanukeys  commit-style  installed  -                      load:../src/mindflayer/examples
+hint: tanukeys is marked by a mind.toml, which `mind migrate` moves to a settings.toml
 ```
 
 Each artifact is in one of four states:
@@ -962,10 +963,13 @@ none, as for `deploy`, which `collapse` keeps in `skills/`, a folder no agent
 reads, and for everything in a project whose `.mind` an older Mindflayer
 made, which names no agents. Last, where what was installed came
 from, as `--from` takes it: `workspace`, `load:<path>` or a shelf source's
-address. `mind status` says the same of the project you are in, and `flayer
-status -p tanukeys` of one; as in `list`, the project column is there only
-when there is more than one project to tell apart, and the kind column only
-when there is more than one kind.
+address. A project an older Mindflayer made, marked by a `mind.toml` or a
+`settings.json`, gets a hint after the report naming [`mind
+migrate`](#a-project-made-before-settings), which moves it to a
+`settings.toml`; the exit status stays the report's. `mind status` says the
+same of the project you are in, and `flayer status -p tanukeys` of one; as in
+`list`, the project column is there only when there is more than one project
+to tell apart, and the kind column only when there is more than one kind.
 
 A rule the project received is read from what was installed and from its
 `AGENTS.md`, and its agents are the ones it reaches: all of the project's
@@ -1004,6 +1008,7 @@ $ flayer status -p tanukeys --json
         "name": "tanukeys",
         "entry": "tanukeys",
         "path": "/home/you/Projects/tanukeys",
+        "marker": "mind.toml",
         "agents": [],
         "stale": null,
         "unreached": [],
@@ -1022,6 +1027,7 @@ $ flayer status -p tanukeys --json
   },
   "warnings": []
 }
+hint: tanukeys is marked by a mind.toml, which `mind migrate` moves to a settings.toml
 ```
 
 ## The workspace's own skills and rules
@@ -1742,8 +1748,9 @@ migrate --all-projects` does it for every project the workspace links that a
 `mind.toml` or a `settings.json` marks, each on its own: without `--yes` it
 lists every one and writes nothing, and with it one that cannot be moved is
 said and the others go ahead. `flayer migrate` alone says which of the three
-to ask for, and [the TUI](#the-tui)'s header counts the projects still marked
-by either, naming the command.
+to ask for, [the TUI](#the-tui)'s header counts the projects still marked
+by either, naming the command, and [`status`](#what-each-project-has) gives
+each one a hint.
 
 `--local` keeps `.mind` and the copies out of git, as `mind init` does for
 a new project. A `.gitignore` keeps out only what git does not track yet,

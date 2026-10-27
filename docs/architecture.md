@@ -1119,7 +1119,9 @@ dry run is.
   or `mind migrate` for a project on its own. `t` and `T` on a project a
   `settings.json` marks say it is changed by nothing but the move before a
   form opens, as they say of a `mind.toml`. It has no key for the move
-  ([open questions](#open-questions)).
+  ([open questions](#open-questions)). `flayer status` and `mind status`
+  say it too, a hint for each such project ([what each project
+  has](#what-each-project-has)).
 
 ### Why the markers are TOML written from a template
 
@@ -2452,6 +2454,17 @@ installs skills](#where-a-project-installs-skills)).
 - **A stale entry is listed, not left out**, with why it would not open, and
   said as a failure beside the rest, as `flayer list` says one: it is the
   entry somebody has to find to unlink it.
+- **An older marker is a hint.** Each project names the file its marker is
+  read from (`ProjectStatus::marker`, `marker` in the JSON), and one an
+  older Mindflayer wrote, a `mind.toml` or a `settings.json`, is a `hint:`
+  after the report naming `mind migrate`, as the TUI's header points at the
+  move ([moving a project to its
+  settings](#moving-a-project-to-its-settings)). Nothing else in a report
+  tells a `settings.json` from a `settings.toml`, which name the same
+  agents, though only the second can be changed. A hint, not a warning: the
+  project is read whole and the report is true of it, so the exit status is
+  the report's. On stderr under `--json` too, as `mind status`'s hint about
+  its workspace is, since the data says it in `marker`.
 - **Read, not made.** The ledger is opened with `ledger_for_reading`, so a
   workspace that never installed anything is left without one, and a default
   workspace nothing has made is reported as one with nothing linked, as
