@@ -35,8 +35,8 @@ use thiserror::Error;
 
 use super::{
     copy_at, kept_by_a_load, local, project_entry, route, same_place, standing, targets,
-    unrecorded, user_scope, Candidate, InstallError, Installation, Installed, Offer, Removed,
-    Standing,
+    unrecorded, user_scope, Candidate, Edits, InstallError, Installation, Installed, Offer,
+    Removed, Standing,
 };
 use crate::agent::{Agent, AgentHomes};
 use crate::agents_md::{self, AgentsMd, AgentsMdError, Section, Written as BlockWritten};
@@ -336,9 +336,10 @@ pub(crate) fn install(
     project: &MindProject,
     candidate: &Candidate,
     homes: &AgentHomes,
+    edits: Edits,
 ) -> Result<Installation, InstallError> {
     if project.settings().is_none() {
-        return copy_in(workspace, ledger, project, candidate, homes);
+        return copy_in(workspace, ledger, project, candidate, homes, edits);
     }
     receives(project)?;
     let root = project.root();
@@ -353,6 +354,14 @@ pub(crate) fn install(
     let _lock = workspace.lock().map_err(WorkspaceError::from)?;
     if let Some(path) = Held::read(workspace, ledger, project)?.foreign(root, &name) {
         return Ok(Installed::Foreign { name, path }.into());
+    }
+    // A section or a file of it somebody changed since it was rendered is
+    // theirs, as a skill's copy is, unless the install is forced.
+    if edits == Edits::Kept {
+        let paths = super::edited(workspace, ledger, project, Kind::Rule, &name)?;
+        if !paths.is_empty() {
+            return Ok(Installed::Edited { name, paths }.into());
+        }
     }
     let entry = project_entry(workspace, project);
     let before = ledger.installation(&entry, Kind::Rule, &name)?;
@@ -413,6 +422,7 @@ pub(crate) fn uninstall(
     project: &MindProject,
     name: &str,
     homes: &AgentHomes,
+    edits: Edits,
 ) -> Result<Removed, InstallError> {
     let root = project.root();
     let _lock = workspace.lock().map_err(WorkspaceError::from)?;
@@ -430,6 +440,15 @@ pub(crate) fn uninstall(
             },
         );
     };
+    if edits == Edits::Kept {
+        let paths = super::edited(workspace, ledger, project, Kind::Rule, name)?;
+        if !paths.is_empty() {
+            return Ok(Removed::Edited {
+                name: name.to_owned(),
+                paths,
+            });
+        }
+    }
     let rendered = render_held(workspace, ledger, project, homes, Change::Uninstall(name))?;
     let detail = format!("{name} from {}", project.name());
     ledger.log(Action::Uninstall, Some(&entry), Outcome::Ok, Some(&detail))?;
@@ -1207,6 +1226,7 @@ fn copy_in(
     project: &MindProject,
     candidate: &Candidate,
     homes: &AgentHomes,
+    edits: Edits,
 ) -> Result<Installation, InstallError> {
     let kind = Kind::Rule;
     let name = candidate.name().to_owned();
@@ -1264,6 +1284,12 @@ fn copy_in(
     let recorded = ledger.copies(&entry, kind)?;
     if let Some(path) = unrecorded(project.root(), kind, &copies, &recorded) {
         return Ok(Installed::Foreign { name, path }.into());
+    }
+    if edits == Edits::Kept {
+        let paths = super::edited(workspace, ledger, project, kind, &name)?;
+        if !paths.is_empty() {
+            return Ok(Installed::Edited { name, paths }.into());
+        }
     }
 
     let rule = Wanted::of(workspace, &candidate.offer, None)?;

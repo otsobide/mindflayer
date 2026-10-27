@@ -14,7 +14,8 @@ use mindflayer_core::claude_md::{self, Fallback, Reach};
 use mindflayer_core::claude_rules::{self, Warning as FileWarning};
 use mindflayer_core::install::rules::{self, Warning, Withheld};
 use mindflayer_core::install::{
-    self, Candidate, InstallError, Installation, Installed, Removed, Standing, WORKSPACE_ORIGIN,
+    self, Candidate, Edits, InstallError, Installation, Installed, Removed, Standing,
+    WORKSPACE_ORIGIN,
 };
 use mindflayer_core::ledger::{InstallRecord, Target};
 use mindflayer_core::lifecycle;
@@ -462,6 +463,20 @@ impl Fixture {
             route,
             &AgentHomes::default(),
         )
+    }
+
+    /// Take the rule at `route` out, edited since it was installed or not.
+    fn uninstall_forced(&self, route: &str) -> Removed {
+        install::uninstall_with(
+            &self.workspace,
+            &self.ledger,
+            &self.project,
+            Kind::Rule,
+            route,
+            &AgentHomes::default(),
+            Edits::Forced,
+        )
+        .unwrap()
     }
 
     fn render(&self) -> rules::Rendered {
@@ -1112,7 +1127,16 @@ fn rules_no_longer_offered_can_each_be_taken_out_and_the_rest_stay_as_they_are()
         .collect();
     assert_eq!(fixture.records(), others);
 
-    fixture.uninstall("git/no-force-push");
+    // Edited, so taken out only when forced.
+    assert_eq!(
+        fixture.uninstall("git/no-force-push"),
+        Removed::Edited {
+            name: String::from("git/no-force-push"),
+            paths: vec![fixture.agents_md()],
+        }
+    );
+    assert_eq!(fixture.records(), others);
+    fixture.uninstall_forced("git/no-force-push");
 
     assert_eq!(fixture.text(), TEAM);
     assert!(fixture.claude_file("rust/errors").is_file());
@@ -1286,6 +1310,7 @@ impl Fixture {
             &self.project,
             &Reference::parse(typed),
             &AgentHomes::default(),
+            Edits::Kept,
         )
     }
 }

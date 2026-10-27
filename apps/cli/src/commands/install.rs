@@ -28,7 +28,8 @@ use crate::{CliError, Failure, Outcome};
 /// [`kinds_named`]: mindflayer_core::install::kinds_named
 ///
 /// `homes` are the agents' own folders the command line decided, which core
-/// refuses to install into.
+/// refuses to install into. `force` writes over a copy edited since it was
+/// installed, which core otherwise leaves alone.
 pub(crate) fn install_named(
     workspace: &FlayerWorkspace,
     project: &MindProject,
@@ -36,6 +37,7 @@ pub(crate) fn install_named(
     from: Option<&str>,
     directory: &Path,
     homes: &AgentHomes,
+    force: bool,
 ) -> Result<Outcome, Failure> {
     use mindflayer_core::install::{self as installing, Installed};
     use mindflayer_core::Excluded;
@@ -70,18 +72,19 @@ pub(crate) fn install_named(
     let origin = candidate.origin();
     let into = project.name();
     let done =
-        installing::install(workspace, &ledger, project, &candidate, homes).map_err(|error| {
-            // What it cleared before it failed comes first, being what it did,
-            // after only what the scrub before it did: on stderr with the error,
-            // the only place a failure prints.
-            let mut told = said.clone().lines();
-            told.extend(cleared(project, error.swept()));
-            told.extend(warnings.iter().cloned());
-            Failure {
-                error: Box::new(error.into()),
-                warnings: told,
-            }
-        })?;
+        installing::install_with(workspace, &ledger, project, &candidate, homes, edits(force))
+            .map_err(|error| {
+                // What it cleared before it failed comes first, being what it did,
+                // after only what the scrub before it did: on stderr with the error,
+                // the only place a failure prints.
+                let mut told = said.clone().lines();
+                told.extend(cleared(project, error.swept()));
+                told.extend(warnings.iter().cloned());
+                Failure {
+                    error: Box::new(error.into()),
+                    warnings: told,
+                }
+            })?;
     let unhashed = done.installed.unhashed().map(str::to_owned);
     let mut outcome = match done.installed {
             Installed::Added { name, .. } => Outcome::plain(format!(
@@ -103,6 +106,16 @@ pub(crate) fn install_named(
                     "warning: {into} already has a {} at {} that Mindflayer did not put there, so it was left alone",
                     named(kind, &name),
                     shown(project, &path)
+                )],
+                ok: false,
+            },
+            // And so is a copy somebody changed since, until forced.
+            Installed::Edited { name, paths } => Outcome {
+                stdout: String::new(),
+                stderr: vec![format!(
+                    "warning: {} in {into} was changed since it was installed, at {}, so it was left alone; --force writes over it",
+                    named(kind, &name),
+                    listed(project, &paths)
                 )],
                 ok: false,
             },
@@ -245,6 +258,27 @@ pub(crate) fn still(name: &str, project: &str, reason: &str) -> String {
     )
 }
 
+/// Whether core may write over, or take out, a copy edited since it was
+/// installed: only when `--force` says so.
+pub(crate) fn edits(force: bool) -> mindflayer_core::install::Edits {
+    use mindflayer_core::install::Edits;
+
+    if force {
+        Edits::Forced
+    } else {
+        Edits::Kept
+    }
+}
+
+/// Each of `paths` as [`shown`] spells it, joined into one list.
+pub(crate) fn listed(project: &MindProject, paths: &[std::path::PathBuf]) -> String {
+    paths
+        .iter()
+        .map(|path| shown(project, path))
+        .collect::<Vec<_>>()
+        .join(", ")
+}
+
 /// A path in `project` as somebody standing in it would spell it, or as it
 /// is when it is not in there.
 pub(crate) fn shown(project: &MindProject, path: &Path) -> String {
@@ -258,12 +292,14 @@ pub(crate) fn shown(project: &MindProject, path: &Path) -> String {
 
 /// Take what `typed` names, a skill or a rule Mindflayer installed, back out
 /// of one project, handing core the agents' own folders, `homes`, as an
-/// install does.
+/// install does. `force` takes out a copy edited since it was installed,
+/// which core otherwise leaves alone with the rest.
 pub(crate) fn uninstall_named(
     workspace: &FlayerWorkspace,
     project: &MindProject,
     typed: &str,
     homes: &AgentHomes,
+    force: bool,
 ) -> Result<Outcome, Failure> {
     use mindflayer_core::install::{self as installing, Removed};
 
@@ -275,11 +311,17 @@ pub(crate) fn uninstall_named(
         error: Box::new(error),
         warnings: said.lines(),
     };
-    let (kind, taken) =
-        match installing::uninstall_typed(workspace, &ledger, project, &reference, homes) {
-            Ok(taken) => taken,
-            Err(error) => return Err(failed(error.into(), said)),
-        };
+    let (kind, taken) = match installing::uninstall_typed(
+        workspace,
+        &ledger,
+        project,
+        &reference,
+        homes,
+        edits(force),
+    ) {
+        Ok(taken) => taken,
+        Err(error) => return Err(failed(error.into(), said)),
+    };
     match taken {
         Removed::Removed {
             name,
@@ -308,6 +350,15 @@ pub(crate) fn uninstall_named(
                 "warning: {} at {} in {from} was not installed by Mindflayer, so it was left alone",
                 named(kind, &name),
                 shown(project, &path)
+            )],
+            ok: false,
+        })),
+        Removed::Edited { name, paths } => Ok(said.before(Outcome {
+            stdout: String::new(),
+            stderr: vec![format!(
+                "warning: {} in {from} was changed since it was installed, at {}, so it was left alone; --force takes it out",
+                named(kind, &name),
+                listed(project, &paths)
             )],
             ok: false,
         })),

@@ -225,12 +225,25 @@ fn a_copy_that_cannot_be_hashed_is_recorded_without_a_hash_and_said() {
 
     let candidate =
         install::offered(&workspace, &ledger, &project, Kind::Skill, "notes", None).unwrap();
-    let done = install::install(
+    // No install writes a link, so one there is an edit, refused unless
+    // the install is forced.
+    let refused = install::install(
         &workspace,
         &ledger,
         &project,
         &candidate,
         &AgentHomes::default(),
+    )
+    .unwrap()
+    .installed;
+    assert!(matches!(refused, Installed::Edited { .. }), "{refused:?}");
+    let done = install::install_with(
+        &workspace,
+        &ledger,
+        &project,
+        &candidate,
+        &AgentHomes::default(),
+        install::Edits::Forced,
     )
     .unwrap()
     .installed;

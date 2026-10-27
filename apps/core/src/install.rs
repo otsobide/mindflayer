@@ -49,6 +49,68 @@ mod standing;
 
 pub use standing::Standing;
 
+/// Whether an install or an uninstall may write over, or take out, a copy
+/// edited since it was installed (D-04): what `--force` says.
+///
+/// An edit is somebody's work, so by default it is refused as a copy
+/// nothing records is: never written over or deleted, and the caller told
+/// which copies, rather than obeyed quietly. Forcing reaches only a copy the
+/// ledger records; somebody's that nothing records stays out of reach
+/// whatever is asked.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub enum Edits {
+    /// Left as they are, and the whole change refused.
+    #[default]
+    Kept,
+    /// Written over or taken out as any copy Mindflayer installed.
+    Forced,
+}
+
+/// Every copy of the installation of `name` into `project` edited since it
+/// was installed, where the ledger has it: none when nothing is recorded.
+///
+/// A copy whose record has no hash is held to where it came from, so the
+/// offers are looked for only then.
+fn edited(
+    workspace: &FlayerWorkspace,
+    ledger: &Ledger,
+    project: &MindProject,
+    kind: Kind,
+    name: &str,
+) -> Result<Vec<PathBuf>, InstallError> {
+    let entry = project_entry(workspace, project);
+    let Some(record) = ledger.installation(&entry, kind, name)? else {
+        return Ok(Vec::new());
+    };
+    let unhashed = record.content_hash.is_none()
+        || record
+            .targets
+            .iter()
+            .any(|target| kind == Kind::Rule && target.content_hash.is_none());
+    let offers = if unhashed {
+        offers(workspace, ledger, kind)?
+    } else {
+        Vec::new()
+    };
+    let offered = offered_for(&record, &offers);
+    // Matched on the kind, so a third one has to say how its copies are told.
+    let looked = match kind {
+        Kind::Skill => standing::skill_copies(workspace, project, &record, &offered),
+        Kind::Rule => standing::rule_copies(
+            workspace,
+            project,
+            &record,
+            rules::block_file(project.root()).as_ref(),
+            &offered,
+        ),
+    };
+    Ok(looked
+        .into_iter()
+        .filter(|copy| copy.found == standing::Found::Edited)
+        .map(|copy| copy.path)
+        .collect())
+}
+
 /// What `origin` says for the workspace's own artifacts.
 pub const WORKSPACE_ORIGIN: &str = "workspace";
 
@@ -783,6 +845,7 @@ pub fn uninstall_typed(
     project: &MindProject,
     reference: &Reference,
     homes: &AgentHomes,
+    edits: Edits,
 ) -> Result<(Kind, Removed), InstallError> {
     let name = reference.name();
     let kind = match reference.kind() {
@@ -801,7 +864,8 @@ pub fn uninstall_typed(
                 [] => {
                     let mut absent = None;
                     for kind in kinds {
-                        let removed = uninstall(workspace, ledger, project, kind, name, homes)?;
+                        let removed =
+                            uninstall_with(workspace, ledger, project, kind, name, homes, edits)?;
                         if matches!(removed, Removed::Foreign { .. }) {
                             return Ok((kind, removed));
                         }
@@ -818,7 +882,8 @@ pub fn uninstall_typed(
             }
         }
     };
-    uninstall(workspace, ledger, project, kind, name, homes).map(|removed| (kind, removed))
+    uninstall_with(workspace, ledger, project, kind, name, homes, edits)
+        .map(|removed| (kind, removed))
 }
 
 /// The kinds `reference` could name: the one it is qualified with, or,
@@ -872,6 +937,11 @@ pub fn receives(project: &MindProject, kind: Kind) -> Result<(), InstallError> {
 /// `homes` are the folders the agents read for every project, which the
 /// front end decides: a copy that would land inside one of them is refused
 /// ([`InstallError::UserScope`]).
+///
+/// A copy edited since it was installed refuses the whole install, with
+/// nothing written in any target ([`Installed::Edited`]): it is somebody's
+/// work, as a copy nothing records is, until [`install_with`] is told to
+/// write over it.
 pub fn install(
     workspace: &FlayerWorkspace,
     ledger: &Ledger,
@@ -879,13 +949,27 @@ pub fn install(
     candidate: &Candidate,
     homes: &AgentHomes,
 ) -> Result<Installation, InstallError> {
+    install_with(workspace, ledger, project, candidate, homes, Edits::Kept)
+}
+
+/// [`install`], writing over a copy edited since it was installed when
+/// `edits` says so, as `--force` does. Never over a copy nothing records,
+/// which is somebody's whatever is asked.
+pub fn install_with(
+    workspace: &FlayerWorkspace,
+    ledger: &Ledger,
+    project: &MindProject,
+    candidate: &Candidate,
+    homes: &AgentHomes,
+    edits: Edits,
+) -> Result<Installation, InstallError> {
     let kind = candidate.kind();
     let name = candidate.name().to_owned();
     installable_name(kind, &name)?;
     // Matched on the kind, so a third one has to say how it is installed.
     match kind {
         Kind::Skill => {}
-        Kind::Rule => return rules::install(workspace, ledger, project, candidate, homes),
+        Kind::Rule => return rules::install(workspace, ledger, project, candidate, homes, edits),
     }
     let entry = project_entry(workspace, project);
     // The folder is named after the artifact, not after the folder it had on
@@ -991,6 +1075,16 @@ pub fn install(
     let recorded = ledger.copies(&entry, kind)?;
     if let Some(path) = unrecorded(project.root(), kind, &copies, &recorded) {
         return Ok(Installed::Foreign { name, path }.into());
+    }
+    // And a copy somebody edited since it was installed is theirs as much,
+    // unless the install is forced: wherever the record has it, since an
+    // install records its copies afresh, and one it did not write over
+    // would be left with no record.
+    if edits == Edits::Kept {
+        let paths = edited(workspace, ledger, project, kind, &name)?;
+        if !paths.is_empty() {
+            return Ok(Installed::Edited { name, paths }.into());
+        }
     }
 
     // Links are followed only inside where the artifact comes from: the
@@ -1273,6 +1367,10 @@ fn unfit(kind: Kind, from: &Path, name: &str) -> Result<Vec<ValidationIssue>, In
 /// `homes` are the agents' own folders, which the front end decides as it
 /// does for [`install`]: taking one thing out can change how the rest reach
 /// the agents.
+///
+/// A copy edited since it was installed refuses the whole uninstall, with
+/// every copy left where it is and the record kept ([`Removed::Edited`]),
+/// until [`uninstall_with`] is told to take it out.
 pub fn uninstall(
     workspace: &FlayerWorkspace,
     ledger: &Ledger,
@@ -1281,9 +1379,23 @@ pub fn uninstall(
     name: &str,
     homes: &AgentHomes,
 ) -> Result<Removed, InstallError> {
+    uninstall_with(workspace, ledger, project, kind, name, homes, Edits::Kept)
+}
+
+/// [`uninstall`], taking out a copy edited since it was installed when
+/// `edits` says so, as `--force` does.
+pub fn uninstall_with(
+    workspace: &FlayerWorkspace,
+    ledger: &Ledger,
+    project: &MindProject,
+    kind: Kind,
+    name: &str,
+    homes: &AgentHomes,
+    edits: Edits,
+) -> Result<Removed, InstallError> {
     installable_name(kind, name)?;
     if kind == Kind::Rule && project.settings().is_some() {
-        return rules::uninstall(workspace, ledger, project, name, homes);
+        return rules::uninstall(workspace, ledger, project, name, homes, edits);
     }
     // Held from before the record is read until it is dropped, for the
     // reason `install` holds it: an install of the same name at the same
@@ -1318,6 +1430,18 @@ pub fn uninstall(
             return Err(InstallError::KeptByALoad { path, loaded });
         }
         paths.push(path);
+    }
+    // Every copy or none: one left behind with no record would be nobody's
+    // to take out again, and its record kept beside copies gone would say
+    // they are missing.
+    if edits == Edits::Kept {
+        let edited = edited(workspace, ledger, project, kind, name)?;
+        if !edited.is_empty() {
+            return Ok(Removed::Edited {
+                name: name.to_owned(),
+                paths: edited,
+            });
+        }
     }
     for path in &paths {
         let removed = match kind.layout() {
@@ -1528,6 +1652,9 @@ pub enum Installed {
     /// Something of that name is already in one of the targets, at `path`,
     /// and is not ours to replace, so nothing was written in any of them.
     Foreign { name: String, path: PathBuf },
+    /// A copy Mindflayer installed was changed since, at each of `paths`,
+    /// and the install was not forced, so nothing was written in any target.
+    Edited { name: String, paths: Vec<PathBuf> },
 }
 
 impl Installed {
@@ -1538,7 +1665,7 @@ impl Installed {
             Installed::Added { unhashed, .. }
             | Installed::Updated { unhashed, .. }
             | Installed::Unchanged { unhashed, .. } => unhashed.as_deref(),
-            Installed::Foreign { .. } => None,
+            Installed::Foreign { .. } | Installed::Edited { .. } => None,
         }
     }
 }
@@ -1601,6 +1728,10 @@ pub enum Removed {
     },
     /// Present, at `path`, but nobody here put it there.
     Foreign { name: String, path: PathBuf },
+    /// Installed, but a copy was changed since, at each of `paths`, and the
+    /// uninstall was not forced, so every copy is where it was, and so is
+    /// the record.
+    Edited { name: String, paths: Vec<PathBuf> },
     /// Nothing of that name to remove.
     Absent { name: String },
 }

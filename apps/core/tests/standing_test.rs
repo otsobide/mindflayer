@@ -9,8 +9,9 @@ use std::fs;
 use std::path::PathBuf;
 
 use common::{repository, skill, url};
+use mindflayer_core::copy;
 use mindflayer_core::gather::{self, Request};
-use mindflayer_core::install::{self, Installed, Standing};
+use mindflayer_core::install::{self, Edits, Installed, Removed, Standing};
 use mindflayer_core::{
     claude_rules, create, Agent, AgentHomes, Directories, FlayerWorkspace, Kind, Ledger,
     MindProject, Share,
@@ -475,4 +476,192 @@ fn a_rules_copy_in_a_project_a_mind_toml_marks_is_told_by_its_own_hash() {
         Standing::Missing
     );
     assert!(given.dir.path().join("app").is_dir());
+}
+
+// ---------------------------------------------------------------------------
+// What an edit refuses, and what forcing does
+// ---------------------------------------------------------------------------
+
+impl Given {
+    fn install_with(&self, kind: Kind, name: &str, edits: Edits) -> Installed {
+        let candidate = install::offered(
+            &self.workspace,
+            &self.ledger,
+            &self.project,
+            kind,
+            name,
+            None,
+        )
+        .unwrap();
+        install::install_with(
+            &self.workspace,
+            &self.ledger,
+            &self.project,
+            &candidate,
+            &AgentHomes::default(),
+            edits,
+        )
+        .unwrap()
+        .installed
+    }
+
+    fn uninstall_with(&self, kind: Kind, name: &str, edits: Edits) -> Removed {
+        install::uninstall_with(
+            &self.workspace,
+            &self.ledger,
+            &self.project,
+            kind,
+            name,
+            &AgentHomes::default(),
+            edits,
+        )
+        .unwrap()
+    }
+}
+
+#[test]
+fn reinstalling_after_a_hand_edit_of_a_copy_leaves_it_untouched_and_says_it_is_edited() {
+    let given = given(&["deploy"]);
+    given.install(Kind::Skill, "deploy");
+    let [agents, claude] = given.copies("deploy");
+    let manifest = agents.join("SKILL.md");
+    type_into(&manifest);
+    let edited = fs::read(&manifest).unwrap();
+    // The offer has moved on too, which an install would bring in.
+    type_into(&given.offered_skill("deploy"));
+    let other = fs::read(claude.join("SKILL.md")).unwrap();
+
+    let again = given.install(Kind::Skill, "deploy");
+
+    assert_eq!(
+        again,
+        Installed::Edited {
+            name: String::from("deploy"),
+            paths: vec![agents.clone()],
+        }
+    );
+    assert_eq!(fs::read(&manifest).unwrap(), edited);
+    // Nor the copy nobody edited: every copy or none.
+    assert_eq!(fs::read(claude.join("SKILL.md")).unwrap(), other);
+    assert_eq!(given.standing(Kind::Skill, "deploy"), Standing::Edited);
+}
+
+#[test]
+fn a_forced_install_writes_over_an_edited_copy_and_makes_it_current() {
+    let given = given(&["deploy"]);
+    given.install(Kind::Skill, "deploy");
+    let [agents, claude] = given.copies("deploy");
+    type_into(&agents.join("SKILL.md"));
+
+    let forced = given.install_with(Kind::Skill, "deploy", Edits::Forced);
+
+    assert!(matches!(forced, Installed::Updated { .. }), "{forced:?}");
+    assert!(copy::same(&agents, &claude).unwrap());
+    assert_eq!(given.standing(Kind::Skill, "deploy"), Standing::Current);
+}
+
+#[test]
+fn uninstalling_an_edited_skill_takes_out_no_copy_until_it_is_forced() {
+    let given = given(&["deploy"]);
+    given.install(Kind::Skill, "deploy");
+    let [agents, claude] = given.copies("deploy");
+    type_into(&claude.join("SKILL.md"));
+
+    let refused = given.uninstall_with(Kind::Skill, "deploy", Edits::Kept);
+
+    assert_eq!(
+        refused,
+        Removed::Edited {
+            name: String::from("deploy"),
+            paths: vec![claude.clone()],
+        }
+    );
+    assert!(agents.is_dir() && claude.is_dir());
+    assert_eq!(given.standing(Kind::Skill, "deploy"), Standing::Edited);
+
+    let forced = given.uninstall_with(Kind::Skill, "deploy", Edits::Forced);
+
+    assert!(matches!(forced, Removed::Removed { .. }), "{forced:?}");
+    assert!(!agents.exists() && !claude.exists());
+    assert_eq!(given.standing(Kind::Skill, "deploy"), Standing::Absent);
+}
+
+#[test]
+fn a_record_from_before_hashes_whose_copy_matches_no_offer_is_refused_until_forced() {
+    let given = given(&["deploy"]);
+    given.install(Kind::Skill, "deploy");
+    given.forget_hashes();
+    type_into(&given.offered_skill("deploy"));
+
+    assert!(matches!(
+        given.install(Kind::Skill, "deploy"),
+        Installed::Edited { .. }
+    ));
+    assert_eq!(given.recorded_hash(Kind::Skill, "deploy"), None);
+
+    given.install_with(Kind::Skill, "deploy", Edits::Forced);
+
+    assert!(given.recorded_hash(Kind::Skill, "deploy").is_some());
+    assert_eq!(given.standing(Kind::Skill, "deploy"), Standing::Current);
+}
+
+#[test]
+fn an_edited_section_refuses_the_rules_install_and_uninstall_until_they_are_forced() {
+    let given = given(&[]);
+    let offer = given.rule("git/no-force-push", NO_FORCE_PUSH);
+    given.install(Kind::Rule, "git/no-force-push");
+    let edited = fs::read_to_string(given.agents_md())
+        .unwrap()
+        .replace(NO_FORCE_PUSH, "Force-push whenever you like.\n");
+    fs::write(given.agents_md(), &edited).unwrap();
+    type_into(&offer);
+
+    assert_eq!(
+        given.install(Kind::Rule, "git/no-force-push"),
+        Installed::Edited {
+            name: String::from("git/no-force-push"),
+            paths: vec![given.agents_md()],
+        }
+    );
+    assert_eq!(
+        given.uninstall_with(Kind::Rule, "git/no-force-push", Edits::Kept),
+        Removed::Edited {
+            name: String::from("git/no-force-push"),
+            paths: vec![given.agents_md()],
+        }
+    );
+    assert_eq!(fs::read_to_string(given.agents_md()).unwrap(), edited);
+
+    given.install_with(Kind::Rule, "git/no-force-push", Edits::Forced);
+
+    let rendered = fs::read_to_string(given.agents_md()).unwrap();
+    assert!(rendered.contains("Never force-push"), "{rendered}");
+    assert_eq!(
+        given.standing(Kind::Rule, "git/no-force-push"),
+        Standing::Current
+    );
+}
+
+#[test]
+fn an_edited_rules_copy_in_a_project_a_mind_toml_marks_is_left_until_forced() {
+    let given = older();
+    given.rule("git/no-force-push", NO_FORCE_PUSH);
+    given.install(Kind::Rule, "git/no-force-push");
+    let copy = given.project.root().join("rules/git/no-force-push.md");
+    type_into(&copy);
+    let edited = fs::read(&copy).unwrap();
+
+    assert!(matches!(
+        given.install(Kind::Rule, "git/no-force-push"),
+        Installed::Edited { .. }
+    ));
+    assert!(matches!(
+        given.uninstall_with(Kind::Rule, "git/no-force-push", Edits::Kept),
+        Removed::Edited { .. }
+    ));
+    assert_eq!(fs::read(&copy).unwrap(), edited);
+
+    given.uninstall_with(Kind::Rule, "git/no-force-push", Edits::Forced);
+
+    assert!(!copy.exists());
 }

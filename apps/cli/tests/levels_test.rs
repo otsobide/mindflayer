@@ -571,7 +571,23 @@ fn a_copy_that_cannot_be_hashed_is_installed_and_said() {
     fs::rename(&file, &elsewhere).unwrap();
     std::os::unix::fs::symlink(&elsewhere, &file).unwrap();
 
-    let again = mind(&alpha, &["install", "commit-style"]).unwrap();
+    // No install writes a link, so one there is an edit, left alone until
+    // the install is forced.
+    let refused = mind(&alpha, &["install", "commit-style"]).unwrap();
+    assert_eq!(refused.stdout, "");
+    assert_eq!(
+        refused.stderr,
+        [format!(
+            "warning: commit-style in alpha was changed since it was installed, at {}, so it \
+             was left alone; --force writes over it",
+            copies(&alpha, "commit-style")[0]
+                .strip_prefix(&alpha)
+                .unwrap()
+                .display()
+        )]
+    );
+    assert!(!refused.ok);
+    let again = mind(&alpha, &["install", "commit-style", "--force"]).unwrap();
 
     assert_eq!(again.stdout, "commit-style in alpha was already current\n");
     assert_eq!(again.stderr.len(), 1, "{:?}", again.stderr);
@@ -587,6 +603,57 @@ fn a_copy_that_cannot_be_hashed_is_installed_and_said() {
         "{said}"
     );
     assert!(!again.ok);
+}
+
+#[test]
+fn a_copy_changed_since_it_was_installed_is_taken_out_only_with_force() {
+    let dir = workspace_with_own();
+    let alpha = dir.path().join("alpha");
+    mind(&alpha, &["install", "commit-style"]).unwrap();
+    let copies = copies(&alpha, "commit-style");
+    let manifest = copies[0].join("SKILL.md");
+    let edited = fs::read_to_string(&manifest).unwrap() + "Ours.\n";
+    fs::write(&manifest, &edited).unwrap();
+
+    let refused = mind(&alpha, &["uninstall", "commit-style"]).unwrap();
+    let from_the_workspace =
+        flayer(dir.path(), &["uninstall", "-p", "alpha", "commit-style"]).unwrap();
+
+    let said = format!(
+        "warning: commit-style in alpha was changed since it was installed, at {}, so it was \
+         left alone; --force takes it out",
+        copies[0].strip_prefix(&alpha).unwrap().display()
+    );
+    for refused in [&refused, &from_the_workspace] {
+        assert_eq!(refused.stdout, "");
+        assert_eq!(refused.stderr, [said.as_str()]);
+        assert!(!refused.ok);
+    }
+    assert_eq!(fs::read_to_string(&manifest).unwrap(), edited);
+    for copy in &copies {
+        assert!(copy.is_dir(), "{}", copy.display());
+    }
+
+    let forced = flayer(
+        dir.path(),
+        &["uninstall", "-p", "alpha", "commit-style", "--force"],
+    )
+    .unwrap();
+
+    assert_eq!(forced.stdout, "removed commit-style from alpha\n");
+    for copy in &copies {
+        assert!(!copy.exists(), "{}", copy.display());
+    }
+}
+
+#[test]
+fn force_is_for_one_install_and_not_for_the_screen() {
+    let dir = workspace_with_own();
+    let line = line("flayer", &["install", "--force"], dir.path());
+
+    let refused = FlayerCli::try_parse_from(&line).unwrap_err();
+
+    assert!(refused.to_string().contains("--force"), "{refused}");
 }
 
 #[test]
