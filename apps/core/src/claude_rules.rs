@@ -15,8 +15,9 @@
 //! Such a rule reaches Claude alone, which is said ([`Warning::ClaudeOnly`]).
 //! The same files give Claude the rules about every file when it reads no
 //! block, in [`Mode::Fallback`]. Which mode applies is the caller's to say,
-//! from whether Claude reads `AGENTS.md` (#44), never from whether a block
-//! was written, so Claude reads each rule once and misses none.
+//! from how Claude reaches the block ([`crate::claude_md::Reach::mode`]),
+//! never from whether a block was written alone, so Claude reads each rule
+//! once and misses none.
 //!
 //! A file holds the rule as written, front matter and all: Claude takes
 //! `paths` from it and strips the rest before the rule reaches the model
@@ -84,7 +85,7 @@ pub fn file_for(route: &str) -> PathBuf {
 }
 
 /// Which rules a render writes, as its caller decides from whether Claude
-/// reads the block in `AGENTS.md` (#44).
+/// reads the block in `AGENTS.md` ([`crate::claude_md::Reach::mode`]).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Mode {
     /// Only the rules about some files: Claude reads the others in the block

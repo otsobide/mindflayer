@@ -79,7 +79,9 @@ under `apps/` with its own `Makefile`:
   (`agent`), the catalog, gathering (`gix`), the SQLite ledger,
   installing, keeping installs out of git (`exclude`), a project's rules
   rendered into the block of its `AGENTS.md` (`agents_md`) and into
-  Claude's rules folder (`claude_rules`), changing a project's agents or
+  Claude's rules folder (`claude_rules`), whether Claude reads that block
+  and the `@AGENTS.md` import in a project's `CLAUDE.md` that makes it
+  (`claude_md`), changing a project's agents or
   share mode and carrying its installs along
   (`reapply`), what each project holds, from where and for which agents
   (`status`), creating and changing artifacts, and moving a workspace's own
@@ -259,6 +261,23 @@ These are easy to break from a single file without noticing.
     and no further. A render asked for a rule is refused wherever the block
     is (`agents_md::misplaced`), and both renderers ask
     `RuleManifest::is_scoped` which rules are about some files only.
+  - The import of `AGENTS.md` in a project's own `CLAUDE.md` or
+    `.claude/CLAUDE.md` (`claude_md`) is one line between the block's
+    markers, read by the same search (`agents_md::locate`), at the top of
+    the file, an empty line below it that goes with it; a rule's marker
+    there is refused like a broken block. Whether Claude reads the block is
+    one predicate (`claude_md::reads_agents_md`): the three names in the
+    project's root and every folder above it but `/`, the user memory file
+    left out. `claude_md::reach` decides Native, the import, or Claude's
+    rules folder (`Reach::mode`), never more than one, so Claude reads each
+    rule once; an `@AGENTS.md` line somebody wrote in one of Claude's files
+    counts as the import, and nothing is written. `claude_md::render` never
+    makes a `CLAUDE.md` or a `CLAUDE.local.md`, never edits a file above
+    the project (it is the fallback's reason instead), a link, the user
+    memory file or the `AGENTS.md` itself, edits a file git tracks
+    (`exclude::tracks_file`) in a local project only with `edit_tracked`,
+    and takes the import out with the last rule, giving the file back as it
+    was; one it may no longer take out is left and said.
   - An entry in a config file somebody else owns (`.mcp.json`,
     `opencode.json`, `.codex/config.toml`) is changed one at a time through
     `config_entry`: JSON and JSONC entries are edited through jsonc-parser's
@@ -343,7 +362,10 @@ These are easy to break from a single file without noticing.
     through. So is a rule file whose folders lead out of the project
     through a link (`claude_rules`), written or taken away, since `.claude`
     can be a link to the user's own `~/.claude`; the file itself is never
-    followed.
+    followed. A `CLAUDE.md` reached through any link is never given the
+    import (`claude_md`), whose path would then mean wherever the link
+    leads, unless it is the project's `AGENTS.md` itself, which Claude then
+    reads the block as (`Reach::Same`).
   - URLs are stored, logged and shown without credentials. `url::redacted`
     is the one function that takes them out: the ledger applies it to every
     URL it writes and reads, `GitError` to what it says, `git::scrub` to a
@@ -365,7 +387,7 @@ These are easy to break from a single file without noticing.
   project's settings until their change and every copy it carries along are
   written. A new
   writer takes it the same way, inside core; `config_entry::ConfigFile`,
-  `agents_md::render`, `claude_rules::render` and
+  `agents_md::render`, `claude_rules::render`, `claude_md::render` and
   `MindProject::change_settings` take none, since
   the writers that call them hold it. A second workspace linking the same
   project is kept out by neither lock, an open question in
@@ -457,7 +479,8 @@ These are easy to break from a single file without noticing.
   `Lookup::given` decides them once per command line, into the `Lookup`
   (`Lookup::agents`), and install is the first to take them, to refuse a
   copy inside one, as `agents_md::render` and `claude_rules::render` take
-  them to refuse rules there. `tui::execute` hands each line the TUI's own
+  them to refuse rules there, and `claude_md` to leave the user memory file
+  out of what keeps Claude from reading `AGENTS.md`. `tui::execute` hands each line the TUI's own
   with the rest of its `Lookup`, and so does its install screen: a command
   the TUI runs carries none of the four options, so it would decide them
   again from the environment.
@@ -535,7 +558,10 @@ These are easy to break from a single file without noticing.
   puts its copies is asked of core (`common::copies`). A test about what a
   project an older Mindflayer made does, a copy installed in the folder it
   authors in, makes one with `common::older_project`. What git would list is
-  asked of gix too (`common::untracked`).
+  asked of gix too (`common::untracked`), and a core fixture has git track
+  its files by writing the index with gix (`common::indexed`). A core test
+  about which `CLAUDE.md` Claude finds first holds its temporary folder to
+  have none above it (`claude_md_test.rs`'s `clean`).
 - Tests that run a shell (`apps/cli/tests/shells_test.rs`, Linux only) start
   it with no startup file and an environment holding only a `PATH`, a
   temporary `HOME` and what the test sets, so no `MINDFLAYER_*` variable or
