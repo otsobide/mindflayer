@@ -1077,6 +1077,140 @@ fn forgetting_one_copy_keeps_the_installation_until_its_last_copy_goes() {
 }
 
 #[test]
+fn a_renamed_copy_takes_its_installation_with_it_when_it_was_the_only_one() {
+    let ledger = Ledger::in_memory().unwrap();
+    let written = installation_of("deploy", &[(None, "skills/deploy")]);
+    ledger.installed("collapse", &written).unwrap();
+    let when = |ledger: &Ledger| -> i64 {
+        ledger
+            .connection
+            .query_row("SELECT installed_at FROM installations", [], |row| {
+                row.get(0)
+            })
+            .unwrap()
+    };
+    let installed_at = when(&ledger);
+
+    assert_eq!(
+        ledger
+            .renamed_copy(
+                "collapse",
+                Kind::Skill,
+                "deploy",
+                "skills/deploy",
+                "ship",
+                "skills/ship"
+            )
+            .unwrap(),
+        Carried::Moved
+    );
+
+    assert!(ledger
+        .installation("collapse", Kind::Skill, "deploy")
+        .unwrap()
+        .is_none());
+    assert_eq!(
+        ledger
+            .installation("collapse", Kind::Skill, "ship")
+            .unwrap(),
+        Some(InstallRecord {
+            name: String::from("ship"),
+            ..installation_of("ship", &[(None, "skills/ship")])
+        })
+    );
+    assert_eq!(when(&ledger), installed_at);
+}
+
+#[test]
+fn a_renamed_copy_is_an_installation_of_its_own_beside_the_copies_it_left() {
+    let ledger = Ledger::in_memory().unwrap();
+    let mut written = installation_of(
+        "git/no-force-push",
+        &[(None, "AGENTS.md"), (None, "rules/git/no-force-push.md")],
+    );
+    written.kind = Kind::Rule;
+    written.targets[1].content_hash = Some(String::from("4f9c2a7e"));
+    ledger.installed("collapse", &written).unwrap();
+
+    let carried = ledger
+        .renamed_copy(
+            "collapse",
+            Kind::Rule,
+            "git/no-force-push",
+            "rules/git/no-force-push.md",
+            "git/never-force-push",
+            "rules/git/never-force-push.md",
+        )
+        .unwrap();
+
+    assert_eq!(carried, Carried::Moved);
+    assert_eq!(
+        ledger
+            .installation("collapse", Kind::Rule, "git/no-force-push")
+            .unwrap(),
+        Some(InstallRecord {
+            targets: written.targets[..1].to_vec(),
+            ..written.clone()
+        })
+    );
+    // With the hash of what was written there, which the copy still holds.
+    assert_eq!(
+        ledger
+            .installation("collapse", Kind::Rule, "git/never-force-push")
+            .unwrap(),
+        Some(InstallRecord {
+            name: String::from("git/never-force-push"),
+            targets: vec![Target {
+                agent: None,
+                path: String::from("rules/git/never-force-push.md"),
+                content_hash: Some(String::from("4f9c2a7e")),
+            }],
+            ..written
+        })
+    );
+}
+
+#[test]
+fn a_copy_renamed_onto_a_name_installed_already_is_forgotten() {
+    let ledger = Ledger::in_memory().unwrap();
+    ledger
+        .installed(
+            "collapse",
+            &installation_of("deploy", &[(None, "skills/deploy")]),
+        )
+        .unwrap();
+    let ship = installation_of("ship", &[(None, ".agents/skills/ship")]);
+    ledger.installed("collapse", &ship).unwrap();
+    let renamed = |path| {
+        ledger
+            .renamed_copy(
+                "collapse",
+                Kind::Skill,
+                "deploy",
+                path,
+                "ship",
+                "skills/ship",
+            )
+            .unwrap()
+    };
+
+    assert_eq!(renamed("skills/elsewhere"), Carried::Nothing);
+    assert_eq!(renamed("skills/deploy"), Carried::Forgotten);
+
+    assert_eq!(
+        ledger.installations("collapse", Kind::Skill).unwrap(),
+        ["ship"]
+    );
+    assert_eq!(
+        ledger
+            .installation("collapse", Kind::Skill, "ship")
+            .unwrap(),
+        Some(ship)
+    );
+    assert_eq!(renamed("skills/deploy"), Carried::Nothing);
+}
+
+#[test]
 fn an_installation_recording_no_copy_is_forgotten_whole_by_any_one() {
     let ledger = Ledger::in_memory().unwrap();
     ledger

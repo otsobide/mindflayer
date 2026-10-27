@@ -206,6 +206,18 @@ pub enum Forgotten {
     Installation,
 }
 
+/// What [`Ledger::renamed_copy`] did.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Carried {
+    /// No installation of that name records a copy there.
+    Nothing,
+    /// The copy is recorded under its new name and at its new place.
+    Moved,
+    /// Another installation holds the new name, so the copy is recorded by
+    /// neither, and its installation goes with it when it was the last.
+    Forgotten,
+}
+
 /// One line of the action log.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Entry {
@@ -1003,6 +1015,131 @@ impl Ledger {
         };
         transaction.commit().map_err(failed)?;
         Ok(forgotten)
+    }
+
+    /// Record that the copy an installation of `name` wrote at `path` is
+    /// called `to_name` now, at `to_path`, saying what became of its record.
+    ///
+    /// For a rename that reached one copy: it is what was installed, renamed,
+    /// and stays Mindflayer's to tell apart (D-04), as an edit does, from
+    /// where it came, with the hash of what was written. An installation it
+    /// was the last copy of takes the new name whole, keeping when it was
+    /// installed; one that records others keeps them under the old name,
+    /// still what was installed, and the copy is recorded under the new one
+    /// as an installation of its own from the same place. A name is one
+    /// installation a project, so where another holds the new name already
+    /// the copy is forgotten instead, as [`Ledger::uninstalled_copy`] would.
+    /// A skill's installation recording no copy at all, which only a build
+    /// from before installations had targets wrote, is forgotten whole as
+    /// there. One transaction, so an install of either name at the same
+    /// moment never finds half of this done.
+    pub fn renamed_copy(
+        &self,
+        project: &str,
+        kind: Kind,
+        name: &str,
+        path: &str,
+        to_name: &str,
+        to_path: &str,
+    ) -> Result<Carried, LedgerError> {
+        let failed = |source| self.failed("recording a renamed copy", source);
+        let transaction = self.connection.unchecked_transaction().map_err(failed)?;
+        let Some(id) = transaction
+            .query_row(
+                "SELECT id FROM installations
+                  WHERE project = ?1 AND kind = ?2 AND name = ?3",
+                rusqlite::params![project, kind.slug(), name],
+                |row| row.get::<_, i64>(0),
+            )
+            .optional()
+            .map_err(failed)?
+        else {
+            return Ok(Carried::Nothing);
+        };
+        let count = |transaction: &Transaction<'_>| -> rusqlite::Result<i64> {
+            transaction.query_row(
+                "SELECT count(*) FROM installation_targets WHERE installation_id = ?1",
+                [id],
+                |row| row.get(0),
+            )
+        };
+        let copy: Option<(Option<String>, Option<String>)> = transaction
+            .query_row(
+                "SELECT agent, content_hash FROM installation_targets
+                  WHERE installation_id = ?1 AND path = ?2",
+                rusqlite::params![id, path],
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            )
+            .optional()
+            .map_err(failed)?;
+        let Some((agent, held)) = copy else {
+            if kind != Kind::Rule && count(&transaction).map_err(failed)? == 0 {
+                transaction
+                    .execute("DELETE FROM installations WHERE id = ?1", [id])
+                    .map_err(failed)?;
+                transaction.commit().map_err(failed)?;
+                return Ok(Carried::Forgotten);
+            }
+            return Ok(Carried::Nothing);
+        };
+        transaction
+            .execute(
+                "DELETE FROM installation_targets
+                  WHERE installation_id = ?1 AND path = ?2",
+                rusqlite::params![id, path],
+            )
+            .map_err(failed)?;
+        let last = count(&transaction).map_err(failed)? == 0;
+        let taken = transaction
+            .query_row(
+                "SELECT 1 FROM installations
+                  WHERE project = ?1 AND kind = ?2 AND name = ?3",
+                rusqlite::params![project, kind.slug(), to_name],
+                |_| Ok(()),
+            )
+            .optional()
+            .map_err(failed)?
+            .is_some();
+        let carried = if taken {
+            if last {
+                transaction
+                    .execute("DELETE FROM installations WHERE id = ?1", [id])
+                    .map_err(failed)?;
+            }
+            Carried::Forgotten
+        } else {
+            let to = if last {
+                transaction
+                    .execute(
+                        "UPDATE installations SET name = ?1 WHERE id = ?2",
+                        rusqlite::params![to_name, id],
+                    )
+                    .map_err(failed)?;
+                id
+            } else {
+                transaction
+                    .query_row(
+                        "INSERT INTO installations
+                             (project, kind, name, source_id, origin, content_hash, installed_at)
+                         SELECT project, kind, ?1, source_id, origin, content_hash, installed_at
+                           FROM installations WHERE id = ?2
+                         RETURNING id",
+                        rusqlite::params![to_name, id],
+                        |row| row.get::<_, i64>(0),
+                    )
+                    .map_err(failed)?
+            };
+            transaction
+                .execute(
+                    "INSERT INTO installation_targets (installation_id, agent, path, content_hash)
+                     VALUES (?1, ?2, ?3, ?4)",
+                    rusqlite::params![to, agent, to_path, held],
+                )
+                .map_err(failed)?;
+            Carried::Moved
+        };
+        transaction.commit().map_err(failed)?;
+        Ok(carried)
     }
 
     /// Record that the installation of `name` has its copies at `targets`
