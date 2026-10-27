@@ -441,8 +441,11 @@ project with `-p`; `flayer validate` reads the shelf as well, labelling what it
 finds there `shelf/<source folder>`. `flayer status` reads every project, or
 one with `-p`, and `mind status` the one you are in: not the workspace's own,
 which nothing is installed into ([what each project
-has](#what-each-project-has)). Reads look everywhere; a change needs one
-place, and without `-p` that place is the workspace.
+has](#what-each-project-has)). `mind agents` and `share` change the project
+you are in, and `flayer agents` and `share` the one `-p` names, which they
+need: the workspace's own have no agents, and reach one by being installed.
+Reads look everywhere; a change needs one place, and without `-p` that place
+is the workspace.
 
 There is one implementation of each. `mind add` and `flayer add -p alpha` are
 the same function given the same project, and `flayer add` is that function
@@ -799,6 +802,13 @@ and an id names the project for good. So is a folder the change moves out of
 the project, as `init` refuses one, while one written there by hand is still
 read and stops no change to something else.
 
+What changes them from a command line is `mind agents` and `mind share`
+(#37), at either level, and since a project's agents and share mode decide
+where what is installed into it goes and whether git sees it, those carry
+the installs along too, through `reapply`, holding the lock of the workspace
+that links the project ([when a project's agents or share mode
+change](#when-a-projects-agents-or-share-mode-change)).
+
 ### A project marked by its settings is read where its agents read
 
 What an agent loads is what sits in its folders, whoever put it there, and a
@@ -932,7 +942,8 @@ crash leaves either the old config or the new one. An edit of `flayer.toml`
 holds the workspace's lock from its read to that re-read, so a second writer
 edits what the first one wrote ([Writers at the same
 time](#writers-at-the-same-time)); an edit of a project's settings takes none
-yet ([open questions](#open-questions)).
+of its own, and the one change that makes it (`reapply::apply`) holds the lock
+of the workspace that links the project around it.
 
 ### Formats are versioned
 
@@ -1800,7 +1811,10 @@ How an install uses it:
 - **Local projects only.** A shared project's copies are the team's to
   commit, and a project a `mind.toml` marks was committed by design, so for
   those the exclude file is not opened at all, by an install or an
-  uninstall.
+  uninstall. A project whose share mode changes has its group rewritten
+  then: forgotten whole when it turns shared, and given an entry for each
+  copy the ledger records in place when it turns local ([when a project's
+  agents or share mode change](#when-a-projects-agents-or-share-mode-change)).
 - **Keyed by the project's id**, from its settings, which stays when the
   project is renamed or moved within its repository.
 - **Taken out after the copies.** An uninstall removes the copies, then the
@@ -1876,6 +1890,97 @@ And how it edits:
   pattern syntax and two kinds of comment, and an edit rewrites only its own
   group and keeps every other line where it is, so a block a newer Mindflayer
   wrote survives an older one's edit.
+
+### When a project's agents or share mode change
+
+`mind agents [add|remove] <agent>...` and `mind share local|shared
+[--edit-tracked]` (#37), and `flayer agents` and `flayer share` with `-p` for
+a project the workspace manages, change a project's settings, and with them
+where what is installed into it belongs: a copy in each folder an agent it
+names is sent one ([D-07](#d-07-one-copy-per-agent-folder)), kept out of git
+while it is local ([D-02](#d-02-installs-stay-local-unless-a-project-shares-them)).
+Core's `reapply` decides all of it, `reapply::plan` writing nothing and
+`reapply::apply` doing it, so the TUI's toggles and the command line say the
+same.
+
+- **A dry run without `--yes`**, as `remove` and `flayer migrate --library`
+  are: a line for each thing that would change, the settings first and then
+  each copy, so what an agent change does to the installs is read before it
+  is done. Made, the same lines say what was done.
+- **Brought to the target set, not to the difference.** Every installation
+  the ledger records is compared with where the settings, as changed, send
+  copies, rather than with what the change itself moved. The same change run
+  again does nothing once it is done, and finishes what one that stopped
+  halfway, or a hand edit of the settings, left undone. Planning from the
+  difference would leave both to somebody's memory.
+- **A new copy is made from a copy, not from the offer.** A folder an agent
+  the project now names is sent copies to is given a copy of one the record
+  names that still holds what was installed, by the hash every copy was
+  recorded with ([D-04](#d-04-an-edited-copy-is-detected-not-disowned)),
+  built in a stage and put in place as an install's copies are
+  (`copy::Stage::place`), and the installation records one more target, its
+  hash, origin and time as they were (`Ledger::retargeted`). Installing
+  again from where it came from was turned down: that is an update, which
+  can bring a newer revision into one folder while the other keeps the old,
+  the very thing D-07 rules out, and the offer may have gone since. An
+  installation none of whose copies still holds what was installed is given
+  none, and that is a warning (`Why::Unsourced`).
+- **Only an untouched copy is taken out.** A recorded copy in a folder no
+  agent the project names is sent copies to any more is removed when its
+  hash is the one recorded and forgotten when it has gone already.
+  Otherwise, changed since it was installed or not to be compared (a record
+  with no hash, a link), it is left where it is and dropped from the record
+  with its exclude entry: its author's now, as an edit makes a copy, until
+  D-04's states (#47) say more. Deleting it on a guess was turned down, and
+  so was keeping it recorded, which would name a copy in a folder no listing
+  of the project reads and call the installation partial for good.
+- **Somebody's is left, and said.** A folder where a new copy would go that
+  holds something unrecorded is not written over, so that agent reads it
+  rather than what was installed: a warning, as an install refused over
+  somebody's skill is. What sits unrecorded in a folder the change stops
+  sending copies to is left too, and listed, since no listing of the project
+  reads that folder once no agent it names is sent copies there. The folder
+  the project authors in is not one of those, being read whatever its agents.
+- **Turning shared forgets the whole group; turning local fills it.** A
+  project turning shared has its `.mind/.gitignore` removed, only while it
+  holds what Mindflayer writes (`MIND_IGNORE`), so one changed by hand stays
+  and is said, and its group of the exclude block forgotten whole
+  (`exclude::forget`), every line whichever workspace wrote it, since each
+  names a copy that is now the team's to commit. One turning local is given
+  the `.gitignore` and an entry for each copy the ledger records in place
+  that the group does not hold yet, both before its settings say so, as
+  `mind init` writes the `.gitignore` before the settings. `edit_tracked` is
+  written with the share mode every time, off unless `--edit-tracked` is
+  given, so one command line says the whole of how the project shares.
+- **Refused before anything is written**: a project a `mind.toml` marks,
+  which has no settings until `mind migrate` (#38) moves it to them, and is
+  pointed there; a change that leaves it naming no agent, which would take
+  every copy out, an uninstall's to do by name; and a copy that would land
+  in an agent's own folder, or in one a loaded workspace keeps as its own,
+  as an install refuses one.
+- **Held by the workspace's lock.** `apply` takes the lock of the workspace
+  that links the project from before it reads the settings again until
+  every copy, record and exclude entry is written, so an install in that
+  workspace comes wholly before it or wholly after it.
+  `MindProject::change_settings` takes none of its own, as
+  `config_entry::ConfigFile` takes none: what keeps its edit apart is its
+  caller's, and here the change is a workspace's as much as the project's.
+  A lock in `.mind`, the other answer the open question offered, would keep
+  a second workspace linking the project away from the settings but not
+  from its own installs into it, which go by that workspace's lock; that
+  case stays open ([open questions](#open-questions)).
+- **A project nothing links still changes.** Its settings are its own
+  ([D-09](#d-09-project-settings-live-in-the-project)), so in a project no
+  workspace `mind` consults links, `mind agents` and `mind share` change
+  them, move no copy, and say with a `hint:` that nothing installed was
+  carried along, as `mind status` says why nothing reads as installed.
+- **In an order that shows nothing in `git status` for a moment**: the
+  exclude entries of the copies about to land and the `.gitignore` of a
+  project turning local, then the settings, then the copies and their
+  records, and last what keeps out of git what has gone, or what a project
+  turning shared means to commit. A refusal before the settings are written
+  leaves everything as it was; what fails after is collected and said, and
+  the same change run again finishes it.
 
 ### The screen, and why it is three files
 
@@ -2153,6 +2258,20 @@ screen needed `link` and `unlink` to take several paths, and they take them
 **all or nothing**: every path is checked before any entry is written, so a
 refused one leaves the registry as it was rather than half changed by a
 command that reports failure.
+
+### The agents and share toggles
+
+`t` on a project's row opens a box for each agent, its share mode and
+`edit_tracked`, ticked as its settings say, and applying them runs the lines
+they amount to: `agents --yes <agent>...`, then `share --yes <mode>`, each
+only when what it sets changes, with what they said shown in full, since an
+agent change can copy and remove a skill in every project folder an agent
+reads. The agents a project names keep their order, and one ticked is named
+after them, so a toggle does not reorder the settings. A line cannot name no
+agent at all, so unticking every one becomes `agents remove` of every one
+named, which the command refuses for its own reason, in the form: the rule
+that a project names an agent is core's, and the screen does not say it a
+second time.
 
 ## The local server
 
@@ -3374,8 +3493,12 @@ other, and none of them makes a reader wait for the workspace.
   it has the lock: the standing it is handed comes from a survey made before,
   minutes before on the install screen, and a copy an edit has made its
   author's since is left alone rather than written over and recorded again.
-  A project's settings are not the workspace's, and a change to them takes
-  no lock yet, which leaves two at once keeping only one
+  A change to a project's agents or share mode holds it too, from before it
+  reads the project's settings until it has written them and carried the
+  installs along (`reapply::apply`): the settings are the project's, but
+  what changing them moves is the workspace's, and two changes at once in
+  one workspace would otherwise each keep only their own. Two workspaces
+  linking one project are kept apart by neither's lock
   ([open questions](#open-questions)).
 - **Opening the ledger takes no lock**, though it is when a ledger is made or
   migrated. A migration is one transaction that reads the version again once
@@ -3509,7 +3632,10 @@ Carrying it out, #34 keeps a local project's installed skills out of git
 with one entry per copy in its group of the exclude block, keyed by the
 project's id, written before the copies land and taken out after they go;
 a shared project's exclude file is left alone ([What keeps an install out of
-git](#what-keeps-an-install-out-of-git)).
+git](#what-keeps-an-install-out-of-git)). #37 lets the share mode change,
+with `mind share`: a project turning shared loses its `.gitignore` and its
+whole group, one turning local gains both ([when a project's agents or
+share mode change](#when-a-projects-agents-or-share-mode-change)).
 
 ### D-03: Rules reach every agent through `AGENTS.md`
 
@@ -3663,7 +3789,9 @@ Carrying it out, #29 adds the format, `Settings` in `settings.rs`, which
 `MindProject::init_settings`, which writes it with D-01's `.gitignore` (see
 [a project's settings](#a-projects-settings)), and #35 makes `mind init`
 write one, naming the agents `--agents` gives and the share mode `--shared`
-chooses.
+chooses. #37 changes them, with `mind agents` and `mind share`, and carries
+what is installed into the project along ([when a project's agents or share
+mode change](#when-a-projects-agents-or-share-mode-change)).
 
 ### D-10: An MCP server is one owned entry per agent
 
@@ -4035,15 +4163,16 @@ leak into the lifecycle code. Unblocks #33, #45, #62, #93, #94 and #95.
   (`skills = "."`), from which discovery reads nothing in `.mindflayer`, holds
   the shelf by the same rule. Whether an open should hold a marker to those
   rules, and what a refusal then says, is still to choose.
-- **Two writers changing one project's settings.**
-  `MindProject::change_settings` reads the file, edits it and renames the
-  result into place without a lock: the settings are the project's, which has
-  no lock of its own, and a workspace's keeps out only that workspace's
-  writers, while several may link the project. Two changes at once keep only
-  the one renamed last. Nothing calls it yet. #37, its first caller, could
-  take the lock of the workspace it acts for, or a lock in `.mind` could keep
-  every writer out, at the price of a file a shared project would have to
-  ignore.
+- **Two workspaces changing one project's settings.** A change to a
+  project's agents or share mode holds the lock of the workspace that links
+  it (#37), which keeps out that workspace's installs and changes, but not a
+  second workspace linking the same project: two changes at once from two
+  workspaces each read the settings, and the one renamed last keeps only its
+  own, each carrying its own installs along by its own ledger. A lock in
+  `.mind`, taken by every change to the settings beside the workspace's, would
+  keep the settings whole, at the price of a file a shared project would have
+  to ignore, and still not the installs, which each workspace records apart:
+  the wall disowning from elsewhere meets too.
 - **A leftover `mind.toml` nobody is told about.** A project holding both
   markers is read from its settings, and `MindProject::warnings` names the
   `mind.toml` ignored, but no front end prints it yet. This build leaves
@@ -4099,27 +4228,39 @@ leak into the lifecycle code. Unblocks #33, #45, #62, #93, #94 and #95.
   tree reads it. An install keys a project's group by its id, so a project
   checked out in two worktrees with one settings file, committed in shared
   mode or copied in local mode, has one group for both, and uninstalling in
-  one stops excluding the copy the other still has. A shared project writes
-  no entries, so only a copied local `.mind` meets it. A key that names the
-  checkout rather than the project would keep them apart.
+  one stops excluding the copy the other still has; `mind share shared` in
+  one forgets the group for both. A shared project writes no entries, so
+  only a copied local `.mind` meets it. A key that names the checkout rather
+  than the project would keep them apart.
 - **A project that moves.** Exclude entries are anchored at the route the
   project had when they were written. Moved within its repository, a project
   keeps a group of lines pointing where it was, which removing its entries by
   their new route never matches. Rewriting a project's whole group from what
   the ledger says it has installed would heal it.
-- **A share mode that changes.** An install writes exclude entries only for
-  a local project, and an uninstall takes them out only from one, so a
-  project that turns shared with copies installed keeps their entries, and
-  they keep the copies it now means to commit out of `git status`. A project
-  that turns local keeps its copies unexcluded until each is installed
-  again. Nothing changes the share mode yet; whatever does (#37 changes the
-  agents) would rewrite the project's group from what the ledger says it has
-  installed.
-- **Copies for an agent no longer named.** An install replaces its record's
-  targets with the ones the project has now, so a copy in the folder of an
-  agent the project stopped naming is no longer recorded: Foreign, left where
-  it is with its exclude entry. Taking such copies out, or keeping them
-  recorded until they are, is #37's, which changes the agents.
+- **Agents changed by hand.** `mind agents` carries what is installed along
+  (#37), but the settings are JSON anybody can edit. An install after such an
+  edit replaces its record's targets with the ones the project has now, so a
+  copy in the folder of an agent the project stopped naming is no longer
+  recorded: Foreign, left where it is with its exclude entry. `mind agents`
+  naming the agents the file already names re-applies the installs, and
+  takes such copies out, only while the install has not dropped them from
+  its record first. An install that carried the installation's other copies
+  along itself, as `reapply` does, would close it.
+- **An install surveyed before a change.** An install works out its targets
+  from the project it is handed, read before it takes the workspace's lock,
+  as it does its standing, which it looks at again under the lock. One
+  surveyed before `mind agents` changed the project's settings, and applied
+  after, puts a copy where the settings no longer send one; recorded, so the
+  next `mind agents` with the same agents takes it out. Reading the settings
+  again under the lock would close that.
+- **A copy as installed, to make another from.** A change of agents gives a
+  new folder a copy of one the record names that still holds what was
+  installed, by its hash. An installation whose every copy was edited, or
+  was recorded without a hash, has none, so the new agent gets nothing and
+  that is said; installing it again puts every copy back, the edited one
+  included, written over as an install writes over a recorded copy until
+  #47 tells an edited one apart. Copying from the offer instead would hand
+  the agents two revisions of one skill whenever the offer has moved on.
 - **Two workspaces, one exclude file.** The workspace's lock keeps one
   workspace's writers apart, and an exclude edit is made under it, but
   projects of one repository linked from two workspaces edit `info/exclude`
