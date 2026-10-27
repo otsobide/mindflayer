@@ -76,10 +76,11 @@ pub(crate) fn install_named(
                 Outcome::plain(format!("{name} in {into} was already current\n"))
             }
             // Refused rather than obeyed: somebody wrote that one.
-            Installed::Foreign { name } => Outcome {
+            Installed::Foreign { name, path } => Outcome {
                 stdout: String::new(),
                 stderr: vec![format!(
-                    "warning: {into} already has a {name} that Mindflayer did not put there, so it was left alone"
+                    "warning: {into} already has a {name} at {} that Mindflayer did not put there, so it was left alone",
+                    shown(project, &path)
                 )],
                 ok: false,
             },
@@ -114,18 +115,26 @@ pub(crate) fn swept(project: &MindProject, swept: &[std::path::PathBuf]) -> Stri
 /// what the install did to put it under. Shown from the project, where
 /// somebody would go and look.
 pub(crate) fn cleared(project: &MindProject, swept: &[std::path::PathBuf]) -> Vec<String> {
-    use mindflayer_core::paths;
-
     swept
         .iter()
         .map(|path| {
-            let shown = paths::relative_to(path, project.root())
-                .as_deref()
-                .and_then(paths::to_config_string)
-                .unwrap_or_else(|| path.display().to_string());
-            format!("cleared {shown}, left by an install that did not finish")
+            format!(
+                "cleared {}, left by an install that did not finish",
+                shown(project, path)
+            )
         })
         .collect()
+}
+
+/// A path in `project` as somebody standing in it would spell it, or as it
+/// is when it is not in there.
+pub(crate) fn shown(project: &MindProject, path: &Path) -> String {
+    use mindflayer_core::paths;
+
+    paths::relative_to(path, project.root())
+        .as_deref()
+        .and_then(paths::to_config_string)
+        .unwrap_or_else(|| path.display().to_string())
 }
 
 /// Take one skill Mindflayer installed back out of one project.
@@ -151,10 +160,11 @@ pub(crate) fn uninstall_named(
         Removed::Removed { name, .. } => {
             Ok(said.before(Outcome::plain(format!("removed {name} from {from}\n"))))
         }
-        Removed::Foreign { name } => Ok(said.before(Outcome {
+        Removed::Foreign { name, path } => Ok(said.before(Outcome {
             stdout: String::new(),
             stderr: vec![format!(
-                "warning: {name} in {from} was not installed by Mindflayer, so it was left alone"
+                "warning: {name} at {} in {from} was not installed by Mindflayer, so it was left alone",
+                shown(project, &path)
             )],
             ok: false,
         })),

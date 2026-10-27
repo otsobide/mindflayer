@@ -422,57 +422,127 @@ fn a_project_with_an_empty_shelf_is_told_where_skills_come_from() {
     assert!(rendered(&screen).contains("nothing on the shelf"));
 }
 
-#[test]
-fn a_project_whose_settings_name_no_skills_folder_is_said_and_hides_no_other() {
-    let (dir, _, _) = shelved(&["beta"], &["deploy"]);
-    let root = dir.path().join("alpha");
+/// A project beside the shelf's `beta`, marked by settings that name
+/// `agents` and author skills nowhere, linked to the workspace.
+fn with_settings(dir: &Path, agents: &str) {
+    let root = dir.join("alpha");
     fs::create_dir_all(root.join(MIND_DIR)).unwrap();
     fs::write(
         root.join(MIND_DIR).join("settings.json"),
-        r#"{
+        format!(
+            r#"{{
   "version": 3,
   "id": "0123456789abcdef0123456789abcdef",
   "name": "alpha",
-  "agents": ["claude"],
-  "share": "local",
-  "directories": {"rules": "rules"}
-}
-"#,
+  "agents": [{agents}],
+  "share": "shared",
+  "directories": {{"rules": "rules"}}
+}}
+"#
+        ),
     )
     .unwrap();
-    flayer(dir.path(), &["link", "alpha"]).unwrap();
+    flayer(dir, &["link", "alpha"]).unwrap();
+}
+
+/// Where the screen lists the project called `name`.
+fn listed(screen: &Screen, name: &str) -> usize {
+    screen
+        .targets
+        .iter()
+        .position(|target| target.name() == name)
+        .unwrap_or_else(|| panic!("{name} is not listed"))
+}
+
+#[test]
+fn a_project_whose_settings_name_no_agent_is_said_and_hides_no_other() {
+    let (dir, _, _) = shelved(&["beta"], &["deploy"]);
+    with_settings(dir.path(), "");
     let workspace = FlayerWorkspace::locate(dir.path()).unwrap().unwrap();
     let ledger = workspace.ledger().unwrap();
 
     let mut screen = screen_for(&workspace, &ledger);
 
-    let names: Vec<String> = screen
-        .targets
-        .iter()
-        .map(|target| target.name().to_owned())
-        .collect();
-    assert_eq!(names.len(), 2, "{names:?}");
-    let at = |name: &str| names.iter().position(|named| named == name).unwrap();
-    screen.cursor = at("alpha");
+    assert_eq!(screen.targets.len(), 2);
+    screen.cursor = listed(&screen, "alpha");
     let drawn = rendered(&screen);
-    assert!(
-        drawn.contains("alpha keeps no skills of its own"),
-        "{drawn}"
-    );
+    assert!(drawn.contains("alpha names no agent"), "{drawn}");
     assert!(!drawn.contains("nothing on the shelf"), "{drawn}");
     press(&mut screen, &[KeyCode::Right]);
     assert_eq!(screen.focus, Focus::Projects);
-    assert!(
-        screen
-            .message
-            .as_deref()
-            .is_some_and(|message| message.contains("keeps no skills of its own")),
-        "{:?}",
-        screen.message
+    assert_eq!(
+        screen.message.as_deref(),
+        Some(
+            "alpha names no agent in its settings that skills are installed for, so none can \
+             be installed into it"
+        )
     );
-    screen.cursor = at("beta");
+    screen.cursor = listed(&screen, "beta");
     assert!(rendered(&screen).contains("[ ] deploy"));
-    assert!(!root.join("skills").exists());
+    assert!(!dir.path().join("alpha/skills").exists());
+}
+
+#[test]
+fn the_screen_installs_into_every_folder_a_project_marked_by_its_settings_has_agents_read() {
+    let (dir, _, _) = shelved(&["beta"], &["deploy"]);
+    with_settings(dir.path(), r#""claude", "codex""#);
+    let workspace = FlayerWorkspace::locate(dir.path()).unwrap().unwrap();
+    let ledger = workspace.ledger().unwrap();
+    let mut screen = screen_for(&workspace, &ledger);
+    screen.cursor = listed(&screen, "alpha");
+    assert!(rendered(&screen).contains("[ ] deploy"));
+
+    press(&mut screen, &[KeyCode::Right, KeyCode::Char(' ')]);
+    let outcome = install_screen::apply(&workspace, &ledger, &screen).unwrap();
+
+    assert!(outcome.ok, "{:?}", outcome.stderr);
+    assert!(
+        outcome.stdout.contains("alpha: installed deploy"),
+        "{}",
+        outcome.stdout
+    );
+    let root = dir.path().join("alpha");
+    let claude = fs::read(root.join(".claude/skills/deploy/SKILL.md")).unwrap();
+    let agents = fs::read(root.join(".agents/skills/deploy/SKILL.md")).unwrap();
+    assert_eq!(claude, agents);
+    let mut reopened = screen_for(&workspace, &ledger);
+    reopened.cursor = listed(&reopened, "alpha");
+    assert!(rendered(&reopened).contains("[x] deploy"));
+
+    // Unticked, both go.
+    press(&mut reopened, &[KeyCode::Right, KeyCode::Char(' ')]);
+    let outcome = install_screen::apply(&workspace, &ledger, &reopened).unwrap();
+    assert!(
+        outcome.stdout.contains("alpha: removed deploy"),
+        "{}",
+        outcome.stdout
+    );
+    assert!(!root.join(".claude/skills/deploy").exists());
+    assert!(!root.join(".agents/skills/deploy").exists());
+}
+
+#[test]
+fn a_skill_somebody_keeps_in_one_agents_folder_is_left_alone_from_the_screen() {
+    let (dir, _, _) = shelved(&["beta"], &["deploy"]);
+    with_settings(dir.path(), r#""claude", "codex""#);
+    let root = dir.path().join("alpha");
+    fs::create_dir_all(root.join(".claude/skills/deploy")).unwrap();
+    fs::write(
+        root.join(".claude/skills/deploy/SKILL.md"),
+        skill_file("deploy", "Written by a person"),
+    )
+    .unwrap();
+    let workspace = FlayerWorkspace::locate(dir.path()).unwrap().unwrap();
+    let ledger = workspace.ledger().unwrap();
+
+    let mut screen = screen_for(&workspace, &ledger);
+    screen.cursor = listed(&screen, "alpha");
+
+    let drawn = rendered(&screen);
+    assert!(drawn.contains("not installed by mindflayer"), "{drawn}");
+    press(&mut screen, &[KeyCode::Right, KeyCode::Char(' ')]);
+    assert_eq!(screen.counts(), (0, 0));
+    assert!(!root.join(".agents/skills/deploy").exists());
 }
 
 /// Put a token into the URL of every source on the shelf, the way a Mindflayer

@@ -271,9 +271,10 @@ pub fn apply(
                         let _ = writeln!(stdout, "{}: {name} was already current", project.name());
                     }
                     // Refused rather than obeyed: somebody wrote that file.
-                    Installed::Foreign { name } => stderr.push(format!(
-                        "warning: {}: {name} is already there and Mindflayer did not put it there, so it was left alone",
-                        project.name()
+                    Installed::Foreign { name, path } => stderr.push(format!(
+                        "warning: {}: {name} is already at {} and Mindflayer did not put it there, so it was left alone",
+                        project.name(),
+                        crate::commands::install::shown(project, &path)
                     )),
                 }
                 stdout.push_str(&crate::commands::install::swept(project, &done.swept));
@@ -294,9 +295,10 @@ pub fn apply(
                         removed += 1;
                         let _ = writeln!(stdout, "{}: removed {name}", project.name());
                     }
-                    Removed::Foreign { name } => stderr.push(format!(
-                        "warning: {}: {name} was not installed by Mindflayer, so it was left alone",
-                        project.name()
+                    Removed::Foreign { name, path } => stderr.push(format!(
+                        "warning: {}: {name} at {} was not installed by Mindflayer, so it was left alone",
+                        project.name(),
+                        crate::commands::install::shown(project, &path)
                     )),
                     Removed::Absent { name } => {
                         let _ = writeln!(stdout, "{}: {name} was not there", project.name());

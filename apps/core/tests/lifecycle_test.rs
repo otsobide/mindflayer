@@ -642,7 +642,8 @@ fn an_edit_that_changes_an_installed_copy_drops_its_record() {
     assert_eq!(
         install::uninstall(&workspace, &ledger, &project, Kind::Skill, "deploy").unwrap(),
         install::Removed::Foreign {
-            name: String::from("deploy")
+            name: String::from("deploy"),
+            path: project.root().join("skills").join("deploy"),
         }
     );
     assert!(dir.path().join("collapse/skills/deploy/SKILL.md").is_file());

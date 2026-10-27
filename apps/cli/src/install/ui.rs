@@ -73,7 +73,7 @@ fn skills(screen: &Screen, frame: &mut Frame, area: Rect) {
 
     let heading = title(target);
     if target.rows.is_empty() {
-        let said = target.no_folder().unwrap_or_else(|| {
+        let said = target.unreachable().unwrap_or_else(|| {
             String::from(
                 "nothing on the shelf; `flayer gather git <url>`, `flayer load <path>` or `flayer add skill` first",
             )

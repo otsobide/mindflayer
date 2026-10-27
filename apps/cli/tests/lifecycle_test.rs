@@ -407,7 +407,9 @@ fn a_workspace_beside_a_project_drops_its_record_when_flayer_edits_the_copy() {
     let left = flayer(&hub, &["uninstall", "-p", "collapse", "deploy"]).unwrap();
     assert_eq!(
         left.stderr,
-        vec!["warning: deploy in collapse was not installed by Mindflayer, so it was left alone"]
+        vec![
+            "warning: deploy at skills/deploy in collapse was not installed by Mindflayer, so it was left alone"
+        ]
     );
     assert!(project.join("skills/deploy/SKILL.md").is_file());
 }
