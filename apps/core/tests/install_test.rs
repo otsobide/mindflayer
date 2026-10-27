@@ -1631,10 +1631,11 @@ fn copies_that_cannot_be_put_in_place_take_their_exclude_entries_back_out() {
     )
     .unwrap_err();
 
-    assert!(
-        matches!(refused, install::InstallError::Write { .. }),
-        "{refused}"
-    );
+    // Named, the one that is broken rather than the first.
+    let install::InstallError::Write { path, .. } = &refused else {
+        panic!("{refused}");
+    };
+    assert_eq!(*path, agents_copies(&project, "deploy")[1]);
     assert!(!agents_copies(&project, "deploy")[0].exists());
     assert_eq!(fs::read_to_string(&file).unwrap(), before);
 }

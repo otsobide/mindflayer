@@ -736,10 +736,13 @@ pub fn install(
         Ok(changes) => changes,
         // What was cleared on the way goes out with the error rather than
         // with the stage: it was cleared whether or not this copy lands.
-        Err(source) => {
+        Err(copy::PlaceError { target, source }) => {
             undo();
             return Err(InstallError::Write {
-                path: copies[0].clone(),
+                // The target it failed at, since the error may not say: or
+                // the first, as with one target, when it failed building the
+                // copy, which is no target's doing.
+                path: target.unwrap_or_else(|| copies[0].clone()),
                 source,
                 swept: stage.swept().to_vec(),
             });

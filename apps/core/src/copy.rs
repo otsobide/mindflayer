@@ -217,6 +217,37 @@ pub struct Stage {
     _lock: Option<File>,
 }
 
+/// Why [`Stage::place`] put no copy in place, and at which target.
+///
+/// The target is said apart from the error because the error often does not
+/// name it: making the folder a copy goes in fails with what the filesystem
+/// says, which names no path, and with several targets the caller cannot
+/// tell which one was broken.
+#[derive(Debug)]
+pub struct PlaceError {
+    /// The target it failed at, as `to` names it: one that could not be
+    /// cleared beside, compared or put in place. None when the copy itself
+    /// could not be built, which is no target's doing.
+    pub target: Option<PathBuf>,
+    pub source: io::Error,
+}
+
+impl PlaceError {
+    fn at(target: &Path) -> impl FnOnce(io::Error) -> PlaceError + '_ {
+        move |source| PlaceError {
+            target: Some(target.to_path_buf()),
+            source,
+        }
+    }
+
+    fn building(source: io::Error) -> PlaceError {
+        PlaceError {
+            target: None,
+            source,
+        }
+    }
+}
+
 /// The `.gitignore` a scratch folder is given, so nothing staged in it is
 /// committed: `*`, as a Python venv ignores itself, inside the folder it is
 /// about rather than in a team's `.gitignore`.
@@ -264,7 +295,9 @@ impl Stage {
     ///
     /// Mutable, because a stage builds one copy at a time in one place.
     pub fn replace(&mut self, from: &Path, to: &Path, within: &Path) -> Result<Change, io::Error> {
-        let changes = self.place(from, std::slice::from_ref(&to.to_path_buf()), within, &[])?;
+        let changes = self
+            .place(from, std::slice::from_ref(&to.to_path_buf()), within, &[])
+            .map_err(|error| error.source)?;
         Ok(changes[0])
     }
 
@@ -295,27 +328,29 @@ impl Stage {
     /// place twice, and the second rename would find the first's copy there.
     /// What an interrupted run of an earlier version left beside each target
     /// is cleared first, as for [`Stage::replace`].
+    ///
+    /// A failure says which target it was at ([`PlaceError::target`]).
     pub fn place(
         &mut self,
         from: &Path,
         to: &[PathBuf],
         within: &Path,
         leave_out: &[&str],
-    ) -> Result<Vec<Change>, io::Error> {
+    ) -> Result<Vec<Change>, PlaceError> {
         for target in to {
-            self.clear_beside(target)?;
+            self.clear_beside(target).map_err(PlaceError::at(target))?;
         }
-        let built = self.fresh("new")?;
+        let built = self.fresh("new").map_err(PlaceError::building)?;
         if let Err(error) = tree_leaving(from, &built, within, leave_out) {
             let _ = fs::remove_dir_all(&built);
-            return Err(error);
+            return Err(PlaceError::building(error));
         }
 
         let mut changes = Vec::with_capacity(to.len());
         let mut moving = Vec::new();
         for (index, target) in to.iter().enumerate() {
             let change = match target.exists() {
-                true if same(&built, target)? => Change::Unchanged,
+                true if same(&built, target).map_err(PlaceError::at(target))? => Change::Unchanged,
                 true => Change::Updated,
                 false => Change::Added,
             };
@@ -337,12 +372,14 @@ impl Stage {
                 copies.push(built.clone());
                 continue;
             }
-            let copy = self.fresh(&format!("new-{index}"))?;
+            let copy = self
+                .fresh(&format!("new-{index}"))
+                .map_err(PlaceError::building)?;
             if let Err(error) = tree(&built, &copy, &built) {
                 self.clear(&copies);
                 let _ = fs::remove_dir_all(&copy);
                 let _ = fs::remove_dir_all(&built);
-                return Err(error);
+                return Err(PlaceError::building(error));
             }
             copies.push(copy);
         }
@@ -355,7 +392,7 @@ impl Stage {
                 Err(error) => {
                     self.take_back(&placed);
                     self.clear(&copies);
-                    return Err(error);
+                    return Err(PlaceError::at(target)(error));
                 }
             }
         }

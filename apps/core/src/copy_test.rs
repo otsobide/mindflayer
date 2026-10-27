@@ -331,7 +331,7 @@ fn a_target_that_cannot_be_put_in_place_leaves_every_target_as_it_was() {
 
     let error = stage.place(&from, &targets, &from, &[]).unwrap_err();
 
-    assert!(!error.to_string().is_empty());
+    assert_eq!(error.target.as_ref(), Some(&targets[2]));
     // Put back, the one it replaced and the one it added alike.
     assert_eq!(
         fs::read_to_string(targets[0].join("SKILL.md")).unwrap(),
