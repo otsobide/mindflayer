@@ -101,21 +101,35 @@ impl Rendered {
     /// of the rule it took out ([`Removed::Removed`]), and an install of the
     /// project.
     pub fn warnings_of(&self, changed: Option<&str>) -> Vec<String> {
-        let other = |route: &str| changed.is_some_and(|changed| changed != route);
+        self.warnings_about(|route| changed.is_none_or(|changed| changed == route), true)
+    }
+
+    /// What a render that brought the rules `updated` up to date has to
+    /// warn of, as [`Rendered::warnings_of`] says it of one rule changed:
+    /// what is true of each of them, and of the rules as a whole. Not an
+    /// edit it kept, in a section or a file for Claude, which the update
+    /// says itself of every copy it leaves alone, as it says a skill's
+    /// ([`crate::update::Step::Leave`]).
+    pub fn warnings_of_update(&self, updated: &[&str]) -> Vec<String> {
+        self.warnings_about(|route| updated.contains(&route), false)
+    }
+
+    /// Every warning of the render, those about one rule only while it is
+    /// `about` that rule, and those about an edit it kept only with `kept`.
+    fn warnings_about(&self, about: impl Fn(&str) -> bool, kept: bool) -> Vec<String> {
         let rules = self.warnings.iter().filter(|warning| match warning {
-            Warning::Unreached { route } => !other(route),
+            Warning::Unreached { route } => about(route),
+            Warning::Kept { .. } => kept,
             Warning::Withheld { .. }
             | Warning::Left { .. }
             | Warning::Edited { .. }
-            | Warning::Kept { .. }
             | Warning::Unremoved { .. } => true,
         });
         let block = self.block.iter().flat_map(|block| &block.warnings);
         let files = self.files.warnings.iter().filter(|warning| match warning {
-            claude_rules::Warning::ClaudeOnly { route, .. } => !other(route),
-            claude_rules::Warning::Foreign { .. }
-            | claude_rules::Warning::Edited { .. }
-            | claude_rules::Warning::Failed { .. } => true,
+            claude_rules::Warning::ClaudeOnly { route, .. } => about(route),
+            claude_rules::Warning::Edited { .. } => kept,
+            claude_rules::Warning::Foreign { .. } | claude_rules::Warning::Failed { .. } => true,
         });
         rules
             .map(ToString::to_string)
@@ -527,6 +541,39 @@ pub fn render(
     .map(Some)
 }
 
+/// Render `project`'s rules again to bring each up to date with where it
+/// was installed from, as an update does ([`crate::update`]), with the
+/// workspace's lock held: as [`render`] renders them, but writing over an
+/// edit of each rule `forced` names, section and file for Claude, as
+/// `--force` asks, and keeping a rule no longer offered as the project
+/// holds it rather than refusing the render, as an uninstall of another
+/// rule keeps one. Every other edit is kept, as every render keeps one.
+pub(crate) fn update_held(
+    workspace: &FlayerWorkspace,
+    ledger: &Ledger,
+    project: &MindProject,
+    homes: &AgentHomes,
+    forced: &[String],
+) -> Result<Rendered, InstallError> {
+    let edits = if forced.is_empty() {
+        Edits::Kept
+    } else {
+        Edits::Forced
+    };
+    let rendered = render_held(
+        workspace,
+        ledger,
+        project,
+        homes,
+        Change::Update(forced),
+        edits,
+    )?;
+    let entry = project_entry(workspace, project);
+    let detail = format!("the rules of {}, brought up to date", project.name());
+    ledger.log(Action::Install, Some(&entry), Outcome::Ok, Some(&detail))?;
+    Ok(rendered)
+}
+
 /// What a render is for.
 #[derive(Clone, Copy)]
 enum Change<'a> {
@@ -534,6 +581,8 @@ enum Change<'a> {
     Install(&'a Candidate),
     /// Taking this one out.
     Uninstall(&'a str),
+    /// Bringing every rule up to date, writing over the edits of these.
+    Update(&'a [String]),
     /// Neither: rendering what the project has, as it is now.
     Again,
 }
@@ -545,6 +594,19 @@ impl Change<'_> {
         match self {
             Change::Install(candidate) => candidate.name() == name,
             Change::Uninstall(going) => *going == name,
+            Change::Update(_) | Change::Again => false,
+        }
+    }
+
+    /// Whether an edit of the rule `name`, in its section or its file for
+    /// Claude, is written over or taken away rather than kept, when the
+    /// render is forced: the one rule an install or an uninstall changes,
+    /// whose edit refused it unless forced, or each an update was forced
+    /// to write over.
+    fn forces(&self, name: &str) -> bool {
+        match self {
+            Change::Install(_) | Change::Uninstall(_) => self.changes(name),
+            Change::Update(forced) => forced.iter().any(|route| route == name),
             Change::Again => false,
         }
     }
@@ -685,7 +747,8 @@ fn withholding(project: &MindProject) -> Option<Withheld> {
 /// leaving its section out would take it from every agent, as the block
 /// refuses a rule it cannot read. An uninstall of another rule keeps it
 /// instead, as the project holds it: its section as the block holds it, its
-/// file for Claude where it is, its record as it was. What can refuse is
+/// file for Claude where it is, its record as it was; and so does an
+/// update. What can refuse is
 /// asked before anything is written: a block that cannot be read or holds a
 /// section nothing records, a rule taken out whose section is in a block
 /// that cannot be edited, a file or a folder where no rule is written, a
@@ -704,7 +767,7 @@ fn withholding(project: &MindProject) -> Option<Withheld> {
 /// for Claude, by [`claude_rules::render`]. The rule `change` installs or
 /// takes out was refused before this if it was edited, unless `edits`
 /// forces it, and then its file for Claude is written over or taken away as
-/// its section is.
+/// its section is; so is each rule an update is forced to write over.
 fn render_held(
     workspace: &FlayerWorkspace,
     ledger: &Ledger,
@@ -741,8 +804,10 @@ fn render_held(
             // and refusing would leave two rules no longer offered each
             // keeping the other from being taken out, with nothing else that
             // drops a rule's record: the one kept stays as the project holds
-            // it, for its own uninstall to take out.
-            (None, Change::Uninstall(_)) => unoffered.push(record),
+            // it, for its own uninstall to take out. Nor is bringing the
+            // rest up to date, which an update does whatever is orphaned
+            // beside them (D-04): it is said, not refused.
+            (None, Change::Uninstall(_) | Change::Update(_)) => unoffered.push(record),
             (None, _) => {
                 return Err(InstallError::NoLongerOffered {
                     name: record.name.clone(),
@@ -846,7 +911,7 @@ fn render_held(
                 let Some(recorded) = recorded else {
                     continue;
                 };
-                if change.changes(name) || !text.routes().contains(&name) {
+                if change.forces(name) || !text.routes().contains(&name) {
                     continue;
                 }
                 // One that cannot be read back would go with the render.
@@ -994,7 +1059,7 @@ fn render_held(
             .filter_map(|record| {
                 let file = claude_file(&record.name);
                 let target = record.targets.iter().find(|target| target.path == file)?;
-                let forced = (edits == Edits::Forced && change.changes(&record.name))
+                let forced = (edits == Edits::Forced && change.forces(&record.name))
                     .then(|| held_file(&root.join(&file)))
                     .flatten();
                 Some(Recorded {

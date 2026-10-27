@@ -48,6 +48,7 @@ pub mod rules;
 mod standing;
 
 pub use standing::Standing;
+pub(crate) use standing::{Found, Surveyed};
 
 /// Whether an install or an uninstall may write over, or take out, a copy
 /// edited since it was installed (D-04): what `--force` says.
@@ -635,6 +636,21 @@ pub fn standings(
     project: &MindProject,
     kind: Kind,
 ) -> Result<Vec<(String, Standing)>, LedgerError> {
+    Ok(surveyed(workspace, ledger, project, kind)?
+        .into_iter()
+        .map(|surveyed| (surveyed.record.name, surveyed.standing))
+        .collect())
+}
+
+/// Every installation of `kind` the ledger records in `project`, by name in
+/// name order, as [`standings`] tells them, with what told each: where it
+/// is offered now and how each of its copies is found.
+pub(crate) fn surveyed(
+    workspace: &FlayerWorkspace,
+    ledger: &Ledger,
+    project: &MindProject,
+    kind: Kind,
+) -> Result<Vec<Surveyed>, LedgerError> {
     let records = ledger.records(&project_entry(workspace, project), kind)?;
     if records.is_empty() {
         return Ok(Vec::new());
@@ -646,16 +662,34 @@ pub fn standings(
         Kind::Rule => rules::block_file(project.root()),
     };
     Ok(records
-        .iter()
+        .into_iter()
         .map(|record| {
-            let offered = offered_for(record, &offers);
-            let standing = match kind {
-                Kind::Skill => standing::of_skill(workspace, project, record, &offered),
+            let offered = offered_for(&record, &offers);
+            let (copies, standing) = match kind {
+                Kind::Skill => {
+                    let copies = standing::skill_copies(workspace, project, &record, &offered);
+                    let standing = standing::skill_standing(workspace, &copies, &offered);
+                    (copies, standing)
+                }
                 Kind::Rule => {
-                    standing::of_rule(workspace, project, record, block.as_ref(), &offered)
+                    let copies = standing::rule_copies(
+                        workspace,
+                        project,
+                        &record,
+                        block.as_ref(),
+                        &offered,
+                    );
+                    let standing = standing::rule_standing(workspace, &record, &copies, &offered);
+                    (copies, standing)
                 }
             };
-            (record.name.clone(), standing)
+            let offered = offered.into_iter().cloned().collect();
+            Surveyed {
+                record,
+                offered,
+                copies,
+                standing,
+            }
         })
         .collect())
 }
