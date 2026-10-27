@@ -349,16 +349,34 @@ pub(crate) fn install(
         return copy_in(workspace, ledger, project, candidate, homes, edits);
     }
     receives(project)?;
-    let root = project.root();
     let name = candidate.name().to_owned();
     // Looked at before the lock, so a refusal waits for nobody, and again
     // under it, as an install of a skill looks.
     if candidate.standing == Standing::Foreign {
-        if let Some(path) = Held::read(workspace, ledger, project)?.foreign(root, &name) {
+        if let Some(path) = Held::read(workspace, ledger, project)?.foreign(project.root(), &name) {
             return Ok(Installed::Foreign { name, path }.into());
         }
     }
     let _lock = workspace.lock().map_err(WorkspaceError::from)?;
+    install_held(workspace, ledger, project, candidate, homes, edits)
+}
+
+/// [`install`], with the workspace's lock held already, as
+/// [`super::install_held`] is for a skill.
+pub(crate) fn install_held(
+    workspace: &FlayerWorkspace,
+    ledger: &Ledger,
+    project: &MindProject,
+    candidate: &Candidate,
+    homes: &AgentHomes,
+    edits: Edits,
+) -> Result<Installation, InstallError> {
+    if project.settings().is_none() {
+        return copy_in_held(workspace, ledger, project, candidate, homes, edits);
+    }
+    receives(project)?;
+    let root = project.root();
+    let name = candidate.name().to_owned();
     if let Some(path) = Held::read(workspace, ledger, project)?.foreign(root, &name) {
         return Ok(Installed::Foreign { name, path }.into());
     }
@@ -1357,6 +1375,29 @@ fn copy_in(
         }
     }
     let _lock = workspace.lock().map_err(WorkspaceError::from)?;
+    copy_in_held(workspace, ledger, project, candidate, homes, edits)
+}
+
+/// [`copy_in`], with the workspace's lock held already.
+fn copy_in_held(
+    workspace: &FlayerWorkspace,
+    ledger: &Ledger,
+    project: &MindProject,
+    candidate: &Candidate,
+    homes: &AgentHomes,
+    edits: Edits,
+) -> Result<Installation, InstallError> {
+    let kind = Kind::Rule;
+    let name = candidate.name().to_owned();
+    let entry = project_entry(workspace, project);
+    let targets = targets(project, kind)?;
+    let copies: Vec<PathBuf> = targets
+        .iter()
+        .map(|target| copy_at(&target.folder, kind, &name))
+        .collect();
+    if let Some(error) = user_scope(homes, &copies) {
+        return Err(error);
+    }
 
     let from = candidate.source(workspace);
     if !from.is_file() {

@@ -998,7 +998,7 @@ pub fn install_with(
     // Somebody's work in any of them refuses the whole install: one copy
     // written beside it would leave the agents reading both folders two
     // different skills of one name. Looked at before the lock, so a refusal
-    // waits for nobody, and again under it below.
+    // waits for nobody, and again under it.
     if candidate.standing == Standing::Foreign {
         let recorded = ledger.copies(&entry, kind)?;
         if let Some(path) = unrecorded(project.root(), kind, &copies, &recorded) {
@@ -1010,6 +1010,41 @@ pub fn install_with(
     // would otherwise each record theirs, and the copies left would be
     // whichever moved into place last.
     let _lock = workspace.lock().map_err(WorkspaceError::from)?;
+    install_held(workspace, ledger, project, candidate, homes, edits)
+}
+
+/// [`install_with`], with the workspace's lock held already: for a writer
+/// that installs several things under one hold of it, as an update does
+/// ([`crate::update`]), since the lock is not re-entrant. Everything an
+/// install refuses is looked at again here, under the lock, whatever was
+/// looked at before it.
+pub(crate) fn install_held(
+    workspace: &FlayerWorkspace,
+    ledger: &Ledger,
+    project: &MindProject,
+    candidate: &Candidate,
+    homes: &AgentHomes,
+    edits: Edits,
+) -> Result<Installation, InstallError> {
+    let kind = candidate.kind();
+    let name = candidate.name().to_owned();
+    installable_name(kind, &name)?;
+    // Matched on the kind, so a third one has to say how it is installed.
+    match kind {
+        Kind::Skill => {}
+        Kind::Rule => {
+            return rules::install_held(workspace, ledger, project, candidate, homes, edits)
+        }
+    }
+    let entry = project_entry(workspace, project);
+    let targets = targets(project, kind)?;
+    let copies: Vec<PathBuf> = targets
+        .iter()
+        .map(|target| copy_at(&target.folder, kind, &name))
+        .collect();
+    if let Some(error) = user_scope(homes, &copies) {
+        return Err(error);
+    }
 
     let from = candidate.source(workspace);
     if !from.is_dir() {
