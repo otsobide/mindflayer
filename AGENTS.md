@@ -519,9 +519,11 @@ These are easy to break from a single file without noticing.
   `feature/*`, `hotfix/*` or `release/*` (or `main`, for a back-merge). PRs
   into `main` come only from `dev`. PRs are merged with merge commits.
 - CI runs `fmt and clippy`, then `test (core)`, then `test (cli)` and
-  `test (server)`, and builds each app after its tests pass. macOS and
-  Windows run on pushes to `dev`/`main`, on PRs from `dev`, `main` or
-  `release/*`, and on PRs labelled `full-matrix`.
+  `test (server)`, and builds each app after its tests pass. Development
+  targets Linux only for now: macOS and Windows run only by hand
+  (`workflow_dispatch`) or on PRs labelled `full-matrix`, until the
+  compatibility pass (#154) puts them back on pushes to `dev`/`main` and PRs
+  from `dev`, `main` or `release/*`.
 - Commit messages: `<area>: <imperative summary>`, where area is `core`,
   `cli`, `server`, `web`, `docs`, `build`, `ci` or `chore` (`core, cli:` when
   a change spans two apps).
