@@ -7,7 +7,7 @@
 //! names for each kind, and no share mode, because a project from before
 //! settings was committed by design. It is read the way it was written, so
 //! nothing moves it but being asked to. [`project_plan`] says what asking
-//! would do, and [`project`] does it: `.mind/settings.json` written from the
+//! would do, and [`project`] does it: `.mind/settings.toml` written from the
 //! `mind.toml`, its name and folders kept, with the agents and share mode
 //! asked for; every installation a workspace records given a copy where each
 //! agent the project names is sent one (D-07), and its untouched copy taken
@@ -53,7 +53,7 @@ pub struct ProjectPlan {
     /// The settings written: the `mind.toml`'s name and folders, the agents
     /// and share mode asked for, and an id of the project's own.
     pub settings: Settings,
-    /// Where they go: `.mind/settings.json`.
+    /// Where they go: `.mind/settings.toml`.
     pub settings_file: PathBuf,
     /// The `mind.toml` that marks the project now.
     pub marker: PathBuf,

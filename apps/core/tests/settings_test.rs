@@ -1,5 +1,6 @@
-//! A project marked by its settings, `.mind/settings.json`: found and read
-//! as any project is, beside the ones a `mind.toml` still marks.
+//! A project marked by its settings, `.mind/settings.toml`, or the
+//! `.mind/settings.json` before it: found and read as any project is, beside
+//! the ones a `mind.toml` still marks.
 
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -9,7 +10,7 @@ use mindflayer_core::{
     create, scan, Agent, AgentTarget, Catalog, CreateError, Directories, FlayerWorkspace,
     Initialization, Kind, MarkerFile, MindProject, Misplaced, MisplacedTarget, ProjectWarning,
     Settings, Share, Targets, WorkspaceError, MIND_CONFIG, MIND_DIR, MIND_IGNORE, SETTINGS_FILE,
-    SETTINGS_TOML_FILE, SETTINGS_TOML_VERSION, SETTINGS_VERSION, TARGETS_VERSION,
+    SETTINGS_JSON_FILE, SETTINGS_TOML_VERSION, SETTINGS_VERSION, TARGETS_VERSION,
 };
 use tempfile::TempDir;
 
@@ -62,13 +63,13 @@ fn a_project_holding_both_markers_is_read_from_its_settings_and_warns_of_the_oth
         warnings,
         vec![ProjectWarning::Leftover {
             path: leftover.clone(),
-            read: MarkerFile::SettingsJson,
+            read: MarkerFile::SettingsToml,
         }]
     );
     assert_eq!(
         warnings[0].to_string(),
         format!(
-            "{}: ignored, since the project is read from the settings.json beside it",
+            "{}: ignored, since the project is read from the settings.toml beside it",
             leftover.display()
         )
     );
@@ -80,7 +81,7 @@ fn a_project_holding_both_markers_is_read_from_its_settings_and_warns_of_the_oth
 fn json_project(root: &Path, targets: Option<&str>) -> PathBuf {
     let mind = root.join(MIND_DIR);
     fs::create_dir_all(&mind).unwrap();
-    let path = mind.join(SETTINGS_FILE);
+    let path = mind.join(SETTINGS_JSON_FILE);
     let (version, targets) = match targets {
         Some(targets) => (4, format!(",\n  \"targets\": {targets}")),
         None => (3, String::new()),
@@ -102,11 +103,7 @@ fn json_project(root: &Path, targets: Option<&str>) -> PathBuf {
 fn toml_project(root: &Path, settings: &Settings) -> PathBuf {
     let mind = root.join(MIND_DIR);
     fs::create_dir_all(&mind).unwrap();
-    let path = mind.join(SETTINGS_TOML_FILE);
-    let settings = Settings {
-        version: SETTINGS_TOML_VERSION,
-        ..settings.clone()
-    };
+    let path = mind.join(SETTINGS_FILE);
     fs::write(&path, settings.text().unwrap()).unwrap();
     path
 }
@@ -130,7 +127,7 @@ fn a_settings_json_of_version_3_or_4_is_read_as_it_was_written() {
         assert_eq!(project.marker_file(), MarkerFile::SettingsJson);
         assert_eq!(
             project.marker_path(),
-            project.mind_dir().join(SETTINGS_FILE)
+            project.mind_dir().join(SETTINGS_JSON_FILE)
         );
         assert_eq!(
             project.directory_for(Kind::Skill),
@@ -172,7 +169,7 @@ fn a_project_holding_a_settings_toml_is_read_from_it_and_warns_of_each_older_mar
         [
             format!(
                 "{}: ignored, since the project is read from the settings.toml beside it",
-                mind.join(SETTINGS_FILE).display()
+                mind.join(SETTINGS_JSON_FILE).display()
             ),
             format!(
                 "{}: ignored, since the project is read from the settings.toml beside it",
@@ -335,9 +332,8 @@ fn targeting(root: &Path, folders: &[&str]) -> MindProject {
     fs::write(
         mind.join(SETTINGS_FILE),
         format!(
-            "{{\"version\": 4, \"id\": \"0123456789abcdef0123456789abcdef\", \"name\": \"collapse\", \
-             \"agents\": [\"claude\", \"codex\"], \"share\": \"local\", \
-             \"targets\": {{\"skills\": [{}]}}}}\n",
+            "version = 5\nid = \"0123456789abcdef0123456789abcdef\"\nname = \"collapse\"\n\
+             agents = [\"claude\", \"codex\"]\nshare = \"local\"\n\n[targets]\nskills = [{}]\n",
             listed.join(", ")
         ),
     )
@@ -570,25 +566,25 @@ fn a_new_project_writes_exactly_its_settings_and_a_gitignore() {
 
     assert_eq!(outcome, Initialization::Created);
     let mind = root.join(MIND_DIR);
-    assert_eq!(names_in(&mind), [".gitignore", "settings.json"]);
+    assert_eq!(names_in(&mind), [".gitignore", "settings.toml"]);
+    let text = fs::read_to_string(mind.join(SETTINGS_FILE)).unwrap();
+    assert_eq!(text, project.settings().unwrap().text().unwrap());
     let id = project.settings().unwrap().id.to_string();
-    assert_eq!(
-        fs::read_to_string(mind.join(SETTINGS_FILE)).unwrap(),
-        format!(
-            r#"{{
-  "version": 3,
-  "id": "{id}",
-  "name": "collapse",
-  "agents": ["claude", "codex", "opencode"],
-  "share": "local",
-  "edit_tracked": false,
-  "directories": {{
-    "skills": "skills",
-    "rules": "rules"
-  }}
-}}
-"#
-        )
+    assert!(
+        text.ends_with(&format!(
+            "# this file is laid out: change neither.\n\
+             version = 5\n\
+             id = \"{id}\"\n\
+             name = \"collapse\"\n\
+             agents = [\"claude\", \"codex\", \"opencode\"]\n\
+             share = \"local\"\n\
+             edit_tracked = false\n\
+             \n\
+             [directories]\n\
+             skills = \"skills\"\n\
+             rules = \"rules\"\n"
+        )),
+        "{text}"
     );
     assert_eq!(
         fs::read_to_string(mind.join(".gitignore")).unwrap(),
@@ -619,10 +615,10 @@ fn a_shared_project_writes_no_gitignore() {
     MindProject::init_settings(dir.path(), &[Agent::Claude], Share::Shared, &both_beside())
         .unwrap();
 
-    assert_eq!(names_in(&dir.path().join(MIND_DIR)), ["settings.json"]);
+    assert_eq!(names_in(&dir.path().join(MIND_DIR)), ["settings.toml"]);
     let text = fs::read_to_string(dir.path().join(MIND_DIR).join(SETTINGS_FILE)).unwrap();
-    assert!(text.contains("  \"share\": \"shared\",\n"), "{text}");
-    assert!(text.contains("  \"agents\": [\"claude\"],\n"), "{text}");
+    assert!(text.contains("\nshare = \"shared\"\n"), "{text}");
+    assert!(text.contains("\nagents = [\"claude\"]\n"), "{text}");
 }
 
 #[test]
@@ -773,7 +769,7 @@ fn git_ignores_everything_in_a_local_projects_mind() {
 
     MindProject::init_settings(dir.path(), &Agent::ALL, Share::Local, &both_beside()).unwrap();
 
-    assert!(ignored(dir.path(), ".mind/settings.json"));
+    assert!(ignored(dir.path(), ".mind/settings.toml"));
     assert!(ignored(dir.path(), ".mind/.gitignore"));
     // What the project authors is its own to commit.
     assert!(!ignored(dir.path(), "skills/"));
@@ -787,7 +783,7 @@ fn git_sees_a_shared_projects_settings() {
 
     MindProject::init_settings(dir.path(), &Agent::ALL, Share::Shared, &both_beside()).unwrap();
 
-    assert!(!ignored(dir.path(), ".mind/settings.json"));
+    assert!(!ignored(dir.path(), ".mind/settings.toml"));
 }
 
 /// Settings as somebody keeps them by hand: four spaces a level, the keys in
@@ -807,7 +803,7 @@ const BY_HAND: &str = r#"{
 /// A project at `root` marked by [`BY_HAND`], and where its settings are.
 fn by_hand(root: &Path) -> (MindProject, PathBuf) {
     fs::create_dir_all(root.join(MIND_DIR)).unwrap();
-    let path = root.join(MIND_DIR).join(SETTINGS_FILE);
+    let path = root.join(MIND_DIR).join(SETTINGS_JSON_FILE);
     fs::write(&path, BY_HAND).unwrap();
     (MindProject::open(root).unwrap(), path)
 }
@@ -1201,7 +1197,7 @@ skills = "skills"
 /// are.
 fn toml_by_hand(root: &Path) -> (MindProject, PathBuf) {
     fs::create_dir_all(root.join(MIND_DIR)).unwrap();
-    let path = root.join(MIND_DIR).join(SETTINGS_TOML_FILE);
+    let path = root.join(MIND_DIR).join(SETTINGS_FILE);
     fs::write(&path, TOML_BY_HAND).unwrap();
     (MindProject::open(root).unwrap(), path)
 }

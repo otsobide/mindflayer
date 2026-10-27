@@ -1,6 +1,6 @@
-//! A project's marker from version 3 on: `.mind/settings.json`, and from
-//! [`SETTINGS_TOML_VERSION`] `.mind/settings.toml`, holding what the hub
-//! needs to know about the project and nothing else.
+//! A project's marker from version 3 on: `.mind/settings.toml`, and before
+//! [`SETTINGS_TOML_VERSION`] the `.mind/settings.json` it replaced, holding
+//! what the hub needs to know about the project and nothing else.
 //!
 //! Which agents read it, whether what is installed into it is shared with the
 //! team or kept to this checkout (D-02), whether a team file git tracks may
@@ -13,19 +13,23 @@
 //! in any one workspace's `flayer.toml`, where two workspaces could disagree
 //! about one project's files.
 //!
-//! JSON rather than the TOML `mind.toml` is written in, the owner's choice
-//! (D-06): a file this small explains nothing a comment would have to, and
-//! every tool and editor reads and writes JSON. Strict JSON, not JSONC, for
-//! the same reason: `jq`, Python's `json` and a browser's `JSON.parse` take
-//! it as it is, and an edit (`config_entry`, held to RFC 8259) refuses what
-//! they would refuse.
+//! TOML, as `flayer.toml` is, the owner's choice (D-06, amended): both
+//! markers are written from a template whose comments say what each key
+//! does, and edited through toml_edit, which keeps every byte an edit does
+//! not touch, those comments included. JSON, which the settings were
+//! written in first, has no comments to say it with. A `settings.json` is
+//! still read the way it was written, versions 3 and 4 alike, through the
+//! same key-at-a-time reader, so a key each holds is held to the same rules
+//! in both, and edited where it stands through `config_entry`.
 //!
 //! A key this build does not know is carried rather than refused: read past,
 //! and kept by an edit, where it was. The format grows, and a project
 //! configured by a newer Mindflayer is still a project, as it is for unknown
 //! front matter. A key that changes what an older build would do with the
 //! project is the exception, and comes with a version of its own, which
-//! that build refuses: `targets` ([`TARGETS_VERSION`]).
+//! that build refuses: `targets` came with [`TARGETS_VERSION`], which a
+//! `settings.json` holds only while it sets them, and a `settings.toml`, which
+//! no build from before them reads, holds them at its own version.
 
 use std::collections::BTreeMap;
 use std::fmt;
@@ -42,12 +46,13 @@ use crate::workspace::{
     SETTINGS_TOML_VERSION, SETTINGS_VERSION, TARGETS_VERSION,
 };
 
-/// The marker file of a version 3 or 4 project, inside its `.mind`.
-pub const SETTINGS_FILE: &str = "settings.json";
-
 /// The marker file of a project from [`SETTINGS_TOML_VERSION`] on, inside
-/// its `.mind`.
-pub const SETTINGS_TOML_FILE: &str = "settings.toml";
+/// its `.mind`: what `mind init` writes.
+pub const SETTINGS_FILE: &str = "settings.toml";
+
+/// The marker file of a version 3 or 4 project, inside its `.mind`: read as
+/// it was written, and moved to a [`SETTINGS_FILE`] by `mind migrate`.
+pub const SETTINGS_JSON_FILE: &str = "settings.json";
 
 /// The contents of a project's settings file, `.mind/settings.toml` or the
 /// `.mind/settings.json` before it.
@@ -59,8 +64,8 @@ pub struct Settings {
     /// The layout version the file was written with, which says which file
     /// it is in: [`SETTINGS_TOML_VERSION`] for a `settings.toml`; for a
     /// `settings.json`, [`SETTINGS_VERSION`], or [`TARGETS_VERSION`] for one
-    /// that says where installs land ([`Settings::version_needed`]). One this
-    /// build does not know is refused.
+    /// that says where installs land. One this build does not know is
+    /// refused.
     pub version: u32,
     /// What names the project whatever it is called and wherever it is.
     pub id: ProjectId,
@@ -89,9 +94,9 @@ pub struct Settings {
 }
 
 impl Settings {
-    /// A new project's settings, at [`SETTINGS_VERSION`], with an id of its
-    /// own and `edit_tracked` off: the one setting nobody chooses at the
-    /// start, and the one that edits a team's files.
+    /// A new project's settings, at [`SETTINGS_TOML_VERSION`], with an id
+    /// of its own and `edit_tracked` off: the one setting nobody chooses at
+    /// the start, and the one that edits a team's files.
     pub fn new(
         name: impl Into<String>,
         agents: Vec<Agent>,
@@ -99,7 +104,7 @@ impl Settings {
         directories: Directories,
     ) -> Self {
         Settings {
-            version: SETTINGS_VERSION,
+            version: SETTINGS_TOML_VERSION,
             id: ProjectId::generate(),
             name: name.into(),
             agents,
@@ -154,29 +159,6 @@ impl Settings {
         parse(path, &text)
     }
 
-    /// The text of a new settings file holding these, in the grammar their
-    /// version is written in: [`toml_text`](Self::toml_text) from
-    /// [`SETTINGS_TOML_VERSION`] on, and JSON before it.
-    ///
-    /// The JSON is pretty-printed, two spaces a level, ending in a newline,
-    /// the keys in the order the format lists them, and `targets` only when
-    /// it names a kind, since leaving it out says the same: written as
-    /// `config_entry` lays out what an edit inserts, so a file written new
-    /// and one an edit has changed since read alike. Refused for a directory
-    /// that is not UTF-8, which neither grammar can hold.
-    pub fn text(&self) -> Result<String, WorkspaceError> {
-        if self.version >= SETTINGS_TOML_VERSION {
-            return self.toml_text();
-        }
-        let members = self
-            .members()?
-            .into_iter()
-            .filter(|(key, _)| *key != TARGETS || !self.targets.is_empty())
-            .map(|(key, value)| (key.to_owned(), value));
-        Ok(config_entry::json_text(&Value::Object(members.collect()))
-            .expect("settings hold nothing JSON cannot write"))
-    }
-
     /// The text of a new `settings.toml` holding these, written from a
     /// template rather than serialized, as `flayer.toml` is: its comments say
     /// what each key does, in the file somebody opens to change one, and an
@@ -191,7 +173,7 @@ impl Settings {
     /// same on every platform, and one that is not UTF-8 is refused.
     ///
     /// [`MindProject::change_settings`]: crate::MindProject::change_settings
-    pub fn toml_text(&self) -> Result<String, WorkspaceError> {
+    pub fn text(&self) -> Result<String, WorkspaceError> {
         let agents: Vec<String> = self
             .agents
             .iter()

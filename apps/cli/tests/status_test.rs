@@ -521,11 +521,7 @@ fn installing_in(folders: &str) -> (TempDir, PathBuf) {
     fs::create_dir(&root).unwrap();
     new_project(&root);
     let path = root.join(MIND_DIR).join(SETTINGS_FILE);
-    let text = fs::read_to_string(&path).unwrap().replacen(
-        "{\n",
-        &format!("{{\n  \"targets\": {{\"skills\": [{folders}]}},\n"),
-        1,
-    );
+    let text = fs::read_to_string(&path).unwrap() + &format!("\n[targets]\nskills = [{folders}]\n");
     fs::write(&path, text).unwrap();
     flayer(dir.path(), &["link", "collapse"]).unwrap();
     flayer(dir.path(), &["add", "skill", "deploy", "Ship it"]).unwrap();

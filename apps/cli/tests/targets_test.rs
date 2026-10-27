@@ -51,8 +51,6 @@ fn setting_targets_says_what_it_would_move_then_moves_every_copy_there() {
         dry.stdout,
         "would set the targets of skills to .skills in collapse, where they were the folders its \
          agents read\n\
-         would set version to 4 in collapse, where it was 3, so a Mindflayer from before targets \
-         refuses it\n\
          would copy deploy to .skills/deploy, for claude, codex and opencode, kept out of git\n\
          would remove deploy from .agents/skills/deploy\n\
          would remove deploy from .claude/skills/deploy\n\
@@ -79,15 +77,16 @@ fn setting_targets_says_what_it_would_move_then_moves_every_copy_there() {
         done.stdout,
         "set the targets of skills to .skills in collapse, where they were the folders its agents \
          read\n\
-         set version to 4 in collapse, where it was 3, so a Mindflayer from before targets \
-         refuses it\n\
          copied deploy to .skills/deploy, for claude, codex and opencode, kept out of git\n\
          removed deploy from .agents/skills/deploy\n\
          removed deploy from .claude/skills/deploy\n"
     );
     assert_eq!(done.stderr, [format!("note: {UNREAD}")]);
     assert!(done.ok);
-    assert!(settings(&root).contains("\"targets\": {\n    \"skills\": [\".skills\"]\n  }"));
+    // At the version it was, the one a `settings.toml` holds whatever it
+    // sets: no line says a version moved.
+    assert!(settings(&root).ends_with("\n[targets]\nskills = [\".skills\"]\n"));
+    assert!(settings(&root).contains("\nversion = 5\n"));
     assert_eq!(
         copies(&root, "deploy"),
         [root.join(".skills").join("deploy")]
@@ -142,7 +141,6 @@ fn resetting_moves_the_copies_back_and_leaves_somebodys_where_it_is_said() {
         done.stdout,
         "set the targets of skills to the folders its agents read in collapse, where they were \
          .skills\n\
-         set version to 3 in collapse, where it was 4\n\
          copied deploy to .agents/skills/deploy, for codex and opencode, kept out of git\n\
          copied deploy to .claude/skills/deploy, for claude, kept out of git\n\
          removed deploy from .skills/deploy\n\
@@ -156,7 +154,7 @@ fn resetting_moves_the_copies_back_and_leaves_somebodys_where_it_is_said() {
         recorded(dir.path()),
         [".agents/skills/deploy", ".claude/skills/deploy"]
     );
-    assert!(!settings(&root).contains("targets"));
+    assert!(!settings(&root).contains("\n[targets]\n"));
 
     let again = mind(&root, &["targets", "reset", "skills"]).unwrap();
     assert_eq!(

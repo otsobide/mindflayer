@@ -31,7 +31,7 @@ use crate::kind::{Kind, Layout};
 use crate::ledger::{Ledger, LedgerError, LEDGER_FILE};
 use crate::lock::{self, LockError, WorkspaceLock};
 use crate::paths;
-use crate::settings::{Settings, Share, SETTINGS_FILE, SETTINGS_TOML_FILE};
+use crate::settings::{Settings, Share, SETTINGS_FILE, SETTINGS_JSON_FILE};
 
 /// The newest version of a project's marker this build reads: version 5, a
 /// `.mind/settings.toml` ([`SETTINGS_TOML_VERSION`]).
@@ -76,17 +76,19 @@ pub const FLAYER_FORMAT_VERSION: u32 = 2;
 /// which is exactly what the version field exists to prevent.
 pub const DIRECTORIES_VERSION: u32 = 2;
 
-/// The first [`MIND_FORMAT_VERSION`] whose marker is `.mind/settings.json`
-/// ([`crate::settings`]) rather than `.mind/mind.toml`.
+/// The first [`MIND_FORMAT_VERSION`] whose marker is a project's settings
+/// ([`crate::settings`]) rather than `.mind/mind.toml`: `.mind/settings.json`
+/// up to [`TARGETS_VERSION`], and `.mind/settings.toml` from
+/// [`SETTINGS_TOML_VERSION`].
 ///
 /// A line drawn the way [`DIRECTORIES_VERSION`] is: a marker from before it is
-/// read the way it was written, as TOML, and one from it on as JSON. Past it,
-/// a kind the marker names no folder for has none
+/// read the way it was written, as a `mind.toml`, and one from it on as the
+/// settings file its version names ([`MarkerFile::of_version`]). Past it, a
+/// kind the marker names no folder for has none
 /// ([`MindProject::directory_for`]), where a `mind.toml` from version 2 gives
 /// it the default beside the code.
 ///
-/// What `mind init` writes, and what a settings file stays while it says
-/// nothing of where installs land ([`Settings::version_needed`]).
+/// What a `settings.json` stays while it says nothing of where installs land.
 pub const SETTINGS_VERSION: u32 = 3;
 
 /// The first [`MIND_FORMAT_VERSION`] whose settings may say where what is
@@ -96,8 +98,8 @@ pub const SETTINGS_VERSION: u32 = 3;
 /// A version of its own, where a key the format does not define is
 /// otherwise read past: a build from before it would read past `targets`
 /// too, and install into the standard folders without a word, where the
-/// settings send copies elsewhere. Written only by a file that sets them,
-/// so a project that does not stays one every build since
+/// settings send copies elsewhere. A `settings.json` is written at it only
+/// while it sets them, so one that does not stays one every build since
 /// [`SETTINGS_VERSION`] reads. Nothing else in the file changes meaning, so
 /// it is read as a version 3 file is, with `targets` beside.
 pub const TARGETS_VERSION: u32 = 4;
@@ -206,8 +208,8 @@ impl MarkerFile {
     pub const fn name(self) -> &'static str {
         match self {
             MarkerFile::MindToml => MIND_CONFIG,
-            MarkerFile::SettingsJson => SETTINGS_FILE,
-            MarkerFile::SettingsToml => SETTINGS_TOML_FILE,
+            MarkerFile::SettingsJson => SETTINGS_JSON_FILE,
+            MarkerFile::SettingsToml => SETTINGS_FILE,
         }
     }
 
@@ -603,8 +605,9 @@ impl MindProject {
         Self::init_settings(root, agents, share, &asked.clone().with_defaults())
     }
 
-    /// Make `root` a project marked by its settings ([`SETTINGS_VERSION`]):
-    /// `.mind/settings.json`, a `.mind/.gitignore` holding `*` unless the
+    /// Make `root` a project marked by its settings
+    /// ([`SETTINGS_TOML_VERSION`]): `.mind/settings.toml`, written from its
+    /// template ([`Settings::text`]), a `.mind/.gitignore` holding `*` unless the
     /// project is [shared](Share::Shared), and the folder of each kind
     /// `directories` names. A kind it leaves out has no folder, and none is
     /// made for it.
@@ -619,7 +622,8 @@ impl MindProject {
     /// marked, by settings or by a `mind.toml`, keeps its marker, and only
     /// what its marker asks for and is missing is made, a folder or the
     /// `.gitignore` of a local project. Moving a project from a `mind.toml`
-    /// to settings is a migration's (#38), not this.
+    /// or a `settings.json` to a `settings.toml` is a migration's (#38), not
+    /// this.
     pub fn init_settings(
         root: impl AsRef<Path>,
         agents: &[Agent],
@@ -936,8 +940,9 @@ impl MindProject {
     /// file.
     ///
     /// A change of `targets` writes the version they need with them
-    /// ([`Settings::version_needed`]), up when a kind is named and down when
-    /// none is any more, which is the one version an edit changes.
+    /// ([`Settings::version_needed`]): in a `settings.json`, up when a kind
+    /// is named and down when none is any more, which is the one version an
+    /// edit changes; in a `settings.toml`, the one version it holds.
     ///
     /// Refused for a project a `mind.toml` marks, which has no settings until
     /// it is moved to them, when the change touches the version or the id,
@@ -1919,7 +1924,7 @@ pub enum WorkspaceError {
     #[error("{path}: not valid Mindflayer configuration: {detail}")]
     Malformed { path: PathBuf, detail: String },
     #[error(
-        "{path}: not a mind project (no {MIND_DIR}/{SETTINGS_TOML_FILE}, {MIND_DIR}/{SETTINGS_FILE} \
+        "{path}: not a mind project (no {MIND_DIR}/{SETTINGS_FILE}, {MIND_DIR}/{SETTINGS_JSON_FILE} \
          or {MIND_DIR}/{MIND_CONFIG})"
     )]
     NotAProject { path: PathBuf },

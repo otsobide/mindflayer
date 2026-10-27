@@ -100,16 +100,13 @@ fn with_version(path: &Path, version: u32) {
     fs::write(path, rewritten).unwrap();
 }
 
-/// A project marked by settings at the newest version a project's marker
-/// has, a `settings.toml`, written at `root`.
+/// A project marked by settings, written at `root` as a new project's are:
+/// a `settings.toml`, at the newest version a project's marker has.
 fn settings_project(root: &Path, directories: Directories) -> PathBuf {
     let mind = root.join(MIND_DIR);
     fs::create_dir_all(&mind).unwrap();
-    let path = mind.join(SETTINGS_TOML_FILE);
-    let settings = Settings {
-        version: SETTINGS_TOML_VERSION,
-        ..Settings::new("both", Agent::ALL.to_vec(), Share::Local, directories)
-    };
+    let path = mind.join(SETTINGS_FILE);
+    let settings = Settings::new("both", Agent::ALL.to_vec(), Share::Local, directories);
     fs::write(&path, settings.text().unwrap()).unwrap();
     path
 }

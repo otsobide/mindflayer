@@ -572,7 +572,7 @@ fn turning_local_refused_before_the_settings_leaves_the_exclude_file_as_it_was()
 fn a_gitignore_somebody_changed_is_left_when_the_project_turns_shared() {
     let (_dir, workspace, project) = installed(&[Agent::Claude], Share::Local);
     let ignore = project.root().join(MIND_DIR).join(".gitignore");
-    fs::write(&ignore, "*\n!settings.json\n").unwrap();
+    fs::write(&ignore, "*\n!settings.toml\n").unwrap();
 
     let change = Change::Share {
         share: Share::Shared,
@@ -582,7 +582,7 @@ fn a_gitignore_somebody_changed_is_left_when_the_project_turns_shared() {
         reapply::apply(Some(&workspace), &project, &change, &AgentHomes::default()).unwrap();
 
     assert_eq!(applied.plan.ignore, Some(Ignore::Kept(ignore.clone())));
-    assert_eq!(fs::read_to_string(&ignore).unwrap(), "*\n!settings.json\n");
+    assert_eq!(fs::read_to_string(&ignore).unwrap(), "*\n!settings.toml\n");
 }
 
 #[test]
@@ -681,12 +681,15 @@ fn the_record_of_another_workspace_is_never_read_or_written() {
 fn a_change_keeps_what_the_settings_file_holds_by_hand_and_where() {
     let (_dir, workspace, project) = installed(&[Agent::Claude], Share::Local);
     let path = settings_file(&project);
-    // A key this build does not know, written first, and a layout of one's
-    // own: what an edit keeps, and a rewrite would not.
-    let written = fs::read_to_string(&path).unwrap().replacen(
-        "{\n",
-        "{\n  \"servers\": {\"github\": [\"npx\"]},\n",
-        1,
+    // A key this build does not know, written first, a comment of one's own
+    // and a layout of one's own: what an edit keeps, and a rewrite would not.
+    let written = format!(
+        "servers = {{ github = [\"npx\"] }}\n{}",
+        fs::read_to_string(&path).unwrap()
+    )
+    .replace(
+        "agents = [\"claude\"]",
+        "agents = [ \"claude\" ] # who works here",
     );
     fs::write(&path, &written).unwrap();
 
@@ -702,8 +705,8 @@ fn a_change_keeps_what_the_settings_file_holds_by_hand_and_where() {
     assert_eq!(
         text,
         written.replace(
-            r#""agents": ["claude"]"#,
-            r#""agents": ["claude", "codex"]"#
+            "agents = [ \"claude\" ] # who works here",
+            "agents = [\"claude\", \"codex\"] # who works here"
         )
     );
 }
@@ -766,16 +769,17 @@ fn setting_targets_moves_each_installation_there_and_out_of_the_agents_folders()
     assert!(!claudes(&project, "deploy").exists());
     assert_eq!(targets(&workspace), [target(None, ".skills/deploy")]);
     assert_eq!(excluded(&project), ["/.skills/deploy/"]);
-    // Written as the settings spell a folder, at the version that reads it.
+    // Written as the settings spell a folder, at the one version a
+    // `settings.toml` holds.
     let settings = reopened(&project).settings().unwrap().clone();
-    assert_eq!(settings.version, mindflayer_core::TARGETS_VERSION);
+    assert_eq!(settings.version, mindflayer_core::SETTINGS_TOML_VERSION);
     assert_eq!(
         settings.targets.get(Kind::Skill),
         Some(&[PathBuf::from(".skills")][..])
     );
     assert!(fs::read_to_string(settings_file(&project))
         .unwrap()
-        .contains("\"targets\": {\n    \"skills\": [\".skills\"]\n  }"));
+        .ends_with("\n[targets]\nskills = [\".skills\"]\n"));
 }
 
 #[test]
@@ -825,7 +829,10 @@ fn resetting_targets_moves_copies_back_and_leaves_somebodys_where_it_is_said() {
     );
     let settings = reopened(&project).settings().unwrap().clone();
     assert!(settings.targets.is_empty());
-    assert_eq!(settings.version, mindflayer_core::SETTINGS_VERSION);
+    assert_eq!(settings.version, mindflayer_core::SETTINGS_TOML_VERSION);
+    assert!(!fs::read_to_string(settings_file(&project))
+        .unwrap()
+        .contains("\n[targets]\n"));
 }
 
 #[test]

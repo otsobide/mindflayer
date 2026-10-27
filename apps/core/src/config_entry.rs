@@ -231,26 +231,15 @@ fn kept(
 
 /// The whole of `text` as a value.
 ///
-/// For a file Mindflayer reads whole, a project's settings, as well as for
-/// what an edit is held to: one parser for both, so what a read takes is
-/// what an edit takes, and a file one refuses the other refuses too.
+/// For a file Mindflayer reads whole, a project's settings in either of the
+/// grammars they have been written in, as well as for what an edit is held
+/// to: one parser for both, so what a read takes is what an edit takes, and
+/// a file one refuses the other refuses too.
 pub(crate) fn document(format: Format, text: &str) -> Result<Value, EntryError> {
     match format {
         Format::Json | Format::Jsonc => json::document(format, text),
         Format::Toml => toml::document(text),
     }
-}
-
-/// `value` as the whole of a new JSON file: laid out as an insert lays out
-/// what it splices in, an object's members on lines of their own and two
-/// spaces a level, with LF line endings and one after the last line.
-///
-/// For a file Mindflayer writes whole and then edits in place, a project's
-/// settings, so that the file a write makes reads as one an edit would
-/// leave, and an edit to it adds nothing laid out differently. Refused for a
-/// value JSON cannot write, as an edit refuses it.
-pub(crate) fn json_text(value: &Value) -> Result<String, EntryError> {
-    json::text(value)
 }
 
 /// The value at `key` in `document`, `None` when a key on the way is missing.

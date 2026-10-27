@@ -83,7 +83,7 @@ fn adding_codex_says_what_it_would_copy_then_copies_it_where_codex_reads() {
          copied deploy to .agents/skills/deploy, for codex, kept out of git\n"
     );
     assert!(done.ok, "{:?}", done.stderr);
-    assert!(settings(&root).contains(r#""agents": ["claude", "codex"]"#));
+    assert!(settings(&root).contains(r#"agents = ["claude", "codex"]"#));
     assert_eq!(
         fs::read(agents(&root, "deploy").join("SKILL.md")).unwrap(),
         fs::read(claudes(&root, "deploy").join("SKILL.md")).unwrap()
@@ -275,14 +275,14 @@ fn sharing_a_local_project_leaves_its_mind_and_its_copies_for_the_team() {
     );
     assert!(done.ok, "{:?}", done.stderr);
     // The settings and the copy are offered to git, for the team to commit.
-    assert_eq!(offered(&root), [".claude", ".mind/settings.json"]);
+    assert_eq!(offered(&root), [".claude", ".mind/settings.toml"]);
     assert!(!root.join(MIND_DIR).join(".gitignore").exists());
 }
 
 #[test]
 fn making_a_shared_project_local_keeps_its_mind_and_its_copies_out_of_git() {
     let (_dir, root) = installed("claude", true);
-    assert_eq!(offered(&root), [".claude", ".mind/settings.json"]);
+    assert_eq!(offered(&root), [".claude", ".mind/settings.toml"]);
 
     let done = mind(&root, &["share", "local", "--edit-tracked", "--yes"]).unwrap();
 
@@ -294,7 +294,7 @@ fn making_a_shared_project_local_keeps_its_mind_and_its_copies_out_of_git() {
          kept .claude/skills/deploy out of git\n"
     );
     assert!(untracked(&root).is_empty(), "{:?}", untracked(&root));
-    assert!(settings(&root).contains(r#""edit_tracked": true"#));
+    assert!(settings(&root).contains("\nedit_tracked = true\n"));
 
     let again = mind(&root, &["share", "local", "--edit-tracked"]).unwrap();
     assert_eq!(

@@ -446,16 +446,16 @@ fn with_settings_sharing(dir: &Path, agents: &str, share: &str) {
     let root = dir.join("alpha");
     fs::create_dir_all(root.join(MIND_DIR)).unwrap();
     fs::write(
-        root.join(MIND_DIR).join("settings.json"),
+        root.join(MIND_DIR).join(SETTINGS_FILE),
         format!(
-            r#"{{
-  "version": 3,
-  "id": "0123456789abcdef0123456789abcdef",
-  "name": "alpha",
-  "agents": [{agents}],
-  "share": "{share}",
-  "directories": {{"rules": "rules"}}
-}}
+            r#"version = 5
+id = "0123456789abcdef0123456789abcdef"
+name = "alpha"
+agents = [{agents}]
+share = "{share}"
+
+[directories]
+rules = "rules"
 "#
         ),
     )
@@ -469,16 +469,16 @@ fn installing_in(dir: &Path, targets: &str) {
     let root = dir.join("alpha");
     fs::create_dir_all(root.join(MIND_DIR)).unwrap();
     fs::write(
-        root.join(MIND_DIR).join("settings.json"),
+        root.join(MIND_DIR).join(SETTINGS_FILE),
         format!(
-            r#"{{
-  "version": 4,
-  "id": "0123456789abcdef0123456789abcdef",
-  "name": "alpha",
-  "agents": ["claude", "codex", "opencode"],
-  "share": "shared",
-  "targets": {{"skills": [{targets}]}}
-}}
+            r#"version = 5
+id = "0123456789abcdef0123456789abcdef"
+name = "alpha"
+agents = ["claude", "codex", "opencode"]
+share = "shared"
+
+[targets]
+skills = [{targets}]
 "#
         ),
     )
@@ -490,11 +490,7 @@ fn installing_in(dir: &Path, targets: &str) {
 fn an_install_says_each_target_no_install_may_use_and_installs_in_the_others() {
     let (dir, _, _) = shelved(&["beta"], &["deploy"]);
     installing_in(dir.path(), r#"".skills", "../shared""#);
-    let settings = dir
-        .path()
-        .join("alpha")
-        .join(MIND_DIR)
-        .join("settings.json");
+    let settings = dir.path().join("alpha").join(MIND_DIR).join(SETTINGS_FILE);
     let misplaced = format!(
         "warning: {}: ../shared is no folder to install skills in, because it is not inside the \
          project, so nothing is installed there",
@@ -566,7 +562,7 @@ fn a_bare_name_from_a_path_to_a_loaded_workspace_is_found_where_no_skill_can_go(
 
 /// Change `alpha`'s settings to install skills in `../shared` alone.
 fn installing_in_only(dir: &Path) {
-    let path = dir.join("alpha").join(MIND_DIR).join("settings.json");
+    let path = dir.join("alpha").join(MIND_DIR).join(SETTINGS_FILE);
     let text = fs::read_to_string(&path)
         .unwrap()
         .replace(r#"".skills", "#, "");

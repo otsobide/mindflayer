@@ -70,7 +70,7 @@ fn mind_migrate_says_what_it_would_move_then_moves_it_and_then_has_nothing_to_do
 
     assert_eq!(
         dry.stdout,
-        "would write .mind/settings.json for collapse: agents claude,codex,opencode, share shared\n\
+        "would write .mind/settings.toml for collapse: agents claude,codex,opencode, share shared\n\
          would move .mind/mind.toml to .mind/tmp/mind.toml.v2, as it is\n\
          would copy deploy to .agents/skills/deploy, for codex and opencode\n\
          would copy deploy to .claude/skills/deploy, for claude\n\
@@ -94,7 +94,7 @@ fn mind_migrate_says_what_it_would_move_then_moves_it_and_then_has_nothing_to_do
 
     assert_eq!(
         done.stdout,
-        "wrote .mind/settings.json for collapse: agents claude,codex,opencode, share shared\n\
+        "wrote .mind/settings.toml for collapse: agents claude,codex,opencode, share shared\n\
          moved .mind/mind.toml to .mind/tmp/mind.toml.v2, as it was\n\
          copied deploy to .agents/skills/deploy, for codex and opencode\n\
          copied deploy to .claude/skills/deploy, for claude\n\
@@ -149,7 +149,7 @@ fn flayer_migrate_moves_one_project_it_links_by_name() {
 
     assert_eq!(
         done.stdout,
-        "wrote .mind/settings.json for collapse: agents claude, share shared\n\
+        "wrote .mind/settings.toml for collapse: agents claude, share shared\n\
          moved .mind/mind.toml to .mind/tmp/mind.toml.v2, as it was\n\
          copied deploy to .claude/skills/deploy, for claude\n\
          removed deploy from skills/deploy\n"
@@ -178,7 +178,7 @@ fn a_project_already_keeping_its_skills_where_claude_reads_keeps_that_copy() {
 
     assert_eq!(
         done.stdout,
-        "wrote .mind/settings.json for collapse: agents claude,codex,opencode, share shared\n\
+        "wrote .mind/settings.toml for collapse: agents claude,codex,opencode, share shared\n\
          moved .mind/mind.toml to .mind/tmp/mind.toml.v2, as it was\n\
          copied deploy to .agents/skills/deploy, for codex and opencode\n"
     );
@@ -200,7 +200,7 @@ fn a_copy_edited_since_it_was_installed_is_left_where_it_is_and_said() {
 
     assert_eq!(
         done.stdout,
-        "wrote .mind/settings.json for collapse: agents claude,codex,opencode, share shared\n\
+        "wrote .mind/settings.toml for collapse: agents claude,codex,opencode, share shared\n\
          moved .mind/mind.toml to .mind/tmp/mind.toml.v2, as it was\n\
          left skills/deploy where it is, no longer Mindflayer's: it was changed since it was \
          installed\n"
@@ -236,13 +236,13 @@ fn every_older_project_is_listed_without_yes_and_nothing_is_written() {
 
     assert_eq!(
         dry.stdout,
-        "would write .mind/settings.json for alpha: agents claude,codex,opencode, share shared\n\
+        "would write .mind/settings.toml for alpha: agents claude,codex,opencode, share shared\n\
          would move .mind/mind.toml to .mind/tmp/mind.toml.v2, as it is\n\
          would copy deploy to .agents/skills/deploy, for codex and opencode\n\
          would copy deploy to .claude/skills/deploy, for claude\n\
          would remove deploy from skills/deploy\n\
          \n\
-         would write .mind/settings.json for beta: agents claude,codex,opencode, share shared\n\
+         would write .mind/settings.toml for beta: agents claude,codex,opencode, share shared\n\
          would move .mind/mind.toml to .mind/tmp/mind.toml.v2, as it is\n\
          nothing changed: add --yes to go ahead\n"
     );
@@ -270,7 +270,7 @@ fn every_older_project_is_moved_on_its_own_and_one_refused_is_named() {
 
     assert_eq!(
         done.stdout,
-        "wrote .mind/settings.json for alpha: agents claude,codex,opencode, share shared\n\
+        "wrote .mind/settings.toml for alpha: agents claude,codex,opencode, share shared\n\
          moved .mind/mind.toml to .mind/tmp/mind.toml.v2, as it was\n\
          copied deploy to .agents/skills/deploy, for codex and opencode\n\
          copied deploy to .claude/skills/deploy, for claude\n\
@@ -340,7 +340,7 @@ fn a_local_migration_of_a_project_git_tracks_says_how_to_stop_tracking_its_mind(
 
     assert_eq!(
         done.stdout,
-        "wrote .mind/settings.json for collapse: agents claude, share local\n\
+        "wrote .mind/settings.toml for collapse: agents claude, share local\n\
          moved .mind/mind.toml to .mind/tmp/mind.toml.v2, as it was\n\
          wrote .mind/.gitignore, keeping .mind out of git\n\
          copied deploy to .claude/skills/deploy, for claude, kept out of git\n\
@@ -373,7 +373,7 @@ fn a_project_no_workspace_links_is_moved_and_told_nothing_was_carried() {
 
     assert_eq!(
         done.stdout,
-        "wrote .mind/settings.json for collapse: agents claude,codex,opencode, share shared\n\
+        "wrote .mind/settings.toml for collapse: agents claude,codex,opencode, share shared\n\
          moved .mind/mind.toml to .mind/tmp/mind.toml.v2, as it was\n\
          left skills/notes where it is: the project's own\n"
     );

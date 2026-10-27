@@ -564,12 +564,9 @@ fn a_project_installing_where_its_agents_read_has_nothing_unreached() {
 fn a_target_no_install_may_use_is_a_failure_beside_the_report() {
     let (dir, mut workspace) = workspace();
     let alpha = marked(&dir, &mut workspace, "alpha", &Agent::ALL);
-    let path = alpha.root().join(".mind").join("settings.json");
-    let text = fs::read_to_string(&path).unwrap().replacen(
-        "{\n",
-        "{\n  \"targets\": {\"skills\": [\".skills\", \"../shared\"]},\n",
-        1,
-    );
+    let path = alpha.marker_path();
+    let text =
+        fs::read_to_string(&path).unwrap() + "\n[targets]\nskills = [\".skills\", \"../shared\"]\n";
     fs::write(&path, text).unwrap();
 
     let (status, failures) = Status::of_workspace(&workspace);

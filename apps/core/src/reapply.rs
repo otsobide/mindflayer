@@ -6,7 +6,7 @@
 //! its `targets` say where instead (the owner's amendment to D-07), and its
 //! share mode whether they are kept out of git (D-02), so a change to any of
 //! them is a change to what is installed as much as to
-//! `.mind/settings.json` (D-09). [`plan`] says what a [`Change`] would do, writing nothing, and
+//! `.mind/settings.toml` (D-09). [`plan`] says what a [`Change`] would do, writing nothing, and
 //! [`apply`] does it: the settings edited where they stand
 //! ([`MindProject::change_settings`]), each installation given a copy in
 //! every folder an agent the project now names is sent one, and Mindflayer's

@@ -61,7 +61,7 @@ pub use reapply::{Change, ReapplyError};
 pub use resolve::{resolve, resolve_except, Inputs, Intent, Reason, ResolveError, Resolved};
 pub use rule::{Lenient, RuleManifest};
 pub use scan::{scan, Found, Scan, ScanFailure};
-pub use settings::{ProjectId, Settings, Share, Targets, SETTINGS_FILE, SETTINGS_TOML_FILE};
+pub use settings::{ProjectId, Settings, Share, Targets, SETTINGS_FILE, SETTINGS_JSON_FILE};
 pub use skill::{
     Compatibility, Metadata, SkillManifest, MAX_COMPATIBILITY_LEN, MAX_DESCRIPTION_LEN,
     MAX_NAME_SEGMENT_LEN,
