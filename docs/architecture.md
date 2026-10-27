@@ -5223,11 +5223,23 @@ leak into the lifecycle code. Unblocks #33, #45, #62, #93, #94 and #95.
 - **A `CLAUDE.md` hard linked to `AGENTS.md`.** One file under two names is
   told by resolving both paths, which sees a symbolic link and not a hard
   one, and the block's render replaces `AGENTS.md` through a rename, which
-  splits a hard link anyway. The two are then files of their own, the import
-  goes into `CLAUDE.md` as into any other, and Claude reads the team's text
-  twice, once in each, though each rule once. Writing `AGENTS.md` in place
-  rather than by a rename, where it has more than one link, would keep them
-  one file, at the price of a write that is no longer all or nothing.
+  splits a hard link. What follows depends on when the link was made. One
+  made before any block was written is split by the first render: the two
+  are then files of their own, the import goes into `CLAUDE.md` as into any
+  other, and Claude reads the team's text twice, once in each, though each
+  rule once. One made once `AGENTS.md` holds the block, the likelier order,
+  since the block is there whenever a team links the two, gives a
+  `CLAUDE.md` holding the block's rule markers, which `ClaudeMd::parse`
+  refuses (`Malformed::Ruled`), as it refuses any copy of `AGENTS.md`: every
+  reach and every render of the import is refused, `render(false)` too,
+  until somebody edits that file or takes the link away, and a block render
+  that changes the rules meanwhile splits the link and leaves `CLAUDE.md`
+  the copy with the rules as they were. Telling a hard link by the file's
+  device and inode alone would not end it, since such a render splits the
+  link before the import is decided. Writing `AGENTS.md` in place rather
+  than by a rename, where it has more than one link, would keep them one
+  file for that to tell as `Reach::Same`, at the price of a write that is
+  no longer all or nothing.
 - **An import left in a file git tracks.** An import no longer wanted in a
   file that may no longer be edited, a `CLAUDE.md` committed with it in a
   project turned local, stays and is said at every render
