@@ -211,7 +211,7 @@ fn add_from_a_template_that_is_not_there_says_which_are() {
 
 #[test]
 fn a_removed_install_leaves_no_record_for_what_is_written_there_next() {
-    let (dir, workspace, ledger) = shelved(&["collapse"], &["deploy"]);
+    let (dir, workspace, ledger) = shelved_older(&["collapse"], &["deploy"]);
     installed(dir.path(), &workspace, &ledger);
     let project = dir.path().join("collapse");
 
@@ -234,7 +234,7 @@ fn a_removed_install_leaves_no_record_for_what_is_written_there_next() {
 
 #[test]
 fn removing_an_install_scrubs_the_ledger_it_drops_the_record_from_and_says_so() {
-    let (dir, workspace, ledger) = shelved(&["collapse"], &["deploy"]);
+    let (dir, workspace, ledger) = shelved_older(&["collapse"], &["deploy"]);
     installed(dir.path(), &workspace, &ledger);
     // What an older build could have left in the same file.
     rusqlite::Connection::open(workspace.ledger_path())
@@ -267,7 +267,7 @@ fn removing_an_install_scrubs_the_ledger_it_drops_the_record_from_and_says_so() 
 #[cfg(unix)]
 #[test]
 fn an_editor_that_writes_and_then_fails_still_says_what_the_scrub_took_out() {
-    let (dir, workspace, ledger) = shelved(&["collapse"], &["deploy"]);
+    let (dir, workspace, ledger) = shelved_older(&["collapse"], &["deploy"]);
     installed(dir.path(), &workspace, &ledger);
     rusqlite::Connection::open(workspace.ledger_path())
         .unwrap()
@@ -308,7 +308,7 @@ fn an_editor_that_writes_and_then_fails_still_says_what_the_scrub_took_out() {
 #[cfg(unix)]
 #[test]
 fn an_installed_skill_that_is_edited_is_yours_from_then_on() {
-    let (dir, workspace, ledger) = shelved(&["collapse"], &["deploy"]);
+    let (dir, workspace, ledger) = shelved_older(&["collapse"], &["deploy"]);
     installed(dir.path(), &workspace, &ledger);
 
     let outcome = mind(
@@ -328,7 +328,7 @@ fn an_installed_skill_that_is_edited_is_yours_from_then_on() {
 #[cfg(unix)]
 #[test]
 fn an_installed_skill_is_yours_when_the_editor_writes_it_and_then_fails() {
-    let (dir, workspace, ledger) = shelved(&["collapse"], &["deploy"]);
+    let (dir, workspace, ledger) = shelved_older(&["collapse"], &["deploy"]);
     installed(dir.path(), &workspace, &ledger);
     let project = dir.path().join("collapse");
 
@@ -359,9 +359,10 @@ fn an_installed_skill_is_yours_when_the_editor_writes_it_and_then_fails() {
     );
 }
 
-/// `hub`, a workspace, and `collapse`, a project it links from beside it
-/// rather than from above: walking up from the project never reaches it.
-fn linked_from_beside() -> (TempDir, PathBuf, PathBuf) {
+/// `hub`, a workspace, and `collapse`, a project `make` makes, which the
+/// workspace links from beside it rather than from above: walking up from the
+/// project never reaches it.
+fn linked_from_beside(make: fn(&Path)) -> (TempDir, PathBuf, PathBuf) {
     let dir = TempDir::new().unwrap();
     let hub = dir.path().join("hub");
     let project = dir.path().join("collapse");
@@ -369,15 +370,16 @@ fn linked_from_beside() -> (TempDir, PathBuf, PathBuf) {
         fs::create_dir(root).unwrap();
     }
     flayer(&hub, &["init"]).unwrap();
-    mind(&project, &["init"]).unwrap();
+    make(&project);
     flayer(&hub, &["link", "../collapse"]).unwrap();
     (dir, hub, project)
 }
 
 /// `linked_from_beside`, with the workspace's own `deploy` installed into
-/// the project.
+/// the project, one an older Mindflayer made, so the copy is in the folder
+/// it authors in, where a change from the workspace reaches it.
 fn installed_from_beside() -> (TempDir, PathBuf, PathBuf) {
-    let (dir, hub, project) = linked_from_beside();
+    let (dir, hub, project) = linked_from_beside(older_project);
     flayer(&hub, &["add", "skill", "deploy", "Ship it"]).unwrap();
     flayer(&hub, &["install", "-p", "collapse", "deploy"]).unwrap();
     (dir, hub, project)
@@ -421,7 +423,9 @@ fn mind_drops_the_record_of_the_workspace_in_your_home_when_that_manages_the_pro
     let elsewhere = TempDir::new().unwrap();
     let project = elsewhere.path().join("collapse");
     fs::create_dir(&project).unwrap();
-    mind(&project, &["init"]).unwrap();
+    // Made as an older Mindflayer made it, so the copy installed is in the
+    // folder it authors in, where `mind edit` reaches it.
+    older_project(&project);
     flayer_at_home(elsewhere.path(), home.path(), &["link", "collapse"]).unwrap();
     flayer_at_home(
         elsewhere.path(),
@@ -446,7 +450,7 @@ fn mind_drops_the_record_of_the_workspace_in_your_home_when_that_manages_the_pro
 
 #[test]
 fn a_workspace_beside_a_project_offers_it_the_workspaces_templates() {
-    let (_dir, hub, project) = linked_from_beside();
+    let (_dir, hub, project) = linked_from_beside(new_project);
     let template = hub.join(".mindflayer/templates/runbook/SKILL.md");
     fs::create_dir_all(template.parent().unwrap()).unwrap();
     fs::write(&template, "---\n---\n\n# {{name}}\n\nThe hub's runbook.\n").unwrap();

@@ -315,14 +315,47 @@ pub fn write_tree(repo: &gix::Repository, dir: &Path) -> gix::ObjectId {
         .detach()
 }
 
+/// Make `root`, a folder, a mind project as `mind init` makes one.
+pub fn new_project(root: &Path) {
+    mind(root, &["init"]).unwrap();
+}
+
+/// Make `root`, a folder, a project the way a version 2 `mind init` did:
+/// marked by a `mind.toml`, and authoring in `skills/` and `rules/`, which
+/// is where an install puts its copy too.
+///
+/// For what such a project does that one marked by its settings does not: a
+/// copy installed in the folder the project authors in, so that a change
+/// made from the project reaches it and drops its record. Made through core
+/// rather than `mind init`, so these tests keep such a project whatever
+/// `mind init` writes.
+pub fn older_project(root: &Path) {
+    MindProject::init(root).expect("mark a project with a mind.toml");
+}
+
 /// A workspace with `projects` linked and a shelf holding `skills`.
 pub fn shelved(projects: &[&str], skills: &[&str]) -> (TempDir, FlayerWorkspace, Ledger) {
+    shelved_with(projects, skills, new_project)
+}
+
+/// [`shelved`], each project made the way an older Mindflayer made it
+/// ([`older_project`]).
+pub fn shelved_older(projects: &[&str], skills: &[&str]) -> (TempDir, FlayerWorkspace, Ledger) {
+    shelved_with(projects, skills, older_project)
+}
+
+/// [`shelved`], each project made by `make`.
+fn shelved_with(
+    projects: &[&str],
+    skills: &[&str],
+    make: fn(&Path),
+) -> (TempDir, FlayerWorkspace, Ledger) {
     let dir = TempDir::new().unwrap();
     flayer(dir.path(), &["init"]).unwrap();
     for name in projects {
         let root = dir.path().join(name);
         fs::create_dir(&root).unwrap();
-        mind(&root, &["init"]).unwrap();
+        make(&root);
         flayer(dir.path(), &["link", name]).unwrap();
     }
 

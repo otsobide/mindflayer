@@ -1712,7 +1712,9 @@ fn settle_until(app: &mut App, until: impl Fn(&App) -> bool) {
 
 /// Under one directory: `outer`, a workspace, and `hub` beside it, which
 /// links `collapse`, a project under neither, and has installed its own
-/// `hub-skill` there.
+/// `hub-skill` there. The project is made as an older Mindflayer made it,
+/// so the copy is in the folder it authors in, where a line run on it
+/// reaches it and drops the record of the workspace it consulted.
 fn hub_beside_outer() -> (TempDir, PathBuf, PathBuf, PathBuf) {
     let dir = TempDir::new().unwrap();
     let (outer, hub, collapse) = (
@@ -1725,7 +1727,7 @@ fn hub_beside_outer() -> (TempDir, PathBuf, PathBuf, PathBuf) {
     }
     flayer(&outer, &["init"]).unwrap();
     flayer(&hub, &["init"]).unwrap();
-    mind(&collapse, &["init"]).unwrap();
+    older_project(&collapse);
     flayer(&hub, &["link", "../collapse"]).unwrap();
     flayer(&hub, &["add", "skill", "hub-skill", "The hub's"]).unwrap();
     flayer(&hub, &["install", "-p", "collapse", "hub-skill"]).unwrap();
