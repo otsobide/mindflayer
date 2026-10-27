@@ -577,14 +577,16 @@ fn init_can_be_told_where_this_project_keeps_its_skills() {
 #[test]
 fn listing_reads_from_where_the_project_says_its_skills_are() {
     let dir = TempDir::new().unwrap();
-    mind(dir.path(), &["init", "--skills", ".claude/skills"]).unwrap();
+    // A folder no agent reads, so only the settings lead the listing there:
+    // `.claude/skills` would be read for Claude whatever they said.
+    mind(dir.path(), &["init", "--skills", "docs/skills"]).unwrap();
     write_skill(dir.path(), "deploy", &skill_file("deploy", "Ship it"));
 
     let outcome = mind(dir.path(), &["list", "skills"]).unwrap();
 
     assert_eq!(outcome.stdout, "deploy  Ship it\n");
     // And it really is the configured folder that was read.
-    assert!(dir.path().join(".claude/skills/deploy/SKILL.md").is_file());
+    assert!(dir.path().join("docs/skills/deploy/SKILL.md").is_file());
 }
 
 #[test]
@@ -627,7 +629,8 @@ fn a_workspace_sees_a_project_that_keeps_its_skills_elsewhere() {
     flayer(dir.path(), &["init"]).unwrap();
     let project = dir.path().join("collapse");
     fs::create_dir(&project).unwrap();
-    mind(&project, &["init", "--skills", ".claude/skills"]).unwrap();
+    // Not `.claude/skills`, which Claude's folder would reach anyway.
+    mind(&project, &["init", "--skills", "docs/skills"]).unwrap();
     write_skill(&project, "deploy", &skill_file("deploy", "Ship it"));
     flayer(dir.path(), &["link", "collapse"]).unwrap();
 
