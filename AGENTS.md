@@ -80,8 +80,9 @@ under `apps/` with its own `Makefile`:
   installing, keeping installs out of git (`exclude`), changing a project's
   agents or share mode and carrying its installs along (`reapply`), what
   each project holds, from where and for which agents (`status`), creating
-  and changing artifacts, and moving a workspace's own into its library
-  (`migrate`). Its only I/O is files, and it never reads the environment.
+  and changing artifacts, and moving a workspace's own into its library and
+  a project from its `mind.toml` to settings (`migrate`). Its only I/O is
+  files, and it never reads the environment.
 - `apps/cli` (`mindflayer-cli`): the binaries `mind` (`src/main.rs`) and
   `flayer` (`src/bin/flayer.rs`), and the TUI. `src/lib.rs` only re-exports
   the public API. The parsers are in `src/parse.rs`. `src/commands.rs`
@@ -90,7 +91,7 @@ under `apps/` with its own `Makefile`:
   scan), `workspace` (load, unload), `activate` (activate, which),
   `artifact` (add, edit, rename, remove, templates), `read` (list, show,
   validate), `status`, `settings` (agents, share), `gather`, `install` and
-  `migrate` (migrate --library). `src/render.rs` holds `Outcome`, `Failure`, the table helpers
+  `migrate` (migrate, at both levels). `src/render.rs` holds `Outcome`, `Failure`, the table helpers
   and the envelope every `--json` prints (`json`),
   `src/error.rs` holds `CliError`, and `src/homes.rs` decides the default
   home and the agent homes, and gathers them with `-W` and
@@ -197,10 +198,15 @@ These are easy to break from a single file without noticing.
     `mind share`), which carries what is installed along with them.
   - Creation uses `create_new` or `create_dir`.
   - `rename` rewrites only the `name:` line (`frontmatter::with_key`).
-  - `remove`, `flayer migrate --library`, `agents` and `share` are dry runs
+  - `remove`, `migrate` at either level, `agents` and `share` are dry runs
     without `--yes`.
-    A migration moves nothing a project holds, refuses as a whole, and keeps
-    the marker it rewrites as `flayer.toml.v<version>` (`create_new`).
+    A migration of the library moves nothing a project holds, refuses as a
+    whole, and keeps the marker it rewrites as `flayer.toml.v<version>`
+    (`create_new`). A project's (`migrate::project`) writes its settings
+    with `create_new`, keeps its `mind.toml` as
+    `.mind/tmp/mind.toml.v<version>`, never runs git (it says `git rm -r
+    --cached .mind` instead), and puts back every step it took when a later
+    one fails.
   - A file somebody else owns is edited only inside Mindflayer's marked
     blocks or, in an agent's config file, which can carry no marks, one entry
     at a time (next bullet). Every byte outside them is kept, and a malformed
@@ -261,7 +267,10 @@ These are easy to break from a single file without noticing.
   a copy of one whose `hash::tree` is the one recorded, never one over
   somebody's, and a dropped folder loses a recorded copy only while its
   hash is the one recorded; one changed since is left there, and its record
-  and exclude entry dropped.
+  and exclude entry dropped. A project's move to settings
+  (`migrate::project`) moves its installs the same way, through
+  `reapply::retarget`, and holds a record from before hashes to its offer
+  (D-04).
   `install::disown` is private to core, so no front end drops a record on its
   own. A front end adds through `lifecycle::add`, never `create` or
   `create_from`, which leave a stale record in place.
@@ -303,8 +312,10 @@ These are easy to break from a single file without noticing.
   it: `edit_array`, `install::install` and `uninstall`, `gather::gather`,
   `gather::scrub`, which `FlayerWorkspace::ledger_to_write` runs, when it has
   clones to rewrite, `migrate::library`, from its plan to its rewrite of
-  the marker, and `reapply::apply`, from before it reads a project's settings
-  until their change and every copy it carries along are written. A new
+  the marker, `migrate::project`, from before it reads the project again
+  until its ledger is written, and `reapply::apply`, from before it reads a
+  project's settings until their change and every copy it carries along are
+  written. A new
   writer takes it the same way, inside core; `config_entry::ConfigFile` and
   `MindProject::change_settings` take none, since the writers that call them
   hold it. A second workspace linking the same project is kept out by
@@ -338,7 +349,8 @@ These are easy to break from a single file without noticing.
   still read, and `SETTINGS_VERSION` for why a kind a settings file does not
   name has no folder (`directory_for` is `None`). Anything from a newer
   version is refused. A format change must keep reading old files the way
-  they were written.
+  they were written, and move one forward only when asked, never on a read
+  (`flayer migrate --library`, `mind migrate`).
   - A ledger schema step is one more block in `Ledger::migrate`, which takes
     the write lock, copies the file to `mindflayer.db.v<old>.bak`
     (`Ledger::back_up`) and runs every step in one transaction. A step fills
