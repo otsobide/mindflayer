@@ -12,8 +12,8 @@ use mindflayer_core::install;
 use mindflayer_core::ledger::{Ledger, Target};
 use mindflayer_core::reapply::{self, Change, Ignore, Why};
 use mindflayer_core::{
-    Agent, AgentHomes, Directories, FlayerWorkspace, Kind, MindProject, ReapplyError, Share,
-    WorkspaceError, MIND_DIR, MIND_IGNORE, SETTINGS_FILE,
+    Agent, AgentHomes, Directories, FlayerWorkspace, Kind, MarkerFile, MindProject, ReapplyError,
+    Share, WorkspaceError, MIND_DIR, MIND_IGNORE, SETTINGS_FILE, SETTINGS_JSON_FILE,
 };
 use tempfile::TempDir;
 
@@ -327,6 +327,42 @@ fn a_project_a_mind_toml_marks_is_refused_and_sent_to_mind_migrate() {
     }
     assert!(!settings_file(&project).exists());
     // Not even its ledger is opened to find that out.
+    assert!(!workspace.ledger_path().exists());
+}
+
+#[test]
+fn a_project_a_settings_json_marks_is_refused_and_sent_to_mind_migrate() {
+    let (dir, mut workspace) = workspace();
+    let root = dir.path().join("json");
+    fs::create_dir_all(root.join(MIND_DIR)).unwrap();
+    let json = root.join(MIND_DIR).join(SETTINGS_JSON_FILE);
+    let written = "{\"version\": 3, \"id\": \"0123456789abcdef0123456789abcdef\", \
+                   \"name\": \"json\", \"agents\": [\"claude\"], \"share\": \"local\"}\n";
+    fs::write(&json, written).unwrap();
+    let project = MindProject::open(&root).unwrap();
+    workspace.link(&project).unwrap();
+
+    let error = reapply::plan(
+        Some(&workspace),
+        &project,
+        &Change::AddAgents(vec![Agent::Codex]),
+        &AgentHomes::default(),
+    )
+    .unwrap_err();
+
+    assert!(
+        matches!(
+            error,
+            ReapplyError::Workspace(WorkspaceError::NoSettings {
+                marker: MarkerFile::SettingsJson,
+                ..
+            })
+        ),
+        "{error}"
+    );
+    assert!(error.to_string().contains("`mind migrate`"), "{error}");
+    assert_eq!(fs::read_to_string(&json).unwrap(), written);
+    assert!(!settings_file(&project).exists());
     assert!(!workspace.ledger_path().exists());
 }
 

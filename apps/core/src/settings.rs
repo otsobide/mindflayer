@@ -17,10 +17,12 @@
 //! markers are written from a template whose comments say what each key
 //! does, and edited through toml_edit, which keeps every byte an edit does
 //! not touch, those comments included. JSON, which the settings were
-//! written in first, has no comments to say it with. A `settings.json` is
-//! still read the way it was written, versions 3 and 4 alike, through the
-//! same key-at-a-time reader, so a key each holds is held to the same rules
-//! in both, and edited where it stands through `config_entry`.
+//! written in first, has no comments to say it with, and was edited a
+//! third way, through `config_entry`, which is for the agents' own config
+//! files. A `settings.json` is still read the way it was written, versions
+//! 3 and 4 alike, and changed by nothing but the migration that moves it to
+//! a `settings.toml` (`mind migrate`): read through the same key-at-a-time
+//! reader, so a key each holds is held to the same rules in both.
 //!
 //! A key this build does not know is carried rather than refused: read past,
 //! and kept by an edit, where it was. The format grows, and a project
@@ -38,7 +40,7 @@ use std::path::{Path, PathBuf};
 use serde::{Serialize, Serializer};
 
 use crate::agent::Agent;
-use crate::config_entry::{self, Edit, Format, Value};
+use crate::config_entry::{self, Format, Value};
 use crate::kind::Kind;
 use crate::paths;
 use crate::workspace::{
@@ -112,31 +114,6 @@ impl Settings {
             edit_tracked: false,
             directories,
             targets: Targets::default(),
-        }
-    }
-
-    /// The lowest version that reads these settings as they mean:
-    /// [`TARGETS_VERSION`] when they say where a kind is installed, and
-    /// [`SETTINGS_VERSION`] otherwise.
-    ///
-    /// Not the newest this build writes for every file: a project that never
-    /// sets `targets` stays one every build since settings reads, while one
-    /// that sets them is refused by a build from before them, which would
-    /// read past the key and install into the standard folders without a
-    /// word. An edit of `targets` brings the version with it
-    /// ([`MindProject::change_settings`](crate::MindProject::change_settings)),
-    /// back down too once no kind is named, so a project whose override
-    /// went is one an older build reads again.
-    ///
-    /// A `settings.json`'s rule: a `settings.toml` needs the one version it
-    /// holds, [`SETTINGS_TOML_VERSION`], whatever it says.
-    pub fn version_needed(&self) -> u32 {
-        if self.version >= SETTINGS_TOML_VERSION {
-            SETTINGS_TOML_VERSION
-        } else if self.targets.is_empty() {
-            SETTINGS_VERSION
-        } else {
-            TARGETS_VERSION
         }
     }
 
@@ -228,64 +205,6 @@ impl Settings {
             }
         }
         Ok(text)
-    }
-
-    /// Each key the format defines, with what these settings hold for it, in
-    /// the order a new file writes them.
-    fn members(&self) -> Result<Vec<(&'static str, Value)>, WorkspaceError> {
-        Ok(vec![
-            (VERSION, Value::Integer(i64::from(self.version))),
-            (ID, Value::from(self.id.as_str())),
-            (NAME, Value::from(self.name.as_str())),
-            (
-                AGENTS,
-                Value::array(self.agents.iter().map(|agent| agent.name())),
-            ),
-            (SHARE, Value::from(self.share.name())),
-            (EDIT_TRACKED, Value::Bool(self.edit_tracked)),
-            (DIRECTORIES, Value::Object(self.directory_members()?)),
-            (TARGETS, Value::Object(self.target_members()?)),
-        ])
-    }
-
-    /// The entries of `targets`, in the order [`directory_members`] gives
-    /// its own, each a list of paths spelled with `/`.
-    ///
-    /// [`directory_members`]: Self::directory_members
-    fn target_members(&self) -> Result<Vec<(String, Value)>, WorkspaceError> {
-        self.targets
-            .entries()
-            .into_iter()
-            .map(|(key, folders)| {
-                let written = folders
-                    .iter()
-                    .map(|folder| {
-                        paths::to_config_string(folder).ok_or_else(|| WorkspaceError::NonUtf8Path {
-                            path: folder.clone(),
-                        })
-                    })
-                    .collect::<Result<Vec<String>, WorkspaceError>>()?;
-                Ok((key.to_owned(), Value::array(written)))
-            })
-            .collect()
-    }
-
-    /// The entries of `directories`, the kinds this build knows first, in
-    /// report order, then any other key in name order, each a path spelled
-    /// with `/` so the file reads the same on every platform.
-    fn directory_members(&self) -> Result<Vec<(String, Value)>, WorkspaceError> {
-        self.directories
-            .entries()
-            .into_iter()
-            .map(|(key, directory)| {
-                let written = paths::to_config_string(directory).ok_or_else(|| {
-                    WorkspaceError::NonUtf8Path {
-                        path: directory.to_path_buf(),
-                    }
-                })?;
-                Ok((key.to_owned(), Value::from(written)))
-            })
-            .collect()
     }
 }
 
@@ -524,108 +443,6 @@ pub(crate) fn parse(path: &Path, text: &str) -> Result<Settings, WorkspaceError>
     members.settings(version).map_err(malformed)
 }
 
-/// `text`, the settings file at `path` holding `before`, changed to hold
-/// `wanted`, with every byte that is not a changed value as it was.
-///
-/// Only the keys whose values differ are touched, each as one entry
-/// (`config_entry::edit`), and `directories` an entry at a time: a key this
-/// build does not know, the order the keys are written in, the file's
-/// indentation and a value that did not change all stay as the file had
-/// them, so a file somebody edited by hand is not laid out again. A key the
-/// file left out goes in after the others, and only when what it holds is
-/// not what leaving it out reads as: `edit_tracked` off is not written in
-/// by an edit that changes something else.
-///
-/// The version and the id are refused rather than changed: a version moves
-/// with a migration, which writes the file its version describes, and an id
-/// names the project for good. The one version an edit writes is the one a
-/// change of `targets` brings with it ([`Settings::version_needed`]), since
-/// that key is what the version says an older build cannot read.
-///
-/// `targets` emptied is taken out whole rather than left as `{}`, since
-/// leaving it out is what a file that installs where its agents read says;
-/// `targets` that a version 3 file holds and that were read past for not
-/// reading as targets are written over whole.
-pub(crate) fn edited(
-    path: &Path,
-    text: &str,
-    before: &Settings,
-    wanted: &Settings,
-) -> Result<String, WorkspaceError> {
-    let refused = |detail: String| WorkspaceError::Edit {
-        path: path.to_path_buf(),
-        detail,
-    };
-    let follows_targets =
-        wanted.targets != before.targets && wanted.version == wanted.version_needed();
-    if wanted.version != before.version && !follows_targets {
-        return Err(refused(format!(
-            "`{VERSION}` changes with a migration, never with an edit"
-        )));
-    }
-    if wanted.id != before.id {
-        return Err(refused(format!(
-            "`{ID}` names the project for good, so no edit changes it"
-        )));
-    }
-
-    let mut edits: Vec<(Vec<String>, Edit)> = Vec::new();
-    for ((key, was), (_, now)) in before.members()?.into_iter().zip(wanted.members()?) {
-        if was == now {
-            continue;
-        }
-        let found = config_entry::get(Format::Json, text, &[key])
-            .map_err(|error| refused(error.to_string()))?;
-        let present = found.is_some();
-        if key == TARGETS && matches!(&now, Value::Object(now) if now.is_empty()) {
-            if present {
-                edits.push((vec![key.to_owned()], Edit::Remove));
-            }
-            continue;
-        }
-        // Written over whole when what the file holds does not read as
-        // targets, which a version 3 file's read past: an entry at a time
-        // would edit inside something that is no list of folders a kind.
-        if key == TARGETS && found.is_some_and(|found| !reads_as_targets(found)) {
-            edits.push((vec![key.to_owned()], Edit::Replace(now)));
-            continue;
-        }
-        if let (Value::Object(was), Value::Object(now)) = (&was, &now) {
-            // `directories`, the one object: an entry at a time, so one the
-            // change leaves alone, a key this build does not know included,
-            // stays where it is.
-            for (name, value) in now {
-                let edit = match was.iter().find(|(old, _)| old == name) {
-                    Some((_, old)) if old == value => continue,
-                    Some(_) => Edit::Replace(value.clone()),
-                    None => Edit::Insert(value.clone()),
-                };
-                edits.push((vec![key.to_owned(), name.clone()], edit));
-            }
-            for (name, _) in was {
-                if !now.iter().any(|(new, _)| new == name) {
-                    edits.push((vec![key.to_owned(), name.clone()], Edit::Remove));
-                }
-            }
-            continue;
-        }
-        let edit = if present {
-            Edit::Replace(now)
-        } else {
-            Edit::Insert(now)
-        };
-        edits.push((vec![key.to_owned()], edit));
-    }
-
-    let mut text = text.to_owned();
-    for (key, edit) in edits {
-        let key: Vec<&str> = key.iter().map(String::as_str).collect();
-        text = config_entry::edit(Format::Json, &text, &key, &edit)
-            .map_err(|error| refused(error.to_string()))?;
-    }
-    Ok(text)
-}
-
 /// `text`, the `settings.toml` at `path` holding `before`, changed to hold
 /// `wanted` through toml_edit, as `flayer.toml` is edited, with every byte
 /// that is not a changed value as it was.
@@ -641,18 +458,17 @@ pub(crate) fn edited(
 /// `edit_tracked` off is not written in by an edit that changes something
 /// else.
 ///
-/// The version and the id are refused rather than changed, as in a
-/// `settings.json`: a version moves with a migration, which writes the file
-/// its version describes, and an id names the project for good. A
-/// `settings.toml` is [`SETTINGS_TOML_VERSION`] whatever it sets, so no
-/// edit moves it.
+/// The version and the id are refused rather than changed: a version moves
+/// with a migration, which writes the file its version describes, and an id
+/// names the project for good. A `settings.toml` is [`SETTINGS_TOML_VERSION`]
+/// whatever it sets, so no edit moves it, `targets` included.
 ///
 /// `targets` emptied is taken out whole, its `[targets]` header included,
 /// since leaving it out is what a file that installs where its agents read
 /// says; but for a comment somebody wrote above the header, which keeps the
 /// header, empty, since an empty table says the same and their words stay.
 /// What is taken out of a table takes the comments on its own lines with it.
-pub(crate) fn toml_edited(
+pub(crate) fn edited(
     path: &Path,
     text: &str,
     before: &Settings,
@@ -801,14 +617,6 @@ fn config_path(path: &Path) -> Result<String, WorkspaceError> {
     paths::to_config_string(path).ok_or_else(|| WorkspaceError::NonUtf8Path {
         path: path.to_path_buf(),
     })
-}
-
-/// Whether `value`, what a settings file holds under `targets`, reads as
-/// them at the version that defines the key.
-fn reads_as_targets(value: Value) -> bool {
-    Members::new(&[(TARGETS.to_owned(), value)], Format::Json)
-        .strict_targets()
-        .is_ok()
 }
 
 /// The members of a settings file's object, read a key at a time.

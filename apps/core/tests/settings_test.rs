@@ -449,7 +449,7 @@ fn a_kind_every_target_of_which_is_passed_over_goes_nowhere() {
 fn an_edit_sending_a_kind_where_no_install_may_go_is_refused_and_writes_nothing() {
     let dir = TempDir::new().unwrap();
     let elsewhere = TempDir::new().unwrap();
-    let (mut project, path) = by_hand(dir.path());
+    let (mut project, path) = toml_by_hand(dir.path());
 
     for (kind, folders, why) in [
         (
@@ -484,7 +484,7 @@ fn an_edit_sending_a_kind_where_no_install_may_go_is_refused_and_writes_nothing(
         })
         .unwrap_err();
     assert!(matches!(none, WorkspaceError::Edit { .. }), "{none}");
-    assert_eq!(fs::read_to_string(&path).unwrap(), BY_HAND);
+    assert_eq!(fs::read_to_string(&path).unwrap(), TOML_BY_HAND);
 
     let outside = project
         .change_settings(|settings| {
@@ -786,392 +786,6 @@ fn git_sees_a_shared_projects_settings() {
     assert!(!ignored(dir.path(), ".mind/settings.toml"));
 }
 
-/// Settings as somebody keeps them by hand: four spaces a level, the keys in
-/// an order of their own, a key this build does not know among them and
-/// another in `directories`, which is written on one line.
-const BY_HAND: &str = r#"{
-    "name": "collapse",
-    "servers": {"github": ["npx"]},
-    "version": 3,
-    "agents": ["claude"],
-    "id": "0123456789abcdef0123456789abcdef",
-    "share": "local",
-    "directories": {"mcp": "mcp", "skills": "skills"}
-}
-"#;
-
-/// A project at `root` marked by [`BY_HAND`], and where its settings are.
-fn by_hand(root: &Path) -> (MindProject, PathBuf) {
-    fs::create_dir_all(root.join(MIND_DIR)).unwrap();
-    let path = root.join(MIND_DIR).join(SETTINGS_JSON_FILE);
-    fs::write(&path, BY_HAND).unwrap();
-    (MindProject::open(root).unwrap(), path)
-}
-
-#[test]
-fn an_edit_keeps_an_unknown_key_and_the_order_the_keys_are_in() {
-    let dir = TempDir::new().unwrap();
-    let (mut project, path) = by_hand(dir.path());
-
-    project
-        .change_settings(|settings| settings.agents = vec![Agent::Claude, Agent::Codex])
-        .unwrap();
-
-    assert_eq!(
-        fs::read_to_string(&path).unwrap(),
-        BY_HAND.replace(
-            r#""agents": ["claude"]"#,
-            r#""agents": ["claude", "codex"]"#
-        )
-    );
-    assert_eq!(
-        project.settings().unwrap().agents,
-        [Agent::Claude, Agent::Codex]
-    );
-}
-
-#[test]
-fn an_edit_that_changes_nothing_writes_nothing() {
-    let dir = TempDir::new().unwrap();
-    let (mut project, path) = by_hand(dir.path());
-    let long_ago = SystemTime::UNIX_EPOCH + Duration::from_secs(1_000_000);
-    fs::File::options()
-        .write(true)
-        .open(&path)
-        .unwrap()
-        .set_modified(long_ago)
-        .unwrap();
-
-    let agents = project
-        .change_settings(|settings| {
-            settings.share = Share::Local;
-            settings.agents.clone()
-        })
-        .unwrap();
-
-    assert_eq!(agents, [Agent::Claude]);
-    assert_eq!(fs::read_to_string(&path).unwrap(), BY_HAND);
-    assert_eq!(fs::metadata(&path).unwrap().modified().unwrap(), long_ago);
-}
-
-#[test]
-fn an_edit_adds_a_key_the_file_left_out_only_when_it_has_something_to_say() {
-    let dir = TempDir::new().unwrap();
-    let (mut project, path) = by_hand(dir.path());
-
-    // Left out, `edit_tracked` reads as off: renaming is no reason to say so.
-    project
-        .change_settings(|settings| settings.name = "renamed".to_owned())
-        .unwrap();
-    let renamed = BY_HAND.replace(r#""name": "collapse""#, r#""name": "renamed""#);
-    assert_eq!(fs::read_to_string(&path).unwrap(), renamed);
-
-    project
-        .change_settings(|settings| settings.edit_tracked = true)
-        .unwrap();
-    assert_eq!(
-        fs::read_to_string(&path).unwrap(),
-        renamed.replace(
-            "\"skills\": \"skills\"}\n}",
-            "\"skills\": \"skills\"},\n    \"edit_tracked\": true\n}"
-        )
-    );
-    assert!(project.settings().unwrap().edit_tracked);
-}
-
-#[test]
-fn an_edit_changes_directories_an_entry_at_a_time() {
-    let dir = TempDir::new().unwrap();
-    let (mut project, path) = by_hand(dir.path());
-
-    project
-        .change_settings(|settings| {
-            settings.directories = settings
-                .directories
-                .clone()
-                .without(Kind::Skill)
-                .with(Kind::Rule, "docs/rules");
-        })
-        .unwrap();
-
-    assert_eq!(
-        fs::read_to_string(&path).unwrap(),
-        BY_HAND.replace(
-            r#""directories": {"mcp": "mcp", "skills": "skills"}"#,
-            r#""directories": {"mcp": "mcp", "rules": "docs/rules"}"#
-        )
-    );
-    assert_eq!(project.directory_for(Kind::Skill), None);
-    assert_eq!(
-        project.directory_for(Kind::Rule),
-        Some(dir.path().join("docs/rules"))
-    );
-}
-
-#[test]
-fn an_edit_names_a_folder_in_settings_that_named_none() {
-    let dir = TempDir::new().unwrap();
-    let (mut project, path) = by_hand(dir.path());
-    let without = BY_HAND.replace(
-        ",\n    \"directories\": {\"mcp\": \"mcp\", \"skills\": \"skills\"}",
-        "",
-    );
-    fs::write(&path, &without).unwrap();
-
-    project
-        .change_settings(|settings| {
-            settings.directories = Directories::default().with(Kind::Skill, ".claude/skills");
-        })
-        .unwrap();
-
-    assert_eq!(
-        fs::read_to_string(&path).unwrap(),
-        without.replace(
-            "\"share\": \"local\"\n}",
-            "\"share\": \"local\",\n    \"directories\": {\n        \"skills\": \".claude/skills\"\n    }\n}"
-        )
-    );
-}
-
-#[test]
-fn an_edit_of_targets_writes_them_last_and_the_version_they_need() {
-    let dir = TempDir::new().unwrap();
-    let (mut project, path) = by_hand(dir.path());
-
-    project
-        .change_settings(|settings| {
-            settings.targets = Targets::default().with(Kind::Skill, vec![PathBuf::from(".skills")]);
-        })
-        .unwrap();
-
-    assert_eq!(
-        fs::read_to_string(&path).unwrap(),
-        BY_HAND.replace(r#""version": 3"#, r#""version": 4"#).replace(
-            "\"skills\": \"skills\"}\n}",
-            "\"skills\": \"skills\"},\n    \"targets\": {\n        \"skills\": [\".skills\"]\n    }\n}"
-        )
-    );
-    let settings = project.settings().unwrap();
-    assert_eq!(settings.version, TARGETS_VERSION);
-    assert_eq!(
-        settings.targets.get(Kind::Skill),
-        Some(&[PathBuf::from(".skills")][..])
-    );
-}
-
-#[test]
-fn an_edit_that_names_no_kind_any_more_takes_targets_and_their_version_out() {
-    let dir = TempDir::new().unwrap();
-    let (mut project, path) = by_hand(dir.path());
-    project
-        .change_settings(|settings| {
-            settings.targets = Targets::default().with(Kind::Skill, vec![PathBuf::from(".skills")]);
-        })
-        .unwrap();
-
-    project
-        .change_settings(|settings| settings.targets = Targets::default())
-        .unwrap();
-
-    assert_eq!(fs::read_to_string(&path).unwrap(), BY_HAND);
-    assert_eq!(project.settings().unwrap().version, SETTINGS_VERSION);
-}
-
-#[test]
-fn an_edit_of_something_else_leaves_targets_written_by_hand_and_their_version() {
-    let dir = TempDir::new().unwrap();
-    let (mut project, path) = by_hand(dir.path());
-    let hand = BY_HAND.replace(
-        "\"version\": 3,",
-        "\"version\": 3,\n    \"targets\": {\"skills\": [\".skills\"]},",
-    );
-    fs::write(&path, &hand).unwrap();
-
-    project
-        .change_settings(|settings| settings.agents = vec![Agent::Codex])
-        .unwrap();
-
-    assert_eq!(
-        fs::read_to_string(&path).unwrap(),
-        hand.replace(r#""agents": ["claude"]"#, r#""agents": ["codex"]"#)
-    );
-}
-
-#[test]
-fn a_version_3_file_whose_targets_do_not_read_opens_and_an_edit_of_them_writes_them_over() {
-    for unread in [
-        r#"{"skills": []}"#,
-        r#"[".skills"]"#,
-        r#"{"skills": ".skills"}"#,
-    ] {
-        let dir = TempDir::new().unwrap();
-        let (_, path) = by_hand(dir.path());
-        let hand = BY_HAND.replace(
-            "\"version\": 3,",
-            &format!("\"version\": 3,\n    \"targets\": {unread},"),
-        );
-        fs::write(&path, &hand).unwrap();
-
-        // Opened as every build before targets opened it, the key read past.
-        let mut project = MindProject::open(dir.path()).unwrap();
-        assert!(project.settings().unwrap().targets.is_empty(), "{unread}");
-        project
-            .change_settings(|settings| settings.agents = vec![Agent::Codex])
-            .unwrap();
-        assert_eq!(
-            fs::read_to_string(&path).unwrap(),
-            hand.replace(r#""agents": ["claude"]"#, r#""agents": ["codex"]"#),
-            "{unread}"
-        );
-
-        project
-            .change_settings(|settings| {
-                settings.targets =
-                    Targets::default().with(Kind::Skill, vec![PathBuf::from(".skills")]);
-            })
-            .unwrap();
-        let settings = project.settings().unwrap();
-        assert_eq!(settings.version, TARGETS_VERSION, "{unread}");
-        assert_eq!(
-            settings.targets.get(Kind::Skill),
-            Some(&[PathBuf::from(".skills")][..]),
-            "{unread}"
-        );
-    }
-}
-
-#[test]
-fn an_edit_of_the_version_or_the_id_is_refused_and_writes_nothing() {
-    let dir = TempDir::new().unwrap();
-    let (mut project, path) = by_hand(dir.path());
-
-    let version = project
-        .change_settings(|settings| settings.version = 4)
-        .unwrap_err();
-    let id = project
-        .change_settings(|settings| settings.id = mindflayer_core::ProjectId::generate())
-        .unwrap_err();
-
-    for error in [version, id] {
-        assert!(matches!(error, WorkspaceError::Edit { .. }), "{error}");
-    }
-    assert_eq!(fs::read_to_string(&path).unwrap(), BY_HAND);
-}
-
-#[test]
-fn a_project_a_mind_toml_marks_has_no_settings_to_change() {
-    let dir = TempDir::new().unwrap();
-    let (mut project, _) = MindProject::init(dir.path()).unwrap();
-
-    let error = project
-        .change_settings(|settings| settings.edit_tracked = true)
-        .unwrap_err();
-
-    assert!(
-        matches!(error, WorkspaceError::NoSettings { .. }),
-        "{error}"
-    );
-    // Sent to what gives it settings, since `mind init` leaves its marker.
-    assert!(error.to_string().contains("`mind migrate`"), "{error}");
-    assert!(!dir.path().join(MIND_DIR).join(SETTINGS_FILE).exists());
-}
-
-#[test]
-fn settings_somebody_broke_since_they_were_read_are_refused_and_left_as_they_are() {
-    let dir = TempDir::new().unwrap();
-    let (mut project, path) = by_hand(dir.path());
-    let broken = BY_HAND.replace("\"version\": 3,", "\"version\": 3, // three");
-    fs::write(&path, &broken).unwrap();
-
-    let error = project
-        .change_settings(|settings| settings.edit_tracked = true)
-        .unwrap_err();
-
-    assert!(matches!(error, WorkspaceError::Malformed { .. }), "{error}");
-    assert_eq!(fs::read_to_string(&path).unwrap(), broken);
-}
-
-#[test]
-fn an_edit_leaves_nothing_else_beside_the_settings() {
-    let dir = TempDir::new().unwrap();
-    let (mut project, _) = by_hand(dir.path());
-
-    project
-        .change_settings(|settings| settings.share = Share::Shared)
-        .unwrap();
-
-    assert_eq!(names_in(&dir.path().join(MIND_DIR)), ["settings.json"]);
-    assert_eq!(project.settings().unwrap().share, Share::Shared);
-}
-
-#[test]
-fn an_edit_that_moves_a_folder_out_of_the_project_is_refused() {
-    let dir = TempDir::new().unwrap();
-    let (mut project, path) = by_hand(dir.path());
-
-    for outside in ["/etc/skills", "../elsewhere", "."] {
-        let error = project
-            .change_settings(|settings| {
-                settings.directories = settings.directories.clone().with(Kind::Skill, outside);
-            })
-            .unwrap_err();
-
-        assert!(
-            matches!(
-                error,
-                WorkspaceError::OutsideProject {
-                    kind: Kind::Skill,
-                    ..
-                }
-            ),
-            "{outside}: {error}"
-        );
-    }
-    assert_eq!(fs::read_to_string(&path).unwrap(), BY_HAND);
-}
-
-#[test]
-fn an_edit_that_moves_a_folder_into_mind_is_refused() {
-    let dir = TempDir::new().unwrap();
-    let (mut project, path) = by_hand(dir.path());
-
-    let error = project
-        .change_settings(|settings| {
-            settings.directories = settings.directories.clone().with(Kind::Rule, ".mind/rules");
-        })
-        .unwrap_err();
-
-    assert!(
-        matches!(
-            error,
-            WorkspaceError::InsideMind {
-                kind: Kind::Rule,
-                ..
-            }
-        ),
-        "{error}"
-    );
-    assert_eq!(fs::read_to_string(&path).unwrap(), BY_HAND);
-}
-
-#[test]
-fn a_folder_written_outside_by_hand_does_not_stop_a_change_to_something_else() {
-    let dir = TempDir::new().unwrap();
-    let (_, path) = by_hand(dir.path());
-    let outside = BY_HAND.replace("\"skills\": \"skills\"", "\"skills\": \"../shared\"");
-    fs::write(&path, &outside).unwrap();
-    let mut project = MindProject::open(dir.path()).unwrap();
-
-    project
-        .change_settings(|settings| settings.share = Share::Shared)
-        .unwrap();
-
-    assert_eq!(
-        fs::read_to_string(&path).unwrap(),
-        outside.replace("\"share\": \"local\"", "\"share\": \"shared\"")
-    );
-}
-
 // ---------------------------------------------------------------------------
 // Changing a settings.toml
 // ---------------------------------------------------------------------------
@@ -1403,4 +1017,197 @@ fn a_change_in_toml_of_the_version_or_the_id_is_refused_and_writes_nothing() {
         assert!(matches!(error, WorkspaceError::Edit { .. }), "{error}");
         assert_eq!(fs::read_to_string(&path).unwrap(), TOML_BY_HAND);
     }
+}
+
+#[test]
+fn a_change_in_toml_names_a_folder_in_settings_that_named_none() {
+    let dir = TempDir::new().unwrap();
+    let (mut project, path) = toml_by_hand(dir.path());
+    let start = TOML_BY_HAND.find("\n[directories]").unwrap();
+    let without = &TOML_BY_HAND[..start];
+    fs::write(&path, without).unwrap();
+
+    project
+        .change_settings(|settings| {
+            settings.directories = Directories::default().with(Kind::Skill, ".claude/skills");
+        })
+        .unwrap();
+
+    assert_eq!(
+        fs::read_to_string(&path).unwrap(),
+        format!("{without}\n[directories]\nskills = \".claude/skills\"\n")
+    );
+}
+
+#[test]
+fn a_change_of_something_else_leaves_targets_written_by_hand() {
+    let dir = TempDir::new().unwrap();
+    let (mut project, path) = toml_by_hand(dir.path());
+    let hand = TOML_BY_HAND.replace(
+        "[directories]",
+        "[targets] # one for all\nskills = [ \".skills\" ]\n\n[directories]",
+    );
+    fs::write(&path, &hand).unwrap();
+
+    project
+        .change_settings(|settings| settings.agents = vec![Agent::Codex])
+        .unwrap();
+
+    assert_eq!(
+        fs::read_to_string(&path).unwrap(),
+        hand.replace(r#"agents = ["claude"]"#, r#"agents = ["codex"]"#)
+    );
+}
+
+#[test]
+fn a_project_a_mind_toml_marks_has_no_settings_to_change() {
+    let dir = TempDir::new().unwrap();
+    let (mut project, _) = MindProject::init(dir.path()).unwrap();
+
+    let error = project
+        .change_settings(|settings| settings.edit_tracked = true)
+        .unwrap_err();
+
+    assert!(
+        matches!(
+            error,
+            WorkspaceError::NoSettings {
+                marker: MarkerFile::MindToml,
+                ..
+            }
+        ),
+        "{error}"
+    );
+    // Sent to what gives it settings, since `mind init` leaves its marker.
+    assert!(error.to_string().contains("`mind migrate`"), "{error}");
+    assert!(!dir.path().join(MIND_DIR).join(SETTINGS_FILE).exists());
+}
+
+#[test]
+fn a_settings_json_is_changed_by_nothing_but_its_move_to_a_settings_toml() {
+    let dir = TempDir::new().unwrap();
+    let path = json_project(dir.path(), None);
+    let written = fs::read_to_string(&path).unwrap();
+    let mut project = MindProject::open(dir.path()).unwrap();
+
+    let error = project
+        .change_settings(|settings| settings.share = Share::Shared)
+        .unwrap_err();
+
+    assert!(
+        matches!(
+            error,
+            WorkspaceError::NoSettings {
+                marker: MarkerFile::SettingsJson,
+                ..
+            }
+        ),
+        "{error}"
+    );
+    assert_eq!(
+        error.to_string(),
+        format!(
+            "{}: has no settings.toml to change, since a settings.json marks it; \
+             `mind migrate` moves it to one",
+            dir.path().display()
+        )
+    );
+    assert_eq!(fs::read_to_string(&path).unwrap(), written);
+    assert!(!dir.path().join(MIND_DIR).join(SETTINGS_FILE).exists());
+}
+
+#[test]
+fn settings_somebody_broke_since_they_were_read_are_refused_and_left_as_they_are() {
+    let dir = TempDir::new().unwrap();
+    let (mut project, path) = toml_by_hand(dir.path());
+    let broken = TOML_BY_HAND.replace("version = 5\n", "version = 5,\n");
+    fs::write(&path, &broken).unwrap();
+
+    let error = project
+        .change_settings(|settings| settings.edit_tracked = true)
+        .unwrap_err();
+
+    assert!(matches!(error, WorkspaceError::Malformed { .. }), "{error}");
+    assert_eq!(fs::read_to_string(&path).unwrap(), broken);
+}
+
+#[test]
+fn a_change_leaves_nothing_else_beside_the_settings() {
+    let dir = TempDir::new().unwrap();
+    let (mut project, _) = toml_by_hand(dir.path());
+
+    project
+        .change_settings(|settings| settings.share = Share::Shared)
+        .unwrap();
+
+    assert_eq!(names_in(&dir.path().join(MIND_DIR)), ["settings.toml"]);
+    assert_eq!(project.settings().unwrap().share, Share::Shared);
+}
+
+#[test]
+fn a_change_that_moves_a_folder_out_of_the_project_is_refused() {
+    let dir = TempDir::new().unwrap();
+    let (mut project, path) = toml_by_hand(dir.path());
+
+    for outside in ["/etc/skills", "../elsewhere", "."] {
+        let error = project
+            .change_settings(|settings| {
+                settings.directories = settings.directories.clone().with(Kind::Skill, outside);
+            })
+            .unwrap_err();
+
+        assert!(
+            matches!(
+                error,
+                WorkspaceError::OutsideProject {
+                    kind: Kind::Skill,
+                    ..
+                }
+            ),
+            "{outside}: {error}"
+        );
+    }
+    assert_eq!(fs::read_to_string(&path).unwrap(), TOML_BY_HAND);
+}
+
+#[test]
+fn a_change_that_moves_a_folder_into_mind_is_refused() {
+    let dir = TempDir::new().unwrap();
+    let (mut project, path) = toml_by_hand(dir.path());
+
+    let error = project
+        .change_settings(|settings| {
+            settings.directories = settings.directories.clone().with(Kind::Rule, ".mind/rules");
+        })
+        .unwrap_err();
+
+    assert!(
+        matches!(
+            error,
+            WorkspaceError::InsideMind {
+                kind: Kind::Rule,
+                ..
+            }
+        ),
+        "{error}"
+    );
+    assert_eq!(fs::read_to_string(&path).unwrap(), TOML_BY_HAND);
+}
+
+#[test]
+fn a_folder_written_outside_by_hand_does_not_stop_a_change_to_something_else() {
+    let dir = TempDir::new().unwrap();
+    let (_, path) = toml_by_hand(dir.path());
+    let outside = TOML_BY_HAND.replace("skills = \"skills\"", "skills = \"../shared\"");
+    fs::write(&path, &outside).unwrap();
+    let mut project = MindProject::open(dir.path()).unwrap();
+
+    project
+        .change_settings(|settings| settings.share = Share::Shared)
+        .unwrap();
+
+    assert_eq!(
+        fs::read_to_string(&path).unwrap(),
+        outside.replace("share = \"local\"", "share = \"shared\"")
+    );
 }

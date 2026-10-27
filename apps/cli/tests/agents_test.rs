@@ -197,6 +197,35 @@ fn a_project_a_mind_toml_marks_is_refused_and_sent_to_mind_migrate() {
 }
 
 #[test]
+fn a_project_a_settings_json_marks_is_refused_and_sent_to_mind_migrate() {
+    let dir = TempDir::new().unwrap();
+    flayer(dir.path(), &["init"]).unwrap();
+    let root = dir.path().join("json");
+    fs::create_dir(&root).unwrap();
+    json_project(&root);
+    flayer(dir.path(), &["link", "json"]).unwrap();
+    let json = root.join(MIND_DIR).join(SETTINGS_JSON_FILE);
+    let written = fs::read_to_string(&json).unwrap();
+
+    for args in [
+        &["agents", "add", "codex"][..],
+        &["share", "shared", "--yes"][..],
+        &["targets", "set", "skills", ".skills", "--yes"][..],
+    ] {
+        let failure = mind(&root, args).unwrap_err();
+        let said = failure.error.to_string();
+        assert!(said.contains("since a settings.json marks it"), "{said}");
+        assert!(said.ends_with("`mind migrate` moves it to one"), "{said}");
+    }
+    assert_eq!(fs::read_to_string(&json).unwrap(), written);
+
+    // Moved, it changes as any project does.
+    mind(&root, &["migrate", "--yes"]).unwrap();
+    mind(&root, &["share", "shared", "--yes"]).unwrap();
+    assert!(settings(&root).contains("\nshare = \"shared\"\n"));
+}
+
+#[test]
 fn somebodys_skill_where_a_copy_would_go_is_left_and_warned_about() {
     let (dir, root) = installed("claude", false);
     let theirs = agents(&root, "deploy");

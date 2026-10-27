@@ -98,8 +98,8 @@ pub const SETTINGS_VERSION: u32 = 3;
 /// A version of its own, where a key the format does not define is
 /// otherwise read past: a build from before it would read past `targets`
 /// too, and install into the standard folders without a word, where the
-/// settings send copies elsewhere. A `settings.json` is written at it only
-/// while it sets them, so one that does not stays one every build since
+/// settings send copies elsewhere. A `settings.json` was written at it only
+/// while it set them, so one that did not stayed one every build since
 /// [`SETTINGS_VERSION`] reads. Nothing else in the file changes meaning, so
 /// it is read as a version 3 file is, with `targets` beside.
 pub const TARGETS_VERSION: u32 = 4;
@@ -929,28 +929,22 @@ impl MindProject {
     /// was opened, so a change is made to the file it is about to write and
     /// not to a copy that may be minutes old, as a workspace's marker is
     /// edited ([`FlayerWorkspace`]'s `edit_array`), through the same
-    /// `rewrite`. Each key whose value changed is edited where it stands, in
-    /// a `settings.toml` through toml_edit as `flayer.toml` is
-    /// (`settings::toml_edited`), so a key this build does not know, the
-    /// order of the keys, the comments and the file's layout all stay as
-    /// somebody left them. A changed file is written through a temporary and
-    /// a rename (`replace_file`), so a crash leaves the old settings or the
-    /// new ones; an unchanged one is not written at all, its modification
-    /// time included. What is in memory afterwards is read back from the
-    /// file.
+    /// `rewrite`. Each key whose value changed is edited where it stands,
+    /// through toml_edit as `flayer.toml` is (`settings::edited`), so a key
+    /// this build does not know, the order of the keys, the comments and the
+    /// file's layout all stay as somebody left them. A changed file is
+    /// written through a temporary and a rename (`replace_file`), so a crash
+    /// leaves the old settings or the new ones; an unchanged one is not
+    /// written at all, its modification time included. What is in memory
+    /// afterwards is read back from the file.
     ///
-    /// A change of `targets` writes the version they need with them
-    /// ([`Settings::version_needed`]): in a `settings.json`, up when a kind
-    /// is named and down when none is any more, which is the one version an
-    /// edit changes; in a `settings.toml`, the one version it holds.
-    ///
-    /// Refused for a project a `mind.toml` marks, which has no settings until
-    /// it is moved to them, when the change touches the version or the id,
-    /// and when it moves a kind's folder out of the project or into its
-    /// `.mind`, as `init` refuses one, or sends a kind's installs to a folder
-    /// no install would use: strict when writing, while a folder somebody
-    /// wrote there by hand is still read, and left alone by a change to
-    /// something else.
+    /// Refused for a project an older marker marks
+    /// ([`changeable`](Self::changeable)), when the change touches the
+    /// version or the id, and when it moves a kind's folder out of the
+    /// project or into its `.mind`, as `init` refuses one, or sends a kind's
+    /// installs to a folder no install would use: strict when writing, while
+    /// a folder somebody wrote there by hand is still read, and left alone by
+    /// a change to something else.
     /// A settings file this build refuses to read is refused here too, and
     /// left as it is.
     ///
@@ -967,42 +961,48 @@ impl MindProject {
         &mut self,
         change: impl FnOnce(&mut Settings) -> T,
     ) -> Result<T, WorkspaceError> {
-        if self.settings().is_none() {
-            return Err(WorkspaceError::NoSettings {
-                path: self.root.clone(),
-            });
-        }
+        self.changeable()?;
         let path = self.marker_path();
-        let toml = self.marker_file() == MarkerFile::SettingsToml;
         let value = rewrite(&path, |text| {
             let before = crate::settings::parse(&path, text)?;
             let mut wanted = before.clone();
             let value = change(&mut wanted);
-            Self::check_change(&path, &before, &mut wanted)?;
-            let edited = if toml {
-                crate::settings::toml_edited(&path, text, &before, &wanted)?
-            } else {
-                crate::settings::edited(&path, text, &before, &wanted)?
-            };
+            Self::check_change(&path, &before, &wanted)?;
+            let edited = crate::settings::edited(&path, text, &before, &wanted)?;
             Ok((edited, value))
         })?;
         self.config = ProjectConfig::Settings(Settings::read(&path)?);
         Ok(value)
     }
 
+    /// The project's settings, when a change may be made to them: those of
+    /// a project its `settings.toml` marks.
+    ///
+    /// Refused for a project an older marker marks, pointing at the
+    /// migration: a `mind.toml` has no settings to change, and a
+    /// `settings.json` is read as it was written and changed by nothing but
+    /// its move to a `settings.toml`, so the settings are changed one way,
+    /// as `flayer.toml` is, and never in a grammar this build no longer
+    /// writes.
+    pub fn changeable(&self) -> Result<&Settings, WorkspaceError> {
+        match &self.config {
+            ProjectConfig::Settings(settings) if self.marker_file() == MarkerFile::SettingsToml => {
+                Ok(settings)
+            }
+            _ => Err(WorkspaceError::NoSettings {
+                path: self.root.clone(),
+                marker: self.marker_file(),
+            }),
+        }
+    }
+
     /// What [`change_settings`](Self::change_settings) holds `wanted`, the
-    /// settings as a change leaves them, to before it writes them, and the
-    /// version a change of `targets` brings with it.
+    /// settings as a change leaves them, to before it writes them.
     fn check_change(
         path: &Path,
         before: &Settings,
-        wanted: &mut Settings,
+        wanted: &Settings,
     ) -> Result<(), WorkspaceError> {
-        // `targets` come with the version a build from before them refuses,
-        // and go with it, so a change to them writes the one they need.
-        if wanted.targets != before.targets && wanted.version == before.version {
-            wanted.version = wanted.version_needed();
-        }
         for kind in Kind::ALL {
             if let Some(error) = wanted
                 .directories
@@ -1968,13 +1968,14 @@ pub enum WorkspaceError {
         why: Misplaced,
     },
     /// Pointing at the migration rather than at `mind init`, which never
-    /// rewrites a marker: what such a project lacks is what moving it to
-    /// settings gives it, as it was committed by design.
+    /// rewrites a marker: what such a project lacks is what moving it to a
+    /// `settings.toml` gives it, as it was committed by design or written
+    /// before.
     #[error(
-        "{path}: has no {SETTINGS_FILE} to change, since a {MIND_CONFIG} marks it; \
+        "{path}: has no {SETTINGS_FILE} to change, since a {marker} marks it; \
          `mind migrate` moves it to one"
     )]
-    NoSettings { path: PathBuf },
+    NoSettings { path: PathBuf, marker: MarkerFile },
     #[error("{path}: cannot hold the workspace's {kind}s, because it is not inside the workspace")]
     OutsideWorkspace { path: PathBuf, kind: Kind },
     #[error(
@@ -2010,7 +2011,7 @@ impl WorkspaceError {
             | WorkspaceError::InsideMind { path, .. }
             | WorkspaceError::NoDirectory { path, .. }
             | WorkspaceError::Target { path, .. }
-            | WorkspaceError::NoSettings { path }
+            | WorkspaceError::NoSettings { path, .. }
             | WorkspaceError::OutsideWorkspace { path, .. }
             | WorkspaceError::OverlapsGathered { path, .. } => path,
             WorkspaceError::Lock(error) => error.path(),

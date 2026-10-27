@@ -275,8 +275,9 @@ pub enum Stranded {
 /// when that one links it: [`project_plan`], done. From a `settings.json`,
 /// write the same settings as a `settings.toml` and keep the `settings.json`
 /// in `.mind/tmp`, with no workspace's lock or ledger, since no copy moves:
-/// a second move at once finds the `settings.toml` there, which `create_new`
-/// refuses. `None` for a project its `settings.toml` marks already, which is
+/// nothing else writes a `settings.json` any more
+/// ([`MindProject::changeable`]), and a second move at once finds the
+/// `settings.toml` there, which `create_new` refuses. `None` for a project its `settings.toml` marks already, which is
 /// left as it is, and nothing written.
 ///
 /// Holds that workspace's lock from before the project is read again until

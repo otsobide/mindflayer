@@ -120,9 +120,6 @@ impl Change {
                     }
                     None => targets.without(*kind),
                 };
-                if after.targets != before.targets {
-                    after.version = after.version_needed();
-                }
             }
         }
         after
@@ -371,8 +368,9 @@ pub enum ReapplyError {
 /// being made.
 ///
 /// Refused as [`apply`] would refuse it, so a dry run says what the real one
-/// will: a project a `mind.toml` marks, which has no settings until it is
-/// moved to them; a change that leaves it naming no agent; one that would
+/// will: a project an older marker marks, a `mind.toml` or a
+/// `settings.json`, which has no `settings.toml` to change until it is moved
+/// to one; a change that leaves it naming no agent; one that would
 /// install a kind in no folder, or in one no install may use; a copy that
 /// would land inside one of `homes` or in a folder a loaded workspace keeps
 /// as its own; and a record naming a copy outside the project.
@@ -593,17 +591,13 @@ pub fn apply(
 
 /// `workspace`, when it is made and links `project`: the one whose records
 /// say what in the project is Mindflayer's. The project is refused first
-/// when a `mind.toml` marks it, before any ledger is opened.
+/// when an older marker marks it ([`MindProject::changeable`]), before any
+/// ledger is opened.
 fn linking<'a>(
     workspace: Option<&'a FlayerWorkspace>,
     project: &MindProject,
 ) -> Result<Option<&'a FlayerWorkspace>, ReapplyError> {
-    if project.settings().is_none() {
-        return Err(WorkspaceError::NoSettings {
-            path: project.root().to_path_buf(),
-        }
-        .into());
-    }
+    project.changeable()?;
     Ok(workspace.filter(|workspace| workspace.is_made() && workspace.is_linked(project.root())))
 }
 
@@ -615,12 +609,7 @@ fn plan_with(
     change: &Change,
     homes: &AgentHomes,
 ) -> Result<Plan, ReapplyError> {
-    let Some(before) = project.settings().cloned() else {
-        return Err(WorkspaceError::NoSettings {
-            path: project.root().to_path_buf(),
-        }
-        .into());
-    };
+    let before = project.changeable()?.clone();
     let after = change.applied(&before);
     if after.agents.is_empty() {
         return Err(ReapplyError::NoAgent {
