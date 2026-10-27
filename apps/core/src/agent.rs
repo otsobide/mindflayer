@@ -165,8 +165,8 @@ impl fmt::Display for UnknownAgent {
 ///
 /// A value rather than a function a caller reaches for, because the
 /// standard layout is only the default: a project's settings may put a kind
-/// somewhere else for every agent (#40), and a caller handed the table then
-/// follows that without changing. The project hands it on, in core: which
+/// somewhere else for every agent ([`overriding`](TargetTable::overriding)),
+/// and a caller handed the table then follows that without changing. The project hands it on, in core: which
 /// table applies is its settings' to say, so a caller asks the project
 /// ([`MindProject::targets`](crate::MindProject::targets)), as an install
 /// does, and no front end calls
@@ -176,20 +176,20 @@ impl fmt::Display for UnknownAgent {
 /// Where a kind goes for an agent is where its copy is put for that agent,
 /// not proof the agent reads it there: the standard layout is built from
 /// what each one reads, but an override's folder reaches an agent only once
-/// the agent is pointed at it, which is #40's status check to say.
+/// the agent is pointed at it, which is for a project's status to say.
 ///
-/// One location per kind and agent for now, which is all the standard layout
-/// needs, kept private so it can grow into the list of folders per kind the
-/// override names when #40 lands, without a caller noticing. A pair with
-/// none is a kind that reaches that agent some other way, or not at all,
-/// which is every rule for now: D-03 puts rules in a block of `AGENTS.md`,
-/// which M2 adds here, as M6 adds MCP servers.
+/// A list of locations per kind and agent, kept private: the standard
+/// layout needs one, and an override names as many folders as it likes,
+/// each for every agent ([`overriding`](TargetTable::overriding)). A pair
+/// with none is a kind that reaches that agent some other way, or not at
+/// all, which is every rule for now: D-03 puts rules in a block of
+/// `AGENTS.md`, which M2 adds here, as M6 adds MCP servers.
 ///
 /// Pure: no entry is looked for on disk, and every location is relative to
 /// a project's root.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TargetTable {
-    locations: BTreeMap<(Kind, Agent), PathBuf>,
+    locations: BTreeMap<(Kind, Agent), Vec<PathBuf>>,
 }
 
 impl TargetTable {
@@ -210,17 +210,40 @@ impl TargetTable {
         let locations = Kind::ALL
             .into_iter()
             .flat_map(|kind| Agent::ALL.into_iter().map(move |agent| (kind, agent)))
-            .filter_map(|(kind, agent)| Some(((kind, agent), standard(kind, agent)?)))
+            .filter_map(|(kind, agent)| Some(((kind, agent), vec![standard(kind, agent)?])))
             .collect();
         TargetTable { locations }
+    }
+
+    /// This table with `kind` sent to `folders`, for every agent, in place of
+    /// wherever it sent it: what a project's settings make of it when they
+    /// say where a kind is installed (the owner's amendment to D-07).
+    ///
+    /// For every agent alike, rather than a folder per agent: the override
+    /// is one place every agent the project names shares (one `.skills` for
+    /// all three, say), and two agents sent to one folder get one copy, as
+    /// Codex and OpenCode share `.agents/skills` in the standard layout. A
+    /// folder per agent would be a second table to write by hand, which the
+    /// standard one already is. No folder at all sends the kind nowhere.
+    ///
+    /// Pure, and unchecked: whether each folder is one an install may use
+    /// (inside the project, outside `.mind`) is the project's to say, which
+    /// hands over only those
+    /// ([`MindProject::targets`](crate::MindProject::targets)).
+    pub fn overriding(mut self, kind: Kind, folders: &[PathBuf]) -> TargetTable {
+        for agent in Agent::ALL {
+            self.locations.insert((kind, agent), folders.to_vec());
+        }
+        self
     }
 
     /// Where `kind` goes for `agents`: one target per location, each with
     /// the agents it is for, so two agents sent to one folder get one copy.
     ///
     /// Sorted here, by location and then by agent in report order, so every
-    /// front end lists them alike; an agent named twice is served once, and
-    /// one the kind does not reach adds nothing.
+    /// front end lists them alike; an agent named twice is served once, one
+    /// location named twice for an agent is one target, and an agent the
+    /// kind does not reach adds nothing.
     ///
     /// Pure, as the table is: nothing is read on disk, and every location
     /// comes from the table it is called on, which for
@@ -229,7 +252,7 @@ impl TargetTable {
     pub fn targets(&self, kind: Kind, agents: &[Agent]) -> Vec<AgentTarget> {
         let mut served: BTreeMap<&Path, BTreeSet<Agent>> = BTreeMap::new();
         for &agent in agents {
-            if let Some(location) = self.locations.get(&(kind, agent)) {
+            for location in self.locations.get(&(kind, agent)).into_iter().flatten() {
                 served.entry(location).or_default().insert(agent);
             }
         }
@@ -268,7 +291,7 @@ pub struct AgentTarget {
     /// The agents asked about that the table sends here, each once, in report
     /// order. Never empty: a location none of them is sent to is not one of
     /// their targets. Under the standard table these are agents that read the
-    /// location; under an override (#40) they need not be.
+    /// location; under an override they need not be.
     pub agents: Vec<Agent>,
 }
 

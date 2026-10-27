@@ -160,16 +160,10 @@ fn a_rule_reaches_no_agent_through_a_folder_yet() {
 }
 
 #[test]
-fn agents_sharing_a_location_another_table_names_get_one_target() {
-    // What a project's settings could make of the table (#40): one folder
-    // for every agent is one copy, for all three, whether or not any of them
-    // reads it.
-    let table = TargetTable {
-        locations: Agent::ALL
-            .into_iter()
-            .map(|agent| ((Kind::Skill, agent), PathBuf::from(".skills")))
-            .collect(),
-    };
+fn agents_an_override_sends_to_one_folder_get_one_target() {
+    // What a project's settings make of the table: one folder for every
+    // agent is one copy, for all three, whether or not any of them reads it.
+    let table = TargetTable::standard().overriding(Kind::Skill, &[PathBuf::from(".skills")]);
 
     assert_eq!(
         table.targets(Kind::Skill, &Agent::ALL),
@@ -178,6 +172,64 @@ fn agents_sharing_a_location_another_table_names_get_one_target() {
             agents: Agent::ALL.to_vec(),
         }]
     );
+    assert_eq!(
+        table.targets(Kind::Skill, &[Agent::Codex]),
+        [AgentTarget {
+            path: PathBuf::from(".skills"),
+            agents: vec![Agent::Codex],
+        }]
+    );
+}
+
+#[test]
+fn an_override_of_several_folders_sends_every_agent_to_each_once() {
+    let folders = [
+        PathBuf::from(".skills"),
+        claude_skills(),
+        PathBuf::from(".skills"),
+    ];
+    let table = TargetTable::standard().overriding(Kind::Skill, &folders);
+
+    assert_eq!(
+        table.targets(Kind::Skill, &[Agent::Codex, Agent::Claude]),
+        [
+            AgentTarget {
+                path: claude_skills(),
+                agents: vec![Agent::Claude, Agent::Codex],
+            },
+            AgentTarget {
+                path: PathBuf::from(".skills"),
+                agents: vec![Agent::Claude, Agent::Codex],
+            },
+        ]
+    );
+}
+
+#[test]
+fn an_override_of_one_kind_leaves_the_others_where_the_table_sent_them() {
+    let standard = TargetTable::standard();
+    let table = standard
+        .clone()
+        .overriding(Kind::Rule, &[PathBuf::from(".rules")]);
+
+    assert_eq!(
+        table.targets(Kind::Skill, &Agent::ALL),
+        standard.targets(Kind::Skill, &Agent::ALL)
+    );
+    assert_eq!(
+        table.targets(Kind::Rule, &[Agent::Claude]),
+        [AgentTarget {
+            path: PathBuf::from(".rules"),
+            agents: vec![Agent::Claude],
+        }]
+    );
+}
+
+#[test]
+fn an_override_of_no_folder_sends_the_kind_nowhere() {
+    let table = TargetTable::standard().overriding(Kind::Skill, &[]);
+
+    assert_eq!(table.targets(Kind::Skill, &Agent::ALL), []);
 }
 
 #[test]
