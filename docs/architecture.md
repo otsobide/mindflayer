@@ -1426,7 +1426,13 @@ directions: never overwritten, never deleted, and the caller is told so,
 with the path, rather than obeyed quietly. So somebody's skill in
 `.claude/skills` refuses the whole install, and `.agents/skills` is not
 written either: a copy beside it would hand OpenCode, which reads both, two
-different skills of one name. A name installed into one folder does not claim
+different skills of one name. Only the targets refuse, as D-07 has it, not
+every folder an agent reads (`Agent::reads`): a project that names OpenCode
+and not Claude is sent nothing in `.claude/skills` or `.opencode/skills`,
+though OpenCode loads what is there, so somebody's `ship` in one of them does
+not stop `.agents/skills/ship` from being written, and OpenCode is then
+handed two versions of one skill, which nothing says ([an open
+question](#open-questions)). A name installed into one folder does not claim
 what somebody keeps under it in another, as when a project names an agent
 after the install. Every copy there recorded is `Installed`, even if one the
 record names has gone since, and the next install puts it back. A listing
@@ -4033,7 +4039,14 @@ leak into the lifecycle code. Unblocks #33, #45, #62, #93, #94 and #95.
   can meet somebody's work, so those are what a listing has to know; reading
   every folder `Agent::reads` names would list the rest as well, from folders
   no install of Mindflayer's reaches. Doctor (#96) is the other place a skill
-  only there could be reported.
+  only there could be reported. An install refuses on the targets alone too,
+  so in a project that names OpenCode and not Claude it writes
+  `.agents/skills/<name>` beside somebody's `.claude/skills/<name>` or
+  `.opencode/skills/<name>`, and OpenCode loads two versions of one skill.
+  Refusing on every folder an agent reads would close that, at the price of
+  refusing over a copy no listing shows; reading those folders for both is
+  the other way, and whichever is chosen, a listing and an install should
+  agree on it.
 - **Listing reads every copy it compares.** Copies of one name in a v3
   project's agents' folders are compared on every listing by `hash::tree`,
   which reads each of their files whole: with a copy installed in each
