@@ -5,7 +5,9 @@
 //! Defined here and nowhere else. Every target of an installation is compared
 //! with the one hash recorded for it, on whichever machine the comparison
 //! runs, so two spellings of the recipe (or one that depended on the
-//! platform) would call an untouched copy edited.
+//! platform) would call an untouched copy edited. Two recipes, one for a
+//! folder ([`tree`]) and one for a file written whole ([`bytes`]), each for
+//! its own kind of target and never compared with the other.
 
 use std::fmt::Write as _;
 use std::fs;
@@ -70,12 +72,28 @@ pub fn tree(root: &Path) -> Result<String, io::Error> {
         }
     }
 
+    Ok(hex(hasher))
+}
+
+/// The SHA-256 of a file's contents, as 64 lowercase hex digits.
+///
+/// For a target that is one file Mindflayer writes whole, as a rule is in
+/// Claude's rules folder (#43), where [`tree`] walks a folder. The bytes
+/// alone, not the file's name, as a copy's own name is not part of its
+/// tree's hash; and handed the bytes rather than a path, so what is hashed
+/// is what was written or read, never a file that changed in between.
+pub fn bytes(contents: &[u8]) -> String {
+    hex(Sha256::new_with_prefix(contents))
+}
+
+/// What `hasher` has taken in, as 64 lowercase hex digits.
+fn hex(hasher: Sha256) -> String {
     let mut hex = String::with_capacity(64);
     for byte in hasher.finalize() {
         // Writing to a `String` cannot fail.
         let _ = write!(hex, "{byte:02x}");
     }
-    Ok(hex)
+    hex
 }
 
 /// One folder or file found under the root.

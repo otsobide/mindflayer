@@ -158,3 +158,17 @@ fn a_link_is_refused_rather_than_followed() {
         "{error}"
     );
 }
+
+#[test]
+fn a_files_bytes_hash_to_their_sha256_whatever_the_file_is_called() {
+    // Pinned, as a tree's is: the SHA-256 of these bytes and nothing else.
+    assert_eq!(
+        bytes(b"Never force-push a shared branch.\n"),
+        "013f095e62c6a43dce17b02b712714037233bceec34622cc917f611a0c81a761"
+    );
+    assert_eq!(
+        bytes(b""),
+        "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    );
+    assert_ne!(bytes(b"a\n"), bytes(b"a\r\n"));
+}
