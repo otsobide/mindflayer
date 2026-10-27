@@ -148,7 +148,11 @@ These are easy to break from a single file without noticing.
   every folder an install may use (`misplaced_target`), so code that needs
   one asks the project (`MindProject::targets`), as discovery and an install
   (`install::targets`) do. Which agents read none of a project's targets is
-  core's too (`ProjectStatus::unreached`). Where an agent reads
+  core's too (`ProjectStatus::unreached`), and so is which read a rule it
+  received nowhere (`ProjectStatus::missed`). Which kind a name typed bare
+  is, to install or take out, is core's (`install::offered_typed`,
+  `uninstall_typed`), and so is what a render of rules warns of
+  (`Rendered::warnings_of`). Where an agent reads
   (`Agent::reads`) is kept apart from where it is sent a copy: OpenCode reads
   `.claude/skills` and is sent nothing there. Which folders a project is read
   from is core's too (`Catalog::folders`).
@@ -345,7 +349,9 @@ These are easy to break from a single file without noticing.
   a block holding such a section refuses the render (`NotRecorded`), as a
   rule no longer offered does (`NoLongerOffered`). What a project received
   as rules is listed from the ledger and the block (`status`, D-23), never
-  by discovery, which reads no block.
+  by discovery, which reads no block, and a front end finds what to change
+  through `lifecycle::find_to_change`, which refuses such a rule as received
+  rather than as nothing.
 - **Strict when writing, lenient when reading.** A skill's front matter is
   the Agent Skills format. `mind add`, `rename` and `install` refuse a name or
   description that breaks its rules, all through `artifact::strict_issues`
