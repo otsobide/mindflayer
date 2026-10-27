@@ -24,20 +24,26 @@
 //! (D-04).
 
 use std::fs;
+use std::io;
 use std::path::{Path, PathBuf};
+
+use thiserror::Error;
 
 use super::{MigrateError, Refusal};
 use crate::agent::{Agent, AgentHomes};
 use crate::catalog::Catalog;
-use crate::exclude;
+use crate::copy;
+use crate::exclude::{self, ExcludeError};
+use crate::gather::Scrub;
 use crate::install::{self, Candidate, InstallError, Offer};
 use crate::kind::{Kind, Layout};
-use crate::ledger::{InstallRecord, Ledger};
+use crate::ledger::{Action, InstallRecord, Ledger, LedgerError, Moved, Target};
 use crate::reapply::{self, Retarget, Why};
 use crate::settings::{Settings, Share, SETTINGS_FILE};
 use crate::workspace::{
-    misplaced_authored, same_directory, Directories, FlayerWorkspace, MindConfig, MindProject,
-    ProjectConfig, DIRECTORIES_VERSION, MIND_CONFIG, MIND_DIR,
+    ignore_itself, misplaced_authored, same_directory, write_new, Directories, FlayerWorkspace,
+    MindConfig, MindProject, ProjectConfig, WorkspaceError, DIRECTORIES_VERSION, MIND_CONFIG,
+    MIND_DIR, MIND_IGNORE,
 };
 
 /// What moving a project from its `mind.toml` to its settings would do:
@@ -116,6 +122,403 @@ pub fn project_plan(
         None => None,
     };
     plan_with(linked.zip(ledger.as_ref()), project, agents, share, homes)
+}
+
+/// What [`project`] did.
+#[derive(Debug)]
+pub struct ProjectMigrated {
+    /// What was planned under the lock, and so done.
+    pub plan: ProjectPlan,
+    /// What opening the ledger to write took out of it, for the front end to
+    /// say.
+    pub scrub: Scrub,
+    /// What interrupted installs had left in the project's scratch folder,
+    /// cleared before anything was built there.
+    pub swept: Vec<PathBuf>,
+}
+
+/// A step of moving a project to its settings that failed once something
+/// was written, which is then put back ([`MigrateError::Project`]).
+#[derive(Debug, Error)]
+pub enum ProjectFailure {
+    #[error("{0}, since what was to be installed into it could not be kept out of git")]
+    Exclude(ExcludeError),
+    #[error(transparent)]
+    Workspace(WorkspaceError),
+    #[error(transparent)]
+    Ledger(LedgerError),
+    #[error("{path}: cannot be made, to build copies and keep the marker in: {source}")]
+    Scratch {
+        path: PathBuf,
+        #[source]
+        source: io::Error,
+    },
+    #[error("{path}: cannot be written, so {name} is not copied where the project's agents read it: {source}")]
+    Copy {
+        name: String,
+        path: PathBuf,
+        #[source]
+        source: io::Error,
+    },
+    #[error("{path}: cannot be moved out of the way: {source}")]
+    Retire {
+        path: PathBuf,
+        #[source]
+        source: io::Error,
+    },
+    #[error("{path}: cannot be kept as {backup}: {source}")]
+    Keep {
+        path: PathBuf,
+        backup: PathBuf,
+        #[source]
+        source: io::Error,
+    },
+}
+
+/// What a project's move that failed could not put back as it was, for a
+/// front end to say beside the failure.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Stranded {
+    /// A copy put where an agent reads, which nothing records.
+    Copy(PathBuf),
+    /// An installed copy that was moved out of the folder the project
+    /// authors in and could not be moved back to `path`: it goes with the
+    /// scratch folder, and installing it again puts it back.
+    Retired { name: String, path: PathBuf },
+    /// The settings, written beside the `mind.toml` they are read before.
+    Settings(PathBuf),
+    /// The `mind.toml`, kept at `backup` and not back at `marker`, which
+    /// leaves the project marked by nothing but settings, if by anything.
+    Marker { marker: PathBuf, backup: PathBuf },
+    /// The `.gitignore` written for a project that was to be local, which
+    /// keeps the committed `.mind` of a project from before settings out of
+    /// git.
+    Ignore(PathBuf),
+}
+
+/// Move `project` from its `mind.toml` to settings naming `agents` and
+/// `share`, and carry what `workspace` records installing into it along,
+/// when that one links it: [`project_plan`], done. `None` for a project its
+/// settings mark already, which is left as it is, and nothing written.
+///
+/// Holds that workspace's lock from before the project is read again until
+/// every copy, record and marker is written, as a change of agents does, so
+/// an install in that workspace comes wholly before it or wholly after it.
+/// The ledger is opened to write before the lock, since its scrub takes the
+/// lock when it has clones to rewrite, and not at all when there is none.
+///
+/// All or nothing, for the project. A refusal writes nothing. Otherwise, in
+/// an order that shows nothing in `git status` for a moment: a local
+/// project's exclude entries for the copies about to land and its
+/// `.gitignore`; the new copies, each installation's built in one stage and
+/// put in place together (`copy::Stage::place`); the untouched copies taken
+/// out, moved into that stage rather than deleted; the settings, with
+/// `create_new`; the `mind.toml` moved into `.mind/tmp`; and last the ledger,
+/// in one transaction ([`Ledger::migrated`]). A step that fails puts back
+/// every one before it, the last first, so the `mind.toml` marks the project
+/// again and the ledger names what it named; what cannot be put back is
+/// said ([`MigrateError::left_behind`]). Only once the ledger holds the move
+/// are the copies taken out deleted, with the stage.
+pub fn project(
+    workspace: Option<&FlayerWorkspace>,
+    project: &MindProject,
+    agents: &[Agent],
+    share: Share,
+    homes: &AgentHomes,
+) -> Result<Option<ProjectMigrated>, MigrateError> {
+    if project.settings().is_some() {
+        return Ok(None);
+    }
+    let linked = linking(workspace, project);
+    let (ledger, scrub) = match linked {
+        Some(workspace) if workspace.ledger_path().is_file() => {
+            let (ledger, scrub) = workspace.ledger_to_write()?;
+            (Some(ledger), scrub)
+        }
+        Some(workspace) => (Some(workspace.ledger_for_reading()?), Scrub::default()),
+        None => (None, Scrub::default()),
+    };
+    let _lock = match linked {
+        Some(workspace) => Some(workspace.lock().map_err(WorkspaceError::from)?),
+        None => None,
+    };
+    // Read again under the lock: the project handed in may be minutes old,
+    // and another run may have moved it since.
+    let project = MindProject::open(project.root())?;
+    let records = linked.zip(ledger.as_ref());
+    let Some(mut plan) = plan_with(records, &project, agents, share, homes)? else {
+        return Ok(None);
+    };
+    if !plan.refusals.is_empty() {
+        return Err(MigrateError::Refused(std::mem::take(&mut plan.refusals)));
+    }
+
+    let scratch = project.scratch_dir();
+    let mut stage = copy::Stage::open(&scratch).map_err(|source| MigrateError::Project {
+        failure: Box::new(ProjectFailure::Scratch {
+            path: scratch.clone(),
+            source,
+        }),
+        stranded: Vec::new(),
+    })?;
+    let mut undo = Undo::new(&project, plan.settings.id.as_str());
+    if let Err(failure) = carry_out(&project, records, &plan, &mut stage, &mut undo) {
+        // Before the stage goes, since what was taken out is in it.
+        let stranded = undo.run();
+        return Err(MigrateError::Project {
+            failure: Box::new(failure),
+            stranded,
+        });
+    }
+    // Once every copy is placed, since placing one clears what an earlier
+    // version left beside it too.
+    let swept = stage.swept().to_vec();
+    // What was taken out goes with it, now that the ledger holds the move.
+    drop(stage);
+    Ok(Some(ProjectMigrated { plan, scrub, swept }))
+}
+
+/// Every step of [`project`] after the plan, each one written down in
+/// `undo` as it is made, so a failure can put it back.
+fn carry_out(
+    project: &MindProject,
+    records: Option<(&FlayerWorkspace, &Ledger)>,
+    plan: &ProjectPlan,
+    stage: &mut copy::Stage,
+    undo: &mut Undo,
+) -> Result<(), ProjectFailure> {
+    let root = project.root();
+    let key = plan.settings.id.as_str();
+    if plan.settings.share == Share::Local {
+        let landing: Vec<PathBuf> = plan
+            .installations
+            .iter()
+            .flat_map(|retarget| retarget.added.iter().map(|added| added.path.clone()))
+            .chain(plan.excluded.iter().cloned())
+            .collect();
+        if !landing.is_empty() {
+            let entries = install::entries(project, &landing);
+            // Only the lines this adds are taken back out on a failure: the
+            // group is new with the id, so any it holds are somebody's.
+            let listed = exclude::listed(root, key)
+                .map_err(ProjectFailure::Exclude)?
+                .map(|listing| (listing.route, listing.lines));
+            undo.excluded = entries
+                .iter()
+                .filter(|entry| {
+                    listed.as_ref().is_some_and(|(route, lines)| {
+                        entry
+                            .pattern(route)
+                            .is_ok_and(|line| !lines.contains(&line))
+                    })
+                })
+                .cloned()
+                .collect();
+            exclude::add(root, key, &entries).map_err(ProjectFailure::Exclude)?;
+        }
+    }
+    if let Some(path) = &plan.ignore {
+        // Looked at again, so one made since is somebody's, and left.
+        if fs::symlink_metadata(path).is_err() {
+            ignore_itself(&project.mind_dir()).map_err(ProjectFailure::Workspace)?;
+            undo.ignore = Some(path.clone());
+        }
+    }
+
+    for retarget in &plan.installations {
+        let (Some(source), false) = (&retarget.source, retarget.added.is_empty()) else {
+            continue;
+        };
+        let copies: Vec<PathBuf> = retarget
+            .added
+            .iter()
+            .map(|added| added.path.clone())
+            .collect();
+        // From a copy that was installed, so nothing an install leaves out
+        // is in it: links followed only inside it all the same.
+        stage
+            .place(source, &copies, source, &install::left_out_names())
+            .map_err(|copy::PlaceError { target, source }| ProjectFailure::Copy {
+                name: retarget.name.clone(),
+                path: target.unwrap_or_else(|| copies[0].clone()),
+                source,
+            })?;
+        undo.placed.extend(copies);
+    }
+    // Moved aside rather than deleted, so a failure later puts them back:
+    // into the stage, on the project's filesystem, which deletes them once
+    // the ledger holds the move, and whose leftovers the next install sweeps.
+    for (index, (retarget, path)) in plan
+        .installations
+        .iter()
+        .flat_map(|retarget| retarget.removed.iter().map(move |path| (retarget, path)))
+        .enumerate()
+    {
+        let aside = stage.path().join(format!("retired-{index}"));
+        fs::rename(path, &aside).map_err(|source| ProjectFailure::Retire {
+            path: path.clone(),
+            source,
+        })?;
+        undo.retired
+            .push((retarget.name.clone(), path.clone(), aside));
+    }
+
+    let text = plan.settings.text().map_err(ProjectFailure::Workspace)?;
+    write_new(&plan.settings_file, &text).map_err(ProjectFailure::Workspace)?;
+    undo.settings = Some(plan.settings_file.clone());
+    // Looked for again just before: a rename onto a file replaces it, and a
+    // copy made there since the plan is somebody's.
+    let kept = if fs::symlink_metadata(&plan.backup).is_ok() {
+        Err(io::Error::from(io::ErrorKind::AlreadyExists))
+    } else {
+        fs::rename(&plan.marker, &plan.backup)
+    };
+    kept.map_err(|source| ProjectFailure::Keep {
+        path: plan.marker.clone(),
+        backup: plan.backup.clone(),
+        source,
+    })?;
+    undo.marker = Some((plan.marker.clone(), plan.backup.clone()));
+
+    if let Some((workspace, ledger)) = records {
+        let entry = install::entry_for_root(workspace, root);
+        let (moved, log) = recorded(project, plan);
+        ledger
+            .migrated(&entry, &moved, &log)
+            .map_err(ProjectFailure::Ledger)?;
+    }
+    Ok(())
+}
+
+/// What the ledger is to record of each installation that moved, and the
+/// log of it.
+///
+/// Each keeps the copies that stayed and gains those put where its agents
+/// read. A record with no hash whose copies were found current by their
+/// offer gets the one hash they hold now, so the next change to the
+/// project's agents compares them as it compares any other; one already
+/// holding a hash keeps it, being what was installed.
+fn recorded(project: &MindProject, plan: &ProjectPlan) -> (Vec<Moved>, Vec<(Action, String)>) {
+    let root = project.root();
+    let into = project.name();
+    let mut moved = Vec::new();
+    let mut log = Vec::new();
+    for retarget in &plan.installations {
+        let mut targets: Vec<Target> = retarget.kept.clone();
+        targets.extend(retarget.added.iter().map(|added| added.target(root)));
+        targets.sort_by(|a, b| a.path.cmp(&b.path));
+        let content_hash = retarget.source.as_ref().and_then(|_| {
+            let copies: Vec<PathBuf> = targets
+                .iter()
+                .map(|target| root.join(&target.path))
+                .collect();
+            install::one_hash(&copies).ok()
+        });
+        let name = &retarget.name;
+        for added in &retarget.added {
+            log.push((
+                Action::Install,
+                format!(
+                    "{name}'s copy at {} into {into}, moved from its {MIND_CONFIG} to settings",
+                    install::route(root, &added.path)
+                ),
+            ));
+        }
+        let gone = retarget.removed.iter().chain(&retarget.forgotten).chain(
+            retarget
+                .left
+                .iter()
+                .filter(|left| left.why.disowns())
+                .map(|left| &left.path),
+        );
+        for path in gone {
+            log.push((
+                Action::Uninstall,
+                format!(
+                    "{name}'s copy at {} from {into}, moved from its {MIND_CONFIG} to settings",
+                    install::route(root, path)
+                ),
+            ));
+        }
+        moved.push(Moved {
+            kind: retarget.kind,
+            name: name.clone(),
+            targets,
+            content_hash,
+        });
+    }
+    (moved, log)
+}
+
+/// Everything [`carry_out`] has written so far, to put back when a later
+/// step fails.
+struct Undo<'a> {
+    project: &'a MindProject,
+    key: String,
+    excluded: Vec<exclude::Entry>,
+    ignore: Option<PathBuf>,
+    placed: Vec<PathBuf>,
+    /// Each copy taken out: its installation's name, where it was, and
+    /// where in the stage it is.
+    retired: Vec<(String, PathBuf, PathBuf)>,
+    settings: Option<PathBuf>,
+    marker: Option<(PathBuf, PathBuf)>,
+}
+
+impl<'a> Undo<'a> {
+    fn new(project: &'a MindProject, key: &str) -> Self {
+        Undo {
+            project,
+            key: key.to_owned(),
+            excluded: Vec::new(),
+            ignore: None,
+            placed: Vec::new(),
+            retired: Vec::new(),
+            settings: None,
+            marker: None,
+        }
+    }
+
+    /// Put back everything written, the last first, and say what could not
+    /// be.
+    ///
+    /// Exclude lines that will not come out are passed over, as an install
+    /// passes over them when its copies fail: what is left is a line naming
+    /// an empty place.
+    fn run(self) -> Vec<Stranded> {
+        let mut stranded = Vec::new();
+        if let Some((marker, backup)) = self.marker {
+            if fs::rename(&backup, &marker).is_err() {
+                stranded.push(Stranded::Marker { marker, backup });
+            }
+        }
+        if let Some(settings) = self.settings {
+            if fs::remove_file(&settings).is_err() {
+                stranded.push(Stranded::Settings(settings));
+            }
+        }
+        for (name, path, aside) in self.retired.into_iter().rev() {
+            if fs::rename(&aside, &path).is_err() {
+                stranded.push(Stranded::Retired { name, path });
+            }
+        }
+        for path in self.placed.into_iter().rev() {
+            if fs::remove_dir_all(&path).is_err() {
+                stranded.push(Stranded::Copy(path));
+            }
+        }
+        if let Some(ignore) = self.ignore {
+            // Only while it holds what was written.
+            let ours = fs::read(&ignore).is_ok_and(|bytes| bytes == MIND_IGNORE.as_bytes());
+            if ours && fs::remove_file(&ignore).is_err() {
+                stranded.push(Stranded::Ignore(ignore));
+            }
+        }
+        if !self.excluded.is_empty() {
+            let _ = exclude::remove(self.project.root(), &self.key, &self.excluded);
+        }
+        stranded
+    }
 }
 
 /// `workspace`, when it is made and links `project`: the one whose records

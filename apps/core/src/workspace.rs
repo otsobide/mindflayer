@@ -1808,7 +1808,7 @@ pub(crate) fn ignore_itself(dir: &Path) -> Result<(), WorkspaceError> {
 ///
 /// `create_new` rather than a prior `exists()` check: the check and the write
 /// are one operation, so nothing that appears in between is overwritten.
-fn write_new(path: &Path, contents: &str) -> Result<(), WorkspaceError> {
+pub(crate) fn write_new(path: &Path, contents: &str) -> Result<(), WorkspaceError> {
     use std::io::Write as _;
 
     let mut file = fs::OpenOptions::new()

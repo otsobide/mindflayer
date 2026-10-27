@@ -40,7 +40,7 @@ use crate::workspace::{
     MIND_CONFIG,
 };
 
-pub use project::{project_plan, ProjectPlan};
+pub use project::{project, project_plan, ProjectFailure, ProjectMigrated, ProjectPlan, Stranded};
 
 /// What moving the workspace's own into its library would do, and what would
 /// stop it.
@@ -199,6 +199,16 @@ pub enum MigrateError {
         source: Box<WorkspaceError>,
         stranded: Vec<Move>,
     },
+    /// A step of moving a project to its settings failed, and what it had
+    /// written was put back, but for what `stranded` names
+    /// ([`MigrateError::left_behind`]).
+    #[error("{failure}; nothing was migrated")]
+    Project {
+        /// Boxed, for the reason `Marker`'s source is.
+        #[source]
+        failure: Box<ProjectFailure>,
+        stranded: Vec<Stranded>,
+    },
 }
 
 impl MigrateError {
@@ -209,6 +219,16 @@ impl MigrateError {
     pub fn stranded(&self) -> &[Move] {
         match self {
             MigrateError::Move { stranded, .. } | MigrateError::Marker { stranded, .. } => stranded,
+            _ => &[],
+        }
+    }
+
+    /// What a project's move that failed could not put back as it was, for
+    /// a front end to say: the `mind.toml` marks the project again but for
+    /// what is named here.
+    pub fn left_behind(&self) -> &[Stranded] {
+        match self {
+            MigrateError::Project { stranded, .. } => stranded,
             _ => &[],
         }
     }
