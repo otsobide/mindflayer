@@ -441,9 +441,10 @@ project with `-p`; `flayer validate` reads the shelf as well, labelling what it
 finds there `shelf/<source folder>`. `flayer status` reads every project, or
 one with `-p`, and `mind status` the one you are in: not the workspace's own,
 which nothing is installed into ([what each project
-has](#what-each-project-has)). `mind agents` and `share` change the project
-you are in, and `flayer agents` and `share` the one `-p` names, which they
-need: the workspace's own have no agents, and reach one by being installed.
+has](#what-each-project-has)). `mind agents`, `share` and `targets` change
+the project you are in, and `flayer agents`, `share` and `targets` the one
+`-p` names, which they need: the workspace's own have no agents, and reach
+one by being installed.
 `mind migrate` moves the project you are in from its `mind.toml` to
 settings, and `flayer migrate -p` one the workspace links, or
 `--all-projects` every one ([moving a project to its
@@ -734,7 +735,10 @@ The agents that work in the project, by the names `Agent` takes; whether what
 is installed into it is the team's or this checkout's
 ([D-02](#d-02-installs-stay-local-unless-a-project-shares-them)); whether a
 team file git tracks may be edited to reach an agent, off unless the file says
-so; the folders it authors in; a name; and an id. They describe the files
+so; the folders it authors in; a name; and an id. A project that installs a
+kind somewhere other than where its agents read names where in `targets` too,
+which a new project leaves out, and which comes with version 4 ([a project's
+own targets](#a-projects-own-targets)). They describe the files
 physically in the project, and several workspaces may link it, so they live
 in the project, where every workspace reads the same ones. The id is 128 bits
 drawn from the operating system through `std`'s hasher keys, as a stage's name
@@ -785,12 +789,16 @@ names the `mind.toml` ignored ([open questions](#open-questions)). A
 refused as malformed: what either would mean is nobody's to say.
 
 A key the format does not define is read past and kept, as unknown front
-matter is: the format grows, and the next key is #40's override of the install
-targets (`"targets": {"skills": [".skills"]}`), which this leaves room for
-without reading. Every key it does define is held to what it holds: a missing
-`id`, an agent no `Agent` names, a `share` other than `local` and `shared` are
-refused, each named, rather than guessed at. `edit_tracked` and `directories`
-may be left out, and read as off and as no folders.
+matter is: the format grows, and a project a newer build configured is still
+a project. A key that changes what an older build would do with the project
+is the exception, and comes with a version of its own, as `targets` comes
+with 4. Every key it does define is held to what it holds: a missing `id`, an
+agent no `Agent` names, a `share` other than `local` and `shared`, a
+`targets` entry that is not a list of folders or names none, are refused,
+each named, rather than guessed at. `edit_tracked`, `directories` and
+`targets` may be left out, and read as off, as no folders and as where the
+agents read. A folder `targets` names that no install may use is read and
+said, not refused, since everything else the file says still stands.
 
 `MindProject::change_settings` changes them. It reads the file again rather
 than trusting what was read when the project was opened, lets its caller
@@ -803,16 +811,19 @@ absence does not, so turning nothing on writes no `"edit_tracked": false`. A
 changed file goes through a temporary and a rename; an unchanged one is not
 written, its modification time included. The version and the id are refused:
 a version moves with a migration, which writes the file its version describes,
-and an id names the project for good. So is a folder the change moves out of
-the project, as `init` refuses one, while one written there by hand is still
-read and stops no change to something else.
+and an id names the project for good. The one version an edit writes is the
+one a change of `targets` brings with it, up to 4 when a kind is named and
+back to 3 when none is. So is a folder the change moves out of the project,
+as `init` refuses one, or a target no install may use, while one written
+there by hand is still read and stops no change to something else.
 
 What changes them from a command line is `mind agents` and `mind share`
-(#37), at either level, and since a project's agents and share mode decide
-where what is installed into it goes and whether git sees it, those carry
-the installs along too, through `reapply`, holding the lock of the workspace
-that links the project ([when a project's agents or share mode
-change](#when-a-projects-agents-or-share-mode-change)).
+(#37), and `mind targets` (#40), at either level, and since a project's
+agents, targets and share mode decide where what is installed into it goes
+and whether git sees it, those carry the installs along too, through
+`reapply`, holding the lock of the workspace that links the project ([when a
+project's agents, targets or share mode
+change](#when-a-projects-agents-targets-or-share-mode-change)).
 
 ### A project marked by its settings is read where its agents read
 
@@ -820,8 +831,8 @@ What an agent loads is what sits in its folders, whoever put it there, and a
 project marked by its settings says which agents work in it. So discovery
 reads it where they read (`Catalog::discover_kinds`): the folder each of its
 agents is sent copies in (`MindProject::targets`, the project's target table,
-which is the standard one until #40 reads an override), and beside them the
-folder the project authors in, from `directories`. Reading only the authored
+the standard one overridden by its `targets`), and beside them the folder the
+project authors in, from `directories`. Reading only the authored
 folder, as every project was read before, would list the project's own work
 and none of what its agents run: an install's copies, and the skills
 somebody already keeps in `.claude/skills` or `.agents/skills` by hand. A
@@ -954,10 +965,10 @@ is.
 - **The installs move as for a change of agents.** It is one, from none to
   the ones asked for, so each recorded installation is brought to the
   targets the settings give through `reapply::retarget`, as `mind agents`
-  brings it ([when a project's agents or share mode
-  change](#when-a-projects-agents-or-share-mode-change)): a new copy is made
-  from a copy that still holds what was installed, never from the offer,
-  which may have changed since; an untouched copy in a folder no agent is
+  brings it ([when a project's agents, targets or share mode
+  change](#when-a-projects-agents-targets-or-share-mode-change)): a new copy
+  is made from a copy that still holds what was installed, never from the
+  offer, which may have changed since; an untouched copy in a folder no agent is
   sent copies to, which for such a project is the folder it authors in, is
   taken out; one changed since is left, and its record dropped, its
   author's. A project whose `mind.toml` kept its skills in `.claude/skills`
@@ -1090,8 +1101,9 @@ workspace.
 Two constants rather than one, because the files change for different reasons.
 Shared, the project marker going to 3 would have written every new
 `flayer.toml` as a 3 too, and an older build would refuse a workspace that had
-not changed at all. A project's marker reads up to 3 today, a settings file,
-and a workspace's up to 2, and neither moved when the other did.
+not changed at all. A project's marker reads up to 4 today, a settings file
+that may say where installs land, and a workspace's up to 2, and neither
+moved when the other did.
 
 A project's newest version is the one `mind init` writes, a settings file,
 and `mind init` waited to write it (#35) until this build read such a project
@@ -1109,11 +1121,17 @@ one from then on, while this build reads the settings and passes the
 An older marker is read the way it was written, never refused, and moved
 forward only when somebody asks: a workspace's own folders by `flayer migrate
 --library`, a project's `mind.toml` by `mind migrate` ([moving a project to
-its settings](#moving-a-project-to-its-settings)). Two lines are
-drawn so far, both project-marker versions, since a workspace's number says
+its settings](#moving-a-project-to-its-settings)). Three lines are
+drawn so far, all project-marker versions, since a workspace's number says
 nothing about how a project keeps its artifacts: `DIRECTORIES_VERSION`, before
-which every kind lived inside `.mind`, and `SETTINGS_VERSION`, from which the
-marker is `settings.json` and a kind it does not name has no folder. The
+which every kind lived inside `.mind`; `SETTINGS_VERSION`, from which the
+marker is `settings.json` and a kind it does not name has no folder; and
+`TARGETS_VERSION`, from which the settings may say where installs land. The
+last is written only by a file that needs it, so a settings file is a 3 or a
+4 by what it says rather than by which build wrote it: one that never sets
+`targets` is read by every build since settings, and one that does is
+refused by the builds that would read past them ([a project's own
+targets](#a-projects-own-targets)). The
 ledger carries its version in SQLite's `user_version` and is refused from the
 future the same way, but an older one is migrated forward rather than read as
 written, after a copy of it is set aside ([Why the ledger is
@@ -1610,8 +1628,10 @@ project's agents read it ([D-07](#d-07-one-copy-per-agent-folder)): one copy
 in each of its targets (`install::targets`), the folders the target table
 sends its agents to (`MindProject::targets`), so a project naming all three
 gets a copy in `.claude/skills` for Claude and one in `.agents/skills` that
-Codex and OpenCode share. A project a `mind.toml` marks names no agents, and
-gets one copy in the folder its marker names, as before.
+Codex and OpenCode share, and one whose settings name `targets` a copy in
+each folder they name, for all of them ([a project's own
+targets](#a-projects-own-targets)). A project a `mind.toml` marks names no
+agents, and gets one copy in the folder its marker names, as before.
 
 Not the folder a project's settings say it authors in
 ([D-06](#d-06-projects-keep-authoring-beside-the-code)): what the workspace
@@ -1816,8 +1836,8 @@ as it keeps whatever a source held.
 
 Left out of every install, whichever agents the project names, rather than
 only out of Claude's copy: one copy differing from the other is what D-07
-rules out, and a folder an override names (#40) may be Claude's too. Only at
-the top, where Claude looks: further down, a skill that teaches plugin
+rules out, and a folder a project's `targets` name may be Claude's too. Only
+at the top, where Claude looks: further down, a skill that teaches plugin
 writing ships one as an example, and it is the skill's like any other file.
 Left out rather than copied and deleted, so nothing in it is read, and a link
 in it pointing outside the source refuses nothing. A copy is compared with
@@ -1950,7 +1970,8 @@ How an install uses it:
   uninstall. A project whose share mode changes has its group rewritten
   then: forgotten whole when it turns shared, and given an entry for each
   copy the ledger records in place when it turns local ([when a project's
-  agents or share mode change](#when-a-projects-agents-or-share-mode-change)).
+  agents, targets or share mode
+  change](#when-a-projects-agents-targets-or-share-mode-change)).
 - **Keyed by the project's id**, from its settings, which stays when the
   project is renamed or moved within its repository.
 - **Taken out after the copies.** An uninstall removes the copies, then the
@@ -2027,17 +2048,25 @@ And how it edits:
   group and keeps every other line where it is, so a block a newer Mindflayer
   wrote survives an older one's edit.
 
-### When a project's agents or share mode change
+### When a project's agents, targets or share mode change
 
 `mind agents [add|remove] <agent>...` and `mind share local|shared
-[--edit-tracked]` (#37), and `flayer agents` and `flayer share` with `-p` for
-a project the workspace manages, change a project's settings, and with them
-where what is installed into it belongs: a copy in each folder an agent it
-names is sent one ([D-07](#d-07-one-copy-per-agent-folder)), kept out of git
-while it is local ([D-02](#d-02-installs-stay-local-unless-a-project-shares-them)).
-Core's `reapply` decides all of it, `reapply::plan` writing nothing and
-`reapply::apply` doing it, so the TUI's toggles and the command line say the
-same.
+[--edit-tracked]` (#37), `mind targets set <kind> <dir>...` and `mind targets
+reset <kind>` (#40), and `flayer agents`, `flayer share` and `flayer targets`
+with `-p` for a project the workspace manages, change a project's settings,
+and with them where what is installed into it belongs: a copy in each folder
+an agent it names is sent one ([D-07](#d-07-one-copy-per-agent-folder)), or
+in each its `targets` name ([a project's own
+targets](#a-projects-own-targets)), kept out of git while it is local
+([D-02](#d-02-installs-stay-local-unless-a-project-shares-them)). Core's
+`reapply` decides all of it, `reapply::plan` writing nothing and
+`reapply::apply` doing it, so the TUI's toggles and form and the command line
+say the same. A change of targets is one more `Change`, the whole list of a
+kind's folders or none, brought to the target set as the agents are, so
+everything below holds of it too: `targets set` moves Mindflayer's untouched
+copies into the folders it names and out of the ones it stops using, leaves
+somebody's at a new target where it is and says so, and lists what sits
+unrecorded in a folder it drops; `targets reset` is the same the other way.
 
 - **A dry run without `--yes`**, as `remove` and `flayer migrate --library`
   are: a line for each thing that would change, the settings first and then
@@ -2084,7 +2113,10 @@ same.
   sits unrecorded in a folder the change stops sending copies to is left too,
   and listed, since no listing of the project reads that folder once no agent
   it names is sent copies there. The folder the project authors in is not one
-  of those, being read whatever its agents.
+  of those, being read whatever its agents. A change that sends a kind only
+  to folders all holding somebody's skill of a name leaves that installation
+  no copy, and the ledger forgets it, as an uninstall would: the settings
+  said where its copies go, and somebody's is there already.
 - **Turning shared forgets the whole group; turning local fills it.** A
   project turning shared has its `.mind/.gitignore` removed, only while it
   holds what Mindflayer writes (`MIND_IGNORE`), so one changed by hand stays
@@ -2100,9 +2132,11 @@ same.
   which has no settings until `mind migrate` moves it to them ([moving a
   project to its settings](#moving-a-project-to-its-settings)), and is
   pointed there; a change that leaves it naming no agent, which would take
-  every copy out, an uninstall's to do by name; and a copy that would land
-  in an agent's own folder, or in one a loaded workspace keeps as its own,
-  as an install refuses one.
+  every copy out, an uninstall's to do by name, or that installs a kind in
+  no folder, for the same reason; a target no install may use ([a project's
+  own targets](#a-projects-own-targets)); and a copy that would land in an
+  agent's own folder, or in one a loaded workspace keeps as its own, as an
+  install refuses one.
 - **Held by the workspace's lock.** `apply` takes the lock of the workspace
   that links the project from before it reads the settings again until
   every copy, record and exclude entry is written, so an install in that
@@ -2212,6 +2246,18 @@ from its settings, so a front end can lay its rows out by agent; a project a
 Whether a copy is current, outdated or edited is #47's to tell, once a copy is
 compared with what it came from, and the states it adds (#48) take over from
 partial for a copy that is missing.
+
+Each project also names, in `unreached`, every kind it installs only in
+folders some of its agents do not read, with those agents: what a project's
+`targets` can leave ([a project's own targets](#a-projects-own-targets)),
+and nothing under the standard folders, which each agent reads. It is a
+warning beside the report, with a non-zero exit, as anything that hides an
+install from an agent is: a partial install says one copy is gone, and this
+says every copy is where an agent does not look. A folder the settings name
+in `targets` that no install uses is a failure beside the report too
+(`StatusFailure::Target`), since the report reads the installs as going
+everywhere else they name. Both are in the TUI's rows ([where a project
+installs skills](#where-a-project-installs-skills)).
 
 - **Every project the workspace links, in its marker's order**, each
   directory once however many entries point at it, as every screen lists
@@ -2419,6 +2465,25 @@ agent at all, so unticking every one becomes `agents remove` of every one
 named, which the command refuses for its own reason, in the form: the rule
 that a project names an agent is core's, and the screen does not say it a
 second time.
+
+### Where a project installs skills
+
+`T` on a project's row opens a form holding the folders its settings install
+skills in ([a project's own targets](#a-projects-own-targets)), empty when
+they go where its agents read, and applying it runs `targets set --yes skills
+<dir>...`, or `targets reset --yes skills` once the folders are cleared, with
+what it said shown in full, since it moves every copy. The folders are typed
+on one line, a space between each, as a shell splits a line without quotes;
+a folder whose name holds a space is named on the command line instead. A
+form rather than toggles, since the folders are anybody's to name. Which of
+them an install may use is core's to say, so the form takes what is typed
+and shows the command's refusal in place, as the toggles do.
+
+A project whose installs some of its agents do not see is marked on its row,
+and its pane gets a strip saying so in `status`'s words
+(`ProjectStatus::unreached`, and each folder no install may use), beside the
+strip of what could not be read. Both strips are as tall as their lines once
+wrapped, so the end of a sentence, which says what to do, is not cut off.
 
 ## The local server
 
@@ -3124,31 +3189,101 @@ starts from this list (`install::targets`).
 The table is a value a caller is handed, not a function it reaches for,
 because the standard layout is only the default: the owner's amendment to
 D-07 lets a project's `.mind/settings.json` put a kind somewhere else, one
-`.skills` folder for every agent for instance (#40). A caller that takes the
-table then follows the project's without changing, and two agents the
-override sends to one folder get one target, as Codex and OpenCode do now.
+`.skills` folder for every agent for instance ([a project's own
+targets](#a-projects-own-targets)). A caller that takes the table follows
+the project's without changing, and two agents the override sends to one
+folder get one target, as Codex and OpenCode do in the standard layout.
 The project hands it on, in core: discovery, and an install, take the
 targets from the project (`MindProject::targets`), which gives the standard
-table until #40 has it read its override, and no front end calls
+table overridden by what its settings name, and no front end calls
 `TargetTable::standard`, which would pick a table the project's settings
 could contradict. Rejected: a free `targets`
-over the standard layout, which every caller would hard-wire and #40 would
-have to find again; and a folder per agent alone, which cannot say that a
-skill and a rule reach Claude in different places.
-Checking what an override names, that it stays inside the project, is #40's,
-where the override is read.
+over the standard layout, which every caller would hard-wire and the override
+would have to find again; and a folder per agent alone, which cannot say that
+a skill and a rule reach Claude in different places.
 
 A target's agents are the ones its copy is for, not proof that they read it:
 the standard layout is built from what each agent reads, but a folder an
-override names reaches an agent only once that agent is pointed at it, and
-warning of a target none of them reads is #40's status check. The table's
-shape is private so the override can fit it: one location per kind and agent
-is all the standard layout needs, and it can grow into the list of folders
-per kind that the override names when #40 lands, without a caller noticing.
+override names reaches an agent only once that agent is pointed at it, which
+a project's status warns of (`ProjectStatus::unreached`). The table's shape
+is private, a list of locations per kind and agent: the standard layout
+needs one, and `TargetTable::overriding` sends a kind to the list of folders
+an override names, for every agent alike, without a caller noticing.
 
 It is pure: nothing is looked for on disk, and locations are joined a folder
 at a time, so each has one kind of separator on Windows too. Whether a folder
 exists, holds foreign content or is tracked is the install's to find out.
+
+### A project's own targets
+
+A project's settings may name, per kind, the folders what is installed into
+it lands in, in place of the ones its agents read: `"targets": {"skills":
+[".skills"]}` sends every skill installed into the project to `.skills`, one
+copy for every agent it names (the owner's amendment to
+[D-07](#d-07-one-copy-per-agent-folder)). `MindProject::targets` overrides
+the standard table for each kind the settings name with the folders they
+give (`TargetTable::overriding`), so discovery reads there, an install writes
+there and records that one target, and a change of agents carries copies to
+and from there, none of them knowing an override was read.
+
+- **The standard layout is the default**, and stays so: it is the one place
+  each agent finds a skill without being told, by the facts in
+  docs/agents.md, so a project made without a thought for it reaches every
+  agent it names. An override is for somebody who points the agents
+  elsewhere on purpose, and says so in the file.
+- **For every agent alike**, rather than a folder per agent: one shared
+  folder is what the amendment asks for, and a table per agent written by
+  hand would be the standard one again, with every fact in it to keep in
+  step with the agents by somebody who is not reading docs/agents.md. Several
+  folders are each every agent's, and a folder named twice is one target.
+- **Each folder is held to what an install may use** (`misplaced_target`):
+  inside the project, as a folder it authors in is, so a copy is that
+  project's and no other's; not in `.mind`, which no agent reads and a local
+  project keeps out of git; not in a `.mindflayer`, which no agent reads
+  either, and whose shelf and cache gathering replaces by names of its own,
+  which a workspace at the project's root keeps there; and only for a kind
+  installed as a folder an artifact, so a rule, which reaches agents through
+  `AGENTS.md` ([D-03](#d-03-rules-reach-every-agent-through-agentsmd)), has
+  none until M2 says how the table carries it. What an install refuses of
+  any target, an agent's own folder and one a loaded workspace keeps as its
+  own, it refuses of these too, since only it knows the homes and the loads.
+- **Strict when writing, lenient when reading.** A change that names a folder
+  no install may use is refused before anything is written, and so is a kind
+  named with no folder at all, which would install it nowhere: an
+  uninstall's to do, by name. A folder written into the file by hand is read,
+  passed over and said (`MindProject::misplaced_targets`, `MisplacedTarget`):
+  a warning wherever the project is reported or installed into, and no copy
+  there, rather than a reason to refuse everything else the settings say. A
+  kind every folder of which is passed over goes nowhere, rather than back to
+  the standard folders the settings said not to use, and an install into it
+  is refused (`InstallError::NoUsableTarget`).
+- **Read by no agent until one is pointed there.** Whether an agent reads a
+  folder is told by where it reads (`Agent::reads`), matched on disk, so a
+  `.claude/skills` linked to `.skills` is Claude reading it.
+  `ProjectStatus::unreached` names, for each kind, the agents that read none
+  of its targets; `status` warns of them, with a non-zero exit, since what is
+  installed there reaches those agents no more than if it had gone, and
+  `targets set` notes it when it is set (`Plan::unreached`). An agent pointed
+  there by a setting of its own is beyond what docs/agents.md says it reads,
+  and is still warned of ([an open question](#open-questions)).
+- **Changed through `reapply`**, as the agents are: `mind targets set <kind>
+  <dir>...` and `mind targets reset <kind>`, and `flayer targets -p`, a dry
+  run without `--yes` ([when a project's agents, targets or share mode
+  change](#when-a-projects-agents-targets-or-share-mode-change)).
+- **With version 4 of the settings** (`TARGETS_VERSION`). A key the format
+  does not define is otherwise read past, and a build from before this one
+  would read past `targets` too and install into the standard folders
+  without a word, recording copies the newer build does not read. So a file
+  that sets them is written at version 4, which such a build refuses, and
+  one that does not stays at 3, which every build since settings reads: the
+  version a file is written with is the lowest that reads it as it means
+  (`Settings::version_needed`). A change of `targets` brings it along, back
+  down once no kind is named, the one version an edit changes. A version 3
+  file given `targets` by hand is read with them all the same: somebody
+  wrote them to be used, and only an older build could miss them ([an open
+  question](#open-questions)). Bumping every file to 4 was turned down: a
+  project that never sets an override would be refused by every older build
+  for nothing.
 
 ### Adding an agent
 
@@ -3832,8 +3967,9 @@ project's id, written before the copies land and taken out after they go;
 a shared project's exclude file is left alone ([What keeps an install out of
 git](#what-keeps-an-install-out-of-git)). #37 lets the share mode change,
 with `mind share`: a project turning shared loses its `.gitignore` and its
-whole group, one turning local gains both ([when a project's agents or
-share mode change](#when-a-projects-agents-or-share-mode-change)). #38 moves
+whole group, one turning local gains both ([when a project's agents, targets
+or share mode change](#when-a-projects-agents-targets-or-share-mode-change)).
+#38 moves
 a v2 project to settings shared unless `--local` ([moving a project to its
 settings](#moving-a-project-to-its-settings)).
 
@@ -3952,11 +4088,14 @@ deprecated or undocumented, are never targeted. Unblocks #17, #28, #34 and #40.
 Carrying it out, #28 puts the layout in core's target table
 (`TargetTable::standard`, see [Agents, and where each kind reaches
 them](#agents-and-where-each-kind-reaches-them)), a value every caller is
-handed so the override #40 reads can take its place. #34 installs into it:
+handed so the override can take its place. #34 installs into it:
 every copy is built from one tree in the project's stage and put in place
 with the others or not at all, the installation is recorded once with a
 target for each, and somebody's work in either folder refuses it, in both
-([Installing](#installing)).
+([Installing](#installing)). #40 reads the override from a project's
+settings, `targets`, which sends a kind to the folders it names for every
+agent, at version 4 of the settings, and warns of agents that read none of
+them ([a project's own targets](#a-projects-own-targets)).
 
 ### D-08: An explicit or activated workspace wins
 
@@ -3993,8 +4132,10 @@ Carrying it out, #29 adds the format, `Settings` in `settings.rs`, which
 [a project's settings](#a-projects-settings)), and #35 makes `mind init`
 write one, naming the agents `--agents` gives and the share mode `--shared`
 chooses. #37 changes them, with `mind agents` and `mind share`, and carries
-what is installed into the project along ([when a project's agents or share
-mode change](#when-a-projects-agents-or-share-mode-change)).
+what is installed into the project along ([when a project's agents, targets
+or share mode change](#when-a-projects-agents-targets-or-share-mode-change)).
+#40 adds `targets`, changed with `mind targets` through the same path ([a
+project's own targets](#a-projects-own-targets)).
 
 ### D-10: An MCP server is one owned entry per agent
 
@@ -4403,11 +4544,22 @@ leak into the lifecycle code. Unblocks #33, #45, #62, #93, #94 and #95.
   from it from then on. With `mind init` making a settings project by
   default, two builds on one machine are enough. A `warning:` line wherever a
   project is opened, or a doctor check (#96), would make it seen.
-- **A key an older build reads past.** A key a project's settings do not
-  define is read past and kept, which leaves room for #40's `targets`. A
-  build from before #40, reading a project that sets them, would install
-  into the standard folders and say nothing. Whether `targets` comes with a
-  version 4, which such a build refuses, is #40's to choose.
+- **`targets` written by hand into a version 3 file.** `targets` comes with
+  version 4, which a build from before it refuses, and a file that sets them
+  through Mindflayer is written at 4 ([a project's own
+  targets](#a-projects-own-targets)). One a person gives `targets` while
+  leaving it at 3 is read with them by this build and read past by an older
+  one, which installs into the standard folders and says nothing, until a
+  change of targets writes the 4. Refusing such a file as malformed would
+  close it, at the price of a project no build opens over a version number;
+  a warning naming the version it needs is the other way.
+- **An agent pointed at a target some other way.** Whether an agent reads a
+  project's own target is told by where docs/agents.md says it reads, so one
+  pointed there by a link from a folder it reads is seen, and one pointed
+  there by a setting of its own, an OpenCode configuration naming another
+  skills folder say, is warned of as reading none, with a non-zero `status`
+  for good. Reading each agent's configuration where it says where it reads
+  (#44, #96 read those files for other reasons) would tell the two apart.
 - **Reads from a screen on the unmade default.** The TUI's reads (`v`, `s`,
   and showing an artifact) run from the default workspace's root, as its
   changes do. Before the default is made, with a workspace above home, they
@@ -4457,21 +4609,23 @@ leak into the lifecycle code. Unblocks #33, #45, #62, #93, #94 and #95.
   their new route never matches. Rewriting a project's whole group from what
   the ledger says it has installed would heal it.
 - **Agents changed by hand.** `mind agents` carries what is installed along
-  (#37), but the settings are JSON anybody can edit. An install after such an
-  edit replaces its record's targets with the ones the project has now, so a
-  copy in the folder of an agent the project stopped naming is no longer
+  (#37), and `mind targets` (#40), but the settings are JSON anybody can
+  edit. An install after such an edit replaces its record's targets with the
+  ones the project has now, so a copy in the folder of an agent the project
+  stopped naming, or one its `targets` stopped naming, is no longer
   recorded: Foreign, left where it is with its exclude entry. `mind agents`
-  naming the agents the file already names re-applies the installs, and
-  takes such copies out, only while the install has not dropped them from
-  its record first. An install that carried the installation's other copies
-  along itself, as `reapply` does, would close it.
+  naming the agents the file already names, or `mind targets set` naming the
+  folders it names, re-applies the installs, and takes such copies out, only
+  while the install has not dropped them from its record first. An install
+  that carried the installation's other copies along itself, as `reapply`
+  does, would close it.
 - **An install surveyed before a change.** An install works out its targets
   from the project it is handed, read before it takes the workspace's lock,
   as it does its standing, which it looks at again under the lock. One
-  surveyed before `mind agents` changed the project's settings, and applied
-  after, puts a copy where the settings no longer send one; recorded, so the
-  next `mind agents` with the same agents takes it out. Reading the settings
-  again under the lock would close that.
+  surveyed before `mind agents` or `mind targets` changed the project's
+  settings, and applied after, puts a copy where the settings no longer send
+  one; recorded, so the next `mind agents` with the same agents takes it
+  out. Reading the settings again under the lock would close that.
 - **A copy as installed, to make another from.** A change of agents gives a
   new folder a copy of one the record names that still holds what was
   installed, by its hash. An installation whose every copy was edited, or

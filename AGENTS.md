@@ -90,9 +90,10 @@ under `apps/` with its own `Makefile`:
   commands has a file under `src/commands/`: `project` (init, link, unlink,
   scan), `workspace` (load, unload), `activate` (activate, which),
   `artifact` (add, edit, rename, remove, templates), `read` (list, show,
-  validate), `status`, `settings` (agents, share), `gather`, `install` and
-  `migrate` (migrate, at both levels). `src/render.rs` holds `Outcome`, `Failure`, the table helpers
-  and the envelope every `--json` prints (`json`),
+  validate), `status`, `settings` (agents, share, targets), `gather`,
+  `install` and `migrate` (migrate, at both levels). `src/render.rs` holds
+  `Outcome`, `Failure`, the table helpers and the envelope every `--json`
+  prints (`json`),
   `src/error.rs` holds `CliError`, and `src/homes.rs` decides the default
   home and the agent homes, and gathers them with `-W` and
   `$MINDFLAYER_WORKSPACE` into a `Lookup`. `src/tui/` and `src/install/` are
@@ -137,12 +138,14 @@ These are easy to break from a single file without noticing.
   agent reads it and sort order are all core's, so a future front end cannot
   disagree with this one. No front end spells an agent's folder or calls
   `TargetTable::standard`: which table applies is the project's, in core, the
-  standard one until #40 reads an override from its settings, so code that
-  needs one asks the project (`MindProject::targets`), as discovery and an
-  install (`install::targets`) do. Where an agent reads (`Agent::reads`) is
-  kept apart from where it is sent a copy: OpenCode reads `.claude/skills` and
-  is sent nothing there. Which folders a project is read from is core's too
-  (`Catalog::folders`).
+  standard one overridden for each kind its settings name `targets` for, with
+  every folder an install may use (`misplaced_target`), so code that needs
+  one asks the project (`MindProject::targets`), as discovery and an install
+  (`install::targets`) do. Which agents read none of a project's targets is
+  core's too (`ProjectStatus::unreached`). Where an agent reads
+  (`Agent::reads`) is kept apart from where it is sent a copy: OpenCode reads
+  `.claude/skills` and is sent nothing there. Which folders a project is read
+  from is core's too (`Catalog::folders`).
 - **Two binaries, one parser.** `flayer <cmd>` is `mind flayer <cmd>`, and
   both reach the same function. `mind add` and `flayer add` (with or without
   `-p`) are one implementation given a different holder
@@ -194,12 +197,13 @@ These are easy to break from a single file without noticing.
     through `config_entry`, as an agent's config file is (below), then
     `replace_file`: a key this build does not know, the key order and a
     hand-made layout survive, and nothing is written when nothing changed.
-    Its agents and share mode change through `reapply::apply` (`mind agents`,
-    `mind share`), which carries what is installed along with them.
+    Its agents, targets and share mode change through `reapply::apply`
+    (`mind agents`, `mind targets`, `mind share`), which carries what is
+    installed along with them.
   - Creation uses `create_new` or `create_dir`.
   - `rename` rewrites only the `name:` line (`frontmatter::with_key`).
-  - `remove`, `migrate` at either level, `agents` and `share` are dry runs
-    without `--yes`.
+  - `remove`, `migrate` at either level, `agents`, `share` and `targets` are
+    dry runs without `--yes`.
     A migration of the library moves nothing a project holds, refuses as a
     whole, and keeps the marker it rewrites as `flayer.toml.v<version>`
     (`create_new`). A project's (`migrate::project`) writes its settings
@@ -262,7 +266,7 @@ These are easy to break from a single file without noticing.
   (`Ledger::uninstalled_copy`: a v3 project whose authored folder is also a
   target keeps the record of its other copies, and a local one stops
   excluding that copy's place), and return what they did (`lifecycle::Record`, and the `scrub` that opening the ledger ran),
-  which the CLI only renders. A change of a project's agents
+  which the CLI only renders. A change of a project's agents or targets
   (`reapply::apply`) moves only what the ledger records: a new folder gets
   a copy of one whose `hash::tree` is the one recorded, never one over
   somebody's, and a dropped folder loses a recorded copy only while its
@@ -290,7 +294,11 @@ These are easy to break from a single file without noticing.
 - **Loaded and gathered content is untrusted.**
   - An installed name must be one folder name (`install::is_folder_name`).
   - Symlinks are followed only inside the source (`copy::tree`'s `within`).
-  - A project's artifact directories must stay inside the project.
+  - A project's artifact directories must stay inside the project, and so
+    must the folders its `targets` name, outside `.mind` and any
+    `.mindflayer` too (`misplaced_target`): refused when a change names one,
+    and passed over and said (`MindProject::misplaced_targets`) when the
+    file was written by hand.
   - A config file is named by a route of folder names from the project, and
     a symlink anywhere on it, the file included, is refused, never followed
     (`config_entry::ConfigFile`): the route is looked at when the file is
@@ -344,14 +352,17 @@ These are easy to break from a single file without noticing.
   `mind.toml` up to `MIND_TOML_VERSION`, which only `MindProject::init` still
   writes, for tests of such a project, and `settings.json` from
   `SETTINGS_VERSION`, which `mind init` writes (`MindProject::init_asked`,
-  which fills in each folder it was not told about); either makes a
-  directory a project (`MindProject::is_marked`), and the settings win when
-  both are there. See `DIRECTORIES_VERSION` for how a v1 `mind.toml` is
-  still read, and `SETTINGS_VERSION` for why a kind a settings file does not
-  name has no folder (`directory_for` is `None`). Anything from a newer
-  version is refused. A format change must keep reading old files the way
-  they were written, and move one forward only when asked, never on a read
-  (`flayer migrate --library`, `mind migrate`).
+  which fills in each folder it was not told about), and from
+  `TARGETS_VERSION` when they name `targets`, which an older build would read
+  past: a settings file is written at the lowest version that reads it as it
+  means (`Settings::version_needed`), and a change of `targets` brings it
+  along. Either makes a directory a project (`MindProject::is_marked`), and
+  the settings win when both are there. See `DIRECTORIES_VERSION` for how a
+  v1 `mind.toml` is still read, and `SETTINGS_VERSION` for why a kind a
+  settings file does not name has no folder (`directory_for` is `None`).
+  Anything from a newer version is refused. A format change must keep
+  reading old files the way they were written, and move one forward only
+  when asked, never on a read (`flayer migrate --library`, `mind migrate`).
   - A ledger schema step is one more block in `Ledger::migrate`, which takes
     the write lock, copies the file to `mindflayer.db.v<old>.bak`
     (`Ledger::back_up`) and runs every step in one transaction. A step fills
