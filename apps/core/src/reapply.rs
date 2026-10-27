@@ -670,7 +670,6 @@ fn retarget(
     record: &InstallRecord,
     wanted: &[InstallTarget],
 ) -> Result<Retarget, ReapplyError> {
-    let root = project.root();
     let name = &record.name;
     if !install::is_folder_name(name) {
         return Err(InstallError::UnsafeName { name: name.clone() }.into());
@@ -704,12 +703,16 @@ fn retarget(
         .iter()
         .find(|(_, _, found)| matches!(found, Some(Compared::Untouched)))
         .map(|(path, _, _)| path.clone());
+    let copies: Vec<PathBuf> = compared.iter().map(|(path, _, _)| path.clone()).collect();
 
+    // A copy stays where it is while an agent the project names reads the
+    // folder it is in, by whichever spelling: `install::targets` makes two
+    // spellings of one folder one target, under the first, so the record may
+    // name `.agents/skills` where the settings, changed, now send Claude to
+    // the `.claude/skills` linked to it. Compared by route, that copy would
+    // be taken out of the very folder Claude reads.
     for (path, target, found) in compared {
-        if let Some((_, now)) = wanted
-            .iter()
-            .find(|(copy, _)| install::route(root, copy) == target.path)
-        {
+        if let Some((_, now)) = wanted.iter().find(|(_, now)| in_folder(&path, &now.folder)) {
             retarget.kept.push(Target {
                 agent: install::agent_of(&now.agents),
                 path: target.path.clone(),
@@ -730,8 +733,7 @@ fn retarget(
         }
     }
     for (path, target) in &wanted {
-        let route = install::route(root, path);
-        if record.targets.iter().any(|recorded| recorded.path == route) {
+        if copies.iter().any(|copy| in_folder(copy, &target.folder)) {
             continue;
         }
         if install::holds(path, kind) {
@@ -752,6 +754,13 @@ fn retarget(
         }
     }
     Ok(retarget)
+}
+
+/// Whether `copy` is in `folder`, however either is spelled, as
+/// `install::targets` tells one folder from another.
+fn in_folder(copy: &Path, folder: &Path) -> bool {
+    copy.parent()
+        .is_some_and(|parent| same_directory(parent, folder))
 }
 
 /// How a copy stands against what was installed.

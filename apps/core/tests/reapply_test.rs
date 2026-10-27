@@ -21,6 +21,16 @@ use tempfile::TempDir;
 /// repository linked to it, marked by its settings naming `agents` in
 /// `share` mode, with `deploy` installed.
 fn installed(agents: &[Agent], share: Share) -> (TempDir, FlayerWorkspace, MindProject) {
+    installed_after(agents, share, |_| {})
+}
+
+/// [`installed`], with `prepare` given the project's root before `deploy` is
+/// installed into it.
+fn installed_after(
+    agents: &[Agent],
+    share: Share,
+    prepare: impl FnOnce(&Path),
+) -> (TempDir, FlayerWorkspace, MindProject) {
     let (dir, mut workspace) = workspace();
     let folder = workspace
         .own()
@@ -41,6 +51,7 @@ fn installed(agents: &[Agent], share: Share) -> (TempDir, FlayerWorkspace, MindP
     )
     .unwrap();
     workspace.link(&project).unwrap();
+    prepare(&root);
 
     let ledger = workspace.ledger().unwrap();
     let candidate =
@@ -198,6 +209,42 @@ fn removing_claude_takes_out_its_copies_and_leaves_somebodys_where_they_are() {
     assert!(agents(&project, "deploy").join("SKILL.md").is_file());
     // `.agents/skills` is for the two agents still named.
     assert_eq!(targets(&workspace), [target(None, ".agents/skills/deploy")]);
+    assert_eq!(excluded(&project), ["/.agents/skills/deploy/"]);
+}
+
+#[cfg(unix)]
+#[test]
+fn a_copy_in_a_folder_an_agent_still_reads_through_a_link_is_kept() {
+    // `.claude/skills` linked to `.agents/skills`, so Claude and Codex share
+    // one copy, recorded under the spelling that sorts first.
+    let (_dir, workspace, project) =
+        installed_after(&[Agent::Claude, Agent::Codex], Share::Local, |root| {
+            fs::create_dir_all(root.join(".agents").join("skills")).unwrap();
+            fs::create_dir_all(root.join(".claude")).unwrap();
+            std::os::unix::fs::symlink(
+                root.join(".agents").join("skills"),
+                root.join(".claude").join("skills"),
+            )
+            .unwrap();
+        });
+    assert_eq!(targets(&workspace), [target(None, ".agents/skills/deploy")]);
+
+    let change = Change::RemoveAgents(vec![Agent::Codex]);
+    let plan = reapply::plan(Some(&workspace), &project, &change, &AgentHomes::default()).unwrap();
+    // Nothing moves: the folder Claude reads is the one the copy is in.
+    assert!(plan.installations[0].removed.is_empty(), "{plan:?}");
+    assert!(plan.installations[0].left.is_empty(), "{plan:?}");
+    assert!(plan.foreign.is_empty(), "{plan:?}");
+
+    let applied =
+        reapply::apply(Some(&workspace), &project, &change, &AgentHomes::default()).unwrap();
+    assert!(applied.failures.is_empty(), "{:?}", applied.failures);
+    assert!(claudes(&project, "deploy").join("SKILL.md").is_file());
+    // Still recorded, under the spelling it was, now for Claude alone.
+    assert_eq!(
+        targets(&workspace),
+        [target(Some("claude"), ".agents/skills/deploy")]
+    );
     assert_eq!(excluded(&project), ["/.agents/skills/deploy/"]);
 }
 
