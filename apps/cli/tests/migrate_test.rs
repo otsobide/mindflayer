@@ -126,6 +126,7 @@ fn a_home_workspace_migrates_and_what_it_installed_stays_current() {
     assert!(home_path.join("skills/x/SKILL.md").is_file());
 
     let migrated = run(&["migrate", "--library", "--yes"]).unwrap();
+    let status = run(&["status", "-p", "alpha"]).unwrap();
     let installed = run(&["install", "-p", "alpha", "x"]).unwrap();
 
     assert!(
@@ -141,9 +142,14 @@ fn a_home_workspace_migrates_and_what_it_installed_stays_current() {
         .join(".mindflayer/library/skills/x/SKILL.md")
         .is_file());
     assert!(!home_path.join("skills").exists());
-    // Recorded, unchanged, and still the copy of what the workspace offers.
-    // `install` saying so stands in for `flayer status` (#36), which the
-    // issue names but is not there yet; that check belongs here once it is.
+    // Recorded, from the workspace, in every folder alpha's agents read; and
+    // still the copy of what the workspace offers, which only `install` says
+    // until status tells an outdated copy from a current one (#47).
+    assert_eq!(
+        status.stdout,
+        "x  installed  claude,codex,opencode  workspace\n"
+    );
+    assert!(status.ok, "{status:?}");
     assert_eq!(installed.stdout, "x in alpha was already current\n");
     assert!(installed.ok, "{installed:?}");
 }
