@@ -85,6 +85,10 @@ pub enum CliError {
     Refused(mindflayer_core::migrate::Refusal),
     #[error(transparent)]
     Migrate(#[from] mindflayer_core::migrate::MigrateError),
+    #[error(transparent)]
+    Reapply(#[from] mindflayer_core::ReapplyError),
+    #[error("say which project's agents to change (`flayer agents -p <project> <agent>...`); the workspace's own reach agents by being installed")]
+    AgentsWhere,
     #[error("`{editor}` could not be started: {source}")]
     Editor {
         editor: String,

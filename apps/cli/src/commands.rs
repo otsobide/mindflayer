@@ -11,6 +11,7 @@ pub(crate) mod install;
 pub(crate) mod migrate;
 pub(crate) mod project;
 pub(crate) mod read;
+pub(crate) mod settings;
 pub(crate) mod status;
 pub(crate) mod workspace;
 
@@ -18,7 +19,7 @@ use std::path::{Path, PathBuf};
 
 use mindflayer_core::gather::Watch;
 use mindflayer_core::resolve::{self, resolve, Intent};
-use mindflayer_core::{paths, Catalog, FlayerWorkspace, MindProject, Reference, Share};
+use mindflayer_core::{paths, Catalog, Change, FlayerWorkspace, MindProject, Reference, Share};
 
 use crate::homes::Lookup;
 use crate::{tui, Cli, CliError, Command, Failure, FlayerCli, FlayerCommand, Outcome};
@@ -35,6 +36,7 @@ use read::{
     everywhere, everywhere_and_the_shelf, list, list_workspace, one_project, show, validate,
     wanted, Level, Selector,
 };
+use settings::{agents_change, change_here, change_of};
 use status::{status_here, status_of_project, status_of_workspace};
 use workspace::{load_command, unload_command};
 
@@ -186,6 +188,19 @@ pub(crate) fn run_with(cli: &Cli, lookup: &Lookup, watch: &Watch) -> Result<Outc
             let workspace = managing(&project, lookup)?;
             uninstall_named(&workspace, &project, name)
         }
+        Command::Agents { change, named } => {
+            let (change, yes) = agents_change(change.as_ref(), named);
+            change_here(&project_here(&directory)?, &change, yes, lookup)
+        }
+        Command::Share { mode } => change_here(
+            &project_here(&directory)?,
+            &Change::Share {
+                share: mode.share,
+                edit_tracked: mode.edit_tracked,
+            },
+            mode.yes,
+            lookup,
+        ),
         Command::Tui => tui::run_project(&directory, lookup),
     }
 }
@@ -375,6 +390,37 @@ fn run_flayer(
             })
         }
 
+        // `-p` is the project's whichever side of `add` or `remove` it is
+        // typed, which clap can take only as an option it does not require.
+        FlayerCommand::Agents {
+            project,
+            change,
+            named,
+        } => {
+            let project = project.as_deref().ok_or(CliError::AgentsWhere)?;
+            let workspace = workspace_here(directory, lookup)?;
+            let (change, yes) = agents_change(change.as_ref(), named);
+            change_of(
+                &workspace,
+                &workspace.pick(project)?,
+                &change,
+                yes,
+                &lookup.agents,
+            )
+        }
+        FlayerCommand::Share { project, mode } => {
+            let workspace = workspace_here(directory, lookup)?;
+            change_of(
+                &workspace,
+                &workspace.pick(project)?,
+                &Change::Share {
+                    share: mode.share,
+                    edit_tracked: mode.edit_tracked,
+                },
+                mode.yes,
+                &lookup.agents,
+            )
+        }
         FlayerCommand::Tui => tui::run(directory, lookup),
 
         FlayerCommand::List { kind, project } => {
