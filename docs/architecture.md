@@ -3458,7 +3458,8 @@ Never force-push a branch somebody else may have pulled.
   file that is there is replaced through `replace_bytes`, a temporary and a
   rename, which follows a link to the file it names: an `AGENTS.md` linked
   to the `CLAUDE.md` beside it, as some teams keep the two, is written
-  through. A link leading out of the project is refused
+  through, though #44's import would share its markers there (an [open
+  question](#open-questions)). A link leading out of the project is refused
   (`AgentsMdError::LinkedOut`), since a repository can hold one to the
   user's own `~/.codex/AGENTS.md`, and replacing it with a file of the
   project's own would undo what somebody linked on purpose. It takes no
@@ -5008,6 +5009,19 @@ leak into the lifecycle code. Unblocks #33, #45, #62, #93, #94 and #95.
   path as spelled, as `ConfigFile` does, would close it, at the price of
   replacing the link to a file inside the project that some teams keep
   between `AGENTS.md` and `CLAUDE.md`.
+- **An `AGENTS.md` linked to the `CLAUDE.md` beside it.** A render writes
+  through such a link, so its block lands in `CLAUDE.md`, between the same
+  `<!-- mindflayer:begin -->` and `<!-- mindflayer:end -->` that #44 writes
+  its `@AGENTS.md` import between there ([docs/agents.md](agents.md)). With
+  both in one file, each writer would take the other's block for its own: a
+  render would replace the import line with the rules, and #44 the rules
+  with the import, each undoing the other on every run, while two blocks
+  would have the second refused as malformed (`Malformed::Reopened`), and
+  the import would bring the file into itself. Claude reads that file as
+  its `CLAUDE.md`, so the rules already reach it, and #44's predicate is
+  where the case belongs: it can count Claude as reached when the two names
+  are one file and write no import, or the import can take markers of its
+  own.
 - **A config file left empty by its last entry.** Removing the last server
   leaves `"mcpServers": {}` in a JSON file, and a `.codex/config.toml` that
   Mindflayer made holding nothing, and the file stays, with any folder made for
