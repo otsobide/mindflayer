@@ -778,12 +778,14 @@ is read from the one folder its marker names, exactly as before.
   that skill is the project's own or an install's is the ledger's to say,
   below. `Catalog::folders` is the list read, in order, which `list` names
   when it finds nothing.
-- **One artifact a name.** Every copy of one name in the agents' folders, a
-  target or a folder one of the project's agents reads, is one artifact
-  (`Artifact::copies`), described by its first copy by path. An installation
+- **One artifact a name.** Every copy of one name the project holds, in a
+  target, a folder one of its agents reads or the folder it authors in, is
+  one artifact (`Artifact::copies`), described by its first copy: the
+  project's own when it has one, then the rest by path. An installation
   writes one copy per folder ([D-07](#d-07-one-copy-per-agent-folder)), and
   a listing that showed each would show one skill twice, under a name the
-  agents see once.
+  agents see once. The project's own leads because it is what a change from
+  the project reaches (below), so `show` prints the file `edit` opens.
 - **With the agents that see it.** `Artifact::agents` is every agent the
   project names that reads one of its copies, by `Agent::reads`, which is not
   the target table ([agents, and where each kind reaches
@@ -794,26 +796,32 @@ is read from the one folder its marker names, exactly as before.
   of its reaches the project.
 - **Copies that differ are said.** Claude reads one standard folder, Codex the
   other, and OpenCode loads whichever it takes of the two (V1 at random), so
-  two copies that do not hold the same mean the agents do not run the same
-  skill. They are compared by `hash::tree`, the hash an install records, which
-  refuses a link rather than reading wherever it points, as a copy here is
-  anybody's; one folder reached twice, through a link to it, is one copy
-  without being read. Differing copies are still one artifact
-  (`Artifact::copies_differ`), and a failure, `DiscoveryFailure::Diverged`:
-  a `warning:` and a non-zero exit, like anything else discovery could not
-  make one thing of. `validate` counts them apart from unreadable files
+  two copies an agent reads that do not hold the same mean the agents do not
+  run the same skill. They are compared by `hash::tree`, the hash an install
+  records, which refuses a link rather than reading wherever it points, as a
+  copy here is anybody's; one folder reached twice, through a link to it, is
+  one copy without being read. Differing copies are still one artifact
+  (`Artifact::copies_differ`), and a failure, `DiscoveryFailure::Diverged`: a
+  `warning:` and a non-zero exit, like anything else discovery could not make
+  one thing of. `validate` counts them apart from unreadable files
   (`DiscoveryFailure::is_unreadable`). A copy that cannot be hashed is said
   too (`Uncompared`), and is not taken to differ.
 - **Each copy is validated.** `Artifact::validate` judges every copy on its
   own file and folder, adding what another has to what the first has, since
   an agent loads the copy in the folder it reads: one copy filed under a
   folder its name does not match fails there and nowhere else.
-- **What the project authors where no agent reads stays apart.** The default
-  `skills/` is read by no agent: what is there is the project's own work,
-  which reaches an agent only once installed. A skill there and one of the
-  same name in `.claude/skills` are two artifacts, not two copies of one,
-  however alike: grouping them would call the project's own source an
-  agent's copy.
+- **What the project authors where no agent reads is a copy no agent
+  sees.** The default `skills/` is read by no agent: what is there is the
+  project's own work, which reaches an agent only once installed. A skill
+  there is one more copy of its name, with no agent of its own, so the
+  agents an entry lists are still only those that load it, and it is
+  compared with no other copy: it is the source an install delivers from,
+  and a source edited since it was delivered is a status to report (#36),
+  not a warning on every listing until it is installed again. Listing it
+  apart, as a second entry of the same name, was turned down: a project
+  level `list` has no column to tell the two apart, and a screen naming a
+  row by its name alone would aim a change at the agents' copy and reach
+  the project's own.
 
 Who put a copy there (`Provenance`) is the ledger's, and discovery reads no
 ledger: a listing that says nothing of it opens none. `Catalog::with_records`
@@ -831,10 +839,12 @@ since none says who put what where; `flayer status` will (#36).
 Foreign is never touched. A change to a project's own artifacts looks only in
 the folders it authors in (`Catalog::discover_authored`, from
 `lifecycle::find`), so `edit`, `rename` and `remove` never reach a copy in an
-agent's folder the project does not author in; one named there is refused as
-such (`LifecycleError::NotAuthored`) rather than reported missing, since a
-listing has just shown it. Installing still writes into the authored folder
-until #34 writes a copy in each target.
+agent's folder the project does not author in. A name the project authors is
+one entry whose first copy is its own, and a change reaches that copy alone;
+one found only in an agent's folder is refused as such
+(`LifecycleError::NotAuthored`) rather than reported missing, since a listing
+has just shown it. Installing still writes into the authored folder until #34
+writes a copy in each target.
 
 ### Why the markers are TOML written from a template
 
@@ -3830,9 +3840,12 @@ leak into the lifecycle code. Unblocks #33, #45, #62, #93, #94 and #95.
   only there could be reported.
 - **A minds screen that lists what it cannot change.** The TUI's project rows
   come from the same discovery, so a v3 project's row lists the skills in its
-  agents' folders, and a change aimed at one is refused (`NotAuthored`). #36
-  gives each row its state; until then a row does not say which of its skills
-  are the project's to change.
+  agents' folders as well. A row is one name, so a change aimed at it reaches
+  the project's own copy when it authors one, and is refused (`NotAuthored`)
+  when the name sits only in its agents' folders. An own copy that does not
+  read takes the row its name has rather than a second one, whose keys would
+  reach it all the same. #36 gives each row its state; until then a row does
+  not say which of its skills are the project's to change.
 - **An agent's CLI writing the same config file.** The workspace's lock keeps
   Mindflayer's writers apart, not the agents': `claude mcp add` rewriting
   `.mcp.json` between `ConfigFile::edit`'s read and its rename is undone by the

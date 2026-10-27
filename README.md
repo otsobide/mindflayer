@@ -913,11 +913,12 @@ holds both it reads `settings.json`.
 
 Such a project is listed from the folders its agents read as well:
 `.claude/skills` for Claude, `.agents/skills` for Codex and OpenCode. A skill
-there is listed once, whoever put it there, and when it sits in both folders
-with different contents `list` and `validate` warn, since the agents would not
-all load the same skill. Mindflayer changes only what sits in the folders the
-project authors in, so `mind edit`, `rename` and `remove` leave a skill in an
-agent's folder alone.
+there is listed once, whoever put it there, and once with the project's own of
+that name, which it reads as; when it sits in both folders with different
+contents `list` and `validate` warn, since the agents would not all load the
+same skill. Mindflayer changes only what sits in the folders the project
+authors in, so `mind edit`, `rename` and `remove` reach the project's own copy
+and leave a skill in an agent's folder alone.
 
 ## What a skill looks like
 
