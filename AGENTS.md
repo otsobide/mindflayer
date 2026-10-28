@@ -249,11 +249,13 @@ These are easy to break from a single file without noticing.
   lines consult (`docs/architecture.md`, "The read model").
 - **Every error has a stable code.** Each public error type in core,
   `ValidationIssue`, and `install::Refused`, why an install or an uninstall
-  wrote nothing (`Installed::refused`, `Removed::refused`), is given
-  `code()` with `code::codes!`, which writes it as a match with no
-  wildcard, so a new variant does not compile without one, and lists the
-  codes it gives in `CODES` from the same arms. Each arm names one variant,
-  and the macro refuses a wildcard or an or-pattern, which would give
+  wrote nothing (`Installed::refused`, `Removed::refused`, and for a copy
+  an update or a change of agents leaves, `update::Step::refused` and
+  `reapply::Why::refused`), is given `code()` with `code::codes!`, which
+  writes it as a match with no wildcard, so a new variant does not compile
+  without one, and lists the codes it gives in `CODES` from the same arms.
+  Each arm names one variant, and the macro refuses a wildcard or an
+  or-pattern, which would give
   several one code and list it once. A code is unique across core, not
   only its type, never renamed nor moved to another condition, and named
   for the condition in snake_case. A variant

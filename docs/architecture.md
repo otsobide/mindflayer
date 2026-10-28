@@ -1428,12 +1428,15 @@ writes nothing, and the front end says so and goes on with the rest, as an
 uninstall's `Removed` does. The panel still has to tell the two apart, and
 the CLI's warning carries `foreign` beside its text, so `Installed::refused`
 and `Removed::refused` say why as an `install::Refused` (`foreign`, `edited`,
-`not_installed`). An update that leaves a copy changed since says `edited`,
-and a change of a project's agents or targets that leaves somebody's skill
-where a copy would go says `foreign`, by the same codes: one condition, met
-by another command. One type for both rather than a code on each outcome,
-since a copy that is somebody's refuses an install and an uninstall alike:
-two types would give `foreign` twice, which the rule below forbids.
+`not_installed`). An update that leaves a copy changed since says `edited`
+(`update::Step::refused`), and a change of a project's agents or targets
+that leaves somebody's skill where a copy would go says `foreign`
+(`reapply::Why::refused`), by the same codes: one condition, met by another
+command, and named by core, so no front end decides which of core's
+conditions a code names. One type for both rather than a code on each
+outcome, since a copy that is somebody's refuses an install and an
+uninstall alike: two types would give `foreign` twice, which the rule below
+forbids.
 
 - **Unique across core**, not only within one type. A code reaches the panel
   without the type it came from, so `workspace_busy` has to mean the lock

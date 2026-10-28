@@ -8,7 +8,6 @@
 use std::fmt::Write as _;
 use std::path::PathBuf;
 
-use mindflayer_core::install::Refused;
 use mindflayer_core::reapply::{self, Change, Ignore, Plan, Retarget, Why};
 use mindflayer_core::{
     paths, Agent, AgentHomes, Excluded, FlayerWorkspace, Kind, MindProject, Settings, Share,
@@ -216,25 +215,23 @@ pub(crate) fn not_copied(project: &MindProject, retarget: &Retarget) -> Vec<Warn
         .iter()
         .filter_map(|left| {
             let at = shown(project, &left.path);
-            match &left.why {
-                // Refused for a copy here as an install is refused for one,
-                // and said by the same code.
-                Why::Foreign => Some(Warning::coded(
-                    Refused::Foreign.code(),
-                    format!(
-                        "warning: {into} already has a {name} at {at} that Mindflayer did not \
-                         put there, so it was left alone, and {name} was not copied there"
-                    ),
-                )),
-                Why::Unsourced => Some(
-                    format!(
-                        "warning: {name} was not copied to {at}: no copy of it in {into} still \
-                         holds what was installed"
-                    )
-                    .into(),
+            let text = match &left.why {
+                Why::Foreign => format!(
+                    "warning: {into} already has a {name} at {at} that Mindflayer did not put \
+                     there, so it was left alone, and {name} was not copied there"
                 ),
-                Why::Edited | Why::Uncompared(_) => None,
-            }
+                Why::Unsourced => format!(
+                    "warning: {name} was not copied to {at}: no copy of it in {into} still holds \
+                     what was installed"
+                ),
+                Why::Edited | Why::Uncompared(_) => return None,
+            };
+            // Refused for a copy here as an install is refused for one, and
+            // said by the same code, which core gives.
+            Some(Warning {
+                text,
+                code: left.why.refused().map(|refused| refused.code()),
+            })
         })
         .collect()
 }

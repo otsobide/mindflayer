@@ -7,7 +7,7 @@
 use std::fmt::Write as _;
 use std::path::{Path, PathBuf};
 
-use mindflayer_core::install::{Installation, Installed, Refused};
+use mindflayer_core::install::{Installation, Installed};
 use mindflayer_core::update::{self, Plan, ProjectPlan, Step, Update};
 use mindflayer_core::{paths, AgentHomes, Excluded, FlayerWorkspace, MindProject, Reference};
 
@@ -149,18 +149,18 @@ fn project_laid_out(outcome: &mut Outcome, project: &ProjectPlan, done: bool) {
         match &update.step {
             Step::Keep => {}
             // Left as an install not forced leaves it, and said by the same
-            // code.
+            // code, which core gives.
             Step::Leave(paths) => {
-                outcome.stderr.push(Warning::coded(
-                    Refused::Edited.code(),
-                    format!(
+                outcome.stderr.push(Warning {
+                    text: format!(
                         "warning: {} in {into} was changed since it was installed, at {}, so it \
                          {} left alone; --force writes over it",
                         named(update.kind, &update.name),
                         listed_at(&project.root, paths),
                         if done { "was" } else { "would be" }
                     ),
-                ));
+                    code: update.step.refused().map(|refused| refused.code()),
+                });
                 outcome.ok = false;
             }
             Step::Orphaned => outcome.stderr.push(
