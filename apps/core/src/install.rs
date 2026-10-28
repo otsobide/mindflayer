@@ -42,7 +42,7 @@ use crate::ledger::{
 use crate::paths;
 use crate::settings::Share;
 use crate::url::redacted;
-use crate::workspace::{same_directory, FlayerWorkspace, MindProject, WorkspaceError};
+use crate::workspace::{same_directory, FlayerWorkspace, Loaded, MindProject, WorkspaceError};
 
 pub mod rules;
 mod standing;
@@ -704,22 +704,35 @@ pub(crate) fn surveyed_one(
 /// away, and taking them out on that would take out what a drive mounted
 /// again tomorrow offers still. A record from before origins were kept may
 /// have come from any loaded workspace, so it waits while any is away.
+///
+/// Nor one whose place where it came from could not be read, in the
+/// workspace's own ([`own_failures`]) or a loaded workspace's
+/// ([`LoadFailure::Artifact`]): front matter that no longer parses, or a
+/// folder that cannot be listed, offers nothing there, and is still
+/// somebody's artifact to mend, not a reason to take its copies out. By
+/// place ([`places`]), since what cannot be read cannot say its name.
 pub(crate) fn orphaned(
     workspace: &FlayerWorkspace,
     ledger: &Ledger,
     project: &MindProject,
     kind: Kind,
 ) -> Result<Vec<String>, LedgerError> {
-    let away: Vec<String> = workspace
-        .loads()
-        .into_iter()
+    let loads = workspace.loads();
+    let away: Vec<String> = loads
+        .iter()
         .filter(|loaded| loaded.workspace.is_err())
-        .map(|loaded| {
-            let entry = paths::to_config_string(&loaded.entry)
-                .unwrap_or_else(|| loaded.entry.display().to_string());
-            format!("{LOADED_PREFIX}{entry}")
-        })
+        .map(load_origin)
         .collect();
+    let mut unread: Vec<PathBuf> = own_failures(workspace, &[kind])
+        .iter()
+        .map(|failure| failure.path().to_path_buf())
+        .collect();
+    unread.extend(from_loads(workspace, &[kind]).failures.iter().filter_map(
+        |failure| match failure {
+            LoadFailure::Artifact(failure) => Some(failure.path().to_path_buf()),
+            _ => None,
+        },
+    ));
     Ok(surveyed(workspace, ledger, project, kind)?
         .into_iter()
         .filter(|surveyed| surveyed.offered.is_empty())
@@ -730,8 +743,77 @@ pub(crate) fn orphaned(
                 (None, None) => away.is_empty(),
             },
         )
+        .filter(|surveyed| {
+            // A failure about the artifact's own file, or about a folder it
+            // sits in.
+            !places(workspace, &loads, &surveyed.record)
+                .iter()
+                .any(|place| {
+                    unread
+                        .iter()
+                        .any(|path| path.starts_with(place) || place.starts_with(path))
+                })
+        })
         .map(|surveyed| surveyed.record.name)
         .collect())
+}
+
+/// What the workspace's own could not offer of `kinds`: an artifact of it
+/// that cannot be read, or a folder of them that cannot be listed. None of
+/// a kind it does not keep ([`FlayerWorkspace::own_kinds`]), which it
+/// offers none of. Failures collected, as every discovery's, for a front
+/// end to warn with, as [`offered_by_loads`] has a load's.
+pub fn own_failures(workspace: &FlayerWorkspace, kinds: &[Kind]) -> Vec<DiscoveryFailure> {
+    let kept = workspace.own_kinds();
+    let kinds: Vec<Kind> = kinds
+        .iter()
+        .copied()
+        .filter(|kind| kept.contains(kind))
+        .collect();
+    if kinds.is_empty() {
+        return Vec::new();
+    }
+    let own = workspace.own();
+    let (_, failures) = Catalog::discover_kinds(std::slice::from_ref(&own), &kinds).into_parts();
+    failures
+}
+
+/// Where what `record` installed would sit now in each place its origin
+/// names that offers by discovery: the workspace's own, or a loaded
+/// workspace's that can be opened. A record from before origins were kept
+/// may have come from any of them. None for one from the shelf, whose
+/// offers are the ledger's rows, not a read that can fail.
+fn places(workspace: &FlayerWorkspace, loads: &[Loaded], record: &InstallRecord) -> Vec<PathBuf> {
+    let any = record.origin.is_none() && record.source_id.is_none();
+    let names = |origin: &str| any || record.origin.as_deref() == Some(origin);
+    let mut places = Vec::new();
+    if names(WORKSPACE_ORIGIN) {
+        places.extend(crate::lifecycle::place(
+            &workspace.own(),
+            record.kind,
+            &record.name,
+        ));
+    }
+    for loaded in loads {
+        if let Ok(source) = &loaded.workspace {
+            if names(&load_origin(loaded)) {
+                places.extend(crate::lifecycle::place(
+                    &source.own(),
+                    record.kind,
+                    &record.name,
+                ));
+            }
+        }
+    }
+    places
+}
+
+/// The origin a record names for what it installed from `loaded`, as
+/// [`Offer::origin`] spells it.
+fn load_origin(loaded: &Loaded) -> String {
+    let entry = paths::to_config_string(&loaded.entry)
+        .unwrap_or_else(|| loaded.entry.display().to_string());
+    format!("{LOADED_PREFIX}{entry}")
 }
 
 /// The block of `project`'s `AGENTS.md` that a rule's copies are told by;

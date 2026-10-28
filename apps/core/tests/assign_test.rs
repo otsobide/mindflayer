@@ -10,7 +10,7 @@ use std::path::{Path, PathBuf};
 
 use common::skill;
 use mindflayer_core::assign::{self, Install, Offered, Part};
-use mindflayer_core::install::{Edits, Installed, Removed};
+use mindflayer_core::install::{self, Edits, Installed, Removed};
 use mindflayer_core::{
     create, Agent, AgentHomes, Directories, FlayerWorkspace, Kind, MindProject, Reference, Share,
 };
@@ -318,6 +318,58 @@ fn a_copy_from_a_loaded_workspace_that_cannot_be_opened_is_not_an_orphan() {
     fs::rename(&team, dir.path().join("away")).unwrap();
 
     let parts = orphans_out(&workspace, &projects, Edits::Kept);
+
+    assert_eq!(orphans_taken(&parts), [(String::from("alpha"), vec![])]);
+    for copy in copies(&projects[0], "review") {
+        assert!(copy.join("SKILL.md").is_file(), "{}", copy.display());
+    }
+}
+
+#[test]
+fn a_copy_of_one_of_the_workspaces_own_that_cannot_be_read_is_not_an_orphan() {
+    let (_dir, workspace, projects) = given(&["alpha"]);
+    installing(&workspace, &projects, "deploy");
+    let library = workspace.own().directory_for(Kind::Skill).unwrap();
+    // Still there, and somebody's to mend: it offers nothing while its front
+    // matter does not parse.
+    let manifest = library.join("deploy/SKILL.md");
+    fs::write(
+        &manifest,
+        "---\nname: deploy\ndescription: [unclosed\n---\n",
+    )
+    .unwrap();
+    assert!(!install::own_failures(&workspace, &[Kind::Skill]).is_empty());
+
+    let parts = orphans_out(&workspace, &projects, Edits::Forced);
+
+    assert_eq!(orphans_taken(&parts), [(String::from("alpha"), vec![])]);
+    for copy in copies(&projects[0], "deploy") {
+        assert!(copy.join("SKILL.md").is_file(), "{}", copy.display());
+    }
+}
+
+#[test]
+fn a_copy_from_a_loaded_workspace_whose_artifact_cannot_be_read_is_not_an_orphan() {
+    let (dir, mut workspace, projects) = given(&["alpha"]);
+    let team = dir.path().join("team");
+    fs::create_dir(&team).unwrap();
+    let (loaded, _) = FlayerWorkspace::init(&team).unwrap();
+    create(&loaded.own(), Kind::Skill, "review", "Review it").unwrap();
+    workspace.load(&loaded).unwrap();
+    let workspace = FlayerWorkspace::open(workspace.root()).unwrap();
+    installing(&workspace, &projects, "review");
+    let manifest = loaded
+        .own()
+        .directory_for(Kind::Skill)
+        .unwrap()
+        .join("review/SKILL.md");
+    fs::write(
+        &manifest,
+        "---\nname: review\ndescription: [unclosed\n---\n",
+    )
+    .unwrap();
+
+    let parts = orphans_out(&workspace, &projects, Edits::Forced);
 
     assert_eq!(orphans_taken(&parts), [(String::from("alpha"), vec![])]);
     for copy in copies(&projects[0], "review") {

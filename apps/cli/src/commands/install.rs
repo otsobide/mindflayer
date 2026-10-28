@@ -481,9 +481,11 @@ pub(crate) fn uninstall_named(
 /// project by project in the order asked, and one that fails as an error of
 /// its project while the rest stand, as [`together`] says them. With none
 /// orphaned anywhere asked, that is said, and is no failure, as it was
-/// asked to be. What the loaded workspaces could not offer is said after
-/// it all: an installation from a loaded workspace that cannot be opened is
-/// not taken for orphaned, and this is why it stays.
+/// asked to be. What could not be offered is said after it all, the
+/// workspace's own first, as it is offered first, then the loaded
+/// workspaces': an installation from an artifact that cannot be read, or a
+/// loaded workspace that cannot be opened, is not taken for orphaned, and
+/// this is why it stays.
 pub(crate) fn uninstall_orphans(
     workspace: &FlayerWorkspace,
     projects: &[MindProject],
@@ -495,7 +497,11 @@ pub(crate) fn uninstall_orphans(
     let assigned = assign::uninstall_orphaned(workspace, projects, homes, edits(force))
         .map_err(CliError::from)?;
     let said = scrubbed(&assigned.scrub);
-    let loads = load_warnings(workspace);
+    let mut unoffered: Vec<String> = mindflayer_core::install::own_failures(workspace, &Kind::ALL)
+        .iter()
+        .map(|failure| format!("warning: {failure}"))
+        .collect();
+    unoffered.extend(load_warnings(workspace));
     let among = assigned.parts.len() > 1;
     let mut asked: Vec<String> = Vec::new();
     let mut each: Vec<(String, Result<Outcome, Failure>)> = Vec::new();
@@ -524,11 +530,11 @@ pub(crate) fn uninstall_orphans(
             "nothing removed: nothing installed in {} is orphaned\n",
             words_listed(&asked)
         ));
-        outcome.ok = loads.is_empty();
-        outcome.stderr = loads;
+        outcome.ok = unoffered.is_empty();
+        outcome.stderr = unoffered;
         return Ok(said.before(outcome));
     }
-    together(said, each, loads)
+    together(said, each, unoffered)
 }
 
 /// One project's part of an uninstall, `done`, as a command that takes it

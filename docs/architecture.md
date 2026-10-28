@@ -2222,6 +2222,17 @@ names rather than the command line.
   be, since it may be that one's. What the loaded workspaces could not
   offer is said after the rest, as an install says it, so what was passed
   over has its reason beside it.
+- **Nor one whose artifact cannot be read.** A skill whose front matter no
+  longer parses, or a folder that cannot be listed, offers nothing, so what
+  was installed from it reads as orphaned too, as `status` says; but it is
+  still there, somebody's to mend, and failures are collected, never a
+  reason to take out what they are about. So a record is passed over while
+  the place it came from, the workspace's own (`install::own_failures`) or
+  a loaded workspace's (`LoadFailure::Artifact`), has a failure about the
+  artifact's place or a folder it sits in (`install::orphaned`, by
+  `lifecycle::place`, since what cannot be read cannot say its name). The
+  workspace's own failures are said first, before the loaded workspaces',
+  as the own is offered first.
 - **None is no failure.** A project with nothing orphaned is as it was
   asked to be, so it says nothing, and every project asked having none is
   said in one line, exit zero; a project that cannot be surveyed, or an

@@ -396,6 +396,34 @@ removed commit-style from beta
 }
 
 #[test]
+fn uninstall_orphaned_leaves_what_cannot_be_read_and_says_why() {
+    let dir = workspace_with_copies();
+    let manifest = own_directory_for(dir.path(), Kind::Skill).join("commit-style/SKILL.md");
+    fs::write(
+        &manifest,
+        "---\nname: commit-style\ndescription: [unclosed\n---\n",
+    )
+    .unwrap();
+
+    let outcome = flayer(dir.path(), &["uninstall", "--orphaned", "-p", "alpha"]).unwrap();
+
+    assert_eq!(
+        outcome.stdout,
+        "nothing removed: nothing installed in alpha is orphaned\n"
+    );
+    assert_eq!(outcome.stderr.len(), 1, "{:?}", outcome.stderr);
+    assert!(
+        outcome.stderr[0].starts_with(&format!("warning: {}: ", manifest.display())),
+        "{:?}",
+        outcome.stderr
+    );
+    assert!(!outcome.ok, "what could not be read is a warning");
+    for copy in copies(&dir.path().join("alpha"), "commit-style") {
+        assert!(copy.join("SKILL.md").is_file(), "{}", copy.display());
+    }
+}
+
+#[test]
 fn mind_uninstall_orphaned_takes_them_out_of_the_project_it_is_in() {
     let dir = workspace_with_copies();
     fs::remove_dir_all(own_directory_for(dir.path(), Kind::Skill).join("commit-style")).unwrap();

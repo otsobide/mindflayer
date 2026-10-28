@@ -1293,7 +1293,9 @@ warning: commit-style in tanukeys was changed since it was installed, at .agents
 
 A copy from a loaded workspace that cannot be opened is not taken for
 orphaned, though `status` says it is: what that workspace offers cannot be
-told until it is back.
+told until it is back. Nor is one whose artifact is still there but cannot be
+read, its front matter broken: that is a `warning:` to mend, never a reason
+to take its copies out.
 
 ## The TUI
 
