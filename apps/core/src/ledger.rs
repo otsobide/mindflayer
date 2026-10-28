@@ -249,15 +249,24 @@ pub enum Carried {
 }
 
 /// One line of the action log.
-#[derive(Debug, Clone, PartialEq, Eq)]
+///
+/// What it serializes to is a contract, as a status report's is: each field
+/// by its name, and the two that can quote a URL only through [`redacted`],
+/// where they are written rather than trusted to [`Ledger::history`], which
+/// hands back none with a credential in it: a row an older build wrote
+/// before the scrub still holds one until a command that writes opens the
+/// ledger.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct Entry {
     /// When it happened, in seconds since the Unix epoch.
     pub at: i64,
     pub action: String,
     /// What the action was about: a URL, a name. A URL is [`redacted`].
+    #[serde(serialize_with = "crate::url::serialize_redacted_option")]
     pub target: Option<String>,
     pub outcome: String,
     /// What it said, successful or not, with every URL in it [`redacted`].
+    #[serde(serialize_with = "crate::url::serialize_redacted_option")]
     pub detail: Option<String>,
 }
 
