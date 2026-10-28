@@ -3453,6 +3453,16 @@ One type, so a line is spelled one way whichever front end asked for it; a
 second front end building its own lines would be a second place for one to be
 spelled wrong.
 
+The panel will send a task as JSON, so it serializes both ways, as one flat
+object tagged by its name in snake_case (`{"type": "link", "path": "beta"}`),
+its holder and its agents line tagged the same way inside it. Its kind, agents
+and share mode are the words a command line takes, read back through what
+reads those ([JSON, in one envelope](#json-in-one-envelope)), and a field a
+task does not have is refused rather than passed over: a task is a write, and
+one sent with a field misspelled would run without it. A name, once a front
+end sends it, is a contract as a report's is, so a test pins every one, and
+reads every task back from its JSON as it was.
+
 That is what turns "every feature has a command and a place in the TUI" from a
 promise into a property. A feature is written once, as a command, and the TUI
 gains it by producing that command's words. A test parses every task's lines

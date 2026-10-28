@@ -11,9 +11,20 @@
 
 use mindflayer_core::url::redacted;
 use mindflayer_core::{Agent, Kind, Share, DEFAULT_SUBDIRECTORY, QUALIFIER};
+use serde::{Deserialize, Serialize};
 
 /// What an `agents` line says, as the toggles have it.
-#[derive(Debug, Clone, PartialEq, Eq)]
+///
+/// `{"type": "named", "agents": ["claude"]}` in JSON: tagged as a task is,
+/// with the agents beside the tag, since a variant holding a list has no
+/// field of its own for them to be named by.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(
+    tag = "type",
+    content = "agents",
+    rename_all = "snake_case",
+    deny_unknown_fields
+)]
 pub enum AgentsLine {
     /// `agents --yes <agent>...`: exactly these.
     Named(Vec<Agent>),
@@ -24,7 +35,17 @@ pub enum AgentsLine {
 }
 
 /// Which level a task runs at: what holds the artifacts it is about.
-#[derive(Debug, Clone, PartialEq, Eq)]
+///
+/// `{"type": "project", "entry": "alpha"}` in JSON, or `{"type":
+/// "workspace"}`: the shape a task's own variants have, which a variant
+/// holding one string cannot take inside the object the tag is in.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(
+    tag = "type",
+    content = "entry",
+    rename_all = "snake_case",
+    deny_unknown_fields
+)]
 pub enum Holder {
     /// The workspace, for its own artifacts: `flayer <cmd>`.
     Workspace,
@@ -42,8 +63,19 @@ pub enum Holder {
     Elsewhere(String),
 }
 
-/// Work a key asked for, as the command it is.
-#[derive(Debug, Clone, PartialEq, Eq)]
+/// Work a front end asked for, as the command it is.
+///
+/// In JSON, what the panel sends to be run, each variant is an object
+/// tagged by its name in snake_case, its fields beside the tag: `{"type":
+/// "link", "path": "beta"}`. Tagged inside the object rather than around
+/// it, so a task reads as one flat record, the shape TypeScript tells a
+/// union apart by. A field a task with fields does not have is refused
+/// rather than passed over, as one its holder or its agents line does not
+/// have is: a task is a write, and one sent with a field misspelled would
+/// run without it. Each name is a contract once a front end sends it, as a
+/// report's is, so a test pins every one.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case", deny_unknown_fields)]
 pub enum Task {
     /// `flayer init`, where the TUI was opened.
     InitWorkspace,
@@ -192,8 +224,9 @@ pub enum Task {
 
 /// What one directory's mark on the minds screen asks of the workspace, when
 /// it differs from how the directory started: what [`Task::minds`] is built
-/// from.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+/// from. By its name in snake_case in JSON: `"init_and_link"`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
 pub enum MindsChange {
     Link,
     /// `mind init` in it, then link it: a repository that is not a mind
