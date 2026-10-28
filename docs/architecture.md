@@ -3494,7 +3494,8 @@ so the transcript says what it ran in words that run again.
 - `tui/ui.rs`: what the screen looks like, rendered into an in-memory
   terminal by the tests.
 - `tui/minds.rs`: the minds screen's rows and ticks, and the task they amount
-  to; like `state.rs`, it touches nothing.
+  to, which `Task::minds` builds from the marks, so another front end marking
+  directories builds the same lines; like `state.rs`, it touches nothing.
 - `tui.rs`: the loop, laying out the snapshot core reads ([the read
   model](#the-read-model)) and a scan as what the screen shows, and running
   tasks. `step` is everything the loop does between a key and the next frame,

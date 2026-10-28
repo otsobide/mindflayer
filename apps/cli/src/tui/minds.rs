@@ -14,6 +14,7 @@ use ratatui::crossterm::event::KeyCode;
 
 use super::state::{Task, Workspace};
 use crate::commands::project::worth_linking;
+use crate::task::MindsChange;
 
 /// Where a row stands now, which decides what ticking or unticking it asks.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -25,15 +26,6 @@ pub enum Standing {
     /// repository that is not a mind project yet, which linking makes one
     /// first.
     Found { mind: bool },
-}
-
-/// What applying one row would do.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Change {
-    Link,
-    /// `mind init` in it, then link it.
-    InitAndLink,
-    Unlink,
 }
 
 /// One directory the workspace manages, or could.
@@ -52,18 +44,18 @@ pub struct Row {
 
 impl Row {
     /// What this row asks for, if its box disagrees with how it started.
-    pub fn change(&self) -> Option<Change> {
+    pub fn change(&self) -> Option<MindsChange> {
         let started = matches!(self.standing, Standing::Linked { .. });
         (self.ticked != started).then(|| self.offers())
     }
 
     /// What turning its box over from how it started would ask for, ticked
     /// or not now: what the screen keeps room for beside it.
-    pub fn offers(&self) -> Change {
+    pub fn offers(&self) -> MindsChange {
         match self.standing {
-            Standing::Found { mind: true } => Change::Link,
-            Standing::Found { mind: false } => Change::InitAndLink,
-            Standing::Linked { .. } => Change::Unlink,
+            Standing::Found { mind: true } => MindsChange::Link,
+            Standing::Found { mind: false } => MindsChange::InitAndLink,
+            Standing::Linked { .. } => MindsChange::Unlink,
         }
     }
 }
@@ -161,9 +153,9 @@ impl Minds {
             .iter()
             .filter_map(Row::change)
             .fold((0, 0, 0), |(link, init, unlink), change| match change {
-                Change::Link => (link + 1, init, unlink),
-                Change::InitAndLink => (link + 1, init + 1, unlink),
-                Change::Unlink => (link, init, unlink + 1),
+                MindsChange::Link => (link + 1, init, unlink),
+                MindsChange::InitAndLink => (link + 1, init + 1, unlink),
+                MindsChange::Unlink => (link, init, unlink + 1),
             })
     }
 
@@ -172,21 +164,14 @@ impl Minds {
         self.rows.iter().all(|row| row.change().is_none())
     }
 
-    /// The commands the marks amount to, or nothing when nothing is marked.
+    /// The commands the marks amount to, or nothing when nothing is marked:
+    /// the batch every front end builds from its marks ([`Task::minds`]).
     pub fn task(&self) -> Option<Task> {
-        let (mut init, mut link, mut unlink) = (Vec::new(), Vec::new(), Vec::new());
-        for row in &self.rows {
-            match row.change() {
-                Some(Change::Link) => link.push(row.path.clone()),
-                Some(Change::InitAndLink) => {
-                    init.push(row.path.clone());
-                    link.push(row.path.clone());
-                }
-                Some(Change::Unlink) => unlink.push(row.path.clone()),
-                None => {}
-            }
-        }
-        (!link.is_empty() || !unlink.is_empty()).then_some(Task::Minds { init, link, unlink })
+        Task::minds(
+            self.rows
+                .iter()
+                .filter_map(|row| Some((row.path.clone(), row.change()?))),
+        )
     }
 
     /// What applying asks, before anything is written: `mind init` writes into
@@ -204,7 +189,7 @@ impl Minds {
             let names: Vec<&str> = self
                 .rows
                 .iter()
-                .filter(|row| row.change() == Some(Change::InitAndLink))
+                .filter(|row| row.change() == Some(MindsChange::InitAndLink))
                 .map(|row| row.path.as_str())
                 .collect();
             let (is, it) = if init == 1 {

@@ -23,6 +23,7 @@ use crate::commands::project::worth_linking;
 use crate::install::ui::{centred, pane, selected};
 use crate::progress::said;
 use crate::render::{plural, printable};
+use crate::task::MindsChange;
 
 /// How wide a form's labels are, so the values line up.
 const LABEL: u16 = 13;
@@ -1302,8 +1303,8 @@ fn minds_screen(app: &App, screen: &Minds, frame: &mut Frame, area: Rect) {
 fn mind_row(row: &minds::Row, width: usize, said: usize) -> ListItem<'_> {
     let change = row.change();
     let colour = match change {
-        Some(minds::Change::Link | minds::Change::InitAndLink) => Color::Green,
-        Some(minds::Change::Unlink) => Color::Red,
+        Some(MindsChange::Link | MindsChange::InitAndLink) => Color::Green,
+        Some(MindsChange::Unlink) => Color::Red,
         None => Color::Reset,
     };
     let path = printable(&row.path);
@@ -1327,11 +1328,11 @@ fn mind_row(row: &minds::Row, width: usize, said: usize) -> ListItem<'_> {
 }
 
 /// What applying a row would do to it, in words, and in what colour.
-fn pending(change: minds::Change) -> (&'static str, Color) {
+fn pending(change: MindsChange) -> (&'static str, Color) {
     match change {
-        minds::Change::Link => ("  + link", Color::Green),
-        minds::Change::InitAndLink => ("  + mind init, then link", Color::Green),
-        minds::Change::Unlink => ("  - unlink", Color::Red),
+        MindsChange::Link => ("  + link", Color::Green),
+        MindsChange::InitAndLink => ("  + mind init, then link", Color::Green),
+        MindsChange::Unlink => ("  - unlink", Color::Red),
     }
 }
 

@@ -107,7 +107,7 @@ pub enum Task {
     Validate { holder: Holder },
     /// `mind -C <path> init` for each repository that is not a project yet,
     /// then one `flayer link` and one `flayer unlink`: what the minds screen's
-    /// marks amount to.
+    /// marks amount to, built from them by [`Task::minds`].
     Minds {
         init: Vec<String>,
         link: Vec<String>,
@@ -190,7 +190,44 @@ pub enum Task {
     Refresh,
 }
 
+/// What one directory's mark on the minds screen asks of the workspace, when
+/// it differs from how the directory started: what [`Task::minds`] is built
+/// from.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MindsChange {
+    Link,
+    /// `mind init` in it, then link it: a repository that is not a mind
+    /// project yet.
+    InitAndLink,
+    Unlink,
+}
+
 impl Task {
+    /// The task a pass over which minds a workspace manages amounts to, each
+    /// directory by the path a command is given with what to do to it, or
+    /// none when there is nothing to do.
+    ///
+    /// Here rather than on the minds screen, so a front end that marks
+    /// directories some other way builds the same lines from its marks: that
+    /// a directory made a project is then linked, in one `flayer link` with
+    /// the rest, is the batch's rule, and a front end spelling it again could
+    /// leave one made and never linked. Each list keeps the order the
+    /// directories were given in.
+    pub fn minds(changes: impl IntoIterator<Item = (String, MindsChange)>) -> Option<Task> {
+        let (mut init, mut link, mut unlink) = (Vec::new(), Vec::new(), Vec::new());
+        for (path, change) in changes {
+            match change {
+                MindsChange::Link => link.push(path),
+                MindsChange::InitAndLink => {
+                    init.push(path.clone());
+                    link.push(path);
+                }
+                MindsChange::Unlink => unlink.push(path),
+            }
+        }
+        (!link.is_empty() || !unlink.is_empty()).then_some(Task::Minds { init, link, unlink })
+    }
+
     /// The command lines this task is, word by word, as a person would type
     /// them from where the commands run: the workspace root, or the project
     /// the TUI was opened on.
@@ -560,3 +597,7 @@ fn quote(word: &str) -> String {
         format!("'{}'", word.replace('\'', r"'\''"))
     }
 }
+
+#[cfg(test)]
+#[path = "task_test.rs"]
+mod tests;
