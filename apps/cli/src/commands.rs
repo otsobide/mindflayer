@@ -300,7 +300,7 @@ fn run_flayer(
                 Some(path) => typed(directory, path)?,
                 None => directory.to_path_buf(),
             };
-            init_workspace(&root, skills.as_deref(), rules.as_deref())
+            init_workspace(&root, skills.as_deref(), rules.as_deref(), lookup)
         }
         FlayerCommand::Activate { path, shell } => {
             activate_command(directory, path.as_deref(), *shell, lookup)

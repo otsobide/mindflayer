@@ -10,8 +10,8 @@ use std::path::{Path, PathBuf};
 
 use mindflayer_core::scan::MAX_LISTED;
 use mindflayer_core::{
-    scan, Agent, Directories, FlayerWorkspace, Initialization, Kind, MindProject, Registration,
-    Scan, Share, WorkspaceError,
+    known, scan, Agent, Directories, FlayerWorkspace, Initialization, Kind, MindProject,
+    Registration, Scan, Share, WorkspaceError,
 };
 
 use super::{all_or_nothing, project_here, targets, workspace_for, workspace_here};
@@ -40,20 +40,51 @@ pub(crate) fn init_project(
     )))
 }
 
-/// `flayer init`: the directory made a flayer workspace.
+/// `flayer init`: the directory made a flayer workspace, and remembered by
+/// the default one in `lookup`'s home, when that is made, so `flayer
+/// workspaces` lists it.
+///
+/// One already made is remembered too, and otherwise left as it was: what
+/// makes a workspace from before the default one, or from before the list,
+/// known. A default that cannot remember it is a warning after the init,
+/// which is done by then and is not undone for it.
 pub(crate) fn init_workspace(
     directory: &Path,
     skills: Option<&Path>,
     rules: Option<&Path>,
+    lookup: &Lookup,
 ) -> Result<Outcome, Failure> {
     let directories = asked_directories(skills, rules);
     let (workspace, outcome) = FlayerWorkspace::init_with(directory, &directories)?;
-    Ok(Outcome::plain(initialized(
+    let mut stdout = initialized(
         "flayer workspace",
         workspace.name(),
         &workspace.flayer_dir(),
         outcome,
-    )))
+    );
+    let mut stderr = Vec::new();
+    match known::remember(lookup.home.as_deref(), &workspace) {
+        // Said only when it is news: a second init of one already known
+        // changes nothing, and says nothing more than the first line.
+        Ok(Some((entry, Registration::Added))) => {
+            let _ = writeln!(
+                stdout,
+                "  remembered as {} by the default workspace",
+                as_stored(&entry)
+            );
+        }
+        Ok(_) => {}
+        Err(error) => {
+            stderr.push(format!(
+                "warning: the default workspace could not remember it: {error}"
+            ));
+        }
+    }
+    Ok(Outcome {
+        ok: stderr.is_empty(),
+        stdout,
+        stderr,
+    })
 }
 
 /// What `init` was asked to put where, at either level.
