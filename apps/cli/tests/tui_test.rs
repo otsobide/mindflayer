@@ -963,9 +963,18 @@ fn a_gather_refused_for_a_token_in_its_url_shows_the_token_neither_while_it_runs
     assert!(!transcript.contains("ghp_t0ken"), "{transcript}");
 }
 
+/// Where the shelf `shelved` gathered offers its skills from, as the
+/// install screen says it.
+fn shelf_origin(workspace: &FlayerWorkspace, ledger: &Ledger) -> String {
+    screen_for(workspace, ledger).targets[0].rows[0]
+        .candidate
+        .origin()
+}
+
 #[test]
 fn the_install_screen_opens_inside_the_tui_and_applies_from_there() {
-    let (dir, _workspace, _ledger) = shelved(&["collapse"], &["deploy"]);
+    let (dir, workspace, ledger) = shelved(&["collapse"], &["deploy"]);
+    let origin = shelf_origin(&workspace, &ledger);
     let mut app = tui_in(dir.path());
 
     press_and_run(&mut app, KeyCode::Char('i'));
@@ -977,25 +986,35 @@ fn the_install_screen_opens_inside_the_tui_and_applies_from_there() {
     press_key(&mut app, KeyCode::Char('a'));
     let task = press_and_run(&mut app, KeyCode::Char('y'));
 
-    assert_eq!(task, Some(Task::ApplyInstall));
+    assert_eq!(
+        task,
+        Some(Task::ApplyInstall {
+            changes: vec![Task::Install {
+                projects: vec![String::from("collapse")],
+                kind: Kind::Skill,
+                name: String::from("deploy"),
+                from: Some(origin.clone()),
+            }]
+        })
+    );
     for copy in copies(&dir.path().join("collapse"), "deploy") {
         assert!(copy.join("SKILL.md").is_file(), "{}", copy.display());
     }
+    let said = format!("installed deploy into collapse, from {origin}");
     let Mode::Reading(reader) = &app.mode else {
         panic!("{:?}", app.mode);
     };
-    assert!(reader
-        .lines
-        .iter()
-        .any(|(_, line)| line == "collapse: installed deploy"));
-    assert!(app
-        .transcript()
-        .contains("$ flayer install\ncollapse: installed deploy"));
+    assert!(reader.lines.iter().any(|(_, line)| *line == said));
+    assert_eq!(
+        app.transcript(),
+        format!("$ flayer install -p collapse --from {origin} skill:deploy\n{said}\n")
+    );
 }
 
 #[test]
 fn the_install_screen_inside_the_tui_turns_round_by_artifact_and_applies_the_same_batch() {
-    let (dir, _workspace, _ledger) = shelved(&["collapse", "tanukeys"], &["deploy"]);
+    let (dir, workspace, ledger) = shelved(&["collapse", "tanukeys"], &["deploy"]);
+    let origin = shelf_origin(&workspace, &ledger);
     let mut app = tui_in(dir.path());
     press_and_run(&mut app, KeyCode::Char('i'));
 
@@ -1009,15 +1028,23 @@ fn the_install_screen_inside_the_tui_turns_round_by_artifact_and_applies_the_sam
     let task = press_and_run(&mut app, KeyCode::Char('y'));
 
     assert!(drawn.contains("Projects for deploy"), "{drawn}");
-    assert_eq!(task, Some(Task::ApplyInstall));
+    assert!(
+        matches!(&task, Some(Task::ApplyInstall { changes }) if changes.len() == 1),
+        "one artifact's ticks are one line: {task:?}"
+    );
     for project in ["collapse", "tanukeys"] {
         for copy in copies(&dir.path().join(project), "deploy") {
             assert!(copy.join("SKILL.md").is_file(), "{}", copy.display());
         }
     }
-    assert!(app
-        .transcript()
-        .contains("$ flayer install\ncollapse: installed deploy\ntanukeys: installed deploy"));
+    assert_eq!(
+        app.transcript(),
+        format!(
+            "$ flayer install -p collapse -p tanukeys --from {origin} skill:deploy\n\
+             installed deploy into collapse, from {origin}\n\
+             installed deploy into tanukeys, from {origin}\n"
+        )
+    );
 }
 
 #[test]
@@ -1048,13 +1075,24 @@ fn the_install_screen_inside_the_tui_installs_where_each_agent_of_a_v3_project_r
     press_key(&mut app, KeyCode::Char('a'));
     let task = press_and_run(&mut app, KeyCode::Char('y'));
 
-    assert_eq!(task, Some(Task::ApplyInstall));
+    assert!(
+        matches!(&task, Some(Task::ApplyInstall { changes }) if changes.len() == 1),
+        "{task:?}"
+    );
     let claude = fs::read(root.join(".claude/skills/deploy/SKILL.md")).unwrap();
     let agents = fs::read(root.join(".agents/skills/deploy/SKILL.md")).unwrap();
     assert_eq!(claude, agents);
-    assert!(app
-        .transcript()
-        .contains("$ flayer install\nalpha: installed deploy"));
+    // Opened again, now that it links `alpha`.
+    let workspace = FlayerWorkspace::open(dir.path()).unwrap();
+    let origin = shelf_origin(&workspace, &workspace.ledger_for_reading().unwrap());
+    assert!(
+        app.transcript().starts_with(&format!(
+            "$ flayer install -p alpha --from {origin} skill:deploy\n\
+             installed deploy into alpha, from {origin}\n"
+        )),
+        "{}",
+        app.transcript()
+    );
 }
 
 #[test]
@@ -1085,13 +1123,25 @@ fn a_rule_ticked_on_the_install_screen_inside_the_tui_is_installed_from_there() 
     assert!(rules.contains("[ ] git/commits"), "{rules}");
     assert!(ticked.contains("[x] git/commits  + install"), "{ticked}");
     assert!(ticked.contains("1 to install, 0 to remove"), "{ticked}");
-    assert_eq!(task, Some(Task::ApplyInstall));
+    assert_eq!(
+        task,
+        Some(Task::ApplyInstall {
+            changes: vec![Task::Install {
+                projects: vec![String::from("collapse")],
+                kind: Kind::Rule,
+                name: String::from("git/commits"),
+                from: Some(String::from("workspace")),
+            }]
+        })
+    );
     assert!(fs::read_to_string(dir.path().join("collapse/AGENTS.md"))
         .unwrap()
         .contains("<!-- mindflayer:rule git/commits -->\n# Commit one coherent step at a time\n"));
     assert!(
-        app.transcript()
-            .contains("$ flayer install\ncollapse: installed rule git/commits\n"),
+        app.transcript().starts_with(
+            "$ flayer install -p collapse --from workspace rule:git/commits\n\
+             installed rule git/commits into collapse, from workspace\n"
+        ),
         "{}",
         app.transcript()
     );
@@ -1172,7 +1222,10 @@ fn the_install_screen_scrubs_the_ledger_when_it_applies_and_not_when_it_opens() 
 
     let transcript = app.transcript();
     assert!(
-        transcript.starts_with("$ flayer install\ncollapse: installed deploy\n"),
+        transcript.starts_with(
+            "$ flayer install -p collapse --from https://example.com/acme/skills skill:deploy\n\
+             installed deploy into collapse, from https://example.com/acme/skills\n"
+        ),
         "{transcript}"
     );
     assert!(
@@ -1184,6 +1237,230 @@ fn the_install_screen_scrubs_the_ledger_when_it_applies_and_not_when_it_opens() 
     );
     assert!(!transcript.contains("ghp_t0ken"), "{transcript}");
     assert_eq!(stored(), "https://example.com/acme/skills");
+}
+
+#[test]
+fn a_line_of_the_install_screen_that_fails_does_not_keep_the_rest_from_running() {
+    let (dir, workspace, ledger) = shelved(&["collapse"], &["deploy"]);
+    let origin = shelf_origin(&workspace, &ledger);
+    flayer(
+        dir.path(),
+        &["add", "skill", "ours", "Of the workspace's own"],
+    )
+    .unwrap();
+    let mut app = tui_in(dir.path());
+    press_and_run(&mut app, KeyCode::Char('i'));
+    // The workspace's own first, then the shelf's.
+    for key in [
+        KeyCode::Right,
+        KeyCode::Char(' '),
+        KeyCode::Down,
+        KeyCode::Char(' '),
+        KeyCode::Char('a'),
+    ] {
+        press_key(&mut app, key);
+    }
+    // Gone once it was ticked, so its line is refused.
+    fs::remove_dir_all(own_directory_for(dir.path(), Kind::Skill).join("ours")).unwrap();
+
+    press_and_run(&mut app, KeyCode::Char('y'));
+
+    for copy in copies(&dir.path().join("collapse"), "deploy") {
+        assert!(copy.join("SKILL.md").is_file(), "{}", copy.display());
+    }
+    let transcript = app.transcript();
+    assert!(
+        transcript.starts_with("$ flayer install -p collapse --from workspace skill:ours\nerror: "),
+        "{transcript}"
+    );
+    assert!(
+        transcript.contains(&format!(
+            "$ flayer install -p collapse --from {origin} skill:deploy\n\
+             installed deploy into collapse, from {origin}\n"
+        )),
+        "{transcript}"
+    );
+}
+
+/// Copy everything under `from` into `to`, as it is.
+fn copy_tree(from: &Path, to: &Path) {
+    fs::create_dir_all(to).unwrap();
+    for entry in fs::read_dir(from).unwrap() {
+        let entry = entry.unwrap();
+        let target = to.join(entry.file_name());
+        if entry.file_type().unwrap().is_dir() {
+            copy_tree(&entry.path(), &target);
+        } else {
+            fs::copy(entry.path(), target).unwrap();
+        }
+    }
+}
+
+/// Every folder and file under `root` by its path from there, with what
+/// each file holds; but the ledger, which is compared by what it records
+/// rather than by its bytes, which hold when each action was taken, and the
+/// workspace's lock.
+fn disk(root: &Path) -> std::collections::BTreeMap<String, Option<Vec<u8>>> {
+    let mut found = std::collections::BTreeMap::new();
+    let mut folders = vec![root.to_path_buf()];
+    while let Some(folder) = folders.pop() {
+        for entry in fs::read_dir(&folder).unwrap() {
+            let path = entry.unwrap().path();
+            let route = path
+                .strip_prefix(root)
+                .unwrap()
+                .to_string_lossy()
+                .replace('\\', "/");
+            let kept = [".mindflayer/mindflayer.db", ".mindflayer/lock"];
+            if kept.iter().any(|kept| route.starts_with(kept)) {
+                continue;
+            }
+            if path.is_dir() {
+                folders.push(path);
+                found.insert(route, None);
+            } else {
+                found.insert(route, Some(fs::read(&path).unwrap()));
+            }
+        }
+    }
+    found
+}
+
+/// What the ledger of the workspace at `root` records of every installation
+/// in each of `projects`.
+fn recorded(root: &Path, projects: &[&str]) -> Vec<mindflayer_core::ledger::InstallRecord> {
+    let ledger = FlayerWorkspace::open(root)
+        .unwrap()
+        .ledger_for_reading()
+        .unwrap();
+    let mut records = Vec::new();
+    for project in projects {
+        for kind in Kind::ALL {
+            records.extend(ledger.records(project, kind).unwrap());
+        }
+    }
+    records
+}
+
+/// A command line as the transcript shows it, back into its words: split at
+/// spaces, but not inside the single quotes `state::shell` puts round a word
+/// a shell would split, nor at a quote escaped between two of them (`'\''`).
+fn words_of(line: &str) -> Vec<String> {
+    let mut words = Vec::new();
+    let mut word: Option<String> = None;
+    let (mut quoted, mut escaped) = (false, false);
+    for c in line.chars() {
+        let text = word.get_or_insert_with(String::new);
+        match c {
+            c if escaped => {
+                text.push(c);
+                escaped = false;
+            }
+            '\\' if !quoted => escaped = true,
+            '\'' => quoted = !quoted,
+            ' ' if !quoted => {
+                if let Some(done) = word.take().filter(|done| !done.is_empty()) {
+                    words.push(done);
+                }
+            }
+            c => text.push(c),
+        }
+    }
+    words.extend(word.filter(|done| !done.is_empty()));
+    words
+}
+
+#[test]
+fn a_line_as_the_transcript_shows_it_reads_back_into_its_words() {
+    let words: Vec<String> = [
+        "flayer",
+        "install",
+        "--from",
+        "it's #1",
+        "a b",
+        "skill:deploy",
+    ]
+    .iter()
+    .map(|word| (*word).to_owned())
+    .collect();
+
+    assert_eq!(words_of(&tui::state::shell(&words)), words);
+}
+
+#[test]
+fn the_lines_the_install_screen_ran_run_again_on_a_copy_leave_the_same_ledger_and_disk() {
+    let (dir, workspace, ledger) = shelved(&["collapse", "tanukeys"], &["deploy", "lint"]);
+    let origin = shelf_origin(&workspace, &ledger);
+    flayer(
+        dir.path(),
+        &["add", "rule", "git/commits", "Commit one step at a time"],
+    )
+    .unwrap();
+    flayer(dir.path(), &["install", "-p", "tanukeys", "lint"]).unwrap();
+    let copy = TempDir::new().unwrap();
+    copy_tree(dir.path(), copy.path());
+    let projects = ["collapse", "tanukeys"];
+    assert_eq!(disk(dir.path()), disk(copy.path()));
+
+    let mut app = tui_in(dir.path());
+    press_and_run(&mut app, KeyCode::Char('i'));
+    for key in [
+        // collapse: deploy, then git/commits, ticked.
+        KeyCode::Right,
+        KeyCode::Char(' '),
+        KeyCode::Tab,
+        KeyCode::Char(' '),
+        // tanukeys: git/commits and deploy ticked, lint unticked.
+        KeyCode::Left,
+        KeyCode::Down,
+        KeyCode::Right,
+        KeyCode::Char(' '),
+        KeyCode::Tab,
+        KeyCode::Char(' '),
+        KeyCode::Down,
+        KeyCode::Char(' '),
+    ] {
+        press_key(&mut app, key);
+    }
+    let marked = tui_drawn(&app);
+    assert!(marked.contains("4 to install, 1 to remove"), "{marked}");
+    press_key(&mut app, KeyCode::Char('a'));
+    press_and_run(&mut app, KeyCode::Char('y'));
+
+    let transcript = app.transcript();
+    let ran: Vec<&str> = transcript
+        .lines()
+        .filter_map(|line| line.strip_prefix("$ "))
+        .collect();
+    assert_eq!(
+        ran,
+        [
+            &format!("flayer install -p collapse -p tanukeys --from {origin} skill:deploy"),
+            "flayer uninstall -p tanukeys skill:lint",
+            "flayer install -p collapse -p tanukeys --from workspace rule:git/commits",
+        ],
+        "{transcript}"
+    );
+    assert!(app.done.iter().all(|done| done.ok), "{transcript}");
+    assert_ne!(
+        disk(dir.path()),
+        disk(copy.path()),
+        "the screen changed nothing"
+    );
+
+    for line in &ran {
+        let words = words_of(line);
+        assert_eq!(words[0], "flayer", "{line}");
+        let args: Vec<&str> = words[1..].iter().map(String::as_str).collect();
+        let replayed = flayer(copy.path(), &args).unwrap();
+        assert!(replayed.ok, "{line}: {replayed:?}");
+    }
+
+    assert_eq!(
+        recorded(dir.path(), &projects),
+        recorded(copy.path(), &projects)
+    );
+    assert_eq!(disk(dir.path()), disk(copy.path()));
 }
 
 #[test]
@@ -1368,6 +1645,23 @@ fn every_task_the_tui_runs_is_a_line_the_binaries_accept() {
             name: String::from("git/no-force-push"),
             everywhere: true,
         },
+        Task::Install {
+            projects: vec![String::from("alpha"), String::from("-odd")],
+            kind: Kind::Skill,
+            name: String::from("deploy"),
+            from: Some(String::from("-weird")),
+        },
+        Task::Install {
+            projects: vec![String::from("../collapse")],
+            kind: Kind::Rule,
+            name: String::from("git/no-force-push"),
+            from: None,
+        },
+        Task::Uninstall {
+            projects: vec![String::from("-odd"), String::from("./alpha")],
+            kind: Kind::Rule,
+            name: String::from("git/no-force-push"),
+        },
     ];
 
     for task in &tasks {
@@ -1425,6 +1719,118 @@ fn the_agents_and_share_toggles_parse_back_into_what_they_were() {
     assert_eq!(mode.share, Share::Local);
     assert!(mode.edit_tracked);
     assert!(mode.yes);
+}
+
+#[test]
+fn the_install_and_uninstall_tasks_parse_back_into_what_they_were() {
+    let install = Task::Install {
+        projects: vec![String::from("alpha"), String::from("-odd")],
+        kind: Kind::Skill,
+        name: String::from("deploy"),
+        from: Some(String::from("https://example.com/acme/skills#main")),
+    };
+    let uninstall = Task::Uninstall {
+        projects: vec![String::from("../collapse")],
+        kind: Kind::Rule,
+        name: String::from("git/commits"),
+    };
+
+    assert_eq!(
+        install.describe(),
+        "flayer install -p alpha -p ./-odd --from 'https://example.com/acme/skills#main' \
+         skill:deploy"
+    );
+    assert_eq!(
+        uninstall.describe(),
+        "flayer uninstall -p ../collapse rule:git/commits"
+    );
+    assert!(install.writes() && uninstall.writes());
+
+    let line = install.commands().remove(0);
+    let Some(mindflayer_cli::FlayerCommand::Install {
+        projects,
+        all_projects,
+        name,
+        from,
+        force,
+    }) = FlayerCli::try_parse_from(&line).unwrap().command
+    else {
+        panic!("{line:?}");
+    };
+    assert_eq!(projects, ["alpha", "./-odd"]);
+    assert!(!all_projects && !force);
+    assert_eq!(name.as_deref(), Some("skill:deploy"));
+    assert_eq!(
+        from.as_deref(),
+        Some("https://example.com/acme/skills#main")
+    );
+
+    let line = uninstall.commands().remove(0);
+    let Some(mindflayer_cli::FlayerCommand::Uninstall {
+        projects,
+        name,
+        orphaned,
+        force,
+        ..
+    }) = FlayerCli::try_parse_from(&line).unwrap().command
+    else {
+        panic!("{line:?}");
+    };
+    assert_eq!(projects, ["../collapse"]);
+    assert_eq!(name.as_deref(), Some("rule:git/commits"));
+    assert!(!orphaned && !force);
+}
+
+#[test]
+fn an_install_task_installs_into_every_project_it_names_and_an_uninstall_takes_it_out() {
+    let (dir, _workspace, _ledger) = shelved(&["collapse", "tanukeys"], &["deploy"]);
+    let mut app = tui_in(dir.path());
+    let projects = vec![String::from("collapse"), String::from("tanukeys")];
+
+    tui::step(
+        &mut app,
+        Task::Install {
+            projects: projects.clone(),
+            kind: Kind::Skill,
+            name: String::from("deploy"),
+            from: None,
+        },
+    );
+    for project in &projects {
+        for copy in copies(&dir.path().join(project), "deploy") {
+            assert!(copy.join("SKILL.md").is_file(), "{}", copy.display());
+        }
+    }
+    tui::step(
+        &mut app,
+        Task::Uninstall {
+            projects: projects.clone(),
+            kind: Kind::Skill,
+            name: String::from("deploy"),
+        },
+    );
+
+    for project in &projects {
+        for copy in copies(&dir.path().join(project), "deploy") {
+            assert!(!copy.exists(), "{}", copy.display());
+        }
+    }
+    let transcript = app.transcript();
+    assert!(
+        transcript.starts_with(
+            "$ flayer install -p collapse -p tanukeys skill:deploy\n\
+             installed deploy into collapse, from "
+        ),
+        "{transcript}"
+    );
+    assert!(
+        transcript.contains(
+            "$ flayer uninstall -p collapse -p tanukeys skill:deploy\n\
+             removed deploy from collapse\n\
+             removed deploy from tanukeys\n"
+        ),
+        "{transcript}"
+    );
 }
 
 // ---------------------------------------------------------------------------

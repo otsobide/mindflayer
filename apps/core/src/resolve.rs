@@ -308,6 +308,41 @@ impl FlayerWorkspace {
             }),
         }
     }
+
+    /// What names `project` to [`pick`](Self::pick) and picks nothing else:
+    /// its entry as the marker spells it, or that entry from the root
+    /// (`./alpha`) when another project declares the entry as its name,
+    /// which a path from the root never is.
+    ///
+    /// For a front end that turns a project chosen on a screen into the `-p`
+    /// of a line somebody can run again. The entry rather than the name,
+    /// which reads better but which two projects can declare, as `unlink`
+    /// and the TUI's `-C` spell a project by its entry; and only then from
+    /// the root, which reads worse, so a line names a project the way
+    /// somebody would type it whenever that is enough.
+    pub fn naming(&self, project: &MindProject) -> String {
+        let members = self.members();
+        let entry = members
+            .iter()
+            .find(|member| same_directory(&member.root, project.root()))
+            .map_or_else(
+                || self.entry_for(project.root()),
+                |member| member.entry.clone(),
+            );
+        let spelled = stored(&entry);
+        let taken = members.iter().any(|member| {
+            !same_directory(&member.root, project.root())
+                && member
+                    .project
+                    .as_ref()
+                    .is_ok_and(|other| other.name() == spelled)
+        });
+        if taken && entry.is_relative() {
+            format!("./{spelled}")
+        } else {
+            spelled
+        }
+    }
 }
 
 /// An entry as the marker spells it, `/`-separated on every platform.

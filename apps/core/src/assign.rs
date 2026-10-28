@@ -14,7 +14,8 @@
 //! as an update and a migration of every project go ahead past one.
 //!
 //! The workspace's lock is taken by each project's install, not held across
-//! them all, as the install screen's batch takes it. Nothing ties one
+//! them all, nor across the lines the install screen runs, each of which is
+//! one of these batches. Nothing ties one
 //! project's install to another's, so a writer elsewhere in the workspace has
 //! no reason to wait for every project, and holding the lock once would mean
 //! a second body of each install, rules' included, that runs under a lock it
