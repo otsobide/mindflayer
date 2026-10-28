@@ -4,16 +4,18 @@
 
 use std::path::Path;
 
+use mindflayer_core::assign::{self, Offered};
 use mindflayer_core::install::rules::Rendered;
 use mindflayer_core::{AgentHomes, FlayerWorkspace, Kind, MindProject, Reference};
 
-use crate::commands::gather::scrubbed;
+use crate::commands::gather::{scrubbed, Scrubbed};
 use crate::commands::workspace::load_warnings;
 use crate::{CliError, Failure, Outcome};
 
 /// Put what `typed` names into one project, from wherever it is offered: a
 /// skill or a rule, by its name alone or qualified (`rule:git/commits`), as
-/// core finds it ([`offered_typed`](mindflayer_core::install::offered_typed)).
+/// core finds it ([`offered_typed`](mindflayer_core::install::offered_typed)),
+/// through core's batch of one ([`assign::install`]).
 ///
 /// `from` may be a path to a loaded workspace typed from `directory`, as it was
 /// given to `load`. What the loaded workspaces could not offer is said as
@@ -39,86 +41,115 @@ pub(crate) fn install_named(
     homes: &AgentHomes,
     force: bool,
 ) -> Result<Outcome, Failure> {
-    use mindflayer_core::install::{self as installing, Installed};
-    use mindflayer_core::Excluded;
-
     let reference = Reference::parse(typed);
     let loads = load_warnings(workspace);
-    let (ledger, scrub) = workspace.ledger_to_write().map_err(|error| {
+    let assigned = assign::install(
+        workspace,
+        std::slice::from_ref(project),
+        &reference,
+        from,
+        directory,
+        homes,
+        edits(force),
+    )
+    .map_err(|error| {
         let mut warnings = loads.clone();
-        warnings.extend(misplaced(project, &installing::kinds_named(&reference)));
+        warnings.extend(misplaced(
+            project,
+            &mindflayer_core::install::kinds_named(&reference),
+        ));
         Failure {
             error: Box::new(error.into()),
             warnings,
         }
     })?;
-    let said = scrubbed(&scrub);
-    let candidate =
-        installing::offered_typed(workspace, &ledger, project, &reference, from, directory)
-            .map_err(|error| {
-                // What the scrub said goes with an error too: it happened all
-                // the same.
-                let mut told = said.clone().lines();
-                told.extend(loads.iter().cloned());
-                told.extend(misplaced(project, &installing::kinds_named(&reference)));
-                Failure {
-                    error: Box::new(error.into()),
-                    warnings: told,
-                }
-            })?;
+    let said = scrubbed(&assigned.scrub);
+    let mut parts = assigned.parts.into_iter();
+    let Some(part) = parts.next() else {
+        // A batch of one project hands back its part.
+        return Ok(said.before(Outcome::plain(String::new())));
+    };
+    // What the scrub said goes first, with an error too: it happened all the
+    // same.
+    alone(
+        said,
+        install_said(&part.project, part.done, &reference, &loads),
+    )
+}
+
+/// One project's part of an install, `done`, as a command that installs into
+/// it alone says it: a line of what it did and what there is to say beside
+/// it, or why it was refused. `loads` are what the loaded workspaces could
+/// not offer, said before what is said of the project's folders.
+fn install_said(
+    project: &MindProject,
+    done: assign::Install,
+    reference: &Reference,
+    loads: &[String],
+) -> Result<Outcome, Failure> {
+    use mindflayer_core::install::{self as installing, Installed};
+    use mindflayer_core::Excluded;
+
+    let Offered {
+        candidate,
+        installed,
+    } = done.map_err(|error| {
+        let mut told = loads.to_vec();
+        told.extend(misplaced(project, &installing::kinds_named(reference)));
+        Failure {
+            error: Box::new(error.into()),
+            warnings: told,
+        }
+    })?;
     let kind = candidate.kind();
-    let mut warnings = loads;
+    let mut warnings = loads.to_vec();
     warnings.extend(misplaced(project, &[kind]));
     let origin = candidate.origin();
     let into = project.name();
-    let done =
-        installing::install_with(workspace, &ledger, project, &candidate, homes, edits(force))
-            .map_err(|error| {
-                // What it cleared before it failed comes first, being what it did,
-                // after only what the scrub before it did: on stderr with the error,
-                // the only place a failure prints.
-                let mut told = said.clone().lines();
-                told.extend(cleared(project, error.swept()));
-                told.extend(warnings.iter().cloned());
-                Failure {
-                    error: Box::new(error.into()),
-                    warnings: told,
-                }
-            })?;
+    let done = installed.map_err(|error| {
+        // What it cleared before it failed comes first, being what it did:
+        // on stderr with the error, the only place a failure prints.
+        let mut told = cleared(project, error.swept());
+        told.extend(warnings.iter().cloned());
+        Failure {
+            error: Box::new(error.into()),
+            warnings: told,
+        }
+    })?;
     let unhashed = done.installed.unhashed().map(str::to_owned);
     let mut outcome = match done.installed {
-            Installed::Added { name, .. } => Outcome::plain(format!(
-                "installed {} into {into}, from {origin}\n",
-                named(kind, &name)
-            )),
-            Installed::Updated { name, .. } => Outcome::plain(format!(
-                "updated {} in {into}, from {origin}\n",
-                named(kind, &name)
-            )),
-            Installed::Unchanged { name, .. } => Outcome::plain(format!(
-                "{} in {into} was already current\n",
-                named(kind, &name)
-            )),
-            // Refused rather than obeyed: somebody wrote that one.
-            Installed::Foreign { name, path } => Outcome {
-                stdout: String::new(),
-                stderr: vec![format!(
-                    "warning: {into} already has a {} at {} that Mindflayer did not put there, so it was left alone",
-                    named(kind, &name),
-                    shown(project, &path)
-                )],
-                ok: false,
-            },
-            // And so is a copy somebody changed since, until forced.
-            Installed::Edited { name, paths } => Outcome {
-                stdout: String::new(),
-                stderr: vec![format!(
-                    "warning: {} in {into} was changed since it was installed, at {}, so it was left alone; --force writes over it",
-                    named(kind, &name),
-                    listed(project, &paths)
-                )],
-                ok: false,
-            },
+        Installed::Added { name, .. } => Outcome::plain(format!(
+            "installed {} into {into}, from {origin}\n",
+            named(kind, &name)
+        )),
+        Installed::Updated { name, .. } => Outcome::plain(format!(
+            "updated {} in {into}, from {origin}\n",
+            named(kind, &name)
+        )),
+        Installed::Unchanged { name, .. } => Outcome::plain(format!(
+            "{} in {into} was already current\n",
+            named(kind, &name)
+        )),
+        // Refused rather than obeyed: somebody wrote that one.
+        Installed::Foreign { name, path } => Outcome {
+            stdout: String::new(),
+            stderr: vec![format!(
+                "warning: {into} already has a {} at {} that Mindflayer did not put there, so it was left alone",
+                named(kind, &name),
+                shown(project, &path)
+            )],
+            ok: false,
+        },
+        // And so is a copy somebody changed since, until forced.
+        Installed::Edited { name, paths } => Outcome {
+            stdout: String::new(),
+            stderr: vec![format!(
+                "warning: {} in {into} was changed since it was installed, at {}, so it was left alone; --force writes over it",
+                named(kind, &name),
+                listed(project, &paths)
+            )],
+            ok: false,
+        },
     };
     let name = named(kind, candidate.name());
     outcome.stdout.push_str(&swept(project, &done.swept));
@@ -165,7 +196,19 @@ pub(crate) fn install_named(
         outcome.stderr.extend(warnings);
         outcome.ok = false;
     }
-    Ok(said.before(outcome))
+    Ok(outcome)
+}
+
+/// One project's part, `said`, as a command given that project alone ends:
+/// with what opening the ledger scrubbed before it, an error included.
+fn alone(scrub: Scrubbed, said: Result<Outcome, Failure>) -> Result<Outcome, Failure> {
+    match said {
+        Ok(outcome) => Ok(scrub.before(outcome)),
+        Err(mut failure) => {
+            failure.warnings.splice(0..0, scrub.lines());
+            Err(failure)
+        }
+    }
 }
 
 /// How a line about installing names what it is about: a skill by its name
@@ -292,8 +335,9 @@ pub(crate) fn shown(project: &MindProject, path: &Path) -> String {
 
 /// Take what `typed` names, a skill or a rule Mindflayer installed, back out
 /// of one project, handing core the agents' own folders, `homes`, as an
-/// install does. `force` takes out a copy edited since it was installed,
-/// which core otherwise leaves alone with the rest.
+/// install does, through core's batch of one ([`assign::uninstall`]).
+/// `force` takes out a copy edited since it was installed, which core
+/// otherwise leaves alone with the rest.
 pub(crate) fn uninstall_named(
     workspace: &FlayerWorkspace,
     project: &MindProject,
@@ -301,27 +345,32 @@ pub(crate) fn uninstall_named(
     homes: &AgentHomes,
     force: bool,
 ) -> Result<Outcome, Failure> {
-    use mindflayer_core::install::{self as installing, Removed};
-
     let reference = Reference::parse(typed);
-    let (ledger, scrub) = workspace.ledger_to_write().map_err(CliError::from)?;
-    let said = scrubbed(&scrub);
-    let from = project.name();
-    let failed = |error: CliError, said: super::gather::Scrubbed| Failure {
-        error: Box::new(error),
-        warnings: said.lines(),
-    };
-    let (kind, taken) = match installing::uninstall_typed(
+    let assigned = assign::uninstall(
         workspace,
-        &ledger,
-        project,
+        std::slice::from_ref(project),
         &reference,
         homes,
         edits(force),
-    ) {
-        Ok(taken) => taken,
-        Err(error) => return Err(failed(error.into(), said)),
+    )
+    .map_err(CliError::from)?;
+    let said = scrubbed(&assigned.scrub);
+    let mut parts = assigned.parts.into_iter();
+    let Some(part) = parts.next() else {
+        // A batch of one project hands back its part.
+        return Ok(said.before(Outcome::plain(String::new())));
     };
+    alone(said, uninstall_said(&part.project, part.done))
+}
+
+/// One project's part of an uninstall, `done`, as a command that takes it
+/// out of that project alone says it: a line of what it took out and what
+/// there is to say beside it, or why it was not.
+fn uninstall_said(project: &MindProject, done: assign::Uninstall) -> Result<Outcome, Failure> {
+    use mindflayer_core::install::Removed;
+
+    let from = project.name();
+    let (kind, taken) = done.map_err(CliError::from)?;
     match taken {
         Removed::Removed {
             name,
@@ -342,9 +391,9 @@ pub(crate) fn uninstall_named(
                 outcome.stderr.push(still(&name, from, &reason));
                 outcome.ok = false;
             }
-            Ok(said.before(outcome))
+            Ok(outcome)
         }
-        Removed::Foreign { name, path } => Ok(said.before(Outcome {
+        Removed::Foreign { name, path } => Ok(Outcome {
             stdout: String::new(),
             stderr: vec![format!(
                 "warning: {} at {} in {from} was not installed by Mindflayer, so it was left alone",
@@ -352,8 +401,8 @@ pub(crate) fn uninstall_named(
                 shown(project, &path)
             )],
             ok: false,
-        })),
-        Removed::Edited { name, paths } => Ok(said.before(Outcome {
+        }),
+        Removed::Edited { name, paths } => Ok(Outcome {
             stdout: String::new(),
             stderr: vec![format!(
                 "warning: {} in {from} was changed since it was installed, at {}, so it was left alone; --force takes it out",
@@ -361,15 +410,13 @@ pub(crate) fn uninstall_named(
                 listed(project, &paths)
             )],
             ok: false,
-        })),
+        }),
         // Taking out something that is not there is a typo far more often
         // than it is a no-op, the reason `unlink` says so too.
-        Removed::Absent { name } => Err(failed(
-            CliError::NotInstalled {
-                name: named(kind, &name),
-                project: from.to_owned(),
-            },
-            said,
-        )),
+        Removed::Absent { name } => Err(CliError::NotInstalled {
+            name: named(kind, &name),
+            project: from.to_owned(),
+        }
+        .into()),
     }
 }
