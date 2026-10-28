@@ -584,9 +584,11 @@ fn workspace_view(
             .map(|registered| member(registered, workspace, lookup)),
     );
     // Spelled from the workspace root, the default, where the TUI runs its
-    // lines.
+    // lines, and in the order `flayer scan --suggest` lists them, which core
+    // ranks: the screens show it rather than sorting their own.
     let request = scan::Request {
         roots: roots.to_vec(),
+        order: scan::Order::Suggested,
         ..scan::Request::default()
     };
     let scanned = scan(workspace, &request);
@@ -599,6 +601,8 @@ fn workspace_view(
             route: found.route,
             mind: found.mind,
             moved: found.moved,
+            reason: found.reason,
+            agent_files: found.agent_files,
         })
         .collect();
     Workspace {

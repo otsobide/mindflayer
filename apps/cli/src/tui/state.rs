@@ -13,6 +13,7 @@ use std::sync::mpsc::{Receiver, TryRecvError};
 use std::sync::Arc;
 
 use mindflayer_core::gather::{Progress, Watch};
+use mindflayer_core::scan;
 use mindflayer_core::url::redacted;
 use mindflayer_core::{
     paths, Agent, Kind, Layout, MarkerFile, Reason, Share, State, DEFAULT_SUBDIRECTORY, QUALIFIER,
@@ -62,7 +63,8 @@ pub struct Workspace {
     /// the order the marker lists them. On its own, a project is the one.
     pub members: Vec<Member>,
     /// What sits under the root, or under the folders `flayer minds` was
-    /// given, and could be linked, but is not.
+    /// given, and could be linked, but is not, most worth linking first, in
+    /// the order `flayer scan --suggest` gives.
     pub unlinked: Vec<Unlinked>,
     /// Where `unlinked` was looked for: the folders `flayer minds` was
     /// given, none meaning the root.
@@ -268,6 +270,11 @@ pub struct Unlinked {
     /// The entry it moved from, as the scan spelled it, when it holds the id
     /// the workspace last saw at an entry where no project is any more.
     pub moved: Option<String>,
+    /// Why it is worth linking, which core ranked it by.
+    pub reason: scan::Reason,
+    /// The names at its root an agent reads, which make a repository's
+    /// reason.
+    pub agent_files: Vec<String>,
 }
 
 // ---------------------------------------------------------------------------
@@ -3108,7 +3115,9 @@ impl Reader {
         ));
         lines.push((
             Tone::Info,
-            String::from("What the link form offers is what `flayer scan` lists."),
+            String::from(
+                "What the link form and m offer is what `flayer scan --suggest` lists, in its order.",
+            ),
         ));
         let legend: Vec<String> = Agent::ALL
             .iter()

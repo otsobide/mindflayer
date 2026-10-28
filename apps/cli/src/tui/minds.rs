@@ -2,7 +2,9 @@
 //! it does, to link and unlink in one pass.
 //!
 //! What the link form and `u` do one project at a time, for everything under
-//! the workspace at once, or under the folders `flayer minds` was given.
+//! the workspace at once, or under the folders `flayer minds` was given,
+//! listed as `flayer scan --suggest` lists them: what is not linked first,
+//! most worth linking first, each with why, then what is.
 //! Ticking only marks. Applying runs the commands the
 //! marks amount to (`mind -C <path> init` for a repository that is not a
 //! project yet, then one `flayer link` and one `flayer unlink`), so, as
@@ -11,6 +13,7 @@
 use ratatui::crossterm::event::KeyCode;
 
 use super::state::{Task, Workspace};
+use crate::commands::project::worth_linking;
 
 /// Where a row stands now, which decides what ticking or unticking it asks.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -42,6 +45,9 @@ pub struct Row {
     pub path: String,
     pub standing: Standing,
     pub ticked: bool,
+    /// Why it is worth linking, in the words `flayer scan --suggest` says it
+    /// with; empty for one linked.
+    pub why: String,
 }
 
 impl Row {
@@ -74,15 +80,31 @@ pub struct Minds {
 }
 
 impl Minds {
-    /// Every registered project, ticked, and every one found that is not,
-    /// unticked, all in one list by path, because the question it answers is
-    /// "which of these", not "which kind".
+    /// Every one found that is not registered, unticked, in the order the
+    /// scan ranked them, then every registered project, ticked, by path: the
+    /// order `flayer scan --suggest` lists them in, because what the screen
+    /// is opened for is what to link next.
     ///
-    /// Every registered one, even given folders to look under: a folder
-    /// names where to look for more, not which of the workspace's own to
-    /// show, and a project linked from elsewhere is one to untick too.
+    /// Not sorted here: which is most worth linking is core's to say, and a
+    /// screen sorting its own rows could rank them differently from the
+    /// command it shows. Every registered one, even given folders to look
+    /// under: a folder names where to look for more, not which of the
+    /// workspace's own to show, and a project linked from elsewhere is one
+    /// to untick too.
     pub fn of(workspace: &Workspace) -> Self {
         let mut rows: Vec<Row> = workspace
+            .unlinked
+            .iter()
+            .map(|unlinked| Row {
+                path: unlinked.route.clone(),
+                standing: Standing::Found {
+                    mind: unlinked.mind,
+                },
+                ticked: false,
+                why: worth_linking(unlinked.reason, &unlinked.agent_files),
+            })
+            .collect();
+        let mut linked: Vec<Row> = workspace
             .members
             .iter()
             .filter(|member| !member.own)
@@ -92,16 +114,11 @@ impl Minds {
                     opens: member.holdings.is_ok(),
                 },
                 ticked: true,
+                why: String::new(),
             })
             .collect();
-        rows.extend(workspace.unlinked.iter().map(|unlinked| Row {
-            path: unlinked.route.clone(),
-            standing: Standing::Found {
-                mind: unlinked.mind,
-            },
-            ticked: false,
-        }));
-        rows.sort_by(|a, b| a.path.cmp(&b.path));
+        linked.sort_by(|a, b| a.path.cmp(&b.path));
+        rows.extend(linked);
         Self { rows, cursor: 0 }
     }
 

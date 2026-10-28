@@ -19,6 +19,7 @@ use super::state::{
     Mode, Reader, RenameForm, Running, Scope, SettingsForm, TargetsForm, Task, Tone, View,
     Workspace, GATHER_FIELDS,
 };
+use crate::commands::project::worth_linking;
 use crate::install::ui::{centred, pane, selected};
 use crate::progress::said;
 use crate::render::{plural, printable};
@@ -912,10 +913,13 @@ fn linking(app: &App, form: &LinkForm, frame: &mut Frame, area: Rect) {
             .map(|unlinked| {
                 let route = printable(&unlinked.route);
                 let padding = " ".repeat(width.saturating_sub(route.chars().count()));
+                // Why, as the minds screen and `flayer scan --suggest` say
+                // it, since the list is in their order.
+                let why = worth_linking(unlinked.reason, &unlinked.agent_files);
                 let what = if unlinked.mind {
-                    Span::styled("  mind project", dim())
+                    Span::styled(format!("  {why}"), dim())
                 } else {
-                    Span::styled("  git repository (mind init first)", warn())
+                    Span::styled(format!("  {}", found_repository(&why)), warn())
                 };
                 ListItem::new(Line::from(vec![
                     Span::raw(format!("{route}{padding}")),
@@ -1260,7 +1264,7 @@ fn minds_screen(app: &App, screen: &Minds, frame: &mut Frame, area: Rect) {
     let said = screen
         .rows
         .iter()
-        .map(|row| standing(row.standing).0.chars().count())
+        .map(|row| standing(row).0.chars().count())
         .max()
         .unwrap_or(0);
     let items: Vec<ListItem> = screen
@@ -1287,7 +1291,7 @@ fn mind_row(row: &minds::Row, width: usize, said: usize) -> ListItem<'_> {
     };
     let path = printable(&row.path);
     let padding = " ".repeat(width.saturating_sub(path.chars().count()));
-    let (standing, style) = standing(row.standing);
+    let (standing, style) = standing(row);
     let after = " ".repeat(said.saturating_sub(standing.chars().count()));
     let mut spans = vec![
         Span::styled(
@@ -1310,17 +1314,24 @@ fn mind_row(row: &minds::Row, width: usize, said: usize) -> ListItem<'_> {
     ListItem::new(Line::from(spans))
 }
 
-/// Where a row stands, in words, and how loudly.
-fn standing(standing: minds::Standing) -> (&'static str, Style) {
-    match standing {
-        minds::Standing::Linked { opens: true } => ("linked", dim()),
+/// Where a row stands, in words, and how loudly: for one found, why it is
+/// worth linking.
+fn standing(row: &minds::Row) -> (String, Style) {
+    match row.standing {
+        minds::Standing::Linked { opens: true } => (String::from("linked"), dim()),
         minds::Standing::Linked { opens: false } => (
-            "cannot be opened; untick it to unlink",
+            String::from("cannot be opened; untick it to unlink"),
             Style::default().fg(Color::Red),
         ),
-        minds::Standing::Found { mind: true } => ("mind project", dim()),
-        minds::Standing::Found { mind: false } => ("git repository (mind init first)", warn()),
+        minds::Standing::Found { mind: true } => (row.why.clone(), dim()),
+        minds::Standing::Found { mind: false } => (found_repository(&row.why), warn()),
     }
+}
+
+/// A repository found, by why it is worth linking, and what linking it
+/// takes first: on the minds screen and in the link form alike.
+fn found_repository(why: &str) -> String {
+    format!("{why} (mind init first)")
 }
 
 /// Drawn while a command runs, which for a gather means the network.
