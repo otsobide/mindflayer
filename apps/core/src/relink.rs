@@ -14,7 +14,7 @@
 //! own.
 
 use std::fmt;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use thiserror::Error;
 
@@ -22,8 +22,202 @@ use crate::exclude::{self, ExcludeError, Followed};
 use crate::gather::Scrub;
 use crate::install;
 use crate::ledger::LedgerError;
+use crate::paths;
 use crate::settings::{ProjectId, Share};
 use crate::workspace::{same_directory, FlayerWorkspace, MindProject, WorkspaceError};
+
+/// What [`relink`] did.
+#[derive(Debug)]
+pub struct Relinked {
+    /// What the project is called.
+    pub name: String,
+    /// The entry that pointed where it was, as the marker spelled it.
+    pub was: PathBuf,
+    /// The entry that points where it is now, as the marker spells it.
+    pub entry: PathBuf,
+    /// The id it holds, which is how it was found.
+    pub id: ProjectId,
+    /// How many installations the ledger records of it, which moved with it.
+    pub installations: usize,
+    /// What became of its group in the exclude file, for a local project:
+    /// carried to where it is ([`exclude::carry`]). `None` for a shared one.
+    pub excluded: Option<Followed>,
+    /// What opening the ledger took out that an older build stored with a
+    /// credential, for the front end to say.
+    pub scrub: Scrub,
+}
+
+/// Follow the project the workspace links at `old`, a directory that no
+/// longer holds it, to `new`, which does: the entry is rewritten to point
+/// there, in its place in the marker, and every record the ledger keeps of
+/// it moves with it, so what was installed reads as it did before the move.
+///
+/// `new` is `old`'s project when it holds the id the ledger last saw at
+/// `old`, which nothing but a copy shares. So it is refused when:
+///
+/// - `old` is no entry of the workspace's;
+/// - `new` is no project, or one a `mind.toml` marks, which has no id to be
+///   found by (moves of those are found by nobody), or one the workspace
+///   links already, which would leave two entries for one project;
+/// - `old` still holds a project, which has not moved: with `new`'s id, a
+///   copy made with its `.mind` ([`Duplicate`]), and with any other, or
+///   none, another project;
+/// - another project the workspace links holds `new`'s id: a copy too,
+///   refused until one of the two is given an id of its own ([`new_id`]). A
+///   copy nobody linked is beyond what this reads; `flayer scan` names it,
+///   and never offers a duplicate as a move;
+/// - the ledger last saw another id at `old`, or `new`'s at an entry other
+///   than `old`, which is where `new` moved from, if anywhere;
+/// - the ledger records something at `old` but no id, as it records a
+///   project's installs from before ids were kept: nothing says they were
+///   `new`'s project's, and handing them to it would let Mindflayer write
+///   over or delete what sits at the paths they name.
+///
+/// A workspace whose ledger knows nothing of `old`, or has none, has no
+/// record to keep, and the entry alone moves.
+///
+/// Holds the workspace's lock from before the ledger is read for its checks
+/// until the entry and the records are written, which go together or not
+/// at all ([`Ledger::relinked`]): a relink at the same moment, or an install
+/// into either, comes wholly before it or wholly after. A local project's
+/// exclude lines are carried first ([`exclude::carry`]), where the project
+/// is now, and back again if the entry cannot be written.
+///
+/// [`Ledger::relinked`]: crate::ledger::Ledger::relinked
+pub fn relink(
+    workspace: &mut FlayerWorkspace,
+    old: &Path,
+    new: &Path,
+) -> Result<Relinked, RelinkError> {
+    let old = paths::normalize(old);
+    let new = paths::normalize(new);
+    if !workspace.is_linked(&old) {
+        return Err(WorkspaceError::NotRegistered {
+            path: old,
+            workspace: workspace.root().to_path_buf(),
+        }
+        .into());
+    }
+    let project = MindProject::open(&new)?;
+    let Some(settings) = project.settings().cloned() else {
+        return Err(RelinkError::NoId {
+            path: new,
+            marker: project.marker_file(),
+        });
+    };
+    if let Some(entry) = workspace.linked_as(&new) {
+        return Err(RelinkError::Linked {
+            path: new,
+            entry: entry.to_path_buf(),
+        });
+    }
+    if let Ok(there) = MindProject::open(&old) {
+        return Err(match there.settings() {
+            Some(held) if held.id == settings.id => RelinkError::Copied(Duplicate {
+                id: settings.id,
+                paths: vec![old, new],
+            }),
+            _ => RelinkError::Present {
+                path: old,
+                name: there.name().to_owned(),
+            },
+        });
+    }
+    // Another project the workspace links holding the id is a copy too, and
+    // which of the two the records were made for is nobody's to guess.
+    let copy = workspace.members().into_iter().find(|member| {
+        member
+            .project
+            .as_ref()
+            .ok()
+            .and_then(MindProject::settings)
+            .is_some_and(|held| held.id == settings.id)
+    });
+    if let Some(copy) = copy {
+        return Err(RelinkError::Copied(Duplicate {
+            id: settings.id,
+            paths: vec![copy.root, new],
+        }));
+    }
+
+    let (ledger, scrub) = if workspace.ledger_path().is_file() {
+        let (ledger, scrub) = workspace.ledger_to_write()?;
+        (Some(ledger), scrub)
+    } else {
+        (None, Scrub::default())
+    };
+    let _lock = workspace.lock().map_err(WorkspaceError::from)?;
+    let from = install::entry_for_root(workspace, &old);
+    let to = install::route(workspace.root(), &new);
+    if let Some(ledger) = &ledger {
+        match ledger.project_at(&from)? {
+            Some(was) if was == settings.id => {}
+            Some(was) => {
+                return Err(RelinkError::Mismatch {
+                    old,
+                    was,
+                    new,
+                    id: settings.id,
+                })
+            }
+            None => {
+                let seen = ledger
+                    .known_projects()?
+                    .into_iter()
+                    .find(|(id, _)| *id == settings.id)
+                    .map(|(_, route)| route);
+                let elsewhere = seen.filter(|route| {
+                    workspace
+                        .members()
+                        .iter()
+                        .any(|member| install::entry_for_root(workspace, &member.root) == *route)
+                });
+                if let Some(route) = elsewhere {
+                    return Err(RelinkError::Elsewhere {
+                        path: new,
+                        id: settings.id,
+                        at: workspace.root().join(route),
+                    });
+                }
+                if ledger.holds(&from)? {
+                    return Err(RelinkError::Unknown { path: old });
+                }
+            }
+        }
+    }
+
+    let id = settings.id.clone();
+    let excluded = match settings.share {
+        Share::Local => Some(exclude::carry(&old, id.as_str(), &new, id.as_str())?),
+        Share::Shared => None,
+    };
+    let written = match &ledger {
+        Some(ledger) => ledger
+            .relinked(&from, &to, &id, || workspace.relink_held(&old, &new))?
+            .map(|((was, entry), moved)| (was, entry, moved)),
+        None => workspace
+            .relink_held(&old, &new)
+            .map(|(was, entry)| (was, entry, 0)),
+    };
+    let (was, entry, installations) = match written {
+        Ok(written) => written,
+        Err(error) => {
+            if excluded.is_some() {
+                let _ = exclude::carry(&new, id.as_str(), &old, id.as_str());
+            }
+            return Err(error.into());
+        }
+    };
+    Ok(Relinked {
+        name: project.name().to_owned(),
+        was,
+        entry,
+        id,
+        installations,
+        excluded,
+        scrub,
+    })
+}
 
 /// What [`new_id`] did.
 #[derive(Debug)]
@@ -185,4 +379,56 @@ pub enum RelinkError {
     Ledger(#[from] LedgerError),
     #[error(transparent)]
     Exclude(#[from] ExcludeError),
+    /// A project with no id, which nothing can tell is the one another entry
+    /// was: one a `mind.toml` marks.
+    #[error(
+        "{path}: a {marker} marks it, which names it by no id, so nothing says it is the project \
+         another entry was; `flayer link` links it as one of its own"
+    )]
+    NoId {
+        path: PathBuf,
+        marker: crate::workspace::MarkerFile,
+    },
+    /// The directory a relink would point an entry at is linked already.
+    #[error(
+        "{path}: the workspace links it already, as {}; `flayer unlink` that entry first",
+        crate::paths::to_config_string(entry).unwrap_or_else(|| entry.display().to_string())
+    )]
+    Linked { path: PathBuf, entry: PathBuf },
+    /// The entry and the directory hold one id: a copy, not a move.
+    #[error("{0}")]
+    Copied(Duplicate),
+    /// The entry still holds a project, so it has not moved.
+    #[error(
+        "{path}: still holds a project, {name}, so it has not moved; `flayer link` links the \
+         other as a project of its own"
+    )]
+    Present { path: PathBuf, name: String },
+    /// The directory holds another project than the one the entry was.
+    #[error(
+        "{new}: holds project {id}, and {old} was project {was}, so it is not where that one \
+         moved; nothing was changed"
+    )]
+    Mismatch {
+        old: PathBuf,
+        was: ProjectId,
+        new: PathBuf,
+        id: ProjectId,
+    },
+    /// The directory holds the project another entry was.
+    #[error(
+        "{path}: holds project {id}, which the workspace last saw at {at}; `flayer relink {at} \
+         {path}` follows it from there"
+    )]
+    Elsewhere {
+        path: PathBuf,
+        id: ProjectId,
+        at: PathBuf,
+    },
+    /// The entry has records no id says whose they were.
+    #[error(
+        "{path}: the ledger records what was installed there but no id it was installed for, so \
+         nothing says which project it was; `flayer unlink` it and `flayer link` the other"
+    )]
+    Unknown { path: PathBuf },
 }

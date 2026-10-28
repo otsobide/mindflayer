@@ -1550,6 +1550,74 @@ impl FlayerWorkspace {
         self.unlink_all(&[project_root.to_path_buf()])
     }
 
+    /// Point the workspace's entry for the directory `old` at `new` instead,
+    /// where it stands in the marker, and hand back both spellings: what the
+    /// entry was, and what it is now, the route [`link`](Self::link) would
+    /// have written for `new`. Every other entry pointing at `old` goes, as
+    /// [`unlink`](Self::unlink) takes every spelling of one directory.
+    ///
+    /// In place rather than an unlink and a link, so the entry keeps its
+    /// place in the list and the comments around it, which a person put
+    /// there about the project, not about where it was. For
+    /// [`crate::relink::relink`], which holds the workspace's lock and has
+    /// said `new` is `old`'s project, moved. Refused when no entry points at
+    /// `old`, matched against the array being edited, as `link` matches.
+    pub(crate) fn relink_held(
+        &mut self,
+        old: &Path,
+        new: &Path,
+    ) -> Result<(PathBuf, PathBuf), WorkspaceError> {
+        let entry = self.entry_for(new);
+        let written =
+            paths::to_config_string(&entry).ok_or_else(|| WorkspaceError::NonUtf8Path {
+                path: entry.clone(),
+            })?;
+        let target = paths::normalize(old);
+        let moved = paths::normalize(new);
+        let root = self.root.clone();
+        let edited = self.edit_marker_held(|document| {
+            let Some(array) = document
+                .get_mut(PROJECTS_KEY)
+                .and_then(toml_edit::Item::as_array_mut)
+            else {
+                return Ok(None);
+            };
+            // Looked at again here, under the lock: a link made since the
+            // caller looked would leave two entries for one project.
+            if let Some(linked) = entries(array)
+                .into_iter()
+                .find(|entry| points_at(&root, entry, &moved))
+            {
+                return Err(format!(
+                    "{} is linked already, as {}",
+                    new.display(),
+                    linked.display()
+                ));
+            }
+            let Some(index) = array.iter().position(|value| {
+                value
+                    .as_str()
+                    .is_some_and(|entry| points_at(&root, Path::new(entry), &target))
+            }) else {
+                return Ok(None);
+            };
+            let was = array
+                .get(index)
+                .and_then(|value| value.as_str())
+                .map(PathBuf::from);
+            array.replace(index, written.as_str());
+            remove_pointing_at(array, &root, &target);
+            Ok(was)
+        })?;
+        match edited {
+            Some(was) => Ok((was, PathBuf::from(&written))),
+            None => Err(WorkspaceError::NotRegistered {
+                path: old.to_path_buf(),
+                workspace: self.root.clone(),
+            }),
+        }
+    }
+
     /// [`unlink`](Self::unlink) several at once, in one rewrite of the file:
     /// all of them or, if any is not registered, none. Two spellings of one
     /// directory are one project, not a second one to fail on.

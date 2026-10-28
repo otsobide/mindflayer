@@ -231,3 +231,262 @@ fn two_linked_copies_are_a_failure_of_the_status_naming_both() {
         "{said:?}"
     );
 }
+
+/// Install `deploy`, the workspace's own, into `project`.
+fn install_deploy(workspace: &FlayerWorkspace, project: &MindProject) {
+    let (ledger, _) = workspace.ledger_to_write().unwrap();
+    let candidate =
+        install::offered(workspace, &ledger, project, Kind::Skill, "deploy", None).unwrap();
+    install::install(
+        workspace,
+        &ledger,
+        project,
+        &candidate,
+        &AgentHomes::default(),
+    )
+    .unwrap();
+}
+
+/// A project marked by its settings at `root`, local, linked by `workspace`.
+fn linked(workspace: &mut FlayerWorkspace, root: &Path) -> MindProject {
+    fs::create_dir_all(root).unwrap();
+    let (project, _) =
+        MindProject::init_asked(root, &Agent::ALL, Share::Local, &Directories::default()).unwrap();
+    workspace.link(&project).unwrap();
+    project
+}
+
+fn marker(workspace: &FlayerWorkspace) -> String {
+    fs::read_to_string(workspace.config_path()).unwrap()
+}
+
+/// How each artifact of the project at `entry` stands, as `flayer status`
+/// reports it.
+fn states(workspace: &FlayerWorkspace, entry: &str) -> Vec<(String, String)> {
+    let (status, failures) = mindflayer_core::Status::of_workspace(workspace);
+    assert!(failures.is_empty(), "{failures:?}");
+    status
+        .projects
+        .iter()
+        .find(|project| project.entry.as_deref() == Some(entry))
+        .unwrap()
+        .artifacts
+        .iter()
+        .map(|artifact| (artifact.name.clone(), artifact.state.slug().to_owned()))
+        .collect()
+}
+
+#[test]
+fn a_moved_project_is_relinked_in_its_place_and_every_install_is_current_again() {
+    let (dir, mut workspace, project) = installed(Share::Local);
+    let tanukeys = dir.path().join("Projects/tanukeys");
+    gix::init(&tanukeys).unwrap();
+    linked(&mut workspace, &tanukeys);
+    let before = marker(&workspace);
+    let id = id_of(project.root());
+    let moved = dir.path().join("Projects/apps/collapse");
+    fs::create_dir_all(moved.parent().unwrap()).unwrap();
+    fs::rename(project.root(), &moved).unwrap();
+
+    let relinked = relink::relink(&mut workspace, project.root(), &moved).unwrap();
+
+    assert_eq!(relinked.was, PathBuf::from("collapse"));
+    assert_eq!(relinked.entry, PathBuf::from("apps/collapse"));
+    assert_eq!(relinked.id, id);
+    assert_eq!(relinked.installations, 1);
+    assert_eq!(
+        marker(&workspace),
+        before.replace("\"collapse\"", "\"apps/collapse\"")
+    );
+    assert_eq!(
+        states(&workspace, "apps/collapse"),
+        [(String::from("deploy"), String::from("current"))]
+    );
+    let ledger = workspace.ledger_for_reading().unwrap();
+    assert_eq!(
+        ledger.project_at("apps/collapse").unwrap(),
+        Some(id.clone())
+    );
+    assert!(!ledger.holds("collapse").unwrap());
+    // The repository moved whole, its exclude file with it.
+    assert_eq!(relinked.excluded, Some(Followed::Nothing));
+    assert_eq!(
+        exclude::listed(&moved, id.as_str()).unwrap().unwrap().lines,
+        ["/.agents/skills/deploy/", "/.claude/skills/deploy/"]
+    );
+}
+
+#[test]
+fn a_project_moved_inside_its_repository_takes_its_exclude_lines_along() {
+    let dir = TempDir::new().unwrap();
+    let repository = dir.path().join("monorepo");
+    gix::init(&repository).unwrap();
+    let (mut workspace, _) = FlayerWorkspace::init(&repository).unwrap();
+    mindflayer_core::create(&workspace.own(), Kind::Skill, "deploy", "Ship it").unwrap();
+    let project = linked(&mut workspace, &repository.join("packages/app"));
+    install_deploy(&workspace, &project);
+    let id = id_of(project.root());
+    let moved = repository.join("apps/app");
+    fs::create_dir_all(moved.parent().unwrap()).unwrap();
+    fs::rename(project.root(), &moved).unwrap();
+
+    let relinked = relink::relink(&mut workspace, project.root(), &moved).unwrap();
+
+    assert_eq!(
+        relinked.excluded,
+        Some(Followed::Written {
+            file: exclude_file(&repository)
+        })
+    );
+    assert_eq!(
+        exclude::listed(&moved, id.as_str()).unwrap().unwrap().lines,
+        [
+            "/apps/app/.agents/skills/deploy/",
+            "/apps/app/.claude/skills/deploy/"
+        ]
+    );
+    assert_eq!(
+        states(&workspace, "apps/app"),
+        [(String::from("deploy"), String::from("current"))]
+    );
+}
+
+#[test]
+fn a_project_holding_another_id_is_refused_and_nothing_changes() {
+    let (dir, mut workspace, project) = installed(Share::Local);
+    fs::rename(project.root(), dir.path().join("gone")).unwrap();
+    let other = dir.path().join("other");
+    fs::create_dir_all(&other).unwrap();
+    MindProject::init_asked(&other, &Agent::ALL, Share::Local, &Directories::default()).unwrap();
+    let before = marker(&workspace);
+    let ledger = fs::read(workspace.ledger_path()).unwrap();
+
+    let refused = relink::relink(&mut workspace, project.root(), &other).unwrap_err();
+
+    assert!(
+        matches!(&refused, RelinkError::Mismatch { was, id, .. }
+            if *was == id_of(&dir.path().join("gone")) && *id == id_of(&other)),
+        "{refused}"
+    );
+    assert!(
+        refused.to_string().contains("nothing was changed"),
+        "{refused}"
+    );
+    assert_eq!(marker(&workspace), before);
+    assert_eq!(fs::read(workspace.ledger_path()).unwrap(), ledger);
+}
+
+#[test]
+fn an_entry_still_holding_a_project_has_not_moved() {
+    let (dir, mut workspace, project) = installed(Share::Local);
+    let copy = dir.path().join("copy");
+    copied(project.root(), &copy);
+    let other = dir.path().join("other");
+    fs::create_dir_all(&other).unwrap();
+    MindProject::init_asked(&other, &Agent::ALL, Share::Local, &Directories::default()).unwrap();
+
+    let refused = relink::relink(&mut workspace, project.root(), &copy).unwrap_err();
+    assert!(matches!(refused, RelinkError::Copied(_)), "{refused}");
+    assert!(
+        refused.to_string().contains("copied with its .mind"),
+        "{refused}"
+    );
+
+    let refused = relink::relink(&mut workspace, project.root(), &other).unwrap_err();
+    assert!(matches!(refused, RelinkError::Present { .. }), "{refused}");
+}
+
+#[test]
+fn a_linked_copy_refuses_the_relink_until_it_is_given_an_id_of_its_own() {
+    let (dir, mut workspace, project) = installed(Share::Local);
+    let copy = dir.path().join("Projects/copy");
+    copied(project.root(), &copy);
+    workspace.link(&MindProject::open(&copy).unwrap()).unwrap();
+    let moved = dir.path().join("Projects/moved");
+    fs::rename(project.root(), &moved).unwrap();
+    // Two directories hold the id, so the scan offers neither as the move.
+    assert!(scanned(&workspace)
+        .found
+        .iter()
+        .all(|found| found.moved.is_none()));
+
+    let refused = relink::relink(&mut workspace, project.root(), &moved).unwrap_err();
+    assert!(
+        matches!(&refused, RelinkError::Copied(duplicate)
+            if duplicate.paths == [copy.clone(), moved.clone()]),
+        "{refused}"
+    );
+
+    relink::new_id(Some(&workspace), &MindProject::open(&copy).unwrap()).unwrap();
+    let found = scanned(&workspace);
+    let found = found
+        .found
+        .iter()
+        .find(|found| found.path == moved)
+        .unwrap();
+    assert_eq!(found.moved.as_deref(), Some("collapse"));
+    let relinked = relink::relink(&mut workspace, project.root(), &moved).unwrap();
+    assert_eq!(relinked.installations, 1);
+}
+
+#[test]
+fn a_workspace_with_no_ledger_moves_the_entry_alone() {
+    let dir = TempDir::new().unwrap();
+    let (mut workspace, _) = FlayerWorkspace::init(dir.path()).unwrap();
+    let project = linked(&mut workspace, &dir.path().join("collapse"));
+    let moved = dir.path().join("moved");
+    fs::rename(project.root(), &moved).unwrap();
+
+    let relinked = relink::relink(&mut workspace, project.root(), &moved).unwrap();
+
+    assert_eq!(relinked.installations, 0);
+    assert!(workspace.is_linked(&moved));
+    assert!(!workspace.is_linked(project.root()));
+    assert!(!workspace.ledger_path().exists());
+}
+
+#[test]
+fn records_no_id_says_were_the_projects_are_never_handed_to_another_directory() {
+    let (dir, mut workspace, project) = installed(Share::Local);
+    // As a ledger an older build made keeps them, its project unread since.
+    rusqlite::Connection::open(workspace.ledger_path())
+        .unwrap()
+        .execute("DELETE FROM projects", [])
+        .unwrap();
+    let moved = dir.path().join("moved");
+    fs::rename(project.root(), &moved).unwrap();
+
+    let refused = relink::relink(&mut workspace, project.root(), &moved).unwrap_err();
+
+    assert!(matches!(refused, RelinkError::Unknown { .. }), "{refused}");
+    assert!(workspace.is_linked(project.root()));
+}
+
+#[test]
+fn what_is_not_an_entry_or_not_a_project_with_an_id_is_refused() {
+    let (dir, mut workspace, project) = installed(Share::Local);
+    let legacy = dir.path().join("legacy");
+    MindProject::init(&legacy).unwrap();
+    let moved = dir.path().join("moved");
+    fs::rename(project.root(), &moved).unwrap();
+
+    let refused = relink::relink(&mut workspace, &legacy, &moved).unwrap_err();
+    assert!(
+        matches!(
+            refused,
+            RelinkError::Workspace(WorkspaceError::NotRegistered { .. })
+        ),
+        "{refused}"
+    );
+    let refused = relink::relink(&mut workspace, project.root(), &legacy).unwrap_err();
+    assert!(matches!(refused, RelinkError::NoId { .. }), "{refused}");
+    let refused =
+        relink::relink(&mut workspace, project.root(), &dir.path().join("nothing")).unwrap_err();
+    assert!(
+        matches!(
+            refused,
+            RelinkError::Workspace(WorkspaceError::NotAProject { .. })
+        ),
+        "{refused}"
+    );
+}
