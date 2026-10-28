@@ -915,7 +915,12 @@ fn linking(app: &App, form: &LinkForm, frame: &mut Frame, area: Rect) {
                 let padding = " ".repeat(width.saturating_sub(route.chars().count()));
                 // Why, as the minds screen and `flayer scan --suggest` say
                 // it, since the list is in their order.
-                let why = worth_linking(unlinked.reason, &unlinked.agent_files);
+                let why = worth_linking(
+                    &unlinked.route,
+                    unlinked.moved.as_deref(),
+                    unlinked.reason,
+                    &unlinked.agent_files,
+                );
                 let what = if unlinked.mind {
                     Span::styled(format!("  {why}"), dim())
                 } else {

@@ -348,6 +348,63 @@ fn the_link_form_offers_what_is_not_linked_in_the_order_and_words_of_a_suggestio
 }
 
 #[test]
+fn the_minds_screen_and_the_link_form_say_a_moved_project_moved_as_flayer_scan_suggest_does() {
+    let dir = workspace_with_own();
+    flayer(dir.path(), &["install", "-p", "alpha", "commit-style"]).unwrap();
+    fs::create_dir(dir.path().join("apps")).unwrap();
+    fs::rename(dir.path().join("alpha"), dir.path().join("apps/alpha")).unwrap();
+
+    let suggested = flayer(dir.path(), &["scan", "--suggest"]).unwrap();
+
+    // Each line of the command not linked, as its route and what follows
+    // its standing.
+    let not_linked: Vec<(String, String)> = suggested
+        .stdout
+        .lines()
+        .take_while(|line| !line.is_empty())
+        .filter_map(|line| {
+            let (route, rest) = line.split_once(' ')?;
+            let why = rest.trim_start().strip_prefix("not linked")?;
+            Some((route.to_owned(), why.trim_start().to_owned()))
+        })
+        .collect();
+    assert_eq!(
+        not_linked,
+        [(
+            String::from("apps/alpha"),
+            String::from("moved: alpha -> apps/alpha")
+        )]
+    );
+    // Its reason is its id, which ranks it first, but what it wants is a
+    // relink, so the screen says it moved as the command does, rather than
+    // offering it as the project most worth linking.
+    let app = tui::minds(dir.path(), &[], &Lookup::default()).unwrap();
+    let Mode::Minds(screen) = &app.mode else {
+        panic!("{:?}", app.mode)
+    };
+    let found: Vec<(String, String)> = screen
+        .rows
+        .iter()
+        .filter(|row| matches!(row.standing, tui::minds::Standing::Found { .. }))
+        .map(|row| (row.path.clone(), row.why.clone()))
+        .collect();
+    assert_eq!(found, not_linked);
+    let drawn = tui_drawn(&app);
+    assert!(
+        drawn.contains("[ ] apps/alpha  moved: alpha -> apps/alpha"),
+        "{drawn}"
+    );
+
+    let mut app = tui_in(dir.path());
+    press_key(&mut app, KeyCode::Char('l'));
+    let drawn = tui_drawn(&app);
+    assert!(
+        drawn.contains("apps/alpha  moved: alpha -> apps/alpha"),
+        "{drawn}"
+    );
+}
+
+#[test]
 fn leaving_the_minds_screen_applies_nothing() {
     let dir = workspace_with_candidates();
     let before = registry(dir.path());

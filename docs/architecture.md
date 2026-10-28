@@ -5466,11 +5466,13 @@ reason first and by route within one, then what is linked, by route, whose
 reason says why it was worth linking once and nothing now. The minds screen
 and the link form read their scan in that order and show it unsorted, each
 row with the words `flayer scan --suggest` uses (one helper in the CLI says
-them for both), so the screen cannot rank differently from the command it
-shows. A project found moved still says `moved`: its reason is its id, but
-what it wants is a relink. A suggestion links nothing, makes nothing a
-project, and reads as any scan does: no marker, no ledger and no workspace
-written.
+them for the command and both screens), so the screen cannot rank
+differently from the command it shows. A project found moved says `moved`
+on the screens as in the command: its reason is its id, which ranks it
+first, but what it wants is a relink, and a row offering it as the project
+most worth linking would have it linked beside the entry it left stale. A
+suggestion links nothing, makes nothing a project, and reads as any scan
+does: no marker, no ledger and no workspace written.
 
 ## Writers at the same time
 

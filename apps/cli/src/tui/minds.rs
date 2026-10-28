@@ -101,7 +101,12 @@ impl Minds {
                     mind: unlinked.mind,
                 },
                 ticked: false,
-                why: worth_linking(unlinked.reason, &unlinked.agent_files),
+                why: worth_linking(
+                    &unlinked.route,
+                    unlinked.moved.as_deref(),
+                    unlinked.reason,
+                    &unlinked.agent_files,
+                ),
             })
             .collect();
         let mut linked: Vec<Row> = workspace

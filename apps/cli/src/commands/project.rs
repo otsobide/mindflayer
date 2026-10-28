@@ -300,17 +300,33 @@ pub(crate) fn scan_workspace(
     scanned(&scan, warnings, request.order == Order::Suggested)
 }
 
-/// Why one found is worth linking, as `flayer scan --suggest` says it and
-/// the minds screen shows it, in these words rather than its own: the
-/// reason core ranked it by, and for a repository the agent files that
-/// gave it that reason, by name.
-pub(crate) fn worth_linking(reason: Reason, agent_files: &[String]) -> String {
+/// Why one found at `route` is worth linking, as `flayer scan --suggest`
+/// says it and the minds screen and the link form show it, in these words
+/// rather than their own: for one found moved, where from, since its reason
+/// is its id but what it wants is a relink, not a link beside the entry it
+/// left stale; otherwise the reason core ranked it by, and for a repository
+/// the agent files that gave it that reason, by name.
+pub(crate) fn worth_linking(
+    route: &str,
+    moved: Option<&str>,
+    reason: Reason,
+    agent_files: &[String],
+) -> String {
+    if let Some(old) = moved {
+        return moved_to(old, route);
+    }
     match reason {
         Reason::Id => String::from("mind project with an id"),
         Reason::Mind => String::from("mind project without an id"),
         Reason::Agents => format!("git repository with {}", agent_files.join(", ")),
         Reason::Git => String::from("git repository"),
     }
+}
+
+/// A project found at `route`, moved from the entry `old`, as a scan says it
+/// whether or not it suggests.
+fn moved_to(old: &str, route: &str) -> String {
+    format!("moved: {} -> {}", printable(old), printable(route))
 }
 
 /// What a scan could not read, and that it stopped early, each as a warning
@@ -354,10 +370,13 @@ fn scanned(scan: &Scan, warnings: Vec<String>, suggested: bool) -> Outcome {
             .map(|found| {
                 let what = match (found.linked, found.mind, &found.moved) {
                     (true, _, _) => String::new(),
-                    (false, true, Some(old)) => {
-                        format!("moved: {} -> {}", printable(old), printable(&found.route))
-                    }
-                    _ if suggested => worth_linking(found.reason, &found.agent_files),
+                    _ if suggested => worth_linking(
+                        &found.route,
+                        found.moved.as_deref(),
+                        found.reason,
+                        &found.agent_files,
+                    ),
+                    (false, true, Some(old)) => moved_to(old, &found.route),
                     (false, true, None) => String::from("mind project"),
                     (false, false, _) => String::from("git repository, not a mind project yet"),
                 };
