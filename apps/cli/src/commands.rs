@@ -28,7 +28,7 @@ use crate::homes::Lookup;
 use crate::{tui, Cli, CliError, Command, Failure, FlayerCli, FlayerCommand, Outcome};
 use activate::{activate_command, which_command};
 use artifact::{
-    add_to, edit_in, remove_everywhere, remove_from, rename_in, templates_of,
+    add_to, edit_in, remove_everywhere, remove_from, remove_own, rename_in, templates_of,
     would_remove_everywhere,
 };
 use gather::run_gather;
@@ -369,20 +369,10 @@ fn run_flayer(
             }),
             (false, true) => {
                 let workspace = workspace_here(directory, lookup)?;
-                remove_from(
-                    Some(&workspace),
-                    &workspace.holder(project.as_deref())?,
-                    reference,
-                    true,
-                )
+                removed_from(&workspace, project.as_deref(), reference, true)
             }
             (false, false) => reading_workspace(directory, lookup, |workspace| {
-                remove_from(
-                    Some(workspace),
-                    &workspace.holder(project.as_deref())?,
-                    reference,
-                    false,
-                )
+                removed_from(workspace, project.as_deref(), reference, false)
             }),
         },
         FlayerCommand::Templates { project } => reading_workspace(directory, lookup, |workspace| {
@@ -796,6 +786,21 @@ fn workspace_for(project: &MindProject, lookup: &Lookup) -> Result<FlayerWorkspa
     resolve(&lookup.inputs(project.root(), Intent::Write))?
         .map(|resolved| resolved.workspace)
         .ok_or_else(|| CliError::NoWorkspaceAbove(project.root().to_path_buf()))
+}
+
+/// `flayer remove` without `--everywhere`: of one of the workspace's own,
+/// with what it leaves orphaned said beside it, or of `project`'s, a
+/// project the workspace links, whose own nothing installed anywhere.
+fn removed_from(
+    workspace: &FlayerWorkspace,
+    project: Option<&str>,
+    reference: &str,
+    yes: bool,
+) -> Result<Outcome, Failure> {
+    match project {
+        None => remove_own(workspace, reference, yes),
+        Some(_) => remove_from(Some(workspace), &workspace.holder(project)?, reference, yes),
+    }
 }
 
 /// The projects a command names: each one `-p` names, by name or path, or,

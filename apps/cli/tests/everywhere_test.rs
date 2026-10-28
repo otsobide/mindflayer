@@ -257,6 +257,55 @@ fn everywhere_is_for_the_workspaces_own_and_not_a_projects() {
 }
 
 #[test]
+fn removing_one_of_the_workspaces_own_alone_says_whose_copies_it_orphans() {
+    let dir = workspace_with_copies();
+    let library = own_directory_for(dir.path(), Kind::Skill).join("commit-style");
+
+    let failure = flayer(dir.path(), &["remove", "commit-style"]).unwrap_err();
+    assert!(matches!(*failure.error, CliError::Unconfirmed { .. }));
+    assert_eq!(
+        failure.warnings,
+        [
+            "warning: commit-style is installed in alpha, beta and collapse, which removing it \
+             alone would leave orphaned there; --everywhere takes it out of them too"
+        ]
+    );
+
+    let outcome = flayer(dir.path(), &["remove", "commit-style", "--yes"]).unwrap();
+
+    assert_eq!(
+        outcome.stdout,
+        format!("removed skill commit-style from {}\n", library.display())
+    );
+    assert_eq!(
+        outcome.stderr,
+        [
+            "warning: commit-style is still installed in alpha, beta and collapse, orphaned now \
+             that nothing offers it; `flayer uninstall --orphaned --all-projects` takes out what \
+             nothing offers"
+        ]
+    );
+    assert!(!outcome.ok);
+    let status = flayer(dir.path(), &["status", "-p", "alpha"]).unwrap();
+    assert!(
+        status.stdout.contains("commit-style  orphaned"),
+        "{}",
+        status.stdout
+    );
+}
+
+#[test]
+fn removing_one_installed_nowhere_says_nothing_of_projects() {
+    let dir = workspace_with_copies();
+    flayer(dir.path(), &["add", "skill", "review", "How reviews go"]).unwrap();
+
+    let outcome = flayer(dir.path(), &["remove", "review", "--yes"]).unwrap();
+
+    assert!(outcome.stderr.is_empty(), "{:?}", outcome.stderr);
+    assert!(outcome.ok);
+}
+
+#[test]
 fn uninstall_orphaned_takes_out_what_nothing_offers_any_more_but_an_edit() {
     let dir = workspace_with_copies();
     flayer(dir.path(), &["add", "skill", "review", "How reviews go"]).unwrap();

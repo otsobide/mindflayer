@@ -13,7 +13,7 @@
 use std::fmt::Write as _;
 use std::path::Path;
 
-use mindflayer_core::everywhere::{self, Step};
+use mindflayer_core::everywhere::{self, EverywhereError, Plan, Step};
 use mindflayer_core::install::{InstallError, Removed};
 use mindflayer_core::lifecycle::{self, Record};
 use mindflayer_core::template::{self, Origin};
@@ -24,6 +24,7 @@ use mindflayer_core::{
 
 use crate::commands::gather::scrubbed;
 use crate::commands::install::{listed, named, render_said, shown, still};
+use crate::commands::update::listed as words_listed;
 use crate::error::deleting;
 use crate::render::{printable, table, verdict};
 use crate::{CliError, Failure, Outcome};
@@ -167,6 +168,71 @@ pub(crate) fn remove_from(
         })
     });
     Ok(scrubbed(&removed.scrub).before(outcome))
+}
+
+/// `flayer remove` of one of the workspace's own, without `--everywhere`:
+/// removed as [`remove_from`] removes it, or said what would be, and beside
+/// it each project that has a copy installed from it, which nothing offers
+/// once it is gone, as core plans it ([`everywhere::plan`]): orphaned there,
+/// left as it is, never updated again, and taken out only when somebody
+/// says so. Said in the dry run with what `--everywhere` would do about it,
+/// and after the removal with what takes them out now.
+///
+/// Which projects is read before the removal, while the library copy still
+/// says what was installed from it, and a ledger that cannot be read is a
+/// warning beside the removal rather than a refusal of it: the removal is
+/// the workspace's, and the projects only to be told of.
+pub(crate) fn remove_own(
+    workspace: &FlayerWorkspace,
+    reference: &str,
+    yes: bool,
+) -> Result<Outcome, Failure> {
+    let orphaning = match everywhere::plan(workspace, &Reference::parse(reference)) {
+        Ok(plan) => orphaning(&plan, yes),
+        // The removal finds the same thing, and refuses it the same way.
+        Err(EverywhereError::Lifecycle(_)) => Vec::new(),
+        Err(error) => vec![format!(
+            "warning: whether it is installed in any project cannot be told: {error}"
+        )],
+    };
+    match remove_from(Some(workspace), &workspace.own(), reference, yes) {
+        Ok(mut outcome) => {
+            outcome.ok &= orphaning.is_empty();
+            outcome.stderr.extend(orphaning);
+            Ok(outcome)
+        }
+        Err(mut failure) => {
+            failure.warnings.extend(orphaning);
+            Err(failure)
+        }
+    }
+}
+
+/// What [`remove_own`] says of the projects `plan` finds a copy installed
+/// in: one warning naming them all, as a dry run or, once `removed`, as
+/// what was done. None when there are none.
+fn orphaning(plan: &Plan, removed: bool) -> Vec<String> {
+    let projects: Vec<&str> = plan
+        .orphaned()
+        .iter()
+        .map(|copy| copy.project.name())
+        .collect();
+    if projects.is_empty() {
+        return Vec::new();
+    }
+    let what = named(plan.target.kind, &plan.target.name);
+    let projects = words_listed(&projects);
+    vec![if removed {
+        format!(
+            "warning: {what} is still installed in {projects}, orphaned now that nothing offers \
+             it; `flayer uninstall --orphaned --all-projects` takes out what nothing offers"
+        )
+    } else {
+        format!(
+            "warning: {what} is installed in {projects}, which removing it alone would leave \
+             orphaned there; --everywhere takes it out of them too"
+        )
+    }]
 }
 
 /// `flayer remove --everywhere` without `--yes`: what removing `reference`,
