@@ -181,7 +181,11 @@ pub(crate) fn remove_from(
 /// Which projects is read before the removal, while the library copy still
 /// says what was installed from it, and a ledger that cannot be read is a
 /// warning beside the removal rather than a refusal of it: the removal is
-/// the workspace's, and the projects only to be told of.
+/// the workspace's, and the projects only to be told of. They are told once
+/// the removal is done, or in the dry run, which refuses without `--yes`.
+/// A removal that fails says nothing of them: it may have left the library
+/// copy whole, offering it still, or a skill's folder half deleted, offering
+/// nothing, and either way its error is what there is to say.
 pub(crate) fn remove_own(
     workspace: &FlayerWorkspace,
     reference: &str,
@@ -202,7 +206,9 @@ pub(crate) fn remove_own(
             Ok(outcome)
         }
         Err(mut failure) => {
-            failure.warnings.extend(orphaning);
+            if !yes {
+                failure.warnings.extend(orphaning);
+            }
             Err(failure)
         }
     }

@@ -4738,7 +4738,11 @@ therefore names, beside a removal of one of the workspace's own, each
 project that has a copy of it, in the dry run with what `--everywhere` would
 do about it and after the removal with what takes them out now ([taking out
 what nothing offers](#taking-out-what-nothing-offers)), and a warning, since
-the copies left were not asked about. `flayer remove --everywhere` is that
+the copies left were not asked about. A removal that fails names none of
+them: it may have left the library copy whole, offering it still, or a
+skill's folder half deleted, offering nothing, and saying them orphaned, or
+sending somebody to `--everywhere` against a folder no longer found, would
+each be wrong half the time. `flayer remove --everywhere` is that
 done for you: core's `everywhere::plan` says what it would do, reading the
 ledger without making it, and `everywhere::apply` does it.
 

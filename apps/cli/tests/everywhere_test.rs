@@ -294,6 +294,52 @@ fn removing_one_of_the_workspaces_own_alone_says_whose_copies_it_orphans() {
     );
 }
 
+/// Takes write permission away from a folder, and gives it back when
+/// dropped, so that a failed assertion does not leave a temporary folder
+/// that cannot be cleaned up.
+#[cfg(unix)]
+struct ReadOnly(PathBuf);
+
+#[cfg(unix)]
+impl ReadOnly {
+    fn new(folder: &Path) -> Self {
+        use std::os::unix::fs::PermissionsExt;
+        fs::set_permissions(folder, fs::Permissions::from_mode(0o555)).unwrap();
+        ReadOnly(folder.to_path_buf())
+    }
+}
+
+#[cfg(unix)]
+impl Drop for ReadOnly {
+    fn drop(&mut self) {
+        use std::os::unix::fs::PermissionsExt;
+        let _ = fs::set_permissions(&self.0, fs::Permissions::from_mode(0o755));
+    }
+}
+
+// Unix only: a folder's write permission is what is taken away, and
+// Windows keeps none on a folder.
+#[cfg(unix)]
+#[test]
+fn a_removal_that_fails_does_not_say_its_copies_are_orphaned() {
+    let dir = workspace_with_copies();
+    flayer(dir.path(), &["add", "rule", "git/no-force-push", "Never"]).unwrap();
+    flayer(dir.path(), &["install", "git/no-force-push", "-p", "alpha"]).unwrap();
+    let folder = own_directory_for(dir.path(), Kind::Rule).join("git");
+    let _read_only = ReadOnly::new(&folder);
+
+    let failure = flayer(dir.path(), &["remove", "git/no-force-push", "--yes"]).unwrap_err();
+
+    assert!(
+        failure.error.to_string().contains("cannot be changed"),
+        "{}",
+        failure.error
+    );
+    // Still offered from the library, so nothing is orphaned.
+    assert!(failure.warnings.is_empty(), "{:?}", failure.warnings);
+    assert!(folder.join("no-force-push.md").is_file());
+}
+
 #[test]
 fn removing_one_installed_nowhere_says_nothing_of_projects() {
     let dir = workspace_with_copies();
