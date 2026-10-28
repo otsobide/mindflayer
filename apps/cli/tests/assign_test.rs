@@ -190,3 +190,114 @@ fn a_project_the_workspace_does_not_link_refuses_the_install_before_any_is_made(
         .iter()
         .all(|copy| !copy.exists()));
 }
+
+#[test]
+fn all_projects_and_a_project_are_not_asked_together() {
+    let dir = workspace_with_three();
+    for command in ["install", "uninstall"] {
+        let line = line(
+            "flayer",
+            &[command, "commit-style", "-p", "alpha", "--all-projects"],
+            dir.path(),
+        );
+
+        let refused = FlayerCli::try_parse_from(&line).unwrap_err();
+
+        assert!(refused.to_string().contains("--all-projects"), "{refused}");
+    }
+}
+
+#[test]
+fn every_project_with_none_linked_installs_nothing_and_says_so() {
+    let dir = TempDir::new().unwrap();
+    flayer(dir.path(), &["init"]).unwrap();
+
+    let installed = flayer(dir.path(), &["install", "anything", "--all-projects"]).unwrap();
+    let removed = flayer(dir.path(), &["uninstall", "anything", "--all-projects"]).unwrap();
+
+    assert_eq!(
+        installed.stdout,
+        "nothing installed: no project is linked\n"
+    );
+    assert_eq!(removed.stdout, "nothing removed: no project is linked\n");
+    assert!(installed.ok && removed.ok);
+}
+
+#[test]
+fn uninstalling_from_several_takes_it_out_where_it_is_and_passes_over_where_it_is_not() {
+    let dir = workspace_with_three();
+    flayer(
+        dir.path(),
+        &["install", "commit-style", "-p", "alpha", "-p", "gamma"],
+    )
+    .unwrap();
+
+    let outcome = flayer(dir.path(), &["uninstall", "commit-style", "--all-projects"]).unwrap();
+
+    assert_eq!(
+        outcome.stdout,
+        "\
+removed commit-style from alpha
+removed commit-style from gamma
+"
+    );
+    assert!(outcome.ok && outcome.stderr.is_empty(), "{outcome:?}");
+    for name in ["alpha", "beta", "gamma"] {
+        for copy in copies(&dir.path().join(name), "commit-style") {
+            assert!(!copy.exists(), "{}", copy.display());
+        }
+    }
+}
+
+#[test]
+fn uninstalling_from_several_leaves_somebodys_copy_alone_and_says_so() {
+    let dir = workspace_with_three();
+    flayer(dir.path(), &["install", "commit-style", "-p", "alpha"]).unwrap();
+    let theirs = somebodys(&dir.path().join("beta"));
+
+    let outcome = flayer(
+        dir.path(),
+        &["uninstall", "commit-style", "-p", "alpha", "-p", "beta"],
+    )
+    .unwrap();
+
+    assert_eq!(outcome.stdout, "removed commit-style from alpha\n");
+    assert_eq!(
+        outcome.stderr,
+        [
+            "warning: commit-style at .agents/skills/commit-style in beta was not installed by \
+             Mindflayer, so it was left alone"
+        ]
+    );
+    assert!(!outcome.ok);
+    assert!(theirs.join("SKILL.md").is_file());
+}
+
+#[test]
+fn uninstalling_what_no_project_asked_has_is_refused() {
+    let dir = workspace_with_three();
+
+    let failure = flayer(
+        dir.path(),
+        &["uninstall", "commit-style", "-p", "alpha", "-p", "beta"],
+    )
+    .unwrap_err();
+
+    assert_eq!(
+        failure.error.to_string(),
+        "no project asked has commit-style installed, so there is nothing to take out"
+    );
+}
+
+#[test]
+fn uninstalling_needs_projects_to_take_it_out_of() {
+    let dir = workspace_with_three();
+
+    let failure = flayer(dir.path(), &["uninstall", "commit-style"]).unwrap_err();
+
+    assert!(
+        matches!(*failure.error, CliError::UninstallWhere),
+        "{}",
+        failure.error
+    );
+}

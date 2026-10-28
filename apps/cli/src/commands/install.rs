@@ -412,33 +412,54 @@ pub(crate) fn shown(project: &MindProject, path: &Path) -> String {
 }
 
 /// Take what `typed` names, a skill or a rule Mindflayer installed, back out
-/// of one project, handing core the agents' own folders, `homes`, as an
-/// install does, through core's batch of one ([`assign::uninstall`]).
-/// `force` takes out a copy edited since it was installed, which core
-/// otherwise leaves alone with the rest.
+/// of each of `projects`, handing core the agents' own folders, `homes`, as
+/// an install does, through core's batch ([`assign::uninstall`]). `force`
+/// takes out a copy edited since it was installed, which core otherwise
+/// leaves alone with the rest.
+///
+/// One project is said as it always was, and one that has nothing of the
+/// name is refused, as a typo far more often than not. Of several, one that
+/// has nothing of it is passed over in silence, being as it was asked to
+/// be, unless none of them has it, which is refused as that typo; the rest
+/// are said as [`together`] says them.
 pub(crate) fn uninstall_named(
     workspace: &FlayerWorkspace,
-    project: &MindProject,
+    projects: &[MindProject],
     typed: &str,
     homes: &AgentHomes,
     force: bool,
 ) -> Result<Outcome, Failure> {
+    use mindflayer_core::install::Removed;
+
     let reference = Reference::parse(typed);
-    let assigned = assign::uninstall(
-        workspace,
-        std::slice::from_ref(project),
-        &reference,
-        homes,
-        edits(force),
-    )
-    .map_err(CliError::from)?;
+    let assigned = assign::uninstall(workspace, projects, &reference, homes, edits(force))
+        .map_err(CliError::from)?;
     let said = scrubbed(&assigned.scrub);
-    let mut parts = assigned.parts.into_iter();
-    let Some(part) = parts.next() else {
-        // A batch of one project hands back its part.
-        return Ok(said.before(Outcome::plain(String::new())));
-    };
-    alone(said, uninstall_said(&part.project, part.done))
+    let mut parts = assigned.parts;
+    if parts.len() == 1 {
+        let part = parts.remove(0);
+        return alone(said, uninstall_said(&part.project, part.done));
+    }
+    let absent = |done: &assign::Uninstall| matches!(done, Ok((_, Removed::Absent { .. })));
+    if parts.iter().all(|part| absent(&part.done)) {
+        if let Some(Ok((kind, Removed::Absent { name }))) = parts.first().map(|part| &part.done) {
+            return Err(Failure {
+                error: Box::new(CliError::NotInstalledAnywhere {
+                    name: named(*kind, name),
+                }),
+                warnings: said.lines(),
+            });
+        }
+    }
+    let each = parts
+        .into_iter()
+        .filter(|part| !absent(&part.done))
+        .map(|part| {
+            let from = part.project.name().to_owned();
+            (from, uninstall_said(&part.project, part.done))
+        })
+        .collect();
+    together(said, each, Vec::new())
 }
 
 /// One project's part of an uninstall, `done`, as a command that takes it

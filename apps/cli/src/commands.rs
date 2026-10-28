@@ -191,7 +191,7 @@ pub(crate) fn run_with(cli: &Cli, lookup: &Lookup, watch: &Watch) -> Result<Outc
         Command::Uninstall { name, force } => {
             let project = project_here(&directory)?;
             let workspace = managing(&project, lookup)?;
-            uninstall_named(&workspace, &project, name, &lookup.agents, *force)
+            uninstall_named(&workspace, &[project], name, &lookup.agents, *force)
         }
         Command::Update { names, force, yes } => {
             let project = project_here(&directory)?;
@@ -431,17 +431,22 @@ fn run_flayer(
             (None, false) => Err(CliError::InstallWhat.into()),
         },
         FlayerCommand::Uninstall {
-            project,
+            projects,
+            all_projects,
             name,
             force,
         } => {
+            if projects.is_empty() && !*all_projects {
+                return Err(CliError::UninstallWhere.into());
+            }
             let workspace = workspace_here(directory, lookup)?;
-            uninstall_named(
-                &workspace,
-                &workspace.pick(project)?,
-                name,
-                &lookup.agents,
-                *force,
+            let (asked, unread) = named_projects(&workspace, projects, *all_projects)?;
+            if asked.is_empty() {
+                return Ok(none_linked("removed", unread));
+            }
+            beside_all(
+                uninstall_named(&workspace, &asked, name, &lookup.agents, *force),
+                unread,
             )
         }
 
