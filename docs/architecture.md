@@ -460,6 +460,9 @@ installed in the project you are in up to date, and `flayer update` what is
 installed in each project `-p` names, or with `--all` in every one, needing
 one or the other, as a change of more than one place says which ([bringing
 what was installed up to date](#bringing-what-was-installed-up-to-date)).
+`flayer install` and `uninstall` take `-p` once for each project too, or
+`--all-projects` for every one, and need one or the other ([one artifact
+into many projects](#one-artifact-into-many-projects)).
 Reads look everywhere; a change needs one place, and without `-p` that place
 is the workspace.
 
@@ -2129,6 +2132,56 @@ before the first's absence.
 A line about installing says a rule as `rule <route>`, as `add` and `remove`
 say one, and a skill by its name alone, as every such line did before: a
 route reads like a path, and one name can be both.
+
+### One artifact into many projects
+
+`flayer install <name>` takes `-p` once for each project, or
+`--all-projects` for every one the workspace links, and `flayer uninstall`
+takes them the same way: vision point 2's assigning, from the command line.
+Core's `assign::install` and `assign::uninstall` are the batch, and each
+project's part of it is the install or uninstall that project would have
+alone (`install::offered_typed`, then `install::install_with`, or
+`install::uninstall_typed`), so a project reached this way is held to every
+rule it is held to reached alone, and a front end asking for many decides
+nothing that one install would not.
+
+- **Each project once, in the order asked.** Two spellings of one directory
+  are one project (`same_directory`), as an update takes them.
+- **A part for each, beside the rest.** A project offered nothing of the
+  name, one whose install fails and one whose copy is somebody's each say so
+  in their own part, and the others go ahead. Each project's copies and
+  record are written together or not at all by its own install, so nothing
+  one project's part does depends on another's.
+- **The ledger opened once, the lock taken by each install.** The batch
+  opens the ledger to write, scrubbing it, once, and only that refuses it as
+  a whole; a batch of no project opens nothing. Each project's install takes
+  the workspace's lock as it does alone, as the install screen's rows do,
+  rather than the batch holding it across them: nothing spans two projects,
+  so holding it once would keep every other writer waiting for all of them,
+  and would need a body of each install, rules' included, that runs under a
+  lock it does not take, as an update has (`install::install_held`), to
+  guard nothing a project's own install does not.
+- **The front end names the projects.** `-p` picks each as everywhere
+  (`FlayerWorkspace::pick`), and one the workspace does not link refuses
+  the line before anything is installed anywhere: a typo in one name is no
+  reason to change the rest without it. `--all-projects` is every entry
+  that opens, with a warning for each that does not, as `flayer update
+  --all` takes them. The flag is `flayer migrate`'s `--all-projects`
+  rather than update's `--all`, which beside an artifact's name would read
+  as every artifact.
+
+The CLI says each project's part as an install into it alone says it
+(`commands/install.rs`), in the order asked, so each line names its project
+already; one refused ends in `error: <project>: ...`, and the command exits
+non-zero when any part did not go through, while the others' lines stand,
+since what they did was done. Two things are said once rather than once a
+project: what the loaded workspaces could not offer, after every part, and a
+refusal every part shares, such as a name nothing offers, which is the
+command's error. An uninstall from several passes over a project that has
+nothing of the name, which is as it was asked to be and what most projects
+answer when every one is asked; when none of them has it, that is the typo
+it is for one project, and refused as one. A batch of one project, named or
+the only one linked, is said exactly as one install was before.
 
 ### What no copy holds
 
@@ -5494,8 +5547,11 @@ just listed.
 - **A batch takes turns row by row.** The install screen's batch calls core
   once for each row, and each call takes the workspace's lock for itself:
   another writer can come between two rows, and with the workspace busy every
-  row waits the whole ten seconds before it is passed over. Holding the lock
-  across the batch needs core to apply the batch, which is where #78 plans it.
+  row waits the whole ten seconds before it is passed over. `flayer install`
+  given several projects takes turns the same way, project by project
+  ([one artifact into many projects](#one-artifact-into-many-projects)).
+  Holding the lock across the screen's batch needs core to apply it, which
+  is where #78 plans it.
 - **Changes to an artifact take no lock.** `add`, `edit`, `rename` and
   `remove` write into a project or the workspace's own folders and then see
   to a record ([A record must not outlive the copy it is
