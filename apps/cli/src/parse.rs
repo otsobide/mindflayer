@@ -258,7 +258,13 @@ pub enum Command {
     /// Take a skill or a rule Mindflayer installed back out of this project.
     Uninstall {
         /// Its name, or `kind:name` when one name is both.
-        name: String,
+        #[arg(required_unless_present = "orphaned")]
+        name: Option<String>,
+
+        /// Every installation nothing offers any more where it came from,
+        /// instead of one by name.
+        #[arg(long, conflicts_with = "name")]
+        orphaned: bool,
 
         /// Take out a copy changed since it was installed too, which is
         /// otherwise left alone with every other copy.
@@ -695,7 +701,13 @@ pub enum FlayerCommand {
         all_projects: bool,
 
         /// Its name, or `kind:name` when one name is both.
-        name: String,
+        #[arg(required_unless_present = "orphaned")]
+        name: Option<String>,
+
+        /// Every installation nothing offers any more where it came from,
+        /// instead of one by name.
+        #[arg(long, conflicts_with = "name")]
+        orphaned: bool,
 
         /// Take out a copy changed since it was installed too, which is
         /// otherwise left alone with every other copy.

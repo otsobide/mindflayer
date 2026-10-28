@@ -1,6 +1,8 @@
 //! `flayer remove --everywhere` (#50): one of the workspace's own taken out
 //! of every project it links, what was changed since it was installed and
 //! somebody's own of that name left and said, and then the library copy.
+//! And `uninstall --orphaned`, which takes out what removing it from the
+//! workspace alone left behind.
 
 mod common;
 
@@ -252,4 +254,94 @@ fn everywhere_is_for_the_workspaces_own_and_not_a_projects() {
         refused.to_string().contains("cannot be used with"),
         "{refused}"
     );
+}
+
+#[test]
+fn uninstall_orphaned_takes_out_what_nothing_offers_any_more_but_an_edit() {
+    let dir = workspace_with_copies();
+    flayer(dir.path(), &["add", "skill", "review", "How reviews go"]).unwrap();
+    flayer(dir.path(), &["install", "review", "--all-projects"]).unwrap();
+    fs::remove_dir_all(own_directory_for(dir.path(), Kind::Skill).join("commit-style")).unwrap();
+
+    let outcome = flayer(dir.path(), &["uninstall", "--orphaned", "--all-projects"]).unwrap();
+
+    assert_eq!(
+        outcome.stdout,
+        "\
+removed commit-style from alpha
+removed commit-style from beta
+"
+    );
+    assert_eq!(
+        outcome.stderr,
+        [
+            "warning: commit-style in collapse was changed since it was installed, at \
+             .claude/skills/commit-style, so it was left alone; --force takes it out"
+        ]
+    );
+    assert!(!outcome.ok, "an edited one was left");
+    for name in ["alpha", "beta", "collapse", "tanukeys"] {
+        for copy in copies(&dir.path().join(name), "review") {
+            assert!(copy.join("SKILL.md").is_file(), "{}", copy.display());
+        }
+    }
+    let theirs = dir
+        .path()
+        .join("tanukeys/.claude/skills/commit-style/SKILL.md");
+    assert!(fs::read_to_string(&theirs).unwrap().contains("Mine"));
+
+    let forced = flayer(
+        dir.path(),
+        &["uninstall", "--orphaned", "-p", "collapse", "--force"],
+    )
+    .unwrap();
+    assert_eq!(forced.stdout, "removed commit-style from collapse\n");
+    assert!(forced.ok, "{:?}", forced.stderr);
+    assert!(theirs.is_file());
+}
+
+#[test]
+fn mind_uninstall_orphaned_takes_them_out_of_the_project_it_is_in() {
+    let dir = workspace_with_copies();
+    fs::remove_dir_all(own_directory_for(dir.path(), Kind::Skill).join("commit-style")).unwrap();
+
+    let outcome = mind(&dir.path().join("alpha"), &["uninstall", "--orphaned"]).unwrap();
+
+    assert_eq!(outcome.stdout, "removed commit-style from alpha\n");
+    assert!(outcome.ok, "{:?}", outcome.stderr);
+    for copy in copies(&dir.path().join("beta"), "commit-style") {
+        assert!(copy.join("SKILL.md").is_file(), "{}", copy.display());
+    }
+}
+
+#[test]
+fn uninstall_orphaned_with_nothing_orphaned_says_so_and_does_not_fail() {
+    let dir = workspace_with_copies();
+
+    let outcome = flayer(
+        dir.path(),
+        &["uninstall", "--orphaned", "-p", "alpha", "-p", "beta"],
+    )
+    .unwrap();
+
+    assert_eq!(
+        outcome.stdout,
+        "nothing removed: nothing installed in alpha and beta is orphaned\n"
+    );
+    assert!(outcome.ok, "{:?}", outcome.stderr);
+}
+
+#[test]
+fn uninstall_takes_a_name_or_orphaned_and_not_both() {
+    let dir = TempDir::new().unwrap();
+    for args in [
+        &["uninstall", "-p", "alpha"][..],
+        &["uninstall", "-p", "alpha", "deploy", "--orphaned"][..],
+    ] {
+        assert!(
+            FlayerCli::try_parse_from(line("flayer", args, dir.path())).is_err(),
+            "{args:?}"
+        );
+    }
+    assert!(Cli::try_parse_from(line("mind", &["uninstall"], dir.path())).is_err());
 }
