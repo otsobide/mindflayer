@@ -325,6 +325,19 @@ impl Held {
     }
 }
 
+/// Where somebody's rule at `route` is in `project`, which its settings
+/// mark, while the ledger records none there: in the block of its
+/// `AGENTS.md`, or at its place in Claude's folder of Mindflayer's rules, as
+/// [`uninstall`] tells it.
+pub(crate) fn somebodys(
+    workspace: &FlayerWorkspace,
+    ledger: &Ledger,
+    project: &MindProject,
+    route: &str,
+) -> Result<Option<PathBuf>, InstallError> {
+    Ok(Held::read(workspace, ledger, project)?.foreign(project.root(), route))
+}
+
 /// The routes the block in the `AGENTS.md` at `root` holds: none when it has
 /// no block, or cannot be read as one, which a render then refuses, saying
 /// why.
