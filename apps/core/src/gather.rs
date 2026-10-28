@@ -21,9 +21,12 @@ use std::io;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
+use serde::ser::{SerializeStruct, Serializer};
+use serde::Serialize;
 use thiserror::Error;
 
 use crate::artifact::{Artifact, ArtifactError, ValidationIssue};
+use crate::code::codes;
 use crate::copy::{self, Change};
 use crate::kind::{Kind, Layout};
 use crate::ledger::{self, Action, Ledger, LedgerError, Outcome, SourceKind};
@@ -45,6 +48,28 @@ pub enum Source {
         url: String,
         reference: Option<String>,
     },
+}
+
+/// As an object holding its kind, as the ledger files it, and what that kind
+/// is given: for a git repository its URL, only through [`redacted`], and
+/// the branch or tag asked for.
+///
+/// By hand rather than derived: a derive would tag it with the variant's Rust
+/// name, where the kind's slug is the word the ledger and a report already
+/// hold. The URL is redacted here even though [`gather`] refuses one that
+/// carries a credential, because a request is built before it is refused.
+impl Serialize for Source {
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        match self {
+            Source::Git { url, reference } => {
+                let mut source = serializer.serialize_struct("Source", 3)?;
+                source.serialize_field("kind", &self.kind())?;
+                source.serialize_field("url", &redacted(url))?;
+                source.serialize_field("reference", reference)?;
+                source.end()
+            }
+        }
+    }
 }
 
 impl Source {
@@ -124,7 +149,7 @@ impl Request {
 }
 
 /// One artifact that reached the workspace.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct Harvested {
     /// The name it declares, which is what it will be asked for by.
     pub name: String,
@@ -133,6 +158,7 @@ pub struct Harvested {
     /// The one line a listing shows.
     pub summary: Option<String>,
     /// Where it now sits in the workspace.
+    #[serde(serialize_with = "paths::lossy")]
     pub path: PathBuf,
 }
 
@@ -140,7 +166,10 @@ pub struct Harvested {
 ///
 /// Split three ways rather than counted once, because "3 skills" hides the
 /// only question worth asking after a second gather: what changed.
-#[derive(Debug, Default)]
+///
+/// What it serializes to is a contract, as a status report's is: each field
+/// by its name.
+#[derive(Debug, Default, Serialize)]
 pub struct Report {
     /// The revision that was gathered from, when there was one.
     pub revision: Option<String>,
@@ -151,8 +180,13 @@ pub struct Report {
     pub unchanged: Vec<Harvested>,
     /// Artifacts in the source that could not be taken. One broken skill must
     /// not cost the forty next to it.
+    ///
+    /// Not serialized, nor `warnings`: a front end says both as its
+    /// warnings, which in JSON are the envelope's, as a scan's failures are.
+    #[serde(skip)]
     pub failures: Vec<Failure>,
     /// What is wrong with artifacts that were taken anyway.
+    #[serde(skip)]
     pub warnings: Vec<Warning>,
 }
 
@@ -367,6 +401,8 @@ pub struct Leftover {
     pub source: io::Error,
 }
 
+codes!(Leftover => "source_leftover");
+
 /// A clone made from a URL with credentials that could not be rewritten
 /// without them.
 #[derive(Debug, Error)]
@@ -377,6 +413,8 @@ pub struct ScrubFailure {
     #[source]
     pub source: git::GitError,
 }
+
+codes!(ScrubFailure => "clone_unscrubbed");
 
 /// The work itself, with the logging left to [`gather`].
 fn harvest(
@@ -650,6 +688,13 @@ pub enum Failure {
     },
 }
 
+codes!(Failure {
+    Self::UnusableName { .. } => "gathered_name_not_utf8",
+    Self::Copy { .. } => "gathered_copy_failed",
+} carried {
+    Self::Artifact(error) => error,
+});
+
 impl Failure {
     /// The path the failure is about.
     pub fn path(&self) -> &Path {
@@ -710,6 +755,18 @@ pub enum GatherError {
         source: io::Error,
     },
 }
+
+codes!(GatherError {
+    Self::Cancelled => "gather_cancelled",
+    Self::CredentialsInUrl { .. } => "credentials_in_url",
+    Self::NoSuchFolder { .. } => "gather_no_such_folder",
+    Self::NotGatherable { .. } => "kind_not_gatherable",
+    Self::Read { .. } => "gather_read_failed",
+} carried {
+    Self::Git(error) => error,
+    Self::Ledger(error) => error,
+    Self::Lock(error) => error,
+});
 
 /// Everything the ledger knows about, for a front end to list.
 ///

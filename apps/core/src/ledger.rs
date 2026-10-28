@@ -24,8 +24,10 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use rusqlite::backup::{Backup, StepResult};
 use rusqlite::{Connection, OpenFlags, OptionalExtension, Transaction, TransactionBehavior};
+use serde::{Serialize, Serializer};
 use thiserror::Error;
 
+use crate::code::codes;
 use crate::kind::Kind;
 use crate::settings::ProjectId;
 use crate::url::{carries_credentials, redacted};
@@ -66,14 +68,31 @@ impl SourceKind {
     }
 }
 
+/// By its slug, for the reason a [`Kind`] is: the word the database and a
+/// report already hold, which a renamed variant cannot change.
+impl Serialize for SourceKind {
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        serializer.serialize_str(self.slug())
+    }
+}
+
 /// A place artifacts have been gathered from.
-#[derive(Debug, Clone, PartialEq, Eq)]
+///
+/// What it serializes to is a contract, as a status report's is: each field
+/// by its name, but the row id, and the URL only through [`redacted`].
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct Source {
     /// Its row id, which is what gathered artifacts point at.
+    ///
+    /// Not serialized: it is the ledger's, numbered as rows were written, so
+    /// no front end can name a source by it on a command line, and the URL
+    /// and the branch already tell one source from another.
+    #[serde(skip)]
     pub id: i64,
     pub kind: SourceKind,
     /// The URL as the user typed it, without the credentials [`redacted`]
     /// takes out.
+    #[serde(serialize_with = "crate::url::serialize_redacted")]
     pub url: String,
     /// The branch or tag asked for, or `None` for whatever the remote's HEAD
     /// points at.
@@ -91,7 +110,10 @@ pub struct Source {
 }
 
 /// One gathered artifact, and the source it came from.
-#[derive(Debug, Clone, PartialEq, Eq)]
+///
+/// What it serializes to is a contract, as a status report's is: each field
+/// by its name.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct Gathered {
     pub kind: Kind,
     pub name: String,
@@ -227,15 +249,24 @@ pub enum Carried {
 }
 
 /// One line of the action log.
-#[derive(Debug, Clone, PartialEq, Eq)]
+///
+/// What it serializes to is a contract, as a status report's is: each field
+/// by its name, and the two that can quote a URL only through [`redacted`],
+/// where they are written rather than trusted to [`Ledger::history`], which
+/// hands back none with a credential in it: a row an older build wrote
+/// before the scrub still holds one until a command that writes opens the
+/// ledger.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct Entry {
     /// When it happened, in seconds since the Unix epoch.
     pub at: i64,
     pub action: String,
     /// What the action was about: a URL, a name. A URL is [`redacted`].
+    #[serde(serialize_with = "crate::url::serialize_redacted_option")]
     pub target: Option<String>,
     pub outcome: String,
     /// What it said, successful or not, with every URL in it [`redacted`].
+    #[serde(serialize_with = "crate::url::serialize_redacted_option")]
     pub detail: Option<String>,
 }
 
@@ -812,6 +843,58 @@ impl Ledger {
             });
         }
         Ok(found)
+    }
+
+    /// Every source anything was gathered from, or tried to be, ordered the
+    /// way a listing reads them: by URL, then branch, then folder.
+    ///
+    /// Its own query rather than the sources of [`gathered`](Self::gathered):
+    /// a source whose gather failed before it took anything, or whose every
+    /// artifact has gone since, has no row there to be found by, and it is
+    /// still a place the shelf is filled from. A row naming a kind this build
+    /// has never heard of is skipped, as `gathered` skips it.
+    ///
+    /// Sorted once the URLs are redacted rather than by SQL, so a URL an
+    /// older build stored with a credential is listed where the URL it is
+    /// shown as goes.
+    pub fn sources(&self) -> Result<Vec<Source>, LedgerError> {
+        let failed = |source| self.failed("listing the sources", source);
+        let mut statement = self
+            .connection
+            .prepare(
+                "SELECT id, kind, url, reference, subdirectory, revision, directory
+                   FROM sources ORDER BY id",
+            )
+            .map_err(failed)?;
+        let rows = statement
+            .query_map([], |row| {
+                let slug: String = row.get(1)?;
+                let url: String = row.get(2)?;
+                Ok(
+                    SourceKind::parse(&slug).map(|kind| -> rusqlite::Result<Source> {
+                        Ok(Source {
+                            id: row.get(0)?,
+                            kind,
+                            url: redacted(&url).into_owned(),
+                            reference: row.get(3)?,
+                            subdirectory: row.get(4)?,
+                            revision: row.get(5)?,
+                            directory: row.get(6)?,
+                        })
+                    }),
+                )
+            })
+            .map_err(failed)?;
+        let mut sources = Vec::new();
+        for row in rows {
+            if let Some(source) = row.map_err(failed)? {
+                sources.push(source.map_err(failed)?);
+            }
+        }
+        sources.sort_by(|a: &Source, b: &Source| {
+            (&a.url, &a.reference, &a.subdirectory).cmp(&(&b.url, &b.reference, &b.subdirectory))
+        });
+        Ok(sources)
     }
 
     /// Record that an artifact was put into a project, replacing whatever was
@@ -2244,6 +2327,17 @@ pub enum LedgerError {
         source: rusqlite::Error,
     },
 }
+
+codes!(LedgerError {
+    Self::Create { .. } => "ledger_create_failed",
+    Self::Open { .. } => "ledger_open_failed",
+    Self::Version { .. } => "ledger_too_new",
+    Self::Backup { .. } => "ledger_backup_failed",
+    Self::Unmade { .. } => "ledger_unmade",
+    Self::Query { .. } => "ledger_query_failed",
+} carried {
+    Self::Lock(error) => error,
+});
 
 impl LedgerError {
     /// The file the failure is about.

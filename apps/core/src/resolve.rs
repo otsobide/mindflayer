@@ -22,8 +22,10 @@
 use std::fmt;
 use std::path::{Path, PathBuf};
 
+use serde::{Serialize, Serializer};
 use thiserror::Error;
 
+use crate::code::codes;
 use crate::paths;
 use crate::workspace::{
     absolute, same_directory, FlayerWorkspace, MindProject, WorkspaceError, FLAYER_CONFIG,
@@ -65,6 +67,29 @@ pub enum Reason {
     Above,
     /// The default one, in home.
     Home,
+}
+
+impl Reason {
+    /// How JSON names it: one lowercase word for the rule, which once
+    /// printed is a contract. Not the words [`Display`](fmt::Display) puts
+    /// on a screen (`named`, `found above`), which are a sentence's and may
+    /// be reworded; these are the rules as this module orders them.
+    pub const fn slug(self) -> &'static str {
+        match self {
+            Reason::Explicit => "explicit",
+            Reason::Activated => "activated",
+            Reason::Above => "above",
+            Reason::Home => "home",
+        }
+    }
+}
+
+/// By its slug, written by hand for the reason a kind is: a derive would
+/// tie the contract to a name chosen for Rust.
+impl Serialize for Reason {
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        serializer.serialize_str(self.slug())
+    }
 }
 
 impl fmt::Display for Reason {
@@ -141,6 +166,15 @@ pub enum ResolveError {
         matches: Vec<String>,
     },
 }
+
+codes!(ResolveError {
+    Self::NotManaged { .. } => "not_managed",
+    Self::UnknownProject { .. } => "unknown_project",
+    Self::AmbiguousProject { .. } => "ambiguous_project",
+} carried {
+    Self::Chosen { source, .. } => source,
+    Self::Workspace(error) => error,
+});
 
 /// The workspace a command uses, and why that one; `None` only when nothing
 /// names one, none is above `start`, and there is no default.

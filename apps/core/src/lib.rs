@@ -20,6 +20,7 @@ pub mod assign;
 pub mod catalog;
 pub mod claude_md;
 pub mod claude_rules;
+pub mod code;
 pub mod config_entry;
 pub mod copy;
 pub mod create;
@@ -48,6 +49,7 @@ pub mod status;
 pub mod template;
 pub mod update;
 pub mod url;
+pub mod view;
 pub mod workspace;
 
 pub use activate::{ActivateError, Shell, UnknownShell};

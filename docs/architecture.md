@@ -109,17 +109,25 @@ Two consequences worth stating, because they are what the split buys:
 - **Rendering happens in the front end**, and the CLI builds its output into a
   string before printing it, which is what lets its tests assert on the exact
   text a user sees.
+- **Reading happens through one value**, the snapshot core builds of a
+  workspace ([the read model](#the-read-model)), so two front ends showing
+  one workspace show one answer, put together once.
 
 ### How the CLI crate is laid out
 
 The grammar is in `parse.rs`, the work in `commands.rs` and a module per
-family of commands under `commands/`, and what a command produced, with the
-helpers every report is laid out with and the envelope its JSON goes out in,
-in `render.rs`. `CliError` has
-`error.rs` to itself, `homes.rs` decides where the default workspace's home and
+family of commands under `commands/`, and what a command produced, each line
+on stderr with its code ([failures are collected, not
+raised](#failures-are-collected-not-raised)), with the helpers every report is
+laid out with and the envelope its JSON goes out in, in `render.rs`.
+`CliError` has `error.rs`, with every code the CLI gives of its own
+(`CODES`), `homes.rs` decides where the default workspace's home and
 each agent's own folder are, and gathers them with what `-W` and
 `$MINDFLAYER_WORKSPACE` say (`Lookup`), `progress.rs` says what a gather's
-steps read as and draws them on stderr, and `lib.rs` only says what is public.
+steps read as and draws them on stderr, `task.rs` holds the work a front end
+asks for as the command lines it is ([every change is a command
+line](#every-change-is-a-command-line)), and `lib.rs` only says what is
+public.
 
 The split is by family. One file holding the parser, every command and the
 rendering was where every change to a command met every other, so pieces of
@@ -1271,6 +1279,20 @@ The CLI prints those on stderr as warnings and exits non-zero: visible, but not
 in the way of the answer. Asked for JSON, it puts them in the envelope beside
 the data instead ([JSON, in one envelope](#json-in-one-envelope)).
 
+Each line it says beside a report is a `render::Warning`, an `Outcome`'s and a
+`Failure`'s alike: the text a terminal shows, word for word, and beside it the
+code of what it says ([a code for what went wrong](#a-code-for-what-went-wrong)),
+taken from the value the line renders, core's error or failure or the CLI's
+own. The panel acts on a warning by its code, and a front end running a
+command line hands it the code with the text. A hint or a note has none, nor
+does a line the CLI words from what it found rather than from something that
+went wrong; a line built from text core handed over has none either, until
+core hands it over with its code, as a render's warnings come (`code::Said`).
+Kept on the line rather than in a list beside the lines, which every line
+pushed would have to keep in step with, and compared with a string by its text
+alone, so a test of what a terminal shows reads as it did. The TUI keeps the
+text alone: it shows a line as a terminal would.
+
 The distinction the code draws is between a problem and an absence. A project
 with no skills folder yet is not a failure, it is a project nobody has added a
 skill to. A skills folder that exists and cannot be listed is a
@@ -1287,29 +1309,34 @@ whatever the command (`render::json`):
 
 `status` was the first to take it ([what each project
 has](#what-each-project-has)), and every later reading command takes the same
-one rather than a shape of its own: `scan --json` ([Scanning](#scanning)),
+one rather than a shape of its own: `scan --json` ([Scanning](#scanning)) and
 `workspaces --json` ([the workspaces this machine
-knows](#the-workspaces-this-machine-knows)), and the read types #61 makes
-serializable. One shape is one parser for a script,
-and for the panel's backend when it reads through the CLI.
+knows](#the-workspaces-this-machine-knows)). One shape is one parser for a
+script, and for the panel's backend when it reads through the CLI.
 
 - **The warnings are inside it.** Failures are collected, not raised, in JSON
   as in text: what a table would say on stderr as `warning:` lines goes into
   `warnings`, without the prefix, and stderr is left without them, so a
   script reading stdout misses nothing. The exit status is the text's. A
   hint, advice for whoever reads the terminal, stays on stderr. An error that
-  stops a command is still text on stderr, `--json` or not, until #61 gives
-  errors codes.
+  stops a command is still text on stderr, `--json` or not: every error has
+  a code since #61 ([a code for what went wrong](#a-code-for-what-went-wrong)),
+  but none is printed yet.
 - **Its names are a contract.** Every type in `data` derives `Serialize` in
   core, each field by its snake_case name, and `Kind`, `Agent` and `State`
   are serialized by the word a command line takes for them (`skill`,
   `opencode`, `missing`), written by hand rather than derived: a derive
   spells the variant, so `Agent::OpenCode` would print `open_code`, a name no
-  command line or settings file holds, and a rename would change it. A path
-  is text, whatever bytes it holds, so one unprintable path cannot fail the
-  report. A name once printed stays: a field that goes or changes what it
-  holds moves `ENVELOPE_VERSION`, and one added does not, since a reader
-  passes over a key it does not know. A test reads each report back into
+  command line or settings file holds, and a rename would change it. `Kind`,
+  `Agent` and `Share` are read back the same way, through what reads a
+  command line's word (`FromStr`, `Share::named`), so a task a front end
+  hands back to be run ([every change is a command
+  line](#every-change-is-a-command-line)) takes the words a command line
+  takes and refuses the ones it refuses. A path is text, whatever bytes it
+  holds, so one unprintable path cannot fail the report. A name once printed
+  stays: a field that goes or changes what it holds moves
+  `ENVELOPE_VERSION`, and one added does not, since a reader passes over a
+  key it does not know. A test reads each report back into
   structs of its own that refuse any field they do not name
   (`common::enveloped`), so a change shows there before it reaches a script.
   It moved once, to 2, when `status` took the five states an installation
@@ -1322,6 +1349,248 @@ and for the panel's backend when it reads through the CLI.
   a report is laid out is a front end's to choose. What goes in `data` is
   core's, which builds and orders it, so the table and the JSON cannot
   disagree about what is there.
+
+### The read types serialize
+
+The reports a command prints are not the only types a front end reads. The
+panel shows what the TUI shows, and the snapshot it is served (#62) is built
+from the same types the CLI renders, so #61 made the read types it named
+serializable, under the rule the reports already kept, and every new read
+type derives `Serialize` from the start:
+
+- **Already there**, for a command's `--json`: the status report (`Status`,
+  `ProjectStatus`, `ArtifactStatus`, `Unreached`, `Missed`, `State`,
+  `MarkerFile`), a scan (`Scan`, `Found`, `Reason`), the workspaces this
+  machine knows (`Known`, `KnownWorkspace`), `Kind`, `Agent` and `ProjectId`.
+  None of them changed.
+- **Added**: a `Reference`, as typed and as read; an `Artifact` and each
+  `ArtifactCopy`, as a listing shows them, with their `Provenance` and every
+  `ValidationIssue`; a `Template`; a source to gather from (`gather::Source`),
+  a gather's `Report` and what it `Harvested`; a source the ledger keeps
+  (`ledger::Source`, its `SourceKind`) and what was `Gathered` from it; what
+  can be installed (`Offer`, `Candidate`) and how it stands (`Standing`); a
+  workspace's `Member` and `Loaded` entries, with a project's `Share` mode.
+- **Handed over by the snapshot** ([the read model](#the-read-model)), the
+  first change to give a front end types older than the rule: how a
+  workspace was chosen (`resolve::Reason`, as the slug of its rule,
+  `explicit`, `activated`, `above` or `home`, not the words a screen puts it
+  in), and the ledger's history (`ledger::Entry`, its target and detail
+  through `url::redacted`). `Resolved` does not: it only pairs a workspace
+  with its reason, which the snapshot says beside the workspace's name and
+  path.
+- **Not yet**, being older than the rule and handed to no front end so far:
+  the ledger's record of an install (`InstallRecord`), and what an update or
+  a change of agents would do (`update::Plan`, `reapply::Plan`). Each
+  derives `Serialize` in the change that first hands it to one, under the
+  same rule.
+
+What each says is held to the rule above, and three more things:
+
+- **Each field is named as the type names it**, whether derived or written by
+  hand. By hand only where a derive would print the wrong thing: a word a
+  command line takes (`Standing`, `Provenance`, `Share`, `SourceKind`, the
+  place an `Offer` comes from), a type holding more than a reader is given
+  (an artifact's front matter is `show`'s, and how each copy stands sits in
+  a placement no front end sees), or an error. A `ValidationIssue` goes out
+  as its code, what it is about, whether it is only worth a warning, and
+  its message: `warning` is core's to say, so the panel needs no list of
+  its own to tell an artifact that does not work from one that only says
+  something odd.
+- **An error goes out as its code and its message** (`code::Said`), never as
+  its fields: one holds an `io::Error` or a parser's own, which JSON has no
+  shape for, and only the two are meant to leave core. A member whose entry
+  opens no project says why as `error`, which is what a status report's
+  `stale` says, with the code beside it.
+- **A URL goes out only through `url::redacted`**, where it is written
+  (`url::serialize_redacted`) rather than trusted to where it came from. The
+  ledger hands back no URL with a credential in it, but a request is built
+  before a URL that carries one is refused, and a test builds a source with
+  one to prove that neither the source nor an offer's origin prints it.
+
+What a failure collected beside a report says stays out of the report, as a
+scan's does: a gather's `failures` and `warnings` are a front end's
+warnings, which in JSON are the envelope's. Every type's test pins its JSON
+name by name; a serialized name is a versioned contract from the first
+release that prints it, as a report's is.
+
+### A code for what went wrong
+
+The panel has to tell a workspace another writer holds from a project that
+has gone, and the server hands it what went wrong as JSON: matching the
+English would break the first time a message is reworded. So every public
+error type in core has a `code()`, a snake_case word for the condition
+(`workspace_busy`, `offered_twice`, `not_a_project`), and a
+`ValidationIssue` has one from the same list.
+
+So does a refusal, which is no error: an install that finds somebody's
+copy, or one changed since, answers `Installed::Foreign` or `Edited` and
+writes nothing, and the front end says so and goes on with the rest, as an
+uninstall's `Removed` does. The panel still has to tell the two apart, and
+the CLI's warning carries `foreign` beside its text, so `Installed::refused`
+and `Removed::refused` say why as an `install::Refused` (`foreign`, `edited`,
+`not_installed`). An update that leaves a copy changed since says `edited`
+(`update::Step::refused`), and a change of a project's agents or targets
+that leaves somebody's skill where a copy would go says `foreign`
+(`reapply::Why::refused`), by the same codes: one condition, met by another
+command, and named by core, so no front end decides which of core's
+conditions a code names. One type for both rather than a code on each
+outcome, since a copy that is somebody's refuses an install and an
+uninstall alike: two types would give `foreign` twice, which the rule below
+forbids.
+
+- **Unique across core**, not only within one type. A code reaches the panel
+  without the type it came from, so `workspace_busy` has to mean the lock
+  whichever command met it. Unique within a type was the other way, which
+  leaves the panel to know which type each code came from, and the server
+  hands it none.
+- **A variant that carries another error takes its code** when that error is
+  what went wrong and the variant adds only where, or what came of it: an
+  install that met a busy lock says `workspace_busy`, as the lock does. One
+  that says something the error it carries does not, a record dropped while
+  its exclude entry stays (`still_excluded`), has a code of its own. A type
+  whose every variant carries another error, as a status report's failures
+  do, gives no code of its own.
+- **Named for the condition**, in as few words as tell it from every other:
+  the variant's own name where that is enough, and its subject before it
+  where the bare name says nothing alone (`exclude_read_failed`,
+  `adopt_unfit`).
+- **A versioned contract, as a serialized name is.** A code is never renamed
+  nor moved to another condition, since a front end acting on it would stop
+  without a word. A new variant gets a new code, and rewording a message
+  changes none.
+
+Each type is given its codes with `code::codes!`, which writes `code()` as a
+match with no wildcard, so a new variant does not compile until it has one,
+and the list of the codes it gives (`CODES`) from the same arms, so no code
+is given without being listed. Each arm is `Self::` and one variant, with
+its fields in braces or parentheses: the macro takes no other pattern, so a
+wildcard or an or-pattern, which would give several variants one code and
+list it once, does not compile, and neither does an enum given the one
+code a struct takes. Every code listed is then one variant's own.
+`code::ALL` gathers every type's list, by the module it is defined in, and
+a test holds no two codes in it alike, which holds every variant to a code
+of its own; a second reads core's source for every public type that derives `Error`, and
+finds a new one that never joined `ALL`. A match written by hand beside a
+list kept by hand was the other way, and nothing fails when such a list
+misses a code. Building one value of every variant in a test, with a match
+to say when one is missing, was a third, rejected for the some three hundred
+variants it would build, many around an `io::Error`, or a parser's or
+SQLite's error a test has no plain way to make, and for a match that says a
+variant is missing from it but not from the list beside it.
+
+Nothing prints a code yet. A member's `error` was the first type to hold
+one, and the snapshot every front end reads holds them wherever it says what
+went wrong ([the read model](#the-read-model)), each a `code::Said`, the code
+beside its message; the CLI's warnings and failures carry them beside their
+text ([failures are collected, not raised](#failures-are-collected-not-raised)),
+which the panel's backend hands on (#67).
+
+**The CLI's errors have codes too**, since what a command could not do
+reaches the panel beside what core could not: `CliError::code`, given by the
+same `codes!`, which core exports for it. A variant that carries one of
+core's errors takes its code, as one of core's does. One that says a
+condition core names in words of the CLI's, with the command that would put
+it right (`not_managed`, `unknown_project`, `not_installed`), echoes the code
+core gives it, listed after `echoed`, which `code()` gives and `CODES` leaves
+out, so the panel meets one code for one condition whichever way it was
+reached. The rest are the CLI's own (`install_no_projects`,
+`not_a_terminal`), and so are a refusal's ([every change is a command
+line](#every-change-is-a-command-line)). `mindflayer_cli::CODES` lists them
+as `code::ALL` lists core's, and a test holds none of them to be given
+twice, there or in core, and each echoed one to be one core gives. A code
+the CLI took of its own for a condition core names was the other way, and
+would have the panel tell one condition apart from itself.
+
+## The read model
+
+Every front end reads a workspace through one value, `view::Snapshot`, its
+read contract: the TUI's now, and the panel's views next, which the server
+serves it to (#65) and which draw it from #72 on. It is a workspace in one
+read, built and ordered in core from the read types the commands print:
+
+- the workspace: its name, its path, the rule that chose it (`reason`) and
+  whether it is made;
+- every kind, agent and state core knows, from `Kind::ALL`, `Agent::ALL` and
+  `State::ALL`, so a kind added to core reaches a front end that lays its
+  columns out by them with no change of its own
+  ([D-21](#d-21-the-panels-views-follow-the-capabilities-they-show));
+- its library, the workspace's own, with where it keeps each kind and the
+  templates `flayer add` finds;
+- each project its registry names, in marker order, a stale entry with why
+  it opens none, and a second spelling of one directory as a project of its
+  own, since each entry is what `unlink` is given, as the TUI has always
+  listed them (a report lists one directory once). A project says its entry,
+  path, name, marker, id, agents and settings, where it authors each kind,
+  its templates, and what its agents miss (`unreached`, `missed`,
+  `misplaced`), as `status` says it;
+- each artifact a holder holds, with its kind, summary, state, the agents
+  that read it, where it came from, where it is held (`targets`: every copy
+  found and every place the ledger records putting one), everything
+  `validate` says of it, and which copy's file does not read and why
+  (`unread`, its own place named beside the reason, since its row keeps
+  how a readable copy of the name elsewhere stands, the report's), the
+  rules a project's `AGENTS.md` block holds among them
+  ([D-23](#d-23-what-a-project-received-is-an-installed-view));
+- the workspaces it loads, each with how many of its own it offers; its
+  shelf and the sources it is filled from; the workspaces this machine
+  knows; the latest actions, newest first (`view::HISTORY`); and the
+  warnings that belong to none of those.
+
+One value rather than each front end putting its view together from the
+reports, as the TUI did until #62: which unreadable file is which artifact's,
+which install nothing of is found, how much a load offers counted across two
+spellings of it, are answers, and a second front end working them out would
+come to a second set of them. `Snapshot::read` resolves the workspace as a
+read does, whatever its inputs intend; `Snapshot::of` builds one for a front
+end that resolved the workspace itself, to scan it too. `view::Project::read`
+and `LoadedWorkspace::of` read the same way what the TUI shows of a project
+no workspace links.
+
+- **A read, and nothing more.** The ledger is opened only through
+  `ledger_for_reading`, the default workspace is never made for it, and no
+  scrub runs ([a read leaves the ledger as it finds
+  it](#a-read-leaves-the-ledger-as-it-finds-it)). A test reads one of a
+  fixture, and of a home with no workspace, and finds no path made and no
+  byte changed.
+- **No scan.** What could be linked is a walk of the disk, bounded but not
+  free, and a snapshot is what a live update (#74) rebuilds every time
+  something changes. So the scan is a query of its own, run when somebody
+  asks (#77), which the TUI runs beside the snapshot. A test counts the
+  scans its thread runs, with a counter only a test build has, and finds
+  none.
+- **Its names are a contract**, as a report's are ([the read types
+  serialize](#the-read-types-serialize)), under a version of its own,
+  `view::FORMAT`, carried as `format`: the snapshot is no command's report,
+  so the envelope's version says nothing of it. It moves when a field goes
+  or changes what it holds, and not when one is added. A test pins the whole
+  of a fixture's JSON, every key in its order, written out in the test
+  rather than kept in a file a snapshot crate rewrites, so a change to it is
+  a change somebody reads in the diff.
+- **Every URL through `url::redacted`, where it is written**: a source's, an
+  origin, the log's target and detail, and the message of every error it
+  carries, which can quote one. The ledger hands back none with a
+  credential, but a row an older build wrote keeps its own until a command
+  that writes scrubs it, and a read scrubs nothing; a test writes such rows
+  and finds none of them in the JSON.
+- **Failures are collected beside what they are about**: a project's in its
+  `failures`, an entry that opens nothing as its `stale`, a load that would
+  not open as its `error`, a known workspace that has gone in its row, and
+  the rest (two projects holding one id, what a load cannot offer, a shelf
+  or a log that would not read) in `warnings`. One list of everything was
+  the other way, which a front end showing one project would have to sort
+  back out by project. A ledger that cannot be read is about every
+  project's records and the shelf alike, so each says it, as the TUI's rows
+  always have.
+- **What went wrong is a `code::Said`**, its code and its message, public
+  down to its fields, since the TUI reads the snapshot as Rust rather than as
+  JSON.
+
+What a front end reads beside the snapshot is what no snapshot holds: a scan,
+and which workspace `mind` consults from each project, which depends on the
+front end's own `-W`, activation and home, and which the TUI asks to know
+when a row's lines need `-W .` ([the TUI looks where it was
+told](#the-tui-looks-where-it-was-told)). The screen is the snapshot laid
+out: every test of the TUI passed unchanged when it moved to reading one.
 
 ## How entries are stored
 
@@ -1617,8 +1886,9 @@ said and not what they were.
 
 A source is stored, logged, listed and named in errors by its URL, so a token
 typed into one would be repeated everywhere: in `mindflayer.db`, in the
-clone's `.git/config`, in every report, and soon in a snapshot, `--json`
-output and the panel. One function takes it out, `url::redacted`, and
+clone's `.git/config`, in every report, in the snapshot every front end reads
+([the read model](#the-read-model)), in `--json` output and soon in the
+panel. One function takes it out, `url::redacted`, and
 everything that keeps or shows a URL goes through it.
 
 What it takes out is everything before the `@` of a `scheme://` URL, except
@@ -1654,9 +1924,9 @@ and into every reflog as `clone: from <url>`, and those files are rewritten
 through the same function. A clone a gather makes now has nothing to take out,
 and finding that costs a few small reads. A `--from` typed with credentials
 names the source they were taken out of. The CLI's report prints URLs
-redacted, and the TUI redacts a command line where it is built for showing
-(`state::shell`), so the box that says what is running and the transcript
-printed on the way out both leave the token out.
+redacted, and a task's command line is redacted where it is built for
+showing (`task::shell`), so the box that says what is running and the
+transcript printed on the way out both leave the token out.
 
 What a Mindflayer from before the refusal stored is **scrubbed** when a
 command that writes opens the ledger. `FlayerWorkspace::ledger_to_write` is
@@ -3171,10 +3441,14 @@ column holds no space for a script splitting on spaces to cut, and `-` for
 none, since reaching no agent is something to say. `--json` prints the
 report as core built it ([JSON, in one envelope](#json-in-one-envelope)).
 
-The TUI's rows show the same report. Each project is read once, through
-`ProjectStatus::read`, which hands back the catalog it read beside the
-report, so a row's summary, its problems and its state come from one
-discovery rather than two. A row shows its state, then a badge in each of the
+The TUI's rows show the same report, through the snapshot ([the read
+model](#the-read-model)). Each project is read once, through
+`ProjectStatus::read`'s own discovery, which hands back the catalog it read
+beside the report, so a row's summary, its problems and its state come from
+one discovery rather than two. Where each artifact is held comes back beside
+the report too (`read_placed`) rather than in it: the report's JSON is a
+contract `flayer status --json` prints, and the snapshot is where a front end
+reads more of each artifact than a script was promised. A row shows its state, then a badge in each of the
 project's agents' places, blank where that agent does not read it, so rows
 read down by agent. The two letters (`CC`, `CX`, `OC`) are the screen's, its
 own initials for each agent, since Claude Code and Codex share the first. A
@@ -3227,15 +3501,78 @@ Two things follow, and both are deliberate:
   repeated in a script. Commands that only read (show, validate, the shelf)
   are left out, because they changed nothing.
 
+`Task` is not the TUI's own, though the TUI is where it was born: it lives in
+`task.rs`, shared by every front end that runs commands, the TUI now and the
+panel's backend next ([D-18](#d-18-the-panel-writes-by-running-commands)).
+One type, so a line is spelled one way whichever front end asked for it; a
+second front end building its own lines would be a second place for one to be
+spelled wrong.
+
+The panel will send a task as JSON, so it serializes both ways, as one flat
+object tagged by its name in snake_case (`{"type": "link", "path": "beta"}`),
+its holder and its agents line tagged the same way inside it. Its kind, agents
+and share mode are the words a command line takes, read back through what
+reads those ([JSON, in one envelope](#json-in-one-envelope)), and a field a
+task does not have is refused rather than passed over: a task is a write, and
+one sent with a field misspelled would run without it. A name, once a front
+end sends it, is a contract as a report's is, so a test pins every one, and
+reads every task back from its JSON as it was.
+
+**No value a task holds is read as an option, or as a command.** A task the
+panel sends holds whatever a browser put in it, so a description that reads
+`--yes` has to reach `add` as a description, not confirm anything. A line's
+own words, the command and the options the task sets, are spelled in
+`task.rs` and never taken from a field, so a value cannot name a command;
+and each value goes one of three ways. After the option that takes it,
+joined to it by `=` when it starts with a dash (`--path=-odd`); as a `-C` or
+a `-p` that starts with one, behind a `./`, which names the same directory
+and the same project by its path; or among the positionals, which go behind
+a `--` whenever one of them starts with a dash. So a task names each project
+it gives `-p` as `FlayerWorkspace::naming` does, by its entry or a path from
+the root, never by the project's name, which behind a `./` would be read as
+a path instead: a `-p=-odd` would keep it a name, and change the line the
+TUI has always shown for such a project. A test holds every variant to it:
+fed values that start with a dash, the flags the grammar knows among them
+and a couple of hundred more made from a fixed seed, each line is read as
+the same line with a plain value is: the same commands, the same options,
+and under each option or positional the value as given wherever the plain
+one was, behind its `./` under a `-C` or a `-p`. Compared option by option
+rather than as one bag of values, since a line holds a value in several
+fields, and one field holding it would hide another that dropped its dash.
+A property-test crate was the alternative, and one loop over every variant,
+with no new dependency, is all this asks of one. Shown, a line is quoted for
+a shell (`task::shell`), so one pasted from the transcript runs as one
+command of exactly its words.
+
 A `-C` or a `-W` in those words is relative to the workspace root, which is
 how someone reading the transcript takes it, so it is resolved against the
 root rather than against wherever the process started. What the screen was
 opened with is passed along rather than spelled: its home, and the `-W` or
 activation that chose its workspace (`tui::execute`), as they were given to
-`flayer` itself. A command that opens a screen of its own
-(`flayer`, `flayer tui`, `flayer minds`, `flayer install` with nothing named,
+`flayer` itself. A command that opens a screen of its own (`flayer`, `flayer
+tui`, `flayer minds`, `flayer install` with neither a name nor a project,
 `mind`, `mind tui`) is refused if it ever reaches that path, rather than drawn
-inside this one.
+inside this one. Half an install (`flayer install -p alpha`) opens none, and
+is left to the command, which refuses it with a reason of its own.
+
+That refusal is one part of a list every front end shares (`task::Refusal`):
+what a front end with no terminal of its own, the panel's server, does not
+run. A screen of its own; `edit` in every form, which hands the terminal to
+an editor, until #81 gives it one that takes the contents; `activate`, which
+prints code for a shell; and `gather git`, the network for as long as it
+takes, until #112 brings to the server the progress and the cancel only a
+screen has now. `ui` joins it when #68 makes it a command. The TUI has a
+terminal, so of the list it refuses only the screens. The list is of
+commands as the parsers read them, not as they are spelled, so `mind flayer
+minds` is refused as `flayer minds` is, and it is a match over every command
+with no wildcard, so a new command does not compile until it says whether
+it is refused. A task is refused for the first of its lines that is
+(`Task::refusal`), whichever variant it is, and each refusal has a code of
+its own (`opens_screen`, `opens_editor`, `prints_shell_code`,
+`gather_unwatched`), held to the rules core's codes are ([a code for what
+went wrong](#a-code-for-what-went-wrong)). A list of tasks was the
+alternative, and it would leave out a line no task builds: a front end that
+runs lines it is sent would run one the list never named.
 
 The exceptions are named, not hidden: opening the install screen builds the
 screen `flayer install` opens, as a read, rather than running a line, and
@@ -3253,8 +3590,10 @@ so the transcript says what it ran in words that run again.
 - `tui/ui.rs`: what the screen looks like, rendered into an in-memory
   terminal by the tests.
 - `tui/minds.rs`: the minds screen's rows and ticks, and the task they amount
-  to; like `state.rs`, it touches nothing.
-- `tui.rs`: the loop, reading the disk into what the screen shows, and running
+  to, which `Task::minds` builds from the marks, so another front end marking
+  directories builds the same lines; like `state.rs`, it touches nothing.
+- `tui.rs`: the loop, laying out the snapshot core reads ([the read
+  model](#the-read-model)) and a scan as what the screen shows, and running
   tasks. `step` is everything the loop does between a key and the next frame,
   and `settle` what it does before each frame while a task runs apart; both
   are public so a test can do exactly that without a terminal.
@@ -4100,9 +4439,9 @@ price of a project's row no longer teaching a project's command.
 make it either. `FlayerWorkspace::ledger_for_reading` opens it only when it
 exists (`Ledger::open_existing`, without SQLite's create flag) and otherwise
 answers from an empty ledger in memory, which says what a ledger nothing was
-ever written to would. So `flayer gather list`, the TUI's shelf count and the
-install screen leave a workspace that has never gathered or installed anything
-without one. The install screen is a read until something on it is applied;
+ever written to would. So `flayer gather list`, the snapshot every front end
+reads and the install screen leave a workspace that has never gathered or
+installed anything without one. The install screen is a read until something on it is applied;
 applying runs lines that open the ledger to write (`ledger_to_write`,
 through `assign`), which makes it, and never the stand-in, whose records
 would be gone when it was dropped. Nor does a read scrub an existing ledger of
@@ -6248,6 +6587,18 @@ just listed.
   dry run says so; holding such an update back until the project is shared
   or sets `edit_tracked` would make the consent a setting, at the price of
   an adopted copy no update reaches by default.
+- **A snapshot is read whole.** Every update reads every project's folders
+  and the ledger again, so a workspace of many projects pays for all of them
+  each time one changes. Rebuilding only the projects whose paths changed
+  (`watched_paths`, #74) would cut that, at the price of a snapshot put
+  together from parts read at different moments, which could disagree about
+  an install that happened between two of them.
+- **Which workspace a project's lines consult is not in the snapshot.** The
+  TUI asks it beside the snapshot, from its own lookup, to know when a row's
+  lines need `-W .`, and the panel's lines will need the same (#76).
+  Carrying it in the snapshot would make what the snapshot says depend on
+  the front end's `-W` and activation, where now only the list of known
+  workspaces depends on its home.
 - **Precedence between projects.** Two projects in one workspace can declare
   the same skill name. Core returns both matches and says nothing about which
   wins, because nothing here yet has to choose. Whatever resolves it (a
@@ -6797,8 +7148,11 @@ just listed.
   listing keep to.
 - **Errors outside the envelope.** A command that fails says why as text on
   stderr, `--json` or not, and prints no envelope, so a script tells failure
-  only by the exit status. #61 gives errors codes, and is where an error
-  joins the envelope, if it does.
+  only by the exit status. Every error has had a code since #61 ([a code for
+  what went wrong](#a-code-for-what-went-wrong)), and a serialized error is
+  its code and its message, but none of them is printed: whether a failing
+  command's `--json` prints an envelope holding its error is left to #63,
+  which carries codes on the CLI's warnings and failures.
 - **An agent's CLI writing the same config file.** The workspace's lock keeps
   Mindflayer's writers apart, not the agents': `claude mcp add` rewriting
   `.mcp.json` between `ConfigFile::edit`'s read and its rename is undone by the
@@ -7042,3 +7396,19 @@ just listed.
   it is forgotten and `flayer init` run where it went. Nothing in a workspace
   names it for good, as a project's id names a project (#57 relinks those), so
   there is nothing to match a moved one by.
+- **Lines core hands over as text.** A warning carries the code of the value
+  it renders, and a few are built from text core hands over without one: why
+  an exclude entry could not be dropped (`still_excluded`, an install's
+  `Rendered::still_excluded`), why a copy was recorded without a hash, what a
+  copy left out and why, and the notes an `Excluded` gives. Each says a
+  condition the panel may want to act on, and carries no code until core
+  hands it over as a `code::Said`, as a render's warnings now come. Spelling
+  core's code by hand at the line was the other way, rejected for a code no
+  test could hold to the value it names. Nor do the CLI's own warnings,
+  worded from what it found (a gathered name that is not one folder name, an
+  update that cannot tell where a copy came from), carry a code of the CLI's:
+  each would join `mindflayer_cli::CODES` once the panel acts on it.
+- **A command `ui` will be.** The list of what a front end with no terminal
+  does not run is to refuse `ui` too, a server started from the panel's own,
+  and `ui` is no command yet: #68 adds it, and `Refusal::of_flayer`, a match
+  over every command, does not compile until it says where `ui` goes.

@@ -6,6 +6,8 @@
 
 use std::borrow::Cow;
 
+use serde::Serializer;
+
 /// `text` with every URL in it stripped of the credentials its userinfo
 /// carries, so a source can be stored, logged and named in an error without
 /// repeating a token somebody typed into it.
@@ -83,6 +85,31 @@ pub fn redacted(text: &str) -> Cow<'_, str> {
     } else {
         kept.push_str(&text[copied..]);
         Cow::Owned(kept)
+    }
+}
+
+/// A URL as a serialized type writes it: [`redacted`], whatever the value
+/// holds. What the ledger hands back carries no credential already; a type
+/// built some other way, a source a front end holds before it gathers, or
+/// one a test builds, must not print one either, so the redaction is where
+/// the URL is written rather than trusted to where it came from.
+pub(crate) fn serialize_redacted<S: Serializer>(
+    url: &str,
+    serializer: S,
+) -> Result<S::Ok, S::Error> {
+    serializer.serialize_str(&redacted(url))
+}
+
+/// [`serialize_redacted`], for a text that may not be there: an action
+/// log's target or detail, which can quote a URL among other words, or an
+/// origin a record from before origins were kept lacks.
+pub(crate) fn serialize_redacted_option<S: Serializer>(
+    text: &Option<String>,
+    serializer: S,
+) -> Result<S::Ok, S::Error> {
+    match text {
+        Some(text) => serializer.serialize_some(&redacted(text)),
+        None => serializer.serialize_none(),
     }
 }
 

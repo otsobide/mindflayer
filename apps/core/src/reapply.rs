@@ -39,11 +39,12 @@ use std::path::{Path, PathBuf};
 use thiserror::Error;
 
 use crate::agent::{Agent, AgentHomes};
+use crate::code::codes;
 use crate::copy;
 use crate::exclude::{self, ExcludeError};
 use crate::gather::Scrub;
 use crate::hash;
-use crate::install::{self, InstallError, InstallTarget};
+use crate::install::{self, InstallError, InstallTarget, Refused};
 use crate::kind::{Kind, Layout};
 use crate::ledger::{Action, InstallRecord, Ledger, LedgerError, Outcome, Target};
 use crate::paths;
@@ -298,6 +299,22 @@ impl Why {
     pub(crate) fn disowns(&self) -> bool {
         matches!(self, Why::Edited | Why::Uncompared(_))
     }
+
+    /// Why no copy was made here, when an install would have been refused
+    /// here for the same reason: what a front end says it with, by the code
+    /// of that install's refusal, since a code names one condition wherever
+    /// it is met. Here rather than in each front end, which would otherwise
+    /// decide for itself which of core's conditions a code names.
+    ///
+    /// Only somebody's copy: one with nothing to make it from is no
+    /// refusal, and an edited one in a folder no agent is sent copies to
+    /// any more is let go rather than refused a copy.
+    pub fn refused(&self) -> Option<Refused> {
+        match self {
+            Why::Foreign => Some(Refused::Foreign),
+            Why::Unsourced | Why::Edited | Why::Uncompared(_) => None,
+        }
+    }
 }
 
 /// What [`apply`] did.
@@ -343,6 +360,13 @@ pub enum ReapplyFailure {
     },
 }
 
+codes!(ReapplyFailure {
+    Self::Copy { .. } => "reapply_copy_failed",
+    Self::Remove { .. } => "reapply_remove_failed",
+    Self::StillExcluded(_) => "reapply_still_excluded",
+    Self::Ignore { .. } => "reapply_ignore_unremoved",
+});
+
 /// Why a change could not be made at all: refused before anything is
 /// written, but for a ledger that fails while the copies' records are being
 /// written, which stops everything, as it does wherever it fails.
@@ -367,6 +391,16 @@ pub enum ReapplyError {
     #[error("{project} would install its {kind}s in no folder; name one, or reset them to go where its agents read")]
     NoFolder { project: String, kind: Kind },
 }
+
+codes!(ReapplyError {
+    Self::NoAgent { .. } => "reapply_no_agent",
+    Self::NoFolder { .. } => "reapply_no_folder",
+} carried {
+    Self::Workspace(error) => error,
+    Self::Ledger(error) => error,
+    Self::Install(error) => error,
+    Self::Exclude(error) => error,
+});
 
 /// What `change` would do to `project`, against what `workspace` records
 /// of it when that one links it: nothing written, the ledger read without

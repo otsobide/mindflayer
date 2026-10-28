@@ -73,6 +73,13 @@ pub struct KnownWorkspace {
     /// Why it would not open, when it would not: listed rather than left
     /// out, since a workspace that has gone is the one somebody has to find
     /// to forget it.
+    ///
+    /// Written through [`redacted`](crate::url::redacted), as an error's
+    /// message is in a [`Said`](crate::code::Said): a marker that does not
+    /// parse is quoted in its own words, a source's URL among them perhaps,
+    /// and whoever wrote that file is no promise that it holds no
+    /// credential.
+    #[serde(serialize_with = "crate::url::serialize_redacted_option")]
     pub stale: Option<String>,
 }
 

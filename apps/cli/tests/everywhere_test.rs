@@ -413,7 +413,9 @@ fn uninstall_orphaned_leaves_what_cannot_be_read_and_says_why() {
     );
     assert_eq!(outcome.stderr.len(), 1, "{:?}", outcome.stderr);
     assert!(
-        outcome.stderr[0].starts_with(&format!("warning: {}: ", manifest.display())),
+        outcome.stderr[0]
+            .text
+            .starts_with(&format!("warning: {}: ", manifest.display())),
         "{:?}",
         outcome.stderr
     );

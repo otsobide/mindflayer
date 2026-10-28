@@ -36,6 +36,7 @@ use thiserror::Error;
 
 use crate::agent::AgentHomes;
 use crate::catalog::Reference;
+use crate::code::codes;
 use crate::gather::Scrub;
 use crate::install::{self, Edits, Found, InstallError, Offer, Removed, Standing};
 use crate::ledger::{InstallRecord, Ledger, LedgerError};
@@ -127,6 +128,12 @@ pub enum EverywhereError {
     #[error(transparent)]
     Install(#[from] InstallError),
 }
+
+codes!(EverywhereError {} carried {
+    Self::Lifecycle(error) => error,
+    Self::Ledger(error) => error,
+    Self::Install(error) => error,
+});
 
 /// What removing what `reference` names, one of `workspace`'s own, from the
 /// workspace and from every project it links would do: nothing written, the

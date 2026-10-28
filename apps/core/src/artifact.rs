@@ -6,9 +6,11 @@ use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
 
+use serde::ser::{Serialize, SerializeMap, SerializeStruct, Serializer};
 use thiserror::Error;
 
 use crate::agent::Agent;
+use crate::code::codes;
 use crate::frontmatter::{self, FrontMatterError};
 use crate::kind::{Kind, Layout};
 use crate::rule::{Lenient, RuleManifest};
@@ -150,6 +152,21 @@ impl ArtifactCopy {
     }
 }
 
+/// As a listing shows a copy: where it is, who reads it there, who put it
+/// there and what is wrong with it there, each by the name its accessor
+/// gives it. By hand, since who reads and who put it are held together in
+/// a placement of the artifact's own that no front end sees.
+impl Serialize for ArtifactCopy {
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        let mut copy = serializer.serialize_struct("ArtifactCopy", 4)?;
+        copy.serialize_field("path", &self.path.to_string_lossy())?;
+        copy.serialize_field("agents", self.agents())?;
+        copy.serialize_field("provenance", &self.provenance())?;
+        copy.serialize_field("issues", self.issues())?;
+        copy.end()
+    }
+}
+
 /// Who put a copy where it is, as far as its folder and the ledger say.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Provenance {
@@ -164,6 +181,53 @@ pub enum Provenance {
     /// by nothing: somebody's, put there some other way, and never
     /// Mindflayer's to change.
     Foreign,
+}
+
+impl Provenance {
+    /// How a report says it: one lowercase word, which once printed is a
+    /// contract.
+    pub const fn slug(self) -> &'static str {
+        match self {
+            Provenance::Installed => "installed",
+            Provenance::Authored => "authored",
+            Provenance::Foreign => "foreign",
+        }
+    }
+}
+
+/// By its slug, for the reason a kind is: a renamed variant cannot change
+/// what a front end compares.
+impl Serialize for Provenance {
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        serializer.serialize_str(self.slug())
+    }
+}
+
+/// As a listing shows it: what it is, where its first copy is and in which
+/// project, who put it there and who reads it, what is wrong with it, and
+/// every copy with what is wrong with each.
+///
+/// By hand rather than derived: an artifact holds what it declared, the
+/// whole of its front matter, which is `show`'s to print rather than a
+/// listing's, and how each copy stands in a placement no front end sees.
+/// Each field is named for the accessor that gives it, and says what that
+/// accessor says: `issues` is [`validate`](Artifact::validate), every copy's
+/// together, and `copies` is [`copies`](Artifact::copies), the first first.
+impl Serialize for Artifact {
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        let mut artifact = serializer.serialize_struct("Artifact", 10)?;
+        artifact.serialize_field("kind", &self.kind())?;
+        artifact.serialize_field("name", &self.name)?;
+        artifact.serialize_field("summary", &self.summary)?;
+        artifact.serialize_field("path", &self.path.to_string_lossy())?;
+        artifact.serialize_field("project", &self.project.to_string_lossy())?;
+        artifact.serialize_field("provenance", &self.provenance())?;
+        artifact.serialize_field("agents", &self.agents())?;
+        artifact.serialize_field("issues", &self.validate())?;
+        artifact.serialize_field("copies_differ", &self.differ)?;
+        artifact.serialize_field("copies", &self.copies())?;
+        artifact.end()
+    }
 }
 
 impl Artifact {
@@ -692,6 +756,25 @@ pub enum ValidationIssue {
     DescriptionNotAString,
 }
 
+codes!(ValidationIssue {
+    Self::NameEmpty => "name_empty",
+    Self::NameNotKebabCase { .. } => "name_not_kebab_case",
+    Self::NameSegmentTooLong { .. } => "name_segment_too_long",
+    Self::NameDirectoryMismatch { .. } => "name_directory_mismatch",
+    Self::DescriptionEmpty => "description_empty",
+    Self::DescriptionTooLong { .. } => "description_too_long",
+    Self::CompatibilityEmpty => "compatibility_empty",
+    Self::CompatibilityTooLong { .. } => "compatibility_too_long",
+    Self::CompatibilityNotAString => "compatibility_not_a_string",
+    Self::MetadataNotAMap => "metadata_not_a_map",
+    Self::MetadataNotAString { .. } => "metadata_not_a_string",
+    Self::MetadataRepeated { .. } => "metadata_repeated",
+    Self::Empty => "content_empty",
+    Self::FrontMatterUnparsed { .. } => "front_matter_unparsed",
+    Self::PathsNotStrings => "paths_not_strings",
+    Self::DescriptionNotAString => "description_not_a_string",
+});
+
 impl ValidationIssue {
     /// Whether this breaks one of the strict rules: the ones Mindflayer will
     /// not break when it writes a skill into a project (creating, renaming
@@ -746,6 +829,59 @@ impl ValidationIssue {
             | ValidationIssue::DescriptionTooLong { .. }
             | ValidationIssue::Empty => false,
         }
+    }
+}
+
+/// As an object: its code, what it is about by the name its variant gives
+/// each, whether it is only worth a warning, and its message.
+///
+/// By hand rather than derived, for the reason a kind is: a derive tags each
+/// variant with its Rust name, which a rename would change, where the code
+/// is the word a front end compares and is held to stay. `warning` is
+/// [`is_warning`](Self::is_warning), core's to say, so the panel tells an
+/// artifact that does not work from one that only says something odd
+/// without a list of its own; the message is there for the same reason, to
+/// be shown rather than written again in TypeScript.
+impl Serialize for ValidationIssue {
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        let mut map = serializer.serialize_map(None)?;
+        map.serialize_entry("code", self.code())?;
+        // Matched in full, so a new issue has to say what it carries.
+        match self {
+            ValidationIssue::NameEmpty
+            | ValidationIssue::DescriptionEmpty
+            | ValidationIssue::CompatibilityEmpty
+            | ValidationIssue::CompatibilityNotAString
+            | ValidationIssue::MetadataNotAMap
+            | ValidationIssue::Empty
+            | ValidationIssue::PathsNotStrings
+            | ValidationIssue::DescriptionNotAString => {}
+            ValidationIssue::NameNotKebabCase { segment } => {
+                map.serialize_entry("segment", segment)?;
+            }
+            ValidationIssue::NameSegmentTooLong { segment, length } => {
+                map.serialize_entry("segment", segment)?;
+                map.serialize_entry("length", length)?;
+            }
+            ValidationIssue::NameDirectoryMismatch { name, directory } => {
+                map.serialize_entry("name", name)?;
+                map.serialize_entry("directory", directory)?;
+            }
+            ValidationIssue::DescriptionTooLong { length }
+            | ValidationIssue::CompatibilityTooLong { length } => {
+                map.serialize_entry("length", length)?;
+            }
+            ValidationIssue::MetadataNotAString { key }
+            | ValidationIssue::MetadataRepeated { key } => {
+                map.serialize_entry("key", key)?;
+            }
+            ValidationIssue::FrontMatterUnparsed { reason } => {
+                map.serialize_entry("reason", reason)?;
+            }
+        }
+        map.serialize_entry("warning", &self.is_warning())?;
+        map.serialize_entry("message", &self.to_string())?;
+        map.end()
     }
 }
 
@@ -834,6 +970,13 @@ pub enum ArtifactError {
         source: serde_yaml_ng::Error,
     },
 }
+
+codes!(ArtifactError {
+    Self::Read { .. } => "artifact_read_failed",
+    Self::Parse { .. } => "front_matter_invalid",
+} carried {
+    Self::FrontMatter { source, .. } => source,
+});
 
 impl ArtifactError {
     /// The file the failure is about.

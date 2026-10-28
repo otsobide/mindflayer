@@ -299,6 +299,6 @@ fn the_default_workspace_unmade_has_nothing_to_move_and_is_not_made() {
         "nothing to move: the workspace keeps its own in its library already\n"
     );
     assert_eq!(outcome.stderr.len(), 1);
-    assert!(outcome.stderr[0].starts_with("hint: "), "{outcome:?}");
+    assert!(outcome.stderr[0].text.starts_with("hint: "), "{outcome:?}");
     assert!(!home.path().join(FLAYER_DIR).exists());
 }

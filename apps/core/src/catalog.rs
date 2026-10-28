@@ -5,10 +5,12 @@ use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
 
+use serde::Serialize;
 use thiserror::Error;
 
 use crate::agent::Agent;
 use crate::artifact::{Artifact, ArtifactError};
+use crate::code::codes;
 use crate::hash;
 use crate::install;
 use crate::kind::{Kind, Layout};
@@ -556,7 +558,10 @@ impl Catalog {
 ///
 /// It also removes the shape from Windows entirely, where a filename cannot
 /// contain `:` at all.
-#[derive(Debug, Clone, PartialEq, Eq)]
+///
+/// Serialized as what it read, each part by its name: the kind as a command
+/// line takes it, or none when it was not qualified.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct Reference {
     kind: Option<Kind>,
     name: String,
@@ -648,6 +653,16 @@ pub enum DiscoveryFailure {
         source: io::Error,
     },
 }
+
+codes!(DiscoveryFailure {
+    Self::Directory { .. } => "folder_unlisted",
+    Self::UnusableName { .. } => "route_not_utf8",
+    Self::Diverged { .. } => "copies_diverged",
+    Self::Uncompared { .. } => "copy_uncompared",
+} carried {
+    Self::Artifact(error) => error,
+    Self::Ledger(error) => error,
+});
 
 impl DiscoveryFailure {
     /// The path the failure is about: the first copy an agent reads, for

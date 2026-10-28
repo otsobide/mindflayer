@@ -87,6 +87,11 @@ updated commit-style in beta, from workspace
           .claude/skills/commit-style, so it was left alone; --force writes over it"
         ]
     );
+    assert_eq!(
+        updated.stderr[0].code,
+        Some("edited"),
+        "left alone as an install not forced is, and said by its code"
+    );
     assert!(!updated.ok);
     let offer = fs::read(offered(dir.path())).unwrap();
     for project in ["alpha", "beta"] {
@@ -332,7 +337,8 @@ fn a_stale_entry_is_said_beside_what_the_rest_update() {
     );
     assert_eq!(planned.stderr.len(), 1, "{:?}", planned.stderr);
     assert!(
-        planned.stderr[0].starts_with("warning: ") && planned.stderr[0].contains("old-api"),
+        planned.stderr[0].text.starts_with("warning: ")
+            && planned.stderr[0].text.contains("old-api"),
         "{:?}",
         planned.stderr
     );
@@ -357,7 +363,8 @@ fn every_entry_stale_is_not_said_as_nothing_linked() {
     );
     assert_eq!(planned.stderr.len(), 1, "{:?}", planned.stderr);
     assert!(
-        planned.stderr[0].starts_with("warning: ") && planned.stderr[0].contains("old-api"),
+        planned.stderr[0].text.starts_with("warning: ")
+            && planned.stderr[0].text.contains("old-api"),
         "{:?}",
         planned.stderr
     );

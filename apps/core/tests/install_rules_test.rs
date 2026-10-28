@@ -12,6 +12,7 @@ use std::path::PathBuf;
 use mindflayer_core::agents_md::{self, Section};
 use mindflayer_core::claude_md::{self, Fallback, Reach};
 use mindflayer_core::claude_rules::{self, Warning as FileWarning};
+use mindflayer_core::code::Said;
 use mindflayer_core::install::rules::{self, Warning, Withheld};
 use mindflayer_core::install::{
     self, Candidate, Edits, InstallError, Installation, Installed, Removed, Standing,
@@ -1258,7 +1259,7 @@ fn a_render_keeps_another_rules_edited_section_as_the_block_holds_it_and_says_so
     assert_eq!(fixture.standing("git/no-force-push"), Standing::Edited);
     let rendered = again.rendered.unwrap();
     assert_eq!(
-        rendered.warnings_of(Some("review/tone")),
+        messages(rendered.warnings_of(Some("review/tone"))),
         [format!(
             "{}: the section of rule `git/no-force-push` was changed since it was rendered, so \
              it is left as it is",
@@ -1748,16 +1749,22 @@ fn a_render_says_what_each_renderer_found_once_in_one_list() {
          no .claude/rules",
     );
     assert_eq!(
-        rendered.warnings_of(Some("rust/errors")),
+        messages(rendered.warnings_of(Some("rust/errors"))),
         [no_git_root.clone(), claude_only.clone()]
     );
     // What is true of a rule whatever the render is said of the one changed,
     // and of every one by a render that changed none.
     assert_eq!(
-        rendered.warnings_of(Some("git/no-force-push")),
+        messages(rendered.warnings_of(Some("git/no-force-push"))),
         std::slice::from_ref(&no_git_root)
     );
-    assert_eq!(rendered.warnings_of(None), [no_git_root, claude_only]);
+    let warned = rendered.warnings_of(None);
+    assert_eq!(
+        warned.iter().map(|said| said.code).collect::<Vec<_>>(),
+        ["codex_no_git_root", "claude_only_rule"],
+        "each beside its code"
+    );
+    assert_eq!(messages(warned), [no_git_root, claude_only]);
     assert_eq!(
         rendered.notes(),
         [format!(
@@ -1821,6 +1828,11 @@ fn a_project_whose_settings_name_no_agent_receives_neither_kind() {
             "{refused:?}"
         );
     }
+}
+
+/// What each of `said` says, without its code.
+fn messages(said: Vec<Said>) -> Vec<String> {
+    said.into_iter().map(|said| said.message).collect()
 }
 
 /// What status says each rule the fixture's project received misses.

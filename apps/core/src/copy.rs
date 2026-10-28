@@ -223,8 +223,12 @@ pub struct Stage {
 /// name it: making the folder a copy goes in fails with what the filesystem
 /// says, which names no path, and with several targets the caller cannot
 /// tell which one was broken.
+///
+/// Core's alone, as placing is: each caller turns it into an error of its
+/// own, one with a code (`code`), so no front end ever meets this one, and it
+/// needs none.
 #[derive(Debug)]
-pub struct PlaceError {
+pub(crate) struct PlaceError {
     /// The target it failed at, as `to` names it: one that could not be
     /// cleared beside, compared or put in place. None when the copy itself
     /// could not be built, which is no target's doing.
@@ -330,7 +334,7 @@ impl Stage {
     /// is cleared first, as for [`Stage::replace`].
     ///
     /// A failure says which target it was at ([`PlaceError::target`]).
-    pub fn place(
+    pub(crate) fn place(
         &mut self,
         from: &Path,
         to: &[PathBuf],
@@ -345,7 +349,7 @@ impl Stage {
     /// have been updated: for a target its caller knows is not the copy it
     /// writes though [`same`] says it is, a copy holding a link to the same
     /// bytes, which [`same`] follows.
-    pub fn place_over(
+    pub(crate) fn place_over(
         &mut self,
         from: &Path,
         to: &[PathBuf],
@@ -682,7 +686,7 @@ pub fn same(a: &Path, b: &Path) -> Result<bool, io::Error> {
 }
 
 /// Whether `b` holds what a copy of `a` leaving out `leave_out` would
-/// ([`Stage::place`]): the same names and bytes, but for what is named
+/// (`Stage::place`): the same names and bytes, but for what is named
 /// `leave_out` directly inside `a`. Only `a`'s are passed over, so a `b`
 /// that holds one of those names is not that copy.
 pub fn same_leaving(a: &Path, b: &Path, leave_out: &[&str]) -> Result<bool, io::Error> {

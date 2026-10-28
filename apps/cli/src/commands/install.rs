@@ -13,7 +13,7 @@ use mindflayer_core::{AgentHomes, FlayerWorkspace, Kind, MindProject, Reference}
 use crate::commands::gather::{scrubbed, Scrubbed};
 use crate::commands::update::listed as words_listed;
 use crate::commands::workspace::load_warnings;
-use crate::{CliError, Failure, Outcome};
+use crate::{CliError, Failure, Outcome, Warning};
 
 /// Put what `typed` names into each of `projects`, from wherever it is
 /// offered: a skill or a rule, by its name alone or qualified
@@ -109,7 +109,7 @@ fn install_said(
     project: &MindProject,
     done: assign::Install,
     reference: &Reference,
-    loads: &[String],
+    loads: &[Warning],
     among: bool,
 ) -> Result<Outcome, Failure> {
     use mindflayer_core::install::{self as installing, Installed};
@@ -134,7 +134,10 @@ fn install_said(
     let done = installed.map_err(|error| {
         // What it cleared before it failed comes first, being what it did:
         // on stderr with the error, the only place a failure prints.
-        let mut told = cleared(project, error.swept());
+        let mut told: Vec<Warning> = cleared(project, error.swept())
+            .into_iter()
+            .map(Warning::from)
+            .collect();
         told.extend(warnings.iter().cloned());
         Failure {
             error: Box::new(error.into()),
@@ -142,6 +145,9 @@ fn install_said(
         }
     })?;
     let unhashed = done.installed.unhashed().map(str::to_owned);
+    // Why it was refused, when it was: what the panel tells somebody's copy
+    // from one changed since by, as the line does in words.
+    let refused = done.installed.refused().map(|refused| refused.code());
     let mut outcome = match done.installed {
         Installed::Added { name, .. } => Outcome::plain(format!(
             "installed {} into {into}, from {origin}\n",
@@ -158,21 +164,27 @@ fn install_said(
         // Refused rather than obeyed: somebody wrote that one.
         Installed::Foreign { name, path } => Outcome {
             stdout: String::new(),
-            stderr: vec![format!(
-                "warning: {into} already has a {} at {} that Mindflayer did not put there, so it was left alone",
-                named(kind, &name),
-                shown(project, &path)
-            )],
+            stderr: vec![Warning {
+                text: format!(
+                    "warning: {into} already has a {} at {} that Mindflayer did not put there, so it was left alone",
+                    named(kind, &name),
+                    shown(project, &path)
+                ),
+                code: refused,
+            }],
             ok: false,
         },
         // And so is a copy somebody changed since, until forced.
         Installed::Edited { name, paths } => Outcome {
             stdout: String::new(),
-            stderr: vec![format!(
-                "warning: {} in {into} was changed since it was installed, at {}, so it was left alone; --force writes over it",
-                named(kind, &name),
-                listed(project, &paths)
-            )],
+            stderr: vec![Warning {
+                text: format!(
+                    "warning: {} in {into} was changed since it was installed, at {}, so it was left alone; --force writes over it",
+                    named(kind, &name),
+                    listed(project, &paths)
+                ),
+                code: refused,
+            }],
             ok: false,
         },
     };
@@ -183,7 +195,7 @@ fn install_said(
     for left in &done.left_out {
         outcome
             .stderr
-            .push(format!("warning: {name} in {into} {}", left_out(left)));
+            .push(format!("warning: {name} in {into} {}", left_out(left)).into());
         outcome.ok = false;
     }
     // Installed, and what the project's rules came to on the way, which can
@@ -195,10 +207,13 @@ fn install_said(
         }
         outcome.stderr.extend(warned);
         if let Some(reason) = &rendered.still_excluded {
-            outcome.stderr.push(format!(
-                "warning: {into}: the exclude file still keeps out of git a file that is no \
-                 longer Mindflayer's: {reason}"
-            ));
+            outcome.stderr.push(
+                format!(
+                    "warning: {into}: the exclude file still keeps out of git a file that is no \
+                     longer Mindflayer's: {reason}"
+                )
+                .into(),
+            );
             outcome.ok = false;
         }
         outcome.stderr.extend(notes);
@@ -207,14 +222,17 @@ fn install_said(
     // nothing went wrong, but what local mode keeps out of git is then kept
     // out of nothing.
     if let Some(note) = done.excluded.as_ref().and_then(Excluded::warning) {
-        outcome.stderr.push(format!("note: {note}"));
+        outcome.stderr.push(format!("note: {note}").into());
     }
     // Installed and recorded all the same, but without what tells a later
     // edit apart, which is worth a look at what is in the copy.
     if let Some(reason) = unhashed {
-        outcome.stderr.push(format!(
-            "warning: {name} in {into} was recorded without a hash of what it holds: {reason}"
-        ));
+        outcome.stderr.push(
+            format!(
+                "warning: {name} in {into} was recorded without a hash of what it holds: {reason}"
+            )
+            .into(),
+        );
         outcome.ok = false;
     }
     if !warnings.is_empty() {
@@ -249,7 +267,7 @@ fn alone(scrub: Scrubbed, said: Result<Outcome, Failure>) -> Result<Outcome, Fai
 fn together(
     scrub: Scrubbed,
     each: Vec<(String, Result<Outcome, Failure>)>,
-    after: Vec<String>,
+    after: Vec<Warning>,
 ) -> Result<Outcome, Failure> {
     let alike = each.split_first().is_some_and(|((_, first), rest)| {
         first.as_ref().err().is_some_and(|first| {
@@ -285,9 +303,10 @@ fn together(
             }
             Err(failure) => {
                 outcome.stderr.extend(failure.warnings);
-                outcome
-                    .stderr
-                    .push(format!("error: {name}: {}", failure.error));
+                outcome.stderr.push(Warning::coded(
+                    failure.error.code(),
+                    format!("error: {name}: {}", failure.error),
+                ));
                 outcome.ok = false;
             }
         }
@@ -317,30 +336,32 @@ pub(crate) fn render_said(
     rendered: &Rendered,
     changed: &str,
     project: Option<&str>,
-) -> (Vec<String>, Vec<String>) {
+) -> (Vec<Warning>, Vec<Warning>) {
     let of = project.map_or_else(String::new, |project| format!("{project}: "));
     (
         rendered
             .warnings_of(Some(changed))
             .iter()
-            .map(|warning| format!("warning: {of}{warning}"))
+            .map(|warning| {
+                Warning::coded(warning.code, format!("warning: {of}{}", warning.message))
+            })
             .collect(),
         rendered
             .notes()
             .iter()
-            .map(|note| format!("note: {note}"))
+            .map(|note| format!("note: {note}").into())
             .collect(),
     )
 }
 
 /// A warning for each folder `project`'s settings name for one of `kinds`
 /// that no install uses.
-fn misplaced(project: &MindProject, kinds: &[Kind]) -> Vec<String> {
+fn misplaced(project: &MindProject, kinds: &[Kind]) -> Vec<Warning> {
     project
         .misplaced_targets()
         .iter()
         .filter(|misplaced| kinds.contains(&misplaced.kind))
-        .map(|misplaced| format!("warning: {misplaced}"))
+        .map(|misplaced| Warning::coded(misplaced.code(), format!("warning: {misplaced}")))
         .collect()
 }
 
@@ -380,11 +401,12 @@ pub(crate) fn left_out(left: &mindflayer_core::install::LeftOut) -> String {
 
 /// What to say of a skill taken out of a project whose exclude block could not
 /// be edited to stop naming it.
-pub(crate) fn still(name: &str, project: &str, reason: &str) -> String {
+pub(crate) fn still(name: &str, project: &str, reason: &str) -> Warning {
     format!(
         "warning: {name} is gone from {project}, but the exclude file still keeps its place out \
          of git: {reason}"
     )
+    .into()
 }
 
 /// Whether core may write over, or take out, a copy edited since it was
@@ -497,9 +519,9 @@ pub(crate) fn uninstall_orphans(
     let assigned = assign::uninstall_orphaned(workspace, projects, homes, edits(force))
         .map_err(CliError::from)?;
     let said = scrubbed(&assigned.scrub);
-    let mut unoffered: Vec<String> = mindflayer_core::install::own_failures(workspace, &Kind::ALL)
+    let mut unoffered: Vec<Warning> = mindflayer_core::install::own_failures(workspace, &Kind::ALL)
         .iter()
-        .map(|failure| format!("warning: {failure}"))
+        .map(|failure| Warning::coded(failure.code(), format!("warning: {failure}")))
         .collect();
     unoffered.extend(load_warnings(workspace));
     let among = assigned.parts.len() > 1;
@@ -550,6 +572,7 @@ fn uninstall_said(
 
     let from = project.name();
     let (kind, taken) = done.map_err(CliError::from)?;
+    let refused = taken.refused().map(|refused| refused.code());
     match taken {
         Removed::Removed {
             name,
@@ -574,20 +597,26 @@ fn uninstall_said(
         }
         Removed::Foreign { name, path } => Ok(Outcome {
             stdout: String::new(),
-            stderr: vec![format!(
-                "warning: {} at {} in {from} was not installed by Mindflayer, so it was left alone",
-                named(kind, &name),
-                shown(project, &path)
-            )],
+            stderr: vec![Warning {
+                text: format!(
+                    "warning: {} at {} in {from} was not installed by Mindflayer, so it was left alone",
+                    named(kind, &name),
+                    shown(project, &path)
+                ),
+                code: refused,
+            }],
             ok: false,
         }),
         Removed::Edited { name, paths } => Ok(Outcome {
             stdout: String::new(),
-            stderr: vec![format!(
-                "warning: {} in {from} was changed since it was installed, at {}, so it was left alone; --force takes it out",
-                named(kind, &name),
-                listed(project, &paths)
-            )],
+            stderr: vec![Warning {
+                text: format!(
+                    "warning: {} in {from} was changed since it was installed, at {}, so it was left alone; --force takes it out",
+                    named(kind, &name),
+                    listed(project, &paths)
+                ),
+                code: refused,
+            }],
             ok: false,
         }),
         // Taking out something that is not there is a typo far more often

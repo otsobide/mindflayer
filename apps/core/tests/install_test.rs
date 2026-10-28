@@ -1947,3 +1947,103 @@ fn a_project_at_the_users_home_is_refused_an_install_into_its_agents_own_folders
     )
     .unwrap();
 }
+
+#[test]
+fn a_standing_is_serialized_as_its_slug() {
+    let serialized = serde_json::to_string(&[
+        Standing::Absent,
+        Standing::Current,
+        Standing::Outdated,
+        Standing::Edited,
+        Standing::Missing,
+        Standing::Orphaned,
+        Standing::Foreign,
+    ])
+    .unwrap();
+
+    assert_eq!(
+        serialized,
+        r#"["absent","current","outdated","edited","missing","orphaned","foreign"]"#
+    );
+}
+
+/// What an offer serializes to is a contract: the place that offers it, what
+/// that place holds of it, and its origin as `--from` takes it.
+#[test]
+fn each_offer_serializes_its_place_what_it_holds_and_its_origin() {
+    let workspace = install::Offer::Workspace {
+        kind: Kind::Skill,
+        name: String::from("deploy"),
+        summary: Some(String::from("Ship it")),
+        path: std::path::PathBuf::from("/work/.mindflayer/skills/deploy"),
+    };
+    let loaded = install::Offer::Loaded {
+        kind: Kind::Rule,
+        name: String::from("git/no-force"),
+        summary: None,
+        path: std::path::PathBuf::from("/team/.mindflayer/rules/git/no-force.md"),
+        entry: String::from("../team"),
+        workspace: String::from("team"),
+    };
+
+    assert_eq!(
+        serde_json::to_string(&workspace).unwrap(),
+        concat!(
+            r#"{"place":"workspace","kind":"skill","name":"deploy","summary":"Ship it","#,
+            r#""path":"/work/.mindflayer/skills/deploy","origin":"workspace"}"#,
+        )
+    );
+    assert_eq!(
+        serde_json::to_string(&loaded).unwrap(),
+        concat!(
+            r#"{"place":"loaded","kind":"rule","name":"git/no-force","summary":null,"#,
+            r#""path":"/team/.mindflayer/rules/git/no-force.md","entry":"../team","#,
+            r#""workspace":"team","origin":"load:../team"}"#,
+        )
+    );
+}
+
+/// A candidate from the shelf: what was gathered, its source with it, and
+/// how it stands in the project. Built with a credential in the source's
+/// URL, which nothing the ledger hands back holds, to prove that neither
+/// the source nor the origin prints it.
+#[test]
+fn a_candidate_from_the_shelf_serializes_without_the_credentials_its_source_carries() {
+    let candidate = install::Candidate {
+        offer: install::Offer::Shelf(gather::Gathered {
+            kind: Kind::Skill,
+            name: String::from("review"),
+            path: String::from(".mindflayer/skills/github.com-acme-skills/review"),
+            summary: Some(String::from("Review a change")),
+            revision: Some(String::from("4f9c2a7")),
+            gathered_at: 1_790_000_000,
+            source: mindflayer_core::ledger::Source {
+                id: 1,
+                kind: mindflayer_core::SourceKind::Git,
+                url: String::from("https://me:s3cret@github.com/acme/skills.git"),
+                reference: Some(String::from("main")),
+                subdirectory: String::from("skills"),
+                revision: Some(String::from("4f9c2a7")),
+                directory: String::from("github.com-acme-skills"),
+            },
+        }),
+        standing: Standing::Outdated,
+    };
+
+    let serialized = serde_json::to_string(&candidate).unwrap();
+
+    assert!(!serialized.contains("s3cret"), "{serialized}");
+    assert_eq!(
+        serialized,
+        concat!(
+            r#"{"offer":{"place":"shelf","kind":"skill","name":"review","#,
+            r#""path":".mindflayer/skills/github.com-acme-skills/review","#,
+            r#""summary":"Review a change","revision":"4f9c2a7","gathered_at":1790000000,"#,
+            r#""source":{"kind":"git","url":"https://github.com/acme/skills.git","#,
+            r#""reference":"main","subdirectory":"skills","revision":"4f9c2a7","#,
+            r#""directory":"github.com-acme-skills"},"#,
+            r#""origin":"https://github.com/acme/skills.git#main"},"#,
+            r#""standing":"outdated"}"#,
+        )
+    );
+}

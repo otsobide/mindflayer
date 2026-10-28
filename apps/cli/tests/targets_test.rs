@@ -182,11 +182,13 @@ fn somebodys_skill_at_a_new_target_is_left_and_warned_about() {
 
     let done = mind(&root, &["targets", "set", "skills", ".skills", "--yes"]).unwrap();
 
-    assert!(done.stderr.contains(
-        &"warning: collapse already has a deploy at .skills/deploy that Mindflayer did not put \
-          there, so it was left alone, and deploy was not copied there"
-            .to_owned()
-    ));
+    // Said by the code an install refused over somebody's copy is said by.
+    assert!(done.stderr.iter().any(|line| {
+        *line
+            == "warning: collapse already has a deploy at .skills/deploy that Mindflayer did not \
+                put there, so it was left alone, and deploy was not copied there"
+            && line.code == Some("foreign")
+    }));
     assert!(!done.ok);
     assert_eq!(
         fs::read_to_string(theirs.join("SKILL.md")).unwrap(),
@@ -358,11 +360,9 @@ fn a_project_no_workspace_links_changes_its_targets_and_is_told_what_was_not_car
         .stdout
         .starts_with("set the targets of skills to .skills"));
     assert!(
-        done.stderr.contains(
-            &"hint: no workspace links this project, so nothing installed in it was carried \
-              along"
-                .to_owned()
-        ),
+        done.stderr.iter().any(|line| *line
+            == "hint: no workspace links this project, so nothing installed in it was carried \
+                along"),
         "{:?}",
         done.stderr
     );

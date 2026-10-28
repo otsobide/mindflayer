@@ -27,7 +27,7 @@ use crate::commands::install::{listed, named, render_said, shown, still};
 use crate::commands::update::listed as words_listed;
 use crate::error::deleting;
 use crate::render::{printable, table, verdict};
-use crate::{CliError, Failure, Outcome};
+use crate::{CliError, Failure, Outcome, Warning};
 
 /// What a dry run that would delete something ends with.
 const UNREMOVED: &str = "nothing removed: add --yes to go ahead\n";
@@ -80,7 +80,9 @@ pub(crate) fn edit_in(
     if let Err(error) = opened {
         let mut failure = Failure::from(error);
         if let Err(error) = finished.copy {
-            failure.warnings.push(format!("warning: {error}"));
+            failure
+                .warnings
+                .push(Warning::coded(error.code(), format!("warning: {error}")));
         }
         return Err(failure);
     }
@@ -195,8 +197,9 @@ pub(crate) fn remove_own(
         Ok(plan) => orphaning(&plan, yes),
         // The removal finds the same thing, and refuses it the same way.
         Err(EverywhereError::Lifecycle(_)) => Vec::new(),
-        Err(error) => vec![format!(
-            "warning: whether it is installed in any project cannot be told: {error}"
+        Err(error) => vec![Warning::coded(
+            error.code(),
+            format!("warning: whether it is installed in any project cannot be told: {error}"),
         )],
     };
     match remove_from(Some(workspace), &workspace.own(), reference, yes) {
@@ -217,7 +220,7 @@ pub(crate) fn remove_own(
 /// What [`remove_own`] says of the projects `plan` finds a copy installed
 /// in: one warning naming them all, as a dry run or, once `removed`, as
 /// what was done. None when there are none.
-fn orphaning(plan: &Plan, removed: bool) -> Vec<String> {
+fn orphaning(plan: &Plan, removed: bool) -> Vec<Warning> {
     let projects: Vec<&str> = plan
         .orphaned()
         .iter()
@@ -228,7 +231,7 @@ fn orphaning(plan: &Plan, removed: bool) -> Vec<String> {
     }
     let what = named(plan.target.kind, &plan.target.name);
     let projects = words_listed(&projects);
-    vec![if removed {
+    let said = if removed {
         format!(
             "warning: {what} is still installed in {projects}, orphaned now that nothing offers \
              it; `flayer uninstall --orphaned --all-projects` takes out what nothing offers"
@@ -238,7 +241,8 @@ fn orphaning(plan: &Plan, removed: bool) -> Vec<String> {
             "warning: {what} is installed in {projects}, which removing it alone would leave \
              orphaned there; --everywhere takes it out of them too"
         )
-    }]
+    };
+    vec![said.into()]
 }
 
 /// `flayer remove --everywhere` without `--yes`: what removing `reference`,
@@ -357,7 +361,10 @@ pub(crate) fn remove_everywhere(
                 }
             }
             (_, Some(Err(error))) => {
-                outcome.stderr.push(format!("error: {from}: {error}"));
+                outcome.stderr.push(Warning::coded(
+                    error.code(),
+                    format!("error: {from}: {error}"),
+                ));
                 outcome.ok = false;
             }
             // Taken out by something else since it was planned.
@@ -384,15 +391,20 @@ pub(crate) fn remove_everywhere(
                 Kind::Rule => target.qualified_name(),
             };
             for from in orphaned {
-                outcome.stderr.push(format!(
-                    "note: nothing offers {what} in {from} any more; `flayer uninstall -p {from} \
-                     {typed} --force` takes it out"
-                ));
+                outcome.stderr.push(
+                    format!(
+                        "note: nothing offers {what} in {from} any more; `flayer uninstall -p \
+                         {from} {typed} --force` takes it out"
+                    )
+                    .into(),
+                );
             }
             removed_scrub = Some(removed.scrub);
         }
         Err(error) => {
-            outcome.stderr.push(format!("error: {error}"));
+            outcome
+                .stderr
+                .push(Warning::coded(error.code(), format!("error: {error}")));
             outcome.ok = false;
         }
     }
@@ -409,7 +421,10 @@ pub(crate) fn remove_everywhere(
 /// be told.
 fn unread(outcome: &mut Outcome, unread: &[WorkspaceError]) {
     for failure in unread {
-        outcome.stderr.push(format!("warning: {failure}"));
+        outcome.stderr.push(Warning::coded(
+            failure.code(),
+            format!("warning: {failure}"),
+        ));
         outcome.ok = false;
     }
 }
@@ -506,7 +521,7 @@ fn edited(project: &MindProject, target: &Target, changed: bool) -> Outcome {
         Err(error) => {
             return Outcome {
                 stdout: format!("{head}, and it does not read\n"),
-                stderr: vec![format!("warning: {error}")],
+                stderr: vec![Warning::coded(error.code(), format!("warning: {error}"))],
                 ok: false,
             }
         }
@@ -539,7 +554,9 @@ fn recorded(
             }
         }
         Err(error) => {
-            outcome.stderr.push(format!("warning: {error}"));
+            outcome
+                .stderr
+                .push(Warning::coded(error.code(), format!("warning: {error}")));
             outcome.ok = false;
         }
     }

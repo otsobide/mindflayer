@@ -16,11 +16,13 @@ use std::fmt;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
+use serde::de::{self, Deserialize, Deserializer};
 use serde::{Serialize, Serializer};
 use thiserror::Error;
 
 use crate::agents_md;
 use crate::claude_md::{CLAUDE_LOCAL_MD, CLAUDE_MD};
+use crate::code::codes;
 use crate::kind::Kind;
 
 /// A coding agent Mindflayer puts skills and rules where it reads them.
@@ -181,6 +183,16 @@ impl Serialize for Agent {
     }
 }
 
+/// From its name, through [`FromStr`], for the reason a [`Kind`] is read
+/// through it.
+impl<'de> Deserialize<'de> for Agent {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        String::deserialize(deserializer)?
+            .parse()
+            .map_err(de::Error::custom)
+    }
+}
+
 impl FromStr for Agent {
     type Err = UnknownAgent;
 
@@ -198,6 +210,8 @@ impl FromStr for Agent {
 /// A word that names no agent.
 #[derive(Debug, Clone, PartialEq, Eq, Error)]
 pub struct UnknownAgent(pub String);
+
+codes!(UnknownAgent => "unknown_agent");
 
 impl fmt::Display for UnknownAgent {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {

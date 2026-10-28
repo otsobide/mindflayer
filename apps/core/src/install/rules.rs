@@ -43,6 +43,7 @@ use crate::agents_md::{self, AgentsMd, AgentsMdError, Section, Written as BlockW
 use crate::artifact::Artifact;
 use crate::claude_md;
 use crate::claude_rules::{self, Mode, Recorded};
+use crate::code::{codes, Said};
 use crate::copy;
 use crate::exclude::{self, Excluded};
 use crate::hash;
@@ -92,6 +93,10 @@ impl Rendered {
     /// them, then the block's, the import's and Claude's files' in the order
     /// they were rendered. Every one, for a render that changed no rule.
     ///
+    /// Each with its code beside its message ([`Said`]), which a front end
+    /// carries beside the line it says: the warnings are of four types, and
+    /// a caller handed text alone could not tell the panel which is which.
+    ///
     /// Gathered here rather than by each front end, so none says one
     /// renderer's warnings and forgets another's. Not what is true of
     /// another rule whatever the render: that it reaches Claude alone, or no
@@ -100,7 +105,7 @@ impl Rendered {
     /// and fail, for another. Nor `still_excluded`, which an uninstall says
     /// of the rule it took out ([`Removed::Removed`]), and an install of the
     /// project.
-    pub fn warnings_of(&self, changed: Option<&str>) -> Vec<String> {
+    pub fn warnings_of(&self, changed: Option<&str>) -> Vec<Said> {
         self.warnings_about(|route| changed.is_none_or(|changed| changed == route), true)
     }
 
@@ -110,13 +115,13 @@ impl Rendered {
     /// edit it kept, in a section or a file for Claude, which the update
     /// says itself of every copy it leaves alone, as it says a skill's
     /// ([`crate::update::Step::Leave`]).
-    pub fn warnings_of_update(&self, updated: &[&str]) -> Vec<String> {
+    pub fn warnings_of_update(&self, updated: &[&str]) -> Vec<Said> {
         self.warnings_about(|route| updated.contains(&route), false)
     }
 
     /// Every warning of the render, those about one rule only while it is
     /// `about` that rule, and those about an edit it kept only with `kept`.
-    fn warnings_about(&self, about: impl Fn(&str) -> bool, kept: bool) -> Vec<String> {
+    fn warnings_about(&self, about: impl Fn(&str) -> bool, kept: bool) -> Vec<Said> {
         let rules = self.warnings.iter().filter(|warning| match warning {
             Warning::Unreached { route } => about(route),
             Warning::Kept { .. } => kept,
@@ -132,10 +137,15 @@ impl Rendered {
             claude_rules::Warning::Foreign { .. } | claude_rules::Warning::Failed { .. } => true,
         });
         rules
-            .map(ToString::to_string)
-            .chain(block.map(ToString::to_string))
-            .chain(self.import.warnings.iter().map(ToString::to_string))
-            .chain(files.map(ToString::to_string))
+            .map(|warning| Said::of(warning.code(), warning))
+            .chain(block.map(|warning| Said::of(warning.code(), warning)))
+            .chain(
+                self.import
+                    .warnings
+                    .iter()
+                    .map(|warning| Said::of(warning.code(), warning)),
+            )
+            .chain(files.map(|warning| Said::of(warning.code(), warning)))
             .collect()
     }
 
@@ -203,6 +213,15 @@ pub enum Warning {
     },
 }
 
+codes!(Warning {
+    Self::Withheld { .. } => "rules_block_withheld",
+    Self::Left { .. } => "rules_block_left",
+    Self::Unreached { .. } => "rule_unreached",
+    Self::Edited { .. } => "rule_copy_edited",
+    Self::Kept { .. } => "rule_section_kept",
+    Self::Unremoved { .. } => "rule_copy_unremoved",
+});
+
 /// Why no block was written into a project's `AGENTS.md`.
 #[derive(Debug, Clone, PartialEq, Eq, Error)]
 pub enum Withheld {
@@ -214,6 +233,11 @@ pub enum Withheld {
     #[error("whether git tracks it cannot be told ({0})")]
     Untold(String),
 }
+
+codes!(Withheld {
+    Self::Tracked => "withheld_tracked",
+    Self::Untold(_) => "withheld_untold",
+});
 
 /// ", and codex and opencode read none of them", or nothing for no agent.
 fn missing(missed: &[Agent]) -> String {

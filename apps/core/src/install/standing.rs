@@ -18,6 +18,8 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 
+use serde::{Serialize, Serializer};
+
 use super::{left_out_names, recorded_copy, Offer};
 use crate::agents_md::{self, AgentsMd, Section};
 use crate::artifact::Artifact;
@@ -89,6 +91,14 @@ impl Standing {
             Standing::Orphaned => "orphaned",
             Standing::Foreign => "foreign",
         }
+    }
+}
+
+/// By its slug, for the reason a kind is: the word `status` says of an
+/// installation that stands so, which a renamed variant cannot change.
+impl Serialize for Standing {
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        serializer.serialize_str(self.slug())
     }
 }
 

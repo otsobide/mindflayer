@@ -31,6 +31,7 @@ use std::path::{Path, PathBuf};
 use thiserror::Error;
 
 use crate::catalog::{Catalog, DiscoveryFailure};
+use crate::code::codes;
 use crate::exclude::ExcludeError;
 use crate::install::InstallError;
 use crate::kind::Kind;
@@ -156,6 +157,21 @@ pub enum Refusal {
     Install(InstallError),
 }
 
+codes!(Refusal {
+    Self::Taken { .. } => "migrate_target_taken",
+    Self::Backup { .. } => "migrate_backup_present",
+    Self::Link { .. } => "migrate_relative_link",
+    Self::Linked { .. } => "migrate_folder_linked",
+    Self::Tangled { .. } => "migrate_folder_tangled",
+    Self::NoAgent { .. } => "migrate_no_agent",
+} carried {
+    Self::Misplaced(error) => error,
+    Self::Unlisted(error) => error,
+    Self::Unreadable(error) => error,
+    Self::Authored(error) => error,
+    Self::Install(error) => error,
+});
+
 /// What [`library`] did.
 #[derive(Debug)]
 pub struct Migrated {
@@ -214,6 +230,19 @@ pub enum MigrateError {
         stranded: Vec<Stranded>,
     },
 }
+
+codes!(MigrateError {
+    Self::Refused(_) => "migrate_refused",
+    Self::Backup { .. } => "migrate_marker_backup_failed",
+    Self::Move { .. } => "migrate_move_failed",
+} carried {
+    Self::Workspace(error) => error,
+    Self::Ledger(error) => error,
+    Self::Install(error) => error,
+    Self::Exclude(error) => error,
+    Self::Marker { source, .. } => source,
+    Self::Project { failure, .. } => failure,
+});
 
 impl MigrateError {
     /// What had moved into the library when the migration failed and could

@@ -13,12 +13,25 @@ use mindflayer_core::everywhere::EverywhereError;
 use mindflayer_core::gather::GatherError;
 use mindflayer_core::ledger::LedgerError;
 use mindflayer_core::{
-    ArtifactError, CreateError, Kind, LifecycleError, Reason, ResolveError, TemplateError,
+    codes, ArtifactError, CreateError, Kind, LifecycleError, Reason, ResolveError, TemplateError,
     WorkspaceError,
 };
 use thiserror::Error;
 
 use crate::render::plural;
+use crate::task::Refusal;
+
+/// Every type the CLI gives codes of its own to, by the module it is
+/// defined in, with those codes: what reaches the panel beside core's
+/// (`mindflayer_core::code::ALL`), and what a front end listing every code
+/// starts from, as it does from core's.
+///
+/// Held to core's rules by a test: no code here is given twice, here or in
+/// core, since the panel is handed a code without the type it came from.
+pub const CODES: &[(&str, &[&str])] = &[
+    ("error::CliError", CliError::CODES),
+    ("task::Refusal", Refusal::CODES),
+];
 
 /// Why a command could not run at all, as opposed to running and finding
 /// problems: those are in the [`Outcome`](crate::Outcome).
@@ -156,6 +169,61 @@ pub enum CliError {
     },
 }
 
+// A variant that carries core's error takes its code, as one of core's does;
+// one that says a condition core names in words of the CLI's, with the
+// command that would put it right, echoes the code core gives it, so the
+// panel meets one code for one condition whichever way it was reached.
+codes!(CliError {
+    Self::CurrentDirectory(_) => "current_directory_unreadable",
+    Self::Resolve { .. } => "path_unresolved",
+    Self::NotInProject(_) => "not_in_project",
+    Self::NotInWorkspace(_) => "not_in_workspace",
+    Self::NowhereToLoad { .. } => "nowhere_to_load",
+    Self::NoShell => "shell_unset",
+    Self::Unconfirmed { .. } => "remove_unconfirmed",
+    Self::MigrateWhat => "migrate_nothing_named",
+    Self::UpdateWhere => "update_no_projects",
+    Self::AgentsWhere => "agents_no_project",
+    Self::TargetsWhere => "targets_no_project",
+    Self::Editor { .. } => "editor_unstarted",
+    Self::EditorFailed { .. } => "editor_failed",
+    Self::NoWorkspaceAbove(_) => "no_workspace_above",
+    Self::NoDefault(_) => "no_default_workspace",
+    Self::InstallWhere => "install_no_projects",
+    Self::InstallWhat => "install_nothing_named",
+    Self::UninstallWhere => "uninstall_no_projects",
+    Self::NoTerminal { .. } => "terminal_unusable",
+    Self::NotATerminal => "not_a_terminal",
+    Self::Screen { .. } => "screen_failed",
+} carried {
+    Self::Workspace(error) => error,
+    Self::Chosen { source, .. } => source,
+    Self::Artifact(error) => error,
+    Self::Gather(error) => error,
+    Self::Ledger(error) => error,
+    Self::Install(error) => error,
+    Self::Create(error) => error,
+    Self::Lifecycle(error) => error,
+    Self::Everywhere(error) => error,
+    Self::Adopt(error) => error,
+    Self::Template(error) => error,
+    Self::Activate(error) => error,
+    Self::Refused(refusal) => refusal,
+    Self::Migrate(error) => error,
+    Self::MigrateUnrecorded(error) => error,
+    Self::Reapply(error) => error,
+    Self::Relink(error) => error,
+    Self::Update(error) => error,
+} echoed {
+    Self::UnknownArtifact(_) => "not_found",
+    Self::UnknownShell { .. } => "unknown_shell",
+    Self::NotManaged { .. } => "not_managed",
+    Self::UnknownProject { .. } => "unknown_project",
+    Self::AmbiguousProject { .. } => "ambiguous_project",
+    Self::NotInstalled { .. } => "not_installed",
+    Self::NotInstalledAnywhere { .. } => "not_installed",
+});
+
 /// Core's answer to which workspace, or which of its projects, rendered as
 /// the CLI says it: with the command that would put it right.
 impl From<ResolveError> for CliError {
@@ -207,3 +275,7 @@ pub(crate) fn deleting(path: &Path, kind: &Kind, files: &usize) -> String {
         mindflayer_core::Layout::Files { .. } => path.display().to_string(),
     }
 }
+
+#[cfg(test)]
+#[path = "error_test.rs"]
+mod tests;

@@ -160,8 +160,23 @@ fn an_unreadable_skill_is_a_warning_on_stderr() {
 
     assert!(outcome.stdout.contains("good"));
     assert_eq!(outcome.stderr.len(), 1);
-    assert!(outcome.stderr[0].contains("front matter"));
+    assert!(outcome.stderr[0].text.contains("front matter"));
     assert!(!outcome.ok);
+}
+
+#[test]
+fn a_warning_carries_the_code_of_what_it_says_beside_its_text() {
+    let dir = TempDir::new().unwrap();
+    mind(dir.path(), &["init"]).unwrap();
+    write_skill(dir.path(), "broken", "# no front matter at all\n");
+
+    let failure = mind(dir.path(), &["show", "broken"]).unwrap_err();
+
+    // Core's code for what the file lacks, and core's for the condition the
+    // CLI words as `nothing named`, which is what the panel acts on.
+    assert_eq!(failure.warnings[0].code, Some("front_matter_missing"));
+    assert!(failure.warnings[0].text.starts_with("warning: "));
+    assert_eq!(failure.error.code(), "not_found");
 }
 
 #[test]
@@ -222,7 +237,7 @@ fn a_failing_command_still_reports_what_it_had_already_noticed() {
     // there; the warning is the half that explains it.
     assert!(matches!(*failure.error, CliError::UnknownArtifact(_)));
     assert_eq!(failure.warnings.len(), 1);
-    assert!(failure.warnings[0].contains("front matter"));
+    assert!(failure.warnings[0].text.contains("front matter"));
 }
 
 #[test]

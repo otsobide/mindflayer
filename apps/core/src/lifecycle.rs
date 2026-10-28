@@ -33,6 +33,7 @@ use thiserror::Error;
 
 use crate::artifact::{self, issue_list, Artifact, ArtifactError, ValidationIssue};
 use crate::catalog::{Catalog, Reference, QUALIFIER};
+use crate::code::codes;
 use crate::create::{create, create_from, CreateError};
 use crate::frontmatter;
 use crate::gather::Scrub;
@@ -869,3 +870,22 @@ pub enum LifecycleError {
     #[error(transparent)]
     Artifact(#[from] ArtifactError),
 }
+
+codes!(LifecycleError {
+    Self::NotFound { .. } => "not_found",
+    Self::Received { .. } => "change_received_rule",
+    Self::NotAuthored { .. } => "change_not_authored",
+    Self::Ambiguous { .. } => "ambiguous_name",
+    Self::Name { .. } => "rename_name_unfit",
+    Self::Nested { .. } => "rename_skill_nested",
+    Self::Unfit { .. } => "rename_unfit",
+    Self::Unchanged { .. } => "rename_unchanged",
+    Self::Exists { .. } => "rename_target_exists",
+    Self::Unreadable { .. } => "rename_front_matter_unreadable",
+    Self::Rewrite { .. } => "rename_rewrite_failed",
+    Self::Outside { .. } => "change_outside",
+    Self::Io { .. } => "change_failed",
+} carried {
+    Self::Workspace(error) => error,
+    Self::Artifact(error) => error,
+});

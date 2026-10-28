@@ -4,8 +4,11 @@
 use std::fmt;
 use std::str::FromStr;
 
+use serde::de::{self, Deserialize, Deserializer};
 use serde::{Serialize, Serializer};
 use thiserror::Error;
+
+use crate::code::codes;
 
 /// A kind of artifact.
 ///
@@ -80,6 +83,17 @@ impl Serialize for Kind {
     }
 }
 
+/// From the word a command line takes, through [`FromStr`], so what a front
+/// end sends back (a task the panel asks to run) is read as a command line
+/// reads it, and a word one refuses the other refuses too.
+impl<'de> Deserialize<'de> for Kind {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        String::deserialize(deserializer)?
+            .parse()
+            .map_err(de::Error::custom)
+    }
+}
+
 impl FromStr for Kind {
     type Err = UnknownKind;
 
@@ -97,6 +111,8 @@ impl FromStr for Kind {
 /// A word that names no kind.
 #[derive(Debug, Clone, PartialEq, Eq, Error)]
 pub struct UnknownKind(pub String);
+
+codes!(UnknownKind => "unknown_kind");
 
 impl fmt::Display for UnknownKind {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {

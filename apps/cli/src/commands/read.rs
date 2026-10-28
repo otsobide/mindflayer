@@ -12,7 +12,7 @@ use std::path::PathBuf;
 use mindflayer_core::{Artifact, Catalog, Declared, FlayerWorkspace, Kind, MindProject, Reference};
 
 use crate::render::{plural, printable, table, verdict};
-use crate::{CliError, Failure, Outcome};
+use crate::{CliError, Failure, Outcome, Warning};
 
 /// Which level a command reports at.
 ///
@@ -84,7 +84,7 @@ where
 /// every managed project's, in one catalog.
 pub(crate) fn everywhere<F>(
     workspace: &FlayerWorkspace,
-    warnings: Vec<String>,
+    warnings: Vec<Warning>,
     projects: &[MindProject],
     kinds: Vec<Kind>,
     command: F,
@@ -103,7 +103,7 @@ where
 /// `gather list`'s, so `list` and `show` keep to what is held.
 pub(crate) fn everywhere_and_the_shelf<F>(
     workspace: &FlayerWorkspace,
-    warnings: Vec<String>,
+    warnings: Vec<Warning>,
     projects: &[MindProject],
     kinds: Vec<Kind>,
     command: F,
@@ -117,7 +117,7 @@ where
 /// The two above.
 fn workspace_wide<F>(
     workspace: &FlayerWorkspace,
-    warnings: Vec<String>,
+    warnings: Vec<Warning>,
     projects: &[MindProject],
     kinds: Vec<Kind>,
     shelf: bool,
@@ -151,7 +151,7 @@ where
 
 /// Hand a catalog to a reading command, with the warnings that came with it.
 fn reading<F>(
-    mut stderr: Vec<String>,
+    mut stderr: Vec<Warning>,
     catalog: &Catalog,
     projects: &[MindProject],
     level: Level,
@@ -167,7 +167,7 @@ where
         catalog
             .failures()
             .iter()
-            .map(|failure| format!("warning: {failure}")),
+            .map(|failure| Warning::coded(failure.code(), format!("warning: {failure}"))),
     );
 
     let (stdout, ok) = match command(catalog, projects, level) {

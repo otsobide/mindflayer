@@ -15,6 +15,7 @@ use serde::{Serialize, Serializer};
 use thiserror::Error;
 
 use crate::agent::Agent;
+use crate::code::codes;
 use crate::install;
 use crate::ledger::LedgerError;
 use crate::paths;
@@ -199,6 +200,21 @@ pub struct Scan {
     pub truncated: bool,
 }
 
+#[cfg(test)]
+thread_local! {
+    /// How many scans this thread has run: what a test holds a read that
+    /// must never walk the disk to, the snapshot's ([`crate::view`]). Per
+    /// thread, since the tests beside it run on threads of their own and
+    /// scan as they please.
+    static SCANS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+}
+
+/// How many scans this thread has run ([`SCANS`]).
+#[cfg(test)]
+pub(crate) fn scans() -> usize {
+    SCANS.with(std::cell::Cell::get)
+}
+
 /// Look for mind projects and git repositories under the roots `request`
 /// names, or under the workspace root when it names none.
 ///
@@ -211,6 +227,8 @@ pub struct Scan {
 /// entered whatever it is called and however it is reached, because somebody
 /// named it.
 pub fn scan(workspace: &FlayerWorkspace, request: &Request) -> Scan {
+    #[cfg(test)]
+    SCANS.with(|scans| scans.set(scans.get() + 1));
     // A root somebody named that is not there is a typo worth a warning; the
     // workspace root not being there is an absence, since the default
     // workspace before it is made can be read in a home nobody has created
@@ -548,6 +566,14 @@ pub enum ScanFailure {
     #[error(transparent)]
     Ledger(LedgerError),
 }
+
+codes!(ScanFailure {
+    Self::Unlisted { .. } => "scan_folder_unlisted",
+} carried {
+    Self::Unread(error) => error,
+    Self::Duplicate(duplicate) => duplicate,
+    Self::Ledger(error) => error,
+});
 
 impl ScanFailure {
     /// The folder, or the marker, it is about: the first directory holding

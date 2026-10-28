@@ -501,3 +501,183 @@ fn an_artifact_is_installed_only_when_every_copy_is_recorded() {
     let neither = copied("/p/a", placed(false, false), other(false, false));
     assert_eq!(neither.provenance(), Provenance::Foreign);
 }
+
+/// What an issue serializes to is a contract: its code, what it is about by
+/// name, and whether it is only worth a warning. The message is the one
+/// part worded rather than named, and is the issue's text exactly.
+#[test]
+fn an_issue_serializes_its_code_what_it_is_about_and_whether_it_warns() {
+    let segment = || String::from("Deploy");
+    let key = || String::from("team");
+    let issues = [
+        (
+            ValidationIssue::NameEmpty,
+            serde_json::json!({"code": "name_empty", "warning": false}),
+        ),
+        (
+            ValidationIssue::NameNotKebabCase { segment: segment() },
+            serde_json::json!({
+                "code": "name_not_kebab_case", "segment": "Deploy", "warning": false,
+            }),
+        ),
+        (
+            ValidationIssue::NameSegmentTooLong {
+                segment: segment(),
+                length: 70,
+            },
+            serde_json::json!({
+                "code": "name_segment_too_long", "segment": "Deploy", "length": 70,
+                "warning": false,
+            }),
+        ),
+        (
+            ValidationIssue::NameDirectoryMismatch {
+                name: String::from("deploy"),
+                directory: String::from("ship"),
+            },
+            serde_json::json!({
+                "code": "name_directory_mismatch", "name": "deploy", "directory": "ship",
+                "warning": false,
+            }),
+        ),
+        (
+            ValidationIssue::DescriptionEmpty,
+            serde_json::json!({"code": "description_empty", "warning": false}),
+        ),
+        (
+            ValidationIssue::DescriptionTooLong { length: 1100 },
+            serde_json::json!({"code": "description_too_long", "length": 1100, "warning": false}),
+        ),
+        (
+            ValidationIssue::CompatibilityEmpty,
+            serde_json::json!({"code": "compatibility_empty", "warning": true}),
+        ),
+        (
+            ValidationIssue::CompatibilityTooLong { length: 600 },
+            serde_json::json!({"code": "compatibility_too_long", "length": 600, "warning": true}),
+        ),
+        (
+            ValidationIssue::CompatibilityNotAString,
+            serde_json::json!({"code": "compatibility_not_a_string", "warning": true}),
+        ),
+        (
+            ValidationIssue::MetadataNotAMap,
+            serde_json::json!({"code": "metadata_not_a_map", "warning": true}),
+        ),
+        (
+            ValidationIssue::MetadataNotAString { key: key() },
+            serde_json::json!({"code": "metadata_not_a_string", "key": "team", "warning": true}),
+        ),
+        (
+            ValidationIssue::MetadataRepeated { key: key() },
+            serde_json::json!({"code": "metadata_repeated", "key": "team", "warning": true}),
+        ),
+        (
+            ValidationIssue::Empty,
+            serde_json::json!({"code": "content_empty", "warning": false}),
+        ),
+        (
+            ValidationIssue::FrontMatterUnparsed {
+                reason: String::from("a tab"),
+            },
+            serde_json::json!({
+                "code": "front_matter_unparsed", "reason": "a tab", "warning": true,
+            }),
+        ),
+        (
+            ValidationIssue::PathsNotStrings,
+            serde_json::json!({"code": "paths_not_strings", "warning": true}),
+        ),
+        (
+            ValidationIssue::DescriptionNotAString,
+            serde_json::json!({"code": "description_not_a_string", "warning": true}),
+        ),
+    ];
+    assert_eq!(
+        issues.len(),
+        ValidationIssue::CODES.len(),
+        "one of each issue"
+    );
+
+    for (issue, expected) in issues {
+        let mut serialized = serde_json::to_value(&issue).unwrap();
+        let message = serialized
+            .as_object_mut()
+            .unwrap()
+            .remove("message")
+            .unwrap();
+        assert_eq!(message, issue.to_string());
+        assert_eq!(serialized, expected, "{issue:?}");
+    }
+}
+
+#[test]
+fn an_issue_says_its_code_first_and_its_message_last() {
+    let serialized =
+        serde_json::to_string(&ValidationIssue::DescriptionTooLong { length: 1100 }).unwrap();
+
+    assert_eq!(
+        serialized,
+        format!(
+            "{{\"code\":\"description_too_long\",\"length\":1100,\"warning\":false,\
+             \"message\":\"`description` is 1100 characters, over the {MAX_DESCRIPTION_LEN} \
+             character limit\"}}"
+        )
+    );
+}
+
+#[test]
+fn provenance_is_serialized_as_its_slug() {
+    let serialized = serde_json::to_string(&[
+        Provenance::Installed,
+        Provenance::Authored,
+        Provenance::Foreign,
+    ])
+    .unwrap();
+
+    assert_eq!(serialized, r#"["installed","authored","foreign"]"#);
+}
+
+/// What an artifact serializes to is a contract, as a status report's is:
+/// each field by its name, in the order a reader meets them, every copy
+/// with what is wrong with it there.
+#[test]
+fn an_artifact_serializes_as_a_listing_shows_it() {
+    let mut first = copied(
+        "/work/repo/.claude/skills/deploy",
+        Placement {
+            agents: vec![Agent::Claude, Agent::OpenCode],
+            authored: false,
+            installed: true,
+        },
+        vec![copy_at(
+            "/work/repo/.agents/skills/deploy",
+            &[Agent::Codex, Agent::OpenCode],
+            false,
+            false,
+        )],
+    );
+    first.others[0].issues = vec![ValidationIssue::DescriptionEmpty];
+    first.differ = true;
+
+    let serialized = serde_json::to_string(&first).unwrap();
+
+    let empty = concat!(
+        r#"{"code":"description_empty","warning":false,"#,
+        r#""message":"`description` is empty"}"#
+    );
+    assert_eq!(
+        serialized,
+        [
+            r#"{"kind":"skill","name":"deploy","summary":"Ship it","#,
+            r#""path":"/work/repo/.claude/skills/deploy","project":"/work/repo","#,
+            r#""provenance":"foreign","agents":["claude","codex","opencode"],"#,
+            &format!(r#""issues":[{empty}],"copies_differ":true,"copies":["#),
+            r#"{"path":"/work/repo/.claude/skills/deploy","agents":["claude","opencode"],"#,
+            r#""provenance":"installed","issues":[]},"#,
+            r#"{"path":"/work/repo/.agents/skills/deploy","agents":["codex","opencode"],"#,
+            &format!(r#""provenance":"foreign","issues":[{empty}]}}]}}"#),
+        ]
+        .concat()
+    );
+}

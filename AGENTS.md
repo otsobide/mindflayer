@@ -96,7 +96,9 @@ under `apps/` with its own `Makefile`:
   workspace's own from every project it links before the library
   (`everywhere`), and bringing a skill somebody keeps in a project's agents'
   folders into the library, its copies recorded as installed from there
-  (`adopt`). Its only I/O is files, and it never reads the environment.
+  (`adopt`), the stable code each of its errors gives (`code`), and the
+  snapshot every front end reads a workspace through (`view`). Its only
+  I/O is files, and it never reads the environment.
 - `apps/cli` (`mindflayer-cli`): the binaries `mind` (`src/main.rs`) and
   `flayer` (`src/bin/flayer.rs`), and the TUI. `src/lib.rs` only re-exports
   the public API. The parsers are in `src/parse.rs`. `src/commands.rs`
@@ -106,11 +108,16 @@ under `apps/` with its own `Makefile`:
   (workspaces, workspaces forget), `artifact` (add, edit, rename, remove,
   templates), `read` (list, show, validate), `status`, `settings` (agents,
   share, targets), `gather`, `install`, `update` and `migrate` (each at both
-  levels), and `adopt` (flayer adopt). `src/render.rs` holds `Outcome`, `Failure`, the table helpers and
-  the envelope every `--json` prints (`json`), `src/error.rs` holds
-  `CliError`, and `src/homes.rs` decides the default home and the agent
+  levels), and `adopt` (flayer adopt). `src/render.rs` holds `Outcome`,
+  `Failure` and `Warning` (a stderr line, with its code beside it), the
+  table helpers and the envelope every `--json` prints (`json`),
+  `src/error.rs` holds `CliError` and `CODES`, every code the CLI gives of
+  its own, and `src/homes.rs` decides the default home and the agent
   homes, and gathers them with `-W` and `$MINDFLAYER_WORKSPACE` into a
-  `Lookup`. `src/tui/` and `src/install/` are the two screens.
+  `Lookup`. `src/task.rs` holds `Task`, work a front end asks for as the
+  command lines it is, every front end's rather than the TUI's alone, and
+  `Refusal`, what a front end with no terminal does not run.
+  `src/tui/` and `src/install/` are the two screens.
 - `apps/server` (`mindflayer-server`): the local server behind the web
   panel, a library no binary runs yet. `src/backend.rs` is the `Backend`
   trait, `src/server.rs` binds and routes, `src/auth.rs` holds the token's
@@ -171,8 +178,9 @@ These are easy to break from a single file without noticing.
   both reach the same function. `mind add` and `flayer add` (with or without
   `-p`) are one implementation given a different holder
   (`FlayerWorkspace::own` makes the workspace look like a `MindProject`).
-- **The TUI only runs commands.** A key produces a `Task`, and
-  `Task::commands` turns it into argument lines that a `Runner` hands to
+- **The TUI only runs commands.** A key produces a `Task` (`src/task.rs`,
+  shared by every front end that runs commands, the panel's backend next),
+  and `Task::commands` turns it into argument lines that a `Runner` hands to
   `execute`, which parses them with `Cli`/`FlayerCli` and runs them through
   `run_with`/`run_flayer_with` with the screen's `Lookup` and a
   `gather::Watch`: what the binaries' `run_watched`/`run_flayer_cli_watched`
@@ -185,7 +193,12 @@ These are easy to break from a single file without noticing.
   opened by `flayer install` (`install::apply`): its marks are the
   `flayer install` and `flayer uninstall` lines they amount to
   (`Screen::task`), each run whatever came of the others
-  (`Task::chained`), so its transcript runs again.
+  (`Task::chained`), so its transcript runs again. What a front end with
+  no terminal does not run is one list, `task::Refusal`, read off the
+  parsed command by a match with no wildcard (`Refusal::of_mind`,
+  `of_flayer`), so a new command says whether it is refused before it
+  compiles; a task is refused for its lines (`Task::refusal`). The TUI
+  refuses only its screens.
 - **A gather is watched, and stops only before it places.** Its `Request`
   carries a `gather::Watch`, core's progress callback and cancel flag; no gix
   type reaches a front end. A cancel is honoured until the shelf starts to
@@ -194,6 +207,12 @@ These are easy to break from a single file without noticing.
   source is.
 - **Output is built, then printed.** Commands return an `Outcome` (stdout
   text, stderr lines, ok), so tests assert on the exact text a user sees.
+  Each stderr line, and each of a `Failure`'s warnings, is a
+  `render::Warning`: the text a terminal shows, word for word, and beside
+  it the code of what it says (`code()` of the core error, refusal or
+  failure it renders, or `CliError::code`), `None` for a hint or a note. A
+  line built from a value with a code takes that code; never a code spelled
+  by hand for a line built from text.
 - **Reading commands print JSON in one envelope, and its names are a
   contract.** A reading command's `--json` prints `render::json`'s
   `{"version": 2, "data": ..., "warnings": [...]}`, never a shape of its own,
@@ -201,11 +220,49 @@ These are easy to break from a single file without noticing.
   and the exit status its text has. `data` is a type core builds and sorts,
   deriving `Serialize` with its fields named in snake_case; a kind, an agent
   or a state goes out as the word a command line takes for it
-  (`Kind::slug`, `Agent::name`, `State::slug`), serialized by hand, never
-  derived from the variant. A name once printed is a contract: dropping or
-  renaming one, or changing what it holds, moves `ENVELOPE_VERSION`, and
-  adding one does not. A test reads it back with `common::enveloped`, into
-  structs of its own that refuse a field they do not name.
+  (`Kind::slug`, `Agent::name`, `State::slug`, `Standing::slug`), serialized
+  by hand, never derived from the variant. The read types #61 named
+  serialize so (`docs/architecture.md`, "The read types serialize", lists
+  them and the older ones that do not yet), and every new read type
+  derives `Serialize` from the start, written by hand only where a derive
+  would print the wrong thing (a word like those, a type holding more than
+  a reader is given, an error, which goes out as its `code` and message
+  through `code::Said`), with a test that pins its JSON name by name. A
+  path goes out as text whatever bytes it holds (`paths::lossy`), and a
+  URL only through `url::redacted`. A name once printed is a
+  contract: dropping or renaming one, or changing what it holds, moves
+  `ENVELOPE_VERSION`, and adding one does not. A test reads it back with
+  `common::enveloped`, into structs of its own that refuse a field they do
+  not name.
+- **Front ends read a workspace through the snapshot.** What a screen shows
+  of a workspace is core's `view::Snapshot` (`Snapshot::read`, or
+  `Snapshot::of` for a front end that resolved the workspace itself), and of
+  a project no workspace links `view::Project::read`: built and sorted in
+  core from the read types, never put together from the reports in a front
+  end. It is a read: the ledger only through `ledger_for_reading`, the
+  default workspace never made, nothing scrubbed, and no scan, which is a
+  query of its own (a test counts scans with `scan::scans`, a test build's).
+  Its names are a contract under `view::FORMAT`, as a report's are under
+  `ENVELOPE_VERSION`, and every URL in it, an error's message included,
+  goes out through `url::redacted`. What a front end reads beside it is
+  only what it cannot hold: a scan, and which workspace a project's own
+  lines consult (`docs/architecture.md`, "The read model").
+- **Every error has a stable code.** Each public error type in core,
+  `ValidationIssue`, and `install::Refused`, why an install or an uninstall
+  wrote nothing (`Installed::refused`, `Removed::refused`, and for a copy
+  an update or a change of agents leaves, `update::Step::refused` and
+  `reapply::Why::refused`), is given `code()` with `code::codes!`, which
+  writes it as a match with no wildcard, so a new variant does not compile
+  without one, and lists the codes it gives in `CODES` from the same arms.
+  Each arm names one variant, and the macro refuses a wildcard or an
+  or-pattern, which would give
+  several one code and list it once. A code is unique across core, not
+  only its type, never renamed nor moved to another condition, and named
+  for the condition in snake_case. A variant
+  that only carries another error of core's, adding where or what came of
+  it, takes that error's code (`carried`). A new error type joins
+  `code::ALL`; `code_test.rs` holds no two codes alike and finds a type
+  that derives `Error` and never joined.
 - **Failures are collected, not raised.** One unreadable artifact or stale
   registry entry is a `warning:` on stderr (in the envelope, under `--json`)
   and a non-zero exit, never a reason to hide the rest. An absence (no
@@ -428,6 +485,12 @@ These are easy to break from a single file without noticing.
   warning, never a reason to hide the rule. `mind add --template` refuses that
   same list (`artifact::rule_issues`) for the rule it is about to write.
 - **Loaded and gathered content is untrusted.**
+  - So is a task's every value, which a browser will fill in: it reaches
+    its command as that value, never as an option or a command. The task
+    module spells each line's own words, and puts a value after the option
+    that takes it (`=` when it starts with a dash), behind `./` for a `-C`
+    or `-p`, or after a `--` among positionals; a test feeds every variant
+    values that start with a dash.
   - An installed name must be one folder name for a skill
     (`install::is_folder_name`), and for a rule a route held to the name
     rules, which never climbs out (`install::is_installable_name`).
@@ -465,7 +528,8 @@ These are easy to break from a single file without noticing.
     reads opens it with `ledger_for_reading`, which scrubs nothing. The
     install screen is a read until it applies, and the lines it then runs
     scrub as any `install` does. Anything new that keeps or prints a URL goes
-    through `url::redacted` too.
+    through `url::redacted` too, a serialized one included
+    (`url::serialize_redacted`), whatever built the value.
 - **Writers take turns; readers never wait.** Core's writers hold the
   workspace's `.mindflayer/lock` (`FlayerWorkspace::lock`) while they change
   it: `edit_array`, `install::install` and `uninstall`,

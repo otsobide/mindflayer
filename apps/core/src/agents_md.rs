@@ -44,6 +44,7 @@ use thiserror::Error;
 use crate::agent::AgentHomes;
 use crate::artifact::{issue_list, name_issues, Artifact, ArtifactError, Declared};
 use crate::catalog::{report_order, spelled};
+use crate::code::codes;
 use crate::exclude;
 use crate::hash;
 use crate::install;
@@ -431,6 +432,14 @@ pub enum Warning {
     #[error("{project}: how much of its AGENTS.md Codex reads cannot be told: {detail}")]
     Unmeasured { project: PathBuf, detail: String },
 }
+
+codes!(Warning {
+    Self::Overridden { .. } => "codex_overridden",
+    Self::NoGitRoot { .. } => "codex_no_git_root",
+    Self::NearBudget { .. } => "codex_near_budget",
+    Self::OverBudget { .. } => "codex_over_budget",
+    Self::Unmeasured { .. } => "codex_unmeasured",
+});
 
 /// What [`Warning`]s the `AGENTS.md` at `project`'s root, as it is on disk,
 /// calls for.
@@ -1030,6 +1039,16 @@ pub enum Malformed {
     Ruled { line: usize },
 }
 
+codes!(Malformed {
+    Self::Unclosed { .. } => "markdown_block_unclosed",
+    Self::Unopened { .. } => "markdown_block_unopened",
+    Self::Reopened { .. } => "markdown_block_reopened",
+    Self::Stray { .. } => "markdown_marker_stray",
+    Self::Repeated { .. } => "markdown_section_repeated",
+    Self::Miswritten { .. } => "markdown_marker_miswritten",
+    Self::Ruled { .. } => "markdown_rule_in_import",
+});
+
 /// Why a project's rules could not be rendered into its `AGENTS.md`.
 #[derive(Debug, Error)]
 pub enum AgentsMdError {
@@ -1089,6 +1108,22 @@ pub enum AgentsMdError {
     #[error("{file}: {problem}, so nothing was written")]
     Malformed { file: PathBuf, problem: Malformed },
 }
+
+codes!(AgentsMdError {
+    Self::Route { .. } => "agents_md_route_unusable",
+    Self::Marked { .. } => "agents_md_marker_in_rule",
+    Self::Twice { .. } => "agents_md_route_twice",
+    Self::NotARule { .. } => "agents_md_not_a_rule",
+    Self::WorkspaceRoot { .. } => "agents_md_workspace_root",
+    Self::AboveProjects { .. } => "agents_md_above_projects",
+    Self::UserScope { .. } => "agents_md_user_scope",
+    Self::LinkedOut { .. } => "agents_md_linked_out",
+    Self::Read { .. } => "agents_md_read_failed",
+    Self::Write { .. } => "agents_md_write_failed",
+} carried {
+    Self::Rule(error) => error,
+    Self::Malformed { problem, .. } => problem,
+});
 
 #[cfg(test)]
 #[path = "agents_md_test.rs"]

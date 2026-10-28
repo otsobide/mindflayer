@@ -37,6 +37,7 @@ use std::collections::BTreeMap;
 use std::fmt;
 use std::path::{Path, PathBuf};
 
+use serde::de::{self, Deserialize, Deserializer};
 use serde::{Serialize, Serializer};
 
 use crate::agent::Agent;
@@ -237,6 +238,29 @@ impl Share {
     /// spell it.
     pub fn named(word: &str) -> Option<Share> {
         Share::ALL.into_iter().find(|share| share.name() == word)
+    }
+}
+
+/// By its name, as the settings file and a command line spell it, rather
+/// than derived from the variant, which a rename would change.
+impl Serialize for Share {
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        serializer.serialize_str(self.name())
+    }
+}
+
+/// From its name, through [`Share::named`], as a command line's word is
+/// read, for the reason a [`Kind`] is read through its `FromStr`.
+impl<'de> Deserialize<'de> for Share {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        let word = String::deserialize(deserializer)?;
+        Share::named(&word).ok_or_else(|| {
+            let names: Vec<&str> = Share::ALL.iter().map(|share| share.name()).collect();
+            de::Error::custom(format_args!(
+                "unknown share mode `{word}`; expected {}",
+                names.join(" or ")
+            ))
+        })
     }
 }
 

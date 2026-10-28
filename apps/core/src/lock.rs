@@ -29,6 +29,8 @@ use std::time::{Duration, Instant};
 
 use thiserror::Error;
 
+use crate::code::codes;
+
 /// How long a writer waits for another to finish before it gives up.
 ///
 /// Bounded, because the writer holding the lock may be a gather waiting on
@@ -183,6 +185,11 @@ pub enum LockError {
         source: io::Error,
     },
 }
+
+codes!(LockError {
+    Self::Busy { .. } => "workspace_busy",
+    Self::Open { .. } => "lock_open_failed",
+});
 
 impl LockError {
     /// The lock file.
