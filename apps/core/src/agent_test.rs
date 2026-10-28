@@ -330,6 +330,76 @@ fn no_agent_is_said_to_read_a_folder_of_rules_yet() {
     }
 }
 
+/// What `agent` reads at a project's root, as strings to compare.
+fn at_root_of(agent: Agent) -> Vec<String> {
+    agent
+        .reads_at_root()
+        .iter()
+        .map(|name| name.to_str().unwrap().to_owned())
+        .collect()
+}
+
+#[test]
+fn each_agent_reads_its_instructions_its_configuration_and_its_folders_at_a_projects_root() {
+    assert_eq!(
+        at_root_of(Agent::Claude),
+        [
+            ".claude",
+            ".mcp.json",
+            "AGENTS.md",
+            "CLAUDE.local.md",
+            "CLAUDE.md"
+        ]
+    );
+    assert_eq!(
+        at_root_of(Agent::Codex),
+        [".agents", ".codex", "AGENTS.md", "AGENTS.override.md"]
+    );
+    assert_eq!(
+        at_root_of(Agent::OpenCode),
+        [
+            ".agents",
+            ".claude",
+            ".opencode",
+            "AGENTS.md",
+            "CLAUDE.md",
+            "opencode.json"
+        ]
+    );
+}
+
+#[test]
+fn every_folder_an_agent_reads_a_kind_from_sits_in_a_name_it_reads_at_the_root() {
+    for kind in Kind::ALL {
+        for agent in Agent::ALL {
+            for path in agent.reads(kind) {
+                let first = path.components().next().unwrap();
+                assert!(
+                    agent
+                        .reads_at_root()
+                        .contains(&PathBuf::from(first.as_os_str())),
+                    "{agent} reads {kind} at {}, and not its root's {first:?}",
+                    path.display()
+                );
+            }
+        }
+    }
+}
+
+#[test]
+fn what_an_agent_reads_at_the_root_is_one_name_each() {
+    for agent in Agent::ALL {
+        for name in agent.reads_at_root() {
+            assert_eq!(
+                name.components().count(),
+                1,
+                "{agent} reads {} at the root",
+                name.display()
+            );
+        }
+    }
+}
+
 #[test]
 fn an_agent_is_serialized_as_the_name_its_settings_take() {
     let serialized = serde_json::to_string(&Agent::ALL).unwrap();
