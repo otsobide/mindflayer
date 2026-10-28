@@ -212,7 +212,7 @@ fn project_laid_out(outcome: &mut Outcome, project: &ProjectPlan, done: bool) {
             outcome.stderr.extend(
                 warnings
                     .iter()
-                    .map(|warning| format!("warning: {into}: {warning}")),
+                    .map(|warning| format!("warning: {into}: {}", warning.message)),
             );
             if let Some(reason) = &rendered.still_excluded {
                 outcome.stderr.push(format!(

@@ -323,7 +323,7 @@ pub(crate) fn render_said(
         rendered
             .warnings_of(Some(changed))
             .iter()
-            .map(|warning| format!("warning: {of}{warning}"))
+            .map(|warning| format!("warning: {of}{}", warning.message))
             .collect(),
         rendered
             .notes()
