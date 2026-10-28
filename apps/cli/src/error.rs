@@ -19,6 +19,16 @@ use mindflayer_core::{
 use thiserror::Error;
 
 use crate::render::plural;
+use crate::task::Refusal;
+
+/// Every type the CLI gives codes of its own to, by the module it is
+/// defined in, with those codes: what reaches the panel beside core's
+/// (`mindflayer_core::code::ALL`), and what a front end listing every code
+/// starts from, as it does from core's.
+///
+/// Held to core's rules by a test: no code here is given twice, here or in
+/// core, since the panel is handed a code without the type it came from.
+pub const CODES: &[(&str, &[&str])] = &[("task::Refusal", Refusal::CODES)];
 
 /// Why a command could not run at all, as opposed to running and finding
 /// problems: those are in the [`Outcome`](crate::Outcome).
@@ -207,3 +217,7 @@ pub(crate) fn deleting(path: &Path, kind: &Kind, files: &usize) -> String {
         mindflayer_core::Layout::Files { .. } => path.display().to_string(),
     }
 }
+
+#[cfg(test)]
+#[path = "error_test.rs"]
+mod tests;

@@ -190,7 +190,12 @@ These are easy to break from a single file without noticing.
   opened by `flayer install` (`install::apply`): its marks are the
   `flayer install` and `flayer uninstall` lines they amount to
   (`Screen::task`), each run whatever came of the others
-  (`Task::chained`), so its transcript runs again.
+  (`Task::chained`), so its transcript runs again. What a front end with
+  no terminal does not run is one list, `task::Refusal`, read off the
+  parsed command by a match with no wildcard (`Refusal::of_mind`,
+  `of_flayer`), so a new command says whether it is refused before it
+  compiles; a task is refused for its lines (`Task::refusal`). The TUI
+  refuses only its screens.
 - **A gather is watched, and stops only before it places.** Its `Request`
   carries a `gather::Watch`, core's progress callback and cancel flag; no gix
   type reaches a front end. A cancel is honoured until the shelf starts to

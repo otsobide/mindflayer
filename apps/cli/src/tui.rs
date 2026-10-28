@@ -37,8 +37,8 @@ use crate::commands::project::scan_warnings;
 use crate::commands::status::{unread, unseen};
 use crate::commands::workspace::same_directory;
 use crate::commands::{consulted, run_flayer_with, run_with};
-use crate::task::{shell, Task};
-use crate::{install, Cli, CliError, Command, Failure, FlayerCli, FlayerCommand, Lookup, Outcome};
+use crate::task::{shell, Refusal, Task};
+use crate::{install, Cli, CliError, Failure, FlayerCli, Lookup, Outcome};
 use state::{
     App, Choice, Done, Holdings, Item, LoadedSource, Member, Mode, Performed, Runner, Running,
     Scope, Step, Unlinked, Update, View, Workspace,
@@ -372,7 +372,7 @@ pub fn execute(words: &[String], base: &Path, lookup: &Lookup, watch: &Watch) ->
     let result = match words.first().map(String::as_str) {
         Some("mind") => match Cli::try_parse_from(words) {
             Err(error) => return Done::failed(command, error.to_string()),
-            Ok(cli) if draws_mind(cli.command.as_ref()) => {
+            Ok(cli) if Refusal::of_mind(cli.command.as_ref()) == Some(Refusal::Screen) => {
                 return Done::failed(command, SCREEN_IN_A_SCREEN);
             }
             Ok(mut cli) => {
@@ -383,7 +383,7 @@ pub fn execute(words: &[String], base: &Path, lookup: &Lookup, watch: &Watch) ->
         },
         Some("flayer") => match FlayerCli::try_parse_from(words) {
             Err(error) => return Done::failed(command, error.to_string()),
-            Ok(cli) if draws(cli.command.as_ref()) => {
+            Ok(cli) if Refusal::of_flayer(cli.command.as_ref()) == Some(Refusal::Screen) => {
                 return Done::failed(command, SCREEN_IN_A_SCREEN);
             }
             Ok(mut cli) => {
@@ -413,30 +413,11 @@ pub fn execute(words: &[String], base: &Path, lookup: &Lookup, watch: &Watch) ->
     }
 }
 
-/// Why a command that draws is not run from here.
+/// Why a command that draws is not run from here: what the TUI refuses of
+/// the list every front end shares ([`Refusal`]), the one refusal a front
+/// end with a terminal has. The rest it runs: an editor, given the terminal
+/// ([`Task::takes_terminal`]), and a gather, watched.
 const SCREEN_IN_A_SCREEN: &str = "opens a screen of its own, so it is not run from inside this one";
-
-/// Whether a workspace command opens a screen of its own: the TUI, or the
-/// install screen (`flayer install` with nothing named to install).
-fn draws(command: Option<&FlayerCommand>) -> bool {
-    matches!(
-        command,
-        None | Some(
-            FlayerCommand::Tui
-                | FlayerCommand::Minds { .. }
-                | FlayerCommand::Install { name: None, .. }
-        )
-    )
-}
-
-/// The same for `mind`, whose own TUI is what it opens on its own.
-fn draws_mind(command: Option<&Command>) -> bool {
-    match command {
-        None | Some(Command::Tui) => true,
-        Some(Command::Flayer { command }) => draws(command.as_ref()),
-        Some(_) => false,
-    }
-}
 
 /// Build the install screen for the workspace at `base`, which is the one on
 /// screen, and the root the lines it amounts to run from once it is applied:

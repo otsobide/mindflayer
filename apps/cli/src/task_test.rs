@@ -643,3 +643,92 @@ fn words_of(line: &str) -> Vec<String> {
     words.extend(word);
     words
 }
+
+/// `line`, split at its spaces, as the words a front end runs.
+fn line(line: &str) -> Vec<String> {
+    line.split(' ').map(str::to_owned).collect()
+}
+
+#[test]
+fn a_front_end_with_no_terminal_refuses_what_draws_edits_activates_or_gathers() {
+    for (said, refusal) in [
+        ("mind", Refusal::Screen),
+        ("mind tui", Refusal::Screen),
+        ("mind -C alpha tui", Refusal::Screen),
+        ("mind flayer", Refusal::Screen),
+        ("mind flayer tui", Refusal::Screen),
+        ("flayer", Refusal::Screen),
+        ("flayer --home= tui", Refusal::Screen),
+        ("flayer minds", Refusal::Screen),
+        ("flayer minds work", Refusal::Screen),
+        ("flayer install", Refusal::Screen),
+        ("flayer install --all-projects", Refusal::Screen),
+        ("mind edit deploy", Refusal::Editor),
+        ("mind edit --editor true deploy", Refusal::Editor),
+        ("flayer edit -p alpha deploy", Refusal::Editor),
+        ("mind flayer edit deploy", Refusal::Editor),
+        ("flayer activate", Refusal::Shell),
+        ("mind flayer activate --shell fish work", Refusal::Shell),
+        (
+            "flayer gather git https://example.com/skills.git",
+            Refusal::Unwatched,
+        ),
+    ] {
+        assert_eq!(refused(&line(said)), Some(refusal), "{said}");
+    }
+}
+
+#[test]
+fn a_front_end_with_no_terminal_runs_everything_else() {
+    for said in [
+        "flayer gather list",
+        "flayer install -p alpha deploy",
+        "flayer install --all-projects deploy",
+        "mind install deploy",
+        "mind flayer link alpha",
+        "flayer which",
+        "mind status --json",
+        // Not a line either parser takes, which running it says, in the
+        // parser's words.
+        "flayer frobnicate",
+        "ls",
+    ] {
+        assert_eq!(refused(&line(said)), None, "{said}");
+    }
+}
+
+#[test]
+fn a_task_is_refused_for_the_first_of_its_lines_that_is() {
+    // Not the empty value, whose lines the parser refuses before this list
+    // is asked: what a line that cannot run would do is no question.
+    let values = VALUES.into_iter().filter(|value| !value.is_empty());
+    for task in values.flat_map(every) {
+        let expected = match &task {
+            Task::OpenInstall => Some(Refusal::Screen),
+            Task::Edit { .. } => Some(Refusal::Editor),
+            Task::Gather { .. } => Some(Refusal::Unwatched),
+            _ => None,
+        };
+
+        assert_eq!(task.refusal(), expected, "{task:?}");
+    }
+}
+
+#[test]
+fn a_refusal_says_why_by_a_code_of_its_own() {
+    let codes: Vec<&str> = [
+        Refusal::Screen,
+        Refusal::Editor,
+        Refusal::Shell,
+        Refusal::Unwatched,
+    ]
+    .iter()
+    .map(Refusal::code)
+    .collect();
+
+    assert_eq!(codes, Refusal::CODES);
+    assert_eq!(
+        Refusal::Screen.to_string(),
+        "opens a screen of its own, which needs a terminal to draw on"
+    );
+}

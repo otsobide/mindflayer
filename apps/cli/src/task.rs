@@ -24,9 +24,13 @@
 //! Shown, a line is quoted so that, pasted into a shell, it runs as one
 //! command of exactly these words ([`shell`]).
 
+use clap::Parser as _;
 use mindflayer_core::url::redacted;
-use mindflayer_core::{Agent, Kind, Share, DEFAULT_SUBDIRECTORY, QUALIFIER};
+use mindflayer_core::{codes, Agent, Kind, Share, DEFAULT_SUBDIRECTORY, QUALIFIER};
 use serde::{Deserialize, Serialize};
+use thiserror::Error;
+
+use crate::{Cli, Command, FlayerCli, FlayerCommand, GatherCommand};
 
 /// What an `agents` line says, as the toggles have it.
 ///
@@ -546,6 +550,158 @@ impl Task {
                 .collect::<Vec<_>>()
                 .join(" && "),
         }
+    }
+
+    /// Why a front end with no terminal of its own does not run this task,
+    /// when it does not: the refusal of the first of its lines that is
+    /// refused ([`refused`]).
+    ///
+    /// Asked of the lines rather than of the variant, so the one list of
+    /// commands decides, whatever task a line came from.
+    pub fn refusal(&self) -> Option<Refusal> {
+        self.commands().iter().find_map(|line| refused(line))
+    }
+}
+
+/// Why a front end with no terminal of its own, the panel's server first
+/// among them, does not run a command line: what [`Task::refusal`] and
+/// [`refused`] answer, from one list every front end shares.
+///
+/// One list, of commands as the parsers read them rather than of tasks, so
+/// a line refused for one front end is refused for every one, whichever
+/// task it came from or none. The TUI has a terminal, and refuses only the
+/// lines that would draw a screen inside its own ([`Refusal::Screen`]).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Error)]
+pub enum Refusal {
+    /// The TUI (`mind` or `flayer` alone, or either's `tui`), the minds
+    /// screen (`flayer minds`), or the install screen (`flayer install`
+    /// with nothing named).
+    #[error("opens a screen of its own, which needs a terminal to draw on")]
+    Screen,
+    /// `edit`, every form of it: it hands the terminal to an editor until
+    /// the editor is closed. Until #81 gives it a form that takes the
+    /// contents instead.
+    #[error("opens an editor, which needs a terminal to draw on")]
+    Editor,
+    /// `flayer activate`, which prints code for a shell to run, and means
+    /// nothing anywhere else.
+    #[error("prints code for a shell to run, which only a shell can")]
+    Shell,
+    /// `flayer gather git`: the network, for as long as it takes, which only
+    /// a screen that shows how far it got and stops it on a key can watch,
+    /// until #112 brings both to the server.
+    #[error(
+        "fetches over the network for as long as that takes, which only the TUI or a shell shows, and stops"
+    )]
+    Unwatched,
+}
+
+codes!(Refusal {
+    Self::Screen => "opens_screen",
+    Self::Editor => "opens_editor",
+    Self::Shell => "prints_shell_code",
+    Self::Unwatched => "gather_unwatched",
+});
+
+impl Refusal {
+    /// Why `mind <command>` is not run by a front end with no terminal, when
+    /// it is not.
+    ///
+    /// One arm per command with no wildcard, as `of_flayer`'s, so a new
+    /// command does not compile until it says whether a front end without a
+    /// terminal runs it.
+    pub fn of_mind(command: Option<&Command>) -> Option<Refusal> {
+        match command {
+            None | Some(Command::Tui) => Some(Refusal::Screen),
+            Some(Command::Edit { .. }) => Some(Refusal::Editor),
+            Some(Command::Flayer { command }) => Refusal::of_flayer(command.as_ref()),
+            Some(
+                Command::Init { .. }
+                | Command::Add { .. }
+                | Command::Rename { .. }
+                | Command::Remove { .. }
+                | Command::Templates
+                | Command::List { .. }
+                | Command::Show { .. }
+                | Command::Validate { .. }
+                | Command::Status { .. }
+                | Command::Link
+                | Command::Unlink
+                | Command::Load { .. }
+                | Command::Unload { .. }
+                | Command::Install { .. }
+                | Command::Uninstall { .. }
+                | Command::Update { .. }
+                | Command::Agents { .. }
+                | Command::Share { .. }
+                | Command::Targets { .. }
+                | Command::Migrate { .. },
+            ) => None,
+        }
+    }
+
+    /// Why `flayer <command>` is not run by a front end with no terminal,
+    /// when it is not.
+    pub fn of_flayer(command: Option<&FlayerCommand>) -> Option<Refusal> {
+        match command {
+            None
+            | Some(
+                FlayerCommand::Tui
+                | FlayerCommand::Minds { .. }
+                | FlayerCommand::Install { name: None, .. },
+            ) => Some(Refusal::Screen),
+            Some(FlayerCommand::Edit { .. }) => Some(Refusal::Editor),
+            Some(FlayerCommand::Activate { .. }) => Some(Refusal::Shell),
+            Some(FlayerCommand::Gather(GatherCommand::Git { .. })) => Some(Refusal::Unwatched),
+            Some(
+                FlayerCommand::Init { .. }
+                | FlayerCommand::Which
+                | FlayerCommand::Workspaces { .. }
+                | FlayerCommand::Add { .. }
+                | FlayerCommand::Rename { .. }
+                | FlayerCommand::Remove { .. }
+                | FlayerCommand::Templates { .. }
+                | FlayerCommand::List { .. }
+                | FlayerCommand::Show { .. }
+                | FlayerCommand::Validate { .. }
+                | FlayerCommand::Status { .. }
+                | FlayerCommand::Link { .. }
+                | FlayerCommand::Unlink { .. }
+                | FlayerCommand::Relink { .. }
+                | FlayerCommand::Load { .. }
+                | FlayerCommand::Unload { .. }
+                | FlayerCommand::Scan { .. }
+                | FlayerCommand::Gather(GatherCommand::List)
+                | FlayerCommand::Install { name: Some(_), .. }
+                | FlayerCommand::Uninstall { .. }
+                | FlayerCommand::Update { .. }
+                | FlayerCommand::Adopt { .. }
+                | FlayerCommand::Agents { .. }
+                | FlayerCommand::Share { .. }
+                | FlayerCommand::Targets { .. }
+                | FlayerCommand::Migrate { .. },
+            ) => None,
+        }
+    }
+}
+
+/// Why a front end with no terminal of its own does not run `words`, a
+/// command line, when it does not.
+///
+/// Read with the parsers that run it, so the list is of commands as they
+/// run, not as they are spelled: `mind flayer minds` is `flayer minds`, and
+/// a flag in front of either changes nothing. A line neither takes is no
+/// refusal of this list's: running it says why it cannot run, in the
+/// parser's words.
+pub fn refused(words: &[String]) -> Option<Refusal> {
+    match words.first().map(String::as_str) {
+        Some("mind") => Cli::try_parse_from(words)
+            .ok()
+            .and_then(|cli| Refusal::of_mind(cli.command.as_ref())),
+        Some("flayer") => FlayerCli::try_parse_from(words)
+            .ok()
+            .and_then(|cli| Refusal::of_flayer(cli.command.as_ref())),
+        _ => None,
     }
 }
 

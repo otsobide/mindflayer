@@ -3506,6 +3506,25 @@ activation that chose its workspace (`tui::execute`), as they were given to
 `mind`, `mind tui`) is refused if it ever reaches that path, rather than drawn
 inside this one.
 
+That refusal is one part of a list every front end shares (`task::Refusal`):
+what a front end with no terminal of its own, the panel's server, does not
+run. A screen of its own; `edit` in every form, which hands the terminal to
+an editor, until #81 gives it one that takes the contents; `activate`, which
+prints code for a shell; and `gather git`, the network for as long as it
+takes, until #112 brings to the server the progress and the cancel only a
+screen has now. `ui` joins it when #68 makes it a command. The TUI has a
+terminal, so of the list it refuses only the screens. The list is of
+commands as the parsers read them, not as they are spelled, so `mind flayer
+minds` is refused as `flayer minds` is, and it is a match over every command
+with no wildcard, so a new command does not compile until it says whether
+it is refused. A task is refused for the first of its lines that is
+(`Task::refusal`), whichever variant it is, and each refusal has a code of
+its own (`opens_screen`, `opens_editor`, `prints_shell_code`,
+`gather_unwatched`), held to the rules core's codes are ([a code for what
+went wrong](#a-code-for-what-went-wrong)). A list of tasks was the
+alternative, and it would leave out a line no task builds: a front end that
+runs lines it is sent would run one the list never named.
+
 The exceptions are named, not hidden: opening the install screen builds the
 screen `flayer install` opens, as a read, rather than running a line, and
 re-reading the disk is not a command, because it changes nothing. Applying
