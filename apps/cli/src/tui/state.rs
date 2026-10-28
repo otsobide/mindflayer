@@ -336,11 +336,14 @@ pub enum Task {
         to: String,
     },
     /// `… remove --yes <kind:name>`: asked about before it gets here, which is
-    /// what the `--yes` says.
+    /// what the `--yes` says. `flayer remove --everywhere --yes <kind:name>`
+    /// when `everywhere`, one of the workspace's own taken out of every
+    /// project it links first.
     Remove {
         holder: Holder,
         kind: Kind,
         name: String,
+        everywhere: bool,
     },
     /// `flayer validate`, everything; `mind validate`, one project.
     Validate { holder: Holder },
@@ -445,8 +448,18 @@ impl Task {
                 from,
                 to,
             } => vec![at(holder, &["rename"], &[&qualified(*kind, from), to])],
-            Task::Remove { holder, kind, name } => {
-                vec![at(holder, &["remove", "--yes"], &[&qualified(*kind, name)])]
+            Task::Remove {
+                holder,
+                kind,
+                name,
+                everywhere,
+            } => {
+                let command: &[&str] = if *everywhere {
+                    &["remove", "--everywhere", "--yes"]
+                } else {
+                    &["remove", "--yes"]
+                };
+                vec![at(holder, command, &[&qualified(*kind, name)])]
             }
             Task::Validate { holder } => vec![at(holder, &["validate"], &[])],
             Task::Minds { init, link, unlink } => {
@@ -1355,13 +1368,42 @@ impl App {
                     Layout::Directory { .. } => "Its folder goes, and everything in it.",
                     Layout::Files { .. } => "The file goes.",
                 };
+                let mut question = vec![
+                    format!("Delete {kind} {name}?"),
+                    String::new(),
+                    what.to_owned(),
+                ];
+                // One of the workspace's own may have been installed into
+                // its projects, where removing it alone leaves each copy
+                // orphaned: a second yes takes them out first, as
+                // `--everywhere` does. A project's own was installed
+                // nowhere, so it has only the one.
+                let also = (holder == Holder::Workspace).then(|| {
+                    question.push(String::new());
+                    question.push(String::from(
+                        "Everywhere takes it out of every project it was installed into first, \
+                         but for a copy changed since.",
+                    ));
+                    Also {
+                        key: 'e',
+                        label: "everywhere",
+                        task: Task::Remove {
+                            holder: holder.clone(),
+                            kind,
+                            name: name.clone(),
+                            everywhere: true,
+                        },
+                    }
+                });
                 let confirm = Confirm {
-                    question: vec![
-                        format!("Delete {kind} {name}?"),
-                        String::new(),
-                        what.to_owned(),
-                    ],
-                    task: Task::Remove { holder, kind, name },
+                    question,
+                    task: Task::Remove {
+                        holder,
+                        kind,
+                        name,
+                        everywhere: false,
+                    },
+                    also,
                     back: Box::new(Mode::Browse),
                 };
                 (Mode::Confirming(confirm), Step::Stay)
@@ -1477,6 +1519,7 @@ impl App {
             task: Task::Unlink {
                 entry: member.entry.clone(),
             },
+            also: None,
             back: Box::new(Mode::Browse),
         };
         (Mode::Confirming(confirm), Step::Stay)
@@ -1781,6 +1824,7 @@ impl App {
                                 ),
                             ],
                             task,
+                            also: None,
                             back: Box::new(Mode::Loading(form)),
                         };
                         (Mode::Confirming(confirm), Step::Stay)
@@ -1851,6 +1895,7 @@ impl App {
                     let confirm = Confirm {
                         question: screen.question(),
                         task,
+                        also: None,
                         back: Box::new(Mode::Minds(screen)),
                     };
                     (Mode::Confirming(confirm), Step::Stay)
@@ -2163,6 +2208,10 @@ fn confirming(confirm: Confirm, key: KeyEvent) -> (Mode, Step) {
         // the form that led here.
         KeyCode::Char('y') | KeyCode::Enter => (*confirm.back, Step::Run(confirm.task)),
         KeyCode::Char('n') | KeyCode::Esc => (*confirm.back, Step::Stay),
+        KeyCode::Char(key) if confirm.also.as_ref().is_some_and(|also| also.key == key) => {
+            let task = confirm.also.map(|also| also.task);
+            (*confirm.back, task.map_or(Step::Stay, Step::Run))
+        }
         _ => (Mode::Confirming(confirm), Step::Stay),
     }
 }
@@ -2611,8 +2660,20 @@ pub struct Confirm {
     pub question: Vec<String>,
     /// What yes runs.
     pub task: Task,
-    /// Where either answer goes back to.
+    /// A second yes, under a key of its own, that runs something more: the
+    /// same question answered "and everywhere else too".
+    pub also: Option<Also>,
+    /// Where any answer goes back to.
     pub back: Box<Mode>,
+}
+
+/// A second yes a [`Confirm`] offers: the key that gives it, the word the
+/// keys line calls it, and what it runs.
+#[derive(Debug)]
+pub struct Also {
+    pub key: char,
+    pub label: &'static str,
+    pub task: Task,
 }
 
 impl Confirm {
@@ -2627,6 +2688,7 @@ impl Confirm {
                 ),
             ],
             task: Task::InitAndLink { path },
+            also: None,
             back: Box::new(back),
         }
     }
@@ -2697,8 +2759,11 @@ impl Reader {
             ),
             (
                 "d",
-                "delete it, once you say yes",
-                &["mind -C <project> remove --yes <kind:name>"],
+                "delete it, once you say yes; on the ◆ row, e takes it out of every project too",
+                &[
+                    "mind -C <project> remove --yes <kind:name>",
+                    "flayer remove --everywhere --yes <kind:name>, with e on the workspace's own",
+                ],
             ),
             (
                 "l",

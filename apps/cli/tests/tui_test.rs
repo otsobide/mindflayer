@@ -1272,6 +1272,7 @@ fn every_task_the_tui_runs_is_a_line_the_binaries_accept() {
             holder: Holder::Project(String::from("alpha")),
             kind: Kind::Skill,
             name: String::from("deploy"),
+            everywhere: false,
         },
         Task::Add {
             holder: Holder::Workspace,
@@ -1289,6 +1290,7 @@ fn every_task_the_tui_runs_is_a_line_the_binaries_accept() {
             holder: Holder::Project(String::from(".")),
             kind: Kind::Rule,
             name: String::from("style"),
+            everywhere: false,
         },
         Task::InitProject,
         Task::LinkHere,
@@ -1311,6 +1313,7 @@ fn every_task_the_tui_runs_is_a_line_the_binaries_accept() {
             holder: Holder::Elsewhere(String::from("../collapse")),
             kind: Kind::Skill,
             name: String::from("deploy"),
+            everywhere: false,
         },
         Task::Add {
             holder: Holder::Elsewhere(String::from("-odd")),
@@ -1358,6 +1361,12 @@ fn every_task_the_tui_runs_is_a_line_the_binaries_accept() {
         Task::Update {
             holder: Holder::Workspace,
             reference: Some(String::from("skill:commit-style")),
+        },
+        Task::Remove {
+            holder: Holder::Workspace,
+            kind: Kind::Rule,
+            name: String::from("git/no-force-push"),
+            everywhere: true,
         },
     ];
 
@@ -1927,6 +1936,63 @@ fn the_workspaces_own_row_sits_above_its_projects() {
         panic!("{step:?}");
     };
     assert_eq!(task.describe(), "flayer edit skill:commit-style");
+}
+
+#[test]
+fn d_on_the_workspaces_own_offers_to_remove_it_everywhere_with_e() {
+    let dir = workspace_with_own();
+    flayer(dir.path(), &["install", "commit-style", "-p", "alpha"]).unwrap();
+    let mut app = tui_in(dir.path());
+    press_key(&mut app, KeyCode::Up);
+    press_key(&mut app, KeyCode::Right);
+
+    press_key(&mut app, KeyCode::Char('d'));
+    let drawn = tui_drawn(&app);
+    assert!(drawn.contains("Delete skill commit-style?"), "{drawn}");
+    assert!(
+        drawn.contains("runs  flayer remove --yes skill:commit-style"),
+        "{drawn}"
+    );
+    assert!(
+        drawn.contains("e     flayer remove --everywhere --yes skill:commit-style"),
+        "{drawn}"
+    );
+    assert!(drawn.contains("e  everywhere"), "{drawn}");
+    let task = press_and_run(&mut app, KeyCode::Char('e'));
+
+    assert_eq!(
+        task,
+        Some(Task::Remove {
+            holder: Holder::Workspace,
+            kind: Kind::Skill,
+            name: String::from("commit-style"),
+            everywhere: true,
+        })
+    );
+    assert!(!own_directory_for(dir.path(), Kind::Skill)
+        .join("commit-style")
+        .exists());
+    for copy in copies(&dir.path().join("alpha"), "commit-style") {
+        assert!(!copy.exists(), "{}", copy.display());
+    }
+    assert!(app.transcript().contains(
+        "$ flayer remove --everywhere --yes skill:commit-style\nremoved commit-style from alpha\n"
+    ));
+}
+
+#[test]
+fn d_on_a_projects_own_has_no_everywhere_to_offer() {
+    let dir = workspace_with_two();
+    let mut app = tui_in(dir.path());
+    press_key(&mut app, KeyCode::Right);
+
+    press_key(&mut app, KeyCode::Char('d'));
+    let drawn = tui_drawn(&app);
+    assert!(!drawn.contains("everywhere"), "{drawn}");
+
+    // So `e` there is no answer, and the question stays.
+    assert_eq!(press_key(&mut app, KeyCode::Char('e')), TuiStep::Stay);
+    assert!(matches!(app.mode, Mode::Confirming(_)));
 }
 
 #[test]

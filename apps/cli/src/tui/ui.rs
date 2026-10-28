@@ -1051,7 +1051,21 @@ fn confirming(confirm: &Confirm, frame: &mut Frame, area: Rect) {
         .iter()
         .map(|line| printable(line))
         .collect();
-    said.extend([String::new(), runs, String::new()]);
+    said.extend([String::new(), runs]);
+    // What the second yes runs, under the first, so both lines a key can
+    // start are read before either key is pressed.
+    let mut keys = String::from("y  yes        ");
+    if let Some(also) = &confirm.also {
+        said.push(format!(
+            "{}     {}",
+            also.key,
+            printable(&also.task.describe())
+        ));
+        keys.push_str(&format!("{}  {}        ", also.key, also.label));
+    }
+    keys.push_str("n  no");
+    let dimmed = said.len() - confirm.question.len() - 1;
+    said.push(String::new());
 
     // Sized to what it says once wrapped, so the answer keys at the bottom are
     // never the part that falls off.
@@ -1062,19 +1076,21 @@ fn confirming(confirm: &Confirm, frame: &mut Frame, area: Rect) {
         .sum();
     let height = u16::try_from(rows + 3).unwrap_or(u16::MAX);
 
-    let last = said.len() - 2;
+    // The command lines, between the blank after the question and the one
+    // before the keys.
+    let commands = said.len() - 1 - dimmed..said.len() - 1;
     let mut text: Vec<Line> = said
         .into_iter()
         .enumerate()
         .map(|(index, line)| {
-            if index == last {
+            if commands.contains(&index) {
                 Line::from(Span::styled(line, dim()))
             } else {
                 Line::from(line)
             }
         })
         .collect();
-    text.push(Line::from(Span::styled("y  yes        n  no", bold())));
+    text.push(Line::from(Span::styled(keys, bold())));
 
     let box_ = centred(area, WIDTH, height);
     frame.render_widget(Clear, box_);
