@@ -1,5 +1,6 @@
-//! The commands that put one skill or rule into one project and take it
-//! back out: `install` and `uninstall`, at either level. The screen `flayer
+//! The commands that put one skill or rule into projects and take it back
+//! out: `install` and `uninstall`, at either level, into one project or, at
+//! the workspace's, into each of several at once. The screen `flayer
 //! install` opens on its own is [`crate::install`].
 
 use std::path::Path;
@@ -12,16 +13,17 @@ use crate::commands::gather::{scrubbed, Scrubbed};
 use crate::commands::workspace::load_warnings;
 use crate::{CliError, Failure, Outcome};
 
-/// Put what `typed` names into one project, from wherever it is offered: a
-/// skill or a rule, by its name alone or qualified (`rule:git/commits`), as
-/// core finds it ([`offered_typed`](mindflayer_core::install::offered_typed)),
-/// through core's batch of one ([`assign::install`]).
+/// Put what `typed` names into each of `projects`, from wherever it is
+/// offered: a skill or a rule, by its name alone or qualified
+/// (`rule:git/commits`), as core finds it for each
+/// ([`offered_typed`](mindflayer_core::install::offered_typed)), through
+/// core's batch ([`assign::install`]).
 ///
 /// `from` may be a path to a loaded workspace typed from `directory`, as it was
 /// given to `load`. What the loaded workspaces could not offer is said as
 /// warnings, whether or not the install then works: a loaded workspace that
 /// has gone is why a skill is "not offered", and the error alone cannot say so.
-/// So is each folder the project's settings name for the kind that no install
+/// So is each folder a project's settings name for the kind that no install
 /// uses ([`MindProject::misplaced_targets`]): no copy went there, and an
 /// install refused for want of any other is refused for that. Every kind the
 /// name could be, as core says ([`kinds_named`]), when it is refused before
@@ -29,12 +31,17 @@ use crate::{CliError, Failure, Outcome};
 ///
 /// [`kinds_named`]: mindflayer_core::install::kinds_named
 ///
+/// One project is said as it always was, a refusal as the command's error.
+/// Several are said as [`together`] says them, each one's lines in the
+/// order asked, and what the loaded workspaces could not offer once, after
+/// them all.
+///
 /// `homes` are the agents' own folders the command line decided, which core
 /// refuses to install into. `force` writes over a copy edited since it was
 /// installed, which core otherwise leaves alone.
 pub(crate) fn install_named(
     workspace: &FlayerWorkspace,
-    project: &MindProject,
+    projects: &[MindProject],
     typed: &str,
     from: Option<&str>,
     directory: &Path,
@@ -45,7 +52,7 @@ pub(crate) fn install_named(
     let loads = load_warnings(workspace);
     let assigned = assign::install(
         workspace,
-        std::slice::from_ref(project),
+        projects,
         &reference,
         from,
         directory,
@@ -53,28 +60,38 @@ pub(crate) fn install_named(
         edits(force),
     )
     .map_err(|error| {
+        let kinds = mindflayer_core::install::kinds_named(&reference);
         let mut warnings = loads.clone();
-        warnings.extend(misplaced(
-            project,
-            &mindflayer_core::install::kinds_named(&reference),
-        ));
+        for project in projects {
+            warnings.extend(misplaced(project, &kinds));
+        }
         Failure {
             error: Box::new(error.into()),
             warnings,
         }
     })?;
-    let said = scrubbed(&assigned.scrub);
-    let mut parts = assigned.parts.into_iter();
-    let Some(part) = parts.next() else {
-        // A batch of one project hands back its part.
-        return Ok(said.before(Outcome::plain(String::new())));
-    };
     // What the scrub said goes first, with an error too: it happened all the
     // same.
-    alone(
-        said,
-        install_said(&part.project, part.done, &reference, &loads),
-    )
+    let said = scrubbed(&assigned.scrub);
+    let mut parts = assigned.parts;
+    if parts.len() == 1 {
+        let part = parts.remove(0);
+        return alone(
+            said,
+            install_said(&part.project, part.done, &reference, &loads),
+        );
+    }
+    let each = parts
+        .into_iter()
+        .map(|part| {
+            let into = part.project.name().to_owned();
+            (
+                into,
+                install_said(&part.project, part.done, &reference, &[]),
+            )
+        })
+        .collect();
+    together(said, each, loads)
 }
 
 /// One project's part of an install, `done`, as a command that installs into
@@ -209,6 +226,67 @@ fn alone(scrub: Scrubbed, said: Result<Outcome, Failure>) -> Result<Outcome, Fai
             Err(failure)
         }
     }
+}
+
+/// Several projects' parts, `each` by the project's name, as one command
+/// says them: what opening the ledger scrubbed first, then each project's
+/// lines in the order asked, one refused ending in an `error:` that names
+/// it, and `after`, said once for them all; failing when any part did,
+/// while the others' lines stand, since what they did was done.
+///
+/// Every part refused alike, as a name nothing offers is refused for every
+/// project, is that refusal once, as the command's error, with what each
+/// part said before it: the same line for each project would bury what it
+/// says under how often.
+fn together(
+    scrub: Scrubbed,
+    each: Vec<(String, Result<Outcome, Failure>)>,
+    after: Vec<String>,
+) -> Result<Outcome, Failure> {
+    let alike = each.split_first().is_some_and(|((_, first), rest)| {
+        first.as_ref().err().is_some_and(|first| {
+            rest.iter().all(|(_, said)| {
+                said.as_ref()
+                    .err()
+                    .is_some_and(|other| other.error.to_string() == first.error.to_string())
+            })
+        })
+    });
+    if alike {
+        let mut warnings = scrub.lines();
+        let mut error = None;
+        for (_, said) in each {
+            if let Err(failure) = said {
+                warnings.extend(failure.warnings);
+                error.get_or_insert(failure.error);
+            }
+        }
+        warnings.extend(after);
+        return Err(Failure {
+            error: error.expect("parts refused alike are refused, one at least"),
+            warnings,
+        });
+    }
+    let mut outcome = Outcome::plain(String::new());
+    for (name, said) in each {
+        match said {
+            Ok(one) => {
+                outcome.stdout.push_str(&one.stdout);
+                outcome.stderr.extend(one.stderr);
+                outcome.ok &= one.ok;
+            }
+            Err(failure) => {
+                outcome.stderr.extend(failure.warnings);
+                outcome
+                    .stderr
+                    .push(format!("error: {name}: {}", failure.error));
+                outcome.ok = false;
+            }
+        }
+    }
+    outcome.ok &= after.is_empty();
+    outcome.stderr.extend(after);
+    Ok(scrub.before(outcome))
 }
 
 /// How a line about installing names what it is about: a skill by its name

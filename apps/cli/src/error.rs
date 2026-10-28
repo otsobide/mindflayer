@@ -121,7 +121,7 @@ pub enum CliError {
         wanted: String,
         matches: Vec<String>,
     },
-    #[error("say which project to install into (`flayer install -p <project> <name>`), or run `flayer install` alone for the screen")]
+    #[error("say which projects to install into: -p <project> for each, or --all-projects for every one the workspace links; or run `flayer install` alone for the screen")]
     InstallWhere,
     #[error("say which skill or rule to install (`flayer install -p <project> <name>`), or run `flayer install` alone for the screen")]
     InstallWhat,

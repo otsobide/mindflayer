@@ -180,7 +180,7 @@ pub(crate) fn run_with(cli: &Cli, lookup: &Lookup, watch: &Watch) -> Result<Outc
             let workspace = managing(&project, lookup)?;
             install_named(
                 &workspace,
-                &project,
+                &[project],
                 name,
                 from.as_deref(),
                 &directory,
@@ -394,33 +394,41 @@ fn run_flayer(
         FlayerCommand::Gather(command) => run_gather(command, directory, lookup, watch),
 
         FlayerCommand::Install {
-            project,
+            projects,
+            all_projects,
             name,
             from,
             force,
-        } => match (name, project) {
+        } => match (name, projects.is_empty() && !*all_projects) {
             // The screen reads until something on it is applied, so it is
             // opened the way a read is: on the default workspace before it
             // is made too, which manages nothing to install into.
-            (None, None) => reading_workspace(directory, lookup, |workspace| {
+            (None, true) => reading_workspace(directory, lookup, |workspace| {
                 crate::install::run(workspace, &lookup.agents)
             }),
-            (Some(name), Some(project)) => {
+            (Some(name), false) => {
                 let workspace = workspace_here(directory, lookup)?;
-                install_named(
-                    &workspace,
-                    &workspace.pick(project)?,
-                    name,
-                    from.as_deref(),
-                    directory,
-                    &lookup.agents,
-                    *force,
+                let (asked, unread) = named_projects(&workspace, projects, *all_projects)?;
+                if asked.is_empty() {
+                    return Ok(none_linked("installed", unread));
+                }
+                beside_all(
+                    install_named(
+                        &workspace,
+                        &asked,
+                        name,
+                        from.as_deref(),
+                        directory,
+                        &lookup.agents,
+                        *force,
+                    ),
+                    unread,
                 )
             }
             // Half of one: a skill with no project to put it in, or a
             // project with nothing named to put there.
-            (Some(_), None) => Err(CliError::InstallWhere.into()),
-            (None, Some(_)) => Err(CliError::InstallWhat.into()),
+            (Some(_), true) => Err(CliError::InstallWhere.into()),
+            (None, false) => Err(CliError::InstallWhat.into()),
         },
         FlayerCommand::Uninstall {
             project,
@@ -772,6 +780,41 @@ fn named_projects(
         .map(|project| workspace.pick(project))
         .collect::<Result<Vec<_>, _>>()?;
     Ok((asked, Vec::new()))
+}
+
+/// What a command given every project the workspace links says when it
+/// links none it could open: that nothing was `done`, and why, with each
+/// entry that would not open, `unread`, beside it, as `flayer update --all`
+/// says it. Not a failure while every entry opens, since nothing asked of
+/// it went wrong.
+fn none_linked(done: &str, unread: Vec<String>) -> Outcome {
+    let why = if unread.is_empty() {
+        "no project is linked"
+    } else {
+        "no project linked could be read"
+    };
+    Outcome {
+        stdout: format!("nothing {done}: {why}\n"),
+        ok: unread.is_empty(),
+        stderr: unread,
+    }
+}
+
+/// `result`, with `unread`, the entries a command given every project could
+/// not open, said after what it says: beside an outcome, failing it, and
+/// before the error of a failure, among its warnings.
+fn beside_all(result: Result<Outcome, Failure>, unread: Vec<String>) -> Result<Outcome, Failure> {
+    match result {
+        Ok(mut outcome) => {
+            outcome.ok &= unread.is_empty();
+            outcome.stderr.extend(unread);
+            Ok(outcome)
+        }
+        Err(mut failure) => {
+            failure.warnings.extend(unread);
+            Err(failure)
+        }
+    }
 }
 
 /// The workspace that manages a project, as core's
