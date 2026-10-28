@@ -5771,6 +5771,18 @@ just listed.
   before it is refused. Holding the lock across the screen's batch needs
   core to apply it as one, which is where #78 plans it, and would want the
   transcript to say it in a line that runs it again as one.
+- **One origin for two folders of one repository.** A source is one URL,
+  branch and folder, but its origin (`Offer::origin`) says only the first
+  two, so one repository gathered at one branch from two folders that each
+  hold a `deploy` offers it twice under one origin: `gather list` prints
+  the same line for each, `--from` names neither, and the install screen's
+  line for either box is refused as offered twice, where the screen, when it
+  installed what it marked itself, installed the one ticked. What it then
+  recorded named the source by id, but the origin it recorded named both,
+  which is what a record's offer is found by (`install::offered_for`). An
+  origin that says a folder other than the kind's own would name each, and
+  would change what a record holds, so it needs a ledger step that writes
+  the folder into the origins older records keep.
 - **Changes to an artifact take no lock.** `add`, `edit`, `rename` and
   `remove` write into a project or the workspace's own folders and then see
   to a record ([A record must not outlive the copy it is
