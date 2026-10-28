@@ -637,7 +637,7 @@ fn footer(app: &App, frame: &mut Frame, area: Rect) {
     // registry, shelf or installs to offer keys for.
     let keys = match (app.focus, app.scope()) {
         (Focus::Items, Scope::Workspace) => {
-            "q quit  ? keys  enter show  e edit  r rename  d delete  u update  a add  ← back  v validate"
+            "q quit  ? keys  enter show  e edit  r rename  d delete  u update  A adopt  a add  ← back  v validate"
         }
         (Focus::Items, Scope::Project) => {
             "q quit  ? keys  enter show  e edit  r rename  d delete  a add  ← back  v validate"

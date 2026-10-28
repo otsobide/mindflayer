@@ -431,6 +431,15 @@ pub enum Task {
         kind: Kind,
         name: String,
     },
+    /// `flayer adopt -p <project> --yes <kind:name>`: somebody's skill in
+    /// the project's agents' folders brought into the workspace's library,
+    /// its copies recorded as installed from there: asked about before it
+    /// gets here, which is what the `--yes` says.
+    Adopt {
+        project: String,
+        kind: Kind,
+        name: String,
+    },
     /// Open the install screen, which is what `flayer install` opens.
     OpenInstall,
     /// What the install screen marked, as the `Install` and `Uninstall`
@@ -620,6 +629,18 @@ impl Task {
                 let head: Vec<&str> = head.iter().map(String::as_str).collect();
                 vec![words(&head, &[&qualified(*kind, name)])]
             }
+            // `--yes` before the name, as `remove` has it, so a name a
+            // `--` has to keep from being read as a flag leaves it a flag.
+            Task::Adopt {
+                project,
+                kind,
+                name,
+            } => {
+                let mut head = picking(&["flayer", "adopt"], std::slice::from_ref(project));
+                head.push(String::from("--yes"));
+                let head: Vec<&str> = head.iter().map(String::as_str).collect();
+                vec![words(&head, &[&qualified(*kind, name)])]
+            }
             Task::ApplyInstall { changes } => changes.iter().flat_map(Task::commands).collect(),
             Task::OpenInstall => vec![words(&["flayer", "install"], &[])],
             Task::Refresh => Vec::new(),
@@ -653,6 +674,7 @@ impl Task {
                 | Task::Update { .. }
                 | Task::Install { .. }
                 | Task::Uninstall { .. }
+                | Task::Adopt { .. }
                 | Task::ApplyInstall { .. }
         )
     }
@@ -1336,7 +1358,8 @@ impl App {
             _ => {}
         }
         // What only a workspace has: its registry, its shelf, its installs.
-        if let KeyCode::Char(key @ ('l' | 'u' | 'U' | 'M' | 'g' | 's' | 'i' | 'm' | 'L')) = key.code
+        if let KeyCode::Char(key @ ('l' | 'u' | 'U' | 'M' | 'A' | 'g' | 's' | 'i' | 'm' | 'L')) =
+            key.code
         {
             return match self.scope() {
                 Scope::Workspace => self.in_workspace(key),
@@ -1356,6 +1379,7 @@ impl App {
             'u' => self.start_updating(),
             'U' => self.start_unlinking(),
             'M' => self.start_relinking(),
+            'A' => self.start_adopting(),
             'g' => (Mode::Gathering(GatherForm::default()), Step::Stay),
             's' => (Mode::Browse, Step::Run(Task::Shelf)),
             'm' => match self.workspace() {
@@ -1673,6 +1697,52 @@ impl App {
             task: Task::Relink {
                 old: member.entry.clone(),
                 new: moved.route.clone(),
+            },
+            also: None,
+            back: Box::new(Mode::Browse),
+        };
+        (Mode::Confirming(confirm), Step::Stay)
+    }
+
+    /// `A`: the foreign skill under the cursor brought into the workspace's
+    /// library, and its copies recorded as installed from there, once
+    /// somebody says yes, as `flayer adopt` does. Only on a row `status`
+    /// calls foreign: what Mindflayer installed is its own already, what the
+    /// project authors is the project's, and a rule is never adopted. Core
+    /// refuses the rest, a name the library holds or copies that differ,
+    /// which the line's error says.
+    fn start_adopting(&mut self) -> (Mode, Step) {
+        let picked = match (self.focus, self.member(), self.current_item()) {
+            (Focus::Items, Some(member), Some(item)) if !member.own => {
+                Some((member, item.kind, item.name.clone(), item.state))
+            }
+            _ => None,
+        };
+        let Some((member, kind, name, state)) = picked else {
+            self.message = Some(Message::info(
+                "A adopts somebody's skill from a project's agents' folders; pick one first, → moves over to them",
+            ));
+            return (Mode::Browse, Step::Stay);
+        };
+        if kind != Kind::Skill || state != Some(State::Foreign) {
+            let what = state.map_or("", State::slug);
+            self.message = Some(Message::info(format!(
+                "A adopts a skill somebody keeps in an agent's folder, which status calls foreign; this {kind} is {what}"
+            )));
+            return (Mode::Browse, Step::Stay);
+        }
+        let confirm = Confirm {
+            question: vec![
+                format!("Adopt {name} from {} into the library?", member.name),
+                String::new(),
+                String::from(
+                    "It is copied into the workspace's library, and the project's copies are                      recorded as installed from there, as they are: updates reach them from now                      on. Nothing in the project is written.",
+                ),
+            ],
+            task: Task::Adopt {
+                project: member.entry.clone(),
+                kind,
+                name,
             },
             also: None,
             back: Box::new(Mode::Browse),
@@ -2898,7 +2968,7 @@ impl Reader {
 
     /// Every key, and the command it runs.
     pub fn help() -> Self {
-        let rows: [(&str, &str, &[&str]); 21] = [
+        let rows: [(&str, &str, &[&str]); 22] = [
             (
                 "a",
                 "add a skill or a rule",
@@ -2948,6 +3018,11 @@ impl Reader {
                 "M",
                 "relink a stale project to where the scan found it moved",
                 &["flayer relink <old> <new>"],
+            ),
+            (
+                "A",
+                "adopt somebody's skill under the cursor into the library, once you say yes",
+                &["flayer adopt -p <project> --yes <kind:name>"],
             ),
             (
                 "t",

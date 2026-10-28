@@ -656,6 +656,61 @@ fn m_on_a_stale_entry_whose_project_was_not_found_says_how_to_relink_it_by_hand(
 }
 
 #[test]
+fn a_on_a_foreign_skill_adopts_it_into_the_library_once_asked() {
+    let dir = workspace_with_two();
+    let notes = dir.path().join("alpha/.claude/skills/notes");
+    fs::create_dir_all(&notes).unwrap();
+    fs::write(notes.join("SKILL.md"), skill_file("notes", "Keep notes")).unwrap();
+    let mut app = tui_in(dir.path());
+    press_key(&mut app, KeyCode::Right);
+    press_key(&mut app, KeyCode::Down);
+    assert_eq!(app.current_item().unwrap().name, "notes");
+
+    press_key(&mut app, KeyCode::Char('A'));
+    assert!(tui_drawn(&app).contains("Adopt notes from alpha into the library?"));
+    let task = press_and_run(&mut app, KeyCode::Char('y'));
+
+    let adopt = Task::Adopt {
+        project: String::from("alpha"),
+        kind: Kind::Skill,
+        name: String::from("notes"),
+    };
+    assert_eq!(
+        adopt.commands(),
+        [["flayer", "adopt", "-p", "alpha", "--yes", "skill:notes"]]
+    );
+    assert_eq!(task, Some(adopt));
+    assert!(own_directory_for(dir.path(), Kind::Skill)
+        .join("notes/SKILL.md")
+        .is_file());
+    let status = flayer(dir.path(), &["status", "-p", "alpha"]).unwrap();
+    assert!(
+        status
+            .stdout
+            .contains("notes  missing   claude,opencode  workspace"),
+        "{}",
+        status.stdout
+    );
+}
+
+#[test]
+fn a_on_a_skill_that_is_not_foreign_says_what_it_adopts() {
+    let dir = workspace_with_two();
+    let mut app = tui_in(dir.path());
+    press_key(&mut app, KeyCode::Right);
+    assert_eq!(app.current_item().unwrap().name, "alpha");
+
+    let step = press_key(&mut app, KeyCode::Char('A'));
+
+    assert!(matches!(step, tui::state::Step::Stay));
+    let said = &app.message.as_ref().unwrap().text;
+    assert!(said.contains("this skill is authored"), "{said}");
+    assert!(!own_directory_for(dir.path(), Kind::Skill)
+        .join("alpha")
+        .exists());
+}
+
+#[test]
 fn enter_on_an_artifact_shows_it_as_mind_show_does() {
     let dir = workspace_with_two();
     let mut app = tui_in(dir.path());
