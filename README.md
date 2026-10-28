@@ -385,7 +385,7 @@ flayer install             # a screen for putting skills and rules into its
 flayer install -p PROJECT <NAME> [--from ORIGIN] [--force]
                            # one, without the screen
 flayer uninstall -p PROJECT <NAME> [--force]
-flayer update -p PROJECT...|--all [NAME...] [--force] [--yes]
+flayer update (-p PROJECT)...|--all [NAME...] [--force] [--yes]
                            # mind update, for the projects named or every one
 flayer agents|share|targets -p PROJECT ...
                            # mind's agents, share and targets, for one of its
