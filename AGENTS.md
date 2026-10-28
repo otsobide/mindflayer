@@ -165,7 +165,8 @@ These are easy to break from a single file without noticing.
   from is core's too (`Catalog::folders`), and so are the names at a
   project's root that show an agent works there (`Agent::reads_at_root`) and
   the order `flayer scan --suggest` ranks what it finds in (`scan::Order`),
-  which the minds screen and the link form show without sorting.
+  in which the minds screen and the link form show what is not linked,
+  without sorting it.
 - **Two binaries, one parser.** `flayer <cmd>` is `mind flayer <cmd>`, and
   both reach the same function. `mind add` and `flayer add` (with or without
   `-p`) are one implementation given a different holder

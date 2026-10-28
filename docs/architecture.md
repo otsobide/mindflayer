@@ -3330,11 +3330,14 @@ most worth linking first, each row saying why ([which to link
 first](#which-to-link-first)). It was one list by path, on the grounds that
 the question was "which of these", not "which kind"; under a home that is
 dozens of repositories in name order, and the one worth linking is wherever
-its name puts it, so the screen shows core's ranking instead, and sorts
-nothing of its own. A reason can name every agent file a repository holds,
-so one longer than the pane leaves room for is cut, ending in `…`, rather
-than pushing what applying would do to each row past the pane's edge; the
-command says it whole. `flayer minds DIR` finds those under the folders it
+its name puts it, so the screen shows core's ranking of those instead, and
+sorts none of them itself. The projects it links come from the marker
+rather than the scan, which may not reach them all, so the screen lists
+those by their entry, as the command lists the ones it found by route. A
+reason can name every agent file a repository holds, so one longer than the
+pane leaves room for is cut, ending in `…`, rather than pushing what
+applying would do to each row past the pane's edge; the command says it
+whole. `flayer minds DIR` finds those under the folders it
 names instead ([Scanning](#scanning)). Ticking only marks. Applying turns the
 marks into lines like any other task: `mind -C <path> init` for each repository that is
 not a project yet, then one `flayer link` and one `flayer unlink`, each with
@@ -5467,15 +5470,16 @@ The order is core's too: a `Request` names it (`scan::Order`), by route
 unless suggested, and a suggestion lists what is not linked first, best
 reason first and by route within one, then what is linked, by route, whose
 reason says why it was worth linking once and nothing now. The minds screen
-and the link form read their scan in that order and show it unsorted, each
-row with the words `flayer scan --suggest` uses (one helper in the CLI says
-them for the command and both screens), so the screen cannot rank
-differently from the command it shows. A project found moved says `moved`
-on the screens as in the command: its reason is its id, which ranks it
-first, but what it wants is a relink, and a row offering it as the project
-most worth linking would have it linked beside the entry it left stale. A
-suggestion links nothing, makes nothing a project, and reads as any scan
-does: no marker, no ledger and no workspace written.
+and the link form read their scan in that order and show what is not linked
+unsorted (the screen lists every project linked after it, by its entry),
+each found row with the words `flayer scan --suggest` uses (one helper in
+the CLI says them for the command and both screens), so the screen cannot
+rank differently from the command it shows. A project found moved says
+`moved` on the screens as in the command: its reason is its id, which ranks
+it first, but what it wants is a relink, and a row offering it as the
+project most worth linking would have it linked beside the entry it left
+stale. A suggestion links nothing, makes nothing a project, and reads as any
+scan does: no marker, no ledger and no workspace written.
 
 ## Writers at the same time
 

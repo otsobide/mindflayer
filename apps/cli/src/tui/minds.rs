@@ -87,14 +87,16 @@ pub struct Minds {
 
 impl Minds {
     /// Every one found that is not registered, unticked, in the order the
-    /// scan ranked them, then every registered project, ticked, by path: the
-    /// order `flayer scan --suggest` lists them in, because what the screen
-    /// is opened for is what to link next.
+    /// scan ranked them, then every registered project, ticked, by its
+    /// entry: the order `flayer scan --suggest` lists them in, because what
+    /// the screen is opened for is what to link next.
     ///
-    /// Not sorted here: which is most worth linking is core's to say, and a
-    /// screen sorting its own rows could rank them differently from the
-    /// command it shows. Every registered one, even given folders to look
-    /// under: a folder names where to look for more, not which of the
+    /// Those found are not sorted here: which is most worth linking is
+    /// core's to say, and a screen sorting them could rank them differently
+    /// from the command it shows. Those registered are, by the entry the
+    /// marker spells, since they come from the marker rather than the scan,
+    /// which may not reach them. Every registered one, even given folders to
+    /// look under: a folder names where to look for more, not which of the
     /// workspace's own to show, and a project linked from elsewhere is one
     /// to untick too.
     pub fn of(workspace: &Workspace) -> Self {
