@@ -455,6 +455,16 @@ pub enum FlayerCommand {
     /// -W, activated, found walking up, or the default one.
     Which,
 
+    /// List the flayer workspaces this machine knows: the default one, each
+    /// one `flayer init` has made or been run on since the default was made,
+    /// and the one in use, marked with `*`.
+    Workspaces {
+        /// Print it as JSON, in the envelope every reading command's --json
+        /// shares.
+        #[arg(long)]
+        json: bool,
+    },
+
     /// Create a skill or a rule: the workspace's own, or a project's.
     Add {
         /// A project this workspace manages, by name or path, instead of the

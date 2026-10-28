@@ -8,6 +8,7 @@ pub(crate) mod activate;
 pub(crate) mod artifact;
 pub(crate) mod gather;
 pub(crate) mod install;
+pub(crate) mod known;
 pub(crate) mod migrate;
 pub(crate) mod project;
 pub(crate) mod read;
@@ -33,6 +34,7 @@ use artifact::{
 };
 use gather::run_gather;
 use install::{install_named, uninstall_named, uninstall_orphans};
+use known::workspaces_command;
 use migrate::{migrate_all, migrate_here, migrate_library, migrate_one, Asked};
 use project::{
     init_project, init_workspace, link_here, link_projects, scan_workspace, unlink_here,
@@ -306,6 +308,7 @@ fn run_flayer(
             activate_command(directory, path.as_deref(), *shell, lookup)
         }
         FlayerCommand::Which => which_command(directory, lookup),
+        FlayerCommand::Workspaces { json } => workspaces_command(directory, lookup, *json),
 
         FlayerCommand::Add {
             project,
