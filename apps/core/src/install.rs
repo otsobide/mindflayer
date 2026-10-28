@@ -2250,6 +2250,18 @@ impl Installed {
             Installed::Foreign { .. } | Installed::Edited { .. } => None,
         }
     }
+
+    /// Why nothing was written, when the install was refused rather than
+    /// done: what a front end says it with, by its code.
+    pub fn refused(&self) -> Option<Refused> {
+        match self {
+            Installed::Added { .. } | Installed::Updated { .. } | Installed::Unchanged { .. } => {
+                None
+            }
+            Installed::Foreign { .. } => Some(Refused::Foreign),
+            Installed::Edited { .. } => Some(Refused::Edited),
+        }
+    }
 }
 
 /// What [`install`] did: to the artifact, and to the project's scratch folder
@@ -2317,6 +2329,48 @@ pub enum Removed {
     /// Nothing of that name to remove.
     Absent { name: String },
 }
+
+impl Removed {
+    /// Why nothing was taken out, when the uninstall was refused rather
+    /// than done: what a front end says it with, by its code.
+    pub fn refused(&self) -> Option<Refused> {
+        match self {
+            Removed::Removed { .. } => None,
+            Removed::Foreign { .. } => Some(Refused::Foreign),
+            Removed::Edited { .. } => Some(Refused::Edited),
+            Removed::Absent { .. } => Some(Refused::NotInstalled),
+        }
+    }
+}
+
+/// Why an install or an uninstall did not do what it was asked, though
+/// nothing went wrong: what [`Installed::refused`] and [`Removed::refused`]
+/// say, with a code from the list every error's comes from (`code`).
+///
+/// An outcome rather than an error, as what it comes from is: the refusal
+/// is the answer, and a front end says it and goes on with the rest. Still
+/// a code, since the panel tells somebody's copy from one changed since the
+/// way it tells one error from another. One type for both changes, since a
+/// copy that is somebody's refuses an install and an uninstall alike, and a
+/// code names one condition wherever it is met: a code on each outcome
+/// would give `foreign` twice.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Refused {
+    /// Something of that name is in a target, and the ledger records none
+    /// of it.
+    Foreign,
+    /// A copy Mindflayer installed was changed since, and the change was not
+    /// forced.
+    Edited,
+    /// Nothing of that name is installed to take out: an uninstall's only.
+    NotInstalled,
+}
+
+codes!(Refused {
+    Self::Foreign => "foreign",
+    Self::Edited => "edited",
+    Self::NotInstalled => "not_installed",
+});
 
 /// How `name` stands in `project`, which installs into `targets`, given
 /// every copy the ledger records Mindflayer writing there (`recorded`, as

@@ -214,14 +214,16 @@ These are easy to break from a single file without noticing.
   `ENVELOPE_VERSION`, and adding one does not. A test reads it back with
   `common::enveloped`, into structs of its own that refuse a field they do
   not name.
-- **Every error has a stable code.** Each public error type in core, and
-  `ValidationIssue`, is given `code()` with `code::codes!`, which writes it
-  as a match with no wildcard, so a new variant does not compile without
-  one, and lists the codes it gives in `CODES` from the same arms. Each arm
-  names one variant, and the macro refuses a wildcard or an or-pattern,
-  which would give several one code and list it once. A code is
-  unique across core, not only its type, never renamed nor moved to
-  another condition, and named for the condition in snake_case. A variant
+- **Every error has a stable code.** Each public error type in core,
+  `ValidationIssue`, and `install::Refused`, why an install or an uninstall
+  wrote nothing (`Installed::refused`, `Removed::refused`), is given
+  `code()` with `code::codes!`, which writes it as a match with no
+  wildcard, so a new variant does not compile without one, and lists the
+  codes it gives in `CODES` from the same arms. Each arm names one variant,
+  and the macro refuses a wildcard or an or-pattern, which would give
+  several one code and list it once. A code is unique across core, not
+  only its type, never renamed nor moved to another condition, and named
+  for the condition in snake_case. A variant
   that only carries another error of core's, adding where or what came of
   it, takes that error's code (`carried`). A new error type joins
   `code::ALL`; `code_test.rs` holds no two codes alike and finds a type

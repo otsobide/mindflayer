@@ -1382,6 +1382,16 @@ error type in core has a `code()`, a snake_case word for the condition
 (`workspace_busy`, `offered_twice`, `not_a_project`), and a
 `ValidationIssue` has one from the same list.
 
+So does a refusal, which is no error: an install that finds somebody's
+copy, or one changed since, answers `Installed::Foreign` or `Edited` and
+writes nothing, and the front end says so and goes on with the rest, as an
+uninstall's `Removed` does. The panel still has to tell the two apart, and
+#63 carries `foreign` on the CLI's warning, so `Installed::refused` and
+`Removed::refused` say why as an `install::Refused` (`foreign`, `edited`,
+`not_installed`). One type for both rather than a code on each outcome,
+since a copy that is somebody's refuses an install and an uninstall alike:
+two types would give `foreign` twice, which the rule below forbids.
+
 - **Unique across core**, not only within one type. A code reaches the panel
   without the type it came from, so `workspace_busy` has to mean the lock
   whichever command met it. Unique within a type was the other way, which

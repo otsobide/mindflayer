@@ -66,6 +66,80 @@ fn a_variant_that_carries_an_error_takes_its_code() {
     );
 }
 
+/// A refusal is an outcome, not an error, and still reaches the panel by a
+/// code: the same one whichever change met it, and none for a change done.
+#[test]
+fn a_refused_install_or_uninstall_says_why_by_its_code() {
+    use crate::install::{Installed, Removed};
+
+    let name = || "deploy".to_owned();
+    let path = || PathBuf::from("/work/app/.claude/skills/deploy");
+    let done = |installed: Installed| installed.refused().map(|refused| refused.code());
+    let undone = |removed: Removed| removed.refused().map(|refused| refused.code());
+
+    for installed in [
+        Installed::Added {
+            name: name(),
+            paths: vec![path()],
+            unhashed: None,
+        },
+        Installed::Updated {
+            name: name(),
+            paths: vec![path()],
+            unhashed: None,
+        },
+        Installed::Unchanged {
+            name: name(),
+            paths: vec![path()],
+            unhashed: None,
+        },
+    ] {
+        assert_eq!(done(installed), None);
+    }
+    assert_eq!(
+        done(Installed::Foreign {
+            name: name(),
+            path: path(),
+        }),
+        Some("foreign")
+    );
+    assert_eq!(
+        done(Installed::Edited {
+            name: name(),
+            paths: vec![path()],
+        }),
+        Some("edited")
+    );
+
+    assert_eq!(
+        undone(Removed::Removed {
+            name: name(),
+            paths: vec![path()],
+            still_excluded: None,
+            rendered: None,
+        }),
+        None
+    );
+    assert_eq!(
+        undone(Removed::Foreign {
+            name: name(),
+            path: path(),
+        }),
+        Some("foreign")
+    );
+    assert_eq!(
+        undone(Removed::Edited {
+            name: name(),
+            paths: vec![path()],
+        }),
+        Some("edited")
+    );
+    assert_eq!(
+        undone(Removed::Absent { name: name() }),
+        Some("not_installed")
+    );
+}
+
 /// Every public type in core that derives `Error`, read off its source, has
 /// its codes in `ALL`: one that never joined would give codes no uniqueness
 /// test sees. The compiler holds each listed type's variants to a code; only
@@ -88,11 +162,12 @@ fn every_public_error_type_in_core_is_listed() {
         "error types with no codes in ALL: {unlisted:?}"
     );
 
-    // What `validate` finds is no error, and takes codes from the same list
-    // so that the panel tells one from another the same way.
+    // What `validate` finds, and what refuses an install or an uninstall,
+    // are no errors, and take codes from the same list so that the panel
+    // tells one from another the same way.
     let strays: Vec<&&str> = listed
         .iter()
-        .filter(|owner| **owner != "artifact::ValidationIssue")
+        .filter(|owner| !["artifact::ValidationIssue", "install::Refused"].contains(*owner))
         .filter(|owner| !found.iter().any(|found| found == **owner))
         .collect();
     assert!(

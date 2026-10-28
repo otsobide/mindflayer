@@ -6,7 +6,9 @@
 //! and the server hands it what went wrong as JSON: matching the English
 //! would break the first time a message is reworded, which happens whenever a
 //! message is made clearer. So every public error type in core has a
-//! `code()`, and `ValidationIssue`, what `validate` finds, has one too.
+//! `code()`, and `ValidationIssue`, what `validate` finds, has one too, as
+//! does `install::Refused`, why an install or an uninstall wrote nothing
+//! though nothing went wrong (`foreign`, `edited`).
 //!
 //! - **Unique across core**, not only within one type: a code reaches the
 //!   panel without the type it came from, so `workspace_busy` has to mean the
@@ -57,7 +59,7 @@ use crate::exclude::{self, ExcludeError};
 use crate::frontmatter::FrontMatterError;
 use crate::gather::git::GitError;
 use crate::gather::{self, GatherError, Leftover, ScrubFailure};
-use crate::install::{rules, InstallError, LoadFailure};
+use crate::install::{rules, InstallError, LoadFailure, Refused};
 use crate::kind::UnknownKind;
 use crate::ledger::LedgerError;
 use crate::lifecycle::LifecycleError;
@@ -179,6 +181,7 @@ pub const ALL: &[(&str, &[&str])] = &[
     ("gather::git::GitError", GitError::CODES),
     ("install::InstallError", InstallError::CODES),
     ("install::LoadFailure", LoadFailure::CODES),
+    ("install::Refused", Refused::CODES),
     ("install::rules::Warning", rules::Warning::CODES),
     ("install::rules::Withheld", rules::Withheld::CODES),
     ("kind::UnknownKind", UnknownKind::CODES),
