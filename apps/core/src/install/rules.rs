@@ -43,6 +43,7 @@ use crate::agents_md::{self, AgentsMd, AgentsMdError, Section, Written as BlockW
 use crate::artifact::Artifact;
 use crate::claude_md;
 use crate::claude_rules::{self, Mode, Recorded};
+use crate::code::codes;
 use crate::copy;
 use crate::exclude::{self, Excluded};
 use crate::hash;
@@ -203,6 +204,15 @@ pub enum Warning {
     },
 }
 
+codes!(Warning {
+    Self::Withheld { .. } => "rules_block_withheld",
+    Self::Left { .. } => "rules_block_left",
+    Self::Unreached { .. } => "rule_unreached",
+    Self::Edited { .. } => "rule_copy_edited",
+    Self::Kept { .. } => "rule_section_kept",
+    Self::Unremoved { .. } => "rule_copy_unremoved",
+});
+
 /// Why no block was written into a project's `AGENTS.md`.
 #[derive(Debug, Clone, PartialEq, Eq, Error)]
 pub enum Withheld {
@@ -214,6 +224,11 @@ pub enum Withheld {
     #[error("whether git tracks it cannot be told ({0})")]
     Untold(String),
 }
+
+codes!(Withheld {
+    Self::Tracked => "withheld_tracked",
+    Self::Untold(_) => "withheld_untold",
+});
 
 /// ", and codex and opencode read none of them", or nothing for no agent.
 fn missing(missed: &[Agent]) -> String {

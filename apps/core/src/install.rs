@@ -31,6 +31,7 @@ use crate::artifact::{self, issue_list, name_issues, Artifact, ArtifactError, Va
 use crate::catalog::{Catalog, DiscoveryFailure, Reference, QUALIFIER};
 use crate::claude_md::ClaudeMdError;
 use crate::claude_rules::ClaudeRulesError;
+use crate::code::codes;
 use crate::copy;
 use crate::exclude::{self, ExcludeError, Excluded};
 use crate::gather::Scrub;
@@ -570,6 +571,14 @@ pub enum LoadFailure {
         problem: String,
     },
 }
+
+codes!(LoadFailure {
+    Self::UnsafeName { .. } => "load_name_unsafe",
+    Self::UnsafeRoute { .. } => "load_route_unsafe",
+} carried {
+    Self::Workspace(error) => error,
+    Self::Artifact(error) => error,
+});
 
 /// Everything of `kind` that can be installed, and how each stands with
 /// `project`: the workspace's own first, then what the workspaces it loads
@@ -2535,6 +2544,40 @@ pub enum InstallError {
         reader: &'static str,
     },
 }
+
+codes!(InstallError {
+    Self::Missing { .. } => "shelf_copy_missing",
+    Self::Gone { .. } => "loaded_copy_gone",
+    Self::UnsafeName { .. } => "name_unsafe",
+    Self::UnsafeRoute { .. } => "route_unsafe",
+    Self::Outside { .. } => "offer_leads_outside",
+    Self::NoLongerOffered { .. } => "rule_no_longer_offered",
+    Self::NotRecorded { .. } => "rule_not_recorded",
+    Self::Unread { .. } => "rule_section_unread",
+    Self::Withheld { .. } => "rules_block_unedited",
+    Self::Unfit { .. } => "install_unfit",
+    Self::Overlaps { .. } => "install_overlaps",
+    Self::KeptByALoad { .. } => "kept_by_a_load",
+    Self::Write { .. } => "install_write_failed",
+    Self::NotOffered { .. } => "not_offered",
+    Self::OfferedTwice { .. } => "offered_twice",
+    Self::OfferedAsKinds { .. } => "offered_as_kinds",
+    Self::InstalledAsKinds { .. } => "installed_as_kinds",
+    Self::NoTarget { .. } => "no_target",
+    Self::NoUsableTarget { .. } => "no_usable_target",
+    Self::Recorded { .. } => "recorded_outside",
+    Self::StillExcluded { .. } => "still_excluded",
+    Self::NotExcluded { .. } => "not_excluded",
+    Self::UserScope { .. } => "install_user_scope",
+} carried {
+    Self::Ledger(error) => error,
+    Self::Workspace(error) => error,
+    Self::AgentsMd(error) => error,
+    Self::ClaudeMd(error) => error,
+    Self::ClaudeRules(error) => error,
+    Self::Artifact(error) => error,
+    Self::Exclude(error) => error,
+});
 
 impl InstallError {
     /// What an install that failed had cleared first, as
