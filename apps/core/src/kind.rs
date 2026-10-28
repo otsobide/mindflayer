@@ -4,6 +4,7 @@
 use std::fmt;
 use std::str::FromStr;
 
+use serde::de::{self, Deserialize, Deserializer};
 use serde::{Serialize, Serializer};
 use thiserror::Error;
 
@@ -79,6 +80,17 @@ impl fmt::Display for Kind {
 impl Serialize for Kind {
     fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
         serializer.serialize_str(self.slug())
+    }
+}
+
+/// From the word a command line takes, through [`FromStr`], so what a front
+/// end sends back (a task the panel asks to run) is read as a command line
+/// reads it, and a word one refuses the other refuses too.
+impl<'de> Deserialize<'de> for Kind {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        String::deserialize(deserializer)?
+            .parse()
+            .map_err(de::Error::custom)
     }
 }
 

@@ -1308,11 +1308,16 @@ script, and for the panel's backend when it reads through the CLI.
   are serialized by the word a command line takes for them (`skill`,
   `opencode`, `missing`), written by hand rather than derived: a derive
   spells the variant, so `Agent::OpenCode` would print `open_code`, a name no
-  command line or settings file holds, and a rename would change it. A path
-  is text, whatever bytes it holds, so one unprintable path cannot fail the
-  report. A name once printed stays: a field that goes or changes what it
-  holds moves `ENVELOPE_VERSION`, and one added does not, since a reader
-  passes over a key it does not know. A test reads each report back into
+  command line or settings file holds, and a rename would change it. `Kind`,
+  `Agent` and `Share` are read back the same way, through what reads a
+  command line's word (`FromStr`, `Share::named`), so a task a front end
+  hands back to be run ([every change is a command
+  line](#every-change-is-a-command-line)) takes the words a command line
+  takes and refuses the ones it refuses. A path is text, whatever bytes it
+  holds, so one unprintable path cannot fail the report. A name once printed
+  stays: a field that goes or changes what it holds moves
+  `ENVELOPE_VERSION`, and one added does not, since a reader passes over a
+  key it does not know. A test reads each report back into
   structs of its own that refuse any field they do not name
   (`common::enveloped`), so a change shows there before it reaches a script.
   It moved once, to 2, when `status` took the five states an installation

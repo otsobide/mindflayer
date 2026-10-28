@@ -612,3 +612,15 @@ fn a_share_mode_is_serialized_by_its_name() {
         r#"["local","shared"]"#
     );
 }
+
+#[test]
+fn a_share_mode_is_read_back_from_its_name_and_no_other_spelling() {
+    let read: Vec<Share> = serde_json::from_str(r#"["local","shared"]"#).unwrap();
+
+    assert_eq!(read, Share::ALL);
+    let error = serde_json::from_str::<Share>(r#""Local""#).unwrap_err();
+    assert_eq!(
+        error.to_string(),
+        "unknown share mode `Local`; expected local or shared"
+    );
+}
