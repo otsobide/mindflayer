@@ -10,11 +10,11 @@ use std::fmt::Write as _;
 use std::path::Path;
 
 use mindflayer_core::resolve::{resolve, Intent};
-use mindflayer_core::{known, Known, KnownWorkspace};
+use mindflayer_core::{known, Known, KnownWorkspace, WorkspaceError};
 
 use super::{reading, typed};
 use crate::render::{as_stored, json, plural, printable, table};
-use crate::{CliError, Failure, Lookup, Outcome};
+use crate::{CliError, Failure, Lookup, Outcome, Warning};
 
 /// `flayer workspaces`: every workspace the default one in `lookup`'s home
 /// knows, with the one a command run from `directory` would use marked, as
@@ -31,11 +31,10 @@ pub(crate) fn workspaces_command(
 ) -> Result<Outcome, Failure> {
     let in_use = resolve(&lookup.inputs(directory, Intent::Read))?.map(|chosen| chosen.workspace);
     let (known, failures) = known::known(lookup.home.as_deref(), in_use.as_ref());
-    let warnings: Vec<String> = failures.iter().map(ToString::to_string).collect();
     let outcome = if as_json {
-        json(&known, warnings)
+        json(&known, failures.iter().map(ToString::to_string).collect())
     } else {
-        listing(&known, warnings)
+        listing(&known, &failures)
     };
     match &in_use {
         Some(workspace) => reading(workspace, |_| Ok(outcome)),
@@ -69,7 +68,7 @@ pub(crate) fn forget_command(
 /// The list as a table: a `*` before the one in use, as `git branch` marks
 /// the branch checked out, then each one's name, where it is and what it
 /// holds; and the advice that applies to what is in it.
-fn listing(known: &Known, warnings: Vec<String>) -> Outcome {
+fn listing(known: &Known, failures: &[WorkspaceError]) -> Outcome {
     let mut stdout = String::new();
     if known.workspaces.is_empty() {
         stdout.push_str("no workspaces known\n");
@@ -125,9 +124,9 @@ fn listing(known: &Known, warnings: Vec<String>) -> Outcome {
             }
         }
     }
-    let stderr: Vec<String> = warnings
+    let stderr: Vec<Warning> = failures
         .iter()
-        .map(|warning| format!("warning: {warning}"))
+        .map(|failure| Warning::coded(failure.code(), format!("warning: {failure}")))
         .collect();
     Outcome {
         ok: stderr.is_empty(),

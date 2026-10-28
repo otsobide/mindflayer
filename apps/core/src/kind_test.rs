@@ -35,3 +35,20 @@ fn a_kind_is_serialized_as_the_word_a_command_line_takes() {
 
     assert_eq!(serialized, r#"["skill","rule"]"#);
 }
+
+#[test]
+fn a_kind_is_read_back_from_any_word_a_command_line_takes_and_no_other() {
+    for kind in Kind::ALL {
+        for word in [kind.slug(), kind.folder()] {
+            let read: Kind = serde_json::from_str(&format!("\"{word}\"")).unwrap();
+            assert_eq!(read, kind);
+        }
+    }
+
+    let error = serde_json::from_str::<Kind>(r#""Skill""#).unwrap_err();
+
+    assert!(
+        error.to_string().contains("unknown kind `Skill`"),
+        "{error}"
+    );
+}

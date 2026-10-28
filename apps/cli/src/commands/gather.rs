@@ -10,7 +10,7 @@ use mindflayer_core::{FlayerWorkspace, Kind};
 
 use super::{reading_workspace, workspace_here};
 use crate::render::{indent, plural, printable, table};
-use crate::{CliError, Failure, GatherCommand, Lookup, Outcome};
+use crate::{CliError, Failure, GatherCommand, Lookup, Outcome, Warning};
 
 /// Collect artifacts onto the workspace shelf, or say what is already on it.
 ///
@@ -58,10 +58,10 @@ fn shelf(workspace: &FlayerWorkspace) -> Result<Outcome, Failure> {
     // orders them; what they cannot offer is a warning beside the rest, not
     // a reason to show nothing.
     let loads = offered_by_loads(workspace);
-    let stderr: Vec<String> = loads
+    let stderr: Vec<Warning> = loads
         .failures
         .iter()
-        .map(|failure| format!("warning: {failure}"))
+        .map(|failure| Warning::coded(failure.code(), format!("warning: {failure}")))
         .collect();
     let mut offers: Vec<Offer> = loads.offers;
     let mut stderr = stderr;
@@ -71,10 +71,13 @@ fn shelf(workspace: &FlayerWorkspace) -> Result<Outcome, Failure> {
         if mindflayer_core::install::is_folder_name(&gathered.name) {
             offers.push(Offer::Shelf(gathered));
         } else {
-            stderr.push(format!(
-                "warning: {}: declares the name `{}`, which is not one folder name, so it is not offered",
-                gathered.path, gathered.name
-            ));
+            stderr.push(
+                format!(
+                    "warning: {}: declares the name `{}`, which is not one folder name, so it is not offered",
+                    gathered.path, gathered.name
+                )
+                .into(),
+            );
         }
     }
     let ok = stderr.is_empty();
@@ -93,15 +96,15 @@ fn shelf(workspace: &FlayerWorkspace) -> Result<Outcome, Failure> {
 /// since the credential is still on disk.
 #[derive(Debug, Default, Clone)]
 pub(crate) struct Scrubbed {
-    notes: Vec<String>,
-    warnings: Vec<String>,
+    notes: Vec<Warning>,
+    warnings: Vec<Warning>,
 }
 
 impl Scrubbed {
     /// Every line, notes first, for a command that stopped before it had
     /// anything else to say: the scrub happened all the same, and says so
     /// only this once.
-    pub(crate) fn lines(self) -> Vec<String> {
+    pub(crate) fn lines(self) -> Vec<Warning> {
         let mut lines = self.notes;
         lines.extend(self.warnings);
         lines
@@ -120,7 +123,7 @@ impl Scrubbed {
 /// person can act on: every source it scrubbed now needs its credential from
 /// a git credential helper.
 pub(crate) fn scrubbed(scrub: &Scrub) -> Scrubbed {
-    let mut notes: Vec<String> = scrub
+    let mut notes: Vec<Warning> = scrub
         .sources
         .iter()
         .map(|source| {
@@ -129,30 +132,36 @@ pub(crate) fn scrubbed(scrub: &Scrub) -> Scrubbed {
                  URL is taken out; gathering it again needs a git credential helper that has it",
                 source.url
             )
+            .into()
         })
         .collect();
     match scrub.actions {
         0 => {}
-        1 => notes.push(String::from(
-            "note: 1 action log entry: the user name, password or token an older Mindflayer \
-             stored in a URL in it is taken out",
-        )),
-        entries => notes.push(format!(
-            "note: {entries} action log entries: the user names, passwords or tokens an older \
-             Mindflayer stored in URLs in them are taken out"
-        )),
+        1 => notes.push(
+            String::from(
+                "note: 1 action log entry: the user name, password or token an older Mindflayer \
+                 stored in a URL in it is taken out",
+            )
+            .into(),
+        ),
+        entries => notes.push(
+            format!(
+                "note: {entries} action log entries: the user names, passwords or tokens an \
+                 older Mindflayer stored in URLs in them are taken out"
+            )
+            .into(),
+        ),
     }
     Scrubbed {
         notes,
         warnings: scrub
             .failures
             .iter()
-            .map(|failure| format!("warning: {failure}"))
+            .map(|failure| Warning::coded(failure.code(), format!("warning: {failure}")))
             .chain(
-                scrub
-                    .leftovers
-                    .iter()
-                    .map(|leftover| format!("warning: {leftover}")),
+                scrub.leftovers.iter().map(|leftover| {
+                    Warning::coded(leftover.code(), format!("warning: {leftover}"))
+                }),
             )
             .collect(),
     }
@@ -207,18 +216,18 @@ fn gathered(url: &str, report: &Report) -> Outcome {
     // An artifact that could not be taken is a warning beside what was, not a
     // reason to be told nothing about the rest; so is what is wrong with one
     // that was taken anyway.
-    let stderr: Vec<String> = report
+    let stderr: Vec<Warning> = report
         .failures
         .iter()
-        .map(|failure| format!("warning: {failure}"))
+        .map(|failure| Warning::coded(failure.code(), format!("warning: {failure}")))
         // Printable, because a warning quotes what the skill declares, which
         // is the source's to write.
-        .chain(
-            report
-                .warnings
-                .iter()
-                .map(|warning| format!("warning: {}", printable(&warning.to_string()))),
-        )
+        .chain(report.warnings.iter().map(|warning| {
+            Warning::coded(
+                warning.issue.code(),
+                format!("warning: {}", printable(&warning.to_string())),
+            )
+        }))
         .collect();
     let ok = stderr.is_empty();
     Outcome { stdout, stderr, ok }

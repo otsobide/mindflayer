@@ -163,7 +163,8 @@ old-api                 stale
     );
     assert_eq!(outcome.stderr.len(), 2, "{:?}", outcome.stderr);
     assert!(
-        outcome.stderr[0].starts_with("warning: ") && outcome.stderr[0].contains("old-api"),
+        outcome.stderr[0].text.starts_with("warning: ")
+            && outcome.stderr[0].text.contains("old-api"),
         "{:?}",
         outcome.stderr
     );
@@ -268,14 +269,14 @@ fn a_workspace_above_that_cannot_be_read_is_a_warning_beside_the_report() {
     assert_eq!(outcome.stderr.len(), 1, "{:?}", outcome.stderr);
     let said = marker.display().to_string();
     assert!(
-        outcome.stderr[0].starts_with("warning: ") && outcome.stderr[0].contains(&said),
+        outcome.stderr[0].text.starts_with("warning: ") && outcome.stderr[0].text.contains(&said),
         "{:?}",
         outcome.stderr
     );
     assert!(!outcome.ok);
     let (report, warnings): (Report, _) = enveloped(&json);
     assert_eq!(words(&report), ["alpha review authored -"]);
-    assert_eq!(warnings, [&outcome.stderr[0]["warning: ".len()..]]);
+    assert_eq!(warnings, [&outcome.stderr[0].text["warning: ".len()..]]);
     assert!(json.stderr.is_empty(), "{:?}", json.stderr);
     assert!(!json.ok);
 }
@@ -318,7 +319,7 @@ review        authored  -
     assert_eq!(text.stderr.len(), 1, "{:?}", text.stderr);
     let said = ledger.display().to_string();
     assert!(
-        text.stderr[0].starts_with("warning: ") && text.stderr[0].contains(&said),
+        text.stderr[0].text.starts_with("warning: ") && text.stderr[0].text.contains(&said),
         "{:?}",
         text.stderr
     );
@@ -347,7 +348,9 @@ fn status_makes_neither_a_ledger_nor_the_default_workspace() {
             home.path().file_name().unwrap().to_string_lossy()
         )
     );
-    assert!(unmade.stderr[0].starts_with("hint: no workspace here or above"));
+    assert!(unmade.stderr[0]
+        .text
+        .starts_with("hint: no workspace here or above"));
     assert!(!home.path().join(FLAYER_DIR).exists());
     assert!(linked.ok, "{linked:?}");
     assert!(!dir.path().join(FLAYER_DIR).join("mindflayer.db").exists());
@@ -722,6 +725,7 @@ fn status_says_an_installed_skill_edited_with_mind_edit_is_edited() {
     // Discovery says the same of the two copies, from where it reads them.
     assert_eq!(after.stderr.len(), 1, "{:?}", after.stderr);
     assert!(after.stderr[0]
+        .text
         .ends_with("differ, so the agents reading them do not all load the same skill"));
     let json = flayer(dir.path(), &["status", "-p", "collapse", "--json"]).unwrap();
     assert!(

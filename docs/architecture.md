@@ -116,13 +116,18 @@ Two consequences worth stating, because they are what the split buys:
 ### How the CLI crate is laid out
 
 The grammar is in `parse.rs`, the work in `commands.rs` and a module per
-family of commands under `commands/`, and what a command produced, with the
-helpers every report is laid out with and the envelope its JSON goes out in,
-in `render.rs`. `CliError` has
-`error.rs` to itself, `homes.rs` decides where the default workspace's home and
+family of commands under `commands/`, and what a command produced, each line
+on stderr with its code ([failures are collected, not
+raised](#failures-are-collected-not-raised)), with the helpers every report is
+laid out with and the envelope its JSON goes out in, in `render.rs`.
+`CliError` has `error.rs`, with every code the CLI gives of its own
+(`CODES`), `homes.rs` decides where the default workspace's home and
 each agent's own folder are, and gathers them with what `-W` and
 `$MINDFLAYER_WORKSPACE` say (`Lookup`), `progress.rs` says what a gather's
-steps read as and draws them on stderr, and `lib.rs` only says what is public.
+steps read as and draws them on stderr, `task.rs` holds the work a front end
+asks for as the command lines it is ([every change is a command
+line](#every-change-is-a-command-line)), and `lib.rs` only says what is
+public.
 
 The split is by family. One file holding the parser, every command and the
 rendering was where every change to a command met every other, so pieces of
@@ -1274,6 +1279,20 @@ The CLI prints those on stderr as warnings and exits non-zero: visible, but not
 in the way of the answer. Asked for JSON, it puts them in the envelope beside
 the data instead ([JSON, in one envelope](#json-in-one-envelope)).
 
+Each line it says beside a report is a `render::Warning`, an `Outcome`'s and a
+`Failure`'s alike: the text a terminal shows, word for word, and beside it the
+code of what it says ([a code for what went wrong](#a-code-for-what-went-wrong)),
+taken from the value the line renders, core's error or failure or the CLI's
+own. The panel acts on a warning by its code, and a front end running a
+command line hands it the code with the text. A hint or a note has none, nor
+does a line the CLI words from what it found rather than from something that
+went wrong; a line built from text core handed over has none either, until
+core hands it over with its code, as a render's warnings come (`code::Said`).
+Kept on the line rather than in a list beside the lines, which every line
+pushed would have to keep in step with, and compared with a string by its text
+alone, so a test of what a terminal shows reads as it did. The TUI keeps the
+text alone: it shows a line as a terminal would.
+
 The distinction the code draws is between a problem and an absence. A project
 with no skills folder yet is not a failure, it is a project nobody has added a
 skill to. A skills folder that exists and cannot be listed is a
@@ -1308,11 +1327,16 @@ script, and for the panel's backend when it reads through the CLI.
   are serialized by the word a command line takes for them (`skill`,
   `opencode`, `missing`), written by hand rather than derived: a derive
   spells the variant, so `Agent::OpenCode` would print `open_code`, a name no
-  command line or settings file holds, and a rename would change it. A path
-  is text, whatever bytes it holds, so one unprintable path cannot fail the
-  report. A name once printed stays: a field that goes or changes what it
-  holds moves `ENVELOPE_VERSION`, and one added does not, since a reader
-  passes over a key it does not know. A test reads each report back into
+  command line or settings file holds, and a rename would change it. `Kind`,
+  `Agent` and `Share` are read back the same way, through what reads a
+  command line's word (`FromStr`, `Share::named`), so a task a front end
+  hands back to be run ([every change is a command
+  line](#every-change-is-a-command-line)) takes the words a command line
+  takes and refuses the ones it refuses. A path is text, whatever bytes it
+  holds, so one unprintable path cannot fail the report. A name once printed
+  stays: a field that goes or changes what it holds moves
+  `ENVELOPE_VERSION`, and one added does not, since a reader passes over a
+  key it does not know. A test reads each report back into
   structs of its own that refuse any field they do not name
   (`common::enveloped`), so a change shows there before it reaches a script.
   It moved once, to 2, when `status` took the five states an installation
@@ -1402,11 +1426,17 @@ So does a refusal, which is no error: an install that finds somebody's
 copy, or one changed since, answers `Installed::Foreign` or `Edited` and
 writes nothing, and the front end says so and goes on with the rest, as an
 uninstall's `Removed` does. The panel still has to tell the two apart, and
-#63 carries `foreign` on the CLI's warning, so `Installed::refused` and
-`Removed::refused` say why as an `install::Refused` (`foreign`, `edited`,
-`not_installed`). One type for both rather than a code on each outcome,
-since a copy that is somebody's refuses an install and an uninstall alike:
-two types would give `foreign` twice, which the rule below forbids.
+the CLI's warning carries `foreign` beside its text, so `Installed::refused`
+and `Removed::refused` say why as an `install::Refused` (`foreign`, `edited`,
+`not_installed`). An update that leaves a copy changed since says `edited`
+(`update::Step::refused`), and a change of a project's agents or targets
+that leaves somebody's skill where a copy would go says `foreign`
+(`reapply::Why::refused`), by the same codes: one condition, met by another
+command, and named by core, so no front end decides which of core's
+conditions a code names. One type for both rather than a code on each
+outcome, since a copy that is somebody's refuses an install and an
+uninstall alike: two types would give `foreign` twice, which the rule below
+forbids.
 
 - **Unique across core**, not only within one type. A code reaches the panel
   without the type it came from, so `workspace_busy` has to mean the lock
@@ -1451,7 +1481,25 @@ variant is missing from it but not from the list beside it.
 Nothing prints a code yet. A member's `error` was the first type to hold
 one, and the snapshot every front end reads holds them wherever it says what
 went wrong ([the read model](#the-read-model)), each a `code::Said`, the code
-beside its message; the CLI's warnings and failures carry them from #63.
+beside its message; the CLI's warnings and failures carry them beside their
+text ([failures are collected, not raised](#failures-are-collected-not-raised)),
+which the panel's backend hands on (#67).
+
+**The CLI's errors have codes too**, since what a command could not do
+reaches the panel beside what core could not: `CliError::code`, given by the
+same `codes!`, which core exports for it. A variant that carries one of
+core's errors takes its code, as one of core's does. One that says a
+condition core names in words of the CLI's, with the command that would put
+it right (`not_managed`, `unknown_project`, `not_installed`), echoes the code
+core gives it, listed after `echoed`, which `code()` gives and `CODES` leaves
+out, so the panel meets one code for one condition whichever way it was
+reached. The rest are the CLI's own (`install_no_projects`,
+`not_a_terminal`), and so are a refusal's ([every change is a command
+line](#every-change-is-a-command-line)). `mindflayer_cli::CODES` lists them
+as `code::ALL` lists core's, and a test holds none of them to be given
+twice, there or in core, and each echoed one to be one core gives. A code
+the CLI took of its own for a condition core names was the other way, and
+would have the panel tell one condition apart from itself.
 
 ## The read model
 
@@ -1876,9 +1924,9 @@ and into every reflog as `clone: from <url>`, and those files are rewritten
 through the same function. A clone a gather makes now has nothing to take out,
 and finding that costs a few small reads. A `--from` typed with credentials
 names the source they were taken out of. The CLI's report prints URLs
-redacted, and the TUI redacts a command line where it is built for showing
-(`state::shell`), so the box that says what is running and the transcript
-printed on the way out both leave the token out.
+redacted, and a task's command line is redacted where it is built for
+showing (`task::shell`), so the box that says what is running and the
+transcript printed on the way out both leave the token out.
 
 What a Mindflayer from before the refusal stored is **scrubbed** when a
 command that writes opens the ledger. `FlayerWorkspace::ledger_to_write` is
@@ -3453,15 +3501,78 @@ Two things follow, and both are deliberate:
   repeated in a script. Commands that only read (show, validate, the shelf)
   are left out, because they changed nothing.
 
+`Task` is not the TUI's own, though the TUI is where it was born: it lives in
+`task.rs`, shared by every front end that runs commands, the TUI now and the
+panel's backend next ([D-18](#d-18-the-panel-writes-by-running-commands)).
+One type, so a line is spelled one way whichever front end asked for it; a
+second front end building its own lines would be a second place for one to be
+spelled wrong.
+
+The panel will send a task as JSON, so it serializes both ways, as one flat
+object tagged by its name in snake_case (`{"type": "link", "path": "beta"}`),
+its holder and its agents line tagged the same way inside it. Its kind, agents
+and share mode are the words a command line takes, read back through what
+reads those ([JSON, in one envelope](#json-in-one-envelope)), and a field a
+task does not have is refused rather than passed over: a task is a write, and
+one sent with a field misspelled would run without it. A name, once a front
+end sends it, is a contract as a report's is, so a test pins every one, and
+reads every task back from its JSON as it was.
+
+**No value a task holds is read as an option, or as a command.** A task the
+panel sends holds whatever a browser put in it, so a description that reads
+`--yes` has to reach `add` as a description, not confirm anything. A line's
+own words, the command and the options the task sets, are spelled in
+`task.rs` and never taken from a field, so a value cannot name a command;
+and each value goes one of three ways. After the option that takes it,
+joined to it by `=` when it starts with a dash (`--path=-odd`); as a `-C` or
+a `-p` that starts with one, behind a `./`, which names the same directory
+and the same project by its path; or among the positionals, which go behind
+a `--` whenever one of them starts with a dash. So a task names each project
+it gives `-p` as `FlayerWorkspace::naming` does, by its entry or a path from
+the root, never by the project's name, which behind a `./` would be read as
+a path instead: a `-p=-odd` would keep it a name, and change the line the
+TUI has always shown for such a project. A test holds every variant to it:
+fed values that start with a dash, the flags the grammar knows among them
+and a couple of hundred more made from a fixed seed, each line is read as
+the same line with a plain value is: the same commands, the same options,
+and under each option or positional the value as given wherever the plain
+one was, behind its `./` under a `-C` or a `-p`. Compared option by option
+rather than as one bag of values, since a line holds a value in several
+fields, and one field holding it would hide another that dropped its dash.
+A property-test crate was the alternative, and one loop over every variant,
+with no new dependency, is all this asks of one. Shown, a line is quoted for
+a shell (`task::shell`), so one pasted from the transcript runs as one
+command of exactly its words.
+
 A `-C` or a `-W` in those words is relative to the workspace root, which is
 how someone reading the transcript takes it, so it is resolved against the
 root rather than against wherever the process started. What the screen was
 opened with is passed along rather than spelled: its home, and the `-W` or
 activation that chose its workspace (`tui::execute`), as they were given to
-`flayer` itself. A command that opens a screen of its own
-(`flayer`, `flayer tui`, `flayer minds`, `flayer install` with nothing named,
+`flayer` itself. A command that opens a screen of its own (`flayer`, `flayer
+tui`, `flayer minds`, `flayer install` with neither a name nor a project,
 `mind`, `mind tui`) is refused if it ever reaches that path, rather than drawn
-inside this one.
+inside this one. Half an install (`flayer install -p alpha`) opens none, and
+is left to the command, which refuses it with a reason of its own.
+
+That refusal is one part of a list every front end shares (`task::Refusal`):
+what a front end with no terminal of its own, the panel's server, does not
+run. A screen of its own; `edit` in every form, which hands the terminal to
+an editor, until #81 gives it one that takes the contents; `activate`, which
+prints code for a shell; and `gather git`, the network for as long as it
+takes, until #112 brings to the server the progress and the cancel only a
+screen has now. `ui` joins it when #68 makes it a command. The TUI has a
+terminal, so of the list it refuses only the screens. The list is of
+commands as the parsers read them, not as they are spelled, so `mind flayer
+minds` is refused as `flayer minds` is, and it is a match over every command
+with no wildcard, so a new command does not compile until it says whether
+it is refused. A task is refused for the first of its lines that is
+(`Task::refusal`), whichever variant it is, and each refusal has a code of
+its own (`opens_screen`, `opens_editor`, `prints_shell_code`,
+`gather_unwatched`), held to the rules core's codes are ([a code for what
+went wrong](#a-code-for-what-went-wrong)). A list of tasks was the
+alternative, and it would leave out a line no task builds: a front end that
+runs lines it is sent would run one the list never named.
 
 The exceptions are named, not hidden: opening the install screen builds the
 screen `flayer install` opens, as a read, rather than running a line, and
@@ -3479,7 +3590,8 @@ so the transcript says what it ran in words that run again.
 - `tui/ui.rs`: what the screen looks like, rendered into an in-memory
   terminal by the tests.
 - `tui/minds.rs`: the minds screen's rows and ticks, and the task they amount
-  to; like `state.rs`, it touches nothing.
+  to, which `Task::minds` builds from the marks, so another front end marking
+  directories builds the same lines; like `state.rs`, it touches nothing.
 - `tui.rs`: the loop, laying out the snapshot core reads ([the read
   model](#the-read-model)) and a scan as what the screen shows, and running
   tasks. `step` is everything the loop does between a key and the next frame,
@@ -7284,3 +7396,19 @@ just listed.
   it is forgotten and `flayer init` run where it went. Nothing in a workspace
   names it for good, as a project's id names a project (#57 relinks those), so
   there is nothing to match a moved one by.
+- **Lines core hands over as text.** A warning carries the code of the value
+  it renders, and a few are built from text core hands over without one: why
+  an exclude entry could not be dropped (`still_excluded`, an install's
+  `Rendered::still_excluded`), why a copy was recorded without a hash, what a
+  copy left out and why, and the notes an `Excluded` gives. Each says a
+  condition the panel may want to act on, and carries no code until core
+  hands it over as a `code::Said`, as a render's warnings now come. Spelling
+  core's code by hand at the line was the other way, rejected for a code no
+  test could hold to the value it names. Nor do the CLI's own warnings,
+  worded from what it found (a gathered name that is not one folder name, an
+  update that cannot tell where a copy came from), carry a code of the CLI's:
+  each would join `mindflayer_cli::CODES` once the panel acts on it.
+- **A command `ui` will be.** The list of what a front end with no terminal
+  does not run is to refuse `ui` too, a server started from the panel's own,
+  and `ui` is no command yet: #68 adds it, and `Refusal::of_flayer`, a match
+  over every command, does not compile until it says where `ui` goes.

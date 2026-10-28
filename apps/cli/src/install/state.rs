@@ -26,7 +26,7 @@ use mindflayer_core::{Kind, MindProject};
 use ratatui::crossterm::event::KeyCode;
 
 use crate::commands::install::named;
-use crate::tui::state::Task;
+use crate::task::Task;
 
 /// Which column the keyboard is in, and so which way round the screen is.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

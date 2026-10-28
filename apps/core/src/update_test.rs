@@ -23,6 +23,29 @@ fn only_an_outdated_a_missing_or_a_forced_installation_is_written() {
 }
 
 #[test]
+fn only_an_installation_left_as_edited_is_refused_and_by_an_install_s_code() {
+    let path = PathBuf::from(".agents/skills/deploy");
+
+    let refused: Vec<Option<&str>> = [
+        Step::Keep,
+        Step::Refresh,
+        Step::PutBack(vec![path.clone()]),
+        Step::WriteOver(vec![path.clone()]),
+        Step::Leave(vec![path]),
+        Step::Orphaned,
+        Step::Unsure(vec![String::from("workspace")]),
+    ]
+    .iter()
+    .map(|step| step.refused().map(|refused| refused.code()))
+    .collect();
+
+    assert_eq!(
+        refused,
+        [None, None, None, None, Some("edited"), None, None]
+    );
+}
+
+#[test]
 fn a_plan_that_writes_nothing_is_empty_whatever_it_says() {
     let update = |step| Update {
         kind: Kind::Skill,

@@ -239,7 +239,7 @@ fn a_loaded_workspace_that_has_gone_is_a_warning_on_the_shelf_listing() {
         shelf.stdout
     );
     assert!(
-        shelf.stderr[0].starts_with("warning: "),
+        shelf.stderr[0].text.starts_with("warning: "),
         "{:?}",
         shelf.stderr
     );
@@ -486,7 +486,7 @@ fn install_says_a_loaded_workspace_has_gone_rather_than_only_that_nothing_is_off
         error
             .warnings
             .iter()
-            .any(|warning| warning.contains("not a flayer workspace")),
+            .any(|warning| warning.text.contains("not a flayer workspace")),
         "{:?}",
         error.warnings
     );
@@ -507,7 +507,7 @@ fn a_broken_skill_in_a_loaded_workspace_is_a_warning() {
     assert!(shelf
         .stderr
         .iter()
-        .any(|warning| warning.contains("broken")));
+        .any(|warning| warning.text.contains("broken")));
     assert!(shelf.stdout.contains("deploy"), "the rest is still listed");
 }
 
@@ -678,7 +678,7 @@ fn said_gone(outcome: &Outcome) -> usize {
         + outcome
             .stderr
             .iter()
-            .filter(|line| line.contains("not a flayer workspace"))
+            .filter(|line| line.text.contains("not a flayer workspace"))
             .count()
 }
 
@@ -747,7 +747,10 @@ fn a_loaded_workspace_that_has_gone_is_the_screens_to_say_when_no_line_installs(
     );
     for outcome in [quit, removed] {
         assert_eq!(said_gone(&outcome), 1, "{outcome:?}");
-        assert!(outcome.stderr[0].starts_with("warning: "), "{outcome:?}");
+        assert!(
+            outcome.stderr[0].text.starts_with("warning: "),
+            "{outcome:?}"
+        );
         assert!(!outcome.ok);
     }
 }
@@ -869,7 +872,7 @@ fn a_shelf_skill_with_a_name_that_is_not_one_folder_is_a_warning_not_a_row() {
     assert!(shelf
         .stderr
         .iter()
-        .any(|warning| warning.contains("not one folder name")));
+        .any(|warning| warning.text.contains("not one folder name")));
 }
 
 #[test]

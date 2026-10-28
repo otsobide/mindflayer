@@ -108,11 +108,16 @@ under `apps/` with its own `Makefile`:
   (workspaces, workspaces forget), `artifact` (add, edit, rename, remove,
   templates), `read` (list, show, validate), `status`, `settings` (agents,
   share, targets), `gather`, `install`, `update` and `migrate` (each at both
-  levels), and `adopt` (flayer adopt). `src/render.rs` holds `Outcome`, `Failure`, the table helpers and
-  the envelope every `--json` prints (`json`), `src/error.rs` holds
-  `CliError`, and `src/homes.rs` decides the default home and the agent
+  levels), and `adopt` (flayer adopt). `src/render.rs` holds `Outcome`,
+  `Failure` and `Warning` (a stderr line, with its code beside it), the
+  table helpers and the envelope every `--json` prints (`json`),
+  `src/error.rs` holds `CliError` and `CODES`, every code the CLI gives of
+  its own, and `src/homes.rs` decides the default home and the agent
   homes, and gathers them with `-W` and `$MINDFLAYER_WORKSPACE` into a
-  `Lookup`. `src/tui/` and `src/install/` are the two screens.
+  `Lookup`. `src/task.rs` holds `Task`, work a front end asks for as the
+  command lines it is, every front end's rather than the TUI's alone, and
+  `Refusal`, what a front end with no terminal does not run.
+  `src/tui/` and `src/install/` are the two screens.
 - `apps/server` (`mindflayer-server`): the local server behind the web
   panel, a library no binary runs yet. `src/backend.rs` is the `Backend`
   trait, `src/server.rs` binds and routes, `src/auth.rs` holds the token's
@@ -173,8 +178,9 @@ These are easy to break from a single file without noticing.
   both reach the same function. `mind add` and `flayer add` (with or without
   `-p`) are one implementation given a different holder
   (`FlayerWorkspace::own` makes the workspace look like a `MindProject`).
-- **The TUI only runs commands.** A key produces a `Task`, and
-  `Task::commands` turns it into argument lines that a `Runner` hands to
+- **The TUI only runs commands.** A key produces a `Task` (`src/task.rs`,
+  shared by every front end that runs commands, the panel's backend next),
+  and `Task::commands` turns it into argument lines that a `Runner` hands to
   `execute`, which parses them with `Cli`/`FlayerCli` and runs them through
   `run_with`/`run_flayer_with` with the screen's `Lookup` and a
   `gather::Watch`: what the binaries' `run_watched`/`run_flayer_cli_watched`
@@ -187,7 +193,12 @@ These are easy to break from a single file without noticing.
   opened by `flayer install` (`install::apply`): its marks are the
   `flayer install` and `flayer uninstall` lines they amount to
   (`Screen::task`), each run whatever came of the others
-  (`Task::chained`), so its transcript runs again.
+  (`Task::chained`), so its transcript runs again. What a front end with
+  no terminal does not run is one list, `task::Refusal`, read off the
+  parsed command by a match with no wildcard (`Refusal::of_mind`,
+  `of_flayer`), so a new command says whether it is refused before it
+  compiles; a task is refused for its lines (`Task::refusal`). The TUI
+  refuses only its screens.
 - **A gather is watched, and stops only before it places.** Its `Request`
   carries a `gather::Watch`, core's progress callback and cancel flag; no gix
   type reaches a front end. A cancel is honoured until the shelf starts to
@@ -196,6 +207,12 @@ These are easy to break from a single file without noticing.
   source is.
 - **Output is built, then printed.** Commands return an `Outcome` (stdout
   text, stderr lines, ok), so tests assert on the exact text a user sees.
+  Each stderr line, and each of a `Failure`'s warnings, is a
+  `render::Warning`: the text a terminal shows, word for word, and beside
+  it the code of what it says (`code()` of the core error, refusal or
+  failure it renders, or `CliError::code`), `None` for a hint or a note. A
+  line built from a value with a code takes that code; never a code spelled
+  by hand for a line built from text.
 - **Reading commands print JSON in one envelope, and its names are a
   contract.** A reading command's `--json` prints `render::json`'s
   `{"version": 2, "data": ..., "warnings": [...]}`, never a shape of its own,
@@ -232,11 +249,13 @@ These are easy to break from a single file without noticing.
   lines consult (`docs/architecture.md`, "The read model").
 - **Every error has a stable code.** Each public error type in core,
   `ValidationIssue`, and `install::Refused`, why an install or an uninstall
-  wrote nothing (`Installed::refused`, `Removed::refused`), is given
-  `code()` with `code::codes!`, which writes it as a match with no
-  wildcard, so a new variant does not compile without one, and lists the
-  codes it gives in `CODES` from the same arms. Each arm names one variant,
-  and the macro refuses a wildcard or an or-pattern, which would give
+  wrote nothing (`Installed::refused`, `Removed::refused`, and for a copy
+  an update or a change of agents leaves, `update::Step::refused` and
+  `reapply::Why::refused`), is given `code()` with `code::codes!`, which
+  writes it as a match with no wildcard, so a new variant does not compile
+  without one, and lists the codes it gives in `CODES` from the same arms.
+  Each arm names one variant, and the macro refuses a wildcard or an
+  or-pattern, which would give
   several one code and list it once. A code is unique across core, not
   only its type, never renamed nor moved to another condition, and named
   for the condition in snake_case. A variant
@@ -466,6 +485,12 @@ These are easy to break from a single file without noticing.
   warning, never a reason to hide the rule. `mind add --template` refuses that
   same list (`artifact::rule_issues`) for the rule it is about to write.
 - **Loaded and gathered content is untrusted.**
+  - So is a task's every value, which a browser will fill in: it reaches
+    its command as that value, never as an option or a command. The task
+    module spells each line's own words, and puts a value after the option
+    that takes it (`=` when it starts with a dash), behind `./` for a `-C`
+    or `-p`, or after a `--` among positionals; a test feeds every variant
+    values that start with a dash.
   - An installed name must be one folder name for a skill
     (`install::is_folder_name`), and for a rule a route held to the name
     rules, which never climbs out (`install::is_installable_name`).

@@ -20,7 +20,7 @@ use super::{
     all_or_nothing, consulted, project_here, targets, typed, workspace_for, workspace_here,
 };
 use crate::render::{as_stored, json, plural, printable, table};
-use crate::{CliError, Failure, Lookup, Outcome};
+use crate::{CliError, Failure, Lookup, Outcome, Warning};
 
 /// `mind init`: the directory made a mind project, marked by its settings,
 /// for `agents`, and shared with the team or kept out of git (D-01).
@@ -79,8 +79,9 @@ pub(crate) fn init_workspace(
         }
         Ok(_) => {}
         Err(error) => {
-            stderr.push(format!(
-                "warning: the default workspace could not remember it: {error}"
+            stderr.push(Warning::coded(
+                error.code(),
+                format!("warning: the default workspace could not remember it: {error}"),
             ));
         }
     }
@@ -104,7 +105,10 @@ pub(crate) fn renew_here(directory: &Path, lookup: &Lookup) -> Result<Outcome, F
     let (workspace, unread) = match consulted(&project, lookup) {
         Ok(workspace) => (workspace, None),
         Err(error @ CliError::Chosen { .. }) => return Err(error.into()),
-        Err(error) => (None, Some(format!("warning: {error}"))),
+        Err(error) => (
+            None,
+            Some(Warning::coded(error.code(), format!("warning: {error}"))),
+        ),
     };
     let renewed = relink::new_id(workspace.as_ref(), &project).map_err(CliError::from)?;
     let mut outcome = Outcome::plain(format!(
@@ -118,7 +122,7 @@ pub(crate) fn renew_here(directory: &Path, lookup: &Lookup) -> Result<Outcome, F
             .excluded
             .as_ref()
             .and_then(|followed| followed.warning())
-            .map(|warning| format!("note: {warning}")),
+            .map(|warning| Warning::from(format!("note: {warning}"))),
     );
     if let Some(warning) = unread {
         outcome.stderr.push(warning);
@@ -158,7 +162,7 @@ pub(crate) fn relink_project(
             .excluded
             .as_ref()
             .and_then(|followed| followed.warning())
-            .map(|warning| format!("note: {warning}")),
+            .map(|warning| Warning::from(format!("note: {warning}"))),
     );
     Ok(scrubbed(&relinked.scrub).before(outcome))
 }
@@ -293,11 +297,10 @@ pub(crate) fn scan_workspace(
     as_json: bool,
 ) -> Outcome {
     let scan = scan(workspace, request);
-    let warnings = scan_warnings(&scan);
     if as_json {
-        return json(&scan, warnings);
+        return json(&scan, scan_warnings(&scan));
     }
-    scanned(&scan, warnings, request.order == Order::Suggested)
+    scanned(&scan, scan_said(&scan), request.order == Order::Suggested)
 }
 
 /// Why one found at `route` is worth linking, as `flayer scan --suggest`
@@ -334,13 +337,24 @@ fn moved_to(old: &str, route: &str) -> String {
 /// envelope beside JSON, and in a strip of the minds screen, which says them
 /// in these words rather than its own.
 pub(crate) fn scan_warnings(scan: &Scan) -> Vec<String> {
-    let mut warnings: Vec<String> = scan.failures.iter().map(ToString::to_string).collect();
+    scan_said(scan).into_iter().map(|(_, said)| said).collect()
+}
+
+/// What [`scan_warnings`] says, each beside the code of what it says, when
+/// that has one: what a failure to read a folder does, and a scan that
+/// stopped early does not.
+fn scan_said(scan: &Scan) -> Vec<(Option<&'static str>, String)> {
+    let mut said: Vec<(Option<&'static str>, String)> = scan
+        .failures
+        .iter()
+        .map(|failure| (Some(failure.code()), failure.to_string()))
+        .collect();
     if scan.truncated {
-        warnings.push(format!(
+        said.push((None, format!(
             "stopped after listing {MAX_LISTED} folders; name a folder further down to scan past it, or link one by its path"
-        ));
+        )));
     }
-    warnings
+    said
 }
 
 /// Every repository a scan found, and whether it is linked yet, in the
@@ -350,7 +364,7 @@ pub(crate) fn scan_warnings(scan: &Scan) -> Vec<String> {
 /// No column for a project's id: the path already tells the rows apart,
 /// and the id, 32 digits on every project's line, is for a script to match
 /// a project by, which reads it from the JSON.
-fn scanned(scan: &Scan, warnings: Vec<String>, suggested: bool) -> Outcome {
+fn scanned(scan: &Scan, warnings: Vec<(Option<&'static str>, String)>, suggested: bool) -> Outcome {
     let mut stdout = String::new();
     if scan.found.is_empty() {
         let roots: Vec<String> = scan
@@ -431,9 +445,12 @@ fn scanned(scan: &Scan, warnings: Vec<String>, suggested: bool) -> Outcome {
         }
     }
 
-    let stderr: Vec<String> = warnings
-        .iter()
-        .map(|warning| format!("warning: {warning}"))
+    let stderr: Vec<Warning> = warnings
+        .into_iter()
+        .map(|(code, warning)| Warning {
+            text: format!("warning: {warning}"),
+            code,
+        })
         .collect();
     let ok = stderr.is_empty();
     Outcome { stdout, stderr, ok }

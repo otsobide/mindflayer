@@ -16,6 +16,7 @@ use std::fmt;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
+use serde::de::{self, Deserialize, Deserializer};
 use serde::{Serialize, Serializer};
 use thiserror::Error;
 
@@ -179,6 +180,16 @@ impl fmt::Display for Agent {
 impl Serialize for Agent {
     fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
         serializer.serialize_str(self.name())
+    }
+}
+
+/// From its name, through [`FromStr`], for the reason a [`Kind`] is read
+/// through it.
+impl<'de> Deserialize<'de> for Agent {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        String::deserialize(deserializer)?
+            .parse()
+            .map_err(de::Error::custom)
     }
 }
 

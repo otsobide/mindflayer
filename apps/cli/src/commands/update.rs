@@ -13,7 +13,7 @@ use mindflayer_core::{paths, AgentHomes, Excluded, FlayerWorkspace, MindProject,
 
 use super::gather::scrubbed;
 use super::install::{edits, left_out, named};
-use crate::{CliError, Failure, Outcome};
+use crate::{CliError, Failure, Outcome, Warning};
 
 /// What a dry run that would write something ends with.
 const UNCHANGED: &str = "nothing changed: add --yes to go ahead\n";
@@ -36,10 +36,10 @@ pub(crate) fn update_projects(
     force: bool,
     yes: bool,
     homes: &AgentHomes,
-    warnings: Vec<String>,
+    warnings: Vec<Warning>,
 ) -> Result<Outcome, Failure> {
     let references: Vec<Reference> = typed.iter().map(|typed| Reference::parse(typed)).collect();
-    let failed = |error: CliError, warnings: &[String]| Failure {
+    let failed = |error: CliError, warnings: &[Warning]| Failure {
         error: Box::new(error),
         warnings: warnings.to_vec(),
     };
@@ -62,7 +62,7 @@ pub(crate) fn update_projects(
 }
 
 /// `outcome`, with `warnings` after what it says.
-fn beside(mut outcome: Outcome, warnings: Vec<String>) -> Outcome {
+fn beside(mut outcome: Outcome, warnings: Vec<Warning>) -> Outcome {
     outcome.ok &= warnings.is_empty();
     outcome.stderr.extend(warnings);
     outcome
@@ -82,9 +82,9 @@ fn laid_out(plan: &Plan, done: bool, unread: bool) -> Outcome {
             [one] => one.name.clone(),
             _ => String::from("any project asked"),
         };
-        outcome.stderr.push(format!(
-            "warning: nothing named `{typed}` is installed in {projects}"
-        ));
+        outcome
+            .stderr
+            .push(format!("warning: nothing named `{typed}` is installed in {projects}").into());
         outcome.ok = false;
     }
     if plan.is_empty() {
@@ -148,35 +148,46 @@ fn project_laid_out(outcome: &mut Outcome, project: &ProjectPlan, done: bool) {
     for update in &project.installations {
         match &update.step {
             Step::Keep => {}
+            // Left as an install not forced leaves it, and said by the same
+            // code, which core gives.
             Step::Leave(paths) => {
-                outcome.stderr.push(format!(
-                    "warning: {} in {into} was changed since it was installed, at {}, so it {} \
-                     left alone; --force writes over it",
-                    named(update.kind, &update.name),
-                    listed_at(&project.root, paths),
-                    if done { "was" } else { "would be" }
-                ));
+                outcome.stderr.push(Warning {
+                    text: format!(
+                        "warning: {} in {into} was changed since it was installed, at {}, so it \
+                         {} left alone; --force writes over it",
+                        named(update.kind, &update.name),
+                        listed_at(&project.root, paths),
+                        if done { "was" } else { "would be" }
+                    ),
+                    code: update.step.refused().map(|refused| refused.code()),
+                });
                 outcome.ok = false;
             }
-            Step::Orphaned => outcome.stderr.push(format!(
-                "note: {} in {into} is no longer offered {}, so it {} left as it is; \
-                 uninstalling it takes it out",
-                named(update.kind, &update.name),
-                update.origin.as_deref().map_or_else(
-                    || String::from("where it came from"),
-                    |origin| format!("by {origin}")
-                ),
-                if done { "was" } else { "would be" }
-            )),
-            Step::Unsure(origins) => {
-                outcome.stderr.push(format!(
-                    "warning: {} in {into} is offered by {}, and was installed before \
-                     Mindflayer kept where from, so it {} left as it is; `install --from` says \
-                     which",
+            Step::Orphaned => outcome.stderr.push(
+                format!(
+                    "note: {} in {into} is no longer offered {}, so it {} left as it is; \
+                     uninstalling it takes it out",
                     named(update.kind, &update.name),
-                    listed(&origins.iter().map(String::as_str).collect::<Vec<_>>()),
+                    update.origin.as_deref().map_or_else(
+                        || String::from("where it came from"),
+                        |origin| format!("by {origin}")
+                    ),
                     if done { "was" } else { "would be" }
-                ));
+                )
+                .into(),
+            ),
+            Step::Unsure(origins) => {
+                outcome.stderr.push(
+                    format!(
+                        "warning: {} in {into} is offered by {}, and was installed before \
+                         Mindflayer kept where from, so it {} left as it is; `install --from` \
+                         says which",
+                        named(update.kind, &update.name),
+                        listed(&origins.iter().map(String::as_str).collect::<Vec<_>>()),
+                        if done { "was" } else { "would be" }
+                    )
+                    .into(),
+                );
                 outcome.ok = false;
             }
             Step::Refresh | Step::PutBack(_) | Step::WriteOver(_) => match &update.done {
@@ -193,12 +204,18 @@ fn project_laid_out(outcome: &mut Outcome, project: &ProjectPlan, done: bool) {
                 }
                 Some(Err(error)) => {
                     for path in error.swept() {
-                        outcome.stderr.push(format!(
-                            "cleared {}, left by an install that did not finish",
-                            at(&project.root, path)
-                        ));
+                        outcome.stderr.push(
+                            format!(
+                                "cleared {}, left by an install that did not finish",
+                                at(&project.root, path)
+                            )
+                            .into(),
+                        );
                     }
-                    outcome.stderr.push(format!("error: {into}: {error}"));
+                    outcome.stderr.push(Warning::coded(
+                        error.code(),
+                        format!("error: {into}: {error}"),
+                    ));
                     outcome.ok = false;
                 }
             },
@@ -209,23 +226,33 @@ fn project_laid_out(outcome: &mut Outcome, project: &ProjectPlan, done: bool) {
             outcome.stdout.push_str(&rule_lines);
             let warnings = rendered.warnings_of_update(&routes);
             outcome.ok &= warnings.is_empty() && rendered.still_excluded.is_none();
-            outcome.stderr.extend(
-                warnings
-                    .iter()
-                    .map(|warning| format!("warning: {into}: {warning}")),
-            );
+            outcome.stderr.extend(warnings.iter().map(|warning| {
+                Warning::coded(
+                    warning.code,
+                    format!("warning: {into}: {}", warning.message),
+                )
+            }));
             if let Some(reason) = &rendered.still_excluded {
-                outcome.stderr.push(format!(
-                    "warning: {into}: the exclude file still keeps out of git a file that is no \
-                     longer Mindflayer's: {reason}"
-                ));
+                outcome.stderr.push(
+                    format!(
+                        "warning: {into}: the exclude file still keeps out of git a file that is \
+                         no longer Mindflayer's: {reason}"
+                    )
+                    .into(),
+                );
             }
-            outcome
-                .stderr
-                .extend(rendered.notes().iter().map(|note| format!("note: {note}")));
+            outcome.stderr.extend(
+                rendered
+                    .notes()
+                    .iter()
+                    .map(|note| Warning::from(format!("note: {note}"))),
+            );
         }
         Some(Err(error)) => {
-            outcome.stderr.push(format!("error: {into}: {error}"));
+            outcome.stderr.push(Warning::coded(
+                error.code(),
+                format!("error: {into}: {error}"),
+            ));
             outcome.ok = false;
         }
         None => {}
@@ -276,6 +303,10 @@ fn installed(
     installation: &Installation,
 ) {
     let what = named(update.kind, &update.name);
+    let refused = installation
+        .installed
+        .refused()
+        .map(|refused| refused.code());
     match &installation.installed {
         Installed::Added { .. } | Installed::Updated { .. } => {
             outcome.stdout.push_str(&line(root, into, update, true));
@@ -285,19 +316,25 @@ fn installed(
         }
         // Looked at again under the lock, and somebody's after all.
         Installed::Foreign { path, .. } => {
-            outcome.stderr.push(format!(
-                "warning: {into} already has a {what} at {} that Mindflayer did not put there, \
-                 so it was left alone",
-                at(root, path)
-            ));
+            outcome.stderr.push(Warning {
+                text: format!(
+                    "warning: {into} already has a {what} at {} that Mindflayer did not put \
+                     there, so it was left alone",
+                    at(root, path)
+                ),
+                code: refused,
+            });
             outcome.ok = false;
         }
         Installed::Edited { paths, .. } => {
-            outcome.stderr.push(format!(
-                "warning: {what} in {into} was changed since it was installed, at {}, so it was \
-                 left alone; --force writes over it",
-                listed_at(root, paths)
-            ));
+            outcome.stderr.push(Warning {
+                text: format!(
+                    "warning: {what} in {into} was changed since it was installed, at {}, so it \
+                     was left alone; --force writes over it",
+                    listed_at(root, paths)
+                ),
+                code: refused,
+            });
             outcome.ok = false;
         }
     }
@@ -311,16 +348,19 @@ fn installed(
     for left in &installation.left_out {
         outcome
             .stderr
-            .push(format!("warning: {what} in {into} {}", left_out(left)));
+            .push(format!("warning: {what} in {into} {}", left_out(left)).into());
         outcome.ok = false;
     }
     if let Some(note) = installation.excluded.as_ref().and_then(Excluded::warning) {
-        outcome.stderr.push(format!("note: {note}"));
+        outcome.stderr.push(format!("note: {note}").into());
     }
     if let Some(reason) = installation.installed.unhashed() {
-        outcome.stderr.push(format!(
-            "warning: {what} in {into} was recorded without a hash of what it holds: {reason}"
-        ));
+        outcome.stderr.push(
+            format!(
+                "warning: {what} in {into} was recorded without a hash of what it holds: {reason}"
+            )
+            .into(),
+        );
         outcome.ok = false;
     }
 }

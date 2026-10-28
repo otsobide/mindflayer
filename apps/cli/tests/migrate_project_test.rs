@@ -485,7 +485,7 @@ fn a_project_whose_workspace_cannot_be_read_is_not_moved() {
         "nothing to migrate: collapse is marked by its settings.toml already\n"
     );
     assert_eq!(again.stderr.len(), 1, "{:?}", again.stderr);
-    assert!(again.stderr[0].starts_with("warning: "));
+    assert!(again.stderr[0].text.starts_with("warning: "));
     assert!(!again.ok);
 }
 
@@ -508,7 +508,9 @@ fn a_migration_refused_says_every_reason_and_changes_nothing() {
         failure.error
     );
     assert_eq!(failure.warnings.len(), 1, "{:?}", failure.warnings);
-    assert!(failure.warnings[0].starts_with("error: nothing moved: .mind/rules: "));
+    assert!(failure.warnings[0]
+        .text
+        .starts_with("error: nothing moved: .mind/rules: "));
     assert!(marker(&root).is_file() && !settings(&root).exists());
 }
 
@@ -610,7 +612,11 @@ fn a_settings_json_moves_beside_a_workspace_that_cannot_be_read_and_says_so() {
         done.stdout
     );
     assert_eq!(done.stderr.len(), 1, "{:?}", done.stderr);
-    assert!(done.stderr[0].starts_with("warning: "), "{:?}", done.stderr);
+    assert!(
+        done.stderr[0].text.starts_with("warning: "),
+        "{:?}",
+        done.stderr
+    );
     assert!(!done.ok);
     assert!(settings(&root).is_file() && !json(&root).exists());
 }

@@ -52,7 +52,7 @@ pub(crate) fn adopt_from(
     // A note rather than a warning, as for an install: a project need not
     // be in git, and nothing went wrong.
     if let Some(note) = adopted.excluded.as_ref().and_then(Excluded::warning) {
-        outcome.stderr.push(format!("note: {note}"));
+        outcome.stderr.push(format!("note: {note}").into());
     }
     Ok(scrubbed(&adopted.scrub).before(outcome))
 }
@@ -120,10 +120,13 @@ fn said(workspace: &FlayerWorkspace, plan: &Plan, done: bool) -> Outcome {
             Some(Git::KeptOut) => {
                 let _ = writeln!(outcome.stdout, "{keep} {at} out of git");
             }
-            Some(Git::Tracked) => outcome.stderr.push(format!(
-                "note: git tracks {at}, so it stays in git though {into} is local: what an update \
-                 writes there shows in `git status`"
-            )),
+            Some(Git::Tracked) => outcome.stderr.push(
+                format!(
+                    "note: git tracks {at}, so it stays in git though {into} is local: what an \
+                     update writes there shows in `git status`"
+                )
+                .into(),
+            ),
             None => {}
         }
     }

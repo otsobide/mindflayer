@@ -406,3 +406,15 @@ fn an_agent_is_serialized_as_the_name_its_settings_take() {
 
     assert_eq!(serialized, r#"["claude","codex","opencode"]"#);
 }
+
+#[test]
+fn an_agent_is_read_back_from_its_name_and_no_other_spelling() {
+    let read: Vec<Agent> = serde_json::from_str(r#"["claude","codex","opencode"]"#).unwrap();
+
+    assert_eq!(read, Agent::ALL);
+    let error = serde_json::from_str::<Agent>(r#""open_code""#).unwrap_err();
+    assert!(
+        error.to_string().contains("unknown agent `open_code`"),
+        "{error}"
+    );
+}

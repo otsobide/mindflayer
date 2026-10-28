@@ -206,7 +206,7 @@ fn relink_refuses_while_a_linked_copy_holds_the_id_until_it_runs_new_id() {
         status
             .stderr
             .iter()
-            .any(|line| line.contains("are both project")),
+            .any(|line| line.text.contains("are both project")),
         "{:?}",
         status.stderr
     );

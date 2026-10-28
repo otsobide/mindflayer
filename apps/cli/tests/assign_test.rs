@@ -6,6 +6,7 @@
 mod common;
 
 use common::*;
+use mindflayer_cli::Warning;
 
 /// A workspace with a skill of its own, `commit-style`, linking `alpha`,
 /// `beta` and `gamma`.
@@ -337,7 +338,9 @@ fn every_project_of_a_default_workspace_nothing_has_made_is_none_and_makes_nothi
         );
         assert_eq!(outcome.stderr.len(), 1, "{:?}", outcome.stderr);
         assert!(
-            outcome.stderr[0].starts_with("hint: no workspace here or above"),
+            outcome.stderr[0]
+                .text
+                .starts_with("hint: no workspace here or above"),
             "{:?}",
             outcome.stderr
         );
@@ -394,6 +397,37 @@ fn uninstalling_from_several_leaves_somebodys_copy_alone_and_says_so() {
     );
     assert!(!outcome.ok);
     assert!(theirs.join("SKILL.md").is_file());
+}
+
+/// The panel tells somebody's copy from one changed since by the code
+/// beside the line, which says it in words for a terminal alone.
+#[test]
+fn a_refusal_over_somebodys_copy_carries_the_code_foreign() {
+    let dir = workspace_with_three();
+    flayer(dir.path(), &["install", "commit-style", "-p", "alpha"]).unwrap();
+    somebodys(&dir.path().join("beta"));
+
+    let installed = flayer(dir.path(), &["install", "commit-style", "-p", "beta"]).unwrap();
+    let among = flayer(
+        dir.path(),
+        &["install", "commit-style", "-p", "alpha", "-p", "beta"],
+    )
+    .unwrap();
+    let removed = flayer(dir.path(), &["uninstall", "commit-style", "-p", "beta"]).unwrap();
+
+    for refused in [&installed, &among, &removed] {
+        let foreign: Vec<&Warning> = refused
+            .stderr
+            .iter()
+            .filter(|line| {
+                line.text.contains("Mindflayer did not put there")
+                    || line.text.contains("was not installed by Mindflayer")
+            })
+            .collect();
+        assert_eq!(foreign.len(), 1, "{refused:?}");
+        assert_eq!(foreign[0].code, Some("foreign"), "{refused:?}");
+        assert!(!refused.ok);
+    }
 }
 
 #[test]
