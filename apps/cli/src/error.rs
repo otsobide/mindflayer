@@ -95,6 +95,8 @@ pub enum CliError {
     #[error(transparent)]
     Reapply(#[from] mindflayer_core::ReapplyError),
     #[error(transparent)]
+    Relink(#[from] mindflayer_core::relink::RelinkError),
+    #[error(transparent)]
     Update(#[from] mindflayer_core::update::UpdateError),
     #[error("say which projects to update: -p <project> for each, or --all for every one the workspace links")]
     UpdateWhere,

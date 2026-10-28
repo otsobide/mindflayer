@@ -604,6 +604,58 @@ fn a_stale_entry_is_shown_where_it_can_be_unlinked() {
 }
 
 #[test]
+fn a_stale_entry_the_scan_found_moved_is_relinked_where_it_went() {
+    let dir = workspace_with_own();
+    flayer(dir.path(), &["install", "-p", "alpha", "commit-style"]).unwrap();
+    fs::create_dir(dir.path().join("apps")).unwrap();
+    fs::rename(dir.path().join("alpha"), dir.path().join("apps/alpha")).unwrap();
+    let mut app = tui_in(dir.path());
+
+    let drawn = tui_drawn(&app);
+    assert!(drawn.contains("! alpha"), "{drawn}");
+    assert!(
+        drawn.contains("it moved to apps/alpha: M relinks it there"),
+        "{drawn}"
+    );
+    press_key(&mut app, KeyCode::Char('M'));
+    assert!(tui_drawn(&app).contains("Relink alpha to apps/alpha?"));
+    let task = press_and_run(&mut app, KeyCode::Char('y'));
+
+    let relink = Task::Relink {
+        old: String::from("alpha"),
+        new: String::from("apps/alpha"),
+    };
+    assert_eq!(
+        relink.commands(),
+        [["flayer", "relink", "alpha", "apps/alpha"]]
+    );
+    assert_eq!(task, Some(relink));
+    assert!(registry(dir.path()).contains("\"apps/alpha\""));
+    let status = flayer(dir.path(), &["status", "-p", "apps/alpha"]).unwrap();
+    assert!(
+        status.stdout.contains("commit-style  current"),
+        "{}",
+        status.stdout
+    );
+}
+
+#[test]
+fn m_on_a_stale_entry_whose_project_was_not_found_says_how_to_relink_it_by_hand() {
+    let dir = workspace_with_two();
+    fs::remove_dir_all(dir.path().join("alpha")).unwrap();
+    let mut app = tui_in(dir.path());
+
+    let step = press_key(&mut app, KeyCode::Char('M'));
+
+    assert!(matches!(step, tui::state::Step::Stay));
+    let said = &app.message.as_ref().unwrap().text;
+    assert!(
+        said.contains("`flayer relink alpha <new>` follows it to where it went"),
+        "{said}"
+    );
+}
+
+#[test]
 fn enter_on_an_artifact_shows_it_as_mind_show_does() {
     let dir = workspace_with_two();
     let mut app = tui_in(dir.path());

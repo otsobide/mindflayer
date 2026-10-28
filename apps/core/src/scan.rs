@@ -14,9 +14,12 @@ use std::path::{Component, Path, PathBuf};
 use serde::Serialize;
 use thiserror::Error;
 
+use crate::install;
+use crate::ledger::LedgerError;
 use crate::paths;
+use crate::relink::{self, Duplicate};
 use crate::settings::ProjectId;
-use crate::workspace::{FlayerWorkspace, MindProject, WorkspaceError};
+use crate::workspace::{same_directory, FlayerWorkspace, MindProject, WorkspaceError};
 
 /// How far below each root a scan looks unless it is told otherwise.
 ///
@@ -85,6 +88,13 @@ pub struct Found {
     pub mind: bool,
     /// Whether the workspace links it already.
     pub linked: bool,
+    /// The entry it moved from, when it is not linked and holds the id the
+    /// workspace's ledger last saw at an entry where no project is any more
+    /// ([`MindProject::is_vacant`]): spelled as `route` is, so `flayer
+    /// relink <moved> <route>` run there follows it. None otherwise, and for
+    /// an id another directory holds too, which is a copy rather than a
+    /// move.
+    pub moved: Option<String>,
 }
 
 /// What a scan found.
@@ -98,6 +108,14 @@ pub struct Scan {
     pub depth: usize,
     /// Ordered by route.
     pub found: Vec<Found>,
+    /// Each entry where no project is any more whose id the ledger never
+    /// learned, as it learns them only when it is written, so nothing found
+    /// can be told to be its project, moved: spelled as `route` is, for the
+    /// `flayer relink <untraced> <route>` that follows it, which only
+    /// somebody who knows where it went can type. In the order the marker
+    /// lists them, and only when something found and not linked holds an id
+    /// that no entry was matched to, which it could be; empty otherwise.
+    pub untraced: Vec<String>,
     /// Folders that could not be listed, and markers that would not open.
     /// One unreadable folder must not hide the repositories beside it.
     ///
@@ -142,6 +160,7 @@ pub fn scan(workspace: &FlayerWorkspace, request: &Request) -> Scan {
         roots: roots.clone(),
         depth: request.depth,
         found: Vec::new(),
+        untraced: Vec::new(),
         failures: Vec::new(),
         truncated: false,
     };
@@ -212,9 +231,107 @@ pub fn scan(workspace: &FlayerWorkspace, request: &Request) -> Scan {
         }
     }
 
+    follow(workspace, from, &mut scan);
     scan.found.sort_by(|a, b| a.route.cmp(&b.route));
     scan.failures.sort_by(|a, b| a.path().cmp(b.path()));
     scan
+}
+
+/// Say which of what `scan` found moved from an entry the workspace links,
+/// and which ids more than one directory holds, among those found and those
+/// linked: a failure naming each, and never a move ([`Duplicate`]).
+///
+/// A move is told by the ledger, which keeps the id it last saw at each
+/// route ([`crate::ledger::Ledger::known_projects`]): a project found and not
+/// linked, holding an id last seen at an entry where no project is any more,
+/// is that entry's project. Only an entry nothing marks
+/// ([`MindProject::is_vacant`]), not every one `flayer status` calls stale:
+/// one whose marker is there and would not open still holds its project,
+/// whose id nothing read, so a copy of it would pass for it moved; and one
+/// that opens holding another id holds another project, which the ledger
+/// follows the next time it is written
+/// ([`FlayerWorkspace::ledger_to_write`]). The ledger is read only when
+/// there is something to match, and one that cannot be read is a failure
+/// beside what was found, which is listed with no move.
+///
+/// A stale entry whose id the ledger never learned is said too (`untraced`)
+/// while something found is left unmatched: a project linked and moved
+/// before anything wrote the ledger is found by nobody, and the entry is
+/// what `flayer relink` would be given for it, where `flayer link` would
+/// leave two entries for one project.
+fn follow(workspace: &FlayerWorkspace, from: &Path, scan: &mut Scan) {
+    let members = workspace.members();
+    let mut held: Vec<(ProjectId, PathBuf)> = Vec::new();
+    let found = scan
+        .found
+        .iter()
+        .filter_map(|found| Some((found.id.clone()?, found.path.clone())));
+    let linked = members.iter().filter_map(|member| {
+        let settings = member.project.as_ref().ok()?.settings()?;
+        Some((settings.id.clone(), member.root.clone()))
+    });
+    for (id, path) in found.chain(linked) {
+        if !held
+            .iter()
+            .any(|(seen, at)| *seen == id && same_directory(at, &path))
+        {
+            held.push((id, path));
+        }
+    }
+    let duplicates = relink::duplicates(&held);
+    let copied = |id: &ProjectId| duplicates.iter().any(|duplicate| duplicate.id == *id);
+
+    let stale: Vec<(String, &Path)> = members
+        .iter()
+        .filter(|member| member.project.is_err() && MindProject::is_vacant(&member.root))
+        .map(|member| {
+            (
+                install::entry_for_root(workspace, &member.root),
+                member.root.as_path(),
+            )
+        })
+        .collect();
+    let wanted = scan
+        .found
+        .iter()
+        .any(|found| !found.linked && found.id.as_ref().is_some_and(|id| !copied(id)));
+    if wanted && !stale.is_empty() {
+        match workspace
+            .ledger_for_reading()
+            .and_then(|ledger| ledger.known_projects())
+        {
+            Ok(known) => {
+                for found in scan.found.iter_mut().filter(|found| !found.linked) {
+                    let Some(id) = found.id.as_ref().filter(|id| !copied(id)) else {
+                        continue;
+                    };
+                    found.moved = known
+                        .iter()
+                        .find(|(seen, _)| seen == id)
+                        .and_then(|(_, at)| stale.iter().find(|(route, _)| route == at))
+                        .map(|(_, root)| route(root, from));
+                }
+                let unmatched = scan.found.iter().any(|found| {
+                    !found.linked
+                        && found.moved.is_none()
+                        && found.id.as_ref().is_some_and(|id| !copied(id))
+                });
+                if unmatched {
+                    for (entry, root) in &stale {
+                        let spelled = route(root, from);
+                        if !known.iter().any(|(_, at)| at == entry)
+                            && !scan.untraced.contains(&spelled)
+                        {
+                            scan.untraced.push(spelled);
+                        }
+                    }
+                }
+            }
+            Err(error) => scan.failures.push(ScanFailure::Ledger(error)),
+        }
+    }
+    scan.failures
+        .extend(duplicates.into_iter().map(ScanFailure::Duplicate));
 }
 
 /// What a directory is to the workspace, if it is anything, with its route
@@ -252,6 +369,7 @@ fn judge(
         id,
         mind,
         linked: workspace.is_linked(directory),
+        moved: None,
     })
 }
 
@@ -307,14 +425,28 @@ pub enum ScanFailure {
     /// A project whose marker would not open, listed without an id.
     #[error(transparent)]
     Unread(WorkspaceError),
+    /// One id held by more than one directory found or linked: a copy,
+    /// which is never taken for a move.
+    #[error(transparent)]
+    Duplicate(Duplicate),
+    /// The ledger, read to tell which project moved, would not open: what
+    /// was found is listed with no move.
+    #[error(transparent)]
+    Ledger(LedgerError),
 }
 
 impl ScanFailure {
-    /// The folder, or the marker, it is about.
+    /// The folder, or the marker, it is about: the first directory holding
+    /// an id more than one holds.
     pub fn path(&self) -> &Path {
         match self {
             ScanFailure::Unlisted { path, .. } => path,
             ScanFailure::Unread(error) => error.path(),
+            ScanFailure::Duplicate(duplicate) => duplicate
+                .paths
+                .first()
+                .map_or(Path::new(""), PathBuf::as_path),
+            ScanFailure::Ledger(error) => error.path(),
         }
     }
 }

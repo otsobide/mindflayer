@@ -598,6 +598,7 @@ fn workspace_view(
         .map(|found| Unlinked {
             route: found.route,
             mind: found.mind,
+            moved: found.moved,
         })
         .collect();
     Workspace {

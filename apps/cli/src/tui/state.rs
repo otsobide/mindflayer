@@ -97,6 +97,20 @@ impl Workspace {
     pub fn projects(&self) -> usize {
         self.members.iter().filter(|member| !member.own).count()
     }
+
+    /// Where the scan found the project `member`'s entry was, moved: the one
+    /// unlinked directory holding the id the workspace last saw there, as
+    /// `flayer scan` says it (`moved`). Matched by the directory each names
+    /// rather than by spelling, since the entry is spelled as the marker
+    /// has it and the scan's route as `flayer link` would take it.
+    pub fn moved_to(&self, member: &Member) -> Option<&Unlinked> {
+        self.unlinked.iter().find(|unlinked| {
+            unlinked
+                .moved
+                .as_ref()
+                .is_some_and(|old| paths::normalize(&self.root.join(old)) == member.root)
+        })
+    }
 }
 
 /// One holder of artifacts: the workspace's own, or a registered entry.
@@ -251,6 +265,9 @@ pub struct Unlinked {
     /// A mind project already, rather than a repository that needs
     /// `mind init` before it can be linked.
     pub mind: bool,
+    /// The entry it moved from, as the scan spelled it, when it holds the id
+    /// the workspace last saw at an entry where no project is any more.
+    pub moved: Option<String>,
 }
 
 // ---------------------------------------------------------------------------
@@ -302,6 +319,9 @@ pub enum Task {
     InitAndLink { path: String },
     /// `flayer unlink <entry>`.
     Unlink { entry: String },
+    /// `flayer relink <old> <new>`: a stale entry pointed at where the scan
+    /// found its project, moved.
+    Relink { old: String, new: String },
     /// `flayer load <path>`.
     Load { path: String },
     /// `mind load <path>`: into the workspace above the project the TUI is on.
@@ -442,6 +462,7 @@ impl Task {
                 words(&["flayer", "link"], &[path]),
             ],
             Task::Unlink { entry } => vec![words(&["flayer", "unlink"], &[entry])],
+            Task::Relink { old, new } => vec![words(&["flayer", "relink"], &[old, new])],
             Task::Load { path } => vec![words(&["flayer", "load"], &[path])],
             Task::LoadHere { path } => vec![words(&["mind", "load"], &[path])],
             Task::Unload { entry } => vec![words(&["flayer", "unload"], &[entry])],
@@ -616,6 +637,7 @@ impl Task {
                 | Task::LinkHere
                 | Task::InitAndLink { .. }
                 | Task::Unlink { .. }
+                | Task::Relink { .. }
                 | Task::Load { .. }
                 | Task::LoadHere { .. }
                 | Task::Unload { .. }
@@ -1314,7 +1336,8 @@ impl App {
             _ => {}
         }
         // What only a workspace has: its registry, its shelf, its installs.
-        if let KeyCode::Char(key @ ('l' | 'u' | 'U' | 'g' | 's' | 'i' | 'm' | 'L')) = key.code {
+        if let KeyCode::Char(key @ ('l' | 'u' | 'U' | 'M' | 'g' | 's' | 'i' | 'm' | 'L')) = key.code
+        {
             return match self.scope() {
                 Scope::Workspace => self.in_workspace(key),
                 Scope::Project => self.on_its_own(key),
@@ -1332,6 +1355,7 @@ impl App {
             'L' => (Mode::Loading(LoadForm::default()), Step::Stay),
             'u' => self.start_updating(),
             'U' => self.start_unlinking(),
+            'M' => self.start_relinking(),
             'g' => (Mode::Gathering(GatherForm::default()), Step::Stay),
             's' => (Mode::Browse, Step::Run(Task::Shelf)),
             'm' => match self.workspace() {
@@ -1602,6 +1626,53 @@ impl App {
             ],
             task: Task::Unlink {
                 entry: member.entry.clone(),
+            },
+            also: None,
+            back: Box::new(Mode::Browse),
+        };
+        (Mode::Confirming(confirm), Step::Stay)
+    }
+
+    /// `M`: the stale entry under the cursor pointed at where the scan found
+    /// its project, moved, once somebody says yes, as `flayer relink` does.
+    /// Only where the scan found one: which directory holds the project is
+    /// the scan's to say, by the id it holds, and a guess here could hand
+    /// what was installed to the wrong one.
+    fn start_relinking(&mut self) -> (Mode, Step) {
+        let (Some(workspace), Some(member)) = (self.workspace(), self.member()) else {
+            self.message = Some(Message::info("nothing to relink"));
+            return (Mode::Browse, Step::Stay);
+        };
+        if member.own || member.holdings.is_ok() {
+            self.message = Some(Message::info(
+                "M relinks a project whose entry went stale to where it moved; this one is where its entry says",
+            ));
+            return (Mode::Browse, Step::Stay);
+        }
+        // Not "nothing holds its id": the ledger learns an id only when it
+        // is written, so a project moved before then is found by nobody,
+        // though it may be right there.
+        let Some(moved) = workspace.moved_to(member) else {
+            self.message = Some(Message::info(format!(
+                "nothing found under {} is known to have moved from {}; `flayer relink {} <new>` follows it to where it went",
+                super::ui::looked_under(workspace),
+                member.entry,
+                member.entry
+            )));
+            return (Mode::Browse, Step::Stay);
+        };
+        let confirm = Confirm {
+            question: vec![
+                format!("Relink {} to {}?", member.entry, moved.route),
+                String::new(),
+                String::from(
+                    "The project there holds the id this entry was, so it is this one, moved. \
+                     The entry follows it, and what was installed stays installed.",
+                ),
+            ],
+            task: Task::Relink {
+                old: member.entry.clone(),
+                new: moved.route.clone(),
             },
             also: None,
             back: Box::new(Mode::Browse),
@@ -2827,7 +2898,7 @@ impl Reader {
 
     /// Every key, and the command it runs.
     pub fn help() -> Self {
-        let rows: [(&str, &str, &[&str]); 20] = [
+        let rows: [(&str, &str, &[&str]); 21] = [
             (
                 "a",
                 "add a skill or a rule",
@@ -2873,6 +2944,11 @@ impl Reader {
                 ],
             ),
             ("U", "unlink the project", &["flayer unlink <path>"]),
+            (
+                "M",
+                "relink a stale project to where the scan found it moved",
+                &["flayer relink <old> <new>"],
+            ),
             (
                 "t",
                 "the project's agents and sharing, toggled",

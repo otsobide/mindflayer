@@ -341,7 +341,7 @@ fn holdings(app: &App, workspace: &Workspace, frame: &mut Frame, area: Rect) {
     let holdings = match &member.holdings {
         Ok(holdings) => holdings,
         Err(error) => {
-            let text = vec![
+            let mut text = vec![
                 Line::from(Span::styled(
                     "this project cannot be opened",
                     bold().fg(Color::Red),
@@ -354,6 +354,17 @@ fn holdings(app: &App, workspace: &Workspace, frame: &mut Frame, area: Rect) {
                     dim(),
                 )),
             ];
+            // Said where the scan found its project, by the id it holds: the
+            // one thing better to do with a stale entry than drop it.
+            if let Some(moved) = workspace.moved_to(member) {
+                text.push(Line::from(Span::styled(
+                    format!(
+                        "it moved to {}: M relinks it there, keeping what was installed",
+                        printable(&moved.route)
+                    ),
+                    dim(),
+                )));
+            }
             frame.render_widget(
                 Paragraph::new(text)
                     .block(pane(&title, focused))
@@ -1135,7 +1146,7 @@ fn reading(reader: &Reader, frame: &mut Frame, area: Rect) {
 
 /// Where the screen looked for what could be linked, as its texts name it:
 /// the workspace, or the folders `flayer minds` was given.
-fn looked_under(workspace: &Workspace) -> String {
+pub(crate) fn looked_under(workspace: &Workspace) -> String {
     if workspace.roots.is_empty() {
         return String::from("this workspace");
     }

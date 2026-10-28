@@ -184,6 +184,7 @@ struct Report {
     roots: Vec<String>,
     depth: usize,
     found: Vec<Found>,
+    untraced: Vec<String>,
     truncated: bool,
 }
 
@@ -195,6 +196,7 @@ struct Found {
     id: Option<String>,
     mind: bool,
     linked: bool,
+    moved: Option<String>,
 }
 
 #[test]
@@ -218,7 +220,16 @@ fn scan_json_is_the_envelope_with_each_one_found_and_its_id() {
             .settings()
             .map(|settings| settings.id.to_string())
     };
-    let found: Vec<(&str, &str, Option<String>, bool, bool)> = report
+    // Each one found, field by field.
+    type Seen<'a> = (
+        &'a str,
+        &'a str,
+        Option<String>,
+        bool,
+        bool,
+        Option<&'a str>,
+    );
+    let found: Vec<Seen> = report
         .found
         .iter()
         .map(|found| {
@@ -228,6 +239,7 @@ fn scan_json_is_the_envelope_with_each_one_found_and_its_id() {
                 found.id.clone(),
                 found.mind,
                 found.linked,
+                found.moved.as_deref(),
             )
         })
         .collect();
@@ -236,12 +248,13 @@ fn scan_json_is_the_envelope_with_each_one_found_and_its_id() {
     assert_eq!(
         found,
         vec![
-            (alpha.as_str(), "alpha", id("alpha"), true, true),
-            (beta.as_str(), "beta", id("beta"), true, false),
-            (gamma.as_str(), "gamma", None, false, false),
+            (alpha.as_str(), "alpha", id("alpha"), true, true, None),
+            (beta.as_str(), "beta", id("beta"), true, false, None),
+            (gamma.as_str(), "gamma", None, false, false, None),
         ]
     );
     assert!(id("alpha").is_some());
+    assert!(report.untraced.is_empty());
 }
 
 #[test]

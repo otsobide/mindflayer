@@ -470,6 +470,13 @@ takes one of the workspace's own out of every project it links before the
 library, and has no `mind` form, nor a `-p`: a project's own was installed
 nowhere ([removing one of the workspace's own
 everywhere](#removing-one-of-the-workspaces-own-everywhere)).
+`flayer relink <old> <new>` follows a project the workspace links to where it
+moved, and has no `mind` form: the project at `old` is gone, and nothing at
+`new` is linked yet to say which workspace to tell. `mind init --new-id`
+gives the project in the directory it works in an id of its own, as `init`
+makes one there rather than in a project above, and has no `flayer` form,
+since a copy is most often not linked yet ([an entry whose project
+moved](#an-entry-whose-project-moved)).
 Reads look everywhere; a change needs one place, and without `-p` that place
 is the workspace.
 
@@ -1374,6 +1381,80 @@ otherwise an edit would quietly widen a chmodded config or detach a shared one.
 A hard link is the case this cannot preserve: a rename breaks it, and keeping
 it would mean giving up the atomic write.
 
+### An entry whose project moved
+
+A route is what moving the project changes. Moved alone, a repository leaves
+its entry stale, and every record of what was installed into it names a
+route nothing is at, so its copies read as somebody's once it is linked again
+where it went. Moved with the workspace, the route stays true, which is why
+it is a route; moved without, nothing in the entry can follow it. What does
+move with it is the `id` its settings hold ([D-09](#d-09-project-settings-live-in-the-project)),
+128 random bits, so that only a copy shares it. So the ledger keeps the id it
+last saw at each route ([schema 5](#why-the-ledger-is-sqlite)), and a
+project found somewhere else holding an id last seen at an entry where no
+project is any more is that entry's project, moved. `flayer scan` says so
+(`moved: <old> -> <new>`, [scanning](#scanning)), and `flayer relink <old>
+<new>` (`relink::relink`) follows it.
+
+The route stays the key of every record, with the id beside it
+(`installations.project_id`), rather than the id taking its place. A project
+a `mind.toml` marks has no id and goes on being found by its route, and so
+does one whose id nothing recorded yet; keyed by the id, both would need a
+second way in, and every record written so far re-keying.
+
+The ledger learns the ids from the projects themselves, never from the
+entries: a step to schema 5 is told those of every project the workspace
+links, and the ledger, opened to write, is told them again every time
+(`FlayerWorkspace::ledger_to_write`, `Ledger::knew`), as the scrub runs every
+time, so an entry written by hand, a project given a new id and one whose
+route holds another project now are all followed without each command that
+links remembering to. A stale entry keeps the id last seen there, which is
+what finds its project, and only a relink moves it. An id two linked
+directories hold is told to nobody.
+
+A relink rewrites the entry where it stands, with the comments around it,
+which a person wrote about the project rather than about where it was, and
+moves every record and every file Mindflayer made there to the new route in
+the same transaction as the rewrite of the marker (`Ledger::relinked`): an
+entry moved without its records would leave them under a route no entry
+names, and records moved without it would name a directory the workspace
+does not link. It holds the workspace's lock from before it reads the ledger
+for its checks. A local project's exclude lines go with it
+([what keeps an install out of git](#what-keeps-an-install-out-of-git)). It
+refuses, with nothing written:
+
+- a directory holding another id than the one last seen at the entry, which
+  is another project, and one holding the id the ledger last saw at another
+  entry, which is where it moved from, if anywhere;
+- an entry that still opens a project, which has not moved: with the same id,
+  a copy; and one whose marker is there and would not open (a typo, a newer
+  version), which still holds its project, whose id nothing read, so a copy
+  of it would pass for it moved (`MindProject::is_vacant` tells the two);
+- another linked project holding the id, a copy too;
+- a project a `mind.toml` marks, which has no id (moves of those are found
+  by nobody, by design);
+- records at the entry with no id, as a ledger from before ids were kept
+  holds them for a project not read since: nothing says they were that
+  project's, and a record is what lets Mindflayer write over and delete what
+  sits at the path it names.
+
+A workspace with no ledger, or whose ledger records nothing at the entry,
+has nothing to keep, and the entry alone moves.
+
+A repository copied with its `.mind` holds the same id as the one it was
+copied from, and no record can tell which of the two it was made for. So a
+copy is never taken for a move: two directories holding one id, among what a
+scan found and what the workspace links, or among what `status` reports, are
+a failure collected with the rest that names every one (`relink::Duplicate`),
+and a relink refuses one it can see. `mind init --new-id` (`relink::new_id`)
+gives a copy an id of its own and keeps every other byte of its settings:
+the one change `MindProject::change_settings` refuses, an id naming the
+project for good, made apart from it (`MindProject::change_id`) through the
+same rewrite and toml_edit. A local copy's exclude lines follow it to the new
+id, and a workspace linking it knows it, and every record of it, by the new
+one, so what was installed stays the project's. A `settings.json`, which
+nothing but `mind migrate` changes, is pointed there.
+
 ## Gathering
 
 A workspace has a **shelf**: artifacts collected from somewhere else, held by
@@ -1656,11 +1737,12 @@ command that writes to it makes it; a read never does, and changes an existing
 one only to migrate it ([A read leaves the ledger as it finds
 it](#a-read-leaves-the-ledger-as-it-finds-it)).
 
-Five things are recorded: the **sources** gathered from, the **artifacts** on
+Six things are recorded: the **sources** gathered from, the **artifacts** on
 the shelf and which source each came from, the **installations** (which skill
 or rule Mindflayer put into which project, from where, every copy it wrote and
 a hash of what it wrote), the **files Mindflayer made** in a project, which it
-may take away again, and an **action log**. The log keeps failures too: a log
+may take away again, the **projects** by the id each was last seen holding,
+and an **action log**. The log keeps failures too: a log
 of only what worked cannot answer the question anybody opens it with.
 Timestamps are Unix seconds, which needs no date library and which SQLite
 renders with `datetime(at, 'unixepoch')`.
@@ -1676,7 +1758,7 @@ A source's shelf folder is stored rather than derived: two URLs can reduce to
 the same readable name, and where a source's files went is a fact about the
 past that must not move when the naming rule changes.
 
-The schema has had four versions, each a block in `Ledger::migrate` and a
+The schema has had five versions, each a block in `Ledger::migrate` and a
 constant beside it:
 
 1. `sources`, `artifacts` and `actions`: what was gathered, from where, and
@@ -1699,6 +1781,10 @@ constant beside it:
    `created_files`, each file Mindflayer made in a project rather than
    wrote into, so the block goes with the last rule and the file with it
    only when Mindflayer made it (#45).
+5. `projects`, the id the ledger last saw at each route, one id a route and
+   one route an id, and on `installations`, the `project_id` each record was
+   made for, so a project that moved is found again by its id ([an entry
+   whose project moved](#an-entry-whose-project-moved), #57).
 
 An older ledger is migrated step by step, so one made two versions ago ends
 where one made today begins, and two rules hold for every step:
@@ -1736,7 +1822,15 @@ source that source's origin, and one from the workspace or a load none, since
 version 2 kept nothing to say which; it makes up no hash for a copy nobody
 hashed when it was written, and D-04 says how a missing one reads. Version 4
 fills in nothing: no build before it installed a rule, and a skill's targets
-need no hash of their own. D-04's states (#47) took no step of their own:
+need no hash of their own. Version 5 fills in what no SQL could: the file
+kept no id, so the step is handed the id of each project the workspace
+links, opened for its settings, with the route its records are under
+(`Ledger::open_knowing`), and its own SQL writes them in. The one exception
+to what a step is filled from, and the reason for it holds: what it is handed
+is what the projects hold, not how today's code spells something. A project
+a `mind.toml` marks, an entry that will not open and an id two linked
+directories hold are handed in for none, and their records keep their route
+alone. D-04's states (#47) took no step of their own:
 what tells them apart is the hash each copy was written with, which versions
 3 and 4 keep, and what the place it came from offers now, which is read where
 it is offered rather than kept. A record with no hash is held to its offer
@@ -2431,7 +2525,17 @@ How an install uses it:
   agents, targets or share mode
   change](#when-a-projects-agents-targets-or-share-mode-change)).
 - **Keyed by the project's id**, from its settings, which stays when the
-  project is renamed or moved within its repository.
+  project is renamed or moved within its repository. A line names a path
+  below the project's own directory, so the group's lines are carried
+  whole when either changes (`exclude::carry`): to where a relinked project
+  is now, anchored again there, in the same repository or the one it moved
+  into, read from the folder nearest the old place that is still there
+  ([an entry whose project moved](#an-entry-whose-project-moved)), and back
+  to the old place, reached the same way, when the entry cannot follow; and
+  to a copy's new id once `mind init --new-id` gives it one, before its
+  settings say so, and back when they cannot. A copy elsewhere in the same tree keeps its own lines under the old
+  id, since those name its copies. A repository moved whole has its lines
+  right already, its exclude file with it.
 - **Taken out after the copies.** An uninstall removes the copies, then the
   record, then the entries, so no copy shows in `git status` on its way out.
   A block that cannot be edited then is a `warning:` beside what was done
@@ -3137,6 +3241,24 @@ The install screen marks a row whose offer has moved on since it was
 installed `(outdated; flayer update refreshes it)`, held as any install's
 row is: the screen marks what goes in and out, and the update is what
 brings one up to date.
+
+### Following a stale row
+
+`M` on a stale project, one the scan under the screen found moved
+([an entry whose project moved](#an-entry-whose-project-moved)), asks and
+then runs `flayer relink <old> <new>`, the entry as the marker spells it and
+the directory as the scan spelled it from the root; the stale row's pane says
+where it went. Only where the scan found it: which directory holds the
+project is the scan's to say, by the id it holds, and the screen guessing
+from a name could hand what was installed to the wrong one. Where it found
+nothing, under the workspace or the folders `flayer minds` was given, the
+screen says the line that names the directory by hand. The scan's match and
+the stale row are told apart by the directory each names, not by spelling,
+since the entry is spelled as the marker has it and the scan's route as
+`flayer link` would take it. A key of its own rather than a second answer
+to `U`'s question: unlinking drops the entry and leaves what was installed
+recorded under a route nothing is at, and the pane says both keys, so the
+choice is made seeing where the project went.
 
 ## The local server
 
@@ -5111,10 +5233,37 @@ git repository, a project a `mind.toml` still marks and one whose marker will
 not open have none, and the last is listed all the same, with a failure
 beside it, since its marker still says it is a project.
 
+A project found and not linked that holds the id the ledger last saw at an
+entry where no project is any more is that entry's, moved, and carries the
+entry (`moved`), spelled as `route` is, so the line it is listed with,
+`moved: <old> -> <new>`, is the `flayer relink` to type from there. Only an
+entry nothing marks (`MindProject::is_vacant`), not every stale one: one
+whose marker is there and would not open still holds its project, whose id
+nothing read, so a copy of it would pass for it moved; and one that opens
+holding another id holds another project, which the ledger follows the next
+time it is written. The ledger is read only when
+something found could match, as a read ([a read leaves the ledger as it
+finds it](#a-read-leaves-the-ledger-as-it-finds-it)), and one that cannot be
+read is a failure beside what was found, listed with no move. An id two
+directories hold, among those found and those the workspace links, is a
+failure naming both, and neither is a move: a copy, which only
+`mind init --new-id` tells apart.
+
+The ledger learns an id only when it is written, so a project linked and
+moved before anything wrote it is found by nobody, though the scan may list
+it. While something found and not linked holds an id no entry was matched
+to, each entry nothing marks whose id the ledger never learned is named
+(`untraced`), and the text says to `flayer relink` it: the hint to
+`flayer link` alone would leave the entry stale beside a second one for the
+same project, which is what a relink is for. Which of them went where is
+the person's to say, never a guess.
+
 `flayer scan --json` prints the scan in [the envelope](#json-in-one-envelope),
 each field by its name (`roots`, `depth`, `found`, each with `path`, `route`,
-`id`, `mind` and `linked`, and `truncated`); its failures, and that it stopped
-early, are the envelope's warnings. The table leaves the id out: the path already tells its
+`id`, `mind`, `linked` and `moved`, `untraced` and `truncated`); its
+failures, and that it stopped early, are the envelope's warnings. `moved`
+and `untraced` came after the others, names added, so the envelope's
+version stayed. The table leaves the id out: the path already tells its
 rows apart, and the id is for a script to match a project by.
 
 `flayer minds DIR` opens the minds screen looking under the folders it is
@@ -5201,7 +5350,11 @@ other, and none of them makes a reader wait for the workspace.
   it from the plan it makes again until its last installation is written
   (`update::apply`), writing each through the body an install hands to once
   it holds the lock (`install::install_held`), since asking for the lock
-  again, as `install_with` does, would wait for itself. Two workspaces
+  again, as `install_with` does, would wait for itself. A relink holds it
+  from before it reads the ledger for its checks until the entry and the
+  records it moves are written (`relink::relink`), and a new id from before
+  it reads the project's settings again until the ledger knows it
+  (`relink::new_id`), as a change to the agents does. Two workspaces
   linking one project are kept apart by neither's lock
   ([open questions](#open-questions)).
 - **Opening the ledger takes no lock**, though it is when a ledger is made or
@@ -5216,7 +5369,10 @@ other, and none of them makes a reader wait for the workspace.
   the first write after an upgrade from a build that stored a credential,
   and a record dropped or carried then waits for it without a deadline: the
   change it follows is made, and trying it again would find nothing to
-  change.
+  change. Telling the ledger which id each linked project holds, which
+  opening it to write does every time (`Ledger::knew`), takes none either:
+  it writes rows, in a transaction that takes SQLite's write lock before it
+  reads, so a relink at the same moment comes wholly before or after it.
 
 How the lock behaves, and why:
 
@@ -5830,6 +5986,37 @@ just listed.
 
 ## Open questions
 
+- **A copy nobody linked.** `flayer relink` refuses a copy it can see: the
+  entry still holding the id, or another project the workspace links
+  holding it. A copy somewhere on disk nobody linked is beyond what it
+  reads, so a project moved and also copied, both holding its id, is
+  followed to whichever directory the command names. `flayer scan` says the
+  two are one id and offers neither as a move, and the TUI relinks only what
+  a scan offered. Scanning from the relink would close it, at the price of a
+  walk of the disk to change one line of a marker, and of an answer that
+  depends on where the walk looked.
+- **A moved project linked again by hand.** Linking the directory a project
+  moved to, rather than relinking it, leaves two entries for one id: the
+  stale one keeps it, for a relink, and the new one is known by none, so
+  what is installed there from then on is recorded with no id. `flayer
+  relink` refuses a directory linked already; unlinking it first hands the
+  stale entry's records to it and drops those, which an install made since
+  wrote. Merging the two, the newer record of a name winning, would keep
+  both, at the price of a relink that sometimes drops an entry rather than
+  rewriting one.
+- **A project moved before its id was learned.** The ledger learns ids when
+  it is written, so a project linked and moved before then is never offered
+  as a move; the scan names its entry (`untraced`) for a relink somebody
+  types. `flayer link` telling the ledger would close it, at the price of
+  every link opening the ledger to write, and making it, which only a
+  gather, an install or an uninstall does now.
+- **A route that holds another project now.** An entry whose directory is
+  given to another project once its own has moved opens, so it is not stale:
+  the ledger follows the project there (`Ledger::knew`), and the records the
+  route had become the newcomer's, which names copies it may not hold. The
+  moved project is then found by nobody. Telling the two apart needs more
+  than the route and the id: the records' copies being there, or the
+  settings' name, which a person can change.
 - **Precedence between projects.** Two projects in one workspace can declare
   the same skill name. Core returns both matches and says nothing about which
   wins, because nothing here yet has to choose. Whatever resolves it (a

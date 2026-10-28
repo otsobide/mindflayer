@@ -129,6 +129,15 @@ pub enum Command {
         /// Where this project keeps its rules [default: `rules`].
         #[arg(long, value_name = "DIR")]
         rules: Option<PathBuf>,
+
+        /// Give the project here an id of its own, keeping everything else:
+        /// for a copy made with its `.mind`, which holds the id of the
+        /// project it was copied from.
+        //
+        // An option of `init` rather than a command of its own: the id is
+        // what `init` gave the project, and this gives it again.
+        #[arg(long, conflicts_with_all = ["agents", "shared", "skills", "rules"])]
+        new_id: bool,
     },
 
     /// Create a skill or a rule in this project.
@@ -614,6 +623,23 @@ pub enum FlayerCommand {
         /// Each project's directory, as registered. It need not still exist.
         #[arg(required = true, value_name = "PROJECT")]
         projects: Vec<PathBuf>,
+    },
+
+    /// Follow a project that moved: point its entry at the directory it is
+    /// in now, and keep everything installed into it.
+    ///
+    /// The directory must hold the id the workspace last saw where the
+    /// project was, which only the project, or a copy of it, holds:
+    /// `flayer scan` names each one it finds as `moved`.
+    Relink {
+        /// The project's directory, as registered, which holds no project
+        /// any more.
+        #[arg(value_name = "OLD")]
+        old: PathBuf,
+
+        /// The directory the project is in now, the one holding `.mind`.
+        #[arg(value_name = "NEW")]
+        new: PathBuf,
     },
 
     /// Offer other flayer workspaces' own skills and rules to this
