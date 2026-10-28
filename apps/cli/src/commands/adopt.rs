@@ -13,6 +13,7 @@ use mindflayer_core::{AgentHomes, Excluded, FlayerWorkspace, MindProject, Refere
 
 use crate::commands::gather::scrubbed;
 use crate::commands::install::shown;
+use crate::render::printable;
 use crate::{CliError, Failure, Outcome};
 
 /// What a dry run ends with.
@@ -71,10 +72,13 @@ fn said(workspace: &FlayerWorkspace, plan: &Plan, done: bool) -> Outcome {
         plan.library.display()
     );
     if !plan.provenance.is_empty() {
+        // Printable, as every row from a file somebody wrote is: this one is
+        // often from somebody else's repository, and it is what is read
+        // before saying yes, so a carriage return must not rewrite the line.
         let entries: Vec<String> = plan
             .provenance
             .iter()
-            .map(|(key, value)| format!("{key} {value}"))
+            .map(|(key, value)| format!("{} {}", printable(key), printable(value)))
             .collect();
         let _ = writeln!(
             outcome.stdout,

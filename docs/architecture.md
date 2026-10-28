@@ -2527,7 +2527,9 @@ what sits where its agents read.
 - **Where `gh skill` got it, shown.** A `SKILL.md` that `gh skill`
   installed says where it came from under `metadata` keys starting
   `github-` (`adopt::PROVENANCE_PREFIX`). The plan hands those back as
-  written, and the CLI shows them under its first line; nothing reads them
+  written, and the CLI shows them under its first line, each key and value
+  made printable as every row from a file somebody wrote is, so a carriage
+  return cannot rewrite the line read before saying yes; nothing reads them
   further, and no other tool's lockfile is read or written. Taking them for
   a source to gather from would be a gather, which is its own command.
 

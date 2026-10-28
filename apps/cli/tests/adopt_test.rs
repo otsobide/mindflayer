@@ -208,6 +208,37 @@ fn what_gh_skill_says_of_where_it_came_from_is_shown() {
 }
 
 #[test]
+fn what_gh_skill_says_cannot_rewrite_the_line_it_is_shown_on() {
+    let dir = workspace_with_two();
+    let folder = dir.path().join("alpha/.claude/skills/notes");
+    fs::create_dir_all(&folder).unwrap();
+    // A carriage return and an erase-line sequence, escaped in YAML's double
+    // quotes, as somebody's repository could write them.
+    fs::write(
+        folder.join("SKILL.md"),
+        "---\nname: notes\ndescription: Keep notes\nmetadata:\n  \
+         github-repo: \"someone/skills\\rwould copy nothing\\x1b[2K\"\n---\n\n# notes\n",
+    )
+    .unwrap();
+
+    let outcome = flayer(dir.path(), &["adopt", "-p", "alpha", "notes"]).unwrap();
+
+    assert!(
+        outcome.stdout.contains(
+            "\n  from gh skill, as its SKILL.md says: github-repo someone/skills would copy \
+             nothing [2K\n"
+        ),
+        "{:?}",
+        outcome.stdout
+    );
+    assert!(
+        !outcome.stdout.contains(['\r', '\x1b']),
+        "{:?}",
+        outcome.stdout
+    );
+}
+
+#[test]
 fn a_copy_git_tracks_in_a_local_project_is_left_in_git_and_said() {
     let dir = with_notes();
     let alpha = dir.path().join("alpha");
