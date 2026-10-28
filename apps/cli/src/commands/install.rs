@@ -78,7 +78,7 @@ pub(crate) fn install_named(
         let part = parts.remove(0);
         return alone(
             said,
-            install_said(&part.project, part.done, &reference, &loads),
+            install_said(&part.project, part.done, &reference, &loads, false),
         );
     }
     let each = parts
@@ -87,7 +87,7 @@ pub(crate) fn install_named(
             let into = part.project.name().to_owned();
             (
                 into,
-                install_said(&part.project, part.done, &reference, &[]),
+                install_said(&part.project, part.done, &reference, &[], true),
             )
         })
         .collect();
@@ -98,11 +98,17 @@ pub(crate) fn install_named(
 /// it alone says it: a line of what it did and what there is to say beside
 /// it, or why it was refused. `loads` are what the loaded workspaces could
 /// not offer, said before what is said of the project's folders.
+///
+/// `among` others, what rendering its rules warns of is said of the project
+/// ([`render_said`]): it names a rule or a file in the project and not the
+/// project, which alone goes without saying, and beside another's would
+/// leave no telling whose it is.
 fn install_said(
     project: &MindProject,
     done: assign::Install,
     reference: &Reference,
     loads: &[String],
+    among: bool,
 ) -> Result<Outcome, Failure> {
     use mindflayer_core::install::{self as installing, Installed};
     use mindflayer_core::Excluded;
@@ -181,7 +187,7 @@ fn install_said(
     // Installed, and what the project's rules came to on the way, which can
     // leave some of its agents reading none of them.
     if let Some(rendered) = &done.rendered {
-        let (warned, notes) = render_said(rendered, candidate.name(), None);
+        let (warned, notes) = render_said(rendered, candidate.name(), among.then_some(into));
         if !warned.is_empty() {
             outcome.ok = false;
         }
@@ -438,7 +444,7 @@ pub(crate) fn uninstall_named(
     let mut parts = assigned.parts;
     if parts.len() == 1 {
         let part = parts.remove(0);
-        return alone(said, uninstall_said(&part.project, part.done));
+        return alone(said, uninstall_said(&part.project, part.done, false));
     }
     let absent = |done: &assign::Uninstall| matches!(done, Ok((_, Removed::Absent { .. })));
     if parts.iter().all(|part| absent(&part.done)) {
@@ -456,7 +462,7 @@ pub(crate) fn uninstall_named(
         .filter(|part| !absent(&part.done))
         .map(|part| {
             let from = part.project.name().to_owned();
-            (from, uninstall_said(&part.project, part.done))
+            (from, uninstall_said(&part.project, part.done, true))
         })
         .collect();
     together(said, each, Vec::new())
@@ -464,8 +470,13 @@ pub(crate) fn uninstall_named(
 
 /// One project's part of an uninstall, `done`, as a command that takes it
 /// out of that project alone says it: a line of what it took out and what
-/// there is to say beside it, or why it was not.
-fn uninstall_said(project: &MindProject, done: assign::Uninstall) -> Result<Outcome, Failure> {
+/// there is to say beside it, or why it was not; `among` others, with what
+/// its rules warn of said of it, as [`install_said`] says it.
+fn uninstall_said(
+    project: &MindProject,
+    done: assign::Uninstall,
+    among: bool,
+) -> Result<Outcome, Failure> {
     use mindflayer_core::install::Removed;
 
     let from = project.name();
@@ -479,7 +490,7 @@ fn uninstall_said(project: &MindProject, done: assign::Uninstall) -> Result<Outc
         } => {
             // What the rules left come to without it.
             let (warned, notes) = rendered
-                .map(|rendered| render_said(&rendered, &name, None))
+                .map(|rendered| render_said(&rendered, &name, among.then_some(from)))
                 .unwrap_or_default();
             let name = named(kind, &name);
             let mut outcome = Outcome::plain(format!("removed {name} from {from}\n"));

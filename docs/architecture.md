@@ -2172,7 +2172,10 @@ nothing that one install would not.
 
 The CLI says each project's part as an install into it alone says it
 (`commands/install.rs`), in the order asked, so each line names its project
-already; one refused ends in `error: <project>: ...`, and the command exits
+already, but for what rendering the project's rules warns of: that names a
+rule or a file and not the project, which alone goes without saying, so
+among several it is said after `<project>: `, as the install screen says
+it. One refused ends in `error: <project>: ...`, and the command exits
 non-zero when any part did not go through, while the others' lines stand,
 since what they did was done. Two things are said once rather than once a
 project: what the loaded workspaces could not offer, after every part, and a

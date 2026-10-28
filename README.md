@@ -891,8 +891,9 @@ not something to guess.
 `flayer install` takes `-p` once for each project, to install into several
 at once, or `--all-projects` for every one the workspace links, and `flayer
 uninstall` takes them the same way. Each project is said as an install into
-it alone says it, in the order asked, and one that refuses is said of it while
-the others go ahead:
+it alone says it, in the order asked, with what its rules warn of after its
+name (`warning: collapse: ...`), and one that refuses is said of it while the
+others go ahead:
 
 ```
 $ flayer install commit-style --all-projects

@@ -86,6 +86,101 @@ installed commit-style into gamma, from workspace
 }
 
 #[test]
+fn what_a_projects_rules_warn_of_is_said_of_that_project() {
+    let dir = workspace_with_three();
+    let rule = own_directory_for(dir.path(), Kind::Rule).join("style/comments.md");
+    fs::create_dir_all(rule.parent().unwrap()).unwrap();
+    fs::write(
+        &rule,
+        "---\npaths:\n  - \"**/*.rs\"\n---\n\n# Comments say why, not what\n",
+    )
+    .unwrap();
+    // Claude alone reads a rule about some files, so `alpha`, naming no
+    // other, has nothing to be warned of.
+    flayer(dir.path(), &["agents", "-p", "alpha", "claude", "--yes"]).unwrap();
+
+    let outcome = flayer(
+        dir.path(),
+        &["install", "style/comments", "-p", "alpha", "-p", "beta"],
+    )
+    .unwrap();
+
+    assert_eq!(
+        outcome.stdout,
+        "\
+installed rule style/comments into alpha, from workspace
+installed rule style/comments into beta, from workspace
+"
+    );
+    assert_eq!(
+        outcome.stderr,
+        [
+            "warning: beta: rule `style/comments` states `paths`, so it reaches claude only: \
+             codex and opencode read no .claude/rules"
+        ]
+    );
+    assert!(!outcome.ok);
+
+    // One project alone is said as it always was.
+    let alone = flayer(dir.path(), &["install", "style/comments", "-p", "gamma"]).unwrap();
+
+    assert_eq!(
+        alone.stderr,
+        [
+            "warning: rule `style/comments` states `paths`, so it reaches claude only: codex \
+             and opencode read no .claude/rules"
+        ]
+    );
+}
+
+#[test]
+fn what_a_projects_rules_warn_of_after_an_uninstall_is_said_of_that_project() {
+    let dir = workspace_with_three();
+    flayer(
+        dir.path(),
+        &["add", "rule", "git/commits", "Commit one step at a time"],
+    )
+    .unwrap();
+    flayer(dir.path(), &["add", "rule", "review/tone", "Review kindly"]).unwrap();
+    for rule in ["git/commits", "review/tone"] {
+        flayer(dir.path(), &["install", rule, "-p", "alpha", "-p", "beta"]).unwrap();
+    }
+    // Somebody's edit of another rule's section in `beta`, which every
+    // render of its rules keeps and warns of.
+    let agents_md = dir.path().join("beta/AGENTS.md");
+    let rendered = fs::read_to_string(&agents_md).unwrap();
+    assert!(rendered.contains("# Review kindly\n"), "{rendered}");
+    fs::write(
+        &agents_md,
+        rendered.replace("# Review kindly\n", "# Review kindly, and briefly\n"),
+    )
+    .unwrap();
+
+    let outcome = flayer(
+        dir.path(),
+        &["uninstall", "git/commits", "-p", "alpha", "-p", "beta"],
+    )
+    .unwrap();
+
+    assert_eq!(
+        outcome.stdout,
+        "\
+removed rule git/commits from alpha
+removed rule git/commits from beta
+"
+    );
+    assert_eq!(
+        outcome.stderr,
+        [format!(
+            "warning: beta: {}: the section of rule `review/tone` was changed since it was \
+             rendered, so it is left as it is",
+            agents_md.display()
+        )]
+    );
+    assert!(!outcome.ok);
+}
+
+#[test]
 fn all_projects_installs_into_every_project_the_workspace_links() {
     let dir = workspace_with_three();
 
