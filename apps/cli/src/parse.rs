@@ -789,6 +789,26 @@ pub enum FlayerCommand {
         yes: bool,
     },
 
+    /// Bring a skill somebody keeps in a project's .claude/skills or
+    /// .agents/skills into this workspace's library, and record the
+    /// project's copies as installed from there, so updates reach them.
+    ///
+    /// Not a byte of the project is written. Without --yes nothing is, and
+    /// the command says what would be.
+    Adopt {
+        /// The project it is in, by name or path.
+        #[arg(short, long, value_name = "PROJECT")]
+        project: String,
+
+        /// Its name, as `flayer status` lists it `foreign`.
+        reference: String,
+
+        /// Adopt it. Without this nothing is written, and the command says
+        /// what would be.
+        #[arg(short, long)]
+        yes: bool,
+    },
+
     /// Change which agents work in a project, and carry what is installed
     /// into it along, as `mind agents` does there.
     ///
