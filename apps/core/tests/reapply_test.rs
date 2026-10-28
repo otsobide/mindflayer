@@ -548,6 +548,24 @@ fn turning_local_writes_the_gitignore_and_keeps_every_copy_in_place_out_of_git()
     assert!(settings.edit_tracked);
 }
 
+#[test]
+fn turning_local_keeps_no_copy_git_tracks_out_of_git() {
+    let (_dir, workspace, project) = installed(&Agent::ALL, Share::Shared);
+    // The team committed what was installed while the project was shared.
+    common::indexed(project.root());
+
+    let change = Change::Share {
+        share: Share::Local,
+        edit_tracked: false,
+    };
+    let plan = reapply::plan(Some(&workspace), &project, &change, &AgentHomes::default()).unwrap();
+    assert!(plan.excluded.is_empty(), "{:?}", plan.excluded);
+
+    reapply::apply(Some(&workspace), &project, &change, &AgentHomes::default()).unwrap();
+    assert!(excluded(&project).is_empty(), "{:?}", excluded(&project));
+    assert_eq!(reopened(&project).settings().unwrap().share, Share::Local);
+}
+
 /// Takes write permission away from a folder, and gives it back when
 /// dropped, so that a failed assertion does not leave a temporary folder
 /// that cannot be cleaned up.
