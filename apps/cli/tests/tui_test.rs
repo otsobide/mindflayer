@@ -1282,6 +1282,187 @@ fn a_line_of_the_install_screen_that_fails_does_not_keep_the_rest_from_running()
     );
 }
 
+/// Copy everything under `from` into `to`, as it is.
+fn copy_tree(from: &Path, to: &Path) {
+    fs::create_dir_all(to).unwrap();
+    for entry in fs::read_dir(from).unwrap() {
+        let entry = entry.unwrap();
+        let target = to.join(entry.file_name());
+        if entry.file_type().unwrap().is_dir() {
+            copy_tree(&entry.path(), &target);
+        } else {
+            fs::copy(entry.path(), target).unwrap();
+        }
+    }
+}
+
+/// Every folder and file under `root` by its path from there, with what
+/// each file holds; but the ledger, which is compared by what it records
+/// rather than by its bytes, which hold when each action was taken, and the
+/// workspace's lock.
+fn disk(root: &Path) -> std::collections::BTreeMap<String, Option<Vec<u8>>> {
+    let mut found = std::collections::BTreeMap::new();
+    let mut folders = vec![root.to_path_buf()];
+    while let Some(folder) = folders.pop() {
+        for entry in fs::read_dir(&folder).unwrap() {
+            let path = entry.unwrap().path();
+            let route = path
+                .strip_prefix(root)
+                .unwrap()
+                .to_string_lossy()
+                .replace('\\', "/");
+            let kept = [".mindflayer/mindflayer.db", ".mindflayer/lock"];
+            if kept.iter().any(|kept| route.starts_with(kept)) {
+                continue;
+            }
+            if path.is_dir() {
+                folders.push(path);
+                found.insert(route, None);
+            } else {
+                found.insert(route, Some(fs::read(&path).unwrap()));
+            }
+        }
+    }
+    found
+}
+
+/// What the ledger of the workspace at `root` records of every installation
+/// in each of `projects`.
+fn recorded(root: &Path, projects: &[&str]) -> Vec<mindflayer_core::ledger::InstallRecord> {
+    let ledger = FlayerWorkspace::open(root)
+        .unwrap()
+        .ledger_for_reading()
+        .unwrap();
+    let mut records = Vec::new();
+    for project in projects {
+        for kind in Kind::ALL {
+            records.extend(ledger.records(project, kind).unwrap());
+        }
+    }
+    records
+}
+
+/// A command line as the transcript shows it, back into its words: split at
+/// spaces, but not inside the single quotes `state::shell` puts round a word
+/// a shell would split, nor at a quote escaped between two of them (`'\''`).
+fn words_of(line: &str) -> Vec<String> {
+    let mut words = Vec::new();
+    let mut word: Option<String> = None;
+    let (mut quoted, mut escaped) = (false, false);
+    for c in line.chars() {
+        let text = word.get_or_insert_with(String::new);
+        match c {
+            c if escaped => {
+                text.push(c);
+                escaped = false;
+            }
+            '\\' if !quoted => escaped = true,
+            '\'' => quoted = !quoted,
+            ' ' if !quoted => {
+                if let Some(done) = word.take().filter(|done| !done.is_empty()) {
+                    words.push(done);
+                }
+            }
+            c => text.push(c),
+        }
+    }
+    words.extend(word.filter(|done| !done.is_empty()));
+    words
+}
+
+#[test]
+fn a_line_as_the_transcript_shows_it_reads_back_into_its_words() {
+    let words: Vec<String> = [
+        "flayer",
+        "install",
+        "--from",
+        "it's #1",
+        "a b",
+        "skill:deploy",
+    ]
+    .iter()
+    .map(|word| (*word).to_owned())
+    .collect();
+
+    assert_eq!(words_of(&tui::state::shell(&words)), words);
+}
+
+#[test]
+fn the_lines_the_install_screen_ran_run_again_on_a_copy_leave_the_same_ledger_and_disk() {
+    let (dir, workspace, ledger) = shelved(&["collapse", "tanukeys"], &["deploy", "lint"]);
+    let origin = shelf_origin(&workspace, &ledger);
+    flayer(
+        dir.path(),
+        &["add", "rule", "git/commits", "Commit one step at a time"],
+    )
+    .unwrap();
+    flayer(dir.path(), &["install", "-p", "tanukeys", "lint"]).unwrap();
+    let copy = TempDir::new().unwrap();
+    copy_tree(dir.path(), copy.path());
+    let projects = ["collapse", "tanukeys"];
+    assert_eq!(disk(dir.path()), disk(copy.path()));
+
+    let mut app = tui_in(dir.path());
+    press_and_run(&mut app, KeyCode::Char('i'));
+    for key in [
+        // collapse: deploy, then git/commits, ticked.
+        KeyCode::Right,
+        KeyCode::Char(' '),
+        KeyCode::Tab,
+        KeyCode::Char(' '),
+        // tanukeys: git/commits and deploy ticked, lint unticked.
+        KeyCode::Left,
+        KeyCode::Down,
+        KeyCode::Right,
+        KeyCode::Char(' '),
+        KeyCode::Tab,
+        KeyCode::Char(' '),
+        KeyCode::Down,
+        KeyCode::Char(' '),
+    ] {
+        press_key(&mut app, key);
+    }
+    let marked = tui_drawn(&app);
+    assert!(marked.contains("4 to install, 1 to remove"), "{marked}");
+    press_key(&mut app, KeyCode::Char('a'));
+    press_and_run(&mut app, KeyCode::Char('y'));
+
+    let transcript = app.transcript();
+    let ran: Vec<&str> = transcript
+        .lines()
+        .filter_map(|line| line.strip_prefix("$ "))
+        .collect();
+    assert_eq!(
+        ran,
+        [
+            &format!("flayer install -p collapse -p tanukeys --from {origin} skill:deploy"),
+            "flayer uninstall -p tanukeys skill:lint",
+            "flayer install -p collapse -p tanukeys --from workspace rule:git/commits",
+        ],
+        "{transcript}"
+    );
+    assert!(app.done.iter().all(|done| done.ok), "{transcript}");
+    assert_ne!(
+        disk(dir.path()),
+        disk(copy.path()),
+        "the screen changed nothing"
+    );
+
+    for line in &ran {
+        let words = words_of(line);
+        assert_eq!(words[0], "flayer", "{line}");
+        let args: Vec<&str> = words[1..].iter().map(String::as_str).collect();
+        let replayed = flayer(copy.path(), &args).unwrap();
+        assert!(replayed.ok, "{line}: {replayed:?}");
+    }
+
+    assert_eq!(
+        recorded(dir.path(), &projects),
+        recorded(copy.path(), &projects)
+    );
+    assert_eq!(disk(dir.path()), disk(copy.path()));
+}
+
 #[test]
 fn leaving_the_install_screen_goes_back_rather_than_out() {
     let (dir, _workspace, _ledger) = shelved(&["collapse"], &["deploy"]);
