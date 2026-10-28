@@ -201,9 +201,7 @@ impl Target {
             .get(index)
             .is_some_and(|row| row.checked != checked)
         {
-            let cursor = std::mem::replace(&mut self.cursor, index);
-            toggle(self);
-            self.cursor = cursor;
+            toggle(self, index);
         }
         self.rows
             .get(index)
@@ -412,7 +410,7 @@ impl Screen {
                 self.focus = Focus::Projects;
             }
             // Only a row the column shows: a kind with none shows none.
-            KeyCode::Char(' ') if at.is_some() => self.message = toggle(target),
+            KeyCode::Char(' ') if at.is_some() => self.message = toggle(target, target.cursor),
             _ => {}
         }
         Step::Stay
@@ -432,9 +430,11 @@ pub fn nothing(kind: Kind) -> &'static str {
     }
 }
 
-/// Mark or unmark the row under the cursor, or say why not.
-fn toggle(target: &mut Target) -> Option<String> {
-    let cursor = target.cursor;
+/// Mark or unmark the row at `cursor`, or say why not: the one under the
+/// project's own cursor, or, on the screen turned round by artifact, the
+/// one of the artifact chosen there, which leaves the project's cursor
+/// where it was.
+fn toggle(target: &mut Target, cursor: usize) -> Option<String> {
     let row = target.rows.get(cursor)?;
 
     if row.foreign() {
