@@ -9,7 +9,7 @@ use std::fmt::Write as _;
 use std::path::{Path, PathBuf};
 
 use mindflayer_core::relink;
-use mindflayer_core::scan::MAX_LISTED;
+use mindflayer_core::scan::{Order, Reason, MAX_LISTED};
 use mindflayer_core::{
     known, scan, Agent, Directories, FlayerWorkspace, Initialization, Kind, MindProject,
     Registration, Scan, Share, WorkspaceError,
@@ -297,7 +297,20 @@ pub(crate) fn scan_workspace(
     if as_json {
         return json(&scan, warnings);
     }
-    scanned(&scan, warnings)
+    scanned(&scan, warnings, request.order == Order::Suggested)
+}
+
+/// Why one found is worth linking, as `flayer scan --suggest` says it and
+/// the minds screen shows it, in these words rather than its own: the
+/// reason core ranked it by, and for a repository the agent files that
+/// gave it that reason, by name.
+pub(crate) fn worth_linking(reason: Reason, agent_files: &[String]) -> String {
+    match reason {
+        Reason::Id => String::from("mind project with an id"),
+        Reason::Mind => String::from("mind project without an id"),
+        Reason::Agents => format!("git repository with {}", agent_files.join(", ")),
+        Reason::Git => String::from("git repository"),
+    }
 }
 
 /// What a scan could not read, and that it stopped early, each as a warning
@@ -314,12 +327,14 @@ pub(crate) fn scan_warnings(scan: &Scan) -> Vec<String> {
     warnings
 }
 
-/// Every repository a scan found, and whether it is linked yet.
+/// Every repository a scan found, and whether it is linked yet, in the
+/// order core gave them; each not linked says why it is worth linking when
+/// `suggested`.
 ///
 /// No column for a project's id: the path already tells the rows apart,
 /// and the id, 32 digits on every project's line, is for a script to match
 /// a project by, which reads it from the JSON.
-fn scanned(scan: &Scan, warnings: Vec<String>) -> Outcome {
+fn scanned(scan: &Scan, warnings: Vec<String>, suggested: bool) -> Outcome {
     let mut stdout = String::new();
     if scan.found.is_empty() {
         let roots: Vec<String> = scan
@@ -342,6 +357,7 @@ fn scanned(scan: &Scan, warnings: Vec<String>) -> Outcome {
                     (false, true, Some(old)) => {
                         format!("moved: {} -> {}", printable(old), printable(&found.route))
                     }
+                    _ if suggested => worth_linking(found.reason, &found.agent_files),
                     (false, true, None) => String::from("mind project"),
                     (false, false, _) => String::from("git repository, not a mind project yet"),
                 };

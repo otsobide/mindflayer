@@ -45,6 +45,26 @@ fn id_of(root: &Path) -> String {
 }
 
 #[test]
+fn a_suggestion_says_a_moved_project_moved_as_a_scan_does() {
+    let (_dir, projects) = installed();
+    fs::create_dir_all(projects.join("apps")).unwrap();
+    fs::rename(projects.join("collapse"), projects.join("apps/collapse")).unwrap();
+
+    let scan = flayer(&projects, &["scan", "--suggest"]).unwrap();
+
+    // Its reason is its id, but what to do about it is a relink.
+    assert_eq!(
+        scan.stdout,
+        "\
+apps/collapse  not linked  moved: collapse -> apps/collapse
+
+  follow one that moved with `flayer relink <old> <new>`
+"
+    );
+    assert!(scan.ok, "{:?}", scan.stderr);
+}
+
+#[test]
 fn a_moved_project_is_stale_then_found_moved_and_relinked_with_every_install_current() {
     let (_dir, projects) = installed();
     fs::create_dir_all(projects.join("apps")).unwrap();
