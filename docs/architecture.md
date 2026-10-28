@@ -1424,9 +1424,12 @@ So does a refusal, which is no error: an install that finds somebody's
 copy, or one changed since, answers `Installed::Foreign` or `Edited` and
 writes nothing, and the front end says so and goes on with the rest, as an
 uninstall's `Removed` does. The panel still has to tell the two apart, and
-#63 carries `foreign` on the CLI's warning, so `Installed::refused` and
-`Removed::refused` say why as an `install::Refused` (`foreign`, `edited`,
-`not_installed`). One type for both rather than a code on each outcome,
+the CLI's warning carries `foreign` beside its text, so `Installed::refused`
+and `Removed::refused` say why as an `install::Refused` (`foreign`, `edited`,
+`not_installed`). An update that leaves a copy changed since says `edited`,
+and a change of a project's agents or targets that leaves somebody's skill
+where a copy would go says `foreign`, by the same codes: one condition, met
+by another command. One type for both rather than a code on each outcome,
 since a copy that is somebody's refuses an install and an uninstall alike:
 two types would give `foreign` twice, which the rule below forbids.
 

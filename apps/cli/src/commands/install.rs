@@ -145,6 +145,9 @@ fn install_said(
         }
     })?;
     let unhashed = done.installed.unhashed().map(str::to_owned);
+    // Why it was refused, when it was: what the panel tells somebody's copy
+    // from one changed since by, as the line does in words.
+    let refused = done.installed.refused().map(|refused| refused.code());
     let mut outcome = match done.installed {
         Installed::Added { name, .. } => Outcome::plain(format!(
             "installed {} into {into}, from {origin}\n",
@@ -161,23 +164,27 @@ fn install_said(
         // Refused rather than obeyed: somebody wrote that one.
         Installed::Foreign { name, path } => Outcome {
             stdout: String::new(),
-            stderr: vec![format!(
-                "warning: {into} already has a {} at {} that Mindflayer did not put there, so it was left alone",
-                named(kind, &name),
-                shown(project, &path)
-            )
-            .into()],
+            stderr: vec![Warning {
+                text: format!(
+                    "warning: {into} already has a {} at {} that Mindflayer did not put there, so it was left alone",
+                    named(kind, &name),
+                    shown(project, &path)
+                ),
+                code: refused,
+            }],
             ok: false,
         },
         // And so is a copy somebody changed since, until forced.
         Installed::Edited { name, paths } => Outcome {
             stdout: String::new(),
-            stderr: vec![format!(
-                "warning: {} in {into} was changed since it was installed, at {}, so it was left alone; --force writes over it",
-                named(kind, &name),
-                listed(project, &paths)
-            )
-            .into()],
+            stderr: vec![Warning {
+                text: format!(
+                    "warning: {} in {into} was changed since it was installed, at {}, so it was left alone; --force writes over it",
+                    named(kind, &name),
+                    listed(project, &paths)
+                ),
+                code: refused,
+            }],
             ok: false,
         },
     };
@@ -565,6 +572,7 @@ fn uninstall_said(
 
     let from = project.name();
     let (kind, taken) = done.map_err(CliError::from)?;
+    let refused = taken.refused().map(|refused| refused.code());
     match taken {
         Removed::Removed {
             name,
@@ -589,22 +597,26 @@ fn uninstall_said(
         }
         Removed::Foreign { name, path } => Ok(Outcome {
             stdout: String::new(),
-            stderr: vec![format!(
-                "warning: {} at {} in {from} was not installed by Mindflayer, so it was left alone",
-                named(kind, &name),
-                shown(project, &path)
-            )
-            .into()],
+            stderr: vec![Warning {
+                text: format!(
+                    "warning: {} at {} in {from} was not installed by Mindflayer, so it was left alone",
+                    named(kind, &name),
+                    shown(project, &path)
+                ),
+                code: refused,
+            }],
             ok: false,
         }),
         Removed::Edited { name, paths } => Ok(Outcome {
             stdout: String::new(),
-            stderr: vec![format!(
-                "warning: {} in {from} was changed since it was installed, at {}, so it was left alone; --force takes it out",
-                named(kind, &name),
-                listed(project, &paths)
-            )
-            .into()],
+            stderr: vec![Warning {
+                text: format!(
+                    "warning: {} in {from} was changed since it was installed, at {}, so it was left alone; --force takes it out",
+                    named(kind, &name),
+                    listed(project, &paths)
+                ),
+                code: refused,
+            }],
             ok: false,
         }),
         // Taking out something that is not there is a typo far more often

@@ -87,6 +87,11 @@ updated commit-style in beta, from workspace
           .claude/skills/commit-style, so it was left alone; --force writes over it"
         ]
     );
+    assert_eq!(
+        updated.stderr[0].code,
+        Some("edited"),
+        "left alone as an install not forced is, and said by its code"
+    );
     assert!(!updated.ok);
     let offer = fs::read(offered(dir.path())).unwrap();
     for project in ["alpha", "beta"] {

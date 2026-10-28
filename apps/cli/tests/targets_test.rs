@@ -182,10 +182,12 @@ fn somebodys_skill_at_a_new_target_is_left_and_warned_about() {
 
     let done = mind(&root, &["targets", "set", "skills", ".skills", "--yes"]).unwrap();
 
+    // Said by the code an install refused over somebody's copy is said by.
     assert!(done.stderr.iter().any(|line| {
         *line
-        == "warning: collapse already has a deploy at .skills/deploy that Mindflayer did not put \
-            there, so it was left alone, and deploy was not copied there"
+            == "warning: collapse already has a deploy at .skills/deploy that Mindflayer did not \
+                put there, so it was left alone, and deploy was not copied there"
+            && line.code == Some("foreign")
     }));
     assert!(!done.ok);
     assert_eq!(

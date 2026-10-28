@@ -7,7 +7,7 @@
 use std::fmt::Write as _;
 use std::path::{Path, PathBuf};
 
-use mindflayer_core::install::{Installation, Installed};
+use mindflayer_core::install::{Installation, Installed, Refused};
 use mindflayer_core::update::{self, Plan, ProjectPlan, Step, Update};
 use mindflayer_core::{paths, AgentHomes, Excluded, FlayerWorkspace, MindProject, Reference};
 
@@ -148,17 +148,19 @@ fn project_laid_out(outcome: &mut Outcome, project: &ProjectPlan, done: bool) {
     for update in &project.installations {
         match &update.step {
             Step::Keep => {}
+            // Left as an install not forced leaves it, and said by the same
+            // code.
             Step::Leave(paths) => {
-                outcome.stderr.push(
+                outcome.stderr.push(Warning::coded(
+                    Refused::Edited.code(),
                     format!(
                         "warning: {} in {into} was changed since it was installed, at {}, so it \
                          {} left alone; --force writes over it",
                         named(update.kind, &update.name),
                         listed_at(&project.root, paths),
                         if done { "was" } else { "would be" }
-                    )
-                    .into(),
-                );
+                    ),
+                ));
                 outcome.ok = false;
             }
             Step::Orphaned => outcome.stderr.push(
@@ -301,6 +303,10 @@ fn installed(
     installation: &Installation,
 ) {
     let what = named(update.kind, &update.name);
+    let refused = installation
+        .installed
+        .refused()
+        .map(|refused| refused.code());
     match &installation.installed {
         Installed::Added { .. } | Installed::Updated { .. } => {
             outcome.stdout.push_str(&line(root, into, update, true));
@@ -310,25 +316,25 @@ fn installed(
         }
         // Looked at again under the lock, and somebody's after all.
         Installed::Foreign { path, .. } => {
-            outcome.stderr.push(
-                format!(
+            outcome.stderr.push(Warning {
+                text: format!(
                     "warning: {into} already has a {what} at {} that Mindflayer did not put \
                      there, so it was left alone",
                     at(root, path)
-                )
-                .into(),
-            );
+                ),
+                code: refused,
+            });
             outcome.ok = false;
         }
         Installed::Edited { paths, .. } => {
-            outcome.stderr.push(
-                format!(
+            outcome.stderr.push(Warning {
+                text: format!(
                     "warning: {what} in {into} was changed since it was installed, at {}, so it \
                      was left alone; --force writes over it",
                     listed_at(root, paths)
-                )
-                .into(),
-            );
+                ),
+                code: refused,
+            });
             outcome.ok = false;
         }
     }
