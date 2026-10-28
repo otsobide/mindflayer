@@ -2642,7 +2642,18 @@ and then what it said, with a non-zero exit when any did not go through. So
 the report shows exactly what ran, and a session with the screen in it can be
 run again without it. Every line is run whatever came of the ones before
 (`Task::chained`), since each is boxes marked one by one, where a task's
-lines otherwise stop at the first that fails.
+lines otherwise stop at the first that fails. Inside a line, a project
+refused is said as its own and the others' boxes are carried out, as the
+command does for several `-p`; but a `-p` that picks nothing by the time
+the line runs, a project unlinked from another terminal since the screen
+opened or one whose marker no longer reads, refuses its whole line, before
+anything is done for the other projects on it, as it does typed ([one
+artifact into many projects](#one-artifact-into-many-projects)). The
+screen's picture of the workspace has gone stale under it, and every line
+naming that project says so. A line a project and an artifact would have
+kept the others going, and is rejected: one artifact's ticks are one line,
+which is what the transcript is read for, and a workspace changed under
+the screen is no reason to change the rest without asking again.
 
 - **`--from` on every install line**, though a name offered from one place
   needs none: the box is one offer, so its line installs that one or nothing
