@@ -1391,8 +1391,8 @@ it is a route; moved without, nothing in the entry can follow it. What does
 move with it is the `id` its settings hold ([D-09](#d-09-project-settings-live-in-the-project)),
 128 random bits, so that only a copy shares it. So the ledger keeps the id it
 last saw at each route ([schema 5](#why-the-ledger-is-sqlite)), and a
-project found somewhere else holding an id last seen at an entry that opens
-no project any more is that entry's project, moved. `flayer scan` says so
+project found somewhere else holding an id last seen at an entry where no
+project is any more is that entry's project, moved. `flayer scan` says so
 (`moved: <old> -> <new>`, [scanning](#scanning)), and `flayer relink <old>
 <new>` (`relink::relink`) follows it.
 
@@ -1427,7 +1427,9 @@ refuses, with nothing written:
   is another project, and one holding the id the ledger last saw at another
   entry, which is where it moved from, if anywhere;
 - an entry that still opens a project, which has not moved: with the same id,
-  a copy;
+  a copy; and one whose marker is there and would not open (a typo, a newer
+  version), which still holds its project, whose id nothing read, so a copy
+  of it would pass for it moved (`MindProject::is_vacant` tells the two);
 - another linked project holding the id, a copy too;
 - a project a `mind.toml` marks, which has no id (moves of those are found
   by nobody, by design);
@@ -5231,11 +5233,14 @@ not open have none, and the last is listed all the same, with a failure
 beside it, since its marker still says it is a project.
 
 A project found and not linked that holds the id the ledger last saw at an
-entry that opens no project any more is that entry's, moved, and carries the
+entry where no project is any more is that entry's, moved, and carries the
 entry (`moved`), spelled as `route` is, so the line it is listed with,
-`moved: <old> -> <new>`, is the `flayer relink` to type from there. Only a
-stale entry: one that opens holding another id holds another project, which
-the ledger follows the next time it is written. The ledger is read only when
+`moved: <old> -> <new>`, is the `flayer relink` to type from there. Only an
+entry nothing marks (`MindProject::is_vacant`), not every stale one: one
+whose marker is there and would not open still holds its project, whose id
+nothing read, so a copy of it would pass for it moved; and one that opens
+holding another id holds another project, which the ledger follows the next
+time it is written. The ledger is read only when
 something found could match, as a read ([a read leaves the ledger as it
 finds it](#a-read-leaves-the-ledger-as-it-finds-it)), and one that cannot be
 read is a failure beside what was found, listed with no move. An id two

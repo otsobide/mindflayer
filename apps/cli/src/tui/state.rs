@@ -266,7 +266,7 @@ pub struct Unlinked {
     /// `mind init` before it can be linked.
     pub mind: bool,
     /// The entry it moved from, as the scan spelled it, when it holds the id
-    /// the workspace last saw at an entry that opens no project any more.
+    /// the workspace last saw at an entry where no project is any more.
     pub moved: Option<String>,
 }
 

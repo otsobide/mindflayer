@@ -1238,10 +1238,11 @@ project the scan found, does the same.
 
 `flayer relink` refuses, with nothing changed: a directory that holds another
 id than the one the workspace last saw at the entry, which is some other
-project; an entry that still holds a project, which has not moved; a project
-a `mind.toml` marks, which has no id to be found by ([`mind
-migrate`](#a-project-made-before-settings) gives it one); and records from
-before ids were kept, which nothing says were that project's. A workspace
+project; an entry that still holds a project, even one whose marker would not
+open, which has not moved; a project a `mind.toml` marks, which has no id to
+be found by ([`mind migrate`](#a-project-made-before-settings) gives it one);
+and records from before ids were kept, which nothing says were that
+project's. A workspace
 learns each linked project's id when its ledger is made or brought up to
 this version, and again every time it writes, so a project moved before
 then is found by nobody.

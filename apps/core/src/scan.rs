@@ -89,10 +89,11 @@ pub struct Found {
     /// Whether the workspace links it already.
     pub linked: bool,
     /// The entry it moved from, when it is not linked and holds the id the
-    /// workspace's ledger last saw at an entry that opens no project any
-    /// more: spelled as `route` is, so `flayer relink <moved> <route>` run
-    /// there follows it. None otherwise, and for an id another directory
-    /// holds too, which is a copy rather than a move.
+    /// workspace's ledger last saw at an entry where no project is any more
+    /// ([`MindProject::is_vacant`]): spelled as `route` is, so `flayer
+    /// relink <moved> <route>` run there follows it. None otherwise, and for
+    /// an id another directory holds too, which is a copy rather than a
+    /// move.
     pub moved: Option<String>,
 }
 
@@ -233,10 +234,13 @@ pub fn scan(workspace: &FlayerWorkspace, request: &Request) -> Scan {
 ///
 /// A move is told by the ledger, which keeps the id it last saw at each
 /// route ([`crate::ledger::Ledger::known_projects`]): a project found and not
-/// linked, holding an id last seen at an entry that opens no project, is
-/// that entry's project. Only an entry that does not open, as `flayer
-/// status` calls one stale: one that opens holding another id holds another
-/// project, which the ledger follows the next time it is written
+/// linked, holding an id last seen at an entry where no project is any more,
+/// is that entry's project. Only an entry nothing marks
+/// ([`MindProject::is_vacant`]), not every one `flayer status` calls stale:
+/// one whose marker is there and would not open still holds its project,
+/// whose id nothing read, so a copy of it would pass for it moved; and one
+/// that opens holding another id holds another project, which the ledger
+/// follows the next time it is written
 /// ([`FlayerWorkspace::ledger_to_write`]). The ledger is read only when
 /// there is something to match, and one that cannot be read is a failure
 /// beside what was found, which is listed with no move.
@@ -264,7 +268,7 @@ fn follow(workspace: &FlayerWorkspace, from: &Path, scan: &mut Scan) {
 
     let stale: Vec<(String, &Path)> = members
         .iter()
-        .filter(|member| member.project.is_err())
+        .filter(|member| member.project.is_err() && MindProject::is_vacant(&member.root))
         .map(|member| {
             (
                 install::entry_for_root(workspace, &member.root),

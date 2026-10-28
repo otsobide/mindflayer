@@ -773,6 +773,32 @@ impl MindProject {
         .any(|file| mind.join(file.name()).is_file())
     }
 
+    /// Whether nothing at `root` says a project is there: each marker file
+    /// looked for and found missing, as where a project moved from is left.
+    ///
+    /// Not merely the opposite of [`is_marked`](Self::is_marked), which a
+    /// marker that cannot be looked at, in a `.mind` nobody may read, fails
+    /// too. A directory still holding a marker, or one that may, holds its
+    /// project, even when the marker would not open (a typo, or a newer
+    /// version): that project's id is what nothing read, so a copy of it
+    /// made with its `.mind` would pass for it moved ([`crate::relink`]).
+    pub fn is_vacant(root: &Path) -> bool {
+        let mind = root.join(MIND_DIR);
+        [
+            MarkerFile::SettingsToml,
+            MarkerFile::SettingsJson,
+            MarkerFile::MindToml,
+        ]
+        .into_iter()
+        .all(|file| match fs::symlink_metadata(mind.join(file.name())) {
+            Ok(_) => false,
+            Err(error) => matches!(
+                error.kind(),
+                io::ErrorKind::NotFound | io::ErrorKind::NotADirectory
+            ),
+        })
+    }
+
     /// Which file the project is read from.
     pub fn marker_file(&self) -> MarkerFile {
         match &self.config {
@@ -1433,6 +1459,12 @@ impl FlayerWorkspace {
     /// id two linked directories hold: a project copied with its `.mind`,
     /// which a report says ([`crate::status`]) until one of them is given an
     /// id of its own, and which the ledger is not to take for either.
+    ///
+    /// An entry whose marker is there and would not open is stale here too,
+    /// though it is no place a project moved from
+    /// ([`MindProject::is_vacant`]): the ledger keeps the id it last saw
+    /// there, rather than handing it to a linked copy of a project nothing
+    /// could read.
     pub(crate) fn known(&self) -> Known {
         let mut held: Vec<(ProjectId, String, PathBuf)> = Vec::new();
         let mut stale = Vec::new();
@@ -2075,7 +2107,8 @@ pub(crate) struct Known {
     /// Each id one linked directory holds, by its route from the workspace,
     /// in the order the marker lists them.
     pub ids: Vec<(ProjectId, String)>,
-    /// The route of each entry that opens no project.
+    /// The route of each entry that opens no project, whether nothing is
+    /// there any more or its marker would not open.
     pub stale: Vec<String>,
 }
 

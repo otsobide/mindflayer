@@ -61,7 +61,8 @@ pub struct Relinked {
 ///   links already, which would leave two entries for one project;
 /// - `old` still holds a project, which has not moved: with `new`'s id, a
 ///   copy made with its `.mind` ([`Duplicate`]), and with any other, or
-///   none, another project;
+///   none, another project. So does one whose marker is there and would not
+///   open ([`MindProject::is_vacant`]), whose id nobody can compare;
 /// - another project the workspace links holds `new`'s id: a copy too,
 ///   refused until one of the two is given an id of its own ([`new_id`]). A
 ///   copy nobody linked is beyond what this reads; `flayer scan` names it,
@@ -111,17 +112,29 @@ pub fn relink(
             entry: entry.to_path_buf(),
         });
     }
-    if let Ok(there) = MindProject::open(&old) {
-        return Err(match there.settings() {
-            Some(held) if held.id == settings.id => RelinkError::Copied(Duplicate {
-                id: settings.id,
-                paths: vec![old, new],
-            }),
-            _ => RelinkError::Present {
+    match MindProject::open(&old) {
+        Ok(there) => {
+            return Err(match there.settings() {
+                Some(held) if held.id == settings.id => RelinkError::Copied(Duplicate {
+                    id: settings.id,
+                    paths: vec![old, new],
+                }),
+                _ => RelinkError::Present {
+                    path: old,
+                    name: there.name().to_owned(),
+                },
+            })
+        }
+        // A marker there that would not open still marks its project, whose
+        // id nothing read: `new` holding the one the ledger last saw at `old`
+        // says nothing, since a copy of that project holds it too.
+        Err(source) if !MindProject::is_vacant(&old) => {
+            return Err(RelinkError::Unread {
                 path: old,
-                name: there.name().to_owned(),
-            },
-        });
+                source: Box::new(source),
+            })
+        }
+        Err(_) => {}
     }
     // Another project the workspace links holding the id is a copy too, and
     // which of the two the records were made for is nobody's to guess.
@@ -404,6 +417,16 @@ pub enum RelinkError {
          other as a project of its own"
     )]
     Present { path: PathBuf, name: String },
+    /// The entry still holds a project's marker, which would not open, so
+    /// nothing says which project it is, or that it moved.
+    #[error(
+        "{path}: still holds a project, so it has not moved, though its marker would not open: \
+         {source}"
+    )]
+    Unread {
+        path: PathBuf,
+        source: Box<WorkspaceError>,
+    },
     /// The directory holds another project than the one the entry was.
     #[error(
         "{new}: holds project {id}, and {old} was project {was}, so it is not where that one \

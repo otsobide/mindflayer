@@ -521,9 +521,10 @@ These are easy to break from a single file without noticing.
   keeps the id it last saw at each route (`projects`), learned from the
   projects themselves every time it is opened to write (`Ledger::knew`),
   and a stale entry keeps its id until `relink::relink` moves it. A relink
-  hands records only to a directory holding that id, and two directories
-  holding one id are a copy (`relink::Duplicate`), a collected failure and
-  never a move.
+  hands records only to a directory holding that id, from an entry nothing
+  marks any more (`MindProject::is_vacant`: one whose marker would not open
+  still holds its project), and two directories holding one id are a copy
+  (`relink::Duplicate`), a collected failure and never a move.
 - **Nothing is staged where agents look.** An install builds its copies in a
   `copy::Stage` under the project's `.mind/tmp` and renames them into place.
   A temporary beside an installed copy is a skill an agent may load, so never

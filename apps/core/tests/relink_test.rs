@@ -397,6 +397,56 @@ fn an_entry_still_holding_a_project_has_not_moved() {
 }
 
 #[test]
+fn an_entry_whose_marker_would_not_open_has_not_moved_and_a_copy_is_never_its_move() {
+    let (dir, mut workspace, project) = installed(Share::Local);
+    let id = id_of(project.root());
+    let copy = dir.path().join("Projects/copy");
+    copied(project.root(), &copy);
+    // Its id is what nothing can read now, so nothing tells the copy apart.
+    let settings = fs::read_to_string(project.marker_path()).unwrap();
+    let newer: Vec<&str> = settings
+        .lines()
+        .map(|line| {
+            if line.starts_with("version") {
+                "version = 99"
+            } else {
+                line
+            }
+        })
+        .collect();
+    fs::write(project.marker_path(), newer.join("\n")).unwrap();
+    let before = marker(&workspace);
+    let ledger = fs::read(workspace.ledger_path()).unwrap();
+    let excluded = fs::read(exclude_file(project.root())).unwrap();
+
+    let scan = scanned(&workspace);
+    let found = scan.found.iter().find(|found| found.path == copy).unwrap();
+    assert_eq!(found.moved, None);
+
+    let refused = relink::relink(&mut workspace, project.root(), &copy).unwrap_err();
+    assert!(
+        matches!(&refused, RelinkError::Unread { path, .. } if path == project.root()),
+        "{refused}"
+    );
+    assert!(
+        refused
+            .to_string()
+            .contains("written by a newer Mindflayer"),
+        "{refused}"
+    );
+    assert_eq!(marker(&workspace), before);
+    assert_eq!(fs::read(workspace.ledger_path()).unwrap(), ledger);
+    assert_eq!(fs::read(exclude_file(project.root())).unwrap(), excluded);
+    assert_eq!(
+        exclude::listed(project.root(), id.as_str())
+            .unwrap()
+            .unwrap()
+            .lines,
+        ["/.agents/skills/deploy/", "/.claude/skills/deploy/"]
+    );
+}
+
+#[test]
 fn a_linked_copy_refuses_the_relink_until_it_is_given_an_id_of_its_own() {
     let (dir, mut workspace, project) = installed(Share::Local);
     let copy = dir.path().join("Projects/copy");
