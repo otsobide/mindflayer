@@ -3483,6 +3483,21 @@ watch nobody follows). The TUI has no code path of its own for linking, adding
 or gathering, and it cannot grow one, because there is nowhere in it to put
 one.
 
+That is what turns "every feature has a command and a place in the TUI" from a
+promise into a property. A feature is written once, as a command, and the TUI
+gains it by producing that command's words. A test parses every task's lines
+(free text shaped to break a naive command line included), so a task that could
+not be typed cannot be written.
+
+Two things follow, and both are deliberate:
+
+- **A form shows what it is about to run, as it is typed**, as the command
+  line. The TUI teaches the CLI rather than standing in front of it.
+- **Closing the TUI prints a transcript**: every command that changed
+  something, with what each said. The session can be read afterwards and
+  repeated in a script. Commands that only read (show, validate, the shelf)
+  are left out, because they changed nothing.
+
 `Task` is not the TUI's own, though the TUI is where it was born: it lives in
 `task.rs`, shared by every front end that runs commands, the TUI now and the
 panel's backend next ([D-18](#d-18-the-panel-writes-by-running-commands)).
@@ -3499,12 +3514,6 @@ task does not have is refused rather than passed over: a task is a write, and
 one sent with a field misspelled would run without it. A name, once a front
 end sends it, is a contract as a report's is, so a test pins every one, and
 reads every task back from its JSON as it was.
-
-That is what turns "every feature has a command and a place in the TUI" from a
-promise into a property. A feature is written once, as a command, and the TUI
-gains it by producing that command's words. A test parses every task's lines
-(free text shaped to break a naive command line included), so a task that could
-not be typed cannot be written.
 
 **No value a task holds is read as an option, or as a command.** A task the
 panel sends holds whatever a browser put in it, so a description that reads
@@ -3523,15 +3532,6 @@ options, holding the value as given. A property-test crate was the
 alternative, and one loop over every variant, with no new dependency, is
 all this asks of one. Shown, a line is quoted for a shell (`task::shell`), so
 one pasted from the transcript runs as one command of exactly its words.
-
-Two things follow, and both are deliberate:
-
-- **A form shows what it is about to run, as it is typed**, as the command
-  line. The TUI teaches the CLI rather than standing in front of it.
-- **Closing the TUI prints a transcript**: every command that changed
-  something, with what each said. The session can be read afterwards and
-  repeated in a script. Commands that only read (show, validate, the shelf)
-  are left out, because they changed nothing.
 
 A `-C` or a `-W` in those words is relative to the workspace root, which is
 how someone reading the transcript takes it, so it is resolved against the
