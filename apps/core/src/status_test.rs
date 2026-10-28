@@ -95,3 +95,45 @@ fn a_report_serializes_every_field_by_the_name_it_is_held_to() {
         )
     );
 }
+
+/// Where an artifact is held, beside the report, is every copy discovery
+/// found and every place the record matched to it names, each once and in
+/// path order: a copy gone since is still where it went.
+#[test]
+fn where_an_artifact_is_held_is_every_copy_found_and_every_place_recorded() {
+    let target = |path: &str| Target {
+        agent: None,
+        path: path.to_owned(),
+        content_hash: None,
+    };
+    let record = InstallRecord {
+        kind: Kind::Skill,
+        name: String::from("deploy"),
+        source_id: None,
+        origin: Some(String::from("workspace")),
+        content_hash: None,
+        targets: vec![
+            target(".claude/skills/deploy"),
+            target(".agents/skills/deploy"),
+        ],
+    };
+    let found = || {
+        vec![
+            String::from("skills/deploy"),
+            String::from(".agents/skills/deploy"),
+        ]
+    };
+
+    assert_eq!(
+        held_at(found(), Some(&record)),
+        [
+            ".agents/skills/deploy",
+            ".claude/skills/deploy",
+            "skills/deploy"
+        ]
+    );
+    assert_eq!(
+        held_at(found(), None),
+        [".agents/skills/deploy", "skills/deploy"]
+    );
+}
