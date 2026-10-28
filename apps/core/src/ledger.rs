@@ -27,6 +27,7 @@ use rusqlite::{Connection, OpenFlags, OptionalExtension, Transaction, Transactio
 use thiserror::Error;
 
 use crate::kind::Kind;
+use crate::settings::ProjectId;
 use crate::url::{carries_credentials, redacted};
 
 /// The schema version this build writes.
@@ -34,7 +35,7 @@ use crate::url::{carries_credentials, redacted};
 /// Refused if the file on disk is newer, for the same reason a marker file is:
 /// an old binary silently misreading a newer database is the failure that has
 /// no error message.
-pub const SCHEMA_VERSION: u32 = 4;
+pub const SCHEMA_VERSION: u32 = 5;
 
 /// The file name, under `.mindflayer/`.
 pub const LEDGER_FILE: &str = "mindflayer.db";
@@ -114,6 +115,8 @@ pub enum Action {
     Install,
     /// Taking one back out of a project.
     Uninstall,
+    /// Following a project the workspace links to where it moved.
+    Relink,
 }
 
 impl Action {
@@ -122,6 +125,7 @@ impl Action {
             Action::Gather => "gather",
             Action::Install => "install",
             Action::Uninstall => "uninstall",
+            Action::Relink => "relink",
         }
     }
 }
@@ -241,6 +245,18 @@ pub struct Ledger {
 impl Ledger {
     /// Open the ledger at `path`, creating and migrating it if needed.
     pub fn open(path: impl Into<PathBuf>) -> Result<Self, LedgerError> {
+        Self::open_knowing(path, Vec::new)
+    }
+
+    /// [`open`](Self::open), with `known` asked, only when a step to schema 5
+    /// is taken, for the id each project it may hold records of holds and
+    /// the route the ledger names it by: what a workspace's linked projects
+    /// say ([`crate::workspace::FlayerWorkspace::ledger`]), which no SQL in
+    /// the file can know.
+    pub fn open_knowing(
+        path: impl Into<PathBuf>,
+        known: impl FnOnce() -> Vec<(ProjectId, String)>,
+    ) -> Result<Self, LedgerError> {
         let path = path.into();
         if let Some(parent) = path.parent() {
             fs::create_dir_all(parent).map_err(|source| LedgerError::Create {
@@ -264,7 +280,7 @@ impl Ledger {
                 source,
             })?;
         let ledger = Self { connection, path };
-        ledger.migrate()?;
+        ledger.migrate(known)?;
         // And write-ahead logging, so that readers and a writer do not wait
         // for each other at all: a reader goes on reading the ledger as the
         // last write left it while the next is made. It needs every process
@@ -297,6 +313,15 @@ impl Ledger {
     /// rather than untouched: the step is upkeep of Mindflayer's own file, not
     /// a change anybody asked for, and the one write a read may make.
     pub fn open_existing(path: impl Into<PathBuf>) -> Result<Option<Self>, LedgerError> {
+        Self::open_existing_knowing(path, Vec::new)
+    }
+
+    /// [`open_existing`](Self::open_existing), with `known` asked as
+    /// [`open_knowing`](Self::open_knowing) asks it.
+    pub fn open_existing_knowing(
+        path: impl Into<PathBuf>,
+        known: impl FnOnce() -> Vec<(ProjectId, String)>,
+    ) -> Result<Option<Self>, LedgerError> {
         let path = path.into();
         if !path.is_file() {
             return Ok(None);
@@ -321,7 +346,7 @@ impl Ledger {
                 source,
             })?;
         let ledger = Self { connection, path };
-        match ledger.migrate() {
+        match ledger.migrate(known) {
             Ok(()) => Ok(Some(ledger)),
             Err(error) if cannot_make_the_log(&ledger.path, &error) => {
                 Self::open_immutable(&ledger.path).map(Some).ok_or(error)
@@ -357,7 +382,7 @@ impl Ledger {
             connection,
             path: path.to_path_buf(),
         };
-        ledger.migrate().ok()?;
+        ledger.migrate(Vec::new).ok()?;
         Some(ledger)
     }
 
@@ -371,7 +396,7 @@ impl Ledger {
             connection,
             path: PathBuf::from(":memory:"),
         };
-        ledger.migrate()?;
+        ledger.migrate(Vec::new)?;
         Ok(ledger)
     }
 
@@ -389,7 +414,11 @@ impl Ledger {
     /// A database that already holds something is [backed up](Self::back_up)
     /// first, whichever step it is about to take. A step to come is one more
     /// block below, and the copy is taken for it without its asking.
-    fn migrate(&self) -> Result<(), LedgerError> {
+    ///
+    /// `known` is asked only by the step to schema 5, for each project's id
+    /// and route ([`open_knowing`](Self::open_knowing)), and not at all by a
+    /// ledger already there, so opening a current one reads no project.
+    fn migrate(&self, known: impl FnOnce() -> Vec<(ProjectId, String)>) -> Result<(), LedgerError> {
         self.connection
             .execute_batch("PRAGMA foreign_keys = ON;")
             .map_err(|source| self.failed("enabling foreign keys", source))?;
@@ -454,6 +483,31 @@ impl Ledger {
             transaction.execute_batch(SCHEMA_V4).map_err(|source| {
                 self.failed("giving each copy a hash and noting the files made", source)
             })?;
+        }
+        if found < 5 {
+            let failed = |source| self.failed("naming each project by its id", source);
+            transaction.execute_batch(SCHEMA_V5).map_err(failed)?;
+            // What no SQL in the file can know: which id the project at a
+            // route holds. Each is taken once, the first for an id or a
+            // route two of them claim, which the caller leaves out anyway,
+            // since two projects holding one id are a copy to tell apart,
+            // not a record to fill in.
+            for (id, route) in known() {
+                let taken = transaction
+                    .execute(
+                        "INSERT OR IGNORE INTO projects (id, last_route) VALUES (?1, ?2)",
+                        rusqlite::params![id.as_str(), route],
+                    )
+                    .map_err(failed)?;
+                if taken > 0 {
+                    transaction
+                        .execute(
+                            "UPDATE installations SET project_id = ?1 WHERE project = ?2",
+                            rusqlite::params![id.as_str(), route],
+                        )
+                        .map_err(failed)?;
+                }
+            }
         }
 
         transaction
@@ -775,13 +829,16 @@ impl Ledger {
         let id: i64 = transaction
             .query_row(
                 "INSERT INTO installations
-                     (project, kind, name, source_id, origin, content_hash, installed_at)
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
+                     (project, kind, name, source_id, origin, content_hash, installed_at,
+                      project_id)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7,
+                         (SELECT id FROM projects WHERE last_route = ?1))
                  ON CONFLICT (project, kind, name) DO UPDATE SET
                      source_id = excluded.source_id,
                      origin = excluded.origin,
                      content_hash = excluded.content_hash,
-                     installed_at = excluded.installed_at
+                     installed_at = excluded.installed_at,
+                     project_id = excluded.project_id
                  RETURNING id",
                 rusqlite::params![
                     project,
@@ -848,12 +905,15 @@ impl Ledger {
             let id: i64 = transaction
                 .query_row(
                     "INSERT INTO installations
-                         (project, kind, name, source_id, origin, content_hash, installed_at)
-                     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
+                         (project, kind, name, source_id, origin, content_hash, installed_at,
+                          project_id)
+                     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7,
+                             (SELECT id FROM projects WHERE last_route = ?1))
                      ON CONFLICT (project, kind, name) DO UPDATE SET
                          source_id = excluded.source_id,
                          origin = excluded.origin,
-                         content_hash = excluded.content_hash
+                         content_hash = excluded.content_hash,
+                         project_id = excluded.project_id
                      RETURNING id",
                     rusqlite::params![
                         project,
@@ -1120,8 +1180,10 @@ impl Ledger {
                 transaction
                     .query_row(
                         "INSERT INTO installations
-                             (project, kind, name, source_id, origin, content_hash, installed_at)
-                         SELECT project, kind, ?1, source_id, origin, content_hash, installed_at
+                             (project, kind, name, source_id, origin, content_hash, installed_at,
+                              project_id)
+                         SELECT project, kind, ?1, source_id, origin, content_hash, installed_at,
+                                project_id
                            FROM installations WHERE id = ?2
                          RETURNING id",
                         rusqlite::params![to_name, id],
@@ -1358,6 +1420,214 @@ impl Ledger {
     pub fn set_created(&self, project: &str, path: &str, created: bool) -> Result<(), LedgerError> {
         set_created_in(&self.connection, project, path, created)
             .map_err(|source| self.failed("noting which files Mindflayer made", source))
+    }
+
+    /// The id the ledger last saw the project at `route` hold, if it saw one
+    /// there: a route from the workspace, spelled as a record spells its
+    /// project.
+    ///
+    /// An id somebody edited into a form no project holds is no id, rather
+    /// than a failure: nothing can hold it, so nothing is found by it.
+    pub fn project_at(&self, route: &str) -> Result<Option<ProjectId>, LedgerError> {
+        self.connection
+            .query_row(
+                "SELECT id FROM projects WHERE last_route = ?1",
+                [route],
+                |row| row.get::<_, String>(0),
+            )
+            .optional()
+            .map(|id| id.as_deref().and_then(ProjectId::parse))
+            .map_err(|source| self.failed("reading which project a route holds", source))
+    }
+
+    /// Every id the ledger knows, with the route it last saw it at, in route
+    /// order: what a scan matches the projects it finds against.
+    pub fn known_projects(&self) -> Result<Vec<(ProjectId, String)>, LedgerError> {
+        let failed = |source| self.failed("reading the projects known by their id", source);
+        let mut statement = self
+            .connection
+            .prepare("SELECT id, last_route FROM projects ORDER BY last_route")
+            .map_err(failed)?;
+        let rows = statement
+            .query_map([], |row| {
+                Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+            })
+            .map_err(failed)?;
+        let mut known = Vec::new();
+        for row in rows {
+            let (id, route) = row.map_err(failed)?;
+            if let Some(id) = ProjectId::parse(&id) {
+                known.push((id, route));
+            }
+        }
+        Ok(known)
+    }
+
+    /// Whether anything is recorded of the project at `route`: an
+    /// installation, or a file Mindflayer made there. What a project the
+    /// ledger knows no id of has to hold nothing of for its entry to be
+    /// handed to another directory ([`Ledger::relinked`]), since nothing
+    /// says which project those records were of.
+    pub fn holds(&self, route: &str) -> Result<bool, LedgerError> {
+        self.connection
+            .query_row(
+                "SELECT EXISTS (SELECT 1 FROM installations WHERE project = ?1)
+                     OR EXISTS (SELECT 1 FROM created_files WHERE project = ?1)",
+                [route],
+                |row| row.get::<_, bool>(0),
+            )
+            .map_err(|source| self.failed("reading what is recorded of a project", source))
+    }
+
+    /// Record that each project of `seen` holds its id at its route, and
+    /// say how many of them the ledger did not know there already.
+    ///
+    /// For what a workspace's projects say now, read whenever it is opened
+    /// to write ([`crate::workspace::FlayerWorkspace::ledger_to_write`]): the
+    /// ledger follows them, so it knows each linked project by the id it
+    /// holds. An id it last saw at another route moves here, unless that
+    /// route is one of `stale`, the entries the workspace links that open
+    /// no project any more: an id seen there is what finds that entry's
+    /// project once it has moved, and only `flayer relink` takes it from
+    /// there ([`Ledger::relinked`]). Whatever id the ledger knew at the
+    /// route goes, as the project there holds another now, and the records
+    /// there are the new one's: they name copies in the directory it holds.
+    ///
+    /// One transaction, taken before anything is read, so a relink at the
+    /// same moment comes wholly before this or wholly after it.
+    pub fn knew(
+        &self,
+        seen: &[(ProjectId, String)],
+        stale: &[String],
+    ) -> Result<usize, LedgerError> {
+        let failed = |source| self.failed("recording which project each route holds", source);
+        let transaction =
+            Transaction::new_unchecked(&self.connection, TransactionBehavior::Immediate)
+                .map_err(failed)?;
+        let mut learned = 0;
+        for (id, route) in seen {
+            let at: Option<String> = transaction
+                .query_row(
+                    "SELECT last_route FROM projects WHERE id = ?1",
+                    [id.as_str()],
+                    |row| row.get(0),
+                )
+                .optional()
+                .map_err(failed)?;
+            match at {
+                Some(at) if at == *route => continue,
+                Some(at) if stale.contains(&at) => continue,
+                Some(_) => {
+                    transaction
+                        .execute("DELETE FROM projects WHERE id = ?1", [id.as_str()])
+                        .map_err(failed)?;
+                }
+                None => {}
+            }
+            transaction
+                .execute(
+                    "DELETE FROM projects WHERE last_route = ?1",
+                    [route.as_str()],
+                )
+                .map_err(failed)?;
+            transaction
+                .execute(
+                    "INSERT INTO projects (id, last_route) VALUES (?1, ?2)",
+                    rusqlite::params![id.as_str(), route],
+                )
+                .map_err(failed)?;
+            transaction
+                .execute(
+                    "UPDATE installations SET project_id = ?1 WHERE project = ?2",
+                    rusqlite::params![id.as_str(), route],
+                )
+                .map_err(failed)?;
+            learned += 1;
+        }
+        transaction.commit().map_err(failed)?;
+        Ok(learned)
+    }
+
+    /// Record that the project the ledger knew at the route `old` is at
+    /// `new` now, holding `id`: every installation and file made recorded
+    /// there moves with it, and `id` is known there. `write`, the change to
+    /// the workspace's marker that goes with it, runs inside the same
+    /// transaction, which is kept only when it succeeds.
+    ///
+    /// So the entry and the records move together or not at all: an entry
+    /// moved without them would leave them under a route no entry names,
+    /// and records moved without it would name a directory the workspace
+    /// does not link. What was recorded at `new` of some other project,
+    /// one linked there once and unlinked, goes first: it names copies in a
+    /// directory that holds `id`'s project now, and the records moving in
+    /// would collide with it, name for name.
+    ///
+    /// Which project `old` was, and whether `new` holds it, is the caller's
+    /// to have checked ([`crate::relink`]); this only moves the rows. Taken
+    /// before anything is read, as [`Ledger::knew`] is, and logged. Hands
+    /// back what `write` did and how many installations moved, or what it
+    /// failed with, nothing moved.
+    pub fn relinked<T, E>(
+        &self,
+        old: &str,
+        new: &str,
+        id: &ProjectId,
+        write: impl FnOnce() -> Result<T, E>,
+    ) -> Result<Result<(T, usize), E>, LedgerError> {
+        let failed = |source| self.failed("moving a project's records to where it is", source);
+        let transaction =
+            Transaction::new_unchecked(&self.connection, TransactionBehavior::Immediate)
+                .map_err(failed)?;
+        transaction
+            .execute(
+                "DELETE FROM installations WHERE project = ?1 AND project_id IS NOT ?2",
+                rusqlite::params![new, id.as_str()],
+            )
+            .map_err(failed)?;
+        transaction
+            .execute("DELETE FROM created_files WHERE project = ?1", [new])
+            .map_err(failed)?;
+        transaction
+            .execute(
+                "DELETE FROM projects WHERE last_route = ?1 AND id != ?2",
+                rusqlite::params![new, id.as_str()],
+            )
+            .map_err(failed)?;
+        // Known before the records name it, which they may only once it is.
+        transaction
+            .execute(
+                "INSERT INTO projects (id, last_route) VALUES (?1, ?2)
+                 ON CONFLICT (id) DO UPDATE SET last_route = excluded.last_route",
+                rusqlite::params![id.as_str(), new],
+            )
+            .map_err(failed)?;
+        let moved = transaction
+            .execute(
+                "UPDATE installations SET project = ?2, project_id = ?3 WHERE project = ?1",
+                rusqlite::params![old, new, id.as_str()],
+            )
+            .map_err(failed)?;
+        transaction
+            .execute(
+                "UPDATE created_files SET project = ?2 WHERE project = ?1",
+                rusqlite::params![old, new],
+            )
+            .map_err(failed)?;
+        insert_log(
+            &transaction,
+            Action::Relink,
+            Some(new),
+            Outcome::Ok,
+            Some(&format!("{old} to {new}")),
+        )
+        .map_err(failed)?;
+        let written = match write() {
+            Ok(written) => written,
+            // Dropped, so nothing above is kept.
+            Err(error) => return Ok(Err(error)),
+        };
+        transaction.commit().map_err(failed)?;
+        Ok(Ok((written, moved)))
     }
 
     /// The sources whose stored URL still carries credentials, which only a
@@ -2128,6 +2398,41 @@ CREATE TABLE created_files (
     created_at INTEGER NOT NULL,
     UNIQUE (project, path)
 );
+";
+
+/// The fifth schema: a project known by its id, so that one that moves is
+/// found again (#57).
+///
+/// Every record names its project by its route from the workspace, which
+/// moving the project changes: its entry goes stale, and its records name a
+/// place nothing is at. `projects` keeps the id ([`ProjectId`]) the ledger
+/// last saw at each route, one id a route and one route an id, so a project
+/// found somewhere else holding an id the ledger last saw at a stale entry
+/// is that entry's project, moved, and `flayer relink` takes its records
+/// along ([`Ledger::relinked`]). `installations.project_id` says which id
+/// each record was made for, the route's when it was written, emptied when
+/// the ledger stops knowing that id and moved with it.
+///
+/// The route stays the key, rather than giving way to the id: a project a
+/// `mind.toml` marks has no id, and keeps being found by its route as
+/// before, and so does one whose id nothing has recorded yet.
+///
+/// What a version before it held is filled in by the step, but not from
+/// the file, which kept no id: from the projects the workspace links, each
+/// opened for the id its settings hold ([`Ledger::open_knowing`]), the one
+/// fact no SQL could know. A project a `mind.toml` marks, an entry that
+/// would not open, and two projects holding one id get none, and their
+/// records keep their route alone.
+const SCHEMA_V5: &str = "
+CREATE TABLE projects (
+    id         TEXT    PRIMARY KEY,
+    last_route TEXT    NOT NULL UNIQUE
+);
+
+ALTER TABLE installations
+    ADD COLUMN project_id TEXT REFERENCES projects(id) ON UPDATE CASCADE ON DELETE SET NULL;
+
+CREATE INDEX installations_by_project_id ON installations (project_id);
 ";
 
 #[cfg(test)]
