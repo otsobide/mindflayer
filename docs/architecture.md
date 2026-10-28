@@ -3469,6 +3469,24 @@ gains it by producing that command's words. A test parses every task's lines
 (free text shaped to break a naive command line included), so a task that could
 not be typed cannot be written.
 
+**No value a task holds is read as an option, or as a command.** A task the
+panel sends holds whatever a browser put in it, so a description that reads
+`--yes` has to reach `add` as a description, not confirm anything. A line's
+own words, the command and the options the task sets, are spelled in
+`task.rs` and never taken from a field, so a value cannot name a command;
+and each value goes one of three ways. After the option that takes it,
+joined to it by `=` when it starts with a dash (`--path=-odd`); as a `-C` or
+a `-p` that starts with one, behind a `./`, which names the same directory
+and the same project by its path; or among the positionals, which go behind
+a `--` whenever one of them starts with a dash. A test holds every variant to
+it: fed values that start with a dash, the flags the grammar knows among
+them and a couple of hundred more made from a fixed seed, each line is read
+as the same line with a plain value is, the same commands and the same
+options, holding the value as given. A property-test crate was the
+alternative, and one loop over every variant, with no new dependency, is
+all this asks of one. Shown, a line is quoted for a shell (`task::shell`), so
+one pasted from the transcript runs as one command of exactly its words.
+
 Two things follow, and both are deliberate:
 
 - **A form shows what it is about to run, as it is typed**, as the command

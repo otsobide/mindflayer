@@ -8,6 +8,21 @@
 //! builds its lines one way: a second one writing its own would be a second
 //! place for a line to be spelled wrong, or for a value to be taken for a
 //! flag.
+//!
+//! **No value a task holds is read as an option, or as a command.** A task
+//! sent by a browser holds whatever the browser put in it, so a path, a name
+//! or a description that starts with a dash has to reach the command as
+//! that value: `--yes` as a description must not confirm anything. The words
+//! of the command itself are fixed here, never taken from a field, so a
+//! value cannot name another command, and each value goes one of three
+//! ways: after the option that takes it, joined to it by `=` when it starts
+//! with a dash (`option`); as a `-C` or `-p` that starts with one, behind a
+//! `./` that names the same directory (`directory`); or as a positional,
+//! behind a `--` whenever one of them starts with a dash (`words`). A test
+//! feeds every variant values that start with a dash, and finds each line
+//! read as the same line with a plain value is, holding the value as given.
+//! Shown, a line is quoted so that, pasted into a shell, it runs as one
+//! command of exactly these words ([`shell`]).
 
 use mindflayer_core::url::redacted;
 use mindflayer_core::{Agent, Kind, Share, DEFAULT_SUBDIRECTORY, QUALIFIER};
@@ -575,6 +590,10 @@ pub(crate) fn qualified(kind: Kind, name: &str) -> String {
 /// A command line's words: `head`, then the positionals, behind a `--` when
 /// one of them would otherwise be read as a flag; a description is free
 /// text, and `- the fast way` is a fine one.
+///
+/// Every positional goes through here, which is what keeps one from being
+/// read as an option: `head` holds the command's own words and options
+/// already kept apart, by [`option`] or [`directory`].
 fn words(head: &[&str], positionals: &[&str]) -> Vec<String> {
     let mut line: Vec<String> = head.iter().map(|word| (*word).to_owned()).collect();
     if positionals.iter().any(|word| word.starts_with('-')) {
@@ -584,7 +603,9 @@ fn words(head: &[&str], positionals: &[&str]) -> Vec<String> {
     line
 }
 
-/// A flag and its value, joined when the value would be read as a flag.
+/// A flag and its value, joined by `=` when the value starts with a dash,
+/// so the parser takes it as this flag's value rather than as a flag of its
+/// own.
 fn option(flag: &str, value: &str) -> Vec<String> {
     if value.starts_with('-') {
         vec![format!("{flag}={value}")]
@@ -593,7 +614,9 @@ fn option(flag: &str, value: &str) -> Vec<String> {
     }
 }
 
-/// A `-C` value, kept from being read as a flag.
+/// A `-C` or `-p` value, kept from being read as a flag: behind a `./` when
+/// it starts with a dash, which names the same directory from where the
+/// lines run, and a project by that path.
 fn directory(path: &str) -> String {
     if path.starts_with('-') {
         format!("./{path}")

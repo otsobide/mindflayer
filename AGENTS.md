@@ -469,6 +469,12 @@ These are easy to break from a single file without noticing.
   warning, never a reason to hide the rule. `mind add --template` refuses that
   same list (`artifact::rule_issues`) for the rule it is about to write.
 - **Loaded and gathered content is untrusted.**
+  - So is a task's every value, which a browser will fill in: it reaches
+    its command as that value, never as an option or a command. The task
+    module spells each line's own words, and puts a value after the option
+    that takes it (`=` when it starts with a dash), behind `./` for a `-C`
+    or `-p`, or after a `--` among positionals; a test feeds every variant
+    values that start with a dash.
   - An installed name must be one folder name for a skill
     (`install::is_folder_name`), and for a rule a route held to the name
     rules, which never climbs out (`install::is_installable_name`).
