@@ -195,7 +195,7 @@ pub(crate) fn run_with(cli: &Cli, lookup: &Lookup, watch: &Watch) -> Result<Outc
         }
         Command::Update { names, force, yes } => {
             let project = project_here(&directory)?;
-            let workspace = managing(&project, lookup)?;
+            let workspace = managing_unmade(&project, lookup)?;
             update_projects(
                 &workspace,
                 &[project],
@@ -767,6 +767,16 @@ fn workspace_for(project: &MindProject, lookup: &Lookup) -> Result<FlayerWorkspa
 /// what is installed there.
 fn managing(project: &MindProject, lookup: &Lookup) -> Result<FlayerWorkspace, CliError> {
     resolve::managing(&lookup.inputs(project.root(), Intent::Write), project)?
+        .ok_or_else(|| CliError::NoWorkspaceAbove(project.root().to_path_buf()))
+}
+
+/// [`managing`], resolved as a read: the default workspace in home is never
+/// made for the occasion. For `mind update`, which changes only what the
+/// workspace records, so one made now would link no project and refuse it
+/// all the same, having written a marker into somebody's home on the way,
+/// even for a dry run.
+fn managing_unmade(project: &MindProject, lookup: &Lookup) -> Result<FlayerWorkspace, CliError> {
+    resolve::managing(&lookup.inputs(project.root(), Intent::Read), project)?
         .ok_or_else(|| CliError::NoWorkspaceAbove(project.root().to_path_buf()))
 }
 

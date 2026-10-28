@@ -352,6 +352,26 @@ fn an_update_of_a_default_workspace_nothing_has_made_makes_nothing() {
 }
 
 #[test]
+fn mind_update_where_no_workspace_manages_the_project_makes_none_in_home() {
+    let home = TempDir::new().unwrap();
+    let here = TempDir::new().unwrap();
+    let project = here.path().join("collapse");
+    fs::create_dir(&project).unwrap();
+    new_project(&project);
+
+    for args in [&["update"][..], &["update", "--yes"]] {
+        let refused = mind_at_home(&project, home.path(), args).unwrap_err();
+
+        assert!(
+            matches!(*refused.error, CliError::NotManaged { .. }),
+            "{args:?}: {}",
+            refused.error
+        );
+    }
+    assert!(!home.path().join(FLAYER_DIR).exists());
+}
+
+#[test]
 fn a_project_with_nothing_installed_has_nothing_to_update() {
     let dir = workspace_with_three();
     let delta = dir.path().join("delta");

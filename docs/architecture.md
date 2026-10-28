@@ -1989,7 +1989,10 @@ change at`, then, for a project's rules, what the render said of the rules
 it wrote (`Rendered::warnings_of_update`), but no edit it kept, which the
 update says itself. `flayer update` takes `-p` once for each project or
 `--all`, refusing neither given, and `mind update` the project it is in,
-through the workspace that manages it, as `mind install` does.
+through the workspace that manages it, as `mind install` does. Both resolve
+it as a read, so neither makes the default workspace in home, not even with
+`--yes`: one made for the occasion links no project, and the update would be
+refused all the same.
 
 ### Built where no agent looks
 
