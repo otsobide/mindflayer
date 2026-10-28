@@ -87,10 +87,14 @@ pub enum CliError {
     Migrate(#[from] mindflayer_core::migrate::MigrateError),
     #[error("nothing moved: what the workspace records of the project decides which of its copies move, and it cannot be read: {0}")]
     MigrateUnrecorded(Box<CliError>),
-    #[error("say what to migrate: --library moves the workspace's own into its library, -p <project> moves a project it links from its mind.toml to settings, and --all-projects moves every one")]
+    #[error("say what to migrate: --library moves the workspace's own into its library, -p <project> moves a project it links from its mind.toml or settings.json to a settings.toml, and --all-projects moves every one")]
     MigrateWhat,
     #[error(transparent)]
     Reapply(#[from] mindflayer_core::ReapplyError),
+    #[error(transparent)]
+    Update(#[from] mindflayer_core::update::UpdateError),
+    #[error("say which projects to update: -p <project> for each, or --all for every one the workspace links")]
+    UpdateWhere,
     #[error("say which project's agents to change (`flayer agents -p <project> <agent>...`); the workspace's own reach agents by being installed")]
     AgentsWhere,
     #[error("say which project's targets to change (`flayer targets -p <project> set <kind> <dir>...`); the workspace's own reach agents by being installed")]
@@ -117,9 +121,9 @@ pub enum CliError {
         wanted: String,
         matches: Vec<String>,
     },
-    #[error("say which project to install into (`flayer install -p <project> <skill>`), or run `flayer install` alone for the screen")]
+    #[error("say which project to install into (`flayer install -p <project> <name>`), or run `flayer install` alone for the screen")]
     InstallWhere,
-    #[error("say which skill to install (`flayer install -p <project> <skill>`), or run `flayer install` alone for the screen")]
+    #[error("say which skill or rule to install (`flayer install -p <project> <name>`), or run `flayer install` alone for the screen")]
     InstallWhat,
     #[error("{project} has no {name} installed, so there is nothing to take out")]
     NotInstalled { name: String, project: String },

@@ -55,11 +55,16 @@ fn workspace_with_everything() -> (TempDir, PathBuf) {
 
 /// What `collapse` holds, as a report about it alone lays it out.
 const COLLAPSE: &str = "\
-commit-style  installed  claude,codex,opencode  workspace
-deploy        partial    codex,opencode         load:../team
-notes         foreign    claude,opencode
-review        authored   -
+commit-style  current   claude,codex,opencode  workspace
+deploy        missing   codex,opencode         load:../team
+notes         foreign   claude,opencode
+review        authored  -
 ";
+
+/// What a report says of `legacy`, which the `mind.toml` an older
+/// Mindflayer wrote marks.
+const LEGACY: &str =
+    "hint: legacy is marked by a mind.toml, which `mind migrate` moves to a settings.toml";
 
 #[test]
 fn status_says_what_every_project_holds_from_where_and_for_which_agents() {
@@ -70,14 +75,14 @@ fn status_says_what_every_project_holds_from_where_and_for_which_agents() {
     assert_eq!(
         outcome.stdout,
         "\
-collapse  commit-style  installed  claude,codex,opencode  workspace
-collapse  deploy        partial    codex,opencode         load:../team
-collapse  notes         foreign    claude,opencode
-collapse  review        authored   -
-legacy    commit-style  installed  -                      workspace
+collapse  commit-style  current   claude,codex,opencode  workspace
+collapse  deploy        missing   codex,opencode         load:../team
+collapse  notes         foreign   claude,opencode
+collapse  review        authored  -
+legacy    commit-style  current   -                      workspace
 "
     );
-    assert!(outcome.stderr.is_empty(), "{:?}", outcome.stderr);
+    assert_eq!(outcome.stderr, [LEGACY]);
     assert!(outcome.ok);
 }
 
@@ -101,7 +106,37 @@ fn a_project_an_older_mindflayer_made_reaches_no_agent_it_names() {
 
     let outcome = flayer(&projects, &["status", "-p", "legacy"]).unwrap();
 
-    assert_eq!(outcome.stdout, "commit-style  installed  -  workspace\n");
+    assert_eq!(outcome.stdout, "commit-style  current  -  workspace\n");
+}
+
+#[test]
+fn a_project_a_settings_json_marks_is_reported_with_a_hint_to_move_it() {
+    let dir = TempDir::new().unwrap();
+    flayer(dir.path(), &["init"]).unwrap();
+    let json = dir.path().join("json");
+    fs::create_dir(&json).unwrap();
+    json_project(&json);
+    flayer(dir.path(), &["link", "json"]).unwrap();
+    mind(&json, &["add", "skill", "review", "Review a change"]).unwrap();
+    let hint =
+        "hint: json is marked by a settings.json, which `mind migrate` moves to a settings.toml";
+
+    let across = flayer(dir.path(), &["status"]).unwrap();
+    let here = mind(&json, &["status"]).unwrap();
+    let as_json = flayer(dir.path(), &["status", "-p", "json", "--json"]).unwrap();
+
+    // Its agents say nothing of it: a settings.json names them as a
+    // settings.toml does.
+    assert_eq!(across.stdout, "review  authored  -\n");
+    assert_eq!(across.stderr, [hint]);
+    assert!(across.ok);
+    assert_eq!(here, across);
+    let (report, warnings): (Report, _) = enveloped(&as_json);
+    assert_eq!(report.projects[0].marker.as_deref(), Some("settings.json"));
+    assert_eq!(report.projects[0].agents, ["claude", "codex", "opencode"]);
+    assert!(warnings.is_empty(), "{warnings:?}");
+    assert_eq!(as_json.stderr, [hint]);
+    assert!(as_json.ok);
 }
 
 #[test]
@@ -118,20 +153,21 @@ fn a_stale_entry_is_listed_as_stale_and_the_rest_still_print() {
     assert_eq!(
         outcome.stdout,
         "\
-collapse  commit-style  installed  claude,codex,opencode  workspace
-collapse  deploy        partial    codex,opencode         load:../team
-collapse  notes         foreign    claude,opencode
-collapse  review        authored   -
-legacy    commit-style  installed  -                      workspace
+collapse  commit-style  current   claude,codex,opencode  workspace
+collapse  deploy        missing   codex,opencode         load:../team
+collapse  notes         foreign   claude,opencode
+collapse  review        authored  -
+legacy    commit-style  current   -                      workspace
 old-api                 stale
 "
     );
-    assert_eq!(outcome.stderr.len(), 1, "{:?}", outcome.stderr);
+    assert_eq!(outcome.stderr.len(), 2, "{:?}", outcome.stderr);
     assert!(
         outcome.stderr[0].starts_with("warning: ") && outcome.stderr[0].contains("old-api"),
         "{:?}",
         outcome.stderr
     );
+    assert_eq!(outcome.stderr[1], LEGACY);
     assert!(!outcome.ok);
 }
 
@@ -355,9 +391,11 @@ struct Project {
     name: Option<String>,
     entry: Option<String>,
     path: String,
+    marker: Option<String>,
     agents: Vec<String>,
     stale: Option<String>,
     unreached: Vec<Unreached>,
+    missed: Vec<Missed>,
     artifacts: Vec<Held>,
 }
 
@@ -366,6 +404,14 @@ struct Project {
 struct Unreached {
     kind: String,
     targets: Vec<String>,
+    agents: Vec<String>,
+}
+
+#[derive(Debug, Deserialize, PartialEq)]
+#[serde(deny_unknown_fields)]
+struct Missed {
+    kind: String,
+    name: String,
     agents: Vec<String>,
 }
 
@@ -422,7 +468,8 @@ fn status_as_json_holds_the_same_entries_as_the_table() {
         .collect();
     assert_eq!(words(&report), table);
     assert!(warnings.is_empty());
-    assert!(outcome.stderr.is_empty(), "{:?}", outcome.stderr);
+    // A hint, which is no warning, so on stderr beside the JSON as well.
+    assert_eq!(outcome.stderr, [LEGACY]);
     assert!(outcome.ok);
 
     let collapse = &report.projects[0];
@@ -432,9 +479,11 @@ fn status_as_json_holds_the_same_entries_as_the_table() {
         collapse.path,
         projects.join("collapse").display().to_string()
     );
+    assert_eq!(collapse.marker.as_deref(), Some("settings.toml"));
     assert_eq!(collapse.agents, ["claude", "codex", "opencode"]);
     assert_eq!(collapse.stale, None);
     assert_eq!(collapse.unreached, []);
+    assert_eq!(collapse.missed, []);
     let kinds: Vec<&str> = collapse
         .artifacts
         .iter()
@@ -442,6 +491,7 @@ fn status_as_json_holds_the_same_entries_as_the_table() {
         .collect();
     assert_eq!(kinds, ["skill"; 4]);
     let legacy = &report.projects[1];
+    assert_eq!(legacy.marker.as_deref(), Some("mind.toml"));
     assert!(legacy.agents.is_empty());
 }
 
@@ -462,13 +512,17 @@ fn a_stale_entry_in_json_says_why_in_its_data_and_its_warnings() {
     assert_eq!(stale.name, None);
     assert_eq!(stale.entry.as_deref(), Some("old-api"));
     assert!(stale.artifacts.is_empty());
+    assert_eq!(stale.marker, None);
     let reason = stale.stale.as_deref().unwrap();
     assert_eq!(warnings, [reason]);
-    assert_eq!(text.stderr, [format!("warning: {reason}")]);
+    assert_eq!(
+        text.stderr,
+        [format!("warning: {reason}"), LEGACY.to_owned()]
+    );
     // The rest are there all the same, and the exit says something was not.
     assert_eq!(report.projects.len(), 3);
     assert_eq!(report.projects[0].artifacts.len(), 4);
-    assert!(outcome.stderr.is_empty(), "{:?}", outcome.stderr);
+    assert_eq!(outcome.stderr, [LEGACY]);
     assert!(!outcome.ok);
 }
 
@@ -482,10 +536,7 @@ fn mind_status_as_json_reports_its_one_project() {
     assert_eq!(here, named);
     let (report, _): (Report, _) = enveloped(&here);
     assert_eq!(report.projects.len(), 1);
-    assert_eq!(
-        words(&report),
-        ["legacy commit-style installed - workspace"]
-    );
+    assert_eq!(words(&report), ["legacy commit-style current - workspace"]);
 }
 
 #[test]
@@ -511,11 +562,7 @@ fn installing_in(folders: &str) -> (TempDir, PathBuf) {
     fs::create_dir(&root).unwrap();
     new_project(&root);
     let path = root.join(MIND_DIR).join(SETTINGS_FILE);
-    let text = fs::read_to_string(&path).unwrap().replacen(
-        "{\n",
-        &format!("{{\n  \"targets\": {{\"skills\": [{folders}]}},\n"),
-        1,
-    );
+    let text = fs::read_to_string(&path).unwrap() + &format!("\n[targets]\nskills = [{folders}]\n");
     fs::write(&path, text).unwrap();
     flayer(dir.path(), &["link", "collapse"]).unwrap();
     flayer(dir.path(), &["add", "skill", "deploy", "Ship it"]).unwrap();
@@ -534,7 +581,7 @@ fn status_warns_of_a_kind_installed_where_none_of_the_projects_agents_reads() {
     let across = flayer(dir.path(), &["status"]).unwrap();
     let json = flayer(dir.path(), &["status", "--json"]).unwrap();
 
-    assert_eq!(here.stdout, "deploy  installed  -  workspace\n");
+    assert_eq!(here.stdout, "deploy  current  -  workspace\n");
     for outcome in [&here, &across] {
         assert_eq!(outcome.stderr, [format!("warning: {unread}")]);
         assert!(!outcome.ok);
@@ -565,7 +612,7 @@ fn status_says_a_target_no_install_may_use_and_the_one_agent_its_others_miss() {
 
     assert_eq!(
         status.stdout,
-        "deploy  installed  claude,opencode  workspace\n"
+        "deploy  current  claude,opencode  workspace\n"
     );
     assert_eq!(
         status.stderr,
@@ -583,4 +630,103 @@ fn status_says_a_target_no_install_may_use_and_the_one_agent_its_others_miss() {
         ]
     );
     assert!(!status.ok);
+}
+
+#[test]
+fn status_lists_the_rules_a_project_received_and_warns_of_one_some_agents_read_nowhere() {
+    let dir = TempDir::new().unwrap();
+    flayer(dir.path(), &["init"]).unwrap();
+    let alpha = dir.path().join("alpha");
+    fs::create_dir(&alpha).unwrap();
+    new_project(&alpha);
+    flayer(dir.path(), &["link", "alpha"]).unwrap();
+    flayer(
+        dir.path(),
+        &[
+            "add",
+            "rule",
+            "git/commits",
+            "Commit one coherent step at a time",
+        ],
+    )
+    .unwrap();
+    let scoped = own_directory_for(dir.path(), Kind::Rule).join("style/comments.md");
+    fs::create_dir_all(scoped.parent().unwrap()).unwrap();
+    fs::write(
+        &scoped,
+        "---\npaths:\n  - \"**/*.rs\"\n---\n\n# Comments say why, not what\n",
+    )
+    .unwrap();
+    flayer(dir.path(), &["install", "-p", "alpha", "git/commits"]).unwrap();
+    flayer(dir.path(), &["install", "-p", "alpha", "style/comments"]).unwrap();
+    let unseen = "codex and opencode do not read rule `style/comments` in alpha";
+
+    let here = mind(&alpha, &["status"]).unwrap();
+    let json = flayer(dir.path(), &["status", "-p", "alpha", "--json"]).unwrap();
+
+    assert_eq!(
+        here.stdout,
+        "git/commits     current  claude,codex,opencode  workspace\n\
+         style/comments  current  claude                 workspace\n"
+    );
+    assert_eq!(here.stderr, [format!("warning: {unseen}")]);
+    assert!(!here.ok);
+    let (report, warnings): (Report, _) = enveloped(&json);
+    assert_eq!(warnings, [unseen]);
+    assert_eq!(
+        report.projects[0].missed,
+        [Missed {
+            kind: String::from("rule"),
+            name: String::from("style/comments"),
+            agents: vec![String::from("codex"), String::from("opencode")],
+        }]
+    );
+    assert!(!json.ok);
+}
+
+#[cfg(unix)]
+#[test]
+fn status_says_an_installed_skill_edited_with_mind_edit_is_edited() {
+    // A project that authors its skills where Claude reads them, so the copy
+    // installed there is one `mind edit` reaches.
+    let dir = TempDir::new().unwrap();
+    let collapse = dir.path().join("collapse");
+    fs::create_dir(&collapse).unwrap();
+    gix::init(&collapse).unwrap();
+    mind(&collapse, &["init", "--skills", ".claude/skills"]).unwrap();
+    flayer(dir.path(), &["init"]).unwrap();
+    flayer(dir.path(), &["link", "collapse"]).unwrap();
+    flayer(
+        dir.path(),
+        &["add", "skill", "commit-style", "How commits are written"],
+    )
+    .unwrap();
+    flayer(dir.path(), &["install", "-p", "collapse", "commit-style"]).unwrap();
+    let before = flayer(dir.path(), &["status", "-p", "collapse"]).unwrap();
+    assert_eq!(
+        before.stdout,
+        "commit-style  current  claude,codex,opencode  workspace\n"
+    );
+
+    mind(
+        &collapse,
+        &["edit", "commit-style", "--editor", "printf 'Ours.\\n' >>"],
+    )
+    .unwrap();
+
+    let after = flayer(dir.path(), &["status", "-p", "collapse"]).unwrap();
+    assert_eq!(
+        after.stdout,
+        "commit-style  edited  claude,codex,opencode  workspace\n"
+    );
+    // Discovery says the same of the two copies, from where it reads them.
+    assert_eq!(after.stderr.len(), 1, "{:?}", after.stderr);
+    assert!(after.stderr[0]
+        .ends_with("differ, so the agents reading them do not all load the same skill"));
+    let json = flayer(dir.path(), &["status", "-p", "collapse", "--json"]).unwrap();
+    assert!(
+        json.stdout.contains("\"state\": \"edited\""),
+        "{}",
+        json.stdout
+    );
 }

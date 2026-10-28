@@ -566,9 +566,7 @@ fn init_can_be_told_where_this_project_keeps_its_skills() {
     // The kind that was not mentioned keeps its default, written down too,
     // since a kind the settings leave out has no folder at all.
     assert!(
-        written.contains(
-            "  \"directories\": {\n    \"skills\": \".claude/skills\",\n    \"rules\": \"rules\"\n  }\n"
-        ),
+        written.ends_with("\n[directories]\nskills = \".claude/skills\"\nrules = \"rules\"\n"),
         "{written}"
     );
     assert!(dir.path().join("rules").is_dir());

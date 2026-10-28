@@ -500,6 +500,15 @@ fn records(ledger: &Ledger) -> Vec<String> {
     ledger.installations("collapse", Kind::Skill).unwrap()
 }
 
+/// How every skill installed into the project stands now, by name.
+fn standings(
+    workspace: &FlayerWorkspace,
+    ledger: &Ledger,
+    project: &MindProject,
+) -> Vec<(String, Standing)> {
+    install::standings(workspace, ledger, project, Kind::Skill).unwrap()
+}
+
 /// How the workspace's own `name` stands with the project now.
 fn standing(
     workspace: &FlayerWorkspace,
@@ -598,7 +607,7 @@ fn what_a_project_authors_beside_its_agents_copies_leaves_their_record_alone() {
     assert_eq!(records(&ledger), ["deploy"]);
     assert_eq!(
         standing(&workspace, &ledger, &project, "deploy"),
-        Standing::Installed
+        Standing::Current
     );
     assert!(installed.join("SKILL.md").is_file());
 }
@@ -643,7 +652,7 @@ fn removing_the_copy_in_a_folder_the_project_authors_in_leaves_the_others_instal
     assert_eq!(excluded(&project), ["/.agents/skills/deploy/"]);
     assert_eq!(
         standing(&workspace, &ledger, &project, "deploy"),
-        Standing::Installed
+        Standing::Current
     );
 
     // What the project writes there next is its own, in git's sight, and
@@ -664,8 +673,15 @@ fn removing_the_copy_in_a_folder_the_project_authors_in_leaves_the_others_instal
     );
 
     // And the copy left can still be taken out, without the project's own.
-    let uninstalled =
-        install::uninstall(&workspace, &ledger, &project, Kind::Skill, "deploy").unwrap();
+    let uninstalled = install::uninstall(
+        &workspace,
+        &ledger,
+        &project,
+        Kind::Skill,
+        "deploy",
+        &AgentHomes::default(),
+    )
+    .unwrap();
     assert!(
         matches!(uninstalled, install::Removed::Removed { .. }),
         "{uninstalled:?}"
@@ -707,7 +723,7 @@ fn an_exclude_block_that_cannot_be_edited_is_reported_and_the_copys_record_still
 }
 
 #[test]
-fn editing_or_renaming_the_copy_in_a_folder_the_project_authors_in_keeps_the_others() {
+fn editing_or_renaming_the_copy_in_a_folder_the_project_authors_in_keeps_every_record() {
     let (dir, workspace, project, ledger) =
         installed_authoring_in(".claude/skills", Share::Shared, &["deploy", "audit"]);
 
@@ -722,20 +738,208 @@ fn editing_or_renaming_the_copy_in_a_folder_the_project_authors_in_keeps_the_oth
     )
     .unwrap();
 
-    assert_eq!(edited.copy.unwrap(), Record::Dropped);
-    assert_eq!(renamed.copy.unwrap(), Record::Dropped);
+    assert_eq!(edited.copy.unwrap(), Record::Kept);
+    assert_eq!(renamed.copy.unwrap(), Record::Moved { edited: true });
     assert_eq!(
         ledger.copies("collapse", Kind::Skill).unwrap(),
-        [".agents/skills/audit", ".agents/skills/deploy"]
+        [
+            ".agents/skills/audit",
+            ".agents/skills/deploy",
+            ".claude/skills/deploy",
+            ".claude/skills/review"
+        ]
     );
     // Nothing a shared project installs is kept out of git.
     assert!(excluded(&project).is_empty());
+    // Each change reads as an edit of what was installed; the copy nobody
+    // touched is still installed as it was.
+    assert_eq!(
+        standings(&workspace, &ledger, &project),
+        [
+            (String::from("audit"), Standing::Current),
+            (String::from("deploy"), Standing::Edited),
+            (String::from("review"), Standing::Edited),
+        ]
+    );
     assert!(dir.path().join("collapse/.agents/skills/audit").is_dir());
-    let uninstalled =
-        install::uninstall(&workspace, &ledger, &project, Kind::Skill, "audit").unwrap();
+    let uninstalled = install::uninstall(
+        &workspace,
+        &ledger,
+        &project,
+        Kind::Skill,
+        "audit",
+        &AgentHomes::default(),
+    )
+    .unwrap();
     assert!(
         matches!(uninstalled, install::Removed::Removed { .. }),
         "{uninstalled:?}"
+    );
+}
+
+#[test]
+fn a_renamed_copy_in_a_local_project_is_kept_out_of_git_where_it_went() {
+    let (_dir, workspace, project, _ledger) =
+        installed_authoring_in(".claude/skills", Share::Local, &["audit"]);
+    assert_eq!(
+        excluded(&project),
+        ["/.agents/skills/audit/", "/.claude/skills/audit/"]
+    );
+
+    let renamed = lifecycle::rename(
+        Some(&workspace),
+        &project,
+        &find(&project, "audit").unwrap(),
+        "review",
+    )
+    .unwrap();
+
+    assert_eq!(renamed.copy.unwrap(), Record::Moved { edited: true });
+    assert_eq!(
+        excluded(&project),
+        ["/.agents/skills/audit/", "/.claude/skills/review/"]
+    );
+}
+
+#[test]
+fn a_copy_renamed_onto_a_name_installed_from_elsewhere_is_its_authors() {
+    let (_dir, workspace, project, ledger) =
+        installed_authoring_in(".claude/skills", Share::Local, &["deploy", "ship"]);
+    // The project's own copy of `ship` gone by hand, the one for the other
+    // agents still installed.
+    fs::remove_dir_all(project.root().join(".claude/skills/ship")).unwrap();
+
+    let renamed = lifecycle::rename(
+        Some(&workspace),
+        &project,
+        &find(&project, "deploy").unwrap(),
+        "ship",
+    )
+    .unwrap();
+
+    // The record of the copy gone is dropped first, and `ship` is still
+    // installed in `.agents/skills`: one name, one installation, so the
+    // renamed copy cannot join it.
+    assert_eq!(renamed.stale.unwrap(), Record::Dropped);
+    assert_eq!(renamed.copy.unwrap(), Record::Dropped);
+    assert_eq!(
+        ledger.copies("collapse", Kind::Skill).unwrap(),
+        [".agents/skills/deploy", ".agents/skills/ship"]
+    );
+    assert_eq!(
+        excluded(&project),
+        ["/.agents/skills/deploy/", "/.agents/skills/ship/"]
+    );
+    assert_eq!(
+        standing(&workspace, &ledger, &project, "ship"),
+        Standing::Foreign
+    );
+}
+
+/// A workspace managing `collapse`, a project a `mind.toml` marks, with the
+/// workspace's own rule `git/no-force-push` copied into it.
+fn installed_rule() -> (TempDir, FlayerWorkspace, MindProject, Ledger) {
+    let (dir, workspace, project, ledger) = installed(&[]);
+    let own = workspace.own().directory_for(Kind::Rule).unwrap();
+    write(&own, "git/no-force-push.md", "Never force-push.\n");
+    let candidate = install::offered(
+        &workspace,
+        &ledger,
+        &project,
+        Kind::Rule,
+        "git/no-force-push",
+        None,
+    )
+    .unwrap();
+    install::install(
+        &workspace,
+        &ledger,
+        &project,
+        &candidate,
+        &AgentHomes::default(),
+    )
+    .unwrap();
+    (dir, workspace, project, ledger)
+}
+
+fn rule_standings(
+    workspace: &FlayerWorkspace,
+    ledger: &Ledger,
+    project: &MindProject,
+) -> Vec<(String, Standing)> {
+    install::standings(workspace, ledger, project, Kind::Rule).unwrap()
+}
+
+#[test]
+fn an_installed_rules_copy_edited_or_renamed_keeps_its_record() {
+    let (dir, workspace, project, ledger) = installed_rule();
+
+    let edit = lifecycle::start_edit(&find(&project, "git/no-force-push").unwrap());
+    type_into(edit.file());
+    let edited = lifecycle::finish_edit(Some(&workspace), &project, edit);
+
+    assert_eq!(edited.copy.unwrap(), Record::Kept);
+    assert_eq!(
+        rule_standings(&workspace, &ledger, &project),
+        [(String::from("git/no-force-push"), Standing::Edited)]
+    );
+
+    let renamed = lifecycle::rename(
+        Some(&workspace),
+        &project,
+        &find(&project, "git/no-force-push").unwrap(),
+        "git/never-force-push",
+    )
+    .unwrap();
+
+    // A rule's name is its route, never in its file: renamed, it holds what
+    // it held, the edit and all, and nothing offers it by its new route.
+    assert_eq!(renamed.copy.unwrap(), Record::Moved { edited: true });
+    let record = ledger
+        .installation("collapse", Kind::Rule, "git/never-force-push")
+        .unwrap()
+        .unwrap();
+    assert_eq!(record.targets[0].path, "rules/git/never-force-push.md");
+    assert_eq!(
+        rule_standings(&workspace, &ledger, &project),
+        [(String::from("git/never-force-push"), Standing::Edited)]
+    );
+    assert!(dir
+        .path()
+        .join("collapse/rules/git/never-force-push.md")
+        .is_file());
+}
+
+#[test]
+fn a_renamed_rules_copy_nobody_edited_is_orphaned_and_taken_out_unforced() {
+    let (_dir, workspace, project, ledger) = installed_rule();
+
+    let renamed = lifecycle::rename(
+        Some(&workspace),
+        &project,
+        &find(&project, "git/no-force-push").unwrap(),
+        "git/never-force-push",
+    )
+    .unwrap();
+
+    // Moved as it was, so it holds what was installed, and says so.
+    assert_eq!(renamed.copy.unwrap(), Record::Moved { edited: false });
+    assert_eq!(
+        rule_standings(&workspace, &ledger, &project),
+        [(String::from("git/never-force-push"), Standing::Orphaned)]
+    );
+    let removed = install::uninstall(
+        &workspace,
+        &ledger,
+        &project,
+        Kind::Rule,
+        "git/never-force-push",
+        &AgentHomes::default(),
+    )
+    .unwrap();
+    assert!(
+        matches!(removed, install::Removed::Removed { .. }),
+        "{removed:?}"
     );
 }
 
@@ -761,6 +965,68 @@ fn adding_where_an_installed_copy_was_deleted_by_hand_drops_its_record() {
     assert_eq!(
         standing(&workspace, &ledger, &project, "deploy"),
         Standing::Foreign
+    );
+}
+
+#[test]
+fn adding_a_rule_beside_an_installed_one_that_reaches_no_agent_keeps_its_record() {
+    // A project naming only Codex, given a rule about some files, which only
+    // Claude reads: installed with no target at all.
+    let dir = TempDir::new().unwrap();
+    let (mut workspace, _) = FlayerWorkspace::init(dir.path()).unwrap();
+    let root = dir.path().join("collapse");
+    fs::create_dir(&root).unwrap();
+    let directories = Directories::default().with(Kind::Rule, "rules");
+    let (project, _) =
+        MindProject::init_settings(&root, &[Agent::Codex], Share::Shared, &directories).unwrap();
+    workspace.link(&project).unwrap();
+    let own = workspace.own().directory_for(Kind::Rule).unwrap();
+    write(
+        &own,
+        "rust/errors.md",
+        "---\npaths:\n  - \"src/**/*.rs\"\n---\nReturn errors.\n",
+    );
+    let ledger = workspace.ledger().unwrap();
+    let candidate = install::offered(
+        &workspace,
+        &ledger,
+        &project,
+        Kind::Rule,
+        "rust/errors",
+        None,
+    )
+    .unwrap();
+    install::install(
+        &workspace,
+        &ledger,
+        &project,
+        &candidate,
+        &AgentHomes::default(),
+    )
+    .unwrap();
+    let recorded = ledger
+        .installation("collapse", Kind::Rule, "rust/errors")
+        .unwrap()
+        .unwrap();
+    assert_eq!(recorded.targets, []);
+
+    // Its own of the same route, in the folder it authors in.
+    let added = lifecycle::add(
+        Some(&workspace),
+        &project,
+        Kind::Rule,
+        "rust/errors",
+        "Our own",
+        None,
+    )
+    .unwrap();
+
+    assert_eq!(added.stale.unwrap(), Record::Untouched);
+    assert_eq!(
+        ledger
+            .installation("collapse", Kind::Rule, "rust/errors")
+            .unwrap(),
+        Some(recorded)
     );
 }
 
@@ -849,7 +1115,7 @@ fn a_record_that_cannot_be_dropped_is_reported_and_the_change_stands() {
 }
 
 #[test]
-fn an_edit_that_changes_an_installed_copy_drops_its_record() {
+fn an_edit_that_changes_an_installed_copy_keeps_its_record_and_reads_as_edited() {
     let (dir, workspace, project, ledger) = installed(&["deploy"]);
     let edit = lifecycle::start_edit(&find(&project, "deploy").unwrap());
     type_into(edit.file());
@@ -857,18 +1123,27 @@ fn an_edit_that_changes_an_installed_copy_drops_its_record() {
     let edited = lifecycle::finish_edit(Some(&workspace), &project, edit);
 
     assert!(edited.changed);
-    assert_eq!(edited.copy.unwrap(), Record::Dropped);
-    // Still there, and now it is somebody's: shown, never overwritten or
-    // deleted by unticking it.
+    assert_eq!(edited.copy.unwrap(), Record::Kept);
+    assert_eq!(records(&ledger), ["deploy"]);
+    // Still installed, and edited: shown, never overwritten or deleted by
+    // unticking it unless forced.
     assert_eq!(
         standing(&workspace, &ledger, &project, "deploy"),
-        Standing::Foreign
+        Standing::Edited
     );
     assert_eq!(
-        install::uninstall(&workspace, &ledger, &project, Kind::Skill, "deploy").unwrap(),
-        install::Removed::Foreign {
+        install::uninstall(
+            &workspace,
+            &ledger,
+            &project,
+            Kind::Skill,
+            "deploy",
+            &AgentHomes::default()
+        )
+        .unwrap(),
+        install::Removed::Edited {
             name: String::from("deploy"),
-            path: project.root().join("skills").join("deploy"),
+            paths: vec![project.root().join("skills").join("deploy")],
         }
     );
     assert!(dir.path().join("collapse/skills/deploy/SKILL.md").is_file());
@@ -887,7 +1162,7 @@ fn an_edit_that_changes_nothing_keeps_the_record() {
 }
 
 #[test]
-fn renaming_an_installed_copy_drops_its_record() {
+fn renaming_an_installed_copy_carries_its_record_and_reads_as_edited() {
     let (_dir, workspace, project, ledger) = installed(&["deploy"]);
 
     let renamed = lifecycle::rename(
@@ -898,9 +1173,20 @@ fn renaming_an_installed_copy_drops_its_record() {
     )
     .unwrap();
 
-    assert_eq!(renamed.copy.unwrap(), Record::Dropped);
+    assert_eq!(renamed.copy.unwrap(), Record::Moved { edited: true });
     assert_eq!(renamed.stale.unwrap(), Record::Untouched);
-    assert_eq!(records(&ledger), Vec::<String>::new());
+    assert_eq!(records(&ledger), ["ship"]);
+    let record = ledger
+        .installation("collapse", Kind::Skill, "ship")
+        .unwrap()
+        .unwrap();
+    assert_eq!(record.origin.as_deref(), Some("workspace"));
+    assert_eq!(record.targets[0].path, "skills/ship");
+    // Its name line is not what was installed.
+    assert_eq!(
+        standings(&workspace, &ledger, &project),
+        [(String::from("ship"), Standing::Edited)]
+    );
 }
 
 #[test]
@@ -916,18 +1202,18 @@ fn renaming_onto_a_name_an_old_record_claims_drops_that_record_too() {
     )
     .unwrap();
 
-    assert_eq!(renamed.copy.unwrap(), Record::Dropped);
     // Left in place, it would make what was just renamed look like the
-    // workspace's own `ship`, to overwrite.
+    // workspace's own `ship` as it was installed, to overwrite.
     assert_eq!(renamed.stale.unwrap(), Record::Dropped);
+    assert_eq!(renamed.copy.unwrap(), Record::Moved { edited: true });
     assert_eq!(
         standing(&workspace, &ledger, &project, "ship"),
-        Standing::Foreign
+        Standing::Edited
     );
 }
 
 #[test]
-fn removing_an_installed_copy_drops_its_record() {
+fn removing_an_installed_copy_uninstalls_it() {
     let (_dir, workspace, project, ledger) = installed(&["deploy"]);
 
     let removed = lifecycle::remove(
@@ -986,15 +1272,16 @@ fn a_change_that_drops_a_record_hands_back_what_scrubbing_the_ledger_took_out() 
 }
 
 #[test]
-fn an_edit_that_changes_nothing_leaves_the_ledger_unscrubbed() {
+fn an_edit_leaves_the_ledger_unscrubbed() {
     let (_dir, workspace, project, ledger) = installed(&["deploy"]);
     tainted(&workspace, &ledger);
     let edit = lifecycle::start_edit(&find(&project, "deploy").unwrap());
+    type_into(edit.file());
 
     let edited = lifecycle::finish_edit(Some(&workspace), &project, edit);
 
-    // Nothing changed, so there was no record to drop and no reason to write.
-    assert!(edited.scrub.is_empty(), "{:?}", edited.scrub);
+    // The record stays as it was, so there was no reason to write.
+    assert_eq!(edited.copy.unwrap(), Record::Kept);
     assert_eq!(ledger.tainted_sources().unwrap().len(), 1);
 }
 
@@ -1018,7 +1305,7 @@ fn a_rename_tells_once_of_a_clone_neither_of_its_scrubs_could_rewrite() {
     )
     .unwrap();
 
-    assert_eq!(renamed.copy.unwrap(), Record::Dropped);
+    assert_eq!(renamed.copy.unwrap(), Record::Moved { edited: true });
     // The ledger was opened once for each name, and both scrubs failed on the
     // same clone.
     let failed: Vec<&str> = renamed
@@ -1064,7 +1351,7 @@ fn changing_something_mindflayer_did_not_install_touches_no_record() {
 }
 
 #[test]
-fn a_change_drops_the_record_of_the_workspace_it_is_given_wherever_that_sits() {
+fn a_change_sees_to_the_record_of_the_workspace_it_is_given_wherever_that_sits() {
     // Beside the project rather than above it, the way the one in your home
     // is for a project anywhere else: walking up from the project never
     // reaches it.
@@ -1093,10 +1380,10 @@ fn a_change_drops_the_record_of_the_workspace_it_is_given_wherever_that_sits() {
 
     let edited = lifecycle::finish_edit(Some(&workspace), &project, edit);
 
-    assert_eq!(edited.copy.unwrap(), Record::Dropped);
+    assert_eq!(edited.copy.unwrap(), Record::Kept);
     assert_eq!(
         standing(&workspace, &ledger, &project, "deploy"),
-        Standing::Foreign
+        Standing::Edited
     );
 }
 

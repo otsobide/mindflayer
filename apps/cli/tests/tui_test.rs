@@ -484,7 +484,7 @@ fn unlinking_asks_first_and_forgets_without_deleting() {
     let dir = workspace_with_two();
     let mut app = tui_in(dir.path());
 
-    press_key(&mut app, KeyCode::Char('u'));
+    press_key(&mut app, KeyCode::Char('U'));
     assert!(tui_drawn(&app).contains("Unlink alpha?"));
     let task = press_and_run(&mut app, KeyCode::Char('y'));
 
@@ -500,6 +500,94 @@ fn unlinking_asks_first_and_forgets_without_deleting() {
 }
 
 #[test]
+fn u_updates_the_project_or_the_artifact_under_the_cursor_and_shows_what_it_said() {
+    let dir = workspace_with_own();
+    flayer(dir.path(), &["install", "-p", "alpha", "commit-style"]).unwrap();
+    flayer(dir.path(), &["install", "-p", "beta", "commit-style"]).unwrap();
+    let manifest = own_directory_for(dir.path(), Kind::Skill).join("commit-style/SKILL.md");
+    let since = fs::read_to_string(&manifest).unwrap() + "Since.\n";
+    fs::write(&manifest, &since).unwrap();
+    let mut app = tui_in(dir.path());
+
+    let project = press_and_run(&mut app, KeyCode::Char('u'));
+    let read = tui_drawn(&app);
+    press_key(&mut app, KeyCode::Esc);
+    press_key(&mut app, KeyCode::Down);
+    press_key(&mut app, KeyCode::Right);
+    // Past beta's own skill, `beta`, to what it was given.
+    press_key(&mut app, KeyCode::Down);
+    let artifact = press_and_run(&mut app, KeyCode::Char('u'));
+
+    assert_eq!(
+        project,
+        Some(Task::Update {
+            holder: Holder::Project(String::from("alpha")),
+            reference: None,
+        })
+    );
+    assert_eq!(project.unwrap().describe(), "mind -C alpha update --yes");
+    assert!(
+        read.contains("updated commit-style in alpha, from workspace"),
+        "{read}"
+    );
+    let artifact = artifact.unwrap();
+    assert_eq!(
+        artifact,
+        Task::Update {
+            holder: Holder::Project(String::from("beta")),
+            reference: Some(String::from("skill:commit-style")),
+        }
+    );
+    assert_eq!(
+        artifact.describe(),
+        "mind -C beta update --yes skill:commit-style"
+    );
+    for project in ["alpha", "beta"] {
+        for copy in copies(&dir.path().join(project), "commit-style") {
+            assert_eq!(fs::read_to_string(copy.join("SKILL.md")).unwrap(), since);
+        }
+    }
+    assert!(app
+        .transcript()
+        .contains("$ mind -C alpha update --yes\nupdated commit-style in alpha, from workspace\n"));
+}
+
+#[test]
+fn u_on_the_workspaces_own_row_updates_every_project_it_links() {
+    let dir = workspace_with_own();
+    let mut app = tui_in(dir.path());
+    press_key(&mut app, KeyCode::Up);
+
+    let Some(task) = press_and_run(&mut app, KeyCode::Char('u')) else {
+        panic!("u runs a command");
+    };
+
+    assert_eq!(task.describe(), "flayer update --all --yes");
+    assert!(
+        tui_drawn(&app).contains("nothing to update in alpha and beta"),
+        "{}",
+        tui_drawn(&app)
+    );
+}
+
+#[test]
+fn u_on_a_project_that_cannot_be_opened_says_so_and_runs_nothing() {
+    let dir = workspace_with_two();
+    fs::remove_dir_all(dir.path().join("alpha")).unwrap();
+    let mut app = tui_in(dir.path());
+
+    assert_eq!(
+        press_key(&mut app, KeyCode::Char('u')),
+        tui::state::Step::Stay
+    );
+    assert!(
+        tui_drawn(&app).contains("alpha cannot be opened, so nothing in it can be updated"),
+        "{}",
+        tui_drawn(&app)
+    );
+}
+
+#[test]
 fn a_stale_entry_is_shown_where_it_can_be_unlinked() {
     let dir = workspace_with_two();
     fs::remove_dir_all(dir.path().join("alpha")).unwrap();
@@ -509,7 +597,7 @@ fn a_stale_entry_is_shown_where_it_can_be_unlinked() {
     assert!(drawn.contains("! alpha"), "{drawn}");
     assert!(drawn.contains("cannot be opened"), "{drawn}");
 
-    press_key(&mut app, KeyCode::Char('u'));
+    press_key(&mut app, KeyCode::Char('U'));
     press_and_run(&mut app, KeyCode::Char('y'));
 
     assert!(!registry(dir.path()).contains("\"alpha\""));
@@ -607,10 +695,10 @@ fn a_projects_rows_say_how_each_artifact_stands_and_which_agents_read_it() {
     // What `flayer status -p collapse` says, a row each: the state, then a
     // badge in each agent's place where that agent reads it.
     for row in [
-        "skill commit-style  installed CC CX OC  How commits are written",
-        "skill deploy        partial      CX OC  Ship the service",
-        "skill notes         foreign   CC    OC  My own notes",
-        "skill review        authored            Review a change",
+        "skill commit-style  current  CC CX OC  How commits are written",
+        "skill deploy        missing     CX OC  Ship the service",
+        "skill notes         foreign  CC    OC  My own notes",
+        "skill review        authored           Review a change",
     ] {
         assert!(drawn.contains(row), "{row}\n{drawn}");
     }
@@ -618,10 +706,10 @@ fn a_projects_rows_say_how_each_artifact_stands_and_which_agents_read_it() {
     assert_eq!(
         status.stdout,
         "\
-commit-style  installed  claude,codex,opencode  workspace
-deploy        partial    codex,opencode         workspace
-notes         foreign    claude,opencode
-review        authored   -
+commit-style  current   claude,codex,opencode  workspace
+deploy        missing   codex,opencode         workspace
+notes         foreign   claude,opencode
+review        authored  -
 "
     );
     // The workspace's own are no project's, and say nothing of the kind.
@@ -943,6 +1031,46 @@ fn the_install_screen_inside_the_tui_installs_where_each_agent_of_a_v3_project_r
 }
 
 #[test]
+fn a_rule_ticked_on_the_install_screen_inside_the_tui_is_installed_from_there() {
+    let (dir, _workspace, _ledger) = shelved(&["collapse"], &["deploy"]);
+    flayer(
+        dir.path(),
+        &[
+            "add",
+            "rule",
+            "git/commits",
+            "Commit one coherent step at a time",
+        ],
+    )
+    .unwrap();
+    let mut app = tui_in(dir.path());
+
+    press_and_run(&mut app, KeyCode::Char('i'));
+    press_key(&mut app, KeyCode::Tab);
+    let rules = tui_drawn(&app);
+    press_key(&mut app, KeyCode::Right);
+    press_key(&mut app, KeyCode::Char(' '));
+    let ticked = tui_drawn(&app);
+    press_key(&mut app, KeyCode::Char('a'));
+    let task = press_and_run(&mut app, KeyCode::Char('y'));
+
+    assert!(rules.contains("Rules in collapse"), "{rules}");
+    assert!(rules.contains("[ ] git/commits"), "{rules}");
+    assert!(ticked.contains("[x] git/commits  + install"), "{ticked}");
+    assert!(ticked.contains("1 to install, 0 to remove"), "{ticked}");
+    assert_eq!(task, Some(Task::ApplyInstall));
+    assert!(fs::read_to_string(dir.path().join("collapse/AGENTS.md"))
+        .unwrap()
+        .contains("<!-- mindflayer:rule git/commits -->\n# Commit one coherent step at a time\n"));
+    assert!(
+        app.transcript()
+            .contains("$ flayer install\ncollapse: installed rule git/commits\n"),
+        "{}",
+        app.transcript()
+    );
+}
+
+#[test]
 fn every_line_the_tui_runs_and_its_install_screen_keep_out_of_the_agents_folders_it_was_given() {
     let (dir, _workspace, _ledger) = shelved(&["collapse"], &["deploy"]);
     // The project's `.agents` stands for the folder several agents read for
@@ -1191,6 +1319,18 @@ fn every_task_the_tui_runs_is_a_line_the_binaries_accept() {
             holder: Holder::Elsewhere(String::from("-odd")),
             kind: Kind::Skill,
             folders: None,
+        },
+        Task::Update {
+            holder: Holder::Project(String::from("alpha")),
+            reference: None,
+        },
+        Task::Update {
+            holder: Holder::Elsewhere(String::from("-odd")),
+            reference: Some(String::from("rule:git/no-force-push")),
+        },
+        Task::Update {
+            holder: Holder::Workspace,
+            reference: Some(String::from("skill:commit-style")),
         },
     ];
 
@@ -1790,7 +1930,7 @@ fn the_workspaces_row_has_nothing_to_unlink() {
     press_key(&mut app, KeyCode::Up);
 
     assert_eq!(
-        press_key(&mut app, KeyCode::Char('u')),
+        press_key(&mut app, KeyCode::Char('U')),
         tui::state::Step::Stay
     );
     assert!(matches!(app.mode, Mode::Browse));
@@ -1829,7 +1969,7 @@ fn mind_opens_a_project_on_its_own_with_what_only_a_workspace_has_explained() {
 
     assert_eq!(app.scope(), Scope::Project);
     assert!(tui_drawn(&app).contains("a project no workspace manages"));
-    for key in ['g', 's', 'i', 'u'] {
+    for key in ['g', 's', 'i', 'u', 'U'] {
         assert_eq!(
             press_key(&mut app, KeyCode::Char(key)),
             tui::state::Step::Stay
@@ -2143,6 +2283,59 @@ fn the_header_flags_projects_a_mind_toml_marks_with_the_command_that_moves_them(
 }
 
 #[test]
+fn the_header_flags_projects_a_settings_json_marks_as_it_flags_a_mind_toml() {
+    let dir = workspace_with_two();
+    let header = |dir: &Path| {
+        tui_drawn(&tui_in(dir))
+            .lines()
+            .next()
+            .unwrap_or_default()
+            .to_owned()
+    };
+    let json = dir.path().join("json");
+    fs::create_dir(&json).unwrap();
+    json_project(&json);
+    flayer(dir.path(), &["link", "json"]).unwrap();
+
+    let flagged = header(dir.path());
+    assert!(
+        flagged
+            .contains("  · 1 project marked by settings.json: `flayer migrate --all-projects`  · "),
+        "{flagged}"
+    );
+
+    // Both kinds, counted together and each named once.
+    let old = dir.path().join("old");
+    fs::create_dir(&old).unwrap();
+    older_project(&old);
+    flayer(dir.path(), &["link", "old"]).unwrap();
+    let both = header(dir.path());
+    assert!(
+        both.contains(
+            "  · 2 projects marked by mind.toml or settings.json: \
+             `flayer migrate --all-projects`"
+        ),
+        "{both}"
+    );
+
+    // A project on its own is told what moves it from where it is.
+    let alone = TempDir::new().unwrap();
+    json_project(alone.path());
+    let own = tui_drawn(&mind_tui_in(alone.path()));
+    assert!(
+        own.lines()
+            .next()
+            .unwrap_or_default()
+            .contains("  · marked by settings.json: `mind migrate`  · "),
+        "{own}"
+    );
+
+    flayer(dir.path(), &["migrate", "--all-projects", "--yes"]).unwrap();
+    let moved = header(dir.path());
+    assert!(!moved.contains("marked by"), "{moved}");
+}
+
+#[test]
 fn a_w_among_a_lines_words_is_typed_from_the_workspace_root() {
     let (_dir, outer, _hub, _collapse) = hub_beside_outer();
     let words: Vec<String> = ["flayer", "-W", "../hub", "list"]
@@ -2388,6 +2581,32 @@ fn t_on_the_workspaces_own_row_or_an_older_project_says_why_not() {
         .contains("`mind migrate`"));
 }
 
+#[test]
+fn t_and_capital_t_on_a_project_a_settings_json_marks_say_why_not() {
+    let dir = workspace_with_two();
+    let json = dir.path().join("json");
+    fs::create_dir(&json).unwrap();
+    json_project(&json);
+    flayer(dir.path(), &["link", "json"]).unwrap();
+    let mut app = tui_in(dir.path());
+    while app.member().unwrap().name != "json" {
+        press_key(&mut app, KeyCode::Down);
+    }
+
+    for key in ['t', 'T'] {
+        press_key(&mut app, KeyCode::Char(key));
+
+        assert!(matches!(app.mode, Mode::Browse), "{key}: {:?}", app.mode);
+        let said = &app.message.as_ref().unwrap().text;
+        assert_eq!(
+            said,
+            "json is marked by a settings.json, which is read as it was written and not \
+             changed; `mind migrate` moves it to a settings.toml",
+            "{key}"
+        );
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Where a project installs skills
 // ---------------------------------------------------------------------------
@@ -2417,6 +2636,30 @@ fn a_project_installing_where_no_agent_reads_is_marked_and_its_pane_says_why() {
     // Its neighbour installs where its agents read, and is not marked.
     assert!(drawn.contains("beta  1 "), "{drawn}");
     assert!(!drawn.contains("beta  1  ⚠"), "{drawn}");
+}
+
+#[test]
+fn a_project_given_a_rule_some_of_its_agents_read_nowhere_is_marked_and_its_pane_says_so() {
+    let dir = workspace_with_own();
+    let scoped = own_directory_for(dir.path(), Kind::Rule).join("style/comments.md");
+    fs::create_dir_all(scoped.parent().unwrap()).unwrap();
+    fs::write(
+        &scoped,
+        "---\npaths:\n  - \"**/*.rs\"\n---\n\n# Comments say why, not what\n",
+    )
+    .unwrap();
+    flayer(dir.path(), &["install", "-p", "alpha", "style/comments"]).unwrap();
+
+    let app = tui_in(dir.path());
+
+    let holdings = app.member().unwrap().holdings.as_ref().unwrap();
+    assert_eq!(
+        holdings.unreached,
+        ["codex and opencode do not read rule `style/comments` in alpha"]
+    );
+    let drawn = tui_drawn(&app);
+    assert!(drawn.contains("⚠"), "{drawn}");
+    assert!(drawn.contains("Not seen by every agent"), "{drawn}");
 }
 
 #[test]

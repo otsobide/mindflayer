@@ -32,8 +32,9 @@ workspace (`examples/.mindflayer/flayer.toml`) holding two skills and two
 rules of its own, so there is something to install while gathering is
 paused. A workspace rather than files the binaries embed or `flayer init`
 copies in, because [loading](#loading-a-third-place-read-live) already offers
-one's own skills to any other, read live from the clone: the examples take
-the path a team's workspace takes, and need no command of their own.
+one's own skills and rules to any other, read live from the clone: the
+examples take the path a team's workspace takes, and need no command of their
+own.
 
 Its `[directories]` are spelled out, so it reads the same whatever a new
 workspace defaults to
@@ -47,8 +48,9 @@ its own, such as `.claude` or `.agents`, not in one called `skills` or
 `apps/cli/tests/examples_test.rs` uses the folder where it is rather than a
 copy, since that folder is what a person loads. It holds every example to
 `validate` with neither a problem nor a warning, installs `commit-style` with
-the reference it carries, checks that nothing it ran wrote into the folder,
-and finds the README's walk-through in the output of the commands it shows.
+the reference it carries and both rules where the README says they go, checks
+that nothing it ran wrote into the folder, and finds the README's walk-through
+in the output of the commands it shows.
 An example whose summary changes changes the README with it.
 
 ### No em dash in what the repository says
@@ -75,8 +77,8 @@ no idea a terminal exists.
 
 `mindflayer-cli` parses a command line, asks core for values, and renders them.
 It holds no rules about artifacts: not the name limits, not the front matter
-format, not which folder a kind lives in, not when a change drops the record
-of an install.
+format, not which folder a kind lives in, not what a change does to the
+record of an install.
 
 It ships **two binaries**, `mind` and `flayer`, and they are two entry points
 into one parser rather than one wrapping the other. `flayer <cmd>` and `mind
@@ -326,7 +328,11 @@ while an empty `paths` says nothing an agent could act on.
 `Artifact::contents` is the body without the front matter, for a rule as for a
 skill. It is what a renderer puts in front of an agent, so the fences are never
 pasted into `AGENTS.md`, and what `show` prints below the description and the
-`paths` a rule declares.
+`paths` a rule declares. Claude's rule files are the one place a rule goes
+whole, fences and all, since Claude reads `paths` from them ([Claude's rule
+files](#claudes-rule-files)). Whether a rule is about some files only is
+`RuleManifest::is_scoped`'s to say, `paths` stated in the shape it is read in,
+so the block and those files never disagree on it.
 
 ### Strict when writing, lenient when reading
 
@@ -361,7 +367,8 @@ pasted into `AGENTS.md`, and what `show` prints below the description and the
   listed as a warning and leaves the verdict at `ok`.
   Counted as invalid, a skill installed with nested metadata would fail its
   project's `validate` from then on, and the only way to clear it would be to
-  edit the copy, which disowns it. The TUI's `✗` follows the same line.
+  edit the copy, which leaves it edited, never updated again unless forced.
+  The TUI's `✗` follows the same line.
 
 ### Adding a third kind
 
@@ -390,9 +397,9 @@ sit in is the usual case. It also holds skills and rules of its own: the ones
 that belong to all of its projects, written once.
 
 Both are identified by a **marker file**, not by the directory alone: a
-project by its `settings.json` or its `mind.toml`, a workspace by its
-`flayer.toml`. An empty `.mind` left behind by a failed copy is not a
-project, and saying so costs an `is_file()` or two
+project by its `settings.toml`, or the `settings.json` or `mind.toml` an older
+build wrote, a workspace by its `flayer.toml`. An empty `.mind` left behind by
+a failed copy is not a project, and saying so costs an `is_file()` or two
 (`MindProject::is_marked`, which everything that looks for a project asks).
 
 Both are found by walking up from a starting directory, so `mind list` works from
@@ -448,7 +455,11 @@ one by being installed.
 `mind migrate` moves the project you are in from its `mind.toml` to
 settings, and `flayer migrate -p` one the workspace links, or
 `--all-projects` every one ([moving a project to its
-settings](#moving-a-project-to-its-settings)).
+settings](#moving-a-project-to-its-settings)). `mind update` brings what is
+installed in the project you are in up to date, and `flayer update` what is
+installed in each project `-p` names, or with `--all` in every one, needing
+one or the other, as a change of more than one place says which ([bringing
+what was installed up to date](#bringing-what-was-installed-up-to-date)).
 Reads look everywhere; a change needs one place, and without `-p` that place
 is the workspace.
 
@@ -620,24 +631,19 @@ happen.
 
 `.mind` is the marker and the configuration. The artifacts themselves sit
 beside the code, in directories the marker names. A project's settings, the
-version 3 marker `mind init` writes ([a project's
-settings](#a-projects-settings)), name them in an object:
-
-```json
-"directories": {
-  "skills": "skills",
-  "rules": "rules"
-}
-```
-
-and a `mind.toml`, the marker of a project an older Mindflayer made, in a
-table:
+`settings.toml` `mind init` writes ([a project's
+settings](#a-projects-settings)), name them in a table, as a `mind.toml`, the
+marker of a project an older Mindflayer made, does:
 
 ```toml
 [directories]
 skills = "skills"
 rules = "rules"
 ```
+
+The `settings.json` between the two named them in an object,
+`"directories": {"skills": "skills", "rules": "rules"}`, and is read the way
+it was written.
 
 Beside the code rather than inside `.mind`, because these are files the
 **agents** read, and an agent looking for skills does not know what a `.mind`
@@ -711,25 +717,39 @@ keeping no folder of its own is no reason to hide what its agents load.
 
 ### A project's settings
 
-From version 3 (`SETTINGS_VERSION`) a project is marked by
-`.mind/settings.json`, which holds what the hub needs to know about it and
+From version 5 (`SETTINGS_TOML_VERSION`) a project is marked by
+`.mind/settings.toml`, which holds what the hub needs to know about it and
 nothing else ([D-06](#d-06-projects-keep-authoring-beside-the-code),
-[D-09](#d-09-project-settings-live-in-the-project)):
+[D-09](#d-09-project-settings-live-in-the-project)), written from a template
+whose comments say what each key does (`Settings::text`, [why the markers are
+TOML written from a
+template](#why-the-markers-are-toml-written-from-a-template)):
 
-```json
-{
-  "version": 3,
-  "id": "4f9c2a7e1b3d5f60a8c4e2b6d0f1a3c5",
-  "name": "collapse",
-  "agents": ["claude", "codex", "opencode"],
-  "share": "local",
-  "edit_tracked": false,
-  "directories": {
-    "skills": "skills",
-    "rules": "rules"
-  }
-}
+```toml
+# Mindflayer mind project: what Mindflayer needs to know about the project
+# this .mind is in, and nothing else. No agent reads it.
+#
+# `name` is what the project is shown as, and `agents` the agents that work
+# in it (claude, codex, opencode): what is installed into the project is
+# copied where each of them reads. `mind agents` changes them.
+# ...
+version = 5
+id = "4f9c2a7e1b3d5f60a8c4e2b6d0f1a3c5"
+name = "collapse"
+agents = ["claude", "codex", "opencode"]
+share = "local"
+edit_tracked = false
+
+[directories]
+skills = "skills"
+rules = "rules"
 ```
+
+Versions 3 and 4 (`SETTINGS_VERSION`, `TARGETS_VERSION`) held the same keys
+as `.mind/settings.json`, in strict JSON, the owner's first choice for
+D-06. Such a file is read the way it was written, through the same reader,
+and changed by nothing but its move to a `settings.toml` ([moving a project
+to its settings](#moving-a-project-to-its-settings)).
 
 The agents that work in the project, by the names `Agent` takes; whether what
 is installed into it is the team's or this checkout's
@@ -737,8 +757,8 @@ is installed into it is the team's or this checkout's
 team file git tracks may be edited to reach an agent, off unless the file says
 so; the folders it authors in; a name; and an id. A project that installs a
 kind somewhere other than where its agents read names where in `targets` too,
-which a new project leaves out, and which comes with version 4 ([a project's
-own targets](#a-projects-own-targets)). They describe the files
+which a new project leaves out ([a project's own
+targets](#a-projects-own-targets)). They describe the files
 physically in the project, and several workspaces may link it, so they live
 in the project, where every workspace reads the same ones. The id is 128 bits
 drawn from the operating system through `std`'s hasher keys, as a stage's name
@@ -748,7 +768,8 @@ shares one.
 
 Minimal, because `.mind` is meant to stay out of the way (vision point 8). No
 agent reads it, so nothing instruction-shaped sits where an agent looks, and
-a file of seven keys is one a person reads at a glance and edits by hand.
+a file of seven keys is one a person reads at a glance and edits by hand,
+its comments telling them what each one does.
 Anything that is not about the project's own files stays out of it: what was
 installed is the ledger's, and which workspaces link the project is theirs.
 
@@ -762,14 +783,14 @@ project and goes when `.mind` does, and no team file is edited for it. A shared
 project gets none, and its settings are the team's to commit. A test asks gix,
 in process, whether a local project's settings are ignored. A second run, as
 for `init`, rewrites nothing and only makes what the marker asks for and is
-missing, a deleted `.gitignore` of a local project included; a project a
-`mind.toml` marks is not given settings, since moving it is `mind
+missing, a deleted `.gitignore` of a local project included; a project an
+older marker marks is not given a `settings.toml`, since moving it is `mind
 migrate`'s ([moving a project to its
 settings](#moving-a-project-to-its-settings)).
 
-`mind init` writes them (#35): every agent unless `--agents` names fewer,
-local unless `--shared`, and `skills/` and `rules/` unless `--skills` or
-`--rules` says otherwise. Every agent, so a project made without a thought
+`mind init` writes them (#35, a `settings.toml` since #166): every agent
+unless `--agents` names fewer, local unless `--shared`, and `skills/` and
+`rules/` unless `--skills` or `--rules` says otherwise. Every agent, so a project made without a thought
 for it reaches whichever agent is opened there; local, because that is what a
 new project is (D-02). The TUI's offer to make a project and the minds
 screen run that same `mind init`, so they write the same marker. The CLI's
@@ -780,42 +801,62 @@ there for the team to commit. `MindProject::init`, which writes a `mind.toml`,
 is no front end's any more; it stays for the tests that start from a project
 an older build made, which is still read the way it was written.
 
-Either file makes a directory a project, and when both are there the settings
-win: they are the newer marker, and a `mind.toml` beside them is one an
-upgrade left or a copy brought back. Refusing the project would hide every
-artifact in it over a stray file, so it is read, and `MindProject::warnings`
-names the `mind.toml` ignored ([open questions](#open-questions)). A
-`mind.toml` claiming version 3, and a settings file claiming 1 or 2, are
-refused as malformed: what either would mean is nobody's to say.
+Any of the three files makes a directory a project, and when more than one
+is there the newest wins, `settings.toml`, then `settings.json`, then
+`mind.toml` (`MindProject::open`): an older one beside it is one an upgrade
+left or a copy brought back. Refusing the project would hide every artifact
+in it over a stray file, so it is read, and `MindProject::warnings` names
+each one ignored ([open questions](#open-questions)). Each file holds
+versions of its own, and `MarkerFile::of_version` says which: a `mind.toml`
+up to 2, a `settings.json` 3 or 4, a `settings.toml` 5. A version found in
+another file, a `mind.toml` claiming 3 or a `settings.toml` claiming 4, is
+refused as malformed: what it would mean is nobody's to say. Both settings
+files are read into one tree (`config_entry::document`) and held to the keys
+by one reader, a key at a time, so the same key is refused the same way in
+either.
 
 A key the format does not define is read past and kept, as unknown front
-matter is: the format grows, and a project a newer build configured is still
-a project. A key that changes what an older build would do with the project
-is the exception, and comes with a version of its own, as `targets` comes
-with 4. Every key it does define is held to what it holds: a missing `id`, an
-agent no `Agent` names, a `share` other than `local` and `shared`, a
-`targets` entry that is not a list of folders or names none, are refused,
-each named, rather than guessed at. `edit_tracked`, `directories` and
-`targets` may be left out, and read as off, as no folders and as where the
-agents read. A folder `targets` names that no install may use is read and
-said, not refused, since everything else the file says still stands.
+matter is: the format grows, and a project a newer build configured is still a
+project. A key that changes what an older build would do with the project is
+the exception, and comes with a version of its own, as `targets` came with 4
+in a `settings.json`; a `settings.toml` is 5 whatever it sets, since every
+build that reads one reads `targets` too. Every key it does define is held to
+what it holds: a missing `id`, an agent no `Agent` names, a `share` other than
+`local` and `shared`, a `targets` entry that is not a list of folders or names
+none, are refused, each named, rather than guessed at. `edit_tracked`,
+`directories` and `targets` may be left out, and read as off, as no folders
+and as where the agents read. A folder `targets` names that no install may use
+is read and said, not refused, since everything else the file says still
+stands.
 
-`MindProject::change_settings` changes them. It reads the file again rather
-than trusting what was read when the project was opened, lets its caller
-change a copy, and edits only the keys whose values changed, each where it
-stands, `directories` an entry at a time, through `config_entry` ([edited in
-a tree that holds every byte](#edited-in-a-tree-that-holds-every-byte)). A key
-this build does not know, the order of the keys and a layout made by hand all
-survive, and a key the file left out goes in only when it says something its
-absence does not, so turning nothing on writes no `"edit_tracked": false`. A
-changed file goes through a temporary and a rename; an unchanged one is not
-written, its modification time included. The version and the id are refused:
-a version moves with a migration, which writes the file its version describes,
-and an id names the project for good. The one version an edit writes is the
-one a change of `targets` brings with it, up to 4 when a kind is named and
-back to 3 when none is. So is a folder the change moves out of the project,
-as `init` refuses one, or a target no install may use, while one written
-there by hand is still read and stops no change to something else.
+`MindProject::change_settings` changes them, the way `flayer.toml` is
+changed: through the same `rewrite`, which reads the file again rather than
+trusting what was read when the project was opened, and writes back only
+what changed, and through toml_edit (`settings::edited`). Its caller changes
+a copy, and only the keys whose values changed are edited, each value written
+where the old one stood, keeping the spacing around it and a comment after it
+on its line, `directories` and `targets` an entry at a time. The template's
+comments, a comment somebody added, a key this build does not know, the
+order of the keys and a layout made by hand all survive, and a key the file
+left out goes in after the others only when it says something its absence
+does not, so turning nothing on writes no `edit_tracked = false`. `targets`
+emptied takes its `[targets]` table out, so setting and resetting them gives
+the file back byte for byte, unless somebody wrote a comment above the
+header, which keeps the header, empty. A changed file goes through a
+temporary and a rename; an unchanged one is not written, its modification
+time included. The version and the id are refused: a version moves with a
+migration, which writes the file its version describes, and an id names the
+project for good. So is a folder the change moves out of the project, as
+`init` refuses one, or a target no install may use, while one written there
+by hand is still read and stops no change to something else.
+
+Only a `settings.toml` is changed (`MindProject::changeable`). A project a
+`settings.json` marks is refused as one a `mind.toml` marks is, naming the
+file and pointing at `mind migrate`: the settings are edited one way, in
+the grammar this build writes, rather than a third way through
+`config_entry`, which is for the agents' own files, and the JSON editor and
+its rule for the version a change of `targets` brought with it went with
+the grammar.
 
 What changes them from a command line is `mind agents` and `mind share`
 (#37), and `mind targets` (#40), at either level, and since a project's
@@ -919,21 +960,23 @@ one found only in an agent's folder is refused as such
 (`LifecycleError::NotAuthored`) rather than reported missing, since a listing
 has just shown it. Installing writes a copy in each target, and in the
 authored folder only when that is one of them, so what a project authors and
-what it was installed are apart: a change to the first drops no record of the
-second. Settings that author in a target, `"skills": ".claude/skills"`, put
-an installed copy where a change reaches it, and that change drops the
-record of that copy alone ([A record must not outlive the copy it is
+what it was installed are apart: a change to the first touches no record of
+the second. Settings that author in a target, `"skills": ".claude/skills"`,
+put an installed copy where a change reaches it, and that change sees to the
+record of that copy alone: kept through an edit, carried through a rename,
+dropped by a removal ([A record must not outlive the copy it is
 about](#a-record-must-not-outlive-the-copy-it-is-about)).
 
 ### Moving a project to its settings
 
 `mind migrate` (#38), or `flayer migrate -p` for a project the workspace
-links and `flayer migrate --all-projects` for every one a `mind.toml` marks,
-moves a project an older Mindflayer made to settings (`migrate::project`),
-and what is installed into it to where its agents read. Without `--yes` it
-plans, says what would happen and changes nothing
-(`migrate::project_plan`), a report as `flayer migrate --library`'s dry run
-is.
+links and `flayer migrate --all-projects` for every one an older marker
+marks, moves a project an older Mindflayer made to a `settings.toml`
+(`migrate::project`): from a `mind.toml`, with what is installed into it
+moved to where its agents read; from a `settings.json`, the same settings in
+TOML (below). Without `--yes` it plans, says what would happen and changes
+nothing (`migrate::project_plan`), a report as `flayer migrate --library`'s
+dry run is.
 
 - **Explicit, never on a read.** Every format here is read the way it was
   written, and moved forward only when somebody asks: a workspace's own by
@@ -953,14 +996,16 @@ is.
   their own. Every agent unless `--agents` names fewer, as `mind init`. And
   shared unless `--local`, as [D-02](#d-02-installs-stay-local-unless-a-project-shares-them)
   has it, because such a project was committed by design; `--shared` says
-  it out loud. Serialized as `mind init` writes them, with `create_new`.
+  it out loud. Written from the template as `mind init` writes them, a
+  `settings.toml` straight from a `mind.toml`, with `create_new`. What else
+  the `mind.toml` held stays in the copy kept.
 - **The marker is kept, in `.mind/tmp`.** Moved to
   `.mind/tmp/mind.toml.v<version>`, named after its version as
   `flayer.toml.v2` is. Not beside the settings, where it would be a
   leftover the project warns about and an older build reads instead; and
   `.mind/tmp` carries its own `.gitignore`, so the kept copy is out of git
   in a shared project too. One already there, kept by an earlier migration,
-  refuses the move. Put back in place of `settings.json`, it is the project
+  refuses the move. Put back in place of `settings.toml`, it is the project
   as it was, though its installs have moved.
 - **The installs move as for a change of agents.** It is one, from none to
   the ones asked for, so each recorded installation is brought to the
@@ -973,21 +1018,25 @@ is.
   taken out; one changed since is left, and its record dropped, its
   author's. A project whose `mind.toml` kept its skills in `.claude/skills`
   keeps its copy there and gains one in `.agents/skills`. Somebody's where a
-  copy would go is left, and said.
+  copy would go is left, and said. A rule's copy is not moved: a rule
+  reaches a project marked by its settings through the block of its
+  `AGENTS.md` and Claude's files, which a render writes, so the copy and its
+  record are left as they are for the next render of the project's rules,
+  which takes the copy out ([installing rules](#installing-rules)).
 - **A record from before hashes is held to its offer.** Most of such a
   project's records were written before schema 3, with no hash, and
   [D-04](#d-04-an-edited-copy-is-detected-not-disowned) reads one as current
-  only while its copy matches its offer byte for byte. So the migration
-  finds the offers (`install::survey`) and hands `retarget` those a record
-  may have come from: by the origin it records, or for a record from before
-  origins by its shelf source's id, or else among the workspace's own and
-  the loaded ones, any of which may be it. A copy matching one is compared
-  as `install::is_current` compares (`copy::same_leaving`), moved, and its
-  record given the hash every copy now holds (`Ledger::migrated`), so the
-  next change of agents compares it as any other; one matching none is
-  edited; with no offer left, it cannot be told, and is left. A change of
-  agents does not look for offers, and reads such a record as one it cannot
-  compare.
+  only while its copy matches its offer byte for byte. So the migration finds
+  the offers (`install::offers`) and hands `retarget` those a record may have
+  come from (`install::offered_for`, which tells every record's standing by
+  the same answer): by the origin it records, or for a record from before
+  origins by its shelf source's id, or else among the workspace's own and the
+  loaded ones, any of which may be it. A copy matching one is compared as
+  `install::is_current` compares (`copy::same_leaving`), moved, and its record
+  given the hash every copy now holds (`Ledger::migrated`), so the next change
+  of agents compares it as any other; one matching none is edited; with no
+  offer left, it cannot be told, and is left. A change of agents does not look
+  for offers, and reads such a record as one it cannot compare.
 - **What the project wrote stays.** Every artifact in a folder the settings
   keep naming that no installation records, rules included, is left where
   it is and said, as what sits unrecorded in a folder its agents are now
@@ -1023,12 +1072,14 @@ is.
   as every other command reads it (`MindProject::directory_for`), so
   naming one outside `.mind`, as the refusal asks, gets such a project
   past it.
-- **A second run is a no-op.** A project its settings mark has nothing to
-  migrate, and nothing is written for it, not even its ledger opened.
+- **A second run is a no-op.** A project its `settings.toml` marks has
+  nothing to migrate, and nothing is written for it, not even its ledger
+  opened.
 - **Each project on its own.** `--all-projects` moves every project the
-  workspace links that a `mind.toml` marks, one at a time, each all or
-  nothing: one refused or failed is an `error:` naming it, the rest go
-  ahead, and the command exits non-zero. Without `--yes` it lists every one.
+  workspace links that a `mind.toml` or a `settings.json` marks, one at a
+  time, each all or nothing: one refused or failed is an `error:` naming it,
+  the rest go ahead, and the command exits non-zero. Without `--yes` it
+  lists every one.
 - **A project nothing links still moves.** Its marker is its own
   ([D-09](#d-09-project-settings-live-in-the-project)), so in a project no
   workspace `mind` consults links, `mind migrate` writes its settings and
@@ -1047,47 +1098,79 @@ is.
   `--all-projects`, one at a time, for the reason `--library` is a flag of
   its own ([above](#moving-them-into-the-library)), and a line naming none is
   told which there are, rather than shown clap's usage.
-- **The TUI points at it.** Its header counts the projects a `mind.toml`
+- **From a `settings.json`, the same settings in TOML.** A project a
+  `settings.json` marks has its agents, share mode and folders already, so
+  its move writes what the file holds as a `settings.toml`, at version 5,
+  and keeps the `settings.json` as `.mind/tmp/settings.json.v<version>`,
+  with `create_new`, as a `mind.toml` is kept; one an earlier migration kept
+  refuses it. A folder written there by hand that a change would refuse is
+  carried as it is: the move changes the grammar, not what the settings
+  say, so the project reads the same before and after. Asked for, never
+  made on a read, as a move from a `mind.toml` is: a build from before #166
+  finds no project in a `settings.toml`, so the move is a step a team takes
+  on purpose, and a read leaves things as it found them. No copy moves, since
+  every one is where the agents send it already, so no workspace is read
+  (`migrate::carries_installs`): no lock, no ledger, and a workspace that
+  cannot be read is a `warning:` beside the move, where it refuses a move
+  from a `mind.toml`. `--agents`, `--local` and `--shared` are what a
+  `mind.toml` is given, and the report's first line says the agents and
+  share mode the file keeps. A key this build does not know stays in the
+  copy kept. Nothing else writes a `settings.json` any more, and a second
+  move at once finds the `settings.toml` there, which `create_new` refuses,
+  so the move needs no lock of its own.
+- **The TUI points at it.** Its header counts the projects an older marker
   marks, in yellow after the workspace's name, where a narrow terminal keeps
-  it, and names the command: `flayer migrate --all-projects`, or `mind
-  migrate` for a project on its own. It has no key for the move ([open
-  questions](#open-questions)).
+  it, naming each file once (`2 projects marked by mind.toml or
+  settings.json`), and names the command: `flayer migrate --all-projects`,
+  or `mind migrate` for a project on its own. `t` and `T` on a project a
+  `settings.json` marks say it is changed by nothing but the move before a
+  form opens, as they say of a `mind.toml`. It has no key for the move
+  ([open questions](#open-questions)). `flayer status` and `mind status`
+  say it too, a hint for each such project ([what each project
+  has](#what-each-project-has)).
 
 ### Why the markers are TOML written from a template
 
 New markers are written from a string template, not serialized. Serializing
-would drop the comments, and the comment in `mind.toml` explaining where skills
-go is the first documentation anyone opening the file will read.
+would drop the comments, and the comment at the top of a marker, saying what
+each key does, is the first documentation anyone opening the file will read.
 
-A project's marker is TOML no longer from version 3, the owner's choice
-([D-06](#d-06-projects-keep-authoring-beside-the-code)): a minimal file needs
-no comments, and any tool can edit JSON. The template was there for the
-comments, and seven keys that name what they hold explain themselves; what
-`mind.toml`'s comment said about where skills go is in this document and the
-README instead. JSON is what every editor, `jq`, Python's standard library
-and a browser read and write, so a person or a script can change a project's
-agents without Mindflayer. Strict JSON rather than JSONC, for the same reason:
-a comment would make the file one those tools refuse, and `config_entry`'s
-JSON, which reads and edits it, refuses what they refuse. So a settings file
-is serialized (`Settings::text`), pretty-printed as `config_entry` lays out
-an insert, two spaces a level and a final newline, and a file written new
-reads like one an edit has changed since. `flayer.toml` keeps its template:
-a workspace's marker has comments worth keeping.
+A project's marker is TOML again from version 5, the owner's amendment to
+[D-06](#d-06-projects-keep-authoring-beside-the-code): `.mind/settings.toml`,
+like `flayer.toml`, so both markers are written and edited the same way.
+Versions 3 and 4 were JSON, `.mind/settings.json`, the owner's first choice:
+any tool can edit JSON, and seven keys that name what they hold seemed to
+explain themselves. JSON has nowhere to put a comment, though, so what each
+key did was in this document and the README rather than in the file
+somebody opens to change one, and the settings needed an editor of their
+own, a third way beside `flayer.toml`'s and `mind.toml`'s, which was
+`config_entry`'s JSON (held to RFC 8259 so `jq` and `JSON.parse` took what it
+wrote). Now `Settings::text` fills a template as `flayer.toml`'s is filled,
+its comments saying what each key does and which command changes it, every
+folder spelled out and a `[targets]` table only when it names a kind; and
+`config_entry` is for the agents' own config files, whose formats are
+theirs. A `settings.json` is still read, the way it was written, and moved
+forward only by `mind migrate`.
 
 Editing an existing marker has the same constraint and a harder job, which is
 why `toml_edit` is a dependency: `flayer link` rewrites the one `projects`
-array and leaves every other byte alone. A project's settings are edited the
-same way, a key at a time through jsonc-parser's CST ([a project's
-settings](#a-projects-settings)), for a file somebody may have laid out by
-hand. Reading a TOML marker stays serde's job. The two halves agree because
-an edit re-reads the file afterwards rather than trusting what it believes it
-wrote, and the write itself goes through a temporary file and a rename, so a
-crash leaves either the old config or the new one. An edit of `flayer.toml`
-holds the workspace's lock from its read to that re-read, so a second writer
-edits what the first one wrote ([Writers at the same
-time](#writers-at-the-same-time)); an edit of a project's settings takes none
-of its own, and the one change that makes it (`reapply::apply`) holds the lock
-of the workspace that links the project around it.
+array and leaves every other byte alone, and a change of a project's settings
+rewrites the keys whose values changed, each where it stands, keeping the
+comment on its line ([a project's settings](#a-projects-settings)). Both go
+through one `rewrite`, which reads the file, hands its text to the edit and
+writes back only what changed. Reading `flayer.toml` and a `mind.toml` stays
+serde's job; a project's settings, in either grammar, are read a key at a
+time (`config_entry::document` and `settings::parse`), so a newer version is
+refused before any key it may have given a new meaning, and a key this build
+does not know is read past rather than refused. The two halves agree because
+an edit re-reads the file afterwards rather than trusting what it believes
+it wrote, and the write itself goes through a temporary file and a rename,
+so a crash leaves either the old config or the new one. An edit of
+`flayer.toml` holds the workspace's lock from its read to that re-read, so a
+second writer edits what the first one wrote ([Writers at the same
+time](#writers-at-the-same-time)); an edit of a project's settings takes
+none of its own, and the one change that makes it (`reapply::apply`) holds
+the lock of the workspace that links the project around it.
 
 ### Formats are versioned
 
@@ -1101,15 +1184,21 @@ workspace.
 Two constants rather than one, because the files change for different reasons.
 Shared, the project marker going to 3 would have written every new
 `flayer.toml` as a 3 too, and an older build would refuse a workspace that had
-not changed at all. A project's marker reads up to 4 today, a settings file
-that may say where installs land, and a workspace's up to 2, and neither
-moved when the other did.
+not changed at all. A project's marker reads up to 5 today, a
+`settings.toml`, and a workspace's up to 2, and neither moved when the other
+did.
 
-A project's newest version is the one `mind init` writes, a settings file,
-and `mind init` waited to write it (#35) until this build read such a project
-(#29), listed it (#33) and installed into it (#34). An older build finds no
-project without a `mind.toml`, so it says a new one is not a project, or that
-a workspace's entry for it is stale, rather than misreading it. Except where
+A project's newest version is the one `mind init` writes, a `settings.toml`
+(#166), as it waited to write a `settings.json` (#35) until this build read
+such a project (#29), listed it (#33) and installed into it (#34). 5 for a
+`settings.toml` whatever it sets, though it holds the keys a version 4
+`settings.json` does, because a version names the file it is written in as
+well as what the file holds, as 3 did between `mind.toml` and
+`settings.json` (`MarkerFile::of_version`): one found in another file is
+refused rather than guessed at. An older build finds no project without the
+file it looks for, so a build from before #29 says a new one is not a
+project, and one from before #166 the same of a `settings.toml`, or that a
+workspace's entry for it is stale, rather than misreading it. Except where
 that answer leads it to make one: a build from before #29 asks only whether a
 `mind.toml` is there, so its `mind init`, or its TUI's making a repository a
 project, writes one beside the settings and reads the project as a `mind.toml`
@@ -1120,18 +1209,19 @@ one from then on, while this build reads the settings and passes the
 
 An older marker is read the way it was written, never refused, and moved
 forward only when somebody asks: a workspace's own folders by `flayer migrate
---library`, a project's `mind.toml` by `mind migrate` ([moving a project to
-its settings](#moving-a-project-to-its-settings)). Three lines are
-drawn so far, all project-marker versions, since a workspace's number says
-nothing about how a project keeps its artifacts: `DIRECTORIES_VERSION`, before
-which every kind lived inside `.mind`; `SETTINGS_VERSION`, from which the
-marker is `settings.json` and a kind it does not name has no folder; and
-`TARGETS_VERSION`, from which the settings may say where installs land. The
-last is written only by a file that needs it, so a settings file is a 3 or a
-4 by what it says rather than by which build wrote it: one that never sets
-`targets` is read by every build since settings, and one that does is
-refused by the builds that would read past them ([a project's own
-targets](#a-projects-own-targets)). The
+--library`, a project's `mind.toml` or `settings.json` by `mind migrate`
+([moving a project to its settings](#moving-a-project-to-its-settings)).
+Four lines are drawn so far, all project-marker versions, since a
+workspace's number says nothing about how a project keeps its artifacts:
+`DIRECTORIES_VERSION`, before which every kind lived inside `.mind`;
+`SETTINGS_VERSION`, from which the marker is a settings file and a kind it
+does not name has no folder; `TARGETS_VERSION`, from which the settings may
+say where installs land; and `SETTINGS_TOML_VERSION`, from which the
+settings are `settings.toml`. A `settings.json` was written at 4 only while
+it set `targets`, so one is a 3 or a 4 by what it says rather than by which
+build wrote it: one that never set them is read by every build since
+settings, and one that did is refused by the builds that would read past
+them ([a project's own targets](#a-projects-own-targets)). The
 ledger carries its version in SQLite's `user_version` and is refused from the
 future the same way, but an older one is migrated forward rather than read as
 written, after a copy of it is set aside ([Why the ledger is
@@ -1160,7 +1250,7 @@ A reading command's `--json` prints what it read inside one envelope,
 whatever the command (`render::json`):
 
 ```json
-{"version": 1, "data": ..., "warnings": [...]}
+{"version": 2, "data": ..., "warnings": [...]}
 ```
 
 `status` was the first to take it ([what each project
@@ -1179,7 +1269,7 @@ and for the panel's backend when it reads through the CLI.
 - **Its names are a contract.** Every type in `data` derives `Serialize` in
   core, each field by its snake_case name, and `Kind`, `Agent` and `State`
   are serialized by the word a command line takes for them (`skill`,
-  `opencode`, `partial`), written by hand rather than derived: a derive
+  `opencode`, `missing`), written by hand rather than derived: a derive
   spells the variant, so `Agent::OpenCode` would print `open_code`, a name no
   command line or settings file holds, and a rename would change it. A path
   is text, whatever bytes it holds, so one unprintable path cannot fail the
@@ -1188,6 +1278,10 @@ and for the panel's backend when it reads through the CLI.
   passes over a key it does not know. A test reads each report back into
   structs of its own that refuse any field they do not name
   (`common::enveloped`), so a change shows there before it reaches a script.
+  It moved once, to 2, when `status` took the five states an installation
+  stands in ([what each project has](#what-each-project-has)): `installed`
+  and `partial`, which a version 1 script knew, went, and a value a script
+  never met came in their place, which is a field changing what it holds.
 - **Pretty-printed**, two spaces a level, since a person reads it as often as
   a script does, and `jq` takes either.
 - **The envelope is the CLI's**, in `render.rs` beside the table helpers: how
@@ -1447,27 +1541,28 @@ command that writes opens the ledger. `FlayerWorkspace::ledger_to_write` is
 the one way to open it for writing: it runs `gather::scrub`, which only core
 can call, and hands back what that took out for the front end to say, the way
 `resolve` with `Intent::Write` is the one way to find a workspace that may be
-created.
-Which commands write is the front end's to know, but what opening to write
-involves is core's, so no front end can write first and scrub after. `gather
-git`, `install` and `uninstall` open it that way, as does `install::disown`,
-through which core's lifecycle changes (`lifecycle::add`, `finish_edit`,
-`rename` and `remove`) drop a record. Each hands back what the scrub took out
-(its result's `scrub`) beside what it did to the record, since a scrub says
-what it found only the first time and a change that dropped it would leave it
-unsaid for good. `rename` opens the ledger once for each name and tells what
-both scrubs found once (`Scrub::absorb`): the second finds only the clones
-the first could not rewrite. So does the install screen, in both screens,
-when what it marked is applied (`install::commit`) rather than as it opens,
-which is a read ([A read leaves the ledger as it finds
+created. Which commands write is the front end's to know, but what opening to
+write involves is core's, so no front end can write first and scrub after.
+`gather git`, `install` and `uninstall` open it that way, as do
+`install::disown` and `install::carry`, through which core's lifecycle changes
+(`lifecycle::add`, `rename` and `remove`) drop or carry a record. Each hands
+back what the scrub took out (its result's `scrub`) beside what it did to the
+record, since a scrub says what it found only the first time and a change that
+dropped it would leave it unsaid for good. `rename` opens the ledger once for
+each name and tells what both scrubs found once (`Scrub::absorb`): the second
+finds only the clones the first could not rewrite. So does the install screen,
+in both screens, when what it marked is applied (`install::commit`) rather
+than as it opens, which is a read ([A read leaves the ledger as it finds
 it](#a-read-leaves-the-ledger-as-it-finds-it)). A scrub can make two sources
 one row, and a mark on the row that went would install from folders the scrub
 removed, or copy the files and then fail to record them. So once a scrub has
 taken out a source, the screen is built again from the scrubbed ledger and
-each mark is made again on the row offering the same name from the same
-place, as the row it became one with does; a mark on what only the row that
-went had gathered is a warning and is not carried out. Scrubbing as the screen
-opened would have spared that, and is rejected: opening it is a read.
+each mark is made again on the row offering the same name from the same place,
+as the row it became one with does; a mark on what only the row that went had
+gathered is a warning and is not carried out. Scrubbing as the screen opened
+would have spared that, and is rejected: opening it is a read. An edit writes
+nothing to the ledger, since it keeps the record as it was, so `finish_edit`
+only reads it (`ledger_for_reading`) and scrubs nothing.
 
 The scrub rewrites the sources whose URL carries a credential, each clone made
 from one, the origin of every installation from one, which schema 3 copied
@@ -1526,10 +1621,11 @@ command that writes to it makes it; a read never does, and changes an existing
 one only to migrate it ([A read leaves the ledger as it finds
 it](#a-read-leaves-the-ledger-as-it-finds-it)).
 
-Four things are recorded: the **sources** gathered from, the **artifacts** on
+Five things are recorded: the **sources** gathered from, the **artifacts** on
 the shelf and which source each came from, the **installations** (which skill
-Mindflayer put into which project, from where, every copy it wrote and a hash
-of what it wrote), and an **action log**. The log keeps failures too: a log
+or rule Mindflayer put into which project, from where, every copy it wrote and
+a hash of what it wrote), the **files Mindflayer made** in a project, which it
+may take away again, and an **action log**. The log keeps failures too: a log
 of only what worked cannot answer the question anybody opens it with.
 Timestamps are Unix seconds, which needs no date library and which SQLite
 renders with `datetime(at, 'unixepoch')`.
@@ -1545,7 +1641,7 @@ A source's shelf folder is stored rather than derived: two URLs can reduce to
 the same readable name, and where a source's files went is a fact about the
 past that must not move when the naming rule changes.
 
-The schema has had three versions, each a block in `Ledger::migrate` and a
+The schema has had four versions, each a block in `Ledger::migrate` and a
 constant beside it:
 
 1. `sources`, `artifacts` and `actions`: what was gathered, from where, and
@@ -1560,6 +1656,14 @@ constant beside it:
    ([D-04](#d-04-an-edited-copy-is-detected-not-disowned)). The
    installation's own path moved into its one target, so a copy's path is
    kept in one place (#30).
+4. A `content_hash` of each target's own, for a kind whose copies hold
+   different bytes: a rule's section of the block in `AGENTS.md` and its
+   file for Claude ([installing rules](#installing-rules)), each of which
+   can be edited apart from the other. A skill's targets leave it empty,
+   every one holding the tree the installation's hash names. And
+   `created_files`, each file Mindflayer made in a project rather than
+   wrote into, so the block goes with the last rule and the file with it
+   only when Mindflayer made it (#45).
 
 An older ledger is migrated step by step, so one made two versions ago ends
 where one made today begins, and two rules hold for every step:
@@ -1595,7 +1699,14 @@ the code that spells it now: a later change to the spelling would otherwise
 change what an earlier step wrote. Version 3 gives an installation from a
 source that source's origin, and one from the workspace or a load none, since
 version 2 kept nothing to say which; it makes up no hash for a copy nobody
-hashed when it was written, and D-04 says how a missing one reads. Each step
+hashed when it was written, and D-04 says how a missing one reads. Version 4
+fills in nothing: no build before it installed a rule, and a skill's targets
+need no hash of their own. D-04's states (#47) took no step of their own:
+what tells them apart is the hash each copy was written with, which versions
+3 and 4 keep, and what the place it came from offers now, which is read where
+it is offered rather than kept. A record with no hash is held to its offer
+by the code that reads it (`install::standings`), since a step has no offer
+to fill one in from, and the first install over it stores its hash. Each step
 comes with a fixture of what the version before it wrote
 (`apps/core/tests/fixtures/ledger-v<N>.sql`, dumped from a ledger that build
 made), from which a test migrates, checks every row is kept, and opens the
@@ -1609,16 +1720,21 @@ alike in every agent's folder, since the copy's own folder is not part of it.
 Folders count, so two copies hash alike exactly when `copy::same` calls them
 the same. A link is refused rather than followed: Mindflayer never writes one
 into a copy, since `copy::tree` copies what a link points at, and following
-one could read anything. It is kept once per installation, not once per
-target: every target is written from one copy, so one hash is what each is
-compared with, and a copy somebody edited is the one whose own hash no longer
-matches it. An install records the hash of the copy as it stands once
+one could read anything. For a skill it is kept once per installation, not
+once per target: every target is written from one copy, so one hash is what
+each is compared with, and a copy somebody edited is the one whose own hash no
+longer matches it. A rule's targets each keep their own, `hash::bytes` of
+what each holds, since its section and its file are not the same bytes. An install records the hash of the copy as it stands once
 written; one that cannot be read back is recorded with none rather than not
 at all, since without a record it would be Foreign for good. That is a
 `warning:` and a non-zero exit, and the log's entry says why, rather than a
-plain success: a copy an install left as it was can hold a link somebody
-put there, which `copy::same` follows and the hash refuses, and a record
-with no hash is read as one from before hashes were kept.
+plain success: a record with no hash is read as one from before hashes were
+kept. No install leaves a copy it can tell holds what the hash refuses. A
+link where no install writes one is an edit, which an install that is not
+forced refuses and a forced one writes over, even when it points at the
+same bytes, which `copy::same` follows it to (`Stage::place_over`): left as
+it was, the copy would be recorded with no hash and read as edited still.
+What is left is a copy changed between landing and being read back.
 
 ## Installing
 
@@ -1631,7 +1747,10 @@ gets a copy in `.claude/skills` for Claude and one in `.agents/skills` that
 Codex and OpenCode share, and one whose settings name `targets` a copy in
 each folder they name, for all of them ([a project's own
 targets](#a-projects-own-targets)). A project a `mind.toml` marks names no
-agents, and gets one copy in the folder its marker names, as before.
+agents, and gets one copy in the folder its marker names, as before. A rule is
+no folder, and reaches a project's agents otherwise: through the block of its
+`AGENTS.md` and Claude's files, rendered with every other rule it has
+([installing rules](#installing-rules)).
 
 Not the folder a project's settings say it authors in
 ([D-06](#d-06-projects-keep-authoring-beside-the-code)): what the workspace
@@ -1690,9 +1809,11 @@ not stop `.agents/skills/ship` from being written, and OpenCode is then
 handed two versions of one skill, which nothing says ([an open
 question](#open-questions)). A name installed into one folder does not claim
 what somebody keeps under it in another, as when a project names an agent
-after the install. Every copy there recorded is `Installed`, even if one the
-record names has gone since, and the next install puts it back. A listing
-says the same of a copy in a project's agents' folders
+after the install. Where every copy there is recorded, what each copy the
+record names holds says how the installation stands ([an edited copy is
+left alone](#an-edited-copy-is-left-alone)): one gone since is
+`Standing::Missing`, and the next install puts it back. A listing says the
+same of a copy in a project's agents' folders
 (`Provenance::Foreign`), and no change to the project's own reaches one
 ([read where its agents
 read](#a-project-marked-by-its-settings-is-read-where-its-agents-read)).
@@ -1724,6 +1845,160 @@ A project has one directory per artifact name in each target, so two shelf
 entries offering `commit-style` cannot both be installed. The screen settles
 it by unticking the other rather than letting both apply and the second win: a
 conflict resolved where somebody can see it happening.
+
+### An edited copy is left alone
+
+The record keeps a hash of what was written in each copy
+([D-04](#d-04-an-edited-copy-is-detected-not-disowned)): once for a skill's
+installation, since every copy is staged from one tree, and once a target
+for a rule's section and its file, which hold different bytes. That hash,
+and what the place the record says it came from offers now
+(`install::offered_for`), tell five standings of an installation apart, as
+`install::standings` says of each installation and `survey` of each offer of
+its name:
+
+- **Current**: every copy holds what was written, and the offer holds it
+  still.
+- **Outdated**: every copy holds what was written, and the offer has moved
+  on. An update brings it up to date, as an install of it does ([bringing
+  what was installed up to date](#bringing-what-was-installed-up-to-date)).
+- **Edited**: a copy holds anything else: a hand edit, `mind edit`, a
+  skill's rename, which rewrites its `name` line, a file added, or a link
+  where a file was, which the hash refuses and no install writes. A rule's
+  rename moves its file as it is, and is no edit: the copy holds what was
+  installed, orphaned while nothing offers it by its new route.
+- **Missing**: a copy the record names is not where it was put, and an
+  update puts it back, as an install of it does. Every copy gone is still missing rather than absent:
+  the ledger records it, and `flayer uninstall` forgets it. The install
+  screen opens its box empty all the same (`Standing::present`), saying a
+  copy is gone, so marking it puts every copy back, as it did when every
+  copy gone read as absent: a `git clean -dX` takes every copy of a local
+  project at once (and its `.mind` with them, an open question). Held, the
+  box could only be marked to be taken out, so one with a copy left is
+  taken out with `flayer uninstall`.
+- **Orphaned**: the place it came from no longer offers it. No offer carries
+  it onto the install screen, so `standings` is where it is said, and
+  `status` and an update say it from there.
+
+When more than one holds, edited is said first, then orphaned, missing,
+outdated: an edit is what a change must not undo, an offer gone leaves
+nothing to put back or bring up to date, and a copy put back is put back as
+the offer holds it now. Outdated asks for the offer itself, read where it is
+offered: a skill's copy is compared with it as an install would write it
+(`copy::same_leaving`, without what no copy holds), a rule by the hash of its
+file against the one its record says every copy was rendered from.
+
+An edited copy is treated as a foreign one is. `install` and `uninstall`
+refuse the whole change, nothing written or taken out in any target, and name
+each edited copy (`Installed::Edited`, `Removed::Edited`), unless forced
+(`install_with` and `uninstall_with` given `Edits::Forced`, which `--force`
+asks for). Every copy or none: writing over the untouched copies beside an
+edited one would hand the agents reading both folders two versions of one
+skill. The look is made under the workspace's lock, after the one for
+somebody's, and wherever the record has its copies, since an install records
+its copies afresh and one in a folder it no longer writes would be left with
+no record. Forcing reaches only what the ledger records: a copy nothing
+records stays out of reach whatever is asked. The install screen never
+forces, and holds an edited row's box as it holds a foreign one's. An
+update leaves an edited installation as an install does, every copy of it,
+and says so, unless forced.
+
+A rule's copy from before a project had settings, in the folder its
+`mind.toml` named, is not one of the copies told in a project marked by
+them. The next render takes it out while it holds what was copied and
+leaves it, the project's own, when it does not, forced or not ([moving a
+project to its settings](#moving-a-project-to-its-settings)), so an edit
+there refuses nothing: refused, it would be a change `--force` does not
+make either.
+
+A record with no hash, from before version 3 of the ledger or of a copy
+that could not be read back, is held to its offer byte for byte: current
+while its copy matches, edited otherwise, and edited when nothing offers it
+any more. An untouched copy whose offer has moved on then reads the same as
+an edit, and taking it for one is the safe mistake. The first install over a
+copy that matches stores its hash, and from then on it is told as any other.
+
+### Bringing what was installed up to date
+
+`flayer update` and `mind update` (`update::plan`, `update::apply`) act on
+the standings: each installation outdated or missing is written again from
+the place its record says it came from, as that place offers it now
+(`Surveyed::source`), and nothing else is. A current one has nothing to
+change. An edited one is left, every copy of it, as an install leaves it,
+and said (`Step::Leave`) unless the update is forced, when it is written
+over and the copies it wrote over are said (`Step::WriteOver`). An orphaned
+one has nothing to be written from, edited or not, so it is said and left
+as the project holds it (`Step::Orphaned`): a note, never a failure, since
+nothing could have been done for it, and `uninstall` is what takes it out.
+A record from before origins were kept may stand for an offer of the
+workspace's own or of any workspace it loads; the one holding what an
+untouched copy holds is where it came from, and with none left to tell by
+it is not guessed (`Step::Unsure`), as an install with no `--from` does not
+guess between two.
+
+- **Written as an install writes.** Each skill, and each rule copied into a
+  project a `mind.toml` marks, goes through the install's own body
+  (`install::install_held`), so its copies are staged and put in place
+  together, its record and hash written afresh, and a local project's
+  exclude entries written before a copy lands. A copy a local project lost
+  comes back kept out of git as it was: one deleted by hand, or the
+  `AGENTS.md` it made, which a `git clean -X` takes, since it is a file in a
+  folder git tracks. Every other copy is in a folder of its own, which only
+  `git clean -dX` goes into, and that takes the project's `.mind` too, so
+  the project has to be marked again before an update can find it (open
+  questions). Under the lock the body looks again at everything an install
+  refuses, so a copy edited between the plan and the write is left all the
+  same.
+- **One lock, a plan made under it.** `apply` opens the ledger to write,
+  takes the workspace's lock, reads each project again and makes the plan
+  again under it, then writes every installation, as `reapply` and
+  `migrate` hold it from plan to write. The lock is not re-entrant, so the
+  install it writes with is the body `install_with` hands to once it holds
+  the lock, rather than `install_with` itself. A workspace with no ledger
+  file is given none: it records nothing to update.
+- **Failures are said where they happened.** A project that cannot be read
+  again refuses the whole update before anything is written. After that,
+  each installation is written whole or not at all, and one that fails
+  says so in its own `done`, beside the rest, which go ahead; the same
+  update run again finishes what is left.
+- **A project's rules come together.** The block in `AGENTS.md` is one file
+  written whole, so a project's rules are brought up to date by one render
+  (`rules::update_held`), which gives each rule as its offer holds it now.
+  Updating one rule therefore brings each other outdated or missing rule
+  of the project along, and the plan names each, so the lines say what was
+  written; leaving them behind would mean reading each back from the block,
+  as a render reads back only an edit it keeps. That render keeps a rule no
+  longer offered as the project holds it, as an uninstall of another rule
+  does, rather than refusing the rest for it, and writes over only the
+  edits of the rules the update was forced to write over. Every other rule
+  somebody edited, named or not, is kept whole (`Change::leaves`): each
+  copy as the project holds it, the one not edited too, and its record as
+  it was. A rule has two copies where Claude reads no block, its section
+  and its file for Claude, and keeping only the edited one, as an install's
+  render does, would write the other from the offer and leave Claude and
+  the agents reading the block with two versions of one rule.
+- **Names narrow it.** Only the installations the names given name are
+  planned, by kind and name as `install` takes them, every one when none is
+  given; a name that matches nothing installed in any project asked is
+  said, as a typo usually is.
+- **A dry run without `--yes`**, which reads the ledger without making it,
+  as every dry run does, and says the same lines with the same exit status:
+  an edited copy left alone is a warning either way, as an install refused
+  over it is, since what was asked for is not all done.
+- **Nothing is gathered.** An update copies what the shelf holds now; a
+  gather is what moves the shelf, and refreshing a source is its own
+  command (#100).
+
+The CLI lays it out (`commands/update.rs`): a line for each installation
+written, `updated`, `put back ... at`, or `updated ..., writing over the
+change at`, then, for a project's rules, what the render said of the rules
+it wrote (`Rendered::warnings_of_update`), but no edit it kept, which the
+update says itself. `flayer update` takes `-p` once for each project or
+`--all`, refusing neither given, and `mind update` the project it is in,
+through the workspace that manages it, as `mind install` does. Both resolve
+it as a read, so neither makes the default workspace in home, not even with
+`--yes`: one made for the occasion links no project, and the update would be
+refused all the same.
 
 ### Built where no agent looks
 
@@ -1811,16 +2086,49 @@ questions.
 ### Two places offer, one command takes
 
 What can be installed comes from the workspace's own skills, offered first,
-the workspaces it loads (below), and the shelf (`install::Offer`). Every
+the workspaces it loads (below), and the shelf (`install::Offer`); a rule from
+the first two, by its route, since nothing gathers one. Every
 installation records its origin, in the spelling `--from` takes; one from the
 shelf also points at the source it came from, and one of the workspace's own
 at none, because it came from nowhere but the workspace.
 
-`mind install <skill>` and `flayer install -p <project> <skill>` install one
-without the screen, through `install::offered`: the one candidate of that name,
-or an error naming every place that offers it when there is more than one;
-`--from` then says which, because which of two lands in the project's one folder
-of that name is not something to guess.
+`mind install <name>` and `flayer install -p <project> <name>` install one
+without the screen, through `install::offered_typed`: the one candidate of that
+name, or an error naming every place that offers it when there is more than
+one; `--from` then says which, because which of two lands in the project's one
+folder of that name is not something to guess.
+
+### Which kind a name is
+
+A name is typed bare or after its kind, `rule:git/commits`, with the colon
+every command takes ([why a qualifier uses a
+colon](#why-a-qualifier-uses-a-colon)), and core reads it (`Reference`).
+Bare, it is the one kind that offers it (`install::offered_typed`), asked
+only of the kinds a copy could be filed under that name
+(`install::is_installable_name`), so `git/commits`, which no skill can be
+called, is a rule's however it is typed. A name two kinds offer is refused
+(`InstallError::OfferedAsKinds`), naming what to type for each, as `mind show`
+refuses one: a skill and a rule of one name are two things. Defaulting a bare
+name to a skill, what every install meant before rules could be installed, was
+turned down: a route would need its qualifier for nothing, and a name both
+kinds offer would quietly install the skill. When no kind offers it, the first
+refusal that says more than that nothing is offered is the one given, so a
+project with nowhere to put a skill is told so, as it was. `--from` is asked
+of each kind as typed, and only when that kind is offered nothing, as a path
+to a loaded workspace (`install::resolve_from`): asked once for every kind,
+the refusal of a project with nowhere to put a skill would hide a rule the
+path offers.
+
+Taking one out reads the ledger instead (`install::uninstall_typed`): a bare
+name is the one kind recorded under it, one recorded as two is refused
+(`InstallError::InstalledAsKinds`), since taking both out would be twice what
+was asked, and one recorded as neither changes nothing whichever kind it is
+taken for, so each kind it could be says what is there, somebody's of either
+before the first's absence.
+
+A line about installing says a rule as `rule <route>`, as `add` and `remove`
+say one, and a skill by its name alone, as every such line did before: a
+route reads like a path, and one name can be both.
 
 ### What no copy holds
 
@@ -1911,7 +2219,10 @@ installing's trust in the name a `SKILL.md` declares under strain. So:
 - **A name must be one folder name** (`install::is_folder_name`). It is joined
   onto the project's folder, and replacing starts with deleting: `..` would
   delete the project, an absolute path anything at all. Such an artifact is
-  not offered from anywhere, and `install`/`uninstall` refuse it outright.
+  not offered from anywhere, and `install`/`uninstall` refuse it outright. A
+  rule's route is held to the rules every name is instead
+  (`install::is_installable_name`), so it never climbs out of the folder it
+  is filed in.
 - **Symlinks are followed only inside where the artifact comes from**
   (`copy::tree`'s `within`): the loaded workspace, the workspace's own root,
   the clone being gathered. One pointing out is refused, not copied, because
@@ -1926,10 +2237,12 @@ installing's trust in the name a `SKILL.md` declares under strain. So:
   any path there, not only one with a manifest, so a folder of notes started
   by hand is never replaced.
 
-What a load cannot offer (a workspace that has gone, an artifact that cannot
-be read, a name that is refused) is collected by `install::offered_by_loads`
-and said as `warning:` lines wherever offers are shown or used, and the
-install screen reports a row it could not apply and carries on with the rest.
+What a load offers is every kind, and what it cannot offer (a workspace that
+has gone, an artifact that cannot be read, a name that is refused) is
+collected by `install::offered_by_loads` and said as `warning:` lines wherever
+offers are shown or used, so what `flayer load`, `gather list` and the TUI
+count is what can be installed. The install screen reports a row it could not
+apply and carries on with the rest.
 Two spellings of one loaded directory are one source; `load_all`,
 `unload_all` and `unlink_all` rewrite the marker once, for all of the paths or
 none.
@@ -1941,8 +2254,10 @@ A project in local mode
 installed into it out of git, through a block of anchored entries in
 `$GIT_COMMON_DIR/info/exclude` that `exclude` keeps. Which paths to exclude
 is the installing side's to choose, and `exclude` only writes them down: an
-install of a skill names one entry for each copy (#43 and #45 will for rules,
-#94 for MCP config).
+install of a skill names one entry for each copy, a render of Claude's rule
+files one for each file ([Claude's rule files](#claudes-rule-files)), a
+render of a project's rules one for an `AGENTS.md` it made ([installing
+rules](#installing-rules)), and #94 will for MCP config.
 
 ```
 # mindflayer:begin
@@ -1979,9 +2294,10 @@ How an install uses it:
   A block that cannot be edited then is a `warning:` beside what was done
   (`Removed::Removed`'s `still_excluded`), not a reason to undo it: the
   copies are gone, and only a line naming their empty place is left. A
-  change from the project that reaches an installed copy, in a folder it
-  authors in that is also a target, takes that copy's entry out the same way
-  ([A record must not outlive the copy it is
+  change from the project that removes an installed copy, in a folder it
+  authors in that is also a target, takes that copy's entry out the same
+  way, and one that renames it moves the entry to where it went ([A record
+  must not outlive the copy it is
   about](#a-record-must-not-outlive-the-copy-it-is-about)).
 - **Outside git, a note.** A project outside a git work tree gets its copies
   and a `note:` saying nothing keeps them out of git
@@ -2095,10 +2411,15 @@ unrecorded in a folder it drops; `targets reset` is the same the other way.
   hash is the one recorded and forgotten when it has gone already.
   Otherwise, changed since it was installed or not to be compared (a record
   with no hash, a link), it is left where it is and dropped from the record
-  with its exclude entry: its author's now, as an edit makes a copy, until
-  D-04's states (#47) say more. Deleting it on a guess was turned down, and
-  so was keeping it recorded, which would name a copy in a folder no listing
-  of the project reads and call the installation partial for good. Which
+  with its exclude entry: its author's now. That is not what an edit does to
+  a copy where an agent reads, which stays recorded and reads as edited
+  ([an edited copy is left alone](#an-edited-copy-is-left-alone)): this one
+  is in a folder no agent the project names is sent copies to, which no
+  install writes again. Deleting it on a guess was turned down, and so was
+  keeping it recorded, which would name a copy in a folder no listing of the
+  project reads, call the installation missing or edited for good, and leave
+  it to the next install, which records its copies afresh, to drop all the
+  same. Which
   folder a copy is in is told by the folder on disk, as `install::targets`
   makes two spellings of one folder one target, not by the route recorded:
   a copy recorded in `.agents/skills` stays when codex goes and Claude reads
@@ -2133,15 +2454,16 @@ unrecorded in a folder it drops; `targets reset` is the same the other way.
   `mind init` writes the `.gitignore` before the settings. `edit_tracked` is
   written with the share mode every time, off unless `--edit-tracked` is
   given, so one command line says the whole of how the project shares.
-- **Refused before anything is written**: a project a `mind.toml` marks,
-  which has no settings until `mind migrate` moves it to them ([moving a
-  project to its settings](#moving-a-project-to-its-settings)), and is
-  pointed there; a change that leaves it naming no agent, which would take
-  every copy out, an uninstall's to do by name, or that installs a kind in
-  no folder, for the same reason; a target no install may use ([a project's
-  own targets](#a-projects-own-targets)); and a copy that would land in an
-  agent's own folder, or in one a loaded workspace keeps as its own, as an
-  install refuses one.
+- **Refused before anything is written**: a project a `mind.toml` or a
+  `settings.json` marks, which has no `settings.toml` to change until `mind
+  migrate` moves it to one ([moving a project to its
+  settings](#moving-a-project-to-its-settings)), and is pointed there
+  (`MindProject::changeable`); a change that leaves it naming no agent, which
+  would take every copy out, an uninstall's to do by name, or that installs a
+  kind in no folder, for the same reason; a target no install may use ([a
+  project's own targets](#a-projects-own-targets)); and a copy that would land
+  in an agent's own folder, or in one a loaded workspace keeps as its own, as
+  an install refuses one.
 - **Held by the workspace's lock.** `apply` takes the lock of the workspace
   that links the project from before it reads the settings again until
   every copy, record and exclude entry is written, so an install in that
@@ -2168,9 +2490,9 @@ unrecorded in a folder it drops; `targets reset` is the same the other way.
 
 ### The screen, and why it is three files
 
-`flayer install` is a two-column screen: projects on the left, the shelf as
-seen from the project under the cursor on the right. It is split so that only
-one of its three parts needs a terminal:
+`flayer install` is a two-column screen: projects on the left, and on the
+right what can be installed, as seen from the project under the cursor. It is
+split so that only one of its three parts needs a terminal:
 
 - `install/state.rs`: what a key does. Marking a box is a statement of intent
   and touches nothing; it is a plain state machine a test drives by pressing
@@ -2186,6 +2508,24 @@ Everything marked is applied in one batch, and what that batch did is printed
 afterwards as an ordinary `Outcome`, so a report from the screen reads like a
 report from any other command, warnings on stderr and a non-zero exit when
 something was left alone.
+
+The right column holds every kind's offers, filtered to one kind at a time:
+`tab` shows the next (`Screen::kind`), skills first, and a project's marks of
+every kind are applied together. A filter rather than a column a kind, so the
+screen keeps two columns however many kinds there are; and rather than every
+kind in one list, where a skill and a rule of one name would sit side by side
+as two boxes for what reads as one thing. A row is one kind and name, so
+ticking one offer unticks another of the same kind and name, and leaves a
+rule of a skill's name alone. Which offer of a rule the project holds is the
+one its record came from (`install::is_current`), since nothing in a project
+holds a rule's bytes alone to compare. A project offered nothing of the kind
+shown says what core says it cannot take (`install::receives`), or where that
+kind comes from: a rule from the workspace's own or a load, never the shelf.
+A row whose box cannot move says why: somebody's, which nothing of
+Mindflayer's touches, and an install edited since, which the screen never
+forces ([an edited copy is left alone](#an-edited-copy-is-left-alone)); every
+offer of the name stands as its one installation, so none of them can be
+marked over it either.
 
 `try_init` rather than `init`, here and in the TUI: these are the commands that
 need a terminal, and being run without one deserves a sentence rather than a
@@ -2205,59 +2545,117 @@ never wrote.
 Each artifact a project holds is one entry, as discovery lists it: every copy
 of one name together ([read where its agents
 read](#a-project-marked-by-its-settings-is-read-where-its-agents-read)). Its
-state is one of four (`status::State`):
+state is one of seven (`status::State`), the first five an installation's
+[standing](#an-edited-copy-is-left-alone), told by the same core function an
+install refuses by and an update acts on (`install::standings`), so the
+report, a refusal and an update never disagree:
 
-- **installed**: the ledger records every copy, and every copy it records is
-  found where it was put.
-- **partial**: the ledger records a copy discovery does not find where it was
-  put: deleted since, by hand or by a `git clean -X`, which the ignored copies
-  of a local project are exposed to, or left so it no longer reads, which
-  discovery says beside the report. The next install puts every copy back,
+- **current**: the ledger records every copy, every copy it records is found
+  where it was put holding what was written there, and the place it came
+  from offers that still.
+- **outdated**: the same, but the place it came from offers something else
+  by now. An update brings it up to date ([bringing what was installed up
+  to date](#bringing-what-was-installed-up-to-date)).
+- **edited**: the ledger records a copy that holds something other than was
+  written there, by its hash. A rule is edited in its section of the block
+  or in its file for Claude. Still Mindflayer's install, left alone by every
+  install, update and uninstall unless forced.
+- **missing**: the ledger records a copy discovery does not find where it
+  was put: deleted since, by hand or by a `git clean`, which the ignored
+  copies of a local project are exposed to, or left so it no longer reads,
+  which discovery says beside the report. An update puts every copy back,
   since it writes each target.
+- **orphaned**: the place it came from no longer offers it, so nothing can
+  bring it up to date or put a copy of it back; `uninstall` takes it out.
 - **foreign**: unrecorded, in an agent's folder outside any the project
   authors in: somebody's, never Mindflayer's to change.
 - **authored**: unrecorded, in a folder the project authors in: its own work.
 
-The state is discovery's answer (`Artifact::provenance`) with the record of
-the install laid over it: installed only when every copy is recorded, and
-partial when the record names one that is not found, even beside a copy the
-project authors of that name. That copy sits where the install wrote nothing,
-or it would be the install's, so the next install puts the gone one back all
-the same, and calling the entry authored would leave an agent reading none
-of it unsaid. Not beside a foreign copy, which is said first: the next
-install of the name is refused over it. The record is
+They took over from `installed`, now current, outdated or orphaned, and
+`partial`, now missing, which is a name a script read changing what it
+holds, so the JSON envelope moved to version 2 ([JSON, in one
+envelope](#json-in-one-envelope)). Keeping `installed` and adding the
+standing beside it, a field that would have moved no version, was turned
+down: two words for one entry, which the table and the TUI would each have
+had to choose between.
+
+The state is discovery's answer (`Artifact::provenance`) with the standing
+of the install laid over it, in the order a standing is said in (edited,
+orphaned, missing, outdated): one of the five only when every copy is
+recorded, and missing when the record names one that is not found, even
+beside a copy the project authors of that name. That copy sits where the
+install wrote nothing, or it would be the install's, so the next update puts
+the gone one back all the same, and calling the entry authored would leave
+an agent reading none of it unsaid. Not beside a foreign copy, which is said
+first: the next install of the name is refused over it. Nor beside an edited
+one, said next, for the same reason unless the update is forced, nor an
+orphaned one, which nothing can put back. The record is
 matched to the entry by the path of a copy it wrote, as discovery marks a copy
 installed, never by name, so an install of a name into one folder neither
 claims nor lends its origin to what somebody keeps under that name in another.
 A recorded copy is missing when discovery did not find it, rather than when
 nothing is at its path: a folder whose `SKILL.md` was deleted, or no longer
-parses, loads in no agent, and the next install replaces it as it replaces
-one that was deleted, where asking the disk would have called it installed
-and reaching nobody.
+parses, loads in no agent, where asking the disk would have called it
+current and reaching nobody. Its standing calls it edited, since it no longer
+holds what was written, and the report says edited over missing, as it does
+for any edit. A copy still holding what was written where discovery no
+longer looks is the other way round: missing in the report, and current to
+an update ([an open question](#open-questions)).
 
-An install nothing of which is found is still in the report, partial and
-reaching no agent, so that what was installed is said once its every copy has
-gone. Unless the project holds something else by that name: that is then the
+An install nothing of which is found is still in the report, missing, or
+orphaned when nothing offers it any more, and reaching no agent, so that
+what was installed is said once its every copy has gone. Unless the project holds something else by that name: that is then the
 name's one entry, said as what is there, since a row is one name, as in every
 listing, and the name is somebody's now ([an open
 question](#open-questions)).
 
 Beside its state, each entry names the agents among the project's that read
-one of its copies (`Artifact::agents`), which for a partial install are fewer
-than it was installed for, and where what was installed came from, the
-record's origin, as `--from` takes it. Each project names its own agents too,
-from its settings, so a front end can lay its rows out by agent; a project a
-`mind.toml` marks names none, and reaches none as far as a report can say.
-Whether a copy is current, outdated or edited is #47's to tell, once a copy is
-compared with what it came from, and the states it adds (#48) take over from
-partial for a copy that is missing.
+one of its copies (`Artifact::agents`), which for an install with a copy
+missing are fewer than it was installed for, and where what was installed
+came from, the record's origin, as `--from` takes it. Each project names its
+own agents too, from its settings, so a front end can lay its rows out by
+agent; a project a `mind.toml` marks names none, and reaches none as far as
+a report can say.
+
+The rules a project marked by its settings received are no copies discovery
+finds, but sections of the block in its `AGENTS.md` and Claude's files, so
+each is listed from its record and the block, an installed view
+([D-23](#d-23-what-a-project-received-is-an-installed-view)): catalog
+discovery parses no block, since a section is never authored in place but
+rendered from a rule kept elsewhere. A rule is missing while a target its
+record names is not found, its route among the block's sections or its file
+for Claude where it was written, as a skill's copies are, and otherwise
+stands as core stands it; one recorded with none has nothing missing. It is
+edited, over missing, while its section or its file holds something other
+than was rendered there, and orphaned while nothing offers it. It reaches
+Codex and
+OpenCode through the block, and Claude through its own file, or through the
+block where the render gave it none: a render gives Claude every rule as a
+file while Claude reads no block, so a rule in the block with no file of its
+own is one Claude reads there (a file that was somebody's when the render ran
+is the one case this tells wrong, and the render said it). A block that
+cannot be read holds none of them, and the next render says why. A rule
+copied into a project a `mind.toml` marks is discovered as its copy, as a
+skill is. A name the project authors a rule of too keeps the one entry
+discovery gives it, as a skill's does.
+
+Each rule a project marked by its settings received that some of its agents
+read nowhere is named in `missed`, with those agents, and is a warning beside
+the report too: one about some files, which Claude alone reads, or one Codex
+and OpenCode read nowhere because its block could not be written. Of each
+rule rather than of its kind, as `unreached` says a skill's: a skill reaches
+the agents that read the folders its kind goes to, the same for every skill,
+while a rule reaches the ones what it states, and where its block may go, let
+it. Only one installed whole, current, outdated or orphaned, from the rows
+as the report lists them: one partly gone is missing already, which says
+so.
 
 Each project also names, in `unreached`, every kind it installs only in
 folders some of its agents do not read, with those agents: what a project's
 `targets` can leave ([a project's own targets](#a-projects-own-targets)),
 and nothing under the standard folders, which each agent reads. It is a
 warning beside the report, with a non-zero exit, as anything that hides an
-install from an agent is: a partial install says one copy is gone, and this
+install from an agent is: a missing install says one copy is gone, and this
 says every copy is where an agent does not look. A folder the settings name
 in `targets` that no install uses is a failure beside the report too
 (`StatusFailure::Target`), since the report reads the installs as going
@@ -2272,6 +2670,17 @@ installs skills](#where-a-project-installs-skills)).
 - **A stale entry is listed, not left out**, with why it would not open, and
   said as a failure beside the rest, as `flayer list` says one: it is the
   entry somebody has to find to unlink it.
+- **An older marker is a hint.** Each project names the file its marker is
+  read from (`ProjectStatus::marker`, `marker` in the JSON), and one an
+  older Mindflayer wrote, a `mind.toml` or a `settings.json`, is a `hint:`
+  after the report naming `mind migrate`, as the TUI's header points at the
+  move ([moving a project to its
+  settings](#moving-a-project-to-its-settings)). Nothing else in a report
+  tells a `settings.json` from a `settings.toml`, which name the same
+  agents, though only the second can be changed. A hint, not a warning: the
+  project is read whole and the report is true of it, so the exit status is
+  the report's. On stderr under `--json` too, as `mind status`'s hint about
+  its workspace is, since the data says it in `marker`.
 - **Read, not made.** The ledger is opened with `ledger_for_reading`, so a
   workspace that never installed anything is left without one, and a default
   workspace nothing has made is reported as one with nothing linked, as
@@ -2363,7 +2772,7 @@ root rather than against wherever the process started. What the screen was
 opened with is passed along rather than spelled: its home, and the `-W` or
 activation that chose its workspace (`tui::execute`), as they were given to
 `flayer` itself. A command that opens a screen of its own
-(`flayer`, `flayer tui`, `flayer minds`, `flayer install` with no skill named,
+(`flayer`, `flayer tui`, `flayer minds`, `flayer install` with nothing named,
 `mind`, `mind tui`) is refused if it ever reaches that path, rather than drawn
 inside this one.
 
@@ -2489,6 +2898,25 @@ and its pane gets a strip saying so in `status`'s words
 (`ProjectStatus::unreached`, and each folder no install may use), beside the
 strip of what could not be read. Both strips are as tall as their lines once
 wrapped, so the end of a sentence, which says what to do, is not cut off.
+
+### Bringing a project up to date
+
+`u` runs `update --yes` for the project under the cursor (`mind -C
+<project> update --yes`), for the one artifact under it from the artifacts
+column (`... update --yes <kind:name>`), and on the workspace's own row for
+every project it links (`flayer update --all --yes`, with the artifact's
+name when one is under the cursor), and shows what it said in full, as the
+toggles do. It asks nothing first, unlike unlinking: an update writes over
+nothing somebody changed, since the screen never forces, and what it leaves
+is in the lines it shows. A project that cannot be opened is said in place
+of running anything. `u` was unlinking's key until #48 gave it to the
+update, the key that runs most often, so unlinking moved to `U`, which a
+stray press reaches less easily and which still asks first.
+
+The install screen marks a row whose offer has moved on since it was
+installed `(outdated; flayer update refreshes it)`, held as any install's
+row is: the screen marks what goes in and out, and the update is what
+brings one up to date.
 
 ## The local server
 
@@ -3051,14 +3479,14 @@ moves the start there itself (`resolve::managing` and `resolve::consulted`).
 `mind link` and `unlink` register the project with the workspace resolved;
 `install` and `uninstall` need that workspace to link the project, and are
 refused (`NotManaged`) when it does not (`managing`); `add`, `edit`, `rename`,
-`remove` and `templates` consult it, to drop the record of what they change
+`remove` and `templates` consult it, to see to the record of what they change
 and to lend templates, and only if it is made (`consulted`): a change to a
 project is no reason to write a marker into somebody's home, and a workspace
-made just now would hold nothing to drop or lend. One found above that
+made just now would hold nothing to see to or lend. One found above that
 cannot be read is a `warning:` after the change, since the change is the
-project's and the workspace was only to be told; one named or activated
-that will not open refuses it, as it refuses every other command, because
-whoever chose it meant that one to be told.
+project's and the workspace was only to be told; one named or activated that
+will not open refuses it, as it refuses every other command, because whoever
+chose it meant that one to be told.
 
 With `-W` or an activation, that is the chosen workspace wherever it sits,
 which is how a project linked from beside its workspace is managed from
@@ -3086,7 +3514,7 @@ A project's row runs `mind -C <entry>`, the line somebody in the project would
 type, which consults the project's own workspace. Where that is not the
 workspace on screen, because the project is linked from outside its tree or
 from above a nearer workspace, the row runs `mind -W . -C <entry>` instead
-(`Holder::Elsewhere`), so a change drops the record of the workspace on screen
+(`Holder::Elsewhere`), so a change sees to the record of the workspace on screen
 and the add form offers that workspace's templates, which are the ones its
 line finds. The `-W` is there only where leaving it out would consult another
 workspace, so every other row still teaches the plain project command; a
@@ -3173,15 +3601,20 @@ would either send OpenCode a second copy it does not need, or have a listing
 say OpenCode misses what sits in Claude's folder. A test holds the two
 together: every folder the standard table sends an agent is one it reads.
 `.codex/skills`, read only in a trusted project, is not counted, and no folder
-of rules is said to be read until M2 settles how a rule reaches each agent,
-though Claude reads `.claude/rules`.
+of rules is said to be read, though Claude reads `.claude/rules`: what
+Mindflayer writes there is listed from the ledger as its rule's target
+([installing rules](#installing-rules)), not found by discovery.
 
-Rules have no entry yet, by design rather than by omission.
+Rules have no entry, by design rather than by omission.
 [D-03](#d-03-rules-reach-every-agent-through-agentsmd) gives a rule a section
 of a block in the project's `AGENTS.md`, with Claude's fallback in
-`.claude/rules/mindflayer` chosen by #44's predicate, and M2 decides how the
-table carries that. MCP servers, entries in each agent's own config file, come
-in M6.
+`.claude/rules/mindflayer` chosen by `claude_md::reach` ([how Claude reaches
+the block](#how-claude-reaches-the-block)). The block is no folder
+a copy goes into, one file every agent shares, so it is rendered outside the
+table ([how a rule reaches the agents](#how-a-rule-reaches-the-agents)), and
+so are Claude's files, which follow how Claude reaches the block rather than
+an agent alone ([installing rules](#installing-rules)). MCP servers, entries
+in each agent's own config file, come in M6.
 
 `TargetTable::targets(kind, agents)` gives one target (`AgentTarget`) per
 location, each with the agents it is for: all three agents take a skill in two
@@ -3193,7 +3626,7 @@ starts from this list (`install::targets`).
 
 The table is a value a caller is handed, not a function it reaches for,
 because the standard layout is only the default: the owner's amendment to
-D-07 lets a project's `.mind/settings.json` put a kind somewhere else, one
+D-07 lets a project's `.mind/settings.toml` put a kind somewhere else, one
 `.skills` folder for every agent for instance ([a project's own
 targets](#a-projects-own-targets)). A caller that takes the table follows
 the project's without changing, and two agents the override sends to one
@@ -3222,9 +3655,9 @@ exists, holds foreign content or is tracked is the install's to find out.
 ### A project's own targets
 
 A project's settings may name, per kind, the folders what is installed into
-it lands in, in place of the ones its agents read: `"targets": {"skills":
-[".skills"]}` sends every skill installed into the project to `.skills`, one
-copy for every agent it names (the owner's amendment to
+it lands in, in place of the ones its agents read: a `[targets]` table
+holding `skills = [".skills"]` sends every skill installed into the project
+to `.skills`, one copy for every agent it names (the owner's amendment to
 [D-07](#d-07-one-copy-per-agent-folder)). `MindProject::targets` overrides
 the standard table for each kind the settings name with the folders they
 give (`TargetTable::overriding`), so discovery reads there, an install writes
@@ -3251,9 +3684,10 @@ and from there, none of them knowing an override was read.
   files, in every clone of a shared project; and only for a kind
   installed as a folder an artifact, so a rule, which reaches agents through
   `AGENTS.md` ([D-03](#d-03-rules-reach-every-agent-through-agentsmd)), has
-  none until M2 says how the table carries it. What an install refuses of
-  any target, an agent's own folder and one a loaded workspace keeps as its
-  own, it refuses of these too, since only it knows the homes and the loads.
+  none: its block and Claude's files are rendered outside the table. What
+  an install refuses of any target, an agent's own folder and one a loaded
+  workspace keeps as its own, it refuses of these too, since only it knows
+  the homes and the loads.
 - **Strict when writing, lenient when reading.** A change that names a folder
   no install may use is refused before anything is written, and so is a kind
   named with no folder at all, which would install it nowhere: an
@@ -3277,22 +3711,24 @@ and from there, none of them knowing an override was read.
   <dir>...` and `mind targets reset <kind>`, and `flayer targets -p`, a dry
   run without `--yes` ([when a project's agents, targets or share mode
   change](#when-a-projects-agents-targets-or-share-mode-change)).
-- **With version 4 of the settings** (`TARGETS_VERSION`). A key the format
-  does not define is otherwise read past, and a build from before this one
-  would read past `targets` too and install into the standard folders
-  without a word, recording copies the newer build does not read. So a file
-  that sets them is written at version 4, which such a build refuses, and
-  one that does not stays at 3, which every build since settings reads: the
-  version a file is written with is the lowest that reads it as it means
-  (`Settings::version_needed`). A change of `targets` brings it along, back
-  down once no kind is named, the one version an edit changes. A version 3
-  file given `targets` by hand is read with them all the same: somebody
-  wrote them to be used, and only an older build could miss them ([an open
-  question](#open-questions)). One whose `targets` do not read as them is
-  read past, as before them, so that no project an older build opened stops
-  opening. Bumping every file to 4 was turned down: a
-  project that never sets an override would be refused by every older build
-  for nothing.
+- **With a version a build from before them refuses** (`TARGETS_VERSION`).
+  A key the format does not define is otherwise read past, and a build from
+  before this one would read past `targets` too and install into the
+  standard folders without a word, recording copies the newer build does not
+  read. A `settings.json` that set them was written at version 4, which such
+  a build refuses, and one that did not stayed at 3, which every build since
+  settings reads: the version such a file was written with was the lowest
+  that read it as it meant, and a change of `targets` brought it along,
+  back down once no kind was named. Bumping every file to 4 was turned down:
+  a project that never set an override would have been refused by every
+  older build for nothing. A `settings.toml` is 5 whatever it sets, since
+  every build that reads one reads `targets`, and one from before it finds no
+  project there at all, so setting or resetting them moves no version. A
+  version 3 `settings.json` given `targets` by hand is read with them all the
+  same: somebody wrote them to be used, and only an older build could miss
+  them ([an open question](#open-questions)). One whose `targets` do not
+  read as them is read past, as before them, so that no project an older
+  build opened stops opening.
 
 ### Adding an agent
 
@@ -3323,9 +3759,10 @@ A change to an agent path cites it; this section is about how Mindflayer
 finds the agents' own folders, not what the agents do in them.
 
 Checks to come read what an agent reads for every project, not only what a
-project holds: Claude's user memory, Codex's config, OpenCode's configuration
-folder and the skills in `~/.agents` (#44, #91, #96). Those folders come in
-the way home does. `--claude-config-dir`, `--codex-home`,
+project holds: Claude's user memory, which `claude_md` leaves out of what
+keeps Claude from reading `AGENTS.md` (#44), Codex's config, OpenCode's
+configuration folder and the skills in `~/.agents` (#91, #96). Those folders
+come in the way home does. `--claude-config-dir`, `--codex-home`,
 `--opencode-config-dir` and `--agents-dir` are global options on both parsers,
 and `homes::agent_homes` takes each from its option, then from the variable
 the agent itself reads (`$CLAUDE_CONFIG_DIR`, `$CODEX_HOME`,
@@ -3363,13 +3800,540 @@ too, as an empty `$MINDFLAYER_HOME` does; whether the agents agree is an [open
 question](#open-questions).
 
 Installing is the first to take them, to refuse a copy inside one ([never
-into an agent's own folder](#never-into-an-agents-own-folder)). They are
+into an agent's own folder](#never-into-an-agents-own-folder)), and
+rendering a project's rules takes them to refuse a block of them there ([how
+a rule reaches the agents](#how-a-rule-reaches-the-agents)). They are
 decided once per command line, with the workspace to use, into the same
 `Lookup` (`Lookup::given`), which the TUI keeps and hands to every line it
 runs (`tui::execute`) and to its install screen: a line the TUI runs carries
 none of the four options, so deciding them again would read the environment
 the TUI was opened in, and a test that drives the TUI would reach the real
 folders. Nothing reads what is in them yet.
+
+## How a rule reaches the agents
+
+A rule reaches a project's agents as a section of a block in the project's
+root `AGENTS.md` ([D-03](#d-03-rules-reach-every-agent-through-agentsmd)):
+the one file of a project that Claude Code, Codex and OpenCode all read, and
+Codex has no way to include another ([docs/agents.md](agents.md)).
+`agents_md::render` writes it, and `claude_rules::render` the rules Claude
+alone is given ([Claude's rule files](#claudes-rule-files)). Which rules a
+project is given, when, and the record of what was written are
+`install::rules`' ([installing rules](#installing-rules)); whether Claude
+reads the file at all, or needs an `@AGENTS.md` import in its `CLAUDE.md`,
+is `claude_md`'s ([how Claude reaches the
+block](#how-claude-reaches-the-block)).
+
+```markdown
+# Working here
+
+Run `make test` before every push.
+
+<!-- mindflayer:begin -->
+<!-- mindflayer:rule commit-style -->
+Write commit messages as `<area>: <imperative summary>`.
+
+<!-- mindflayer:rule git/no-force-push -->
+Never force-push a branch somebody else may have pulled.
+<!-- mindflayer:end -->
+```
+
+- **HTML comments for markers.** Claude strips a block-level comment before
+  the file reaches the model and keeps the text between two of them,
+  verified on 2.1.309 with the file read natively and imported. Codex and
+  OpenCode read the file as it is, where a comment is a line of markup that
+  says nothing. A heading of Mindflayer's own was turned down: every agent
+  would read it as one more instruction.
+- **One section a rule, in listing order.** A section is the rule's marker,
+  naming its route, then its body: `Artifact::contents`, the file less its
+  front matter, without the blank lines it opens and closes with, so the
+  block is laid out the same however each file spaces its fences or ends.
+  One blank line separates two sections, which keeps two rules two
+  paragraphs once Claude has stripped the markers. They come in the order
+  `list` gives them (`catalog::report_order`), by name. A rule that states
+  `paths` has no section: it goes to `.claude/rules/mindflayer` alone
+  ([Claude's rule files](#claudes-rule-files)), where Claude loads it only
+  once one of those files is read, while in the block every agent would read
+  it for every file. A `paths` in a shape nothing reads says nothing, as
+  everywhere else, so that rule has its section. Both renderers ask
+  `RuleManifest::is_scoped`, so they never disagree on which rules those
+  are.
+- **Strict when writing.** A route is held to the rules every name is
+  (`name_issues`), which also keeps its marker one that reads back as
+  itself: lowercase words joined by single hyphens and slashes hold no space
+  and no `--`. A body line that would read back as a marker is refused, and
+  so are two rules of one name, a rule that cannot be read and anything that
+  is not a rule. Each refuses the whole render, with nothing written: a
+  section left out would take its rule away from every agent until the next
+  render.
+- **Every byte outside the block is kept.** The file is read as lines that
+  keep their endings (`lines`, shared with git's exclude file), and only what
+  lies between the markers is replaced, whole, a line somebody wrote there
+  included. A new block goes after what the file holds, on lines of its own,
+  with the ending the file already uses, so a CRLF file stays CRLF; a last
+  line without a newline gets one, and the end marker goes without. An empty
+  line sets it apart from what is above, so that once Claude strips the
+  markers the file's last paragraph and the first rule's are still two, the
+  layout the probe verified ([docs/agents.md](agents.md)). That line is the
+  block's: an empty line just above the begin marker is taken out with it,
+  one somebody wrote there by hand included, since nothing tells the two
+  apart. So dropping the block gives the file back exactly as it was before
+  the block was written, and a render that changes nothing writes nothing.
+- **Refused, never repaired.** A block left open, an end marker closing
+  nothing, a second block, a rule's marker outside the block, one route
+  twice, and a line written like a marker but none of them (indented, spaced
+  otherwise, naming a mark there is not) are each refused with the line they
+  are on, and nothing is written (`agents_md::Malformed`), as in the exclude
+  file. Read as text, a hand-indented begin marker would have the next render
+  write a second block below the first. The file is read a line at a time,
+  not as markdown, so a marker quoted in somebody's code fence counts:
+  telling fences apart would need a markdown parser, for a mistake that is
+  refused and never acted on.
+- **Made, changed, taken away.** A file that is not there is made with
+  `create_new`, and only then is the render said to have made it
+  (`Written::Created`); the ledger keeps that (`created_files`) and the
+  next render is handed it back as `created`, so that once no rule is left
+  the block goes, and the file with it when nothing but blank lines is
+  left. Mindflayer takes away only a file it
+  made, and a link somebody put in its place is emptied, never removed. A
+  file that is there is replaced through `replace_bytes`, a temporary and a
+  rename, which follows a link to the file it names: an `AGENTS.md` linked
+  to the `CLAUDE.md` beside it, as some teams keep the two, is written
+  through, and Claude then reads the block as that `CLAUDE.md`, with no
+  import beside it (`Reach::Same`, [how Claude reaches the
+  block](#how-claude-reaches-the-block)). A link leading out of the project is refused
+  (`AgentsMdError::LinkedOut`), since a repository can hold one to the
+  user's own `~/.codex/AGENTS.md`, and replacing it with a file of the
+  project's own would undo what somebody linked on purpose. It takes no
+  lock, as `ConfigFile` takes none: its caller holds the workspace's.
+- **Never above other projects.** Claude reads every `AGENTS.md` from where
+  it starts up toward `/`, and OpenCode V2 up to the home directory, so rules
+  rendered into a folder above a project the workspace links would reach
+  that project too, beside its own: a monorepo's root, above its packages.
+  A block is refused in such a folder, a stale entry's included, and in the
+  workspace's own root unless a project it links is there. The workspace
+  puts nothing in its own directory (`FlayerWorkspace::own` is a holder at
+  that root, not a project), while a project at the root is a project like
+  any other, and its `AGENTS.md` its own. A render that leaves no block goes
+  ahead in either: a block written before a project was linked below it, or
+  before the one at the root was unlinked, is reaching those agents already,
+  and refusing to take it out would keep the leak the refusal is there to
+  stop.
+- **Never into an agent's own folder.** A block is refused, the same way,
+  in a project at or inside one of the agents' own folders
+  (`AgentsMdError::UserScope`), which the front end hands over as it does
+  for an install ([never into an agent's own
+  folder](#never-into-an-agents-own-folder)): a project at `$CODEX_HOME`
+  would write the `AGENTS.md` Codex reads in every project, one at
+  `~/.config/opencode` OpenCode's, and one at `~/.claude` the
+  `.claude/AGENTS.md` Claude finds above every project in the user's home.
+- **What Codex would miss is said.** Codex reads one file a folder,
+  `AGENTS.override.md` before `AGENTS.md`, from the git root down to where it
+  starts, and cuts the whole off at 32 KiB (`project_doc_max_bytes`); with no
+  git root it reads only the folder it starts in (docs-only, each with its
+  fallback in docs/agents.md). So a render that leaves a block warns
+  (`agents_md::Warning`) of an override beside the file, of a project in no
+  git work tree, and of the files from the git root down coming within an
+  eighth of the budget or past it, each worked out for Codex started at the
+  project's root. Warnings, not refusals: the block still reaches Claude and
+  OpenCode, and what to change is in files that are not Mindflayer's. A
+  repository or a file that cannot be looked at is said the same way, rather
+  than turning a render already written into a failure.
+
+### Claude's rule files
+
+Only Claude reads a project's `.claude/rules`, at any depth, and only Claude
+honours a rule's `paths`, loading such a rule once it reads a file they
+match (verified on 2.1.309, [docs/agents.md](agents.md)). So a rule about
+some files only reaches its project as a file there, which
+`claude_rules::render` writes, and has no section in the block. The same
+renderer gives Claude the rules about every file when it reads no block.
+
+```text
+.claude/rules/mindflayer/rust/errors.md          a rule that states paths
+.claude/rules/mindflayer/git/no-force-push.md    one that does not, in fallback mode
+```
+
+- **Two modes, chosen by the caller.** `Mode::Scoped` writes only the rules
+  that state `paths`, for a project whose Claude reads the block, natively or
+  through the import in its `CLAUDE.md`. `Mode::Fallback` writes every rule,
+  for one whose Claude reads no block. Which applies is `Reach::mode`, from
+  how Claude reaches the block ([how Claude reaches the
+  block](#how-claude-reaches-the-block)), never from whether a block was
+  written alone: in fallback mode the block may still be written for Codex
+  and OpenCode, and Claude, reading none of it, reads each rule once and
+  misses none. A file left from the other mode goes
+  once its rule is no longer taken, unless somebody changed it since: that
+  one stays, and is said, like any edited file.
+- **The rule as written.** A file holds the rule's bytes, front matter
+  included, where the block holds `Artifact::contents`: Claude takes `paths`
+  from it and strips the rest before the rule reaches the model (docs-only),
+  and a file that is the rule byte for byte is one somebody can open and
+  recognise. A `paths` in a shape nothing reads makes a rule about every
+  file here as in the block, and its front matter is still kept as written.
+- **A folder of Mindflayer's own.** `mindflayer` keeps the files apart from
+  rules somebody keeps in `.claude/rules` by hand, so no route names one of
+  theirs. Below it a file is filed by its route, folders and all, as in the
+  library; a route is held to the name rules (`name_issues`), so it never
+  climbs out, and neither does a recorded one.
+- **What is Mindflayer's is what the caller recorded.** The renderer is
+  handed what the ledger records of each file ([installing
+  rules](#installing-rules)), as an earlier render returned it
+  (`Rendered::recorded`): each file's route, and the hash of what it held
+  (`hash::bytes`, the SHA-256 of the bytes, beside `hash::tree` for a
+  folder). A file is Mindflayer's while it holds exactly that: replaced when
+  its rule changes, taken away when its rule is no longer asked for.
+  Anything else at a rule's place is somebody's, never written over or taken
+  away. A file nothing recorded is `Written::Foreign`, and its rule is not
+  written, even when it holds the rule byte for byte, since taking it for
+  Mindflayer's would remove it with the rule. One changed since it was
+  written is `Written::Edited`, left as it is with its record kept, as
+  [D-04](#d-04-an-edited-copy-is-detected-not-disowned) has an edited copy;
+  edited back into the rule as it is now, it is current again. Only a forced
+  install or uninstall of its own rule replaces or takes it away, handing
+  the hash of what it holds now as the one recorded. A link at a rule's
+  place is somebody's too, since Mindflayer writes none. Rejected: telling
+  them by route alone, which would write over a teammate's change committed
+  into a shared project, as the block once replaced a hand-edited section;
+  by the folder, which would take somebody's file there for Mindflayer's;
+  and by a mark in the file, which would no longer be the rule as written,
+  and which a copy made by hand carries along.
+- **Made, replaced, taken away.** A file that is not there is made with
+  `create_new`, so one somebody made after the look is never written over,
+  and only then is it said to be made (`Written::Created`). One that is
+  Mindflayer's is replaced through a temporary beside it and a rename, never
+  through a link (`replace_bytes_unresolved`): the temporary's name ends in
+  `.tmp`, which Claude's `**/*.md` does not load, so it is no rule staged
+  where Claude looks. One that already holds the rule is not written at all.
+  Every file is written before any is taken away, so a renamed rule is never
+  missing from the folder between its old file and its new. Taking away the
+  last file takes the folders it leaves empty, up to and including
+  `mindflayer`, and not `.claude/rules` or `.claude`, which may be
+  somebody's even when empty; a recorded file found gone (`Written::Gone`)
+  leaves its folders to go the same way.
+- **Refused whole, or failed file by file.** A rule that is not a rule, one
+  that cannot be read or is named no name, two rules of one name and a
+  recorded route that is no name refuse the whole render before anything is
+  written, as the block's render refuses them. Two of one name are refused
+  among every rule handed in, whichever the mode takes: in scoped mode the
+  block compares only the rules about every file, so a pair of which one
+  states `paths` is this render's to refuse. A file that cannot be looked
+  at, written or taken away is only its rule's failure
+  (`claude_rules::Warning::Failed`): each file stands on its own, and the
+  caller has to hear of every file that was written, to record it.
+- **Kept out of git in a local project.** One exclude entry a file, in the
+  project's group keyed by its id ([what keeps an install out of
+  git](#what-keeps-an-install-out-of-git)), all written before any file
+  lands; a block that cannot be edited refuses the render with nothing
+  written. The entries of files taken away, found gone, or that failed to
+  land come out last, and a block that cannot be edited then is said
+  (`Rendered::still_excluded`), not raised. Somebody's file at a rule's
+  place gets no entry, and keeps whatever entry it had. An entry names the
+  route through `.claude`, not the folder on disk, and git follows no link,
+  so a file reached through a link inside the project is not kept out
+  ([open question](#open-questions)).
+- **Never where the block is refused.** A render asked for a rule is refused
+  wherever `agents_md::misplaced` refuses the block: above a project the
+  workspace links, at the workspace's root where it links none, and inside
+  an agent's own folder. For a project at the user's home that folder is
+  `~/.claude` itself, whose `rules` Claude reads in every project. A render
+  that only takes files away goes ahead, so rules left there can come out.
+  Whether Claude reads a `.claude/rules` in a folder above where it starts is
+  not recorded, so above a project is refused as for `AGENTS.md`, which at
+  worst is too cautious (an [open question](#open-questions)).
+- **Never out through a link.** A link on the way to a rule's file that
+  leads out of the project is refused, writing or taking away
+  (`ClaudeRulesError::LinkedOut`): `.claude` linked to the user's own
+  `~/.claude` would give every project these rules, and a removal through
+  it would take a file out of somebody else's folder. A link that stays
+  inside the project is followed, though in a local project the file's
+  exclude entry then misses it (above).
+- **What misses a rule is said.** A rule that states `paths` reaches Claude
+  alone, in either mode, and `Warning::ClaudeOnly` names the project's
+  agents that read no `.claude/rules`: Codex and OpenCode, unless the
+  project names fewer, and both for a project a `mind.toml` marks, which
+  names none (docs-only for both agents; were either to read the folder,
+  the warning would be too cautious, never wrong about Claude). Which agents
+  read the folder is a match with an arm an agent and no wildcard, so a new
+  agent says whether it does before it compiles. `Agent::reads` still names
+  no folder of rules, so discovery reads none of these files, and a listing
+  of the project takes none for somebody's: status lists each as a target
+  of its rule, from the ledger ([installing rules](#installing-rules)).
+- **No lock of its own.** As `agents_md::render`, it takes none: its caller
+  holds the workspace's.
+
+### How Claude reaches the block
+
+Claude Code reads `AGENTS.md` natively only when no `CLAUDE.md`,
+`.claude/CLAUDE.md` or `CLAUDE.local.md` is in the folder it starts in or
+any folder above it (verified on 2.1.309, [docs/agents.md](agents.md)). So
+the block reaches Codex and OpenCode wherever it is, and Claude only as
+`claude_md` decides: natively, through an `@AGENTS.md` import Mindflayer
+adds to the project's own `CLAUDE.md`, or not at all, when Claude's rule
+files carry every rule instead ([Claude's rule
+files](#claudes-rule-files)).
+
+```markdown
+<!-- mindflayer:begin -->
+@AGENTS.md
+<!-- mindflayer:end -->
+
+# Working here
+```
+
+- **One predicate.** `claude_md::reads_agents_md` looks for the three names
+  in the project's root and every folder above it, past the git root, since
+  a `CLAUDE.md` in the folder somebody keeps their repositories in stops the
+  read too (verified). It stops below `/`, as Claude's own check does by the
+  directory counts in its debug log: counting `/` would choose the fallback
+  where Claude reads the block natively, and give Claude every rule about
+  every file twice (D-03 records the choice). The user memory file,
+  `CLAUDE.md` in the Claude folder the front end hands over in
+  `AgentHomes`, never counts, also where the walk from a project under the
+  home finds it as the home's `.claude/CLAUDE.md` (verified); it is told by
+  the file it is, both paths resolved, so a spelling through a link is still
+  that file. The walk starts from the project's root resolved, as Claude,
+  started there, has its directory from the system. Anything at one of the
+  names counts, a link followed, a link to nothing not.
+- **Five reaches.** `claude_md::reach` takes the predicate, the project's
+  settings and whether the block was written, and says how Claude gets the
+  block. `Reach::Native` when nothing is in the way. `Reach::Same` when one
+  of Claude's own names in the project is the `AGENTS.md`, one file through
+  a link, as some teams keep the two: Claude reads the block as that file,
+  and an import there would bring the file into itself, between markers the
+  block already holds. `Reach::Imported` when one of the project's own
+  files already imports `AGENTS.md` with a line somebody wrote, as Claude's
+  docs show a `CLAUDE.md` sharing it. `Reach::Import` when the project's
+  own `CLAUDE.md` or `.claude/CLAUDE.md` may take Mindflayer's import, or
+  already holds it. `Reach::Fallback`, with its
+  reason, otherwise: no block written, only a `CLAUDE.local.md`, a
+  `CLAUDE.md` only above the project, the project's own one tracked by git
+  in a local project without `edit_tracked`, one reached through a link, or
+  one of which git cannot say whether it tracks it. `Same` is the case #42
+  left to this predicate: the block is written through such a link, and an
+  import in the same file would have each render take the other's block
+  for its own.
+- **Never read twice.** `Reach::mode` is the mode Claude's rule files are
+  rendered in: `Mode::Scoped` for `Native`, `Same`, `Imported` and `Import`,
+  where Claude reads the block once, natively, as its own file, or through
+  an import, which loads a file once and turns the native read off by being
+  in a `CLAUDE.md` (verified); `Mode::Fallback` for every reason Claude
+  reads no block, where its rules folder holds every rule and the block none
+  of them for Claude. No block written is a fallback too, whatever the
+  predicate says: Claude cannot read a block that is not there, and the
+  rules folder then holds the rules about every file that a refused or
+  skipped block would have. So Claude reads a rule in exactly one place.
+  An import somebody wrote counts as Mindflayer's does, in a file Mindflayer
+  may not edit too: a team's tracked `CLAUDE.md` holding `@AGENTS.md`, in a
+  local project, would otherwise give the fallback, and Claude would read
+  every rule about every file in the block through that line and again in
+  its rules folder. So does one in a `CLAUDE.local.md`, when no file of the
+  project's own can take Mindflayer's, since Claude reads that file as it
+  reads `CLAUDE.md`. Such an import is a line of its own, `@AGENTS.md`, or
+  `@../AGENTS.md` in `.claude/CLAUDE.md`, the line Mindflayer would write,
+  outside a fenced code block, whose imports Claude skips (docs-only), and
+  outside an HTML comment over several lines, which Claude strips. Looking
+  no further is on purpose: a line taken for an import Claude does not
+  follow would keep those rules from Claude altogether, while one missed
+  has Claude read them twice at worst. An `@AGENTS.md` in the middle of a
+  sentence, which Claude follows too, is one missed.
+- **Which file takes the import.** `CLAUDE.md` first, the file the probe
+  verified the import in, as `@AGENTS.md`; then `.claude/CLAUDE.md`, as
+  `@../AGENTS.md`, since Claude resolves an import from the file holding it
+  (docs-only, with its fallback in docs/agents.md). Never
+  `CLAUDE.local.md`, a person's own file, kept out of the team's view. A
+  file may take it in a shared project, in one a `mind.toml` marks, which
+  was committed by design, and in a local one while git does not track the
+  file (`exclude::tracks_file`, from the index with gix) or its settings say
+  `edit_tracked` (D-02). A file already holding the import keeps it, so it
+  never moves from one file to the other, and counts as how Claude reaches
+  the block even once it may no longer be edited, a tracked `CLAUDE.md`
+  committed with the import in it say, since Claude reads it there anyway:
+  taking the fallback beside it would have Claude read every rule twice.
+  An import somebody wrote in either file comes before Mindflayer's, which
+  is then wanted nowhere and taken out where it may be, so nothing is
+  written where a team already shares `AGENTS.md` with Claude. One in a
+  `CLAUDE.local.md` comes after every file of the project's own that may
+  take Mindflayer's: it reaches only its owner, and a teammate cloning a
+  shared project needs the import in the file they share.
+- **A block at the top.** The import sits between the markers the block of
+  `AGENTS.md` has, read by the same search (`agents_md::locate`) through
+  the same lines (`lines`), at the top of the file, an empty line below it,
+  the layout the probe verified. The empty line is the block's, taken out
+  with it, so the file comes back as it was. Everything outside the block
+  is kept byte for byte, CRLF and a missing final newline included, and a
+  byte order mark stays first, where the block would otherwise push it into
+  the middle of the file. A malformed block is refused with nothing
+  written, as in `AGENTS.md`, and so is a rule's marker in the block: it
+  marks a copy of `AGENTS.md`, and an import beside its rules would give
+  them twice.
+- **What is never touched.** `claude_md::render` edits only the project's
+  own `CLAUDE.md` and `.claude/CLAUDE.md`, each only while it is there. It
+  never makes one, as it never makes a `CLAUDE.local.md`: a `CLAUDE.md`
+  Mindflayer made would itself turn Claude's native read off. It never edits
+  a file above the project, which is reported as the fallback's reason
+  (`Fallback::Above`) instead: Claude reads it in every project below, and
+  it is nobody's to edit for one of them. Nor a file reached through a
+  link, whose import would mean whatever the link leads to; nor the user
+  memory file in a project at the home; nor the `AGENTS.md` itself.
+- **Added once, gone with the last rule.** The import goes into the file
+  the reach names, and comes out of the project's other `CLAUDE.md`, so it
+  is in one file at most, however many rules there are; once no block is
+  written it comes out of both, and each file is as it was before.
+  Replaced through a temporary and a rename, never through a link
+  (`replace_bytes_unresolved`), and a file whose text a change leaves as it
+  was is not written. Every file is read before any is written, so a
+  malformed block refuses the whole render. An import no longer wanted in a
+  file that may no longer be edited stays there, and is said
+  (`claude_md::Warning`), never taken out behind the setting that keeps
+  Mindflayer out of the file ([an open question](#open-questions)).
+- **No lock of its own.** As the two renderers, it takes none: its caller
+  holds the workspace's. Which rules a project is given and when to render
+  are `install::rules`', as for the block.
+
+### Installing rules
+
+A rule is installed, and taken out, through the same `install::install`
+and `install::uninstall` a skill is (`install::rules`), offered from the
+workspace's own rules and from a load's, by the route it is filed under:
+held to the rules every name is, as the block holds it (`name_issues`),
+rather than to one folder name, and two places offering one route are
+refused as for a skill (`OfferedTwice`), `--from` saying which. A rule is
+never gathered (#111), so the shelf offers none. The command line, the
+install screen and what a load is said to offer take rules as they take
+skills ([which kind a name is](#which-kind-a-name-is)).
+
+- **One render for every rule.** The block is one file, written whole, so
+  a project marked by its settings is given its rules together: installing
+  one, or taking one out, renders every rule the ledger records for the
+  project, each from the offer it was installed from, as it is there now,
+  into the block ([how a rule reaches the
+  agents](#how-a-rule-reaches-the-agents)), then the import or none in its
+  `CLAUDE.md` ([how Claude reaches the block](#how-claude-reaches-the-block)),
+  then Claude's rule files in the mode that reach says ([Claude's rule
+  files](#claudes-rule-files)). `install::rules::render` does the same with
+  nothing installed or taken out, for a front end to bring the three in
+  line with a project as it is now. Rendering only the rule asked for was
+  turned down: the block has no part of its own to write, and leaving the
+  other sections as they stand would need each read back from the file,
+  which is what an edit there changes. A section somebody edited is the one
+  read back and kept (below).
+- **One installation a rule, a hash a target.** Its targets are its
+  section, recorded by the file it is in, `AGENTS.md`, and its file for
+  Claude, each with the hash of what it holds (schema 4, [why the ledger is
+  SQLite](#why-the-ledger-is-sqlite)): the section's is `Section::hash`, of
+  its lines whatever ending the file uses, and the file's `hash::bytes`. A
+  rule given neither, one about some files in a project that does not name
+  Claude, is recorded with none, and said to reach no agent
+  (`Warning::Unreached`). The installation's own hash is of the rule as it
+  was rendered, what its standing compares the offer with: outdated once
+  the two differ ([an edited copy is left
+  alone](#an-edited-copy-is-left-alone)).
+- **`AGENTS.md` goes only if Mindflayer made it.** Whether the render made
+  the file is noted in the ledger (`created_files`) and handed back to the
+  next render, so the last rule out takes away a file Mindflayer made and
+  leaves one somebody wrote, as it was before the block. A file Mindflayer
+  made that somebody then wrote in is theirs once no block is left in it,
+  and so is one git tracks: somebody committed it.
+- **Local mode, and a file the team owns.** In a local project
+  ([D-02](#d-02-installs-stay-local-unless-a-project-shares-them)) an
+  `AGENTS.md` Mindflayer makes is kept out of git before it is made, an
+  entry in the project's group of the exclude block, taken out once the
+  file is no longer Mindflayer's; one somebody had is theirs to commit, and
+  gets none. One git tracks is written only in a shared project or with
+  `edit_tracked`. Otherwise no block is written there: Claude has every
+  rule from its rule files, since the reach of no block is the fallback,
+  and the agents that read rules only in the block, Codex and OpenCode
+  among those the project names, are said to read none of them
+  (`Warning::Withheld`), while the project has a rule the block would have
+  held: with none left, or only rules about some files, which reach Claude
+  alone anyway, nothing is missed. A block written there before, by a
+  project shared then, is left as it is, and said (`Warning::Left`), as an
+  import left in a tracked `CLAUDE.md` is. A rule whose section it holds is
+  not uninstalled meanwhile (`InstallError::Withheld`): its section would
+  stay, with no record, and the next render that may edit the file would
+  take this workspace's own section for somebody's. Sharing the project,
+  setting `edit_tracked`, or taking the section out by hand lets it go.
+- **Somebody's section is never written over.** A section in the block
+  that the ledger does not record was written by another workspace that
+  links the project, or by a hand that copied a marker, and rendering the
+  block whole would take it out. So it makes its rule `Standing::Foreign`,
+  as a file at a rule's place in Claude's folder that nothing records does,
+  and refuses every render of the project's rules until it is gone
+  (`InstallError::NotRecorded`). Taking it for this workspace's was turned
+  down: two workspaces, each with its own ledger, would take turns taking
+  each other's rules out.
+- **An edited section is kept.** A section this workspace rendered whose
+  hash is not the one recorded was edited since, and a render keeps it as
+  the block holds it (`AgentsMd::section`), with its record, so it reads as
+  edited still, and says so (`Warning::Kept`), as Claude's renderer leaves an
+  edited file. What the rule was rendered from stays recorded too, so once
+  the edit is undone it reads as outdated rather than current. Installing or
+  uninstalling that rule is refused, as for any edited copy, unless forced:
+  then its section is rendered from its offer, or taken out, and its file
+  for Claude is written over or taken away. A section that cannot be read
+  back, a line in it that is not UTF-8, refuses the render
+  (`InstallError::Unread`) rather than go with it. Replacing the whole block,
+  as every render did before #47, lost the edit the next time any rule of
+  the project was installed.
+- **A rule no longer offered refuses the render.** A rule whose origin
+  offers it no more (deleted from the library, a load gone) cannot be
+  rendered, and leaving its section out would take it from every agent,
+  which is what the block refuses a rule it cannot read for. So the render
+  is refused (`NoLongerOffered`) until it is put back, or uninstalled,
+  which renders the rest without it. An uninstall of another rule goes
+  ahead past it, keeping it as the project holds it: its section as the
+  block holds it (`AgentsMd::section`), an edit included, its file for
+  Claude where it is, and its record as it was. Taking one rule out is no
+  reason to take another, and refusing would leave two rules no longer
+  offered each keeping the other in, with nothing else that drops a rule's
+  record. An update goes past it the same way (`rules::update_held`),
+  saying it is orphaned rather than refusing to bring the rest up to date
+  ([bringing what was installed up to
+  date](#bringing-what-was-installed-up-to-date)).
+- **Refused before anything is written.** What can refuse is asked first:
+  a block that cannot be read or holds somebody's section, a place no rule
+  is written (`agents_md::misplaced`), an `AGENTS.md` linked out of the
+  project, a `CLAUDE.md` whose block cannot be read (`claude_md::reach`), a
+  rule linked out of the workspace offering it (`InstallError::Outside`).
+  The block is written before the import and the files; one of those that
+  fails after it records what was written, then is raised, and the next
+  render finishes it.
+- **Recorded before it is written.** Before the first write the ledger
+  holds the rule being installed, and, for each rule's file for Claude that
+  nothing is at, the hash of what the render would put there (and whether
+  the render will make `AGENTS.md`). A render killed part way then leaves
+  files the next one knows for Mindflayer's, rather than taking each for
+  somebody's and leaving it where Claude reads it. A record of a file that
+  was not made says nothing wrong: the next render makes it, or forgets it.
+  A file replaced and not yet recorded reads as edited, and is left, until
+  a render finds it holding its rule as written again, which makes it
+  current. An uninstall keeps its record until the render is done, so one
+  killed part way is run again.
+- **A project a `mind.toml` marks gets a copy.** It names no agents and
+  has no block, so a rule is copied into the folder its marker names, the
+  file as written, filed by its route with its folders made, and recorded
+  as a skill's copy is, its target with the same hash as the installation.
+  An unrecorded file there is somebody's, and refuses the install, as for a
+  skill; an uninstall removes the file its record names, and the folders
+  its route was filed in that this leaves empty, as removing a rule does.
+  Moved to its settings, the project keeps that copy and its record until
+  the next render of its rules, an uninstall's included, which takes the
+  copy out of the folder the project authors in while it holds what was
+  copied, as a change of agents takes out an untouched copy, and leaves one
+  changed since where it is, its author's, its record gone and said
+  (`Warning::Edited`). One that cannot be taken out stays recorded for the
+  render after (`Warning::Unremoved`).
+- **Held by the workspace's lock**, from before the records are read until
+  the last is written, as an install of a skill holds it; none of the three
+  renderers takes it.
+- **A change says what it found, once.** What the three renderers and the
+  render as a whole have to warn of is gathered in core
+  (`Rendered::warnings_of`), so no front end says one renderer's and forgets
+  another's. Not what holds of another rule than the one installed or taken
+  out whatever the render, that it reaches Claude alone or no agent: that
+  was said when the rule went in, `status` says it whenever asked, and saying
+  it on every render made installing one rule warn, and fail, for another.
 
 ## One entry of a config file somebody else owns
 
@@ -3606,9 +4570,14 @@ fixed. A template is looked up by one folder name for the same reason, since
 not something to guess about. Both looks are only in the folders the project
 authors in (`Catalog::discover_authored`): a listing also shows what sits in
 a project's agents' folders, and none of that is the project's to change, so
-a name found only there is refused (`NotAuthored`). The TUI lists unreadable files in the same way,
-by the name their place gives them (`lifecycle::identify`), so they can be
-reached with a key rather than only read about in a warning.
+a name found only there is refused (`NotAuthored`). So is a rule the project
+only received, a section of its block, never authored in place
+([D-23](#d-23-what-a-project-received-is-an-installed-view)): a front end
+finds what to change through `lifecycle::find_to_change`, which refuses one
+the ledger records as received (`Received`), saying how to take it out. The
+TUI lists unreadable files in the same way, by the name their place gives
+them (`lifecycle::identify`), so they can be reached with a key rather than
+only read about in a warning.
 
 ### Rename rewrites one line
 
@@ -3631,41 +4600,66 @@ transcript shows the yes that was given.
 
 ### A record must not outlive the copy it is about
 
-The ledger's record of an installation is what gives the install screen leave
-to overwrite and delete. Remove, rename or edit an installed skill and the copy
-it was about is gone, or is no longer what was installed; a record left behind
-would be inherited by whatever is written there next, and the install screen
-would then delete somebody's work because a box looked untidy. So
-`lifecycle::remove`, `lifecycle::rename` and `lifecycle::finish_edit` drop the
-record, and `lifecycle::add` drops any stale one under the name it writes, as
-`lifecycle::rename` does under the new name. An installed skill that is edited
-becomes its author's.
+The ledger's record of an installation is what gives an install leave to
+overwrite and an uninstall leave to delete. Remove an installed skill and the
+copy it was about is gone; a record left behind would be inherited by
+whatever is written there next, and the install screen would then delete
+somebody's work because a box looked untidy, or, now that a copy gone reads
+as missing, put back what was removed on purpose. So `lifecycle::remove`
+uninstalls the copy it reached, dropping its record, and `lifecycle::add`
+drops any stale one under the name it writes, as `lifecycle::rename` does
+under the new name.
+
+Edit or rename an installed copy and it is still there. Its record stays
+([D-04](#d-04-an-edited-copy-is-detected-not-disowned)), and the hash it
+holds is what tells an edit apart ([an edited copy is left
+alone](#an-edited-copy-is-left-alone)): edited, status says so, and no
+install writes over it, nor uninstall takes it out, unless forced.
+`finish_edit` leaves the record as it is and only reads the ledger to say
+so (`Record::Kept`); `rename` carries it to the new name and place
+(`install::carry`, `Ledger::renamed_copy`), from where it came and with the
+hash of what was written. A skill's rename rewrites its `name` line, which
+reads as the edit it is; a rule's moves its file as it is, so it reads as
+it did, edited only if it was, and otherwise as what was installed, which
+an uninstall takes out unforced. Which of the two it is is told as an
+install tells it, and handed back (`Record::Moved`'s `edited`), so what
+`mind rename` says of the copy is what an install and an uninstall will
+find. Dropping the record, as both once did, made the
+copy its author's: safe, but never updated again and never taken out by the
+uninstall that put it there. Where another installation holds the new name
+already, the renamed copy cannot join it, a name being one installation a
+project, and its record goes instead, as it did (`Record::Dropped`).
 
 Only a record that names the copy the change reached, by its path
-(`install::disown`'s `at`), not every record of that name. A project marked by
-its settings authors in a folder of its own, beside the copies installed for
-its agents: adding, editing, renaming or removing its own `deploy` changes
-nothing in `.claude/skills/deploy`, and dropping that copy's record by name
-would make it Foreign, never updated or removed again, over a change to
-something else. In a project a `mind.toml` marks, the folder it authors in is
-the one it was installed into, so a change there reaches the copy and drops
-its record as before. A record naming no target, which no build has written,
-is dropped by name as records were.
+(`install::disown`'s and `install::carry`'s `at`), not every record of that
+name. A project marked by its settings authors in a folder of its own,
+beside the copies installed for its agents: adding, editing, renaming or
+removing its own `deploy` changes nothing in `.claude/skills/deploy`, and
+seeing to that copy's record by name would drop or carry a record over a
+change to something else. In a project a `mind.toml` marks, the folder it
+authors in is the one it was installed into, so a change there reaches the
+copy. A skill's record naming no target, which only a build from before
+targets wrote, is dropped by name as records were. A rule's naming none is
+one a build writes, for a rule that reaches no agent the project names
+([installing rules](#installing-rules)), and a change to the project's own
+rule of that route reaches nothing it installed, so it stays.
 
-And only that copy's part of the record (`Ledger::uninstalled_copy`), in one
-transaction: settings can make the folder a project authors in one of its
-targets, `"skills": ".claude/skills"`, and a change there reaches the copy an
-install put there and no other. The copy in `.agents/skills` is still what
-was installed, so its target stays recorded, for `flayer install` to update
-and `flayer uninstall` to remove; the installation goes with its last copy.
-Dropping it whole would leave that copy Foreign for good, a skill Codex and
-OpenCode go on loading that nothing of Mindflayer's can change again. In a
-local project the place the change reached also leaves the exclude block,
-after the record, as an uninstall takes its entries out after its copies:
-what is there now, or is written there next, is its author's, and a line
-left behind would hide it from `git status`. A block that cannot be edited
-is reported beside the change as a record that cannot be dropped is
-(`InstallError::StillExcluded`).
+And only that copy's part of the record (`Ledger::uninstalled_copy`,
+`Ledger::renamed_copy`), in one transaction: settings can make the folder a
+project authors in one of its targets, `"skills": ".claude/skills"`, and a
+change there reaches the copy an install put there and no other. The copy in
+`.agents/skills` is still what was installed, so its target stays recorded,
+for `flayer install` to update and `flayer uninstall` to remove; the
+installation goes with its last copy, or takes the new name whole when a
+rename reached its last. A renamed copy that leaves others behind is an
+installation of its own under the new name, from the same place. In a local
+project the place a removal reached also leaves the exclude block, after the
+record, as an uninstall takes its entries out after its copies: what is
+written there next is its author's, and a line left behind would hide it
+from `git status`. A rename moves the entry to the copy's new place, which is
+still an install's and kept out of git. A block that cannot be edited is
+reported beside the change as a record that cannot be changed is
+(`InstallError::StillExcluded`, `InstallError::NotExcluded`).
 
 Core applies that rule inside each change. Dropping the record in the CLI
 after the change, as it once did, put a rule outside core, and
@@ -3676,28 +4670,28 @@ needed calls of their own there, and each could have got them wrong. Each
 change returns what it did to the record (`lifecycle::Record`), with what
 opening the ledger to do it scrubbed out ([A URL is kept without its
 credentials](#a-url-is-kept-without-its-credentials)), and the CLI only says
-so; `install::disown`, which does the dropping, is private to core so that
-nothing else can. That keeps a front end from applying the rule
-differently, not from skipping it: `create` and `create_from`, the writers
-`lifecycle::add` is built on, see to no record and stay public for core's
-tests, so a front end adds through `add`. A record that cannot be dropped is
-reported beside the change rather than instead of it, and the CLI prints it
-as a warning: the change has been made, and saying it was not would be false.
+so; `install::disown` and `install::carry`, which change records, are
+private to core so that nothing else can. That keeps a front end from
+applying the rule differently, not from skipping it: `create` and
+`create_from`, the writers `lifecycle::add` is built on, see to no record and
+stay public for core's tests, so a front end adds through `add`. A record
+that cannot be changed is reported beside the change rather than instead of
+it, and the CLI prints it as a warning: the change has been made, and saying
+it was not would be false.
 
 Editing is split in two, because the editor is not core's to run: which one
 comes from `$VISUAL` or `$EDITOR`, and core never reads the environment.
 `lifecycle::start_edit` notes what the file holds, the CLI runs the editor,
-and `lifecycle::finish_edit` decides whether anything changed and what that
-means for the record. The CLI finishes the edit even when the editor fails:
-one that writes the file and then exits non-zero, as vim does on `:cq`, has
-changed the copy all the same, and a record left behind would let `flayer
-uninstall` delete the change. What dropping it scrubbed out of the ledger goes
-with the editor's error, said there or never.
+and `lifecycle::finish_edit` decides whether anything changed and says
+whether an install of it stays recorded. The CLI finishes the edit even when
+the editor fails: one that writes the file and then exits non-zero, as vim
+does on `:cq`, has changed the copy all the same. Nothing is written to the
+ledger either way, so nothing is scrubbed out of it for the error to carry.
 
-The record dropped is the one held by the workspace the command resolved, the
-one its templates come from, and each change is given it for the same reason:
-a workspace beside the project, which a walk up from the project never
-reaches, would keep a record of a copy that has changed. A change takes that
+The record seen to is the one held by the workspace the command resolved,
+the one its templates come from, and each change is given it for the same
+reason: a workspace beside the project, which a walk up from the project
+never reaches, would keep a record of a copy removed. A change takes that
 workspace rather than its ledger, because opening a ledger creates one, and a
 workspace that never installed anything must not get a database because
 something in a project changed; core opens it only when it is there. Another
@@ -3824,19 +4818,24 @@ other, and none of them makes a reader wait for the workspace.
   clones an older build left a credential in and removes the folders of a
   source made one with another, which a gather beside it would be filling.
   A migration of the workspace's own into its library holds it from its plan
-  to its rewrite of the marker, and a project's move to its settings from
-  before it reads the project again until its ledger is written
-  (`migrate::project`).
+  to its rewrite of the marker, and a project's move from its `mind.toml`
+  from before it reads the project again until its ledger is written
+  (`migrate::project`); a move from a `settings.json` changes nothing of the
+  workspace's, and takes none.
   Core takes it inside each of them (`FlayerWorkspace::lock`), so no front end
   has to remember to. An install looks again at what the project holds once
   it has the lock: the standing it is handed comes from a survey made before,
-  minutes before on the install screen, and a copy an edit has made its
-  author's since is left alone rather than written over and recorded again.
+  minutes before on the install screen, and a copy somebody has written or
+  edited since is left alone rather than written over and recorded again.
   A change to a project's agents or share mode holds it too, from before it
   reads the project's settings until it has written them and carried the
   installs along (`reapply::apply`): the settings are the project's, but
   what changing them moves is the workspace's, and two changes at once in
-  one workspace would otherwise each keep only their own. Two workspaces
+  one workspace would otherwise each keep only their own. An update holds
+  it from the plan it makes again until its last installation is written
+  (`update::apply`), writing each through the body an install hands to once
+  it holds the lock (`install::install_held`), since asking for the lock
+  again, as `install_with` does, would wait for itself. Two workspaces
   linking one project are kept apart by neither's lock
   ([open questions](#open-questions)).
 - **Opening the ledger takes no lock**, though it is when a ledger is made or
@@ -3845,12 +4844,13 @@ other, and none of them makes a reader wait for the workspace.
   one an older build left take turns there and the second finds nothing to
   do (a read's migration included, which the workspace's lock could not keep
   apart, since readers never take it). Taking that lock as well made every
-  change to an artifact wait behind a gather to drop its record, once the
+  change to an artifact wait behind a gather to see to its record, once the
   change was made, and fail as busy when the gather ran long, leaving the
-  record behind. The scrub takes it only when it has clones to rewrite, the
-  first write after an upgrade from a build that stored a credential, and a
-  record drop then waits for it without a deadline: the change it follows is
-  made, and trying it again would find nothing to change.
+  record as it was. The scrub takes it only when it has clones to rewrite,
+  the first write after an upgrade from a build that stored a credential,
+  and a record dropped or carried then waits for it without a deadline: the
+  change it follows is made, and trying it again would find nothing to
+  change.
 
 How the lock behaves, and why:
 
@@ -3980,7 +4980,15 @@ whole group, one turning local gains both ([when a project's agents, targets
 or share mode change](#when-a-projects-agents-targets-or-share-mode-change)).
 #38 moves
 a v2 project to settings shared unless `--local` ([moving a project to its
-settings](#moving-a-project-to-its-settings)).
+settings](#moving-a-project-to-its-settings)). #43 keeps Claude's rule files
+out of git the same way, an entry a file ([Claude's rule
+files](#claudes-rule-files)). #44 adds the `@AGENTS.md` import to a
+project's `CLAUDE.md` that git tracks only in a shared project or with
+`edit_tracked`, and otherwise gives Claude every rule through those files
+([how Claude reaches the block](#how-claude-reaches-the-block)). #45 keeps
+an `AGENTS.md` Mindflayer made out of git, and writes no block into one git
+tracks in a local project without `edit_tracked`, saying which agents then
+miss the rules ([installing rules](#installing-rules)).
 
 ### D-03: Rules reach every agent through `AGENTS.md`
 
@@ -3990,7 +4998,8 @@ route. Where Claude would not read that file, a managed `@AGENTS.md` import
 goes into the project's own `CLAUDE.md`, or
 `.claude/rules/mindflayer/<route>.md` when no file may be edited (D-02); a rule
 that declares `paths:` goes only there. One core predicate (#44) decides,
-walking every ancestor directory and ignoring the user memory file. The root
+walking every ancestor directory but `/` (see below) and ignoring the user
+memory file. The root
 `AGENTS.md` is the only per-project file all three agents read, and Codex has
 no include mechanism. Claude 2.1.277+ reads it natively only when no
 `CLAUDE.md`, `.claude/CLAUDE.md` or `CLAUDE.local.md` sits in the start
@@ -4007,13 +5016,58 @@ the block's text reaches Claude without its markers, the import loads it once,
 and a rule with `paths:` loads only when a matching file is read
 ([docs/agents.md](agents.md)). Two it did not try: that a `.claude/CLAUDE.md`
 counts as well, seen only among the names in Claude's debug output, and the
-2.1.277 floor, which is docs-only. One corner differs from what this says:
-Claude's check most likely stops below `/`, so a `CLAUDE.md` at `/` alone does
-not stop it reading `AGENTS.md` (read from the directory counts in its debug
-log, not tried). #44's walk up to and including `/` would then choose Fallback
-while Claude still read the block, and give Claude each unscoped rule twice;
-whether #44 stops below `/` too is an [open question](#open-questions).
+2.1.277 floor, which is docs-only. One corner differs from what this said
+when validated: Claude's check most likely stops below `/`, so a `CLAUDE.md`
+at `/` alone does not stop it reading `AGENTS.md` (read from the directory
+counts in its debug log, not tried). #44's walk stops below `/` too: every
+ancestor directory but the filesystem's root, so the predicate agrees with
+Claude, where walking up to and including `/` would choose Fallback while
+Claude still read the block, and give Claude each unscoped rule twice.
 Unblocks #17, #42, #43, #44 and #45.
+
+Carrying it out, #42 renders the block, between those markers and under a
+`<!-- mindflayer:rule <route> -->` for each rule, leaving out a rule that
+states `paths:`. It leaves no block in a folder above a project the
+workspace links, nor in the workspace's own root where no project it links
+is, nor inside an agent's own folder, since the agents of other projects
+would read an `AGENTS.md` there too, and takes out one it finds there; a
+project at the workspace's root has its rules in its own. It warns of the override, the
+budget, and a project in no git work tree, where Codex reads only the
+folder it starts in ([how a rule reaches the
+agents](#how-a-rule-reaches-the-agents)).
+
+#43 writes a rule that states `paths:` as
+`.claude/rules/mindflayer/<route>.md`, front matter kept, and every rule there
+in the fallback mode #44 chooses, never because a block was written alone.
+It says that such a rule reaches Claude alone, naming the project's agents
+it misses. What is Mindflayer's there is what its caller recorded of an
+earlier render, each file's hash among it, so a file nothing recorded, or
+one changed since, is never written over or taken away. It is refused where
+the block is, and through a link out of the project ([Claude's rule
+files](#claudes-rule-files)).
+
+#44 is the predicate, `claude_md::reads_agents_md`: the three names in the
+project's root and every folder above it but `/`, the user memory file left
+out by the file it is. `claude_md::reach` turns it, the project's settings
+and whether the block was written into Native, the import in the project's
+own `CLAUDE.md` or `.claude/CLAUDE.md`, or the fallback with its reason, and
+two more: a `CLAUDE.md` that is the `AGENTS.md` through a link, which Claude
+reads the block as, and an `@AGENTS.md` line somebody already wrote in one
+of Claude's files, which Claude reads the block through, so that a team's
+own import, in a file Mindflayer may not edit too, never leaves Claude
+reading a rule twice. `claude_md::render` adds the import once, between the
+block's markers at the top of the file, and takes it out with the last rule;
+it never makes a `CLAUDE.md` or a `CLAUDE.local.md`, and never edits a file
+above the project, reporting it as the fallback's reason instead ([how
+Claude reaches the block](#how-claude-reaches-the-block)).
+
+#45 wires the three to installing: a rule installed into a project marked by
+its settings, or taken out of it, renders every rule the project has, the
+block, then the import, then Claude's rule files in the mode the reach says,
+and records each rule with a hash of its section and of its file, and
+whether Mindflayer made `AGENTS.md`. A project a `mind.toml` marks is given a
+copy of the rule's file in its rules folder instead ([installing
+rules](#installing-rules)).
 
 ### D-04: An edited copy is detected, not disowned
 
@@ -4037,10 +5091,37 @@ differs from its installation's in form (a rule's section of the managed
 block in `AGENTS.md` beside its `.claude/rules/mindflayer/<route>.md` file,
 as D-03 has it) shares no one tree with the others, and would need a hash of
 its own on `installation_targets`, added by the schema step that first
-records one. #38 holds a v2 project's records from before hashes to their
-offers when it moves the project to settings, and gives a record whose copy
-matches the hash every copy then holds ([moving a project to its
-settings](#moving-a-project-to-its-settings)).
+records one, which #45 did for rules. #38 holds a v2 project's records from
+before hashes to their offers when it moves the project to settings, and
+gives a record whose copy matches the hash every copy then holds ([moving a
+project to its settings](#moving-a-project-to-its-settings)).
+
+#47 reads the hashes: `Standing` tells an installation current, outdated,
+edited, missing or orphaned ([an edited copy is left
+alone](#an-edited-copy-is-left-alone)), for a skill's copies, a rule's
+section and its file for Claude, and a rule's copy in a project a
+`mind.toml` marks. `install` and `uninstall` refuse an edited copy, the whole
+change with it, unless `--force`; a render keeps an edited section as the
+block holds it, as Claude's rule files were kept; `status` says `edited`;
+and the lifecycle keeps the record through an edit, carries it through a
+rename, and drops it with a removal, which uninstalls the copy ([a record
+must not outlive the copy it is
+about](#a-record-must-not-outlive-the-copy-it-is-about)). A record with no
+hash is held to its offer in code, with no schema step, and the first
+install over a copy that matches stores its hash. A change of agents, or a
+move to settings, still drops the record of an edited copy it leaves in a
+folder no agent the project names is sent copies to: no install writes
+there again, and no listing reads it ([when a project's agents, targets or
+share mode
+change](#when-a-projects-agents-targets-or-share-mode-change)).
+
+#48 acts on them: `flayer update` and `mind update` write every outdated or
+missing installation again from where it came from, leave an edited one,
+every copy of it, unless `--force`, and say an orphaned one without failing
+([bringing what was installed up to
+date](#bringing-what-was-installed-up-to-date)); and `status` says all five,
+`current`, `outdated`, `missing` and `orphaned` taking over from `installed`
+and `partial` ([what each project has](#what-each-project-has)).
 
 ### D-05: A workspace's library lives in `.mindflayer`
 
@@ -4060,10 +5141,14 @@ home workspace's library, which leaves two layouts to explain. Unblocks #52,
 
 Amended by the owner. Projects keep authoring their own skills and rules beside
 the code, and `mind init` still creates `skills/` and `rules/` by default. The
-v3 project marker is a JSON file, `.mind/settings.json`, which names those
+v3 project marker was a JSON file, `.mind/settings.json`, which names those
 folders (`directories`) beside the project's agents, share mode and id, so any
-tool or editor can read and change it; `flayer.toml`, and v2 projects, keep the
-TOML of [the markers](#why-the-markers-are-toml-written-from-a-template).
+tool or editor can read and change it. Amended again by the owner
+(2026-10-27): the settings are TOML, `.mind/settings.toml` at version 5, like
+`flayer.toml`, so both markers are written from a template whose comments say
+what each key does and edited through toml_edit alike ([the
+markers](#why-the-markers-are-toml-written-from-a-template)); a
+`settings.json` is still read as written, and migrated.
 Installs go to the agent folders the project targets (D-07), not to the
 authored ones. That keeps every existing workflow, makes the workspace the
 default source, and keeps the marker minimal. Rejected: receiving only, which
@@ -4073,7 +5158,13 @@ made the folders opt-in (`--skills`, `--rules`); the owner prefers them to
 exist from the start. Unblocks #29, #33, #35 and #59.
 
 Carrying it out, #35 makes `mind init` write settings that name `skills/` and
-`rules/`, or the folders `--skills` and `--rules` give, and make them.
+`rules/`, or the folders `--skills` and `--rules` give, and make them. #166
+carries out the second amendment: `mind init` writes a `settings.toml`, a
+change edits it a key at a time through toml_edit, a `settings.json` is read
+as written and changed by nothing but `mind migrate`, which moves it, and a
+`mind.toml` straight, to a `settings.toml` ([a project's
+settings](#a-projects-settings), [moving a project to its
+settings](#moving-a-project-to-its-settings)).
 
 ### D-07: One copy per agent folder
 
@@ -4081,8 +5172,9 @@ Amended by the owner. An installed skill is a real copy in
 `.agents/skills/<name>`, which Codex and OpenCode read, and an identical one in
 `.claude/skills/<name>` for Claude, staged and written in one step; the ledger
 records one installation with several targets. That layout is the default, and
-a project's `.mind/settings.json` may override it per kind, for example with
-one `.skills` folder for every agent (#40). Copies fit today's install model
+a project's settings (`.mind/settings.toml` since D-06's second amendment)
+may override it per kind, for example with one `.skills` folder for every
+agent (#40). Copies fit today's install model
 and the Windows CI, survive the hub moving, and keep gathered content
 contained. OpenCode sees the skill twice, which is harmless only while the
 copies are identical, so an install is refused if either target holds foreign
@@ -4103,8 +5195,9 @@ with the others or not at all, the installation is recorded once with a
 target for each, and somebody's work in either folder refuses it, in both
 ([Installing](#installing)). #40 reads the override from a project's
 settings, `targets`, which sends a kind to the folders it names for every
-agent, at version 4 of the settings, and warns of agents that read none of
-them ([a project's own targets](#a-projects-own-targets)).
+agent, at version 4 of a `settings.json` and in any `settings.toml`, and warns
+of agents that read none of them ([a project's own
+targets](#a-projects-own-targets)).
 
 ### D-08: An explicit or activated workspace wins
 
@@ -4127,8 +5220,9 @@ reason (see [activating a workspace](#activating-a-workspace)).
 
 ### D-09: Project settings live in the project
 
-A project's agents, share mode and `edit_tracked` live in its own v3 marker,
-`.mind/settings.json` (D-06), ignored by default (D-01). They describe the
+A project's agents, share mode and `edit_tracked` live in its own settings,
+the v3 marker `.mind/settings.json` and from version 5 `.mind/settings.toml`
+(D-06), ignored by default (D-01). They describe the
 files physically in the project, and several workspaces may link one project,
 so keeping them beside it means every workspace sees the same targets.
 Rejected: `[[project]]` tables in `flayer.toml`, which let two workspaces
@@ -4356,6 +5450,16 @@ parse `AGENTS.md` blocks and agent configs; and treating installed sections and
 entries as artifacts editable in place, which lets three agents' config formats
 leak into the lifecycle code. Unblocks #33, #45, #62, #93, #94 and #95.
 
+Carrying it out, #45 lists the rules a project marked by its settings
+received in `status`, from the ledger and the block of its `AGENTS.md`, and
+never through discovery ([what each project has](#what-each-project-has)).
+A lifecycle change finds no section, since it looks only where the project
+authors, and #46 says so with a hint to uninstall: the front ends find what
+to change through `lifecycle::find_to_change`, which refuses a name the
+project authors nothing of but the ledger records as a rule it received
+(`LifecycleError::Received`), where "nothing named" would deny what `status`
+just listed.
+
 ## Open questions
 
 - **Precedence between projects.** Two projects in one workspace can declare
@@ -4363,6 +5467,11 @@ leak into the lifecycle code. Unblocks #33, #45, #62, #93, #94 and #95.
   wins, because nothing here yet has to choose. Whatever resolves it (a
   workspace-level override, an explicit order in `flayer.toml`) belongs in core
   when it exists, not in a front end.
+- **Forcing from the install screen.** An edited install's box is held on
+  the screen, and only `--force` on the command line writes over or takes
+  out its copies. A key that marks a row to be forced, confirmed as the
+  batch is, would let the screen do what the command line does, most simply
+  once it applies its batch as command lines (#51).
 - **Replaying the install screen.** One install at a time has a command now,
   but what the screen applies is a batch, and its transcript line is
   `flayer install` rather than the `install` and `uninstall` lines it amounts
@@ -4388,31 +5497,24 @@ leak into the lifecycle code. Unblocks #33, #45, #62, #93, #94 and #95.
   row waits the whole ten seconds before it is passed over. Holding the lock
   across the batch needs core to apply the batch, which is where #78 plans it.
 - **Changes to an artifact take no lock.** `add`, `edit`, `rename` and
-  `remove` write into a project or the workspace's own folders and then drop a
-  record ([A record must not outlive the copy it is
+  `remove` write into a project or the workspace's own folders and then see
+  to a record ([A record must not outlive the copy it is
   about](#a-record-must-not-outlive-the-copy-it-is-about)), and neither step
   holds the workspace: an edit is made in an editor, for as long as somebody
   keeps it open, and holding the lock that long would keep every other writer
-  waiting. An install that takes the lock after the change finds the copy its
-  author's and leaves it. One already past that look when the change lands
-  writes over it, and the record dropped is then that install's, which leaves
-  its copy unrecorded. Taking the lock for the change itself, where there is
-  no editor to wait for, would close it for `add`, `rename` and `remove`.
+  waiting. An install that takes the lock after the change finds the copy
+  edited, or somebody's, and leaves it. One already past that look when the
+  change lands writes over it: an edit is then lost, and the record a
+  removal drops or a rename carries is that install's, which leaves its copy
+  unrecorded or the renamed one recorded as the install wrote it. Taking the
+  lock for the change itself, where there is no editor to wait for, would
+  close it for `add`, `rename` and `remove`.
 - **Two first writers making one workspace.** `init` makes a marker with
   `create_new` and then fills it, so a second writer making the same
   workspace at that moment (two first commands in a home with no
   `.mindflayer` yet) finds a marker it cannot read, or fails to create one.
   Writing the marker whole under a name of its own and linking it into place
   would let the second find it whole.
-- **Installing rules.** Installing copies a directory, so only skills can be
-  installed: from the shelf, and now from the workspace's own. The workspace's
-  own rules have no way into a project yet; a rule is one file, filed by its
-  route, and copying one means answering where its folders go.
-  [D-03](#d-03-rules-reach-every-agent-through-agentsmd) answers it: a rule
-  reaches a project as its section of a managed block in `AGENTS.md`, with
-  `.claude/rules/mindflayer` as Claude's fallback, and #45 carries it out.
-  Until then [the examples'](#the-examples-are-a-workspace) two rules are
-  listed and validated, but a load offers only their skills.
 - **Examples outside a clone.** The examples are a folder in the repository,
   so only somebody with a clone has them to load; a binary that arrives some
   other way, as a release would, has none. Embedding them in the binary, or
@@ -4421,15 +5523,6 @@ leak into the lifecycle code. Unblocks #33, #45, #62, #93, #94 and #95.
   workspace holds without having asked. #134 left both out, with gathering
   paused; a gathered or published copy of `examples/` would answer it
   without either.
-- **An edited copy that stays managed.** Editing an installed skill makes it
-  its author's, so updates from the shelf stop reaching it: the safe answer,
-  not the best one. A hash of what was installed, kept in the ledger, would let
-  the install screen tell an untouched copy from an edited one, and offer to
-  update the first while leaving the second alone.
-  [D-04](#d-04-an-edited-copy-is-detected-not-disowned) chose that hash, one
-  per target. #30 records it, once per installation since every target is
-  written from one copy, and #47 reads it, in the lifecycle changes that now
-  hold the rule (`lifecycle::finish_edit`, `rename` and `remove`).
 - **Old copies of the ledger.** Each migration leaves a
   `mindflayer.db.v<old>.bak` beside the ledger, and nothing removes one: a
   copy is the way back from a step that went wrong, and when it is no longer
@@ -4443,10 +5536,11 @@ leak into the lifecycle code. Unblocks #33, #45, #62, #93, #94 and #95.
   it without them, would close that, at the cost of a way back that is no
   longer the file as it was: two of its sources the rewrite makes one would
   have to be merged in the copy, as the scrub merges them in the ledger.
-- **Disowning from elsewhere.** A change drops the record of the workspace
-  its command resolved, wherever that sits, but not of any other workspace
-  that links the same project: nothing in the project says which workspaces
-  link it, so each of them keeps its stale record. Every workspace linking a
+- **Seeing to a record from elsewhere.** A change sees to the record of the
+  workspace its command resolved, wherever that sits, but not of any other
+  workspace that links the same project: nothing in the project says which
+  workspaces link it, so each of them keeps a stale record of a copy
+  removed, or of one renamed under its old name. Every workspace linking a
   project would have to be findable from the project for that to change. The
   TUI no longer runs into it from inside: a project's row whose own workspace
   is not the one on screen runs `mind -W . -C <entry>`, which consults the
@@ -4542,32 +5636,44 @@ leak into the lifecycle code. Unblocks #33, #45, #62, #93, #94 and #95.
   keep the settings whole, at the price of a file a shared project would have
   to ignore, and still not the installs, which each workspace records apart:
   the wall disowning from elsewhere meets too.
-- **A leftover `mind.toml` nobody is told about.** A project holding both
-  markers is read from its settings, and `MindProject::warnings` names the
-  `mind.toml` ignored, but no front end prints it yet. This build leaves
-  none: `mind init` gives a project a `mind.toml` marks no settings, and
-  #38's migration moves the old marker out of the way. One is still left by
-  hand, by a copy, and by an older build: one from before #29 asks only
-  whether a `mind.toml` is there, so its `mind init`, or its TUI's making a
-  repository a project, writes one beside the settings and reads the project
-  from it from then on. With `mind init` making a settings project by
-  default, two builds on one machine are enough. A `warning:` line wherever a
-  project is opened, or a doctor check (#96), would make it seen.
-- **`targets` written by hand into a version 3 file.** `targets` comes with
-  version 4, which a build from before it refuses, and a file that sets them
-  through Mindflayer is written at 4 ([a project's own
+- **A leftover older marker nobody is told about.** A project holding more
+  than one marker is read from the newest, and `MindProject::warnings` names
+  each one ignored, but no front end prints it yet. This build leaves none:
+  `mind init` gives a project an older marker marks no settings, and the
+  migration moves the old marker out of the way. One is still left by hand,
+  by a copy, and by an older build: one from before #29 asks only whether a
+  `mind.toml` is there, and one from before #166 whether a `settings.json`
+  or a `mind.toml` is, so its `mind init`, or its TUI's making a repository a
+  project, writes its own beside a `settings.toml` and reads the project
+  from it from then on, while this build reads the `settings.toml`. With
+  `mind init` making a `settings.toml` by default, two builds on one machine
+  are enough. A `warning:` line wherever a project is opened, or a doctor
+  check (#96), would make it seen.
+- **`targets` written by hand into a version 3 file.** `targets` came with
+  version 4 of a `settings.json`, which a build from before it refuses, and a
+  file that set them through Mindflayer was written at 4 ([a project's own
   targets](#a-projects-own-targets)). One a person gives `targets` while
   leaving it at 3 is read with them by this build and read past by an older
-  one, which installs into the standard folders and says nothing, until a
-  change of targets writes the 4. Refusing such a file as malformed would
-  close it, at the price of a project no build opens over a version number;
-  a warning naming the version it needs is the other way. A version 3 file
-  whose `targets` do not read as targets at all (not an object, a kind with
-  no folder or something other than a list of them) is read past, as every
-  build before them read the key, rather than refused: a project those
-  builds opened still opens, and installs where its agents read without a
-  word, where a version 4 file holding the same is refused as any key the
-  format defines is. A change of targets writes such a key over whole.
+  one, which installs into the standard folders and says nothing, until `mind
+  migrate` moves it to a `settings.toml`, which no such build reads. Refusing
+  such a file as malformed would close it, at the price of a project no build
+  opens over a version number; a warning naming the version it needs is the
+  other way. A version 3 file whose `targets` do not read as targets at all
+  (not an object, a kind with no folder or something other than a list of
+  them) is read past, as every build before them read the key, rather than
+  refused: a project those builds opened still opens, and installs where its
+  agents read without a word, where a version 4 file holding the same is
+  refused as any key the format defines is. The move to a `settings.toml`
+  writes what this build read, no `targets`, and the copy it keeps holds the
+  key as it was.
+- **A key a settings.json holds that this build does not know.** Its move
+  to a `settings.toml` writes what this build reads, the keys the format
+  defines and an unknown one inside `directories` or `targets`, and leaves a
+  key it does not know at the top of the file, a `$schema` say, in the copy
+  kept in `.mind/tmp` alone, as #38's move leaves a `mind.toml`'s. Nothing
+  wrote one but a person, and none means anything to Mindflayer, so it is
+  not said. Carrying each into the TOML is the other way, at the price of a
+  JSON `null`, which TOML cannot hold, refusing the move.
 - **An agent pointed at a target some other way.** Whether an agent reads a
   project's own target is told by where docs/agents.md says it reads, so one
   pointed there by a link from a folder it reads is seen, and one pointed
@@ -4631,18 +5737,23 @@ leak into the lifecycle code. Unblocks #33, #45, #62, #93, #94 and #95.
   An install into a linked folder writes such a line too, and so does a
   change that respells a kept copy's record. Writing the entry by the folder
   on disk would keep it out, at the price of a line an uninstall has to work
-  out again from the filesystem rather than from the record.
+  out again from the filesystem rather than from the record. Claude's rule
+  files meet it too: a link inside the project on the way to one, `.claude`
+  linked to `config/claude`, is followed, while the entry names
+  `.claude/rules/mindflayer/<route>.md`, so in a local project the file
+  shows as untracked. Their entries are spelled from the route, as an
+  install's are from the record, and one answer should serve both.
 - **Agents changed by hand.** `mind agents` carries what is installed along
-  (#37), and `mind targets` (#40), but the settings are JSON anybody can
-  edit. An install after such an edit replaces its record's targets with the
-  ones the project has now, so a copy in the folder of an agent the project
-  stopped naming, or one its `targets` stopped naming, is no longer
-  recorded: Foreign, left where it is with its exclude entry. `mind agents`
-  naming the agents the file already names, or `mind targets set` naming the
-  folders it names, re-applies the installs, and takes such copies out, only
-  while the install has not dropped them from its record first. An install
-  that carried the installation's other copies along itself, as `reapply`
-  does, would close it.
+  (#37), and `mind targets` (#40), but the settings are TOML anybody can edit,
+  and the comments in them say how. An install after such an edit replaces its
+  record's targets with the ones the project has now, so a copy in the folder
+  of an agent the project stopped naming, or one its `targets` stopped naming,
+  is no longer recorded: Foreign, left where it is with its exclude entry.
+  `mind agents` naming the agents the file already names, or `mind targets
+  set` naming the folders it names, re-applies the installs, and takes such
+  copies out, only while the install has not dropped them from its record
+  first. An install that carried the installation's other copies along itself,
+  as `reapply` does, would close it.
 - **An install surveyed before a change.** An install works out its targets
   from the project it is handed, read before it takes the workspace's lock,
   as it does its standing, which it looks at again under the lock. One
@@ -4654,10 +5765,10 @@ leak into the lifecycle code. Unblocks #33, #45, #62, #93, #94 and #95.
   new folder a copy of one the record names that still holds what was
   installed, by its hash. An installation whose every copy was edited, or
   was recorded without a hash, has none, so the new agent gets nothing and
-  that is said; installing it again puts every copy back, the edited one
-  included, written over as an install writes over a recorded copy until
-  #47 tells an edited one apart. Copying from the offer instead would hand
-  the agents two revisions of one skill whenever the offer has moved on.
+  that is said; installing it again is refused over the edited copy, and
+  forced it puts every copy back, the edited one written over. Copying from
+  the offer instead would hand the agents two revisions of one skill
+  whenever the offer has moved on.
 - **Two workspaces, one exclude file.** The workspace's lock keeps one
   workspace's writers apart, and an exclude edit is made under it, but
   projects of one repository linked from two workspaces edit `info/exclude`
@@ -4762,14 +5873,54 @@ leak into the lifecycle code. Unblocks #33, #45, #62, #93, #94 and #95.
   read. #17 did not settle it: it ran only Claude Code and did not try an
   empty `$CLAUDE_CONFIG_DIR`, so how each agent reads one is for an addition
   to `scripts/agent-probe` to record.
-- **A `CLAUDE.md` at `/`.** D-03 counts a `CLAUDE.md` in any directory above
-  the project, and #44 walks up to and including `/`. Claude's own check most
-  likely stops below `/` ([docs/agents.md](agents.md)), so with a `CLAUDE.md`
-  at `/` and none nearer, Claude reads `AGENTS.md` natively while #44 would
-  choose Fallback, and Claude reads each unscoped rule twice. Stopping #44's
-  walk below `/` matches Claude, if Claude does stop there; #17 inferred that
-  from the debug log's directory counts and could not put a file at `/` to
-  try it. #44 settles which.
+- **A `CLAUDE.md` at `/`.** #44's walk stops below `/`, as Claude's own check
+  most likely does ([docs/agents.md](agents.md)): #17 inferred it from the
+  debug log's directory counts and could not put a file at `/` to try it.
+  Were Claude to count `/` after all, a `CLAUDE.md` there with none nearer
+  would have the predicate say Claude reads the block while it reads none,
+  and the rules about every file would miss Claude. A probe run allowed to
+  write at `/`, in a container say, would settle it.
+- **An import from `.claude/CLAUDE.md`.** The import goes there, as
+  `@../AGENTS.md`, only when the project's `CLAUDE.md` is not there or may
+  not be edited. That Claude resolves an import from the file holding it,
+  and reads both `CLAUDE.md` and `.claude/CLAUDE.md` in one folder, is
+  docs-only ([docs/agents.md](agents.md)); were either wrong, the block
+  would miss Claude in that one case. A `claude-import` run with the line in
+  `.claude/CLAUDE.md` would settle both.
+- **Claude started below a project's root.** The predicate looks from the
+  project's root up, for Claude started there. A `CLAUDE.md` in a folder
+  between the root and a deeper start keeps Claude from reading `AGENTS.md`
+  natively there, while the reach says it does, and no import is added.
+  Looking below the root too would tell, at the price of walking the whole
+  project, and of an import for a start nobody may use.
+- **A `CLAUDE.md` hard linked to `AGENTS.md`.** One file under two names is
+  told by resolving both paths, which sees a symbolic link and not a hard
+  one, and the block's render replaces `AGENTS.md` through a rename, which
+  splits a hard link. What follows depends on when the link was made. One
+  made before any block was written is split by the first render: the two
+  are then files of their own, the import goes into `CLAUDE.md` as into any
+  other, and Claude reads the team's text twice, once in each, though each
+  rule once. One made once `AGENTS.md` holds the block, the likelier order,
+  since the block is there whenever a team links the two, gives a
+  `CLAUDE.md` holding the block's rule markers, which `ClaudeMd::parse`
+  refuses (`Malformed::Ruled`), as it refuses any copy of `AGENTS.md`: every
+  reach and every render of the import is refused, `render(false)` too,
+  until somebody edits that file or takes the link away, and a block render
+  that changes the rules meanwhile splits the link and leaves `CLAUDE.md`
+  the copy with the rules as they were. Telling a hard link by the file's
+  device and inode alone would not end it, since such a render splits the
+  link before the import is decided. Writing `AGENTS.md` in place rather
+  than by a rename, where it has more than one link, would keep them one
+  file for that to tell as `Reach::Same`, at the price of a write that is
+  no longer all or nothing.
+- **An import left in a file git tracks.** An import no longer wanted in a
+  file that may no longer be edited, a `CLAUDE.md` committed with it in a
+  project turned local, stays and is said at every render
+  (`claude_md::Warning::Tracked`), until `edit_tracked` or shared mode lets
+  it be taken out. Once the last rule is gone it imports an `AGENTS.md`
+  holding no block, which gives Claude nothing more. Beside a `CLAUDE.md`
+  that is the `AGENTS.md` through a link, Claude reads the block through
+  both, and whether it loads the one file twice is not recorded.
 - **Codex and OpenCode on their binaries.** #17 ran only Claude Code, so
   every Codex and OpenCode fact in [docs/agents.md](agents.md) is docs-only,
   each with a fallback. Its checks 2 (OpenCode given the same skill in both
@@ -4810,7 +5961,14 @@ leak into the lifecycle code. Unblocks #33, #45, #62, #93, #94 and #95.
   installation records is the ledger's, which discovery does not open, and
   a foreign copy has none. If a skill's assets make a listing slow, that
   recorded hash, compared where `Catalog::with_records` already reads the
-  ledger, is where to start.
+  ledger, is where to start. `status`, and so the TUI's rows, reads more:
+  each installation's standing (`install::standings`) hashes every copy its
+  record names again, and compares one of them with the offer it came from,
+  reading both, so that an outdated install can be told from a current one,
+  as `status` and an update both say. Telling an edit alone would need no
+  offer but for a
+  record with no hash; the price was taken so that a report and a refusal
+  are told by one function.
 - **A screen that lists what it cannot change.** The TUI's project rows
   come from the same discovery, so a v3 project's rows list the skills in its
   agents' folders as well. A row is one name, so a change aimed at it reaches
@@ -4827,7 +5985,7 @@ leak into the lifecycle code. Unblocks #33, #45, #62, #93, #94 and #95.
   the next install of it is refused as foreign when what is there sits where
   it would write, and `flayer uninstall` forgets the record without touching
   what is there. While a copy of the install is left, the entry holds it and
-  says partial, even over the project's own copy. A second entry of the same
+  says missing, even over the project's own copy. A second entry of the same
   name would say it, at the price of the one name a row the screen and every
   listing keep to.
 - **Errors outside the envelope.** A command that fails says why as text on
@@ -4847,6 +6005,111 @@ leak into the lifecycle code. Unblocks #33, #45, #62, #93, #94 and #95.
   operating system. Only opening each folder without following links and
   writing relative to it (`openat` with `O_NOFOLLOW`, then `renameat`) closes
   that, which is a platform layer of its own for a window that small.
+- **What Codex reads from below a project's root.** The override and the
+  budget are worked out for Codex started at the project's root, where its
+  `AGENTS.md` is. Started in a folder below, Codex reads that folder's
+  `AGENTS.md` files too, after the project's, and its config can rename the
+  files it looks for (`project_doc_fallback_filenames`), say what marks the
+  root (`project_root_markers`) or change the budget, none of which
+  Mindflayer reads yet. Reading Codex's config, as a doctor check would
+  (#96), would make each warning exact for one more case.
+- **`.claude/rules` above where Claude starts.** Claude reads every
+  `AGENTS.md` and `CLAUDE.md` from where it starts up the tree, but whether
+  it reads a `.claude/rules` in a folder above, as it reads `.claude/rules`
+  at any depth below, is in neither [docs/agents.md](agents.md) nor the
+  probe. Claude's rule files are refused above a project the workspace links
+  as the block is, which at worst keeps rules from a project above others
+  that Claude would not have read in them anyway. A probe check with a rule
+  one folder above the start directory would settle it, and let that one
+  refusal go if Claude reads no such folder.
+- **A project that authors rules in `.claude/rules`.** A project may keep
+  its own rules where Claude reads them, and its listing then reads
+  `.claude/rules/mindflayer` as its own rules, named `mindflayer/<route>`,
+  which a lifecycle change can rename or remove. Nothing is lost, since a
+  render writes a file it recorded again where it finds none, and never
+  writes over one it did not record; but the listing shows Mindflayer's
+  files as the project's. The ledger records them now ([installing
+  rules](#installing-rules)), so a listing could tell them apart as it
+  tells installed copies from authored ones; leaving out the `mindflayer`
+  folder where a project authors in `.claude/rules` would keep the two
+  apart, and the status entry of each rule its one.
+- **A file replaced by a render stopped part way.** A render records each
+  file it may make before it makes it ([installing
+  rules](#installing-rules)), so one killed part way leaves no made file
+  unrecorded. A file it replaced, a rule changed since the last render, is
+  recorded by its new hash only once the render is done: killed between,
+  the file reads as edited, and is left, until a render finds it holding
+  its rule as written again. Recording both hashes for the moment between
+  would close that, at the price of a target that holds two.
+- **A rule whose offer has gone.** Every render an install runs gives each
+  rule from the offer it was installed from, so one no longer offered there
+  (deleted from the library, a load gone) refuses every install of another
+  rule into the project until it is put back or uninstalled ([installing
+  rules](#installing-rules)). An update's render, and an uninstall's, keep
+  it instead, as the project holds it, which reads as orphaned
+  (`Standing::Orphaned`) and is said ([bringing what was installed up to
+  date](#bringing-what-was-installed-up-to-date)); an install's render
+  doing the same would let the rest change there too, at the price of an
+  install that quietly carries a rule no offer stands behind.
+- **Every render brings every rule up to date.** A render gives each rule
+  as its offer holds it now, so installing one rule updates the sections of
+  the others too, where installing a skill touches no other skill. The
+  block is one file written whole, and rendering only one rule would mean
+  reading the others back from it, as a render now reads back a section
+  somebody edited, and keeps it. #48 chose to keep that for an update: one
+  rule named brings the project's other outdated or missing rules along,
+  and its plan names each, so what is written is what is said. An install
+  of a rule still brings them along unsaid, and keeps only the copy of a
+  rule somebody edited, writing its other copy from the offer, where an
+  update keeps every copy of it. Holding an install's render to the same
+  would spare its agents two versions of one rule too.
+- **A copy recorded where nothing reads it.** Status calls an installation
+  missing when discovery does not find one of its copies, and an update
+  writes it when its standing says a copy is gone. A copy that is still
+  there holding what was written, but where discovery no longer reads it (a
+  folder dropped from the project's settings by hand, which `mind agents`
+  would have carried along), reads as missing in status and as current to
+  an update, which writes nothing. Telling such a copy as missing in the
+  standing too would make the update rewrite every target, as an install
+  does, and record the copies afresh.
+- **A `git clean -dX` takes a local project's settings.** A local project
+  keeps its whole `.mind` out of git (`MIND_IGNORE`), so the `-dX` that
+  takes its copies, each in a folder `git clean -X` does not go into, takes
+  its settings with them, and the project is no project any more: an
+  update finds nothing to put back, and `flayer update --all` says the
+  workspace's entry would not open. `mind init` again, with the agents,
+  share mode and folders it had, marks it once more, and the next update
+  puts every copy back from the ledger, which knows the project by its
+  route; the new settings come with a new id, so the copies are kept out
+  of git under a new group, and the old id's group is left in the exclude
+  file naming the same places, which nothing takes out. Keeping the
+  settings out of the ignored folder would show them in `git status`,
+  which is what a local project is for avoiding; keeping a copy of them in
+  the workspace, beside its entry, would let a command mark the project
+  again as it was, its id included.
+- **Rules after a change of agents or share mode.** `reapply` carries a
+  project's skills along when its agents, targets or share mode change, but
+  not its rules: those are rendered again by the next install or uninstall
+  of one, or by `install::rules::render`, which nothing calls on a change
+  yet. Until then a project that stops naming Claude keeps Claude's files,
+  and one turning local leaves an `AGENTS.md` Mindflayer made in git's
+  view. Rendering the rules again at the end of `reapply::apply`, under the
+  lock it holds, would close it, with what the render says in what the
+  change says.
+- **Claude's reach in a report.** Status says Claude reads a rule through
+  the block when the render gave it no file of its own, as the ledger
+  records it, rather than asking `claude_md` again, which needs the agents'
+  own folders a report is not handed. A file for Claude that was somebody's
+  when the render ran is the one case that reads wrong: no file is
+  recorded, and Claude reads neither. Handing a report the agents' folders
+  would let it ask.
+- **A link made while `AGENTS.md` is written.** A link in place of the file
+  is looked at before the read, and one leading out of the project is
+  refused; a link made in the moment between that look and the rename is
+  followed by `replace_bytes`, which resolves the path first. Writing to the
+  path as spelled, as `ConfigFile` does, would close it, at the price of
+  replacing the link to a file inside the project that some teams keep
+  between `AGENTS.md` and `CLAUDE.md`.
 - **A config file left empty by its last entry.** Removing the last server
   leaves `"mcpServers": {}` in a JSON file, and a `.codex/config.toml` that
   Mindflayer made holding nothing, and the file stays, with any folder made for

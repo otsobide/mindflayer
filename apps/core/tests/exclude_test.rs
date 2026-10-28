@@ -457,15 +457,6 @@ fn a_linked_worktree_keeps_its_entries_in_the_common_dir() {
     ));
 }
 
-/// Put every file under `work_tree` in its repository's index, as `git add
-/// -A` would.
-fn indexed(work_tree: &Path) {
-    let repository = gix::open_opts(work_tree, gix::open::Options::isolated()).unwrap();
-    let tree = common::write_tree(&repository, work_tree);
-    let mut index = repository.index_from_tree(&tree).unwrap();
-    index.write(Default::default()).unwrap();
-}
-
 #[test]
 fn a_folder_is_tracked_when_the_index_names_a_file_inside_it() {
     let repo = repository();
@@ -477,7 +468,7 @@ fn a_folder_is_tracked_when_the_index_names_a_file_inside_it() {
     let web = project(repo.path(), "packages/web");
     project(&web, ".mindy");
     fs::write(web.join(".mindy/notes"), "Mine").unwrap();
-    indexed(repo.path());
+    common::indexed(repo.path());
     // Made after the index was written, so git does not track it.
     let late = project(repo.path(), "packages/late");
     project(&late, ".mind");
@@ -501,4 +492,40 @@ fn nothing_is_tracked_outside_a_work_tree_or_in_a_repository_with_no_index() {
     project(repo.path(), ".mind");
     fs::write(repo.path().join(".mind/mind.toml"), "").unwrap();
     assert!(!exclude::tracks(repo.path(), Path::new(".mind")).unwrap());
+}
+
+#[test]
+fn a_file_is_tracked_when_the_index_names_it_and_not_by_a_name_it_starts() {
+    let repo = repository();
+    let app = project(repo.path(), "packages/app");
+    fs::write(app.join("CLAUDE.md"), "# Team\n").unwrap();
+    project(&app, ".claude");
+    fs::write(app.join(".claude/CLAUDE.md"), "# Team\n").unwrap();
+    let web = project(repo.path(), "packages/web");
+    fs::write(web.join("CLAUDE.md.orig"), "# Old\n").unwrap();
+    common::indexed(repo.path());
+    // Made after the index was written, so git does not track them.
+    fs::write(app.join("CLAUDE.local.md"), "# Mine\n").unwrap();
+    fs::write(web.join("CLAUDE.md"), "# Mine\n").unwrap();
+
+    assert!(exclude::tracks_file(&app, Path::new("CLAUDE.md")).unwrap());
+    assert!(exclude::tracks_file(&app, Path::new(".claude/CLAUDE.md")).unwrap());
+    assert!(exclude::tracks_file(repo.path(), Path::new("packages/app/CLAUDE.md")).unwrap());
+    assert!(!exclude::tracks_file(&app, Path::new("CLAUDE.local.md")).unwrap());
+    // A file whose name only starts the same is another file.
+    assert!(!exclude::tracks_file(&web, Path::new("CLAUDE.md")).unwrap());
+    // A folder is no file, and a file is no folder.
+    assert!(!exclude::tracks_file(&app, Path::new(".claude")).unwrap());
+    assert!(!exclude::tracks(&app, Path::new("CLAUDE.md")).unwrap());
+}
+
+#[test]
+fn no_file_is_tracked_outside_a_work_tree_or_in_a_repository_with_no_index() {
+    let outside = TempDir::new().unwrap();
+    fs::write(outside.path().join("CLAUDE.md"), "").unwrap();
+    assert!(!exclude::tracks_file(outside.path(), Path::new("CLAUDE.md")).unwrap());
+
+    let repo = repository();
+    fs::write(repo.path().join("CLAUDE.md"), "").unwrap();
+    assert!(!exclude::tracks_file(repo.path(), Path::new("CLAUDE.md")).unwrap());
 }

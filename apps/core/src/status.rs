@@ -16,20 +16,22 @@
 //! What it serializes to is a contract from the first report on, which is why
 //! each name in it is spelled as a command line takes it.
 
+use std::fs;
 use std::path::{Path, PathBuf};
 
 use serde::{Serialize, Serializer};
 use thiserror::Error;
 
 use crate::agent::Agent;
+use crate::agents_md;
 use crate::artifact::{Artifact, Provenance};
 use crate::catalog::{Catalog, DiscoveryFailure};
-use crate::install;
+use crate::install::{self, Standing};
 use crate::kind::Kind;
-use crate::ledger::InstallRecord;
+use crate::ledger::{InstallRecord, Target};
 use crate::paths;
 use crate::workspace::{
-    same_directory, FlayerWorkspace, MindProject, MisplacedTarget, WorkspaceError,
+    same_directory, FlayerWorkspace, MarkerFile, MindProject, MisplacedTarget, WorkspaceError,
 };
 
 /// What every project a report covers holds.
@@ -52,6 +54,14 @@ pub struct ProjectStatus {
     /// Where it is.
     #[serde(serialize_with = "paths::lossy")]
     pub path: PathBuf,
+    /// The file its marker is read from, inside its `.mind`: a
+    /// `settings.toml`, or the `mind.toml` or `settings.json` an older
+    /// Mindflayer wrote, which `mind migrate` moves to one. Said because
+    /// nothing else in a report tells a `settings.json` from a
+    /// `settings.toml`, which name the same agents, though only the second
+    /// can be changed. None for an entry that would not open, which has no
+    /// marker to read.
+    pub marker: Option<MarkerFile>,
     /// The agents its settings name, in report order: none for a project a
     /// `mind.toml` marks, which names none.
     pub agents: Vec<Agent>,
@@ -65,8 +75,30 @@ pub struct ProjectStatus {
     /// it. None under the folders each agent reads, which is every project
     /// whose settings name no `targets`.
     pub unreached: Vec<Unreached>,
+    /// Each rule it received that some of its agents read nowhere, all of it
+    /// there as it was installed, in the order of `artifacts`: one about
+    /// some files only, which Claude alone reads, or one Codex and OpenCode
+    /// read nowhere because no block could be written for them.
+    ///
+    /// Said of each rule rather than of its kind, as `unreached` says a
+    /// skill's: a skill reaches the agents that read the folders its kind is
+    /// installed in, the same for every skill, while a rule reaches the ones
+    /// what it states and where its block may go let it. One partly gone is
+    /// missing already, which says so.
+    pub missed: Vec<Missed>,
     /// Everything it holds, grouped by kind and ordered by name.
     pub artifacts: Vec<ArtifactStatus>,
+}
+
+/// One artifact a project received that some of its agents read nowhere,
+/// and those agents.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct Missed {
+    pub kind: Kind,
+    pub name: String,
+    /// The agents among the project's that read it nowhere, in report
+    /// order. Never empty.
+    pub agents: Vec<Agent>,
 }
 
 /// A kind a project installs only in folders some of its agents do not read,
@@ -99,8 +131,8 @@ pub struct ArtifactStatus {
     pub name: String,
     pub state: State,
     /// Every agent among the project's that reads one of its copies, in
-    /// report order ([`Artifact::agents`]): what it reaches, which for a
-    /// partial install is fewer than it was installed for.
+    /// report order ([`Artifact::agents`]): what it reaches, which for an
+    /// install with a copy missing is fewer than it was installed for.
     pub agents: Vec<Agent>,
     /// Where what was installed came from, as `--from` takes it: `workspace`,
     /// `load:<entry>`, or a shelf source's address. None when the ledger
@@ -109,21 +141,41 @@ pub struct ArtifactStatus {
     pub origin: Option<String>,
 }
 
-/// How an artifact stands in a project, as far as its copies and the ledger
-/// say.
+/// How an artifact stands in a project, as far as its copies, the ledger and
+/// the place what was installed came from say.
 ///
-/// The outdated and edited states are #47's and #48's, once installs are
-/// compared with what they came from.
+/// The first five are an installation's, as core stands it ([`Standing`]),
+/// told by the same function an install refuses by and an update acts on,
+/// so the report and either of them never disagree. They took over from
+/// `installed`, now current, outdated or orphaned, and `partial`, now
+/// missing, which moved the version of the envelope a report is printed in.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum State {
-    /// Every copy is one the ledger records, and every copy it records is
-    /// found where it was put.
-    Installed,
+    /// Every copy is one the ledger records, every copy it records is found
+    /// where it was put, holding what was installed there, and the place it
+    /// came from offers that still.
+    Current,
+    /// The same, but the place it came from offers something else by now:
+    /// an update, or the next install of it, brings it up to date.
+    Outdated,
+    /// A copy the ledger records holds something other than what was
+    /// installed there, by its hash (D-04): edited by hand or with `mind
+    /// edit`, or a skill renamed, its `name` line rewritten; a rule renamed
+    /// is moved as it is, and holds what it held. Still Mindflayer's
+    /// install, and left alone by every install, update and uninstall
+    /// unless forced. Said over a copy gone beside it, which the next
+    /// install would not put back without forcing.
+    Edited,
     /// The ledger records a copy that is not found where it was put any
-    /// more: deleted since, by hand or by `git clean -X`, or left unreadable.
-    /// The next install of it puts every copy back. Said over the project's
-    /// own copy of the name too, which sits where the install wrote nothing.
-    Partial,
+    /// more: deleted since, by hand or by a `git clean`, or left unreadable.
+    /// An update, or the next install of it, puts every copy back. Said over
+    /// the project's own copy of the name too, which sits where the install
+    /// wrote nothing.
+    Missing,
+    /// The place it came from no longer offers it: nothing can bring it up
+    /// to date or put a copy of it back, and `uninstall` takes it out. Said
+    /// over a copy gone beside it, which nothing can put back.
+    Orphaned,
     /// In an agent's folder outside any the project authors in, and recorded
     /// by nothing: somebody's, put there some other way, and never
     /// Mindflayer's to change.
@@ -135,9 +187,12 @@ pub enum State {
 
 impl State {
     /// Every state, in report order.
-    pub const ALL: [State; 4] = [
-        State::Installed,
-        State::Partial,
+    pub const ALL: [State; 7] = [
+        State::Current,
+        State::Outdated,
+        State::Edited,
+        State::Missing,
+        State::Orphaned,
         State::Foreign,
         State::Authored,
     ];
@@ -145,11 +200,39 @@ impl State {
     /// How it is written in a report, in text and in JSON alike.
     pub const fn slug(self) -> &'static str {
         match self {
-            State::Installed => "installed",
-            State::Partial => "partial",
+            State::Current => "current",
+            State::Outdated => "outdated",
+            State::Edited => "edited",
+            State::Missing => "missing",
+            State::Orphaned => "orphaned",
             State::Foreign => "foreign",
             State::Authored => "authored",
         }
+    }
+
+    /// How an installation the ledger records reads, from how core stands
+    /// it (`standing`, none when that could not be told) and whether one of
+    /// its copies is `missing` where discovery looked for it.
+    ///
+    /// In the order core says a standing in, edited first, then orphaned,
+    /// missing and outdated, with what discovery misses read as missing: a
+    /// copy left where it no longer reads, its `SKILL.md` gone, reaches no
+    /// agent, as one deleted does not.
+    fn installed(standing: Option<Standing>, missing: bool) -> State {
+        match standing {
+            Some(Standing::Edited) => State::Edited,
+            Some(Standing::Orphaned) => State::Orphaned,
+            _ if missing => State::Missing,
+            Some(Standing::Missing) => State::Missing,
+            Some(Standing::Outdated) => State::Outdated,
+            _ => State::Current,
+        }
+    }
+
+    /// Whether every copy of what was installed is where it was put, as it
+    /// was put there: what `missed` says of a rule only when it holds.
+    fn whole(self) -> bool {
+        matches!(self, State::Current | State::Outdated | State::Orphaned)
     }
 }
 
@@ -225,9 +308,11 @@ impl Status {
                         name: None,
                         entry: Some(spelled(&member.entry)),
                         path: member.root,
+                        marker: None,
                         agents: Vec::new(),
                         stale: Some(error.to_string()),
                         unreached: Vec::new(),
+                        missed: Vec::new(),
                         artifacts: Vec::new(),
                     });
                     failures.push(StatusFailure::Stale(error));
@@ -291,6 +376,10 @@ impl ProjectStatus {
         let mut catalog = Catalog::discover_kinds(std::slice::from_ref(project), kinds);
         let mut entry = None;
         let mut installed: Vec<InstallRecord> = Vec::new();
+        // How each installation stands, by kind and name, as core tells it
+        // by the hash of what was written and what its origin offers now
+        // (D-04).
+        let mut standings: Vec<(Kind, String, Standing)> = Vec::new();
         // Records are a workspace's own, so a project it does not link has
         // none there, as `with_records` reads it, and its ledger is not
         // opened for it.
@@ -311,7 +400,28 @@ impl ProjectStatus {
             catalog = match read {
                 Ok((ledger, read)) => {
                     installed = read.into_iter().flatten().collect();
-                    catalog.with_records(workspace, &ledger)
+                    // A standing reads the ledger again, for what the shelf
+                    // offers, and one that fails it fails the report as a
+                    // ledger that cannot be read does, said once: never an
+                    // edited install quietly said to be current.
+                    let mut unread = None;
+                    for &kind in kinds {
+                        match install::standings(workspace, &ledger, project, kind) {
+                            Ok(told) => standings.extend(
+                                told.into_iter()
+                                    .map(|(name, standing)| (kind, name, standing)),
+                            ),
+                            Err(error) => {
+                                unread = Some(error);
+                                break;
+                            }
+                        }
+                    }
+                    let catalog = catalog.with_records(workspace, &ledger);
+                    match unread {
+                        Some(error) => catalog.failing(DiscoveryFailure::Ledger(error)),
+                        None => catalog,
+                    }
                 }
                 Err(error) => catalog.failing(DiscoveryFailure::Ledger(error)),
             };
@@ -322,14 +432,25 @@ impl ProjectStatus {
             .unwrap_or_default();
         agents.sort();
         agents.dedup();
+        // What a project marked by its settings received as rules is no
+        // copy discovery finds, but sections of a block and Claude's files:
+        // read from the ledger and that block (D-23).
+        let (rules, installed): (Vec<InstallRecord>, Vec<InstallRecord>) = installed
+            .into_iter()
+            .partition(|record| record.kind == Kind::Rule && project.settings().is_some());
+        let received: Vec<String> = rules.iter().map(|record| record.name.clone()).collect();
+        let rendered = rendered(root, &agents, rules, &standings);
+        let artifacts = standing(root, catalog.artifacts(), installed, rendered, &standings);
         let status = ProjectStatus {
             name: Some(project.name().to_owned()),
             entry,
             path: root.to_path_buf(),
+            marker: Some(project.marker_file()),
             stale: None,
             unreached: unreached(project, kinds, &agents),
+            missed: missed(&agents, &artifacts, &received),
             agents,
-            artifacts: standing(root, catalog.artifacts(), installed),
+            artifacts,
         };
         (status, catalog)
     }
@@ -350,20 +471,30 @@ impl ProjectStatus {
 /// An artifact's record is the one that wrote one of its copies, matched by
 /// path as discovery marks a copy installed, not by name, so an install of
 /// one name never claims what somebody keeps under it elsewhere. Its state is
-/// what discovery says of its copies ([`Artifact::provenance`]): installed
-/// only when the ledger records every one, and partial when the record names
-/// a copy discovery did not find where it was put, whether the rest are all
-/// recorded or the project authors a copy of its own beside them.
+/// what discovery says of its copies ([`Artifact::provenance`]) with how
+/// core stands the installation laid over it ([`State::installed`]): one of
+/// an installation's states only when the ledger records every copy, and
+/// missing, or edited or orphaned, which are said over it, when the record
+/// names a copy discovery did not find where it was put, whether the rest
+/// are all recorded or the project authors a copy of its own beside them.
 ///
 /// A record no copy is found of is an install every copy of which is gone,
-/// listed as partial with no agent, so that what was installed is said even
-/// once nothing of it is left; unless the project holds something else by
-/// that name, which is then that name's one entry, said as what is there:
-/// a row is one name, and that one is somebody's.
+/// listed as missing, or as edited or orphaned, with no agent, so that what
+/// was installed is said even once nothing of it is left; unless the
+/// project holds something else by that name, which is then that name's one
+/// entry, said as what is there: a row is one name, and that one is
+/// somebody's.
+///
+/// `rendered` are the rules a project marked by its settings received, as
+/// [`rendered`] reads them, each listed under the same rule: after what
+/// discovery found, and not under a name the project holds something else
+/// by. `standings` say how each installation stands, by kind and name.
 fn standing(
     root: &Path,
     artifacts: &[Artifact],
     records: Vec<InstallRecord>,
+    rendered: Vec<ArtifactStatus>,
+    standings: &[(Kind, String, Standing)],
 ) -> Vec<ArtifactStatus> {
     let mut unclaimed = records;
     let mut held: Vec<ArtifactStatus> = Vec::new();
@@ -389,18 +520,25 @@ fn standing(
                 .iter()
                 .any(|target| !routes.contains(&target.path))
         });
+        let told = record
+            .as_ref()
+            .and_then(|record| standing_of(standings, record));
         let state = match artifact.provenance() {
             // Somebody's copy in an agent's folder is said first, even beside
             // an install with a copy gone: the next install of the name is
-            // refused over it, so partial would promise what it cannot keep.
+            // refused over it, so missing would promise what it cannot keep.
             Provenance::Foreign => State::Foreign,
+            Provenance::Installed => State::installed(told, missing),
             // A project's own copy of the name, beside an install of it, does
-            // not hide a copy of that install gone. It sits where the install
-            // wrote nothing, or it would be the install's, so the next one
-            // puts the copy back all the same; and an agent left reading none
-            // would otherwise go unsaid.
-            Provenance::Installed | Provenance::Authored if missing => State::Partial,
-            Provenance::Installed => State::Installed,
+            // not hide an edit of that install, which the next install is
+            // refused over unless forced, nor a copy of it gone. That one
+            // sits where the install wrote nothing, or it would be the
+            // install's, so the next update puts the copy back all the same,
+            // or says that nothing offers it to; and an agent left reading
+            // none would otherwise go unsaid.
+            Provenance::Authored if told == Some(Standing::Edited) || missing => {
+                State::installed(told, missing)
+            }
             Provenance::Authored => State::Authored,
         };
         held.push(ArtifactStatus {
@@ -411,6 +549,14 @@ fn standing(
             origin: record.and_then(|record| record.origin),
         });
     }
+    for rule in rendered {
+        if !held
+            .iter()
+            .any(|other| other.kind == rule.kind && other.name == rule.name)
+        {
+            held.push(rule);
+        }
+    }
     for record in unclaimed {
         if held
             .iter()
@@ -420,8 +566,8 @@ fn standing(
         }
         held.push(ArtifactStatus {
             kind: record.kind,
+            state: State::installed(standing_of(standings, &record), true),
             name: record.name,
-            state: State::Partial,
             agents: Vec::new(),
             origin: record.origin,
         });
@@ -430,13 +576,117 @@ fn standing(
     held
 }
 
+/// How core stands the installation `record` names, among `standings`.
+fn standing_of(standings: &[(Kind, String, Standing)], record: &InstallRecord) -> Option<Standing> {
+    standings
+        .iter()
+        .find(|(kind, name, _)| *kind == record.kind && *name == record.name)
+        .map(|(_, _, standing)| *standing)
+}
+
+/// How each rule recorded as installed into the project at `root`, which its
+/// settings mark, stands, from the ledger and the block of its `AGENTS.md`
+/// (D-23): catalog discovery reads no block, since a section is never
+/// authored in place but rendered from a rule kept elsewhere.
+///
+/// Missing while a target recorded is not found, its section in the block
+/// or its file for Claude where it was written, as for a skill's copies,
+/// and otherwise as core stands it; a rule recorded with none, which reaches
+/// no agent the project names, has nothing missing. It reaches Codex and
+/// OpenCode through the block, and Claude through its own file, or through
+/// the block when it was given none: a render gives Claude every rule as a
+/// file while Claude reads no block, so a rule in the block with no file of
+/// its own is one Claude reads there. Only the agents among `agents`, the
+/// project's own.
+///
+/// A block that cannot be read holds none of them, and every rule in it
+/// reads as missing: the next render refuses it, saying why. One whose
+/// section or file holds something other than was rendered there is edited,
+/// and one nothing offers any more orphaned, as `standings` say, over
+/// missing.
+fn rendered(
+    root: &Path,
+    agents: &[Agent],
+    records: Vec<InstallRecord>,
+    standings: &[(Kind, String, Standing)],
+) -> Vec<ArtifactStatus> {
+    if records.is_empty() {
+        return Vec::new();
+    }
+    let block = install::rules::block_routes(root);
+    records
+        .into_iter()
+        .map(|record| {
+            let file = install::rules::claude_file(&record.name);
+            let found = |target: &Target| {
+                if target.path == agents_md::FILE {
+                    block.contains(&record.name)
+                } else {
+                    fs::symlink_metadata(root.join(&target.path)).is_ok()
+                }
+            };
+            let missing = record.targets.iter().any(|target| !found(target));
+            let in_block = record
+                .targets
+                .iter()
+                .any(|target| target.path == agents_md::FILE && found(target));
+            let given_file = record.targets.iter().find(|target| target.path == file);
+            let in_file = given_file.is_some_and(found);
+            let reached = agents
+                .iter()
+                .copied()
+                .filter(|agent| match agent {
+                    Agent::Claude => in_file || (in_block && given_file.is_none()),
+                    Agent::Codex | Agent::OpenCode => in_block,
+                })
+                .collect();
+            let state = State::installed(standing_of(standings, &record), missing);
+            ArtifactStatus {
+                kind: Kind::Rule,
+                name: record.name,
+                state,
+                agents: reached,
+                origin: record.origin,
+            }
+        })
+        .collect()
+}
+
+/// Each of `artifacts` that is one of the rules a project marked by its
+/// settings `received`, installed whole, with the agents among `agents`,
+/// its own, that read it nowhere ([`ProjectStatus::missed`]).
+///
+/// From the rows as the report lists them, so what is said of a rule is
+/// what its row says it reaches.
+fn missed(agents: &[Agent], artifacts: &[ArtifactStatus], received: &[String]) -> Vec<Missed> {
+    artifacts
+        .iter()
+        .filter(|held| {
+            held.kind == Kind::Rule && held.state.whole() && received.contains(&held.name)
+        })
+        .filter_map(|held| {
+            let agents: Vec<Agent> = agents
+                .iter()
+                .copied()
+                .filter(|agent| !held.agents.contains(agent))
+                .collect();
+            (!agents.is_empty()).then(|| Missed {
+                kind: held.kind,
+                name: held.name.clone(),
+                agents,
+            })
+        })
+        .collect()
+}
+
 /// Each of `kinds` that `project` installs only in folders some of `agents`,
 /// its own, do not read, with those agents.
 ///
 /// From where an install of each would put its copies
 /// ([`install::targets`]), so two spellings of one folder are one, and a kind
-/// installed nowhere, every rule for now, is passed over: nothing of it
-/// reaches any agent through a folder, which is not this to say.
+/// installed in no folder is passed over: a rule, which reaches a project
+/// marked by its settings through the block of its `AGENTS.md`, says which
+/// agents it reaches as each rule's own entry does ([`rendered`]).
 pub(crate) fn unreached(project: &MindProject, kinds: &[Kind], agents: &[Agent]) -> Vec<Unreached> {
     let root = project.root();
     kinds

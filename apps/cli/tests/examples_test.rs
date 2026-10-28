@@ -73,15 +73,6 @@ fn snapshot(root: &Path) -> Vec<(PathBuf, Vec<u8>)> {
     files
 }
 
-/// The first word of each line: the kind, in a listing that has a kind
-/// column, or the name in one that does not.
-fn first_words(stdout: &str) -> Vec<&str> {
-    stdout
-        .lines()
-        .filter_map(|line| line.split_whitespace().next())
-        .collect()
-}
-
 #[test]
 fn the_examples_are_two_skills_and_two_rules() {
     let dir = TempDir::new().unwrap();
@@ -168,14 +159,25 @@ fn a_workspace_loads_the_examples_and_installs_commit_style_with_its_reference()
     assert!(loaded.ok, "{:?}", loaded.stderr);
     assert!(
         loaded.stdout.starts_with("loaded examples as ")
-            && loaded.stdout.contains(": 2 skills to install\n"),
+            && loaded
+                .stdout
+                .contains(": 2 skills and 2 rules to install\n"),
         "{}",
         loaded.stdout
     );
-    // Only the skills: a rule cannot be installed yet, so none is offered.
+    // Its skills and its rules, each of which installs.
     assert_eq!(
-        first_words(&offered.stdout),
-        ["code-review", "commit-style"],
+        offered
+            .stdout
+            .lines()
+            .map(|line| line.split_whitespace().take(2).collect())
+            .collect::<Vec<Vec<&str>>>(),
+        [
+            ["skill", "code-review"],
+            ["skill", "commit-style"],
+            ["rule", "git/commits"],
+            ["rule", "style/comments"],
+        ],
         "{}",
         offered.stdout
     );
@@ -196,20 +198,63 @@ fn a_workspace_loads_the_examples_and_installs_commit_style_with_its_reference()
 }
 
 #[test]
+fn a_workspace_loads_the_examples_and_installs_their_rules_where_the_readme_says() {
+    let (_dir, projects) = projects();
+    let collapse = projects.join("collapse");
+
+    let (commits, comments) = leaving_examples_alone(|examples| {
+        flayer(&projects, &["load", &text(examples)]).unwrap();
+        (
+            flayer(&projects, &["install", "-p", "collapse", "git/commits"]).unwrap(),
+            flayer(&projects, &["install", "-p", "collapse", "style/comments"]).unwrap(),
+        )
+    });
+
+    assert!(commits.ok && commits.stderr.is_empty(), "{commits:?}");
+    // About every file: the block every agent reads, holding the rule.
+    let block = fs::read_to_string(collapse.join("AGENTS.md")).unwrap();
+    let rule = fs::read_to_string(examples().join("rules/git/commits.md")).unwrap();
+    assert!(
+        block.contains(&format!("<!-- mindflayer:rule git/commits -->\n{rule}")),
+        "{block}"
+    );
+    // About some files: Claude's alone, and said.
+    assert_eq!(
+        comments.stderr,
+        [
+            "warning: rule `style/comments` states `paths`, so it reaches claude only: codex and \
+          opencode read no .claude/rules"
+        ]
+    );
+    assert_eq!(
+        fs::read(collapse.join(".claude/rules/mindflayer/style/comments.md")).unwrap(),
+        fs::read(examples().join("rules/style/comments.md")).unwrap()
+    );
+    assert!(!block.contains("style/comments"), "{block}");
+    // Kept out of git, as the copies of a skill are.
+    assert!(
+        untracked(&collapse).is_empty(),
+        "{:?}",
+        untracked(&collapse)
+    );
+}
+
+#[test]
 fn the_readme_walks_through_the_examples_as_the_commands_print_them() {
     let (_dir, projects) = projects();
 
-    let (listed, loaded, installed) = leaving_examples_alone(|examples| {
+    let (listed, loaded, installed, ruled) = leaving_examples_alone(|examples| {
         let examples = text(examples);
         (
             flayer(&projects, &["-W", &examples, "list"]).unwrap(),
             flayer(&projects, &["load", &examples]).unwrap(),
             flayer(&projects, &["install", "-p", "collapse", "commit-style"]).unwrap(),
+            flayer(&projects, &["install", "-p", "collapse", "git/commits"]).unwrap(),
         )
     });
     // The README shows stdout alone, which is all there is to show only when
     // nothing was said on stderr.
-    for outcome in [&listed, &loaded, &installed] {
+    for outcome in [&listed, &loaded, &installed, &ruled] {
         assert!(outcome.ok && outcome.stderr.is_empty(), "{outcome:?}");
     }
 
@@ -232,9 +277,11 @@ fn the_readme_walks_through_the_examples_as_the_commands_print_them() {
         ),
         format!(
             "$ cd ~/Projects\n$ flayer load ~/src/mindflayer/examples\n{}\n\
-             $ flayer install -p collapse commit-style\n{}",
+             $ flayer install -p collapse commit-style\n{}\
+             $ flayer install -p collapse git/commits\n{}",
             as_written(&loaded.stdout),
-            as_written(&installed.stdout)
+            as_written(&installed.stdout),
+            as_written(&ruled.stdout)
         ),
     ];
 

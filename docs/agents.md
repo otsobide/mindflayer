@@ -52,18 +52,22 @@ Each fact carries one of two marks:
   a symlink, so the exclude entry for one must not end in `/` as a directory's
   does, or it ignores nothing.
 
-**One corner contradicts D-03 as written, and #44's predicate:** Claude's
-`AGENTS.md` check most likely stops below `/`. The debug log counted four
-directories searched from a start directory four levels below `/`, and five
-from one five levels below, each one short of the directories up to and
+**One corner differs from D-03 as first written, and #44 follows Claude:**
+Claude's `AGENTS.md` check most likely stops below `/`. The debug log counted
+four directories searched from a start directory four levels below `/`, and
+five from one five levels below, each one short of the directories up to and
 including `/`. So a `CLAUDE.md` at `/` itself would not stop Claude reading
-`AGENTS.md`, where D-03 counts every directory above and #44 walks up to and
-including `/`. That is read from the counts, not tried: no run could put a
-file at `/`. In that one case #44 would choose Fallback while Claude went on
-reading `AGENTS.md` natively, so Claude would read each unscoped rule twice,
-once in the block and once in `.claude/rules`. It is raised on
-[D-03](architecture.md#d-03-rules-reach-every-agent-through-agentsmd) for #44
-to settle. Nothing else contradicts D-02, D-03 or D-07.
+`AGENTS.md`, where D-03 counted every directory above. That is read from the
+counts, not tried: no run could put a file at `/`. #44's predicate
+(`claude_md::reads_agents_md`) stops its walk below `/` too, so the two agree
+there; walking up to and including `/` would have chosen Fallback while Claude
+went on reading `AGENTS.md` natively, and Claude would have read each rule
+about every file twice, once in the block and once in `.claude/rules`. Were
+Claude to count `/` after all, a `CLAUDE.md` there with none nearer would have
+the predicate say Claude reads the block while it reads none, and those rules
+would miss Claude: a file only the machine's administrator can put there,
+which a probe run that may write at `/` would settle. Nothing else
+contradicts D-02, D-03 or D-07.
 
 ## How the checks are run
 
@@ -156,13 +160,16 @@ refuses.
 | Fact | Mark | Evidence, or source and fallback |
 |---|---|---|
 | `CLAUDE.md` is read from the start directory and every folder above it, past the git root. | verified | `claude-parent`. |
-| `AGENTS.md` is read natively only when no `CLAUDE.md`, `.claude/CLAUDE.md` or `CLAUDE.local.md` exists in the start directory or above. | verified, in part | `claude-excluded` and `claude-user-memory` (read), `claude-parent` and `claude-local` (not read). No run placed a `.claude/CLAUDE.md`, but the debug log shows the check looking for all three names. Fallback for that one: #44 counts it, and if Claude did not, the `@AGENTS.md` import would be redundant rather than a second read, since an import never loads the file twice ([memory](https://code.claude.com/docs/en/memory)). |
+| `AGENTS.md` is read natively only when no `CLAUDE.md`, `.claude/CLAUDE.md` or `CLAUDE.local.md` exists in the start directory or above. | verified, in part | `claude-excluded` and `claude-user-memory` (read), `claude-parent` and `claude-local` (not read). No run placed a `.claude/CLAUDE.md`, but the debug log shows the check looking for all three names. Fallback for that one: #44 counts it. Were Claude not to, an `@../AGENTS.md` import there, Mindflayer's or somebody's, would be redundant rather than a second read, since an import never loads the file twice ([memory](https://code.claude.com/docs/en/memory)). But where `.claude/CLAUDE.md` is the only file that stops Claude and it gives the fallback, tracked by git in a local project, reached through a link, or one of which git cannot say whether it tracks it (`Fallback::Tracked`, `Linked`, `Untold`), Claude would read `AGENTS.md` natively as well as every rule in its rules folder, so each rule about every file twice. A `claude-local` run with a `.claude/CLAUDE.md` in place of the `CLAUDE.local.md` would settle it. |
 | That check is made by a built-in plugin, `cc-plugin-agents-md@builtin`. | verified | Listed in the init message's plugins; the debug log's lines come from it. The [memory](https://code.claude.com/docs/en/memory) docs' "Project instructions" setting lives under that plugin's ID. |
-| That check most likely stops below `/`: a `CLAUDE.md` at `/` itself does not count. | verified, in part | Debug: `found 0 of 4 directories` for the `CLAUDE.md` names from a start directory four levels below `/` (`claude-excluded`, and `claude-user-memory` in run 1), `found 0 of 5 directories` from one five levels below (`claude-user-memory`, run 2). Each count is one short of the directories up to and including `/`; no run could put a file at `/` to show it outright. Fallback: #44 walks up to and including `/`, which gives Claude each unscoped rule twice when the only `CLAUDE.md` is at `/`; raised on [D-03](architecture.md#d-03-rules-reach-every-agent-through-agentsmd). |
+| That check most likely stops below `/`: a `CLAUDE.md` at `/` itself does not count. | verified, in part | Debug: `found 0 of 4 directories` for the `CLAUDE.md` names from a start directory four levels below `/` (`claude-excluded`, and `claude-user-memory` in run 1), `found 0 of 5 directories` from one five levels below (`claude-user-memory`, run 2). Each count is one short of the directories up to and including `/`; no run could put a file at `/` to show it outright. #44's walk stops below `/` to match, which a unit test holds to these counts. Fallback: were Claude to count `/`, a `CLAUDE.md` there with none nearer would keep the rules about every file from Claude, since #44 would take the block for read; only an administrator can put one there. |
 | An `AGENTS.md` excluded through `info/exclude` is read. | verified | `claude-excluded`. |
-| Native reading looks for `AGENTS.md` and `.claude/AGENTS.md` in every folder from the start directory up, and reads each one it finds. | verified, in part | The debug log shows the search: `AGENTS.md, .claude/AGENTS.md found 1 of 4 directories`. No run had more than one, so reading each is docs-only ([memory](https://code.claude.com/docs/en/memory)). Fallback: #42 refuses to write `AGENTS.md` into a workspace root or above linked projects, which Claude would otherwise read in every project below. |
+| Native reading looks for `AGENTS.md` and `.claude/AGENTS.md` in every folder from the start directory up, and reads each one it finds. | verified, in part | The debug log shows the search: `AGENTS.md, .claude/AGENTS.md found 1 of 4 directories`. No run had more than one, so reading each is docs-only ([memory](https://code.claude.com/docs/en/memory)). Fallback: #42 leaves no block of rules in an `AGENTS.md` above a linked project, or in a workspace's root where no linked project is, which Claude would otherwise read in every project below. |
 | `AGENTS.local.md`, `AGENTS.override.md` and anything under `.agents/` are never read as instructions. | docs-only | [memory](https://code.claude.com/docs/en/memory). Fallback: Mindflayer writes none of them; the `AGENTS.override.md` warning (#42) is about Codex. |
 | A `CLAUDE.md` holding `@AGENTS.md` loads `AGENTS.md` once, also when that line sits between Mindflayer's markers. | verified | `claude-import`, both runs; in run 2 the line sat between markers, as #44 writes it. Each time one `include` record in the hook, no native read in the debug log, and the token counted once. |
+| An `@` import's relative path is taken from the file that holds it, not from the start directory, so `.claude/CLAUDE.md` brings in the project's `AGENTS.md` as `@../AGENTS.md`. | docs-only | [memory](https://code.claude.com/docs/en/memory). Fallback: #44 imports into `.claude/CLAUDE.md` only when the project's own `CLAUDE.md` is not there or may not be edited. Were the path taken from the start directory, that import would name the `AGENTS.md` one folder above the project, and the block would miss Claude; a `claude-import` run with the line in `.claude/CLAUDE.md` would settle it. |
+| `CLAUDE.md` and `.claude/CLAUDE.md` in one folder are both read. | docs-only | [memory](https://code.claude.com/docs/en/memory) names both places for a project's instructions. Fallback: as for the row above, #44 imports into `.claude/CLAUDE.md` only when `CLAUDE.md` cannot take the import, and an import already in either file stays where it is. |
+| Import parsing skips Markdown code spans and fenced code blocks, and a path ends at the first space, so `@AGENTS.md` alone on a line is an import anywhere but in a fence. A `CLAUDE.local.md` is treated as a `CLAUDE.md` is. | docs-only | [memory](https://code.claude.com/docs/en/memory). Fallback: #44 takes such a line somebody wrote in `CLAUDE.md`, `.claude/CLAUDE.md` (as `@../AGENTS.md`) or `CLAUDE.local.md` for how Claude reaches the block, and writes no import. Were Claude not to follow one it counts, the rules about every file would miss Claude, so it counts only a line of its own, outside a fence and outside an HTML comment over several lines, whose imports no run tried. A `claude-import` run with the line in `CLAUDE.local.md`, and one with it in a fence, would settle it. |
 | A `CLAUDE.local.md` alone, excluded, is read and stops `AGENTS.md` being read. | verified | `claude-local`. |
 | The user memory file (`$CLAUDE_CONFIG_DIR/CLAUDE.md`) is read, once, and does not count for the `AGENTS.md` check, also when the walk up from the project passes the home. | verified | `claude-user-memory`, run 2, with the repository under the temp home: the hook records the file once, as `User`; the debug log found none of the `CLAUDE.md` names in five directories and loaded `AGENTS.md` natively. Run 1 had the repository outside the home, where the walk never met the file. |
 | `.claude/rules` files do not count as a `CLAUDE.md` for that check. | verified | `claude-excluded`: the rules and `AGENTS.md` both loaded. |
@@ -554,7 +561,7 @@ opencode.ai/v2/docs) ([releases](https://github.com/anomalyco/opencode/releases)
 | Fact | Mark | Source, and the fallback |
 |---|---|---|
 | V1 reads every `AGENTS.md` from the start directory up to the worktree, and a project `CLAUDE.md` (then `CONTEXT.md`) only when there is none; globally `~/.config/opencode/AGENTS.md`, else `~/.claude/CLAUDE.md`. `@` references are not followed. | docs-only | [V1 rules](https://opencode.ai/docs/rules/); source, [instruction.ts](https://github.com/anomalyco/opencode/blob/v1.19.4/packages/opencode/src/session/instruction.ts). Fallback: none needed; a project with a block has an `AGENTS.md`, so V1 never falls back to its `CLAUDE.md`. |
-| V2 reads only `AGENTS.md`: the global `~/.config/opencode/AGENTS.md` and every `AGENTS.md` from the start directory up toward home (up to the project root outside home), nested ones when it reads below them; `instructions` after them. | docs-only | [V2 instructions](https://opencode.ai/v2/docs/instructions/), [migration](https://opencode.ai/v2/docs/migrate-v1/). Fallback: #42 refuses to write `AGENTS.md` into a workspace root or above linked projects, since V2, and Claude too, would read it in every project below. |
+| V2 reads only `AGENTS.md`: the global `~/.config/opencode/AGENTS.md` and every `AGENTS.md` from the start directory up toward home (up to the project root outside home), nested ones when it reads below them; `instructions` after them. | docs-only | [V2 instructions](https://opencode.ai/v2/docs/instructions/), [migration](https://opencode.ai/v2/docs/migrate-v1/). Fallback: #42 leaves no block of rules in an `AGENTS.md` above a linked project, or in a workspace's root where no linked project is, since V2, and Claude too, would read it in every project below. |
 | `OPENCODE_DISABLE_PROJECT_CONFIG=1` makes V2 skip project `AGENTS.md`. | docs-only | [V2 instructions](https://opencode.ai/v2/docs/instructions/). Not relied on. |
 | Neither line reads `.claude/rules`: V1's instruction files are `AGENTS.md`, `CLAUDE.md` in its place and `instructions`, V2's `AGENTS.md` and `instructions`. | docs-only | [V1 rules](https://opencode.ai/docs/rules/), [V2 instructions](https://opencode.ai/v2/docs/instructions/). Fallback: as for Codex, #43's "reaches Claude only" warning would at worst be too cautious. |
 | An ignored `AGENTS.md` is read. | docs-only | Source search only. Fallback: shared mode. |
@@ -598,8 +605,10 @@ carries its fallback in the tables above.
 | #43 | Only Claude honours path-scoped rules: Codex and OpenCode read no `.claude/rules`. | verified for Claude; docs-only for Codex and OpenCode |
 | #44 | Claude reads `AGENTS.md` only with no `CLAUDE.md`, `.claude/CLAUDE.md` or `CLAUDE.local.md` in the start directory or above. | verified for `CLAUDE.md` and `CLAUDE.local.md`; `.claude/CLAUDE.md` seen only among the names the check looks for |
 | #44 | A `CLAUDE.md` above the git root counts. | verified |
-| #44 | A `CLAUDE.md` at `/` itself does not count, unlike the predicate's walk. | verified in part: read from the debug log's directory counts, not tried |
+| #44 | A `CLAUDE.md` at `/` itself does not count, and the predicate's walk stops below `/` to match. | verified in part: read from the debug log's directory counts, not tried |
 | #44 | The user memory file does not count, also for a project under the home. | verified |
 | #44 | `@AGENTS.md` in a `CLAUDE.md`, between Mindflayer's markers, loads it once. | verified |
+| #44 | `@../AGENTS.md` in `.claude/CLAUDE.md` loads the project's `AGENTS.md`, and both files are read. | docs-only |
+| #44 | An `@AGENTS.md` line of its own, outside a fence, is followed in any of Claude's files, `CLAUDE.local.md` included. | verified in `CLAUDE.md` outside the markers; docs-only for the fence and `CLAUDE.local.md` |
 | #44 | A `CLAUDE.local.md` alone stops `AGENTS.md` being read. | verified |
 | #44 | Native `AGENTS.md` reading needs Claude 2.1.277 or later. | docs-only |

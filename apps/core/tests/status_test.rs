@@ -6,8 +6,9 @@ use std::path::PathBuf;
 
 use mindflayer_core::ledger::{InstallRecord, Target};
 use mindflayer_core::{
-    Agent, ArtifactStatus, Directories, FlayerWorkspace, Kind, Ledger, MindProject, ProjectStatus,
-    Share, State, Status, StatusFailure, Unreached,
+    hash, Agent, ArtifactStatus, Directories, FlayerWorkspace, Kind, Ledger, MarkerFile,
+    MindProject, ProjectStatus, Share, State, Status, StatusFailure, Unreached, MIND_DIR,
+    SETTINGS_JSON_FILE,
 };
 use tempfile::TempDir;
 
@@ -41,17 +42,43 @@ fn marked(
 /// Write `name`'s SKILL.md in `folder`, a path below the project.
 fn put(project: &MindProject, folder: &str, name: &str) -> PathBuf {
     let dir = project.root().join(folder).join(name);
-    fs::create_dir_all(&dir).unwrap();
+    write_skill(&dir, name);
+    dir
+}
+
+/// Write `name`'s SKILL.md into the folder `dir`, as [`put`] does.
+fn write_skill(dir: &std::path::Path, name: &str) {
+    fs::create_dir_all(dir).unwrap();
     fs::write(
         dir.join("SKILL.md"),
         format!("---\nname: {name}\ndescription: Does {name} things\n---\n\n# {name}\n"),
     )
     .unwrap();
+}
+
+/// Offer `name` among the workspace's own, holding what [`put`] writes: the
+/// place a record from `workspace` came from, offering what its copies hold.
+fn offer(workspace: &FlayerWorkspace, name: &str) -> PathBuf {
+    let dir = workspace
+        .own()
+        .directory_for(Kind::Skill)
+        .unwrap()
+        .join(name);
+    write_skill(&dir, name);
     dir
 }
 
+/// The hash of `name` as [`put`] writes it, which is what an install of it
+/// records: a copy that holds it reads as untouched.
+fn written(name: &str) -> String {
+    let dir = TempDir::new().unwrap();
+    write_skill(&dir.path().join(name), name);
+    hash::tree(&dir.path().join(name)).unwrap()
+}
+
 /// Record in `ledger` that `name` came from `origin` into the project the
-/// workspace stores as `project`, with a copy at each of `paths`.
+/// workspace stores as `project`, with a copy at each of `paths` holding
+/// what [`put`] writes.
 fn record(ledger: &Ledger, project: &str, name: &str, origin: &str, paths: &[&str]) {
     ledger
         .installed(
@@ -61,12 +88,13 @@ fn record(ledger: &Ledger, project: &str, name: &str, origin: &str, paths: &[&st
                 name: name.to_owned(),
                 source_id: None,
                 origin: Some(origin.to_owned()),
-                content_hash: None,
+                content_hash: Some(written(name)),
                 targets: paths
                     .iter()
                     .map(|path| Target {
                         agent: None,
                         path: (*path).to_owned(),
+                        content_hash: None,
                     })
                     .collect(),
             },
@@ -91,13 +119,15 @@ fn states(project: &ProjectStatus) -> Vec<(&str, State, &[Agent], Option<&str>)>
 }
 
 #[test]
-fn each_artifact_is_installed_partial_foreign_or_authored_with_the_agents_it_reaches() {
+fn each_artifact_is_current_outdated_missing_orphaned_foreign_or_authored_with_the_agents_it_reaches(
+) {
     let (dir, mut workspace) = workspace();
     let alpha = marked(&dir, &mut workspace, "alpha", &Agent::ALL);
     let ledger = workspace.ledger().unwrap();
-    // Both copies there, both recorded.
+    // Both copies there, both recorded, and offered as they hold it.
     put(&alpha, ".agents/skills", "deploy");
     put(&alpha, ".claude/skills", "deploy");
+    offer(&workspace, "deploy");
     record(
         &ledger,
         "alpha",
@@ -105,16 +135,29 @@ fn each_artifact_is_installed_partial_foreign_or_authored_with_the_agents_it_rea
         "workspace",
         &[".agents/skills/deploy", ".claude/skills/deploy"],
     );
+    // The same, but offered changed since.
+    put(&alpha, ".agents/skills", "ship");
+    put(&alpha, ".claude/skills", "ship");
+    let ship = offer(&workspace, "ship");
+    fs::write(ship.join("notes.md"), "Since.\n").unwrap();
+    record(
+        &ledger,
+        "alpha",
+        "ship",
+        "workspace",
+        &[".agents/skills/ship", ".claude/skills/ship"],
+    );
     // Claude's copy deleted since.
     put(&alpha, ".agents/skills", "audit");
+    offer(&workspace, "audit");
     record(
         &ledger,
         "alpha",
         "audit",
-        "load:../team",
+        "workspace",
         &[".agents/skills/audit", ".claude/skills/audit"],
     );
-    // Every copy deleted since.
+    // Every copy deleted since, from a source nothing offers it from now.
     record(
         &ledger,
         "alpha",
@@ -144,19 +187,14 @@ fn each_artifact_is_installed_partial_foreign_or_authored_with_the_agents_it_rea
         [
             (
                 "audit",
-                State::Partial,
+                State::Missing,
                 &[Agent::Codex, Agent::OpenCode][..],
-                Some("load:../team")
-            ),
-            (
-                "deploy",
-                State::Installed,
-                &Agent::ALL[..],
                 Some("workspace")
             ),
+            ("deploy", State::Current, &Agent::ALL[..], Some("workspace")),
             (
                 "gone",
-                State::Partial,
+                State::Orphaned,
                 &[][..],
                 Some("https://github.com/acme/skills")
             ),
@@ -167,10 +205,11 @@ fn each_artifact_is_installed_partial_foreign_or_authored_with_the_agents_it_rea
                 None
             ),
             ("review", State::Authored, &[][..], None),
+            ("ship", State::Outdated, &Agent::ALL[..], Some("workspace")),
             ("style", State::Authored, &[][..], None),
         ]
     );
-    assert_eq!(project.artifacts[5].kind, Kind::Rule);
+    assert_eq!(project.artifacts[6].kind, Kind::Rule);
 }
 
 #[test]
@@ -182,6 +221,7 @@ fn a_project_a_mind_toml_marks_is_read_from_its_one_folder_and_names_no_agent() 
     workspace.link(&beta).unwrap();
     let ledger = workspace.ledger().unwrap();
     put(&beta, "skills", "deploy");
+    offer(&workspace, "deploy");
     record(&ledger, "beta", "deploy", "workspace", &["skills/deploy"]);
     put(&beta, "skills", "review");
 
@@ -193,7 +233,7 @@ fn a_project_a_mind_toml_marks_is_read_from_its_one_folder_and_names_no_agent() 
     assert_eq!(
         states(project),
         [
-            ("deploy", State::Installed, &[][..], Some("workspace")),
+            ("deploy", State::Current, &[][..], Some("workspace")),
             ("review", State::Authored, &[][..], None),
         ]
     );
@@ -228,11 +268,49 @@ fn an_install_gone_under_a_name_somebody_keeps_is_that_names_one_entry_as_what_i
 }
 
 #[test]
-fn a_copy_gone_from_an_install_beside_the_projects_own_is_partial() {
+fn an_install_a_copy_of_which_was_changed_since_is_edited_even_beside_one_gone() {
+    let (dir, mut workspace) = workspace();
+    let alpha = marked(&dir, &mut workspace, "alpha", &Agent::ALL);
+    let ledger = workspace.ledger().unwrap();
+    put(&alpha, ".agents/skills", "deploy");
+    let claude = put(&alpha, ".claude/skills", "deploy");
+    record(
+        &ledger,
+        "alpha",
+        "deploy",
+        "workspace",
+        &[".agents/skills/deploy", ".claude/skills/deploy"],
+    );
+    fs::write(claude.join("notes.md"), "Ours.\n").unwrap();
+
+    let edited = Status::of_workspace(&workspace).0;
+    fs::remove_dir_all(alpha.root().join(".agents/skills/deploy")).unwrap();
+    let gone_too = Status::of_workspace(&workspace).0;
+
+    assert_eq!(
+        states(&edited.projects[0]),
+        [("deploy", State::Edited, &Agent::ALL[..], Some("workspace"))]
+    );
+    // The next install is refused over the edit unless forced, so missing,
+    // which promises an update puts the copy back, would say too much.
+    assert_eq!(
+        states(&gone_too.projects[0]),
+        [(
+            "deploy",
+            State::Edited,
+            &[Agent::Claude, Agent::OpenCode][..],
+            Some("workspace")
+        )]
+    );
+}
+
+#[test]
+fn a_copy_gone_from_an_install_beside_the_projects_own_is_missing() {
     let (dir, mut workspace) = workspace();
     let alpha = marked(&dir, &mut workspace, "alpha", &Agent::ALL);
     let ledger = workspace.ledger().unwrap();
     put(&alpha, "skills", "deploy");
+    offer(&workspace, "deploy");
     put(&alpha, ".agents/skills", "deploy");
     put(&alpha, ".claude/skills", "deploy");
     record(
@@ -261,7 +339,48 @@ fn a_copy_gone_from_an_install_beside_the_projects_own_is_partial() {
         states(&status.projects[0]),
         [(
             "deploy",
-            State::Partial,
+            State::Missing,
+            &[Agent::Codex, Agent::OpenCode][..],
+            Some("workspace")
+        )]
+    );
+}
+
+#[test]
+fn a_copy_gone_from_an_install_nothing_offers_any_more_is_orphaned() {
+    let (dir, mut workspace) = workspace();
+    let alpha = marked(&dir, &mut workspace, "alpha", &Agent::ALL);
+    let ledger = workspace.ledger().unwrap();
+    put(&alpha, ".agents/skills", "deploy");
+    put(&alpha, ".claude/skills", "deploy");
+    record(
+        &ledger,
+        "alpha",
+        "deploy",
+        "workspace",
+        &[".agents/skills/deploy", ".claude/skills/deploy"],
+    );
+    let whole = Status::of_workspace(&workspace).0;
+    fs::remove_dir_all(alpha.root().join(".claude/skills/deploy")).unwrap();
+
+    let (status, failures) = Status::of_workspace(&workspace);
+
+    assert!(failures.is_empty(), "{failures:?}");
+    assert_eq!(
+        states(&whole.projects[0]),
+        [(
+            "deploy",
+            State::Orphaned,
+            &Agent::ALL[..],
+            Some("workspace")
+        )]
+    );
+    // Nothing can put the copy back, so missing would promise too much.
+    assert_eq!(
+        states(&status.projects[0]),
+        [(
+            "deploy",
+            State::Orphaned,
             &[Agent::Codex, Agent::OpenCode][..],
             Some("workspace")
         )]
@@ -294,6 +413,46 @@ fn a_stale_entry_is_reported_as_stale_and_the_rest_still_are() {
     assert_eq!(
         stale.stale.as_deref(),
         Some(failures[0].to_string().as_str())
+    );
+}
+
+#[test]
+fn each_project_says_the_file_its_marker_is_read_from() {
+    let (dir, mut workspace) = workspace();
+    marked(&dir, &mut workspace, "alpha", &Agent::ALL);
+    let beta = dir.path().join("beta");
+    fs::create_dir_all(&beta).unwrap();
+    workspace
+        .link(&MindProject::init(&beta).unwrap().0)
+        .unwrap();
+    let gamma = dir.path().join("gamma");
+    fs::create_dir_all(gamma.join(MIND_DIR)).unwrap();
+    fs::write(
+        gamma.join(MIND_DIR).join(SETTINGS_JSON_FILE),
+        r#"{"version": 3, "id": "0123456789abcdef0123456789abcdef", "name": "gamma",
+            "agents": ["claude"], "share": "shared", "directories": {}}"#,
+    )
+    .unwrap();
+    workspace.link(&MindProject::open(&gamma).unwrap()).unwrap();
+    let old = marked(&dir, &mut workspace, "old-api", &Agent::ALL);
+    fs::remove_dir_all(old.root()).unwrap();
+    let workspace = FlayerWorkspace::open(dir.path()).unwrap();
+
+    let (status, _) = Status::of_workspace(&workspace);
+
+    let markers: Vec<Option<MarkerFile>> = status
+        .projects
+        .iter()
+        .map(|project| project.marker)
+        .collect();
+    assert_eq!(
+        markers,
+        [
+            Some(MarkerFile::SettingsToml),
+            Some(MarkerFile::MindToml),
+            Some(MarkerFile::SettingsJson),
+            None,
+        ]
     );
 }
 
@@ -396,6 +555,38 @@ fn a_ledger_that_cannot_be_read_leaves_every_copy_unrecorded_and_is_said_once() 
 }
 
 #[test]
+fn a_ledger_whose_shelf_cannot_be_read_for_a_standing_is_said() {
+    let (dir, mut workspace) = workspace();
+    let alpha = marked(&dir, &mut workspace, "alpha", &Agent::ALL);
+    put(&alpha, ".agents/skills", "deploy");
+    let ledger = workspace.ledger().unwrap();
+    record(
+        &ledger,
+        "alpha",
+        "deploy",
+        "workspace",
+        &[".agents/skills/deploy"],
+    );
+    // The records read, but not what the shelf offers, which a standing
+    // reads to hold an install to where it came from.
+    let path = workspace.ledger_path();
+    rusqlite::Connection::open(&path)
+        .unwrap()
+        .execute_batch("DROP TABLE artifacts;")
+        .unwrap();
+
+    let (_, failures) = Status::of_workspace(&workspace);
+    let (_, failed) = Status::of_project(&alpha, Some(&workspace));
+
+    for failures in [&failures, &failed] {
+        assert_eq!(failures.len(), 1, "{failures:?}");
+        assert!(failures[0]
+            .to_string()
+            .contains(&path.display().to_string()));
+    }
+}
+
+#[test]
 fn a_ledger_that_will_not_open_is_said_and_the_report_still_made() {
     let (dir, mut workspace) = workspace();
     let alpha = marked(&dir, &mut workspace, "alpha", &Agent::ALL);
@@ -450,6 +641,7 @@ fn reading_a_project_hands_back_the_catalog_it_read_with_the_records_marked() {
     let alpha = marked(&dir, &mut workspace, "alpha", &Agent::ALL);
     put(&alpha, ".agents/skills", "deploy");
     put(&alpha, "skills", "review");
+    offer(&workspace, "deploy");
     let ledger = workspace.ledger().unwrap();
     record(
         &ledger,
@@ -471,7 +663,7 @@ fn reading_a_project_hands_back_the_catalog_it_read_with_the_records_marked() {
         status
             .find(Kind::Skill, "deploy")
             .map(|artifact| artifact.state),
-        Some(State::Installed)
+        Some(State::Current)
     );
     assert_eq!(status.find(Kind::Rule, "deploy"), None);
     assert!(catalog.artifacts()[0].copies()[0].is_installed());
@@ -494,6 +686,7 @@ fn a_project_installing_where_no_agent_reads_says_which_agents_read_none_of_it()
     installing_in(&mut alpha, &[".skills"]);
     let ledger = workspace.ledger().unwrap();
     put(&alpha, ".skills", "deploy");
+    offer(&workspace, "deploy");
     record(&ledger, "alpha", "deploy", "workspace", &[".skills/deploy"]);
 
     let (status, failures) = Status::of_workspace(&workspace);
@@ -508,10 +701,10 @@ fn a_project_installing_where_no_agent_reads_says_which_agents_read_none_of_it()
             agents: Agent::ALL.to_vec(),
         }]
     );
-    // Installed, and reaching no agent.
+    // Current, and reaching no agent.
     assert_eq!(
         states(alpha),
-        [("deploy", State::Installed, &[][..], Some("workspace"))]
+        [("deploy", State::Current, &[][..], Some("workspace"))]
     );
 }
 
@@ -563,12 +756,9 @@ fn a_project_installing_where_its_agents_read_has_nothing_unreached() {
 fn a_target_no_install_may_use_is_a_failure_beside_the_report() {
     let (dir, mut workspace) = workspace();
     let alpha = marked(&dir, &mut workspace, "alpha", &Agent::ALL);
-    let path = alpha.root().join(".mind").join("settings.json");
-    let text = fs::read_to_string(&path).unwrap().replacen(
-        "{\n",
-        "{\n  \"targets\": {\"skills\": [\".skills\", \"../shared\"]},\n",
-        1,
-    );
+    let path = alpha.marker_path();
+    let text =
+        fs::read_to_string(&path).unwrap() + "\n[targets]\nskills = [\".skills\", \"../shared\"]\n";
     fs::write(&path, text).unwrap();
 
     let (status, failures) = Status::of_workspace(&workspace);

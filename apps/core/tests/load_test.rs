@@ -288,7 +288,9 @@ fn installing_a_loaded_skill_copies_it_and_a_later_edit_there_updates_it() {
     fs::write(&source, edited).unwrap();
     let candidate =
         install::offered(&target, &ledger, &project, Kind::Skill, "deploy", None).unwrap();
-    assert_eq!(candidate.standing, Standing::Installed);
+    // The copy is what was installed, and the loaded workspace offers
+    // something else by now.
+    assert_eq!(candidate.standing, Standing::Outdated);
     let second = install::install(
         &target,
         &ledger,
@@ -427,7 +429,7 @@ fn a_loaded_workspace_that_is_the_project_itself_is_never_copied_onto_itself() {
     .unwrap();
     // As if a record said it were ours, the case that could otherwise delete
     // the loaded workspace's own files on uninstall.
-    candidate.standing = Standing::Installed;
+    candidate.standing = Standing::Current;
 
     let outcome = install::install(
         &target,
@@ -522,7 +524,15 @@ fn install_and_uninstall_refuse_a_name_that_is_not_one_folder_whatever_offers_it
         &AgentHomes::default(),
     )
     .unwrap_err();
-    let removing = install::uninstall(&target, &ledger, &project, Kind::Skill, "..").unwrap_err();
+    let removing = install::uninstall(
+        &target,
+        &ledger,
+        &project,
+        Kind::Skill,
+        "..",
+        &AgentHomes::default(),
+    )
+    .unwrap_err();
 
     assert!(
         matches!(installing, InstallError::UnsafeName { .. }),
@@ -812,7 +822,15 @@ fn what_a_loaded_workspace_keeps_in_a_projects_folder_is_never_overwritten_or_re
     .unwrap();
     let installing =
         install::install(&target, &ledger, &project, &again, &AgentHomes::default()).unwrap_err();
-    let removing = install::uninstall(&target, &ledger, &project, Kind::Skill, "x").unwrap_err();
+    let removing = install::uninstall(
+        &target,
+        &ledger,
+        &project,
+        Kind::Skill,
+        "x",
+        &AgentHomes::default(),
+    )
+    .unwrap_err();
 
     assert!(
         matches!(installing, InstallError::KeptByALoad { .. }),

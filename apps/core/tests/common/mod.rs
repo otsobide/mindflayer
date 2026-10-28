@@ -107,6 +107,15 @@ pub fn write_tree(repo: &gix::Repository, dir: &Path) -> gix::ObjectId {
         .detach()
 }
 
+/// Put every file under `work_tree` in its repository's index, as `git add
+/// -A` would, so git tracks them, committed or not.
+pub fn indexed(work_tree: &Path) {
+    let repository = gix::open_opts(work_tree, gix::open::Options::isolated()).unwrap();
+    let tree = write_tree(&repository, work_tree);
+    let mut index = repository.index_from_tree(&tree).unwrap();
+    index.write(Default::default()).unwrap();
+}
+
 pub fn skill(name: &str, description: &str) -> String {
     format!("---\nname: {name}\ndescription: {description}\n---\n\n# {name}\n\nSteps.\n")
 }

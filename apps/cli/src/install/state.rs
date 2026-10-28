@@ -4,16 +4,26 @@
 //! the way a person does. Nothing here touches a file: pressing space marks a
 //! box, and marking a box is a statement of intent that is carried out in one
 //! batch when the screen is done with.
+//!
+//! Every kind is offered, in one column filtered to one kind at a time:
+//! `tab` shows the next. A filter rather than a column a kind, so the screen
+//! keeps its two columns however many kinds there are, and rather than every
+//! kind in one list, where a skill and a rule of one name would sit side by
+//! side as two boxes for what reads as one thing.
 
 use mindflayer_core::install::{self, Candidate, Standing};
 use mindflayer_core::{Kind, MindProject};
 use ratatui::crossterm::event::KeyCode;
 
+use crate::commands::install::named;
+
 /// Which column the keyboard is in.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Focus {
     Projects,
-    Skills,
+    /// What can be installed into the project on the left, of the kind
+    /// shown ([`Screen::kind`]).
+    Offers,
 }
 
 /// What marking a box asks for, once it disagrees with how it started.
@@ -23,7 +33,7 @@ pub enum Pending {
     Remove,
 }
 
-/// One shelf entry as it stands with one project, and what the box says now.
+/// One offer as it stands with one project, and what the box says now.
 #[derive(Debug, Clone)]
 pub struct Row {
     pub candidate: Candidate,
@@ -32,8 +42,9 @@ pub struct Row {
     /// What it showed when the screen opened, which is what "pending" is
     /// measured against.
     pub was: bool,
-    /// Another offer of the same name was checked in its place: installing
-    /// that one replaces this one's copy, so this one is not removed.
+    /// Another offer of the same kind and name was checked in its place:
+    /// installing that one replaces this one's copy, so this one is not
+    /// removed.
     pub superseded: bool,
 }
 
@@ -54,6 +65,34 @@ impl Row {
         self.candidate.standing == Standing::Foreign
     }
 
+    /// Mindflayer installed it, and a copy was changed since, so the screen,
+    /// which never forces, neither replaces nor deletes it.
+    pub fn edited(&self) -> bool {
+        self.candidate.standing == Standing::Edited
+    }
+
+    /// Mindflayer installed it, and the place it came from offers something
+    /// else by now: its box is held as any install's is, since the screen
+    /// marks what goes in and out, and `flayer update` brings it up to date.
+    pub fn outdated(&self) -> bool {
+        self.candidate.standing == Standing::Outdated
+    }
+
+    /// Mindflayer installed it, and a copy has gone since: its box opens
+    /// empty, as core says ([`Standing::present`]), and marking it puts every
+    /// copy back.
+    pub fn missing(&self) -> bool {
+        self.candidate.standing == Standing::Missing
+    }
+
+    /// Whether it is an offer of the same artifact as `other`: one kind and
+    /// one name, which a project holds one of. A skill and a rule of one
+    /// name are two.
+    fn same(&self, other: &Row) -> bool {
+        self.candidate.kind() == other.candidate.kind()
+            && self.candidate.name() == other.candidate.name()
+    }
+
     /// What this row is asking for, if anything.
     pub fn pending(&self) -> Option<Pending> {
         if self.superseded {
@@ -67,13 +106,14 @@ impl Row {
     }
 }
 
-/// One project, and every shelf entry seen from it.
+/// One project, and every offer of every kind seen from it.
 #[derive(Debug)]
 pub struct Target {
     pub project: MindProject,
+    /// Every kind's, each kind's together in the order [`Kind::ALL`] gives.
     pub rows: Vec<Row>,
-    /// Where the cursor sits in this project's list, remembered so moving away
-    /// and back does not lose your place.
+    /// The row the cursor sits on, among those of the kind shown, remembered
+    /// so moving away and back does not lose your place.
     pub cursor: usize,
 }
 
@@ -83,16 +123,15 @@ impl Target {
     /// the one whose copy is there, as `current` tells, and clear the rest;
     /// the first, if none matches because the copy was changed since.
     pub fn settle(&mut self, current: impl Fn(&Candidate) -> bool) {
-        let mut names: Vec<String> = Vec::new();
-        for row in &self.rows {
-            let name = row.candidate.name().to_owned();
-            if row.was && !row.foreign() && !names.contains(&name) {
-                names.push(name);
+        let mut held: Vec<usize> = Vec::new();
+        for (index, row) in self.rows.iter().enumerate() {
+            if row.was && !row.foreign() && !held.iter().any(|&seen| self.rows[seen].same(row)) {
+                held.push(index);
             }
         }
-        for name in names {
+        for first in held {
             let same: Vec<usize> = (0..self.rows.len())
-                .filter(|&index| self.rows[index].candidate.name() == name)
+                .filter(|&index| self.rows[index].same(&self.rows[first]))
                 .collect();
             if same.len() < 2 {
                 continue;
@@ -122,19 +161,37 @@ impl Target {
         self.project.name()
     }
 
-    /// What to say in place of the skills when nothing can be installed into
-    /// the project at all, as core says ([`install::targets`]): pointing at
-    /// the shelf would send somebody to gather for a project that cannot take
-    /// what they gather. `None` when something can.
-    pub fn unreachable(&self) -> Option<String> {
-        install::targets(&self.project, Kind::Skill)
+    /// What to say in place of its offers of `kind` when nothing of it can
+    /// be installed into the project at all, as core says
+    /// ([`install::receives`]): pointing at the shelf would send somebody to
+    /// gather for a project that cannot take what they gather. `None` when
+    /// something can.
+    pub fn unreachable(&self, kind: Kind) -> Option<String> {
+        install::receives(&self.project, kind)
             .err()
             .map(|error| error.to_string())
     }
 
+    /// The rows of `kind`, by their place in [`Target::rows`].
+    pub fn shown(&self, kind: Kind) -> Vec<usize> {
+        (0..self.rows.len())
+            .filter(|&index| self.rows[index].candidate.kind() == kind)
+            .collect()
+    }
+
+    /// Put the cursor on a row of `kind`, its first, unless it is on one.
+    fn show(&mut self, kind: Kind) {
+        let shown = self.shown(kind);
+        if !shown.contains(&self.cursor) {
+            if let Some(&first) = shown.first() {
+                self.cursor = first;
+            }
+        }
+    }
+
     /// Make the box at `index` say `checked` as a space on it would, other
-    /// offers of its name included, saying whether it now does: a foreign
-    /// row's box cannot be changed.
+    /// offers of its kind and name included, saying whether it now does: a
+    /// foreign row's box cannot be changed.
     ///
     /// For marks made on another screen of the same projects, carried here
     /// when the shelf changed under them.
@@ -178,6 +235,9 @@ pub enum Step {
 pub struct Screen {
     pub targets: Vec<Target>,
     pub focus: Focus,
+    /// The kind the offers column shows: skills first, the kind installing
+    /// was about before rules could be installed too.
+    pub kind: Kind,
     /// Where the cursor sits in the project column.
     pub cursor: usize,
     /// One line saying why the last key did nothing, when it did nothing.
@@ -189,13 +249,35 @@ pub struct Screen {
 
 impl Screen {
     pub fn new(targets: Vec<Target>) -> Self {
-        Self {
+        let mut screen = Self {
             targets,
             focus: Focus::Projects,
+            kind: Kind::Skill,
             cursor: 0,
             message: None,
             confirming: false,
+        };
+        screen.show(Kind::Skill);
+        screen
+    }
+
+    /// Show the offers of `kind`, each project's cursor on one of them.
+    fn show(&mut self, kind: Kind) {
+        self.kind = kind;
+        for target in &mut self.targets {
+            target.show(kind);
         }
+    }
+
+    /// The kind `tab` shows next, or `shift+tab` (`back`), round again past
+    /// the last.
+    pub fn next_kind(&self, back: bool) -> Kind {
+        let count = Kind::ALL.len();
+        let at = Kind::ALL
+            .iter()
+            .position(|&kind| kind == self.kind)
+            .unwrap_or(0);
+        Kind::ALL[if back { at + count - 1 } else { at + 1 } % count]
     }
 
     /// The project the cursor is on.
@@ -243,9 +325,13 @@ impl Screen {
         match key {
             KeyCode::Char('q') => Step::Quit,
             KeyCode::Char('a') => self.ask(),
+            KeyCode::Tab | KeyCode::BackTab => {
+                self.show(self.next_kind(key == KeyCode::BackTab));
+                Step::Stay
+            }
             _ => match self.focus {
                 Focus::Projects => self.in_projects(key),
-                Focus::Skills => self.in_skills(key),
+                Focus::Offers => self.in_offers(key),
             },
         }
     }
@@ -286,15 +372,15 @@ impl Screen {
                 }
             }
             KeyCode::Right | KeyCode::Enter | KeyCode::Char('l') => {
-                if self.current().is_some_and(|target| !target.rows.is_empty()) {
-                    self.focus = Focus::Skills;
+                let kind = self.kind;
+                if self
+                    .current()
+                    .is_some_and(|target| !target.shown(kind).is_empty())
+                {
+                    self.focus = Focus::Offers;
                 } else {
-                    let said = self.current().and_then(Target::unreachable);
-                    self.message = Some(said.unwrap_or_else(|| {
-                        String::from(
-                            "nothing on the shelf to install, and nothing loaded or of the workspace's own",
-                        )
-                    }));
+                    let said = self.current().and_then(|target| target.unreachable(kind));
+                    self.message = Some(said.unwrap_or_else(|| nothing(kind).to_owned()));
                 }
             }
             KeyCode::Esc => return Step::Quit,
@@ -303,26 +389,46 @@ impl Screen {
         Step::Stay
     }
 
-    fn in_skills(&mut self, key: KeyCode) -> Step {
+    fn in_offers(&mut self, key: KeyCode) -> Step {
+        let kind = self.kind;
         let Some(target) = self.targets.get_mut(self.cursor) else {
             return Step::Stay;
         };
+        // Among the rows of the kind shown, by their place among all.
+        let shown = target.shown(kind);
+        let at = shown.iter().position(|&index| index == target.cursor);
         match key {
             KeyCode::Up | KeyCode::Char('k') => {
-                target.cursor = target.cursor.saturating_sub(1);
+                if let Some(at) = at.filter(|&at| at > 0) {
+                    target.cursor = shown[at - 1];
+                }
             }
             KeyCode::Down | KeyCode::Char('j') => {
-                if target.cursor + 1 < target.rows.len() {
-                    target.cursor += 1;
+                if let Some(&next) = at.and_then(|at| shown.get(at + 1)) {
+                    target.cursor = next;
                 }
             }
             KeyCode::Left | KeyCode::Esc | KeyCode::Char('h') => {
                 self.focus = Focus::Projects;
             }
-            KeyCode::Char(' ') => self.message = toggle(target),
+            // Only a row the column shows: a kind with none shows none.
+            KeyCode::Char(' ') if at.is_some() => self.message = toggle(target),
             _ => {}
         }
         Step::Stay
+    }
+}
+
+/// What to say for a project offered nothing of `kind`, though it could take
+/// it: where that kind comes from. A rule is never gathered, so the shelf
+/// is not where to look for one.
+pub fn nothing(kind: Kind) -> &'static str {
+    // Matched on the kind, so a third one has to say where it comes from.
+    match kind {
+        Kind::Skill => {
+            "nothing on the shelf to install, and nothing loaded or of the workspace's own"
+        }
+        Kind::Rule => "no rules to install: none of the workspace's own, and none loaded",
     }
 }
 
@@ -334,22 +440,35 @@ fn toggle(target: &mut Target) -> Option<String> {
     if row.foreign() {
         return Some(format!(
             "{} is already in {} and Mindflayer did not put it there, so it is left alone",
-            row.candidate.name(),
+            named(row.candidate.kind(), row.candidate.name()),
+            target.name()
+        ));
+    }
+    // Every offer of the name stands as its one installation, so each of
+    // them is refused alike, and no other can be marked over it.
+    if row.edited() {
+        return Some(format!(
+            "{} in {} was changed since it was installed, so it is left alone; --force on \
+             `flayer install` or `flayer uninstall` reaches it",
+            named(row.candidate.kind(), row.candidate.name()),
             target.name()
         ));
     }
 
     let checked = !row.checked;
-    let name = row.candidate.name().to_owned();
+    let name = named(row.candidate.kind(), row.candidate.name());
+    let this = row.clone();
 
-    // One name, one artifact. Two places can offer `deploy`, but a project
-    // has one directory called `deploy`, so marking one unmarks the other
-    // rather than letting both be applied and the second win silently,
-    // and the one it displaces is not removed as well, because installing
-    // this one replaces it. Unmarking it again puts back what it displaced.
+    // One kind and name, one artifact. Two places can offer the skill
+    // `deploy`, but a project has one directory called `deploy`, so marking
+    // one unmarks the other rather than letting both be applied and the
+    // second win silently, and the one it displaces is not removed as well,
+    // because installing this one replaces it. Unmarking it again puts back
+    // what it displaced. A rule called `deploy` is another thing, and keeps
+    // its own box.
     let mut displaced = None;
     for (index, other) in target.rows.iter_mut().enumerate() {
-        if index == cursor || other.candidate.name() != name {
+        if index == cursor || !other.same(&this) {
             continue;
         }
         if checked && (other.checked || other.was) {

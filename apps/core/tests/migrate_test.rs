@@ -531,9 +531,11 @@ fn an_installed_skill_is_still_current_once_its_source_has_moved() {
     migrate::library(&mut workspace).unwrap();
 
     let candidate = offered(&workspace);
-    assert_eq!(candidate.standing, Standing::Installed);
+    assert_eq!(candidate.standing, Standing::Current);
     assert_eq!(candidate.origin(), "workspace");
-    assert!(install::is_current(&workspace, &project, &candidate));
+    assert!(install::is_current(
+        &workspace, &ledger, &project, &candidate
+    ));
     assert_eq!(
         ledger
             .installation("alpha", Kind::Skill, "commit-style")

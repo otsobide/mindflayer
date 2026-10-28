@@ -18,8 +18,9 @@
 //! folders, and reads them through its marker as well.
 //!
 //! A project an older Mindflayer made is the other thing to bring up to
-//! date: [`project_plan`] and [`project`] move it from its `mind.toml` to
-//! settings, and what is installed into it to where its agents read.
+//! date: [`project_plan`] and [`project`] move it from its `mind.toml` to a
+//! `settings.toml`, and what is installed into it to where its agents read,
+//! or from its `settings.json` to a `settings.toml` saying the same.
 
 mod project;
 
@@ -40,7 +41,9 @@ use crate::workspace::{
     MIND_CONFIG,
 };
 
-pub use project::{project, project_plan, ProjectFailure, ProjectMigrated, ProjectPlan, Stranded};
+pub use project::{
+    carries_installs, project, project_plan, ProjectFailure, ProjectMigrated, ProjectPlan, Stranded,
+};
 
 /// What moving the workspace's own into its library would do, and what would
 /// stop it.

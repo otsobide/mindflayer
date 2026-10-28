@@ -232,7 +232,7 @@ pub fn managing(
     Ok(Some(workspace))
 }
 
-/// The workspace a change to `project` consults, to drop the record of
+/// The workspace a change to `project` consults, to see to the record of
 /// what it changes and to lend it templates: the one resolved from the
 /// project's root, as [`managing`] resolves it, if it has been made.
 ///

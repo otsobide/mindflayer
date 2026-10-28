@@ -6,7 +6,7 @@
 //! its `targets` say where instead (the owner's amendment to D-07), and its
 //! share mode whether they are kept out of git (D-02), so a change to any of
 //! them is a change to what is installed as much as to
-//! `.mind/settings.json` (D-09). [`plan`] says what a [`Change`] would do, writing nothing, and
+//! `.mind/settings.toml` (D-09). [`plan`] says what a [`Change`] would do, writing nothing, and
 //! [`apply`] does it: the settings edited where they stand
 //! ([`MindProject::change_settings`]), each installation given a copy in
 //! every folder an agent the project now names is sent one, and Mindflayer's
@@ -25,8 +25,12 @@
 //! than what was installed, and one in a folder the change drops is left too,
 //! and said. A recorded copy that is no longer what was installed, by its
 //! hash, is never deleted: it is left where it is, and stops being
-//! Mindflayer's, as an edit has made a copy its author's until D-04's states
-//! (#47) say more.
+//! Mindflayer's when it is in a folder the change drops. Where an agent
+//! reads, an edited copy stays recorded and reads as edited (D-04); in a
+//! folder no agent the project names is sent copies to, no install writes
+//! again and no listing reads, so a record kept there would call the
+//! installation missing or edited for good, and the next install, which
+//! records its copies afresh, would drop it all the same.
 
 use std::fs;
 use std::io;
@@ -120,9 +124,6 @@ impl Change {
                     }
                     None => targets.without(*kind),
                 };
-                if after.targets != before.targets {
-                    after.version = after.version_needed();
-                }
             }
         }
         after
@@ -258,6 +259,8 @@ impl Added {
         Target {
             agent: install::agent_of(&self.agents),
             path: install::route(root, &self.path),
+            // A skill's copy, holding the tree its installation's hash names.
+            content_hash: None,
         }
     }
 }
@@ -281,7 +284,8 @@ pub enum Why {
     Unsourced,
     /// Changed since it was installed, in a folder no agent the project
     /// names is sent copies to any more: never deleted, and no longer
-    /// Mindflayer's.
+    /// Mindflayer's, since nothing of Mindflayer's writes or reads there
+    /// again.
     Edited,
     /// The same, for a copy that cannot be compared with what was installed:
     /// recorded without a hash, or not read whole, for the reason given.
@@ -369,8 +373,9 @@ pub enum ReapplyError {
 /// being made.
 ///
 /// Refused as [`apply`] would refuse it, so a dry run says what the real one
-/// will: a project a `mind.toml` marks, which has no settings until it is
-/// moved to them; a change that leaves it naming no agent; one that would
+/// will: a project an older marker marks, a `mind.toml` or a
+/// `settings.json`, which has no `settings.toml` to change until it is moved
+/// to one; a change that leaves it naming no agent; one that would
 /// install a kind in no folder, or in one no install may use; a copy that
 /// would land inside one of `homes` or in a folder a loaded workspace keeps
 /// as its own; and a record naming a copy outside the project.
@@ -533,6 +538,7 @@ pub fn apply(
                     kept.push(Target {
                         agent: recorded_agent(retarget, &root, &path),
                         path: install::route(&root, &path),
+                        content_hash: None,
                     });
                     applied
                         .failures
@@ -590,17 +596,13 @@ pub fn apply(
 
 /// `workspace`, when it is made and links `project`: the one whose records
 /// say what in the project is Mindflayer's. The project is refused first
-/// when a `mind.toml` marks it, before any ledger is opened.
+/// when an older marker marks it ([`MindProject::changeable`]), before any
+/// ledger is opened.
 fn linking<'a>(
     workspace: Option<&'a FlayerWorkspace>,
     project: &MindProject,
 ) -> Result<Option<&'a FlayerWorkspace>, ReapplyError> {
-    if project.settings().is_none() {
-        return Err(WorkspaceError::NoSettings {
-            path: project.root().to_path_buf(),
-        }
-        .into());
-    }
+    project.changeable()?;
     Ok(workspace.filter(|workspace| workspace.is_made() && workspace.is_linked(project.root())))
 }
 
@@ -612,12 +614,7 @@ fn plan_with(
     change: &Change,
     homes: &AgentHomes,
 ) -> Result<Plan, ReapplyError> {
-    let Some(before) = project.settings().cloned() else {
-        return Err(WorkspaceError::NoSettings {
-            path: project.root().to_path_buf(),
-        }
-        .into());
-    };
+    let before = project.changeable()?.clone();
     let after = change.applied(&before);
     if after.agents.is_empty() {
         return Err(ReapplyError::NoAgent {
@@ -807,7 +804,7 @@ pub(crate) fn retarget(
     // every copy of it was written with: none for one that is not there.
     let mut compared: Vec<(PathBuf, &Target, Option<Compared>)> = Vec::new();
     for target in &record.targets {
-        let path = install::recorded_copy(project, name, &target.path)?;
+        let path = install::recorded_copy(project, kind, name, &target.path)?;
         let there = fs::symlink_metadata(&path).is_ok();
         let found = there.then(|| compare(&path, record.content_hash.as_deref(), offers));
         compared.push((path, target, found));
@@ -841,6 +838,7 @@ pub(crate) fn retarget(
                 retarget.kept.push(Target {
                     agent: install::agent_of(&now.agents),
                     path: route,
+                    content_hash: None,
                 });
             }
             continue;

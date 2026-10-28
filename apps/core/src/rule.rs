@@ -80,6 +80,21 @@ impl RuleManifest {
             }
         }
     }
+
+    /// Whether the rule is about some files only: its `paths` are stated, in
+    /// the shape they are read in.
+    ///
+    /// The one place that says so, since two renderers act on it and must
+    /// agree: such a rule goes to Claude's rules folder alone
+    /// ([`crate::claude_rules`]), and has no section in the block of
+    /// `AGENTS.md` ([`crate::agents_md`]), so Claude never reads it twice and
+    /// never misses it. A `paths` written in a shape that is not read is
+    /// ignored, as everywhere else ([`Lenient`]), so that rule is about every
+    /// file: taking it for a scoped one would hand it to Claude alone over a
+    /// key nothing reads.
+    pub fn is_scoped(&self) -> bool {
+        self.paths.stated().is_some()
+    }
 }
 
 /// A key read leniently: written in the shape it is meant to have, written in

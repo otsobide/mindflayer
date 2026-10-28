@@ -53,7 +53,8 @@ fn mind_init_writes_settings_kept_out_of_git_and_empty_folders_that_git_does_not
         )
     );
     assert_eq!(names_in(&root), [".git", ".mind", "rules", "skills"]);
-    assert_eq!(names_in(&marker), [".gitignore", "settings.json"]);
+    // TOML, with comments saying what each key does, and no JSON beside it.
+    assert_eq!(names_in(&marker), [".gitignore", "settings.toml"]);
     for kind in ["skills", "rules"] {
         assert_eq!(names_in(&root.join(kind)), Vec::<String>::new(), "{kind}");
     }
@@ -63,23 +64,35 @@ fn mind_init_writes_settings_kept_out_of_git_and_empty_folders_that_git_does_not
         .unwrap()
         .id
         .to_string();
-    assert_eq!(
-        fs::read_to_string(marker.join(SETTINGS_FILE)).unwrap(),
-        format!(
-            r#"{{
-  "version": 3,
-  "id": "{id}",
-  "name": "collapse",
-  "agents": ["claude", "codex", "opencode"],
-  "share": "local",
-  "edit_tracked": false,
-  "directories": {{
-    "skills": "skills",
-    "rules": "rules"
-  }}
-}}
-"#
-        )
+    let written = fs::read_to_string(marker.join(SETTINGS_FILE)).unwrap();
+    assert!(
+        written.starts_with(
+            "# Mindflayer mind project: what Mindflayer needs to know about the project\n"
+        ),
+        "{written}"
+    );
+    for comment in [
+        "# `name` is what the project is shown as, and `agents` the agents that work\n",
+        "# `share` is \"local\" to keep .mind, and what is installed, out of git\n",
+        "# `directories` says where the project keeps the skills and rules it writes\n",
+        "# `id` names the project for good, wherever it moves, and `version` is how\n",
+    ] {
+        assert!(written.contains(comment), "{comment}{written}");
+    }
+    assert!(
+        written.ends_with(&format!(
+            "\nversion = 5\n\
+             id = \"{id}\"\n\
+             name = \"collapse\"\n\
+             agents = [\"claude\", \"codex\", \"opencode\"]\n\
+             share = \"local\"\n\
+             edit_tracked = false\n\
+             \n\
+             [directories]\n\
+             skills = \"skills\"\n\
+             rules = \"rules\"\n"
+        )),
+        "{written}"
     );
     assert_eq!(
         fs::read_to_string(marker.join(".gitignore")).unwrap(),
@@ -103,7 +116,7 @@ fn mind_init_shared_writes_no_gitignore_so_git_lists_its_settings() {
 
     mind(&root, &["init", "--shared"]).unwrap();
 
-    assert_eq!(names_in(&root.join(MIND_DIR)), ["settings.json"]);
+    assert_eq!(names_in(&root.join(MIND_DIR)), ["settings.toml"]);
     let project = MindProject::open(&root).unwrap();
     assert_eq!(
         project.settings().unwrap().share,
@@ -121,7 +134,7 @@ fn mind_init_writes_the_agents_it_is_given_in_the_order_given() {
 
     let written = fs::read_to_string(dir.path().join(MIND_DIR).join(SETTINGS_FILE)).unwrap();
     assert!(
-        written.contains("\n  \"agents\": [\"opencode\", \"claude\"],\n"),
+        written.contains("\nagents = [\"opencode\", \"claude\"]\n"),
         "{written}"
     );
 }
@@ -547,33 +560,150 @@ fn a_skill_of_the_workspaces_installs_at_either_level() {
 
 #[cfg(unix)]
 #[test]
-fn a_copy_that_cannot_be_hashed_is_installed_and_said() {
+fn a_copy_holding_a_link_is_left_alone_until_an_install_is_forced_to_write_over_it() {
     let dir = workspace_with_own();
     let alpha = dir.path().join("alpha");
     mind(&alpha, &["install", "commit-style"]).unwrap();
-    // A file in the copy swapped for a link to the same bytes, which
-    // installing again leaves where it is and the hash refuses.
+    // A file in the copy swapped for a link to the same bytes, which the
+    // hash refuses.
     let file = copies(&alpha, "commit-style")[0].join("SKILL.md");
     let elsewhere = dir.path().join("SKILL.md");
     fs::rename(&file, &elsewhere).unwrap();
     std::os::unix::fs::symlink(&elsewhere, &file).unwrap();
 
-    let again = mind(&alpha, &["install", "commit-style"]).unwrap();
+    // No install writes a link, so one there is an edit, left alone until
+    // the install is forced.
+    let refused = mind(&alpha, &["install", "commit-style"]).unwrap();
+    assert_eq!(refused.stdout, "");
+    assert_eq!(
+        refused.stderr,
+        [format!(
+            "warning: commit-style in alpha was changed since it was installed, at {}, so it \
+             was left alone; --force writes over it",
+            copies(&alpha, "commit-style")[0]
+                .strip_prefix(&alpha)
+                .unwrap()
+                .display()
+        )]
+    );
+    assert!(!refused.ok);
+    let again = mind(&alpha, &["install", "commit-style", "--force"]).unwrap();
 
-    assert_eq!(again.stdout, "commit-style in alpha was already current\n");
-    assert_eq!(again.stderr.len(), 1, "{:?}", again.stderr);
-    let said = &again.stderr[0];
-    assert!(
-        said.starts_with(
-            "warning: commit-style in alpha was recorded without a hash of what it holds: "
-        ),
-        "{said}"
+    // Written over, as it says, though the link led to the same bytes.
+    assert_eq!(
+        again.stdout,
+        "updated commit-style in alpha, from workspace\n"
     );
-    assert!(
-        said.ends_with("SKILL.md is neither a file nor a folder, so it is not hashed"),
-        "{said}"
+    assert!(again.stderr.is_empty(), "{:?}", again.stderr);
+    assert!(again.ok);
+    assert!(!fs::symlink_metadata(&file)
+        .unwrap()
+        .file_type()
+        .is_symlink());
+    let status = mind(&alpha, &["status"]).unwrap().stdout;
+    assert!(status.contains("commit-style  current"), "{status}");
+}
+
+#[test]
+fn a_copy_changed_since_it_was_installed_is_taken_out_only_with_force() {
+    let dir = workspace_with_own();
+    let alpha = dir.path().join("alpha");
+    mind(&alpha, &["install", "commit-style"]).unwrap();
+    let copies = copies(&alpha, "commit-style");
+    let manifest = copies[0].join("SKILL.md");
+    let edited = fs::read_to_string(&manifest).unwrap() + "Ours.\n";
+    fs::write(&manifest, &edited).unwrap();
+
+    let refused = mind(&alpha, &["uninstall", "commit-style"]).unwrap();
+    let from_the_workspace =
+        flayer(dir.path(), &["uninstall", "-p", "alpha", "commit-style"]).unwrap();
+
+    let said = format!(
+        "warning: commit-style in alpha was changed since it was installed, at {}, so it was \
+         left alone; --force takes it out",
+        copies[0].strip_prefix(&alpha).unwrap().display()
     );
-    assert!(!again.ok);
+    for refused in [&refused, &from_the_workspace] {
+        assert_eq!(refused.stdout, "");
+        assert_eq!(refused.stderr, [said.as_str()]);
+        assert!(!refused.ok);
+    }
+    assert_eq!(fs::read_to_string(&manifest).unwrap(), edited);
+    for copy in &copies {
+        assert!(copy.is_dir(), "{}", copy.display());
+    }
+
+    let forced = flayer(
+        dir.path(),
+        &["uninstall", "-p", "alpha", "commit-style", "--force"],
+    )
+    .unwrap();
+
+    assert_eq!(forced.stdout, "removed commit-style from alpha\n");
+    for copy in &copies {
+        assert!(!copy.exists(), "{}", copy.display());
+    }
+}
+
+#[test]
+fn a_copy_changed_since_it_was_installed_is_written_over_only_with_force() {
+    let dir = workspace_with_own();
+    let alpha = dir.path().join("alpha");
+    mind(&alpha, &["install", "commit-style"]).unwrap();
+    let copies = copies(&alpha, "commit-style");
+    let manifest = copies[0].join("SKILL.md");
+    let written = fs::read_to_string(&manifest).unwrap();
+    let edited = written.clone() + "Ours.\n";
+    let status = |of: &str| {
+        let report = mind(&alpha, &["status"]).unwrap().stdout;
+        assert!(report.contains(&format!("commit-style  {of}")), "{report}");
+    };
+
+    // From the project, then from the workspace: each edit is left alone
+    // until the install is forced, and forcing writes it over.
+    for from_the_workspace in [false, true] {
+        let install = |force: bool| {
+            let mut args = if from_the_workspace {
+                vec!["install", "-p", "alpha", "commit-style"]
+            } else {
+                vec!["install", "commit-style"]
+            };
+            if force {
+                args.push("--force");
+            }
+            if from_the_workspace {
+                flayer(dir.path(), &args)
+            } else {
+                mind(&alpha, &args)
+            }
+            .unwrap()
+        };
+        fs::write(&manifest, &edited).unwrap();
+        status("edited");
+
+        let refused = install(false);
+        assert!(!refused.ok);
+        assert_eq!(fs::read_to_string(&manifest).unwrap(), edited);
+        let forced = install(true);
+
+        assert!(forced.ok, "{:?}", forced.stderr);
+        assert_eq!(
+            forced.stdout,
+            "updated commit-style in alpha, from workspace\n"
+        );
+        assert_eq!(fs::read_to_string(&manifest).unwrap(), written);
+        status("current");
+    }
+}
+
+#[test]
+fn force_is_for_one_install_and_not_for_the_screen() {
+    let dir = workspace_with_own();
+    let line = line("flayer", &["install", "--force"], dir.path());
+
+    let refused = FlayerCli::try_parse_from(&line).unwrap_err();
+
+    assert!(refused.to_string().contains("--force"), "{refused}");
 }
 
 #[test]

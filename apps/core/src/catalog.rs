@@ -357,16 +357,7 @@ impl Catalog {
 
     /// Put everything in report order, each file once.
     fn settle(&mut self) {
-        // Grouped by kind, then by name. Kind first because a mixed listing
-        // reads as blocks of like things rather than an alphabetical shuffle
-        // of two different sorts of thing; name second because that is what
-        // the reader is scanning within a block.
-        self.artifacts.sort_by(|a, b| {
-            a.kind()
-                .cmp(&b.kind())
-                .then_with(|| a.name().cmp(b.name()))
-                .then_with(|| a.project().cmp(b.project()))
-        });
+        self.artifacts.sort_by(report_order);
         // One file is one artifact, however many holders can see it: a
         // workspace whose root is also a project it manages would otherwise
         // list everything there twice.
@@ -687,8 +678,24 @@ impl DiscoveryFailure {
     }
 }
 
+/// The order a catalog reports artifacts in, and so the order anything else
+/// that lists them for somebody to read puts them in, so the two never
+/// disagree: the rules in a project's `AGENTS.md` block
+/// ([`crate::agents_md::render`]) read in the order `list` gives them.
+///
+/// Grouped by kind, then by name. Kind first because a mixed listing reads as
+/// blocks of like things rather than an alphabetical shuffle of two different
+/// sorts of thing; name second because that is what the reader is scanning
+/// within a block.
+pub(crate) fn report_order(a: &Artifact, b: &Artifact) -> std::cmp::Ordering {
+    a.kind()
+        .cmp(&b.kind())
+        .then_with(|| a.name().cmp(b.name()))
+        .then_with(|| a.project().cmp(b.project()))
+}
+
 /// `a`, `a and b`, `a, b and c`.
-fn spelled(paths: &[PathBuf]) -> String {
+pub(crate) fn spelled(paths: &[PathBuf]) -> String {
     let shown: Vec<String> = paths
         .iter()
         .map(|path| path.display().to_string())

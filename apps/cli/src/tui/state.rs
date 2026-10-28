@@ -15,7 +15,7 @@ use std::sync::Arc;
 use mindflayer_core::gather::{Progress, Watch};
 use mindflayer_core::url::redacted;
 use mindflayer_core::{
-    paths, Agent, Kind, Layout, Reason, Share, State, DEFAULT_SUBDIRECTORY, QUALIFIER,
+    paths, Agent, Kind, Layout, MarkerFile, Reason, Share, State, DEFAULT_SUBDIRECTORY, QUALIFIER,
 };
 use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
@@ -168,6 +168,11 @@ pub struct Holdings {
     /// as its settings say: none for the workspace's own, and for a project
     /// a `mind.toml` marks, which has no settings to change.
     pub share: Option<Share>,
+    /// The older marker it is read from, a `mind.toml` or a `settings.json`,
+    /// which `mind migrate` moves to a `settings.toml`: none for a project
+    /// its `settings.toml` marks, and for the workspace's own. Until it is
+    /// moved, its settings are changed by nothing, and the header says so.
+    pub older: Option<MarkerFile>,
     /// Whether its settings let a tracked file be edited to reach an agent.
     pub edit_tracked: bool,
     /// Where its settings install skills, each folder as they spell it, when
@@ -175,8 +180,9 @@ pub struct Holdings {
     /// read, and for the workspace's own, which have no settings.
     pub targets: Option<Vec<String>>,
     /// What it installs that some of its agents do not see, as `status` says
-    /// it: each kind installed only where some of them do not read, and each
-    /// folder its settings name that no install uses.
+    /// it: each folder its settings name that no install uses, each kind
+    /// installed only where some of them do not read, and each rule some of
+    /// them read nowhere.
     pub unreached: Vec<String>,
     /// Files that could not be read, one line each.
     pub warnings: Vec<String>,
@@ -372,6 +378,14 @@ pub enum Task {
         share: Option<Share>,
         edit_tracked: bool,
     },
+    /// `… update --yes [<kind:name>]`: what is installed in a project, or
+    /// the one artifact named, brought up to date and put back where a copy
+    /// has gone; `flayer update --all --yes [<kind:name>]` for the
+    /// workspace's own row, in every project it links.
+    Update {
+        holder: Holder,
+        reference: Option<String>,
+    },
     /// Open the install screen, which is what `flayer install` opens.
     OpenInstall,
     /// Carry out what the install screen marked.
@@ -513,6 +527,18 @@ impl Task {
                 }
                 None => vec![at(holder, &["targets", "reset", "--yes"], &[kind.folder()])],
             },
+            // Never forced: an edit is somebody's work, and the screen
+            // leaves it to a command line that says `--force`, as the install
+            // screen does.
+            Task::Update { holder, reference } => {
+                let named: Vec<&str> = reference.iter().map(String::as_str).collect();
+                match holder {
+                    Holder::Workspace => {
+                        vec![words(&["flayer", "update", "--all", "--yes"], &named)]
+                    }
+                    _ => vec![at(holder, &["update", "--yes"], &named)],
+                }
+            }
             Task::OpenInstall | Task::ApplyInstall => vec![words(&["flayer", "install"], &[])],
             Task::Refresh => Vec::new(),
         }
@@ -541,6 +567,7 @@ impl Task {
                 | Task::Minds { .. }
                 | Task::Settings { .. }
                 | Task::Targets { .. }
+                | Task::Update { .. }
                 | Task::ApplyInstall
         )
     }
@@ -1190,7 +1217,7 @@ impl App {
             _ => {}
         }
         // What only a workspace has: its registry, its shelf, its installs.
-        if let KeyCode::Char(key @ ('l' | 'u' | 'g' | 's' | 'i' | 'm' | 'L')) = key.code {
+        if let KeyCode::Char(key @ ('l' | 'u' | 'U' | 'g' | 's' | 'i' | 'm' | 'L')) = key.code {
             return match self.scope() {
                 Scope::Workspace => self.in_workspace(key),
                 Scope::Project => self.on_its_own(key),
@@ -1206,7 +1233,8 @@ impl App {
         match key {
             'l' => (Mode::Linking(LinkForm::default()), Step::Stay),
             'L' => (Mode::Loading(LoadForm::default()), Step::Stay),
-            'u' => self.start_unlinking(),
+            'u' => self.start_updating(),
+            'U' => self.start_unlinking(),
             'g' => (Mode::Gathering(GatherForm::default()), Step::Stay),
             's' => (Mode::Browse, Step::Run(Task::Shelf)),
             'm' => match self.workspace() {
@@ -1401,6 +1429,34 @@ impl App {
         }
     }
 
+    /// `u`: bring what is installed in the project under the cursor up to
+    /// date, or only the artifact under it in the artifacts column; on the
+    /// workspace's own row, in every project it links, which is where its
+    /// own reach once installed. No question first: an update writes over
+    /// nothing somebody changed, and its lines are shown in full after.
+    fn start_updating(&mut self) -> (Mode, Step) {
+        let Some(member) = self.member() else {
+            self.message = Some(Message::info("link a project first; l links one"));
+            return (Mode::Browse, Step::Stay);
+        };
+        if !member.own && member.holdings.is_err() {
+            self.message = Some(Message::info(format!(
+                "{} cannot be opened, so nothing in it can be updated",
+                member.name
+            )));
+            return (Mode::Browse, Step::Stay);
+        }
+        let reference = match (self.focus, self.current_item()) {
+            (Focus::Items, Some(item)) => Some(item.reference()),
+            _ => None,
+        };
+        let task = Task::Update {
+            holder: member.holder(),
+            reference,
+        };
+        (Mode::Browse, Step::Run(task))
+    }
+
     fn start_unlinking(&mut self) -> (Mode, Step) {
         let Some(member) = self.member() else {
             self.message = Some(Message::info("nothing to unlink"));
@@ -1439,6 +1495,9 @@ impl App {
                     "{} cannot be opened, so its agents cannot be changed",
                     member.name
                 ),
+                Ok(holdings) if holdings.older == Some(MarkerFile::SettingsJson) => {
+                    unchanged(&member.name)
+                }
                 Ok(holdings) => match holdings.share {
                     Some(share) => {
                         let form = SettingsForm::new(
@@ -1473,6 +1532,9 @@ impl App {
                     "{} cannot be opened, so where it installs cannot be changed",
                     member.name
                 ),
+                Ok(holdings) if holdings.older == Some(MarkerFile::SettingsJson) => {
+                    unchanged(&member.name)
+                }
                 Ok(holdings) if holdings.share.is_some() => {
                     let form =
                         TargetsForm::new(self.cursor, Kind::Skill, holdings.targets.clone());
@@ -1715,7 +1777,7 @@ impl App {
                                 format!("Unload {}?", source.name),
                                 String::new(),
                                 String::from(
-                                    "Its skills stop being offered here; what was installed from it stays, and nothing on disk is deleted.",
+                                    "What it offers stops being offered here; what was installed from it stays, and nothing on disk is deleted.",
                                 ),
                             ],
                             task,
@@ -1885,6 +1947,7 @@ impl App {
                 | Task::Validate { .. }
                 | Task::Shelf
                 | Task::ApplyInstall
+                | Task::Update { .. }
                 | Task::Minds { .. },
                 _,
             )
@@ -2040,6 +2103,16 @@ impl App {
             self.focus = Focus::Items;
         }
     }
+}
+
+/// What `t` and `T` say of `project`, which a `settings.json` marks: said
+/// before a form opens, as a `mind.toml`'s is, rather than by the command
+/// the form would run, which core refuses the same way.
+fn unchanged(project: &str) -> String {
+    format!(
+        "{project} is marked by a settings.json, which is read as it was written and not changed; \
+         `mind migrate` moves it to a settings.toml"
+    )
 }
 
 /// The kind after this one, round and round.
@@ -2601,7 +2674,7 @@ impl Reader {
 
     /// Every key, and the command it runs.
     pub fn help() -> Self {
-        let rows: [(&str, &str, &[&str]); 18] = [
+        let rows: [(&str, &str, &[&str]); 19] = [
             (
                 "a",
                 "add a skill or a rule",
@@ -2635,7 +2708,15 @@ impl Reader {
                     "mind -C <path> init, first, for a repository that is not one yet",
                 ],
             ),
-            ("u", "unlink the project", &["flayer unlink <path>"]),
+            (
+                "u",
+                "update what is installed in the project, or the artifact under the cursor",
+                &[
+                    "mind -C <project> update --yes [<kind:name>]",
+                    "flayer update --all --yes [<kind:name>], on the workspace's own",
+                ],
+            ),
+            ("U", "unlink the project", &["flayer unlink <path>"]),
             (
                 "t",
                 "the project's agents and sharing, toggled",
@@ -2673,7 +2754,7 @@ impl Reader {
                 &[],
             ),
             ("s", "what is on the shelf", &["flayer gather list"]),
-            ("i", "install from the shelf", &["flayer install"]),
+            ("i", "install skills and rules", &["flayer install"]),
             (
                 "m",
                 "which minds the workspace manages, ticked",

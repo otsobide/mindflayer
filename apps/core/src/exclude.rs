@@ -32,6 +32,7 @@ use std::path::{Component, Path, PathBuf};
 
 use thiserror::Error;
 
+use crate::lines::{self, Line};
 use crate::paths;
 use crate::workspace::replace_bytes;
 
@@ -41,9 +42,6 @@ pub const BEGIN: &str = "# mindflayer:begin";
 pub const END: &str = "# mindflayer:end";
 /// What opens one project's group inside the block, before the project's key.
 pub const GROUP: &str = "# project ";
-
-const LF: &[u8] = b"\n";
-const CRLF: &[u8] = b"\r\n";
 
 /// Keep `entries` of the project at `project` out of git, in the group
 /// headed `key`.
@@ -181,6 +179,40 @@ pub fn locate(project: &Path) -> Result<Option<Location>, ExcludeError> {
 /// and never written: Mindflayer runs no git command, and taking a team's
 /// files out of the index is not its to do.
 pub fn tracks(project: &Path, folder: &Path) -> Result<bool, ExcludeError> {
+    in_index(project, folder, |index, path| {
+        // Ending in a slash, as the index spells a folder's files, so
+        // `.mind` does not take in a `.mindflayer` beside it.
+        let prefix = format!("{path}/");
+        index
+            .prefixed_entries(prefix.as_bytes().into())
+            .is_some_and(|entries| !entries.is_empty())
+    })
+}
+
+/// Whether git tracks the file at `file`, a route from the project at
+/// `project`: whether the index of the work tree holding the project names
+/// it. Never, outside a git work tree.
+///
+/// For a team file Mindflayer would edit to reach an agent, which a local
+/// project leaves alone while git tracks it, unless its settings say
+/// `edit_tracked` (D-02), as a project's `CLAUDE.md`. Read from the index
+/// as [`tracks`] reads it, so a file added and not yet committed is tracked,
+/// as git says it is.
+pub fn tracks_file(project: &Path, file: &Path) -> Result<bool, ExcludeError> {
+    in_index(project, file, |index, path| {
+        index.entry_by_path(path.as_bytes().into()).is_some()
+    })
+}
+
+/// What `look` finds in the index of the work tree holding `project`, given
+/// `inside`, a route from the project, as the index spells it from the work
+/// tree's root: slash separated. False outside a git work tree, and in a
+/// repository with no index yet, where git tracks nothing.
+fn in_index(
+    project: &Path,
+    inside: &Path,
+    look: impl FnOnce(&gix::index::File, &str) -> bool,
+) -> Result<bool, ExcludeError> {
     let Some((repository, route)) = discover(project)? else {
         return Ok(false);
     };
@@ -191,19 +223,28 @@ pub fn tracks(project: &Path, folder: &Path) -> Result<bool, ExcludeError> {
     let index = repository
         .index_or_empty()
         .map_err(|error| unreadable(error.to_string()))?;
-    // Slash separated and ending in one, as the index spells a folder's
-    // files, so `.mind` does not take in a `.mindflayer` beside it.
-    let inside = paths::normalize(&route.join(folder));
-    let Some(mut prefix) = paths::to_config_string(&inside) else {
+    let inside = paths::normalize(&route.join(inside));
+    let Some(path) = paths::to_config_string(&inside) else {
         return Err(unreadable(format!(
             "{} is not valid UTF-8, so the index cannot be searched for it",
             inside.display()
         )));
     };
-    prefix.push('/');
-    Ok(index
-        .prefixed_entries(prefix.as_bytes().into())
-        .is_some_and(|entries| !entries.is_empty()))
+    Ok(look(&index, &path))
+}
+
+/// The work tree holding `project`, as git names it, and the route from it
+/// down to the project: `None` when no work tree holds it.
+///
+/// For a caller that walks the folders between the two, as Codex reads an
+/// `AGENTS.md` in each ([`crate::agents_md`]). The repository is opened as
+/// [`locate`] opens it.
+pub(crate) fn work_tree(project: &Path) -> Result<Option<(PathBuf, PathBuf)>, ExcludeError> {
+    Ok(discover(project)?.and_then(|(repository, route)| {
+        repository
+            .workdir()
+            .map(|worktree| (worktree.to_path_buf(), route))
+    }))
 }
 
 /// The repository whose work tree holds `project`, and where in that work
@@ -437,23 +478,17 @@ fn escape(segment: &str) -> String {
 
 /// An exclude file's text, split around Mindflayer's block.
 ///
-/// Kept as lines with their own endings rather than as one string to search
-/// and splice: what is outside the block is re-emitted exactly as read, CRLF,
-/// a missing final newline and bytes that are not UTF-8 included, and a new
-/// line is written with whichever ending the file already uses.
+/// Kept as lines with their own endings ([`crate::lines`]) rather than as
+/// one string to search and splice: what is outside the block is re-emitted
+/// exactly as read, CRLF, a missing final newline and bytes that are not
+/// UTF-8 included, and a new line is written with whichever ending the file
+/// already uses.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ExcludeFile {
     before: Vec<Line>,
     block: Option<Block>,
     after: Vec<Line>,
     ending: &'static [u8],
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-struct Line {
-    text: Vec<u8>,
-    /// `\n`, `\r\n`, or nothing for a last line without one.
-    end: &'static [u8],
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -481,12 +516,8 @@ impl ExcludeFile {
     /// swallow somebody's patterns into Mindflayer's block, and the next edit
     /// would rewrite them.
     pub fn parse(bytes: &[u8]) -> Result<Self, Malformed> {
-        let lines = split(bytes);
-        let ending = lines
-            .iter()
-            .map(|line| line.end)
-            .find(|end| !end.is_empty())
-            .unwrap_or(LF);
+        let lines = lines::split(bytes);
+        let ending = lines::ending(&lines);
 
         let mut begin = None;
         let mut end = None;
@@ -730,48 +761,6 @@ impl ExcludeFile {
         self.after.iter().for_each(&mut emit);
         out
     }
-}
-
-impl Line {
-    fn new(text: &str, end: &'static [u8]) -> Self {
-        Line {
-            text: text.as_bytes().to_vec(),
-            end,
-        }
-    }
-
-    fn is_blank(&self) -> bool {
-        self.text.trim_ascii().is_empty()
-    }
-}
-
-/// The file's lines, each with the ending it had.
-fn split(bytes: &[u8]) -> Vec<Line> {
-    let mut lines = Vec::new();
-    let mut rest = bytes;
-    while !rest.is_empty() {
-        match rest.iter().position(|&byte| byte == b'\n') {
-            Some(at) => {
-                let (text, end) = match rest[..at].strip_suffix(b"\r") {
-                    Some(text) => (text, CRLF),
-                    None => (&rest[..at], LF),
-                };
-                lines.push(Line {
-                    text: text.to_vec(),
-                    end,
-                });
-                rest = &rest[at + 1..];
-            }
-            None => {
-                lines.push(Line {
-                    text: rest.to_vec(),
-                    end: b"",
-                });
-                break;
-            }
-        }
-    }
-    lines
 }
 
 /// Whether a line is the marker `marker`. Trailing whitespace is forgiven,

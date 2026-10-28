@@ -1,6 +1,7 @@
 //! `mind migrate`, `flayer migrate -p` and `flayer migrate --all-projects`:
-//! moving a project an older Mindflayer made from its `mind.toml` to
-//! settings, and what is installed into it to where its agents read.
+//! moving a project an older Mindflayer made from its `mind.toml` to a
+//! `settings.toml`, and what is installed into it to where its agents read,
+//! or from its `settings.json` to a `settings.toml` saying the same.
 
 mod common;
 
@@ -70,7 +71,7 @@ fn mind_migrate_says_what_it_would_move_then_moves_it_and_then_has_nothing_to_do
 
     assert_eq!(
         dry.stdout,
-        "would write .mind/settings.json for collapse: agents claude,codex,opencode, share shared\n\
+        "would write .mind/settings.toml for collapse: agents claude,codex,opencode, share shared\n\
          would move .mind/mind.toml to .mind/tmp/mind.toml.v2, as it is\n\
          would copy deploy to .agents/skills/deploy, for codex and opencode\n\
          would copy deploy to .claude/skills/deploy, for claude\n\
@@ -94,7 +95,7 @@ fn mind_migrate_says_what_it_would_move_then_moves_it_and_then_has_nothing_to_do
 
     assert_eq!(
         done.stdout,
-        "wrote .mind/settings.json for collapse: agents claude,codex,opencode, share shared\n\
+        "wrote .mind/settings.toml for collapse: agents claude,codex,opencode, share shared\n\
          moved .mind/mind.toml to .mind/tmp/mind.toml.v2, as it was\n\
          copied deploy to .agents/skills/deploy, for codex and opencode\n\
          copied deploy to .claude/skills/deploy, for claude\n\
@@ -123,15 +124,15 @@ fn mind_migrate_says_what_it_would_move_then_moves_it_and_then_has_nothing_to_do
     let status = mind(&root, &["status"]).unwrap();
     assert_eq!(
         status.stdout,
-        "deploy  installed  claude,codex,opencode  workspace\n\
-         notes   authored   -\n\
-         review  installed  claude,codex,opencode  workspace\n"
+        "deploy  current   claude,codex,opencode  workspace\n\
+         notes   authored  -\n\
+         review  current   claude,codex,opencode  workspace\n"
     );
 
     let again = mind(&root, &["migrate", "--yes"]).unwrap();
     assert_eq!(
         again.stdout,
-        "nothing to migrate: collapse is marked by its settings already\n"
+        "nothing to migrate: collapse is marked by its settings.toml already\n"
     );
     assert!(again.stderr.is_empty(), "{:?}", again.stderr);
 }
@@ -149,7 +150,7 @@ fn flayer_migrate_moves_one_project_it_links_by_name() {
 
     assert_eq!(
         done.stdout,
-        "wrote .mind/settings.json for collapse: agents claude, share shared\n\
+        "wrote .mind/settings.toml for collapse: agents claude, share shared\n\
          moved .mind/mind.toml to .mind/tmp/mind.toml.v2, as it was\n\
          copied deploy to .claude/skills/deploy, for claude\n\
          removed deploy from skills/deploy\n"
@@ -178,7 +179,7 @@ fn a_project_already_keeping_its_skills_where_claude_reads_keeps_that_copy() {
 
     assert_eq!(
         done.stdout,
-        "wrote .mind/settings.json for collapse: agents claude,codex,opencode, share shared\n\
+        "wrote .mind/settings.toml for collapse: agents claude,codex,opencode, share shared\n\
          moved .mind/mind.toml to .mind/tmp/mind.toml.v2, as it was\n\
          copied deploy to .agents/skills/deploy, for codex and opencode\n"
     );
@@ -200,7 +201,7 @@ fn a_copy_edited_since_it_was_installed_is_left_where_it_is_and_said() {
 
     assert_eq!(
         done.stdout,
-        "wrote .mind/settings.json for collapse: agents claude,codex,opencode, share shared\n\
+        "wrote .mind/settings.toml for collapse: agents claude,codex,opencode, share shared\n\
          moved .mind/mind.toml to .mind/tmp/mind.toml.v2, as it was\n\
          left skills/deploy where it is, no longer Mindflayer's: it was changed since it was \
          installed\n"
@@ -236,13 +237,13 @@ fn every_older_project_is_listed_without_yes_and_nothing_is_written() {
 
     assert_eq!(
         dry.stdout,
-        "would write .mind/settings.json for alpha: agents claude,codex,opencode, share shared\n\
+        "would write .mind/settings.toml for alpha: agents claude,codex,opencode, share shared\n\
          would move .mind/mind.toml to .mind/tmp/mind.toml.v2, as it is\n\
          would copy deploy to .agents/skills/deploy, for codex and opencode\n\
          would copy deploy to .claude/skills/deploy, for claude\n\
          would remove deploy from skills/deploy\n\
          \n\
-         would write .mind/settings.json for beta: agents claude,codex,opencode, share shared\n\
+         would write .mind/settings.toml for beta: agents claude,codex,opencode, share shared\n\
          would move .mind/mind.toml to .mind/tmp/mind.toml.v2, as it is\n\
          nothing changed: add --yes to go ahead\n"
     );
@@ -270,7 +271,7 @@ fn every_older_project_is_moved_on_its_own_and_one_refused_is_named() {
 
     assert_eq!(
         done.stdout,
-        "wrote .mind/settings.json for alpha: agents claude,codex,opencode, share shared\n\
+        "wrote .mind/settings.toml for alpha: agents claude,codex,opencode, share shared\n\
          moved .mind/mind.toml to .mind/tmp/mind.toml.v2, as it was\n\
          copied deploy to .agents/skills/deploy, for codex and opencode\n\
          copied deploy to .claude/skills/deploy, for claude\n\
@@ -296,7 +297,7 @@ fn every_older_project_is_moved_on_its_own_and_one_refused_is_named() {
     let none = flayer(dir.path(), &["migrate", "--all-projects", "--yes"]).unwrap();
     assert_eq!(
         none.stdout,
-        "nothing to migrate: every project the workspace links is marked by its settings already\n"
+        "nothing to migrate: every project the workspace links is marked by its settings.toml already\n"
     );
 }
 
@@ -309,8 +310,8 @@ fn flayer_migrate_naming_nothing_says_what_there_is_to_migrate() {
     assert_eq!(
         failure.error.to_string(),
         "say what to migrate: --library moves the workspace's own into its library, -p <project> \
-         moves a project it links from its mind.toml to settings, and --all-projects moves every \
-         one"
+         moves a project it links from its mind.toml or settings.json to a settings.toml, and \
+         --all-projects moves every one"
     );
     for refused in [
         &["migrate", "--library", "--all-projects"][..],
@@ -340,7 +341,7 @@ fn a_local_migration_of_a_project_git_tracks_says_how_to_stop_tracking_its_mind(
 
     assert_eq!(
         done.stdout,
-        "wrote .mind/settings.json for collapse: agents claude, share local\n\
+        "wrote .mind/settings.toml for collapse: agents claude, share local\n\
          moved .mind/mind.toml to .mind/tmp/mind.toml.v2, as it was\n\
          wrote .mind/.gitignore, keeping .mind out of git\n\
          copied deploy to .claude/skills/deploy, for claude, kept out of git\n\
@@ -373,7 +374,7 @@ fn a_project_no_workspace_links_is_moved_and_told_nothing_was_carried() {
 
     assert_eq!(
         done.stdout,
-        "wrote .mind/settings.json for collapse: agents claude,codex,opencode, share shared\n\
+        "wrote .mind/settings.toml for collapse: agents claude,codex,opencode, share shared\n\
          moved .mind/mind.toml to .mind/tmp/mind.toml.v2, as it was\n\
          left skills/notes where it is: the project's own\n"
     );
@@ -481,7 +482,7 @@ fn a_project_whose_workspace_cannot_be_read_is_not_moved() {
     let again = mind(&root, &["migrate", "--yes"]).unwrap();
     assert_eq!(
         again.stdout,
-        "nothing to migrate: collapse is marked by its settings already\n"
+        "nothing to migrate: collapse is marked by its settings.toml already\n"
     );
     assert_eq!(again.stderr.len(), 1, "{:?}", again.stderr);
     assert!(again.stderr[0].starts_with("warning: "));
@@ -509,4 +510,141 @@ fn a_migration_refused_says_every_reason_and_changes_nothing() {
     assert_eq!(failure.warnings.len(), 1, "{:?}", failure.warnings);
     assert!(failure.warnings[0].starts_with("error: nothing moved: .mind/rules: "));
     assert!(marker(&root).is_file() && !settings(&root).exists());
+}
+
+// ---------------------------------------------------------------------------
+// From a settings.json
+// ---------------------------------------------------------------------------
+
+fn json(root: &Path) -> PathBuf {
+    root.join(MIND_DIR).join(SETTINGS_JSON_FILE)
+}
+
+#[test]
+fn mind_migrate_moves_a_settings_json_to_a_settings_toml_saying_the_same() {
+    let dir = workspace();
+    let root = dir.path().join("collapse");
+    fs::create_dir(&root).unwrap();
+    json_project(&root);
+    flayer(dir.path(), &["link", "collapse"]).unwrap();
+    flayer(dir.path(), &["add", "skill", "deploy", "Ship it"]).unwrap();
+    flayer(dir.path(), &["install", "-p", "collapse", "deploy"]).unwrap();
+    let before = fs::read_to_string(json(&root)).unwrap();
+    let held = MindProject::open(&root)
+        .unwrap()
+        .settings()
+        .unwrap()
+        .clone();
+    let copies = recorded(dir.path(), "collapse");
+
+    // `--agents` and `--shared` are what a mind.toml is given: a
+    // settings.json keeps its own, and says so on the first line.
+    let dry = mind(&root, &["migrate", "--agents", "claude", "--shared"]).unwrap();
+
+    assert_eq!(
+        dry.stdout,
+        "would write .mind/settings.toml for collapse: agents claude,codex,opencode, share local\n\
+         would move .mind/settings.json to .mind/tmp/settings.json.v3, as it is\n\
+         nothing changed: add --yes to go ahead\n"
+    );
+    assert!(dry.stderr.is_empty(), "{:?}", dry.stderr);
+    assert!(dry.ok);
+    assert_eq!(fs::read_to_string(json(&root)).unwrap(), before);
+    assert!(!settings(&root).exists());
+
+    let done = mind(&root, &["migrate", "--yes"]).unwrap();
+
+    assert_eq!(
+        done.stdout,
+        "wrote .mind/settings.toml for collapse: agents claude,codex,opencode, share local\n\
+         moved .mind/settings.json to .mind/tmp/settings.json.v3, as it was\n"
+    );
+    assert!(done.stderr.is_empty(), "{:?}", done.stderr);
+    assert!(done.ok);
+    assert!(!json(&root).exists());
+    assert_eq!(
+        fs::read_to_string(root.join(MIND_DIR).join("tmp").join("settings.json.v3")).unwrap(),
+        before
+    );
+    let moved = MindProject::open(&root).unwrap();
+    assert_eq!(moved.settings().unwrap().id, held.id);
+    assert_eq!(moved.settings().unwrap().agents, held.agents);
+    assert_eq!(
+        fs::read_to_string(settings(&root)).unwrap(),
+        moved.settings().unwrap().text().unwrap()
+    );
+    // No copy moved, and none needed to: the agents are the ones they were.
+    assert_eq!(recorded(dir.path(), "collapse"), copies);
+    assert_eq!(
+        mind(&root, &["status"]).unwrap().stdout,
+        "deploy  current  claude,codex,opencode  workspace\n"
+    );
+    // Local still, so git is offered nothing.
+    assert!(untracked(&root).is_empty(), "{:?}", untracked(&root));
+
+    let again = mind(&root, &["migrate", "--yes"]).unwrap();
+    assert_eq!(
+        again.stdout,
+        "nothing to migrate: collapse is marked by its settings.toml already\n"
+    );
+}
+
+#[test]
+fn a_settings_json_moves_beside_a_workspace_that_cannot_be_read_and_says_so() {
+    let dir = workspace();
+    let root = dir.path().join("collapse");
+    fs::create_dir(&root).unwrap();
+    json_project(&root);
+    flayer(dir.path(), &["link", "collapse"]).unwrap();
+    let config = dir.path().join(FLAYER_DIR).join(FLAYER_CONFIG);
+    let written = fs::read_to_string(&config).unwrap();
+    fs::write(&config, format!("{written}garbage = [\n")).unwrap();
+
+    // What it records moves nothing here, so it is not needed to go ahead.
+    let done = mind(&root, &["migrate", "--yes"]).unwrap();
+
+    assert!(
+        done.stdout
+            .starts_with("wrote .mind/settings.toml for collapse:"),
+        "{}",
+        done.stdout
+    );
+    assert_eq!(done.stderr.len(), 1, "{:?}", done.stderr);
+    assert!(done.stderr[0].starts_with("warning: "), "{:?}", done.stderr);
+    assert!(!done.ok);
+    assert!(settings(&root).is_file() && !json(&root).exists());
+}
+
+#[test]
+fn every_project_on_an_older_marker_is_moved_by_all_projects() {
+    let dir = workspace();
+    let alpha = older_in(dir.path(), "alpha", &[]);
+    let beta = dir.path().join("beta");
+    fs::create_dir(&beta).unwrap();
+    json_project(&beta);
+    flayer(dir.path(), &["link", "beta"]).unwrap();
+
+    let dry = flayer(dir.path(), &["migrate", "--all-projects"]).unwrap();
+
+    assert_eq!(
+        dry.stdout,
+        "would write .mind/settings.toml for alpha: agents claude,codex,opencode, share shared\n\
+         would move .mind/mind.toml to .mind/tmp/mind.toml.v2, as it is\n\
+         \n\
+         would write .mind/settings.toml for beta: agents claude,codex,opencode, share local\n\
+         would move .mind/settings.json to .mind/tmp/settings.json.v3, as it is\n\
+         nothing changed: add --yes to go ahead\n"
+    );
+
+    flayer(dir.path(), &["migrate", "--all-projects", "--yes"]).unwrap();
+
+    for root in [&alpha, &beta] {
+        assert!(settings(root).is_file(), "{}", root.display());
+        assert!(!marker(root).exists() && !json(root).exists());
+    }
+    let none = flayer(dir.path(), &["migrate", "-p", "beta", "--yes"]).unwrap();
+    assert_eq!(
+        none.stdout,
+        "nothing to migrate: beta is marked by its settings.toml already\n"
+    );
 }

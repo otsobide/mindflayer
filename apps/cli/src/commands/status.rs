@@ -5,7 +5,7 @@
 //! a table naming no more than its rows need to be told apart.
 
 use mindflayer_core::{
-    Agent, FlayerWorkspace, Kind, MindProject, Status, StatusFailure, Unreached,
+    Agent, FlayerWorkspace, Kind, MarkerFile, MindProject, Missed, Status, StatusFailure, Unreached,
 };
 
 use super::consulted;
@@ -136,13 +136,15 @@ impl Layout {
 }
 
 /// What a report could not read, each as a warning says it, without the
-/// prefix, and then each kind a project installs only where some of its
-/// agents do not read.
+/// prefix, then each kind a project installs only where some of its agents
+/// do not read, and each rule it received that some of them read nowhere.
 ///
 /// A warning, and a non-zero exit, though the project is read whole: what
 /// is installed there reaches those agents no more than if it had gone,
 /// which is what a report is asked to say. Pointing them at the folder, or
-/// `targets reset`, ends it.
+/// `targets reset`, ends the first; the second is what a rule about some
+/// files is, or a local project's tracked `AGENTS.md` keeps from Codex and
+/// OpenCode, which sharing the project or `edit_tracked` ends.
 fn said(status: &Status, failures: &[StatusFailure]) -> Vec<String> {
     let mut said: Vec<String> = failures.iter().map(ToString::to_string).collect();
     for project in &status.projects {
@@ -157,8 +159,30 @@ fn said(status: &Status, failures: &[StatusFailure]) -> Vec<String> {
                 .iter()
                 .map(|unreached| unread(&printable(name), unreached, false)),
         );
+        said.extend(
+            project
+                .missed
+                .iter()
+                .map(|missed| unseen(&printable(name), missed)),
+        );
     }
     said
+}
+
+/// What is said of `missed`, something `project` received that some of its
+/// agents read nowhere: by `status`, and by the TUI's pane of the project.
+pub(crate) fn unseen(project: &str, missed: &Missed) -> String {
+    let does = if missed.agents.len() == 1 {
+        "does"
+    } else {
+        "do"
+    };
+    format!(
+        "{} {does} not read {} `{}` in {project}",
+        spoken(&missed.agents),
+        missed.kind,
+        printable(&missed.name)
+    )
 }
 
 /// What is said of `unreached`, a kind `project` installs only in folders
@@ -199,7 +223,10 @@ pub(crate) fn unread(project: &str, unreached: &Unreached, would: bool) -> Strin
 }
 
 /// The report laid out, with what could not be read (`warnings`) said: on
-/// stderr beside a table, inside the envelope beside JSON.
+/// stderr beside a table, inside the envelope beside JSON. Then a hint for
+/// each project an older marker marks ([`older`]), on stderr in JSON too, as
+/// [`status_here`]'s hint is: advice for whoever reads the terminal, which
+/// the data says as each project's `marker`.
 ///
 /// `looked` gives the projects it read, asked only for a table that found
 /// nothing, to say where it looked.
@@ -209,21 +236,53 @@ fn report(
     layout: Layout,
     looked: impl FnOnce() -> Vec<MindProject>,
 ) -> Outcome {
-    let across = match layout {
-        Layout::Json => return json(status, warnings),
-        Layout::Table { across } => across,
+    let mut outcome = match layout {
+        Layout::Json => json(status, warnings),
+        Layout::Table { across } => {
+            let stderr: Vec<String> = warnings
+                .iter()
+                .map(|warning| format!("warning: {warning}"))
+                .collect();
+            let ok = stderr.is_empty();
+            let stdout = rows(status, across).unwrap_or_else(|| {
+                let mut text = String::from("nothing found\n");
+                looked_in(&mut text, &looked());
+                text
+            });
+            Outcome { stdout, stderr, ok }
+        }
     };
-    let stderr: Vec<String> = warnings
+    outcome.stderr.extend(older(status));
+    outcome
+}
+
+/// What is said of each project an older Mindflayer's marker marks, a
+/// `mind.toml` or a `settings.json`, as the TUI's header says it: nothing in
+/// the table tells a `settings.json` from a `settings.toml`, which name the
+/// same agents, though its settings can be changed only once `mind migrate`
+/// has moved it. A hint rather than a warning, so the exit status is the
+/// report's: the project is read whole, and what the report says of it is
+/// true.
+fn older(status: &Status) -> Vec<String> {
+    status
+        .projects
         .iter()
-        .map(|warning| format!("warning: {warning}"))
-        .collect();
-    let ok = stderr.is_empty();
-    let stdout = rows(status, across).unwrap_or_else(|| {
-        let mut text = String::from("nothing found\n");
-        looked_in(&mut text, &looked());
-        text
-    });
-    Outcome { stdout, stderr, ok }
+        .filter_map(|project| {
+            let marker = project
+                .marker
+                .filter(|marker| *marker != MarkerFile::SettingsToml)?;
+            let name = project
+                .name
+                .as_deref()
+                .or(project.entry.as_deref())
+                .unwrap_or("?");
+            Some(format!(
+                "hint: {} is marked by a {marker}, which `mind migrate` moves to a {}",
+                printable(name),
+                MarkerFile::SettingsToml
+            ))
+        })
+        .collect()
 }
 
 /// One line per artifact, and one per entry that would not open; none at

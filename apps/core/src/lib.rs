@@ -13,8 +13,11 @@
 
 pub mod activate;
 pub mod agent;
+pub mod agents_md;
 pub mod artifact;
 pub mod catalog;
+pub mod claude_md;
+pub mod claude_rules;
 pub mod config_entry;
 pub mod copy;
 pub mod create;
@@ -26,6 +29,7 @@ pub mod install;
 pub mod kind;
 pub mod ledger;
 pub mod lifecycle;
+mod lines;
 pub mod lock;
 pub mod migrate;
 pub mod paths;
@@ -37,6 +41,7 @@ pub mod settings;
 pub mod skill;
 pub mod status;
 pub mod template;
+pub mod update;
 pub mod url;
 pub mod workspace;
 
@@ -57,16 +62,17 @@ pub use reapply::{Change, ReapplyError};
 pub use resolve::{resolve, resolve_except, Inputs, Intent, Reason, ResolveError, Resolved};
 pub use rule::{Lenient, RuleManifest};
 pub use scan::{scan, Found, Scan, ScanFailure};
-pub use settings::{ProjectId, Settings, Share, Targets, SETTINGS_FILE};
+pub use settings::{ProjectId, Settings, Share, Targets, SETTINGS_FILE, SETTINGS_JSON_FILE};
 pub use skill::{
     Compatibility, Metadata, SkillManifest, MAX_COMPATIBILITY_LEN, MAX_DESCRIPTION_LEN,
     MAX_NAME_SEGMENT_LEN,
 };
-pub use status::{ArtifactStatus, ProjectStatus, State, Status, StatusFailure, Unreached};
+pub use status::{ArtifactStatus, Missed, ProjectStatus, State, Status, StatusFailure, Unreached};
 pub use template::{Template, TemplateError, TEMPLATES_DIR};
 pub use workspace::{
-    Directories, FlayerConfig, FlayerWorkspace, Initialization, Loaded, Marker, Member, MindConfig,
-    MindProject, Misplaced, MisplacedTarget, ProjectConfig, ProjectWarning, Registration,
-    WorkspaceError, CACHE_DIR, DIRECTORIES_VERSION, FLAYER_CONFIG, FLAYER_DIR, LIBRARY_DIR,
-    MIND_CONFIG, MIND_DIR, MIND_IGNORE, SETTINGS_VERSION, TARGETS_VERSION,
+    Directories, FlayerConfig, FlayerWorkspace, Initialization, Loaded, Marker, MarkerFile, Member,
+    MindConfig, MindProject, Misplaced, MisplacedTarget, ProjectConfig, ProjectWarning,
+    Registration, WorkspaceError, CACHE_DIR, DIRECTORIES_VERSION, FLAYER_CONFIG, FLAYER_DIR,
+    LIBRARY_DIR, MIND_CONFIG, MIND_DIR, MIND_IGNORE, SETTINGS_TOML_VERSION, SETTINGS_VERSION,
+    TARGETS_VERSION,
 };

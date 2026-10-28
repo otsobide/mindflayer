@@ -101,10 +101,11 @@ fn read(kind: Kind, agent: Agent) -> Vec<PathBuf> {
             vec![skills(".agents"), skills(".claude"), skills(".opencode")]
         }
         // A rule reaches an agent through `AGENTS.md`, or Claude's rule files
-        // (D-03), which M2 puts in this and the target table together. Claude
-        // does read `.claude/rules`, but how far down, and what a rule there
-        // is to Mindflayer, is M2's to say; until then no folder of rules is
-        // said to be read, so no listing claims an agent sees a rule.
+        // (D-03), rendered outside the target table (`install::rules`).
+        // Claude does read `.claude/rules`, but what Mindflayer writes there
+        // is listed from the ledger as its rule's target, so no folder of
+        // rules is said to be read, and no listing takes those files for a
+        // rule somebody keeps there.
         (Kind::Rule, Agent::Claude | Agent::Codex | Agent::OpenCode) => Vec::new(),
     }
 }
@@ -182,8 +183,10 @@ impl fmt::Display for UnknownAgent {
 /// layout needs one, and an override names as many folders as it likes,
 /// each for every agent ([`overriding`](TargetTable::overriding)). A pair
 /// with none is a kind that reaches that agent some other way, or not at
-/// all, which is every rule for now: D-03 puts rules in a block of
-/// `AGENTS.md`, which M2 adds here, as M6 adds MCP servers.
+/// all, which is every rule: D-03 puts rules in a block of `AGENTS.md`, one
+/// file every agent shares rather than a folder a copy goes in, rendered
+/// outside the table ([`crate::install::rules`]), as M6's MCP servers will
+/// be entries in each agent's own file.
 ///
 /// Pure: no entry is looked for on disk, and every location is relative to
 /// a project's root.

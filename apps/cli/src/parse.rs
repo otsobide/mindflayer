@@ -203,9 +203,10 @@ pub enum Command {
         target: Option<String>,
     },
 
-    /// Say what this project holds: whether each artifact was installed,
-    /// is partly gone, is somebody's or is the project's own, which agents
-    /// read it, and where what was installed came from.
+    /// Say what this project holds: whether what Mindflayer installed is
+    /// current, outdated, edited, missing or orphaned, what is somebody's
+    /// and what is the project's own, which agents read each, and where
+    /// what was installed came from.
     Status {
         /// Print it as JSON, in the envelope every reading command's --json
         /// shares.
@@ -219,8 +220,9 @@ pub enum Command {
     /// Drop this project from the flayer workspace above it.
     Unlink,
 
-    /// Offer other flayer workspaces' own skills to the workspace above this
-    /// project, read live from where they are; on its own, list what it loads.
+    /// Offer other flayer workspaces' own skills and rules to the workspace
+    /// above this project, read live from where they are; on its own, list
+    /// what it loads.
     Load {
         /// Each workspace's directory, the one holding `.mindflayer`
         /// [default: list the loaded ones].
@@ -235,22 +237,56 @@ pub enum Command {
         workspaces: Vec<PathBuf>,
     },
 
-    /// Put a skill into this project: one of the workspace's own, or one
-    /// from its shelf.
+    /// Put a skill or a rule into this project: one of the workspace's own,
+    /// a loaded workspace's, or one from its shelf.
     Install {
-        /// The skill's name.
+        /// Its name: a skill's, or a rule's route like `git/commits`;
+        /// `skill:<name>` or `rule:<route>` when one name is both.
         name: String,
 
         /// Where it comes from, when two places offer that name: `workspace`,
         /// a shelf source's URL, or a loaded workspace's path or name.
         #[arg(long, value_name = "ORIGIN")]
         from: Option<String>,
+
+        /// Write over a copy changed since it was installed, which is
+        /// otherwise left alone.
+        #[arg(long)]
+        force: bool,
     },
 
-    /// Take a skill Mindflayer installed back out of this project.
+    /// Take a skill or a rule Mindflayer installed back out of this project.
     Uninstall {
-        /// The skill's name.
+        /// Its name, or `kind:name` when one name is both.
         name: String,
+
+        /// Take out a copy changed since it was installed too, which is
+        /// otherwise left alone with every other copy.
+        #[arg(long)]
+        force: bool,
+    },
+
+    /// Bring what Mindflayer installed into this project up to date with
+    /// where it came from, and put back the copies that have gone.
+    ///
+    /// A copy changed since it was installed is left alone, with every
+    /// other copy of it, and said. Without --yes nothing changes, and the
+    /// command says what would.
+    Update {
+        /// Only these, each by its name, or `kind:name` when one name is
+        /// both [default: everything installed].
+        #[arg(value_name = "NAME")]
+        names: Vec<String>,
+
+        /// Write over a copy changed since it was installed, which is
+        /// otherwise left alone.
+        #[arg(long)]
+        force: bool,
+
+        /// Make the change. Without this nothing changes, and the command
+        /// says what would.
+        #[arg(short, long)]
+        yes: bool,
     },
 
     /// Change which agents work in this project, and carry what is
@@ -296,8 +332,9 @@ pub enum Command {
     },
 
     /// Bring this project, made by an older Mindflayer and marked by a
-    /// mind.toml, to settings, and what is installed into it to where its
-    /// agents read.
+    /// mind.toml, to a settings.toml, and what is installed into it to where
+    /// its agents read; or one marked by a settings.json to a settings.toml
+    /// saying the same.
     ///
     /// Without --yes nothing changes, and the command says what would.
     Migrate {
@@ -519,9 +556,10 @@ pub enum FlayerCommand {
         project: Option<String>,
     },
 
-    /// Say what every managed project holds: whether each artifact was
-    /// installed, is partly gone, is somebody's or is the project's own,
-    /// which agents read it, and where what was installed came from.
+    /// Say what every managed project holds: whether what Mindflayer
+    /// installed is current, outdated, edited, missing or orphaned, what is
+    /// somebody's and what is the project's own, which agents read each,
+    /// and where what was installed came from.
     Status {
         /// Only this project.
         #[arg(short, long, value_name = "PROJECT")]
@@ -547,13 +585,14 @@ pub enum FlayerCommand {
         projects: Vec<PathBuf>,
     },
 
-    /// Offer other flayer workspaces' own skills to this workspace's projects,
-    /// read live from where they are.
+    /// Offer other flayer workspaces' own skills and rules to this
+    /// workspace's projects, read live from where they are.
     ///
     /// Into the workspace at or above here that is not one being loaded, or
     /// else the default one in your home: so `flayer load .` from inside a
-    /// workspace full of skills loads it into the one that manages you. On its
-    /// own, it lists what this workspace loads and what each offers.
+    /// workspace full of skills and rules loads it into the one that manages
+    /// you. On its own, it lists what this workspace loads and what each
+    /// offers.
     Load {
         /// Each workspace's directory, the one holding `.mindflayer`
         /// [default: list the loaded ones].
@@ -561,7 +600,7 @@ pub enum FlayerCommand {
         workspaces: Vec<PathBuf>,
     },
 
-    /// Stop offering a loaded workspace's skills.
+    /// Stop offering a loaded workspace's skills and rules.
     Unload {
         /// Each workspace's directory, as loaded. It need not still exist.
         #[arg(required = true, value_name = "WORKSPACE")]
@@ -606,33 +645,77 @@ pub enum FlayerCommand {
     #[command(subcommand)]
     Gather(GatherCommand),
 
-    /// Put skills into the projects this workspace manages: the workspace's
-    /// own, or its shelf's.
+    /// Put skills and rules into the projects this workspace manages: the
+    /// workspace's own, a loaded workspace's, or its shelf's.
     ///
-    /// On its own it opens a screen for all of them at once. Given a skill and
+    /// On its own it opens a screen for all of them at once. Given a name and
     /// a project, it installs that one without one.
     Install {
         /// The project to install into.
         #[arg(short, long, value_name = "PROJECT")]
         project: Option<String>,
 
-        /// The skill's name [default: open the screen].
+        /// Its name: a skill's, or a rule's route like `git/commits`;
+        /// `skill:<name>` or `rule:<route>` when one name is both [default:
+        /// open the screen].
         name: Option<String>,
 
         /// Where it comes from, when two places offer that name: `workspace`,
         /// a shelf source's URL, or a loaded workspace's path or name.
         #[arg(long, value_name = "ORIGIN")]
         from: Option<String>,
+
+        /// Write over a copy changed since it was installed, which is
+        /// otherwise left alone.
+        #[arg(long, requires = "name")]
+        force: bool,
     },
 
-    /// Take a skill Mindflayer installed back out of a project.
+    /// Take a skill or a rule Mindflayer installed back out of a project.
     Uninstall {
         /// The project to take it out of.
         #[arg(short, long, value_name = "PROJECT")]
         project: String,
 
-        /// The skill's name.
+        /// Its name, or `kind:name` when one name is both.
         name: String,
+
+        /// Take out a copy changed since it was installed too, which is
+        /// otherwise left alone with every other copy.
+        #[arg(long)]
+        force: bool,
+    },
+
+    /// Bring what Mindflayer installed into projects up to date with where
+    /// it came from, and put back the copies that have gone, as `mind
+    /// update` does in one.
+    ///
+    /// A copy changed since it was installed is left alone, with every
+    /// other copy of it, and said. Without --yes nothing changes, and the
+    /// command says what would.
+    Update {
+        /// A project to update, by name or path; once for each.
+        #[arg(short = 'p', long = "project", value_name = "PROJECT")]
+        projects: Vec<String>,
+
+        /// Every project the workspace links.
+        #[arg(long, conflicts_with = "projects")]
+        all: bool,
+
+        /// Only these, each by its name, or `kind:name` when one name is
+        /// both [default: everything installed].
+        #[arg(value_name = "NAME")]
+        names: Vec<String>,
+
+        /// Write over a copy changed since it was installed, which is
+        /// otherwise left alone.
+        #[arg(long)]
+        force: bool,
+
+        /// Make the change. Without this nothing changes, and the command
+        /// says what would.
+        #[arg(short, long)]
+        yes: bool,
     },
 
     /// Change which agents work in a project, and carry what is installed
@@ -709,11 +792,13 @@ pub enum FlayerCommand {
         library: bool,
 
         /// Move one project the workspace links, by name or path, from its
-        /// mind.toml to settings, as `mind migrate` does there.
+        /// mind.toml or settings.json to a settings.toml, as `mind migrate`
+        /// does there.
         #[arg(short, long, value_name = "PROJECT")]
         project: Option<String>,
 
-        /// Move every project the workspace links that a mind.toml marks.
+        /// Move every project the workspace links that a mind.toml or a
+        /// settings.json marks.
         #[arg(long)]
         all_projects: bool,
 
@@ -797,13 +882,16 @@ pub enum TargetsChange {
 
 /// What a project's settings are to say once it is moved from its
 /// `mind.toml`, which says neither: the agents that work in it, and whether
-/// what is installed into it is the team's.
+/// what is installed into it is the team's. A `settings.json` says both, and
+/// keeps what it says.
 #[derive(Debug, Args)]
 pub struct Migrated {
     /// The agents that work in the project, comma-separated [default:
     /// claude,codex,opencode].
     ///
-    /// What is installed into it is copied where each of them reads it.
+    /// What is installed into it is copied where each of them reads it. A
+    /// project a settings.json marks keeps the agents and the share mode it
+    /// names.
     #[arg(
         long,
         value_name = "AGENTS",

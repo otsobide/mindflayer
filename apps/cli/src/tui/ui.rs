@@ -6,7 +6,7 @@
 //! command it is about to run, as it is typed. The install screen, when it is
 //! open, draws itself. Nothing here decides anything; [`super::state`] does.
 
-use mindflayer_core::{Agent, Kind, Reason, Share, State};
+use mindflayer_core::{Agent, Kind, MarkerFile, Reason, Share, State};
 use ratatui::layout::{Constraint, Direction, Layout, Rect};
 use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
@@ -192,27 +192,30 @@ fn header(workspace: &Workspace, frame: &mut Frame, area: Rect) {
 }
 
 /// What the header says of projects an older Mindflayer made, marked by a
-/// `mind.toml`, with the command that moves them to settings: until then
-/// their installs reach only the folder that marker names, and nothing else
-/// on screen tells them apart before a toggle refuses one. Early in the
-/// line, so a narrow terminal keeps it. None when there are none.
+/// `mind.toml` or a `settings.json`, with the command that moves them to a
+/// `settings.toml`: until then a `mind.toml`'s installs reach only the
+/// folder it names, neither one's settings can be changed, and nothing else
+/// on screen tells them apart before a toggle refuses one. Each file named
+/// once, in the order they came, oldest first. Early in the line, so a
+/// narrow terminal keeps it. None when there are none.
 fn older(workspace: &Workspace) -> Option<String> {
-    let count = workspace
+    let older: Vec<MarkerFile> = workspace
         .members
         .iter()
-        .filter(|member| {
-            !member.own
-                && member
-                    .holdings
-                    .as_ref()
-                    .is_ok_and(|holdings| holdings.share.is_none())
-        })
-        .count();
-    match (workspace.scope, count) {
+        .filter(|member| !member.own)
+        .filter_map(|member| member.holdings.as_ref().ok()?.older)
+        .collect();
+    let files: Vec<&str> = [MarkerFile::MindToml, MarkerFile::SettingsJson]
+        .into_iter()
+        .filter(|file| older.contains(file))
+        .map(MarkerFile::name)
+        .collect();
+    let files = files.join(" or ");
+    match (workspace.scope, older.len()) {
         (_, 0) => None,
-        (Scope::Project, _) => Some(String::from("marked by mind.toml: `mind migrate`")),
+        (Scope::Project, _) => Some(format!("marked by {files}: `mind migrate`")),
         (Scope::Workspace, count) => Some(format!(
-            "{} marked by mind.toml: `flayer migrate --all-projects`",
+            "{} marked by {files}: `flayer migrate --all-projects`",
             plural(count, "project")
         )),
     }
@@ -347,7 +350,7 @@ fn holdings(app: &App, workspace: &Workspace, frame: &mut Frame, area: Rect) {
                 Line::from(printable(error)),
                 Line::from(""),
                 Line::from(Span::styled(
-                    "u unlinks it; nothing on disk is touched",
+                    "U unlinks it; nothing on disk is touched",
                     dim(),
                 )),
             ];
@@ -520,13 +523,17 @@ fn item_row<'a>(item: &'a Item, agents: &[Agent], width: usize, room: usize) -> 
     ListItem::new(lines)
 }
 
-/// What a state looks like: green for what Mindflayer installed whole,
-/// yellow for an install partly gone, which the next install puts back, and
-/// magenta for somebody's, which no key of Mindflayer's changes.
+/// What a state looks like: green for what Mindflayer installed whole and
+/// current, yellow for one an update brings up to date or puts back, cyan
+/// for one somebody edited, which nothing writes over unless forced, red for
+/// one nothing offers any more, and magenta for somebody's, which no key of
+/// Mindflayer's changes.
 fn state_style(state: State) -> Style {
     match state {
-        State::Installed => Style::default().fg(Color::Green),
-        State::Partial => warn(),
+        State::Current => Style::default().fg(Color::Green),
+        State::Outdated | State::Missing => warn(),
+        State::Edited => Style::default().fg(Color::Cyan),
+        State::Orphaned => Style::default().fg(Color::Red),
         State::Foreign => Style::default().fg(Color::Magenta),
         State::Authored => Style::default(),
     }
@@ -618,11 +625,14 @@ fn footer(app: &App, frame: &mut Frame, area: Rect) {
     // Only the keys that do something here: a project on its own has no
     // registry, shelf or installs to offer keys for.
     let keys = match (app.focus, app.scope()) {
-        (Focus::Items, _) => {
+        (Focus::Items, Scope::Workspace) => {
+            "q quit  ? keys  enter show  e edit  r rename  d delete  u update  a add  ← back  v validate"
+        }
+        (Focus::Items, Scope::Project) => {
             "q quit  ? keys  enter show  e edit  r rename  d delete  a add  ← back  v validate"
         }
         (Focus::Projects, Scope::Workspace) => {
-            "q quit  ? keys  → open  a add  m minds  l link  u unlink  v validate  g gather  L load  s shelf  i install  t agents  T targets"
+            "q quit  ? keys  → open  a add  u update  m minds  l link  U unlink  v validate  g gather  L load  s shelf  i install  t agents  T targets"
         }
         (Focus::Projects, Scope::Project) => {
             "q quit  ? keys  → open  a add  v validate  l link it to the workspace above  L load  t agents  T targets"

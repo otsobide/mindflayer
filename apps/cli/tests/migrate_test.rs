@@ -147,7 +147,7 @@ fn a_home_workspace_migrates_and_what_it_installed_stays_current() {
     // until status tells an outdated copy from a current one (#47).
     assert_eq!(
         status.stdout,
-        "x  installed  claude,codex,opencode  workspace\n"
+        "x  current  claude,codex,opencode  workspace\n"
     );
     assert!(status.ok, "{status:?}");
     assert_eq!(installed.stdout, "x in alpha was already current\n");

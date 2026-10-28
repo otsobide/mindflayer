@@ -3,7 +3,7 @@
 Guidance for coding agents working in this repository.
 
 Mindflayer manages the skills and rules coding agents read, the way git manages
-code. A **mind project** (`.mind/settings.json`) holds artifacts beside its
+code. A **mind project** (`.mind/settings.toml`) holds artifacts beside its
 code; a **flayer workspace** (`.mindflayer/flayer.toml`) links mind projects,
 holds artifacts of its own, gathers skills from git onto a shelf and installs
 them into projects. `README.md` is the user-facing surface.
@@ -72,17 +72,23 @@ asked.
 Three crates in one Cargo workspace, and the panel they serve, each an app
 under `apps/` with its own `Makefile`:
 
-- `apps/core` (`mindflayer-core`): the engine. Projects, a project's
-  settings (`settings`, the v3 marker), workspaces, which
-  workspace a command uses (`resolve`), the shell code that activates one
-  (`activate`), kinds, the agents and where each kind goes for them
-  (`agent`), the catalog, gathering (`gix`), the SQLite ledger,
-  installing, keeping installs out of git (`exclude`), changing a project's
-  agents or share mode and carrying its installs along (`reapply`), what
-  each project holds, from where and for which agents (`status`), creating
-  and changing artifacts, and moving a workspace's own into its library and
-  a project from its `mind.toml` to settings (`migrate`). Its only I/O is
-  files, and it never reads the environment.
+- `apps/core` (`mindflayer-core`): the engine. Projects, a project's settings
+  (`settings`, the marker from v3 on), workspaces, which workspace a command
+  uses (`resolve`), the shell code that activates one (`activate`), kinds, the
+  agents and where each kind goes for them (`agent`), the catalog, gathering
+  (`gix`), the SQLite ledger, installing, keeping installs out of git
+  (`exclude`), a project's rules rendered into the block of its `AGENTS.md`
+  (`agents_md`) and into Claude's rules folder (`claude_rules`), whether
+  Claude reads that block and the `@AGENTS.md` import in a project's
+  `CLAUDE.md` that makes it (`claude_md`), installing a rule through those
+  three, or as a copy into a project a `mind.toml` marks (`install::rules`),
+  changing a project's agents or share mode and carrying its installs along
+  (`reapply`), what each project holds, from where and for which agents
+  (`status`), creating and changing artifacts, and moving a workspace's own
+  into its library and a project from its `mind.toml` or `settings.json` to a
+  `settings.toml` (`migrate`), and bringing what was installed up to date
+  with where it came from (`update`). Its only I/O is files, and it never
+  reads the environment.
 - `apps/cli` (`mindflayer-cli`): the binaries `mind` (`src/main.rs`) and
   `flayer` (`src/bin/flayer.rs`), and the TUI. `src/lib.rs` only re-exports
   the public API. The parsers are in `src/parse.rs`. `src/commands.rs`
@@ -91,7 +97,7 @@ under `apps/` with its own `Makefile`:
   scan), `workspace` (load, unload), `activate` (activate, which),
   `artifact` (add, edit, rename, remove, templates), `read` (list, show,
   validate), `status`, `settings` (agents, share, targets), `gather`,
-  `install` and `migrate` (migrate, at both levels). `src/render.rs` holds
+  `install`, `update` and `migrate` (each at both levels). `src/render.rs` holds
   `Outcome`, `Failure`, the table helpers and the envelope every `--json`
   prints (`json`),
   `src/error.rs` holds `CliError`, and `src/homes.rs` decides the default
@@ -142,7 +148,11 @@ These are easy to break from a single file without noticing.
   every folder an install may use (`misplaced_target`), so code that needs
   one asks the project (`MindProject::targets`), as discovery and an install
   (`install::targets`) do. Which agents read none of a project's targets is
-  core's too (`ProjectStatus::unreached`). Where an agent reads
+  core's too (`ProjectStatus::unreached`), and so is which read a rule it
+  received nowhere (`ProjectStatus::missed`). Which kind a name typed bare
+  is, to install or take out, is core's (`install::offered_typed`,
+  `uninstall_typed`), and so is what a render of rules warns of
+  (`Rendered::warnings_of`). Where an agent reads
   (`Agent::reads`) is kept apart from where it is sent a copy: OpenCode reads
   `.claude/skills` and is sent nothing there. Which folders a project is read
   from is core's too (`Catalog::folders`).
@@ -171,7 +181,7 @@ These are easy to break from a single file without noticing.
   text, stderr lines, ok), so tests assert on the exact text a user sees.
 - **Reading commands print JSON in one envelope, and its names are a
   contract.** A reading command's `--json` prints `render::json`'s
-  `{"version": 1, "data": ..., "warnings": [...]}`, never a shape of its own,
+  `{"version": 2, "data": ..., "warnings": [...]}`, never a shape of its own,
   with what it would have said on stderr as `warning:` lines in `warnings`
   and the exit status its text has. `data` is a type core builds and sorts,
   deriving `Serialize` with its fields named in snake_case; a kind, an agent
@@ -186,31 +196,35 @@ These are easy to break from a single file without noticing.
   and a non-zero exit, never a reason to hide the rest. An absence (no
   `skills/` folder yet) is not a failure.
 - **Never overwrite what somebody wrote.**
-  - New markers are written from string templates so their comments survive.
-    Edits go through `toml_edit` (`edit_array`, or `edit_marker_held` for a
-    writer that holds the lock already) and a temp file of their own
-    (`replace_file`, named for the run) plus a rename.
-  - A project's `.mind/settings.json`, which has no comments to keep, is
-    serialized (`Settings::text`) and made with `create_new`. It is changed
-    only through `MindProject::change_settings`, which reads the file again
-    and edits each key whose value changed, `directories` an entry at a time,
-    through `config_entry`, as an agent's config file is (below), then
-    `replace_file`: a key this build does not know, the key order and a
-    hand-made layout survive, and nothing is written when nothing changed.
+  - New markers are written from string templates so their comments survive:
+    `flayer.toml`, and a project's `.mind/settings.toml` (`Settings::text`),
+    made with `create_new`. Edits go through `toml_edit` and one `rewrite`,
+    which reads the file again, hands its text to the edit and writes back
+    only what changed through a temp file of its own (`replace_file`, named
+    for the run) plus a rename: `edit_array`, or `edit_marker_held` for a
+    writer that holds the lock already, and `MindProject::change_settings`,
+    which edits each key whose value changed where it stands
+    (`settings::edited`), `directories` and `targets` an entry at a time,
+    keeping the comment on a changed value's line: comments, a key this
+    build does not know, the key order and a hand-made layout survive, and
+    nothing is written when nothing changed. Only a `settings.toml` is
+    changed (`MindProject::changeable`): a `settings.json`, read as it was
+    written, is refused with a pointer to `mind migrate`, and `config_entry`
+    is never used to edit a project's settings.
     Its agents, targets and share mode change through `reapply::apply`
     (`mind agents`, `mind targets`, `mind share`), which carries what is
     installed along with them.
   - Creation uses `create_new` or `create_dir`.
   - `rename` rewrites only the `name:` line (`frontmatter::with_key`).
-  - `remove`, `migrate` at either level, `agents`, `share` and `targets` are
-    dry runs without `--yes`.
+  - `remove`, `migrate` at either level, `agents`, `share`, `targets` and
+    `update` are dry runs without `--yes`.
     A migration of the library moves nothing a project holds, refuses as a
     whole, and keeps the marker it rewrites as `flayer.toml.v<version>`
-    (`create_new`). A project's (`migrate::project`) writes its settings
-    with `create_new`, keeps its `mind.toml` as
-    `.mind/tmp/mind.toml.v<version>`, never runs git (it says `git rm -r
-    --cached .mind` instead), and puts back every step it took when a later
-    one fails.
+    (`create_new`). A project's (`migrate::project`) writes its
+    `settings.toml` with `create_new`, keeps the `mind.toml` or
+    `settings.json` it replaces as `.mind/tmp/<name>.v<version>`, never runs
+    git (it says `git rm -r --cached .mind` instead), and puts back every
+    step it took when a later one fails.
   - A file somebody else owns is edited only inside Mindflayer's marked
     blocks or, in an agent's config file, which can carry no marks, one entry
     at a time (next bullet). Every byte outside them is kept, and a malformed
@@ -219,14 +233,63 @@ These are easy to break from a single file without noticing.
     `$GIT_COMMON_DIR/info/exclude` (`exclude`), where an edit rewrites only its
     own project's `# project <key>` group: an install writes one entry per
     copy for a local project, keyed by its id, before the copies land, and
-    never opens the file for a shared project or one a `mind.toml` marks. A
+    a render of Claude's rule files one per file, and neither opens the file
+    for a shared project or one a `mind.toml` marks. A
     project turning shared has its whole group forgotten (`exclude::forget`),
     and one turning local an entry written for each copy in place. A team's
     `.gitignore` and `core.excludesFile` are never edited; the `.gitignore`s
     Mindflayer writes are `.mind/tmp`'s and a local project's `.mind`'s own
     (`MIND_IGNORE`), each inside a folder it owns, made with `create_new`,
     and the second is removed, when the project turns shared, only while it
-    still holds `MIND_IGNORE`.
+    still holds `MIND_IGNORE`. And `<!-- mindflayer:begin -->` and
+    `<!-- mindflayer:end -->` in a project's root `AGENTS.md` (`agents_md`),
+    a section a rule under `<!-- mindflayer:rule <route> -->`: a render
+    replaces the block whole, adds it after what the file holds, an empty
+    line apart, or drops it, that line with it, and gives the file back as
+    it was, in the file's own line endings. A
+    marker written any other way, a rule's marker outside the block and one
+    route twice are refused like a broken block. A missing `AGENTS.md` is
+    made with `create_new`, and only then said to be created; one that is
+    there goes through `replace_bytes`, written through a link only to a
+    file inside the project; and the file is taken away only when
+    Mindflayer made it, as the ledger notes (`created_files`), and nothing
+    else is left in it. No block
+    is left in a workspace's root, unless a project it links is there, nor
+    in a folder above a project it links, whose agents would read it too,
+    nor inside an agent's own folder (`AgentsMdError::UserScope`); a render
+    that takes one out goes ahead there.
+  - Claude's rule files, `.claude/rules/mindflayer/<route>.md`
+    (`claude_rules`), hold a rule as written, front matter included. A
+    render is handed what the ledger records of them
+    (`claude_rules::Recorded`: each file's route and its `hash::bytes`),
+    each file it may make recorded before it is made (`install::rules`), and
+    a file is Mindflayer's only while it holds exactly that: only such a
+    file is replaced or taken away. A file nothing
+    recorded, even one holding the rule, or one changed since, is left
+    exactly as it is and said, and so is a link at a rule's place. A new
+    file is made with `create_new`; one replaced goes through
+    `replace_bytes_unresolved`, whose temporary ends in `.tmp`, which
+    Claude never loads; emptied folders go up to and including `mindflayer`
+    and no further. A render asked for a rule is refused wherever the block
+    is (`agents_md::misplaced`), and both renderers ask
+    `RuleManifest::is_scoped` which rules are about some files only.
+  - The import of `AGENTS.md` in a project's own `CLAUDE.md` or
+    `.claude/CLAUDE.md` (`claude_md`) is one line between the block's
+    markers, read by the same search (`agents_md::locate`), at the top of
+    the file, an empty line below it that goes with it; a rule's marker
+    there is refused like a broken block. Whether Claude reads the block is
+    one predicate (`claude_md::reads_agents_md`): the three names in the
+    project's root and every folder above it but `/`, the user memory file
+    left out. `claude_md::reach` decides Native, the import, or Claude's
+    rules folder (`Reach::mode`), never more than one, so Claude reads each
+    rule once; an `@AGENTS.md` line somebody wrote in one of Claude's files
+    counts as the import, and nothing is written. `claude_md::render` never
+    makes a `CLAUDE.md` or a `CLAUDE.local.md`, never edits a file above
+    the project (it is the fallback's reason instead), a link, the user
+    memory file or the `AGENTS.md` itself, edits a file git tracks
+    (`exclude::tracks_file`) in a local project only with `edit_tracked`,
+    and takes the import out with the last rule, giving the file back as it
+    was; one it may no longer take out is left and said.
   - An entry in a config file somebody else owns (`.mcp.json`,
     `opencode.json`, `.codex/config.toml`) is changed one at a time through
     `config_entry`: JSON and JSONC entries are edited through jsonc-parser's
@@ -247,38 +310,74 @@ These are easy to break from a single file without noticing.
   install (one installation, a target for each copy it wrote, its origin and
   the `hash::tree` of what it wrote, that hash's one definition) is what
   allows overwriting and deleting. An install writes a copy in every target
-  `install::targets` gives (each folder the project's agents read, or the
-  one a `mind.toml` names), built from one tree and put in place together or
-  not at all (`copy::Stage::place`). Standing is by the path each record
-  names (`Ledger::copies`), never by name: anything unrecorded in any target
-  is `Standing::Foreign`, refuses the whole install with nothing written in
-  any target, and is never touched. An uninstall removes the copies its
-  record names and nothing else. No copy holds a skill's top-level
-  `.claude-plugin` (`install::LeftOut`), and none lands inside an agent's
-  own folder (`InstallError::UserScope`). A v3 project is listed from its
-  agents' folders too, where an unrecorded copy outside the folder it
-  authors in is `Provenance::Foreign` (by the path a record names,
-  `Catalog::with_records`), and a lifecycle change looks only where the
-  project authors (`Catalog::discover_authored`), so it never reaches one.
-  Core's lifecycle changes
-  (`lifecycle::add`, `finish_edit`, `rename` and `remove`) drop any record
-  they would leave behind, only that of the copy the change reached
-  (`Ledger::uninstalled_copy`: a v3 project whose authored folder is also a
-  target keeps the record of its other copies, and a local one stops
-  excluding that copy's place), and return what they did (`lifecycle::Record`, and the `scrub` that opening the ledger ran),
-  which the CLI only renders. A change of a project's agents or targets
-  (`reapply::apply`) moves only what the ledger records: a new folder gets
-  a copy of one whose `hash::tree` is the one recorded, never one over
-  somebody's, and a dropped folder loses a recorded copy only while its
-  hash is the one recorded; one changed since is left there, and its record
-  and exclude entry dropped. A project's move to settings
+  `install::targets` gives (each folder the project's agents read, or the one
+  a `mind.toml` names), built from one tree and put in place together or not
+  at all (`copy::Stage::place`). Standing is by the path each record names
+  (`Ledger::copies`), never by name: anything unrecorded in any target is
+  `Standing::Foreign`, refuses the whole install with nothing written in any
+  target, and is never touched. A recorded copy is told by the hash of what
+  was written there and by what its origin offers now (`install::Standing`,
+  `install::standings`, D-04): `Current`, `Outdated`, `Edited`, `Missing` or
+  `Orphaned`, the first true of edited, orphaned, missing and outdated said
+  over the rest. An `Edited` copy refuses the whole install or uninstall as a
+  foreign one does (`Installed::Edited`, `Removed::Edited`) unless it is
+  forced (`install_with`, `uninstall_with` and `uninstall_typed` given
+  `Edits::Forced`, the CLI's `--force`), and forcing never reaches a copy
+  nothing records; a render keeps an edited section of the block as it holds
+  it. A record with no hash counts as current only while its copy matches its
+  offer byte for byte, and as edited otherwise; the first install over a match
+  stores its hash. An update (`update::apply`) writes an `Outdated` or
+  `Missing` installation again from the place its record says it came from,
+  through the install's own body (`install::install_held`), and a project's
+  rules in one render that keeps an orphaned rule as it is
+  (`install::rules::update_held`); it leaves an `Edited` one, every copy of
+  it, unless forced, and says an `Orphaned` one without failing. An
+  uninstall removes the copies its record names and nothing else. No copy
+  holds a skill's top-level `.claude-plugin`
+  (`install::LeftOut`), and none lands inside an agent's own folder
+  (`InstallError::UserScope`). A v3 project is listed from its agents' folders
+  too, where an unrecorded copy outside the folder it authors in is
+  `Provenance::Foreign` (by the path a record names, `Catalog::with_records`),
+  and a lifecycle change looks only where the project authors
+  (`Catalog::discover_authored`), so it never reaches one. Core's lifecycle
+  changes see to the record of the copy the change reached, and only that
+  copy's (D-04): `finish_edit` keeps it, so the copy reads as edited; `rename`
+  carries it to the new name and place (`Ledger::renamed_copy`, dropping it
+  only when another installation holds the new name); `remove` uninstalls the
+  copy, dropping its record (`Ledger::uninstalled_copy`); and `add` drops a
+  stale record under the name it writes. A v3 project whose authored folder is
+  also a target keeps the record of its other copies, and a local one stops
+  excluding a removed copy's place, or moves the entry with a renamed one.
+  Each returns what it did (`lifecycle::Record`, and the `scrub` that opening
+  the ledger to write ran; an edit only reads it), which the CLI only renders.
+  A change of a project's agents or targets (`reapply::apply`) moves only what
+  the ledger records: a new folder gets a copy of one whose `hash::tree` is
+  the one recorded, never one over somebody's, and a dropped folder loses a
+  recorded copy only while its hash is the one recorded; one changed since is
+  left there, and its record and exclude entry dropped, since no install
+  writes in that folder again. A project's move from a `mind.toml`
   (`migrate::project`) moves its installs the same way, through
   `reapply::retarget`, and holds a record from before hashes to its offer
   (D-04). Being made once, it is refused when the workspace `mind migrate`
   consults cannot be read, never made as if that one recorded nothing.
-  `install::disown` is private to core, so no front end drops a record on its
-  own. A front end adds through `lifecycle::add`, never `create` or
-  `create_from`, which leave a stale record in place.
+  `install::disown` and `install::carry` are private to core, so no front end
+  drops or moves a record on its own. A front end adds through
+  `lifecycle::add`, never `create` or `create_from`, which leave a stale
+  record in place. A rule is one installation too: in a project marked by its
+  settings, its targets are its section of the block, recorded as `AGENTS.md`,
+  and its file for Claude, each with a hash of its own
+  (`Target::content_hash`, since the two hold different bytes); in one a
+  `mind.toml` marks, its copy in the rules folder, filed by its route.
+  Installing or uninstalling one renders every rule the project has
+  (`install::rules`), each from the offer it was installed from: a section in
+  the block, or a file at a rule's place for Claude, that the ledger does not
+  record is `Standing::Foreign`, and a block holding such a section refuses
+  the render (`NotRecorded`), as a rule no longer offered does
+  (`NoLongerOffered`). What a project received as rules is listed from the
+  ledger and the block (`status`, D-23), never by discovery, which reads no
+  block, and a front end finds what to change through
+  `lifecycle::find_to_change`, which refuses such a rule as received rather
+  than as nothing.
 - **Strict when writing, lenient when reading.** A skill's front matter is
   the Agent Skills format. `mind add`, `rename` and `install` refuse a name or
   description that breaks its rules, all through `artifact::strict_issues`
@@ -292,8 +391,12 @@ These are easy to break from a single file without noticing.
   warning, never a reason to hide the rule. `mind add --template` refuses that
   same list (`artifact::rule_issues`) for the rule it is about to write.
 - **Loaded and gathered content is untrusted.**
-  - An installed name must be one folder name (`install::is_folder_name`).
-  - Symlinks are followed only inside the source (`copy::tree`'s `within`).
+  - An installed name must be one folder name for a skill
+    (`install::is_folder_name`), and for a rule a route held to the name
+    rules, which never climbs out (`install::is_installable_name`).
+  - Symlinks are followed only inside the source (`copy::tree`'s `within`),
+    and a rule offered for install that leads out of the workspace offering
+    it is refused (`InstallError::Outside`).
   - A project's artifact directories must stay inside the project, and so
     must the folders its `targets` name, outside `.mind` and any
     `.mindflayer` too (`misplaced_target`): refused when a change names one,
@@ -305,6 +408,16 @@ These are easy to break from a single file without noticing.
     read and again just before it is written, and the write is never
     resolved. A folder made a link between that last look and the rename is
     the one window left (architecture.md, open questions).
+  - An `AGENTS.md` that is a link leading out of its project is refused
+    (`agents_md`), since a repository can link it to the user's own
+    `~/.codex/AGENTS.md`; one to a file inside the project is written
+    through. So is a rule file whose folders lead out of the project
+    through a link (`claude_rules`), written or taken away, since `.claude`
+    can be a link to the user's own `~/.claude`; the file itself is never
+    followed. A `CLAUDE.md` reached through any link is never given the
+    import (`claude_md`), whose path would then mean wherever the link
+    leads, unless it is the project's `AGENTS.md` itself, which Claude then
+    reads the block as (`Reach::Same`).
   - URLs are stored, logged and shown without credentials. `url::redacted`
     is the one function that takes them out: the ledger applies it to every
     URL it writes and reads, `GitError` to what it says, `git::scrub` to a
@@ -318,24 +431,32 @@ These are easy to break from a single file without noticing.
     `url::redacted` too.
 - **Writers take turns; readers never wait.** Core's writers hold the
   workspace's `.mindflayer/lock` (`FlayerWorkspace::lock`) while they change
-  it: `edit_array`, `install::install` and `uninstall`, `gather::gather`,
+  it: `edit_array`, `install::install` and `uninstall`,
+  `install::rules::render`, `gather::gather`,
   `gather::scrub`, which `FlayerWorkspace::ledger_to_write` runs, when it has
   clones to rewrite, `migrate::library`, from its plan to its rewrite of
-  the marker, `migrate::project`, from before it reads the project again
-  until its ledger is written, and `reapply::apply`, from before it reads a
+  the marker, `migrate::project`, for a move from a `mind.toml`, from before
+  it reads the project again until its ledger is written (a move from a
+  `settings.json` moves no copy, and takes none), `reapply::apply`,
+  from before it reads a
   project's settings until their change and every copy it carries along are
-  written. A new
-  writer takes it the same way, inside core; `config_entry::ConfigFile` and
-  `MindProject::change_settings` take none, since the writers that call them
-  hold it. A second workspace linking the same project is kept out by
-  neither lock, an open question in `docs/architecture.md`.
+  written, and `update::apply`, from the plan it makes again until its last
+  installation is written, through `install::install_held` (the body
+  `install_with` hands to once it holds the lock) and
+  `install::rules::update_held`, which take none of their own. A new
+  writer takes it the same way, inside core; `config_entry::ConfigFile`,
+  `agents_md::render`, `claude_rules::render`, `claude_md::render` and
+  `MindProject::change_settings` take none, since
+  the writers that call them hold it. A second workspace linking the same
+  project is kept out by neither lock, an open question in
+  `docs/architecture.md`.
   Opening the ledger takes no lock: a schema migration keeps itself apart
   in its own transaction. The lock is not re-entrant: a writer never calls
   another while it holds it, and a front end never takes it. Reads
   (`FlayerWorkspace::open`, `ledger_for_reading`) never take it. A wait is
   bounded (`lock::WAIT`), ending in a `LockError::Busy` that names the
-  holder's pid, except a record drop's (`install::disown`), which follows a
-  change already made.
+  holder's pid, except a record drop's or carry's (`install::disown`,
+  `install::carry`), which follows a change already made.
 - **A gather never prompts for a credential itself.** Every connection `gix`
   lets a clone configure gets the callback in `gather/credentials.rs`, which
   runs the git-config credential helpers with `gix`'s prompt and askpass
@@ -350,15 +471,16 @@ These are easy to break from a single file without noticing.
   `flayer.toml`, so bumping one never makes older builds refuse the other)
   and the ledger uses SQLite's `user_version`. A project's marker is
   `mind.toml` up to `MIND_TOML_VERSION`, which only `MindProject::init` still
-  writes, for tests of such a project, and `settings.json` from
-  `SETTINGS_VERSION`, which `mind init` writes (`MindProject::init_asked`,
-  which fills in each folder it was not told about), and from
-  `TARGETS_VERSION` when they name `targets`, which an older build would read
-  past: a settings file is written at the lowest version that reads it as it
-  means (`Settings::version_needed`), and a change of `targets` brings it
-  along. Either makes a directory a project (`MindProject::is_marked`), and
-  the settings win when both are there. See `DIRECTORIES_VERSION` for how a
-  v1 `mind.toml` is still read, and `SETTINGS_VERSION` for why a kind a
+  writes, for tests of such a project; `settings.json` at `SETTINGS_VERSION`,
+  or `TARGETS_VERSION` when it names `targets`, which an older build would
+  read past, read as written and changed by nothing but `mind migrate`; and
+  `settings.toml` at `SETTINGS_TOML_VERSION` whatever it sets, which `mind
+  init` writes (`MindProject::init_asked`, which fills in each folder it was
+  not told about). Each version is written in one file
+  (`MarkerFile::of_version`), and one found in another is refused. Any of the
+  three makes a directory a project (`MindProject::is_marked`), and the
+  newest wins when more than one is there. See `DIRECTORIES_VERSION` for how
+  a v1 `mind.toml` is still read, and `SETTINGS_VERSION` for why a kind a
   settings file does not name has no folder (`directory_for` is `None`).
   Anything from a newer version is refused. A format change must keep
   reading old files the way they were written, and move one forward only
@@ -415,10 +537,12 @@ These are easy to break from a single file without noticing.
   find. Core takes the answer as `AgentHomes` and never resolves one.
   `Lookup::given` decides them once per command line, into the `Lookup`
   (`Lookup::agents`), and install is the first to take them, to refuse a
-  copy inside one. `tui::execute` hands each line the TUI's own with the
-  rest of its `Lookup`, and so does its install screen: a command the TUI
-  runs carries none of the four options, so it would decide them again from
-  the environment.
+  copy inside one, as `agents_md::render` and `claude_rules::render` take
+  them to refuse rules there, and `claude_md` to leave the user memory file
+  out of what keeps Claude from reading `AGENTS.md`. `tui::execute` hands each line the TUI's own
+  with the rest of its `Lookup`, and so does its install screen: a command
+  the TUI runs carries none of the four options, so it would decide them
+  again from the environment.
 - **The server holds no rules.** `apps/server` carries JSON between the
   browser and a `Backend`, whose `Query`, `Task` and `Outcome` are associated
   types, and depends on no mindflayer crate (`tests/crate_test.rs` checks it
@@ -492,8 +616,13 @@ These are easy to break from a single file without noticing.
   of git rather than saying on stderr that nothing does, and where an install
   puts its copies is asked of core (`common::copies`). A test about what a
   project an older Mindflayer made does, a copy installed in the folder it
-  authors in, makes one with `common::older_project`. What git would list is
-  asked of gix too (`common::untracked`).
+  authors in, makes one with `common::older_project`, and one about a
+  project a `settings.json` marks with `common::json_project`, which writes
+  the file as a version 3 `mind init` did. What git would list is
+  asked of gix too (`common::untracked`), and a core fixture has git track
+  its files by writing the index with gix (`common::indexed`). A core test
+  about which `CLAUDE.md` Claude finds first holds its temporary folder to
+  have none above it (`claude_md_test.rs`'s `clean`).
 - Tests that run a shell (`apps/cli/tests/shells_test.rs`, Linux only) start
   it with no startup file and an environment holding only a `PATH`, a
   temporary `HOME` and what the test sets, so no `MINDFLAYER_*` variable or
