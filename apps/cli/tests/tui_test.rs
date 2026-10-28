@@ -668,6 +668,15 @@ fn a_on_a_foreign_skill_adopts_it_into_the_library_once_asked() {
 
     press_key(&mut app, KeyCode::Char('A'));
     assert!(tui_drawn(&app).contains("Adopt notes from alpha into the library?"));
+    let Mode::Confirming(confirm) = &app.mode else {
+        panic!("{:?}", app.mode);
+    };
+    assert_eq!(
+        confirm.question[2],
+        "It is copied into the workspace's library, and the project's copies are recorded as \
+         installed from there, as they are: updates reach them from now on. Nothing in the \
+         project is written."
+    );
     let task = press_and_run(&mut app, KeyCode::Char('y'));
 
     let adopt = Task::Adopt {

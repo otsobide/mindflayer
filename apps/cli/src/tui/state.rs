@@ -1736,7 +1736,9 @@ impl App {
                 format!("Adopt {name} from {} into the library?", member.name),
                 String::new(),
                 String::from(
-                    "It is copied into the workspace's library, and the project's copies are                      recorded as installed from there, as they are: updates reach them from now                      on. Nothing in the project is written.",
+                    "It is copied into the workspace's library, and the project's copies are \
+                     recorded as installed from there, as they are: updates reach them from now \
+                     on. Nothing in the project is written.",
                 ),
             ],
             task: Task::Adopt {
