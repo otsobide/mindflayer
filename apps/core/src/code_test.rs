@@ -237,3 +237,21 @@ fn errors_in(root: &Path, folder: &Path, found: &mut Vec<String>) {
         }
     }
 }
+
+/// An error can quote a URL, and what built it is no promise that the URL
+/// carries no credential, so its message is redacted where it is written.
+#[test]
+fn an_error_is_said_without_the_credentials_a_url_in_it_carries() {
+    let said = Said::of(
+        "fetch_failed",
+        &"https://me:s3cret@example.com/acme/skills: cannot be fetched",
+    );
+
+    assert_eq!(
+        serde_json::to_string(&said).unwrap(),
+        concat!(
+            r#"{"code":"fetch_failed","#,
+            r#""message":"https://example.com/acme/skills: cannot be fetched"}"#
+        )
+    );
+}

@@ -208,13 +208,19 @@ pub const ALL: &[(&str, &[&str])] = &[
 /// An error as a serialized type holds one: its code, for a front end to act
 /// on, and its message, for whoever reads it.
 ///
-/// Built where the type is serialized rather than kept, since an error holds
-/// what JSON has no shape for (an `io::Error`, a parser's own), and only
-/// these two are meant to leave core.
-#[derive(Debug, Serialize)]
-pub(crate) struct Said {
-    code: &'static str,
-    message: String,
+/// Built where the type is serialized, or kept in what a front end reads
+/// (the workspace's snapshot), in place of the error, since an error
+/// holds what JSON has no shape for (an `io::Error`, a parser's own), and
+/// only these two are meant to leave core. Its fields are public for a
+/// front end that reads the snapshot as Rust rather than as JSON, the TUI.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct Said {
+    pub code: &'static str,
+    /// Written through [`redacted`](crate::url::redacted), as every URL
+    /// is: an error can quote one, a source's among them, and what built
+    /// the error is no promise that it carries no credential.
+    #[serde(serialize_with = "crate::url::serialize_redacted")]
+    pub message: String,
 }
 
 impl Said {
