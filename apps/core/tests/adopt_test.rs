@@ -9,8 +9,11 @@ use std::path::{Path, PathBuf};
 
 use common::skill;
 use mindflayer_core::adopt::{self, AdoptError, Git};
+use mindflayer_core::copy;
 use mindflayer_core::hash;
 use mindflayer_core::install::{self, Edits};
+use mindflayer_core::ledger::Target;
+use mindflayer_core::update;
 use mindflayer_core::{
     create, Agent, AgentHomes, Directories, FlayerWorkspace, Kind, MindProject, Reference, Share,
 };
@@ -363,4 +366,298 @@ fn what_gh_skill_says_of_where_it_came_from_is_shown() {
             (String::from("github-ref"), String::from("v1")),
         ]
     );
+}
+
+// ---------------------------------------------------------------------------
+// Adopting
+// ---------------------------------------------------------------------------
+
+fn adopted(workspace: &FlayerWorkspace, project: &MindProject, typed: &str) -> adopt::Adopted {
+    adopt::apply(
+        workspace,
+        project,
+        &Reference::parse(typed),
+        &AgentHomes::default(),
+    )
+    .unwrap()
+}
+
+/// Every file under `root` but git's own, with what it holds: what adopting
+/// must leave as it was.
+fn files(root: &Path) -> Vec<(PathBuf, Vec<u8>)> {
+    fn walk(dir: &Path, found: &mut Vec<(PathBuf, Vec<u8>)>) {
+        for entry in fs::read_dir(dir).unwrap() {
+            let path = entry.unwrap().path();
+            if path.file_name().is_some_and(|name| name == ".git") {
+                continue;
+            }
+            if path.is_dir() {
+                walk(&path, found);
+            } else {
+                found.push((path.clone(), fs::read(&path).unwrap()));
+            }
+        }
+    }
+    let mut found = Vec::new();
+    walk(root, &mut found);
+    found.sort();
+    found
+}
+
+fn standing(workspace: &FlayerWorkspace, project: &MindProject, name: &str) -> install::Standing {
+    let ledger = workspace.ledger_for_reading().unwrap();
+    install::standings(workspace, &ledger, project, Kind::Skill)
+        .unwrap()
+        .into_iter()
+        .find(|(each, _)| each == name)
+        .map(|(_, standing)| standing)
+        .unwrap_or_else(|| panic!("{name} is not recorded"))
+}
+
+fn update(workspace: &FlayerWorkspace, project: &MindProject) -> update::Applied {
+    update::apply(
+        workspace,
+        std::slice::from_ref(project),
+        &[],
+        Edits::Kept,
+        &AgentHomes::default(),
+    )
+    .unwrap()
+}
+
+#[test]
+fn adopting_copies_into_the_library_records_the_copies_and_leaves_the_project_as_it_was() {
+    let (_dir, workspace, project) = given(Share::Shared);
+    let before = files(project.root());
+
+    let done = adopted(&workspace, &project, "notes");
+
+    assert_eq!(files(project.root()), before);
+    let library = library(&workspace, "notes");
+    assert!(copy::same(&claudes(&project, "notes"), &library).unwrap());
+    assert_eq!(done.plan.library, library);
+    assert!(done.excluded.is_none());
+    let record = workspace
+        .ledger()
+        .unwrap()
+        .installation("collapse", Kind::Skill, "notes")
+        .unwrap()
+        .unwrap();
+    assert_eq!(record.origin.as_deref(), Some("workspace"));
+    assert_eq!(record.source_id, None);
+    assert_eq!(
+        record.content_hash,
+        Some(hash::tree(&claudes(&project, "notes")).unwrap())
+    );
+    assert_eq!(
+        record.targets,
+        [
+            Target {
+                agent: None,
+                path: String::from(".agents/skills/notes"),
+                content_hash: None,
+            },
+            Target {
+                agent: Some(String::from("claude")),
+                path: String::from(".claude/skills/notes"),
+                content_hash: None,
+            },
+        ]
+    );
+}
+
+#[test]
+fn a_target_with_no_copy_reads_as_missing_until_an_update_puts_it_there() {
+    let (_dir, workspace, project) = given(Share::Shared);
+    adopted(&workspace, &project, "notes");
+
+    assert_eq!(
+        standing(&workspace, &project, "notes"),
+        install::Standing::Missing
+    );
+    update(&workspace, &project);
+
+    assert!(copy::same(&claudes(&project, "notes"), &agents(&project, "notes")).unwrap());
+    assert_eq!(
+        standing(&workspace, &project, "notes"),
+        install::Standing::Current
+    );
+}
+
+#[test]
+fn copies_in_every_target_are_current_once_adopted() {
+    let (_dir, workspace, project) = given(Share::Shared);
+    write_skill(&agents(&project, "notes"), &skill("notes", "Keep notes"));
+
+    adopted(&workspace, &project, "notes");
+
+    assert_eq!(
+        standing(&workspace, &project, "notes"),
+        install::Standing::Current
+    );
+}
+
+#[test]
+fn an_update_brings_an_adopted_copy_along_once_the_library_moves_on() {
+    let (_dir, workspace, project) = given(Share::Shared);
+    write_skill(&agents(&project, "notes"), &skill("notes", "Keep notes"));
+    adopted(&workspace, &project, "notes");
+    let newer = skill("notes", "Keep better notes");
+    fs::write(library(&workspace, "notes").join("SKILL.md"), &newer).unwrap();
+    assert_eq!(
+        standing(&workspace, &project, "notes"),
+        install::Standing::Outdated
+    );
+
+    update(&workspace, &project);
+
+    for copy in [claudes(&project, "notes"), agents(&project, "notes")] {
+        assert_eq!(fs::read_to_string(copy.join("SKILL.md")).unwrap(), newer);
+    }
+    assert_eq!(
+        standing(&workspace, &project, "notes"),
+        install::Standing::Current
+    );
+}
+
+#[test]
+fn a_copy_edited_after_it_was_adopted_reads_as_edited() {
+    let (_dir, workspace, project) = given(Share::Shared);
+    adopted(&workspace, &project, "notes");
+
+    fs::write(claudes(&project, "notes").join("notes.md"), "mine").unwrap();
+
+    assert_eq!(
+        standing(&workspace, &project, "notes"),
+        install::Standing::Edited
+    );
+}
+
+#[test]
+fn adopting_a_skill_twice_is_refused_as_installed_already() {
+    let (_dir, workspace, project) = given(Share::Shared);
+    adopted(&workspace, &project, "notes");
+
+    let refused = adopt::apply(
+        &workspace,
+        &project,
+        &Reference::parse("notes"),
+        &AgentHomes::default(),
+    )
+    .unwrap_err();
+
+    assert!(
+        matches!(refused, AdoptError::Installed { .. }),
+        "{refused:?}"
+    );
+}
+
+#[test]
+fn a_refused_adoption_writes_nothing() {
+    let (_dir, workspace, project) = given(Share::Shared);
+    create(&workspace.own(), Kind::Skill, "notes", "The library's").unwrap();
+    let held = files(&library(&workspace, "notes"));
+
+    let refused = adopt::apply(
+        &workspace,
+        &project,
+        &Reference::parse("notes"),
+        &AgentHomes::default(),
+    )
+    .unwrap_err();
+
+    assert!(
+        matches!(refused, AdoptError::InLibrary { .. }),
+        "{refused:?}"
+    );
+    assert_eq!(files(&library(&workspace, "notes")), held);
+    assert!(workspace
+        .ledger()
+        .unwrap()
+        .installation("collapse", Kind::Skill, "notes")
+        .unwrap()
+        .is_none());
+}
+
+/// The lines of the project's group in the repository's exclude file.
+fn excluded(project: &MindProject) -> Vec<String> {
+    let id = project.settings().unwrap().id.clone();
+    let text = fs::read_to_string(project.root().join(".git/info/exclude")).unwrap_or_default();
+    let header = format!("# project {id}");
+    text.lines()
+        .skip_while(|line| *line != header)
+        .skip(1)
+        .take_while(|line| !line.starts_with('#'))
+        .map(str::to_owned)
+        .collect()
+}
+
+#[test]
+fn a_local_project_keeps_an_adopted_copy_git_tracks_in_git_and_the_rest_out() {
+    let (_dir, workspace, project) = given(Share::Local);
+    write_skill(&agents(&project, "notes"), &skill("notes", "Keep notes"));
+    // The team committed `.claude/skills`, and nothing else.
+    let agents_folder = project.root().join(".agents");
+    let aside = project.root().join("aside");
+    fs::rename(&agents_folder, &aside).unwrap();
+    common::indexed(project.root());
+    fs::rename(&aside, &agents_folder).unwrap();
+
+    let done = adopted(&workspace, &project, "notes");
+
+    assert!(matches!(
+        done.excluded,
+        Some(mindflayer_core::Excluded::Written { .. })
+    ));
+    assert_eq!(excluded(&project), ["/.agents/skills/notes/"]);
+
+    // And an update writing the tracked one leaves it in git still.
+    fs::write(
+        library(&workspace, "notes").join("SKILL.md"),
+        skill("notes", "Keep better notes"),
+    )
+    .unwrap();
+    update(&workspace, &project);
+    assert_eq!(excluded(&project), ["/.agents/skills/notes/"]);
+}
+
+// Unix only: a folder's write permission is what is taken away, and Windows
+// keeps none on a folder.
+#[cfg(unix)]
+#[test]
+fn a_library_that_cannot_be_written_takes_back_the_exclude_lines_it_added() {
+    use std::os::unix::fs::PermissionsExt;
+
+    let (_dir, workspace, project) = given(Share::Local);
+    let folder = workspace.own().directory_for(Kind::Skill).unwrap();
+    fs::create_dir_all(&folder).unwrap();
+    fs::set_permissions(&folder, fs::Permissions::from_mode(0o555)).unwrap();
+    let probe = folder.join(".probe");
+    let writable = fs::write(&probe, "").is_ok();
+    let _ = fs::remove_file(&probe);
+
+    let refused = adopt::apply(
+        &workspace,
+        &project,
+        &Reference::parse("notes"),
+        &AgentHomes::default(),
+    );
+    fs::set_permissions(&folder, fs::Permissions::from_mode(0o755)).unwrap();
+    if writable {
+        eprintln!("skipped: {} can be written all the same", folder.display());
+        return;
+    }
+
+    assert!(
+        matches!(refused, Err(AdoptError::Write { .. })),
+        "{refused:?}"
+    );
+    assert!(excluded(&project).is_empty(), "{:?}", excluded(&project));
+    assert!(!library(&workspace, "notes").exists());
+    assert!(workspace
+        .ledger()
+        .unwrap()
+        .installation("collapse", Kind::Skill, "notes")
+        .unwrap()
+        .is_none());
 }

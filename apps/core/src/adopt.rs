@@ -22,9 +22,12 @@
 //! would then disagree with.
 //!
 //! [`plan`] says what adopting would do, writing nothing, the ledger read
-//! without being made.
+//! without being made, and [`apply`] does it: under the workspace's lock,
+//! planned again there, the library copy and the record written together or
+//! not at all.
 
 use std::fs;
+use std::io;
 use std::path::{Path, PathBuf};
 
 use thiserror::Error;
@@ -32,10 +35,13 @@ use thiserror::Error;
 use crate::agent::{Agent, AgentHomes};
 use crate::artifact::{self, issue_list, Artifact, ArtifactError, ValidationIssue};
 use crate::catalog::{Catalog, Reference, QUALIFIER};
+use crate::copy;
+use crate::exclude::{self, ExcludeError, Excluded};
+use crate::gather::Scrub;
 use crate::hash;
-use crate::install::{self, InstallError};
+use crate::install::{self, InstallError, WORKSPACE_ORIGIN};
 use crate::kind::Kind;
-use crate::ledger::{Ledger, LedgerError};
+use crate::ledger::{Action, InstallRecord, Ledger, LedgerError, Outcome, Target};
 use crate::skill::SkillManifest;
 use crate::workspace::{same_directory, FlayerWorkspace, MindProject, WorkspaceError};
 
@@ -99,6 +105,20 @@ pub enum Git {
     Tracked,
 }
 
+/// What [`apply`] did.
+#[derive(Debug)]
+pub struct Adopted {
+    /// What was planned, under the lock, and is now done: the library copy
+    /// made, and every copy recorded as installed from it.
+    pub plan: Plan,
+    /// What keeping a local project's untracked copies out of git came to:
+    /// `None` when it had none to keep out.
+    pub excluded: Option<Excluded>,
+    /// What opening the ledger to write took out of it, for the front end
+    /// to say.
+    pub scrub: Scrub,
+}
+
 /// Why a skill could not be adopted, before anything was written.
 #[derive(Debug, Error)]
 pub enum AdoptError {
@@ -145,6 +165,16 @@ pub enum AdoptError {
         library: PathBuf,
         copy: PathBuf,
     },
+    #[error("{path}: cannot be written: {source}, so nothing was adopted")]
+    Write {
+        path: PathBuf,
+        #[source]
+        source: io::Error,
+    },
+    #[error("{copy} changed while it was copied to {library}, so nothing was adopted and that copy was taken back out: adopt it again")]
+    Changed { library: PathBuf, copy: PathBuf },
+    #[error("{0}, and nothing was adopted, since its copies could not be kept out of git")]
+    Exclude(#[from] ExcludeError),
     #[error(transparent)]
     Install(#[from] InstallError),
     #[error(transparent)]
@@ -169,6 +199,158 @@ pub fn plan(
 ) -> Result<Plan, AdoptError> {
     let ledger = workspace.ledger_for_reading()?;
     plan_with(workspace, &ledger, project, reference, homes)
+}
+
+/// Adopt the skill `reference` names from `project`: [`plan`], done.
+///
+/// The ledger is opened to write, scrubbing it, before the workspace's lock
+/// is taken, since a scrub takes it itself, and the lock is held until the
+/// record is written, so what the ledger says was adopted is what the
+/// library holds. Under it the project is read again and the plan made
+/// again: one shown a minute before, or a change in between, decides
+/// nothing.
+///
+/// Then, in that order: a local project's copies that git tracks nothing in
+/// are kept out of git, so a block that cannot be edited refuses the whole
+/// adoption with nothing written; the library copy is made, from the first
+/// copy, and held to the plan's hash, so a copy changed while it was copied
+/// is not recorded under a hash it no longer holds; and the installation is
+/// recorded, every target an install would write, with that hash and the
+/// workspace's own as its origin. A step that fails takes back what those
+/// before it wrote: the library copy goes, and the exclude lines this added.
+/// The action log is written last, and one that cannot be is an error, as
+/// it is after an install, with what was adopted left adopted, both halves
+/// of it there. Nothing in the project is written, ever.
+pub fn apply(
+    workspace: &FlayerWorkspace,
+    project: &MindProject,
+    reference: &Reference,
+    homes: &AgentHomes,
+) -> Result<Adopted, AdoptError> {
+    let (ledger, scrub) = workspace.ledger_to_write()?;
+    let _lock = workspace.lock().map_err(WorkspaceError::from)?;
+    let project = MindProject::open(project.root())?;
+    let plan = plan_with(workspace, &ledger, &project, reference, homes)?;
+
+    let root = project.root();
+    let out: Vec<PathBuf> = plan
+        .copies
+        .iter()
+        .filter(|copy| copy.git == Some(Git::KeptOut))
+        .map(|copy| copy.path.clone())
+        .collect();
+    let (excluded, fresh) = match install::local(&project) {
+        Some(key) if !out.is_empty() => {
+            let entries = install::entries(&project, &out);
+            // Only the lines this adds are taken back out on a failure: one
+            // the group held already, by hand or from an install whose
+            // record has gone since, was not this adoption's to take.
+            let fresh: Vec<exclude::Entry> = match exclude::listed(root, key)? {
+                Some(listing) => entries
+                    .iter()
+                    .filter(|entry| {
+                        entry
+                            .pattern(&listing.route)
+                            .is_ok_and(|line| !listing.lines.contains(&line))
+                    })
+                    .cloned()
+                    .collect(),
+                None => Vec::new(),
+            };
+            (Some(exclude::add(root, key, &entries)?), fresh)
+        }
+        _ => (None, Vec::new()),
+    };
+    let undo = |library: bool| {
+        if library {
+            let _ = fs::remove_dir_all(&plan.library);
+        }
+        if let (Some(key), false) = (install::local(&project), fresh.is_empty()) {
+            let _ = exclude::remove(root, key, &fresh);
+        }
+    };
+
+    if let Err(error) = into_library(&plan) {
+        // A library copy that was there before it was made is somebody's,
+        // and stays.
+        undo(!matches!(error, AdoptError::InLibrary { .. }));
+        return Err(error);
+    }
+    let entry = install::entry_for_root(workspace, root);
+    let recorded = ledger.installed(
+        &entry,
+        &InstallRecord {
+            kind: Kind::Skill,
+            name: plan.name.clone(),
+            source_id: None,
+            origin: Some(String::from(WORKSPACE_ORIGIN)),
+            content_hash: Some(plan.hash.clone()),
+            targets: plan
+                .copies
+                .iter()
+                .map(|copy| Target {
+                    agent: install::agent_of(&copy.agents),
+                    path: install::route(root, &copy.path),
+                    // Every copy holds the tree `content_hash` names.
+                    content_hash: None,
+                })
+                .collect(),
+        },
+    );
+    if let Err(error) = recorded {
+        undo(true);
+        return Err(error.into());
+    }
+    let detail = format!(
+        "{} from {} into the library at {}",
+        plan.name,
+        project.name(),
+        install::route(workspace.root(), &plan.library)
+    );
+    ledger.log(Action::Adopt, Some(&entry), Outcome::Ok, Some(&detail))?;
+    Ok(Adopted {
+        plan,
+        excluded,
+        scrub,
+    })
+}
+
+/// Make the library copy `plan` names, from its source, holding the hash
+/// the plan recorded every copy holds.
+///
+/// Its folder is made with `create_dir`, which refuses one somebody made in
+/// the meantime rather than copying into it, and the folder of the
+/// workspace's own skills above it is made when it is missing, as the first
+/// one added makes it. Built in place rather than beside: no agent reads
+/// the library, and a rename into a folder made since would put it inside.
+fn into_library(plan: &Plan) -> Result<(), AdoptError> {
+    let write = |path: &Path, source: io::Error| AdoptError::Write {
+        path: path.to_path_buf(),
+        source,
+    };
+    if let Some(folder) = plan.library.parent() {
+        fs::create_dir_all(folder).map_err(|source| write(folder, source))?;
+    }
+    fs::create_dir(&plan.library).map_err(|source| match source.kind() {
+        io::ErrorKind::AlreadyExists => AdoptError::InLibrary {
+            name: plan.name.clone(),
+            library: plan.library.clone(),
+            copy: plan.source.clone(),
+        },
+        _ => write(&plan.library, source),
+    })?;
+    // Links are followed only inside the copy, and the plan refused any it
+    // held, so one there now was put there since, and the hash refuses it.
+    let copied = copy::tree(&plan.source, &plan.library, &plan.source)
+        .and_then(|()| hash::tree(&plan.library));
+    match copied {
+        Ok(hash) if hash == plan.hash => Ok(()),
+        Ok(_) => Err(AdoptError::Changed {
+            library: plan.library.clone(),
+            copy: plan.source.clone(),
+        }),
+        Err(source) => Err(write(&plan.library, source)),
+    }
 }
 
 /// [`plan`], against `ledger`.

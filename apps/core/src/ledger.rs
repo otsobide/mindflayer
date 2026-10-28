@@ -117,6 +117,9 @@ pub enum Action {
     Uninstall,
     /// Following a project the workspace links to where it moved.
     Relink,
+    /// Bringing a skill somebody kept in a project into the library, its
+    /// copies recorded as installed from there.
+    Adopt,
 }
 
 impl Action {
@@ -126,6 +129,7 @@ impl Action {
             Action::Install => "install",
             Action::Uninstall => "uninstall",
             Action::Relink => "relink",
+            Action::Adopt => "adopt",
         }
     }
 }
