@@ -747,7 +747,6 @@ pub(crate) fn unreached(project: &MindProject, kinds: &[Kind], agents: &[Agent])
         .collect()
 }
 
-/// A registry entry as the marker spells it, with `/` whatever the platform.
 #[cfg(test)]
 #[path = "status_test.rs"]
 mod tests;
