@@ -130,7 +130,7 @@ fn nothing(plan: &Plan, unread: bool) -> String {
 }
 
 /// `a`, `a and b`, `a, b and c`.
-fn listed(words: &[&str]) -> String {
+pub(crate) fn listed(words: &[&str]) -> String {
     match words {
         [] => String::new(),
         [one] => (*one).to_owned(),

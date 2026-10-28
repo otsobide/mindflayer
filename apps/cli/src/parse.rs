@@ -258,7 +258,13 @@ pub enum Command {
     /// Take a skill or a rule Mindflayer installed back out of this project.
     Uninstall {
         /// Its name, or `kind:name` when one name is both.
-        name: String,
+        #[arg(required_unless_present = "orphaned")]
+        name: Option<String>,
+
+        /// Every installation nothing offers any more where it came from,
+        /// instead of one by name.
+        #[arg(long, conflicts_with = "name")]
+        orphaned: bool,
 
         /// Take out a copy changed since it was installed too, which is
         /// otherwise left alone with every other copy.
@@ -502,6 +508,9 @@ pub enum FlayerCommand {
     },
 
     /// Delete one of the workspace's own artifacts, or a project's.
+    ///
+    /// One of the workspace's own installed into its projects leaves its
+    /// copies there orphaned; --everywhere takes them out first.
     #[command(alias = "rm")]
     Remove {
         /// Its name, or `kind:name`.
@@ -510,6 +519,12 @@ pub enum FlayerCommand {
         /// A project this workspace manages, instead of the workspace itself.
         #[arg(short, long, value_name = "PROJECT")]
         project: Option<String>,
+
+        /// Uninstall it from every project this workspace links first,
+        /// leaving a copy changed since it was installed, and somebody's own
+        /// of that name.
+        #[arg(long, conflicts_with = "project")]
+        everywhere: bool,
 
         /// Delete it. Without this nothing is deleted, and the command says
         /// what would be.
@@ -686,7 +701,13 @@ pub enum FlayerCommand {
         all_projects: bool,
 
         /// Its name, or `kind:name` when one name is both.
-        name: String,
+        #[arg(required_unless_present = "orphaned")]
+        name: Option<String>,
+
+        /// Every installation nothing offers any more where it came from,
+        /// instead of one by name.
+        #[arg(long, conflicts_with = "name")]
+        orphaned: bool,
 
         /// Take out a copy changed since it was installed too, which is
         /// otherwise left alone with every other copy.

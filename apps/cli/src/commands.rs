@@ -27,9 +27,12 @@ use mindflayer_core::{
 use crate::homes::Lookup;
 use crate::{tui, Cli, CliError, Command, Failure, FlayerCli, FlayerCommand, Outcome};
 use activate::{activate_command, which_command};
-use artifact::{add_to, edit_in, remove_from, rename_in, templates_of};
+use artifact::{
+    add_to, edit_in, remove_everywhere, remove_from, remove_own, rename_in, templates_of,
+    would_remove_everywhere,
+};
 use gather::run_gather;
-use install::{install_named, uninstall_named};
+use install::{install_named, uninstall_named, uninstall_orphans};
 use migrate::{migrate_all, migrate_here, migrate_library, migrate_one, Asked};
 use project::{
     init_project, init_workspace, link_here, link_projects, scan_workspace, unlink_here,
@@ -188,10 +191,14 @@ pub(crate) fn run_with(cli: &Cli, lookup: &Lookup, watch: &Watch) -> Result<Outc
                 *force,
             )
         }
-        Command::Uninstall { name, force } => {
+        // The parser holds a name and --orphaned apart, and asks for one.
+        Command::Uninstall { name, force, .. } => {
             let project = project_here(&directory)?;
             let workspace = managing(&project, lookup)?;
-            uninstall_named(&workspace, &[project], name, &lookup.agents, *force)
+            match name {
+                Some(name) => uninstall_named(&workspace, &[project], name, &lookup.agents, *force),
+                None => uninstall_orphans(&workspace, &[project], &lookup.agents, *force),
+            }
         }
         Command::Update { names, force, yes } => {
             let project = project_here(&directory)?;
@@ -343,19 +350,31 @@ fn run_flayer(
                 to,
             )
         }
+        // Without --yes it deletes nothing, so it is resolved as a read and
+        // makes no workspace, the default one in home included: a dry run
+        // that wrote a marker would not be one.
         FlayerCommand::Remove {
             reference,
             project,
+            everywhere,
             yes,
-        } => {
-            let workspace = workspace_here(directory, lookup)?;
-            remove_from(
-                Some(&workspace),
-                &workspace.holder(project.as_deref())?,
+        } => match (*everywhere, *yes) {
+            (true, true) => remove_everywhere(
+                &workspace_here(directory, lookup)?,
                 reference,
-                *yes,
-            )
-        }
+                &lookup.agents,
+            ),
+            (true, false) => reading_workspace(directory, lookup, |workspace| {
+                would_remove_everywhere(workspace, reference)
+            }),
+            (false, true) => {
+                let workspace = workspace_here(directory, lookup)?;
+                removed_from(&workspace, project.as_deref(), reference, true)
+            }
+            (false, false) => reading_workspace(directory, lookup, |workspace| {
+                removed_from(workspace, project.as_deref(), reference, false)
+            }),
+        },
         FlayerCommand::Templates { project } => reading_workspace(directory, lookup, |workspace| {
             templates_of(Some(workspace), &workspace.holder(project.as_deref())?)
         }),
@@ -434,6 +453,7 @@ fn run_flayer(
             all_projects,
             name,
             force,
+            ..
         } => {
             if projects.is_empty() && !*all_projects {
                 return Err(CliError::UninstallWhere.into());
@@ -443,10 +463,11 @@ fn run_flayer(
                 if asked.is_empty() {
                     return Ok(none_linked("removed", unread));
                 }
-                beside_all(
-                    uninstall_named(workspace, &asked, name, &lookup.agents, *force),
-                    unread,
-                )
+                let done = match name {
+                    Some(name) => uninstall_named(workspace, &asked, name, &lookup.agents, *force),
+                    None => uninstall_orphans(workspace, &asked, &lookup.agents, *force),
+                };
+                beside_all(done, unread)
             })
         }
 
@@ -765,6 +786,21 @@ fn workspace_for(project: &MindProject, lookup: &Lookup) -> Result<FlayerWorkspa
     resolve(&lookup.inputs(project.root(), Intent::Write))?
         .map(|resolved| resolved.workspace)
         .ok_or_else(|| CliError::NoWorkspaceAbove(project.root().to_path_buf()))
+}
+
+/// `flayer remove` without `--everywhere`: of one of the workspace's own,
+/// with what it leaves orphaned said beside it, or of `project`'s, a
+/// project the workspace links, whose own nothing installed anywhere.
+fn removed_from(
+    workspace: &FlayerWorkspace,
+    project: Option<&str>,
+    reference: &str,
+    yes: bool,
+) -> Result<Outcome, Failure> {
+    match project {
+        None => remove_own(workspace, reference, yes),
+        Some(_) => remove_from(Some(workspace), &workspace.holder(project)?, reference, yes),
+    }
 }
 
 /// The projects a command names: each one `-p` names, by name or path, or,

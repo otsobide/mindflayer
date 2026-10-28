@@ -1,6 +1,7 @@
 //! The commands that put one skill or rule into projects and take it back
 //! out: `install` and `uninstall`, at either level, into one project or, at
-//! the workspace's, into each of several at once. The screen `flayer
+//! the workspace's, into each of several at once; and `uninstall --orphaned`,
+//! which takes out whatever nothing offers any more. The screen `flayer
 //! install` opens on its own is [`crate::install`].
 
 use std::path::Path;
@@ -10,6 +11,7 @@ use mindflayer_core::install::rules::Rendered;
 use mindflayer_core::{AgentHomes, FlayerWorkspace, Kind, MindProject, Reference};
 
 use crate::commands::gather::{scrubbed, Scrubbed};
+use crate::commands::update::listed as words_listed;
 use crate::commands::workspace::load_warnings;
 use crate::{CliError, Failure, Outcome};
 
@@ -466,6 +468,73 @@ pub(crate) fn uninstall_named(
         })
         .collect();
     together(said, each, Vec::new())
+}
+
+/// Take every installation nothing offers any more where it came from back
+/// out of each of `projects`, through core's batch
+/// ([`assign::uninstall_orphaned`]), handing it the agents' own folders,
+/// `homes`, as an uninstall by name does. `force` takes out one changed
+/// since it was installed too, which core otherwise leaves alone with the
+/// rest of its copies.
+///
+/// Each one taken out is said as an uninstall of it by name says it,
+/// project by project in the order asked, and one that fails as an error of
+/// its project while the rest stand, as [`together`] says them. With none
+/// orphaned anywhere asked, that is said, and is no failure, as it was
+/// asked to be. What could not be offered is said after it all, the
+/// workspace's own first, as it is offered first, then the loaded
+/// workspaces': an installation from an artifact that cannot be read, or a
+/// loaded workspace that cannot be opened, is not taken for orphaned, and
+/// this is why it stays.
+pub(crate) fn uninstall_orphans(
+    workspace: &FlayerWorkspace,
+    projects: &[MindProject],
+    homes: &AgentHomes,
+    force: bool,
+) -> Result<Outcome, Failure> {
+    use mindflayer_core::install::Removed;
+
+    let assigned = assign::uninstall_orphaned(workspace, projects, homes, edits(force))
+        .map_err(CliError::from)?;
+    let said = scrubbed(&assigned.scrub);
+    let mut unoffered: Vec<String> = mindflayer_core::install::own_failures(workspace, &Kind::ALL)
+        .iter()
+        .map(|failure| format!("warning: {failure}"))
+        .collect();
+    unoffered.extend(load_warnings(workspace));
+    let among = assigned.parts.len() > 1;
+    let mut asked: Vec<String> = Vec::new();
+    let mut each: Vec<(String, Result<Outcome, Failure>)> = Vec::new();
+    for part in assigned.parts {
+        let from = part.project.name().to_owned();
+        asked.push(from.clone());
+        let orphans = match part.done {
+            Ok(orphans) => orphans,
+            Err(error) => {
+                each.push((from, Err(CliError::from(error).into())));
+                continue;
+            }
+        };
+        for orphan in orphans {
+            // Taken out by something else since it was found.
+            if matches!(orphan.removed, Ok(Removed::Absent { .. })) {
+                continue;
+            }
+            let done = orphan.removed.map(|removed| (orphan.kind, removed));
+            each.push((from.clone(), uninstall_said(&part.project, done, among)));
+        }
+    }
+    if each.is_empty() {
+        let asked: Vec<&str> = asked.iter().map(String::as_str).collect();
+        let mut outcome = Outcome::plain(format!(
+            "nothing removed: nothing installed in {} is orphaned\n",
+            words_listed(&asked)
+        ));
+        outcome.ok = unoffered.is_empty();
+        outcome.stderr = unoffered;
+        return Ok(said.before(outcome));
+    }
+    together(said, each, unoffered)
 }
 
 /// One project's part of an uninstall, `done`, as a command that takes it

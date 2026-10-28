@@ -22,6 +22,7 @@ pub mod claude_rules;
 pub mod config_entry;
 pub mod copy;
 pub mod create;
+pub mod everywhere;
 pub mod exclude;
 pub mod frontmatter;
 pub mod gather;

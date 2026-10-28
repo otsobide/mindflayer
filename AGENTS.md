@@ -87,8 +87,10 @@ under `apps/` with its own `Makefile`:
   (`status`), creating and changing artifacts, and moving a workspace's own
   into its library and a project from its `mind.toml` or `settings.json` to a
   `settings.toml` (`migrate`), bringing what was installed up to date with
-  where it came from (`update`), and installing one artifact into several
-  projects at once, or taking it out of them (`assign`). Its only I/O is
+  where it came from (`update`), installing one artifact into several
+  projects at once, or taking it, or whatever nothing offers any more, out
+  of them (`assign`), and removing one of the workspace's own from every
+  project it links before the library (`everywhere`). Its only I/O is
   files, and it never reads the environment.
 - `apps/cli` (`mindflayer-cli`): the binaries `mind` (`src/main.rs`) and
   `flayer` (`src/bin/flayer.rs`), and the TUI. `src/lib.rs` only re-exports
@@ -217,8 +219,8 @@ These are easy to break from a single file without noticing.
     installed along with them.
   - Creation uses `create_new` or `create_dir`.
   - `rename` rewrites only the `name:` line (`frontmatter::with_key`).
-  - `remove`, `migrate` at either level, `agents`, `share`, `targets` and
-    `update` are dry runs without `--yes`.
+  - `remove` (`flayer remove --everywhere` too), `migrate` at either level,
+    `agents`, `share`, `targets` and `update` are dry runs without `--yes`.
     A migration of the library moves nothing a project holds, refuses as a
     whole, and keeps the marker it rewrites as `flayer.toml.v<version>`
     (`create_new`). A project's (`migrate::project`) writes its
@@ -361,6 +363,10 @@ These are easy to break from a single file without noticing.
   `reapply::retarget`, and holds a record from before hashes to its offer
   (D-04). Being made once, it is refused when the workspace `mind migrate`
   consults cannot be read, never made as if that one recorded nothing.
+  Removing one of the workspace's own everywhere (`everywhere::apply`) and
+  `uninstall --orphaned` (`assign::uninstall_orphaned`) take copies out only
+  through `install::uninstall_with`, the first never forced, so an edited
+  copy and somebody's are left as an uninstall leaves them.
   `install::disown` and `install::carry` are private to core, so no front end
   drops or moves a record on its own. A front end adds through
   `lifecycle::add`, never `create` or `create_from`, which leave a stale

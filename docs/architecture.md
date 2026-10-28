@@ -462,7 +462,14 @@ one or the other, as a change of more than one place says which ([bringing
 what was installed up to date](#bringing-what-was-installed-up-to-date)).
 `flayer install` and `uninstall` take `-p` once for each project too, or
 `--all-projects` for every one, and need one or the other ([one artifact
-into many projects](#one-artifact-into-many-projects)).
+into many projects](#one-artifact-into-many-projects)); `uninstall
+--orphaned`, at either level, takes out what nothing offers any more in
+place of one name ([taking out what nothing
+offers](#taking-out-what-nothing-offers)). `flayer remove --everywhere`
+takes one of the workspace's own out of every project it links before the
+library, and has no `mind` form, nor a `-p`: a project's own was installed
+nowhere ([removing one of the workspace's own
+everywhere](#removing-one-of-the-workspaces-own-everywhere)).
 Reads look everywhere; a change needs one place, and without `-p` that place
 is the workspace.
 
@@ -2189,6 +2196,51 @@ answer when every one is asked; when none of them has it, that is the typo
 it is for one project, and refused as one. A batch of one project, named or
 the only one linked, is said exactly as one install was before.
 
+### Taking out what nothing offers
+
+An orphaned installation, one whose origin no longer offers it, stays as the
+project holds it: no update can write it, and no install screen offers it
+to untick. `uninstall --orphaned` takes every one out of the projects asked,
+`flayer`'s by `-p` or `--all-projects` as an uninstall by name takes them and
+`mind`'s the one it runs in, through core's `assign::uninstall_orphaned`,
+which is the batch above with `install::orphaned` choosing each project's
+names rather than the command line.
+
+- **What nothing offers, edited or not.** `install::orphaned` takes each
+  installation whose record `offered_for` matches to nothing, which is the
+  orphaned standing and the edited one that is orphaned beneath it, an edit
+  being said first; an update leaves both alike (`Step::Orphaned`). Each is
+  uninstalled as by name (`install::uninstall_with`), so the edited one is
+  refused unless forced, every copy of it, and said with `--force` as the
+  way out, as an uninstall by name says it.
+- **Not one from a loaded workspace that is away.** A loaded workspace that
+  cannot be opened offers nothing, so what was installed from it reads as
+  orphaned, as `status` says, while it is unmounted or moved. Taking it out
+  on that would take out what that workspace offers still once it is back,
+  so a record naming its origin is passed over while it cannot be opened,
+  and one from before origins were kept while any loaded workspace cannot
+  be, since it may be that one's. What the loaded workspaces could not
+  offer is said after the rest, as an install says it, so what was passed
+  over has its reason beside it.
+- **Nor one whose artifact cannot be read.** A skill whose front matter no
+  longer parses, or a folder that cannot be listed, offers nothing, so what
+  was installed from it reads as orphaned too, as `status` says; but it is
+  still there, somebody's to mend, and failures are collected, never a
+  reason to take out what they are about. So a record is passed over while
+  the place it came from, the workspace's own (`install::own_failures`) or
+  a loaded workspace's (`LoadFailure::Artifact`), has a failure about the
+  artifact's place or a folder it sits in (`install::orphaned`, by
+  `lifecycle::place`, since what cannot be read cannot say its name). The
+  workspace's own failures are said first, before the loaded workspaces',
+  as the own is offered first.
+- **None is no failure.** A project with nothing orphaned is as it was
+  asked to be, so it says nothing, and every project asked having none is
+  said in one line, exit zero; a project that cannot be surveyed, or an
+  uninstall that fails, is an error of its project while the rest stand.
+- **No ledger is made to say so.** The ledger is opened to write only when
+  there is one, as an update opens it: with none, nothing was installed to
+  be orphaned.
+
 ### What no copy holds
 
 A skill's own `.claude-plugin` folder, at its top, goes into no copy
@@ -2932,7 +2984,10 @@ the folders `flayer minds` was given for the session it opened
 be picked, but making it one writes into it, so `mind init` is asked about,
 not assumed, and a typed path that turns out to be a plain directory is asked
 about the same way. Unlinking asks too, and says that nothing on disk is
-deleted. A command that fails from a form leaves the form open with the reason
+deleted. Deleting one of the workspace's own asks with a second yes for
+removing it everywhere ([removing one of the workspace's own
+everywhere](#removing-one-of-the-workspaces-own-everywhere)), the line each
+answer runs shown under the question. A command that fails from a form leaves the form open with the reason
 in it, so a typo is fixed where it was made rather than typed out again.
 
 ### The minds screen
@@ -4679,7 +4734,76 @@ through a temporary file; if the second fails, the folder moves back.
 way `git clean` refuses without `-f`. It is the one command here that cannot be
 taken back, so it is asked for twice: once by naming what, once by saying yes.
 The TUI asks with a question and then runs the command with `--yes`, so the
-transcript shows the yes that was given.
+transcript shows the yes that was given. A `flayer remove` without `--yes`
+resolves its workspace as a read, as the dry runs of `update` and `migrate`
+do, so a dry run in a home nothing has made a workspace in leaves none
+behind.
+
+### Removing one of the workspace's own everywhere
+
+One of the workspace's own reaches a project by being installed there, so
+removing it from the library alone leaves every copy installed from it with
+a record nothing offers any more: orphaned, never updated again, and taken
+out only by an uninstall somebody remembers to run. `flayer remove`
+therefore names, beside a removal of one of the workspace's own, each
+project that has a copy of it, in the dry run with what `--everywhere` would
+do about it and after the removal with what takes them out now ([taking out
+what nothing offers](#taking-out-what-nothing-offers)), and a warning, since
+the copies left were not asked about. A removal that fails names none of
+them: it may have left the library copy whole, offering it still, or a
+skill's folder half deleted, offering nothing, and saying them orphaned, or
+sending somebody to `--everywhere` against a folder no longer found, would
+each be wrong half the time. `flayer remove --everywhere` is that
+done for you: core's `everywhere::plan` says what it would do, reading the
+ledger without making it, and `everywhere::apply` does it.
+
+- **The copies first, then the library.** Each project the workspace links
+  is surveyed for the artifact's name (`install::surveyed_one`), and each
+  copy nobody has changed since it was installed is uninstalled as `flayer
+  uninstall` would (`install::uninstall_with`, never forced): current,
+  outdated, missing one of its copies, or orphaned already. The library copy
+  goes last (`lifecycle::remove`), because a record from before hashes were
+  kept is told from an edit only against its offer, which the library copy
+  is.
+- **D-04 decides what stays.** An edited copy is somebody's work: left, every
+  copy of it, with its record, and from then on offered by nothing, which a
+  note says with the uninstall that takes it out once somebody has looked.
+  Somebody's own of that name, which nothing records (`install::somebodys`),
+  is never Mindflayer's to take out, and is listed as foreign so it is not
+  taken for a copy left behind.
+- **Only what came from the library.** A record naming the workspace's own as
+  its origin came from it. One installed from a loaded workspace or the
+  shelf under the same name stays, offered still by where it came from. One
+  from before origins were kept may have come from the workspace's own or
+  from any loaded workspace, and counts as the library's only while no
+  loaded workspace offers its name (`offered_for` matched against the
+  library alone and against everything else): taking out what may be
+  another workspace's would be a guess. The library copy is matched by its
+  place rather than found among the offers, so one whose front matter no
+  longer reads still finds what was installed from it.
+- **Only the projects it links.** A project another workspace links, or none,
+  keeps what was installed there, since the ledger that could say so is not
+  this one; a project linked but unreadable is a warning, as for `update
+  --all`.
+- **The library copy goes whatever the projects came to.** A copy whose
+  uninstall fails is an error of its project, said beside the rest, and the
+  library copy is removed all the same: what is left is orphaned, as a copy
+  left because it was edited is, and `uninstall --orphaned` finishes it.
+  Keeping the library copy back would ask for the whole removal again to
+  finish one project, and would make a failed project and an edited one two
+  different leftovers of one command.
+- **Each project's uninstall takes the lock for itself,** as `flayer
+  uninstall --all-projects` does ([one artifact into many
+  projects](#one-artifact-into-many-projects)), and looks again under it at
+  what the plan saw: a copy edited between the two is left all the same,
+  and said as left.
+- **A rule goes the same way.** Its uninstall renders the project's block
+  without it, or takes its copy out of a project a `mind.toml` marks.
+
+The TUI's confirmation for `d` on one of the workspace's own offers a second
+yes, `e`, which runs `flayer remove --everywhere --yes`, and shows the line
+each key runs; on a project's own, which was installed nowhere, it keeps the
+one yes.
 
 ### A record must not outlive the copy it is about
 
@@ -5576,6 +5700,14 @@ just listed.
   a removal as all or nothing as an install, at the price an install already
   pays: a target on another filesystem than the project's `.mind/tmp` could
   no longer be removed, where today it can.
+- **Removing everywhere is not one change.** `flayer remove --everywhere`
+  uninstalls project by project, each taking the lock for itself, and then
+  removes the library copy whatever they came to, so a project whose
+  uninstall failed, or a writer that came between two of them, leaves an
+  orphan behind for `uninstall --orphaned`. Holding the lock across the
+  projects and the library would make it one change, at the price of a body
+  of each uninstall, rules' render included, that runs under a lock it does
+  not take, as an update has.
 - **A batch takes turns row by row.** The install screen's batch calls core
   once for each row, and each call takes the workspace's lock for itself:
   another writer can come between two rows, and with the workspace busy every

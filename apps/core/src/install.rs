@@ -26,7 +26,7 @@ use std::time::Duration;
 use thiserror::Error;
 
 use crate::agent::{Agent, AgentHomes};
-use crate::agents_md::AgentsMdError;
+use crate::agents_md::{AgentsMd, AgentsMdError};
 use crate::artifact::{self, issue_list, name_issues, Artifact, ArtifactError, ValidationIssue};
 use crate::catalog::{Catalog, DiscoveryFailure, Reference, QUALIFIER};
 use crate::claude_md::ClaudeMdError;
@@ -42,7 +42,7 @@ use crate::ledger::{
 use crate::paths;
 use crate::settings::Share;
 use crate::url::redacted;
-use crate::workspace::{same_directory, FlayerWorkspace, MindProject, WorkspaceError};
+use crate::workspace::{same_directory, FlayerWorkspace, Loaded, MindProject, WorkspaceError};
 
 pub mod rules;
 mod standing;
@@ -656,42 +656,207 @@ pub(crate) fn surveyed(
         return Ok(Vec::new());
     }
     let offers = offers(workspace, ledger, kind)?;
-    // Matched on the kind, so a third one has to say how its copies are told.
-    let block = match kind {
-        Kind::Skill => None,
-        Kind::Rule => rules::block_file(project.root()),
-    };
+    let block = block_of(project, kind);
     Ok(records
         .into_iter()
-        .map(|record| {
-            let offered = offered_for(&record, &offers);
-            let (copies, standing) = match kind {
-                Kind::Skill => {
-                    let copies = standing::skill_copies(workspace, project, &record, &offered);
-                    let standing = standing::skill_standing(workspace, &copies, &offered);
-                    (copies, standing)
-                }
-                Kind::Rule => {
-                    let copies = standing::rule_copies(
-                        workspace,
-                        project,
-                        &record,
-                        block.as_ref(),
-                        &offered,
-                    );
-                    let standing = standing::rule_standing(workspace, &record, &copies, &offered);
-                    (copies, standing)
-                }
-            };
-            let offered = offered.into_iter().cloned().collect();
-            Surveyed {
-                record,
-                offered,
-                copies,
-                standing,
-            }
-        })
+        .map(|record| told(workspace, project, record, &offers, block.as_ref()))
         .collect())
+}
+
+/// The installation of `name`, of `kind`, the ledger records in `project`,
+/// told as [`surveyed`] tells each, against `offers`, every offer of its
+/// kind ([`offers`]): none when the ledger records none.
+///
+/// One name's, for a caller asking after one artifact in every project, as
+/// removing one everywhere does ([`crate::everywhere`]): surveying each
+/// project whole would hash the copies of everything else installed there.
+pub(crate) fn surveyed_one(
+    workspace: &FlayerWorkspace,
+    ledger: &Ledger,
+    project: &MindProject,
+    kind: Kind,
+    name: &str,
+    offers: &[Offer],
+) -> Result<Option<Surveyed>, LedgerError> {
+    let entry = project_entry(workspace, project);
+    let Some(record) = ledger.installation(&entry, kind, name)? else {
+        return Ok(None);
+    };
+    let block = block_of(project, kind);
+    Ok(Some(told(
+        workspace,
+        project,
+        record,
+        offers,
+        block.as_ref(),
+    )))
+}
+
+/// Every installation of `kind` the ledger records in `project` that
+/// nothing offers any more where it came from, by name in name order: what
+/// `uninstall --orphaned` takes out. Orphaned, or edited and orphaned,
+/// which reads as edited, an edit being said first; an update leaves both
+/// alike, with nothing to write either from (`update::Step::Orphaned`), and
+/// taking out the edited one is the uninstall's to refuse unless forced.
+///
+/// Not one from a loaded workspace that cannot be opened now: what that
+/// offers cannot be told, so its copies read as orphaned only while it is
+/// away, and taking them out on that would take out what a drive mounted
+/// again tomorrow offers still. A record from before origins were kept may
+/// have come from any loaded workspace, so it waits while any is away.
+///
+/// Nor one whose place where it came from could not be read, in the
+/// workspace's own ([`own_failures`]) or a loaded workspace's
+/// ([`LoadFailure::Artifact`]): front matter that no longer parses, or a
+/// folder that cannot be listed, offers nothing there, and is still
+/// somebody's artifact to mend, not a reason to take its copies out. By
+/// place ([`places`]), since what cannot be read cannot say its name.
+pub(crate) fn orphaned(
+    workspace: &FlayerWorkspace,
+    ledger: &Ledger,
+    project: &MindProject,
+    kind: Kind,
+) -> Result<Vec<String>, LedgerError> {
+    let loads = workspace.loads();
+    let away: Vec<String> = loads
+        .iter()
+        .filter(|loaded| loaded.workspace.is_err())
+        .map(load_origin)
+        .collect();
+    let mut unread: Vec<PathBuf> = own_failures(workspace, &[kind])
+        .iter()
+        .map(|failure| failure.path().to_path_buf())
+        .collect();
+    unread.extend(from_loads(workspace, &[kind]).failures.iter().filter_map(
+        |failure| match failure {
+            LoadFailure::Artifact(failure) => Some(failure.path().to_path_buf()),
+            _ => None,
+        },
+    ));
+    Ok(surveyed(workspace, ledger, project, kind)?
+        .into_iter()
+        .filter(|surveyed| surveyed.offered.is_empty())
+        .filter(
+            |surveyed| match (&surveyed.record.origin, surveyed.record.source_id) {
+                (Some(origin), _) => !away.contains(origin),
+                (None, Some(_)) => true,
+                (None, None) => away.is_empty(),
+            },
+        )
+        .filter(|surveyed| {
+            // A failure about the artifact's own file, or about a folder it
+            // sits in.
+            !places(workspace, &loads, &surveyed.record)
+                .iter()
+                .any(|place| {
+                    unread
+                        .iter()
+                        .any(|path| path.starts_with(place) || place.starts_with(path))
+                })
+        })
+        .map(|surveyed| surveyed.record.name)
+        .collect())
+}
+
+/// What the workspace's own could not offer of `kinds`: an artifact of it
+/// that cannot be read, or a folder of them that cannot be listed. None of
+/// a kind it does not keep ([`FlayerWorkspace::own_kinds`]), which it
+/// offers none of. Failures collected, as every discovery's, for a front
+/// end to warn with, as [`offered_by_loads`] has a load's.
+pub fn own_failures(workspace: &FlayerWorkspace, kinds: &[Kind]) -> Vec<DiscoveryFailure> {
+    let kept = workspace.own_kinds();
+    let kinds: Vec<Kind> = kinds
+        .iter()
+        .copied()
+        .filter(|kind| kept.contains(kind))
+        .collect();
+    if kinds.is_empty() {
+        return Vec::new();
+    }
+    let own = workspace.own();
+    let (_, failures) = Catalog::discover_kinds(std::slice::from_ref(&own), &kinds).into_parts();
+    failures
+}
+
+/// Where what `record` installed would sit now in each place its origin
+/// names that offers by discovery: the workspace's own, or a loaded
+/// workspace's that can be opened. A record from before origins were kept
+/// may have come from any of them. None for one from the shelf, whose
+/// offers are the ledger's rows, not a read that can fail.
+fn places(workspace: &FlayerWorkspace, loads: &[Loaded], record: &InstallRecord) -> Vec<PathBuf> {
+    let any = record.origin.is_none() && record.source_id.is_none();
+    let names = |origin: &str| any || record.origin.as_deref() == Some(origin);
+    let mut places = Vec::new();
+    if names(WORKSPACE_ORIGIN) {
+        places.extend(crate::lifecycle::place(
+            &workspace.own(),
+            record.kind,
+            &record.name,
+        ));
+    }
+    for loaded in loads {
+        if let Ok(source) = &loaded.workspace {
+            if names(&load_origin(loaded)) {
+                places.extend(crate::lifecycle::place(
+                    &source.own(),
+                    record.kind,
+                    &record.name,
+                ));
+            }
+        }
+    }
+    places
+}
+
+/// The origin a record names for what it installed from `loaded`, as
+/// [`Offer::origin`] spells it.
+fn load_origin(loaded: &Loaded) -> String {
+    let entry = paths::to_config_string(&loaded.entry)
+        .unwrap_or_else(|| loaded.entry.display().to_string());
+    format!("{LOADED_PREFIX}{entry}")
+}
+
+/// The block of `project`'s `AGENTS.md` that a rule's copies are told by;
+/// none for a skill, whose copies are folders.
+fn block_of(project: &MindProject, kind: Kind) -> Option<AgentsMd> {
+    // Matched on the kind, so a third one has to say how its copies are told.
+    match kind {
+        Kind::Skill => None,
+        Kind::Rule => rules::block_file(project.root()),
+    }
+}
+
+/// How the installation `record` in `project` is found, against `offers`,
+/// every offer of its kind, and `block`, the project's `AGENTS.md` as it
+/// reads now for a rule: what [`surveyed`] says of each.
+fn told(
+    workspace: &FlayerWorkspace,
+    project: &MindProject,
+    record: InstallRecord,
+    offers: &[Offer],
+    block: Option<&AgentsMd>,
+) -> Surveyed {
+    let offered = offered_for(&record, offers);
+    // Matched on the kind, so a third one has to say how its copies are told.
+    let (copies, standing) = match record.kind {
+        Kind::Skill => {
+            let copies = standing::skill_copies(workspace, project, &record, &offered);
+            let standing = standing::skill_standing(workspace, &copies, &offered);
+            (copies, standing)
+        }
+        Kind::Rule => {
+            let copies = standing::rule_copies(workspace, project, &record, block, &offered);
+            let standing = standing::rule_standing(workspace, &record, &copies, &offered);
+            (copies, standing)
+        }
+    };
+    let offered = offered.into_iter().cloned().collect();
+    Surveyed {
+        record,
+        offered,
+        copies,
+        standing,
+    }
 }
 
 /// Everything of `kind` offered to install, from wherever it is offered, in
@@ -1489,14 +1654,7 @@ pub fn uninstall_with(
     let _lock = workspace.lock().map_err(WorkspaceError::from)?;
     let entry = project_entry(workspace, project);
     let Some(record) = ledger.installation(&entry, kind, name)? else {
-        // Nowhere to look is nothing there: a project with no targets now
-        // holds nothing an install would have written.
-        let held = targets(project, kind)
-            .unwrap_or_default()
-            .into_iter()
-            .map(|target| copy_at(&target.folder, kind, name))
-            .find(|copy| holds(copy, kind));
-        return Ok(match held {
+        return Ok(match held_where(project, kind, name) {
             Some(path) => Removed::Foreign {
                 name: name.to_owned(),
                 path,
@@ -1566,6 +1724,45 @@ pub fn uninstall_with(
         still_excluded,
         rendered: None,
     })
+}
+
+/// Where somebody's `name`, of `kind`, is in `project` while the ledger
+/// records no installation of it there: what an uninstall leaves, saying so
+/// ([`Removed::Foreign`]), and an install will not write over. None when
+/// the ledger records one, or nothing of that name is where an install of
+/// it would go.
+///
+/// A rule in a project marked by its settings is somebody's in its block or
+/// in Claude's folder of Mindflayer's rules ([`rules`]), as its uninstall
+/// tells.
+pub(crate) fn somebodys(
+    workspace: &FlayerWorkspace,
+    ledger: &Ledger,
+    project: &MindProject,
+    kind: Kind,
+    name: &str,
+) -> Result<Option<PathBuf>, InstallError> {
+    if kind == Kind::Rule && project.settings().is_some() {
+        return rules::somebodys(workspace, ledger, project, name);
+    }
+    let entry = project_entry(workspace, project);
+    if ledger.installation(&entry, kind, name)?.is_some() {
+        return Ok(None);
+    }
+    Ok(held_where(project, kind, name))
+}
+
+/// The first target of `project` holding something called `name`, of
+/// `kind`, where an install of it would write.
+///
+/// Nowhere to look is nothing there: a project with no targets now holds
+/// nothing an install would have written.
+fn held_where(project: &MindProject, kind: Kind, name: &str) -> Option<PathBuf> {
+    targets(project, kind)
+        .unwrap_or_default()
+        .into_iter()
+        .map(|target| copy_at(&target.folder, kind, name))
+        .find(|copy| holds(copy, kind))
 }
 
 /// Where in `project` a target of `name`'s installation recorded at `route`
