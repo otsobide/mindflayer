@@ -44,7 +44,9 @@ use crate::catalog::Reference;
 use crate::code::codes;
 use crate::gather::Scrub;
 use crate::install::rules::{self, Rendered};
-use crate::install::{self, Candidate, Edits, Found, InstallError, Installation, Standing};
+use crate::install::{
+    self, Candidate, Edits, Found, InstallError, Installation, Refused, Standing,
+};
 use crate::kind::Kind;
 use crate::ledger::{Ledger, LedgerError};
 use crate::workspace::{same_directory, FlayerWorkspace, MindProject, WorkspaceError};
@@ -140,6 +142,26 @@ impl Step {
     /// Whether an update writes anything for it.
     pub fn writes(&self) -> bool {
         matches!(self, Step::Refresh | Step::PutBack(_) | Step::WriteOver(_))
+    }
+
+    /// Why it is not written, when an install not forced would have been
+    /// refused for the same reason: what a front end says it with, by the
+    /// code of that install's refusal, since a code names one condition
+    /// wherever it is met. Here rather than in each front end, which would
+    /// otherwise decide for itself which of core's conditions a code names.
+    ///
+    /// Only a copy changed since: an orphaned or an unsure one is left for
+    /// want of a place to write it from, which no install is refused for.
+    pub fn refused(&self) -> Option<Refused> {
+        match self {
+            Step::Leave(_) => Some(Refused::Edited),
+            Step::Keep
+            | Step::Refresh
+            | Step::PutBack(_)
+            | Step::WriteOver(_)
+            | Step::Orphaned
+            | Step::Unsure(_) => None,
+        }
     }
 }
 

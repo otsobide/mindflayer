@@ -44,7 +44,7 @@ use crate::copy;
 use crate::exclude::{self, ExcludeError};
 use crate::gather::Scrub;
 use crate::hash;
-use crate::install::{self, InstallError, InstallTarget};
+use crate::install::{self, InstallError, InstallTarget, Refused};
 use crate::kind::{Kind, Layout};
 use crate::ledger::{Action, InstallRecord, Ledger, LedgerError, Outcome, Target};
 use crate::paths;
@@ -298,6 +298,22 @@ impl Why {
     /// local project its exclude entry, since what is there is its author's.
     pub(crate) fn disowns(&self) -> bool {
         matches!(self, Why::Edited | Why::Uncompared(_))
+    }
+
+    /// Why no copy was made here, when an install would have been refused
+    /// here for the same reason: what a front end says it with, by the code
+    /// of that install's refusal, since a code names one condition wherever
+    /// it is met. Here rather than in each front end, which would otherwise
+    /// decide for itself which of core's conditions a code names.
+    ///
+    /// Only somebody's copy: one with nothing to make it from is no
+    /// refusal, and an edited one in a folder no agent is sent copies to
+    /// any more is let go rather than refused a copy.
+    pub fn refused(&self) -> Option<Refused> {
+        match self {
+            Why::Foreign => Some(Refused::Foreign),
+            Why::Unsourced | Why::Edited | Why::Uncompared(_) => None,
+        }
     }
 }
 

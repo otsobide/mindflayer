@@ -14,6 +14,21 @@ fn settings(agents: &[Agent]) -> Settings {
 }
 
 #[test]
+fn only_a_copy_left_as_somebody_s_is_refused_and_by_an_install_s_code() {
+    let refused: Vec<Option<&str>> = [
+        Why::Foreign,
+        Why::Unsourced,
+        Why::Edited,
+        Why::Uncompared(String::from("recorded without a hash")),
+    ]
+    .iter()
+    .map(|why| why.refused().map(|refused| refused.code()))
+    .collect();
+
+    assert_eq!(refused, [Some("foreign"), None, None, None]);
+}
+
+#[test]
 fn naming_agents_names_each_once_in_the_order_given() {
     let before = settings(&[Agent::Claude]);
     let after =
