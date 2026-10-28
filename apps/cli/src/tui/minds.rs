@@ -53,11 +53,17 @@ pub struct Row {
 impl Row {
     /// What this row asks for, if its box disagrees with how it started.
     pub fn change(&self) -> Option<Change> {
-        match (self.standing, self.ticked) {
-            (Standing::Found { mind: true }, true) => Some(Change::Link),
-            (Standing::Found { mind: false }, true) => Some(Change::InitAndLink),
-            (Standing::Linked { .. }, false) => Some(Change::Unlink),
-            _ => None,
+        let started = matches!(self.standing, Standing::Linked { .. });
+        (self.ticked != started).then(|| self.offers())
+    }
+
+    /// What turning its box over from how it started would ask for, ticked
+    /// or not now: what the screen keeps room for beside it.
+    pub fn offers(&self) -> Change {
+        match self.standing {
+            Standing::Found { mind: true } => Change::Link,
+            Standing::Found { mind: false } => Change::InitAndLink,
+            Standing::Linked { .. } => Change::Unlink,
         }
     }
 }

@@ -348,6 +348,65 @@ fn the_link_form_offers_what_is_not_linked_in_the_order_and_words_of_a_suggestio
 }
 
 #[test]
+fn the_minds_screen_cuts_a_long_reason_to_keep_what_applying_does_in_sight() {
+    let dir = workspace_with_two();
+    let repo = dir.path().join("github.com/org/repo");
+    fs::create_dir_all(repo.join(".git")).unwrap();
+    fs::create_dir(repo.join(".claude")).unwrap();
+    fs::create_dir(repo.join(".codex")).unwrap();
+    for file in ["AGENTS.md", "CLAUDE.md", ".mcp.json", "opencode.json"] {
+        fs::write(repo.join(file), "").unwrap();
+    }
+    let mut app = tui_in(dir.path());
+    press_key(&mut app, KeyCode::Char('m'));
+    // Tick the repository and untick alpha, the rows under it.
+    press_key(&mut app, KeyCode::Char(' '));
+    press_key(&mut app, KeyCode::Down);
+    press_key(&mut app, KeyCode::Char(' '));
+
+    let reason = "git repository with .claude, .codex, .mcp.json, AGENTS.md, CLAUDE.md, \
+                  opencode.json (mind init first)";
+    for width in [80, 100, 160] {
+        let mut terminal = Terminal::new(TestBackend::new(width, 30)).unwrap();
+        terminal.draw(|frame| tui::ui::draw(&app, frame)).unwrap();
+        let lines: Vec<String> = terminal
+            .backend()
+            .buffer()
+            .content()
+            .chunks(usize::from(width))
+            .map(|line| line.iter().map(|cell| cell.symbol()).collect())
+            .collect();
+        let row = |path: &str| {
+            lines
+                .iter()
+                .find(|line| line.contains(path))
+                .unwrap_or_else(|| panic!("{width}: no {path} in {lines:#?}"))
+        };
+        let repo = row("[x] github.com/org/repo");
+        assert!(repo.contains("+ mind init, then link"), "{width}: {repo}");
+        let alpha = row("[ ] alpha");
+        assert!(alpha.contains("- unlink"), "{width}: {alpha}");
+        // Cut where the pane has no room for all of it, and said whole
+        // where it does.
+        assert_eq!(
+            repo.contains(reason),
+            !repo.contains('…'),
+            "{width}: {repo}"
+        );
+    }
+    let mut terminal = Terminal::new(TestBackend::new(160, 30)).unwrap();
+    terminal.draw(|frame| tui::ui::draw(&app, frame)).unwrap();
+    let drawn: String = terminal
+        .backend()
+        .buffer()
+        .content()
+        .iter()
+        .map(|cell| cell.symbol())
+        .collect();
+    assert!(drawn.contains(reason), "{drawn}");
+}
+
+#[test]
 fn the_minds_screen_and_the_link_form_say_a_moved_project_moved_as_flayer_scan_suggest_does() {
     let dir = workspace_with_own();
     flayer(dir.path(), &["install", "-p", "alpha", "commit-style"]).unwrap();

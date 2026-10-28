@@ -3331,7 +3331,10 @@ first](#which-to-link-first)). It was one list by path, on the grounds that
 the question was "which of these", not "which kind"; under a home that is
 dozens of repositories in name order, and the one worth linking is wherever
 its name puts it, so the screen shows core's ranking instead, and sorts
-nothing of its own. `flayer minds DIR` finds those under the folders it
+nothing of its own. A reason can name every agent file a repository holds,
+so one longer than the pane leaves room for is cut, ending in `…`, rather
+than pushing what applying would do to each row past the pane's edge; the
+command says it whole. `flayer minds DIR` finds those under the folders it
 names instead ([Scanning](#scanning)). Ticking only marks. Applying turns the
 marks into lines like any other task: `mind -C <path> init` for each repository that is
 not a project yet, then one `flayer link` and one `flayer unlink`, each with

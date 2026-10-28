@@ -1265,13 +1265,25 @@ fn minds_screen(app: &App, screen: &Minds, frame: &mut Frame, area: Rect) {
         .unwrap_or(0)
         .min(50);
     // Padded to the longest standing too, so what applying would do lines
-    // up in one column.
+    // up in one column, and that column is the one to keep in sight: a
+    // standing, which can name every agent file a repository holds, is cut
+    // to what the pane leaves once the highlight, the box, the path and the
+    // widest change any row could ask for have their room, so ticking one
+    // never moves the column. `flayer scan --suggest` says it whole.
+    let offered = screen
+        .rows
+        .iter()
+        .map(|row| columns(pending(row.offers()).0))
+        .max()
+        .unwrap_or(0);
+    let room = usize::from(inner.width).saturating_sub(2 + 4 + width + 2 + offered);
     let said = screen
         .rows
         .iter()
-        .map(|row| standing(row).0.chars().count())
+        .map(|row| columns(&standing(row).0))
         .max()
-        .unwrap_or(0);
+        .unwrap_or(0)
+        .min(room);
     let items: Vec<ListItem> = screen
         .rows
         .iter()
@@ -1297,7 +1309,8 @@ fn mind_row(row: &minds::Row, width: usize, said: usize) -> ListItem<'_> {
     let path = printable(&row.path);
     let padding = " ".repeat(width.saturating_sub(path.chars().count()));
     let (standing, style) = standing(row);
-    let after = " ".repeat(said.saturating_sub(standing.chars().count()));
+    let standing = cut(&standing, said);
+    let after = " ".repeat(said.saturating_sub(columns(&standing)));
     let mut spans = vec![
         Span::styled(
             if row.ticked { "[x] " } else { "[ ] " },
@@ -1307,16 +1320,43 @@ fn mind_row(row: &minds::Row, width: usize, said: usize) -> ListItem<'_> {
         Span::styled(standing, style),
         Span::raw(after),
     ];
-    let pending = match change {
-        Some(minds::Change::Link) => Some(("  + link", Color::Green)),
-        Some(minds::Change::InitAndLink) => Some(("  + mind init, then link", Color::Green)),
-        Some(minds::Change::Unlink) => Some(("  - unlink", Color::Red)),
-        None => None,
-    };
-    if let Some((text, colour)) = pending {
+    if let Some((text, colour)) = change.map(pending) {
         spans.push(Span::styled(text, Style::default().fg(colour)));
     }
     ListItem::new(Line::from(spans))
+}
+
+/// What applying a row would do to it, in words, and in what colour.
+fn pending(change: minds::Change) -> (&'static str, Color) {
+    match change {
+        minds::Change::Link => ("  + link", Color::Green),
+        minds::Change::InitAndLink => ("  + mind init, then link", Color::Green),
+        minds::Change::Unlink => ("  - unlink", Color::Red),
+    }
+}
+
+/// `text` in at most `room` columns, ending in `…` where it was cut, so a
+/// standing cut short reads as cut rather than as all there is to it.
+fn cut(text: &str, room: usize) -> String {
+    if columns(text) <= room {
+        return text.to_owned();
+    }
+    let mut kept = String::new();
+    let mut taken = 0;
+    for character in text.chars() {
+        let drawn = columns(character.encode_utf8(&mut [0; 4]));
+        // A column left over for the ellipsis.
+        if taken + drawn >= room {
+            break;
+        }
+        taken += drawn;
+        kept.push(character);
+    }
+    kept.truncate(kept.trim_end().len());
+    if room > 0 {
+        kept.push('…');
+    }
+    kept
 }
 
 /// Where a row stands, in words, and how loudly: for one found, why it is
