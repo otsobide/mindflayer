@@ -26,6 +26,7 @@ use crate::agent::Agent;
 use crate::agents_md;
 use crate::artifact::{Artifact, Provenance};
 use crate::catalog::{Catalog, DiscoveryFailure};
+use crate::code::codes;
 use crate::install::{self, Standing};
 use crate::kind::Kind;
 use crate::ledger::{InstallRecord, Target};
@@ -267,6 +268,13 @@ pub enum StatusFailure {
     #[error(transparent)]
     Duplicate(#[from] Duplicate),
 }
+
+codes!(StatusFailure {} carried {
+    Self::Stale(error) => error,
+    Self::Discovery(error) => error,
+    Self::Target(error) => error,
+    Self::Duplicate(duplicate) => duplicate,
+});
 
 impl Status {
     /// Every project `workspace` links, against what its ledger records of

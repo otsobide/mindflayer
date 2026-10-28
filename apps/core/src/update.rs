@@ -41,6 +41,7 @@ use thiserror::Error;
 
 use crate::agent::AgentHomes;
 use crate::catalog::Reference;
+use crate::code::codes;
 use crate::gather::Scrub;
 use crate::install::rules::{self, Rendered};
 use crate::install::{self, Candidate, Edits, Found, InstallError, Installation, Standing};
@@ -164,6 +165,11 @@ pub enum UpdateError {
     #[error(transparent)]
     Ledger(#[from] LedgerError),
 }
+
+codes!(UpdateError {} carried {
+    Self::Workspace(error) => error,
+    Self::Ledger(error) => error,
+});
 
 /// What updating `projects`, every one a project `workspace` links, would
 /// do, against what its ledger records of them: nothing written, the ledger

@@ -23,6 +23,7 @@ use serde::Serialize;
 use thiserror::Error;
 
 use crate::artifact::{self, issue_list, Artifact, ArtifactError, ValidationIssue};
+use crate::code::codes;
 use crate::frontmatter::{self, FrontMatterError};
 use crate::kind::{Kind, Layout};
 use crate::rule::RuleManifest;
@@ -469,3 +470,18 @@ pub enum CreateError {
     #[error(transparent)]
     Workspace(#[from] WorkspaceError),
 }
+
+codes!(CreateError {
+    Self::Name { .. } => "add_name_unfit",
+    Self::Nested { .. } => "add_skill_nested",
+    Self::DescriptionEmpty { .. } => "add_description_empty",
+    Self::DescriptionNotOneLine => "add_description_not_one_line",
+    Self::DescriptionTooLong { .. } => "add_description_too_long",
+    Self::Exists { .. } => "add_exists",
+    Self::Manifest { .. } => "add_manifest_unwritable",
+    Self::Write { .. } => "add_write_failed",
+} carried {
+    Self::Template(error) => error,
+    Self::Artifact(error) => error,
+    Self::Workspace(error) => error,
+});

@@ -93,6 +93,7 @@ macro_rules! codes {
 pub(crate) use codes;
 
 use crate::activate::{ActivateError, UnknownShell};
+use crate::adopt::AdoptError;
 use crate::agent::UnknownAgent;
 use crate::agents_md::{self, AgentsMdError};
 use crate::artifact::{ArtifactError, ValidationIssue};
@@ -100,6 +101,8 @@ use crate::catalog::DiscoveryFailure;
 use crate::claude_md::{self, ClaudeMdError, Fallback};
 use crate::claude_rules::{self, ClaudeRulesError};
 use crate::config_entry::{EntryError, FileError};
+use crate::create::CreateError;
+use crate::everywhere::EverywhereError;
 use crate::exclude::{self, ExcludeError};
 use crate::frontmatter::FrontMatterError;
 use crate::gather::git::GitError;
@@ -107,9 +110,16 @@ use crate::gather::{self, GatherError, Leftover, ScrubFailure};
 use crate::install::{rules, InstallError, LoadFailure};
 use crate::kind::UnknownKind;
 use crate::ledger::LedgerError;
+use crate::lifecycle::LifecycleError;
 use crate::lock::LockError;
+use crate::migrate::{MigrateError, ProjectFailure, Refusal};
+use crate::reapply::{ReapplyError, ReapplyFailure};
+use crate::relink::{Duplicate, RelinkError};
 use crate::resolve::ResolveError;
+use crate::scan::ScanFailure;
+use crate::status::StatusFailure;
 use crate::template::TemplateError;
+use crate::update::UpdateError;
 use crate::workspace::{MisplacedTarget, ProjectWarning, WorkspaceError};
 
 /// Every type core gives codes to, by its path in the crate, with the codes
@@ -121,6 +131,7 @@ use crate::workspace::{MisplacedTarget, ProjectWarning, WorkspaceError};
 pub const ALL: &[(&str, &[&str])] = &[
     ("activate::ActivateError", ActivateError::CODES),
     ("activate::UnknownShell", UnknownShell::CODES),
+    ("adopt::AdoptError", AdoptError::CODES),
     ("agent::UnknownAgent", UnknownAgent::CODES),
     ("agents_md::AgentsMdError", AgentsMdError::CODES),
     ("agents_md::Malformed", agents_md::Malformed::CODES),
@@ -135,6 +146,8 @@ pub const ALL: &[(&str, &[&str])] = &[
     ("claude_rules::Warning", claude_rules::Warning::CODES),
     ("config_entry::EntryError", EntryError::CODES),
     ("config_entry::file::FileError", FileError::CODES),
+    ("create::CreateError", CreateError::CODES),
+    ("everywhere::EverywhereError", EverywhereError::CODES),
     ("exclude::ExcludeError", ExcludeError::CODES),
     ("exclude::Malformed", exclude::Malformed::CODES),
     ("frontmatter::FrontMatterError", FrontMatterError::CODES),
@@ -149,9 +162,20 @@ pub const ALL: &[(&str, &[&str])] = &[
     ("install::rules::Withheld", rules::Withheld::CODES),
     ("kind::UnknownKind", UnknownKind::CODES),
     ("ledger::LedgerError", LedgerError::CODES),
+    ("lifecycle::LifecycleError", LifecycleError::CODES),
     ("lock::LockError", LockError::CODES),
+    ("migrate::MigrateError", MigrateError::CODES),
+    ("migrate::Refusal", Refusal::CODES),
+    ("migrate::project::ProjectFailure", ProjectFailure::CODES),
+    ("reapply::ReapplyError", ReapplyError::CODES),
+    ("reapply::ReapplyFailure", ReapplyFailure::CODES),
+    ("relink::Duplicate", Duplicate::CODES),
+    ("relink::RelinkError", RelinkError::CODES),
     ("resolve::ResolveError", ResolveError::CODES),
+    ("scan::ScanFailure", ScanFailure::CODES),
+    ("status::StatusFailure", StatusFailure::CODES),
     ("template::TemplateError", TemplateError::CODES),
+    ("update::UpdateError", UpdateError::CODES),
     ("workspace::MisplacedTarget", MisplacedTarget::CODES),
     ("workspace::ProjectWarning", ProjectWarning::CODES),
     ("workspace::WorkspaceError", WorkspaceError::CODES),

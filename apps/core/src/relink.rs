@@ -18,6 +18,7 @@ use std::path::{Path, PathBuf};
 
 use thiserror::Error;
 
+use crate::code::codes;
 use crate::exclude::{self, ExcludeError, Followed};
 use crate::gather::Scrub;
 use crate::install;
@@ -343,6 +344,8 @@ pub struct Duplicate {
     pub paths: Vec<PathBuf>,
 }
 
+codes!(Duplicate => "duplicate_id");
+
 impl fmt::Display for Duplicate {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let mut named: Vec<String> = self
@@ -460,3 +463,18 @@ pub enum RelinkError {
     )]
     Unknown { path: PathBuf },
 }
+
+codes!(RelinkError {
+    Self::NoId { .. } => "relink_no_id",
+    Self::Linked { .. } => "relink_already_linked",
+    Self::Present { .. } => "relink_entry_present",
+    Self::Unread { .. } => "relink_entry_unreadable",
+    Self::Mismatch { .. } => "relink_mismatch",
+    Self::Elsewhere { .. } => "relink_elsewhere",
+    Self::Unknown { .. } => "relink_unknown",
+} carried {
+    Self::Workspace(error) => error,
+    Self::Ledger(error) => error,
+    Self::Exclude(error) => error,
+    Self::Copied(duplicate) => duplicate,
+});
