@@ -452,15 +452,7 @@ fn run_flayer(
                 return Err(CliError::UpdateWhere.into());
             }
             reading_workspace(directory, lookup, |workspace| {
-                let (asked, warnings) = if *all {
-                    managed(workspace)
-                } else {
-                    let asked = projects
-                        .iter()
-                        .map(|project| workspace.pick(project))
-                        .collect::<Result<Vec<_>, _>>()?;
-                    (asked, Vec::new())
-                };
+                let (asked, warnings) = named_projects(workspace, projects, *all)?;
                 update_projects(
                     workspace,
                     &asked,
@@ -760,6 +752,26 @@ fn workspace_for(project: &MindProject, lookup: &Lookup) -> Result<FlayerWorkspa
     resolve(&lookup.inputs(project.root(), Intent::Write))?
         .map(|resolved| resolved.workspace)
         .ok_or_else(|| CliError::NoWorkspaceAbove(project.root().to_path_buf()))
+}
+
+/// The projects a command names: each one `-p` names, by name or path, or,
+/// with `all`, every one the workspace links, with a warning for each entry
+/// that would not open ([`managed`]). One `-p` names that the workspace does
+/// not link refuses the command, before anything is done for the others: a
+/// typo in one name is not a reason to change the rest without it.
+fn named_projects(
+    workspace: &FlayerWorkspace,
+    projects: &[String],
+    all: bool,
+) -> Result<(Vec<MindProject>, Vec<String>), CliError> {
+    if all {
+        return Ok(managed(workspace));
+    }
+    let asked = projects
+        .iter()
+        .map(|project| workspace.pick(project))
+        .collect::<Result<Vec<_>, _>>()?;
+    Ok((asked, Vec::new()))
 }
 
 /// The workspace that manages a project, as core's
