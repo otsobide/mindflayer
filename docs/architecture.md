@@ -7382,3 +7382,19 @@ just listed.
   it is forgotten and `flayer init` run where it went. Nothing in a workspace
   names it for good, as a project's id names a project (#57 relinks those), so
   there is nothing to match a moved one by.
+- **Lines core hands over as text.** A warning carries the code of the value
+  it renders, and a few are built from text core hands over without one: why
+  an exclude entry could not be dropped (`still_excluded`, an install's
+  `Rendered::still_excluded`), why a copy was recorded without a hash, what a
+  copy left out and why, and the notes an `Excluded` gives. Each says a
+  condition the panel may want to act on, and carries no code until core
+  hands it over as a `code::Said`, as a render's warnings now come. Spelling
+  core's code by hand at the line was the other way, rejected for a code no
+  test could hold to the value it names. Nor do the CLI's own warnings,
+  worded from what it found (a gathered name that is not one folder name, an
+  update that cannot tell where a copy came from), carry a code of the CLI's:
+  each would join `mindflayer_cli::CODES` once the panel acts on it.
+- **A command `ui` will be.** The list of what a front end with no terminal
+  does not run is to refuse `ui` too, a server started from the panel's own,
+  and `ui` is no command yet: #68 adds it, and `Refusal::of_flayer`, a match
+  over every command, does not compile until it says where `ui` goes.
