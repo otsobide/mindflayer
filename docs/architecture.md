@@ -2544,8 +2544,9 @@ unrecorded in a folder it drops; `targets reset` is the same the other way.
 ### The screen, and why it is three files
 
 `flayer install` is a two-column screen: projects on the left, and on the
-right what can be installed, as seen from the project under the cursor. It is
-split so that only one of its three parts needs a terminal:
+right what can be installed, as seen from the project under the cursor, or,
+turned round, the other way about. It is split so that only one of its three
+parts needs a terminal:
 
 - `install/state.rs`: what a key does. Marking a box is a statement of intent
   and touches nothing; it is a plain state machine a test drives by pressing
@@ -2579,6 +2580,29 @@ Mindflayer's touches, and an install edited since, which the screen never
 forces ([an edited copy is left alone](#an-edited-copy-is-left-alone)); every
 offer of the name stands as its one installation, so none of them can be
 marked over it either.
+
+`v` turns the screen round by artifact: every offer of the kind shown on the
+left (`Screen::artifacts`, each kind, name and origin once,
+`Row::same_offer`), and every project on the right, ticked where it holds
+the one under the cursor. Not a second set of marks: each box is still a
+project's row, found by its offer (`Target::row_of`), so ticking one goes
+through the same `toggle`, unticking another place's offer of the name as it
+does the right way round, and what is applied is the one batch, however it
+was marked. Turning keeps the box under the cursor, and the keyboard on the
+same side. A project with nowhere to put the kind is offered none of it, so
+turned round it has no box and says why, as it says so in place of its
+offers the right way round. The key is `v` rather than `tab`, which the view
+would have taken before rules could be installed: `tab` shows the next kind,
+which means the same either way round. Applying stays the screen's batch,
+rather than the `flayer install` and `flayer uninstall` lines one artifact's
+ticks amount to now that each takes several projects ([one artifact into
+many projects](#one-artifact-into-many-projects)): the screen applying its
+batch as command lines is #51's to do, for both ways round at once.
+
+The line of keys is cut short at the terminal's edge rather than wrapped, so
+a long one never pushes what is waiting, or why a key did nothing, off the
+bottom, and the keys are two spaces apart, as the TUI's are, so the longest
+fits 80 columns.
 
 `try_init` rather than `init`, here and in the TUI: these are the commands that
 need a terminal, and being run without one deserves a sentence rather than a
@@ -5526,10 +5550,12 @@ just listed.
   batch is, would let the screen do what the command line does, most simply
   once it applies its batch as command lines (#51).
 - **Replaying the install screen.** One install at a time has a command now,
-  but what the screen applies is a batch, and its transcript line is
-  `flayer install` rather than the `install` and `uninstall` lines it amounts
-  to. Printing the batch as those lines would make a session with the screen in
-  it as repeatable as one without.
+  and one artifact into several projects too, but what the screen applies is
+  a batch, and its transcript line is `flayer install` rather than the
+  `install` and `uninstall` lines it amounts to: one of each an artifact, with
+  a `-p` for each project ticked or unticked, which is how the screen turned
+  round by artifact marks it. Printing the batch as those lines would make a
+  session with the screen in it as repeatable as one without.
 - **Gathering still stages beside.** `copy::replace` builds a shelf copy as a
   hidden sibling, `.<name>.mindflayer-new`, under names taken from the skill,
   so a gather stopped halfway leaves its staging on the shelf. Two gathers no

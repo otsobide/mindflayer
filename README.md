@@ -791,7 +791,7 @@ where that project already holds it:
 │                    │┃> [x] deploy  + install                           ┃
 │                    │┃      Ship the service to staging  [acme/skills]  ┃
 └────────────────────┘┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
-↑↓ skill   space mark   tab rules   ←/esc back   a apply   q quit
+↑↓ skill  space mark  tab rules  ←/esc back  v by skill  a apply  q quit
 1 to install, 0 to remove
 ```
 
@@ -804,6 +804,27 @@ everything at once, of both kinds: installs and removals together.
 Each project keeps its own ticks, so one pass across the list is one plan for
 the whole workspace. The number beside a project is how many of its boxes you
 have moved.
+
+`v` turns the screen round, to put one skill or rule into several projects in
+a pass: everything of the kind shown on the left, and on the right every
+project, ticked where it holds the one under the cursor, which `→` goes into
+and `space` ticks as before:
+
+```
+┌ Skills ──────────────────────────────────────────┐┏ Projects for deploy ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+│  commit-style                                    │┃> [x] collapse  + install                         ┃
+│      How this repo writes commits  [acme/skills] │┃  [ ] tanukeys                                    ┃
+│> deploy  (1)                                     │┃                                                  ┃
+│      Ship the service to staging  [acme/skills]  │┃                                                  ┃
+└──────────────────────────────────────────────────┘┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
+↑↓ project  space mark  tab rules  ←/esc back  v by project  a apply  q quit
+1 to install, 0 to remove
+```
+
+They are the same boxes either way round, so a tick made one way is there the
+other, and `a` applies them all as one. `v` again turns it back, with the
+cursor on the same box, and `tab` still shows the other kind. A project that
+cannot take the kind shown has no box there, and says why.
 
 **Unticking removes.** A skill is copied wherever the project's agents read it
 ([below](#where-a-project-keeps-its-artifacts)), or into the directory a
@@ -1259,7 +1280,7 @@ Every key runs a command you could have typed, through the same parser:
 | `g` | gather from a git repository, showing how far it has got; `esc` stops it, until it starts placing | `flayer gather git <url>` |
 | `L` | load another workspace's own skills and rules; enter on a loaded one unloads it | `flayer load <path>`, `flayer unload <path>` |
 | `s` | what is on the shelf | `flayer gather list` |
-| `i` | install skills and rules from the workspace's own, a loaded workspace, or the shelf; `tab` switches between them | `flayer install` |
+| `i` | install skills and rules from the workspace's own, a loaded workspace, or the shelf; `tab` switches between them, and `v` turns the screen round to every project for one of them | `flayer install` |
 | `R` | read the disk again | nothing: it changes nothing |
 
 A project whose own commands would reach another workspace (linked from
