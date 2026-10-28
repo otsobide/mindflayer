@@ -2506,9 +2506,13 @@ what sits where its agents read.
   `edit_tracked` ([D-02](#d-02-installs-stay-local-unless-a-project-shares-them));
   that is about a file Mindflayer edits inside its marks, an `AGENTS.md` or a
   config file, and a skill folder somebody asked by name to be managed is
-  consent for that folder, which the dry run and a `note:` say. A shared
-  project's exclude file, and that of one a `mind.toml` marks, is never
-  opened.
+  consent for that folder, which the dry run and a `note:` say. The plan
+  reads the exclude file whenever a line would be written, so a dry run
+  refuses a block that cannot be edited as the adoption would, and a local
+  project no work tree holds (`Plan::outside`) is said to keep nothing out
+  of git, in the dry run and the adoption both, as an install there says it,
+  rather than listed as keeping each copy out. A shared project's exclude
+  file, and that of one a `mind.toml` marks, is never opened.
 - **One lock, planned again under it, together or not at all.** `apply`
   opens the ledger to write first, since its scrub can take the lock
   itself, then takes the workspace's lock, reads the project again and plans again,

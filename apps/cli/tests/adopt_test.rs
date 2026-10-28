@@ -258,6 +258,30 @@ fn a_copy_git_tracks_in_a_local_project_is_left_in_git_and_said() {
 }
 
 #[test]
+fn a_local_project_no_git_work_tree_holds_is_told_nothing_keeps_its_copies_out() {
+    let dir = TempDir::new().unwrap();
+    flayer(dir.path(), &["init"]).unwrap();
+    let gamma = dir.path().join("gamma");
+    fs::create_dir(&gamma).unwrap();
+    mind(&gamma, &["init"]).unwrap();
+    flayer(dir.path(), &["link", "gamma"]).unwrap();
+    write_notes(&gamma.join(".claude/skills/notes"), "Keep notes");
+    let note = format!(
+        "note: {}: not in a git work tree, so nothing keeps what is installed there out of git",
+        gamma.display()
+    );
+
+    let planned = flayer(dir.path(), &["adopt", "-p", "gamma", "notes"]).unwrap();
+    let done = flayer(dir.path(), &["adopt", "-p", "gamma", "notes", "--yes"]).unwrap();
+
+    for outcome in [&planned, &done] {
+        assert!(!outcome.stdout.contains("out of git"), "{}", outcome.stdout);
+        assert_eq!(outcome.stderr, std::slice::from_ref(&note));
+        assert!(outcome.ok);
+    }
+}
+
+#[test]
 fn adopt_names_the_project_it_takes_from() {
     let dir = with_notes();
 

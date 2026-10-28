@@ -1394,7 +1394,8 @@ A copy git tracks stays in git, even in a local project: a line in
 `info/exclude` would keep none of it out, and would hide every file added
 to it later. An update writes over it there, for the team to see and
 commit. One git does not track is kept out of git in a local project, as
-anything installed there is.
+anything installed there is, and a local project no git work tree holds is
+told, before and after, that nothing keeps it out.
 
 Without `--yes` it writes nothing. It refuses, with nothing written: a name
 the library holds already, saying both paths; copies in `.claude/skills`

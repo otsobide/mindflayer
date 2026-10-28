@@ -13,6 +13,7 @@ use mindflayer_core::{AgentHomes, Excluded, FlayerWorkspace, MindProject, Refere
 
 use crate::commands::gather::scrubbed;
 use crate::commands::install::shown;
+use crate::commands::settings::outside_note;
 use crate::render::printable;
 use crate::{CliError, Failure, Outcome};
 
@@ -26,7 +27,8 @@ const UNADOPTED: &str = "nothing adopted: add --yes to go ahead\n";
 /// A line for the library copy, one for the copies recorded, one for each
 /// target that has no copy, which reads as missing until an update puts one
 /// there, and in a local project one for each copy kept out of git; a note
-/// for one git tracks, which stays in git. What `gh skill` wrote of where it
+/// for one git tracks, which stays in git, and for a local project no git
+/// work tree holds, where nothing keeps them out, as an install says it. What `gh skill` wrote of where it
 /// came from is shown under the first line, and nothing more is made of it.
 ///
 /// `homes` are the agents' own folders the command line decided, which core
@@ -125,5 +127,6 @@ fn said(workspace: &FlayerWorkspace, plan: &Plan, done: bool) -> Outcome {
             None => {}
         }
     }
+    outcome.stderr.extend(outside_note(project, plan.outside));
     outcome
 }

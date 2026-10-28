@@ -74,6 +74,11 @@ pub struct Plan {
     /// says it got it, for a front end to show. Nothing reads it further,
     /// and no other tool's lockfile is opened.
     pub provenance: Vec<(String, String)>,
+    /// Whether the project is local and no git work tree holds it, so
+    /// nothing keeps its copies out of git, and none is said to be: for a
+    /// front end to say, as an install there says it
+    /// ([`Excluded::Outside`]).
+    pub outside: bool,
 }
 
 /// One folder an install of the skill into the project puts a copy in.
@@ -89,7 +94,8 @@ pub struct Copy {
     pub there: bool,
     /// What a local project does with it in git's exclude file, when it is
     /// there: `None` for a shared project, and one a `mind.toml` marks,
-    /// whose copies are the team's to commit.
+    /// whose copies are the team's to commit, and for a local one no work
+    /// tree holds, which has no exclude file ([`Plan::outside`]).
     pub git: Option<Git>,
 }
 
@@ -112,7 +118,8 @@ pub struct Adopted {
     /// made, and every copy recorded as installed from it.
     pub plan: Plan,
     /// What keeping a local project's untracked copies out of git came to:
-    /// `None` when it had none to keep out.
+    /// `None` when it had none to keep out, as one no work tree holds has
+    /// not ([`Plan::outside`]).
     pub excluded: Option<Excluded>,
     /// What opening the ledger to write took out of it, for the front end
     /// to say.
@@ -454,13 +461,13 @@ fn plan_with(
         }
     }
 
-    let local = install::local(project).is_some();
-    let copies = targets
+    let local = install::local(project);
+    let mut copies: Vec<Copy> = targets
         .iter()
         .zip(&paths)
         .map(|(target, path)| {
             let there = there.contains(&path);
-            let git = (local && there).then(|| {
+            let git = (local.is_some() && there).then(|| {
                 if install::untracked(project, std::slice::from_ref(path)).is_empty() {
                     Git::Tracked
                 } else {
@@ -475,6 +482,20 @@ fn plan_with(
             }
         })
         .collect();
+    // Read only when a line would be written, so a dry run refuses a block
+    // that cannot be edited as the adoption would, and a copy outside every
+    // work tree, which git tracks nothing in, is not said to be kept out of
+    // a git there is none of.
+    let mut outside = false;
+    if let Some(key) = local {
+        let keeps_out = copies.iter().any(|copy| copy.git == Some(Git::KeptOut));
+        if keeps_out && exclude::listed(project.root(), key)?.is_none() {
+            outside = true;
+            for copy in &mut copies {
+                copy.git = None;
+            }
+        }
+    }
     let provenance = manifest
         .metadata
         .entries
@@ -489,6 +510,7 @@ fn plan_with(
         source: first.clone(),
         hash,
         provenance,
+        outside,
     })
 }
 

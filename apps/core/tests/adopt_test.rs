@@ -349,6 +349,43 @@ fn a_local_project_keeps_an_untracked_copy_out_of_git_and_leaves_a_tracked_one()
 }
 
 #[test]
+fn a_local_project_no_work_tree_holds_keeps_no_copy_out_of_git_and_says_so() {
+    let dir = TempDir::new().unwrap();
+    let (mut workspace, _) = FlayerWorkspace::init(dir.path()).unwrap();
+    let root = dir.path().join("collapse");
+    fs::create_dir(&root).unwrap();
+    let (project, _) =
+        MindProject::init_settings(&root, &Agent::ALL, Share::Local, &Directories::default())
+            .unwrap();
+    workspace.link(&project).unwrap();
+    write_skill(&claudes(&project, "notes"), &skill("notes", "Keep notes"));
+
+    let plan = plan(&workspace, &project, "notes").unwrap();
+
+    assert!(plan.outside);
+    assert!(
+        plan.copies.iter().all(|copy| copy.git.is_none()),
+        "{:?}",
+        plan.copies
+    );
+    let done = adopted(&workspace, &project, "notes");
+    assert!(done.plan.outside);
+    assert!(done.excluded.is_none(), "{:?}", done.excluded);
+}
+
+#[test]
+fn a_plan_refuses_an_exclude_block_the_adoption_could_not_edit() {
+    let (_dir, workspace, project) = given(Share::Local);
+    let file = project.root().join(".git/info/exclude");
+    fs::create_dir_all(file.parent().unwrap()).unwrap();
+    fs::write(&file, "# mindflayer:begin\n# project .\n").unwrap();
+
+    let refused = plan(&workspace, &project, "notes").unwrap_err();
+
+    assert!(matches!(refused, AdoptError::Exclude(_)), "{refused:?}");
+}
+
+#[test]
 fn what_gh_skill_says_of_where_it_came_from_is_shown() {
     let (_dir, workspace, project) = given(Share::Shared);
     write_skill(
