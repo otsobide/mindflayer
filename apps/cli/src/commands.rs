@@ -417,6 +417,7 @@ fn run_flayer(
                 roots: targets(directory, roots)?,
                 depth: *depth,
                 from: Some(typed(directory, Path::new(""))?),
+                order: scan::Order::Route,
             };
             reading_workspace(directory, lookup, |workspace| {
                 Ok(scan_workspace(workspace, &request, *json))

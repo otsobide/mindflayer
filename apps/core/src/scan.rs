@@ -53,17 +53,36 @@ pub struct Request {
     /// run in with it. None means the workspace root, where the TUI runs its
     /// lines.
     pub from: Option<PathBuf>,
+    /// How what it finds is ordered.
+    pub order: Order,
 }
 
-/// The workspace root, to [`DEFAULT_DEPTH`], spelled from there.
+/// The workspace root, to [`DEFAULT_DEPTH`], spelled from there, by route.
 impl Default for Request {
     fn default() -> Self {
         Request {
             roots: Vec::new(),
             depth: DEFAULT_DEPTH,
             from: None,
+            order: Order::Route,
         }
     }
+}
+
+/// How a scan orders what it found.
+///
+/// Here rather than in each front end, so `flayer scan --suggest` and the
+/// minds screen list one order: a screen that sorted its own rows could
+/// rank them differently from the command it says it shows.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum Order {
+    /// By route, linked or not: what is there.
+    #[default]
+    Route,
+    /// What is not linked first, by [`Reason`], best first, and by route
+    /// within one; then what is, by route: what is worth linking, before
+    /// what needs nothing.
+    Suggested,
 }
 
 /// A directory a workspace could manage.
@@ -159,7 +178,7 @@ pub struct Scan {
     pub roots: Vec<PathBuf>,
     /// How many levels below each root it looked.
     pub depth: usize,
-    /// Ordered by route.
+    /// In the [`Order`] the request asked for.
     pub found: Vec<Found>,
     /// Each entry where no project is any more whose id the ledger never
     /// learned, as it learns them only when it is written, so nothing found
@@ -289,7 +308,15 @@ pub fn scan(workspace: &FlayerWorkspace, request: &Request) -> Scan {
     }
 
     follow(workspace, from, &mut scan);
-    scan.found.sort_by(|a, b| a.route.cmp(&b.route));
+    match request.order {
+        Order::Route => scan.found.sort_by(|a, b| a.route.cmp(&b.route)),
+        // A linked one by route alone: its reason is why it was worth
+        // linking, which says nothing once it is.
+        Order::Suggested => scan.found.sort_by(|a, b| {
+            let rank = |found: &Found| (found.linked, (!found.linked).then_some(found.reason));
+            rank(a).cmp(&rank(b)).then_with(|| a.route.cmp(&b.route))
+        }),
+    }
     scan.failures.sort_by(|a, b| a.path().cmp(b.path()));
     scan
 }
