@@ -96,7 +96,8 @@ under `apps/` with its own `Makefile`:
   workspace's own from every project it links before the library
   (`everywhere`), and bringing a skill somebody keeps in a project's agents'
   folders into the library, its copies recorded as installed from there
-  (`adopt`), and the stable code each of its errors gives (`code`). Its only
+  (`adopt`), the stable code each of its errors gives (`code`), and the
+  snapshot every front end reads a workspace through (`view`). Its only
   I/O is files, and it never reads the environment.
 - `apps/cli` (`mindflayer-cli`): the binaries `mind` (`src/main.rs`) and
   `flayer` (`src/bin/flayer.rs`), and the TUI. `src/lib.rs` only re-exports
@@ -216,6 +217,19 @@ These are easy to break from a single file without noticing.
   `ENVELOPE_VERSION`, and adding one does not. A test reads it back with
   `common::enveloped`, into structs of its own that refuse a field they do
   not name.
+- **Front ends read a workspace through the snapshot.** What a screen shows
+  of a workspace is core's `view::Snapshot` (`Snapshot::read`, or
+  `Snapshot::of` for a front end that resolved the workspace itself), and of
+  a project no workspace links `view::Project::read`: built and sorted in
+  core from the read types, never put together from the reports in a front
+  end. It is a read: the ledger only through `ledger_for_reading`, the
+  default workspace never made, nothing scrubbed, and no scan, which is a
+  query of its own (a test counts scans with `scan::scans`, a test build's).
+  Its names are a contract under `view::FORMAT`, as a report's are under
+  `ENVELOPE_VERSION`, and every URL in it, an error's message included,
+  goes out through `url::redacted`. What a front end reads beside it is
+  only what it cannot hold: a scan, and which workspace a project's own
+  lines consult (`docs/architecture.md`, "The read model").
 - **Every error has a stable code.** Each public error type in core,
   `ValidationIssue`, and `install::Refused`, why an install or an uninstall
   wrote nothing (`Installed::refused`, `Removed::refused`), is given
