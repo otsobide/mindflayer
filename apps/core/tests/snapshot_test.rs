@@ -1,16 +1,19 @@
 //! The snapshot every front end reads, against a real workspace on disk:
-//! what it says of a project, as it will of every project a workspace
-//! links.
+//! what it serializes to, name by name and in order, and what reading it
+//! leaves behind, which is nothing.
 
 mod common;
 
+use std::collections::BTreeMap;
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use mindflayer_core::ledger::{Action, InstallRecord, Outcome, Target};
-use mindflayer_core::view::Project;
+use mindflayer_core::resolve::{Inputs, Intent, Reason};
+use mindflayer_core::view::{Project, Snapshot};
 use mindflayer_core::{
     hash, Agent, Directories, FlayerWorkspace, Kind, MindProject, Share, SourceKind, State,
+    FLAYER_DIR,
 };
 use tempfile::TempDir;
 
@@ -31,7 +34,7 @@ const AT: i64 = 1_790_000_000;
 /// - its shelf holds `lint`, gathered from one source, and its log one
 ///   gather.
 struct Fixture {
-    _dir: TempDir,
+    dir: TempDir,
     hub: PathBuf,
 }
 
@@ -131,7 +134,7 @@ fn fixture() -> Fixture {
         .unwrap();
     drop(ledger);
     at_a_pinned_time(&workspace);
-    Fixture { _dir: dir, hub }
+    Fixture { dir, hub }
 }
 
 /// Every time the ledger keeps, set to [`AT`].
@@ -142,6 +145,354 @@ fn at_a_pinned_time(workspace: &FlayerWorkspace) {
             "UPDATE artifacts SET gathered_at = {AT}; UPDATE actions SET at = {AT};"
         ))
         .unwrap();
+}
+
+/// Inputs naming the workspace at `root`, with the default one in `home`.
+fn naming<'a>(root: &'a Path, home: Option<&'a Path>) -> Inputs<'a> {
+    Inputs {
+        flag: Some(root),
+        activated: None,
+        start: root,
+        home,
+        intent: Intent::Read,
+    }
+}
+
+/// `json` with every spelling of `root` in it as `<root>`, and `id` as
+/// `<id>`, so it reads the same wherever the fixture was made.
+fn placed(json: &str, root: &Path, id: &str) -> String {
+    let escaped = serde_json::to_string(&root.to_string_lossy()).unwrap();
+    let escaped = escaped.trim_matches('"');
+    let json = json.replace(escaped, "<root>").replace(id, "<id>");
+    if cfg!(windows) {
+        json.replace("\\\\", "/")
+    } else {
+        json
+    }
+}
+
+/// What [`fixture`] serializes to, with its folder as `<root>` and `api`'s
+/// id as `<id>`: every name a front end reads, in the order it is written,
+/// pinned whole, so a field that goes, moves or changes what it holds shows
+/// here before it reaches the panel.
+const EXPECTED: &str = r#"{
+  "format": 1,
+  "workspace": {
+    "name": "hub",
+    "path": "<root>/hub",
+    "reason": "explicit",
+    "made": true
+  },
+  "kinds": [
+    "skill",
+    "rule"
+  ],
+  "agents": [
+    "claude",
+    "codex",
+    "opencode"
+  ],
+  "states": [
+    "current",
+    "outdated",
+    "edited",
+    "missing",
+    "orphaned",
+    "foreign",
+    "authored"
+  ],
+  "library": {
+    "directories": [
+      {
+        "kind": "skill",
+        "path": ".mindflayer/library/skills"
+      },
+      {
+        "kind": "rule",
+        "path": ".mindflayer/library/rules"
+      }
+    ],
+    "artifacts": [
+      {
+        "kind": "skill",
+        "name": "review",
+        "summary": "Read it",
+        "state": null,
+        "agents": [],
+        "origin": null,
+        "targets": [
+          ".mindflayer/library/skills/review"
+        ],
+        "issues": [],
+        "unread": null
+      }
+    ],
+    "templates": [
+      {
+        "name": "full",
+        "kind": "skill",
+        "origin": null
+      }
+    ],
+    "failures": []
+  },
+  "projects": [
+    {
+      "entry": "api",
+      "path": "<root>/hub/api",
+      "name": "api",
+      "marker": "settings.toml",
+      "id": "<id>",
+      "agents": [
+        "claude",
+        "codex"
+      ],
+      "settings": {
+        "agents": [
+          "claude",
+          "codex"
+        ],
+        "share": "shared",
+        "edit_tracked": false,
+        "targets": []
+      },
+      "stale": null,
+      "directories": [
+        {
+          "kind": "skill",
+          "path": "skills"
+        },
+        {
+          "kind": "rule",
+          "path": "rules"
+        }
+      ],
+      "artifacts": [
+        {
+          "kind": "skill",
+          "name": "deploy",
+          "summary": "Ship it",
+          "state": "authored",
+          "agents": [],
+          "origin": null,
+          "targets": [
+            "skills/deploy"
+          ],
+          "issues": [],
+          "unread": null
+        },
+        {
+          "kind": "skill",
+          "name": "review",
+          "summary": "Read it",
+          "state": "current",
+          "agents": [
+            "claude",
+            "codex"
+          ],
+          "origin": "workspace",
+          "targets": [
+            ".agents/skills/review",
+            ".claude/skills/review"
+          ],
+          "issues": [],
+          "unread": null
+        }
+      ],
+      "templates": [
+        {
+          "name": "full",
+          "kind": "skill",
+          "origin": null
+        }
+      ],
+      "unreached": [],
+      "missed": [],
+      "misplaced": [],
+      "failures": []
+    },
+    {
+      "entry": "gone",
+      "path": "<root>/hub/gone",
+      "name": null,
+      "marker": null,
+      "id": null,
+      "agents": [],
+      "settings": null,
+      "stale": {
+        "code": "not_a_project",
+        "message": "<root>/hub/gone: not a mind project (no .mind/settings.toml, .mind/settings.json or .mind/mind.toml)"
+      },
+      "directories": [],
+      "artifacts": [],
+      "templates": [],
+      "unreached": [],
+      "missed": [],
+      "misplaced": [],
+      "failures": []
+    }
+  ],
+  "loaded": [
+    {
+      "entry": "../team",
+      "path": "<root>/team",
+      "name": "team",
+      "offers": 1,
+      "error": null
+    }
+  ],
+  "shelf": [
+    {
+      "kind": "skill",
+      "name": "lint",
+      "path": ".mindflayer/skills/github.com-acme-skills/lint",
+      "summary": "Tidy it",
+      "revision": "4f9c2a7e1b3d5f60a8c4e2b6d0f1a3c5e7b9d1f3",
+      "gathered_at": 1790000000,
+      "source": {
+        "kind": "git",
+        "url": "https://github.com/acme/skills",
+        "reference": null,
+        "subdirectory": "skills",
+        "revision": "4f9c2a7e1b3d5f60a8c4e2b6d0f1a3c5e7b9d1f3",
+        "directory": "github.com-acme-skills"
+      }
+    }
+  ],
+  "sources": [
+    {
+      "kind": "git",
+      "url": "https://github.com/acme/skills",
+      "reference": null,
+      "subdirectory": "skills",
+      "revision": "4f9c2a7e1b3d5f60a8c4e2b6d0f1a3c5e7b9d1f3",
+      "directory": "github.com-acme-skills"
+    }
+  ],
+  "known": [
+    {
+      "name": "hub",
+      "path": "<root>/hub",
+      "default": false,
+      "remembered": false,
+      "in_use": true,
+      "projects": 2,
+      "stale_projects": 1,
+      "stale": null
+    }
+  ],
+  "history": [
+    {
+      "at": 1790000000,
+      "action": "gather",
+      "target": "https://github.com/acme/skills",
+      "outcome": "ok",
+      "detail": "1 added, 0 updated, 0 unchanged, 0 failed"
+    }
+  ],
+  "warnings": []
+}"#;
+
+/// A snapshot's names are a contract, as a report's are: every key, and the
+/// order each is written in.
+#[test]
+fn a_snapshot_serializes_every_name_in_order() {
+    let fixture = fixture();
+    let api = MindProject::open(fixture.hub.join("api")).unwrap();
+    let id = api.settings().unwrap().id.to_string();
+
+    let snapshot = Snapshot::read(&naming(&fixture.hub, None))
+        .unwrap()
+        .unwrap();
+    let json = serde_json::to_string_pretty(&snapshot).unwrap();
+
+    assert_eq!(placed(&json, fixture.dir.path(), &id), EXPECTED);
+}
+
+/// Every path under `root`, hidden ones included, with what each file holds.
+fn tree(root: &Path) -> BTreeMap<PathBuf, Option<Vec<u8>>> {
+    let mut found = BTreeMap::new();
+    let mut pending = vec![root.to_path_buf()];
+    while let Some(directory) = pending.pop() {
+        for entry in fs::read_dir(&directory).unwrap() {
+            let path = entry.unwrap().path();
+            if path.is_dir() {
+                pending.push(path.clone());
+                found.insert(path, None);
+            } else {
+                let bytes = fs::read(&path).unwrap();
+                found.insert(path, Some(bytes));
+            }
+        }
+    }
+    found
+}
+
+/// A front end reads a snapshot at every update, so reading one must leave
+/// the disk as it was: no ledger made or rewritten, no scrub, and no default
+/// workspace made in a home that has none.
+#[test]
+fn building_a_snapshot_creates_no_path_and_never_the_home_workspace() {
+    let fixture = fixture();
+    let home = fixture.dir.path().join("home");
+    fs::create_dir_all(&home).unwrap();
+    let before = tree(fixture.dir.path());
+
+    let named = Snapshot::read(&naming(&fixture.hub, Some(&home)))
+        .unwrap()
+        .unwrap();
+    // Nothing named and nothing above: the default one, as it would be,
+    // even asked by inputs that mean to write, which a read is not.
+    let defaulted = Snapshot::read(&Inputs {
+        flag: None,
+        activated: None,
+        start: &home,
+        home: Some(&home),
+        intent: Intent::Write,
+    })
+    .unwrap()
+    .unwrap();
+
+    assert_eq!(named.workspace.reason, Reason::Explicit);
+    assert_eq!(defaulted.workspace.reason, Reason::Home);
+    assert!(!defaulted.workspace.made);
+    assert!(!home.join(FLAYER_DIR).exists());
+    assert_eq!(tree(fixture.dir.path()), before);
+}
+
+/// A row an older build wrote before credentials were refused still holds
+/// them until a command that writes opens the ledger; a snapshot is a read,
+/// which scrubs nothing, and prints none of them all the same.
+#[test]
+fn no_url_in_a_snapshot_carries_userinfo_even_from_rows_written_before_the_scrub() {
+    let fixture = fixture();
+    let workspace = FlayerWorkspace::open(&fixture.hub).unwrap();
+    let tainted = "https://me:ghp_t0ken@github.com/acme/skills";
+    rusqlite::Connection::open(workspace.ledger_path())
+        .unwrap()
+        .execute_batch(&format!(
+            "UPDATE sources SET url = '{tainted}';
+             UPDATE installations SET origin = '{tainted}';
+             INSERT INTO actions (at, action, target, outcome, detail)
+                 VALUES ({AT}, 'gather', '{tainted}', 'failed', '{tainted}: cannot be fetched');"
+        ))
+        .unwrap();
+    let ledger = fs::read(workspace.ledger_path()).unwrap();
+
+    let snapshot = Snapshot::read(&naming(&fixture.hub, None))
+        .unwrap()
+        .unwrap();
+    let json = serde_json::to_string(&snapshot).unwrap();
+
+    assert!(!json.contains("ghp_t0ken"), "{json}");
+    assert!(!json.contains("me:"), "{json}");
+    assert!(json.contains("https://github.com/acme/skills"), "{json}");
+    assert_eq!(snapshot.history.len(), 2, "{:?}", snapshot.history);
+    assert_eq!(
+        fs::read(workspace.ledger_path()).unwrap(),
+        ledger,
+        "a read scrubbed the ledger"
+    );
 }
 
 /// The project `name` in [`fixture`], as a snapshot shows it.
