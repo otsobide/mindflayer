@@ -984,6 +984,26 @@ impl MindProject {
         Ok(value)
     }
 
+    /// Give the project `id` in place of the one its settings hold, and hand
+    /// back that one: the one change [`change_settings`](Self::change_settings)
+    /// refuses, made the way it makes the others, through the same rewrite and
+    /// toml_edit, with every other byte as it was (`settings::renewed`).
+    ///
+    /// Refused as a change is ([`changeable`](Self::changeable)), and taking
+    /// no lock, as a change takes none: [`crate::relink::new_id`] holds the
+    /// one of the workspace linking the project, and keeps its exclude group
+    /// and ledger with it.
+    pub(crate) fn change_id(&mut self, id: &ProjectId) -> Result<ProjectId, WorkspaceError> {
+        self.changeable()?;
+        let path = self.marker_path();
+        let was = rewrite(&path, |text| {
+            let before = crate::settings::parse(&path, text)?;
+            Ok((crate::settings::renewed(&path, text, id)?, before.id))
+        })?;
+        self.config = ProjectConfig::Settings(Settings::read(&path)?);
+        Ok(was)
+    }
+
     /// The project's settings, when a change may be made to them: those of
     /// a project its `settings.toml` marks.
     ///

@@ -37,6 +37,7 @@ pub mod lock;
 pub mod migrate;
 pub mod paths;
 pub mod reapply;
+pub mod relink;
 pub mod resolve;
 pub mod rule;
 pub mod scan;
