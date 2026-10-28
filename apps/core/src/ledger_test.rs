@@ -1825,3 +1825,69 @@ fn a_new_ledger_knows_each_project_it_is_told_of_once() {
         ]
     );
 }
+
+/// A gathered artifact as a source a test can build, whose URL is whatever
+/// it is given.
+fn gathered_from(url: &str) -> Gathered {
+    Gathered {
+        kind: Kind::Skill,
+        name: String::from("deploy"),
+        path: String::from(".mindflayer/skills/github.com-acme-skills/deploy"),
+        summary: Some(String::from("Ship it")),
+        revision: Some(String::from("4f9c2a7")),
+        gathered_at: 1_790_000_000,
+        source: Source {
+            id: 3,
+            kind: SourceKind::Git,
+            url: url.to_owned(),
+            reference: Some(String::from("main")),
+            subdirectory: String::from("skills"),
+            revision: Some(String::from("4f9c2a7")),
+            directory: String::from("github.com-acme-skills"),
+        },
+    }
+}
+
+/// What a gathered artifact serializes to is a contract, as a status
+/// report's is: each field by its name, its source's among them, but the
+/// row id, which is the ledger's.
+#[test]
+fn a_gathered_artifact_serializes_every_field_and_its_source() {
+    let serialized =
+        serde_json::to_string(&gathered_from("https://github.com/acme/skills.git")).unwrap();
+
+    assert_eq!(
+        serialized,
+        concat!(
+            r#"{"kind":"skill","name":"deploy","#,
+            r#""path":".mindflayer/skills/github.com-acme-skills/deploy","#,
+            r#""summary":"Ship it","revision":"4f9c2a7","gathered_at":1790000000,"#,
+            r#""source":{"kind":"git","url":"https://github.com/acme/skills.git","#,
+            r#""reference":"main","subdirectory":"skills","revision":"4f9c2a7","#,
+            r#""directory":"github.com-acme-skills"}}"#,
+        )
+    );
+}
+
+/// The ledger hands back no URL with a credential in it, but a source built
+/// any other way may hold one, and a report must not print it whatever
+/// built it.
+#[test]
+fn a_source_is_serialized_without_the_credentials_its_url_carries() {
+    let serialized = serde_json::to_string(&gathered_from(
+        "https://me:s3cret@github.com/acme/skills.git",
+    ))
+    .unwrap();
+
+    assert!(!serialized.contains("s3cret"), "{serialized}");
+    assert!(!serialized.contains("me:"), "{serialized}");
+    assert!(
+        serialized.contains(r#""url":"https://github.com/acme/skills.git""#),
+        "{serialized}"
+    );
+}
+
+#[test]
+fn a_source_kind_is_serialized_as_its_slug() {
+    assert_eq!(serde_json::to_string(&SourceKind::Git).unwrap(), r#""git""#);
+}

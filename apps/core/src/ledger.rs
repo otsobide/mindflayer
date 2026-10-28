@@ -24,6 +24,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use rusqlite::backup::{Backup, StepResult};
 use rusqlite::{Connection, OpenFlags, OptionalExtension, Transaction, TransactionBehavior};
+use serde::{Serialize, Serializer};
 use thiserror::Error;
 
 use crate::code::codes;
@@ -67,14 +68,31 @@ impl SourceKind {
     }
 }
 
+/// By its slug, for the reason a [`Kind`] is: the word the database and a
+/// report already hold, which a renamed variant cannot change.
+impl Serialize for SourceKind {
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        serializer.serialize_str(self.slug())
+    }
+}
+
 /// A place artifacts have been gathered from.
-#[derive(Debug, Clone, PartialEq, Eq)]
+///
+/// What it serializes to is a contract, as a status report's is: each field
+/// by its name, but the row id, and the URL only through [`redacted`].
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct Source {
     /// Its row id, which is what gathered artifacts point at.
+    ///
+    /// Not serialized: it is the ledger's, numbered as rows were written, so
+    /// no front end can name a source by it on a command line, and the URL
+    /// and the branch already tell one source from another.
+    #[serde(skip)]
     pub id: i64,
     pub kind: SourceKind,
     /// The URL as the user typed it, without the credentials [`redacted`]
     /// takes out.
+    #[serde(serialize_with = "crate::url::serialize_redacted")]
     pub url: String,
     /// The branch or tag asked for, or `None` for whatever the remote's HEAD
     /// points at.
@@ -92,7 +110,10 @@ pub struct Source {
 }
 
 /// One gathered artifact, and the source it came from.
-#[derive(Debug, Clone, PartialEq, Eq)]
+///
+/// What it serializes to is a contract, as a status report's is: each field
+/// by its name.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct Gathered {
     pub kind: Kind,
     pub name: String,

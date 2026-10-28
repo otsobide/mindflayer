@@ -904,3 +904,62 @@ fn cancelled_at(at: impl Fn(Progress) -> bool + Send + Sync + 'static) -> Watch 
         }
     })
 }
+
+/// What a source to gather from serializes to is a contract: its kind as the
+/// ledger files it, its URL without any credential, and the branch asked for.
+/// A request is built before a URL with a credential in it is refused, so
+/// the URL is taken out of what is printed whatever it holds.
+#[test]
+fn a_source_to_gather_from_serializes_without_the_credentials_its_url_carries() {
+    let typed = Request::git("https://me:s3cret@github.com/acme/skills.git").at(Some("main"));
+
+    let serialized = serde_json::to_string(&typed.source).unwrap();
+
+    assert_eq!(
+        serialized,
+        r#"{"kind":"git","url":"https://github.com/acme/skills.git","reference":"main"}"#
+    );
+}
+
+/// What a gather's report serializes to is a contract, as a status report's
+/// is. What could not be taken, and what is wrong with what was, stay out:
+/// a front end says them as its warnings, which in JSON are the envelope's.
+#[test]
+fn a_gather_report_serializes_what_changed_and_leaves_its_failures_to_the_warnings() {
+    let harvested = |name: &str| gather::Harvested {
+        name: name.to_owned(),
+        directory: name.to_owned(),
+        summary: Some(format!("About {name}")),
+        path: std::path::PathBuf::from(format!(
+            "/work/.mindflayer/skills/github.com-acme-skills/{name}"
+        )),
+    };
+    let report = gather::Report {
+        revision: Some(String::from("4f9c2a7")),
+        directory: String::from("github.com-acme-skills"),
+        added: vec![harvested("deploy")],
+        updated: Vec::new(),
+        unchanged: vec![harvested("review")],
+        failures: vec![gather::Failure::UnusableName {
+            path: std::path::PathBuf::from("/work/.mindflayer/cache/x"),
+        }],
+        warnings: vec![Warning {
+            path: std::path::PathBuf::from("/work/SKILL.md"),
+            issue: ValidationIssue::MetadataNotAMap,
+        }],
+    };
+
+    let serialized = serde_json::to_string(&report).unwrap();
+
+    assert_eq!(
+        serialized,
+        concat!(
+            r#"{"revision":"4f9c2a7","directory":"github.com-acme-skills","#,
+            r#""added":[{"name":"deploy","directory":"deploy","summary":"About deploy","#,
+            r#""path":"/work/.mindflayer/skills/github.com-acme-skills/deploy"}],"#,
+            r#""updated":[],"#,
+            r#""unchanged":[{"name":"review","directory":"review","summary":"About review","#,
+            r#""path":"/work/.mindflayer/skills/github.com-acme-skills/review"}]}"#,
+        )
+    );
+}
