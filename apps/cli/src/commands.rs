@@ -5,9 +5,11 @@
 //! pieces of work on different commands do not collide in the same one.
 
 pub(crate) mod activate;
+pub(crate) mod adopt;
 pub(crate) mod artifact;
 pub(crate) mod gather;
 pub(crate) mod install;
+pub(crate) mod known;
 pub(crate) mod migrate;
 pub(crate) mod project;
 pub(crate) mod read;
@@ -25,18 +27,22 @@ use mindflayer_core::{
 };
 
 use crate::homes::Lookup;
-use crate::{tui, Cli, CliError, Command, Failure, FlayerCli, FlayerCommand, Outcome};
+use crate::{
+    tui, Cli, CliError, Command, Failure, FlayerCli, FlayerCommand, Outcome, WorkspacesCommand,
+};
 use activate::{activate_command, which_command};
+use adopt::adopt_from;
 use artifact::{
     add_to, edit_in, remove_everywhere, remove_from, remove_own, rename_in, templates_of,
     would_remove_everywhere,
 };
 use gather::run_gather;
 use install::{install_named, uninstall_named, uninstall_orphans};
+use known::{forget_command, workspaces_command};
 use migrate::{migrate_all, migrate_here, migrate_library, migrate_one, Asked};
 use project::{
-    init_project, init_workspace, link_here, link_projects, scan_workspace, unlink_here,
-    unlink_projects,
+    init_project, init_workspace, link_here, link_projects, relink_project, renew_here,
+    scan_workspace, unlink_here, unlink_projects,
 };
 use read::{
     everywhere, everywhere_and_the_shelf, list, list_workspace, one_project, show, validate,
@@ -83,11 +89,13 @@ pub(crate) fn run_with(cli: &Cli, lookup: &Lookup, watch: &Watch) -> Result<Outc
             lookup,
             watch,
         ),
+        Command::Init { new_id: true, .. } => renew_here(&directory, lookup),
         Command::Init {
             agents,
             shared,
             skills,
             rules,
+            new_id: false,
         } => init_project(
             &directory,
             agents,
@@ -300,12 +308,16 @@ fn run_flayer(
                 Some(path) => typed(directory, path)?,
                 None => directory.to_path_buf(),
             };
-            init_workspace(&root, skills.as_deref(), rules.as_deref())
+            init_workspace(&root, skills.as_deref(), rules.as_deref(), lookup)
         }
         FlayerCommand::Activate { path, shell } => {
             activate_command(directory, path.as_deref(), *shell, lookup)
         }
         FlayerCommand::Which => which_command(directory, lookup),
+        FlayerCommand::Workspaces { command, json } => match command {
+            None => workspaces_command(directory, lookup, *json),
+            Some(WorkspacesCommand::Forget { path }) => forget_command(directory, path, lookup),
+        },
 
         FlayerCommand::Add {
             project,
@@ -381,6 +393,7 @@ fn run_flayer(
 
         FlayerCommand::Link { projects } => link_projects(directory, projects, lookup),
         FlayerCommand::Unlink { projects } => unlink_projects(directory, projects, lookup),
+        FlayerCommand::Relink { old, new } => relink_project(directory, old, new, lookup),
 
         FlayerCommand::Load { workspaces } => {
             load_command(directory, directory, workspaces, lookup)
@@ -399,11 +412,21 @@ fn run_flayer(
         // Each folder taken from here as `link` takes a path, and each path
         // found spelled as `flayer link` run here would take it, so a line of
         // the report is a line to type.
-        FlayerCommand::Scan { roots, depth, json } => {
+        FlayerCommand::Scan {
+            roots,
+            depth,
+            suggest,
+            json,
+        } => {
             let request = scan::Request {
                 roots: targets(directory, roots)?,
                 depth: *depth,
                 from: Some(typed(directory, Path::new(""))?),
+                order: if *suggest {
+                    scan::Order::Suggested
+                } else {
+                    scan::Order::Route
+                },
             };
             reading_workspace(directory, lookup, |workspace| {
                 Ok(scan_workspace(workspace, &request, *json))
@@ -498,6 +521,23 @@ fn run_flayer(
                 )
             })
         }
+
+        // Resolved as a read, with --yes too, as `update` is: a default
+        // workspace made for the occasion links no project to adopt from,
+        // and `-p` would refuse it all the same.
+        FlayerCommand::Adopt {
+            project,
+            reference,
+            yes,
+        } => reading_workspace(directory, lookup, |workspace| {
+            adopt_from(
+                workspace,
+                &workspace.pick(project)?,
+                reference,
+                *yes,
+                &lookup.agents,
+            )
+        }),
 
         // Resolved as a read, on the default workspace before it is made
         // too: a workspace made for the occasion keeps its own in its

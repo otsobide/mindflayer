@@ -488,7 +488,7 @@ fn carry_out(
         let entry = install::entry_for_root(workspace, root);
         let (moved, log) = recorded(project, plan);
         ledger
-            .migrated(&entry, &moved, &log)
+            .migrated(&entry, &plan.settings.id, &moved, &log)
             .map_err(ProjectFailure::Ledger)?;
     }
     Ok(())

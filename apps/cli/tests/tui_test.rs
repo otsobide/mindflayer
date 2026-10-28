@@ -172,19 +172,25 @@ fn m_opens_the_minds_screen_with_the_linked_ones_ticked() {
         .iter()
         .map(|row| (row.path.as_str(), row.ticked))
         .collect();
+    // What is not linked first, as `flayer scan --suggest` lists it: a
+    // project before a repository.
     assert_eq!(
         rows,
         [
-            ("alpha", true),
-            ("beta", true),
             ("gamma", false),
-            ("repo", false)
+            ("repo", false),
+            ("alpha", true),
+            ("beta", true)
         ]
     );
     let drawn = tui_drawn(&app);
     assert!(drawn.contains("[x] alpha"), "{drawn}");
     assert!(drawn.contains("[ ] repo"), "{drawn}");
-    assert!(drawn.contains("mind init first"), "{drawn}");
+    assert!(drawn.contains("mind project with an id"), "{drawn}");
+    assert!(
+        drawn.contains("git repository (mind init first)"),
+        "{drawn}"
+    );
 }
 
 #[test]
@@ -193,9 +199,8 @@ fn applying_the_minds_screen_links_and_unlinks_in_one_pass() {
     let mut app = tui_in(dir.path());
     press_key(&mut app, KeyCode::Char('m'));
 
-    // Untick alpha, tick gamma and repo.
+    // Tick gamma and repo, untick alpha.
     press_key(&mut app, KeyCode::Char(' '));
-    press_key(&mut app, KeyCode::Down);
     press_key(&mut app, KeyCode::Down);
     press_key(&mut app, KeyCode::Char(' '));
     press_key(&mut app, KeyCode::Down);
@@ -250,6 +255,211 @@ fn applying_the_minds_screen_links_and_unlinks_in_one_pass() {
     assert!(
         transcript.contains("$ flayer unlink alpha\n"),
         "{transcript}"
+    );
+}
+
+/// `workspace_with_candidates`, with one more of each reason not linked:
+/// `older`, a project a `mind.toml` marks, and `notes`, a repository
+/// holding an `AGENTS.md`.
+fn workspace_with_one_of_each() -> TempDir {
+    let dir = workspace_with_candidates();
+    let older = dir.path().join("older");
+    fs::create_dir(&older).unwrap();
+    older_project(&older);
+    fs::create_dir_all(dir.path().join("notes/.git")).unwrap();
+    fs::write(dir.path().join("notes/AGENTS.md"), "# Agents\n").unwrap();
+    dir
+}
+
+#[test]
+fn the_minds_screen_lists_what_flayer_scan_suggest_does_in_its_order_and_words() {
+    let dir = workspace_with_one_of_each();
+    let app = tui::minds(dir.path(), &[], &Lookup::default()).unwrap();
+
+    let suggested = flayer(dir.path(), &["scan", "--suggest"]).unwrap();
+
+    // Each line of the command as the route and what follows its standing.
+    let lines: Vec<(String, String)> = suggested
+        .stdout
+        .lines()
+        .take_while(|line| !line.is_empty())
+        .map(|line| {
+            let (route, rest) = line.split_once(' ').unwrap();
+            let rest = rest.trim_start();
+            let why = rest
+                .strip_prefix("not linked")
+                .map_or("", str::trim_start)
+                .to_owned();
+            (route.to_owned(), why)
+        })
+        .collect();
+    let Mode::Minds(screen) = &app.mode else {
+        panic!("{:?}", app.mode)
+    };
+    let rows: Vec<(String, String)> = screen
+        .rows
+        .iter()
+        .map(|row| (row.path.clone(), row.why.clone()))
+        .collect();
+    assert_eq!(rows, lines);
+    assert_eq!(
+        rows.iter()
+            .map(|(path, _)| path.as_str())
+            .collect::<Vec<_>>(),
+        ["gamma", "older", "notes", "repo", "alpha", "beta"]
+    );
+    let drawn = tui_drawn(&app);
+    assert!(drawn.contains("mind project without an id"), "{drawn}");
+    assert!(
+        drawn.contains("git repository with AGENTS.md (mind init first)"),
+        "{drawn}"
+    );
+}
+
+#[test]
+fn the_link_form_offers_what_is_not_linked_in_the_order_and_words_of_a_suggestion() {
+    let dir = workspace_with_one_of_each();
+    let mut app = tui_in(dir.path());
+
+    press_key(&mut app, KeyCode::Char('l'));
+
+    let routes: Vec<&str> = app
+        .workspace()
+        .unwrap()
+        .unlinked
+        .iter()
+        .map(|unlinked| unlinked.route.as_str())
+        .collect();
+    assert_eq!(routes, ["gamma", "older", "notes", "repo"]);
+    let drawn = tui_drawn(&app);
+    assert!(drawn.contains("gamma  mind project with an id"), "{drawn}");
+    assert!(
+        drawn.contains("notes  git repository with AGENTS.md (mind init first)"),
+        "{drawn}"
+    );
+    // The first offered is the one picked: enter links the project.
+    let task = press_and_run(&mut app, KeyCode::Enter);
+    assert_eq!(
+        task,
+        Some(Task::Link {
+            path: String::from("gamma")
+        })
+    );
+}
+
+#[test]
+fn the_minds_screen_cuts_a_long_reason_to_keep_what_applying_does_in_sight() {
+    let dir = workspace_with_two();
+    let repo = dir.path().join("github.com/org/repo");
+    fs::create_dir_all(repo.join(".git")).unwrap();
+    fs::create_dir(repo.join(".claude")).unwrap();
+    fs::create_dir(repo.join(".codex")).unwrap();
+    for file in ["AGENTS.md", "CLAUDE.md", ".mcp.json", "opencode.json"] {
+        fs::write(repo.join(file), "").unwrap();
+    }
+    let mut app = tui_in(dir.path());
+    press_key(&mut app, KeyCode::Char('m'));
+    // Tick the repository and untick alpha, the rows under it.
+    press_key(&mut app, KeyCode::Char(' '));
+    press_key(&mut app, KeyCode::Down);
+    press_key(&mut app, KeyCode::Char(' '));
+
+    let reason = "git repository with .claude, .codex, .mcp.json, AGENTS.md, CLAUDE.md, \
+                  opencode.json (mind init first)";
+    for width in [80, 100, 160] {
+        let mut terminal = Terminal::new(TestBackend::new(width, 30)).unwrap();
+        terminal.draw(|frame| tui::ui::draw(&app, frame)).unwrap();
+        let lines: Vec<String> = terminal
+            .backend()
+            .buffer()
+            .content()
+            .chunks(usize::from(width))
+            .map(|line| line.iter().map(|cell| cell.symbol()).collect())
+            .collect();
+        let row = |path: &str| {
+            lines
+                .iter()
+                .find(|line| line.contains(path))
+                .unwrap_or_else(|| panic!("{width}: no {path} in {lines:#?}"))
+        };
+        let repo = row("[x] github.com/org/repo");
+        assert!(repo.contains("+ mind init, then link"), "{width}: {repo}");
+        let alpha = row("[ ] alpha");
+        assert!(alpha.contains("- unlink"), "{width}: {alpha}");
+        // Cut where the pane has no room for all of it, and said whole
+        // where it does.
+        assert_eq!(
+            repo.contains(reason),
+            !repo.contains('…'),
+            "{width}: {repo}"
+        );
+    }
+    let mut terminal = Terminal::new(TestBackend::new(160, 30)).unwrap();
+    terminal.draw(|frame| tui::ui::draw(&app, frame)).unwrap();
+    let drawn: String = terminal
+        .backend()
+        .buffer()
+        .content()
+        .iter()
+        .map(|cell| cell.symbol())
+        .collect();
+    assert!(drawn.contains(reason), "{drawn}");
+}
+
+#[test]
+fn the_minds_screen_and_the_link_form_say_a_moved_project_moved_as_flayer_scan_suggest_does() {
+    let dir = workspace_with_own();
+    flayer(dir.path(), &["install", "-p", "alpha", "commit-style"]).unwrap();
+    fs::create_dir(dir.path().join("apps")).unwrap();
+    fs::rename(dir.path().join("alpha"), dir.path().join("apps/alpha")).unwrap();
+
+    let suggested = flayer(dir.path(), &["scan", "--suggest"]).unwrap();
+
+    // Each line of the command not linked, as its route and what follows
+    // its standing.
+    let not_linked: Vec<(String, String)> = suggested
+        .stdout
+        .lines()
+        .take_while(|line| !line.is_empty())
+        .filter_map(|line| {
+            let (route, rest) = line.split_once(' ')?;
+            let why = rest.trim_start().strip_prefix("not linked")?;
+            Some((route.to_owned(), why.trim_start().to_owned()))
+        })
+        .collect();
+    assert_eq!(
+        not_linked,
+        [(
+            String::from("apps/alpha"),
+            String::from("moved: alpha -> apps/alpha")
+        )]
+    );
+    // Its reason is its id, which ranks it first, but what it wants is a
+    // relink, so the screen says it moved as the command does, rather than
+    // offering it as the project most worth linking.
+    let app = tui::minds(dir.path(), &[], &Lookup::default()).unwrap();
+    let Mode::Minds(screen) = &app.mode else {
+        panic!("{:?}", app.mode)
+    };
+    let found: Vec<(String, String)> = screen
+        .rows
+        .iter()
+        .filter(|row| matches!(row.standing, tui::minds::Standing::Found { .. }))
+        .map(|row| (row.path.clone(), row.why.clone()))
+        .collect();
+    assert_eq!(found, not_linked);
+    let drawn = tui_drawn(&app);
+    assert!(
+        drawn.contains("[ ] apps/alpha  moved: alpha -> apps/alpha"),
+        "{drawn}"
+    );
+
+    let mut app = tui_in(dir.path());
+    press_key(&mut app, KeyCode::Char('l'));
+    let drawn = tui_drawn(&app);
+    assert!(
+        drawn.contains("apps/alpha  moved: alpha -> apps/alpha"),
+        "{drawn}"
     );
 }
 
@@ -601,6 +811,122 @@ fn a_stale_entry_is_shown_where_it_can_be_unlinked() {
     press_and_run(&mut app, KeyCode::Char('y'));
 
     assert!(!registry(dir.path()).contains("\"alpha\""));
+}
+
+#[test]
+fn a_stale_entry_the_scan_found_moved_is_relinked_where_it_went() {
+    let dir = workspace_with_own();
+    flayer(dir.path(), &["install", "-p", "alpha", "commit-style"]).unwrap();
+    fs::create_dir(dir.path().join("apps")).unwrap();
+    fs::rename(dir.path().join("alpha"), dir.path().join("apps/alpha")).unwrap();
+    let mut app = tui_in(dir.path());
+
+    let drawn = tui_drawn(&app);
+    assert!(drawn.contains("! alpha"), "{drawn}");
+    assert!(
+        drawn.contains("it moved to apps/alpha: M relinks it there"),
+        "{drawn}"
+    );
+    press_key(&mut app, KeyCode::Char('M'));
+    assert!(tui_drawn(&app).contains("Relink alpha to apps/alpha?"));
+    let task = press_and_run(&mut app, KeyCode::Char('y'));
+
+    let relink = Task::Relink {
+        old: String::from("alpha"),
+        new: String::from("apps/alpha"),
+    };
+    assert_eq!(
+        relink.commands(),
+        [["flayer", "relink", "alpha", "apps/alpha"]]
+    );
+    assert_eq!(task, Some(relink));
+    assert!(registry(dir.path()).contains("\"apps/alpha\""));
+    let status = flayer(dir.path(), &["status", "-p", "apps/alpha"]).unwrap();
+    assert!(
+        status.stdout.contains("commit-style  current"),
+        "{}",
+        status.stdout
+    );
+}
+
+#[test]
+fn m_on_a_stale_entry_whose_project_was_not_found_says_how_to_relink_it_by_hand() {
+    let dir = workspace_with_two();
+    fs::remove_dir_all(dir.path().join("alpha")).unwrap();
+    let mut app = tui_in(dir.path());
+
+    let step = press_key(&mut app, KeyCode::Char('M'));
+
+    assert!(matches!(step, tui::state::Step::Stay));
+    let said = &app.message.as_ref().unwrap().text;
+    assert!(
+        said.contains("`flayer relink alpha <new>` follows it to where it went"),
+        "{said}"
+    );
+}
+
+#[test]
+fn a_on_a_foreign_skill_adopts_it_into_the_library_once_asked() {
+    let dir = workspace_with_two();
+    let notes = dir.path().join("alpha/.claude/skills/notes");
+    fs::create_dir_all(&notes).unwrap();
+    fs::write(notes.join("SKILL.md"), skill_file("notes", "Keep notes")).unwrap();
+    let mut app = tui_in(dir.path());
+    press_key(&mut app, KeyCode::Right);
+    press_key(&mut app, KeyCode::Down);
+    assert_eq!(app.current_item().unwrap().name, "notes");
+
+    press_key(&mut app, KeyCode::Char('A'));
+    assert!(tui_drawn(&app).contains("Adopt notes from alpha into the library?"));
+    let Mode::Confirming(confirm) = &app.mode else {
+        panic!("{:?}", app.mode);
+    };
+    assert_eq!(
+        confirm.question[2],
+        "It is copied into the workspace's library, and the project's copies are recorded as \
+         installed from there, as they are: updates reach them from now on. Nothing in the \
+         project is written."
+    );
+    let task = press_and_run(&mut app, KeyCode::Char('y'));
+
+    let adopt = Task::Adopt {
+        project: String::from("alpha"),
+        kind: Kind::Skill,
+        name: String::from("notes"),
+    };
+    assert_eq!(
+        adopt.commands(),
+        [["flayer", "adopt", "-p", "alpha", "--yes", "skill:notes"]]
+    );
+    assert_eq!(task, Some(adopt));
+    assert!(own_directory_for(dir.path(), Kind::Skill)
+        .join("notes/SKILL.md")
+        .is_file());
+    let status = flayer(dir.path(), &["status", "-p", "alpha"]).unwrap();
+    assert!(
+        status
+            .stdout
+            .contains("notes  missing   claude,opencode  workspace"),
+        "{}",
+        status.stdout
+    );
+}
+
+#[test]
+fn a_on_a_skill_that_is_not_foreign_says_what_it_adopts() {
+    let dir = workspace_with_two();
+    let mut app = tui_in(dir.path());
+    press_key(&mut app, KeyCode::Right);
+    assert_eq!(app.current_item().unwrap().name, "alpha");
+
+    let step = press_key(&mut app, KeyCode::Char('A'));
+
+    assert!(matches!(step, tui::state::Step::Stay));
+    let said = &app.message.as_ref().unwrap().text;
+    assert!(said.contains("this skill is authored"), "{said}");
+    assert!(!own_directory_for(dir.path(), Kind::Skill)
+        .join("alpha")
+        .exists());
 }
 
 #[test]
@@ -3346,4 +3672,76 @@ fn capital_t_on_the_workspaces_own_row_or_an_older_project_says_why_not() {
         .unwrap()
         .text
         .contains("`mind migrate`"));
+}
+
+#[test]
+fn w_lists_the_workspaces_this_machine_knows_with_the_one_on_screen_marked() {
+    let dir = TempDir::new().unwrap();
+    let home = dir.path().join("home");
+    fs::create_dir(&home).unwrap();
+    flayer_at_home(&home, &home, &["init"]).unwrap();
+    flayer_at_home(&home, &home, &["init", "flayers/writing"]).unwrap();
+    let writing = home.join("flayers/writing");
+    let mut app = tui_at_home(&writing, &home);
+
+    assert_eq!(
+        press_and_run(&mut app, KeyCode::Char('w')),
+        Some(Task::Workspaces)
+    );
+
+    let drawn = tui_drawn(&app);
+    assert!(drawn.contains(" flayer workspaces "), "{drawn}");
+    let default = format!(
+        "  home     {}                  no projects; the default one",
+        home.display()
+    );
+    let in_use = format!("* writing  {}  no projects", writing.display());
+    assert!(drawn.contains(&default), "{drawn}");
+    assert!(drawn.contains(&in_use), "{drawn}");
+    assert!(app.transcript().is_empty(), "a read is no change to print");
+
+    press_key(&mut app, KeyCode::Esc);
+    assert!(matches!(app.mode, Mode::Browse), "{:?}", app.mode);
+}
+
+#[test]
+fn w_on_a_project_on_its_own_marks_the_workspace_its_commands_would_use() {
+    let dir = TempDir::new().unwrap();
+    let home = dir.path().join("home");
+    fs::create_dir(&home).unwrap();
+    flayer_at_home(&home, &home, &["init"]).unwrap();
+    let project = home.join("collapse");
+    fs::create_dir(&project).unwrap();
+    new_project(&project);
+    let lookup = Lookup::at_home(Some(&home));
+    let mut app = App::opened_on(
+        Scope::Project,
+        project.clone(),
+        tui::load_project(&project, &lookup).unwrap(),
+    )
+    .with_lookup(lookup);
+
+    press_and_run(&mut app, KeyCode::Char('w'));
+
+    let drawn = tui_drawn(&app);
+    let marked = format!("* home  {}  no projects; the default one", home.display());
+    assert!(drawn.contains(&marked), "{drawn}");
+}
+
+#[test]
+fn the_keys_help_names_the_workspaces_list_and_its_command() {
+    let dir = workspace_with_two();
+    let mut app = tui_in(dir.path());
+
+    press_key(&mut app, KeyCode::Char('?'));
+
+    let Mode::Reading(reader) = &app.mode else {
+        panic!("{:?}", app.mode);
+    };
+    let lines: Vec<&str> = reader.lines.iter().map(|(_, line)| line.as_str()).collect();
+    let at = lines
+        .iter()
+        .position(|line| line.starts_with("  w      the workspaces this machine knows"))
+        .unwrap_or_else(|| panic!("{lines:?}"));
+    assert_eq!(lines[at + 1].trim(), "flayer workspaces");
 }

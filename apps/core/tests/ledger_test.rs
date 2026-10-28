@@ -12,7 +12,7 @@ use mindflayer_core::hash;
 use mindflayer_core::install::{self, Installed, Offer};
 use mindflayer_core::ledger::{backup_path, InstallRecord, Target, SCHEMA_VERSION};
 use mindflayer_core::AgentHomes;
-use mindflayer_core::{FlayerWorkspace, Kind, Ledger, MindProject, LEDGER_FILE};
+use mindflayer_core::{FlayerWorkspace, Kind, Ledger, MindProject, ProjectId, LEDGER_FILE};
 use rusqlite::types::Value;
 use rusqlite::Connection;
 use tempfile::TempDir;
@@ -74,6 +74,9 @@ const VERSION_2: &str = include_str!("fixtures/ledger-v2.sql");
 
 /// What schema 3 wrote, dumped from a ledger it made.
 const VERSION_3: &str = include_str!("fixtures/ledger-v3.sql");
+
+/// What schema 4 wrote, dumped from a ledger it made.
+const VERSION_4: &str = include_str!("fixtures/ledger-v4.sql");
 
 /// A ledger file in `dir` holding what `fixture` describes, untouched by
 /// anything of this build's.
@@ -446,7 +449,8 @@ fn a_version_3_ledger_keeps_every_row_it_had_and_its_copies_gain_no_hash() {
         "SELECT * FROM sources ORDER BY id",
         "SELECT * FROM artifacts ORDER BY id",
         "SELECT * FROM actions ORDER BY id",
-        "SELECT * FROM installations ORDER BY id",
+        "SELECT id, project, kind, name, source_id, installed_at, origin, content_hash
+           FROM installations ORDER BY id",
         "SELECT installation_id, agent, path FROM installation_targets
           ORDER BY installation_id, path",
     ] {
@@ -502,4 +506,213 @@ fn a_version_3_ledger_is_copied_aside_and_the_copy_opens_at_version_3() {
     ] {
         assert_eq!(rows(&copy, query), rows(&before, query), "{query}");
     }
+}
+
+/// The id `tanukeys` holds in the schema 4 fixture: what its settings said
+/// when that build made it.
+const TANUKEYS: &str = "376e550a51f67281fb714f604283f7a0";
+
+#[test]
+fn a_version_4_ledger_keeps_every_row_it_had_and_knows_no_project_it_is_not_told_of() {
+    let dir = TempDir::new().unwrap();
+    let path = written_at(dir.path(), VERSION_4);
+    let before = as_written(VERSION_4);
+
+    let ledger = Ledger::open(&path).unwrap();
+
+    let after = Connection::open(&path).unwrap();
+    assert_eq!(version_of(&after), SCHEMA_VERSION);
+    for query in [
+        "SELECT * FROM sources ORDER BY id",
+        "SELECT * FROM artifacts ORDER BY id",
+        "SELECT * FROM actions ORDER BY id",
+        "SELECT id, project, kind, name, source_id, installed_at, origin, content_hash
+           FROM installations ORDER BY id",
+        "SELECT * FROM installation_targets ORDER BY installation_id, path",
+        "SELECT * FROM created_files ORDER BY project, path",
+    ] {
+        let kept = rows(&after, query);
+        assert_eq!(kept, rows(&before, query), "{query}");
+        assert!(!kept.is_empty(), "{query} reads nothing to compare");
+    }
+    // The file kept no id, and nothing said one: every record keeps its
+    // route alone.
+    assert!(rows(&after, "SELECT * FROM projects").is_empty());
+    assert!(rows(&after, "SELECT project_id FROM installations")
+        .iter()
+        .all(|row| row == &[Value::Null]));
+    assert_eq!(ledger.project_at("tanukeys").unwrap(), None);
+}
+
+#[test]
+fn a_version_4_ledger_names_each_record_by_the_id_its_linked_project_holds() {
+    let dir = TempDir::new().unwrap();
+    let path = written_at(dir.path(), VERSION_4);
+    let tanukeys = ProjectId::parse(TANUKEYS).unwrap();
+
+    // What a workspace hands in: `tanukeys`, marked by its settings, and
+    // not `collapse`, which a `mind.toml` marks and has no id.
+    let ledger =
+        Ledger::open_knowing(&path, || vec![(tanukeys.clone(), String::from("tanukeys"))]).unwrap();
+
+    assert_eq!(ledger.project_at("tanukeys").unwrap(), Some(tanukeys));
+    let after = Connection::open(&path).unwrap();
+    assert_eq!(
+        rows(
+            &after,
+            "SELECT project, name, project_id FROM installations ORDER BY id"
+        ),
+        [
+            [text("collapse"), text("deploy"), Value::Null],
+            [text("collapse"), text("notes"), Value::Null],
+            [text("collapse"), text("lint"), Value::Null],
+            [text("tanukeys"), text("review"), text(TANUKEYS)],
+            [text("tanukeys"), text("notes"), text(TANUKEYS)],
+            [text("tanukeys"), text("style"), text(TANUKEYS)],
+        ]
+    );
+}
+
+#[test]
+fn a_version_4_ledger_is_copied_aside_and_the_copy_opens_at_version_4() {
+    let dir = TempDir::new().unwrap();
+    let path = written_at(dir.path(), VERSION_4);
+    let before = as_written(VERSION_4);
+
+    Ledger::open(&path).unwrap();
+
+    let backup = dir.path().join("mindflayer.db.v4.bak");
+    assert_eq!(backup_path(&path, 4), backup);
+    let copy = Connection::open(&backup).unwrap();
+    assert_eq!(version_of(&copy), 4);
+    for query in [
+        "SELECT * FROM sources ORDER BY id",
+        "SELECT * FROM installations ORDER BY id",
+        "SELECT * FROM installation_targets ORDER BY installation_id, path",
+        "SELECT * FROM created_files ORDER BY project, path",
+        "SELECT type, name, sql FROM sqlite_master ORDER BY name",
+    ] {
+        assert_eq!(rows(&copy, query), rows(&before, query), "{query}");
+    }
+}
+
+/// A workspace linking `names`, each a project marked by its settings under
+/// the workspace, shared so no repository is needed.
+fn linking(names: &[&str]) -> (TempDir, FlayerWorkspace, Vec<MindProject>) {
+    let dir = TempDir::new().unwrap();
+    let (mut workspace, _) = FlayerWorkspace::init(dir.path()).unwrap();
+    let mut projects = Vec::new();
+    for name in names {
+        let (project, _) = MindProject::init_settings(
+            dir.path().join(name),
+            &mindflayer_core::Agent::ALL,
+            mindflayer_core::Share::Shared,
+            &mindflayer_core::Directories::default(),
+        )
+        .unwrap();
+        workspace.link(&project).unwrap();
+        projects.push(project);
+    }
+    (dir, workspace, projects)
+}
+
+fn id_of(project: &MindProject) -> ProjectId {
+    project.settings().unwrap().id.clone()
+}
+
+#[test]
+fn a_ledger_made_for_a_workspace_knows_each_project_it_links_by_its_id() {
+    let (dir, mut workspace, projects) = linking(&["collapse", "tanukeys"]);
+    let (legacy, _) = MindProject::init(dir.path().join("legacy")).unwrap();
+    workspace.link(&legacy).unwrap();
+
+    let ledger = workspace.ledger().unwrap();
+
+    assert_eq!(
+        ledger.known_projects().unwrap(),
+        [
+            (id_of(&projects[0]), String::from("collapse")),
+            (id_of(&projects[1]), String::from("tanukeys")),
+        ]
+    );
+}
+
+#[test]
+fn reading_a_version_4_ledger_names_its_records_by_the_ids_of_the_projects_linked() {
+    let (dir, workspace, projects) = linking(&["tanukeys"]);
+    written_at(&dir.path().join(".mindflayer"), VERSION_4);
+
+    let ledger = workspace.ledger_for_reading().unwrap();
+
+    let tanukeys = id_of(&projects[0]);
+    assert_eq!(
+        ledger.project_at("tanukeys").unwrap(),
+        Some(tanukeys.clone())
+    );
+    let after = Connection::open(workspace.ledger_path()).unwrap();
+    assert_eq!(
+        rows(
+            &after,
+            "SELECT DISTINCT project_id FROM installations WHERE project = 'tanukeys'"
+        ),
+        [[text(tanukeys.as_str())]]
+    );
+}
+
+#[test]
+fn opening_the_ledger_to_write_follows_a_project_linked_since_and_one_given_a_new_id() {
+    let (dir, mut workspace, projects) = linking(&["collapse"]);
+    drop(workspace.ledger().unwrap());
+    let (later, _) = MindProject::init_settings(
+        dir.path().join("later"),
+        &mindflayer_core::Agent::ALL,
+        mindflayer_core::Share::Shared,
+        &mindflayer_core::Directories::default(),
+    )
+    .unwrap();
+    workspace.link(&later).unwrap();
+    // What `mind init --new-id` leaves, written here by hand.
+    let settings = projects[0].marker_path();
+    let renewed = ProjectId::generate();
+    let text = std::fs::read_to_string(&settings)
+        .unwrap()
+        .replace(id_of(&projects[0]).as_str(), renewed.as_str());
+    std::fs::write(&settings, text).unwrap();
+
+    let (ledger, _) = workspace.ledger_to_write().unwrap();
+
+    assert_eq!(
+        ledger.known_projects().unwrap(),
+        [
+            (renewed, String::from("collapse")),
+            (id_of(&later), String::from("later")),
+        ]
+    );
+}
+
+#[test]
+fn a_stale_entry_keeps_its_id_and_a_copy_linked_beside_its_project_gives_none() {
+    let (dir, mut workspace, projects) = linking(&["collapse", "tanukeys"]);
+    drop(workspace.ledger().unwrap());
+    // `collapse` moves away, and `tanukeys` is copied with its `.mind`.
+    std::fs::rename(dir.path().join("collapse"), dir.path().join("moved")).unwrap();
+    let copy = dir.path().join("copy");
+    std::fs::create_dir_all(copy.join(".mind")).unwrap();
+    std::fs::copy(
+        projects[1].marker_path(),
+        copy.join(".mind").join(mindflayer_core::SETTINGS_FILE),
+    )
+    .unwrap();
+    workspace.link(&MindProject::open(&copy).unwrap()).unwrap();
+
+    let (ledger, _) = workspace.ledger_to_write().unwrap();
+
+    // The duplicate is left out, so what was known of `tanukeys` stays.
+    assert_eq!(
+        ledger.known_projects().unwrap(),
+        [
+            (id_of(&projects[0]), String::from("collapse")),
+            (id_of(&projects[1]), String::from("tanukeys")),
+        ]
+    );
 }

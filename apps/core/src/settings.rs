@@ -555,6 +555,25 @@ pub(crate) fn edited(
     Ok(document.to_string())
 }
 
+/// `text`, the `settings.toml` at `path`, holding `id` in place of the id
+/// it holds, through toml_edit as [`edited`] writes a changed value, with
+/// every other byte as it was.
+///
+/// Apart from [`edited`], which refuses to change an id: a change to a
+/// project's settings never moves the id that names it for good, and giving
+/// it another is an act of its own, for a copy made with its `.mind`
+/// (`mind init --new-id`, [`crate::relink::new_id`]).
+pub(crate) fn renewed(path: &Path, text: &str, id: &ProjectId) -> Result<String, WorkspaceError> {
+    let mut document: toml_edit::DocumentMut =
+        text.parse()
+            .map_err(|error: toml_edit::TomlError| WorkspaceError::Edit {
+                path: path.to_path_buf(),
+                detail: error.to_string(),
+            })?;
+    set(document.as_table_mut(), ID, id.as_str().into());
+    Ok(document.to_string())
+}
+
 /// `value` written at `key` of `table`, in place of what is there, keeping
 /// the spacing around it and a comment after it on its line; after the
 /// last key when there is none.

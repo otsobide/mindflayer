@@ -8,6 +8,7 @@ use std::io;
 use std::path::{Path, PathBuf};
 
 use mindflayer_core::activate::{self, ActivateError, WORKSPACE_VARIABLE};
+use mindflayer_core::adopt::AdoptError;
 use mindflayer_core::everywhere::EverywhereError;
 use mindflayer_core::gather::GatherError;
 use mindflayer_core::ledger::LedgerError;
@@ -65,6 +66,8 @@ pub enum CliError {
     #[error(transparent)]
     Everywhere(#[from] EverywhereError),
     #[error(transparent)]
+    Adopt(#[from] AdoptError),
+    #[error(transparent)]
     Template(#[from] TemplateError),
     #[error(transparent)]
     Activate(#[from] ActivateError),
@@ -95,6 +98,8 @@ pub enum CliError {
     #[error(transparent)]
     Reapply(#[from] mindflayer_core::ReapplyError),
     #[error(transparent)]
+    Relink(#[from] mindflayer_core::relink::RelinkError),
+    #[error(transparent)]
     Update(#[from] mindflayer_core::update::UpdateError),
     #[error("say which projects to update: -p <project> for each, or --all for every one the workspace links")]
     UpdateWhere,
@@ -112,6 +117,8 @@ pub enum CliError {
     EditorFailed { editor: String, status: String },
     #[error("no flayer workspace above {0}; make one with `flayer init` in the directory that holds your projects")]
     NoWorkspaceAbove(PathBuf),
+    #[error("{0}: not known, since there is no default workspace to remember it (--home or $MINDFLAYER_HOME names none)")]
+    NoDefault(PathBuf),
     #[error("{project}: not managed by the workspace at {workspace}; `mind link` adds it")]
     NotManaged {
         project: PathBuf,

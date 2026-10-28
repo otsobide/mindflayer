@@ -342,7 +342,10 @@ so the block and those files never disagree on it.
   the description breaks the rules. `mind add`, `rename` and `install` all
   ask `artifact::strict_issues`, which keeps what `ValidationIssue::is_strict`
   picks out of that list, for the skill as it is about to be written, so one
-  change to the set reaches all three. `rename` asks too, although the name is
+  change to the set reaches all three. So does `flayer adopt`, whose library
+  copy is a write, and whose project copies become what an install would
+  have written ([adopting what a project already
+  keeps](#adopting-what-a-project-already-keeps)). `rename` asks too, although the name is
   all it writes, because what it leaves behind is a skill Mindflayer wrote;
   `mind add` checks the name and the description before building anything as
   well, only for messages of its own. Those are what agents refuse: Codex skips a skill whose name is over 64
@@ -470,6 +473,19 @@ takes one of the workspace's own out of every project it links before the
 library, and has no `mind` form, nor a `-p`: a project's own was installed
 nowhere ([removing one of the workspace's own
 everywhere](#removing-one-of-the-workspaces-own-everywhere)).
+`flayer adopt -p <project> <name>` brings a skill somebody keeps in the
+project's agents' folders into the workspace's library and records the
+project's copies as installed from there, and has no `mind` form: what it
+writes is the workspace's library, which `mind` changes nowhere, as
+`flayer add` without `-p` has none ([adopting what a project already
+keeps](#adopting-what-a-project-already-keeps)).
+`flayer relink <old> <new>` follows a project the workspace links to where it
+moved, and has no `mind` form: the project at `old` is gone, and nothing at
+`new` is linked yet to say which workspace to tell. `mind init --new-id`
+gives the project in the directory it works in an id of its own, as `init`
+makes one there rather than in a project above, and has no `flayer` form,
+since a copy is most often not linked yet ([an entry whose project
+moved](#an-entry-whose-project-moved)).
 Reads look everywhere; a change needs one place, and without `-p` that place
 is the workspace.
 
@@ -1217,6 +1233,12 @@ one from then on, while this build reads the settings and passes the
 `MIND_TOML_VERSION` is the newest a `mind.toml` holds, which only
 `MindProject::init` still writes.
 
+A key that an older build can read past without misreading anything moves no
+version: `known`, the list of [the workspaces this machine
+knows](#the-workspaces-this-machine-knows) that the default workspace keeps,
+says nothing about the workspace holding it, and every edit of a marker keeps
+a key it does not know.
+
 An older marker is read the way it was written, never refused, and moved
 forward only when somebody asks: a workspace's own folders by `flayer migrate
 --library`, a project's `mind.toml` or `settings.json` by `mind migrate`
@@ -1265,8 +1287,10 @@ whatever the command (`render::json`):
 
 `status` was the first to take it ([what each project
 has](#what-each-project-has)), and every later reading command takes the same
-one rather than a shape of its own: `scan --json` ([Scanning](#scanning)), and
-the read types #61 makes serializable. One shape is one parser for a script,
+one rather than a shape of its own: `scan --json` ([Scanning](#scanning)),
+`workspaces --json` ([the workspaces this machine
+knows](#the-workspaces-this-machine-knows)), and the read types #61 makes
+serializable. One shape is one parser for a script,
 and for the panel's backend when it reads through the CLI.
 
 - **The warnings are inside it.** Failures are collected, not raised, in JSON
@@ -1326,6 +1350,20 @@ Matching is by where an entry **points**, not by how it is spelled, so
 `collapse` and `./collapse` are one entry. Arithmetic settles most of it, and
 two spellings only the filesystem can equate are settled by canonicalising.
 
+`loaded` and the default workspace's `known` are stored and matched the same
+way ([the workspaces this machine knows](#the-workspaces-this-machine-knows)).
+An entry dropped from any of the three leaves its place's layout to the entry
+after it, so dropping the first of `["a", "b"]` leaves `["b"]` rather than
+`[ "b"]`, and a list laid out a line each keeps its lines. It takes its own
+comments with it and leaves everybody else's: the ones above it and the one
+after it on its line go, while a comment above the entry after it, or at the
+end of the line before it, stays where it was. toml_edit keeps what comes
+before an entry as one string, from the comma ahead of it, so the end of the
+line above and the comments above the entry share it. Each is split at its
+first line break: the part before it stays with the line above, the part after
+it with the entry below. Handing the next entry the dropped one's string whole
+would put the dropped entry's comment above it in place of its own.
+
 `link` and `unlink` match against **the array they are about to edit**, not
 against the copy parsed when the workspace was opened. The marker file is meant
 to be editable by hand, so that copy can be stale, and acting on a stale index
@@ -1351,6 +1389,80 @@ temporary first, and a symlinked config is followed to the file it names;
 otherwise an edit would quietly widen a chmodded config or detach a shared one.
 A hard link is the case this cannot preserve: a rename breaks it, and keeping
 it would mean giving up the atomic write.
+
+### An entry whose project moved
+
+A route is what moving the project changes. Moved alone, a repository leaves
+its entry stale, and every record of what was installed into it names a
+route nothing is at, so its copies read as somebody's once it is linked again
+where it went. Moved with the workspace, the route stays true, which is why
+it is a route; moved without, nothing in the entry can follow it. What does
+move with it is the `id` its settings hold ([D-09](#d-09-project-settings-live-in-the-project)),
+128 random bits, so that only a copy shares it. So the ledger keeps the id it
+last saw at each route ([schema 5](#why-the-ledger-is-sqlite)), and a
+project found somewhere else holding an id last seen at an entry where no
+project is any more is that entry's project, moved. `flayer scan` says so
+(`moved: <old> -> <new>`, [scanning](#scanning)), and `flayer relink <old>
+<new>` (`relink::relink`) follows it.
+
+The route stays the key of every record, with the id beside it
+(`installations.project_id`), rather than the id taking its place. A project
+a `mind.toml` marks has no id and goes on being found by its route, and so
+does one whose id nothing recorded yet; keyed by the id, both would need a
+second way in, and every record written so far re-keying.
+
+The ledger learns the ids from the projects themselves, never from the
+entries: a step to schema 5 is told those of every project the workspace
+links, and the ledger, opened to write, is told them again every time
+(`FlayerWorkspace::ledger_to_write`, `Ledger::knew`), as the scrub runs every
+time, so an entry written by hand, a project given a new id and one whose
+route holds another project now are all followed without each command that
+links remembering to. A stale entry keeps the id last seen there, which is
+what finds its project, and only a relink moves it. An id two linked
+directories hold is told to nobody.
+
+A relink rewrites the entry where it stands, with the comments around it,
+which a person wrote about the project rather than about where it was, and
+moves every record and every file Mindflayer made there to the new route in
+the same transaction as the rewrite of the marker (`Ledger::relinked`): an
+entry moved without its records would leave them under a route no entry
+names, and records moved without it would name a directory the workspace
+does not link. It holds the workspace's lock from before it reads the ledger
+for its checks. A local project's exclude lines go with it
+([what keeps an install out of git](#what-keeps-an-install-out-of-git)). It
+refuses, with nothing written:
+
+- a directory holding another id than the one last seen at the entry, which
+  is another project, and one holding the id the ledger last saw at another
+  entry, which is where it moved from, if anywhere;
+- an entry that still opens a project, which has not moved: with the same id,
+  a copy; and one whose marker is there and would not open (a typo, a newer
+  version), which still holds its project, whose id nothing read, so a copy
+  of it would pass for it moved (`MindProject::is_vacant` tells the two);
+- another linked project holding the id, a copy too;
+- a project a `mind.toml` marks, which has no id (moves of those are found
+  by nobody, by design);
+- records at the entry with no id, as a ledger from before ids were kept
+  holds them for a project not read since: nothing says they were that
+  project's, and a record is what lets Mindflayer write over and delete what
+  sits at the path it names.
+
+A workspace with no ledger, or whose ledger records nothing at the entry,
+has nothing to keep, and the entry alone moves.
+
+A repository copied with its `.mind` holds the same id as the one it was
+copied from, and no record can tell which of the two it was made for. So a
+copy is never taken for a move: two directories holding one id, among what a
+scan found and what the workspace links, or among what `status` reports, are
+a failure collected with the rest that names every one (`relink::Duplicate`),
+and a relink refuses one it can see. `mind init --new-id` (`relink::new_id`)
+gives a copy an id of its own and keeps every other byte of its settings:
+the one change `MindProject::change_settings` refuses, an id naming the
+project for good, made apart from it (`MindProject::change_id`) through the
+same rewrite and toml_edit. A local copy's exclude lines follow it to the new
+id, and a workspace linking it knows it, and every record of it, by the new
+one, so what was installed stays the project's. A `settings.json`, which
+nothing but `mind migrate` changes, is pointed there.
 
 ## Gathering
 
@@ -1634,11 +1746,12 @@ command that writes to it makes it; a read never does, and changes an existing
 one only to migrate it ([A read leaves the ledger as it finds
 it](#a-read-leaves-the-ledger-as-it-finds-it)).
 
-Five things are recorded: the **sources** gathered from, the **artifacts** on
+Six things are recorded: the **sources** gathered from, the **artifacts** on
 the shelf and which source each came from, the **installations** (which skill
 or rule Mindflayer put into which project, from where, every copy it wrote and
 a hash of what it wrote), the **files Mindflayer made** in a project, which it
-may take away again, and an **action log**. The log keeps failures too: a log
+may take away again, the **projects** by the id each was last seen holding,
+and an **action log**. The log keeps failures too: a log
 of only what worked cannot answer the question anybody opens it with.
 Timestamps are Unix seconds, which needs no date library and which SQLite
 renders with `datetime(at, 'unixepoch')`.
@@ -1654,7 +1767,7 @@ A source's shelf folder is stored rather than derived: two URLs can reduce to
 the same readable name, and where a source's files went is a fact about the
 past that must not move when the naming rule changes.
 
-The schema has had four versions, each a block in `Ledger::migrate` and a
+The schema has had five versions, each a block in `Ledger::migrate` and a
 constant beside it:
 
 1. `sources`, `artifacts` and `actions`: what was gathered, from where, and
@@ -1677,6 +1790,10 @@ constant beside it:
    `created_files`, each file Mindflayer made in a project rather than
    wrote into, so the block goes with the last rule and the file with it
    only when Mindflayer made it (#45).
+5. `projects`, the id the ledger last saw at each route, one id a route and
+   one route an id, and on `installations`, the `project_id` each record was
+   made for, so a project that moved is found again by its id ([an entry
+   whose project moved](#an-entry-whose-project-moved), #57).
 
 An older ledger is migrated step by step, so one made two versions ago ends
 where one made today begins, and two rules hold for every step:
@@ -1714,7 +1831,15 @@ source that source's origin, and one from the workspace or a load none, since
 version 2 kept nothing to say which; it makes up no hash for a copy nobody
 hashed when it was written, and D-04 says how a missing one reads. Version 4
 fills in nothing: no build before it installed a rule, and a skill's targets
-need no hash of their own. D-04's states (#47) took no step of their own:
+need no hash of their own. Version 5 fills in what no SQL could: the file
+kept no id, so the step is handed the id of each project the workspace
+links, opened for its settings, with the route its records are under
+(`Ledger::open_knowing`), and its own SQL writes them in. The one exception
+to what a step is filled from, and the reason for it holds: what it is handed
+is what the projects hold, not how today's code spells something. A project
+a `mind.toml` marks, an entry that will not open and an id two linked
+directories hold are handed in for none, and their records keep their route
+alone. D-04's states (#47) took no step of their own:
 what tells them apart is the hash each copy was written with, which versions
 3 and 4 keep, and what the place it came from offers now, which is read where
 it is offered rather than kept. A record with no hash is held to its offer
@@ -1811,7 +1936,9 @@ its name (`Ledger::copies`, as a listing marks installed copies): a skill
 present anywhere it would be written, and unrecorded there, is
 `Standing::Foreign`, whatever the other targets hold. Foreign is inert in both
 directions: never overwritten, never deleted, and the caller is told so,
-with the path, rather than obeyed quietly. So somebody's skill in
+with the path, rather than obeyed quietly. It becomes Mindflayer's only when
+somebody adopts it by name ([adopting what a project already
+keeps](#adopting-what-a-project-already-keeps)), as it is. So somebody's skill in
 `.claude/skills` refuses the whole install, and `.agents/skills` is not
 written either: a copy beside it would hand OpenCode, which reads both, two
 different skills of one name. Only the targets refuse, as D-07 has it, not
@@ -2297,6 +2424,122 @@ down: whether a folder reaches every project depends on where the agents
 read, which `AgentHomes` already says, not on where the user's home is, and
 a home moved with `$CLAUDE_CONFIG_DIR` moves what is refused with it.
 
+### Adopting what a project already keeps
+
+Many repositories keep skills written by hand in `.claude/skills` or
+`.agents/skills`, committed with the code. Each lists as foreign, and
+foreign is inert both ways, so nothing Mindflayer does reaches one: no
+update, and no copy for an agent that reads the other folder. `flayer adopt
+-p <project> <name>` (`adopt::plan`, `adopt::apply`, #59) is the one way a
+copy nobody installed becomes recorded: asked for by name, never done by a
+scan or an install, it copies the skill into the workspace's library and
+records the project's copies as an installation from there, with the hash
+they hold. The project's bytes are never written: what is there is what is
+recorded, and from then on it is managed as anything installed is, current
+while nobody changes it, edited once somebody does, outdated once the
+library copy moves on ([an edited copy is left
+alone](#an-edited-copy-is-left-alone)). What a project authors stays its
+own ([D-06](#d-06-projects-keep-authoring-beside-the-code)); this is about
+what sits where its agents read.
+
+- **Held to what an install could have written.** Every later look compares
+  the copies with the recorded hash and with the library copy, so both are
+  made from the bytes as they are: the hash is `hash::tree` of the copies,
+  the library copy is made from the first with `copy::tree` and refused
+  unless it hashes the same, and the record names the workspace's own as its
+  origin. What no install writes is refused rather than recorded: a link,
+  where the copy is or inside it, which the hash refuses and an install
+  never leaves; something at the copy's place that is no folder; and a
+  `.claude-plugin` at its top, which an install leaves out of every copy
+  ([what no copy holds](#what-no-copy-holds)). Recorded with it, the copy
+  would read as outdated at once, since an install's copy holds no such
+  folder (`copy::same_leaving`), and the next update would take it out,
+  turning off the plugin's hooks and servers behind somebody's back;
+  recorded without it, the copy would hold what the record does not. So it
+  is said, and moving it out of the skill is somebody's to do first.
+- **Strict, as installing is.** The library copy is a write, so the skill is
+  held to what an install refuses one over (`artifact::strict_issues`),
+  filed under its name: a name that breaks the rules or does not match its
+  folder, a description empty or too long.
+- **Every copy one skill.** Copies in two targets that do not hold the same
+  are refused, both named: one hash is recorded, and which of the two is the
+  skill is not something to guess.
+- **Only where an install writes, every target recorded.** It looks in the
+  targets an install of it uses (`install::targets`), and records each,
+  those with no copy too, so one with none reads as missing, and the next
+  update puts a copy there from the library, as for any installation that
+  lost one. Adopting writes nothing in a project, so it is the update, run
+  when somebody chooses, that gives Codex and OpenCode a skill a repository
+  kept only in `.claude/skills`. Recording only the copies found was turned
+  down: current at once, but the agents of the empty folder would go
+  without it and nothing would say so, until the next install recorded the
+  copies afresh. So was refusing: most repositories keep one folder, and a
+  new project names all three agents. A copy only in a folder no install
+  writes, `.opencode/skills` say, is not adopted, since no install or update
+  would reach it there and the next would make it somebody's again.
+- **Somebody's, nothing else.** Not one the ledger records already, from
+  wherever it came, which is Mindflayer's to update or uninstall; not one in
+  the folder the project authors in, which a `mind.toml`'s target always is
+  and settings may make one, since that is the project's own work and a
+  change from the project reaches it; not one inside an agent's own folder
+  ([never into an agent's own folder](#never-into-an-agents-own-folder)),
+  nor one where a loaded workspace keeps its own. A rule is refused too: one
+  reaches a project rendered from the library as a section of its
+  `AGENTS.md`, and taking rules out of a hand-written one is a change of its
+  own.
+- **One name in the library.** A name the library holds already, by its
+  folder or by what one of its skills declares, is refused with both paths:
+  the workspace would offer two skills of one name. The copy's folder is
+  made with `create_dir`, which refuses one made in the meantime, and the
+  folder of the workspace's own skills with it when it is missing, as the
+  first one added makes it. Built in place rather than beside: no agent
+  reads the library.
+- **Out of git only what git does not track.** In a local project each copy
+  git tracks nothing in is kept out of git before anything else is written,
+  as an install's copies are, so a block that cannot be edited refuses the
+  whole adoption ([what keeps an install out of
+  git](#what-keeps-an-install-out-of-git)). One git tracks, as a committed
+  `.claude/skills` is, gets no line, then or after an update: a line would
+  keep none of it out and hide every file added to it later. It stays the
+  team's in git, and an update writes over it there, for the change to show
+  in `git status`. Local mode edits a tracked team file only with
+  `edit_tracked` ([D-02](#d-02-installs-stay-local-unless-a-project-shares-them));
+  that is about a file Mindflayer edits inside its marks, an `AGENTS.md` or a
+  config file, and a skill folder somebody asked by name to be managed is
+  consent for that folder, which the dry run and a `note:` say. The plan
+  reads the exclude file whenever a line would be written, so a dry run
+  refuses a block that cannot be edited as the adoption would, and a local
+  project no work tree holds (`Plan::outside`) is said to keep nothing out
+  of git, in the dry run and the adoption both, as an install there says it,
+  rather than listed as keeping each copy out. A shared project's exclude
+  file, and that of one a `mind.toml` marks, is never opened.
+- **One lock, planned again under it, together or not at all.** `apply`
+  opens the ledger to write first, since its scrub can take the lock
+  itself, then takes the workspace's lock, reads the project again and plans again,
+  so a plan shown a minute before decides nothing. The exclude lines, the
+  library copy and the record follow in that order, and a step that fails
+  takes back what came before it: the library copy goes, and the exclude
+  lines this added, not one the group held already. The action log is
+  written last, as after an install.
+- **A dry run without `--yes`**, which reads the ledger without making it and
+  writes nothing, as every dry run does, and exits zero: what it gives is a
+  line for the library copy, one for the copies recorded, one for each
+  target with no copy, and in a local project one for each copy kept out of
+  git, to read before saying yes. Resolved as a read with `--yes` too, as an
+  update is: a workspace made for the occasion links no project to adopt
+  from.
+- **Where `gh skill` got it, shown.** A `SKILL.md` that `gh skill`
+  installed says where it came from under `metadata` keys starting
+  `github-` (`adopt::PROVENANCE_PREFIX`). The plan hands those back as
+  written, and the CLI shows them under its first line, each key and value
+  made printable as every row from a file somebody wrote is, so a carriage
+  return cannot rewrite the line read before saying yes; nothing reads them
+  further, and no other tool's lockfile is read or written. Taking them for
+  a source to gather from would be a gather, which is its own command.
+
+The TUI offers it on a row `status` calls foreign, with `A`, which asks and
+then runs `flayer adopt -p <project> --yes skill:<name>`.
+
 ### Loading: a third place, read live
 
 `flayer load <path>` adds a third place that offers: the own artifacts of
@@ -2375,7 +2618,8 @@ A project in local mode
 installed into it out of git, through a block of anchored entries in
 `$GIT_COMMON_DIR/info/exclude` that `exclude` keeps. Which paths to exclude
 is the installing side's to choose, and `exclude` only writes them down: an
-install of a skill names one entry for each copy, a render of Claude's rule
+install of a skill names one entry for each copy git tracks nothing in, a
+render of Claude's rule
 files one for each file ([Claude's rule files](#claudes-rule-files)), a
 render of a project's rules one for an `AGENTS.md` it made ([installing
 rules](#installing-rules)), and #94 will for MCP config.
@@ -2400,6 +2644,19 @@ How an install uses it:
   teammate's way. Copies that then fail to land take back out the entries of
   every target left empty, since a line naming an empty place would keep
   whatever somebody writes there later out of git without a word.
+- **Never a copy git tracks.** An ignore rule leaves alone what the index
+  holds, so a line for a copy git tracks keeps none of its files out, and
+  hides from `git status` every file added to it later, where a teammate
+  would never see it to commit. So an install writes a line only for each
+  copy git tracks nothing in (`install::untracked`), asked of the index as
+  `exclude::tracks` asks it: a copy that lands where nothing was, as most
+  do, is untracked, while one a team committed, as an [adopted
+  one](#adopting-what-a-project-already-keeps) often is, or one a project
+  that was shared kept when it turned local, stays in git, and what an
+  update writes over it shows as the change it is. Mindflayer runs no git
+  command and leaves the index as it is. An index that cannot be read takes
+  nothing for tracked, and the exclude edit that follows reads the same
+  repository.
 - **Local projects only.** A shared project's copies are the team's to
   commit, and a project a `mind.toml` marks was committed by design, so for
   those the exclude file is not opened at all, by an install or an
@@ -2409,7 +2666,17 @@ How an install uses it:
   agents, targets or share mode
   change](#when-a-projects-agents-targets-or-share-mode-change)).
 - **Keyed by the project's id**, from its settings, which stays when the
-  project is renamed or moved within its repository.
+  project is renamed or moved within its repository. A line names a path
+  below the project's own directory, so the group's lines are carried
+  whole when either changes (`exclude::carry`): to where a relinked project
+  is now, anchored again there, in the same repository or the one it moved
+  into, read from the folder nearest the old place that is still there
+  ([an entry whose project moved](#an-entry-whose-project-moved)), and back
+  to the old place, reached the same way, when the entry cannot follow; and
+  to a copy's new id once `mind init --new-id` gives it one, before its
+  settings say so, and back when they cannot. A copy elsewhere in the same tree keeps its own lines under the old
+  id, since those name its copies. A repository moved whole has its lines
+  right already, its exclude file with it.
 - **Taken out after the copies.** An uninstall removes the copies, then the
   record, then the entries, so no copy shows in `git status` on its way out.
   A block that cannot be edited then is a `warning:` beside what was done
@@ -2571,7 +2838,8 @@ unrecorded in a folder it drops; `targets reset` is the same the other way.
   (`exclude::forget`), every line whichever workspace wrote it, since each
   names a copy that is now the team's to commit. One turning local is given
   the `.gitignore` and an entry for each copy the ledger records in place
-  that the group does not hold yet, both before its settings say so, as
+  that git does not track and the group does not hold yet, both before its
+  settings say so, as
   `mind init` writes the `.gitignore` before the settings. `edit_tracked` is
   written with the share mode every time, off unless `--edit-tracked` is
   given, so one command line says the whole of how the project shares.
@@ -2759,7 +3027,9 @@ report, a refusal and an update never disagree:
 - **orphaned**: the place it came from no longer offers it, so nothing can
   bring it up to date or put a copy of it back; `uninstall` takes it out.
 - **foreign**: unrecorded, in an agent's folder outside any the project
-  authors in: somebody's, never Mindflayer's to change.
+  authors in: somebody's, never Mindflayer's to change unless somebody
+  adopts it ([adopting what a project already
+  keeps](#adopting-what-a-project-already-keeps)).
 - **authored**: unrecorded, in a folder the project authors in: its own work.
 
 They took over from `installed`, now current, outdated or orphaned, and
@@ -3040,10 +3310,11 @@ that is not a command line.
 
 The link form offers what `flayer scan` finds under the workspace, or under
 the folders `flayer minds` was given for the session it opened
-([Scanning](#scanning)). A git repository that is not a mind project yet can
-be picked, but making it one writes into it, so `mind init` is asked about,
-not assumed, and a typed path that turns out to be a plain directory is asked
-about the same way. Unlinking asks too, and says that nothing on disk is
+([Scanning](#scanning)), in the order `flayer scan --suggest` gives and with
+its reasons, so the row picked when it opens is the one most worth linking.
+A git repository that is not a mind project yet can be picked, but making it
+one writes into it, so `mind init` is asked about, not assumed, and a typed
+path that turns out to be a plain directory is asked about the same way. Unlinking asks too, and says that nothing on disk is
 deleted. Deleting one of the workspace's own asks with a second yes for
 removing it everywhere ([removing one of the workspace's own
 everywhere](#removing-one-of-the-workspaces-own-everywhere)), the line each
@@ -3052,12 +3323,23 @@ in it, so a typo is fixed where it was made rather than typed out again.
 
 ### The minds screen
 
-`m`, or `flayer minds`, lists every project the workspace links, ticked, and
-every one `flayer scan` finds under it that it does not, unticked, all in one
-list by path, because the question it answers is "which of these", not "which
-kind". `flayer minds DIR` finds those under the folders it names instead
-([Scanning](#scanning)). Ticking only marks. Applying turns the marks into
-lines like any other task: `mind -C <path> init` for each repository that is
+`m`, or `flayer minds`, lists every one `flayer scan` finds under the
+workspace that it does not link, unticked, then every project it links,
+ticked, in the order `flayer scan --suggest` gives: what is not linked first,
+most worth linking first, each row saying why ([which to link
+first](#which-to-link-first)). It was one list by path, on the grounds that
+the question was "which of these", not "which kind"; under a home that is
+dozens of repositories in name order, and the one worth linking is wherever
+its name puts it, so the screen shows core's ranking of those instead, and
+sorts none of them itself. The projects it links come from the marker
+rather than the scan, which may not reach them all, so the screen lists
+those by their entry, as the command lists the ones it found by route. A
+reason can name every agent file a repository holds, so one longer than the
+pane leaves room for is cut, ending in `…`, rather than pushing what
+applying would do to each row past the pane's edge; the command says it
+whole. `flayer minds DIR` finds those under the folders it
+names instead ([Scanning](#scanning)). Ticking only marks. Applying turns the
+marks into lines like any other task: `mind -C <path> init` for each repository that is
 not a project yet, then one `flayer link` and one `flayer unlink`, each with
 every path at once. So the screen needed `link` and `unlink` to take several
 paths, and they take them **all or nothing**: every path is checked before any
@@ -3115,6 +3397,24 @@ The install screen marks a row whose offer has moved on since it was
 installed `(outdated; flayer update refreshes it)`, held as any install's
 row is: the screen marks what goes in and out, and the update is what
 brings one up to date.
+
+### Following a stale row
+
+`M` on a stale project, one the scan under the screen found moved
+([an entry whose project moved](#an-entry-whose-project-moved)), asks and
+then runs `flayer relink <old> <new>`, the entry as the marker spells it and
+the directory as the scan spelled it from the root; the stale row's pane says
+where it went. Only where the scan found it: which directory holds the
+project is the scan's to say, by the id it holds, and the screen guessing
+from a name could hand what was installed to the wrong one. Where it found
+nothing, under the workspace or the folders `flayer minds` was given, the
+screen says the line that names the directory by hand. The scan's match and
+the stale row are told apart by the directory each names, not by spelling,
+since the entry is spelled as the marker has it and the scan's route as
+`flayer link` would take it. A key of its own rather than a second answer
+to `U`'s question: unlinking drops the entry and leaves what was installed
+recorded under a route nothing is at, and the pane says both keys, so the
+choice is made seeing where the project went.
 
 ## The local server
 
@@ -3550,7 +3850,9 @@ and defines `flayer-deactivate`, which puts both back; it is run as `eval
 "$(flayer activate DIR)"`. Printed for the shell to run rather than written
 to a file to be sourced: activation lasts as long as the shell, as a
 virtualenv's does, and D-08 rejected an activation file as hidden state in
-repositories meant to stay minimal. Activating writes nothing at all. It
+repositories meant to stay minimal. Activating writes nothing at all, so it
+does not remember the workspace among [the ones this machine
+knows](#the-workspaces-this-machine-knows) either: `flayer init` does. It
 opens `DIR` as `-W` opens a workspace (`resolve::named`), by its root or its
 `.mindflayer`, and without `DIR` it activates what a read resolves from
 where it runs, so `-W` and an earlier activation count, and the default one
@@ -3668,6 +3970,79 @@ database and no marker. A command that writes asks for the real one.
 
 `unload`, which only takes away, resolves as a read and wants a made
 workspace, since an unmade one has loaded nothing.
+
+### The workspaces this machine knows
+
+The default workspace keeps a list of the others on the machine, a `known`
+array in its `flayer.toml` beside `projects` and `loaded`, so switching
+between several flayers, in the CLI and the TUI now and in the panel later
+(#84), has somewhere to read them from. `flayer workspaces` lists it, `flayer
+workspaces forget PATH` takes one out, and `w` in the TUI runs `flayer
+workspaces` and shows what it prints, as `s` shows `flayer gather list`. What
+is known, in which order, and which one is in use are core's (`known::known`,
+fed by `resolve`), so the panel's switcher will read the answer the CLI
+prints.
+
+In the default workspace's marker rather than in a file of its own or in the
+ledger. Home is the one place every flayer on a machine can find; its marker
+is already edited one array at a time (`edit_array`), under its lock, with
+every comment kept; and the list is configuration a person may read and
+prune by hand, like the registry. A file of its own would be one more format
+to version and lock, and the ledger would hide the list from that person, and
+would have to be made to hold it. The key is not in the template, since only
+the default has a use for it and every other marker would carry a line about
+nothing: the edit that first makes it gives it a comment saying what it is
+(`explained`), and an edit that makes a key and puts nothing in it, as a
+refused `forget` would, takes it out again, so the file is left as it was
+found.
+
+`flayer init` remembers: each workspace it makes, and one already there,
+which it otherwise leaves as it was, so a workspace made before the default,
+or by a build from before the list, is one idempotent command from being on
+it. conda's `environments.txt` gains an environment the same way, when it is
+made and not when it is activated. #56 asked `flayer activate` to remember
+too, and it does not. Activating writes nothing ([activating a
+workspace](#activating-a-workspace)), which #55 was accepted on and the
+README promises; writing there would take the default workspace's lock at
+every new shell whose startup file runs `eval "$(flayer activate DIR)"`, wait
+behind a gather holding it for up to `lock::WAIT`, and turn a default a newer
+build wrote, or a home nobody can write to, into a warning at every prompt.
+And nothing is lost by it: the workspace in use is listed whether it is
+remembered or not, so an activated one is never missing from the list
+somebody is looking at. Whether activating should remember after all is an
+[open question](#open-questions).
+
+Never made for the occasion. A default nothing has made yet remembers
+nothing and lists nothing, and `flayer init` does not make one to remember
+in, the rule every read follows; with `--home ""` there is no default, and
+only the workspace in use is listed. The default is never in its own list:
+it comes first, for being the default, whatever `known` says. An entry is
+stored as `link` stores a project ([how entries are
+stored](#how-entries-are-stored)), a route from home when one reaches and an
+absolute path otherwise, and matched by where it points. So remembering one
+already known by another spelling changes nothing and says the spelling the
+file holds, and `forget` takes out every spelling, of a workspace that has
+gone too, since that is the one most worth forgetting. One nothing remembers
+is refused, as `unlink` refuses what is not linked.
+
+The list is the default, then each entry in the order `known` holds them,
+each directory once, then the one in use when it is none of those, said to
+be not remembered and given the line that would remember it. The one in use
+is marked `*`, as `git branch` marks the branch checked out, and each says
+how many projects it links and how many of those are stale. A remembered
+workspace that has gone is a row that cannot be opened and a `warning:` that
+fails the exit, as a stale project is in every report: shown, never raised.
+The stale entries of a workspace that opens are counted rather than warned
+of, since they are that workspace's to report. `--json` prints the same list
+in the envelope ([JSON, in one envelope](#json-in-one-envelope)), each field
+by its name: `name`, `path`, `default`, `remembered`, `in_use`, `projects`,
+`stale_projects` and `stale`.
+
+`known` moves no `FLAYER_FORMAT_VERSION`. A build from before it reads past
+the key, which says nothing about the workspace holding it, so there is
+nothing for it to misread, and keeps it when it edits the marker, since every
+edit goes through `toml_edit` ([formats are
+versioned](#formats-are-versioned)).
 
 ### A project's workspace
 
@@ -3934,7 +4309,9 @@ Record what it reads first, in docs/agents.md, verified or docs-only with a
 fallback. Then a variant on `Agent` and its name, and its arm for each kind in
 the table's `standard`, and in `read`, behind `Agent::reads`, which both match
 every pair with no wildcard: neither a new agent nor a new kind compiles until
-somebody has said where it goes and where it reads. The
+somebody has said where it goes and where it reads. Its arm in `at_root`,
+behind `Agent::reads_at_root`, says which files at a project's root it reads,
+for a suggestion to rank by ([which to link first](#which-to-link-first)). The
 compiler lists every match on `Agent`, since each is exhaustive, but not what
 is not a match:
 
@@ -5014,11 +5391,39 @@ git repository, a project a `mind.toml` still marks and one whose marker will
 not open have none, and the last is listed all the same, with a failure
 beside it, since its marker still says it is a project.
 
+A project found and not linked that holds the id the ledger last saw at an
+entry where no project is any more is that entry's, moved, and carries the
+entry (`moved`), spelled as `route` is, so the line it is listed with,
+`moved: <old> -> <new>`, is the `flayer relink` to type from there. Only an
+entry nothing marks (`MindProject::is_vacant`), not every stale one: one
+whose marker is there and would not open still holds its project, whose id
+nothing read, so a copy of it would pass for it moved; and one that opens
+holding another id holds another project, which the ledger follows the next
+time it is written. The ledger is read only when
+something found could match, as a read ([a read leaves the ledger as it
+finds it](#a-read-leaves-the-ledger-as-it-finds-it)), and one that cannot be
+read is a failure beside what was found, listed with no move. An id two
+directories hold, among those found and those the workspace links, is a
+failure naming both, and neither is a move: a copy, which only
+`mind init --new-id` tells apart.
+
+The ledger learns an id only when it is written, so a project linked and
+moved before anything wrote it is found by nobody, though the scan may list
+it. While something found and not linked holds an id no entry was matched
+to, each entry nothing marks whose id the ledger never learned is named
+(`untraced`), and the text says to `flayer relink` it: the hint to
+`flayer link` alone would leave the entry stale beside a second one for the
+same project, which is what a relink is for. Which of them went where is
+the person's to say, never a guess.
+
 `flayer scan --json` prints the scan in [the envelope](#json-in-one-envelope),
 each field by its name (`roots`, `depth`, `found`, each with `path`, `route`,
-`id`, `mind` and `linked`, and `truncated`); its failures, and that it stopped
-early, are the envelope's warnings. The table leaves the id out: the path already tells its
-rows apart, and the id is for a script to match a project by.
+`id`, `mind`, `linked`, `moved`, `reason` and `agent_files`, `untraced` and
+`truncated`); its failures, and that it stopped early, are the envelope's
+warnings. `moved` and `untraced` came after the others, and `reason` and
+`agent_files` after them, names added, so the envelope's version stayed.
+The table leaves the id out: the path already tells its rows apart, and the
+id is for a script to match a project by.
 
 `flayer minds DIR` opens the minds screen looking under the folders it is
 given rather than the workspace root, and the TUI keeps them and looks there
@@ -5029,6 +5434,52 @@ to show. What the scan could not read, and that it stopped early, the screen
 says in a strip below the list, in the words `flayer scan` warns with, so a
 folder typed wrong is said there too rather than drawn as one with nothing
 in it.
+
+### Which to link first
+
+A scan of a home lists dozens of repositories, most of which nobody wants
+managed, so `flayer scan --suggest` ranks them. What it finds carries its
+reason (`scan::Reason`), the strongest of what it holds, best first: a mind
+project its settings name by an id (`id`), which a workspace follows when it
+moves; one with no id (`mind`), which a `mind.toml` marks or whose marker
+would not open; a git repository holding something an agent reads at its
+root (`agents`); and any other repository (`git`). A project ranks above a
+repository because it is linked as it is, where a repository needs
+`mind init` first, a write into somebody's tree; a repository an agent works
+in ranks above one nobody does because that is where skills and rules would
+be read. Each goes out as that word, by hand rather than derived from the
+variant, as a kind or an agent does.
+
+What counts as an agent's is a name at the root, never what a file holds:
+`Agent::reads_at_root` gives, for each agent, the folder each place it reads
+a kind from sits in, taken from `Agent::reads` (`.claude` for
+`.claude/skills`), its instruction files, and the file
+[D-10](#d-10-an-mcp-server-is-one-owned-entry-per-agent) puts its project's
+MCP servers in, each resting on a fact in
+[docs/agents.md](agents.md#what-says-an-agent-works-in-a-project). It lives
+with the agent rather than in the scan or a front end, behind a match on
+every agent with no wildcard, so an agent added, or a folder an agent is
+found to read, reaches the ranking without anyone remembering it. The names
+are looked at with `symlink_metadata`, a few in each directory already
+found: nothing more is listed, so the walk stays inside the bounds above,
+and a link counts as what it is called without being followed. Every
+directory found lists the ones it holds (`agent_files`), a project too, so
+a script sees what made a repository's reason.
+
+The order is core's too: a `Request` names it (`scan::Order`), by route
+unless suggested, and a suggestion lists what is not linked first, best
+reason first and by route within one, then what is linked, by route, whose
+reason says why it was worth linking once and nothing now. The minds screen
+and the link form read their scan in that order and show what is not linked
+unsorted (the screen lists every project linked after it, by its entry),
+each found row with the words `flayer scan --suggest` uses (one helper in
+the CLI says them for the command and both screens), so the screen cannot
+rank differently from the command it shows. A project found moved says
+`moved` on the screens as in the command: its reason is its id, which ranks
+it first, but what it wants is a relink, and a row offering it as the
+project most worth linking would have it linked beside the entry it left
+stale. A suggestion links nothing, makes nothing a project, and reads as any
+scan does: no marker, no ledger and no workspace written.
 
 ## Writers at the same time
 
@@ -5079,11 +5530,13 @@ other, and none of them makes a reader wait for the workspace.
   writes each put back a marker with only their own entry, and the second
   rename wins. So a writer holds `.mindflayer/lock` from before it reads what
   it will change until the change is written: an edit of the marker (`link`,
-  `unlink`, `load`, `unload`), an install or an uninstall, a gather (clone and
-  all, since two gathers of one source clone into one folder) and the scrub
-  that opening the ledger to write runs (`ledger_to_write`), while it rewrites
-  clones an older build left a credential in and removes the folders of a
-  source made one with another, which a gather beside it would be filling.
+  `unlink`, `load`, `unload`, and the default workspace's, which `flayer
+  init` and `workspaces forget` change), an install or an uninstall, a
+  gather (clone and all, since two gathers of one source clone into one
+  folder) and the scrub that opening the ledger to write runs
+  (`ledger_to_write`), while it rewrites clones an older build left a
+  credential in and removes the folders of a source made one with another,
+  which a gather beside it would be filling.
   A migration of the workspace's own into its library holds it from its plan
   to its rewrite of the marker, and a project's move from its `mind.toml`
   from before it reads the project again until its ledger is written
@@ -5102,7 +5555,14 @@ other, and none of them makes a reader wait for the workspace.
   it from the plan it makes again until its last installation is written
   (`update::apply`), writing each through the body an install hands to once
   it holds the lock (`install::install_held`), since asking for the lock
-  again, as `install_with` does, would wait for itself. Two workspaces
+  again, as `install_with` does, would wait for itself. A relink holds it
+  from before it reads the ledger for its checks until the entry and the
+  records it moves are written (`relink::relink`), and a new id from before
+  it reads the project's settings again until the ledger knows it
+  (`relink::new_id`), as a change to the agents does. An adoption holds it
+  from the plan it makes again until its record is written
+  (`adopt::apply`), so what the ledger says was adopted is what the library
+  holds. Two workspaces
   linking one project are kept apart by neither's lock
   ([open questions](#open-questions)).
 - **Opening the ledger takes no lock**, though it is when a ledger is made or
@@ -5117,7 +5577,10 @@ other, and none of them makes a reader wait for the workspace.
   the first write after an upgrade from a build that stored a credential,
   and a record dropped or carried then waits for it without a deadline: the
   change it follows is made, and trying it again would find nothing to
-  change.
+  change. Telling the ledger which id each linked project holds, which
+  opening it to write does every time (`Ledger::knew`), takes none either:
+  it writes rows, in a transaction that takes SQLite's write lock before it
+  reads, so a relink at the same moment comes wholly before or after it.
 
 How the lock behaves, and why:
 
@@ -5255,7 +5718,11 @@ project's `CLAUDE.md` that git tracks only in a shared project or with
 ([how Claude reaches the block](#how-claude-reaches-the-block)). #45 keeps
 an `AGENTS.md` Mindflayer made out of git, and writes no block into one git
 tracks in a local project without `edit_tracked`, saying which agents then
-miss the rules ([installing rules](#installing-rules)).
+miss the rules ([installing rules](#installing-rules)). #59 writes no line
+for a copy git tracks, as an adopted one often is, whether an install, an
+update or a project turning local would have written one, since it keeps
+none of the copy out ([what keeps an install out of
+git](#what-keeps-an-install-out-of-git)).
 
 ### D-03: Rules reach every agent through `AGENTS.md`
 
@@ -5431,7 +5898,12 @@ change edits it a key at a time through toml_edit, a `settings.json` is read
 as written and changed by nothing but `mind migrate`, which moves it, and a
 `mind.toml` straight, to a `settings.toml` ([a project's
 settings](#a-projects-settings), [moving a project to its
-settings](#moving-a-project-to-its-settings)).
+settings](#moving-a-project-to-its-settings)). #59 brings what a project's
+agents read and nothing installed, a skill somebody keeps in
+`.claude/skills` by hand, into the workspace's library when asked, its
+copies recorded as installed from there and left as they are; what a
+project authors is never adopted ([adopting what a project already
+keeps](#adopting-what-a-project-already-keeps)).
 
 ### D-07: One copy per agent folder
 
@@ -5483,7 +5955,9 @@ minimal. Unblocks #54, #55 and #56. #54 carried it out: core's `resolve`,
 with `-W/--workspace` on both binaries (see [which workspace a command
 uses](#which-workspace-a-command-uses)). #55 added what sets the variable,
 `flayer activate` and `flayer-deactivate`, and `flayer which`, which says the
-reason (see [activating a workspace](#activating-a-workspace)).
+reason (see [activating a workspace](#activating-a-workspace)). #56 lists the
+workspaces this machine knows, with the one `resolve` chooses marked (see
+[the workspaces this machine knows](#the-workspaces-this-machine-knows)).
 
 ### D-09: Project settings live in the project
 
@@ -5729,6 +6203,51 @@ just listed.
 
 ## Open questions
 
+- **A copy nobody linked.** `flayer relink` refuses a copy it can see: the
+  entry still holding the id, or another project the workspace links
+  holding it. A copy somewhere on disk nobody linked is beyond what it
+  reads, so a project moved and also copied, both holding its id, is
+  followed to whichever directory the command names. `flayer scan` says the
+  two are one id and offers neither as a move, and the TUI relinks only what
+  a scan offered. Scanning from the relink would close it, at the price of a
+  walk of the disk to change one line of a marker, and of an answer that
+  depends on where the walk looked.
+- **A moved project linked again by hand.** Linking the directory a project
+  moved to, rather than relinking it, leaves two entries for one id: the
+  stale one keeps it, for a relink, and the new one is known by none, so
+  what is installed there from then on is recorded with no id. `flayer
+  relink` refuses a directory linked already; unlinking it first hands the
+  stale entry's records to it and drops those, which an install made since
+  wrote. Merging the two, the newer record of a name winning, would keep
+  both, at the price of a relink that sometimes drops an entry rather than
+  rewriting one.
+- **A project moved before its id was learned.** The ledger learns ids when
+  it is written, so a project linked and moved before then is never offered
+  as a move; the scan names its entry (`untraced`) for a relink somebody
+  types. `flayer link` telling the ledger would close it, at the price of
+  every link opening the ledger to write, and making it, which only a
+  gather, an install or an uninstall does now.
+- **A route that holds another project now.** An entry whose directory is
+  given to another project once its own has moved opens, so it is not stale:
+  the ledger follows the project there (`Ledger::knew`), and the records the
+  route had become the newcomer's, which names copies it may not hold. The
+  moved project is then found by nobody. Telling the two apart needs more
+  than the route and the id: the records' copies being there, or the
+  settings' name, which a person can change.
+- **Adopting into one project at a time.** `flayer adopt` takes one
+  project's copy, so a skill several repositories keep by hand, each its own
+  copy, is adopted from one of them, and in the others it is still foreign,
+  and refused by an install of the adopted one. Adopting from every project
+  holding the same bytes at once would bring them all under one record each,
+  at the price of a batch that must agree on what the skill is before it
+  writes anything, and say why one project differs.
+- **A tracked copy in a local project, written by an update.** An adopted
+  copy git tracks stays in git, so an update in a local project changes a
+  file the team committed, where local mode otherwise edits a tracked file
+  only with `edit_tracked`. Adopting by name is taken for consent, and the
+  dry run says so; holding such an update back until the project is shared
+  or sets `edit_tracked` would make the consent a setting, at the price of
+  an adopted copy no update reaches by default.
 - **Precedence between projects.** Two projects in one workspace can declare
   the same skill name. Core returns both matches and says nothing about which
   wins, because nothing here yet has to choose. Whatever resolves it (a
@@ -6483,10 +7002,23 @@ just listed.
   nothing keeps the folders, so the TUI's `m` and link form opened another
   time look under the workspace root again, and a default workspace in home
   offers the whole home, three levels down. Keeping them in `flayer.toml`
-  would be a format change, and whether it belongs with ranked suggestions
-  (#58) is open. Nor does the screen take a depth: `flayer minds` looks
+  would be a format change, which ranked suggestions (#58) did without: they
+  rank what a scan finds wherever it looks, so the screen puts what is worth
+  linking first even under a whole home, and keeping the folders is still
+  open. Nor does the screen take a depth: `flayer minds` looks
   `DEFAULT_DEPTH` levels down, and a project further down is linked by its
   path.
+- **What a suggestion counts.** An agent's files count by name at a
+  candidate's root: a `.claude` holding only somebody's local settings ranks
+  a repository as one holding skills does, and an `AGENTS.md` in a
+  subfolder counts for nothing. Reading what each holds, or looking deeper,
+  would rank better at the price of opening files in every repository under
+  a home. Nor do agent files make a folder a candidate: one that is neither
+  a project nor a repository, notes kept beside a `CLAUDE.md`, is walked
+  through and never offered, however much an agent reads there, since
+  offering it would offer a home directory for its `.claude` too. And the
+  ranking stops at the reason: within one, candidates go by route, not by
+  how many agent files each holds or how recently it changed.
 - **The shelf in other reports.** `flayer validate` reads the shelf; `flayer
   list` and `show` do not, because `gather list` is the shelf's listing. Seeing
   a gathered skill's contents before installing it means reading its folder.
@@ -6495,3 +7027,18 @@ just listed.
   repository says](#no-em-dash-in-what-the-repository-says)). A step in CI
   over a pull request's own commits would catch one before the merge without
   tripping on the history from before the rule.
+- **Remembering on activate.** #56 asked `flayer activate` to remember the
+  workspace it activates as well as `flayer init`; it remembers none, since
+  activating writes nothing ([the workspaces this machine
+  knows](#the-workspaces-this-machine-knows)), and `flayer init` run again on
+  a workspace remembers it. Remembering there would want a write of its own
+  beside the code it prints and never on stdout, taking the default
+  workspace's lock without waiting, so a busy one is passed over rather than
+  waited for at every new shell, and saying a failure only as a hint, so a
+  shell's startup file is neither slowed nor made noisy; and the rule that
+  activating writes nothing would have to say why it no longer holds.
+- **A remembered workspace that moves.** The list names a workspace by where
+  it was, so one moved with `mv` is listed as one that cannot be opened until
+  it is forgotten and `flayer init` run where it went. Nothing in a workspace
+  names it for good, as a project's id names a project (#57 relinks those), so
+  there is nothing to match a moved one by.

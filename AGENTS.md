@@ -84,29 +84,33 @@ under `apps/` with its own `Makefile`:
   three, or as a copy into a project a `mind.toml` marks (`install::rules`),
   changing a project's agents or share mode and carrying its installs along
   (`reapply`), what each project holds, from where and for which agents
-  (`status`), creating and changing artifacts, and moving a workspace's own
-  into its library and a project from its `mind.toml` or `settings.json` to a
-  `settings.toml` (`migrate`), bringing what was installed up to date with
-  where it came from (`update`), installing one artifact into several
-  projects at once, or taking it, or whatever nothing offers any more, out
-  of them (`assign`), and removing one of the workspace's own from every
-  project it links before the library (`everywhere`). Its only I/O is
-  files, and it never reads the environment.
+  (`status`), finding a project that moved again by its id and giving a
+  copy made with its `.mind` one of its own (`relink`), the workspaces this
+  machine knows, a list the default
+  workspace keeps (`known`), creating and changing artifacts, and moving a
+  workspace's own into its library and a project from its `mind.toml` or
+  `settings.json` to a `settings.toml` (`migrate`), bringing what was
+  installed up to date with where it came from (`update`), installing one
+  artifact into several projects at once, or taking it, or whatever nothing
+  offers any more, out of them (`assign`), removing one of the
+  workspace's own from every project it links before the library
+  (`everywhere`), and bringing a skill somebody keeps in a project's agents'
+  folders into the library, its copies recorded as installed from there
+  (`adopt`). Its only I/O is files, and it never reads the environment.
 - `apps/cli` (`mindflayer-cli`): the binaries `mind` (`src/main.rs`) and
   `flayer` (`src/bin/flayer.rs`), and the TUI. `src/lib.rs` only re-exports
   the public API. The parsers are in `src/parse.rs`. `src/commands.rs`
   dispatches them and asks core what a command acts on, and each family of
   commands has a file under `src/commands/`: `project` (init, link, unlink,
-  scan), `workspace` (load, unload), `activate` (activate, which),
-  `artifact` (add, edit, rename, remove, templates), `read` (list, show,
-  validate), `status`, `settings` (agents, share, targets), `gather`,
-  `install`, `update` and `migrate` (each at both levels). `src/render.rs` holds
-  `Outcome`, `Failure`, the table helpers and the envelope every `--json`
-  prints (`json`),
-  `src/error.rs` holds `CliError`, and `src/homes.rs` decides the default
-  home and the agent homes, and gathers them with `-W` and
-  `$MINDFLAYER_WORKSPACE` into a `Lookup`. `src/tui/` and `src/install/` are
-  the two screens.
+  relink, scan), `workspace` (load, unload), `activate` (activate, which), `known`
+  (workspaces, workspaces forget), `artifact` (add, edit, rename, remove,
+  templates), `read` (list, show, validate), `status`, `settings` (agents,
+  share, targets), `gather`, `install`, `update` and `migrate` (each at both
+  levels), and `adopt` (flayer adopt). `src/render.rs` holds `Outcome`, `Failure`, the table helpers and
+  the envelope every `--json` prints (`json`), `src/error.rs` holds
+  `CliError`, and `src/homes.rs` decides the default home and the agent
+  homes, and gathers them with `-W` and `$MINDFLAYER_WORKSPACE` into a
+  `Lookup`. `src/tui/` and `src/install/` are the two screens.
 - `apps/server` (`mindflayer-server`): the local server behind the web
   panel, a library no binary runs yet. `src/backend.rs` is the `Backend`
   trait, `src/server.rs` binds and routes, `src/auth.rs` holds the token's
@@ -158,7 +162,11 @@ These are easy to break from a single file without noticing.
   (`Rendered::warnings_of`). Where an agent reads
   (`Agent::reads`) is kept apart from where it is sent a copy: OpenCode reads
   `.claude/skills` and is sent nothing there. Which folders a project is read
-  from is core's too (`Catalog::folders`).
+  from is core's too (`Catalog::folders`), and so are the names at a
+  project's root that show an agent works there (`Agent::reads_at_root`) and
+  the order `flayer scan --suggest` ranks what it finds in (`scan::Order`),
+  in which the minds screen and the link form show what is not linked,
+  without sorting it.
 - **Two binaries, one parser.** `flayer <cmd>` is `mind flayer <cmd>`, and
   both reach the same function. `mind add` and `flayer add` (with or without
   `-p`) are one implementation given a different holder
@@ -220,11 +228,15 @@ These are easy to break from a single file without noticing.
     is never used to edit a project's settings.
     Its agents, targets and share mode change through `reapply::apply`
     (`mind agents`, `mind targets`, `mind share`), which carries what is
-    installed along with them.
+    installed along with them. Its id is refused there, naming the project
+    for good, and changes only through `MindProject::change_id`, which
+    `relink::new_id` calls for a copy made with its `.mind` (`mind init
+    --new-id`).
   - Creation uses `create_new` or `create_dir`.
   - `rename` rewrites only the `name:` line (`frontmatter::with_key`).
   - `remove` (`flayer remove --everywhere` too), `migrate` at either level,
-    `agents`, `share`, `targets` and `update` are dry runs without `--yes`.
+    `agents`, `share`, `targets`, `update` and `flayer adopt` are dry runs
+    without `--yes`.
     A migration of the library moves nothing a project holds, refuses as a
     whole, and keeps the marker it rewrites as `flayer.toml.v<version>`
     (`create_new`). A project's (`migrate::project`) writes its
@@ -243,7 +255,12 @@ These are easy to break from a single file without noticing.
     a render of Claude's rule files one per file, and neither opens the file
     for a shared project or one a `mind.toml` marks. A
     project turning shared has its whole group forgotten (`exclude::forget`),
-    and one turning local an entry written for each copy in place. A team's
+    and one turning local an entry written for each copy in place. No entry
+    is written for a copy git tracks (`install::untracked`), by an install,
+    an adoption or a project turning local: it would keep none of the copy
+    out, and hide what is added to it later. A
+    relinked project's lines, and a copy's given a new id, are carried to its
+    new place or key (`exclude::carry`), never left as a stale group. A team's
     `.gitignore` and `core.excludesFile` are never edited; the `.gitignore`s
     Mindflayer writes are `.mind/tmp`'s and a local project's `.mind`'s own
     (`MIND_IGNORE`), each inside a folder it owns, made with `create_new`,
@@ -372,7 +389,15 @@ These are easy to break from a single file without noticing.
   through `install::uninstall_with`, the first never forced, so an edited
   copy and somebody's are left as an uninstall leaves them.
   `install::disown` and `install::carry` are private to core, so no front end
-  drops or moves a record on its own. A front end adds through
+  drops or moves a record on its own. The one way a copy nobody installed
+  becomes recorded is `flayer adopt` (`adopt::apply`), asked for by name: it
+  copies the skill into the library and records the project's copies, every
+  target an install uses, under the `hash::tree` they hold, so they read as
+  current (a target with no copy as missing, for an update to fill), never
+  writes in the project, and refuses whatever an install could not have
+  written there (a link, a top-level `.claude-plugin`, copies that differ,
+  a skill `artifact::strict_issues` refuses), the project's own, and a name
+  the library holds. A front end adds through
   `lifecycle::add`, never `create` or `create_from`, which leave a stale
   record in place. A rule is one installation too: in a project marked by its
   settings, its targets are its section of the block, recorded as `AGENTS.md`,
@@ -390,8 +415,9 @@ These are easy to break from a single file without noticing.
   `lifecycle::find_to_change`, which refuses such a rule as received rather
   than as nothing.
 - **Strict when writing, lenient when reading.** A skill's front matter is
-  the Agent Skills format. `mind add`, `rename` and `install` refuse a name or
-  description that breaks its rules, all through `artifact::strict_issues`
+  the Agent Skills format. `mind add`, `rename`, `install` and `flayer adopt`
+  refuse a name or description that breaks its rules, all through
+  `artifact::strict_issues`
   (what `ValidationIssue::is_strict` picks out), so change the rules there and
   nowhere else; gathering
   takes such a skill with a `warning:` per problem, and `validate` reports
@@ -451,7 +477,9 @@ These are easy to break from a single file without noticing.
   `settings.json` moves no copy, and takes none), `reapply::apply`,
   from before it reads a
   project's settings until their change and every copy it carries along are
-  written, and `update::apply`, from the plan it makes again until its last
+  written, `relink::relink`, from its ledger checks until the entry and the
+  records it moves are written, `relink::new_id`, `adopt::apply`, from the
+  plan it makes again until its record is written, and `update::apply`, from the plan it makes again until its last
   installation is written, through `install::install_held` (the body
   `install_with` hands to once it holds the lock) and
   `install::rules::update_held`, which take none of their own. A new
@@ -498,12 +526,25 @@ These are easy to break from a single file without noticing.
   Anything from a newer version is refused. A format change must keep
   reading old files the way they were written, and move one forward only
   when asked, never on a read (`flayer migrate --library`, `mind migrate`).
+  A key an older build reads past without misreading anything moves no
+  version, as the default workspace's `known` did not.
   - A ledger schema step is one more block in `Ledger::migrate`, which takes
     the write lock, copies the file to `mindflayer.db.v<old>.bak`
     (`Ledger::back_up`) and runs every step in one transaction. A step fills
     in old rows in its own SQL, not through today's code, and adds a fixture
     of what the version before it wrote
     (`apps/core/tests/fixtures/ledger-v<N>.sql`) for a test to migrate.
+    What no SQL can know is handed to the step rather than read by it:
+    schema 5 is told each linked project's id (`Ledger::open_knowing`, from
+    `FlayerWorkspace::known`).
+- **A project is found again by its id, never by a guess.** The ledger
+  keeps the id it last saw at each route (`projects`), learned from the
+  projects themselves every time it is opened to write (`Ledger::knew`),
+  and a stale entry keeps its id until `relink::relink` moves it. A relink
+  hands records only to a directory holding that id, from an entry nothing
+  marks any more (`MindProject::is_vacant`: one whose marker would not open
+  still holds its project), and two directories holding one id are a copy
+  (`relink::Duplicate`), a collected failure and never a move.
 - **Nothing is staged where agents look.** An install builds its copies in a
   `copy::Stage` under the project's `.mind/tmp` and renames them into place.
   A temporary beside an installed copy is a skill an agent may load, so never
@@ -589,16 +630,20 @@ These are easy to break from a single file without noticing.
   it; `tests/shell.test.ts` fails on any `<style>` element added at run time.
 - **Activating prints, and writes nothing.** `flayer activate` prints core's
   code (`activate::script`), and nothing on stdout when it fails, so `eval`
-  runs nothing. Its shell comes from `--shell`, then `$SHELL`, read by the
-  front end. The code undoes only what it did, through `flayer-deactivate`
-  and never `deactivate`, and a workspace's name reaches a prompt only
-  through `activate::prompt`.
+  runs nothing. Nor does it remember the workspace in the default one's
+  `known`, though #56 asked it to: `flayer init` does (`known::remember`),
+  only once the default is made, and never makes it (architecture.md, "The
+  workspaces this machine knows", and its open questions). Its shell comes
+  from `--shell`, then `$SHELL`, read by the front end. The code undoes only
+  what it did, through `flayer-deactivate` and never `deactivate`, and a
+  workspace's name reaches a prompt only through `activate::prompt`.
 - **`Kind` and `Agent` are closed enums.** To add a kind, follow "Adding a
   third kind" in the architecture doc, and to add an agent, "Adding an agent",
   which starts in `docs/agents.md`. Either way the compiler's exhaustive
   matches are the checklist: the target table's `standard`, and `read` behind
   `Agent::reads`, match every kind and agent with no wildcard, so neither
-  compiles until it says where it goes and where it reads.
+  compiles until it says where it goes and where it reads; `at_root`, behind
+  `Agent::reads_at_root`, matches every agent the same way.
   "Adding an agent" also lists what no match covers: `Agent::ALL`, and an
   agent home's field, option and place in `common::PINNED` and `CLEARED`.
 

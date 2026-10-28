@@ -1754,6 +1754,38 @@ fn a_local_install_keeps_every_copy_out_of_git_and_its_uninstall_takes_them_back
 }
 
 #[test]
+fn a_local_install_keeps_no_copy_git_tracks_out_of_git() {
+    let (dir, workspace, _, ledger) = ready(&["deploy", "commit-style"]);
+    let root = dir.path().join("alpha");
+    fs::create_dir(&root).unwrap();
+    gix::init(&root).unwrap();
+    let (project, _) =
+        MindProject::init_settings(&root, &Agent::ALL, Share::Local, &Directories::default())
+            .unwrap();
+    let id = project.settings().unwrap().id.as_str().to_owned();
+    install_from_shelf(&workspace, &ledger, &project, "deploy");
+    // The team commits deploy's copies, as a project that was shared would
+    // have, and its lines go.
+    mindflayer_core::exclude::forget(project.root(), &id).unwrap();
+    common::indexed(project.root());
+    let file = exclude_file(&project);
+    let before = fs::read_to_string(&file).unwrap();
+
+    install_from_shelf(&workspace, &ledger, &project, "deploy");
+    install_from_shelf(&workspace, &ledger, &project, "commit-style");
+
+    assert_eq!(
+        fs::read_to_string(&file).unwrap(),
+        format!(
+            "{before}# mindflayer:begin\n# project {id}\n/.agents/skills/commit-style/\n\
+             /.claude/skills/commit-style/\n# mindflayer:end\n"
+        )
+    );
+    assert!(!ignored(&project, ".claude/skills/deploy"));
+    assert!(ignored(&project, ".claude/skills/commit-style"));
+}
+
+#[test]
 fn a_shared_install_leaves_the_exclude_file_alone() {
     let (_dir, workspace, project, ledger) = local_v3(Share::Shared, true);
     let file = exclude_file(&project);

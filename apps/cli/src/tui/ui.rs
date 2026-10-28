@@ -19,6 +19,7 @@ use super::state::{
     Mode, Reader, RenameForm, Running, Scope, SettingsForm, TargetsForm, Task, Tone, View,
     Workspace, GATHER_FIELDS,
 };
+use crate::commands::project::worth_linking;
 use crate::install::ui::{centred, pane, selected};
 use crate::progress::said;
 use crate::render::{plural, printable};
@@ -341,7 +342,7 @@ fn holdings(app: &App, workspace: &Workspace, frame: &mut Frame, area: Rect) {
     let holdings = match &member.holdings {
         Ok(holdings) => holdings,
         Err(error) => {
-            let text = vec![
+            let mut text = vec![
                 Line::from(Span::styled(
                     "this project cannot be opened",
                     bold().fg(Color::Red),
@@ -354,6 +355,17 @@ fn holdings(app: &App, workspace: &Workspace, frame: &mut Frame, area: Rect) {
                     dim(),
                 )),
             ];
+            // Said where the scan found its project, by the id it holds: the
+            // one thing better to do with a stale entry than drop it.
+            if let Some(moved) = workspace.moved_to(member) {
+                text.push(Line::from(Span::styled(
+                    format!(
+                        "it moved to {}: M relinks it there, keeping what was installed",
+                        printable(&moved.route)
+                    ),
+                    dim(),
+                )));
+            }
             frame.render_widget(
                 Paragraph::new(text)
                     .block(pane(&title, focused))
@@ -626,16 +638,16 @@ fn footer(app: &App, frame: &mut Frame, area: Rect) {
     // registry, shelf or installs to offer keys for.
     let keys = match (app.focus, app.scope()) {
         (Focus::Items, Scope::Workspace) => {
-            "q quit  ? keys  enter show  e edit  r rename  d delete  u update  a add  ← back  v validate"
+            "q quit  ? keys  enter show  e edit  r rename  d delete  u update  A adopt  a add  ← back  v validate"
         }
         (Focus::Items, Scope::Project) => {
             "q quit  ? keys  enter show  e edit  r rename  d delete  a add  ← back  v validate"
         }
         (Focus::Projects, Scope::Workspace) => {
-            "q quit  ? keys  → open  a add  u update  m minds  l link  U unlink  v validate  g gather  L load  s shelf  i install  t agents  T targets"
+            "q quit  ? keys  → open  a add  u update  m minds  l link  U unlink  v validate  g gather  L load  s shelf  i install  t agents  T targets  w workspaces"
         }
         (Focus::Projects, Scope::Project) => {
-            "q quit  ? keys  → open  a add  v validate  l link it to the workspace above  L load  t agents  T targets"
+            "q quit  ? keys  → open  a add  v validate  l link it to the workspace above  L load  t agents  T targets  w workspaces"
         }
     };
     let second = match &app.message {
@@ -901,10 +913,18 @@ fn linking(app: &App, form: &LinkForm, frame: &mut Frame, area: Rect) {
             .map(|unlinked| {
                 let route = printable(&unlinked.route);
                 let padding = " ".repeat(width.saturating_sub(route.chars().count()));
+                // Why, as the minds screen and `flayer scan --suggest` say
+                // it, since the list is in their order.
+                let why = worth_linking(
+                    &unlinked.route,
+                    unlinked.moved.as_deref(),
+                    unlinked.reason,
+                    &unlinked.agent_files,
+                );
                 let what = if unlinked.mind {
-                    Span::styled("  mind project", dim())
+                    Span::styled(format!("  {why}"), dim())
                 } else {
-                    Span::styled("  git repository (mind init first)", warn())
+                    Span::styled(format!("  {}", found_repository(&why)), warn())
                 };
                 ListItem::new(Line::from(vec![
                     Span::raw(format!("{route}{padding}")),
@@ -1135,7 +1155,7 @@ fn reading(reader: &Reader, frame: &mut Frame, area: Rect) {
 
 /// Where the screen looked for what could be linked, as its texts name it:
 /// the workspace, or the folders `flayer minds` was given.
-fn looked_under(workspace: &Workspace) -> String {
+pub(crate) fn looked_under(workspace: &Workspace) -> String {
     if workspace.roots.is_empty() {
         return String::from("this workspace");
     }
@@ -1245,13 +1265,25 @@ fn minds_screen(app: &App, screen: &Minds, frame: &mut Frame, area: Rect) {
         .unwrap_or(0)
         .min(50);
     // Padded to the longest standing too, so what applying would do lines
-    // up in one column.
+    // up in one column, and that column is the one to keep in sight: a
+    // standing, which can name every agent file a repository holds, is cut
+    // to what the pane leaves once the highlight, the box, the path and the
+    // widest change any row could ask for have their room, so ticking one
+    // never moves the column. `flayer scan --suggest` says it whole.
+    let offered = screen
+        .rows
+        .iter()
+        .map(|row| columns(pending(row.offers()).0))
+        .max()
+        .unwrap_or(0);
+    let room = usize::from(inner.width).saturating_sub(2 + 4 + width + 2 + offered);
     let said = screen
         .rows
         .iter()
-        .map(|row| standing(row.standing).0.chars().count())
+        .map(|row| columns(&standing(row).0))
         .max()
-        .unwrap_or(0);
+        .unwrap_or(0)
+        .min(room);
     let items: Vec<ListItem> = screen
         .rows
         .iter()
@@ -1276,8 +1308,9 @@ fn mind_row(row: &minds::Row, width: usize, said: usize) -> ListItem<'_> {
     };
     let path = printable(&row.path);
     let padding = " ".repeat(width.saturating_sub(path.chars().count()));
-    let (standing, style) = standing(row.standing);
-    let after = " ".repeat(said.saturating_sub(standing.chars().count()));
+    let (standing, style) = standing(row);
+    let standing = cut(&standing, said);
+    let after = " ".repeat(said.saturating_sub(columns(&standing)));
     let mut spans = vec![
         Span::styled(
             if row.ticked { "[x] " } else { "[ ] " },
@@ -1287,29 +1320,63 @@ fn mind_row(row: &minds::Row, width: usize, said: usize) -> ListItem<'_> {
         Span::styled(standing, style),
         Span::raw(after),
     ];
-    let pending = match change {
-        Some(minds::Change::Link) => Some(("  + link", Color::Green)),
-        Some(minds::Change::InitAndLink) => Some(("  + mind init, then link", Color::Green)),
-        Some(minds::Change::Unlink) => Some(("  - unlink", Color::Red)),
-        None => None,
-    };
-    if let Some((text, colour)) = pending {
+    if let Some((text, colour)) = change.map(pending) {
         spans.push(Span::styled(text, Style::default().fg(colour)));
     }
     ListItem::new(Line::from(spans))
 }
 
-/// Where a row stands, in words, and how loudly.
-fn standing(standing: minds::Standing) -> (&'static str, Style) {
-    match standing {
-        minds::Standing::Linked { opens: true } => ("linked", dim()),
+/// What applying a row would do to it, in words, and in what colour.
+fn pending(change: minds::Change) -> (&'static str, Color) {
+    match change {
+        minds::Change::Link => ("  + link", Color::Green),
+        minds::Change::InitAndLink => ("  + mind init, then link", Color::Green),
+        minds::Change::Unlink => ("  - unlink", Color::Red),
+    }
+}
+
+/// `text` in at most `room` columns, ending in `…` where it was cut, so a
+/// standing cut short reads as cut rather than as all there is to it.
+fn cut(text: &str, room: usize) -> String {
+    if columns(text) <= room {
+        return text.to_owned();
+    }
+    let mut kept = String::new();
+    let mut taken = 0;
+    for character in text.chars() {
+        let drawn = columns(character.encode_utf8(&mut [0; 4]));
+        // A column left over for the ellipsis.
+        if taken + drawn >= room {
+            break;
+        }
+        taken += drawn;
+        kept.push(character);
+    }
+    kept.truncate(kept.trim_end().len());
+    if room > 0 {
+        kept.push('…');
+    }
+    kept
+}
+
+/// Where a row stands, in words, and how loudly: for one found, why it is
+/// worth linking.
+fn standing(row: &minds::Row) -> (String, Style) {
+    match row.standing {
+        minds::Standing::Linked { opens: true } => (String::from("linked"), dim()),
         minds::Standing::Linked { opens: false } => (
-            "cannot be opened; untick it to unlink",
+            String::from("cannot be opened; untick it to unlink"),
             Style::default().fg(Color::Red),
         ),
-        minds::Standing::Found { mind: true } => ("mind project", dim()),
-        minds::Standing::Found { mind: false } => ("git repository (mind init first)", warn()),
+        minds::Standing::Found { mind: true } => (row.why.clone(), dim()),
+        minds::Standing::Found { mind: false } => (found_repository(&row.why), warn()),
     }
+}
+
+/// A repository found, by why it is worth linking, and what linking it
+/// takes first: on the minds screen and in the link form alike.
+fn found_repository(why: &str) -> String {
+    format!("{why} (mind init first)")
 }
 
 /// Drawn while a command runs, which for a gather means the network.

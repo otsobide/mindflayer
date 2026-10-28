@@ -31,7 +31,7 @@ use crate::kind::{Kind, Layout};
 use crate::ledger::{Ledger, LedgerError, LEDGER_FILE};
 use crate::lock::{self, LockError, WorkspaceLock};
 use crate::paths;
-use crate::settings::{Settings, Share, SETTINGS_FILE, SETTINGS_JSON_FILE};
+use crate::settings::{ProjectId, Settings, Share, SETTINGS_FILE, SETTINGS_JSON_FILE};
 
 /// The newest version of a project's marker this build reads: version 5, a
 /// `.mind/settings.toml` ([`SETTINGS_TOML_VERSION`]).
@@ -773,6 +773,32 @@ impl MindProject {
         .any(|file| mind.join(file.name()).is_file())
     }
 
+    /// Whether nothing at `root` says a project is there: each marker file
+    /// looked for and found missing, as where a project moved from is left.
+    ///
+    /// Not merely the opposite of [`is_marked`](Self::is_marked), which a
+    /// marker that cannot be looked at, in a `.mind` nobody may read, fails
+    /// too. A directory still holding a marker, or one that may, holds its
+    /// project, even when the marker would not open (a typo, or a newer
+    /// version): that project's id is what nothing read, so a copy of it
+    /// made with its `.mind` would pass for it moved ([`crate::relink`]).
+    pub fn is_vacant(root: &Path) -> bool {
+        let mind = root.join(MIND_DIR);
+        [
+            MarkerFile::SettingsToml,
+            MarkerFile::SettingsJson,
+            MarkerFile::MindToml,
+        ]
+        .into_iter()
+        .all(|file| match fs::symlink_metadata(mind.join(file.name())) {
+            Ok(_) => false,
+            Err(error) => matches!(
+                error.kind(),
+                io::ErrorKind::NotFound | io::ErrorKind::NotADirectory
+            ),
+        })
+    }
+
     /// Which file the project is read from.
     pub fn marker_file(&self) -> MarkerFile {
         match &self.config {
@@ -984,6 +1010,26 @@ impl MindProject {
         Ok(value)
     }
 
+    /// Give the project `id` in place of the one its settings hold, and hand
+    /// back that one: the one change [`change_settings`](Self::change_settings)
+    /// refuses, made the way it makes the others, through the same rewrite and
+    /// toml_edit, with every other byte as it was (`settings::renewed`).
+    ///
+    /// Refused as a change is ([`changeable`](Self::changeable)), and taking
+    /// no lock, as a change takes none: [`crate::relink::new_id`] holds the
+    /// one of the workspace linking the project, and keeps its exclude group
+    /// and ledger with it.
+    pub(crate) fn change_id(&mut self, id: &ProjectId) -> Result<ProjectId, WorkspaceError> {
+        self.changeable()?;
+        let path = self.marker_path();
+        let was = rewrite(&path, |text| {
+            let before = crate::settings::parse(&path, text)?;
+            Ok((crate::settings::renewed(&path, text, id)?, before.id))
+        })?;
+        self.config = ProjectConfig::Settings(Settings::read(&path)?);
+        Ok(was)
+    }
+
     /// The project's settings, when a change may be made to them: those of
     /// a project its `settings.toml` marks.
     ///
@@ -1085,6 +1131,15 @@ pub struct FlayerConfig {
     /// projects, read live from where they are; relative to its root.
     #[serde(default)]
     pub loaded: Vec<PathBuf>,
+    /// The other flayer workspaces this machine knows, relative to its root:
+    /// read only in the default workspace, the one in home, which
+    /// [`crate::known`] keeps it in.
+    ///
+    /// No new [`FLAYER_FORMAT_VERSION`]: a build from before it reads past
+    /// the key, which says nothing about this workspace, and keeps it when
+    /// it edits the marker, since every edit goes through `toml_edit`.
+    #[serde(default)]
+    pub known: Vec<PathBuf>,
     /// Where the workspace keeps its own artifacts (the ones it shares with
     /// every project it manages), relative to its root. A kind it does not
     /// name is kept in its library ([`Directories::library_for`]).
@@ -1311,13 +1366,17 @@ impl FlayerWorkspace {
     /// only keep every change to an artifact waiting behind a gather to drop
     /// its record, after the change was made, and failing as busy when the
     /// gather ran long, with the record left behind.
+    ///
+    /// A ledger made or migrated here is told the id of each project the
+    /// workspace links (`FlayerWorkspace::known`), which the step to schema 5
+    /// names each one's records by.
     pub fn ledger(&self) -> Result<Ledger, LedgerError> {
         if !self.made {
             return Err(LedgerError::Unmade {
                 path: self.ledger_path(),
             });
         }
-        Ledger::open(self.ledger_path())
+        Ledger::open_knowing(self.ledger_path(), || self.known().ids)
     }
 
     /// Open that database for a command that writes to it: scrubbed first of
@@ -1335,6 +1394,15 @@ impl FlayerWorkspace {
     /// The scrub holds the workspace while it rewrites clones, which is only
     /// when an older build left a credential in one, and like any writer gives
     /// up as busy after [`lock::WAIT`].
+    ///
+    /// And told which id each project the workspace links holds now
+    /// ([`Ledger::knew`]), so it follows them: one linked since it was made,
+    /// one given a new id, one whose route held another project before. A
+    /// stale entry keeps the id the ledger last saw there, which is what
+    /// finds its project once it has moved ([`crate::relink`]). Every time,
+    /// as the scrub runs every time, rather than by each command that
+    /// changes what the workspace links: an entry written by hand is linked
+    /// too. Rows only, which SQLite keeps apart, so it waits for no lock.
     pub fn ledger_to_write(&self) -> Result<(Ledger, Scrub), LedgerError> {
         self.ledger_to_write_waiting(lock::WAIT)
     }
@@ -1348,6 +1416,8 @@ impl FlayerWorkspace {
     ) -> Result<(Ledger, Scrub), LedgerError> {
         let ledger = self.ledger()?;
         let scrub = gather::scrub(self, &ledger, wait)?;
+        let known = self.known();
+        ledger.knew(&known.ids, &known.stale)?;
         Ok((ledger, scrub))
     }
 
@@ -1375,10 +1445,55 @@ impl FlayerWorkspace {
         if !self.made {
             return Ledger::in_memory();
         }
-        match Ledger::open_existing(self.ledger_path())? {
+        match Ledger::open_existing_knowing(self.ledger_path(), || self.known().ids)? {
             Some(ledger) => Ok(ledger),
             None => Ledger::in_memory(),
         }
+    }
+
+    /// Which id each project the workspace links holds, by the route the
+    /// ledger names it by, and which entries open no project: what the
+    /// ledger is told of them ([`Ledger::knew`]).
+    ///
+    /// A project a `mind.toml` marks has no id, and is in neither. Nor is an
+    /// id two linked directories hold: a project copied with its `.mind`,
+    /// which a report says ([`crate::status`]) until one of them is given an
+    /// id of its own, and which the ledger is not to take for either.
+    ///
+    /// An entry whose marker is there and would not open is stale here too,
+    /// though it is no place a project moved from
+    /// ([`MindProject::is_vacant`]): the ledger keeps the id it last saw
+    /// there, rather than handing it to a linked copy of a project nothing
+    /// could read.
+    pub(crate) fn known(&self) -> Known {
+        let mut held: Vec<(ProjectId, String, PathBuf)> = Vec::new();
+        let mut stale = Vec::new();
+        for member in self.members() {
+            let route = crate::install::entry_for_root(self, &member.root);
+            match member.project {
+                Ok(project) => {
+                    if let Some(settings) = project.settings() {
+                        held.push((settings.id.clone(), route, member.root));
+                    }
+                }
+                Err(_) => stale.push(route),
+            }
+        }
+        let ids = held
+            .iter()
+            .filter(|(id, _, root)| {
+                held.iter()
+                    .all(|(other, _, at)| other != id || same_directory(at, root))
+            })
+            .map(|(id, route, _)| (id.clone(), route.clone()))
+            .collect::<Vec<_>>();
+        let mut unique: Vec<(ProjectId, String)> = Vec::new();
+        for (id, route) in ids {
+            if !unique.iter().any(|(seen, _)| *seen == id) {
+                unique.push((id, route));
+            }
+        }
+        Known { ids: unique, stale }
     }
 
     /// The entry this workspace would store for a project directory.
@@ -1465,6 +1580,74 @@ impl FlayerWorkspace {
     /// what turns a silent success into a fixable mistake.
     pub fn unlink(&mut self, project_root: &Path) -> Result<Vec<PathBuf>, WorkspaceError> {
         self.unlink_all(&[project_root.to_path_buf()])
+    }
+
+    /// Point the workspace's entry for the directory `old` at `new` instead,
+    /// where it stands in the marker, and hand back both spellings: what the
+    /// entry was, and what it is now, the route [`link`](Self::link) would
+    /// have written for `new`. Every other entry pointing at `old` goes, as
+    /// [`unlink`](Self::unlink) takes every spelling of one directory.
+    ///
+    /// In place rather than an unlink and a link, so the entry keeps its
+    /// place in the list and the comments around it, which a person put
+    /// there about the project, not about where it was. For
+    /// [`crate::relink::relink`], which holds the workspace's lock and has
+    /// said `new` is `old`'s project, moved. Refused when no entry points at
+    /// `old`, matched against the array being edited, as `link` matches.
+    pub(crate) fn relink_held(
+        &mut self,
+        old: &Path,
+        new: &Path,
+    ) -> Result<(PathBuf, PathBuf), WorkspaceError> {
+        let entry = self.entry_for(new);
+        let written =
+            paths::to_config_string(&entry).ok_or_else(|| WorkspaceError::NonUtf8Path {
+                path: entry.clone(),
+            })?;
+        let target = paths::normalize(old);
+        let moved = paths::normalize(new);
+        let root = self.root.clone();
+        let edited = self.edit_marker_held(|document| {
+            let Some(array) = document
+                .get_mut(PROJECTS_KEY)
+                .and_then(toml_edit::Item::as_array_mut)
+            else {
+                return Ok(None);
+            };
+            // Looked at again here, under the lock: a link made since the
+            // caller looked would leave two entries for one project.
+            if let Some(linked) = entries(array)
+                .into_iter()
+                .find(|entry| points_at(&root, entry, &moved))
+            {
+                return Err(format!(
+                    "{} is linked already, as {}",
+                    new.display(),
+                    linked.display()
+                ));
+            }
+            let Some(index) = array.iter().position(|value| {
+                value
+                    .as_str()
+                    .is_some_and(|entry| points_at(&root, Path::new(entry), &target))
+            }) else {
+                return Ok(None);
+            };
+            let was = array
+                .get(index)
+                .and_then(|value| value.as_str())
+                .map(PathBuf::from);
+            array.replace(index, written.as_str());
+            remove_pointing_at(array, &root, &target);
+            Ok(was)
+        })?;
+        match edited {
+            Some(was) => Ok((was, PathBuf::from(&written))),
+            None => Err(WorkspaceError::NotRegistered {
+                path: old.to_path_buf(),
+                workspace: self.root.clone(),
+            }),
+        }
     }
 
     /// [`unlink`](Self::unlink) several at once, in one rewrite of the file:
@@ -1591,8 +1774,19 @@ impl FlayerWorkspace {
     /// Only one level deep: what a loaded workspace loads itself is not
     /// followed, so two workspaces loading each other is not a loop.
     pub fn loads(&self) -> Vec<Loaded> {
-        self.config
-            .loaded
+        self.opened(&self.config.loaded)
+    }
+
+    /// Every `known` entry, in marker order, with the workspace it opens or
+    /// the reason it does not, as [`loads`](Self::loads) has them: what
+    /// [`crate::known::known`] lists, a workspace that has gone included.
+    pub(crate) fn remembered(&self) -> Vec<Loaded> {
+        self.opened(&self.config.known)
+    }
+
+    /// Each of `entries`, resolved against the root, with the workspace there.
+    fn opened(&self, entries: &[PathBuf]) -> Vec<Loaded> {
+        entries
             .iter()
             .map(|entry| {
                 let root = paths::normalize(&self.root.join(entry));
@@ -1604,6 +1798,47 @@ impl FlayerWorkspace {
                 }
             })
             .collect()
+    }
+
+    /// Remember another workspace in this one's `known`, stored the way
+    /// `link` stores a project and matched the same way, so remembering one
+    /// already known by another spelling changes nothing and reports the
+    /// spelling the file uses.
+    ///
+    /// Crate-private: which workspace remembers, the default one only once
+    /// it is made, and never itself, is [`crate::known`]'s to decide, so no
+    /// front end writes the list into some other workspace.
+    pub(crate) fn remember(
+        &mut self,
+        workspace: &FlayerWorkspace,
+    ) -> Result<(PathBuf, Registration), WorkspaceError> {
+        let entry = self.entry_for(workspace.root());
+        let target = paths::normalize(workspace.root());
+        let written =
+            paths::to_config_string(&entry).ok_or_else(|| WorkspaceError::NonUtf8Path {
+                path: entry.clone(),
+            })?;
+        let root = self.root.clone();
+        self.edit_array(KNOWN_KEY, move |array| {
+            if let Some(existing) = entries(array)
+                .into_iter()
+                .find(|entry| points_at(&root, entry, &target))
+            {
+                return Ok((existing, Registration::AlreadyRegistered));
+            }
+            array.push(written.as_str());
+            Ok((PathBuf::from(&written), Registration::Added))
+        })
+    }
+
+    /// Drop every `known` entry pointing at `root`, returning what was
+    /// removed: every spelling, as `unlink` drops every one of a project's,
+    /// and a path rather than a workspace, since the one most worth
+    /// forgetting is one that has gone. Refused when none points at it.
+    pub(crate) fn forget(&mut self, root: &Path) -> Result<Vec<PathBuf>, WorkspaceError> {
+        let workspace = self.root.clone();
+        self.drop_entries(KNOWN_KEY, &[root.to_path_buf()])?
+            .map_err(|path| WorkspaceError::NotKnown { path, workspace })
     }
 
     /// Rewrite the `projects` array in place. See [`edit_array`](Self::edit_array).
@@ -1640,13 +1875,28 @@ impl FlayerWorkspace {
         self.edit_marker_held(|document| {
             // A key deleted by hand, or a marker from before `loaded`
             // existed, is made again rather than refused.
-            if !document.as_table().contains_key(key) {
+            let made = !document.as_table().contains_key(key);
+            if made {
                 document[key] = toml_edit::value(toml_edit::Array::new());
+                if let (Some(comment), Some(mut made)) = (explained(key), document.key_mut(key)) {
+                    made.leaf_decor_mut().set_prefix(comment);
+                }
             }
             let array = document[key]
                 .as_array_mut()
                 .ok_or_else(|| format!("`{key}` is not an array"))?;
-            edit(array)
+            let value = edit(array)?;
+            // Made for an edit that put nothing in it, such as a `forget`
+            // of a workspace nothing remembers: taken out again, so an edit
+            // that changes nothing leaves the file as it found it.
+            if made
+                && document[key]
+                    .as_array()
+                    .is_some_and(toml_edit::Array::is_empty)
+            {
+                document.remove(key);
+            }
+            Ok(value)
         })
     }
 
@@ -1850,6 +2100,18 @@ impl FlayerWorkspace {
     }
 }
 
+/// What the projects a workspace links say of their ids
+/// ([`FlayerWorkspace::known`]).
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub(crate) struct Known {
+    /// Each id one linked directory holds, by its route from the workspace,
+    /// in the order the marker lists them.
+    pub ids: Vec<(ProjectId, String)>,
+    /// The route of each entry that opens no project, whether nothing is
+    /// there any more or its marker would not open.
+    pub stale: Vec<String>,
+}
+
 /// One entry in a workspace's registry, and what it opens.
 #[derive(Debug)]
 pub struct Member {
@@ -1861,7 +2123,8 @@ pub struct Member {
     pub project: Result<MindProject, WorkspaceError>,
 }
 
-/// One entry in a workspace's `loaded` list, and what it opens.
+/// One entry in a workspace's `loaded` list, or in the default workspace's
+/// `known`, and what it opens.
 #[derive(Debug)]
 pub struct Loaded {
     /// The entry as the marker spells it.
@@ -1874,6 +2137,20 @@ pub struct Loaded {
 
 const PROJECTS_KEY: &str = "projects";
 const LOADED_KEY: &str = "loaded";
+const KNOWN_KEY: &str = "known";
+
+/// The comment a key an edit makes is given in the marker: `known`'s, the
+/// one key the template leaves out, since only the default workspace has a
+/// use for it and every other marker would carry a line about nothing.
+fn explained(key: &str) -> Option<&'static str> {
+    (key == KNOWN_KEY).then_some(
+        "\n\
+         # `known` lists the other flayer workspaces on this machine, which\n\
+         # `flayer workspaces` shows. While this is the default workspace,\n\
+         # `flayer init` adds each one it makes; `flayer workspaces forget <path>`\n\
+         # takes one out.\n",
+    )
+}
 
 /// Remove every entry of `array` pointing at `target`, returning them.
 fn remove_pointing_at(array: &mut toml_edit::Array, root: &Path, target: &Path) -> Vec<PathBuf> {
@@ -1883,12 +2160,67 @@ fn remove_pointing_at(array: &mut toml_edit::Array, root: &Path, target: &Path) 
         match array.get(index).and_then(|value| value.as_str()) {
             Some(entry) if points_at(root, Path::new(entry), target) => {
                 removed.push(PathBuf::from(entry));
-                array.remove(index);
+                let gone = array.remove(index);
+                // The entry after it moves into its place. A prefix toml_edit
+                // has not been given is the one it would write there: none
+                // before the first entry, a space before any other.
+                if let Some(next) = array.get_mut(index) {
+                    let place = layout(&gone, if index == 0 { "" } else { " " });
+                    let moved = moved_in(place, layout(next, " "));
+                    next.decor_mut().set_prefix(moved);
+                }
             }
             _ => index += 1,
         }
     }
     removed
+}
+
+/// What comes before `value` in its array: the space and comments since
+/// the bracket or comma ahead of it, or `default` when it has none of its own.
+fn layout<'v>(value: &'v toml_edit::Value, default: &'v str) -> &'v str {
+    value
+        .decor()
+        .prefix()
+        .and_then(|raw| raw.as_str())
+        .unwrap_or(default)
+}
+
+/// The layout an entry laid out as `own` is left with when the one before
+/// it, laid out as `place`, is dropped and it moves into that place.
+///
+/// Each layout starts on the line of whatever comes before its entry: up to
+/// its first line break is the rest of that line, and a comment there is
+/// that line's; after the break come the comments above the entry and its
+/// indent. So the entry keeps the rest of the line above the dropped one and
+/// its own comments, and loses the dropped entry's: the ones above it, and
+/// one after it on its line (the start of `own`). Taking `place` whole would
+/// put the dropped entry's comment above this one in place of its own, and
+/// keeping `own` whole would leave `[ "b"]` from `["a", "b"]` and lose a
+/// comment at the end of the line above.
+fn moved_in(place: &str, own: &str) -> String {
+    let (above, dropped) = first_line(place);
+    let (line, kept) = first_line(own);
+    if line.ends_with('\n') {
+        // The entry had a line of its own, and keeps one. A plain break
+        // even where the file has `\r\n`: toml_edit writes layout without
+        // its `\r`s.
+        let break_ = if above.ends_with('\n') { "" } else { "\n" };
+        format!("{above}{break_}{kept}")
+    } else {
+        // It shared the dropped entry's line, so it takes that one's indent.
+        let indent = dropped.rsplit_once('\n').map_or(dropped, |(_, last)| last);
+        format!("{above}{indent}")
+    }
+}
+
+/// `raw` split after its first line break, or all of it and nothing when
+/// it has none.
+fn first_line(raw: &str) -> (&str, &str) {
+    match raw.find('\n') {
+        Some(at) => raw.split_at(at + 1),
+        None => (raw, ""),
+    }
 }
 
 /// Whether two spellings name one directory: lexically first, then through
@@ -1953,6 +2285,8 @@ pub enum WorkspaceError {
     LoadsItself { path: PathBuf },
     #[error("{path}: not loaded by the workspace at {workspace}")]
     NotLoaded { path: PathBuf, workspace: PathBuf },
+    #[error("{path}: not known to the default workspace at {workspace}")]
+    NotKnown { path: PathBuf, workspace: PathBuf },
     #[error("{path}: not valid UTF-8, so it cannot be written into a marker")]
     NonUtf8Path { path: PathBuf },
     #[error("{path}: cannot hold a project's {kind}s, because it is not inside the project")]
@@ -2015,6 +2349,7 @@ impl WorkspaceError {
             | WorkspaceError::NotRegistered { path, .. }
             | WorkspaceError::LoadsItself { path }
             | WorkspaceError::NotLoaded { path, .. }
+            | WorkspaceError::NotKnown { path, .. }
             | WorkspaceError::NonUtf8Path { path }
             | WorkspaceError::OutsideProject { path, .. }
             | WorkspaceError::InsideMind { path, .. }

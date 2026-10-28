@@ -158,8 +158,8 @@ pub struct Plan {
     /// project reads that folder any more.
     pub foreign: Vec<PathBuf>,
     /// Copies already in place that a project turning local keeps out of
-    /// git from now on. Those an installation is given are kept out as they
-    /// land, and are not here.
+    /// git from now on: not one git tracks, which stays the team's. Those an
+    /// installation is given are kept out as they land, and are not here.
     pub excluded: Vec<PathBuf>,
     /// The lines of the project's group in the exclude block that a project
     /// turning shared takes out: all of them, whichever workspace wrote them.
@@ -982,8 +982,9 @@ fn ignore(project: &MindProject, share: Share) -> Option<Ignore> {
 /// What the change does to the project's group of the exclude block, beyond
 /// the copies it adds and removes: the whole group for a project turning
 /// shared, and for one turning local an entry for each recorded copy in place
-/// (`in_place`) that the group does not hold yet. Read from the file, so a
-/// dry run says what will be written rather than what might be.
+/// (`in_place`) that git does not track and the group does not hold yet.
+/// Read from the file, so a dry run says what will be written rather than
+/// what might be.
 fn exclusions(
     project: &MindProject,
     change: &Change,
@@ -1010,13 +1011,16 @@ fn exclusions(
     if !local {
         plan.unexcluded = listing.lines;
     } else if change.shares() {
-        for path in in_place {
-            let Some(relative) = crate::paths::relative_to(path, project.root()) else {
+        // Not one git tracks, which a line would keep none of out of git,
+        // and whose files added later it would hide ([`install::untracked`]):
+        // a shared project's copies are often committed.
+        for path in install::untracked(project, in_place) {
+            let Some(relative) = crate::paths::relative_to(&path, project.root()) else {
                 continue;
             };
             let line = exclude::Entry::directory(relative).pattern(&listing.route)?;
             if !listing.lines.contains(&line) {
-                plan.excluded.push(path.clone());
+                plan.excluded.push(path);
             }
         }
     }

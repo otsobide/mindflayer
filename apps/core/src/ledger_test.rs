@@ -1346,6 +1346,7 @@ fn a_migrated_project_moves_every_installation_fills_a_missing_hash_and_logs_it_
     ledger
         .migrated(
             "collapse",
+            &id('a'),
             &[
                 moved("deploy", Some("ffff")),
                 moved("review", Some("abcd")),
@@ -1374,6 +1375,15 @@ fn a_migrated_project_moves_every_installation_fills_a_missing_hash_and_logs_it_
         .installation("collapse", Kind::Skill, "gone")
         .unwrap()
         .is_none());
+    // Known by the id its settings gave it, and its records with it.
+    assert_eq!(ledger.project_at("collapse").unwrap(), Some(id('a')));
+    assert_eq!(
+        project_ids(&ledger, "collapse"),
+        [
+            (String::from("deploy"), Some(id('a').to_string())),
+            (String::from("review"), Some(id('a').to_string()))
+        ]
+    );
     let history = ledger.history(5).unwrap();
     assert_eq!(history.len(), 1);
     assert_eq!(history[0].target.as_deref(), Some("collapse"));
@@ -1402,6 +1412,7 @@ fn a_migration_the_ledger_cannot_finish_records_none_of_it() {
 
     let failed = ledger.migrated(
         "collapse",
+        &id('a'),
         &[Moved {
             kind: Kind::Skill,
             name: String::from("deploy"),
@@ -1416,6 +1427,7 @@ fn a_migration_the_ledger_cannot_finish_records_none_of_it() {
         ledger.copies("collapse", Kind::Skill).unwrap(),
         ["skills/deploy"]
     );
+    assert_eq!(ledger.project_at("collapse").unwrap(), None);
     assert!(ledger.history(5).unwrap().is_empty());
 }
 
@@ -1552,4 +1564,264 @@ fn a_ledger_waits_for_another_writer_as_long_as_a_writer_waits_for_the_workspace
             crate::lock::WAIT.as_millis()
         );
     }
+}
+
+fn id(digit: char) -> ProjectId {
+    ProjectId::parse(&digit.to_string().repeat(ProjectId::LEN)).unwrap()
+}
+
+/// The id each installation of `project` names, by name.
+fn project_ids(ledger: &Ledger, project: &str) -> Vec<(String, Option<String>)> {
+    let mut statement = ledger
+        .connection
+        .prepare("SELECT name, project_id FROM installations WHERE project = ?1 ORDER BY name")
+        .unwrap();
+    statement
+        .query_map([project], |row| Ok((row.get(0)?, row.get(1)?)))
+        .unwrap()
+        .map(Result::unwrap)
+        .collect()
+}
+
+#[test]
+fn an_install_names_the_id_known_at_its_route_and_none_where_none_is() {
+    let ledger = Ledger::in_memory().unwrap();
+    ledger
+        .knew(&[(id('a'), String::from("collapse"))], &[])
+        .unwrap();
+
+    for project in ["collapse", "legacy"] {
+        ledger
+            .installed(
+                project,
+                &installation_of("deploy", &[(None, "skills/deploy")]),
+            )
+            .unwrap();
+    }
+
+    assert_eq!(
+        project_ids(&ledger, "collapse"),
+        [(String::from("deploy"), Some(id('a').to_string()))]
+    );
+    assert_eq!(
+        project_ids(&ledger, "legacy"),
+        [(String::from("deploy"), None)]
+    );
+}
+
+#[test]
+fn a_route_known_by_an_id_is_read_back_both_ways() {
+    let ledger = Ledger::in_memory().unwrap();
+
+    let learned = ledger
+        .knew(
+            &[
+                (id('b'), String::from("tanukeys")),
+                (id('a'), String::from("collapse")),
+            ],
+            &[],
+        )
+        .unwrap();
+
+    assert_eq!(learned, 2);
+    assert_eq!(ledger.project_at("collapse").unwrap(), Some(id('a')));
+    assert_eq!(ledger.project_at("elsewhere").unwrap(), None);
+    assert_eq!(
+        ledger.known_projects().unwrap(),
+        [
+            (id('a'), String::from("collapse")),
+            (id('b'), String::from("tanukeys"))
+        ]
+    );
+    // Knowing it again is nothing new.
+    assert_eq!(
+        ledger
+            .knew(&[(id('a'), String::from("collapse"))], &[])
+            .unwrap(),
+        0
+    );
+}
+
+#[test]
+fn a_route_whose_project_holds_another_id_now_is_known_by_that_one_with_its_records() {
+    let ledger = Ledger::in_memory().unwrap();
+    ledger
+        .knew(&[(id('a'), String::from("collapse"))], &[])
+        .unwrap();
+    ledger
+        .installed(
+            "collapse",
+            &installation_of("deploy", &[(None, "skills/deploy")]),
+        )
+        .unwrap();
+
+    ledger
+        .knew(&[(id('c'), String::from("collapse"))], &[])
+        .unwrap();
+
+    assert_eq!(ledger.project_at("collapse").unwrap(), Some(id('c')));
+    assert_eq!(ledger.known_projects().unwrap().len(), 1);
+    assert_eq!(
+        project_ids(&ledger, "collapse"),
+        [(String::from("deploy"), Some(id('c').to_string()))]
+    );
+}
+
+#[test]
+fn an_id_last_seen_at_a_stale_entry_stays_there_until_a_relink_moves_it() {
+    let ledger = Ledger::in_memory().unwrap();
+    ledger.knew(&[(id('a'), String::from("old"))], &[]).unwrap();
+
+    ledger
+        .knew(&[(id('a'), String::from("new"))], &[String::from("old")])
+        .unwrap();
+    assert_eq!(ledger.project_at("old").unwrap(), Some(id('a')));
+    assert_eq!(ledger.project_at("new").unwrap(), None);
+
+    // One no entry links any more is no reason to keep it there.
+    ledger.knew(&[(id('a'), String::from("new"))], &[]).unwrap();
+    assert_eq!(ledger.project_at("old").unwrap(), None);
+    assert_eq!(ledger.project_at("new").unwrap(), Some(id('a')));
+}
+
+#[test]
+fn a_relink_moves_every_record_and_file_made_to_the_new_route() {
+    let ledger = Ledger::in_memory().unwrap();
+    ledger.knew(&[(id('a'), String::from("old"))], &[]).unwrap();
+    for name in ["deploy", "review"] {
+        let path = format!("skills/{name}");
+        ledger
+            .installed("old", &installation_of(name, &[(None, &path)]))
+            .unwrap();
+    }
+    ledger.set_created("old", "AGENTS.md", true).unwrap();
+
+    let (written, moved) = ledger
+        .relinked("old", "new", &id('a'), || Ok::<_, ()>("marker"))
+        .unwrap()
+        .unwrap();
+
+    assert_eq!((written, moved), ("marker", 2));
+    assert!(ledger.records("old", Kind::Skill).unwrap().is_empty());
+    assert_eq!(
+        ledger.installations("new", Kind::Skill).unwrap(),
+        ["deploy", "review"]
+    );
+    assert_eq!(
+        project_ids(&ledger, "new"),
+        [
+            (String::from("deploy"), Some(id('a').to_string())),
+            (String::from("review"), Some(id('a').to_string()))
+        ]
+    );
+    assert!(ledger.created("new", "AGENTS.md").unwrap());
+    assert!(!ledger.holds("old").unwrap());
+    assert_eq!(ledger.project_at("new").unwrap(), Some(id('a')));
+    assert_eq!(ledger.project_at("old").unwrap(), None);
+    let logged = &ledger.history(1).unwrap()[0];
+    assert_eq!(logged.action, "relink");
+    assert_eq!(logged.detail.as_deref(), Some("old to new"));
+}
+
+#[test]
+fn a_relink_drops_what_another_project_left_at_the_new_route() {
+    let ledger = Ledger::in_memory().unwrap();
+    ledger
+        .knew(
+            &[
+                (id('a'), String::from("old")),
+                (id('b'), String::from("new")),
+            ],
+            &[],
+        )
+        .unwrap();
+    ledger
+        .installed(
+            "old",
+            &installation_of("deploy", &[(None, "skills/deploy")]),
+        )
+        .unwrap();
+    for name in ["deploy", "lint"] {
+        let path = format!("skills/{name}");
+        ledger
+            .installed("new", &installation_of(name, &[(None, &path)]))
+            .unwrap();
+    }
+    ledger.set_created("new", "AGENTS.md", true).unwrap();
+
+    ledger
+        .relinked("old", "new", &id('a'), || Ok::<_, ()>(()))
+        .unwrap()
+        .unwrap();
+
+    assert_eq!(
+        ledger.installations("new", Kind::Skill).unwrap(),
+        ["deploy"]
+    );
+    assert!(!ledger.created("new", "AGENTS.md").unwrap());
+    assert_eq!(
+        ledger.known_projects().unwrap(),
+        [(id('a'), String::from("new"))]
+    );
+}
+
+#[test]
+fn a_relink_whose_marker_is_not_written_moves_nothing() {
+    let ledger = Ledger::in_memory().unwrap();
+    ledger.knew(&[(id('a'), String::from("old"))], &[]).unwrap();
+    ledger
+        .installed(
+            "old",
+            &installation_of("deploy", &[(None, "skills/deploy")]),
+        )
+        .unwrap();
+
+    let refused = ledger
+        .relinked("old", "new", &id('a'), || Err::<(), _>("refused"))
+        .unwrap();
+
+    assert_eq!(refused, Err("refused"));
+    assert_eq!(
+        ledger.installations("old", Kind::Skill).unwrap(),
+        ["deploy"]
+    );
+    assert_eq!(ledger.project_at("old").unwrap(), Some(id('a')));
+    assert!(ledger.history(1).unwrap().is_empty());
+}
+
+#[test]
+fn a_route_holds_what_an_install_or_a_made_file_records_there() {
+    let ledger = Ledger::in_memory().unwrap();
+    assert!(!ledger.holds("collapse").unwrap());
+
+    ledger.set_created("collapse", "AGENTS.md", true).unwrap();
+    assert!(ledger.holds("collapse").unwrap());
+
+    ledger
+        .installed(
+            "tanukeys",
+            &installation_of("deploy", &[(None, "skills/deploy")]),
+        )
+        .unwrap();
+    assert!(ledger.holds("tanukeys").unwrap());
+}
+
+#[test]
+fn a_new_ledger_knows_each_project_it_is_told_of_once() {
+    let ledger = Ledger::open_knowing(":memory:", || {
+        vec![
+            (id('a'), String::from("collapse")),
+            (id('a'), String::from("copy")),
+            (id('b'), String::from("tanukeys")),
+        ]
+    })
+    .unwrap();
+
+    assert_eq!(
+        ledger.known_projects().unwrap(),
+        [
+            (id('a'), String::from("collapse")),
+            (id('b'), String::from("tanukeys"))
+        ]
+    );
 }

@@ -115,12 +115,15 @@ variable counts as unset. `--home` still says only where the default lives.
 ### Several flayers
 
 A flayer can be made anywhere and switched to for a whole shell, the way a
-Python virtualenv is. `flayer init DIR` makes one in `DIR`, and `flayer
-activate DIR` prints the shell code that activates it, for `eval` to run:
+Python virtualenv is. `flayer init DIR` makes one in `DIR`, which the
+workspace in your home remembers ([the flayers this machine
+knows](#the-flayers-this-machine-knows)), and `flayer activate DIR` prints the
+shell code that activates it, for `eval` to run:
 
 ```
 $ flayer init ~/flayers/writing
 initialized flayer workspace `writing` in /home/you/flayers/writing/.mindflayer
+  remembered as flayers/writing by the default workspace
 $ cd ~/Projects/collapse
 $ flayer which
 Projects at /home/you/Projects, found walking up from /home/you/Projects/collapse
@@ -167,6 +170,48 @@ code, so `eval` runs nothing and the shell is left as it was:
 $ eval "$(flayer activate ~/notes)"
 error: /home/you/notes: not a flayer workspace (no .mindflayer/flayer.toml)
 ```
+
+### The flayers this machine knows
+
+The workspace in your home keeps a list of the other flayers on this machine,
+so they can all be seen in one place and one picked to activate. `flayer init`
+adds each one it makes, once the workspace in your home is made, and `flayer
+workspaces` lists them, with a `*` before the one a command run where you are
+would use:
+
+```
+$ cd ~/Projects/collapse
+$ flayer workspaces
+  you       /home/you                  no projects; the default one
+  writing   /home/you/flayers/writing  no projects
+* Projects  /home/you/Projects         3 projects, 1 stale; not remembered
+
+  `flayer init <path>` remembers the one in use, and changes nothing else in it
+$ flayer init ~/Projects
+flayer workspace `Projects` already initialized in /home/you/Projects/.mindflayer
+  remembered as Projects by the default workspace
+```
+
+Each one says how many projects it links, and how many of those are stale. A
+flayer made before the workspace in your home was, or by an older Mindflayer,
+is not on the list until `flayer init` runs on it again, which changes nothing
+else in it; the one in use is listed all the same, marked as not remembered.
+Activating a flayer does not remember it, since activating writes nothing. One
+that has gone is listed as `cannot be opened`, with a warning, and `flayer
+workspaces forget` takes it off the list, under every spelling it was
+remembered by, leaving the flayer itself, if it is still there, as it is:
+
+```
+$ flayer workspaces forget ~/flayers/writing
+forgot flayers/writing
+```
+
+The list is a `known` array in `~/.mindflayer/flayer.toml`, which you can read
+and edit by hand, and which an older Mindflayer reads past and keeps. Listing
+never makes the workspace in your home; until something does, it knows no
+flayer, and with `--home ""` there is none to know them. `--json` prints the
+list in the envelope every reading command's `--json` shares, and `w` shows it
+in [the TUI](#the-tui).
 
 ## The two kinds
 
@@ -312,6 +357,8 @@ mind                       # the TUI, on this project
 mind init [--agents AGENTS] [--shared] [--skills DIR] [--rules DIR]
                            # create a .mind here: for which agents, kept out of
                            # git unless shared, and where its artifacts go
+mind init --new-id         # give the project here an id of its own: for a
+                           # copy made with its .mind
 mind add <KIND> <NAME> <DESCRIPTION> [--template NAME]
                            # create a skill or a rule that validates as written
 mind edit <NAME> [--editor CMD]
@@ -359,6 +406,10 @@ flayer init [PATH] [--skills DIR] [--rules DIR]
 flayer activate [DIR] [--shell SHELL]
                            # the code that activates a workspace: eval "$(...)"
 flayer which               # the workspace a command here would use, and why
+flayer workspaces [--json] # the flayers this machine knows, the one in use
+                           # marked
+flayer workspaces forget <path>
+                           # take one off that list
 flayer add|edit|rename|remove|templates [-p PROJECT] ...
                            # the same as mind's: the workspace's own by
                            # default, one of its projects with -p
@@ -372,11 +423,14 @@ flayer status [-p PROJECT] [--json]
                            # what every project holds, or one: current,
                            # outdated, edited, missing, orphaned, foreign or
                            # authored, for which agents, and from where
-flayer scan [DIR...] [--depth N] [--json]
+flayer scan [DIR...] [--depth N] [--suggest] [--json]
                            # the repositories under it, or under each DIR,
-                           # and which are linked
+                           # which are linked, and which moved; --suggest
+                           # lists what is most worth linking first
 flayer link <path>...      # register mind projects with it
 flayer unlink <path>...    # drop them
+flayer relink <old> <new>  # follow a project that moved, keeping what was
+                           # installed into it
 flayer minds [DIR...]      # a screen for linking and unlinking many at once
 flayer load <path>...      # offer another workspace's own skills and rules,
                            # read live
@@ -392,6 +446,10 @@ flayer install (-p PROJECT)...|--all-projects <NAME> [--from ORIGIN] [--force]
 flayer uninstall (-p PROJECT)...|--all-projects <NAME>|--orphaned [--force]
 flayer update (-p PROJECT)...|--all [NAME...] [--force] [--yes]
                            # mind update, for the projects named or every one
+flayer adopt -p PROJECT <NAME> [--yes]
+                           # a skill a project keeps by hand in an agent's
+                           # folder, into the library and managed from there;
+                           # without --yes, say what would happen
 flayer agents|share|targets -p PROJECT ...
                            # mind's agents, share and targets, for one of its
                            # projects
@@ -473,6 +531,30 @@ tanukeys  not linked  mind project
   a repository needs `mind -C <path> init` before it can be linked
 ```
 
+`--suggest` asks which to link first. It lists what is not linked before
+what is, ranked by what each holds, and says why on each row: a mind project
+whose settings give it an id, which the workspace can follow when it moves;
+then one without (marked by an older `mind.toml`, or by a marker that would
+not open); then a git repository holding something an agent reads at its
+root, named on the row; then any other repository. What counts as an agent's
+is what Claude Code, Codex and OpenCode read there: `AGENTS.md`,
+`AGENTS.override.md`, `CLAUDE.md`, `CLAUDE.local.md`, `.mcp.json`,
+`opencode.json`, `.claude`, `.agents`, `.codex` and `.opencode`
+([where each agent reads](docs/agents.md#what-says-an-agent-works-in-a-project)).
+It still links nothing and makes nothing a project: a suggestion is a line
+to type, or a row to tick on [the minds screen](#the-tui), which lists them
+in this order.
+
+```
+$ flayer scan --suggest
+tanukeys  not linked  mind project with an id
+notes     not linked  git repository with CLAUDE.md
+collapse  linked
+
+  link one with `flayer link <path>`
+  a repository needs `mind -C <path> init` before it can be linked
+```
+
 Name a folder, or several, and it looks under those instead; `--depth` says
 how many levels below each. Every path is spelled the way `flayer link` takes
 it from where you ran the scan, so a line of the report is a line to type: a
@@ -487,13 +569,19 @@ $ flayer scan ~/Work
   a repository needs `mind -C <path> init` before it can be linked
 ```
 
-Hidden folders, symlinks, `node_modules` and `target` are never entered, nor
-is a repository it finds, whose folders are its own, so a folder at the top of
-your home does not turn into a crawl of the disk; a scan that still lists too
-many folders stops and says so. `flayer minds ~/Work` opens [the minds
-screen](#the-tui) on what is there, and `--json` prints the report in the
-envelope [`status --json`](#what-each-project-has) uses, with the id each
-project's settings name it by:
+A scan is bounded so that a folder at the top of your home does not turn
+into a crawl of the disk. It goes three levels below each folder unless
+`--depth` says otherwise. Hidden folders, symlinks, `node_modules` and
+`target` are never entered, nor is a repository it finds, whose folders are
+its own. Agent files are looked for only at the top of each one it finds,
+by name: never opened, and never followed when they are links. However
+deep it goes, it stops after listing 4096 folders and says so.
+`flayer minds ~/Work` opens [the minds screen](#the-tui) on what is there,
+and `--json` prints the report in the envelope
+[`status --json`](#what-each-project-has) uses, with the id each project's
+settings name it by, the reason each is worth linking (`id`, `mind`,
+`agents` or `git`) and the agent files it holds. With `--suggest`, `found`
+is in the suggested order:
 
 ```
 $ flayer scan ~/Work --depth 2 --json
@@ -510,16 +598,23 @@ $ flayer scan ~/Work --depth 2 --json
         "route": "/home/you/Work/acme/api",
         "id": null,
         "mind": false,
-        "linked": false
+        "linked": false,
+        "moved": null,
+        "reason": "git",
+        "agent_files": []
       },
       {
         "path": "/home/you/Work/acme/web",
         "route": "/home/you/Work/acme/web",
         "id": "f4a29f5daaf5bc789c4b5d6b13174f48",
         "mind": true,
-        "linked": false
+        "linked": false,
+        "moved": null,
+        "reason": "id",
+        "agent_files": []
       }
     ],
+    "untraced": [],
     "truncated": false
   },
   "warnings": []
@@ -1145,6 +1240,82 @@ $ flayer status -p tanukeys --json
 hint: tanukeys is marked by a mind.toml, which `mind migrate` moves to a settings.toml
 ```
 
+## Following a project that moved
+
+The workspace knows each project by its route from the workspace, so moving
+the repository leaves its entry `stale`, and the record of everything
+installed into it naming a place nothing is at. What moves with it is the
+`id` in its `.mind/settings.toml`, random, so that only a copy shares it,
+which the workspace keeps beside the route it last saw it at. `flayer scan`
+finds the project by it, and `flayer relink` follows it there. Say
+`collapse`, with `commit-style` and `git/commits` installed into it from the
+examples as [above](#try-it-with-the-examples), is the one project the
+workspace links, and moves into `apps/`:
+
+```
+$ cd ~/Projects
+$ mkdir apps && mv collapse apps/
+$ flayer status
+collapse  stale
+warning: /home/you/Projects/collapse: not a mind project (no .mind/settings.toml, .mind/settings.json or .mind/mind.toml)
+$ flayer scan
+apps/collapse  not linked  moved: collapse -> apps/collapse
+
+  follow one that moved with `flayer relink <old> <new>`
+$ flayer relink collapse apps/collapse
+relinked collapse as apps/collapse, from collapse
+  2 installs kept with it
+$ flayer status
+skill  commit-style  current  claude,codex,opencode  load:../src/mindflayer/examples
+rule   git/commits   current  claude,codex,opencode  load:../src/mindflayer/examples
+```
+
+The entry is rewritten where it stands in `flayer.toml`, comments and all,
+and every record moves with it, so what was installed is current again rather
+than somebody's. In a local project, what keeps those copies out of git goes
+along: lines of `info/exclude` naming the old place are written for the new
+one, in the same repository or the one it moved into, and a repository that
+moved whole has them right already. `M` in [the TUI](#the-tui), on a stale
+project the scan found, does the same.
+
+`flayer relink` refuses, with nothing changed: a directory that holds another
+id than the one the workspace last saw at the entry, which is some other
+project; an entry that still holds a project, even one whose marker would not
+open, which has not moved; a project a `mind.toml` marks, which has no id to
+be found by ([`mind migrate`](#a-project-made-before-settings) gives it one);
+and records from before ids were kept, which nothing says were that
+project's. A workspace learns each linked project's id when its ledger is
+made or brought up to this version, and again every time it writes, so a
+project moved before then is found by nobody. `flayer scan` names the entry
+it left instead, in a hint to `flayer relink <entry> <path>`, for you to say
+where it went: the entry keeps its place, where `flayer link` would leave it
+stale beside a second one.
+
+A repository copied with its `.mind` holds the same id as the one it was
+copied from, and nothing can tell which of the two the records were made for.
+So the copy is never taken for a move: wherever two projects holding one id
+are read together, by `flayer scan` or `flayer status`, it is a warning
+naming both, and a non-zero exit, and `flayer relink` refuses to follow it.
+`mind init --new-id` in the copy gives it an id of its own and keeps
+everything else, its name included:
+
+```
+$ cp -r apps/collapse collapse-copy
+$ flayer scan
+apps/collapse  linked
+collapse-copy  not linked  mind project
+
+  link one with `flayer link <path>`
+warning: /home/you/Projects/collapse-copy and /home/you/Projects/apps/collapse are both project 4f9c2a7e1b3d5f60a8c4e2b6d0f1a3c5, copied with its .mind; `mind -C <copy> init --new-id` gives a copy an id of its own
+$ mind -C collapse-copy init --new-id
+gave collapse a new id, 0123456789abcdef0123456789abcdef (it was 4f9c2a7e1b3d5f60a8c4e2b6d0f1a3c5)
+```
+
+A local copy's lines in `info/exclude` follow its new id, and a workspace
+that links it knows it, and what was installed into it, by the new one. A
+project still marked by a `settings.json` moves to a `settings.toml` first,
+with `mind migrate`.
+
 ## Keeping projects up to date
 
 What was installed stays what it was when it went in, so a skill or a rule
@@ -1212,6 +1383,67 @@ note: commit-style in collapse is no longer offered by load:../src/mindflayer/ex
 
 An update copies what the shelf holds now: what a gathered source offers
 moves when it is gathered again.
+
+## A repository that already has .claude/skills
+
+Many repositories keep skills written by hand in `.claude/skills` or
+`.agents/skills`, committed with the code. Mindflayer lists each as
+`foreign`, somebody else's, and never touches it: no update reaches it, and
+an agent that reads the other folder never gets it. `flayer adopt` brings
+one into the workspace's library, when you ask and never on its own, and
+records the project's copies as installed from there, exactly as they are:
+not a byte of the project is written. Say `collapse` is a local project that
+keeps `notes` in `.claude/skills`, committed:
+
+```
+$ cd ~/Projects
+$ flayer status -p collapse
+notes  foreign  claude,opencode
+$ flayer adopt -p collapse notes
+would copy notes from collapse into the library, at /home/you/Projects/.mindflayer/library/skills/notes
+would record notes in collapse as installed from workspace, at .claude/skills/notes
+would record .agents/skills/notes missing, for `flayer update -p collapse` to put there
+nothing adopted: add --yes to go ahead
+note: git tracks .claude/skills/notes, so it stays in git though collapse is local: what an update writes there shows in `git status`
+$ flayer adopt -p collapse notes --yes
+copied notes from collapse into the library, at /home/you/Projects/.mindflayer/library/skills/notes
+recorded notes in collapse as installed from workspace, at .claude/skills/notes
+recorded .agents/skills/notes missing: `flayer update -p collapse` puts it there
+note: git tracks .claude/skills/notes, so it stays in git though collapse is local: what an update writes there shows in `git status`
+$ flayer update -p collapse --yes
+put back notes in collapse at .agents/skills/notes, from workspace
+$ flayer status -p collapse
+notes  current  claude,codex,opencode  workspace
+```
+
+From then on `notes` is the workspace's own, managed in `collapse` like
+anything installed there: current while nobody changes it, `edited` once
+somebody does, and brought up to date by `flayer update` when the library
+copy changes. The update above gave Codex, which reads only
+`.agents/skills`, the copy it had never had; adopting itself writes nothing
+into a project, so a folder an install would put a copy in that holds none
+is recorded `missing` until then. Every other project can now be given it with
+`flayer install -p <project> notes`.
+
+A copy git tracks stays in git, even in a local project: a line in
+`info/exclude` would keep none of it out, and would hide every file added
+to it later. An update writes over it there, for the team to see and
+commit. One git does not track is kept out of git in a local project, as
+anything installed there is, and a local project no git work tree holds is
+told, before and after, that nothing keeps it out.
+
+Without `--yes` it writes nothing. It refuses, with nothing written: a name
+the library holds already, saying both paths; copies in `.claude/skills`
+and `.agents/skills` that differ, since which is the skill cannot be told; a
+skill an install would refuse, its name not matching its folder or its
+description empty or too long; one holding a link, or a `.claude-plugin`
+folder at its top, which no install copies; one Mindflayer installed
+already, or the project's own, in the folder it authors in; and a rule. If
+its `SKILL.md` says where `gh skill` got it, under `metadata` keys starting
+`github-`, the dry run and the adoption show it in a line under the
+first, and nothing more is made of it: no other tool's lockfile is read or
+written. `A` in [the TUI](#the-tui), on a `foreign` row, asks and then runs
+the same line.
 
 ## The workspace's own skills and rules
 
@@ -1360,12 +1592,15 @@ Every key runs a command you could have typed, through the same parser:
 | `u` | bring what is installed in the project up to date, or only the artifact under the cursor; on the `◆` row, in every project | `mind -C <project> update --yes [<kind:name>]`; on the `◆` row, `flayer update --all --yes [<kind:name>]` |
 | `l` | link a project | `flayer link <path>` |
 | `U` | unlink the project | `flayer unlink <path>` |
+| `M` | on a stale project the scan found moved, follow it there | `flayer relink <old> <new>` |
+| `A` | on a skill somebody keeps in a project's agents' folders, `foreign`, adopt it into the library, once you say yes | `flayer adopt -p <project> --yes <kind:name>` |
 | `t` | toggle the project's agents and share mode, then apply | `mind -C <project> agents --yes <agent>...`, `mind -C <project> share --yes local\|shared` |
 | `T` | type the folders the project installs skills in, or clear them for where its agents read | `mind -C <project> targets set --yes skills <dir>...`, `mind -C <project> targets reset --yes skills` |
 | `v` | validate everything | `flayer validate` |
 | `g` | gather from a git repository, showing how far it has got; `esc` stops it, until it starts placing | `flayer gather git <url>` |
 | `L` | load another workspace's own skills and rules; enter on a loaded one unloads it | `flayer load <path>`, `flayer unload <path>` |
 | `s` | what is on the shelf | `flayer gather list` |
+| `w` | the flayers this machine knows, the one in use marked | `flayer workspaces` |
 | `i` | install skills and rules from the workspace's own, a loaded workspace, or the shelf; `tab` switches between them, and `v` turns the screen round to every project for one of them | `flayer install` opens it; `a` runs `flayer install -p <project>... --from <origin> <kind:name>` and `flayer uninstall -p <project>... <kind:name>` |
 | `R` | read the disk again | nothing: it changes nothing |
 
@@ -1383,10 +1618,12 @@ the projects an older Mindflayer made, still marked by a `mind.toml` or a
 
 `m`, or `flayer minds` straight from the shell, opens a list of every
 project the workspace links and every repository under it that it does not,
-ticked where it does. `flayer minds ~/Work` looks for those under that folder
-instead, as `flayer scan ~/Work` does, and says below the list what it could
-not read. Tick and untick, then `a` applies all of it in one go, after saying
-which repositories `mind init` will write into. `link` and `unlink` are all or
+ticked where it does, in the order `flayer scan --suggest` gives: what is not
+linked first, most worth linking first, each saying why, then what is.
+`flayer minds ~/Work` looks for those under that folder instead, as
+`flayer scan ~/Work` does, and says below the list what it could not read.
+Tick and untick, then `a` applies all of it in one go, after saying which
+repositories `mind init` will write into. `link` and `unlink` are all or
 nothing: if one path is refused, none is changed.
 
 That is the rule it is built by: **nothing the TUI does is out of reach of a
@@ -1405,11 +1642,13 @@ Opened where there is no workspace and no default one either (`--home ""`), it
 offers to create one there, then goes straight to linking; with a default, it
 opens that one and says so. It stays empty, and marked not made yet, until the
 first change you make from it, which runs `flayer init` there first. The link
-form lists what `flayer scan` finds under the workspace, or under the folders
-`flayer minds` was given (mind projects, and git repositories that are not one
-yet), and picking a repository asks before running `mind init` in it, because
-that writes into it. A project whose directory has gone is listed with a `!`,
-where `U` drops it; an artifact `validate` would reject is marked `✗`, with the
+form lists what `flayer scan --suggest` finds under the workspace, or under
+the folders `flayer minds` was given (mind projects, and git repositories that
+are not one yet), in its order and with its reasons, and picking a repository
+asks before running `mind init` in it, because that writes into it. A project
+whose directory has gone is listed with a `!`, where `U` drops it, or, when
+the scan found it [moved](#following-a-project-that-moved),
+`M` follows it; an artifact `validate` would reject is marked `✗`, with the
 reason underneath.
 
 ## Where a project keeps its artifacts
@@ -1600,8 +1839,9 @@ stopped keeping /.agents/skills/commit-style/ out of git
 Turning shared removes `.mind/.gitignore`, if it is still the one
 Mindflayer wrote, and the project's whole group in `.git/info/exclude`, so
 the settings and the copies are the team's to commit; turning local writes
-both back, an entry for each copy installed. `flayer agents -p collapse ...`
-and `flayer share -p collapse ...` do the same from the workspace, and `t` in
+both back, an entry for each copy installed that git does not track: one the
+team committed stays in git. `flayer agents -p collapse ...` and
+`flayer share -p collapse ...` do the same from the workspace, and `t` in
 [the TUI](#the-tui) toggles them for the project under the cursor. A project
 no workspace links still changes its settings, which are its own, and is told
 that nothing installed in it was carried along.

@@ -4,8 +4,9 @@ This is the reference for where Claude Code, Codex and OpenCode look for
 skills and rules, at project and user scope, and what each does with
 duplicates and ignored files. Mindflayer's agent adapters build on it: the
 target table (#28), installing into several folders (#34), the managed block
-in `AGENTS.md` (#42), Claude's rule files (#43) and the predicate that decides
-how Claude reaches the block (#44). [docs/architecture.md](architecture.md)
+in `AGENTS.md` (#42), Claude's rule files (#43), the predicate that decides
+how Claude reaches the block (#44) and the names a suggestion ranks a
+repository by (#58). [docs/architecture.md](architecture.md)
 says what Mindflayer does with these facts and why; this page says what the
 agents do.
 
@@ -573,6 +574,27 @@ opencode.ai/v2/docs) ([releases](https://github.com/anomalyco/opencode/releases)
 | `OPENCODE_CONFIG_DIR` adds a folder loaded after `~/.config/opencode` and the project's `.opencode`; it does not replace `~/.config/opencode`. | docs-only | [config](https://opencode.ai/docs/config/). Fallback: still an [open question](architecture.md#open-questions); `AgentHomes` takes both folders when a check first reads OpenCode's. |
 | Whether `$XDG_CONFIG_HOME` moves `~/.config/opencode`. | docs-only | The [config](https://opencode.ai/docs/config/) docs name `~/.config/opencode` and are silent on `$XDG_CONFIG_HOME`; not run. Fallback: Mindflayer takes `~/.config/opencode` whatever `$XDG_CONFIG_HOME` says, so if OpenCode follows it, a check reads the wrong folder while it is set; `--opencode-config-dir` names the right one outright. An [open question](architecture.md#open-questions). |
 | How an empty `OPENCODE_CONFIG_DIR` is read. | docs-only | The [config](https://opencode.ai/docs/config/) docs are silent; not run. Fallback: Mindflayer reads an empty variable as no folder, as it reads an empty `$MINDFLAYER_HOME`, so if the agent takes it for unset and reads its default folder, a check leaves that folder out; `--opencode-config-dir` names it outright. An [open question](architecture.md#open-questions). |
+
+## What says an agent works in a project
+
+`flayer scan --suggest` ranks a git repository holding something an agent
+reads at its root above one holding nothing (#58), by name alone:
+`Agent::reads_at_root` in `apps/core/src/agent.rs`. Each name is the folder
+of a place the tables above say the agent reads a kind from, an instruction
+file they list, or the file [D-10](architecture.md#d-10-an-mcp-server-is-one-owned-entry-per-agent)
+puts the agent's project MCP servers in. The fallback for every docs-only row
+is the same: a name wrongly counted ranks a repository a little high, and
+one missed ranks it a little low, but the suggestion still lists every
+repository it finds, so neither hides one.
+
+| Agent | Names at a project's root | Mark | Source, and the fallback |
+|---|---|---|---|
+| Claude Code | `.claude`, `CLAUDE.md`, `CLAUDE.local.md`, `AGENTS.md` | verified | [Skills](#skills) and [rules](#rules-and-instruction-files) above: `.claude/skills`, the instruction files, and `AGENTS.md` read natively when no `CLAUDE.md` is there. |
+| Claude Code | `.mcp.json`, its project's MCP servers | docs-only | [mcp](https://code.claude.com/docs/en/mcp); D-10 writes into it. |
+| Codex | `.agents`, `AGENTS.md`, `AGENTS.override.md` | docs-only | [Skills](#skills-1) and [rules](#rules) above. |
+| Codex | `.codex`, which holds a trusted project's `config.toml` and `skills` | docs-only | [config-reference](https://learn.chatgpt.com/docs/config-file/config-reference), and `.codex/skills` above; D-10 writes into `.codex/config.toml`. Counted though `.codex/skills` is never targeted: a folder of Codex's own shows Codex is used there, trusted or not. |
+| OpenCode | `.agents`, `.claude`, `.opencode`, `AGENTS.md`, and `CLAUDE.md`, which V1 reads when there is no `AGENTS.md` | docs-only | [Skills](#skills-2) and [rules](#rules-1) above. |
+| OpenCode | `opencode.json`, its project's configuration | docs-only | [config](https://opencode.ai/docs/config/); D-10 writes into it, as JSONC. |
 
 ## Facts the roadmap cites
 

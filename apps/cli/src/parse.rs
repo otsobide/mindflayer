@@ -129,6 +129,15 @@ pub enum Command {
         /// Where this project keeps its rules [default: `rules`].
         #[arg(long, value_name = "DIR")]
         rules: Option<PathBuf>,
+
+        /// Give the project here an id of its own, keeping everything else:
+        /// for a copy made with its `.mind`, which holds the id of the
+        /// project it was copied from.
+        //
+        // An option of `init` rather than a command of its own: the id is
+        // what `init` gave the project, and this gives it again.
+        #[arg(long, conflicts_with_all = ["agents", "shared", "skills", "rules"])]
+        new_id: bool,
     },
 
     /// Create a skill or a rule in this project.
@@ -455,6 +464,22 @@ pub enum FlayerCommand {
     /// -W, activated, found walking up, or the default one.
     Which,
 
+    /// List the flayer workspaces this machine knows: the default one, each
+    /// one `flayer init` has made or been run on since the default was made,
+    /// and the one in use, marked with `*`.
+    ///
+    /// `flayer workspaces forget <path>` takes one out of the list.
+    #[command(args_conflicts_with_subcommands = true)]
+    Workspaces {
+        #[command(subcommand)]
+        command: Option<WorkspacesCommand>,
+
+        /// Print it as JSON, in the envelope every reading command's --json
+        /// shares.
+        #[arg(long)]
+        json: bool,
+    },
+
     /// Create a skill or a rule: the workspace's own, or a project's.
     Add {
         /// A project this workspace manages, by name or path, instead of the
@@ -600,6 +625,23 @@ pub enum FlayerCommand {
         projects: Vec<PathBuf>,
     },
 
+    /// Follow a project that moved: point its entry at the directory it is
+    /// in now, and keep everything installed into it.
+    ///
+    /// The directory must hold the id the workspace last saw where the
+    /// project was, which only the project, or a copy of it, holds:
+    /// `flayer scan` names each one it finds as `moved`.
+    Relink {
+        /// The project's directory, as registered, which holds no project
+        /// any more.
+        #[arg(value_name = "OLD")]
+        old: PathBuf,
+
+        /// The directory the project is in now, the one holding `.mind`.
+        #[arg(value_name = "NEW")]
+        new: PathBuf,
+    },
+
     /// Offer other flayer workspaces' own skills and rules to this
     /// workspace's projects, read live from where they are.
     ///
@@ -649,6 +691,12 @@ pub enum FlayerCommand {
         /// that has listed too many folders stops, and says so.
         #[arg(long, value_name = "N", default_value_t = DEFAULT_DEPTH)]
         depth: usize,
+
+        /// List what is not linked first, most worth linking first, each
+        /// with why: a mind project with an id, then one without, then a git
+        /// repository holding files an agent reads, then any other.
+        #[arg(long)]
+        suggest: bool,
 
         /// Print it as JSON, in the envelope every reading command's --json
         /// shares.
@@ -743,6 +791,26 @@ pub enum FlayerCommand {
 
         /// Make the change. Without this nothing changes, and the command
         /// says what would.
+        #[arg(short, long)]
+        yes: bool,
+    },
+
+    /// Bring a skill somebody keeps in a project's .claude/skills or
+    /// .agents/skills into this workspace's library, and record the
+    /// project's copies as installed from there, so updates reach them.
+    ///
+    /// Not a byte of the project is written. Without --yes nothing is, and
+    /// the command says what would be.
+    Adopt {
+        /// The project it is in, by name or path.
+        #[arg(short, long, value_name = "PROJECT")]
+        project: String,
+
+        /// Its name, as `flayer status` lists it `foreign`.
+        reference: String,
+
+        /// Adopt it. Without this nothing is written, and the command says
+        /// what would be.
         #[arg(short, long)]
         yes: bool,
     },
@@ -845,6 +913,19 @@ pub enum FlayerCommand {
     /// What `flayer` does on its own. Everything it changes, it changes by
     /// running one of these commands, and it prints them when it closes.
     Tui,
+}
+
+/// What `workspaces` does to the list besides showing it.
+#[derive(Debug, Subcommand)]
+pub enum WorkspacesCommand {
+    /// Stop knowing a workspace: every entry the default workspace keeps for
+    /// it, however it is spelled.
+    Forget {
+        /// The workspace's directory, the one holding `.mindflayer`. It need
+        /// not still exist.
+        #[arg(value_name = "PATH")]
+        path: PathBuf,
+    },
 }
 
 /// How `agents` changes the agents a project names, when it does not name

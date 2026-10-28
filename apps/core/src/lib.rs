@@ -12,6 +12,7 @@
 //! types return, so the two can never disagree about what a skill is.
 
 pub mod activate;
+pub mod adopt;
 pub mod agent;
 pub mod agents_md;
 pub mod artifact;
@@ -29,6 +30,7 @@ pub mod gather;
 pub mod hash;
 pub mod install;
 pub mod kind;
+pub mod known;
 pub mod ledger;
 pub mod lifecycle;
 mod lines;
@@ -36,6 +38,7 @@ pub mod lock;
 pub mod migrate;
 pub mod paths;
 pub mod reapply;
+pub mod relink;
 pub mod resolve;
 pub mod rule;
 pub mod scan;
@@ -57,6 +60,7 @@ pub use frontmatter::{Document, FrontMatterError};
 pub use gather::{gather, GatherError, Report, Request, Source, DEFAULT_SUBDIRECTORY};
 pub use install::{install, survey, uninstall, Candidate, InstallError, Standing};
 pub use kind::{Kind, Layout, UnknownKind};
+pub use known::{Known, KnownWorkspace};
 pub use ledger::{Ledger, LedgerError, SourceKind, LEDGER_FILE};
 pub use lifecycle::{LifecycleError, Target};
 pub use lock::{LockError, WorkspaceLock};

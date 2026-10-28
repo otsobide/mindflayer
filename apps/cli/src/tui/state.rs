@@ -13,6 +13,7 @@ use std::sync::mpsc::{Receiver, TryRecvError};
 use std::sync::Arc;
 
 use mindflayer_core::gather::{Progress, Watch};
+use mindflayer_core::scan;
 use mindflayer_core::url::redacted;
 use mindflayer_core::{
     paths, Agent, Kind, Layout, MarkerFile, Reason, Share, State, DEFAULT_SUBDIRECTORY, QUALIFIER,
@@ -62,7 +63,8 @@ pub struct Workspace {
     /// the order the marker lists them. On its own, a project is the one.
     pub members: Vec<Member>,
     /// What sits under the root, or under the folders `flayer minds` was
-    /// given, and could be linked, but is not.
+    /// given, and could be linked, but is not, most worth linking first, in
+    /// the order `flayer scan --suggest` gives.
     pub unlinked: Vec<Unlinked>,
     /// Where `unlinked` was looked for: the folders `flayer minds` was
     /// given, none meaning the root.
@@ -96,6 +98,20 @@ impl Workspace {
     /// How many projects it manages, not counting its own artifacts.
     pub fn projects(&self) -> usize {
         self.members.iter().filter(|member| !member.own).count()
+    }
+
+    /// Where the scan found the project `member`'s entry was, moved: the one
+    /// unlinked directory holding the id the workspace last saw there, as
+    /// `flayer scan` says it (`moved`). Matched by the directory each names
+    /// rather than by spelling, since the entry is spelled as the marker
+    /// has it and the scan's route as `flayer link` would take it.
+    pub fn moved_to(&self, member: &Member) -> Option<&Unlinked> {
+        self.unlinked.iter().find(|unlinked| {
+            unlinked
+                .moved
+                .as_ref()
+                .is_some_and(|old| paths::normalize(&self.root.join(old)) == member.root)
+        })
     }
 }
 
@@ -251,6 +267,14 @@ pub struct Unlinked {
     /// A mind project already, rather than a repository that needs
     /// `mind init` before it can be linked.
     pub mind: bool,
+    /// The entry it moved from, as the scan spelled it, when it holds the id
+    /// the workspace last saw at an entry where no project is any more.
+    pub moved: Option<String>,
+    /// Why it is worth linking, which core ranked it by.
+    pub reason: scan::Reason,
+    /// The names at its root an agent reads, which make a repository's
+    /// reason.
+    pub agent_files: Vec<String>,
 }
 
 // ---------------------------------------------------------------------------
@@ -302,6 +326,9 @@ pub enum Task {
     InitAndLink { path: String },
     /// `flayer unlink <entry>`.
     Unlink { entry: String },
+    /// `flayer relink <old> <new>`: a stale entry pointed at where the scan
+    /// found its project, moved.
+    Relink { old: String, new: String },
     /// `flayer load <path>`.
     Load { path: String },
     /// `mind load <path>`: into the workspace above the project the TUI is on.
@@ -357,6 +384,9 @@ pub enum Task {
     },
     /// `flayer gather list`.
     Shelf,
+    /// `flayer workspaces`: the workspaces this machine knows, the one in
+    /// use marked, to read.
+    Workspaces,
     /// `flayer gather git [--path <folder>] [--ref <ref>] <url>`.
     Gather {
         url: String,
@@ -408,6 +438,15 @@ pub enum Task {
         kind: Kind,
         name: String,
     },
+    /// `flayer adopt -p <project> --yes <kind:name>`: somebody's skill in
+    /// the project's agents' folders brought into the workspace's library,
+    /// its copies recorded as installed from there: asked about before it
+    /// gets here, which is what the `--yes` says.
+    Adopt {
+        project: String,
+        kind: Kind,
+        name: String,
+    },
     /// Open the install screen, which is what `flayer install` opens.
     OpenInstall,
     /// What the install screen marked, as the `Install` and `Uninstall`
@@ -439,6 +478,7 @@ impl Task {
                 words(&["flayer", "link"], &[path]),
             ],
             Task::Unlink { entry } => vec![words(&["flayer", "unlink"], &[entry])],
+            Task::Relink { old, new } => vec![words(&["flayer", "relink"], &[old, new])],
             Task::Load { path } => vec![words(&["flayer", "load"], &[path])],
             Task::LoadHere { path } => vec![words(&["mind", "load"], &[path])],
             Task::Unload { entry } => vec![words(&["flayer", "unload"], &[entry])],
@@ -497,6 +537,7 @@ impl Task {
                 lines
             }
             Task::Shelf => vec![words(&["flayer", "gather", "list"], &[])],
+            Task::Workspaces => vec![words(&["flayer", "workspaces"], &[])],
             Task::Gather {
                 url,
                 folder,
@@ -595,6 +636,18 @@ impl Task {
                 let head: Vec<&str> = head.iter().map(String::as_str).collect();
                 vec![words(&head, &[&qualified(*kind, name)])]
             }
+            // `--yes` before the name, as `remove` has it, so a name a
+            // `--` has to keep from being read as a flag leaves it a flag.
+            Task::Adopt {
+                project,
+                kind,
+                name,
+            } => {
+                let mut head = picking(&["flayer", "adopt"], std::slice::from_ref(project));
+                head.push(String::from("--yes"));
+                let head: Vec<&str> = head.iter().map(String::as_str).collect();
+                vec![words(&head, &[&qualified(*kind, name)])]
+            }
             Task::ApplyInstall { changes } => changes.iter().flat_map(Task::commands).collect(),
             Task::OpenInstall => vec![words(&["flayer", "install"], &[])],
             Task::Refresh => Vec::new(),
@@ -612,6 +665,7 @@ impl Task {
                 | Task::LinkHere
                 | Task::InitAndLink { .. }
                 | Task::Unlink { .. }
+                | Task::Relink { .. }
                 | Task::Load { .. }
                 | Task::LoadHere { .. }
                 | Task::Unload { .. }
@@ -627,6 +681,7 @@ impl Task {
                 | Task::Update { .. }
                 | Task::Install { .. }
                 | Task::Uninstall { .. }
+                | Task::Adopt { .. }
                 | Task::ApplyInstall { .. }
         )
     }
@@ -1293,6 +1348,9 @@ impl App {
             KeyCode::Char('q') => return (Mode::Browse, Step::Quit),
             KeyCode::Char('?') => return (Mode::Reading(Reader::help()), Step::Stay),
             KeyCode::Char('R') => return (Mode::Browse, Step::Run(Task::Refresh)),
+            // Whatever is on screen: which workspaces there are is the
+            // machine's to say, not the workspace's or the project's.
+            KeyCode::Char('w') => return (Mode::Browse, Step::Run(Task::Workspaces)),
             KeyCode::Char(key @ ('e' | 'r' | 'd')) => return self.on_item(key),
             KeyCode::Char('a') => return self.start_adding(),
             KeyCode::Char('t') => return self.start_settings(),
@@ -1307,7 +1365,9 @@ impl App {
             _ => {}
         }
         // What only a workspace has: its registry, its shelf, its installs.
-        if let KeyCode::Char(key @ ('l' | 'u' | 'U' | 'g' | 's' | 'i' | 'm' | 'L')) = key.code {
+        if let KeyCode::Char(key @ ('l' | 'u' | 'U' | 'M' | 'A' | 'g' | 's' | 'i' | 'm' | 'L')) =
+            key.code
+        {
             return match self.scope() {
                 Scope::Workspace => self.in_workspace(key),
                 Scope::Project => self.on_its_own(key),
@@ -1325,6 +1385,8 @@ impl App {
             'L' => (Mode::Loading(LoadForm::default()), Step::Stay),
             'u' => self.start_updating(),
             'U' => self.start_unlinking(),
+            'M' => self.start_relinking(),
+            'A' => self.start_adopting(),
             'g' => (Mode::Gathering(GatherForm::default()), Step::Stay),
             's' => (Mode::Browse, Step::Run(Task::Shelf)),
             'm' => match self.workspace() {
@@ -1595,6 +1657,101 @@ impl App {
             ],
             task: Task::Unlink {
                 entry: member.entry.clone(),
+            },
+            also: None,
+            back: Box::new(Mode::Browse),
+        };
+        (Mode::Confirming(confirm), Step::Stay)
+    }
+
+    /// `M`: the stale entry under the cursor pointed at where the scan found
+    /// its project, moved, once somebody says yes, as `flayer relink` does.
+    /// Only where the scan found one: which directory holds the project is
+    /// the scan's to say, by the id it holds, and a guess here could hand
+    /// what was installed to the wrong one.
+    fn start_relinking(&mut self) -> (Mode, Step) {
+        let (Some(workspace), Some(member)) = (self.workspace(), self.member()) else {
+            self.message = Some(Message::info("nothing to relink"));
+            return (Mode::Browse, Step::Stay);
+        };
+        if member.own || member.holdings.is_ok() {
+            self.message = Some(Message::info(
+                "M relinks a project whose entry went stale to where it moved; this one is where its entry says",
+            ));
+            return (Mode::Browse, Step::Stay);
+        }
+        // Not "nothing holds its id": the ledger learns an id only when it
+        // is written, so a project moved before then is found by nobody,
+        // though it may be right there.
+        let Some(moved) = workspace.moved_to(member) else {
+            self.message = Some(Message::info(format!(
+                "nothing found under {} is known to have moved from {}; `flayer relink {} <new>` follows it to where it went",
+                super::ui::looked_under(workspace),
+                member.entry,
+                member.entry
+            )));
+            return (Mode::Browse, Step::Stay);
+        };
+        let confirm = Confirm {
+            question: vec![
+                format!("Relink {} to {}?", member.entry, moved.route),
+                String::new(),
+                String::from(
+                    "The project there holds the id this entry was, so it is this one, moved. \
+                     The entry follows it, and what was installed stays installed.",
+                ),
+            ],
+            task: Task::Relink {
+                old: member.entry.clone(),
+                new: moved.route.clone(),
+            },
+            also: None,
+            back: Box::new(Mode::Browse),
+        };
+        (Mode::Confirming(confirm), Step::Stay)
+    }
+
+    /// `A`: the foreign skill under the cursor brought into the workspace's
+    /// library, and its copies recorded as installed from there, once
+    /// somebody says yes, as `flayer adopt` does. Only on a row `status`
+    /// calls foreign: what Mindflayer installed is its own already, what the
+    /// project authors is the project's, and a rule is never adopted. Core
+    /// refuses the rest, a name the library holds or copies that differ,
+    /// which the line's error says.
+    fn start_adopting(&mut self) -> (Mode, Step) {
+        let picked = match (self.focus, self.member(), self.current_item()) {
+            (Focus::Items, Some(member), Some(item)) if !member.own => {
+                Some((member, item.kind, item.name.clone(), item.state))
+            }
+            _ => None,
+        };
+        let Some((member, kind, name, state)) = picked else {
+            self.message = Some(Message::info(
+                "A adopts somebody's skill from a project's agents' folders; pick one first, → moves over to them",
+            ));
+            return (Mode::Browse, Step::Stay);
+        };
+        if kind != Kind::Skill || state != Some(State::Foreign) {
+            let what = state.map_or("", State::slug);
+            self.message = Some(Message::info(format!(
+                "A adopts a skill somebody keeps in an agent's folder, which status calls foreign; this {kind} is {what}"
+            )));
+            return (Mode::Browse, Step::Stay);
+        }
+        let confirm = Confirm {
+            question: vec![
+                format!("Adopt {name} from {} into the library?", member.name),
+                String::new(),
+                String::from(
+                    "It is copied into the workspace's library, and the project's copies are \
+                     recorded as installed from there, as they are: updates reach them from now \
+                     on. Nothing in the project is written.",
+                ),
+            ],
+            task: Task::Adopt {
+                project: member.entry.clone(),
+                kind,
+                name,
             },
             also: None,
             back: Box::new(Mode::Browse),
@@ -2072,6 +2229,7 @@ impl App {
                 Task::Show { .. }
                 | Task::Validate { .. }
                 | Task::Shelf
+                | Task::Workspaces
                 | Task::ApplyInstall { .. }
                 | Task::Install { .. }
                 | Task::Uninstall { .. }
@@ -2819,7 +2977,7 @@ impl Reader {
 
     /// Every key, and the command it runs.
     pub fn help() -> Self {
-        let rows: [(&str, &str, &[&str]); 19] = [
+        let rows: [(&str, &str, &[&str]); 22] = [
             (
                 "a",
                 "add a skill or a rule",
@@ -2866,6 +3024,16 @@ impl Reader {
             ),
             ("U", "unlink the project", &["flayer unlink <path>"]),
             (
+                "M",
+                "relink a stale project to where the scan found it moved",
+                &["flayer relink <old> <new>"],
+            ),
+            (
+                "A",
+                "adopt somebody's skill under the cursor into the library, once you say yes",
+                &["flayer adopt -p <project> --yes <kind:name>"],
+            ),
+            (
                 "t",
                 "the project's agents and sharing, toggled",
                 &[
@@ -2902,6 +3070,11 @@ impl Reader {
                 &[],
             ),
             ("s", "what is on the shelf", &["flayer gather list"]),
+            (
+                "w",
+                "the workspaces this machine knows, the one in use marked",
+                &["flayer workspaces"],
+            ),
             ("i", "install skills and rules", &["flayer install"]),
             (
                 "m",
@@ -2942,7 +3115,9 @@ impl Reader {
         ));
         lines.push((
             Tone::Info,
-            String::from("What the link form offers is what `flayer scan` lists."),
+            String::from(
+                "What the link form and m offer is what `flayer scan --suggest` lists, in its order.",
+            ),
         ));
         let legend: Vec<String> = Agent::ALL
             .iter()
