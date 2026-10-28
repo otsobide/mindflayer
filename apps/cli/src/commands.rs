@@ -180,7 +180,7 @@ pub(crate) fn run_with(cli: &Cli, lookup: &Lookup, watch: &Watch) -> Result<Outc
             let workspace = managing(&project, lookup)?;
             install_named(
                 &workspace,
-                &project,
+                &[project],
                 name,
                 from.as_deref(),
                 &directory,
@@ -191,7 +191,7 @@ pub(crate) fn run_with(cli: &Cli, lookup: &Lookup, watch: &Watch) -> Result<Outc
         Command::Uninstall { name, force } => {
             let project = project_here(&directory)?;
             let workspace = managing(&project, lookup)?;
-            uninstall_named(&workspace, &project, name, &lookup.agents, *force)
+            uninstall_named(&workspace, &[project], name, &lookup.agents, *force)
         }
         Command::Update { names, force, yes } => {
             let project = project_here(&directory)?;
@@ -394,47 +394,60 @@ fn run_flayer(
         FlayerCommand::Gather(command) => run_gather(command, directory, lookup, watch),
 
         FlayerCommand::Install {
-            project,
+            projects,
+            all_projects,
             name,
             from,
             force,
-        } => match (name, project) {
+        } => match (name, projects.is_empty() && !*all_projects) {
             // The screen reads until something on it is applied, so it is
             // opened the way a read is: on the default workspace before it
             // is made too, which manages nothing to install into.
-            (None, None) => reading_workspace(directory, lookup, |workspace| {
+            (None, true) => reading_workspace(directory, lookup, |workspace| {
                 crate::install::run(workspace, &lookup.agents)
             }),
-            (Some(name), Some(project)) => {
-                let workspace = workspace_here(directory, lookup)?;
-                install_named(
-                    &workspace,
-                    &workspace.pick(project)?,
-                    name,
-                    from.as_deref(),
-                    directory,
-                    &lookup.agents,
-                    *force,
+            (Some(name), false) => assigning(directory, lookup, *all_projects, |workspace| {
+                let (asked, unread) = named_projects(workspace, projects, *all_projects)?;
+                if asked.is_empty() {
+                    return Ok(none_linked("installed", unread));
+                }
+                beside_all(
+                    install_named(
+                        workspace,
+                        &asked,
+                        name,
+                        from.as_deref(),
+                        directory,
+                        &lookup.agents,
+                        *force,
+                    ),
+                    unread,
                 )
-            }
+            }),
             // Half of one: a skill with no project to put it in, or a
             // project with nothing named to put there.
-            (Some(_), None) => Err(CliError::InstallWhere.into()),
-            (None, Some(_)) => Err(CliError::InstallWhat.into()),
+            (Some(_), true) => Err(CliError::InstallWhere.into()),
+            (None, false) => Err(CliError::InstallWhat.into()),
         },
         FlayerCommand::Uninstall {
-            project,
+            projects,
+            all_projects,
             name,
             force,
         } => {
-            let workspace = workspace_here(directory, lookup)?;
-            uninstall_named(
-                &workspace,
-                &workspace.pick(project)?,
-                name,
-                &lookup.agents,
-                *force,
-            )
+            if projects.is_empty() && !*all_projects {
+                return Err(CliError::UninstallWhere.into());
+            }
+            assigning(directory, lookup, *all_projects, |workspace| {
+                let (asked, unread) = named_projects(workspace, projects, *all_projects)?;
+                if asked.is_empty() {
+                    return Ok(none_linked("removed", unread));
+                }
+                beside_all(
+                    uninstall_named(workspace, &asked, name, &lookup.agents, *force),
+                    unread,
+                )
+            })
         }
 
         // Resolved as a read, on the default workspace before it is made
@@ -452,15 +465,7 @@ fn run_flayer(
                 return Err(CliError::UpdateWhere.into());
             }
             reading_workspace(directory, lookup, |workspace| {
-                let (asked, warnings) = if *all {
-                    managed(workspace)
-                } else {
-                    let asked = projects
-                        .iter()
-                        .map(|project| workspace.pick(project))
-                        .collect::<Result<Vec<_>, _>>()?;
-                    (asked, Vec::new())
-                };
+                let (asked, warnings) = named_projects(workspace, projects, *all)?;
                 update_projects(
                     workspace,
                     &asked,
@@ -760,6 +765,85 @@ fn workspace_for(project: &MindProject, lookup: &Lookup) -> Result<FlayerWorkspa
     resolve(&lookup.inputs(project.root(), Intent::Write))?
         .map(|resolved| resolved.workspace)
         .ok_or_else(|| CliError::NoWorkspaceAbove(project.root().to_path_buf()))
+}
+
+/// The projects a command names: each one `-p` names, by name or path, or,
+/// with `all`, every one the workspace links, with a warning for each entry
+/// that would not open ([`managed`]). One `-p` names that the workspace does
+/// not link refuses the command, before anything is done for the others: a
+/// typo in one name is not a reason to change the rest without it.
+fn named_projects(
+    workspace: &FlayerWorkspace,
+    projects: &[String],
+    all: bool,
+) -> Result<(Vec<MindProject>, Vec<String>), CliError> {
+    if all {
+        return Ok(managed(workspace));
+    }
+    let asked = projects
+        .iter()
+        .map(|project| workspace.pick(project))
+        .collect::<Result<Vec<_>, _>>()?;
+    Ok((asked, Vec::new()))
+}
+
+/// Run an install or uninstall of one artifact, `assign`, on the workspace
+/// it is for: as a read when it is given every project (`all`), as `flayer
+/// update --all` is, and as a write when it names them.
+///
+/// Every project of a default workspace nothing has made yet is none, so
+/// making it for the occasion would leave a marker in somebody's home for a
+/// command that then does nothing; read, it says so with where the workspace
+/// will be. A project named by `-p` is still looked for in the workspace a
+/// write makes, as it was for one project alone before several could be
+/// named, which leaves that one refusing after making it (an open question
+/// in the architecture doc).
+fn assigning(
+    directory: &Path,
+    lookup: &Lookup,
+    all: bool,
+    assign: impl FnOnce(&FlayerWorkspace) -> Result<Outcome, Failure>,
+) -> Result<Outcome, Failure> {
+    if all {
+        reading_workspace(directory, lookup, assign)
+    } else {
+        assign(&workspace_here(directory, lookup)?)
+    }
+}
+
+/// What a command given every project the workspace links says when it
+/// links none it could open: that nothing was `done`, and why, with each
+/// entry that would not open, `unread`, beside it, as `flayer update --all`
+/// says it. Not a failure while every entry opens, since nothing asked of
+/// it went wrong.
+fn none_linked(done: &str, unread: Vec<String>) -> Outcome {
+    let why = if unread.is_empty() {
+        "no project is linked"
+    } else {
+        "no project linked could be read"
+    };
+    Outcome {
+        stdout: format!("nothing {done}: {why}\n"),
+        ok: unread.is_empty(),
+        stderr: unread,
+    }
+}
+
+/// `result`, with `unread`, the entries a command given every project could
+/// not open, said after what it says: beside an outcome, failing it, and
+/// before the error of a failure, among its warnings.
+fn beside_all(result: Result<Outcome, Failure>, unread: Vec<String>) -> Result<Outcome, Failure> {
+    match result {
+        Ok(mut outcome) => {
+            outcome.ok &= unread.is_empty();
+            outcome.stderr.extend(unread);
+            Ok(outcome)
+        }
+        Err(mut failure) => {
+            failure.warnings.extend(unread);
+            Err(failure)
+        }
+    }
 }
 
 /// The workspace that manages a project, as core's

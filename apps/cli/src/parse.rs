@@ -649,11 +649,15 @@ pub enum FlayerCommand {
     /// workspace's own, a loaded workspace's, or its shelf's.
     ///
     /// On its own it opens a screen for all of them at once. Given a name and
-    /// a project, it installs that one without one.
+    /// projects, it installs that one into each, without the screen.
     Install {
-        /// The project to install into.
-        #[arg(short, long, value_name = "PROJECT")]
-        project: Option<String>,
+        /// A project to install into, by name or path; once for each.
+        #[arg(short = 'p', long = "project", value_name = "PROJECT")]
+        projects: Vec<String>,
+
+        /// Every project the workspace links.
+        #[arg(long, conflicts_with = "projects")]
+        all_projects: bool,
 
         /// Its name: a skill's, or a rule's route like `git/commits`;
         /// `skill:<name>` or `rule:<route>` when one name is both [default:
@@ -671,11 +675,15 @@ pub enum FlayerCommand {
         force: bool,
     },
 
-    /// Take a skill or a rule Mindflayer installed back out of a project.
+    /// Take a skill or a rule Mindflayer installed back out of projects.
     Uninstall {
-        /// The project to take it out of.
-        #[arg(short, long, value_name = "PROJECT")]
-        project: String,
+        /// A project to take it out of, by name or path; once for each.
+        #[arg(short = 'p', long = "project", value_name = "PROJECT")]
+        projects: Vec<String>,
+
+        /// Every project the workspace links that has it.
+        #[arg(long, conflicts_with = "projects")]
+        all_projects: bool,
 
         /// Its name, or `kind:name` when one name is both.
         name: String,

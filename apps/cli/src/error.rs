@@ -121,12 +121,16 @@ pub enum CliError {
         wanted: String,
         matches: Vec<String>,
     },
-    #[error("say which project to install into (`flayer install -p <project> <name>`), or run `flayer install` alone for the screen")]
+    #[error("say which projects to install into: -p <project> for each, or --all-projects for every one the workspace links; or run `flayer install` alone for the screen")]
     InstallWhere,
     #[error("say which skill or rule to install (`flayer install -p <project> <name>`), or run `flayer install` alone for the screen")]
     InstallWhat,
+    #[error("say which projects to take it out of: -p <project> for each, or --all-projects for every one the workspace links")]
+    UninstallWhere,
     #[error("{project} has no {name} installed, so there is nothing to take out")]
     NotInstalled { name: String, project: String },
+    #[error("no project asked has {name} installed, so there is nothing to take out")]
+    NotInstalledAnywhere { name: String },
     #[error("`{command}` needs a terminal to draw on, and this is not one: {source}")]
     NoTerminal {
         command: &'static str,

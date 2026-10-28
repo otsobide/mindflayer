@@ -86,9 +86,10 @@ under `apps/` with its own `Makefile`:
   (`reapply`), what each project holds, from where and for which agents
   (`status`), creating and changing artifacts, and moving a workspace's own
   into its library and a project from its `mind.toml` or `settings.json` to a
-  `settings.toml` (`migrate`), and bringing what was installed up to date
-  with where it came from (`update`). Its only I/O is files, and it never
-  reads the environment.
+  `settings.toml` (`migrate`), bringing what was installed up to date with
+  where it came from (`update`), and installing one artifact into several
+  projects at once, or taking it out of them (`assign`). Its only I/O is
+  files, and it never reads the environment.
 - `apps/cli` (`mindflayer-cli`): the binaries `mind` (`src/main.rs`) and
   `flayer` (`src/bin/flayer.rs`), and the TUI. `src/lib.rs` only re-exports
   the public API. The parsers are in `src/parse.rs`. `src/commands.rs`
@@ -447,8 +448,10 @@ These are easy to break from a single file without noticing.
   writer takes it the same way, inside core; `config_entry::ConfigFile`,
   `agents_md::render`, `claude_rules::render`, `claude_md::render` and
   `MindProject::change_settings` take none, since
-  the writers that call them hold it. A second workspace linking the same
-  project is kept out by neither lock, an open question in
+  the writers that call them hold it, and `assign::install` and
+  `uninstall` none across their batch, leaving it to each project's
+  install as the install screen's batch does. A second workspace linking
+  the same project is kept out by neither lock, an open question in
   `docs/architecture.md`.
   Opening the ledger takes no lock: a schema migration keeps itself apart
   in its own transaction. The lock is not re-entrant: a writer never calls

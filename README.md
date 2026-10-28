@@ -382,9 +382,10 @@ flayer gather git <URL>    # collect skills from a repository onto the shelf
 flayer gather list         # what is on the shelf or loaded, and where from
 flayer install             # a screen for putting skills and rules into its
                            # projects
-flayer install -p PROJECT <NAME> [--from ORIGIN] [--force]
-                           # one, without the screen
-flayer uninstall -p PROJECT <NAME> [--force]
+flayer install (-p PROJECT)...|--all-projects <NAME> [--from ORIGIN] [--force]
+                           # one, into the projects named or every one,
+                           # without the screen
+flayer uninstall (-p PROJECT)...|--all-projects <NAME> [--force]
 flayer update (-p PROJECT)...|--all [NAME...] [--force] [--yes]
                            # mind update, for the projects named or every one
 flayer agents|share|targets -p PROJECT ...
@@ -790,7 +791,7 @@ where that project already holds it:
 │                    │┃> [x] deploy  + install                           ┃
 │                    │┃      Ship the service to staging  [acme/skills]  ┃
 └────────────────────┘┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
-↑↓ skill   space mark   tab rules   ←/esc back   a apply   q quit
+↑↓ skill  space mark  tab rules  ←/esc back  v by skill  a apply  q quit
 1 to install, 0 to remove
 ```
 
@@ -803,6 +804,27 @@ everything at once, of both kinds: installs and removals together.
 Each project keeps its own ticks, so one pass across the list is one plan for
 the whole workspace. The number beside a project is how many of its boxes you
 have moved.
+
+`v` turns the screen round, to put one skill or rule into several projects in
+a pass: everything of the kind shown on the left, and on the right every
+project, ticked where it holds the one under the cursor, which `→` goes into
+and `space` ticks as before:
+
+```
+┌ Skills ──────────────────────────────────────────┐┏ Projects for deploy ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+│  commit-style                                    │┃> [x] collapse  + install                         ┃
+│      How this repo writes commits  [acme/skills] │┃  [ ] tanukeys                                    ┃
+│> deploy  (1)                                     │┃                                                  ┃
+│      Ship the service to staging  [acme/skills]  │┃                                                  ┃
+└──────────────────────────────────────────────────┘┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
+↑↓ project  space mark  tab rules  ←/esc back  v by project  a apply  q quit
+1 to install, 0 to remove
+```
+
+They are the same boxes either way round, so a tick made one way is there the
+other, and `a` applies them all as one. `v` again turns it back, with the
+cursor on the same box, and `tab` still shows the other kind. A project that
+cannot take the kind shown has no box there, and says why.
 
 **Unticking removes.** A skill is copied wherever the project's agents read it
 ([below](#where-a-project-keeps-its-artifacts)), or into the directory a
@@ -853,6 +875,7 @@ the ones that want it.
 ```bash
 mind install commit-style                  # into the project you are in
 flayer install -p collapse commit-style    # into one the workspace manages
+flayer install --all-projects commit-style # into every one it links
 mind install deploy --from workspace       # when two places offer one name
 mind install git/commits                   # a rule, by its route
 mind install rule:deploy                   # when a skill and a rule share it
@@ -864,6 +887,26 @@ removed, and says so. `--from` takes `workspace`, a shelf source's URL, or a
 loaded workspace's path or name, and is only needed when two places offer the
 same name: which of the two lands in the project's one folder of that name is
 not something to guess.
+
+`flayer install` takes `-p` once for each project, to install into several
+at once, or `--all-projects` for every one the workspace links, and `flayer
+uninstall` takes them the same way. Each project is said as an install into
+it alone says it, in the order asked, with what its rules warn of after its
+name (`warning: collapse: ...`), and one that refuses is said of it while the
+others go ahead:
+
+```
+$ flayer install commit-style --all-projects
+installed commit-style into collapse, from workspace
+warning: tanukeys already has a commit-style at skills/commit-style that Mindflayer did not put there, so it was left alone
+$ flayer uninstall commit-style --all-projects
+removed commit-style from collapse
+warning: commit-style at skills/commit-style in tanukeys was not installed by Mindflayer, so it was left alone
+```
+
+An uninstall from several passes over a project that has nothing of that
+name, unless none of them has it, and a refusal every project shares, such as
+a name nothing offers, is said once rather than once a project.
 
 A copy changed since it was installed is left alone too, every other copy
 with it, until `--force` says to write over it or take it out:
@@ -1238,7 +1281,7 @@ Every key runs a command you could have typed, through the same parser:
 | `g` | gather from a git repository, showing how far it has got; `esc` stops it, until it starts placing | `flayer gather git <url>` |
 | `L` | load another workspace's own skills and rules; enter on a loaded one unloads it | `flayer load <path>`, `flayer unload <path>` |
 | `s` | what is on the shelf | `flayer gather list` |
-| `i` | install skills and rules from the workspace's own, a loaded workspace, or the shelf; `tab` switches between them | `flayer install` |
+| `i` | install skills and rules from the workspace's own, a loaded workspace, or the shelf; `tab` switches between them, and `v` turns the screen round to every project for one of them | `flayer install` |
 | `R` | read the disk again | nothing: it changes nothing |
 
 A project whose own commands would reach another workspace (linked from

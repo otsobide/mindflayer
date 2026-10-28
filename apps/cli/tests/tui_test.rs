@@ -994,6 +994,33 @@ fn the_install_screen_opens_inside_the_tui_and_applies_from_there() {
 }
 
 #[test]
+fn the_install_screen_inside_the_tui_turns_round_by_artifact_and_applies_the_same_batch() {
+    let (dir, _workspace, _ledger) = shelved(&["collapse", "tanukeys"], &["deploy"]);
+    let mut app = tui_in(dir.path());
+    press_and_run(&mut app, KeyCode::Char('i'));
+
+    press_key(&mut app, KeyCode::Char('v'));
+    let drawn = tui_drawn(&app);
+    for key in [KeyCode::Right, KeyCode::Char(' '), KeyCode::Down] {
+        press_key(&mut app, key);
+    }
+    press_key(&mut app, KeyCode::Char(' '));
+    press_key(&mut app, KeyCode::Char('a'));
+    let task = press_and_run(&mut app, KeyCode::Char('y'));
+
+    assert!(drawn.contains("Projects for deploy"), "{drawn}");
+    assert_eq!(task, Some(Task::ApplyInstall));
+    for project in ["collapse", "tanukeys"] {
+        for copy in copies(&dir.path().join(project), "deploy") {
+            assert!(copy.join("SKILL.md").is_file(), "{}", copy.display());
+        }
+    }
+    assert!(app
+        .transcript()
+        .contains("$ flayer install\ncollapse: installed deploy\ntanukeys: installed deploy"));
+}
+
+#[test]
 fn the_install_screen_inside_the_tui_installs_where_each_agent_of_a_v3_project_reads() {
     let (dir, _workspace, _ledger) = shelved(&[], &["deploy"]);
     let root = dir.path().join("alpha");

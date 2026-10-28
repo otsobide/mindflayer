@@ -15,6 +15,7 @@ pub mod activate;
 pub mod agent;
 pub mod agents_md;
 pub mod artifact;
+pub mod assign;
 pub mod catalog;
 pub mod claude_md;
 pub mod claude_rules;
