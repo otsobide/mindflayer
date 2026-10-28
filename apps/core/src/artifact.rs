@@ -9,6 +9,7 @@ use std::path::{Path, PathBuf};
 use thiserror::Error;
 
 use crate::agent::Agent;
+use crate::code::codes;
 use crate::frontmatter::{self, FrontMatterError};
 use crate::kind::{Kind, Layout};
 use crate::rule::{Lenient, RuleManifest};
@@ -692,6 +693,25 @@ pub enum ValidationIssue {
     DescriptionNotAString,
 }
 
+codes!(ValidationIssue {
+    Self::NameEmpty => "name_empty",
+    Self::NameNotKebabCase { .. } => "name_not_kebab_case",
+    Self::NameSegmentTooLong { .. } => "name_segment_too_long",
+    Self::NameDirectoryMismatch { .. } => "name_directory_mismatch",
+    Self::DescriptionEmpty => "description_empty",
+    Self::DescriptionTooLong { .. } => "description_too_long",
+    Self::CompatibilityEmpty => "compatibility_empty",
+    Self::CompatibilityTooLong { .. } => "compatibility_too_long",
+    Self::CompatibilityNotAString => "compatibility_not_a_string",
+    Self::MetadataNotAMap => "metadata_not_a_map",
+    Self::MetadataNotAString { .. } => "metadata_not_a_string",
+    Self::MetadataRepeated { .. } => "metadata_repeated",
+    Self::Empty => "content_empty",
+    Self::FrontMatterUnparsed { .. } => "front_matter_unparsed",
+    Self::PathsNotStrings => "paths_not_strings",
+    Self::DescriptionNotAString => "description_not_a_string",
+});
+
 impl ValidationIssue {
     /// Whether this breaks one of the strict rules: the ones Mindflayer will
     /// not break when it writes a skill into a project (creating, renaming
@@ -834,6 +854,13 @@ pub enum ArtifactError {
         source: serde_yaml_ng::Error,
     },
 }
+
+codes!(ArtifactError {
+    Self::Read { .. } => "artifact_read_failed",
+    Self::Parse { .. } => "front_matter_invalid",
+} carried {
+    Self::FrontMatter { source, .. } => source,
+});
 
 impl ArtifactError {
     /// The file the failure is about.

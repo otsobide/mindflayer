@@ -92,9 +92,17 @@ macro_rules! codes {
 
 pub(crate) use codes;
 
+use crate::activate::{ActivateError, UnknownShell};
+use crate::agent::UnknownAgent;
+use crate::artifact::{ArtifactError, ValidationIssue};
+use crate::catalog::DiscoveryFailure;
+use crate::frontmatter::FrontMatterError;
+use crate::kind::UnknownKind;
 use crate::ledger::LedgerError;
 use crate::lock::LockError;
-use crate::workspace::WorkspaceError;
+use crate::resolve::ResolveError;
+use crate::template::TemplateError;
+use crate::workspace::{MisplacedTarget, ProjectWarning, WorkspaceError};
 
 /// Every type core gives codes to, by its path in the crate, with the codes
 /// it gives of its own.
@@ -103,8 +111,20 @@ use crate::workspace::WorkspaceError;
 /// that lists every code core can give, the panel's types among them (#70),
 /// starts from. A new error type joins it; a test finds one that did not.
 pub const ALL: &[(&str, &[&str])] = &[
+    ("activate::ActivateError", ActivateError::CODES),
+    ("activate::UnknownShell", UnknownShell::CODES),
+    ("agent::UnknownAgent", UnknownAgent::CODES),
+    ("artifact::ArtifactError", ArtifactError::CODES),
+    ("artifact::ValidationIssue", ValidationIssue::CODES),
+    ("catalog::DiscoveryFailure", DiscoveryFailure::CODES),
+    ("frontmatter::FrontMatterError", FrontMatterError::CODES),
+    ("kind::UnknownKind", UnknownKind::CODES),
     ("ledger::LedgerError", LedgerError::CODES),
     ("lock::LockError", LockError::CODES),
+    ("resolve::ResolveError", ResolveError::CODES),
+    ("template::TemplateError", TemplateError::CODES),
+    ("workspace::MisplacedTarget", MisplacedTarget::CODES),
+    ("workspace::ProjectWarning", ProjectWarning::CODES),
     ("workspace::WorkspaceError", WorkspaceError::CODES),
 ];
 

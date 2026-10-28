@@ -7,6 +7,8 @@ use std::str::FromStr;
 use serde::{Serialize, Serializer};
 use thiserror::Error;
 
+use crate::code::codes;
+
 /// A kind of artifact.
 ///
 /// A closed enum on purpose. Every kind ships in this crate, so every `match`
@@ -97,6 +99,8 @@ impl FromStr for Kind {
 /// A word that names no kind.
 #[derive(Debug, Clone, PartialEq, Eq, Error)]
 pub struct UnknownKind(pub String);
+
+codes!(UnknownKind => "unknown_kind");
 
 impl fmt::Display for UnknownKind {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {

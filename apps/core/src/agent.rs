@@ -21,6 +21,7 @@ use thiserror::Error;
 
 use crate::agents_md;
 use crate::claude_md::{CLAUDE_LOCAL_MD, CLAUDE_MD};
+use crate::code::codes;
 use crate::kind::Kind;
 
 /// A coding agent Mindflayer puts skills and rules where it reads them.
@@ -198,6 +199,8 @@ impl FromStr for Agent {
 /// A word that names no agent.
 #[derive(Debug, Clone, PartialEq, Eq, Error)]
 pub struct UnknownAgent(pub String);
+
+codes!(UnknownAgent => "unknown_agent");
 
 impl fmt::Display for UnknownAgent {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {

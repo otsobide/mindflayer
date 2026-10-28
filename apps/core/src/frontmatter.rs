@@ -9,6 +9,8 @@
 
 use thiserror::Error;
 
+use crate::code::codes;
+
 /// A document cut at its front matter fences.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Document<'a> {
@@ -26,6 +28,11 @@ pub enum FrontMatterError {
     #[error("the front matter is never closed by a `---` fence")]
     Unterminated,
 }
+
+codes!(FrontMatterError {
+    Self::Missing => "front_matter_missing",
+    Self::Unterminated => "front_matter_unterminated",
+});
 
 /// Split `source` into its front matter and its body.
 ///

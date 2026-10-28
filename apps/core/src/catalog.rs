@@ -9,6 +9,7 @@ use thiserror::Error;
 
 use crate::agent::Agent;
 use crate::artifact::{Artifact, ArtifactError};
+use crate::code::codes;
 use crate::hash;
 use crate::install;
 use crate::kind::{Kind, Layout};
@@ -648,6 +649,16 @@ pub enum DiscoveryFailure {
         source: io::Error,
     },
 }
+
+codes!(DiscoveryFailure {
+    Self::Directory { .. } => "folder_unlisted",
+    Self::UnusableName { .. } => "route_not_utf8",
+    Self::Diverged { .. } => "copies_diverged",
+    Self::Uncompared { .. } => "copy_uncompared",
+} carried {
+    Self::Artifact(error) => error,
+    Self::Ledger(error) => error,
+});
 
 impl DiscoveryFailure {
     /// The path the failure is about: the first copy an agent reads, for

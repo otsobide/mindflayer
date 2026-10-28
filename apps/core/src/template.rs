@@ -16,6 +16,7 @@ use std::path::{Path, PathBuf};
 
 use thiserror::Error;
 
+use crate::code::codes;
 use crate::install;
 use crate::kind::{Kind, Layout};
 use crate::workspace::{FlayerWorkspace, MindProject};
@@ -302,6 +303,13 @@ pub enum TemplateError {
         source: io::Error,
     },
 }
+
+codes!(TemplateError {
+    Self::BadName { .. } => "template_name_invalid",
+    Self::Unknown { .. } => "unknown_template",
+    Self::WrongKind { .. } => "template_wrong_kind",
+    Self::Read { .. } => "template_read_failed",
+});
 
 /// "; there are full, runbook", or nothing when there are none.
 fn there_are(names: &[String]) -> String {

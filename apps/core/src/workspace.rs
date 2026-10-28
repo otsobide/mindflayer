@@ -459,6 +459,10 @@ pub enum ProjectWarning {
     Leftover { path: PathBuf, read: MarkerFile },
 }
 
+codes!(ProjectWarning {
+    Self::Leftover { .. } => "marker_left_over",
+});
+
 /// A folder a project's settings name as where a kind is installed that no
 /// install uses: read, said, and passed over, rather than a reason to refuse
 /// everything else the settings say ([`MindProject::misplaced_targets`]).
@@ -476,6 +480,8 @@ pub struct MisplacedTarget {
     pub folder: PathBuf,
     pub why: Misplaced,
 }
+
+codes!(MisplacedTarget => "target_misplaced");
 
 /// Why a folder a project's settings name is no place to install a kind in.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

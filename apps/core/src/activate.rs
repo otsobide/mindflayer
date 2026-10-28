@@ -26,6 +26,7 @@ use std::str::FromStr;
 
 use thiserror::Error;
 
+use crate::code::codes;
 use crate::workspace::FlayerWorkspace;
 
 /// The variable that activates a workspace for every command a shell runs,
@@ -103,6 +104,8 @@ impl FromStr for Shell {
 #[derive(Debug, Clone, PartialEq, Eq, Error)]
 pub struct UnknownShell(pub String);
 
+codes!(UnknownShell => "unknown_shell");
+
 impl fmt::Display for UnknownShell {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "unknown shell `{}`; expected {}", self.0, expected())
@@ -127,6 +130,11 @@ pub enum ActivateError {
     #[error("{path}: cannot be activated, since the path is not UTF-8")]
     NotUnicode { path: PathBuf },
 }
+
+codes!(ActivateError {
+    Self::Unmade { .. } => "default_workspace_unmade",
+    Self::NotUnicode { .. } => "activate_path_not_utf8",
+});
 
 /// The code that activates `workspace` in `shell`, for the shell to run:
 /// `eval "$(flayer activate)"` in bash and zsh.

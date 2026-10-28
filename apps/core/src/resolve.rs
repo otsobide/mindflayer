@@ -24,6 +24,7 @@ use std::path::{Path, PathBuf};
 
 use thiserror::Error;
 
+use crate::code::codes;
 use crate::paths;
 use crate::workspace::{
     absolute, same_directory, FlayerWorkspace, MindProject, WorkspaceError, FLAYER_CONFIG,
@@ -141,6 +142,15 @@ pub enum ResolveError {
         matches: Vec<String>,
     },
 }
+
+codes!(ResolveError {
+    Self::NotManaged { .. } => "not_managed",
+    Self::UnknownProject { .. } => "unknown_project",
+    Self::AmbiguousProject { .. } => "ambiguous_project",
+} carried {
+    Self::Chosen { source, .. } => source,
+    Self::Workspace(error) => error,
+});
 
 /// The workspace a command uses, and why that one; `None` only when nothing
 /// names one, none is above `start`, and there is no default.
