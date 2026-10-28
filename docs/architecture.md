@@ -122,7 +122,10 @@ in `render.rs`. `CliError` has
 `error.rs` to itself, `homes.rs` decides where the default workspace's home and
 each agent's own folder are, and gathers them with what `-W` and
 `$MINDFLAYER_WORKSPACE` say (`Lookup`), `progress.rs` says what a gather's
-steps read as and draws them on stderr, and `lib.rs` only says what is public.
+steps read as and draws them on stderr, `task.rs` holds the work a front end
+asks for as the command lines it is ([every change is a command
+line](#every-change-is-a-command-line)), and `lib.rs` only says what is
+public.
 
 The split is by family. One file holding the parser, every command and the
 rendering was where every change to a command met every other, so pieces of
@@ -1881,9 +1884,9 @@ and into every reflog as `clone: from <url>`, and those files are rewritten
 through the same function. A clone a gather makes now has nothing to take out,
 and finding that costs a few small reads. A `--from` typed with credentials
 names the source they were taken out of. The CLI's report prints URLs
-redacted, and the TUI redacts a command line where it is built for showing
-(`state::shell`), so the box that says what is running and the transcript
-printed on the way out both leave the token out.
+redacted, and a task's command line is redacted where it is built for
+showing (`task::shell`), so the box that says what is running and the
+transcript printed on the way out both leave the token out.
 
 What a Mindflayer from before the refusal stored is **scrubbed** when a
 command that writes opens the ledger. `FlayerWorkspace::ledger_to_write` is
@@ -3442,6 +3445,13 @@ where to look for a workspace (`run` and `run_flayer_cli` are the same with a
 watch nobody follows). The TUI has no code path of its own for linking, adding
 or gathering, and it cannot grow one, because there is nowhere in it to put
 one.
+
+`Task` is not the TUI's own, though the TUI is where it was born: it lives in
+`task.rs`, shared by every front end that runs commands, the TUI now and the
+panel's backend next ([D-18](#d-18-the-panel-writes-by-running-commands)).
+One type, so a line is spelled one way whichever front end asked for it; a
+second front end building its own lines would be a second place for one to be
+spelled wrong.
 
 That is what turns "every feature has a command and a place in the TUI" from a
 promise into a property. A feature is written once, as a command, and the TUI

@@ -112,7 +112,9 @@ under `apps/` with its own `Makefile`:
   the envelope every `--json` prints (`json`), `src/error.rs` holds
   `CliError`, and `src/homes.rs` decides the default home and the agent
   homes, and gathers them with `-W` and `$MINDFLAYER_WORKSPACE` into a
-  `Lookup`. `src/tui/` and `src/install/` are the two screens.
+  `Lookup`. `src/task.rs` holds `Task`, work a front end asks for as the
+  command lines it is, every front end's rather than the TUI's alone.
+  `src/tui/` and `src/install/` are the two screens.
 - `apps/server` (`mindflayer-server`): the local server behind the web
   panel, a library no binary runs yet. `src/backend.rs` is the `Backend`
   trait, `src/server.rs` binds and routes, `src/auth.rs` holds the token's
@@ -173,8 +175,9 @@ These are easy to break from a single file without noticing.
   both reach the same function. `mind add` and `flayer add` (with or without
   `-p`) are one implementation given a different holder
   (`FlayerWorkspace::own` makes the workspace look like a `MindProject`).
-- **The TUI only runs commands.** A key produces a `Task`, and
-  `Task::commands` turns it into argument lines that a `Runner` hands to
+- **The TUI only runs commands.** A key produces a `Task` (`src/task.rs`,
+  shared by every front end that runs commands, the panel's backend next),
+  and `Task::commands` turns it into argument lines that a `Runner` hands to
   `execute`, which parses them with `Cli`/`FlayerCli` and runs them through
   `run_with`/`run_flayer_with` with the screen's `Lookup` and a
   `gather::Watch`: what the binaries' `run_watched`/`run_flayer_cli_watched`

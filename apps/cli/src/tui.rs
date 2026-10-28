@@ -37,10 +37,11 @@ use crate::commands::project::scan_warnings;
 use crate::commands::status::{unread, unseen};
 use crate::commands::workspace::same_directory;
 use crate::commands::{consulted, run_flayer_with, run_with};
+use crate::task::{shell, Task};
 use crate::{install, Cli, CliError, Command, Failure, FlayerCli, FlayerCommand, Lookup, Outcome};
 use state::{
     App, Choice, Done, Holdings, Item, LoadedSource, Member, Mode, Performed, Runner, Running,
-    Scope, Step, Task, Unlinked, Update, View, Workspace,
+    Scope, Step, Unlinked, Update, View, Workspace,
 };
 
 /// How long the loop waits for a key before drawing again, so a resize
@@ -349,7 +350,7 @@ fn run_all(
 /// before it is made makes it first ([`App::lines`]). A gather among them
 /// reports to `watch`, and stops when it is cancelled.
 pub fn execute(words: &[String], base: &Path, lookup: &Lookup, watch: &Watch) -> Done {
-    let command = state::shell(words);
+    let command = shell(words);
     let from = |directory: Option<PathBuf>| {
         Some(directory.map_or_else(|| base.to_path_buf(), |directory| base.join(directory)))
     };

@@ -21,6 +21,7 @@ pub mod install;
 pub(crate) mod parse;
 pub(crate) mod progress;
 pub(crate) mod render;
+pub mod task;
 pub mod tui;
 
 pub use commands::read::WORKSPACE;

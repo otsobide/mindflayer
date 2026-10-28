@@ -121,7 +121,7 @@ pub fn open(workspace: &FlayerWorkspace, projects: Vec<MindProject>) -> Result<S
 /// it; failing when any line did not go through.
 ///
 /// Every line is run, whatever came of the ones before, as the TUI runs the
-/// same lines ([`crate::tui::state::Task::chained`]): each is boxes marked
+/// same lines ([`crate::task::Task::chained`]): each is boxes marked
 /// one by one. Its own ledger is opened to write by each line, scrubbed
 /// first, so a source a scrub makes one with another is offered from where
 /// it was by the time the line asks for it, by the origin the screen showed,
