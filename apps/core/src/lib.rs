@@ -29,6 +29,7 @@ pub mod gather;
 pub mod hash;
 pub mod install;
 pub mod kind;
+pub mod known;
 pub mod ledger;
 pub mod lifecycle;
 mod lines;

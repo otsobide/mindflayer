@@ -1085,6 +1085,15 @@ pub struct FlayerConfig {
     /// projects, read live from where they are; relative to its root.
     #[serde(default)]
     pub loaded: Vec<PathBuf>,
+    /// The other flayer workspaces this machine knows, relative to its root:
+    /// read only in the default workspace, the one in home, which
+    /// [`crate::known`] keeps it in.
+    ///
+    /// No new [`FLAYER_FORMAT_VERSION`]: a build from before it reads past
+    /// the key, which says nothing about this workspace, and keeps it when
+    /// it edits the marker, since every edit goes through `toml_edit`.
+    #[serde(default)]
+    pub known: Vec<PathBuf>,
     /// Where the workspace keeps its own artifacts (the ones it shares with
     /// every project it manages), relative to its root. A kind it does not
     /// name is kept in its library ([`Directories::library_for`]).
@@ -1606,6 +1615,47 @@ impl FlayerWorkspace {
             .collect()
     }
 
+    /// Remember another workspace in this one's `known`, stored the way
+    /// `link` stores a project and matched the same way, so remembering one
+    /// already known by another spelling changes nothing and reports the
+    /// spelling the file uses.
+    ///
+    /// Crate-private: which workspace remembers, the default one only once
+    /// it is made, and never itself, is [`crate::known`]'s to decide, so no
+    /// front end writes the list into some other workspace.
+    pub(crate) fn remember(
+        &mut self,
+        workspace: &FlayerWorkspace,
+    ) -> Result<(PathBuf, Registration), WorkspaceError> {
+        let entry = self.entry_for(workspace.root());
+        let target = paths::normalize(workspace.root());
+        let written =
+            paths::to_config_string(&entry).ok_or_else(|| WorkspaceError::NonUtf8Path {
+                path: entry.clone(),
+            })?;
+        let root = self.root.clone();
+        self.edit_array(KNOWN_KEY, move |array| {
+            if let Some(existing) = entries(array)
+                .into_iter()
+                .find(|entry| points_at(&root, entry, &target))
+            {
+                return Ok((existing, Registration::AlreadyRegistered));
+            }
+            array.push(written.as_str());
+            Ok((PathBuf::from(&written), Registration::Added))
+        })
+    }
+
+    /// Drop every `known` entry pointing at `root`, returning what was
+    /// removed: every spelling, as `unlink` drops every one of a project's,
+    /// and a path rather than a workspace, since the one most worth
+    /// forgetting is one that has gone. Refused when none points at it.
+    pub(crate) fn forget(&mut self, root: &Path) -> Result<Vec<PathBuf>, WorkspaceError> {
+        let workspace = self.root.clone();
+        self.drop_entries(KNOWN_KEY, &[root.to_path_buf()])?
+            .map_err(|path| WorkspaceError::NotKnown { path, workspace })
+    }
+
     /// Rewrite the `projects` array in place. See [`edit_array`](Self::edit_array).
     fn edit_projects<F, T>(&mut self, edit: F) -> Result<T, WorkspaceError>
     where
@@ -1640,13 +1690,28 @@ impl FlayerWorkspace {
         self.edit_marker_held(|document| {
             // A key deleted by hand, or a marker from before `loaded`
             // existed, is made again rather than refused.
-            if !document.as_table().contains_key(key) {
+            let made = !document.as_table().contains_key(key);
+            if made {
                 document[key] = toml_edit::value(toml_edit::Array::new());
+                if let (Some(comment), Some(mut made)) = (explained(key), document.key_mut(key)) {
+                    made.leaf_decor_mut().set_prefix(comment);
+                }
             }
             let array = document[key]
                 .as_array_mut()
                 .ok_or_else(|| format!("`{key}` is not an array"))?;
-            edit(array)
+            let value = edit(array)?;
+            // Made for an edit that put nothing in it, such as a `forget`
+            // of a workspace nothing remembers: taken out again, so an edit
+            // that changes nothing leaves the file as it found it.
+            if made
+                && document[key]
+                    .as_array()
+                    .is_some_and(toml_edit::Array::is_empty)
+            {
+                document.remove(key);
+            }
+            Ok(value)
         })
     }
 
@@ -1874,6 +1939,20 @@ pub struct Loaded {
 
 const PROJECTS_KEY: &str = "projects";
 const LOADED_KEY: &str = "loaded";
+const KNOWN_KEY: &str = "known";
+
+/// The comment a key an edit makes is given in the marker: `known`'s, the
+/// one key the template leaves out, since only the default workspace has a
+/// use for it and every other marker would carry a line about nothing.
+fn explained(key: &str) -> Option<&'static str> {
+    (key == KNOWN_KEY).then_some(
+        "\n\
+         # `known` lists the other flayer workspaces on this machine, which\n\
+         # `flayer workspaces` shows. While this is the default workspace,\n\
+         # `flayer init` adds each one it makes; `flayer workspaces forget <path>`\n\
+         # takes one out.\n",
+    )
+}
 
 /// Remove every entry of `array` pointing at `target`, returning them.
 fn remove_pointing_at(array: &mut toml_edit::Array, root: &Path, target: &Path) -> Vec<PathBuf> {
@@ -1953,6 +2032,8 @@ pub enum WorkspaceError {
     LoadsItself { path: PathBuf },
     #[error("{path}: not loaded by the workspace at {workspace}")]
     NotLoaded { path: PathBuf, workspace: PathBuf },
+    #[error("{path}: not known to the default workspace at {workspace}")]
+    NotKnown { path: PathBuf, workspace: PathBuf },
     #[error("{path}: not valid UTF-8, so it cannot be written into a marker")]
     NonUtf8Path { path: PathBuf },
     #[error("{path}: cannot hold a project's {kind}s, because it is not inside the project")]
@@ -2015,6 +2096,7 @@ impl WorkspaceError {
             | WorkspaceError::NotRegistered { path, .. }
             | WorkspaceError::LoadsItself { path }
             | WorkspaceError::NotLoaded { path, .. }
+            | WorkspaceError::NotKnown { path, .. }
             | WorkspaceError::NonUtf8Path { path }
             | WorkspaceError::OutsideProject { path, .. }
             | WorkspaceError::InsideMind { path, .. }
