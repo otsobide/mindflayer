@@ -84,7 +84,9 @@ under `apps/` with its own `Makefile`:
   three, or as a copy into a project a `mind.toml` marks (`install::rules`),
   changing a project's agents or share mode and carrying its installs along
   (`reapply`), what each project holds, from where and for which agents
-  (`status`), the workspaces this machine knows, a list the default
+  (`status`), finding a project that moved again by its id and giving a
+  copy made with its `.mind` one of its own (`relink`), the workspaces this
+  machine knows, a list the default
   workspace keeps (`known`), creating and changing artifacts, and moving a
   workspace's own into its library and a project from its `mind.toml` or
   `settings.json` to a `settings.toml` (`migrate`), bringing what was
@@ -98,7 +100,7 @@ under `apps/` with its own `Makefile`:
   the public API. The parsers are in `src/parse.rs`. `src/commands.rs`
   dispatches them and asks core what a command acts on, and each family of
   commands has a file under `src/commands/`: `project` (init, link, unlink,
-  scan), `workspace` (load, unload), `activate` (activate, which), `known`
+  relink, scan), `workspace` (load, unload), `activate` (activate, which), `known`
   (workspaces, workspaces forget), `artifact` (add, edit, rename, remove,
   templates), `read` (list, show, validate), `status`, `settings` (agents,
   share, targets), `gather`, `install`, `update` and `migrate` (each at both
@@ -220,7 +222,10 @@ These are easy to break from a single file without noticing.
     is never used to edit a project's settings.
     Its agents, targets and share mode change through `reapply::apply`
     (`mind agents`, `mind targets`, `mind share`), which carries what is
-    installed along with them.
+    installed along with them. Its id is refused there, naming the project
+    for good, and changes only through `MindProject::change_id`, which
+    `relink::new_id` calls for a copy made with its `.mind` (`mind init
+    --new-id`).
   - Creation uses `create_new` or `create_dir`.
   - `rename` rewrites only the `name:` line (`frontmatter::with_key`).
   - `remove` (`flayer remove --everywhere` too), `migrate` at either level,
@@ -243,7 +248,9 @@ These are easy to break from a single file without noticing.
     a render of Claude's rule files one per file, and neither opens the file
     for a shared project or one a `mind.toml` marks. A
     project turning shared has its whole group forgotten (`exclude::forget`),
-    and one turning local an entry written for each copy in place. A team's
+    and one turning local an entry written for each copy in place. A
+    relinked project's lines, and a copy's given a new id, are carried to its
+    new place or key (`exclude::carry`), never left as a stale group. A team's
     `.gitignore` and `core.excludesFile` are never edited; the `.gitignore`s
     Mindflayer writes are `.mind/tmp`'s and a local project's `.mind`'s own
     (`MIND_IGNORE`), each inside a folder it owns, made with `create_new`,
@@ -451,7 +458,8 @@ These are easy to break from a single file without noticing.
   `settings.json` moves no copy, and takes none), `reapply::apply`,
   from before it reads a
   project's settings until their change and every copy it carries along are
-  written, and `update::apply`, from the plan it makes again until its last
+  written, `relink::relink`, from its ledger checks until the entry and the
+  records it moves are written, `relink::new_id`, and `update::apply`, from the plan it makes again until its last
   installation is written, through `install::install_held` (the body
   `install_with` hands to once it holds the lock) and
   `install::rules::update_held`, which take none of their own. A new
@@ -506,6 +514,16 @@ These are easy to break from a single file without noticing.
     in old rows in its own SQL, not through today's code, and adds a fixture
     of what the version before it wrote
     (`apps/core/tests/fixtures/ledger-v<N>.sql`) for a test to migrate.
+    What no SQL can know is handed to the step rather than read by it:
+    schema 5 is told each linked project's id (`Ledger::open_knowing`, from
+    `FlayerWorkspace::known`).
+- **A project is found again by its id, never by a guess.** The ledger
+  keeps the id it last saw at each route (`projects`), learned from the
+  projects themselves every time it is opened to write (`Ledger::knew`),
+  and a stale entry keeps its id until `relink::relink` moves it. A relink
+  hands records only to a directory holding that id, and two directories
+  holding one id are a copy (`relink::Duplicate`), a collected failure and
+  never a move.
 - **Nothing is staged where agents look.** An install builds its copies in a
   `copy::Stage` under the project's `.mind/tmp` and renames them into place.
   A temporary beside an installed copy is a skill an agent may load, so never
