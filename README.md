@@ -445,6 +445,10 @@ flayer install (-p PROJECT)...|--all-projects <NAME> [--from ORIGIN] [--force]
 flayer uninstall (-p PROJECT)...|--all-projects <NAME>|--orphaned [--force]
 flayer update (-p PROJECT)...|--all [NAME...] [--force] [--yes]
                            # mind update, for the projects named or every one
+flayer adopt -p PROJECT <NAME> [--yes]
+                           # a skill a project keeps by hand in an agent's
+                           # folder, into the library and managed from there;
+                           # without --yes, say what would happen
 flayer agents|share|targets -p PROJECT ...
                            # mind's agents, share and targets, for one of its
                            # projects
@@ -1345,6 +1349,66 @@ note: commit-style in collapse is no longer offered by load:../src/mindflayer/ex
 An update copies what the shelf holds now: what a gathered source offers
 moves when it is gathered again.
 
+## A repository that already has .claude/skills
+
+Many repositories keep skills written by hand in `.claude/skills` or
+`.agents/skills`, committed with the code. Mindflayer lists each as
+`foreign`, somebody else's, and never touches it: no update reaches it, and
+an agent that reads the other folder never gets it. `flayer adopt` brings
+one into the workspace's library, when you ask and never on its own, and
+records the project's copies as installed from there, exactly as they are:
+not a byte of the project is written. Say `collapse` is a local project that
+keeps `notes` in `.claude/skills`, committed:
+
+```
+$ cd ~/Projects
+$ flayer status -p collapse
+notes  foreign  claude,opencode
+$ flayer adopt -p collapse notes
+would copy notes from collapse into the library, at /home/you/Projects/.mindflayer/library/skills/notes
+would record notes in collapse as installed from workspace, at .claude/skills/notes
+would record .agents/skills/notes missing, for `flayer update -p collapse` to put there
+nothing adopted: add --yes to go ahead
+note: git tracks .claude/skills/notes, so it stays in git though collapse is local: what an update writes there shows in `git status`
+$ flayer adopt -p collapse notes --yes
+copied notes from collapse into the library, at /home/you/Projects/.mindflayer/library/skills/notes
+recorded notes in collapse as installed from workspace, at .claude/skills/notes
+recorded .agents/skills/notes missing: `flayer update -p collapse` puts it there
+note: git tracks .claude/skills/notes, so it stays in git though collapse is local: what an update writes there shows in `git status`
+$ flayer update -p collapse --yes
+put back notes in collapse at .agents/skills/notes, from workspace
+$ flayer status -p collapse
+notes  current  claude,codex,opencode  workspace
+```
+
+From then on `notes` is the workspace's own, managed in `collapse` like
+anything installed there: current while nobody changes it, `edited` once
+somebody does, and brought up to date by `flayer update` when the library
+copy changes. The update above gave Codex, which reads only
+`.agents/skills`, the copy it had never had; adopting itself writes nothing
+into a project, so a folder an install would put a copy in that holds none
+is recorded `missing` until then. Every other project can now be given it with
+`flayer install -p <project> notes`.
+
+A copy git tracks stays in git, even in a local project: a line in
+`info/exclude` would keep none of it out, and would hide every file added
+to it later. An update writes over it there, for the team to see and
+commit. One git does not track is kept out of git in a local project, as
+anything installed there is.
+
+Without `--yes` it writes nothing. It refuses, with nothing written: a name
+the library holds already, saying both paths; copies in `.claude/skills`
+and `.agents/skills` that differ, since which is the skill cannot be told; a
+skill an install would refuse, its name not matching its folder or its
+description empty or too long; one holding a link, or a `.claude-plugin`
+folder at its top, which no install copies; one Mindflayer installed
+already, or the project's own, in the folder it authors in; and a rule. If
+its `SKILL.md` says where `gh skill` got it, under `metadata` keys starting
+`github-`, the dry run and the adoption show it in a line under the
+first, and nothing more is made of it: no other tool's lockfile is read or
+written. `A` in [the TUI](#the-tui), on a `foreign` row, asks and then runs
+the same line.
+
 ## The workspace's own skills and rules
 
 A workspace keeps skills and rules of its own, for the projects it manages:
@@ -1493,6 +1557,7 @@ Every key runs a command you could have typed, through the same parser:
 | `l` | link a project | `flayer link <path>` |
 | `U` | unlink the project | `flayer unlink <path>` |
 | `M` | on a stale project the scan found moved, follow it there | `flayer relink <old> <new>` |
+| `A` | on a skill somebody keeps in a project's agents' folders, `foreign`, adopt it into the library, once you say yes | `flayer adopt -p <project> --yes <kind:name>` |
 | `t` | toggle the project's agents and share mode, then apply | `mind -C <project> agents --yes <agent>...`, `mind -C <project> share --yes local\|shared` |
 | `T` | type the folders the project installs skills in, or clear them for where its agents read | `mind -C <project> targets set --yes skills <dir>...`, `mind -C <project> targets reset --yes skills` |
 | `v` | validate everything | `flayer validate` |
