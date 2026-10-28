@@ -135,3 +135,99 @@ fn a_project_an_older_marker_marks_is_pointed_at_the_migration_for_a_new_id() {
     );
     assert!(refused.to_string().contains("`mind migrate`"), "{refused}");
 }
+
+/// Copy the directory `from` to `to`, `.mind` and all, as `cp -r` would.
+fn copied(from: &Path, to: &Path) {
+    fs::create_dir_all(to).unwrap();
+    for entry in fs::read_dir(from).unwrap() {
+        let entry = entry.unwrap();
+        let target = to.join(entry.file_name());
+        if entry.file_type().unwrap().is_dir() {
+            copied(&entry.path(), &target);
+        } else {
+            fs::copy(entry.path(), target).unwrap();
+        }
+    }
+}
+
+fn scanned(workspace: &FlayerWorkspace) -> mindflayer_core::Scan {
+    mindflayer_core::scan(workspace, &mindflayer_core::scan::Request::default())
+}
+
+#[test]
+fn a_scan_finds_a_project_moved_from_a_stale_entry_by_its_id() {
+    let (dir, workspace, project) = installed(Share::Local);
+    let moved = dir.path().join("Projects/apps/collapse");
+    fs::create_dir_all(moved.parent().unwrap()).unwrap();
+    fs::rename(project.root(), &moved).unwrap();
+
+    let scan = scanned(&workspace);
+
+    let found = scan.found.iter().find(|found| found.path == moved).unwrap();
+    assert_eq!(found.route, "apps/collapse");
+    assert_eq!(found.moved.as_deref(), Some("collapse"));
+    assert!(scan.failures.is_empty(), "{:?}", scan.failures);
+}
+
+#[test]
+fn a_copy_beside_its_project_is_a_duplicate_and_never_a_move() {
+    let (dir, workspace, project) = installed(Share::Local);
+    let copy = dir.path().join("Projects/copy");
+    copied(project.root(), &copy);
+
+    let scan = scanned(&workspace);
+
+    assert!(scan.found.iter().all(|found| found.moved.is_none()));
+    let said: Vec<String> = scan.failures.iter().map(ToString::to_string).collect();
+    assert_eq!(
+        said,
+        [format!(
+            "{} and {} are both project {}, copied with its .mind; \
+             `mind -C <copy> init --new-id` gives a copy an id of its own",
+            project.root().display(),
+            copy.display(),
+            id_of(project.root())
+        )]
+    );
+}
+
+#[test]
+fn two_copies_of_a_project_that_moved_are_a_duplicate_and_neither_is_its_move() {
+    let (dir, workspace, project) = installed(Share::Local);
+    let first = dir.path().join("Projects/first");
+    let second = dir.path().join("Projects/second");
+    copied(project.root(), &second);
+    fs::rename(project.root(), &first).unwrap();
+
+    let scan = scanned(&workspace);
+
+    assert!(scan.found.iter().all(|found| found.moved.is_none()));
+    assert!(matches!(
+        &scan.failures[..],
+        [mindflayer_core::scan::ScanFailure::Duplicate(duplicate)]
+            if duplicate.paths == [first.clone(), second.clone()]
+    ));
+}
+
+#[test]
+fn two_linked_copies_are_a_failure_of_the_status_naming_both() {
+    let (dir, mut workspace, project) = installed(Share::Local);
+    let copy = dir.path().join("Projects/copy");
+    copied(project.root(), &copy);
+    workspace.link(&MindProject::open(&copy).unwrap()).unwrap();
+
+    let (status, failures) = mindflayer_core::Status::of_workspace(&workspace);
+
+    assert_eq!(status.projects.len(), 2);
+    let said: Vec<String> = failures.iter().map(ToString::to_string).collect();
+    assert_eq!(said.len(), 1, "{said:?}");
+    assert!(
+        said[0].starts_with(&format!(
+            "{} and {} are both project {}",
+            project.root().display(),
+            copy.display(),
+            id_of(&copy)
+        )),
+        "{said:?}"
+    );
+}

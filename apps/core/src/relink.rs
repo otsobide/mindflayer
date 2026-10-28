@@ -13,6 +13,9 @@
 //! taken for a move: `mind init --new-id` ([`new_id`]) gives it one of its
 //! own.
 
+use std::fmt;
+use std::path::PathBuf;
+
 use thiserror::Error;
 
 use crate::exclude::{self, ExcludeError, Followed};
@@ -20,7 +23,7 @@ use crate::gather::Scrub;
 use crate::install;
 use crate::ledger::LedgerError;
 use crate::settings::{ProjectId, Share};
-use crate::workspace::{FlayerWorkspace, MindProject, WorkspaceError};
+use crate::workspace::{same_directory, FlayerWorkspace, MindProject, WorkspaceError};
 
 /// What [`new_id`] did.
 #[derive(Debug)]
@@ -111,6 +114,66 @@ pub fn new_id(
         excluded,
         scrub,
     })
+}
+
+/// One id held by more than one directory: a project copied with its
+/// `.mind`, which no record can tell from the project it was copied from.
+///
+/// A failure collected wherever the projects holding it are read together
+/// (`flayer status`, `flayer scan`), naming every one, and never a move:
+/// which of them is the project the records were made for is nobody's to
+/// guess, so none is followed until all but one hold an id of their own
+/// ([`new_id`]).
+#[derive(Debug, Clone, PartialEq, Eq, Error)]
+pub struct Duplicate {
+    pub id: ProjectId,
+    /// Each directory holding it, in the order they were read.
+    pub paths: Vec<PathBuf>,
+}
+
+impl fmt::Display for Duplicate {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let mut named: Vec<String> = self
+            .paths
+            .iter()
+            .map(|path| path.display().to_string())
+            .collect();
+        let last = named.pop().unwrap_or_default();
+        let all = if named.len() > 1 { "all" } else { "both" };
+        write!(
+            f,
+            "{} and {last} are {all} project {}, copied with its .mind; \
+             `mind -C <copy> init --new-id` gives a copy an id of its own",
+            named.join(", "),
+            self.id
+        )
+    }
+}
+
+/// Every id `held` names for more than one directory, with each directory
+/// holding it, in the order `held` lists them. Two spellings of one
+/// directory are one directory, not a copy.
+pub fn duplicates(held: &[(ProjectId, PathBuf)]) -> Vec<Duplicate> {
+    let mut found: Vec<Duplicate> = Vec::new();
+    for (id, path) in held {
+        match found.iter_mut().find(|duplicate| duplicate.id == *id) {
+            Some(duplicate) => {
+                if !duplicate
+                    .paths
+                    .iter()
+                    .any(|seen| same_directory(seen, path))
+                {
+                    duplicate.paths.push(path.clone());
+                }
+            }
+            None => found.push(Duplicate {
+                id: id.clone(),
+                paths: vec![path.clone()],
+            }),
+        }
+    }
+    found.retain(|duplicate| duplicate.paths.len() > 1);
+    found
 }
 
 /// Why a project could not be given a new id, or followed to where it moved.

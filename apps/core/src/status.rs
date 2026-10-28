@@ -30,6 +30,8 @@ use crate::install::{self, Standing};
 use crate::kind::Kind;
 use crate::ledger::{InstallRecord, Target};
 use crate::paths;
+use crate::relink::{self, Duplicate};
+use crate::settings::ProjectId;
 use crate::workspace::{
     same_directory, FlayerWorkspace, MarkerFile, MindProject, MisplacedTarget, WorkspaceError,
 };
@@ -259,6 +261,11 @@ pub enum StatusFailure {
     /// installs as going everywhere else they name.
     #[error(transparent)]
     Target(#[from] MisplacedTarget),
+    /// One id held by more than one project the workspace links: a copy made
+    /// with its `.mind`, which the ledger knows by neither until one is given
+    /// an id of its own.
+    #[error(transparent)]
+    Duplicate(#[from] Duplicate),
 }
 
 impl Status {
@@ -270,12 +277,15 @@ impl Status {
     /// artifacts are no project's, and nothing is installed into them.
     ///
     /// A ledger that cannot be read fails every project's read the same way,
-    /// about its one file, so it is said once, with the first.
+    /// about its one file, so it is said once, with the first. Two projects
+    /// holding one id are each reported, and a failure names them together
+    /// ([`Duplicate`]).
     pub fn of_workspace(workspace: &FlayerWorkspace) -> (Status, Vec<StatusFailure>) {
         let mut status = Status::default();
         let mut failures = Vec::new();
         let mut ledger_said = false;
         let mut seen: Vec<PathBuf> = Vec::new();
+        let mut held: Vec<(ProjectId, PathBuf)> = Vec::new();
         for member in workspace.members() {
             // Two spellings of one directory are one project, reported under
             // the first, rather than everything in it twice.
@@ -285,7 +295,10 @@ impl Status {
             seen.push(member.root.clone());
             match member.project {
                 Ok(project) => {
-                    let (held, catalog) =
+                    if let Some(settings) = project.settings() {
+                        held.push((settings.id.clone(), member.root.clone()));
+                    }
+                    let (read, catalog) =
                         ProjectStatus::read(&project, &Kind::ALL, Some(workspace));
                     let (_, found) = catalog.into_parts();
                     for failure in found {
@@ -301,7 +314,7 @@ impl Status {
                             .into_iter()
                             .map(StatusFailure::from),
                     );
-                    status.projects.push(held);
+                    status.projects.push(read);
                 }
                 Err(error) => {
                     status.projects.push(ProjectStatus {
@@ -319,6 +332,11 @@ impl Status {
                 }
             }
         }
+        failures.extend(
+            relink::duplicates(&held)
+                .into_iter()
+                .map(StatusFailure::from),
+        );
         (status, failures)
     }
 
