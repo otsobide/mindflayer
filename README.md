@@ -1801,8 +1801,9 @@ stopped keeping /.agents/skills/commit-style/ out of git
 Turning shared removes `.mind/.gitignore`, if it is still the one
 Mindflayer wrote, and the project's whole group in `.git/info/exclude`, so
 the settings and the copies are the team's to commit; turning local writes
-both back, an entry for each copy installed. `flayer agents -p collapse ...`
-and `flayer share -p collapse ...` do the same from the workspace, and `t` in
+both back, an entry for each copy installed that git does not track: one the
+team committed stays in git. `flayer agents -p collapse ...` and
+`flayer share -p collapse ...` do the same from the workspace, and `t` in
 [the TUI](#the-tui) toggles them for the project under the cursor. A project
 no workspace links still changes its settings, which are its own, and is told
 that nothing installed in it was carried along.
