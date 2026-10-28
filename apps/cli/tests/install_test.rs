@@ -335,6 +335,38 @@ fn one_name_from_two_shelves_cannot_be_marked_twice() {
     assert!(rendered(&screen).contains("unmarked the one from"));
 }
 
+#[test]
+fn a_mark_on_one_address_gathered_at_two_branches_installs_the_one_ticked() {
+    let (dir, workspace, ledger) = shelved(&["collapse"], &["review"]);
+    let source = repository(&[("skills/deploy/SKILL.md", &skill_file("deploy", "Ship it"))]);
+    let url = source.path().to_string_lossy().into_owned();
+    let head = fs::read_to_string(source.path().join(".git").join("HEAD")).unwrap();
+    let branch = head.trim().rsplit('/').next().unwrap().to_owned();
+    flayer(dir.path(), &["gather", "git", &url]).unwrap();
+    flayer(dir.path(), &["gather", "git", &url, "--ref", &branch]).unwrap();
+    let mut screen = screen_for(&workspace, &ledger);
+
+    // The row offering it from the address alone, which is also the other
+    // row's address without its branch.
+    let target = &mut screen.targets[0];
+    target.cursor = target
+        .rows
+        .iter()
+        .position(|row| row.candidate.name() == "deploy" && row.candidate.origin() == url)
+        .unwrap();
+    press(&mut screen, &[KeyCode::Right, KeyCode::Char(' ')]);
+    let outcome = install_screen::apply(&workspace, &screen, &Lookup::default());
+
+    assert_eq!(
+        outcome.stdout,
+        format!(
+            "$ flayer install -p collapse --from {url} skill:deploy\n\
+             installed deploy into collapse, from {url}\n"
+        )
+    );
+    assert!(outcome.ok, "{outcome:?}");
+}
+
 // ---------------------------------------------------------------------------
 // What an interrupted install left behind
 // ---------------------------------------------------------------------------

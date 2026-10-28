@@ -1505,6 +1505,40 @@ fn one_name_offered_twice_is_installed_only_from_where_it_is_asked_for() {
 }
 
 #[test]
+fn an_origin_as_printed_names_its_one_offer_though_another_branch_has_its_address() {
+    let (_dir, workspace, project, ledger) = ready(&["review"]);
+    let source = repository(&[("skills/deploy/SKILL.md", &skill("deploy", "Ship it"))]);
+    let address = url(&source);
+    let head = fs::read_to_string(source.path().join(".git").join("HEAD")).unwrap();
+    let branch = head.trim().rsplit('/').next().unwrap().to_owned();
+    gather::gather(&workspace, &ledger, &Request::git(&address)).unwrap();
+    gather::gather(
+        &workspace,
+        &ledger,
+        &Request::git(&address).at(Some(&branch)),
+    )
+    .unwrap();
+    let from = |typed: &str| {
+        install::offered(
+            &workspace,
+            &ledger,
+            &project,
+            Kind::Skill,
+            "deploy",
+            Some(typed),
+        )
+    };
+
+    // `<url>` is the first's origin and the second's address without its
+    // branch: the origin is the one it names.
+    let plain = from(&address).unwrap();
+    let branched = from(&format!("{address}#{branch}")).unwrap();
+
+    assert_eq!(plain.origin(), address);
+    assert_eq!(branched.origin(), format!("{address}#{branch}"));
+}
+
+#[test]
 fn from_typed_with_credentials_names_the_source_they_were_taken_out_of_and_repeats_none() {
     let (_dir, workspace, project, ledger) = ready(&["deploy"]);
     // As if gathered from an https address rather than from a path.

@@ -2109,7 +2109,13 @@ at none, because it came from nowhere but the workspace.
 without the screen, through `install::offered_typed`: the one candidate of that
 name, or an error naming every place that offers it when there is more than
 one; `--from` then says which, because which of two lands in the project's one
-folder of that name is not something to guess.
+folder of that name is not something to guess. It takes an origin as printed,
+and looser spellings of one: a source's address without its branch, a loaded
+workspace's name. The origin as printed wins (`install::offered`), so
+`<url>`, one address gathered at its default branch, is that offer and not
+also `<url>#main`'s, whose address it is: refused as offered twice, the
+first would have no `--from` of its own, and the line the install screen runs
+for its box would be refused.
 
 ### Which kind a name is
 

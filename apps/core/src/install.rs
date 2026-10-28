@@ -191,6 +191,9 @@ impl Offer {
     /// Whether `from`, as somebody typed it, names where this came from: the
     /// origin as printed; a source's address without its branch; a loaded
     /// workspace's name, unless that is the word the workspace's own go by.
+    /// The origin as printed wins over the rest ([`offered`]), so it names
+    /// its one offer wherever it is printed, `gather list` and the install
+    /// screen's lines included.
     /// A path to a loaded workspace is [`resolve_from`]'s to turn into its
     /// origin, and only when nothing matches it as typed, so a path never takes
     /// a shelf source's address or the workspace's own away. An address typed
@@ -921,6 +924,15 @@ pub(crate) fn offered_for<'a>(record: &InstallRecord, offers: &'a [Offer]) -> Ve
 /// one directory of that name in each folder it is installed in, and which
 /// of the two goes there is not something to guess.
 ///
+/// An offer whose origin is `from` as printed is the one it names, though
+/// a looser reading names another too ([`Offer::comes_from`]): one address
+/// gathered at its default branch and again at `main` is offered as `<url>`
+/// and `<url>#main`, and `<url>` is also the second's address without its
+/// branch. Refusing that as offered twice would leave the first with no
+/// `--from` of its own, though one is printed beside it, and so leave the
+/// line the install screen runs for its box refused. The looser readings
+/// stand when nothing is printed as `from`, which is what they are for.
+///
 /// A project with nowhere to put `kind` ([`targets`]) is refused here, where
 /// [`survey`] offers it nothing: "not offered" would send somebody to gather
 /// what could never be installed there anyway.
@@ -938,6 +950,14 @@ pub fn offered(
         .filter(|candidate| candidate.name() == name)
         .filter(|candidate| from.is_none_or(|from| candidate.comes_from(from)))
         .collect();
+    if let Some(printed) = from.map(redacted) {
+        if matching
+            .iter()
+            .any(|candidate| candidate.origin() == printed)
+        {
+            matching.retain(|candidate| candidate.origin() == printed);
+        }
+    }
     match matching.len() {
         0 => Err(InstallError::NotOffered {
             name: name.to_owned(),
