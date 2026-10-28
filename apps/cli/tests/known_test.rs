@@ -196,7 +196,8 @@ fn a_remembered_workspace_that_has_gone_is_shown_not_raised() {
         format!(
             "* home     {}                  no projects; the default one\n  \
              writing  {}  1 project\n  \
-             -        {}                 cannot be opened\n",
+             -        {}                 cannot be opened\n\
+             \n  `flayer workspaces forget <path>` forgets one that cannot be opened\n",
             home.display(),
             home.join("flayers/writing").display(),
             notes.display(),
@@ -374,4 +375,120 @@ fn json_prints_the_list_in_the_envelope_with_its_warnings() {
     assert_eq!(warnings, [gone]);
     assert!(outcome.stderr.is_empty(), "the warnings are the envelope's");
     assert!(!outcome.ok, "the exit is the text's");
+}
+
+// ---------------------------------------------------------------------------
+// Forgetting
+// ---------------------------------------------------------------------------
+
+#[test]
+fn forget_removes_every_spelling_of_a_path() {
+    let (_dir, home) = home_with_two();
+    let writing = home.join("flayers/writing");
+    let path = home.join(FLAYER_DIR).join(FLAYER_CONFIG);
+    let absolute = writing.to_string_lossy().into_owned();
+    let text = registry(&home).replace(
+        "\"flayers/writing\",",
+        &format!("\"flayers/writing\", \"./flayers/writing/\", \"{absolute}\","),
+    );
+    fs::write(&path, text).unwrap();
+
+    let outcome =
+        flayer_at_home(&home, &home, &["workspaces", "forget", "flayers/writing"]).unwrap();
+
+    assert_eq!(
+        outcome.stdout,
+        format!("forgot flayers/writing\nforgot ./flayers/writing/\nforgot {absolute}\n")
+    );
+    assert_eq!(known_in(&home), [PathBuf::from("../notes")]);
+    let listed = flayer_at_home(&home, &home, &["workspaces"]).unwrap();
+    assert!(!listed.stdout.contains("writing"), "{}", listed.stdout);
+    assert!(
+        writing.join(FLAYER_DIR).is_dir(),
+        "the workspace itself stays"
+    );
+}
+
+#[test]
+fn a_workspace_that_has_gone_is_forgotten_by_its_path() {
+    let (dir, home) = home_with_two();
+    let notes = dir.path().join("notes");
+    fs::remove_dir_all(&notes).unwrap();
+
+    let outcome = flayer_at_home(dir.path(), &home, &["workspaces", "forget", "notes"]).unwrap();
+    let listed = flayer_at_home(&home, &home, &["workspaces"]).unwrap();
+
+    assert_eq!(outcome.stdout, "forgot ../notes\n");
+    assert!(listed.ok && listed.stderr.is_empty(), "{listed:?}");
+    assert!(
+        !listed.stdout.contains("cannot be opened"),
+        "{}",
+        listed.stdout
+    );
+}
+
+#[test]
+fn forgetting_what_is_not_known_is_refused_and_writes_nothing() {
+    let (dir, home) = home_with_two();
+    let before = registry(&home);
+
+    let failure =
+        flayer_at_home(dir.path(), &home, &["workspaces", "forget", "elsewhere"]).unwrap_err();
+
+    assert_eq!(
+        failure.error.to_string(),
+        format!(
+            "{}: not known to the default workspace at {}",
+            dir.path().join("elsewhere").display(),
+            home.display()
+        )
+    );
+    assert_eq!(registry(&home), before);
+}
+
+#[test]
+fn forgetting_with_no_default_is_refused() {
+    let (dir, home) = home_with_two();
+    let before = registry(&home);
+
+    let failure = flayer(dir.path(), &["workspaces", "forget", "notes"]).unwrap_err();
+
+    assert_eq!(
+        failure.error.to_string(),
+        format!(
+            "{}: not known, since there is no default workspace to remember it (--home or $MINDFLAYER_HOME names none)",
+            dir.path().join("notes").display()
+        )
+    );
+    assert_eq!(registry(&home), before);
+}
+
+#[test]
+fn forgetting_with_the_default_not_made_is_refused_and_makes_nothing() {
+    let dir = TempDir::new().unwrap();
+    let home = dir.path().join("home");
+    fs::create_dir(&home).unwrap();
+
+    let failure =
+        flayer_at_home(dir.path(), &home, &["workspaces", "forget", "notes"]).unwrap_err();
+
+    assert!(
+        matches!(*failure.error, CliError::Workspace(_)),
+        "{}",
+        failure.error
+    );
+    assert!(!home.join(FLAYER_DIR).exists(), "the default was made");
+}
+
+#[test]
+fn json_is_for_the_list_and_not_for_forget() {
+    let dir = TempDir::new().unwrap();
+
+    let line = line(
+        "flayer",
+        &["workspaces", "--json", "forget", "notes"],
+        dir.path(),
+    );
+
+    assert!(FlayerCli::try_parse_from(&line).is_err(), "{line:?}");
 }

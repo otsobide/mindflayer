@@ -1,5 +1,6 @@
-//! The command about the flayer workspaces this machine knows: `workspaces`,
-//! which lists them, with the one in use marked.
+//! The commands about the flayer workspaces this machine knows:
+//! `workspaces`, which lists them, with the one in use marked, and
+//! `workspaces forget`, which takes one out of the list.
 //!
 //! What is known, in which order, and which one is in use are core's
 //! (`known::known`, fed by `resolve`); what is decided here is only how the
@@ -11,9 +12,9 @@ use std::path::Path;
 use mindflayer_core::resolve::{resolve, Intent};
 use mindflayer_core::{known, Known, KnownWorkspace};
 
-use super::reading;
-use crate::render::{json, plural, printable, table};
-use crate::{Failure, Lookup, Outcome};
+use super::{reading, typed};
+use crate::render::{as_stored, json, plural, printable, table};
+use crate::{CliError, Failure, Lookup, Outcome};
 
 /// `flayer workspaces`: every workspace the default one in `lookup`'s home
 /// knows, with the one a command run from `directory` would use marked, as
@@ -40,6 +41,29 @@ pub(crate) fn workspaces_command(
         Some(workspace) => reading(workspace, |_| Ok(outcome)),
         None => Ok(outcome),
     }
+}
+
+/// `flayer workspaces forget`: every entry the default workspace in
+/// `lookup`'s home keeps for the workspace at `path`, typed from
+/// `directory` as `unlink`'s paths are, taken out, each said.
+///
+/// Refused when none points at it, and with no default at all: a typo far
+/// more often than a no-op. Never makes the default to find that out.
+pub(crate) fn forget_command(
+    directory: &Path,
+    path: &Path,
+    lookup: &Lookup,
+) -> Result<Outcome, Failure> {
+    let root = typed(directory, path)?;
+    let home = lookup
+        .home
+        .as_deref()
+        .ok_or_else(|| CliError::NoDefault(root.clone()))?;
+    let mut text = String::new();
+    for entry in known::forget(home, &root)? {
+        let _ = writeln!(text, "forgot {}", as_stored(&entry));
+    }
+    Ok(Outcome::plain(text))
 }
 
 /// The list as a table: a `*` before the one in use, as `git branch` marks
@@ -81,10 +105,24 @@ fn listing(known: &Known, warnings: Vec<String>) -> Outcome {
             .workspaces
             .iter()
             .any(|listed| !listed.default && !listed.remembered);
+        let gone = known
+            .workspaces
+            .iter()
+            .any(|listed| listed.remembered && listed.stale.is_some());
+        let mut hints = Vec::new();
         if default && unremembered {
-            stdout.push_str(
-                "\n  `flayer init <path>` remembers the one in use, and changes nothing else in it\n",
+            hints.push(
+                "`flayer init <path>` remembers the one in use, and changes nothing else in it",
             );
+        }
+        if gone {
+            hints.push("`flayer workspaces forget <path>` forgets one that cannot be opened");
+        }
+        if !hints.is_empty() {
+            stdout.push('\n');
+            for hint in hints {
+                let _ = writeln!(stdout, "  {hint}");
+            }
         }
     }
     let stderr: Vec<String> = warnings

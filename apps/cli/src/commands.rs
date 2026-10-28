@@ -26,7 +26,9 @@ use mindflayer_core::{
 };
 
 use crate::homes::Lookup;
-use crate::{tui, Cli, CliError, Command, Failure, FlayerCli, FlayerCommand, Outcome};
+use crate::{
+    tui, Cli, CliError, Command, Failure, FlayerCli, FlayerCommand, Outcome, WorkspacesCommand,
+};
 use activate::{activate_command, which_command};
 use artifact::{
     add_to, edit_in, remove_everywhere, remove_from, remove_own, rename_in, templates_of,
@@ -34,7 +36,7 @@ use artifact::{
 };
 use gather::run_gather;
 use install::{install_named, uninstall_named, uninstall_orphans};
-use known::workspaces_command;
+use known::{forget_command, workspaces_command};
 use migrate::{migrate_all, migrate_here, migrate_library, migrate_one, Asked};
 use project::{
     init_project, init_workspace, link_here, link_projects, scan_workspace, unlink_here,
@@ -308,7 +310,10 @@ fn run_flayer(
             activate_command(directory, path.as_deref(), *shell, lookup)
         }
         FlayerCommand::Which => which_command(directory, lookup),
-        FlayerCommand::Workspaces { json } => workspaces_command(directory, lookup, *json),
+        FlayerCommand::Workspaces { command, json } => match command {
+            None => workspaces_command(directory, lookup, *json),
+            Some(WorkspacesCommand::Forget { path }) => forget_command(directory, path, lookup),
+        },
 
         FlayerCommand::Add {
             project,
