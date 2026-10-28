@@ -596,6 +596,100 @@ fn a_rule_edited_in_its_section_is_kept_unless_forced() {
     );
 }
 
+/// [`given`], with a `CLAUDE.local.md` and no `CLAUDE.md`, so Claude reads
+/// no block and each rule has a section and a file for Claude, and two
+/// rules installed, `alpha/one` and `alpha/two`, each changed where it is
+/// offered since: their offers.
+fn two_rules_in_both_copies() -> (Given, PathBuf, PathBuf) {
+    let given = given();
+    fs::write(given.project().root().join("CLAUDE.local.md"), "Hers.\n").unwrap();
+    let one = given.rule("alpha/one", "Rule one.\n");
+    let two = given.rule("alpha/two", "Rule two.\n");
+    given.install(Kind::Rule, "alpha/one");
+    given.install(Kind::Rule, "alpha/two");
+    assert!(given.claude_file("alpha/one").is_file());
+    assert!(fs::read_to_string(given.agents_md())
+        .unwrap()
+        .contains("Rule one.\n"));
+    fs::write(&one, "Rule one, changed.\n").unwrap();
+    fs::write(&two, "Rule two, changed.\n").unwrap();
+    (given, one, two)
+}
+
+#[test]
+fn a_rule_edited_in_its_file_for_claude_keeps_its_section_while_another_is_updated() {
+    let (given, _, _) = two_rules_in_both_copies();
+    type_into(&given.claude_file("alpha/one"));
+    let edited = fs::read(given.claude_file("alpha/one")).unwrap();
+
+    let applied = given.apply(&[], Edits::Kept);
+
+    assert_eq!(
+        steps(&applied.plan),
+        [
+            (
+                "app",
+                "alpha/one",
+                &Step::Leave(vec![given.claude_file("alpha/one")])
+            ),
+            ("app", "alpha/two", &Step::Refresh)
+        ]
+    );
+    let rendered = applied.plan.projects[0].rendered.as_ref().unwrap();
+    assert!(rendered.is_ok(), "{rendered:?}");
+    // Every copy of the edited rule as it was, so no agent reads the rule
+    // as offered now while Claude reads somebody's edit of it.
+    let block = fs::read_to_string(given.agents_md()).unwrap();
+    assert!(block.contains("Rule one.\n"), "{block}");
+    assert!(!block.contains("Rule one, changed."), "{block}");
+    assert_eq!(fs::read(given.claude_file("alpha/one")).unwrap(), edited);
+    assert!(block.contains("Rule two, changed."), "{block}");
+    assert_eq!(
+        fs::read_to_string(given.claude_file("alpha/two")).unwrap(),
+        "Rule two, changed.\n"
+    );
+    assert_eq!(given.standing(Kind::Rule, "alpha/one"), Standing::Edited);
+    assert_eq!(given.standing(Kind::Rule, "alpha/two"), Standing::Current);
+
+    let forced = given.apply(&["rule:alpha/one"], Edits::Forced);
+
+    let rendered = forced.plan.projects[0].rendered.as_ref().unwrap();
+    assert!(rendered.is_ok(), "{rendered:?}");
+    let block = fs::read_to_string(given.agents_md()).unwrap();
+    assert!(block.contains("Rule one, changed."), "{block}");
+    assert_eq!(
+        fs::read_to_string(given.claude_file("alpha/one")).unwrap(),
+        "Rule one, changed.\n"
+    );
+    assert_eq!(given.standing(Kind::Rule, "alpha/one"), Standing::Current);
+}
+
+#[test]
+fn a_rule_edited_in_its_section_keeps_its_file_for_claude_while_another_is_updated() {
+    let (given, _, _) = two_rules_in_both_copies();
+    let edited = fs::read_to_string(given.agents_md())
+        .unwrap()
+        .replace("Rule one.\n", "Ours now.\n");
+    fs::write(given.agents_md(), &edited).unwrap();
+
+    // Named the other only, so the edited one is not asked, and still
+    // rendered with it.
+    let applied = given.apply(&["rule:alpha/two"], Edits::Kept);
+
+    assert_eq!(steps(&applied.plan), [("app", "alpha/two", &Step::Refresh)]);
+    let rendered = applied.plan.projects[0].rendered.as_ref().unwrap();
+    assert!(rendered.is_ok(), "{rendered:?}");
+    let block = fs::read_to_string(given.agents_md()).unwrap();
+    assert!(block.contains("Ours now.\n"), "{block}");
+    assert!(block.contains("Rule two, changed."), "{block}");
+    assert_eq!(
+        fs::read_to_string(given.claude_file("alpha/one")).unwrap(),
+        "Rule one.\n"
+    );
+    assert_eq!(given.standing(Kind::Rule, "alpha/one"), Standing::Edited);
+    assert_eq!(given.standing(Kind::Rule, "alpha/two"), Standing::Current);
+}
+
 #[test]
 fn a_rules_section_and_its_file_for_claude_gone_are_put_back() {
     let given = given();

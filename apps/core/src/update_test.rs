@@ -39,6 +39,7 @@ fn a_plan_that_writes_nothing_is_empty_whatever_it_says() {
             name: String::from("collapse"),
             installations: vec![update(step)],
             rendered: None,
+            left: Vec::new(),
         }],
         unmatched: vec![String::from("typo")],
     };

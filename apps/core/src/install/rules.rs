@@ -547,13 +547,23 @@ pub fn render(
 /// edit of each rule `forced` names, section and file for Claude, as
 /// `--force` asks, and keeping a rule no longer offered as the project
 /// holds it rather than refusing the render, as an uninstall of another
-/// rule keeps one. Every other edit is kept, as every render keeps one.
+/// rule keeps one.
+///
+/// Each rule `left` names, one somebody edited that the update leaves, is
+/// kept whole as the project holds it, its record as it was: every copy of
+/// it, not only the one edited. A render keeps an edited section or file
+/// for Claude and writes the rule's other copy from the offer, which is
+/// what an install or an uninstall of another rule wants; an update says it
+/// leaves the rule alone, and writing its other copy would have the agents
+/// reading the block and those reading Claude's folder read two versions of
+/// one rule.
 pub(crate) fn update_held(
     workspace: &FlayerWorkspace,
     ledger: &Ledger,
     project: &MindProject,
     homes: &AgentHomes,
     forced: &[String],
+    left: &[String],
 ) -> Result<Rendered, InstallError> {
     let edits = if forced.is_empty() {
         Edits::Kept
@@ -565,7 +575,7 @@ pub(crate) fn update_held(
         ledger,
         project,
         homes,
-        Change::Update(forced),
+        Change::Update { forced, left },
         edits,
     )?;
     let entry = project_entry(workspace, project);
@@ -581,8 +591,12 @@ enum Change<'a> {
     Install(&'a Candidate),
     /// Taking this one out.
     Uninstall(&'a str),
-    /// Bringing every rule up to date, writing over the edits of these.
-    Update(&'a [String]),
+    /// Bringing every rule up to date, writing over the edits of those
+    /// `forced` names and keeping those `left` names whole.
+    Update {
+        forced: &'a [String],
+        left: &'a [String],
+    },
     /// Neither: rendering what the project has, as it is now.
     Again,
 }
@@ -594,7 +608,17 @@ impl Change<'_> {
         match self {
             Change::Install(candidate) => candidate.name() == name,
             Change::Uninstall(going) => *going == name,
-            Change::Update(_) | Change::Again => false,
+            Change::Update { .. } | Change::Again => false,
+        }
+    }
+
+    /// Whether the rule `name` is kept whole as the project holds it, every
+    /// copy and its record, rather than rendered from its offer: one an
+    /// update leaves for an edit somebody made in any copy of it.
+    fn leaves(&self, name: &str) -> bool {
+        match self {
+            Change::Update { left, .. } => left.iter().any(|route| route == name),
+            Change::Install(_) | Change::Uninstall(_) | Change::Again => false,
         }
     }
 
@@ -606,7 +630,7 @@ impl Change<'_> {
     fn forces(&self, name: &str) -> bool {
         match self {
             Change::Install(_) | Change::Uninstall(_) => self.changes(name),
-            Change::Update(forced) => forced.iter().any(|route| route == name),
+            Change::Update { forced, .. } => forced.iter().any(|route| route == name),
             Change::Again => false,
         }
     }
@@ -767,7 +791,9 @@ fn withholding(project: &MindProject) -> Option<Withheld> {
 /// for Claude, by [`claude_rules::render`]. The rule `change` installs or
 /// takes out was refused before this if it was edited, unless `edits`
 /// forces it, and then its file for Claude is written over or taken away as
-/// its section is; so is each rule an update is forced to write over.
+/// its section is; so is each rule an update is forced to write over. Each
+/// rule an update leaves for an edit is kept whole instead, the copy not
+/// edited too, with its record as it was ([`update_held`]).
 fn render_held(
     workspace: &FlayerWorkspace,
     ledger: &Ledger,
@@ -789,8 +815,14 @@ fn render_held(
     let mut wanted = Vec::new();
     // The rules no longer offered that an uninstall of another keeps.
     let mut unoffered: Vec<&InstallRecord> = Vec::new();
+    // The rules an update leaves for an edit, each kept whole.
+    let mut left: Vec<&InstallRecord> = Vec::new();
     for record in &before {
         if change.changes(&record.name) {
+            continue;
+        }
+        if change.leaves(&record.name) {
+            left.push(record);
             continue;
         }
         let offer = record.origin.as_deref().and_then(|origin| {
@@ -807,7 +839,7 @@ fn render_held(
             // it, for its own uninstall to take out. Nor is bringing the
             // rest up to date, which an update does whatever is orphaned
             // beside them (D-04): it is said, not refused.
-            (None, Change::Uninstall(_) | Change::Update(_)) => unoffered.push(record),
+            (None, Change::Uninstall(_) | Change::Update { .. }) => unoffered.push(record),
             (None, _) => {
                 return Err(InstallError::NoLongerOffered {
                     name: record.name.clone(),
@@ -883,6 +915,31 @@ fn render_held(
                             name: record.name.clone(),
                             origin: record.origin.clone(),
                         })?;
+                let recorded = record
+                    .targets
+                    .iter()
+                    .find(|target| target.path == AGENTS_MD)
+                    .and_then(|target| target.content_hash.clone());
+                sections.insert(
+                    record.name.clone(),
+                    recorded.unwrap_or_else(|| section.hash()),
+                );
+                held.push(section);
+            }
+            // A rule left for an edit keeps its section as the block holds
+            // it, edited or not, so it is never rendered from an offer
+            // while another copy of it holds somebody's edit.
+            for record in &left {
+                if !text.routes().contains(&record.name.as_str()) {
+                    continue;
+                }
+                // One that cannot be read back would go with the render.
+                let section = text
+                    .section(&record.name)
+                    .ok_or_else(|| InstallError::Unread {
+                        file: file.clone(),
+                        route: record.name.clone(),
+                    })?;
                 let recorded = record
                     .targets
                     .iter()
@@ -981,6 +1038,7 @@ fn render_held(
         .map(|rule| rule.pending(root, claude))
         .collect();
     pending.extend(unoffered.iter().map(|&record| record.clone()));
+    pending.extend(left.iter().map(|&record| record.clone()));
     if let Change::Uninstall(going) = change {
         // Kept until the render is done, so one killed part way leaves the
         // rule recorded, for the uninstall to be run again.
@@ -1048,14 +1106,19 @@ fn render_held(
         } else {
             Vec::new()
         };
-        // Not a kept rule's, which no render here writes or takes away. The
-        // rule a forced change is about counts as holding what its file
-        // holds now, so an edit there is written over or taken away as the
-        // file Mindflayer wrote would be; only a file, never a link or a
-        // folder somebody put in its place.
+        // Not a kept rule's, nor a left one's, which no render here writes
+        // or takes away. The rule a forced change is about counts as
+        // holding what its file holds now, so an edit there is written over
+        // or taken away as the file Mindflayer wrote would be; only a file,
+        // never a link or a folder somebody put in its place.
         let recorded: Vec<Recorded> = pending
             .iter()
-            .filter(|record| !unoffered.iter().any(|kept| kept.name == record.name))
+            .filter(|record| {
+                !unoffered
+                    .iter()
+                    .chain(&left)
+                    .any(|kept| kept.name == record.name)
+            })
             .filter_map(|record| {
                 let file = claude_file(&record.name);
                 let target = record.targets.iter().find(|target| target.path == file)?;
@@ -1190,6 +1253,10 @@ fn render_held(
             ..(*record).clone()
         });
     }
+    // A rule left for an edit keeps its record whole, a copy gone from it
+    // included: it still says what was installed, and where, for a forced
+    // update to write over or the edit undone to read as it was.
+    records.extend(left.iter().map(|&record| record.clone()));
     // Each copy from before the project had settings goes now that the rule
     // reaches the project's agents as any rule does, while it holds what was
     // copied: out of the folder the project authors in, as a change of agents
@@ -1301,7 +1368,7 @@ fn render_held(
         // about some files says of each that it reaches Claude alone. A rule
         // kept as the project holds it counts, since what it is about cannot
         // be read where it is offered no longer.
-        let missing = !sections.is_empty() || !unoffered.is_empty();
+        let missing = !sections.is_empty() || !unoffered.is_empty() || !left.is_empty();
         if missing && !missed.is_empty() {
             warnings.push(Warning::Withheld {
                 file: file.clone(),

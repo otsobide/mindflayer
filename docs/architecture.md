@@ -1964,8 +1964,13 @@ guess between two.
   as a render reads back only an edit it keeps. That render keeps a rule no
   longer offered as the project holds it, as an uninstall of another rule
   does, rather than refusing the rest for it, and writes over only the
-  edits of the rules the update was forced to write over: every other edit
-  is kept, as every render keeps one.
+  edits of the rules the update was forced to write over. Every other rule
+  somebody edited, named or not, is kept whole (`Change::leaves`): each
+  copy as the project holds it, the one not edited too, and its record as
+  it was. A rule has two copies where Claude reads no block, its section
+  and its file for Claude, and keeping only the edited one, as an install's
+  render does, would write the other from the offer and leave Claude and
+  the agents reading the block with two versions of one rule.
 - **Names narrow it.** Only the installations the names given name are
   planned, by kind and name as `install` takes them, every one when none is
   given; a name that matches nothing installed in any project asked is
@@ -6045,7 +6050,10 @@ just listed.
   somebody edited, and keeps it. #48 chose to keep that for an update: one
   rule named brings the project's other outdated or missing rules along,
   and its plan names each, so what is written is what is said. An install
-  of a rule still brings them along unsaid.
+  of a rule still brings them along unsaid, and keeps only the copy of a
+  rule somebody edited, writing its other copy from the offer, where an
+  update keeps every copy of it. Holding an install's render to the same
+  would spare its agents two versions of one rule too.
 - **A copy recorded where nothing reads it.** Status calls an installation
   missing when discovery does not find one of its copies, and an update
   writes it when its standing says a copy is gone. A copy that is still

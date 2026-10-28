@@ -18,12 +18,13 @@
 //! block in its `AGENTS.md`, rendered with every other rule it has, so a
 //! project's rules are brought up to date together, in one render
 //! ([`rules::update_held`]). It gives each rule as its offer holds it now,
-//! keeps an edit unless the update is forced to write over that rule, and
-//! keeps a rule no longer offered as the project holds it, where an
-//! install's render refuses one. So updating one rule of such a project
-//! brings each of its other outdated or missing rules along, and the plan
-//! names them: leaving them as they were would mean reading each back from
-//! the block, as a render reads back only an edit it keeps.
+//! keeps a rule somebody edited, every copy of it, unless the update is
+//! forced to write over that rule, and keeps a rule no longer offered as
+//! the project holds it, where an install's render refuses one. So
+//! updating one rule of such a project brings each of its other outdated or
+//! missing rules along, and the plan names them: leaving them as they were
+//! would mean reading each back from the block, as a render reads back only
+//! an edit it keeps.
 //!
 //! What a gathered source offers is not refreshed here: an update copies
 //! what the shelf holds now, and a gather is what moves the shelf.
@@ -79,6 +80,11 @@ pub struct ProjectPlan {
     /// What rendering the project's rules came to, once applied: none until
     /// then, or when no rule of it is written.
     pub rendered: Option<Result<Rendered, InstallError>>,
+    /// Each rule of it edited and not written over, asked or not: what its
+    /// render keeps, every copy as the project holds it, since a render
+    /// writes every rule, and keeping only the copy edited would hand the
+    /// agents two versions of one rule.
+    left: Vec<String>,
 }
 
 /// One installation, how it stands, and what an update does with it.
@@ -261,7 +267,12 @@ pub fn apply(
         }
         if renders {
             planned.rendered = Some(rules::update_held(
-                workspace, &ledger, project, homes, &forced,
+                workspace,
+                &ledger,
+                project,
+                homes,
+                &forced,
+                &planned.left,
             ));
         }
     }
@@ -320,6 +331,15 @@ fn plan_with(
             && updates
                 .iter()
                 .any(|(asked, update)| *asked && update.kind == Kind::Rule && update.step.writes());
+        let left = updates
+            .iter()
+            .filter(|(asked, update)| {
+                update.kind == Kind::Rule
+                    && update.standing == Standing::Edited
+                    && !(*asked && matches!(update.step, Step::WriteOver(_)))
+            })
+            .map(|(_, update)| update.name.clone())
+            .collect();
         let installations = updates
             .into_iter()
             .filter(|(asked, update)| {
@@ -335,6 +355,7 @@ fn plan_with(
             name: project.name().to_owned(),
             installations,
             rendered: None,
+            left,
         });
     }
     let unmatched = references
