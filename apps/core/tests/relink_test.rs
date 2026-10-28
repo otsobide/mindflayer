@@ -166,7 +166,42 @@ fn a_scan_finds_a_project_moved_from_a_stale_entry_by_its_id() {
     let found = scan.found.iter().find(|found| found.path == moved).unwrap();
     assert_eq!(found.route, "apps/collapse");
     assert_eq!(found.moved.as_deref(), Some("collapse"));
+    assert!(scan.untraced.is_empty());
     assert!(scan.failures.is_empty(), "{:?}", scan.failures);
+}
+
+#[test]
+fn a_project_moved_before_the_ledger_learned_its_id_leaves_its_entry_untraced() {
+    let dir = TempDir::new().unwrap();
+    let (mut workspace, _) = FlayerWorkspace::init(dir.path()).unwrap();
+    let project = linked(&mut workspace, &dir.path().join("collapse"));
+    let moved = dir.path().join("apps/collapse");
+    fs::create_dir_all(moved.parent().unwrap()).unwrap();
+    fs::rename(project.root(), &moved).unwrap();
+
+    let scan = scanned(&workspace);
+
+    let found = scan.found.iter().find(|found| found.path == moved).unwrap();
+    assert_eq!(found.moved, None);
+    assert_eq!(scan.untraced, ["collapse"]);
+    assert!(!workspace.ledger_path().exists());
+    // Nor is it said once nothing found could be its project.
+    workspace.link(&MindProject::open(&moved).unwrap()).unwrap();
+    assert!(scanned(&workspace).untraced.is_empty());
+}
+
+#[test]
+fn a_stale_entry_whose_id_the_ledger_knows_is_not_untraced() {
+    let (dir, workspace, project) = installed(Share::Local);
+    fs::rename(project.root(), dir.path().join("gone")).unwrap();
+    let other = dir.path().join("Projects/other");
+    fs::create_dir_all(&other).unwrap();
+    MindProject::init_asked(&other, &Agent::ALL, Share::Local, &Directories::default()).unwrap();
+
+    let scan = scanned(&workspace);
+
+    assert!(scan.found.iter().all(|found| found.moved.is_none()));
+    assert!(scan.untraced.is_empty(), "{:?}", scan.untraced);
 }
 
 #[test]

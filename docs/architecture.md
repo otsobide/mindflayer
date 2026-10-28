@@ -5249,11 +5249,21 @@ directories hold, among those found and those the workspace links, is a
 failure naming both, and neither is a move: a copy, which only
 `mind init --new-id` tells apart.
 
+The ledger learns an id only when it is written, so a project linked and
+moved before anything wrote it is found by nobody, though the scan may list
+it. While something found and not linked holds an id no entry was matched
+to, each entry nothing marks whose id the ledger never learned is named
+(`untraced`), and the text says to `flayer relink` it: the hint to
+`flayer link` alone would leave the entry stale beside a second one for the
+same project, which is what a relink is for. Which of them went where is
+the person's to say, never a guess.
+
 `flayer scan --json` prints the scan in [the envelope](#json-in-one-envelope),
 each field by its name (`roots`, `depth`, `found`, each with `path`, `route`,
-`id`, `mind`, `linked` and `moved`, and `truncated`); its failures, and that
-it stopped early, are the envelope's warnings. `moved` came after the others,
-a name added, so the envelope's version stayed. The table leaves the id out: the path already tells its
+`id`, `mind`, `linked` and `moved`, `untraced` and `truncated`); its
+failures, and that it stopped early, are the envelope's warnings. `moved`
+and `untraced` came after the others, names added, so the envelope's
+version stayed. The table leaves the id out: the path already tells its
 rows apart, and the id is for a script to match a project by.
 
 `flayer minds DIR` opens the minds screen looking under the folders it is
@@ -5994,6 +6004,12 @@ just listed.
   wrote. Merging the two, the newer record of a name winning, would keep
   both, at the price of a relink that sometimes drops an entry rather than
   rewriting one.
+- **A project moved before its id was learned.** The ledger learns ids when
+  it is written, so a project linked and moved before then is never offered
+  as a move; the scan names its entry (`untraced`) for a relink somebody
+  types. `flayer link` telling the ledger would close it, at the price of
+  every link opening the ledger to write, and making it, which only a
+  gather, an install or an uninstall does now.
 - **A route that holds another project now.** An entry whose directory is
   given to another project once its own has moved opens, so it is not stale:
   the ledger follows the project there (`Ledger::knew`), and the records the

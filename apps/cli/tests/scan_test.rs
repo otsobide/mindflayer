@@ -184,6 +184,7 @@ struct Report {
     roots: Vec<String>,
     depth: usize,
     found: Vec<Found>,
+    untraced: Vec<String>,
     truncated: bool,
 }
 
@@ -253,6 +254,7 @@ fn scan_json_is_the_envelope_with_each_one_found_and_its_id() {
         ]
     );
     assert!(id("alpha").is_some());
+    assert!(report.untraced.is_empty());
 }
 
 #[test]

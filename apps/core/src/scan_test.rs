@@ -26,6 +26,7 @@ fn a_scan_is_serialized_field_by_field_without_its_failures() {
                 moved: Some(String::from("gamma")),
             },
         ],
+        untraced: vec![String::from("delta")],
         failures: vec![ScanFailure::Unlisted {
             path: PathBuf::from("/work/locked"),
             source: io::Error::from(io::ErrorKind::PermissionDenied),
@@ -44,7 +45,7 @@ fn a_scan_is_serialized_field_by_field_without_its_failures() {
             r#""moved":null},"#,
             r#"{"path":"/work/beta","route":"beta","id":null,"mind":false,"linked":false,"#,
             r#""moved":"gamma"}"#,
-            r#"],"truncated":false}"#,
+            r#"],"untraced":["delta"],"truncated":false}"#,
         )
     );
 }

@@ -108,6 +108,14 @@ pub struct Scan {
     pub depth: usize,
     /// Ordered by route.
     pub found: Vec<Found>,
+    /// Each entry where no project is any more whose id the ledger never
+    /// learned, as it learns them only when it is written, so nothing found
+    /// can be told to be its project, moved: spelled as `route` is, for the
+    /// `flayer relink <untraced> <route>` that follows it, which only
+    /// somebody who knows where it went can type. In the order the marker
+    /// lists them, and only when something found and not linked holds an id
+    /// that no entry was matched to, which it could be; empty otherwise.
+    pub untraced: Vec<String>,
     /// Folders that could not be listed, and markers that would not open.
     /// One unreadable folder must not hide the repositories beside it.
     ///
@@ -152,6 +160,7 @@ pub fn scan(workspace: &FlayerWorkspace, request: &Request) -> Scan {
         roots: roots.clone(),
         depth: request.depth,
         found: Vec::new(),
+        untraced: Vec::new(),
         failures: Vec::new(),
         truncated: false,
     };
@@ -244,6 +253,12 @@ pub fn scan(workspace: &FlayerWorkspace, request: &Request) -> Scan {
 /// ([`FlayerWorkspace::ledger_to_write`]). The ledger is read only when
 /// there is something to match, and one that cannot be read is a failure
 /// beside what was found, which is listed with no move.
+///
+/// A stale entry whose id the ledger never learned is said too (`untraced`)
+/// while something found is left unmatched: a project linked and moved
+/// before anything wrote the ledger is found by nobody, and the entry is
+/// what `flayer relink` would be given for it, where `flayer link` would
+/// leave two entries for one project.
 fn follow(workspace: &FlayerWorkspace, from: &Path, scan: &mut Scan) {
     let members = workspace.members();
     let mut held: Vec<(ProjectId, PathBuf)> = Vec::new();
@@ -295,6 +310,21 @@ fn follow(workspace: &FlayerWorkspace, from: &Path, scan: &mut Scan) {
                         .find(|(seen, _)| seen == id)
                         .and_then(|(_, at)| stale.iter().find(|(route, _)| route == at))
                         .map(|(_, root)| route(root, from));
+                }
+                let unmatched = scan.found.iter().any(|found| {
+                    !found.linked
+                        && found.moved.is_none()
+                        && found.id.as_ref().is_some_and(|id| !copied(id))
+                });
+                if unmatched {
+                    for (entry, root) in &stale {
+                        let spelled = route(root, from);
+                        if !known.iter().any(|(_, at)| at == entry)
+                            && !scan.untraced.contains(&spelled)
+                        {
+                            scan.untraced.push(spelled);
+                        }
+                    }
                 }
             }
             Err(error) => scan.failures.push(ScanFailure::Ledger(error)),

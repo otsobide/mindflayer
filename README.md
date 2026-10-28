@@ -563,16 +563,19 @@ $ flayer scan ~/Work --depth 2 --json
         "route": "/home/you/Work/acme/api",
         "id": null,
         "mind": false,
-        "linked": false
+        "linked": false,
+        "moved": null
       },
       {
         "path": "/home/you/Work/acme/web",
         "route": "/home/you/Work/acme/web",
         "id": "f4a29f5daaf5bc789c4b5d6b13174f48",
         "mind": true,
-        "linked": false
+        "linked": false,
+        "moved": null
       }
     ],
+    "untraced": [],
     "truncated": false
   },
   "warnings": []
@@ -1242,10 +1245,12 @@ project; an entry that still holds a project, even one whose marker would not
 open, which has not moved; a project a `mind.toml` marks, which has no id to
 be found by ([`mind migrate`](#a-project-made-before-settings) gives it one);
 and records from before ids were kept, which nothing says were that
-project's. A workspace
-learns each linked project's id when its ledger is made or brought up to
-this version, and again every time it writes, so a project moved before
-then is found by nobody.
+project's. A workspace learns each linked project's id when its ledger is
+made or brought up to this version, and again every time it writes, so a
+project moved before then is found by nobody. `flayer scan` names the entry
+it left instead, in a hint to `flayer relink <entry> <path>`, for you to say
+where it went: the entry keeps its place, where `flayer link` would leave it
+stale beside a second one.
 
 A repository copied with its `.mind` holds the same id as the one it was
 copied from, and nothing can tell which of the two the records were made for.

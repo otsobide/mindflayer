@@ -650,7 +650,7 @@ fn m_on_a_stale_entry_whose_project_was_not_found_says_how_to_relink_it_by_hand(
     assert!(matches!(step, tui::state::Step::Stay));
     let said = &app.message.as_ref().unwrap().text;
     assert!(
-        said.contains("`flayer relink alpha <new>` names where it is"),
+        said.contains("`flayer relink alpha <new>` follows it to where it went"),
         "{said}"
     );
 }

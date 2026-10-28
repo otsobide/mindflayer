@@ -1649,11 +1649,14 @@ impl App {
             ));
             return (Mode::Browse, Step::Stay);
         }
+        // Not "nothing holds its id": the ledger learns an id only when it
+        // is written, so a project moved before then is found by nobody,
+        // though it may be right there.
         let Some(moved) = workspace.moved_to(member) else {
             self.message = Some(Message::info(format!(
-                "no project holding {}'s id was found under {}; `flayer relink {} <new>` names where it is",
-                member.entry,
+                "nothing found under {} is known to have moved from {}; `flayer relink {} <new>` follows it to where it went",
                 super::ui::looked_under(workspace),
+                member.entry,
                 member.entry
             )));
             return (Mode::Browse, Step::Stay);

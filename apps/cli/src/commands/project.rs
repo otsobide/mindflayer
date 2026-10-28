@@ -356,19 +356,37 @@ fn scanned(scan: &Scan, warnings: Vec<String>) -> Outcome {
 
         // Only the advice that applies: a hint about a case the listing does
         // not contain is one more line to read past.
-        let mut hints = Vec::new();
+        let mut hints: Vec<String> = Vec::new();
         if scan.found.iter().any(|found| found.moved.is_some()) {
-            hints.push("follow one that moved with `flayer relink <old> <new>`");
+            hints.push(String::from(
+                "follow one that moved with `flayer relink <old> <new>`",
+            ));
+        }
+        // Before the link, which would leave the entry a project moved from
+        // stale beside a second one for it.
+        if let [entry] = &scan.untraced[..] {
+            let entry = printable(entry);
+            hints.push(format!(
+                "follow one that moved from {entry} with `flayer relink {entry} <path>`"
+            ));
+        } else if !scan.untraced.is_empty() {
+            let entries: Vec<String> = scan.untraced.iter().map(|entry| printable(entry)).collect();
+            hints.push(format!(
+                "follow one that moved from {} with `flayer relink <old> <path>`",
+                entries.join(" or ")
+            ));
         }
         if scan
             .found
             .iter()
             .any(|found| !found.linked && found.mind && found.moved.is_none())
         {
-            hints.push("link one with `flayer link <path>`");
+            hints.push(String::from("link one with `flayer link <path>`"));
         }
         if scan.found.iter().any(|found| !found.linked && !found.mind) {
-            hints.push("a repository needs `mind -C <path> init` before it can be linked");
+            hints.push(String::from(
+                "a repository needs `mind -C <path> init` before it can be linked",
+            ));
         }
         if !hints.is_empty() {
             stdout.push('\n');

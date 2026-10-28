@@ -88,6 +88,37 @@ apps/collapse  not linked  moved: collapse -> apps/collapse
 }
 
 #[test]
+fn a_project_moved_before_the_workspace_learned_its_id_is_pointed_at_relink_not_link() {
+    let dir = TempDir::new().unwrap();
+    let projects = dir.path().join("Projects");
+    let collapse = projects.join("collapse");
+    fs::create_dir_all(&collapse).unwrap();
+    flayer(&projects, &["init"]).unwrap();
+    new_project(&collapse);
+    flayer(&projects, &["link", "collapse"]).unwrap();
+    fs::create_dir_all(projects.join("apps")).unwrap();
+    fs::rename(&collapse, projects.join("apps/collapse")).unwrap();
+
+    let scan = flayer(&projects, &["scan"]).unwrap();
+
+    assert_eq!(
+        scan.stdout,
+        "\
+apps/collapse  not linked  mind project
+
+  follow one that moved from collapse with `flayer relink collapse <path>`
+  link one with `flayer link <path>`
+"
+    );
+    assert!(scan.ok, "{:?}", scan.stderr);
+    let relinked = flayer(&projects, &["relink", "collapse", "apps/collapse"]).unwrap();
+    assert_eq!(
+        relinked.stdout,
+        "relinked collapse as apps/collapse, from collapse\n"
+    );
+}
+
+#[test]
 fn a_directory_holding_another_id_is_refused_and_nothing_changes() {
     let (_dir, projects) = installed();
     fs::remove_dir_all(projects.join("collapse")).unwrap();
