@@ -213,7 +213,8 @@ fn unmarking_an_installed_skill_removes_it() {
 fn an_installed_skill_whose_copies_are_gone_opens_unmarked_and_marking_it_puts_them_back() {
     let (dir, workspace, ledger) = shelved(&["collapse"], &["deploy"]);
     installed(dir.path(), &workspace, &ledger);
-    // What a `git clean -X` does to a local project's copies.
+    // What a `git clean -dX` does to a local project's copies; it takes the
+    // project's `.mind` too, which this leaves.
     let copies = copies(&dir.path().join("collapse"), "deploy");
     for copy in &copies {
         fs::remove_dir_all(copy).unwrap();

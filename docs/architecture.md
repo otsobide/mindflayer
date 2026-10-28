@@ -1872,9 +1872,10 @@ its name:
   the ledger records it, and `flayer uninstall` forgets it. The install
   screen opens its box empty all the same (`Standing::present`), saying a
   copy is gone, so marking it puts every copy back, as it did when every
-  copy gone read as absent: a `git clean -X` takes every copy of a local
-  project at once. Held, the box could only be marked to be taken out, so
-  one with a copy left is taken out with `flayer uninstall`.
+  copy gone read as absent: a `git clean -dX` takes every copy of a local
+  project at once (and its `.mind` with them, an open question). Held, the
+  box could only be marked to be taken out, so one with a copy left is
+  taken out with `flayer uninstall`.
 - **Orphaned**: the place it came from no longer offers it. No offer carries
   it onto the install screen, so `standings` is where it is said, and
   `status` and an update say it from there.
@@ -1939,10 +1940,15 @@ guess between two.
   project a `mind.toml` marks, goes through the install's own body
   (`install::install_held`), so its copies are staged and put in place
   together, its record and hash written afresh, and a local project's
-  exclude entries written before a copy lands. A copy a `git clean` took
-  from a local project comes back kept out of git as it was. Under the
-  lock the body looks again at everything an install refuses, so a copy
-  edited between the plan and the write is left all the same.
+  exclude entries written before a copy lands. A copy a local project lost
+  comes back kept out of git as it was: one deleted by hand, or the
+  `AGENTS.md` it made, which a `git clean -X` takes, since it is a file in a
+  folder git tracks. Every other copy is in a folder of its own, which only
+  `git clean -dX` goes into, and that takes the project's `.mind` too, so
+  the project has to be marked again before an update can find it (open
+  questions). Under the lock the body looks again at everything an install
+  refuses, so a copy edited between the plan and the write is left all the
+  same.
 - **One lock, a plan made under it.** `apply` opens the ledger to write,
   takes the workspace's lock, reads each project again and makes the plan
   again under it, then writes every installation, as `reapply` and
@@ -2555,7 +2561,7 @@ report, a refusal and an update never disagree:
   or in its file for Claude. Still Mindflayer's install, left alone by every
   install, update and uninstall unless forced.
 - **missing**: the ledger records a copy discovery does not find where it
-  was put: deleted since, by hand or by a `git clean -X`, which the ignored
+  was put: deleted since, by hand or by a `git clean`, which the ignored
   copies of a local project are exposed to, or left so it no longer reads,
   which discovery says beside the report. An update puts every copy back,
   since it writes each target.
@@ -6066,6 +6072,21 @@ just listed.
   an update, which writes nothing. Telling such a copy as missing in the
   standing too would make the update rewrite every target, as an install
   does, and record the copies afresh.
+- **A `git clean -dX` takes a local project's settings.** A local project
+  keeps its whole `.mind` out of git (`MIND_IGNORE`), so the `-dX` that
+  takes its copies, each in a folder `git clean -X` does not go into, takes
+  its settings with them, and the project is no project any more: an
+  update finds nothing to put back, and `flayer update --all` says the
+  workspace's entry would not open. `mind init` again, with the agents,
+  share mode and folders it had, marks it once more, and the next update
+  puts every copy back from the ledger, which knows the project by its
+  route; the new settings come with a new id, so the copies are kept out
+  of git under a new group, and the old id's group is left in the exclude
+  file naming the same places, which nothing takes out. Keeping the
+  settings out of the ignored folder would show them in `git status`,
+  which is what a local project is for avoiding; keeping a copy of them in
+  the workspace, beside its entry, would let a command mark the project
+  again as it was, its id included.
 - **Rules after a change of agents or share mode.** `reapply` carries a
   project's skills along when its agents, targets or share mode change, but
   not its rules: those are rendered again by the next install or uninstall

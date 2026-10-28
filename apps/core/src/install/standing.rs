@@ -63,7 +63,7 @@ impl Standing {
     /// Whether the project holds it, which is what a checkbox shows:
     /// anything it holds by that name, but not an installation a copy of
     /// which has gone. Its box opens empty, for marking it to put every copy
-    /// back, which a `git clean -X` in a local project makes the common way
+    /// back, which a `git clean -dX` in a local project makes the common way
     /// back; held, it could only be marked to be taken out. One with a copy
     /// left is taken out with `flayer uninstall`.
     pub fn present(self) -> bool {

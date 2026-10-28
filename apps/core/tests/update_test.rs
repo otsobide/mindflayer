@@ -457,32 +457,43 @@ fn every_project_asked_is_updated_each_once() {
 }
 
 #[test]
-fn a_local_projects_copies_lost_to_git_clean_are_put_back_out_of_git() {
+fn a_local_project_a_git_clean_took_is_marked_again_and_its_copies_put_back_out_of_git() {
     let given = given_with(&["app"], Share::Local);
     let offer = given.skill("deploy");
     given.install(Kind::Skill, "deploy");
+    let root = given.project().root().to_path_buf();
     let exclude = given.dir.path().join(".git/info/exclude");
-    let excluded = fs::read_to_string(&exclude).unwrap();
-    // What `git clean -X` takes: everything git ignores, the exclude block
-    // left as it was.
-    for copy in given.copies("deploy") {
-        fs::remove_dir_all(copy.parent().unwrap()).unwrap();
+    // What a `git clean -dX` takes: every folder git ignores, the project's
+    // `.mind` among them, since a local project keeps it out of git whole.
+    // A `git clean -X` takes none of them, folders it does not go into.
+    for folder in [".agents", ".claude", ".mind"] {
+        fs::remove_dir_all(root.join(folder)).unwrap();
     }
+    assert!(MindProject::open(&root).is_err());
+    // Marked again as it was, with an id of its own.
+    let (project, _) =
+        MindProject::init_settings(&root, &Agent::ALL, Share::Local, &Directories::default())
+            .unwrap();
+    let new = project.settings().unwrap().id.to_string();
 
-    given.apply(&[], Edits::Kept);
+    update::apply(
+        &given.workspace,
+        &[project],
+        &[],
+        Edits::Kept,
+        &AgentHomes::default(),
+    )
+    .unwrap();
 
     for copy in given.copies("deploy") {
         assert!(same(&offer, &copy), "{}", copy.display());
     }
-    assert_eq!(fs::read_to_string(&exclude).unwrap(), excluded);
-    assert!(
-        excluded.contains("/app/.agents/skills/deploy/"),
-        "{excluded}"
-    );
-    assert!(
-        excluded.contains("/app/.claude/skills/deploy/"),
-        "{excluded}"
-    );
+    // Kept out of git under the new id; the old id's group is left behind
+    // beside it (architecture.md, open questions), naming the same places.
+    let excluded = fs::read_to_string(&exclude).unwrap();
+    let group =
+        format!("# project {new}\n/app/.agents/skills/deploy/\n/app/.claude/skills/deploy/\n");
+    assert!(excluded.contains(&group), "{excluded}");
 }
 
 #[test]

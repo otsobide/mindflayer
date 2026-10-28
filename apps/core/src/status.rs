@@ -167,7 +167,7 @@ pub enum State {
     /// install would not put back without forcing.
     Edited,
     /// The ledger records a copy that is not found where it was put any
-    /// more: deleted since, by hand or by `git clean -X`, or left unreadable.
+    /// more: deleted since, by hand or by a `git clean`, or left unreadable.
     /// An update, or the next install of it, puts every copy back. Said over
     /// the project's own copy of the name too, which sits where the install
     /// wrote nothing.

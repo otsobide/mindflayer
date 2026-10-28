@@ -831,7 +831,7 @@ it tells: a copy edited by hand or with `mind edit`, a file added to it, or a
 rule's section of `AGENTS.md` rewritten. Only `--force` on [the command
 line](#without-the-screen) writes over it or takes it out.
 
-An install with a copy gone since, deleted by hand or by a `git clean -X`,
+An install with a copy gone since, deleted by hand or by a `git clean`,
 opens unticked and marked `(a copy gone since it was installed)`: ticking it
 puts every copy back. One that still has a copy left is taken out on [the
 command line](#without-the-screen), with `uninstall`. One whose skill or rule
@@ -998,7 +998,7 @@ installed:
 | `current` | Mindflayer put every copy there, every one is still there as it was put, and where it came from offers the same. |
 | `outdated` | the same, but where it came from offers something newer: [`update`](#keeping-projects-up-to-date) brings it up to date. |
 | `edited` | a copy it put there holds something else now, edited by hand or with `mind edit`, or a skill renamed with `mind rename`; still Mindflayer's install, but no install or update writes over it and no uninstall takes it out without `--force`. |
-| `missing` | a copy it put there is gone, deleted by hand or by `git clean -X`, or no longer reads; `update` puts every copy back. Here Claude's copy of `code-review` was deleted. |
+| `missing` | a copy it put there is gone, deleted by hand or by a `git clean`, or no longer reads; `update` puts every copy back. Here Claude's copy of `code-review` was deleted. |
 | `orphaned` | where it came from no longer offers it, deleted from the library or from a workspace that stopped being loaded; nothing can bring it up to date or put a copy back, so it stays as it is until it is uninstalled. |
 | `foreign` | somebody else's, in a folder an agent reads; Mindflayer never overwrites or deletes it. Here `notes`, kept in `.claude/skills` by hand. |
 | `authored` | the project's own, in a folder it authors in, such as `skills/`. |
@@ -1084,8 +1084,11 @@ changed where it is kept (the workspace's own, a workspace it loads, or the
 shelf once a gather brings something newer) leaves every project it went into
 behind it, and `status` says `outdated`. `flayer update` brings them up to
 date from where each was installed from, every copy at once, and puts back
-any copy that has gone, deleted by hand or taken by a `git clean`, kept out of
-git again in a local project. Without `--yes` it says what it would do. Say a
+any copy that has gone, kept out of git again in a local project: one deleted
+by hand, or an `AGENTS.md` Mindflayer made, which `git clean -X` takes. A
+`git clean -dX` takes a local project's `.mind` along with its copies, so run
+`mind init` there again first, with the agents and share mode it had, and the
+update puts every copy back. Without `--yes` it says what it would do. Say a
 pull of `~/src/mindflayer` has changed the examples' `commit-style`, and
 somebody has written into `tanukeys`'s copy of it, with the rest as
 [above](#what-each-project-has):

@@ -11,8 +11,10 @@
 //! unless the update is forced, as an install leaves one. What it writes it
 //! writes as an install does, through the same body
 //! ([`install::install_held`]), so the copies, their record and what keeps
-//! them out of git are an install's: a copy of a local project taken by a
-//! `git clean -X` is put back with its exclude entry.
+//! them out of git are an install's: a copy a local project lost is put
+//! back with its exclude entry. A `git clean -dX`, the one that goes into
+//! the copies' folders, takes the project's `.mind` too, and an update can
+//! find the project only once `mind init` has marked it again.
 //!
 //! A rule a project marked by its settings received is a section of the
 //! block in its `AGENTS.md`, rendered with every other rule it has, so a
