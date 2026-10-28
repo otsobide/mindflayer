@@ -320,6 +320,21 @@ pub struct LeftOut {
     pub reason: &'static str,
 }
 
+/// What the artifact at `from` holds that an install leaves out of every
+/// copy ([`LEAVE_OUT`]): what an install says it did not copy, and what
+/// adopting a copy refuses, since no install could have written it
+/// ([`crate::adopt`]).
+pub(crate) fn left_out(from: &Path) -> Vec<LeftOut> {
+    LEAVE_OUT
+        .iter()
+        .map(|(name, reason)| LeftOut {
+            path: from.join(name),
+            reason,
+        })
+        .filter(|left| fs::symlink_metadata(&left.path).is_ok())
+        .collect()
+}
+
 /// One folder of a project's that an install of a kind puts a copy in, under
 /// the artifact's name.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -1404,14 +1419,7 @@ pub(crate) fn install_held(
         }
     };
     // Said, since what lands is then not all of what was offered.
-    let left_out: Vec<LeftOut> = LEAVE_OUT
-        .iter()
-        .map(|(name, reason)| LeftOut {
-            path: from.join(name),
-            reason,
-        })
-        .filter(|left| fs::symlink_metadata(&left.path).is_ok())
-        .collect();
+    let left_out = left_out(&from);
     let changes = match stage.place_over(&from, &copies, &within, &left_out_names(), &over) {
         Ok(changes) => changes,
         // What was cleared on the way goes out with the error rather than

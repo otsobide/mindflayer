@@ -12,6 +12,7 @@
 //! types return, so the two can never disagree about what a skill is.
 
 pub mod activate;
+pub mod adopt;
 pub mod agent;
 pub mod agents_md;
 pub mod artifact;
