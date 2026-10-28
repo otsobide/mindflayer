@@ -523,6 +523,40 @@ fn a_name_two_projects_answer_to_is_refused_with_each_entry() {
 }
 
 #[test]
+fn a_project_is_named_by_its_entry_which_picks_it_back() {
+    let (dir, workspace) = picking();
+    let beta = MindProject::open(dir.path().join("beta")).unwrap();
+
+    let named = workspace.naming(&beta);
+
+    assert_eq!(named, "beta");
+    assert_eq!(workspace.pick(&named).unwrap().root(), beta.root());
+}
+
+#[test]
+fn a_project_whose_entry_another_declares_as_its_name_is_named_from_the_root() {
+    let (dir, mut workspace) = picking();
+    // In `twin`, but declaring the name `alpha`, which is `alpha`'s entry.
+    let (twin, _) = MindProject::init(dir.path().join("twin")).unwrap();
+    let marker = twin.mind_dir().join(crate::workspace::MIND_CONFIG);
+    let text = fs::read_to_string(&marker)
+        .unwrap()
+        .replace("name = \"twin\"", "name = \"alpha\"");
+    fs::write(&marker, text).unwrap();
+    workspace.link(&twin).unwrap();
+    let alpha = MindProject::open(dir.path().join("alpha")).unwrap();
+    let twin = MindProject::open(dir.path().join("twin")).unwrap();
+
+    let (alpha_named, twin_named) = (workspace.naming(&alpha), workspace.naming(&twin));
+
+    assert_eq!(alpha_named, "./alpha");
+    assert_eq!(workspace.pick(&alpha_named).unwrap().root(), alpha.root());
+    // Nobody declares `twin`, so its entry is enough.
+    assert_eq!(twin_named, "twin");
+    assert_eq!(workspace.pick(&twin_named).unwrap().root(), twin.root());
+}
+
+#[test]
 fn with_no_project_named_the_holder_is_the_workspaces_own() {
     let (dir, workspace) = picking();
 
