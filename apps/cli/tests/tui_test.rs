@@ -1368,6 +1368,23 @@ fn every_task_the_tui_runs_is_a_line_the_binaries_accept() {
             name: String::from("git/no-force-push"),
             everywhere: true,
         },
+        Task::Install {
+            projects: vec![String::from("alpha"), String::from("-odd")],
+            kind: Kind::Skill,
+            name: String::from("deploy"),
+            from: Some(String::from("-weird")),
+        },
+        Task::Install {
+            projects: vec![String::from("../collapse")],
+            kind: Kind::Rule,
+            name: String::from("git/no-force-push"),
+            from: None,
+        },
+        Task::Uninstall {
+            projects: vec![String::from("-odd"), String::from("./alpha")],
+            kind: Kind::Rule,
+            name: String::from("git/no-force-push"),
+        },
     ];
 
     for task in &tasks {
@@ -1425,6 +1442,118 @@ fn the_agents_and_share_toggles_parse_back_into_what_they_were() {
     assert_eq!(mode.share, Share::Local);
     assert!(mode.edit_tracked);
     assert!(mode.yes);
+}
+
+#[test]
+fn the_install_and_uninstall_tasks_parse_back_into_what_they_were() {
+    let install = Task::Install {
+        projects: vec![String::from("alpha"), String::from("-odd")],
+        kind: Kind::Skill,
+        name: String::from("deploy"),
+        from: Some(String::from("https://example.com/acme/skills#main")),
+    };
+    let uninstall = Task::Uninstall {
+        projects: vec![String::from("../collapse")],
+        kind: Kind::Rule,
+        name: String::from("git/commits"),
+    };
+
+    assert_eq!(
+        install.describe(),
+        "flayer install -p alpha -p ./-odd --from 'https://example.com/acme/skills#main' \
+         skill:deploy"
+    );
+    assert_eq!(
+        uninstall.describe(),
+        "flayer uninstall -p ../collapse rule:git/commits"
+    );
+    assert!(install.writes() && uninstall.writes());
+
+    let line = install.commands().remove(0);
+    let Some(mindflayer_cli::FlayerCommand::Install {
+        projects,
+        all_projects,
+        name,
+        from,
+        force,
+    }) = FlayerCli::try_parse_from(&line).unwrap().command
+    else {
+        panic!("{line:?}");
+    };
+    assert_eq!(projects, ["alpha", "./-odd"]);
+    assert!(!all_projects && !force);
+    assert_eq!(name.as_deref(), Some("skill:deploy"));
+    assert_eq!(
+        from.as_deref(),
+        Some("https://example.com/acme/skills#main")
+    );
+
+    let line = uninstall.commands().remove(0);
+    let Some(mindflayer_cli::FlayerCommand::Uninstall {
+        projects,
+        name,
+        orphaned,
+        force,
+        ..
+    }) = FlayerCli::try_parse_from(&line).unwrap().command
+    else {
+        panic!("{line:?}");
+    };
+    assert_eq!(projects, ["../collapse"]);
+    assert_eq!(name.as_deref(), Some("rule:git/commits"));
+    assert!(!orphaned && !force);
+}
+
+#[test]
+fn an_install_task_installs_into_every_project_it_names_and_an_uninstall_takes_it_out() {
+    let (dir, _workspace, _ledger) = shelved(&["collapse", "tanukeys"], &["deploy"]);
+    let mut app = tui_in(dir.path());
+    let projects = vec![String::from("collapse"), String::from("tanukeys")];
+
+    tui::step(
+        &mut app,
+        Task::Install {
+            projects: projects.clone(),
+            kind: Kind::Skill,
+            name: String::from("deploy"),
+            from: None,
+        },
+    );
+    for project in &projects {
+        for copy in copies(&dir.path().join(project), "deploy") {
+            assert!(copy.join("SKILL.md").is_file(), "{}", copy.display());
+        }
+    }
+    tui::step(
+        &mut app,
+        Task::Uninstall {
+            projects: projects.clone(),
+            kind: Kind::Skill,
+            name: String::from("deploy"),
+        },
+    );
+
+    for project in &projects {
+        for copy in copies(&dir.path().join(project), "deploy") {
+            assert!(!copy.exists(), "{}", copy.display());
+        }
+    }
+    let transcript = app.transcript();
+    assert!(
+        transcript.starts_with(
+            "$ flayer install -p collapse -p tanukeys skill:deploy\n\
+             installed deploy into collapse, from "
+        ),
+        "{transcript}"
+    );
+    assert!(
+        transcript.contains(
+            "$ flayer uninstall -p collapse -p tanukeys skill:deploy\n\
+             removed deploy from collapse\n\
+             removed deploy from tanukeys\n"
+        ),
+        "{transcript}"
+    );
 }
 
 // ---------------------------------------------------------------------------

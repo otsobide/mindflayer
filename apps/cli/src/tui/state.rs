@@ -389,6 +389,25 @@ pub enum Task {
         holder: Holder,
         reference: Option<String>,
     },
+    /// `flayer install -p <project>... [--from <origin>] <kind:name>`: one
+    /// offer into each project named, by what picks it out
+    /// ([`FlayerWorkspace::naming`]), from the place `from` names when it
+    /// names one.
+    ///
+    /// [`FlayerWorkspace::naming`]: mindflayer_core::FlayerWorkspace::naming
+    Install {
+        projects: Vec<String>,
+        kind: Kind,
+        name: String,
+        from: Option<String>,
+    },
+    /// `flayer uninstall -p <project>... <kind:name>`: one artifact taken
+    /// back out of each project named, whichever place its copy came from.
+    Uninstall {
+        projects: Vec<String>,
+        kind: Kind,
+        name: String,
+    },
     /// Open the install screen, which is what `flayer install` opens.
     OpenInstall,
     /// Carry out what the install screen marked.
@@ -552,6 +571,28 @@ impl Task {
                     _ => vec![at(holder, &["update", "--yes"], &named)],
                 }
             }
+            Task::Install {
+                projects,
+                kind,
+                name,
+                from,
+            } => {
+                let mut head = picking(&["flayer", "install"], projects);
+                if let Some(from) = from {
+                    head.extend(option("--from", from));
+                }
+                let head: Vec<&str> = head.iter().map(String::as_str).collect();
+                vec![words(&head, &[&qualified(*kind, name)])]
+            }
+            Task::Uninstall {
+                projects,
+                kind,
+                name,
+            } => {
+                let head = picking(&["flayer", "uninstall"], projects);
+                let head: Vec<&str> = head.iter().map(String::as_str).collect();
+                vec![words(&head, &[&qualified(*kind, name)])]
+            }
             Task::OpenInstall | Task::ApplyInstall => vec![words(&["flayer", "install"], &[])],
             Task::Refresh => Vec::new(),
         }
@@ -581,6 +622,8 @@ impl Task {
                 | Task::Settings { .. }
                 | Task::Targets { .. }
                 | Task::Update { .. }
+                | Task::Install { .. }
+                | Task::Uninstall { .. }
                 | Task::ApplyInstall
         )
     }
@@ -640,6 +683,17 @@ fn at(holder: &Holder, command: &[&str], positionals: &[&str]) -> Vec<String> {
     let mut head: Vec<&str> = start.iter().map(String::as_str).collect();
     head.extend_from_slice(command);
     words(&head, positionals)
+}
+
+/// `head`, then a `-p` for each of `projects`, each kept from being read as a
+/// flag as a `-C` is.
+fn picking(head: &[&str], projects: &[String]) -> Vec<String> {
+    let mut line: Vec<String> = head.iter().map(|word| (*word).to_owned()).collect();
+    for project in projects {
+        line.push(String::from("-p"));
+        line.push(directory(project));
+    }
+    line
 }
 
 /// `skill:deploy`: a name that says which kind it names.
@@ -1992,6 +2046,8 @@ impl App {
                 | Task::Validate { .. }
                 | Task::Shelf
                 | Task::ApplyInstall
+                | Task::Install { .. }
+                | Task::Uninstall { .. }
                 | Task::Update { .. }
                 | Task::Minds { .. },
                 _,
