@@ -3538,10 +3538,11 @@ how someone reading the transcript takes it, so it is resolved against the
 root rather than against wherever the process started. What the screen was
 opened with is passed along rather than spelled: its home, and the `-W` or
 activation that chose its workspace (`tui::execute`), as they were given to
-`flayer` itself. A command that opens a screen of its own
-(`flayer`, `flayer tui`, `flayer minds`, `flayer install` with nothing named,
+`flayer` itself. A command that opens a screen of its own (`flayer`, `flayer
+tui`, `flayer minds`, `flayer install` with neither a name nor a project,
 `mind`, `mind tui`) is refused if it ever reaches that path, rather than drawn
-inside this one.
+inside this one. Half an install (`flayer install -p alpha`) opens none, and
+is left to the command, which refuses it with a reason of its own.
 
 That refusal is one part of a list every front end shares (`task::Refusal`):
 what a front end with no terminal of its own, the panel's server, does not

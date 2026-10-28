@@ -662,7 +662,8 @@ fn a_front_end_with_no_terminal_refuses_what_draws_edits_activates_or_gathers() 
         ("flayer minds", Refusal::Screen),
         ("flayer minds work", Refusal::Screen),
         ("flayer install", Refusal::Screen),
-        ("flayer install --all-projects", Refusal::Screen),
+        ("flayer install --from workspace", Refusal::Screen),
+        ("mind flayer install", Refusal::Screen),
         ("mind edit deploy", Refusal::Editor),
         ("mind edit --editor true deploy", Refusal::Editor),
         ("flayer edit -p alpha deploy", Refusal::Editor),
@@ -684,6 +685,10 @@ fn a_front_end_with_no_terminal_runs_everything_else() {
         "flayer gather list",
         "flayer install -p alpha deploy",
         "flayer install --all-projects deploy",
+        // Half an install, which opens no screen: the command refuses it
+        // with a reason of its own.
+        "flayer install -p alpha",
+        "flayer install --all-projects",
         "mind install deploy",
         "mind flayer link alpha",
         "flayer which",

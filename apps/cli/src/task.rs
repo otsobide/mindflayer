@@ -575,7 +575,7 @@ impl Task {
 pub enum Refusal {
     /// The TUI (`mind` or `flayer` alone, or either's `tui`), the minds
     /// screen (`flayer minds`), or the install screen (`flayer install`
-    /// with nothing named).
+    /// with neither a name nor a project).
     #[error("opens a screen of its own, which needs a terminal to draw on")]
     Screen,
     /// `edit`, every form of it: it hands the terminal to an editor until
@@ -644,12 +644,18 @@ impl Refusal {
     /// when it is not.
     pub fn of_flayer(command: Option<&FlayerCommand>) -> Option<Refusal> {
         match command {
-            None
-            | Some(
-                FlayerCommand::Tui
-                | FlayerCommand::Minds { .. }
-                | FlayerCommand::Install { name: None, .. },
-            ) => Some(Refusal::Screen),
+            None | Some(FlayerCommand::Tui | FlayerCommand::Minds { .. }) => Some(Refusal::Screen),
+            // The screen only when it is what the line opens, as the command
+            // decides: a project with nothing named is half an install,
+            // which the command refuses with a reason and a code of its own
+            // (`install_nothing_named`), and a screen it would not open is
+            // no reason to give in their place.
+            Some(FlayerCommand::Install {
+                name: None,
+                projects,
+                all_projects: false,
+                ..
+            }) if projects.is_empty() => Some(Refusal::Screen),
             Some(FlayerCommand::Edit { .. }) => Some(Refusal::Editor),
             Some(FlayerCommand::Activate { .. }) => Some(Refusal::Shell),
             Some(FlayerCommand::Gather(GatherCommand::Git { .. })) => Some(Refusal::Unwatched),
@@ -672,7 +678,7 @@ impl Refusal {
                 | FlayerCommand::Unload { .. }
                 | FlayerCommand::Scan { .. }
                 | FlayerCommand::Gather(GatherCommand::List)
-                | FlayerCommand::Install { name: Some(_), .. }
+                | FlayerCommand::Install { .. }
                 | FlayerCommand::Uninstall { .. }
                 | FlayerCommand::Update { .. }
                 | FlayerCommand::Adopt { .. }
