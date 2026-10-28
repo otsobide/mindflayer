@@ -6,7 +6,7 @@ use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
 
-use serde::ser::{Serialize, SerializeMap, Serializer};
+use serde::ser::{Serialize, SerializeMap, SerializeStruct, Serializer};
 use thiserror::Error;
 
 use crate::agent::Agent;
@@ -152,6 +152,21 @@ impl ArtifactCopy {
     }
 }
 
+/// As a listing shows a copy: where it is, who reads it there, who put it
+/// there and what is wrong with it there, each by the name its accessor
+/// gives it. By hand, since who reads and who put it are held together in
+/// a placement of the artifact's own that no front end sees.
+impl Serialize for ArtifactCopy {
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        let mut copy = serializer.serialize_struct("ArtifactCopy", 4)?;
+        copy.serialize_field("path", &self.path.to_string_lossy())?;
+        copy.serialize_field("agents", self.agents())?;
+        copy.serialize_field("provenance", &self.provenance())?;
+        copy.serialize_field("issues", self.issues())?;
+        copy.end()
+    }
+}
+
 /// Who put a copy where it is, as far as its folder and the ledger say.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Provenance {
@@ -166,6 +181,53 @@ pub enum Provenance {
     /// by nothing: somebody's, put there some other way, and never
     /// Mindflayer's to change.
     Foreign,
+}
+
+impl Provenance {
+    /// How a report says it: one lowercase word, which once printed is a
+    /// contract.
+    pub const fn slug(self) -> &'static str {
+        match self {
+            Provenance::Installed => "installed",
+            Provenance::Authored => "authored",
+            Provenance::Foreign => "foreign",
+        }
+    }
+}
+
+/// By its slug, for the reason a kind is: a renamed variant cannot change
+/// what a front end compares.
+impl Serialize for Provenance {
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        serializer.serialize_str(self.slug())
+    }
+}
+
+/// As a listing shows it: what it is, where its first copy is and in which
+/// project, who put it there and who reads it, what is wrong with it, and
+/// every copy with what is wrong with each.
+///
+/// By hand rather than derived: an artifact holds what it declared, the
+/// whole of its front matter, which is `show`'s to print rather than a
+/// listing's, and how each copy stands in a placement no front end sees.
+/// Each field is named for the accessor that gives it, and says what that
+/// accessor says: `issues` is [`validate`](Artifact::validate), every copy's
+/// together, and `copies` is [`copies`](Artifact::copies), the first first.
+impl Serialize for Artifact {
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        let mut artifact = serializer.serialize_struct("Artifact", 10)?;
+        artifact.serialize_field("kind", &self.kind())?;
+        artifact.serialize_field("name", &self.name)?;
+        artifact.serialize_field("summary", &self.summary)?;
+        artifact.serialize_field("path", &self.path.to_string_lossy())?;
+        artifact.serialize_field("project", &self.project.to_string_lossy())?;
+        artifact.serialize_field("provenance", &self.provenance())?;
+        artifact.serialize_field("agents", &self.agents())?;
+        artifact.serialize_field("issues", &self.validate())?;
+        artifact.serialize_field("copies_differ", &self.differ)?;
+        artifact.serialize_field("copies", &self.copies())?;
+        artifact.end()
+    }
 }
 
 impl Artifact {

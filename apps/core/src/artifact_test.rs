@@ -625,3 +625,59 @@ fn an_issue_says_its_code_first_and_its_message_last() {
         )
     );
 }
+
+#[test]
+fn provenance_is_serialized_as_its_slug() {
+    let serialized = serde_json::to_string(&[
+        Provenance::Installed,
+        Provenance::Authored,
+        Provenance::Foreign,
+    ])
+    .unwrap();
+
+    assert_eq!(serialized, r#"["installed","authored","foreign"]"#);
+}
+
+/// What an artifact serializes to is a contract, as a status report's is:
+/// each field by its name, in the order a reader meets them, every copy
+/// with what is wrong with it there.
+#[test]
+fn an_artifact_serializes_as_a_listing_shows_it() {
+    let mut first = copied(
+        "/work/repo/.claude/skills/deploy",
+        Placement {
+            agents: vec![Agent::Claude, Agent::OpenCode],
+            authored: false,
+            installed: true,
+        },
+        vec![copy_at(
+            "/work/repo/.agents/skills/deploy",
+            &[Agent::Codex, Agent::OpenCode],
+            false,
+            false,
+        )],
+    );
+    first.others[0].issues = vec![ValidationIssue::DescriptionEmpty];
+    first.differ = true;
+
+    let serialized = serde_json::to_string(&first).unwrap();
+
+    let empty = concat!(
+        r#"{"code":"description_empty","warning":false,"#,
+        r#""message":"`description` is empty"}"#
+    );
+    assert_eq!(
+        serialized,
+        [
+            r#"{"kind":"skill","name":"deploy","summary":"Ship it","#,
+            r#""path":"/work/repo/.claude/skills/deploy","project":"/work/repo","#,
+            r#""provenance":"foreign","agents":["claude","codex","opencode"],"#,
+            &format!(r#""issues":[{empty}],"copies_differ":true,"copies":["#),
+            r#"{"path":"/work/repo/.claude/skills/deploy","agents":["claude","opencode"],"#,
+            r#""provenance":"installed","issues":[]},"#,
+            r#"{"path":"/work/repo/.agents/skills/deploy","agents":["codex","opencode"],"#,
+            &format!(r#""provenance":"foreign","issues":[{empty}]}}]}}"#),
+        ]
+        .concat()
+    );
+}
