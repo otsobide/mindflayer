@@ -1323,13 +1323,13 @@ script, and for the panel's backend when it reads through the CLI.
   core's, which builds and orders it, so the table and the JSON cannot
   disagree about what is there.
 
-### Every read type serializes
+### The read types serialize
 
 The reports a command prints are not the only types a front end reads. The
 panel shows what the TUI shows, and the snapshot it is served (#62) is built
-from the same types the CLI renders, so #61 made every read type in core
-serializable, under the rule the reports already kept, and every new one
-derives `Serialize` from the start:
+from the same types the CLI renders, so #61 made the read types it named
+serializable, under the rule the reports already kept, and every new read
+type derives `Serialize` from the start:
 
 - **Already there**, for a command's `--json`: the status report (`Status`,
   `ProjectStatus`, `ArtifactStatus`, `Unreached`, `Missed`, `State`,
@@ -1343,6 +1343,13 @@ derives `Serialize` from the start:
   (`ledger::Source`, its `SourceKind`) and what was `Gathered` from it; what
   can be installed (`Offer`, `Candidate`) and how it stands (`Standing`); a
   workspace's `Member` and `Loaded` entries, with a project's `Share` mode.
+- **Not yet**, being older than the rule and printed by no `--json` so
+  far: how a workspace was chosen (`resolve::Reason`, `Resolved`), the
+  ledger's history (`ledger::Entry`) and its record of an install
+  (`InstallRecord`), and what an update or a change of agents would do
+  (`update::Plan`, `reapply::Plan`). Each derives `Serialize` in the change
+  that first hands it to a front end, #62's snapshot among them, under the
+  same rule.
 
 What each says is held to the rule above, and three more things:
 

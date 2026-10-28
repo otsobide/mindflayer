@@ -203,13 +203,15 @@ These are easy to break from a single file without noticing.
   deriving `Serialize` with its fields named in snake_case; a kind, an agent
   or a state goes out as the word a command line takes for it
   (`Kind::slug`, `Agent::name`, `State::slug`, `Standing::slug`), serialized
-  by hand, never derived from the variant. Every read type core has
-  serializes so, and every new one derives `Serialize` from the start,
-  written by hand only where a derive would print the wrong thing (a word
-  like those, a type holding more than a reader is given, an error, which
-  goes out as its `code` and message through `code::Said`), with a test
-  that pins its JSON name by name. A path goes out as text whatever bytes it holds (`paths::lossy`),
-  and a URL only through `url::redacted`. A name once printed is a
+  by hand, never derived from the variant. The read types #61 named
+  serialize so (`docs/architecture.md`, "The read types serialize", lists
+  them and the older ones that do not yet), and every new read type
+  derives `Serialize` from the start, written by hand only where a derive
+  would print the wrong thing (a word like those, a type holding more than
+  a reader is given, an error, which goes out as its `code` and message
+  through `code::Said`), with a test that pins its JSON name by name. A
+  path goes out as text whatever bytes it holds (`paths::lossy`), and a
+  URL only through `url::redacted`. A name once printed is a
   contract: dropping or renaming one, or changing what it holds, moves
   `ENVELOPE_VERSION`, and adding one does not. A test reads it back with
   `common::enveloped`, into structs of its own that refuse a field they do
