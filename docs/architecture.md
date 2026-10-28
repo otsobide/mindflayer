@@ -1338,7 +1338,15 @@ two spellings only the filesystem can equate are settled by canonicalising.
 way ([the workspaces this machine knows](#the-workspaces-this-machine-knows)).
 An entry dropped from any of the three leaves its place's layout to the entry
 after it, so dropping the first of `["a", "b"]` leaves `["b"]` rather than
-`[ "b"]`, and a list laid out a line each keeps its lines.
+`[ "b"]`, and a list laid out a line each keeps its lines. It takes its own
+comments with it and leaves everybody else's: the ones above it and the one
+after it on its line go, while a comment above the entry after it, or at the
+end of the line before it, stays where it was. toml_edit keeps what comes
+before an entry as one string, from the comma ahead of it, so the end of the
+line above and the comments above the entry share it. Each is split at its
+first line break: the part before it stays with the line above, the part after
+it with the entry below. Handing the next entry the dropped one's string whole
+would put the dropped entry's comment above it in place of its own.
 
 `link` and `unlink` match against **the array they are about to edit**, not
 against the copy parsed when the workspace was opened. The marker file is meant

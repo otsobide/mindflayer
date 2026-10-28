@@ -180,6 +180,36 @@ fn a_workspace_that_has_gone_is_forgotten_by_its_path() {
 }
 
 #[test]
+fn forgetting_takes_the_comment_above_its_entry_and_leaves_the_others() {
+    let (_dir, home, writing) = home_and_writing();
+    known::remember(Some(&home), &writing).unwrap();
+    let path = home.join(FLAYER_DIR).join(FLAYER_CONFIG);
+    let text = marker(&home).replace(
+        "known = [\"flayers/writing\"]",
+        "known = [\n    # the work flayer\n    \"flayers/work\",\n    # the writing flayer\n    \
+         \"flayers/writing\",\n    # notes, keep\n    \"flayers/notes\",\n]",
+    );
+    fs::write(&path, text).unwrap();
+
+    known::forget(&home, writing.root()).unwrap();
+    let text = marker(&home);
+    assert!(
+        text.contains(
+            "known = [\n    # the work flayer\n    \"flayers/work\",\n    \
+             # notes, keep\n    \"flayers/notes\",\n]\n"
+        ),
+        "{text}"
+    );
+
+    known::forget(&home, &home.join("flayers/work")).unwrap();
+    let text = marker(&home);
+    assert!(
+        text.contains("known = [\n    # notes, keep\n    \"flayers/notes\",\n]\n"),
+        "{text}"
+    );
+}
+
+#[test]
 fn forgetting_what_nothing_remembers_is_refused_and_writes_nothing() {
     let (_dir, home, writing) = home_and_writing();
     let before = marker(&home);

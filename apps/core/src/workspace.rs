@@ -1975,28 +1975,66 @@ fn remove_pointing_at(array: &mut toml_edit::Array, root: &Path, target: &Path) 
             Some(entry) if points_at(root, Path::new(entry), target) => {
                 removed.push(PathBuf::from(entry));
                 let gone = array.remove(index);
-                // What came before an entry is the layout of the place it
-                // held, which the entry after it moves into: so dropping the
-                // first of `["a", "b"]` leaves `["b"]` rather than `[ "b"]`,
-                // and a list laid out a line each keeps its first line's.
+                // The entry after it moves into its place. A prefix toml_edit
+                // has not been given is the one it would write there: none
+                // before the first entry, a space before any other.
                 if let Some(next) = array.get_mut(index) {
-                    let decor = next.decor_mut();
-                    match gone.decor().prefix() {
-                        Some(place) => decor.set_prefix(place.clone()),
-                        None => {
-                            let suffix = decor.suffix().cloned();
-                            decor.clear();
-                            if let Some(suffix) = suffix {
-                                decor.set_suffix(suffix);
-                            }
-                        }
-                    }
+                    let place = layout(&gone, if index == 0 { "" } else { " " });
+                    let moved = moved_in(place, layout(next, " "));
+                    next.decor_mut().set_prefix(moved);
                 }
             }
             _ => index += 1,
         }
     }
     removed
+}
+
+/// What comes before `value` in its array: the space and comments since
+/// the bracket or comma ahead of it, or `default` when it has none of its own.
+fn layout<'v>(value: &'v toml_edit::Value, default: &'v str) -> &'v str {
+    value
+        .decor()
+        .prefix()
+        .and_then(|raw| raw.as_str())
+        .unwrap_or(default)
+}
+
+/// The layout an entry laid out as `own` is left with when the one before
+/// it, laid out as `place`, is dropped and it moves into that place.
+///
+/// Each layout starts on the line of whatever comes before its entry: up to
+/// its first line break is the rest of that line, and a comment there is
+/// that line's; after the break come the comments above the entry and its
+/// indent. So the entry keeps the rest of the line above the dropped one and
+/// its own comments, and loses the dropped entry's: the ones above it, and
+/// one after it on its line (the start of `own`). Taking `place` whole would
+/// put the dropped entry's comment above this one in place of its own, and
+/// keeping `own` whole would leave `[ "b"]` from `["a", "b"]` and lose a
+/// comment at the end of the line above.
+fn moved_in(place: &str, own: &str) -> String {
+    let (above, dropped) = first_line(place);
+    let (line, kept) = first_line(own);
+    if line.ends_with('\n') {
+        // The entry had a line of its own, and keeps one. A plain break
+        // even where the file has `\r\n`: toml_edit writes layout without
+        // its `\r`s.
+        let break_ = if above.ends_with('\n') { "" } else { "\n" };
+        format!("{above}{break_}{kept}")
+    } else {
+        // It shared the dropped entry's line, so it takes that one's indent.
+        let indent = dropped.rsplit_once('\n').map_or(dropped, |(_, last)| last);
+        format!("{above}{indent}")
+    }
+}
+
+/// `raw` split after its first line break, or all of it and nothing when
+/// it has none.
+fn first_line(raw: &str) -> (&str, &str) {
+    match raw.find('\n') {
+        Some(at) => raw.split_at(at + 1),
+        None => (raw, ""),
+    }
 }
 
 /// Whether two spellings name one directory: lexically first, then through
