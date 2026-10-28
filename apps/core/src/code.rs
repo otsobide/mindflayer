@@ -97,12 +97,33 @@ use crate::workspace::{MisplacedTarget, ProjectWarning, WorkspaceError};
 /// A struct, which is one condition, takes one code:
 /// `codes!(UnknownKind => "unknown_kind");`. An enum given one that way
 /// does not compile either.
+///
+/// Exported for a front end's own errors, which reach the panel beside
+/// core's and are held to the same rules: the CLI's, which also say some of
+/// core's conditions in words of their own, without the error core gave.
+/// Each of those is listed after `echoed` with the code core gives the
+/// condition, which `code()` gives and `CODES` leaves out, being core's, and
+/// `ECHOED` lists for a test to find among core's (`code::ALL`):
+///
+/// ```text
+/// codes!(CliError {
+///     Self::NoShell => "no_shell",
+/// } carried {
+///     Self::Workspace(error) => error,
+/// } echoed {
+///     Self::NotManaged { .. } => "not_managed",
+/// });
+/// ```
+#[macro_export]
 macro_rules! codes {
     ($error:ident {
         $(Self::$variant:ident $(($($tuple:tt)*))? $({$($named:tt)*})? => $code:literal,)*
     } $(carried {
         $(Self::$carrier:ident $(($($carrier_tuple:tt)*))? $({$($carrier_named:tt)*})?
             => $carried:ident,)*
+    })? $(echoed {
+        $(Self::$echo:ident $(($($echo_tuple:tt)*))? $({$($echo_named:tt)*})?
+            => $echoed:literal,)*
     })?) => {
         impl $error {
             /// The word for what went wrong, unique among every code core
@@ -115,13 +136,22 @@ macro_rules! codes {
                         Self::$carrier $(($($carrier_tuple)*))? $({$($carrier_named)*})?
                             => $carried.code(),
                     )*)?
+                    $($(
+                        Self::$echo $(($($echo_tuple)*))? $({$($echo_named)*})? => $echoed,
+                    )*)?
                 }
             }
 
             /// Every code this type gives of its own, leaving out those
-            /// it takes from an error it carries: what [`crate::code::ALL`]
-            /// gathers.
+            /// it takes from an error it carries, or echoes: what
+            /// `mindflayer_core::code::ALL` gathers for core's.
             pub const CODES: &'static [&'static str] = &[$($code),*];
+
+            $(
+                /// The codes of core's conditions this type says in words of
+                /// its own, each one core gives already.
+                pub const ECHOED: &'static [&'static str] = &[$($echoed),*];
+            )?
         }
     };
     ($error:ident => $code:literal) => {
@@ -136,8 +166,8 @@ macro_rules! codes {
                 $code
             }
 
-            /// The one code this type gives: what [`crate::code::ALL`]
-            /// gathers.
+            /// The one code this type gives: what
+            /// `mindflayer_core::code::ALL` gathers for core's.
             pub const CODES: &'static [&'static str] = &[$code];
         }
     };
