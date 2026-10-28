@@ -13,14 +13,23 @@
 use std::fmt::Write as _;
 use std::path::Path;
 
-use mindflayer_core::install::InstallError;
+use mindflayer_core::everywhere::{self, Step};
+use mindflayer_core::install::{InstallError, Removed};
 use mindflayer_core::lifecycle::{self, Record};
 use mindflayer_core::template::{self, Origin};
-use mindflayer_core::{paths, FlayerWorkspace, Kind, MindProject, Reference, Target};
+use mindflayer_core::{
+    paths, AgentHomes, FlayerWorkspace, Kind, MindProject, Reference, Standing, Target,
+    WorkspaceError,
+};
 
 use crate::commands::gather::scrubbed;
+use crate::commands::install::{listed, named, render_said, shown, still};
+use crate::error::deleting;
 use crate::render::{printable, table, verdict};
 use crate::{CliError, Failure, Outcome};
+
+/// What a dry run that would delete something ends with.
+const UNREMOVED: &str = "nothing removed: add --yes to go ahead\n";
 
 pub(crate) fn add_to(
     workspace: Option<&FlayerWorkspace>,
@@ -158,6 +167,179 @@ pub(crate) fn remove_from(
         })
     });
     Ok(scrubbed(&removed.scrub).before(outcome))
+}
+
+/// `flayer remove --everywhere` without `--yes`: what removing `reference`,
+/// one of the workspace's own, from every project it links and then from
+/// the workspace would do, as core plans it ([`everywhere::plan`]), nothing
+/// written. A line for each project's copy, saying how it stands, then one
+/// for the library copy, in the order they would go.
+pub(crate) fn would_remove_everywhere(
+    workspace: &FlayerWorkspace,
+    reference: &str,
+) -> Result<Outcome, Failure> {
+    let plan = everywhere::plan(workspace, &Reference::parse(reference)).map_err(CliError::from)?;
+    let target = &plan.target;
+    let mut outcome = Outcome::plain(String::new());
+    for copy in &plan.copies {
+        let what = named(target.kind, &target.name);
+        let into = copy.project.name();
+        let standing = copy.standing.slug();
+        let _ = match &copy.step {
+            Step::Uninstall => writeln!(
+                outcome.stdout,
+                "would remove {what} from {into}, where it is {standing}"
+            ),
+            Step::Leave(paths) => writeln!(
+                outcome.stdout,
+                "would leave {what} in {into}, where it is {standing}, at {}",
+                listed(&copy.project, paths)
+            ),
+            Step::Somebodys(path) => writeln!(
+                outcome.stdout,
+                "would leave {what} in {into}, where it is {standing}, at {}",
+                shown(&copy.project, path)
+            ),
+        };
+    }
+    let _ = writeln!(
+        outcome.stdout,
+        "would remove {} {} from {}",
+        target.kind,
+        target.name,
+        deleting(&target.path, &target.kind, &lifecycle::files(target))
+    );
+    outcome.stdout.push_str(UNREMOVED);
+    unread(&mut outcome, &plan.unread);
+    Ok(outcome)
+}
+
+/// `flayer remove --everywhere --yes`: `reference`, one of the workspace's
+/// own, uninstalled from every project it links and then removed from the
+/// workspace, as core does it ([`everywhere::apply`]), handing it the
+/// agents' own folders, `homes`, as an uninstall does.
+///
+/// A line for each project's copy, as the dry run has it but for what was
+/// done, then the library copy's. A copy left because it was changed since
+/// it was installed is offered by nothing from then on, which a note says
+/// beside it with the command that takes it out once somebody has looked.
+/// A copy whose uninstall failed is an error of its project, as among
+/// several in `flayer uninstall`, and the rest stand.
+pub(crate) fn remove_everywhere(
+    workspace: &FlayerWorkspace,
+    reference: &str,
+    homes: &AgentHomes,
+) -> Result<Outcome, Failure> {
+    let everywhere::Applied {
+        plan,
+        removed,
+        scrub,
+    } = everywhere::apply(workspace, &Reference::parse(reference), homes)
+        .map_err(CliError::from)?;
+    let target = &plan.target;
+    let what = named(target.kind, &target.name);
+    let among = plan.copies.len() > 1;
+    let mut outcome = Outcome::plain(String::new());
+    let mut orphaned: Vec<&str> = Vec::new();
+    for copy in &plan.copies {
+        let project = &copy.project;
+        let from = project.name();
+        match (&copy.step, &copy.done) {
+            (Step::Leave(paths), _) | (_, Some(Ok(Removed::Edited { paths, .. }))) => {
+                let _ = writeln!(
+                    outcome.stdout,
+                    "left {what} in {from}, where it is {}, at {}",
+                    Standing::Edited.slug(),
+                    listed(project, paths)
+                );
+                orphaned.push(from);
+            }
+            (Step::Somebodys(path), _) | (_, Some(Ok(Removed::Foreign { path, .. }))) => {
+                let _ = writeln!(
+                    outcome.stdout,
+                    "left {what} in {from}, where it is {}, at {}",
+                    Standing::Foreign.slug(),
+                    shown(project, path)
+                );
+            }
+            (
+                _,
+                Some(Ok(Removed::Removed {
+                    still_excluded,
+                    rendered,
+                    ..
+                })),
+            ) => {
+                let _ = writeln!(outcome.stdout, "removed {what} from {from}");
+                // What the project's rules come to without it.
+                if let Some(rendered) = rendered {
+                    let (warned, notes) =
+                        render_said(rendered, &target.name, among.then_some(from));
+                    outcome.ok &= warned.is_empty();
+                    outcome.stderr.extend(warned);
+                    outcome.stderr.extend(notes);
+                }
+                if let Some(reason) = still_excluded {
+                    outcome.stderr.push(still(&what, from, reason));
+                    outcome.ok = false;
+                }
+            }
+            (_, Some(Err(error))) => {
+                outcome.stderr.push(format!("error: {from}: {error}"));
+                outcome.ok = false;
+            }
+            // Taken out by something else since it was planned.
+            (_, Some(Ok(Removed::Absent { .. })) | None) => {}
+        }
+    }
+    let mut removed_scrub = None;
+    match removed {
+        Ok(removed) => {
+            let _ = writeln!(
+                outcome.stdout,
+                "removed {} {} from {}",
+                target.kind,
+                target.name,
+                target.path.display()
+            );
+            // The library copy is no copy installed anywhere, so nothing
+            // is said of a record but one that could not be changed.
+            recorded(&mut outcome, removed.copy, |_| None);
+            // Named as `uninstall` takes it: a route is a rule's alone, but
+            // a rule of one word could be a skill's name too.
+            let typed = match target.kind {
+                Kind::Skill => target.name.clone(),
+                Kind::Rule => target.qualified_name(),
+            };
+            for from in orphaned {
+                outcome.stderr.push(format!(
+                    "note: nothing offers {what} in {from} any more; `flayer uninstall -p {from} \
+                     {typed} --force` takes it out"
+                ));
+            }
+            removed_scrub = Some(removed.scrub);
+        }
+        Err(error) => {
+            outcome.stderr.push(format!("error: {error}"));
+            outcome.ok = false;
+        }
+    }
+    unread(&mut outcome, &plan.unread);
+    let outcome = match removed_scrub {
+        Some(later) => scrubbed(&later).before(outcome),
+        None => outcome,
+    };
+    Ok(scrubbed(&scrub).before(outcome))
+}
+
+/// A warning for each project the workspace links that could not be
+/// opened, beside what is said of the rest: whether it holds a copy cannot
+/// be told.
+fn unread(outcome: &mut Outcome, unread: &[WorkspaceError]) {
+    for failure in unread {
+        outcome.stderr.push(format!("warning: {failure}"));
+        outcome.ok = false;
+    }
 }
 
 pub(crate) fn templates_of(

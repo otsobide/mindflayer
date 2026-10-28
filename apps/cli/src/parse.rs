@@ -502,6 +502,9 @@ pub enum FlayerCommand {
     },
 
     /// Delete one of the workspace's own artifacts, or a project's.
+    ///
+    /// One of the workspace's own installed into its projects leaves its
+    /// copies there orphaned; --everywhere takes them out first.
     #[command(alias = "rm")]
     Remove {
         /// Its name, or `kind:name`.
@@ -510,6 +513,12 @@ pub enum FlayerCommand {
         /// A project this workspace manages, instead of the workspace itself.
         #[arg(short, long, value_name = "PROJECT")]
         project: Option<String>,
+
+        /// Uninstall it from every project this workspace links first,
+        /// leaving a copy changed since it was installed, and somebody's own
+        /// of that name.
+        #[arg(long, conflicts_with = "project")]
+        everywhere: bool,
 
         /// Delete it. Without this nothing is deleted, and the command says
         /// what would be.

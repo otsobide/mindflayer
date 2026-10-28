@@ -27,7 +27,10 @@ use mindflayer_core::{
 use crate::homes::Lookup;
 use crate::{tui, Cli, CliError, Command, Failure, FlayerCli, FlayerCommand, Outcome};
 use activate::{activate_command, which_command};
-use artifact::{add_to, edit_in, remove_from, rename_in, templates_of};
+use artifact::{
+    add_to, edit_in, remove_everywhere, remove_from, rename_in, templates_of,
+    would_remove_everywhere,
+};
 use gather::run_gather;
 use install::{install_named, uninstall_named};
 use migrate::{migrate_all, migrate_here, migrate_library, migrate_one, Asked};
@@ -343,19 +346,41 @@ fn run_flayer(
                 to,
             )
         }
+        // Without --yes it deletes nothing, so it is resolved as a read and
+        // makes no workspace, the default one in home included: a dry run
+        // that wrote a marker would not be one.
         FlayerCommand::Remove {
             reference,
             project,
+            everywhere,
             yes,
-        } => {
-            let workspace = workspace_here(directory, lookup)?;
-            remove_from(
-                Some(&workspace),
-                &workspace.holder(project.as_deref())?,
+        } => match (*everywhere, *yes) {
+            (true, true) => remove_everywhere(
+                &workspace_here(directory, lookup)?,
                 reference,
-                *yes,
-            )
-        }
+                &lookup.agents,
+            ),
+            (true, false) => reading_workspace(directory, lookup, |workspace| {
+                would_remove_everywhere(workspace, reference)
+            }),
+            (false, true) => {
+                let workspace = workspace_here(directory, lookup)?;
+                remove_from(
+                    Some(&workspace),
+                    &workspace.holder(project.as_deref())?,
+                    reference,
+                    true,
+                )
+            }
+            (false, false) => reading_workspace(directory, lookup, |workspace| {
+                remove_from(
+                    Some(workspace),
+                    &workspace.holder(project.as_deref())?,
+                    reference,
+                    false,
+                )
+            }),
+        },
         FlayerCommand::Templates { project } => reading_workspace(directory, lookup, |workspace| {
             templates_of(Some(workspace), &workspace.holder(project.as_deref())?)
         }),
