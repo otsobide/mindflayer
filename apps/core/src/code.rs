@@ -35,6 +35,40 @@
 //! by hand beside a list kept by hand was the other way, and a list can miss
 //! a code its match gives without anything failing.
 
+use std::fmt::Display;
+
+use serde::Serialize;
+
+use crate::activate::{ActivateError, UnknownShell};
+use crate::adopt::AdoptError;
+use crate::agent::UnknownAgent;
+use crate::agents_md::{self, AgentsMdError};
+use crate::artifact::{ArtifactError, ValidationIssue};
+use crate::catalog::DiscoveryFailure;
+use crate::claude_md::{self, ClaudeMdError, Fallback};
+use crate::claude_rules::{self, ClaudeRulesError};
+use crate::config_entry::{EntryError, FileError};
+use crate::create::CreateError;
+use crate::everywhere::EverywhereError;
+use crate::exclude::{self, ExcludeError};
+use crate::frontmatter::FrontMatterError;
+use crate::gather::git::GitError;
+use crate::gather::{self, GatherError, Leftover, ScrubFailure};
+use crate::install::{rules, InstallError, LoadFailure};
+use crate::kind::UnknownKind;
+use crate::ledger::LedgerError;
+use crate::lifecycle::LifecycleError;
+use crate::lock::LockError;
+use crate::migrate::{MigrateError, ProjectFailure, Refusal};
+use crate::reapply::{ReapplyError, ReapplyFailure};
+use crate::relink::{Duplicate, RelinkError};
+use crate::resolve::ResolveError;
+use crate::scan::ScanFailure;
+use crate::status::StatusFailure;
+use crate::template::TemplateError;
+use crate::update::UpdateError;
+use crate::workspace::{MisplacedTarget, ProjectWarning, WorkspaceError};
+
 /// Give an error type its `code()` and its `CODES`.
 ///
 /// An enum lists each variant with a code of its own, as a pattern on
@@ -92,42 +126,8 @@ macro_rules! codes {
 
 pub(crate) use codes;
 
-use std::fmt::Display;
-
-use serde::Serialize;
-
-use crate::activate::{ActivateError, UnknownShell};
-use crate::adopt::AdoptError;
-use crate::agent::UnknownAgent;
-use crate::agents_md::{self, AgentsMdError};
-use crate::artifact::{ArtifactError, ValidationIssue};
-use crate::catalog::DiscoveryFailure;
-use crate::claude_md::{self, ClaudeMdError, Fallback};
-use crate::claude_rules::{self, ClaudeRulesError};
-use crate::config_entry::{EntryError, FileError};
-use crate::create::CreateError;
-use crate::everywhere::EverywhereError;
-use crate::exclude::{self, ExcludeError};
-use crate::frontmatter::FrontMatterError;
-use crate::gather::git::GitError;
-use crate::gather::{self, GatherError, Leftover, ScrubFailure};
-use crate::install::{rules, InstallError, LoadFailure};
-use crate::kind::UnknownKind;
-use crate::ledger::LedgerError;
-use crate::lifecycle::LifecycleError;
-use crate::lock::LockError;
-use crate::migrate::{MigrateError, ProjectFailure, Refusal};
-use crate::reapply::{ReapplyError, ReapplyFailure};
-use crate::relink::{Duplicate, RelinkError};
-use crate::resolve::ResolveError;
-use crate::scan::ScanFailure;
-use crate::status::StatusFailure;
-use crate::template::TemplateError;
-use crate::update::UpdateError;
-use crate::workspace::{MisplacedTarget, ProjectWarning, WorkspaceError};
-
-/// Every type core gives codes to, by its path in the crate, with the codes
-/// it gives of its own.
+/// Every type core gives codes to, by the module it is defined in, with the
+/// codes it gives of its own.
 ///
 /// What the test that no two codes are alike reads, and what a front end
 /// that lists every code core can give, the panel's types among them (#70),
