@@ -406,15 +406,14 @@ fn run_flayer(
             (None, true) => reading_workspace(directory, lookup, |workspace| {
                 crate::install::run(workspace, &lookup.agents)
             }),
-            (Some(name), false) => {
-                let workspace = workspace_here(directory, lookup)?;
-                let (asked, unread) = named_projects(&workspace, projects, *all_projects)?;
+            (Some(name), false) => assigning(directory, lookup, *all_projects, |workspace| {
+                let (asked, unread) = named_projects(workspace, projects, *all_projects)?;
                 if asked.is_empty() {
                     return Ok(none_linked("installed", unread));
                 }
                 beside_all(
                     install_named(
-                        &workspace,
+                        workspace,
                         &asked,
                         name,
                         from.as_deref(),
@@ -424,7 +423,7 @@ fn run_flayer(
                     ),
                     unread,
                 )
-            }
+            }),
             // Half of one: a skill with no project to put it in, or a
             // project with nothing named to put there.
             (Some(_), true) => Err(CliError::InstallWhere.into()),
@@ -439,15 +438,16 @@ fn run_flayer(
             if projects.is_empty() && !*all_projects {
                 return Err(CliError::UninstallWhere.into());
             }
-            let workspace = workspace_here(directory, lookup)?;
-            let (asked, unread) = named_projects(&workspace, projects, *all_projects)?;
-            if asked.is_empty() {
-                return Ok(none_linked("removed", unread));
-            }
-            beside_all(
-                uninstall_named(&workspace, &asked, name, &lookup.agents, *force),
-                unread,
-            )
+            assigning(directory, lookup, *all_projects, |workspace| {
+                let (asked, unread) = named_projects(workspace, projects, *all_projects)?;
+                if asked.is_empty() {
+                    return Ok(none_linked("removed", unread));
+                }
+                beside_all(
+                    uninstall_named(workspace, &asked, name, &lookup.agents, *force),
+                    unread,
+                )
+            })
         }
 
         // Resolved as a read, on the default workspace before it is made
@@ -785,6 +785,30 @@ fn named_projects(
         .map(|project| workspace.pick(project))
         .collect::<Result<Vec<_>, _>>()?;
     Ok((asked, Vec::new()))
+}
+
+/// Run an install or uninstall of one artifact, `assign`, on the workspace
+/// it is for: as a read when it is given every project (`all`), as `flayer
+/// update --all` is, and as a write when it names them.
+///
+/// Every project of a default workspace nothing has made yet is none, so
+/// making it for the occasion would leave a marker in somebody's home for a
+/// command that then does nothing; read, it says so with where the workspace
+/// will be. A project named by `-p` is still looked for in the workspace a
+/// write makes, as it was for one project alone before several could be
+/// named, which leaves that one refusing after making it (an open question
+/// in the architecture doc).
+fn assigning(
+    directory: &Path,
+    lookup: &Lookup,
+    all: bool,
+    assign: impl FnOnce(&FlayerWorkspace) -> Result<Outcome, Failure>,
+) -> Result<Outcome, Failure> {
+    if all {
+        reading_workspace(directory, lookup, assign)
+    } else {
+        assign(&workspace_here(directory, lookup)?)
+    }
 }
 
 /// What a command given every project the workspace links says when it

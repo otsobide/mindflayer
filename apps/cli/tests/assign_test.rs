@@ -319,6 +319,34 @@ fn every_project_with_none_linked_installs_nothing_and_says_so() {
 }
 
 #[test]
+fn every_project_of_a_default_workspace_nothing_has_made_is_none_and_makes_nothing() {
+    let home = TempDir::new().unwrap();
+    let here = TempDir::new().unwrap();
+
+    for (command, done) in [("install", "installed"), ("uninstall", "removed")] {
+        let outcome = flayer_at_home(
+            here.path(),
+            home.path(),
+            &[command, "anything", "--all-projects"],
+        )
+        .unwrap();
+
+        assert_eq!(
+            outcome.stdout,
+            format!("nothing {done}: no project is linked\n")
+        );
+        assert_eq!(outcome.stderr.len(), 1, "{:?}", outcome.stderr);
+        assert!(
+            outcome.stderr[0].starts_with("hint: no workspace here or above"),
+            "{:?}",
+            outcome.stderr
+        );
+        assert!(outcome.ok);
+    }
+    assert!(!home.path().join(FLAYER_DIR).exists());
+}
+
+#[test]
 fn uninstalling_from_several_takes_it_out_where_it_is_and_passes_over_where_it_is_not() {
     let dir = workspace_with_three();
     flayer(

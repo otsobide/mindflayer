@@ -2166,9 +2166,12 @@ nothing that one install would not.
   the line before anything is installed anywhere: a typo in one name is no
   reason to change the rest without it. `--all-projects` is every entry
   that opens, with a warning for each that does not, as `flayer update
-  --all` takes them. The flag is `flayer migrate`'s `--all-projects`
-  rather than update's `--all`, which beside an artifact's name would read
-  as every artifact.
+  --all` takes them, and resolves the workspace as update does, as a read:
+  a default workspace nobody has made links no project, and making it for
+  a command that then does nothing would leave a marker in the home for
+  nothing. The flag is `flayer migrate`'s `--all-projects` rather than
+  update's `--all`, which beside an artifact's name would read as every
+  artifact.
 
 The CLI says each project's part as an install into it alone says it
 (`commands/install.rs`), in the order asked, so each line names its project
@@ -5644,8 +5647,9 @@ just listed.
   writes makes the default workspace before it finds out whether there is
   anything to do in it. Outside every workspace, `mind install` and `mind
   uninstall` in a project nothing manages, `flayer install -p` and `flayer
-  uninstall -p`, and `unlink` at either level leave a `~/.mindflayer` behind
-  and then refuse, since a workspace just made manages nothing. `flayer edit`,
+  uninstall -p` (not with `--all-projects`, which resolves as a read), and
+  `unlink` at either level leave a `~/.mindflayer` behind and then refuse,
+  since a workspace just made manages nothing. `flayer edit`,
   `rename` and `remove` make it to change its own artifacts, `remove`'s dry
   run included. Each could resolve with `Intent::Read` first and make it only
   when it is about to write; whether each should is a choice per command, and
