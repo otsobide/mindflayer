@@ -92,6 +92,10 @@ macro_rules! codes {
 
 pub(crate) use codes;
 
+use std::fmt::Display;
+
+use serde::Serialize;
+
 use crate::activate::{ActivateError, UnknownShell};
 use crate::adopt::AdoptError;
 use crate::agent::UnknownAgent;
@@ -180,6 +184,28 @@ pub const ALL: &[(&str, &[&str])] = &[
     ("workspace::ProjectWarning", ProjectWarning::CODES),
     ("workspace::WorkspaceError", WorkspaceError::CODES),
 ];
+
+/// An error as a serialized type holds one: its code, for a front end to act
+/// on, and its message, for whoever reads it.
+///
+/// Built where the type is serialized rather than kept, since an error holds
+/// what JSON has no shape for (an `io::Error`, a parser's own), and only
+/// these two are meant to leave core.
+#[derive(Debug, Serialize)]
+pub(crate) struct Said {
+    code: &'static str,
+    message: String,
+}
+
+impl Said {
+    /// `error`, by `code`, the one its `code()` gives.
+    pub(crate) fn of(code: &'static str, error: &impl Display) -> Self {
+        Said {
+            code,
+            message: error.to_string(),
+        }
+    }
+}
 
 #[cfg(test)]
 #[path = "code_test.rs"]

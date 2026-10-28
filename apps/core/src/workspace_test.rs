@@ -488,3 +488,127 @@ fn dropping_an_entry_takes_its_comments_and_leaves_everyone_elses() {
         "[ # the list\n    \"b\", # b\n    \"c\", # c\n]"
     );
 }
+
+/// A project read from `config` at `root`, without touching the disk.
+fn project_at(root: &str, config: ProjectConfig) -> MindProject {
+    MindProject {
+        root: PathBuf::from(root),
+        config,
+        leftovers: Vec::new(),
+    }
+}
+
+/// What a member serializes to is a contract, as a status report's is: the
+/// entry and where it points, then what the project there says of itself,
+/// or why there is none, by its code and message.
+#[test]
+fn a_member_serializes_its_entry_and_the_project_it_opens() {
+    let mut settings = Settings::new(
+        "api",
+        vec![Agent::Claude, Agent::Codex],
+        Share::Local,
+        Directories::default(),
+    );
+    settings.id = ProjectId::parse("0123456789abcdef0123456789abcdef").unwrap();
+    let older = MindConfig {
+        version: MIND_TOML_VERSION,
+        name: String::from("old"),
+        directories: Directories::default(),
+    };
+    let gone = || WorkspaceError::NotAProject {
+        path: PathBuf::from("/gone"),
+    };
+    let members = [
+        Member {
+            entry: PathBuf::from("api"),
+            root: PathBuf::from("/work/api"),
+            project: Ok(project_at("/work/api", ProjectConfig::Settings(settings))),
+        },
+        Member {
+            entry: PathBuf::from("old"),
+            root: PathBuf::from("/work/old"),
+            project: Ok(project_at("/work/old", ProjectConfig::Toml(older))),
+        },
+        Member {
+            entry: PathBuf::from("../gone"),
+            root: PathBuf::from("/gone"),
+            project: Err(gone()),
+        },
+    ];
+
+    let serialized = serde_json::to_string(&members).unwrap();
+
+    assert_eq!(
+        serialized,
+        [
+            r#"[{"entry":"api","root":"/work/api","name":"api","marker":"settings.toml","#,
+            r#""id":"0123456789abcdef0123456789abcdef","agents":["claude","codex"],"#,
+            r#""share":"local","error":null},"#,
+            r#"{"entry":"old","root":"/work/old","name":"old","marker":"mind.toml","#,
+            r#""id":null,"agents":[],"share":null,"error":null},"#,
+            r#"{"entry":"../gone","root":"/gone","name":null,"marker":null,"#,
+            r#""id":null,"agents":[],"share":null,"#,
+            &format!(
+                r#""error":{{"code":"not_a_project","message":"{}"}}}}]"#,
+                gone()
+            ),
+        ]
+        .concat()
+    );
+}
+
+/// The same for a workspace one loads: the entry, where it points, and the
+/// workspace's name, or why there is none.
+#[test]
+fn a_loaded_workspace_serializes_its_entry_and_its_name() {
+    let team = FlayerWorkspace {
+        root: PathBuf::from("/team"),
+        config: FlayerConfig {
+            version: FLAYER_FORMAT_VERSION,
+            name: String::from("team"),
+            projects: Vec::new(),
+            loaded: Vec::new(),
+            known: Vec::new(),
+            directories: Directories::default(),
+        },
+        made: true,
+    };
+    let gone = || WorkspaceError::NotAWorkspace {
+        path: PathBuf::from("/gone"),
+    };
+    let loads = [
+        Loaded {
+            entry: PathBuf::from("../team"),
+            root: PathBuf::from("/team"),
+            workspace: Ok(team),
+        },
+        Loaded {
+            entry: PathBuf::from("../gone"),
+            root: PathBuf::from("/gone"),
+            workspace: Err(gone()),
+        },
+    ];
+
+    let serialized = serde_json::to_string(&loads).unwrap();
+
+    assert_eq!(
+        serialized,
+        [
+            r#"[{"entry":"../team","root":"/team","name":"team","error":null},"#,
+            r#"{"entry":"../gone","root":"/gone","name":null,"#,
+            &format!(
+                r#""error":{{"code":"not_a_workspace","message":"{}"}}}}]"#,
+                gone()
+            ),
+        ]
+        .concat()
+    );
+}
+
+#[test]
+fn a_share_mode_is_serialized_by_its_name() {
+    assert_eq!(
+        serde_json::to_string(&Share::ALL).unwrap(),
+        r#"["local","shared"]"#
+    );
+}

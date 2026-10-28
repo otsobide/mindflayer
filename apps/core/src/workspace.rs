@@ -22,11 +22,12 @@ use std::io;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
+use serde::ser::{SerializeStruct, Serializer};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 use crate::agent::{Agent, AgentTarget, TargetTable};
-use crate::code::codes;
+use crate::code::{codes, Said};
 use crate::gather::{self, Scrub};
 use crate::kind::{Kind, Layout};
 use crate::ledger::{Ledger, LedgerError, LEDGER_FILE};
@@ -2130,6 +2131,38 @@ pub struct Member {
     pub project: Result<MindProject, WorkspaceError>,
 }
 
+/// As the entry and what it opens: the entry as the marker spells it, where
+/// it points, then the project's name, marker, id, agents and share mode,
+/// none of them for an entry that opens no project, and why it opens none
+/// as `error`, by its code and message.
+///
+/// By hand: a project holds the whole of its marker, and the error what JSON
+/// has no shape for, so a derive could not write either. Spread over fields
+/// of the member's own, rather than nested, so it reads as a status report's
+/// project does, whose `name`, `marker` and `agents` say the same thing by
+/// the same names; `error` says what that report's `stale` does, with the
+/// code beside the message.
+impl Serialize for Member {
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        let project = self.project.as_ref().ok();
+        let settings = project.and_then(MindProject::settings);
+        let error = self.project.as_ref().err();
+        let mut member = serializer.serialize_struct("Member", 8)?;
+        member.serialize_field("entry", &paths::as_route(&self.entry))?;
+        member.serialize_field("root", &self.root.to_string_lossy())?;
+        member.serialize_field("name", &project.map(MindProject::name))?;
+        member.serialize_field("marker", &project.map(MindProject::marker_file))?;
+        member.serialize_field("id", &settings.map(|settings| &settings.id))?;
+        member.serialize_field(
+            "agents",
+            settings.map_or(&[][..], |settings| &settings.agents),
+        )?;
+        member.serialize_field("share", &settings.map(|settings| settings.share))?;
+        member.serialize_field("error", &error.map(|error| Said::of(error.code(), error)))?;
+        member.end()
+    }
+}
+
 /// One entry in a workspace's `loaded` list, or in the default workspace's
 /// `known`, and what it opens.
 #[derive(Debug)]
@@ -2140,6 +2173,22 @@ pub struct Loaded {
     pub root: PathBuf,
     /// The workspace there, or why there is none.
     pub workspace: Result<FlayerWorkspace, WorkspaceError>,
+}
+
+/// As the entry and what it opens, for the reason a [`Member`] is: the entry
+/// as the marker spells it, where it points, the workspace's name, none for
+/// an entry that opens none, and why it opens none as `error`.
+impl Serialize for Loaded {
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        let workspace = self.workspace.as_ref().ok();
+        let error = self.workspace.as_ref().err();
+        let mut loaded = serializer.serialize_struct("Loaded", 4)?;
+        loaded.serialize_field("entry", &paths::as_route(&self.entry))?;
+        loaded.serialize_field("root", &self.root.to_string_lossy())?;
+        loaded.serialize_field("name", &workspace.map(FlayerWorkspace::name))?;
+        loaded.serialize_field("error", &error.map(|error| Said::of(error.code(), error)))?;
+        loaded.end()
+    }
 }
 
 const PROJECTS_KEY: &str = "projects";
