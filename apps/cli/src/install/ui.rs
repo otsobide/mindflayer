@@ -271,21 +271,22 @@ fn boxed(entry: &Row, label: String) -> Vec<Span<'static>> {
 ///
 /// A line each: a line of keys too long for the terminal is cut short
 /// rather than wrapped, which would push what is waiting, or why a key did
-/// nothing, off the bottom.
+/// nothing, off the bottom. Two spaces between keys, as the TUI's own line
+/// has, so the longest still fits an 80-column terminal.
 fn footer(screen: &Screen, frame: &mut Frame, area: Rect) {
     let (kind, next) = (screen.kind, screen.next_kind(false));
     let keys = match screen.focus {
         Focus::Projects => {
-            format!("↑↓ project   →/enter {kind}s   tab {next}s   v by {kind}   a apply   q quit")
+            format!("↑↓ project  →/enter {kind}s  tab {next}s  v by {kind}  a apply  q quit")
         }
-        Focus::Offers => format!(
-            "↑↓ {kind}   space mark   tab {next}s   ←/esc back   v by {kind}   a apply   q quit"
-        ),
+        Focus::Offers => {
+            format!("↑↓ {kind}  space mark  tab {next}s  ←/esc back  v by {kind}  a apply  q quit")
+        }
         Focus::Artifacts => {
-            format!("↑↓ {kind}   →/enter projects   tab {next}s   v by project   a apply   q quit")
+            format!("↑↓ {kind}  →/enter projects  tab {next}s  v by project  a apply  q quit")
         }
         Focus::Receivers => format!(
-            "↑↓ project   space mark   tab {next}s   ←/esc back   v by project   a apply   q quit"
+            "↑↓ project  space mark  tab {next}s  ←/esc back  v by project  a apply  q quit"
         ),
     };
     let (install, remove) = screen.counts();
