@@ -1217,6 +1217,12 @@ one from then on, while this build reads the settings and passes the
 `MIND_TOML_VERSION` is the newest a `mind.toml` holds, which only
 `MindProject::init` still writes.
 
+A key that an older build can read past without misreading anything moves no
+version: `known`, the list of [the workspaces this machine
+knows](#the-workspaces-this-machine-knows) that the default workspace keeps,
+says nothing about the workspace holding it, and every edit of a marker keeps
+a key it does not know.
+
 An older marker is read the way it was written, never refused, and moved
 forward only when somebody asks: a workspace's own folders by `flayer migrate
 --library`, a project's `mind.toml` or `settings.json` by `mind migrate`
@@ -1265,8 +1271,10 @@ whatever the command (`render::json`):
 
 `status` was the first to take it ([what each project
 has](#what-each-project-has)), and every later reading command takes the same
-one rather than a shape of its own: `scan --json` ([Scanning](#scanning)), and
-the read types #61 makes serializable. One shape is one parser for a script,
+one rather than a shape of its own: `scan --json` ([Scanning](#scanning)),
+`workspaces --json` ([the workspaces this machine
+knows](#the-workspaces-this-machine-knows)), and the read types #61 makes
+serializable. One shape is one parser for a script,
 and for the panel's backend when it reads through the CLI.
 
 - **The warnings are inside it.** Failures are collected, not raised, in JSON
@@ -1325,6 +1333,20 @@ portable rather than frozen to one machine's symlink layout.
 Matching is by where an entry **points**, not by how it is spelled, so
 `collapse` and `./collapse` are one entry. Arithmetic settles most of it, and
 two spellings only the filesystem can equate are settled by canonicalising.
+
+`loaded` and the default workspace's `known` are stored and matched the same
+way ([the workspaces this machine knows](#the-workspaces-this-machine-knows)).
+An entry dropped from any of the three leaves its place's layout to the entry
+after it, so dropping the first of `["a", "b"]` leaves `["b"]` rather than
+`[ "b"]`, and a list laid out a line each keeps its lines. It takes its own
+comments with it and leaves everybody else's: the ones above it and the one
+after it on its line go, while a comment above the entry after it, or at the
+end of the line before it, stays where it was. toml_edit keeps what comes
+before an entry as one string, from the comma ahead of it, so the end of the
+line above and the comments above the entry share it. Each is split at its
+first line break: the part before it stays with the line above, the part after
+it with the entry below. Handing the next entry the dropped one's string whole
+would put the dropped entry's comment above it in place of its own.
 
 `link` and `unlink` match against **the array they are about to edit**, not
 against the copy parsed when the workspace was opened. The marker file is meant
@@ -3550,7 +3572,9 @@ and defines `flayer-deactivate`, which puts both back; it is run as `eval
 "$(flayer activate DIR)"`. Printed for the shell to run rather than written
 to a file to be sourced: activation lasts as long as the shell, as a
 virtualenv's does, and D-08 rejected an activation file as hidden state in
-repositories meant to stay minimal. Activating writes nothing at all. It
+repositories meant to stay minimal. Activating writes nothing at all, so it
+does not remember the workspace among [the ones this machine
+knows](#the-workspaces-this-machine-knows) either: `flayer init` does. It
 opens `DIR` as `-W` opens a workspace (`resolve::named`), by its root or its
 `.mindflayer`, and without `DIR` it activates what a read resolves from
 where it runs, so `-W` and an earlier activation count, and the default one
@@ -3668,6 +3692,79 @@ database and no marker. A command that writes asks for the real one.
 
 `unload`, which only takes away, resolves as a read and wants a made
 workspace, since an unmade one has loaded nothing.
+
+### The workspaces this machine knows
+
+The default workspace keeps a list of the others on the machine, a `known`
+array in its `flayer.toml` beside `projects` and `loaded`, so switching
+between several flayers, in the CLI and the TUI now and in the panel later
+(#84), has somewhere to read them from. `flayer workspaces` lists it, `flayer
+workspaces forget PATH` takes one out, and `w` in the TUI runs `flayer
+workspaces` and shows what it prints, as `s` shows `flayer gather list`. What
+is known, in which order, and which one is in use are core's (`known::known`,
+fed by `resolve`), so the panel's switcher will read the answer the CLI
+prints.
+
+In the default workspace's marker rather than in a file of its own or in the
+ledger. Home is the one place every flayer on a machine can find; its marker
+is already edited one array at a time (`edit_array`), under its lock, with
+every comment kept; and the list is configuration a person may read and
+prune by hand, like the registry. A file of its own would be one more format
+to version and lock, and the ledger would hide the list from that person, and
+would have to be made to hold it. The key is not in the template, since only
+the default has a use for it and every other marker would carry a line about
+nothing: the edit that first makes it gives it a comment saying what it is
+(`explained`), and an edit that makes a key and puts nothing in it, as a
+refused `forget` would, takes it out again, so the file is left as it was
+found.
+
+`flayer init` remembers: each workspace it makes, and one already there,
+which it otherwise leaves as it was, so a workspace made before the default,
+or by a build from before the list, is one idempotent command from being on
+it. conda's `environments.txt` gains an environment the same way, when it is
+made and not when it is activated. #56 asked `flayer activate` to remember
+too, and it does not. Activating writes nothing ([activating a
+workspace](#activating-a-workspace)), which #55 was accepted on and the
+README promises; writing there would take the default workspace's lock at
+every new shell whose startup file runs `eval "$(flayer activate DIR)"`, wait
+behind a gather holding it for up to `lock::WAIT`, and turn a default a newer
+build wrote, or a home nobody can write to, into a warning at every prompt.
+And nothing is lost by it: the workspace in use is listed whether it is
+remembered or not, so an activated one is never missing from the list
+somebody is looking at. Whether activating should remember after all is an
+[open question](#open-questions).
+
+Never made for the occasion. A default nothing has made yet remembers
+nothing and lists nothing, and `flayer init` does not make one to remember
+in, the rule every read follows; with `--home ""` there is no default, and
+only the workspace in use is listed. The default is never in its own list:
+it comes first, for being the default, whatever `known` says. An entry is
+stored as `link` stores a project ([how entries are
+stored](#how-entries-are-stored)), a route from home when one reaches and an
+absolute path otherwise, and matched by where it points. So remembering one
+already known by another spelling changes nothing and says the spelling the
+file holds, and `forget` takes out every spelling, of a workspace that has
+gone too, since that is the one most worth forgetting. One nothing remembers
+is refused, as `unlink` refuses what is not linked.
+
+The list is the default, then each entry in the order `known` holds them,
+each directory once, then the one in use when it is none of those, said to
+be not remembered and given the line that would remember it. The one in use
+is marked `*`, as `git branch` marks the branch checked out, and each says
+how many projects it links and how many of those are stale. A remembered
+workspace that has gone is a row that cannot be opened and a `warning:` that
+fails the exit, as a stale project is in every report: shown, never raised.
+The stale entries of a workspace that opens are counted rather than warned
+of, since they are that workspace's to report. `--json` prints the same list
+in the envelope ([JSON, in one envelope](#json-in-one-envelope)), each field
+by its name: `name`, `path`, `default`, `remembered`, `in_use`, `projects`,
+`stale_projects` and `stale`.
+
+`known` moves no `FLAYER_FORMAT_VERSION`. A build from before it reads past
+the key, which says nothing about the workspace holding it, so there is
+nothing for it to misread, and keeps it when it edits the marker, since every
+edit goes through `toml_edit` ([formats are
+versioned](#formats-are-versioned)).
 
 ### A project's workspace
 
@@ -5079,11 +5176,13 @@ other, and none of them makes a reader wait for the workspace.
   writes each put back a marker with only their own entry, and the second
   rename wins. So a writer holds `.mindflayer/lock` from before it reads what
   it will change until the change is written: an edit of the marker (`link`,
-  `unlink`, `load`, `unload`), an install or an uninstall, a gather (clone and
-  all, since two gathers of one source clone into one folder) and the scrub
-  that opening the ledger to write runs (`ledger_to_write`), while it rewrites
-  clones an older build left a credential in and removes the folders of a
-  source made one with another, which a gather beside it would be filling.
+  `unlink`, `load`, `unload`, and the default workspace's, which `flayer
+  init` and `workspaces forget` change), an install or an uninstall, a
+  gather (clone and all, since two gathers of one source clone into one
+  folder) and the scrub that opening the ledger to write runs
+  (`ledger_to_write`), while it rewrites clones an older build left a
+  credential in and removes the folders of a source made one with another,
+  which a gather beside it would be filling.
   A migration of the workspace's own into its library holds it from its plan
   to its rewrite of the marker, and a project's move from its `mind.toml`
   from before it reads the project again until its ledger is written
@@ -5483,7 +5582,9 @@ minimal. Unblocks #54, #55 and #56. #54 carried it out: core's `resolve`,
 with `-W/--workspace` on both binaries (see [which workspace a command
 uses](#which-workspace-a-command-uses)). #55 added what sets the variable,
 `flayer activate` and `flayer-deactivate`, and `flayer which`, which says the
-reason (see [activating a workspace](#activating-a-workspace)).
+reason (see [activating a workspace](#activating-a-workspace)). #56 lists the
+workspaces this machine knows, with the one `resolve` chooses marked (see
+[the workspaces this machine knows](#the-workspaces-this-machine-knows)).
 
 ### D-09: Project settings live in the project
 
@@ -6495,3 +6596,18 @@ just listed.
   repository says](#no-em-dash-in-what-the-repository-says)). A step in CI
   over a pull request's own commits would catch one before the merge without
   tripping on the history from before the rule.
+- **Remembering on activate.** #56 asked `flayer activate` to remember the
+  workspace it activates as well as `flayer init`; it remembers none, since
+  activating writes nothing ([the workspaces this machine
+  knows](#the-workspaces-this-machine-knows)), and `flayer init` run again on
+  a workspace remembers it. Remembering there would want a write of its own
+  beside the code it prints and never on stdout, taking the default
+  workspace's lock without waiting, so a busy one is passed over rather than
+  waited for at every new shell, and saying a failure only as a hint, so a
+  shell's startup file is neither slowed nor made noisy; and the rule that
+  activating writes nothing would have to say why it no longer holds.
+- **A remembered workspace that moves.** The list names a workspace by where
+  it was, so one moved with `mv` is listed as one that cannot be opened until
+  it is forgotten and `flayer init` run where it went. Nothing in a workspace
+  names it for good, as a project's id names a project (#57 relinks those), so
+  there is nothing to match a moved one by.

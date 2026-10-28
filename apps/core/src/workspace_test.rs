@@ -432,3 +432,59 @@ fn a_project_marked_by_settings_keeps_each_kind_it_names_where_it_says() {
     );
     assert_eq!(project.directory_for(Kind::Rule), None);
 }
+
+/// `list = <array>` with every entry pointing at `entry` dropped, as the
+/// marker would read afterwards.
+fn dropping(array: &str, entry: &str) -> String {
+    let mut document: toml_edit::DocumentMut = format!("list = {array}\n").parse().unwrap();
+    let root = Path::new("/w");
+    let removed = remove_pointing_at(
+        document["list"].as_array_mut().unwrap(),
+        root,
+        &root.join(entry),
+    );
+    assert_eq!(removed, [PathBuf::from(entry)], "{array}");
+    document
+        .to_string()
+        .strip_prefix("list = ")
+        .unwrap()
+        .strip_suffix('\n')
+        .unwrap()
+        .to_owned()
+}
+
+#[test]
+fn an_entry_moving_into_a_dropped_ones_place_takes_its_layout() {
+    assert_eq!(dropping(r#"["a", "b"]"#, "a"), r#"["b"]"#);
+    assert_eq!(dropping(r#"[ "a", "b" ]"#, "a"), r#"[ "b" ]"#);
+    assert_eq!(dropping(r#"["a", "b", "c"]"#, "b"), r#"["a", "c"]"#);
+    assert_eq!(
+        dropping("[\n    \"a\",\n    \"b\",\n]", "a"),
+        "[\n    \"b\",\n]"
+    );
+    assert_eq!(dropping("[\n    \"a\", \"b\",\n]", "a"), "[\n    \"b\",\n]");
+    assert_eq!(dropping("[\"a\",\n    \"b\"]", "a"), "[\n    \"b\"]");
+}
+
+#[test]
+fn dropping_an_entry_takes_its_comments_and_leaves_everyone_elses() {
+    let above = "[\n    # a\n    \"a\",\n    # b\n    \"b\",\n    # c\n    \"c\",\n]";
+    assert_eq!(
+        dropping(above, "b"),
+        "[\n    # a\n    \"a\",\n    # c\n    \"c\",\n]"
+    );
+    assert_eq!(
+        dropping(above, "a"),
+        "[\n    # b\n    \"b\",\n    # c\n    \"c\",\n]"
+    );
+
+    let beside = "[ # the list\n    \"a\", # a\n    \"b\", # b\n    \"c\", # c\n]";
+    assert_eq!(
+        dropping(beside, "b"),
+        "[ # the list\n    \"a\", # a\n    \"c\", # c\n]"
+    );
+    assert_eq!(
+        dropping(beside, "a"),
+        "[ # the list\n    \"b\", # b\n    \"c\", # c\n]"
+    );
+}

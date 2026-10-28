@@ -8,6 +8,7 @@ pub(crate) mod activate;
 pub(crate) mod artifact;
 pub(crate) mod gather;
 pub(crate) mod install;
+pub(crate) mod known;
 pub(crate) mod migrate;
 pub(crate) mod project;
 pub(crate) mod read;
@@ -25,7 +26,9 @@ use mindflayer_core::{
 };
 
 use crate::homes::Lookup;
-use crate::{tui, Cli, CliError, Command, Failure, FlayerCli, FlayerCommand, Outcome};
+use crate::{
+    tui, Cli, CliError, Command, Failure, FlayerCli, FlayerCommand, Outcome, WorkspacesCommand,
+};
 use activate::{activate_command, which_command};
 use artifact::{
     add_to, edit_in, remove_everywhere, remove_from, remove_own, rename_in, templates_of,
@@ -33,6 +36,7 @@ use artifact::{
 };
 use gather::run_gather;
 use install::{install_named, uninstall_named, uninstall_orphans};
+use known::{forget_command, workspaces_command};
 use migrate::{migrate_all, migrate_here, migrate_library, migrate_one, Asked};
 use project::{
     init_project, init_workspace, link_here, link_projects, scan_workspace, unlink_here,
@@ -300,12 +304,16 @@ fn run_flayer(
                 Some(path) => typed(directory, path)?,
                 None => directory.to_path_buf(),
             };
-            init_workspace(&root, skills.as_deref(), rules.as_deref())
+            init_workspace(&root, skills.as_deref(), rules.as_deref(), lookup)
         }
         FlayerCommand::Activate { path, shell } => {
             activate_command(directory, path.as_deref(), *shell, lookup)
         }
         FlayerCommand::Which => which_command(directory, lookup),
+        FlayerCommand::Workspaces { command, json } => match command {
+            None => workspaces_command(directory, lookup, *json),
+            Some(WorkspacesCommand::Forget { path }) => forget_command(directory, path, lookup),
+        },
 
         FlayerCommand::Add {
             project,

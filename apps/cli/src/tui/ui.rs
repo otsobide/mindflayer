@@ -632,10 +632,10 @@ fn footer(app: &App, frame: &mut Frame, area: Rect) {
             "q quit  ? keys  enter show  e edit  r rename  d delete  a add  ← back  v validate"
         }
         (Focus::Projects, Scope::Workspace) => {
-            "q quit  ? keys  → open  a add  u update  m minds  l link  U unlink  v validate  g gather  L load  s shelf  i install  t agents  T targets"
+            "q quit  ? keys  → open  a add  u update  m minds  l link  U unlink  v validate  g gather  L load  s shelf  i install  t agents  T targets  w workspaces"
         }
         (Focus::Projects, Scope::Project) => {
-            "q quit  ? keys  → open  a add  v validate  l link it to the workspace above  L load  t agents  T targets"
+            "q quit  ? keys  → open  a add  v validate  l link it to the workspace above  L load  t agents  T targets  w workspaces"
         }
     };
     let second = match &app.message {

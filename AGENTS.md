@@ -84,29 +84,29 @@ under `apps/` with its own `Makefile`:
   three, or as a copy into a project a `mind.toml` marks (`install::rules`),
   changing a project's agents or share mode and carrying its installs along
   (`reapply`), what each project holds, from where and for which agents
-  (`status`), creating and changing artifacts, and moving a workspace's own
-  into its library and a project from its `mind.toml` or `settings.json` to a
-  `settings.toml` (`migrate`), bringing what was installed up to date with
-  where it came from (`update`), installing one artifact into several
-  projects at once, or taking it, or whatever nothing offers any more, out
-  of them (`assign`), and removing one of the workspace's own from every
-  project it links before the library (`everywhere`). Its only I/O is
-  files, and it never reads the environment.
+  (`status`), the workspaces this machine knows, a list the default
+  workspace keeps (`known`), creating and changing artifacts, and moving a
+  workspace's own into its library and a project from its `mind.toml` or
+  `settings.json` to a `settings.toml` (`migrate`), bringing what was
+  installed up to date with where it came from (`update`), installing one
+  artifact into several projects at once, or taking it, or whatever nothing
+  offers any more, out of them (`assign`), and removing one of the
+  workspace's own from every project it links before the library
+  (`everywhere`). Its only I/O is files, and it never reads the environment.
 - `apps/cli` (`mindflayer-cli`): the binaries `mind` (`src/main.rs`) and
   `flayer` (`src/bin/flayer.rs`), and the TUI. `src/lib.rs` only re-exports
   the public API. The parsers are in `src/parse.rs`. `src/commands.rs`
   dispatches them and asks core what a command acts on, and each family of
   commands has a file under `src/commands/`: `project` (init, link, unlink,
-  scan), `workspace` (load, unload), `activate` (activate, which),
-  `artifact` (add, edit, rename, remove, templates), `read` (list, show,
-  validate), `status`, `settings` (agents, share, targets), `gather`,
-  `install`, `update` and `migrate` (each at both levels). `src/render.rs` holds
-  `Outcome`, `Failure`, the table helpers and the envelope every `--json`
-  prints (`json`),
-  `src/error.rs` holds `CliError`, and `src/homes.rs` decides the default
-  home and the agent homes, and gathers them with `-W` and
-  `$MINDFLAYER_WORKSPACE` into a `Lookup`. `src/tui/` and `src/install/` are
-  the two screens.
+  scan), `workspace` (load, unload), `activate` (activate, which), `known`
+  (workspaces, workspaces forget), `artifact` (add, edit, rename, remove,
+  templates), `read` (list, show, validate), `status`, `settings` (agents,
+  share, targets), `gather`, `install`, `update` and `migrate` (each at both
+  levels). `src/render.rs` holds `Outcome`, `Failure`, the table helpers and
+  the envelope every `--json` prints (`json`), `src/error.rs` holds
+  `CliError`, and `src/homes.rs` decides the default home and the agent
+  homes, and gathers them with `-W` and `$MINDFLAYER_WORKSPACE` into a
+  `Lookup`. `src/tui/` and `src/install/` are the two screens.
 - `apps/server` (`mindflayer-server`): the local server behind the web
   panel, a library no binary runs yet. `src/backend.rs` is the `Backend`
   trait, `src/server.rs` binds and routes, `src/auth.rs` holds the token's
@@ -498,6 +498,8 @@ These are easy to break from a single file without noticing.
   Anything from a newer version is refused. A format change must keep
   reading old files the way they were written, and move one forward only
   when asked, never on a read (`flayer migrate --library`, `mind migrate`).
+  A key an older build reads past without misreading anything moves no
+  version, as the default workspace's `known` did not.
   - A ledger schema step is one more block in `Ledger::migrate`, which takes
     the write lock, copies the file to `mindflayer.db.v<old>.bak`
     (`Ledger::back_up`) and runs every step in one transaction. A step fills
@@ -589,10 +591,13 @@ These are easy to break from a single file without noticing.
   it; `tests/shell.test.ts` fails on any `<style>` element added at run time.
 - **Activating prints, and writes nothing.** `flayer activate` prints core's
   code (`activate::script`), and nothing on stdout when it fails, so `eval`
-  runs nothing. Its shell comes from `--shell`, then `$SHELL`, read by the
-  front end. The code undoes only what it did, through `flayer-deactivate`
-  and never `deactivate`, and a workspace's name reaches a prompt only
-  through `activate::prompt`.
+  runs nothing. Nor does it remember the workspace in the default one's
+  `known`, though #56 asked it to: `flayer init` does (`known::remember`),
+  only once the default is made, and never makes it (architecture.md, "The
+  workspaces this machine knows", and its open questions). Its shell comes
+  from `--shell`, then `$SHELL`, read by the front end. The code undoes only
+  what it did, through `flayer-deactivate` and never `deactivate`, and a
+  workspace's name reaches a prompt only through `activate::prompt`.
 - **`Kind` and `Agent` are closed enums.** To add a kind, follow "Adding a
   third kind" in the architecture doc, and to add an agent, "Adding an agent",
   which starts in `docs/agents.md`. Either way the compiler's exhaustive

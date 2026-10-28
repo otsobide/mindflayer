@@ -3347,3 +3347,75 @@ fn capital_t_on_the_workspaces_own_row_or_an_older_project_says_why_not() {
         .text
         .contains("`mind migrate`"));
 }
+
+#[test]
+fn w_lists_the_workspaces_this_machine_knows_with_the_one_on_screen_marked() {
+    let dir = TempDir::new().unwrap();
+    let home = dir.path().join("home");
+    fs::create_dir(&home).unwrap();
+    flayer_at_home(&home, &home, &["init"]).unwrap();
+    flayer_at_home(&home, &home, &["init", "flayers/writing"]).unwrap();
+    let writing = home.join("flayers/writing");
+    let mut app = tui_at_home(&writing, &home);
+
+    assert_eq!(
+        press_and_run(&mut app, KeyCode::Char('w')),
+        Some(Task::Workspaces)
+    );
+
+    let drawn = tui_drawn(&app);
+    assert!(drawn.contains(" flayer workspaces "), "{drawn}");
+    let default = format!(
+        "  home     {}                  no projects; the default one",
+        home.display()
+    );
+    let in_use = format!("* writing  {}  no projects", writing.display());
+    assert!(drawn.contains(&default), "{drawn}");
+    assert!(drawn.contains(&in_use), "{drawn}");
+    assert!(app.transcript().is_empty(), "a read is no change to print");
+
+    press_key(&mut app, KeyCode::Esc);
+    assert!(matches!(app.mode, Mode::Browse), "{:?}", app.mode);
+}
+
+#[test]
+fn w_on_a_project_on_its_own_marks_the_workspace_its_commands_would_use() {
+    let dir = TempDir::new().unwrap();
+    let home = dir.path().join("home");
+    fs::create_dir(&home).unwrap();
+    flayer_at_home(&home, &home, &["init"]).unwrap();
+    let project = home.join("collapse");
+    fs::create_dir(&project).unwrap();
+    new_project(&project);
+    let lookup = Lookup::at_home(Some(&home));
+    let mut app = App::opened_on(
+        Scope::Project,
+        project.clone(),
+        tui::load_project(&project, &lookup).unwrap(),
+    )
+    .with_lookup(lookup);
+
+    press_and_run(&mut app, KeyCode::Char('w'));
+
+    let drawn = tui_drawn(&app);
+    let marked = format!("* home  {}  no projects; the default one", home.display());
+    assert!(drawn.contains(&marked), "{drawn}");
+}
+
+#[test]
+fn the_keys_help_names_the_workspaces_list_and_its_command() {
+    let dir = workspace_with_two();
+    let mut app = tui_in(dir.path());
+
+    press_key(&mut app, KeyCode::Char('?'));
+
+    let Mode::Reading(reader) = &app.mode else {
+        panic!("{:?}", app.mode);
+    };
+    let lines: Vec<&str> = reader.lines.iter().map(|(_, line)| line.as_str()).collect();
+    let at = lines
+        .iter()
+        .position(|line| line.starts_with("  w      the workspaces this machine knows"))
+        .unwrap_or_else(|| panic!("{lines:?}"));
+    assert_eq!(lines[at + 1].trim(), "flayer workspaces");
+}

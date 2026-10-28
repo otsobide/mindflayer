@@ -455,6 +455,22 @@ pub enum FlayerCommand {
     /// -W, activated, found walking up, or the default one.
     Which,
 
+    /// List the flayer workspaces this machine knows: the default one, each
+    /// one `flayer init` has made or been run on since the default was made,
+    /// and the one in use, marked with `*`.
+    ///
+    /// `flayer workspaces forget <path>` takes one out of the list.
+    #[command(args_conflicts_with_subcommands = true)]
+    Workspaces {
+        #[command(subcommand)]
+        command: Option<WorkspacesCommand>,
+
+        /// Print it as JSON, in the envelope every reading command's --json
+        /// shares.
+        #[arg(long)]
+        json: bool,
+    },
+
     /// Create a skill or a rule: the workspace's own, or a project's.
     Add {
         /// A project this workspace manages, by name or path, instead of the
@@ -845,6 +861,19 @@ pub enum FlayerCommand {
     /// What `flayer` does on its own. Everything it changes, it changes by
     /// running one of these commands, and it prints them when it closes.
     Tui,
+}
+
+/// What `workspaces` does to the list besides showing it.
+#[derive(Debug, Subcommand)]
+pub enum WorkspacesCommand {
+    /// Stop knowing a workspace: every entry the default workspace keeps for
+    /// it, however it is spelled.
+    Forget {
+        /// The workspace's directory, the one holding `.mindflayer`. It need
+        /// not still exist.
+        #[arg(value_name = "PATH")]
+        path: PathBuf,
+    },
 }
 
 /// How `agents` changes the agents a project names, when it does not name
