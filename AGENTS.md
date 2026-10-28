@@ -173,7 +173,11 @@ These are easy to break from a single file without noticing.
   TUI gains it by producing that command's words. Never add a TUI-only code
   path. A gather's lines run on a thread of their own (`Task::runs_apart`),
   still through the same parsers: the thread changes where they run, not
-  what they are.
+  what they are. The install screen applies the same way, in the TUI or
+  opened by `flayer install` (`install::apply`): its marks are the
+  `flayer install` and `flayer uninstall` lines they amount to
+  (`Screen::task`), each run whatever came of the others
+  (`Task::chained`), so its transcript runs again.
 - **A gather is watched, and stops only before it places.** Its `Request`
   carries a `gather::Watch`, core's progress callback and cancel flag; no gix
   type reaches a front end. A cancel is honoured until the shelf starts to
@@ -433,9 +437,9 @@ These are easy to break from a single file without noticing.
     `FlayerWorkspace::ledger_to_write`, which scrubs what an older build
     stored first and hands back what it took out to be said; one that only
     reads opens it with `ledger_for_reading`, which scrubs nothing. The
-    install screen is a read until it applies, so it scrubs then
-    (`install::commit`). Anything new that keeps or prints a URL goes through
-    `url::redacted` too.
+    install screen is a read until it applies, and the lines it then runs
+    scrub as any `install` does. Anything new that keeps or prints a URL goes
+    through `url::redacted` too.
 - **Writers take turns; readers never wait.** Core's writers hold the
   workspace's `.mindflayer/lock` (`FlayerWorkspace::lock`) while they change
   it: `edit_array`, `install::install` and `uninstall`,
@@ -456,7 +460,7 @@ These are easy to break from a single file without noticing.
   `MindProject::change_settings` take none, since
   the writers that call them hold it, and `assign::install` and
   `uninstall` none across their batch, leaving it to each project's
-  install as the install screen's batch does. A second workspace linking
+  install, in the install screen's lines too. A second workspace linking
   the same project is kept out by neither lock, an open question in
   `docs/architecture.md`.
   Opening the ledger takes no lock: a schema migration keeps itself apart

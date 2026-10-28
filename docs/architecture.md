@@ -1561,16 +1561,19 @@ record, since a scrub says what it found only the first time and a change that
 dropped it would leave it unsaid for good. `rename` opens the ledger once for
 each name and tells what both scrubs found once (`Scrub::absorb`): the second
 finds only the clones the first could not rewrite. So does the install screen,
-in both screens, when what it marked is applied (`install::commit`) rather
-than as it opens, which is a read ([A read leaves the ledger as it finds
-it](#a-read-leaves-the-ledger-as-it-finds-it)). A scrub can make two sources
+in both screens, when what it marked is applied rather than as it opens,
+which is a read ([A read leaves the ledger as it finds
+it](#a-read-leaves-the-ledger-as-it-finds-it)): applying runs the `install`
+and `uninstall` lines its marks amount to, and the first of them opens the
+ledger to write, scrubbing it, as from the shell. A scrub can make two sources
 one row, and a mark on the row that went would install from folders the scrub
-removed, or copy the files and then fail to record them. So once a scrub has
-taken out a source, the screen is built again from the scrubbed ledger and
-each mark is made again on the row offering the same name from the same place,
-as the row it became one with does; a mark on what only the row that went had
-gathered is a warning and is not carried out. Scrubbing as the screen opened
-would have spared that, and is rejected: opening it is a read. An edit writes
+removed, or copy the files and then fail to record them. Each install line
+names its offer by its origin (`--from`), which is shown without credentials
+before a scrub as after it, so once a scrub has taken out a source the line
+finds the row it became one with, through the lookup any `--from` goes
+through; a line for what only the row that went had gathered is refused as
+not offered, said under that line. Scrubbing as the screen opened would have
+spared that, and is rejected: opening it is a read. An edit writes
 nothing to the ledger, since it keeps the record as it was, so `finish_edit`
 only reads it (`ledger_for_reading`) and scrubs nothing.
 
@@ -2162,12 +2165,13 @@ nothing that one install would not.
 - **The ledger opened once, the lock taken by each install.** The batch
   opens the ledger to write, scrubbing it, once, and only that refuses it as
   a whole; a batch of no project opens nothing. Each project's install takes
-  the workspace's lock as it does alone, as the install screen's rows do,
-  rather than the batch holding it across them: nothing spans two projects,
-  so holding it once would keep every other writer waiting for all of them,
-  and would need a body of each install, rules' included, that runs under a
-  lock it does not take, as an update has (`install::install_held`), to
-  guard nothing a project's own install does not.
+  the workspace's lock as it does alone, in the lines the install screen
+  runs as anywhere, rather than the batch holding it across them: nothing
+  spans two projects, so holding it once would keep every other writer
+  waiting for all of them, and would need a body of each install, rules'
+  included, that runs under a lock it does not take, as an update has
+  (`install::install_held`), to guard nothing a project's own install does
+  not.
 - **The front end names the projects.** `-p` picks each as everywhere
   (`FlayerWorkspace::pick`), and one the workspace does not link refuses
   the line before anything is installed anywhere: a typo in one name is no
@@ -2184,17 +2188,17 @@ The CLI says each project's part as an install into it alone says it
 (`commands/install.rs`), in the order asked, so each line names its project
 already, but for what rendering the project's rules warns of: that names a
 rule or a file and not the project, which alone goes without saying, so
-among several it is said after `<project>: `, as the install screen says
-it. One refused ends in `error: <project>: ...`, and the command exits
-non-zero when any part did not go through, while the others' lines stand,
-since what they did was done. Two things are said once rather than once a
-project: what the loaded workspaces could not offer, after every part, and a
-refusal every part shares, such as a name nothing offers, which is the
-command's error. An uninstall from several passes over a project that has
-nothing of the name, which is as it was asked to be and what most projects
-answer when every one is asked; when none of them has it, that is the typo
-it is for one project, and refused as one. A batch of one project, named or
-the only one linked, is said exactly as one install was before.
+among several it is said after `<project>: `. One refused ends in
+`error: <project>: ...`, and the command exits non-zero when any part did
+not go through, while the others' lines stand, since what they did was done.
+Two things are said once rather than once a project: what the loaded
+workspaces could not offer, after every part, and a refusal every part
+shares, such as a name nothing offers, which is the command's error. An
+uninstall from several passes over a project that has nothing of the name,
+which is as it was asked to be and what most projects answer when every one
+is asked; when none of them has it, that is the typo it is for one project,
+and refused as one. A batch of one project, named or the only one linked, is
+said exactly as one install was before.
 
 ### Taking out what nothing offers
 
@@ -2352,8 +2356,8 @@ What a load offers is every kind, and what it cannot offer (a workspace that
 has gone, an artifact that cannot be read, a name that is refused) is
 collected by `install::offered_by_loads` and said as `warning:` lines wherever
 offers are shown or used, so what `flayer load`, `gather list` and the TUI
-count is what can be installed. The install screen reports a row it could not
-apply and carries on with the rest.
+count is what can be installed. The install screen's line for a row it could
+not apply says why, and the lines after it run all the same.
 Two spellings of one loaded directory are one source; `load_all`,
 `unload_all` and `unlink_all` rewrite the marker once, for all of the paths or
 none.
@@ -2606,20 +2610,49 @@ right what can be installed, as seen from the project under the cursor, or,
 turned round, the other way about. It is split so that only one of its three
 parts needs a terminal:
 
-- `install/state.rs`: what a key does. Marking a box is a statement of intent
-  and touches nothing; it is a plain state machine a test drives by pressing
-  the keys a person would.
+- `install/state.rs`: what a key does, and the command lines what was
+  marked amounts to. Marking a box is a statement of intent and touches
+  nothing; it is a plain state machine a test drives by pressing the keys a
+  person would.
 - `install/ui.rs`: what the screen looks like. Rendered into an in-memory
   terminal by the tests, so the exact text a user sees is asserted on, the same
   way every other command's output is.
-- `install.rs`: the loop that reads a real keyboard, and the batch that
-  carries out what was marked. The loop is the only part with no test, and it
+- `install.rs`: the loop that reads a real keyboard, and running the lines
+  what was marked amounts to. The loop is the only part with no test, and it
   holds nothing but the loop for that reason.
 
-Everything marked is applied in one batch, and what that batch did is printed
-afterwards as an ordinary `Outcome`, so a report from the screen reads like a
-report from any other command, warnings on stderr and a non-zero exit when
-something was left alone.
+What is marked is applied as the command lines it amounts to
+(`Screen::task`), kind by kind: a
+`flayer install -p <project>... --from <origin> <kind:name>` for each offer
+ticked, with a `-p` for each project ticked to take it, and a
+`flayer uninstall -p <project>... <kind:name>` for each artifact unticked,
+which takes it out whichever offer its copy came from. They are the TUI's `Install` and `Uninstall` tasks, which the TUI
+runs as it runs any task, and which `flayer install` runs the same way
+(`install::apply`): each line parsed and run from the workspace root by
+`tui::execute`, with the screen's `Lookup`, so its agent homes and the
+workspace it was opened on reach every line; and what each said is printed
+afterwards as the TUI's transcript prints it (`state::transcript`), the line
+and then what it said, with a non-zero exit when any did not go through. So
+the report shows exactly what ran, and a session with the screen in it can be
+run again without it. Every line is run whatever came of the ones before
+(`Task::chained`), since each is boxes marked one by one, where a task's
+lines otherwise stop at the first that fails.
+
+- **`--from` on every install line**, though a name offered from one place
+  needs none: the box is one offer, so its line installs that one or nothing
+  when run again after another place starts offering the name, and whether a
+  name needs `--from` is core's to say (`install::offered`), not the
+  screen's to work out again.
+- **`-p` as core says** (`FlayerWorkspace::naming`): a project's entry, or
+  `./<entry>` when another project declares the entry as its name, which
+  `pick` would otherwise refuse as naming two.
+- **What a line warns of is the command's.** A line says what the command
+  says typed by hand: a project's `AGENTS.md` git tracks, say, is said by
+  each rule's line that renders the project's rules, where the screen, when
+  it carried out its marks itself, said it once. That was the alternative,
+  rejected: a second front end to installing, row by row through core with a
+  report of its own, which said what the commands say a second way and left
+  the transcript a `flayer install` nobody could run again.
 
 The right column holds every kind's offers, filtered to one kind at a time:
 `tab` shows the next (`Screen::kind`), skills first, and a project's marks of
@@ -2651,11 +2684,10 @@ same side. A project with nowhere to put the kind is offered none of it, so
 turned round it has no box and says why, as it says so in place of its
 offers the right way round. The key is `v` rather than `tab`, which the view
 would have taken before rules could be installed: `tab` shows the next kind,
-which means the same either way round. Applying stays the screen's batch,
-rather than the `flayer install` and `flayer uninstall` lines one artifact's
-ticks amount to now that each takes several projects ([one artifact into
-many projects](#one-artifact-into-many-projects)): the screen applying its
-batch as command lines is #51's to do, for both ways round at once.
+which means the same either way round. Either way round, one artifact's
+ticks are one `flayer install` line and one `flayer uninstall` line, a `-p`
+for each project, since each takes several ([one artifact into many
+projects](#one-artifact-into-many-projects)).
 
 The line of keys is cut short at the terminal's edge rather than wrapped, so
 a long one never pushes what is waiting, or why a key did nothing, off the
@@ -2911,9 +2943,13 @@ activation that chose its workspace (`tui::execute`), as they were given to
 `mind`, `mind tui`) is refused if it ever reaches that path, rather than drawn
 inside this one.
 
-The exceptions are named, not hidden: the install screen is embedded as it is,
-and applying it is the batch `flayer install` applies; re-reading the disk is
-not a command, because it changes nothing.
+The exceptions are named, not hidden: opening the install screen builds the
+screen `flayer install` opens, as a read, rather than running a line, and
+re-reading the disk is not a command, because it changes nothing. Applying
+the install screen is no exception: its marks are the `install` and
+`uninstall` lines they amount to (`Task::ApplyInstall`, [the
+screen](#the-screen-and-why-it-is-three-files)), run as every other line is,
+so the transcript says what it ran in words that run again.
 
 ### Split three ways, like the install screen
 
@@ -3668,8 +3704,8 @@ answers from an empty ledger in memory, which says what a ledger nothing was
 ever written to would. So `flayer gather list`, the TUI's shelf count and the
 install screen leave a workspace that has never gathered or installed anything
 without one. The install screen is a read until something on it is applied;
-applying opens the ledger to write (`ledger_to_write`, through
-`install::commit`), which makes it, and never the stand-in, whose records
+applying runs lines that open the ledger to write (`ledger_to_write`,
+through `assign`), which makes it, and never the stand-in, whose records
 would be gone when it was dropped. Nor does a read scrub an existing ledger of
 what an older build stored with a credential, which waits for the next
 command that writes ([A URL is kept without its
@@ -3943,10 +3979,10 @@ rendering a project's rules takes them to refuse a block of them there ([how
 a rule reaches the agents](#how-a-rule-reaches-the-agents)). They are
 decided once per command line, with the workspace to use, into the same
 `Lookup` (`Lookup::given`), which the TUI keeps and hands to every line it
-runs (`tui::execute`) and to its install screen: a line the TUI runs carries
-none of the four options, so deciding them again would read the environment
-the TUI was opened in, and a test that drives the TUI would reach the real
-folders. Nothing reads what is in them yet.
+runs (`tui::execute`), its install screen's among them: a line the TUI runs
+carries none of the four options, so deciding them again would read the
+environment the TUI was opened in, and a test that drives the TUI would reach
+the real folders. Nothing reads what is in them yet.
 
 ## How a rule reaches the agents
 
@@ -5082,7 +5118,7 @@ How the lock behaves, and why:
   Ten seconds is longer than anything but a gather takes, and short enough
   that a command kept waiting by a process that has stopped answering says
   so rather than looks hung. The error is collected like any other: the CLI
-  prints it, and the install screen prints it for the row it was applying
+  prints it, and the install screen prints it under the line it was running
   and goes on to the next.
 - **Who holds it, in a file of its own.** The writer holding the lock writes
   its process id to `.mindflayer/lock.pid`, and takes it away while it still
@@ -5677,15 +5713,9 @@ just listed.
 - **Forcing from the install screen.** An edited install's box is held on
   the screen, and only `--force` on the command line writes over or takes
   out its copies. A key that marks a row to be forced, confirmed as the
-  batch is, would let the screen do what the command line does, most simply
-  once it applies its batch as command lines (#51).
-- **Replaying the install screen.** One install at a time has a command now,
-  and one artifact into several projects too, but what the screen applies is
-  a batch, and its transcript line is `flayer install` rather than the
-  `install` and `uninstall` lines it amounts to: one of each an artifact, with
-  a `-p` for each project ticked or unticked, which is how the screen turned
-  round by artifact marks it. Printing the batch as those lines would make a
-  session with the screen in it as repeatable as one without.
+  batch is, would let the screen do what the command line does: the line
+  its marks amount to would say `--force`, for the projects forced apart
+  from the rest.
 - **Gathering still stages beside.** `copy::replace` builds a shelf copy as a
   hidden sibling, `.<name>.mindflayer-new`, under names taken from the skill,
   so a gather stopped halfway leaves its staging on the shelf. Two gathers no
@@ -5708,14 +5738,15 @@ just listed.
   projects and the library would make it one change, at the price of a body
   of each uninstall, rules' render included, that runs under a lock it does
   not take, as an update has.
-- **A batch takes turns row by row.** The install screen's batch calls core
-  once for each row, and each call takes the workspace's lock for itself:
-  another writer can come between two rows, and with the workspace busy every
-  row waits the whole ten seconds before it is passed over. `flayer install`
-  given several projects takes turns the same way, project by project
-  ([one artifact into many projects](#one-artifact-into-many-projects)).
-  Holding the lock across the screen's batch needs core to apply it, which
-  is where #78 plans it.
+- **A batch takes turns line by line.** The install screen's lines run one
+  after another, and each install in them takes the workspace's lock for
+  itself, project by project, as `flayer install` given several projects
+  does ([one artifact into many
+  projects](#one-artifact-into-many-projects)): another writer can come
+  between two, and with the workspace busy each waits the whole ten seconds
+  before it is refused. Holding the lock across the screen's batch needs
+  core to apply it as one, which is where #78 plans it, and would want the
+  transcript to say it in a line that runs it again as one.
 - **Changes to an artifact take no lock.** `add`, `edit`, `rename` and
   `remove` write into a project or the workspace's own folders and then see
   to a record ([A record must not outlive the copy it is

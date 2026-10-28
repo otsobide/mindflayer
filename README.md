@@ -805,6 +805,23 @@ it instead, and the skills again (`shift+tab` goes the other way). `→` or
 back. Nothing touches a file until `a`, which asks first and then does
 everything at once, of both kinds: installs and removals together.
 
+What `a` runs is the commands you would have typed: a `flayer install` for
+each skill or rule ticked, with a `-p` for every project ticked to take it
+and `--from` for where the one ticked comes from, and a `flayer uninstall`
+for each one unticked. It prints each with what it said, as the TUI prints a
+session when it closes, so a session with the screen in it can be run again
+without it:
+
+```
+$ flayer install -p collapse -p tanukeys --from load:../src/mindflayer/examples skill:commit-style
+installed commit-style into collapse, from load:../src/mindflayer/examples
+installed commit-style into tanukeys, from load:../src/mindflayer/examples
+$ flayer uninstall -p collapse rule:git/commits
+removed rule git/commits from collapse
+```
+
+One that fails says why where it ran, and the rest run all the same.
+
 Each project keeps its own ticks, so one pass across the list is one plan for
 the whole workspace. The number beside a project is how many of its boxes you
 have moved.
@@ -826,9 +843,11 @@ and `space` ticks as before:
 ```
 
 They are the same boxes either way round, so a tick made one way is there the
-other, and `a` applies them all as one. `v` again turns it back, with the
-cursor on the same box, and `tab` still shows the other kind. A project that
-cannot take the kind shown has no box there, and says why.
+other, and `a` applies them all: a line for each skill or rule ticked and one
+for each unticked, whichever way round the ticks were made. `v` again turns
+it back, with the cursor on the same box, and `tab` still shows the other
+kind. A project that cannot take the kind shown has no box there, and says
+why.
 
 **Unticking removes.** A skill is copied wherever the project's agents read it
 ([below](#where-a-project-keeps-its-artifacts)), or into the directory a
@@ -1345,7 +1364,7 @@ Every key runs a command you could have typed, through the same parser:
 | `g` | gather from a git repository, showing how far it has got; `esc` stops it, until it starts placing | `flayer gather git <url>` |
 | `L` | load another workspace's own skills and rules; enter on a loaded one unloads it | `flayer load <path>`, `flayer unload <path>` |
 | `s` | what is on the shelf | `flayer gather list` |
-| `i` | install skills and rules from the workspace's own, a loaded workspace, or the shelf; `tab` switches between them, and `v` turns the screen round to every project for one of them | `flayer install` |
+| `i` | install skills and rules from the workspace's own, a loaded workspace, or the shelf; `tab` switches between them, and `v` turns the screen round to every project for one of them | `flayer install` opens it; `a` runs `flayer install -p <project>... --from <origin> <kind:name>` and `flayer uninstall -p <project>... <kind:name>` |
 | `R` | read the disk again | nothing: it changes nothing |
 
 A project whose own commands would reach another workspace (linked from
