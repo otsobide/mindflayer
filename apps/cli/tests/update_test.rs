@@ -340,6 +340,31 @@ fn a_stale_entry_is_said_beside_what_the_rest_update() {
 }
 
 #[test]
+fn every_entry_stale_is_not_said_as_nothing_linked() {
+    let dir = TempDir::new().unwrap();
+    flayer(dir.path(), &["init"]).unwrap();
+    let old = dir.path().join("old-api");
+    fs::create_dir(&old).unwrap();
+    new_project(&old);
+    flayer(dir.path(), &["link", "old-api"]).unwrap();
+    fs::remove_dir_all(&old).unwrap();
+
+    let planned = flayer(dir.path(), &["update", "--all"]).unwrap();
+
+    assert_eq!(
+        planned.stdout,
+        "nothing to update: no project linked could be read\n"
+    );
+    assert_eq!(planned.stderr.len(), 1, "{:?}", planned.stderr);
+    assert!(
+        planned.stderr[0].starts_with("warning: ") && planned.stderr[0].contains("old-api"),
+        "{:?}",
+        planned.stderr
+    );
+    assert!(!planned.ok);
+}
+
+#[test]
 fn an_update_of_a_default_workspace_nothing_has_made_makes_nothing() {
     let home = TempDir::new().unwrap();
     let here = TempDir::new().unwrap();

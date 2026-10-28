@@ -43,10 +43,13 @@ pub(crate) fn update_projects(
         error: Box::new(error),
         warnings: warnings.to_vec(),
     };
+    // Every project linked, and none of them would open: not a workspace
+    // that links none, which is what an empty plan otherwise means.
+    let unread = projects.is_empty() && !warnings.is_empty();
     if !yes {
         let plan = update::plan(workspace, projects, &references, edits(force))
             .map_err(|error| failed(error.into(), &warnings))?;
-        let mut outcome = laid_out(&plan, false);
+        let mut outcome = laid_out(&plan, false, unread);
         if !plan.is_empty() {
             outcome.stdout.push_str(UNCHANGED);
         }
@@ -55,7 +58,7 @@ pub(crate) fn update_projects(
     let applied = update::apply(workspace, projects, &references, edits(force), homes)
         .map_err(|error| failed(error.into(), &warnings))?;
     let said = scrubbed(&applied.scrub);
-    Ok(said.before(beside(laid_out(&applied.plan, true), warnings)))
+    Ok(said.before(beside(laid_out(&applied.plan, true, unread), warnings)))
 }
 
 /// `outcome`, with `warnings` after what it says.
@@ -67,7 +70,9 @@ fn beside(mut outcome: Outcome, warnings: Vec<String>) -> Outcome {
 
 /// A line for each installation written, in plan order, and on stderr what
 /// is left and why: as what would happen, or, once `done`, as what did.
-fn laid_out(plan: &Plan, done: bool) -> Outcome {
+/// `unread` says the plan holds no project because none of those linked
+/// would open.
+fn laid_out(plan: &Plan, done: bool, unread: bool) -> Outcome {
     let mut outcome = Outcome::plain(String::new());
     for project in &plan.projects {
         project_laid_out(&mut outcome, project, done);
@@ -83,23 +88,28 @@ fn laid_out(plan: &Plan, done: bool) -> Outcome {
         outcome.ok = false;
     }
     if plan.is_empty() {
-        outcome.stdout = nothing(plan);
+        outcome.stdout = nothing(plan, unread);
     }
     outcome
 }
 
 /// What an update that writes nothing says: that everything asked is
 /// current, when it is, and otherwise only that nothing is written, with
-/// why beside it.
-fn nothing(plan: &Plan) -> String {
+/// why beside it. `unread` as [`laid_out`] takes it.
+fn nothing(plan: &Plan, unread: bool) -> String {
     let names: Vec<&str> = plan
         .projects
         .iter()
         .map(|project| project.name.as_str())
         .collect();
-    // Only `--all` asks for none, in a workspace that links none.
+    // Only `--all` asks for none: in a workspace that links none, or one
+    // whose every entry would not open, each said beside this.
     if names.is_empty() {
-        return String::from("nothing to update: no project is linked\n");
+        return String::from(if unread {
+            "nothing to update: no project linked could be read\n"
+        } else {
+            "nothing to update: no project is linked\n"
+        });
     }
     // Said only of what there is: with nothing installed, or nothing the
     // names given match, there is nothing to call current.
