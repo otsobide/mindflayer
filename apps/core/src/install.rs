@@ -23,6 +23,7 @@ use std::io;
 use std::path::{Component, Path, PathBuf};
 use std::time::Duration;
 
+use serde::{Serialize, Serializer};
 use thiserror::Error;
 
 use crate::agent::{Agent, AgentHomes};
@@ -143,6 +144,92 @@ pub enum Offer {
         /// The loaded workspace's declared name.
         workspace: String,
     },
+}
+
+/// As an object holding the place that offers it (`shelf`, `workspace` or
+/// `loaded`), what that place holds of it, each field by the name its
+/// variant gives it, and its origin as `--from` takes it.
+///
+/// By hand, for the place: a derive would tag each variant with its Rust
+/// name, where these are words a front end compares and a rename must not
+/// change. `path` is what the variant holds: the shelf's route from the
+/// workspace, `/` separated, as the ledger keeps it, and the folder itself
+/// for the other two. The origin goes out through [`redacted`], as every
+/// URL does, so an offer built with a credential in its source prints none.
+impl Serialize for Offer {
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        #[derive(Serialize)]
+        struct Placed<T> {
+            place: &'static str,
+            #[serde(flatten)]
+            held: T,
+            origin: String,
+        }
+        #[derive(Serialize)]
+        struct Own<'a> {
+            kind: Kind,
+            name: &'a str,
+            summary: &'a Option<String>,
+            #[serde(serialize_with = "paths::lossy")]
+            path: &'a Path,
+        }
+        #[derive(Serialize)]
+        struct Load<'a> {
+            kind: Kind,
+            name: &'a str,
+            summary: &'a Option<String>,
+            #[serde(serialize_with = "paths::lossy")]
+            path: &'a Path,
+            entry: &'a str,
+            workspace: &'a str,
+        }
+
+        let origin = redacted(&self.origin()).into_owned();
+        match self {
+            Offer::Shelf(gathered) => Placed {
+                place: "shelf",
+                held: gathered,
+                origin,
+            }
+            .serialize(serializer),
+            Offer::Workspace {
+                kind,
+                name,
+                summary,
+                path,
+            } => Placed {
+                place: "workspace",
+                held: Own {
+                    kind: *kind,
+                    name,
+                    summary,
+                    path,
+                },
+                origin,
+            }
+            .serialize(serializer),
+            Offer::Loaded {
+                kind,
+                name,
+                summary,
+                path,
+                entry,
+                workspace,
+            } => Placed {
+                place: "loaded",
+                held: Load {
+                    kind: *kind,
+                    name,
+                    summary,
+                    path,
+                    entry,
+                    workspace,
+                },
+                origin,
+            }
+            .serialize(serializer),
+        }
+    }
 }
 
 impl Offer {
@@ -426,7 +513,10 @@ pub fn targets(project: &MindProject, kind: Kind) -> Result<Vec<InstallTarget>, 
 }
 
 /// One thing that can be installed, seen from one project.
-#[derive(Debug, Clone)]
+///
+/// What it serializes to is a contract, as a status report's is: each field
+/// by its name.
+#[derive(Debug, Clone, Serialize)]
 pub struct Candidate {
     pub offer: Offer,
     pub standing: Standing,
