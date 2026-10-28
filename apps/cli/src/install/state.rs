@@ -10,6 +10,15 @@
 //! keeps its two columns however many kinds there are, and rather than every
 //! kind in one list, where a skill and a rule of one name would sit side by
 //! side as two boxes for what reads as one thing.
+//!
+//! `v` turns the screen round, by artifact: every offer of the kind shown on
+//! the left, and on the right every project, ticked where it holds the one
+//! under the cursor. The same boxes either way round, each a project's row
+//! of an offer, so a mark made one way is there the other way, and what is
+//! applied is one batch whichever way it was marked. `v` rather than `tab`,
+//! the key such a view would have had before rules could be installed:
+//! `tab` shows the next kind, which means the same either way round, so the
+//! two cannot share it.
 
 use mindflayer_core::install::{self, Candidate, Standing};
 use mindflayer_core::{Kind, MindProject};
@@ -17,13 +26,26 @@ use ratatui::crossterm::event::KeyCode;
 
 use crate::commands::install::named;
 
-/// Which column the keyboard is in.
+/// Which column the keyboard is in, and so which way round the screen is.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Focus {
     Projects,
     /// What can be installed into the project on the left, of the kind
     /// shown ([`Screen::kind`]).
     Offers,
+    /// Every offer of the kind shown, from wherever it is offered: the left
+    /// column of the screen turned round by artifact.
+    Artifacts,
+    /// Every project, ticked where it holds the artifact on the left: the
+    /// right column of the screen turned round.
+    Receivers,
+}
+
+impl Focus {
+    /// Whether the screen is turned round by artifact.
+    pub fn by_artifact(self) -> bool {
+        matches!(self, Focus::Artifacts | Focus::Receivers)
+    }
 }
 
 /// What marking a box asks for, once it disagrees with how it started.
@@ -91,6 +113,14 @@ impl Row {
     fn same(&self, other: &Row) -> bool {
         self.candidate.kind() == other.candidate.kind()
             && self.candidate.name() == other.candidate.name()
+    }
+
+    /// Whether it is the very offer `other` is, as another project sees it:
+    /// one kind and name from one place, which the screen turned round lists
+    /// once. Two places offering one name are two of its rows, as they are
+    /// two boxes in a project.
+    pub fn same_offer(&self, other: &Row) -> bool {
+        self.same(other) && self.candidate.origin() == other.candidate.origin()
     }
 
     /// What this row is asking for, if anything.
@@ -172,6 +202,13 @@ impl Target {
             .map(|error| error.to_string())
     }
 
+    /// Its row of the offer `artifact` is, by its place in [`Target::rows`]:
+    /// none when it is offered nothing of that kind, having nowhere to put
+    /// it ([`Target::unreachable`]).
+    pub fn row_of(&self, artifact: &Row) -> Option<usize> {
+        self.rows.iter().position(|row| row.same_offer(artifact))
+    }
+
     /// The rows of `kind`, by their place in [`Target::rows`].
     pub fn shown(&self, kind: Kind) -> Vec<usize> {
         (0..self.rows.len())
@@ -238,6 +275,12 @@ pub struct Screen {
     pub kind: Kind,
     /// Where the cursor sits in the project column.
     pub cursor: usize,
+    /// Where it sits among the artifacts of the kind shown, turned round
+    /// ([`Screen::artifacts`]).
+    pub artifact: usize,
+    /// Where it sits among the projects, turned round: a place in
+    /// [`Screen::targets`], as [`Screen::cursor`] is.
+    pub receiver: usize,
     /// One line saying why the last key did nothing, when it did nothing.
     pub message: Option<String>,
     /// Whether the confirmation is up. Applying removes files, so it is asked
@@ -252,6 +295,8 @@ impl Screen {
             focus: Focus::Projects,
             kind: Kind::Skill,
             cursor: 0,
+            artifact: 0,
+            receiver: 0,
             message: None,
             confirming: false,
         };
@@ -259,12 +304,88 @@ impl Screen {
         screen
     }
 
-    /// Show the offers of `kind`, each project's cursor on one of them.
+    /// Show the offers of `kind`, each project's cursor on one of them, and
+    /// the cursor turned round on the first.
     fn show(&mut self, kind: Kind) {
         self.kind = kind;
+        self.artifact = 0;
         for target in &mut self.targets {
             target.show(kind);
         }
+    }
+
+    /// Every offer of the kind shown, once each, as the screen turned round
+    /// lists them: a row of each, from the first project offered it, in the
+    /// order the projects are offered them. A project with nowhere to put
+    /// the kind is offered none, so it adds none.
+    pub fn artifacts(&self) -> Vec<&Row> {
+        let mut listed: Vec<&Row> = Vec::new();
+        for target in &self.targets {
+            for index in target.shown(self.kind) {
+                let row = &target.rows[index];
+                if !listed.iter().any(|seen| seen.same_offer(row)) {
+                    listed.push(row);
+                }
+            }
+        }
+        listed
+    }
+
+    /// The artifact the cursor is on, turned round.
+    pub fn chosen(&self) -> Option<&Row> {
+        self.artifacts().get(self.artifact).copied()
+    }
+
+    /// How many projects' boxes of the offer `artifact` is disagree with how
+    /// they started.
+    pub fn changes_of(&self, artifact: &Row) -> usize {
+        self.targets
+            .iter()
+            .filter_map(|target| target.row_of(artifact).map(|index| &target.rows[index]))
+            .filter(|row| row.pending().is_some())
+            .count()
+    }
+
+    /// Turn the screen round, keeping the box under the cursor under it: a
+    /// project's row of an offer is the offer's row of that project. The
+    /// column the keyboard is in stays the same side, so `v` from a box
+    /// lands on that box, and from the left column on the left column.
+    fn turn(&mut self) {
+        let kind = self.kind;
+        if self.focus.by_artifact() {
+            let chosen = self.chosen().cloned();
+            self.cursor = self.receiver;
+            let Some(target) = self.targets.get_mut(self.cursor) else {
+                self.focus = Focus::Projects;
+                return;
+            };
+            if let Some(index) = chosen.as_ref().and_then(|row| target.row_of(row)) {
+                target.cursor = index;
+            }
+            let offered = !target.shown(kind).is_empty();
+            self.focus = match self.focus {
+                Focus::Receivers if offered => Focus::Offers,
+                _ => Focus::Projects,
+            };
+            return;
+        }
+        self.receiver = self.cursor;
+        let held = self
+            .current()
+            .and_then(|target| target.rows.get(target.cursor))
+            .filter(|row| row.candidate.kind() == kind)
+            .cloned();
+        self.artifact = held
+            .and_then(|held| {
+                self.artifacts()
+                    .iter()
+                    .position(|row| row.same_offer(&held))
+            })
+            .unwrap_or(0);
+        self.focus = match self.focus {
+            Focus::Offers => Focus::Receivers,
+            _ => Focus::Artifacts,
+        };
     }
 
     /// The kind `tab` shows next, or `shift+tab` (`back`), round again past
@@ -327,9 +448,15 @@ impl Screen {
                 self.show(self.next_kind(key == KeyCode::BackTab));
                 Step::Stay
             }
+            KeyCode::Char('v') => {
+                self.turn();
+                Step::Stay
+            }
             _ => match self.focus {
                 Focus::Projects => self.in_projects(key),
                 Focus::Offers => self.in_offers(key),
+                Focus::Artifacts => self.in_artifacts(key),
+                Focus::Receivers => self.in_receivers(key),
             },
         }
     }
@@ -414,6 +541,94 @@ impl Screen {
             _ => {}
         }
         Step::Stay
+    }
+
+    /// The left column turned round: the artifacts of the kind shown.
+    fn in_artifacts(&mut self, key: KeyCode) -> Step {
+        let count = self.artifacts().len();
+        match key {
+            KeyCode::Up | KeyCode::Char('k') => {
+                self.artifact = self.artifact.saturating_sub(1);
+            }
+            KeyCode::Down | KeyCode::Char('j') => {
+                if self.artifact + 1 < count {
+                    self.artifact += 1;
+                }
+            }
+            KeyCode::Right | KeyCode::Enter | KeyCode::Char('l') => {
+                if self.chosen().is_some() {
+                    self.focus = Focus::Receivers;
+                } else {
+                    self.message = Some(self.none_offered());
+                }
+            }
+            KeyCode::Esc => return Step::Quit,
+            _ => {}
+        }
+        Step::Stay
+    }
+
+    /// The right column turned round: every project, for the artifact on
+    /// the left. A project offered nothing of its kind has no box, and says
+    /// why instead, as the screen the right way round says it in place of
+    /// its offers.
+    fn in_receivers(&mut self, key: KeyCode) -> Step {
+        match key {
+            KeyCode::Up | KeyCode::Char('k') => {
+                self.receiver = self.receiver.saturating_sub(1);
+            }
+            KeyCode::Down | KeyCode::Char('j') => {
+                if self.receiver + 1 < self.targets.len() {
+                    self.receiver += 1;
+                }
+            }
+            KeyCode::Left | KeyCode::Esc | KeyCode::Char('h') => {
+                self.focus = Focus::Artifacts;
+            }
+            KeyCode::Char(' ') => {
+                let kind = self.kind;
+                let Some(chosen) = self.chosen().cloned() else {
+                    self.message = Some(self.none_offered());
+                    return Step::Stay;
+                };
+                let Some(target) = self.targets.get_mut(self.receiver) else {
+                    return Step::Stay;
+                };
+                self.message = match target.row_of(&chosen) {
+                    Some(index) => toggle(target, index),
+                    None => Some(
+                        target
+                            .unreachable(kind)
+                            .unwrap_or_else(|| nothing(kind).to_owned()),
+                    ),
+                };
+            }
+            _ => {}
+        }
+        Step::Stay
+    }
+
+    /// What to say turned round when nothing of the kind shown is offered
+    /// to any project: that no project can take it, when none can, as each
+    /// says the right way round, or else where that kind comes from.
+    pub fn none_offered(&self) -> String {
+        if self.none_can_take() {
+            return format!(
+                "no project here can take {}s; v turns the screen back, where each says why",
+                self.kind
+            );
+        }
+        nothing(self.kind).to_owned()
+    }
+
+    /// Whether every project has nowhere to put the kind shown, as core
+    /// says of each ([`Target::unreachable`]).
+    pub fn none_can_take(&self) -> bool {
+        !self.targets.is_empty()
+            && self
+                .targets
+                .iter()
+                .all(|target| target.unreachable(self.kind).is_some())
     }
 }
 

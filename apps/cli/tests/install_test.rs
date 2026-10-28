@@ -1252,3 +1252,240 @@ fn what_is_true_of_a_projects_rules_as_a_whole_is_said_once_when_several_are_app
     );
     assert_eq!(outcome.stderr, [tracked]);
 }
+
+// ---------------------------------------------------------------------------
+// The screen turned round, by artifact
+//
+// `v` lists every offer on the left and every project on the right, ticked
+// where it holds the one under the cursor: the same boxes as the screen the
+// right way round, so what is marked either way is one batch.
+// ---------------------------------------------------------------------------
+
+#[test]
+fn v_turns_the_screen_round_to_every_project_for_one_artifact_and_back() {
+    let (_dir, workspace, ledger) = shelved(&["collapse", "tanukeys"], &["deploy", "review"]);
+    let mut screen = screen_for(&workspace, &ledger);
+
+    press(&mut screen, &[KeyCode::Char('v')]);
+
+    assert_eq!(screen.focus, Focus::Artifacts);
+    let drawn = rendered(&screen);
+    assert!(drawn.contains("┏ Skills ━"), "{drawn}");
+    assert!(drawn.contains("> deploy"), "{drawn}");
+    assert!(drawn.contains("  review"), "{drawn}");
+    assert!(drawn.contains("What review does"), "{drawn}");
+    assert!(drawn.contains("Projects for deploy"), "{drawn}");
+    assert!(drawn.contains("[ ] collapse"), "{drawn}");
+    assert!(drawn.contains("[ ] tanukeys"), "{drawn}");
+    assert!(drawn.contains("→/enter projects"), "{drawn}");
+    assert!(drawn.contains("v by project"), "{drawn}");
+
+    press(&mut screen, &[KeyCode::Down]);
+    assert!(rendered(&screen).contains("Projects for review"));
+    press(&mut screen, &[KeyCode::Char('v')]);
+    assert_eq!(screen.focus, Focus::Projects);
+    let back = rendered(&screen);
+    assert!(back.contains("Skills in collapse"), "{back}");
+    assert!(back.contains("v by skill"), "{back}");
+}
+
+#[test]
+fn ticking_projects_for_one_artifact_marks_each_projects_box_and_applies_as_one_batch() {
+    let (dir, workspace, ledger) = shelved(&["collapse", "tanukeys"], &["deploy", "review"]);
+    let mut screen = screen_for(&workspace, &ledger);
+
+    press(
+        &mut screen,
+        &[
+            KeyCode::Char('v'),
+            KeyCode::Right,
+            KeyCode::Char(' '),
+            KeyCode::Down,
+            KeyCode::Char(' '),
+        ],
+    );
+
+    assert_eq!(screen.focus, Focus::Receivers);
+    assert_eq!(screen.counts(), (2, 0));
+    let drawn = rendered(&screen);
+    assert!(drawn.contains("[x] collapse  + install"), "{drawn}");
+    assert!(drawn.contains("[x] tanukeys  + install"), "{drawn}");
+    assert!(drawn.contains("deploy  (2)"), "{drawn}");
+    assert!(drawn.contains("space mark"), "{drawn}");
+    assert!(drawn.contains("2 to install, 0 to remove"), "{drawn}");
+
+    // The right way round, each project holds its own mark.
+    press(&mut screen, &[KeyCode::Char('v')]);
+    let back = rendered(&screen);
+    assert!(back.contains("collapse  (1)"), "{back}");
+    assert!(back.contains("tanukeys  (1)"), "{back}");
+    assert!(back.contains("[x] deploy  + install"), "{back}");
+
+    let outcome =
+        install_screen::apply(&workspace, &ledger, &screen, &AgentHomes::default()).unwrap();
+
+    assert_eq!(
+        outcome.stdout,
+        "collapse: installed deploy\ntanukeys: installed deploy\n\n2 installed, 0 removed\n"
+    );
+    assert!(outcome.ok, "{:?}", outcome.stderr);
+    for project in ["collapse", "tanukeys"] {
+        for copy in copies(&dir.path().join(project), "deploy") {
+            assert!(copy.join("SKILL.md").is_file(), "{}", copy.display());
+        }
+    }
+}
+
+#[test]
+fn unticking_a_project_for_one_artifact_takes_it_out_of_that_project_alone() {
+    let (dir, workspace, ledger) = shelved(&["collapse", "tanukeys"], &["deploy"]);
+    let mut screen = screen_for(&workspace, &ledger);
+    press(
+        &mut screen,
+        &[
+            KeyCode::Char('v'),
+            KeyCode::Right,
+            KeyCode::Char(' '),
+            KeyCode::Down,
+            KeyCode::Char(' '),
+        ],
+    );
+    install_screen::apply(&workspace, &ledger, &screen, &AgentHomes::default()).unwrap();
+
+    let mut again = screen_for(&workspace, &ledger);
+    press(
+        &mut again,
+        &[KeyCode::Char('v'), KeyCode::Right, KeyCode::Char(' ')],
+    );
+
+    let drawn = rendered(&again);
+    assert!(drawn.contains("[ ] collapse  - remove"), "{drawn}");
+    assert!(drawn.contains("[x] tanukeys"), "{drawn}");
+    let outcome =
+        install_screen::apply(&workspace, &ledger, &again, &AgentHomes::default()).unwrap();
+    assert_eq!(
+        outcome.stdout,
+        "collapse: removed deploy\n\n0 installed, 1 removed\n"
+    );
+    assert!(copies(&dir.path().join("collapse"), "deploy")
+        .iter()
+        .all(|copy| !copy.exists()));
+    assert!(copies(&dir.path().join("tanukeys"), "deploy")
+        .iter()
+        .all(|copy| copy.join("SKILL.md").is_file()));
+}
+
+#[test]
+fn turning_the_screen_round_keeps_the_box_under_the_cursor() {
+    let (_dir, workspace, ledger) = shelved(&["collapse", "tanukeys"], &["deploy", "review"]);
+    let mut screen = screen_for(&workspace, &ledger);
+    // tanukeys's review, the right way round.
+    press(&mut screen, &[KeyCode::Down, KeyCode::Right, KeyCode::Down]);
+
+    press(&mut screen, &[KeyCode::Char('v')]);
+
+    assert_eq!(screen.focus, Focus::Receivers);
+    assert_eq!(screen.chosen().unwrap().candidate.name(), "review");
+    assert_eq!(screen.targets[screen.receiver].name(), "tanukeys");
+    press(&mut screen, &[KeyCode::Char(' ')]);
+    press(&mut screen, &[KeyCode::Char('v')]);
+    assert_eq!(screen.focus, Focus::Offers);
+    let back = rendered(&screen);
+    assert!(back.contains("Skills in tanukeys"), "{back}");
+    assert!(back.contains("> [x] review  + install"), "{back}");
+}
+
+#[test]
+fn turned_round_somebodys_copy_is_held_and_says_why() {
+    let (dir, workspace, ledger) = shelved(&["collapse", "tanukeys"], &["deploy"]);
+    let written = copies(&dir.path().join("tanukeys"), "deploy").remove(0);
+    fs::create_dir_all(&written).unwrap();
+    fs::write(
+        written.join("SKILL.md"),
+        skill_file("deploy", "Written by a person"),
+    )
+    .unwrap();
+    let mut screen = screen_for(&workspace, &ledger);
+
+    press(
+        &mut screen,
+        &[
+            KeyCode::Char('v'),
+            KeyCode::Right,
+            KeyCode::Down,
+            KeyCode::Char(' '),
+        ],
+    );
+
+    assert_eq!(screen.counts(), (0, 0), "the box did not move");
+    let drawn = rendered(&screen);
+    assert!(
+        drawn.contains("[x] tanukeys  (not installed by mindflayer)"),
+        "{drawn}"
+    );
+    assert!(drawn.contains("left alone"), "and it says why:\n{drawn}");
+}
+
+#[test]
+fn turned_round_a_project_that_cannot_take_the_kind_has_no_box_and_says_why() {
+    let (dir, _, _) = shelved(&["beta"], &["deploy"]);
+    with_settings(dir.path(), "");
+    let workspace = FlayerWorkspace::locate(dir.path()).unwrap().unwrap();
+    let ledger = workspace.ledger().unwrap();
+    let mut screen = screen_for(&workspace, &ledger);
+    let alpha = listed(&screen, "alpha");
+
+    press(&mut screen, &[KeyCode::Char('v'), KeyCode::Right]);
+    screen.receiver = alpha;
+    press(&mut screen, &[KeyCode::Char(' ')]);
+
+    assert_eq!(screen.counts(), (0, 0));
+    let drawn = rendered(&screen);
+    assert!(drawn.contains("alpha  (takes no skills)"), "{drawn}");
+    assert!(drawn.contains("[ ] beta"), "{drawn}");
+    assert_eq!(
+        screen.message.as_deref(),
+        Some(
+            "alpha names no agent in its settings that skills are installed for, so none can \
+             be installed into it"
+        )
+    );
+}
+
+#[test]
+fn turned_round_tab_shows_the_rules_and_each_project_for_one() {
+    let (_dir, workspace, ledger) = with_a_rule(&["collapse", "tanukeys"]);
+    let mut screen = screen_for(&workspace, &ledger);
+
+    press(&mut screen, &[KeyCode::Char('v'), KeyCode::Tab]);
+
+    assert_eq!(screen.kind, Kind::Rule);
+    assert_eq!(screen.focus, Focus::Artifacts);
+    let drawn = rendered(&screen);
+    assert!(drawn.contains("┏ Rules ━"), "{drawn}");
+    assert!(drawn.contains("> git/commits"), "{drawn}");
+    assert!(!drawn.contains("deploy"), "{drawn}");
+    assert!(drawn.contains("Projects for rule git/commits"), "{drawn}");
+    assert!(drawn.contains("tab skills"), "{drawn}");
+    press(&mut screen, &[KeyCode::Right, KeyCode::Char(' ')]);
+    assert_eq!(screen.counts(), (1, 0));
+    assert!(rendered(&screen).contains("[x] collapse  + install"));
+}
+
+#[test]
+fn turned_round_with_nothing_offered_says_where_it_comes_from() {
+    let (_dir, workspace, ledger) = shelved(&["collapse"], &["deploy"]);
+    let mut screen = screen_for(&workspace, &ledger);
+
+    press(
+        &mut screen,
+        &[KeyCode::Char('v'), KeyCode::Tab, KeyCode::Right],
+    );
+
+    assert_eq!(screen.focus, Focus::Artifacts, "nothing to go into");
+    assert_eq!(
+        screen.message.as_deref(),
+        Some("no rules to install: none of the workspace's own, and none loaded")
+    );
+    assert!(rendered(&screen).contains("`flayer add rule` first"));
+}
