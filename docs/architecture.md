@@ -342,7 +342,10 @@ so the block and those files never disagree on it.
   the description breaks the rules. `mind add`, `rename` and `install` all
   ask `artifact::strict_issues`, which keeps what `ValidationIssue::is_strict`
   picks out of that list, for the skill as it is about to be written, so one
-  change to the set reaches all three. `rename` asks too, although the name is
+  change to the set reaches all three. So does `flayer adopt`, whose library
+  copy is a write, and whose project copies become what an install would
+  have written ([adopting what a project already
+  keeps](#adopting-what-a-project-already-keeps)). `rename` asks too, although the name is
   all it writes, because what it leaves behind is a skill Mindflayer wrote;
   `mind add` checks the name and the description before building anything as
   well, only for messages of its own. Those are what agents refuse: Codex skips a skill whose name is over 64
@@ -470,6 +473,12 @@ takes one of the workspace's own out of every project it links before the
 library, and has no `mind` form, nor a `-p`: a project's own was installed
 nowhere ([removing one of the workspace's own
 everywhere](#removing-one-of-the-workspaces-own-everywhere)).
+`flayer adopt -p <project> <name>` brings a skill somebody keeps in the
+project's agents' folders into the workspace's library and records the
+project's copies as installed from there, and has no `mind` form: what it
+writes is the workspace's library, which `mind` changes nowhere, as
+`flayer add` without `-p` has none ([adopting what a project already
+keeps](#adopting-what-a-project-already-keeps)).
 `flayer relink <old> <new>` follows a project the workspace links to where it
 moved, and has no `mind` form: the project at `old` is gone, and nothing at
 `new` is linked yet to say which workspace to tell. `mind init --new-id`
@@ -1927,7 +1936,9 @@ its name (`Ledger::copies`, as a listing marks installed copies): a skill
 present anywhere it would be written, and unrecorded there, is
 `Standing::Foreign`, whatever the other targets hold. Foreign is inert in both
 directions: never overwritten, never deleted, and the caller is told so,
-with the path, rather than obeyed quietly. So somebody's skill in
+with the path, rather than obeyed quietly. It becomes Mindflayer's only when
+somebody adopts it by name ([adopting what a project already
+keeps](#adopting-what-a-project-already-keeps)), as it is. So somebody's skill in
 `.claude/skills` refuses the whole install, and `.agents/skills` is not
 written either: a copy beside it would hand OpenCode, which reads both, two
 different skills of one name. Only the targets refuse, as D-07 has it, not
@@ -2413,6 +2424,122 @@ down: whether a folder reaches every project depends on where the agents
 read, which `AgentHomes` already says, not on where the user's home is, and
 a home moved with `$CLAUDE_CONFIG_DIR` moves what is refused with it.
 
+### Adopting what a project already keeps
+
+Many repositories keep skills written by hand in `.claude/skills` or
+`.agents/skills`, committed with the code. Each lists as foreign, and
+foreign is inert both ways, so nothing Mindflayer does reaches one: no
+update, and no copy for an agent that reads the other folder. `flayer adopt
+-p <project> <name>` (`adopt::plan`, `adopt::apply`, #59) is the one way a
+copy nobody installed becomes recorded: asked for by name, never done by a
+scan or an install, it copies the skill into the workspace's library and
+records the project's copies as an installation from there, with the hash
+they hold. The project's bytes are never written: what is there is what is
+recorded, and from then on it is managed as anything installed is, current
+while nobody changes it, edited once somebody does, outdated once the
+library copy moves on ([an edited copy is left
+alone](#an-edited-copy-is-left-alone)). What a project authors stays its
+own ([D-06](#d-06-projects-keep-authoring-beside-the-code)); this is about
+what sits where its agents read.
+
+- **Held to what an install could have written.** Every later look compares
+  the copies with the recorded hash and with the library copy, so both are
+  made from the bytes as they are: the hash is `hash::tree` of the copies,
+  the library copy is made from the first with `copy::tree` and refused
+  unless it hashes the same, and the record names the workspace's own as its
+  origin. What no install writes is refused rather than recorded: a link,
+  where the copy is or inside it, which the hash refuses and an install
+  never leaves; something at the copy's place that is no folder; and a
+  `.claude-plugin` at its top, which an install leaves out of every copy
+  ([what no copy holds](#what-no-copy-holds)). Recorded with it, the copy
+  would read as outdated at once, since an install's copy holds no such
+  folder (`copy::same_leaving`), and the next update would take it out,
+  turning off the plugin's hooks and servers behind somebody's back;
+  recorded without it, the copy would hold what the record does not. So it
+  is said, and moving it out of the skill is somebody's to do first.
+- **Strict, as installing is.** The library copy is a write, so the skill is
+  held to what an install refuses one over (`artifact::strict_issues`),
+  filed under its name: a name that breaks the rules or does not match its
+  folder, a description empty or too long.
+- **Every copy one skill.** Copies in two targets that do not hold the same
+  are refused, both named: one hash is recorded, and which of the two is the
+  skill is not something to guess.
+- **Only where an install writes, every target recorded.** It looks in the
+  targets an install of it uses (`install::targets`), and records each,
+  those with no copy too, so one with none reads as missing, and the next
+  update puts a copy there from the library, as for any installation that
+  lost one. Adopting writes nothing in a project, so it is the update, run
+  when somebody chooses, that gives Codex and OpenCode a skill a repository
+  kept only in `.claude/skills`. Recording only the copies found was turned
+  down: current at once, but the agents of the empty folder would go
+  without it and nothing would say so, until the next install recorded the
+  copies afresh. So was refusing: most repositories keep one folder, and a
+  new project names all three agents. A copy only in a folder no install
+  writes, `.opencode/skills` say, is not adopted, since no install or update
+  would reach it there and the next would make it somebody's again.
+- **Somebody's, nothing else.** Not one the ledger records already, from
+  wherever it came, which is Mindflayer's to update or uninstall; not one in
+  the folder the project authors in, which a `mind.toml`'s target always is
+  and settings may make one, since that is the project's own work and a
+  change from the project reaches it; not one inside an agent's own folder
+  ([never into an agent's own folder](#never-into-an-agents-own-folder)),
+  nor one where a loaded workspace keeps its own. A rule is refused too: one
+  reaches a project rendered from the library as a section of its
+  `AGENTS.md`, and taking rules out of a hand-written one is a change of its
+  own.
+- **One name in the library.** A name the library holds already, by its
+  folder or by what one of its skills declares, is refused with both paths:
+  the workspace would offer two skills of one name. The copy's folder is
+  made with `create_dir`, which refuses one made in the meantime, and the
+  folder of the workspace's own skills with it when it is missing, as the
+  first one added makes it. Built in place rather than beside: no agent
+  reads the library.
+- **Out of git only what git does not track.** In a local project each copy
+  git tracks nothing in is kept out of git before anything else is written,
+  as an install's copies are, so a block that cannot be edited refuses the
+  whole adoption ([what keeps an install out of
+  git](#what-keeps-an-install-out-of-git)). One git tracks, as a committed
+  `.claude/skills` is, gets no line, then or after an update: a line would
+  keep none of it out and hide every file added to it later. It stays the
+  team's in git, and an update writes over it there, for the change to show
+  in `git status`. Local mode edits a tracked team file only with
+  `edit_tracked` ([D-02](#d-02-installs-stay-local-unless-a-project-shares-them));
+  that is about a file Mindflayer edits inside its marks, an `AGENTS.md` or a
+  config file, and a skill folder somebody asked by name to be managed is
+  consent for that folder, which the dry run and a `note:` say. The plan
+  reads the exclude file whenever a line would be written, so a dry run
+  refuses a block that cannot be edited as the adoption would, and a local
+  project no work tree holds (`Plan::outside`) is said to keep nothing out
+  of git, in the dry run and the adoption both, as an install there says it,
+  rather than listed as keeping each copy out. A shared project's exclude
+  file, and that of one a `mind.toml` marks, is never opened.
+- **One lock, planned again under it, together or not at all.** `apply`
+  opens the ledger to write first, since its scrub can take the lock
+  itself, then takes the workspace's lock, reads the project again and plans again,
+  so a plan shown a minute before decides nothing. The exclude lines, the
+  library copy and the record follow in that order, and a step that fails
+  takes back what came before it: the library copy goes, and the exclude
+  lines this added, not one the group held already. The action log is
+  written last, as after an install.
+- **A dry run without `--yes`**, which reads the ledger without making it and
+  writes nothing, as every dry run does, and exits zero: what it gives is a
+  line for the library copy, one for the copies recorded, one for each
+  target with no copy, and in a local project one for each copy kept out of
+  git, to read before saying yes. Resolved as a read with `--yes` too, as an
+  update is: a workspace made for the occasion links no project to adopt
+  from.
+- **Where `gh skill` got it, shown.** A `SKILL.md` that `gh skill`
+  installed says where it came from under `metadata` keys starting
+  `github-` (`adopt::PROVENANCE_PREFIX`). The plan hands those back as
+  written, and the CLI shows them under its first line, each key and value
+  made printable as every row from a file somebody wrote is, so a carriage
+  return cannot rewrite the line read before saying yes; nothing reads them
+  further, and no other tool's lockfile is read or written. Taking them for
+  a source to gather from would be a gather, which is its own command.
+
+The TUI offers it on a row `status` calls foreign, with `A`, which asks and
+then runs `flayer adopt -p <project> --yes skill:<name>`.
+
 ### Loading: a third place, read live
 
 `flayer load <path>` adds a third place that offers: the own artifacts of
@@ -2491,7 +2618,8 @@ A project in local mode
 installed into it out of git, through a block of anchored entries in
 `$GIT_COMMON_DIR/info/exclude` that `exclude` keeps. Which paths to exclude
 is the installing side's to choose, and `exclude` only writes them down: an
-install of a skill names one entry for each copy, a render of Claude's rule
+install of a skill names one entry for each copy git tracks nothing in, a
+render of Claude's rule
 files one for each file ([Claude's rule files](#claudes-rule-files)), a
 render of a project's rules one for an `AGENTS.md` it made ([installing
 rules](#installing-rules)), and #94 will for MCP config.
@@ -2516,6 +2644,19 @@ How an install uses it:
   teammate's way. Copies that then fail to land take back out the entries of
   every target left empty, since a line naming an empty place would keep
   whatever somebody writes there later out of git without a word.
+- **Never a copy git tracks.** An ignore rule leaves alone what the index
+  holds, so a line for a copy git tracks keeps none of its files out, and
+  hides from `git status` every file added to it later, where a teammate
+  would never see it to commit. So an install writes a line only for each
+  copy git tracks nothing in (`install::untracked`), asked of the index as
+  `exclude::tracks` asks it: a copy that lands where nothing was, as most
+  do, is untracked, while one a team committed, as an [adopted
+  one](#adopting-what-a-project-already-keeps) often is, or one a project
+  that was shared kept when it turned local, stays in git, and what an
+  update writes over it shows as the change it is. Mindflayer runs no git
+  command and leaves the index as it is. An index that cannot be read takes
+  nothing for tracked, and the exclude edit that follows reads the same
+  repository.
 - **Local projects only.** A shared project's copies are the team's to
   commit, and a project a `mind.toml` marks was committed by design, so for
   those the exclude file is not opened at all, by an install or an
@@ -2697,7 +2838,8 @@ unrecorded in a folder it drops; `targets reset` is the same the other way.
   (`exclude::forget`), every line whichever workspace wrote it, since each
   names a copy that is now the team's to commit. One turning local is given
   the `.gitignore` and an entry for each copy the ledger records in place
-  that the group does not hold yet, both before its settings say so, as
+  that git does not track and the group does not hold yet, both before its
+  settings say so, as
   `mind init` writes the `.gitignore` before the settings. `edit_tracked` is
   written with the share mode every time, off unless `--edit-tracked` is
   given, so one command line says the whole of how the project shares.
@@ -2885,7 +3027,9 @@ report, a refusal and an update never disagree:
 - **orphaned**: the place it came from no longer offers it, so nothing can
   bring it up to date or put a copy of it back; `uninstall` takes it out.
 - **foreign**: unrecorded, in an agent's folder outside any the project
-  authors in: somebody's, never Mindflayer's to change.
+  authors in: somebody's, never Mindflayer's to change unless somebody
+  adopts it ([adopting what a project already
+  keeps](#adopting-what-a-project-already-keeps)).
 - **authored**: unrecorded, in a folder the project authors in: its own work.
 
 They took over from `installed`, now current, outdated or orphaned, and
@@ -5354,7 +5498,10 @@ other, and none of them makes a reader wait for the workspace.
   from before it reads the ledger for its checks until the entry and the
   records it moves are written (`relink::relink`), and a new id from before
   it reads the project's settings again until the ledger knows it
-  (`relink::new_id`), as a change to the agents does. Two workspaces
+  (`relink::new_id`), as a change to the agents does. An adoption holds it
+  from the plan it makes again until its record is written
+  (`adopt::apply`), so what the ledger says was adopted is what the library
+  holds. Two workspaces
   linking one project are kept apart by neither's lock
   ([open questions](#open-questions)).
 - **Opening the ledger takes no lock**, though it is when a ledger is made or
@@ -5510,7 +5657,11 @@ project's `CLAUDE.md` that git tracks only in a shared project or with
 ([how Claude reaches the block](#how-claude-reaches-the-block)). #45 keeps
 an `AGENTS.md` Mindflayer made out of git, and writes no block into one git
 tracks in a local project without `edit_tracked`, saying which agents then
-miss the rules ([installing rules](#installing-rules)).
+miss the rules ([installing rules](#installing-rules)). #59 writes no line
+for a copy git tracks, as an adopted one often is, whether an install, an
+update or a project turning local would have written one, since it keeps
+none of the copy out ([what keeps an install out of
+git](#what-keeps-an-install-out-of-git)).
 
 ### D-03: Rules reach every agent through `AGENTS.md`
 
@@ -5686,7 +5837,12 @@ change edits it a key at a time through toml_edit, a `settings.json` is read
 as written and changed by nothing but `mind migrate`, which moves it, and a
 `mind.toml` straight, to a `settings.toml` ([a project's
 settings](#a-projects-settings), [moving a project to its
-settings](#moving-a-project-to-its-settings)).
+settings](#moving-a-project-to-its-settings)). #59 brings what a project's
+agents read and nothing installed, a skill somebody keeps in
+`.claude/skills` by hand, into the workspace's library when asked, its
+copies recorded as installed from there and left as they are; what a
+project authors is never adopted ([adopting what a project already
+keeps](#adopting-what-a-project-already-keeps)).
 
 ### D-07: One copy per agent folder
 
@@ -6017,6 +6173,20 @@ just listed.
   moved project is then found by nobody. Telling the two apart needs more
   than the route and the id: the records' copies being there, or the
   settings' name, which a person can change.
+- **Adopting into one project at a time.** `flayer adopt` takes one
+  project's copy, so a skill several repositories keep by hand, each its own
+  copy, is adopted from one of them, and in the others it is still foreign,
+  and refused by an install of the adopted one. Adopting from every project
+  holding the same bytes at once would bring them all under one record each,
+  at the price of a batch that must agree on what the skill is before it
+  writes anything, and say why one project differs.
+- **A tracked copy in a local project, written by an update.** An adopted
+  copy git tracks stays in git, so an update in a local project changes a
+  file the team committed, where local mode otherwise edits a tracked file
+  only with `edit_tracked`. Adopting by name is taken for consent, and the
+  dry run says so; holding such an update back until the project is shared
+  or sets `edit_tracked` would make the consent a setting, at the price of
+  an adopted copy no update reaches by default.
 - **Precedence between projects.** Two projects in one workspace can declare
   the same skill name. Core returns both matches and says nothing about which
   wins, because nothing here yet has to choose. Whatever resolves it (a

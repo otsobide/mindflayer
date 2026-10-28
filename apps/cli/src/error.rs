@@ -8,6 +8,7 @@ use std::io;
 use std::path::{Path, PathBuf};
 
 use mindflayer_core::activate::{self, ActivateError, WORKSPACE_VARIABLE};
+use mindflayer_core::adopt::AdoptError;
 use mindflayer_core::everywhere::EverywhereError;
 use mindflayer_core::gather::GatherError;
 use mindflayer_core::ledger::LedgerError;
@@ -64,6 +65,8 @@ pub enum CliError {
     Lifecycle(#[from] LifecycleError),
     #[error(transparent)]
     Everywhere(#[from] EverywhereError),
+    #[error(transparent)]
+    Adopt(#[from] AdoptError),
     #[error(transparent)]
     Template(#[from] TemplateError),
     #[error(transparent)]

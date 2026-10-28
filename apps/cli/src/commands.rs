@@ -5,6 +5,7 @@
 //! pieces of work on different commands do not collide in the same one.
 
 pub(crate) mod activate;
+pub(crate) mod adopt;
 pub(crate) mod artifact;
 pub(crate) mod gather;
 pub(crate) mod install;
@@ -30,6 +31,7 @@ use crate::{
     tui, Cli, CliError, Command, Failure, FlayerCli, FlayerCommand, Outcome, WorkspacesCommand,
 };
 use activate::{activate_command, which_command};
+use adopt::adopt_from;
 use artifact::{
     add_to, edit_in, remove_everywhere, remove_from, remove_own, rename_in, templates_of,
     would_remove_everywhere,
@@ -509,6 +511,23 @@ fn run_flayer(
                 )
             })
         }
+
+        // Resolved as a read, with --yes too, as `update` is: a default
+        // workspace made for the occasion links no project to adopt from,
+        // and `-p` would refuse it all the same.
+        FlayerCommand::Adopt {
+            project,
+            reference,
+            yes,
+        } => reading_workspace(directory, lookup, |workspace| {
+            adopt_from(
+                workspace,
+                &workspace.pick(project)?,
+                reference,
+                *yes,
+                &lookup.agents,
+            )
+        }),
 
         // Resolved as a read, on the default workspace before it is made
         // too: a workspace made for the occasion keeps its own in its

@@ -92,9 +92,11 @@ under `apps/` with its own `Makefile`:
   `settings.json` to a `settings.toml` (`migrate`), bringing what was
   installed up to date with where it came from (`update`), installing one
   artifact into several projects at once, or taking it, or whatever nothing
-  offers any more, out of them (`assign`), and removing one of the
+  offers any more, out of them (`assign`), removing one of the
   workspace's own from every project it links before the library
-  (`everywhere`). Its only I/O is files, and it never reads the environment.
+  (`everywhere`), and bringing a skill somebody keeps in a project's agents'
+  folders into the library, its copies recorded as installed from there
+  (`adopt`). Its only I/O is files, and it never reads the environment.
 - `apps/cli` (`mindflayer-cli`): the binaries `mind` (`src/main.rs`) and
   `flayer` (`src/bin/flayer.rs`), and the TUI. `src/lib.rs` only re-exports
   the public API. The parsers are in `src/parse.rs`. `src/commands.rs`
@@ -104,7 +106,7 @@ under `apps/` with its own `Makefile`:
   (workspaces, workspaces forget), `artifact` (add, edit, rename, remove,
   templates), `read` (list, show, validate), `status`, `settings` (agents,
   share, targets), `gather`, `install`, `update` and `migrate` (each at both
-  levels). `src/render.rs` holds `Outcome`, `Failure`, the table helpers and
+  levels), and `adopt` (flayer adopt). `src/render.rs` holds `Outcome`, `Failure`, the table helpers and
   the envelope every `--json` prints (`json`), `src/error.rs` holds
   `CliError`, and `src/homes.rs` decides the default home and the agent
   homes, and gathers them with `-W` and `$MINDFLAYER_WORKSPACE` into a
@@ -229,7 +231,8 @@ These are easy to break from a single file without noticing.
   - Creation uses `create_new` or `create_dir`.
   - `rename` rewrites only the `name:` line (`frontmatter::with_key`).
   - `remove` (`flayer remove --everywhere` too), `migrate` at either level,
-    `agents`, `share`, `targets` and `update` are dry runs without `--yes`.
+    `agents`, `share`, `targets`, `update` and `flayer adopt` are dry runs
+    without `--yes`.
     A migration of the library moves nothing a project holds, refuses as a
     whole, and keeps the marker it rewrites as `flayer.toml.v<version>`
     (`create_new`). A project's (`migrate::project`) writes its
@@ -248,7 +251,10 @@ These are easy to break from a single file without noticing.
     a render of Claude's rule files one per file, and neither opens the file
     for a shared project or one a `mind.toml` marks. A
     project turning shared has its whole group forgotten (`exclude::forget`),
-    and one turning local an entry written for each copy in place. A
+    and one turning local an entry written for each copy in place. No entry
+    is written for a copy git tracks (`install::untracked`), by an install,
+    an adoption or a project turning local: it would keep none of the copy
+    out, and hide what is added to it later. A
     relinked project's lines, and a copy's given a new id, are carried to its
     new place or key (`exclude::carry`), never left as a stale group. A team's
     `.gitignore` and `core.excludesFile` are never edited; the `.gitignore`s
@@ -379,7 +385,15 @@ These are easy to break from a single file without noticing.
   through `install::uninstall_with`, the first never forced, so an edited
   copy and somebody's are left as an uninstall leaves them.
   `install::disown` and `install::carry` are private to core, so no front end
-  drops or moves a record on its own. A front end adds through
+  drops or moves a record on its own. The one way a copy nobody installed
+  becomes recorded is `flayer adopt` (`adopt::apply`), asked for by name: it
+  copies the skill into the library and records the project's copies, every
+  target an install uses, under the `hash::tree` they hold, so they read as
+  current (a target with no copy as missing, for an update to fill), never
+  writes in the project, and refuses whatever an install could not have
+  written there (a link, a top-level `.claude-plugin`, copies that differ,
+  a skill `artifact::strict_issues` refuses), the project's own, and a name
+  the library holds. A front end adds through
   `lifecycle::add`, never `create` or `create_from`, which leave a stale
   record in place. A rule is one installation too: in a project marked by its
   settings, its targets are its section of the block, recorded as `AGENTS.md`,
@@ -397,8 +411,9 @@ These are easy to break from a single file without noticing.
   `lifecycle::find_to_change`, which refuses such a rule as received rather
   than as nothing.
 - **Strict when writing, lenient when reading.** A skill's front matter is
-  the Agent Skills format. `mind add`, `rename` and `install` refuse a name or
-  description that breaks its rules, all through `artifact::strict_issues`
+  the Agent Skills format. `mind add`, `rename`, `install` and `flayer adopt`
+  refuse a name or description that breaks its rules, all through
+  `artifact::strict_issues`
   (what `ValidationIssue::is_strict` picks out), so change the rules there and
   nowhere else; gathering
   takes such a skill with a `warning:` per problem, and `validate` reports
@@ -459,7 +474,8 @@ These are easy to break from a single file without noticing.
   from before it reads a
   project's settings until their change and every copy it carries along are
   written, `relink::relink`, from its ledger checks until the entry and the
-  records it moves are written, `relink::new_id`, and `update::apply`, from the plan it makes again until its last
+  records it moves are written, `relink::new_id`, `adopt::apply`, from the
+  plan it makes again until its record is written, and `update::apply`, from the plan it makes again until its last
   installation is written, through `install::install_held` (the body
   `install_with` hands to once it holds the lock) and
   `install::rules::update_held`, which take none of their own. A new
