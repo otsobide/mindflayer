@@ -1287,19 +1287,19 @@ whatever the command (`render::json`):
 
 `status` was the first to take it ([what each project
 has](#what-each-project-has)), and every later reading command takes the same
-one rather than a shape of its own: `scan --json` ([Scanning](#scanning)),
+one rather than a shape of its own: `scan --json` ([Scanning](#scanning)) and
 `workspaces --json` ([the workspaces this machine
-knows](#the-workspaces-this-machine-knows)), and the read types #61 makes
-serializable. One shape is one parser for a script,
-and for the panel's backend when it reads through the CLI.
+knows](#the-workspaces-this-machine-knows)). One shape is one parser for a
+script, and for the panel's backend when it reads through the CLI.
 
 - **The warnings are inside it.** Failures are collected, not raised, in JSON
   as in text: what a table would say on stderr as `warning:` lines goes into
   `warnings`, without the prefix, and stderr is left without them, so a
   script reading stdout misses nothing. The exit status is the text's. A
   hint, advice for whoever reads the terminal, stays on stderr. An error that
-  stops a command is still text on stderr, `--json` or not, until #61 gives
-  errors codes.
+  stops a command is still text on stderr, `--json` or not: every error has
+  a code since #61 ([a code for what went wrong](#a-code-for-what-went-wrong)),
+  but none is printed yet.
 - **Its names are a contract.** Every type in `data` derives `Serialize` in
   core, each field by its snake_case name, and `Kind`, `Agent` and `State`
   are serialized by the word a command line takes for them (`skill`,
@@ -1322,6 +1322,126 @@ and for the panel's backend when it reads through the CLI.
   a report is laid out is a front end's to choose. What goes in `data` is
   core's, which builds and orders it, so the table and the JSON cannot
   disagree about what is there.
+
+### The read types serialize
+
+The reports a command prints are not the only types a front end reads. The
+panel shows what the TUI shows, and the snapshot it is served (#62) is built
+from the same types the CLI renders, so #61 made the read types it named
+serializable, under the rule the reports already kept, and every new read
+type derives `Serialize` from the start:
+
+- **Already there**, for a command's `--json`: the status report (`Status`,
+  `ProjectStatus`, `ArtifactStatus`, `Unreached`, `Missed`, `State`,
+  `MarkerFile`), a scan (`Scan`, `Found`, `Reason`), the workspaces this
+  machine knows (`Known`, `KnownWorkspace`), `Kind`, `Agent` and `ProjectId`.
+  None of them changed.
+- **Added**: a `Reference`, as typed and as read; an `Artifact` and each
+  `ArtifactCopy`, as a listing shows them, with their `Provenance` and every
+  `ValidationIssue`; a `Template`; a source to gather from (`gather::Source`),
+  a gather's `Report` and what it `Harvested`; a source the ledger keeps
+  (`ledger::Source`, its `SourceKind`) and what was `Gathered` from it; what
+  can be installed (`Offer`, `Candidate`) and how it stands (`Standing`); a
+  workspace's `Member` and `Loaded` entries, with a project's `Share` mode.
+- **Not yet**, being older than the rule and printed by no `--json` so
+  far: how a workspace was chosen (`resolve::Reason`, `Resolved`), the
+  ledger's history (`ledger::Entry`) and its record of an install
+  (`InstallRecord`), and what an update or a change of agents would do
+  (`update::Plan`, `reapply::Plan`). Each derives `Serialize` in the change
+  that first hands it to a front end, #62's snapshot among them, under the
+  same rule.
+
+What each says is held to the rule above, and three more things:
+
+- **Each field is named as the type names it**, whether derived or written by
+  hand. By hand only where a derive would print the wrong thing: a word a
+  command line takes (`Standing`, `Provenance`, `Share`, `SourceKind`, the
+  place an `Offer` comes from), a type holding more than a reader is given
+  (an artifact's front matter is `show`'s, and how each copy stands sits in
+  a placement no front end sees), or an error. A `ValidationIssue` goes out
+  as its code, what it is about, whether it is only worth a warning, and
+  its message: `warning` is core's to say, so the panel needs no list of
+  its own to tell an artifact that does not work from one that only says
+  something odd.
+- **An error goes out as its code and its message** (`code::Said`), never as
+  its fields: one holds an `io::Error` or a parser's own, which JSON has no
+  shape for, and only the two are meant to leave core. A member whose entry
+  opens no project says why as `error`, which is what a status report's
+  `stale` says, with the code beside it.
+- **A URL goes out only through `url::redacted`**, where it is written
+  (`url::serialize_redacted`) rather than trusted to where it came from. The
+  ledger hands back no URL with a credential in it, but a request is built
+  before a URL that carries one is refused, and a test builds a source with
+  one to prove that neither the source nor an offer's origin prints it.
+
+What a failure collected beside a report says stays out of the report, as a
+scan's does: a gather's `failures` and `warnings` are a front end's
+warnings, which in JSON are the envelope's. Every type's test pins its JSON
+name by name; a serialized name is a versioned contract from the first
+release that prints it, as a report's is.
+
+### A code for what went wrong
+
+The panel has to tell a workspace another writer holds from a project that
+has gone, and the server hands it what went wrong as JSON: matching the
+English would break the first time a message is reworded. So every public
+error type in core has a `code()`, a snake_case word for the condition
+(`workspace_busy`, `offered_twice`, `not_a_project`), and a
+`ValidationIssue` has one from the same list.
+
+So does a refusal, which is no error: an install that finds somebody's
+copy, or one changed since, answers `Installed::Foreign` or `Edited` and
+writes nothing, and the front end says so and goes on with the rest, as an
+uninstall's `Removed` does. The panel still has to tell the two apart, and
+#63 carries `foreign` on the CLI's warning, so `Installed::refused` and
+`Removed::refused` say why as an `install::Refused` (`foreign`, `edited`,
+`not_installed`). One type for both rather than a code on each outcome,
+since a copy that is somebody's refuses an install and an uninstall alike:
+two types would give `foreign` twice, which the rule below forbids.
+
+- **Unique across core**, not only within one type. A code reaches the panel
+  without the type it came from, so `workspace_busy` has to mean the lock
+  whichever command met it. Unique within a type was the other way, which
+  leaves the panel to know which type each code came from, and the server
+  hands it none.
+- **A variant that carries another error takes its code** when that error is
+  what went wrong and the variant adds only where, or what came of it: an
+  install that met a busy lock says `workspace_busy`, as the lock does. One
+  that says something the error it carries does not, a record dropped while
+  its exclude entry stays (`still_excluded`), has a code of its own. A type
+  whose every variant carries another error, as a status report's failures
+  do, gives no code of its own.
+- **Named for the condition**, in as few words as tell it from every other:
+  the variant's own name where that is enough, and its subject before it
+  where the bare name says nothing alone (`exclude_read_failed`,
+  `adopt_unfit`).
+- **A versioned contract, as a serialized name is.** A code is never renamed
+  nor moved to another condition, since a front end acting on it would stop
+  without a word. A new variant gets a new code, and rewording a message
+  changes none.
+
+Each type is given its codes with `code::codes!`, which writes `code()` as a
+match with no wildcard, so a new variant does not compile until it has one,
+and the list of the codes it gives (`CODES`) from the same arms, so no code
+is given without being listed. Each arm is `Self::` and one variant, with
+its fields in braces or parentheses: the macro takes no other pattern, so a
+wildcard or an or-pattern, which would give several variants one code and
+list it once, does not compile, and neither does an enum given the one
+code a struct takes. Every code listed is then one variant's own.
+`code::ALL` gathers every type's list, by the module it is defined in, and
+a test holds no two codes in it alike, which holds every variant to a code
+of its own; a second reads core's source for every public type that derives `Error`, and
+finds a new one that never joined `ALL`. A match written by hand beside a
+list kept by hand was the other way, and nothing fails when such a list
+misses a code. Building one value of every variant in a test, with a match
+to say when one is missing, was a third, rejected for the some three hundred
+variants it would build, many around an `io::Error`, or a parser's or
+SQLite's error a test has no plain way to make, and for a match that says a
+variant is missing from it but not from the list beside it.
+
+Nothing prints a code yet. A member's `error` is the first type to hold
+one, for the snapshot the panel is served (#62), and the CLI's warnings and
+failures carry them from #63.
 
 ## How entries are stored
 
@@ -6797,8 +6917,11 @@ just listed.
   listing keep to.
 - **Errors outside the envelope.** A command that fails says why as text on
   stderr, `--json` or not, and prints no envelope, so a script tells failure
-  only by the exit status. #61 gives errors codes, and is where an error
-  joins the envelope, if it does.
+  only by the exit status. Every error has had a code since #61 ([a code for
+  what went wrong](#a-code-for-what-went-wrong)), and a serialized error is
+  its code and its message, but none of them is printed: whether a failing
+  command's `--json` prints an envelope holding its error is left to #63,
+  which carries codes on the CLI's warnings and failures.
 - **An agent's CLI writing the same config file.** The workspace's lock keeps
   Mindflayer's writers apart, not the agents': `claude mcp add` rewriting
   `.mcp.json` between `ConfigFile::edit`'s read and its rename is undone by the

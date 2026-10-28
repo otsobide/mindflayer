@@ -35,6 +35,8 @@ use std::fmt::{self, Write as _};
 use sha2::{Digest, Sha256};
 use thiserror::Error;
 
+use crate::code::codes;
+
 mod file;
 mod json;
 mod toml;
@@ -106,6 +108,19 @@ pub enum EntryError {
     #[error("{}: the edit would have changed more than the entry, or not the entry as asked, so it was not made", at(.key))]
     Unkept { key: String },
 }
+
+codes!(EntryError {
+    Self::Malformed { .. } => "config_malformed",
+    Self::NoKey => "entry_no_key",
+    Self::NotAnObject { .. } => "entry_not_an_object",
+    Self::Exists { .. } => "entry_exists",
+    Self::Missing { .. } => "entry_missing",
+    Self::Ambiguous { .. } => "entry_ambiguous",
+    Self::DuplicateKey { .. } => "entry_duplicate_key",
+    Self::Unrepresentable { .. } => "entry_unrepresentable",
+    Self::MixedLineEndings => "config_mixed_line_endings",
+    Self::Unkept { .. } => "entry_unkept",
+});
 
 /// Where in a file an error is, for its message.
 fn at(key: &str) -> String {

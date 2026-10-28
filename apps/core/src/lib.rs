@@ -20,6 +20,7 @@ pub mod assign;
 pub mod catalog;
 pub mod claude_md;
 pub mod claude_rules;
+pub mod code;
 pub mod config_entry;
 pub mod copy;
 pub mod create;

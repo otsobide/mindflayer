@@ -26,6 +26,7 @@ use crate::agent::Agent;
 use crate::agents_md;
 use crate::artifact::{Artifact, Provenance};
 use crate::catalog::{Catalog, DiscoveryFailure};
+use crate::code::codes;
 use crate::install::{self, Standing};
 use crate::kind::Kind;
 use crate::ledger::{InstallRecord, Target};
@@ -268,6 +269,13 @@ pub enum StatusFailure {
     Duplicate(#[from] Duplicate),
 }
 
+codes!(StatusFailure {} carried {
+    Self::Stale(error) => error,
+    Self::Discovery(error) => error,
+    Self::Target(error) => error,
+    Self::Duplicate(duplicate) => duplicate,
+});
+
 impl Status {
     /// Every project `workspace` links, against what its ledger records of
     /// them.
@@ -319,7 +327,7 @@ impl Status {
                 Err(error) => {
                     status.projects.push(ProjectStatus {
                         name: None,
-                        entry: Some(spelled(&member.entry)),
+                        entry: Some(paths::as_route(&member.entry)),
                         path: member.root,
                         marker: None,
                         agents: Vec::new(),
@@ -404,7 +412,7 @@ impl ProjectStatus {
         if let Some((workspace, linked)) =
             workspace.and_then(|workspace| Some((workspace, workspace.linked_as(root)?)))
         {
-            entry = Some(spelled(linked));
+            entry = Some(paths::as_route(linked));
             let named = install::entry_for_root(workspace, root);
             let read = workspace.ledger_for_reading().and_then(|ledger| {
                 let records = kinds
@@ -730,18 +738,13 @@ pub(crate) fn unreached(project: &MindProject, kinds: &[Kind], agents: &[Agent])
                     .map(|target| {
                         let route = paths::relative_to(&target.folder, root)
                             .unwrap_or_else(|| target.folder.clone());
-                        spelled(&route)
+                        paths::as_route(&route)
                     })
                     .collect(),
                 agents: missed,
             })
         })
         .collect()
-}
-
-/// A registry entry as the marker spells it, with `/` whatever the platform.
-fn spelled(entry: &Path) -> String {
-    paths::to_config_string(entry).unwrap_or_else(|| entry.display().to_string())
 }
 
 #[cfg(test)]

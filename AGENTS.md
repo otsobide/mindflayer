@@ -96,7 +96,8 @@ under `apps/` with its own `Makefile`:
   workspace's own from every project it links before the library
   (`everywhere`), and bringing a skill somebody keeps in a project's agents'
   folders into the library, its copies recorded as installed from there
-  (`adopt`). Its only I/O is files, and it never reads the environment.
+  (`adopt`), and the stable code each of its errors gives (`code`). Its only
+  I/O is files, and it never reads the environment.
 - `apps/cli` (`mindflayer-cli`): the binaries `mind` (`src/main.rs`) and
   `flayer` (`src/bin/flayer.rs`), and the TUI. `src/lib.rs` only re-exports
   the public API. The parsers are in `src/parse.rs`. `src/commands.rs`
@@ -201,11 +202,34 @@ These are easy to break from a single file without noticing.
   and the exit status its text has. `data` is a type core builds and sorts,
   deriving `Serialize` with its fields named in snake_case; a kind, an agent
   or a state goes out as the word a command line takes for it
-  (`Kind::slug`, `Agent::name`, `State::slug`), serialized by hand, never
-  derived from the variant. A name once printed is a contract: dropping or
-  renaming one, or changing what it holds, moves `ENVELOPE_VERSION`, and
-  adding one does not. A test reads it back with `common::enveloped`, into
-  structs of its own that refuse a field they do not name.
+  (`Kind::slug`, `Agent::name`, `State::slug`, `Standing::slug`), serialized
+  by hand, never derived from the variant. The read types #61 named
+  serialize so (`docs/architecture.md`, "The read types serialize", lists
+  them and the older ones that do not yet), and every new read type
+  derives `Serialize` from the start, written by hand only where a derive
+  would print the wrong thing (a word like those, a type holding more than
+  a reader is given, an error, which goes out as its `code` and message
+  through `code::Said`), with a test that pins its JSON name by name. A
+  path goes out as text whatever bytes it holds (`paths::lossy`), and a
+  URL only through `url::redacted`. A name once printed is a
+  contract: dropping or renaming one, or changing what it holds, moves
+  `ENVELOPE_VERSION`, and adding one does not. A test reads it back with
+  `common::enveloped`, into structs of its own that refuse a field they do
+  not name.
+- **Every error has a stable code.** Each public error type in core,
+  `ValidationIssue`, and `install::Refused`, why an install or an uninstall
+  wrote nothing (`Installed::refused`, `Removed::refused`), is given
+  `code()` with `code::codes!`, which writes it as a match with no
+  wildcard, so a new variant does not compile without one, and lists the
+  codes it gives in `CODES` from the same arms. Each arm names one variant,
+  and the macro refuses a wildcard or an or-pattern, which would give
+  several one code and list it once. A code is unique across core, not
+  only its type, never renamed nor moved to another condition, and named
+  for the condition in snake_case. A variant
+  that only carries another error of core's, adding where or what came of
+  it, takes that error's code (`carried`). A new error type joins
+  `code::ALL`; `code_test.rs` holds no two codes alike and finds a type
+  that derives `Error` and never joined.
 - **Failures are collected, not raised.** One unreadable artifact or stale
   registry entry is a `warning:` on stderr (in the envelope, under `--json`)
   and a non-zero exit, never a reason to hide the rest. An absence (no
@@ -465,7 +489,8 @@ These are easy to break from a single file without noticing.
     reads opens it with `ledger_for_reading`, which scrubs nothing. The
     install screen is a read until it applies, and the lines it then runs
     scrub as any `install` does. Anything new that keeps or prints a URL goes
-    through `url::redacted` too.
+    through `url::redacted` too, a serialized one included
+    (`url::serialize_redacted`), whatever built the value.
 - **Writers take turns; readers never wait.** Core's writers hold the
   workspace's `.mindflayer/lock` (`FlayerWorkspace::lock`) while they change
   it: `edit_array`, `install::install` and `uninstall`,

@@ -49,6 +49,7 @@ use thiserror::Error;
 use crate::agent::AgentHomes;
 use crate::agents_md::{self, Malformed, BEGIN, END};
 use crate::claude_rules::{self, Mode};
+use crate::code::codes;
 use crate::exclude;
 use crate::lines::{self, Line};
 use crate::settings::Share;
@@ -256,6 +257,15 @@ pub enum Fallback {
     )]
     Untold { file: PathBuf, detail: String },
 }
+
+codes!(Fallback {
+    Self::NoBlock => "claude_fallback_no_block",
+    Self::LocalOnly(_) => "claude_fallback_local_only",
+    Self::Above(_) => "claude_fallback_above",
+    Self::Tracked(_) => "claude_fallback_tracked",
+    Self::Linked { .. } => "claude_fallback_linked",
+    Self::Untold { .. } => "claude_fallback_untold",
+});
 
 /// How Claude Code, started at `project`'s root, is to reach the block of
 /// rules in its `AGENTS.md`, given whether the block is there
@@ -580,6 +590,11 @@ pub enum Warning {
     )]
     Untold { file: PathBuf, detail: String },
 }
+
+codes!(Warning {
+    Self::Tracked(_) => "claude_import_left_tracked",
+    Self::Untold { .. } => "claude_import_left_untold",
+});
 
 /// Write `text` over the file at `file`, which is there.
 fn write(file: &Path, text: &ClaudeMd) -> Result<(), ClaudeMdError> {
@@ -946,6 +961,13 @@ pub enum ClaudeMdError {
     #[error("{file}: {problem}, so nothing was written")]
     Malformed { file: PathBuf, problem: Malformed },
 }
+
+codes!(ClaudeMdError {
+    Self::Read { .. } => "claude_md_read_failed",
+    Self::Write { .. } => "claude_md_write_failed",
+} carried {
+    Self::Malformed { problem, .. } => problem,
+});
 
 #[cfg(test)]
 #[path = "claude_md_test.rs"]

@@ -35,6 +35,7 @@ use thiserror::Error;
 use crate::agent::{Agent, AgentHomes};
 use crate::artifact::{self, issue_list, Artifact, ArtifactError, ValidationIssue};
 use crate::catalog::{Catalog, Reference, QUALIFIER};
+use crate::code::codes;
 use crate::copy;
 use crate::exclude::{self, ExcludeError, Excluded};
 use crate::gather::Scrub;
@@ -191,6 +192,27 @@ pub enum AdoptError {
     #[error(transparent)]
     Workspace(#[from] WorkspaceError),
 }
+
+codes!(AdoptError {
+    Self::Rule { .. } => "adopt_not_a_skill",
+    Self::NotHeld { .. } => "adopt_not_held",
+    Self::Installed { .. } => "adopt_already_installed",
+    Self::Authored { .. } => "adopt_authored",
+    Self::UserScope { .. } => "adopt_user_scope",
+    Self::Unreproducible { .. } => "adopt_unreproducible",
+    Self::LeftOut { .. } => "adopt_left_out",
+    Self::Unfit { .. } => "adopt_unfit",
+    Self::Differ { .. } => "adopt_copies_differ",
+    Self::InLibrary { .. } => "adopt_in_library",
+    Self::Write { .. } => "adopt_write_failed",
+    Self::Changed { .. } => "adopt_changed",
+} carried {
+    Self::Exclude(error) => error,
+    Self::Install(error) => error,
+    Self::Artifact(error) => error,
+    Self::Ledger(error) => error,
+    Self::Workspace(error) => error,
+});
 
 /// What adopting the skill `reference` names from `project`, which
 /// `workspace` links, would do: nothing written, the ledger read without

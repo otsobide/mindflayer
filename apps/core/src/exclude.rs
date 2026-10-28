@@ -32,6 +32,7 @@ use std::path::{Component, Path, PathBuf};
 
 use thiserror::Error;
 
+use crate::code::codes;
 use crate::lines::{self, Line};
 use crate::paths;
 use crate::workspace::replace_bytes;
@@ -962,6 +963,13 @@ pub enum Malformed {
     Regrouped { line: usize, key: String },
 }
 
+codes!(Malformed {
+    Self::Unclosed { .. } => "exclude_block_unclosed",
+    Self::Unopened { .. } => "exclude_block_unopened",
+    Self::Reopened { .. } => "exclude_block_reopened",
+    Self::Regrouped { .. } => "exclude_group_repeated",
+});
+
 /// Why a project's paths could not be kept out of git.
 #[derive(Debug, Error)]
 pub enum ExcludeError {
@@ -990,6 +998,18 @@ pub enum ExcludeError {
     #[error("{file}: {problem}, so nothing was written")]
     Malformed { file: PathBuf, problem: Malformed },
 }
+
+codes!(ExcludeError {
+    Self::Key { .. } => "exclude_key_invalid",
+    Self::Pattern { .. } => "exclude_pattern_invalid",
+    Self::Path { .. } => "exclude_path_unnamable",
+    Self::Repository { .. } => "repository_unopened",
+    Self::Route { .. } => "project_outside_worktree",
+    Self::Read { .. } => "exclude_read_failed",
+    Self::Write { .. } => "exclude_write_failed",
+} carried {
+    Self::Malformed { problem, .. } => problem,
+});
 
 #[cfg(test)]
 #[path = "exclude_test.rs"]

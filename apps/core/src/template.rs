@@ -14,8 +14,10 @@ use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
 
+use serde::{Serialize, Serializer};
 use thiserror::Error;
 
+use crate::code::codes;
 use crate::install;
 use crate::kind::{Kind, Layout};
 use crate::workspace::{FlayerWorkspace, MindProject};
@@ -32,8 +34,24 @@ pub enum Origin {
     Path(PathBuf),
 }
 
+/// As the folder or the file it is, or none for one built in, which is in
+/// no folder: the one thing a front end needs to tell them apart, and where
+/// to look. A word for built in beside paths was the other way, which a
+/// template folder of that name could be taken for.
+impl Serialize for Origin {
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        match self {
+            Origin::BuiltIn => serializer.serialize_none(),
+            Origin::Path(path) => serializer.serialize_some(&path.to_string_lossy()),
+        }
+    }
+}
+
 /// A template `mind add` can start from.
-#[derive(Debug, Clone, PartialEq, Eq)]
+///
+/// What it serializes to is a contract, as a status report's is: each field
+/// by its name.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct Template {
     pub name: String,
     pub kind: Kind,
@@ -303,6 +321,13 @@ pub enum TemplateError {
     },
 }
 
+codes!(TemplateError {
+    Self::BadName { .. } => "template_name_invalid",
+    Self::Unknown { .. } => "unknown_template",
+    Self::WrongKind { .. } => "template_wrong_kind",
+    Self::Read { .. } => "template_read_failed",
+});
+
 /// "; there are full, runbook", or nothing when there are none.
 fn there_are(names: &[String]) -> String {
     if names.is_empty() {
@@ -311,3 +336,7 @@ fn there_are(names: &[String]) -> String {
         format!("; there are {}", names.join(", "))
     }
 }
+
+#[cfg(test)]
+#[path = "template_test.rs"]
+mod tests;

@@ -39,6 +39,7 @@ use thiserror::Error;
 use super::{MigrateError, Refusal};
 use crate::agent::{Agent, AgentHomes};
 use crate::catalog::Catalog;
+use crate::code::codes;
 use crate::copy;
 use crate::exclude::{self, ExcludeError};
 use crate::gather::Scrub;
@@ -246,6 +247,17 @@ pub enum ProjectFailure {
         source: io::Error,
     },
 }
+
+codes!(ProjectFailure {
+    Self::Scratch { .. } => "migrate_scratch_failed",
+    Self::Copy { .. } => "migrate_copy_failed",
+    Self::Retire { .. } => "migrate_retire_failed",
+    Self::Keep { .. } => "migrate_keep_failed",
+} carried {
+    Self::Exclude(error) => error,
+    Self::Workspace(error) => error,
+    Self::Ledger(error) => error,
+});
 
 /// What a project's move that failed could not put back as it was, for a
 /// front end to say beside the failure.

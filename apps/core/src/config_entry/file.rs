@@ -23,6 +23,8 @@ use thiserror::Error;
 
 use super::{edit_document, get, Edit, EntryError, Format, Value};
 
+use crate::code::codes;
+
 /// A config file, found by its route from a folder.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ConfigFile {
@@ -77,6 +79,18 @@ pub enum FileError {
         source: EntryError,
     },
 }
+
+codes!(FileError {
+    Self::Route { .. } => "config_route_invalid",
+    Self::Symlink { .. } => "config_symlink",
+    Self::NotAFolder { .. } => "config_not_a_folder",
+    Self::NotAFile { .. } => "config_not_a_file",
+    Self::NotText { .. } => "config_not_text",
+    Self::Read { .. } => "config_read_failed",
+    Self::Write { .. } => "config_write_failed",
+} carried {
+    Self::Entry { source, .. } => source,
+});
 
 impl ConfigFile {
     /// The file at `route` below `root`, written in `format`.

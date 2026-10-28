@@ -21,6 +21,7 @@ use thiserror::Error;
 
 use super::credentials::{self, Shortfall, Shortfalls};
 use super::{Progress, Watch};
+use crate::code::codes;
 use crate::url::redacted;
 use crate::workspace::{replace_file, WorkspaceError};
 
@@ -359,6 +360,18 @@ pub enum GitError {
     #[error(transparent)]
     Scrub(#[from] WorkspaceError),
 }
+
+codes!(GitError {
+    Self::Url { .. } => "git_url_invalid",
+    Self::Reference { .. } => "git_reference_invalid",
+    Self::Cache { .. } => "git_cache_failed",
+    Self::Fetch { .. } => "git_fetch_failed",
+    Self::Credentials { .. } => "git_credentials_needed",
+    Self::Checkout { .. } => "git_checkout_failed",
+    Self::Cancelled => "git_clone_cancelled",
+} carried {
+    Self::Scrub(error) => error,
+});
 
 #[cfg(test)]
 #[path = "git_test.rs"]

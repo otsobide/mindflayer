@@ -15,6 +15,7 @@ use serde::{Serialize, Serializer};
 use thiserror::Error;
 
 use crate::agent::Agent;
+use crate::code::codes;
 use crate::install;
 use crate::ledger::LedgerError;
 use crate::paths;
@@ -548,6 +549,14 @@ pub enum ScanFailure {
     #[error(transparent)]
     Ledger(LedgerError),
 }
+
+codes!(ScanFailure {
+    Self::Unlisted { .. } => "scan_folder_unlisted",
+} carried {
+    Self::Unread(error) => error,
+    Self::Duplicate(duplicate) => duplicate,
+    Self::Ledger(error) => error,
+});
 
 impl ScanFailure {
     /// The folder, or the marker, it is about: the first directory holding

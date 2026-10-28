@@ -22,10 +22,12 @@ use std::io;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
+use serde::ser::{SerializeStruct, Serializer};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 use crate::agent::{Agent, AgentTarget, TargetTable};
+use crate::code::{codes, Said};
 use crate::gather::{self, Scrub};
 use crate::kind::{Kind, Layout};
 use crate::ledger::{Ledger, LedgerError, LEDGER_FILE};
@@ -458,6 +460,10 @@ pub enum ProjectWarning {
     Leftover { path: PathBuf, read: MarkerFile },
 }
 
+codes!(ProjectWarning {
+    Self::Leftover { .. } => "marker_left_over",
+});
+
 /// A folder a project's settings name as where a kind is installed that no
 /// install uses: read, said, and passed over, rather than a reason to refuse
 /// everything else the settings say ([`MindProject::misplaced_targets`]).
@@ -475,6 +481,8 @@ pub struct MisplacedTarget {
     pub folder: PathBuf,
     pub why: Misplaced,
 }
+
+codes!(MisplacedTarget => "target_misplaced");
 
 /// Why a folder a project's settings name is no place to install a kind in.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -2123,6 +2131,38 @@ pub struct Member {
     pub project: Result<MindProject, WorkspaceError>,
 }
 
+/// As the entry and what it opens: the entry as the marker spells it, where
+/// it points, then the project's name, marker, id, agents and share mode,
+/// none of them for an entry that opens no project, and why it opens none
+/// as `error`, by its code and message.
+///
+/// By hand: a project holds the whole of its marker, and the error what JSON
+/// has no shape for, so a derive could not write either. Spread over fields
+/// of the member's own, rather than nested, so it reads as a status report's
+/// project does, whose `name`, `marker` and `agents` say the same thing by
+/// the same names; `error` says what that report's `stale` does, with the
+/// code beside the message.
+impl Serialize for Member {
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        let project = self.project.as_ref().ok();
+        let settings = project.and_then(MindProject::settings);
+        let error = self.project.as_ref().err();
+        let mut member = serializer.serialize_struct("Member", 8)?;
+        member.serialize_field("entry", &paths::as_route(&self.entry))?;
+        member.serialize_field("root", &self.root.to_string_lossy())?;
+        member.serialize_field("name", &project.map(MindProject::name))?;
+        member.serialize_field("marker", &project.map(MindProject::marker_file))?;
+        member.serialize_field("id", &settings.map(|settings| &settings.id))?;
+        member.serialize_field(
+            "agents",
+            settings.map_or(&[][..], |settings| &settings.agents),
+        )?;
+        member.serialize_field("share", &settings.map(|settings| settings.share))?;
+        member.serialize_field("error", &error.map(|error| Said::of(error.code(), error)))?;
+        member.end()
+    }
+}
+
 /// One entry in a workspace's `loaded` list, or in the default workspace's
 /// `known`, and what it opens.
 #[derive(Debug)]
@@ -2133,6 +2173,22 @@ pub struct Loaded {
     pub root: PathBuf,
     /// The workspace there, or why there is none.
     pub workspace: Result<FlayerWorkspace, WorkspaceError>,
+}
+
+/// As the entry and what it opens, for the reason a [`Member`] is: the entry
+/// as the marker spells it, where it points, the workspace's name, none for
+/// an entry that opens none, and why it opens none as `error`.
+impl Serialize for Loaded {
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        let workspace = self.workspace.as_ref().ok();
+        let error = self.workspace.as_ref().err();
+        let mut loaded = serializer.serialize_struct("Loaded", 4)?;
+        loaded.serialize_field("entry", &paths::as_route(&self.entry))?;
+        loaded.serialize_field("root", &self.root.to_string_lossy())?;
+        loaded.serialize_field("name", &workspace.map(FlayerWorkspace::name))?;
+        loaded.serialize_field("error", &error.map(|error| Said::of(error.code(), error)))?;
+        loaded.end()
+    }
 }
 
 const PROJECTS_KEY: &str = "projects";
@@ -2333,6 +2389,31 @@ pub enum WorkspaceError {
     #[error(transparent)]
     Lock(#[from] LockError),
 }
+
+codes!(WorkspaceError {
+    Self::Create { .. } => "create_failed",
+    Self::Read { .. } => "read_failed",
+    Self::Parse { .. } => "marker_unparsed",
+    Self::Malformed { .. } => "marker_malformed",
+    Self::NotAProject { .. } => "not_a_project",
+    Self::NotAWorkspace { .. } => "not_a_workspace",
+    Self::Version { .. } => "marker_too_new",
+    Self::Edit { .. } => "marker_edit_failed",
+    Self::NotRegistered { .. } => "not_registered",
+    Self::LoadsItself { .. } => "loads_itself",
+    Self::NotLoaded { .. } => "not_loaded",
+    Self::NotKnown { .. } => "not_known",
+    Self::NonUtf8Path { .. } => "path_not_utf8",
+    Self::OutsideProject { .. } => "folder_outside_project",
+    Self::InsideMind { .. } => "folder_inside_mind",
+    Self::NoDirectory { .. } => "no_folder",
+    Self::Target { .. } => "target_unusable",
+    Self::NoSettings { .. } => "no_settings",
+    Self::OutsideWorkspace { .. } => "folder_outside_workspace",
+    Self::OverlapsGathered { .. } => "folder_overlaps_gathered",
+} carried {
+    Self::Lock(error) => error,
+});
 
 impl WorkspaceError {
     /// The path the failure is about.

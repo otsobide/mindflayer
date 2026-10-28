@@ -240,6 +240,14 @@ impl Share {
     }
 }
 
+/// By its name, as the settings file and a command line spell it, rather
+/// than derived from the variant, which a rename would change.
+impl Serialize for Share {
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        serializer.serialize_str(self.name())
+    }
+}
+
 impl fmt::Display for Share {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_str(self.name())

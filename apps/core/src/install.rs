@@ -23,6 +23,7 @@ use std::io;
 use std::path::{Component, Path, PathBuf};
 use std::time::Duration;
 
+use serde::{Serialize, Serializer};
 use thiserror::Error;
 
 use crate::agent::{Agent, AgentHomes};
@@ -31,6 +32,7 @@ use crate::artifact::{self, issue_list, name_issues, Artifact, ArtifactError, Va
 use crate::catalog::{Catalog, DiscoveryFailure, Reference, QUALIFIER};
 use crate::claude_md::ClaudeMdError;
 use crate::claude_rules::ClaudeRulesError;
+use crate::code::codes;
 use crate::copy;
 use crate::exclude::{self, ExcludeError, Excluded};
 use crate::gather::Scrub;
@@ -142,6 +144,92 @@ pub enum Offer {
         /// The loaded workspace's declared name.
         workspace: String,
     },
+}
+
+/// As an object holding the place that offers it (`shelf`, `workspace` or
+/// `loaded`), what that place holds of it, each field by the name its
+/// variant gives it, and its origin as `--from` takes it.
+///
+/// By hand, for the place: a derive would tag each variant with its Rust
+/// name, where these are words a front end compares and a rename must not
+/// change. `path` is what the variant holds: the shelf's route from the
+/// workspace, `/` separated, as the ledger keeps it, and the folder itself
+/// for the other two. The origin goes out through [`redacted`], as every
+/// URL does, so an offer built with a credential in its source prints none.
+impl Serialize for Offer {
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        #[derive(Serialize)]
+        struct Placed<T> {
+            place: &'static str,
+            #[serde(flatten)]
+            held: T,
+            origin: String,
+        }
+        #[derive(Serialize)]
+        struct Own<'a> {
+            kind: Kind,
+            name: &'a str,
+            summary: &'a Option<String>,
+            #[serde(serialize_with = "paths::lossy")]
+            path: &'a Path,
+        }
+        #[derive(Serialize)]
+        struct Load<'a> {
+            kind: Kind,
+            name: &'a str,
+            summary: &'a Option<String>,
+            #[serde(serialize_with = "paths::lossy")]
+            path: &'a Path,
+            entry: &'a str,
+            workspace: &'a str,
+        }
+
+        let origin = redacted(&self.origin()).into_owned();
+        match self {
+            Offer::Shelf(gathered) => Placed {
+                place: "shelf",
+                held: gathered,
+                origin,
+            }
+            .serialize(serializer),
+            Offer::Workspace {
+                kind,
+                name,
+                summary,
+                path,
+            } => Placed {
+                place: "workspace",
+                held: Own {
+                    kind: *kind,
+                    name,
+                    summary,
+                    path,
+                },
+                origin,
+            }
+            .serialize(serializer),
+            Offer::Loaded {
+                kind,
+                name,
+                summary,
+                path,
+                entry,
+                workspace,
+            } => Placed {
+                place: "loaded",
+                held: Load {
+                    kind: *kind,
+                    name,
+                    summary,
+                    path,
+                    entry,
+                    workspace,
+                },
+                origin,
+            }
+            .serialize(serializer),
+        }
+    }
 }
 
 impl Offer {
@@ -425,7 +513,10 @@ pub fn targets(project: &MindProject, kind: Kind) -> Result<Vec<InstallTarget>, 
 }
 
 /// One thing that can be installed, seen from one project.
-#[derive(Debug, Clone)]
+///
+/// What it serializes to is a contract, as a status report's is: each field
+/// by its name.
+#[derive(Debug, Clone, Serialize)]
 pub struct Candidate {
     pub offer: Offer,
     pub standing: Standing,
@@ -570,6 +661,14 @@ pub enum LoadFailure {
         problem: String,
     },
 }
+
+codes!(LoadFailure {
+    Self::UnsafeName { .. } => "load_name_unsafe",
+    Self::UnsafeRoute { .. } => "load_route_unsafe",
+} carried {
+    Self::Workspace(error) => error,
+    Self::Artifact(error) => error,
+});
 
 /// Everything of `kind` that can be installed, and how each stands with
 /// `project`: the workspace's own first, then what the workspaces it loads
@@ -2151,6 +2250,18 @@ impl Installed {
             Installed::Foreign { .. } | Installed::Edited { .. } => None,
         }
     }
+
+    /// Why nothing was written, when the install was refused rather than
+    /// done: what a front end says it with, by its code.
+    pub fn refused(&self) -> Option<Refused> {
+        match self {
+            Installed::Added { .. } | Installed::Updated { .. } | Installed::Unchanged { .. } => {
+                None
+            }
+            Installed::Foreign { .. } => Some(Refused::Foreign),
+            Installed::Edited { .. } => Some(Refused::Edited),
+        }
+    }
 }
 
 /// What [`install`] did: to the artifact, and to the project's scratch folder
@@ -2218,6 +2329,48 @@ pub enum Removed {
     /// Nothing of that name to remove.
     Absent { name: String },
 }
+
+impl Removed {
+    /// Why nothing was taken out, when the uninstall was refused rather
+    /// than done: what a front end says it with, by its code.
+    pub fn refused(&self) -> Option<Refused> {
+        match self {
+            Removed::Removed { .. } => None,
+            Removed::Foreign { .. } => Some(Refused::Foreign),
+            Removed::Edited { .. } => Some(Refused::Edited),
+            Removed::Absent { .. } => Some(Refused::NotInstalled),
+        }
+    }
+}
+
+/// Why an install or an uninstall did not do what it was asked, though
+/// nothing went wrong: what [`Installed::refused`] and [`Removed::refused`]
+/// say, with a code from the list every error's comes from (`code`).
+///
+/// An outcome rather than an error, as what it comes from is: the refusal
+/// is the answer, and a front end says it and goes on with the rest. Still
+/// a code, since the panel tells somebody's copy from one changed since the
+/// way it tells one error from another. One type for both changes, since a
+/// copy that is somebody's refuses an install and an uninstall alike, and a
+/// code names one condition wherever it is met: a code on each outcome
+/// would give `foreign` twice.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Refused {
+    /// Something of that name is in a target, and the ledger records none
+    /// of it.
+    Foreign,
+    /// A copy Mindflayer installed was changed since, and the change was not
+    /// forced.
+    Edited,
+    /// Nothing of that name is installed to take out: an uninstall's only.
+    NotInstalled,
+}
+
+codes!(Refused {
+    Self::Foreign => "foreign",
+    Self::Edited => "edited",
+    Self::NotInstalled => "not_installed",
+});
 
 /// How `name` stands in `project`, which installs into `targets`, given
 /// every copy the ledger records Mindflayer writing there (`recorded`, as
@@ -2535,6 +2688,40 @@ pub enum InstallError {
         reader: &'static str,
     },
 }
+
+codes!(InstallError {
+    Self::Missing { .. } => "shelf_copy_missing",
+    Self::Gone { .. } => "loaded_copy_gone",
+    Self::UnsafeName { .. } => "name_unsafe",
+    Self::UnsafeRoute { .. } => "route_unsafe",
+    Self::Outside { .. } => "offer_leads_outside",
+    Self::NoLongerOffered { .. } => "rule_no_longer_offered",
+    Self::NotRecorded { .. } => "rule_not_recorded",
+    Self::Unread { .. } => "rule_section_unread",
+    Self::Withheld { .. } => "rules_block_unedited",
+    Self::Unfit { .. } => "install_unfit",
+    Self::Overlaps { .. } => "install_overlaps",
+    Self::KeptByALoad { .. } => "kept_by_a_load",
+    Self::Write { .. } => "install_write_failed",
+    Self::NotOffered { .. } => "not_offered",
+    Self::OfferedTwice { .. } => "offered_twice",
+    Self::OfferedAsKinds { .. } => "offered_as_kinds",
+    Self::InstalledAsKinds { .. } => "installed_as_kinds",
+    Self::NoTarget { .. } => "no_target",
+    Self::NoUsableTarget { .. } => "no_usable_target",
+    Self::Recorded { .. } => "recorded_outside",
+    Self::StillExcluded { .. } => "still_excluded",
+    Self::NotExcluded { .. } => "not_excluded",
+    Self::UserScope { .. } => "install_user_scope",
+} carried {
+    Self::Ledger(error) => error,
+    Self::Workspace(error) => error,
+    Self::AgentsMd(error) => error,
+    Self::ClaudeMd(error) => error,
+    Self::ClaudeRules(error) => error,
+    Self::Artifact(error) => error,
+    Self::Exclude(error) => error,
+});
 
 impl InstallError {
     /// What an install that failed had cleared first, as
