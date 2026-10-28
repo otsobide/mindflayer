@@ -116,10 +116,12 @@ Two consequences worth stating, because they are what the split buys:
 ### How the CLI crate is laid out
 
 The grammar is in `parse.rs`, the work in `commands.rs` and a module per
-family of commands under `commands/`, and what a command produced, with the
-helpers every report is laid out with and the envelope its JSON goes out in,
-in `render.rs`. `CliError` has
-`error.rs` to itself, `homes.rs` decides where the default workspace's home and
+family of commands under `commands/`, and what a command produced, each line
+on stderr with its code ([failures are collected, not
+raised](#failures-are-collected-not-raised)), with the helpers every report is
+laid out with and the envelope its JSON goes out in, in `render.rs`.
+`CliError` has `error.rs`, with every code the CLI gives of its own
+(`CODES`), `homes.rs` decides where the default workspace's home and
 each agent's own folder are, and gathers them with what `-W` and
 `$MINDFLAYER_WORKSPACE` say (`Lookup`), `progress.rs` says what a gather's
 steps read as and draws them on stderr, `task.rs` holds the work a front end

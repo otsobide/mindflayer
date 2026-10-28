@@ -108,12 +108,15 @@ under `apps/` with its own `Makefile`:
   (workspaces, workspaces forget), `artifact` (add, edit, rename, remove,
   templates), `read` (list, show, validate), `status`, `settings` (agents,
   share, targets), `gather`, `install`, `update` and `migrate` (each at both
-  levels), and `adopt` (flayer adopt). `src/render.rs` holds `Outcome`, `Failure`, the table helpers and
-  the envelope every `--json` prints (`json`), `src/error.rs` holds
-  `CliError`, and `src/homes.rs` decides the default home and the agent
+  levels), and `adopt` (flayer adopt). `src/render.rs` holds `Outcome`,
+  `Failure` and `Warning` (a stderr line, with its code beside it), the
+  table helpers and the envelope every `--json` prints (`json`),
+  `src/error.rs` holds `CliError` and `CODES`, every code the CLI gives of
+  its own, and `src/homes.rs` decides the default home and the agent
   homes, and gathers them with `-W` and `$MINDFLAYER_WORKSPACE` into a
   `Lookup`. `src/task.rs` holds `Task`, work a front end asks for as the
-  command lines it is, every front end's rather than the TUI's alone.
+  command lines it is, every front end's rather than the TUI's alone, and
+  `Refusal`, what a front end with no terminal does not run.
   `src/tui/` and `src/install/` are the two screens.
 - `apps/server` (`mindflayer-server`): the local server behind the web
   panel, a library no binary runs yet. `src/backend.rs` is the `Backend`
