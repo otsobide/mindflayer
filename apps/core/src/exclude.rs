@@ -90,6 +90,145 @@ pub fn listed(project: &Path, key: &str) -> Result<Option<Listing>, ExcludeError
     }))
 }
 
+/// Move the lines of the group headed `from_key` that name paths in the
+/// project at `from` into the group headed `to_key`, naming the same paths
+/// in the project at `to`: for a project whose id changed
+/// (`mind init --new-id`), which keeps its place and takes a new key, and
+/// for one that moved (`flayer relink`), which keeps its key and takes a new
+/// place, in the same work tree or another.
+///
+/// A line is the project's when it names a path below the project's own
+/// directory ([`Entry::pattern`] writes every one that way), so a copy of
+/// the project elsewhere in the work tree, holding the same id, keeps its
+/// lines under the old key: those name its copies, not this project's.
+/// Each is anchored again under `to` as it was under `from`, everything
+/// after the project's own route kept as written.
+///
+/// `from` need not be there any more, as a project that moved is not: its
+/// exclude file is the one git reads for the folder nearest it that still
+/// is, and its route from there what it was. Added where they go before they
+/// are taken from where they were, so a copy is not offered to git between
+/// the two, and nothing is written when no line is the project's. Outside a
+/// work tree at `to`, the lines are taken out and none is written, which
+/// [`Followed::warning`] says.
+pub fn carry(
+    from: &Path,
+    from_key: &str,
+    to: &Path,
+    to_key: &str,
+) -> Result<Followed, ExcludeError> {
+    check(from_key, &[])?;
+    check(to_key, &[])?;
+    let Some(source) = locate_reaching(from)? else {
+        return Ok(Followed::Nothing);
+    };
+    let below = format!("{}/", anchored(&source.route)?);
+    let mut source_file = read(&source.file)?;
+    let lines: Vec<String> = source_file
+        .lines_of(from_key)
+        .into_iter()
+        .filter(|line| line.starts_with(&below))
+        .collect();
+    if lines.is_empty() {
+        return Ok(Followed::Nothing);
+    }
+
+    let Some(target) = locate(to)? else {
+        source_file.remove(from_key, &lines)?;
+        write(&source.file, &source_file)?;
+        return Ok(Followed::Outside {
+            project: to.to_path_buf(),
+        });
+    };
+    let there = format!("{}/", anchored(&target.route)?);
+    if target.file == source.file && from_key == to_key && there == below {
+        return Ok(Followed::Nothing);
+    }
+    let moved: Vec<String> = lines
+        .iter()
+        .map(|line| format!("{there}{}", &line[below.len()..]))
+        .collect();
+    if target.file == source.file {
+        source_file.remove(from_key, &lines)?;
+        source_file.add(to_key, &moved)?;
+        write(&source.file, &source_file)?;
+    } else {
+        let mut target_file = read(&target.file)?;
+        target_file.add(to_key, &moved)?;
+        write(&target.file, &target_file)?;
+        source_file.remove(from_key, &lines)?;
+        write(&source.file, &source_file)?;
+    }
+    Ok(Followed::Written { file: target.file })
+}
+
+/// What [`carry`] did.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Followed {
+    /// No line of the group was the project's, and nothing was written.
+    Nothing,
+    /// The lines are in `file`, under the new key and place.
+    Written { file: PathBuf },
+    /// No git work tree holds the project where it is now, so its lines were
+    /// taken out of the file they were in and written nowhere.
+    Outside { project: PathBuf },
+}
+
+impl Followed {
+    /// What a front end should say, if anything, as [`Excluded::warning`]
+    /// says it.
+    pub fn warning(&self) -> Option<String> {
+        match self {
+            Followed::Outside { project } => Excluded::Outside {
+                project: project.clone(),
+            }
+            .warning(),
+            Followed::Nothing | Followed::Written { .. } => None,
+        }
+    }
+}
+
+/// [`locate`], for a project that may not be there any more: from the
+/// nearest folder above it that is, its route from that one's work tree
+/// carried on below it. `None` when no folder above it is in a work tree.
+fn locate_reaching(project: &Path) -> Result<Option<Location>, ExcludeError> {
+    let project =
+        paths::normalize(
+            &std::path::absolute(project).map_err(|_| ExcludeError::Path {
+                path: project.to_path_buf(),
+            })?,
+        );
+    let mut at = project.as_path();
+    let mut below: Vec<&std::ffi::OsStr> = Vec::new();
+    while fs::symlink_metadata(at).is_err() {
+        let (Some(parent), Some(name)) = (at.parent(), at.file_name()) else {
+            return Ok(None);
+        };
+        below.push(name);
+        at = parent;
+    }
+    let Some(mut location) = locate(at)? else {
+        return Ok(None);
+    };
+    for name in below.into_iter().rev() {
+        location.route.push(name);
+    }
+    Ok(Some(location))
+}
+
+/// Write `file` to `path`, its `info` folder made first when it is not
+/// there, as [`change`] writes it.
+fn write(path: &Path, file: &ExcludeFile) -> Result<(), ExcludeError> {
+    if let Some(info) = path.parent() {
+        fs::create_dir_all(info).map_err(|source| ExcludeError::Write {
+            path: info.to_path_buf(),
+            source,
+        })?;
+    }
+    replace_bytes(path, &file.to_bytes())
+        .map_err(|(path, source)| ExcludeError::Write { path, source })
+}
+
 /// What one project's group holds, and where: [`listed`].
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Listing {
@@ -342,14 +481,7 @@ fn change(
         });
     }
 
-    if let Some(info) = location.file.parent() {
-        fs::create_dir_all(info).map_err(|source| ExcludeError::Write {
-            path: info.to_path_buf(),
-            source,
-        })?;
-    }
-    replace_bytes(&location.file, &file.to_bytes())
-        .map_err(|(path, source)| ExcludeError::Write { path, source })?;
+    write(&location.file, &file)?;
     Ok(Excluded::Written {
         file: location.file,
     })
@@ -416,38 +548,16 @@ impl Entry {
     /// characters escaped, so a route like `apps/[legacy]` names that folder
     /// rather than a class of letters.
     pub fn pattern(&self, route: &Path) -> Result<String, ExcludeError> {
-        let mut line = String::new();
-        for (path, must_name) in [(route, false), (self.path(), true)] {
-            let refused = || ExcludeError::Path {
-                path: path.to_path_buf(),
-            };
-            let mut named = false;
-            for component in path.components() {
-                match component {
-                    Component::CurDir => {}
-                    Component::Normal(segment) => {
-                        let segment = segment.to_str().ok_or_else(refused)?;
-                        if segment.chars().any(char::is_control) {
-                            return Err(refused());
-                        }
-                        line.push('/');
-                        line.push_str(&escape(segment));
-                        named = true;
-                    }
-                    // Climbing out or starting over would aim the line at
-                    // something outside the project, which is not this
-                    // module's to hide.
-                    Component::ParentDir | Component::RootDir | Component::Prefix(_) => {
-                        return Err(refused())
-                    }
-                }
-            }
-            // An empty route is a project at the root. An empty entry would be
-            // the whole project, or the whole work tree.
-            if must_name && !named {
-                return Err(refused());
-            }
+        let mut line = anchored(route)?;
+        let entry = anchored(self.path())?;
+        // An empty route is a project at the root. An empty entry would be
+        // the whole project, or the whole work tree.
+        if entry.is_empty() {
+            return Err(ExcludeError::Path {
+                path: self.path().to_path_buf(),
+            });
         }
+        line.push_str(&entry);
         match self {
             Entry::Directory(_) => line.push('/'),
             // Git drops trailing spaces from a pattern unless each is
@@ -461,6 +571,37 @@ impl Entry {
         }
         Ok(line)
     }
+}
+
+/// `path`, a route below a work tree or a project, as an exclude line
+/// spells it: each segment after a `/`, its glob characters escaped, and
+/// nothing for the root itself. Refused when a segment is not one a line
+/// can hold.
+fn anchored(path: &Path) -> Result<String, ExcludeError> {
+    let refused = || ExcludeError::Path {
+        path: path.to_path_buf(),
+    };
+    let mut line = String::new();
+    for component in path.components() {
+        match component {
+            Component::CurDir => {}
+            Component::Normal(segment) => {
+                let segment = segment.to_str().ok_or_else(refused)?;
+                if segment.chars().any(char::is_control) {
+                    return Err(refused());
+                }
+                line.push('/');
+                line.push_str(&escape(segment));
+            }
+            // Climbing out or starting over would aim the line at
+            // something outside the project, which is not this
+            // module's to hide.
+            Component::ParentDir | Component::RootDir | Component::Prefix(_) => {
+                return Err(refused())
+            }
+        }
+    }
+    Ok(line)
 }
 
 /// A path segment with git's glob characters escaped, so it matches only

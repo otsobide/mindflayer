@@ -529,3 +529,145 @@ fn no_file_is_tracked_outside_a_work_tree_or_in_a_repository_with_no_index() {
     fs::write(repo.path().join("CLAUDE.md"), "").unwrap();
     assert!(!exclude::tracks_file(repo.path(), Path::new("CLAUDE.md")).unwrap());
 }
+
+const OLD: &str = "4f9c2a7e1b3d5f60a8c4e2b6d0f1a3c5";
+const NEW: &str = "0123456789abcdef0123456789abcdef";
+
+#[test]
+fn a_new_key_takes_the_projects_lines_and_leaves_a_copys_under_the_old_one() {
+    let repo = repository();
+    let file = exclude_file(repo.path());
+    let app = project(repo.path(), "packages/app");
+    let copy = project(repo.path(), "packages/app-copy");
+    exclude::add(&app, OLD, &[skill("deploy"), skill("review")]).unwrap();
+    exclude::add(&copy, OLD, &[skill("deploy")]).unwrap();
+
+    let followed = exclude::carry(&app, OLD, &app, NEW).unwrap();
+
+    assert_eq!(followed, exclude::Followed::Written { file: file.clone() });
+    assert_eq!(
+        group(&file, OLD),
+        [
+            format!("# project {OLD}"),
+            String::from("/packages/app-copy/.agents/skills/deploy/"),
+        ]
+    );
+    assert_eq!(
+        group(&file, NEW),
+        [
+            format!("# project {NEW}"),
+            String::from("/packages/app/.agents/skills/deploy/"),
+            String::from("/packages/app/.agents/skills/review/"),
+        ]
+    );
+    assert!(ignored(repo.path(), "packages/app/.agents/skills/review/"));
+}
+
+#[test]
+fn a_project_moved_in_its_work_tree_takes_its_lines_where_it_went() {
+    let repo = repository();
+    let file = exclude_file(repo.path());
+    let old = project(repo.path(), "packages/app");
+    exclude::add(&old, OLD, &[skill("deploy"), Entry::file("AGENTS.md")]).unwrap();
+    let new = repo.path().join("apps/[app]");
+    fs::create_dir_all(new.parent().unwrap()).unwrap();
+    fs::rename(&old, &new).unwrap();
+
+    exclude::carry(&old, OLD, &new, OLD).unwrap();
+
+    assert_eq!(
+        group(&file, OLD),
+        [
+            format!("# project {OLD}"),
+            String::from("/apps/\\[app]/.agents/skills/deploy/"),
+            String::from("/apps/\\[app]/AGENTS.md"),
+        ]
+    );
+    assert!(ignored(repo.path(), "apps/[app]/.agents/skills/deploy/"));
+    assert!(!ignored(repo.path(), "packages/app/.agents/skills/deploy/"));
+}
+
+#[test]
+fn a_project_moved_to_another_repository_takes_its_lines_into_that_ones_file() {
+    let first = repository();
+    let second = repository();
+    let old = project(first.path(), "app");
+    exclude::add(&old, OLD, &[skill("deploy")]).unwrap();
+    exclude::add(first.path(), NEW, &[skill("review")]).unwrap();
+    let new = second.path().join("app");
+    fs::rename(&old, &new).unwrap();
+
+    exclude::carry(&old, OLD, &new, OLD).unwrap();
+
+    assert!(group(&exclude_file(first.path()), OLD).is_empty());
+    assert_eq!(
+        group(&exclude_file(first.path()), NEW),
+        [
+            format!("# project {NEW}"),
+            String::from("/.agents/skills/review/")
+        ]
+    );
+    assert_eq!(
+        group(&exclude_file(second.path()), OLD),
+        [
+            format!("# project {OLD}"),
+            String::from("/app/.agents/skills/deploy/")
+        ]
+    );
+}
+
+#[test]
+fn a_whole_repository_moved_already_has_its_lines_where_they_go() {
+    let dir = TempDir::new().unwrap();
+    let old = dir.path().join("collapse");
+    gix::init(&old).unwrap();
+    exclude::add(&old, OLD, &[skill("deploy")]).unwrap();
+    let before = fs::read(exclude_file(&old)).unwrap();
+    let new = dir.path().join("renamed");
+    fs::rename(&old, &new).unwrap();
+
+    let followed = exclude::carry(&old, OLD, &new, OLD).unwrap();
+
+    assert_eq!(followed, exclude::Followed::Nothing);
+    assert_eq!(fs::read(exclude_file(&new)).unwrap(), before);
+}
+
+#[test]
+fn a_project_moved_out_of_git_loses_its_lines_and_says_nothing_keeps_its_copies_out() {
+    let repo = repository();
+    let outside = TempDir::new().unwrap();
+    let old = project(repo.path(), "app");
+    exclude::add(&old, OLD, &[skill("deploy")]).unwrap();
+    let new = outside.path().join("app");
+    fs::rename(&old, &new).unwrap();
+
+    let followed = exclude::carry(&old, OLD, &new, OLD).unwrap();
+
+    assert_eq!(
+        followed,
+        exclude::Followed::Outside {
+            project: new.clone()
+        }
+    );
+    assert!(followed
+        .warning()
+        .unwrap()
+        .contains("not in a git work tree"));
+    assert!(group(&exclude_file(repo.path()), OLD).is_empty());
+}
+
+#[test]
+fn a_group_with_no_line_of_the_project_is_left_as_it_is() {
+    let repo = repository();
+    let file = exclude_file(repo.path());
+    let app = project(repo.path(), "app");
+    let other = project(repo.path(), "other");
+    exclude::add(&other, OLD, &[skill("deploy")]).unwrap();
+    let before = fs::read(&file).unwrap();
+
+    assert_eq!(
+        exclude::carry(&app, OLD, &app, NEW).unwrap(),
+        exclude::Followed::Nothing
+    );
+    assert_eq!(fs::read(&file).unwrap(), before);
+}
