@@ -1346,6 +1346,7 @@ fn a_migrated_project_moves_every_installation_fills_a_missing_hash_and_logs_it_
     ledger
         .migrated(
             "collapse",
+            &id('a'),
             &[
                 moved("deploy", Some("ffff")),
                 moved("review", Some("abcd")),
@@ -1374,6 +1375,15 @@ fn a_migrated_project_moves_every_installation_fills_a_missing_hash_and_logs_it_
         .installation("collapse", Kind::Skill, "gone")
         .unwrap()
         .is_none());
+    // Known by the id its settings gave it, and its records with it.
+    assert_eq!(ledger.project_at("collapse").unwrap(), Some(id('a')));
+    assert_eq!(
+        project_ids(&ledger, "collapse"),
+        [
+            (String::from("deploy"), Some(id('a').to_string())),
+            (String::from("review"), Some(id('a').to_string()))
+        ]
+    );
     let history = ledger.history(5).unwrap();
     assert_eq!(history.len(), 1);
     assert_eq!(history[0].target.as_deref(), Some("collapse"));
@@ -1402,6 +1412,7 @@ fn a_migration_the_ledger_cannot_finish_records_none_of_it() {
 
     let failed = ledger.migrated(
         "collapse",
+        &id('a'),
         &[Moved {
             kind: Kind::Skill,
             name: String::from("deploy"),
@@ -1416,6 +1427,7 @@ fn a_migration_the_ledger_cannot_finish_records_none_of_it() {
         ledger.copies("collapse", Kind::Skill).unwrap(),
         ["skills/deploy"]
     );
+    assert_eq!(ledger.project_at("collapse").unwrap(), None);
     assert!(ledger.history(5).unwrap().is_empty());
 }
 

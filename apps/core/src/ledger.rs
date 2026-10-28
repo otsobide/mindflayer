@@ -1236,7 +1236,8 @@ impl Ledger {
 
     /// Record where each of a project's installations has its copies once
     /// the project has moved from a `mind.toml` to its settings, a hash for
-    /// each record that had none and was found current, and `log`, each
+    /// each record that had none and was found current, the `id` its
+    /// settings hold now, as [`Ledger::knew`] records one, and `log`, each
     /// line a log entry about the project.
     ///
     /// All of it in one transaction, where [`Ledger::retargeted`] takes one
@@ -1248,11 +1249,13 @@ impl Ledger {
     pub fn migrated(
         &self,
         project: &str,
+        id: &ProjectId,
         moved: &[Moved],
         log: &[(Action, String)],
     ) -> Result<(), LedgerError> {
         let failed = |source| self.failed("recording a project's move to its settings", source);
         let transaction = self.connection.unchecked_transaction().map_err(failed)?;
+        know_in(&transaction, id, project, &[]).map_err(failed)?;
         for one in moved {
             let id = retarget_in(&transaction, project, one.kind, &one.name, &one.targets)
                 .map_err(failed)?;
@@ -1506,43 +1509,9 @@ impl Ledger {
                 .map_err(failed)?;
         let mut learned = 0;
         for (id, route) in seen {
-            let at: Option<String> = transaction
-                .query_row(
-                    "SELECT last_route FROM projects WHERE id = ?1",
-                    [id.as_str()],
-                    |row| row.get(0),
-                )
-                .optional()
-                .map_err(failed)?;
-            match at {
-                Some(at) if at == *route => continue,
-                Some(at) if stale.contains(&at) => continue,
-                Some(_) => {
-                    transaction
-                        .execute("DELETE FROM projects WHERE id = ?1", [id.as_str()])
-                        .map_err(failed)?;
-                }
-                None => {}
+            if know_in(&transaction, id, route, stale).map_err(failed)? {
+                learned += 1;
             }
-            transaction
-                .execute(
-                    "DELETE FROM projects WHERE last_route = ?1",
-                    [route.as_str()],
-                )
-                .map_err(failed)?;
-            transaction
-                .execute(
-                    "INSERT INTO projects (id, last_route) VALUES (?1, ?2)",
-                    rusqlite::params![id.as_str(), route],
-                )
-                .map_err(failed)?;
-            transaction
-                .execute(
-                    "UPDATE installations SET project_id = ?1 WHERE project = ?2",
-                    rusqlite::params![id.as_str(), route],
-                )
-                .map_err(failed)?;
-            learned += 1;
         }
         transaction.commit().map_err(failed)?;
         Ok(learned)
@@ -1890,6 +1859,41 @@ impl Ledger {
             source,
         }
     }
+}
+
+/// [`Ledger::knew`] of one project, through `connection`, which a caller
+/// holds a transaction on: whether the ledger did not know `id` at `route`
+/// already.
+fn know_in(
+    connection: &Connection,
+    id: &ProjectId,
+    route: &str,
+    stale: &[String],
+) -> rusqlite::Result<bool> {
+    let at: Option<String> = connection
+        .query_row(
+            "SELECT last_route FROM projects WHERE id = ?1",
+            [id.as_str()],
+            |row| row.get(0),
+        )
+        .optional()?;
+    match at {
+        Some(at) if at == route || stale.contains(&at) => return Ok(false),
+        Some(_) => {
+            connection.execute("DELETE FROM projects WHERE id = ?1", [id.as_str()])?;
+        }
+        None => {}
+    }
+    connection.execute("DELETE FROM projects WHERE last_route = ?1", [route])?;
+    connection.execute(
+        "INSERT INTO projects (id, last_route) VALUES (?1, ?2)",
+        rusqlite::params![id.as_str(), route],
+    )?;
+    connection.execute(
+        "UPDATE installations SET project_id = ?1 WHERE project = ?2",
+        rusqlite::params![id.as_str(), route],
+    )?;
+    Ok(true)
 }
 
 /// Give the installation of `name` the copies `targets` in place of those

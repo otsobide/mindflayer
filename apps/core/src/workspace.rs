@@ -31,7 +31,7 @@ use crate::kind::{Kind, Layout};
 use crate::ledger::{Ledger, LedgerError, LEDGER_FILE};
 use crate::lock::{self, LockError, WorkspaceLock};
 use crate::paths;
-use crate::settings::{Settings, Share, SETTINGS_FILE, SETTINGS_JSON_FILE};
+use crate::settings::{ProjectId, Settings, Share, SETTINGS_FILE, SETTINGS_JSON_FILE};
 
 /// The newest version of a project's marker this build reads: version 5, a
 /// `.mind/settings.toml` ([`SETTINGS_TOML_VERSION`]).
@@ -1320,13 +1320,17 @@ impl FlayerWorkspace {
     /// only keep every change to an artifact waiting behind a gather to drop
     /// its record, after the change was made, and failing as busy when the
     /// gather ran long, with the record left behind.
+    ///
+    /// A ledger made or migrated here is told the id of each project the
+    /// workspace links (`FlayerWorkspace::known`), which the step to schema 5
+    /// names each one's records by.
     pub fn ledger(&self) -> Result<Ledger, LedgerError> {
         if !self.made {
             return Err(LedgerError::Unmade {
                 path: self.ledger_path(),
             });
         }
-        Ledger::open(self.ledger_path())
+        Ledger::open_knowing(self.ledger_path(), || self.known().ids)
     }
 
     /// Open that database for a command that writes to it: scrubbed first of
@@ -1344,6 +1348,15 @@ impl FlayerWorkspace {
     /// The scrub holds the workspace while it rewrites clones, which is only
     /// when an older build left a credential in one, and like any writer gives
     /// up as busy after [`lock::WAIT`].
+    ///
+    /// And told which id each project the workspace links holds now
+    /// ([`Ledger::knew`]), so it follows them: one linked since it was made,
+    /// one given a new id, one whose route held another project before. A
+    /// stale entry keeps the id the ledger last saw there, which is what
+    /// finds its project once it has moved ([`crate::relink`]). Every time,
+    /// as the scrub runs every time, rather than by each command that
+    /// changes what the workspace links: an entry written by hand is linked
+    /// too. Rows only, which SQLite keeps apart, so it waits for no lock.
     pub fn ledger_to_write(&self) -> Result<(Ledger, Scrub), LedgerError> {
         self.ledger_to_write_waiting(lock::WAIT)
     }
@@ -1357,6 +1370,8 @@ impl FlayerWorkspace {
     ) -> Result<(Ledger, Scrub), LedgerError> {
         let ledger = self.ledger()?;
         let scrub = gather::scrub(self, &ledger, wait)?;
+        let known = self.known();
+        ledger.knew(&known.ids, &known.stale)?;
         Ok((ledger, scrub))
     }
 
@@ -1384,10 +1399,49 @@ impl FlayerWorkspace {
         if !self.made {
             return Ledger::in_memory();
         }
-        match Ledger::open_existing(self.ledger_path())? {
+        match Ledger::open_existing_knowing(self.ledger_path(), || self.known().ids)? {
             Some(ledger) => Ok(ledger),
             None => Ledger::in_memory(),
         }
+    }
+
+    /// Which id each project the workspace links holds, by the route the
+    /// ledger names it by, and which entries open no project: what the
+    /// ledger is told of them ([`Ledger::knew`]).
+    ///
+    /// A project a `mind.toml` marks has no id, and is in neither. Nor is an
+    /// id two linked directories hold: a project copied with its `.mind`,
+    /// which a report says ([`crate::status`]) until one of them is given an
+    /// id of its own, and which the ledger is not to take for either.
+    pub(crate) fn known(&self) -> Known {
+        let mut held: Vec<(ProjectId, String, PathBuf)> = Vec::new();
+        let mut stale = Vec::new();
+        for member in self.members() {
+            let route = crate::install::entry_for_root(self, &member.root);
+            match member.project {
+                Ok(project) => {
+                    if let Some(settings) = project.settings() {
+                        held.push((settings.id.clone(), route, member.root));
+                    }
+                }
+                Err(_) => stale.push(route),
+            }
+        }
+        let ids = held
+            .iter()
+            .filter(|(id, _, root)| {
+                held.iter()
+                    .all(|(other, _, at)| other != id || same_directory(at, root))
+            })
+            .map(|(id, route, _)| (id.clone(), route.clone()))
+            .collect::<Vec<_>>();
+        let mut unique: Vec<(ProjectId, String)> = Vec::new();
+        for (id, route) in ids {
+            if !unique.iter().any(|(seen, _)| *seen == id) {
+                unique.push((id, route));
+            }
+        }
+        Known { ids: unique, stale }
     }
 
     /// The entry this workspace would store for a project directory.
@@ -1924,6 +1978,17 @@ impl FlayerWorkspace {
             .find(|candidate| same_directory(candidate, &target))
             .unwrap_or(target)
     }
+}
+
+/// What the projects a workspace links say of their ids
+/// ([`FlayerWorkspace::known`]).
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub(crate) struct Known {
+    /// Each id one linked directory holds, by its route from the workspace,
+    /// in the order the marker lists them.
+    pub ids: Vec<(ProjectId, String)>,
+    /// The route of each entry that opens no project.
+    pub stale: Vec<String>,
 }
 
 /// One entry in a workspace's registry, and what it opens.
