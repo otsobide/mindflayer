@@ -24,6 +24,7 @@ use std::time::Duration;
 use thiserror::Error;
 
 use crate::artifact::{Artifact, ArtifactError, ValidationIssue};
+use crate::code::codes;
 use crate::copy::{self, Change};
 use crate::kind::{Kind, Layout};
 use crate::ledger::{self, Action, Ledger, LedgerError, Outcome, SourceKind};
@@ -367,6 +368,8 @@ pub struct Leftover {
     pub source: io::Error,
 }
 
+codes!(Leftover => "source_leftover");
+
 /// A clone made from a URL with credentials that could not be rewritten
 /// without them.
 #[derive(Debug, Error)]
@@ -377,6 +380,8 @@ pub struct ScrubFailure {
     #[source]
     pub source: git::GitError,
 }
+
+codes!(ScrubFailure => "clone_unscrubbed");
 
 /// The work itself, with the logging left to [`gather`].
 fn harvest(
@@ -650,6 +655,13 @@ pub enum Failure {
     },
 }
 
+codes!(Failure {
+    Self::UnusableName { .. } => "gathered_name_not_utf8",
+    Self::Copy { .. } => "gathered_copy_failed",
+} carried {
+    Self::Artifact(error) => error,
+});
+
 impl Failure {
     /// The path the failure is about.
     pub fn path(&self) -> &Path {
@@ -710,6 +722,18 @@ pub enum GatherError {
         source: io::Error,
     },
 }
+
+codes!(GatherError {
+    Self::Cancelled => "gather_cancelled",
+    Self::CredentialsInUrl { .. } => "credentials_in_url",
+    Self::NoSuchFolder { .. } => "gather_no_such_folder",
+    Self::NotGatherable { .. } => "kind_not_gatherable",
+    Self::Read { .. } => "gather_read_failed",
+} carried {
+    Self::Git(error) => error,
+    Self::Ledger(error) => error,
+    Self::Lock(error) => error,
+});
 
 /// Everything the ledger knows about, for a front end to list.
 ///

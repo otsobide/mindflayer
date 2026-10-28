@@ -102,6 +102,8 @@ use crate::claude_rules::{self, ClaudeRulesError};
 use crate::config_entry::{EntryError, FileError};
 use crate::exclude::{self, ExcludeError};
 use crate::frontmatter::FrontMatterError;
+use crate::gather::git::GitError;
+use crate::gather::{self, GatherError, Leftover, ScrubFailure};
 use crate::install::{rules, InstallError, LoadFailure};
 use crate::kind::UnknownKind;
 use crate::ledger::LedgerError;
@@ -136,6 +138,11 @@ pub const ALL: &[(&str, &[&str])] = &[
     ("exclude::ExcludeError", ExcludeError::CODES),
     ("exclude::Malformed", exclude::Malformed::CODES),
     ("frontmatter::FrontMatterError", FrontMatterError::CODES),
+    ("gather::Failure", gather::Failure::CODES),
+    ("gather::GatherError", GatherError::CODES),
+    ("gather::Leftover", Leftover::CODES),
+    ("gather::ScrubFailure", ScrubFailure::CODES),
+    ("gather::git::GitError", GitError::CODES),
     ("install::InstallError", InstallError::CODES),
     ("install::LoadFailure", LoadFailure::CODES),
     ("install::rules::Warning", rules::Warning::CODES),
