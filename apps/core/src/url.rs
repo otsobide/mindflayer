@@ -100,6 +100,19 @@ pub(crate) fn serialize_redacted<S: Serializer>(
     serializer.serialize_str(&redacted(url))
 }
 
+/// [`serialize_redacted`], for a text that may not be there: an action
+/// log's target or detail, which can quote a URL among other words, or an
+/// origin a record from before origins were kept lacks.
+pub(crate) fn serialize_redacted_option<S: Serializer>(
+    text: &Option<String>,
+    serializer: S,
+) -> Result<S::Ok, S::Error> {
+    match text {
+        Some(text) => serializer.serialize_some(&redacted(text)),
+        None => serializer.serialize_none(),
+    }
+}
+
 /// Whether `url` carries anything [`redacted`] would take out of it: a
 /// password, or a user name anywhere but in front of an ssh host.
 pub fn carries_credentials(url: &str) -> bool {

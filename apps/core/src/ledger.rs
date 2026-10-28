@@ -249,15 +249,24 @@ pub enum Carried {
 }
 
 /// One line of the action log.
-#[derive(Debug, Clone, PartialEq, Eq)]
+///
+/// What it serializes to is a contract, as a status report's is: each field
+/// by its name, and the two that can quote a URL only through [`redacted`],
+/// where they are written rather than trusted to [`Ledger::history`], which
+/// hands back none with a credential in it: a row an older build wrote
+/// before the scrub still holds one until a command that writes opens the
+/// ledger.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct Entry {
     /// When it happened, in seconds since the Unix epoch.
     pub at: i64,
     pub action: String,
     /// What the action was about: a URL, a name. A URL is [`redacted`].
+    #[serde(serialize_with = "crate::url::serialize_redacted_option")]
     pub target: Option<String>,
     pub outcome: String,
     /// What it said, successful or not, with every URL in it [`redacted`].
+    #[serde(serialize_with = "crate::url::serialize_redacted_option")]
     pub detail: Option<String>,
 }
 
@@ -834,6 +843,58 @@ impl Ledger {
             });
         }
         Ok(found)
+    }
+
+    /// Every source anything was gathered from, or tried to be, ordered the
+    /// way a listing reads them: by URL, then branch, then folder.
+    ///
+    /// Its own query rather than the sources of [`gathered`](Self::gathered):
+    /// a source whose gather failed before it took anything, or whose every
+    /// artifact has gone since, has no row there to be found by, and it is
+    /// still a place the shelf is filled from. A row naming a kind this build
+    /// has never heard of is skipped, as `gathered` skips it.
+    ///
+    /// Sorted once the URLs are redacted rather than by SQL, so a URL an
+    /// older build stored with a credential is listed where the URL it is
+    /// shown as goes.
+    pub fn sources(&self) -> Result<Vec<Source>, LedgerError> {
+        let failed = |source| self.failed("listing the sources", source);
+        let mut statement = self
+            .connection
+            .prepare(
+                "SELECT id, kind, url, reference, subdirectory, revision, directory
+                   FROM sources ORDER BY id",
+            )
+            .map_err(failed)?;
+        let rows = statement
+            .query_map([], |row| {
+                let slug: String = row.get(1)?;
+                let url: String = row.get(2)?;
+                Ok(
+                    SourceKind::parse(&slug).map(|kind| -> rusqlite::Result<Source> {
+                        Ok(Source {
+                            id: row.get(0)?,
+                            kind,
+                            url: redacted(&url).into_owned(),
+                            reference: row.get(3)?,
+                            subdirectory: row.get(4)?,
+                            revision: row.get(5)?,
+                            directory: row.get(6)?,
+                        })
+                    }),
+                )
+            })
+            .map_err(failed)?;
+        let mut sources = Vec::new();
+        for row in rows {
+            if let Some(source) = row.map_err(failed)? {
+                sources.push(source.map_err(failed)?);
+            }
+        }
+        sources.sort_by(|a: &Source, b: &Source| {
+            (&a.url, &a.reference, &a.subdirectory).cmp(&(&b.url, &b.reference, &b.subdirectory))
+        });
+        Ok(sources)
     }
 
     /// Record that an artifact was put into a project, replacing whatever was

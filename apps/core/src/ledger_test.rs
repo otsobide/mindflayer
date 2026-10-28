@@ -1891,3 +1891,91 @@ fn a_source_is_serialized_without_the_credentials_its_url_carries() {
 fn a_source_kind_is_serialized_as_its_slug() {
     assert_eq!(serde_json::to_string(&SourceKind::Git).unwrap(), r#""git""#);
 }
+
+/// What a line of the action log serializes to is a contract too: each
+/// field by its name.
+#[test]
+fn an_action_log_entry_serializes_every_field() {
+    let entry = Entry {
+        at: 1_790_000_000,
+        action: String::from("install"),
+        target: Some(String::from("collapse")),
+        outcome: String::from("ok"),
+        detail: None,
+    };
+
+    assert_eq!(
+        serde_json::to_string(&entry).unwrap(),
+        r#"{"at":1790000000,"action":"install","target":"collapse","outcome":"ok","detail":null}"#
+    );
+}
+
+/// An entry built some other way than [`Ledger::history`] reads one may
+/// hold a credential, in its target or quoted in its detail, and a report
+/// must not print it whatever built it.
+#[test]
+fn an_action_log_entry_is_serialized_without_the_credentials_its_urls_carry() {
+    let url = "https://me:s3cret@github.com/acme/skills.git";
+    let entry = Entry {
+        at: 0,
+        action: String::from("gather"),
+        target: Some(url.to_owned()),
+        outcome: String::from("failed"),
+        detail: Some(format!("{url}: cannot be fetched")),
+    };
+
+    let serialized = serde_json::to_string(&entry).unwrap();
+
+    assert!(!serialized.contains("s3cret"), "{serialized}");
+    assert!(
+        serialized.contains(r#""target":"https://github.com/acme/skills.git""#),
+        "{serialized}"
+    );
+    assert!(
+        serialized.contains(r#""detail":"https://github.com/acme/skills.git: cannot be fetched""#),
+        "{serialized}"
+    );
+}
+
+/// Every source is listed, one nothing was gathered from included, by URL,
+/// then branch, then folder, and none with the credentials an older build
+/// stored in it.
+#[test]
+fn every_source_is_listed_in_url_order_without_credentials() {
+    let ledger = Ledger::in_memory().unwrap();
+    ledger
+        .source_for(SourceKind::Git, "https://h/b", None, "skills")
+        .unwrap();
+    ledger
+        .source_for(SourceKind::Git, "https://h/a", Some("main"), "skills")
+        .unwrap();
+    ledger
+        .source_for(SourceKind::Git, "https://h/a", None, "skills")
+        .unwrap();
+    // What a Mindflayer from before the refusal could have stored.
+    ledger
+        .connection
+        .execute(
+            "INSERT INTO sources (kind, url, reference, subdirectory, directory, first_seen, last_seen)
+             VALUES ('git', 'https://me:t0ken@h/aa', NULL, 'skills', 'h-aa', 0, 0)",
+            [],
+        )
+        .unwrap();
+
+    let listed: Vec<(String, Option<String>)> = ledger
+        .sources()
+        .unwrap()
+        .into_iter()
+        .map(|source| (source.url, source.reference))
+        .collect();
+
+    assert_eq!(
+        listed,
+        [
+            (String::from("https://h/a"), None),
+            (String::from("https://h/a"), Some(String::from("main"))),
+            (String::from("https://h/aa"), None),
+            (String::from("https://h/b"), None),
+        ]
+    );
+}

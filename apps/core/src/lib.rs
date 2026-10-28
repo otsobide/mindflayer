@@ -49,6 +49,7 @@ pub mod status;
 pub mod template;
 pub mod update;
 pub mod url;
+pub mod view;
 pub mod workspace;
 
 pub use activate::{ActivateError, Shell, UnknownShell};

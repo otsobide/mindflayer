@@ -566,3 +566,18 @@ fn with_no_project_named_the_holder_is_the_workspaces_own() {
         dir.path().join("beta")
     );
 }
+
+/// How a workspace was chosen goes out as one word for each rule, which a
+/// front end compares: a contract, as every serialized name is.
+#[test]
+fn a_reason_serializes_as_the_rule_that_chose_the_workspace() {
+    let serialized = serde_json::to_string(&[
+        Reason::Explicit,
+        Reason::Activated,
+        Reason::Above,
+        Reason::Home,
+    ])
+    .unwrap();
+
+    assert_eq!(serialized, r#"["explicit","activated","above","home"]"#);
+}

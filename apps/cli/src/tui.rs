@@ -21,15 +21,13 @@ use std::sync::mpsc;
 use std::thread;
 use std::time::Duration;
 
-use std::error::Error as _;
-
 use clap::Parser;
+use mindflayer_core::code::Said;
 use mindflayer_core::gather::Watch;
-use mindflayer_core::resolve::{self, resolve, Intent, Reason, Resolved};
-use mindflayer_core::workspace::Member as Registered;
+use mindflayer_core::resolve::{self, resolve, Intent, Resolved};
+use mindflayer_core::view::{self, Directory, Held, LoadedWorkspace, Snapshot};
 use mindflayer_core::{
-    lifecycle, paths, scan, template, Catalog, FlayerWorkspace, Kind, MarkerFile, MindProject,
-    ProjectStatus, WorkspaceError,
+    scan, FlayerWorkspace, Kind, MarkerFile, MindProject, Template, WorkspaceError,
 };
 use ratatui::crossterm::event::{self, Event, KeyEventKind};
 use ratatui::crossterm::terminal::{self, EnterAlternateScreen};
@@ -39,7 +37,6 @@ use crate::commands::project::scan_warnings;
 use crate::commands::status::{unread, unseen};
 use crate::commands::workspace::same_directory;
 use crate::commands::{consulted, run_flayer_with, run_with};
-use crate::render::as_stored;
 use crate::{install, Cli, CliError, Command, Failure, FlayerCli, FlayerCommand, Lookup, Outcome};
 use state::{
     App, Choice, Done, Holdings, Item, LoadedSource, Member, Mode, Performed, Runner, Running,
@@ -491,12 +488,7 @@ pub fn load(directory: &Path, lookup: &Lookup) -> Result<View, CliError> {
 /// opens on.
 pub fn load_under(directory: &Path, lookup: &Lookup, roots: &[PathBuf]) -> Result<View, CliError> {
     Ok(match resolve(&lookup.inputs(directory, Intent::Read))? {
-        Some(resolved) => View::Workspace(Box::new(workspace_view(
-            &resolved.workspace,
-            resolved.reason,
-            lookup,
-            roots,
-        ))),
+        Some(resolved) => View::Workspace(Box::new(workspace_view(&resolved, lookup, roots))),
         None => View::Nowhere,
     })
 }
@@ -515,41 +507,38 @@ pub fn load_project(directory: &Path, lookup: &Lookup) -> Result<View, CliError>
     // that decides it for the `mind` lines this screen runs, so the two
     // cannot come to disagree.
     let consulted = resolve::consulted(&lookup.inputs(project.root(), Intent::Read), &project)?;
-    if let Some(Resolved { workspace, reason }) = &consulted {
-        if workspace.is_linked(project.root()) {
+    if let Some(resolved) = &consulted {
+        if resolved.workspace.is_linked(project.root()) {
             return Ok(View::Workspace(Box::new(workspace_view(
-                workspace,
-                *reason,
+                resolved,
                 lookup,
                 &[],
             ))));
         }
     }
     let above = consulted.map(|resolved| resolved.workspace);
-    // `.`, because the commands run from the project itself.
-    let entry = String::from(".");
-    let root = project.root().to_path_buf();
+    // Read as a snapshot reads each project, with `above`'s templates, the
+    // ones `mind add` will find, and no records: it does not link the
+    // project, so it says nothing of what was installed there.
+    let read = view::Project::read(&project, above.as_ref());
     Ok(View::Workspace(Box::new(Workspace {
         name: project.name().to_owned(),
-        // `above`'s templates, the ones `mind add` will find, and no
-        // records: it does not link the project, so it says nothing of what
-        // was installed there.
-        members: vec![held(
-            entry,
-            root.clone(),
-            false,
-            &project,
-            &Kind::ALL,
-            above.as_ref(),
-        )],
-        root,
+        // `.`, because the commands run from the project itself.
+        members: vec![held(String::from("."), &read)],
+        root: read.path,
         unlinked: Vec::new(),
         roots: Vec::new(),
         scan_warnings: Vec::new(),
         shelf: 0,
         // What `mind load` has put into the workspace above, so the load form
         // can show it and unload it from here too.
-        loaded: above.as_ref().map(loaded).unwrap_or_default(),
+        loaded: above
+            .as_ref()
+            .map(LoadedWorkspace::of)
+            .unwrap_or_default()
+            .iter()
+            .map(loaded_source)
+            .collect(),
         scope: Scope::Project,
         above: above
             .map(|workspace| workspace.root().to_path_buf())
@@ -559,29 +548,19 @@ pub fn load_project(directory: &Path, lookup: &Lookup) -> Result<View, CliError>
     })))
 }
 
-/// A workspace as the screen shows it: its own artifacts first, then every
-/// project it manages, and what could be linked under `roots`, or under its
-/// root when there are none.
-fn workspace_view(
-    workspace: &FlayerWorkspace,
-    reason: Reason,
-    lookup: &Lookup,
-    roots: &[PathBuf],
-) -> Workspace {
-    let own = workspace.own();
-    let mut members = vec![held(
-        String::new(),
-        workspace.root().to_path_buf(),
-        true,
-        &own,
-        &workspace.own_kinds(),
-        Some(workspace),
-    )];
+/// A workspace as the screen shows it, from the snapshot every front end
+/// reads ([`Snapshot`]): its own artifacts first, then every project it
+/// manages, and what could be linked under `roots`, or under its root when
+/// there are none, which no snapshot holds, being a scan of the disk.
+fn workspace_view(resolved: &Resolved, lookup: &Lookup, roots: &[PathBuf]) -> Workspace {
+    let workspace = &resolved.workspace;
+    let snapshot = Snapshot::of(resolved, lookup.home.as_deref());
+    let mut members = vec![own(&snapshot)];
     members.extend(
-        workspace
-            .members()
-            .into_iter()
-            .map(|registered| member(registered, workspace, lookup)),
+        snapshot
+            .projects
+            .iter()
+            .map(|project| member(project, workspace, lookup)),
     );
     // Spelled from the workspace root, the default, where the TUI runs its
     // lines, and in the order `flayer scan --suggest` lists them, which core
@@ -606,306 +585,190 @@ fn workspace_view(
         })
         .collect();
     Workspace {
-        name: workspace.name().to_owned(),
-        root: workspace.root().to_path_buf(),
         members,
         unlinked,
         roots: roots.to_vec(),
         scan_warnings,
-        shelf: shelf(workspace),
-        loaded: loaded(workspace),
+        shelf: snapshot.shelf.len(),
+        loaded: snapshot.loaded.iter().map(loaded_source).collect(),
         scope: Scope::Workspace,
         above: None,
-        reason: Some(reason),
-        made: workspace.is_made(),
+        reason: Some(snapshot.workspace.reason),
+        made: snapshot.workspace.made,
+        name: snapshot.workspace.name,
+        root: snapshot.workspace.path,
     }
 }
 
-/// Every workspace this one loads, with how many of its own each offers,
-/// counted from the install machinery's own offers, so the number is what
-/// the install screen shows.
-fn loaded(workspace: &FlayerWorkspace) -> Vec<LoadedSource> {
-    use mindflayer_core::install::{offered_by_loads, Offer};
-    let offers: Vec<Offer> = offered_by_loads(workspace).offers;
-    let loads = workspace.loads();
-    let mut shown: Vec<LoadedSource> = Vec::new();
-    for (index, loaded) in loads.iter().enumerate() {
-        let entry = as_stored(&loaded.entry);
-        // A second spelling of one workspace offers what the first does.
-        let first = loads[..index]
-            .iter()
-            .find(|earlier| same_directory(&earlier.root, &loaded.root))
-            .map_or_else(|| entry.clone(), |earlier| as_stored(&earlier.entry));
-        shown.push(match &loaded.workspace {
-            Ok(source) => LoadedSource {
-                root: loaded.root.clone(),
-                offers: Ok(offers
-                    .iter()
-                    .filter(|offer| {
-                        matches!(offer, Offer::Loaded { entry: from, .. } if *from == first)
-                    })
-                    .count()),
-                name: source.name().to_owned(),
-                entry,
-            },
-            Err(error) => LoadedSource {
-                root: loaded.root.clone(),
-                name: entry.clone(),
-                offers: Err(error.to_string()),
-                entry,
-            },
-        });
+/// A workspace this one loads, as the load form shows it: by its entry when
+/// it would not open, with why in place of what it offers.
+fn loaded_source(loaded: &LoadedWorkspace) -> LoadedSource {
+    LoadedSource {
+        entry: loaded.entry.clone(),
+        root: loaded.path.clone(),
+        name: loaded.name.clone().unwrap_or_else(|| loaded.entry.clone()),
+        offers: match &loaded.error {
+            Some(error) => Err(error.message.clone()),
+            None => Ok(loaded.offers),
+        },
     }
-    shown
 }
 
-/// One entry in `screen`'s registry, opened and read.
+/// The workspace's own artifacts, its library, as the first row.
+fn own(snapshot: &Snapshot) -> Member {
+    let library = &snapshot.library;
+    Member {
+        entry: String::new(),
+        root: snapshot.workspace.path.clone(),
+        name: snapshot.workspace.name.clone(),
+        own: true,
+        elsewhere: false,
+        // No project's: no settings, no agents, and nothing installed into
+        // them, so nothing any agent misses.
+        holdings: Ok(Holdings {
+            items: items(&library.artifacts),
+            agents: Vec::new(),
+            named: Vec::new(),
+            share: None,
+            older: None,
+            edit_tracked: false,
+            targets: None,
+            unreached: Vec::new(),
+            warnings: messages(&library.failures),
+            directories: directories(&library.directories),
+            templates: choices(&library.templates),
+        }),
+    }
+}
+
+/// One entry in `screen`'s registry, as its snapshot read it.
 ///
 /// Its lines consult the workspace on screen, whatever `mind` would consult
 /// about the project from the shell: where that is another, or cannot be
 /// read, the row is [`elsewhere`](Member::elsewhere) and its lines say `-W
 /// .`. So its templates are the screen's too, the ones the add form's line
-/// will find.
-fn member(registered: Registered, screen: &FlayerWorkspace, lookup: &Lookup) -> Member {
-    let entry = as_stored(&registered.entry);
-    match registered.project {
-        Ok(project) => {
-            let elsewhere = !matches!(
-                consulted(&project, lookup),
-                Ok(Some(workspace)) if same_directory(workspace.root(), screen.root())
-            );
-            Member {
-                elsewhere,
-                ..held(
-                    entry,
-                    registered.root,
-                    false,
-                    &project,
-                    &Kind::ALL,
-                    Some(screen),
-                )
-            }
-        }
-        Err(error) => Member {
+/// will find. Which workspace `mind` consults is the lookup's, which no
+/// snapshot holds, so it is asked here.
+fn member(project: &view::Project, screen: &FlayerWorkspace, lookup: &Lookup) -> Member {
+    let entry = project.entry.clone().unwrap_or_default();
+    if let Some(stale) = &project.stale {
+        return Member {
             name: entry.clone(),
             entry,
-            root: registered.root,
+            root: project.path.clone(),
             own: false,
             elsewhere: false,
-            holdings: Err(error.to_string()),
-        },
+            holdings: Err(stale.message.clone()),
+        };
+    }
+    let consults = MindProject::open(&project.path)
+        .map_err(CliError::from)
+        .and_then(|opened| consulted(&opened, lookup));
+    let elsewhere = !matches!(
+        consults,
+        Ok(Some(workspace)) if same_directory(workspace.root(), screen.root())
+    );
+    Member {
+        elsewhere,
+        ..held(entry, project)
     }
 }
 
-/// What one holder holds, read from the disk: a project, or the workspace's
-/// own for the kinds it keeps apart. `workspace` is the one whose templates
-/// count for it, if any, and whose ledger says which of a project's copies
-/// were installed, when it links the project.
-fn held(
-    entry: String,
-    root: PathBuf,
-    own: bool,
-    project: &MindProject,
-    kinds: &[Kind],
-    workspace: Option<&FlayerWorkspace>,
-) -> Member {
-    // A project's rows say how each artifact stands, from the report
-    // `status` prints, read with the catalog the rows are drawn from rather
-    // than beside it, so the project is read once. The workspace's own are
-    // no project's, and nothing is installed into them. A ledger that cannot
-    // be read is among the catalog's failures, so each project's rows say
-    // it, as the report does once.
-    let (status, catalog) = if own {
-        (
-            None,
-            Catalog::discover_kinds(std::slice::from_ref(project), kinds),
-        )
-    } else {
-        let (status, catalog) = ProjectStatus::read(project, kinds, workspace);
-        (Some(status), catalog)
-    };
-    let standing = |kind: Kind, name: &str| {
-        status
-            .as_ref()
-            .and_then(|status| status.find(kind, name))
-            .map(|held| (held.state, held.agents.clone()))
-    };
-    let mut items: Vec<Item> = catalog
-        .artifacts()
-        .iter()
-        .map(|artifact| Item {
-            kind: artifact.kind(),
-            name: artifact.name().to_owned(),
-            summary: artifact.summary().unwrap_or("").to_owned(),
-            // What `validate` would call invalid: a warning is no reason
-            // for a mark.
-            issues: artifact
-                .validate()
-                .iter()
-                .filter(|issue| !issue.is_warning())
-                .map(ToString::to_string)
-                .collect(),
-            broken: None,
-            state: standing(artifact.kind(), artifact.name()).map(|(state, _)| state),
-            agents: standing(artifact.kind(), artifact.name())
-                .map(|(_, agents)| agents)
-                .unwrap_or_default(),
-        })
-        .collect();
-
-    // A file that does not read is listed where it would have been, by the
-    // name its place gives it, so it can be opened and fixed from here. Only
-    // what cannot be pinned to an artifact (a folder that cannot be listed)
-    // is left as a warning on its own.
-    let mut warnings = Vec::new();
-    for failure in catalog.failures() {
-        match lifecycle::identify(project, failure.path()) {
-            Some((kind, name)) => {
-                let (state, agents) = standing(kind, &name).unzip();
-                let broken = Item {
-                    kind,
-                    name,
-                    summary: String::new(),
-                    issues: Vec::new(),
-                    // The reason without the path, which the row already says.
-                    broken: Some(
-                        failure
-                            .source()
-                            .map_or_else(|| failure.to_string(), ToString::to_string),
-                    ),
-                    state,
-                    agents: agents.unwrap_or_default(),
-                };
-                // Its name may be listed already, from a copy in the
-                // project's agents' folders. A row is named by its name
-                // alone, and a change to that name reaches the project's own
-                // copy, this one, so the row is this one's: a second row of
-                // the same name would aim a key at the agents' copy and
-                // reach this.
-                match items
-                    .iter_mut()
-                    .find(|item| item.kind == broken.kind && item.name == broken.name)
-                {
-                    Some(item) => *item = broken,
-                    None => items.push(broken),
-                }
-            }
-            None => warnings.push(failure.to_string()),
-        }
-    }
-    // An install nothing of which is found is in the report all the same, as
-    // missing, and has a row like the rest: `i` puts it back from there.
-    for held in status.iter().flat_map(|status| &status.artifacts) {
-        if !items
-            .iter()
-            .any(|item| item.kind == held.kind && item.name == held.name)
-        {
-            items.push(Item {
-                kind: held.kind,
-                name: held.name.clone(),
-                summary: String::new(),
-                issues: Vec::new(),
-                broken: None,
-                state: Some(held.state),
-                agents: held.agents.clone(),
-            });
-        }
-    }
-    items.sort_by(|a, b| a.kind.cmp(&b.kind).then_with(|| a.name.cmp(&b.name)));
-
-    let directories = Kind::ALL
-        .into_iter()
-        .filter_map(|kind| Some((kind, within(project, kind)?)))
-        .collect();
-    let templates = match template::templates(workspace, project) {
-        Ok(templates) => templates
-            .into_iter()
-            .map(|template| Choice {
-                name: template.name,
-                kind: template.kind,
-            })
-            .collect(),
-        Err(error) => {
-            warnings.push(error.to_string());
-            Vec::new()
-        }
-    };
-
-    let settings = project.settings().filter(|_| !own);
+/// What one project holds, as a snapshot read it, under `entry`.
+fn held(entry: String, project: &view::Project) -> Member {
+    let name = project.name.clone().unwrap_or_else(|| entry.clone());
     // What `status` warns of, said in its words: the folders no install
     // uses first, then the agents that read none of the rest, then each rule
     // some of them read nowhere.
     let mut unreached: Vec<String> = project
-        .misplaced_targets()
+        .misplaced
         .iter()
-        .filter(|_| !own)
-        .map(ToString::to_string)
+        .map(|misplaced| misplaced.message.clone())
         .collect();
-    unreached.extend(status.iter().flat_map(|status| {
-        status
+    unreached.extend(
+        project
             .unreached
             .iter()
-            .map(|unreached| unread(project.name(), unreached, false))
-    }));
-    unreached.extend(status.iter().flat_map(|status| {
-        status
-            .missed
-            .iter()
-            .map(|missed| unseen(project.name(), missed))
-    }));
+            .map(|unreached| unread(&name, unreached, false)),
+    );
+    unreached.extend(project.missed.iter().map(|missed| unseen(&name, missed)));
+    let settings = project.settings.as_ref();
     Member {
         entry,
-        root,
-        name: project.name().to_owned(),
-        own,
+        root: project.path.clone(),
+        name,
+        own: false,
         elsewhere: false,
         holdings: Ok(Holdings {
-            items,
-            agents: status.map(|status| status.agents).unwrap_or_default(),
-            // The workspace's own have no settings, whatever a project at its
-            // root says: they reach agents by being installed.
+            items: items(&project.artifacts),
+            agents: project.agents.clone(),
             named: settings
                 .map(|settings| settings.agents.clone())
                 .unwrap_or_default(),
             share: settings.map(|settings| settings.share),
-            older: Some(project.marker_file())
-                .filter(|file| !own && *file != MarkerFile::SettingsToml),
+            older: project
+                .marker
+                .filter(|file| *file != MarkerFile::SettingsToml),
             edit_tracked: settings.is_some_and(|settings| settings.edit_tracked),
-            targets: settings
-                .and_then(|settings| settings.targets.get(Kind::Skill))
-                .map(|folders| {
-                    folders
-                        .iter()
-                        .map(|folder| {
-                            paths::to_config_string(folder)
-                                .unwrap_or_else(|| folder.display().to_string())
-                        })
-                        .collect()
-                }),
+            targets: settings.and_then(|settings| {
+                settings
+                    .targets
+                    .iter()
+                    .find(|targets| targets.kind == Kind::Skill)
+                    .map(|targets| targets.folders.clone())
+            }),
             unreached,
-            warnings,
-            directories,
-            templates,
+            warnings: messages(&project.failures),
+            directories: directories(&project.directories),
+            templates: choices(&project.templates),
         }),
     }
 }
 
-/// Where a project keeps a kind, relative to the project; `None` when it
-/// keeps no folder for it, which an empty project then does not mention.
-fn within(project: &MindProject, kind: Kind) -> Option<String> {
-    let directory = project.directory_for(kind)?;
-    Some(
-        paths::relative_to(&directory, project.root())
-            .as_deref()
-            .and_then(paths::to_config_string)
-            .unwrap_or_else(|| directory.display().to_string()),
-    )
+/// A holder's artifacts as rows.
+fn items(artifacts: &[Held]) -> Vec<Item> {
+    artifacts
+        .iter()
+        .map(|held| Item {
+            kind: held.kind,
+            name: held.name.clone(),
+            summary: held.summary.clone().unwrap_or_default(),
+            // What `validate` would call invalid: a warning is no reason
+            // for a mark.
+            issues: held
+                .issues
+                .iter()
+                .filter(|issue| !issue.is_warning())
+                .map(ToString::to_string)
+                .collect(),
+            broken: held.unread.as_ref().map(|unread| unread.message.clone()),
+            state: held.state,
+            agents: held.agents.clone(),
+        })
+        .collect()
 }
 
-/// How much is on the shelf, without creating a ledger just to look.
-fn shelf(workspace: &FlayerWorkspace) -> usize {
-    workspace
-        .ledger_for_reading()
-        .and_then(|ledger| ledger.gathered())
-        .map_or(0, |gathered| gathered.len())
+/// What each of `said` says, one line each.
+fn messages(said: &[Said]) -> Vec<String> {
+    said.iter().map(|said| said.message.clone()).collect()
+}
+
+/// Where a holder keeps each kind, relative to it, so an empty one can say
+/// where it looked.
+fn directories(directories: &[Directory]) -> Vec<(Kind, String)> {
+    directories
+        .iter()
+        .map(|directory| (directory.kind, directory.path.clone()))
+        .collect()
+}
+
+/// The templates the add form can offer.
+fn choices(templates: &[Template]) -> Vec<Choice> {
+    templates
+        .iter()
+        .map(|template| Choice {
+            name: template.name.clone(),
+            kind: template.kind,
+        })
+        .collect()
 }

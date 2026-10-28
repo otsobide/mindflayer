@@ -487,3 +487,25 @@ fn the_list_serializes_each_field_by_its_name() {
         })
     );
 }
+
+#[test]
+fn why_a_workspace_would_not_open_is_written_with_no_credential() {
+    let (_dir, home, writing) = home_and_writing();
+    known::remember(Some(&home), &writing).unwrap();
+    // A marker that does not parse is quoted in the parser's own words,
+    // whatever line it stopped at.
+    let tainted = "https://me:ghp_t0ken@github.com/acme/skills";
+    fs::write(
+        writing.root().join(FLAYER_DIR).join(FLAYER_CONFIG),
+        format!("version = 2\nsource = \"{tainted}\n"),
+    )
+    .unwrap();
+
+    let (known, _) = known::known(Some(&home), None);
+
+    let stale = known.workspaces[1].stale.as_deref().expect("said why");
+    assert!(stale.contains("ghp_t0ken"), "{stale}");
+    let json = serde_json::to_string(&known).unwrap();
+    assert!(!json.contains("ghp_t0ken"), "{json}");
+    assert!(json.contains("https://github.com/acme/skills"), "{json}");
+}

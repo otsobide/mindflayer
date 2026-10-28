@@ -398,6 +398,25 @@ impl ProjectStatus {
         kinds: &[Kind],
         workspace: Option<&FlayerWorkspace>,
     ) -> (ProjectStatus, Catalog) {
+        let (status, catalog, _) = Self::read_placed(project, kinds, workspace);
+        (status, catalog)
+    }
+
+    /// [`read`](Self::read), with where each of the report's artifacts is
+    /// held, in the order of its `artifacts`: what the snapshot shows beside
+    /// how each stands (`view::Snapshot`).
+    ///
+    /// Each as routes from the project, `/` separated, in path order: every
+    /// copy discovery found, and every place the record matched to it names,
+    /// found or not, so an install with a copy gone still says where it went.
+    /// Kept beside the report rather than in it: the report's JSON is a
+    /// contract `flayer status --json` prints, and where each copy sits is
+    /// more than a script reading it was promised.
+    pub(crate) fn read_placed(
+        project: &MindProject,
+        kinds: &[Kind],
+        workspace: Option<&FlayerWorkspace>,
+    ) -> (ProjectStatus, Catalog, Vec<Vec<String>>) {
         let root = project.root();
         let mut catalog = Catalog::discover_kinds(std::slice::from_ref(project), kinds);
         let mut entry = None;
@@ -466,7 +485,10 @@ impl ProjectStatus {
             .partition(|record| record.kind == Kind::Rule && project.settings().is_some());
         let received: Vec<String> = rules.iter().map(|record| record.name.clone()).collect();
         let rendered = rendered(root, &agents, rules, &standings);
-        let artifacts = standing(root, catalog.artifacts(), installed, rendered, &standings);
+        let (artifacts, placed): (Vec<ArtifactStatus>, Vec<Vec<String>>) =
+            standing(root, catalog.artifacts(), installed, rendered, &standings)
+                .into_iter()
+                .unzip();
         let status = ProjectStatus {
             name: Some(project.name().to_owned()),
             entry,
@@ -478,7 +500,7 @@ impl ProjectStatus {
             agents,
             artifacts,
         };
-        (status, catalog)
+        (status, catalog, placed)
     }
 
     /// How the artifact of `kind` named `name` stands, if the project holds
@@ -515,15 +537,18 @@ impl ProjectStatus {
 /// [`rendered`] reads them, each listed under the same rule: after what
 /// discovery found, and not under a name the project holds something else
 /// by. `standings` say how each installation stands, by kind and name.
+///
+/// Each comes with where it is held ([`ProjectStatus::read_placed`]): the
+/// routes of its copies and of the targets of the record matched to it.
 fn standing(
     root: &Path,
     artifacts: &[Artifact],
     records: Vec<InstallRecord>,
-    rendered: Vec<ArtifactStatus>,
+    rendered: Vec<(ArtifactStatus, Vec<String>)>,
     standings: &[(Kind, String, Standing)],
-) -> Vec<ArtifactStatus> {
+) -> Vec<(ArtifactStatus, Vec<String>)> {
     let mut unclaimed = records;
-    let mut held: Vec<ArtifactStatus> = Vec::new();
+    let mut held: Vec<(ArtifactStatus, Vec<String>)> = Vec::new();
     for artifact in artifacts {
         let routes: Vec<String> = artifact
             .copies()
@@ -567,39 +592,61 @@ fn standing(
             }
             Provenance::Authored => State::Authored,
         };
-        held.push(ArtifactStatus {
-            kind: artifact.kind(),
-            name: artifact.name().to_owned(),
-            state,
-            agents: artifact.agents(),
-            origin: record.and_then(|record| record.origin),
-        });
+        let placed = held_at(routes, record.as_ref());
+        held.push((
+            ArtifactStatus {
+                kind: artifact.kind(),
+                name: artifact.name().to_owned(),
+                state,
+                agents: artifact.agents(),
+                origin: record.and_then(|record| record.origin),
+            },
+            placed,
+        ));
     }
-    for rule in rendered {
-        if !held
-            .iter()
-            .any(|other| other.kind == rule.kind && other.name == rule.name)
-        {
-            held.push(rule);
+    let named = |held: &[(ArtifactStatus, Vec<String>)], kind: Kind, name: &str| {
+        held.iter()
+            .any(|(other, _)| other.kind == kind && other.name == name)
+    };
+    for (rule, placed) in rendered {
+        if !named(&held, rule.kind, &rule.name) {
+            held.push((rule, placed));
         }
     }
     for record in unclaimed {
-        if held
-            .iter()
-            .any(|other| other.kind == record.kind && other.name == record.name)
-        {
+        if named(&held, record.kind, &record.name) {
             continue;
         }
-        held.push(ArtifactStatus {
-            kind: record.kind,
-            state: State::installed(standing_of(standings, &record), true),
-            name: record.name,
-            agents: Vec::new(),
-            origin: record.origin,
-        });
+        let placed = held_at(Vec::new(), Some(&record));
+        held.push((
+            ArtifactStatus {
+                kind: record.kind,
+                state: State::installed(standing_of(standings, &record), true),
+                name: record.name,
+                agents: Vec::new(),
+                origin: record.origin,
+            },
+            placed,
+        ));
     }
-    held.sort_by(|a, b| a.kind.cmp(&b.kind).then_with(|| a.name.cmp(&b.name)));
+    held.sort_by(|(a, _), (b, _)| a.kind.cmp(&b.kind).then_with(|| a.name.cmp(&b.name)));
     held
+}
+
+/// Where an artifact is held: `routes`, those of the copies discovery found,
+/// and those `record`, the installation matched to it, names, each once, in
+/// path order.
+fn held_at(routes: Vec<String>, record: Option<&InstallRecord>) -> Vec<String> {
+    let mut placed = routes;
+    placed.extend(
+        record
+            .iter()
+            .flat_map(|record| &record.targets)
+            .map(|target| target.path.clone()),
+    );
+    placed.sort();
+    placed.dedup();
+    placed
 }
 
 /// How core stands the installation `record` names, among `standings`.
@@ -635,7 +682,7 @@ fn rendered(
     agents: &[Agent],
     records: Vec<InstallRecord>,
     standings: &[(Kind, String, Standing)],
-) -> Vec<ArtifactStatus> {
+) -> Vec<(ArtifactStatus, Vec<String>)> {
     if records.is_empty() {
         return Vec::new();
     }
@@ -667,13 +714,17 @@ fn rendered(
                 })
                 .collect();
             let state = State::installed(standing_of(standings, &record), missing);
-            ArtifactStatus {
-                kind: Kind::Rule,
-                name: record.name,
-                state,
-                agents: reached,
-                origin: record.origin,
-            }
+            let placed = held_at(Vec::new(), Some(&record));
+            (
+                ArtifactStatus {
+                    kind: Kind::Rule,
+                    name: record.name,
+                    state,
+                    agents: reached,
+                    origin: record.origin,
+                },
+                placed,
+            )
         })
         .collect()
 }
