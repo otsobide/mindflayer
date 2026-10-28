@@ -976,3 +976,17 @@ fn a_project_the_workspace_does_not_link_has_no_record_in_its_ledger() {
 
     assert_eq!(catalog.artifacts()[0].provenance(), Provenance::Foreign);
 }
+
+/// What a reference serializes to is a contract: what was typed, and the two
+/// parts read from it, the kind as a command line takes it.
+#[test]
+fn a_reference_serializes_what_was_typed_and_what_it_names() {
+    let qualified = serde_json::to_string(&Reference::parse("rule:git/no-force")).unwrap();
+    let bare = serde_json::to_string(&Reference::parse("deploy")).unwrap();
+
+    assert_eq!(
+        qualified,
+        r#"{"kind":"rule","name":"git/no-force","typed":"rule:git/no-force"}"#
+    );
+    assert_eq!(bare, r#"{"kind":null,"name":"deploy","typed":"deploy"}"#);
+}

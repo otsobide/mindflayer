@@ -6,6 +6,7 @@ use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
 
+use serde::ser::{Serialize, SerializeMap, Serializer};
 use thiserror::Error;
 
 use crate::agent::Agent;
@@ -766,6 +767,59 @@ impl ValidationIssue {
             | ValidationIssue::DescriptionTooLong { .. }
             | ValidationIssue::Empty => false,
         }
+    }
+}
+
+/// As an object: its code, what it is about by the name its variant gives
+/// each, whether it is only worth a warning, and its message.
+///
+/// By hand rather than derived, for the reason a kind is: a derive tags each
+/// variant with its Rust name, which a rename would change, where the code
+/// is the word a front end compares and is held to stay. `warning` is
+/// [`is_warning`](Self::is_warning), core's to say, so the panel tells an
+/// artifact that does not work from one that only says something odd
+/// without a list of its own; the message is there for the same reason, to
+/// be shown rather than written again in TypeScript.
+impl Serialize for ValidationIssue {
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        let mut map = serializer.serialize_map(None)?;
+        map.serialize_entry("code", self.code())?;
+        // Matched in full, so a new issue has to say what it carries.
+        match self {
+            ValidationIssue::NameEmpty
+            | ValidationIssue::DescriptionEmpty
+            | ValidationIssue::CompatibilityEmpty
+            | ValidationIssue::CompatibilityNotAString
+            | ValidationIssue::MetadataNotAMap
+            | ValidationIssue::Empty
+            | ValidationIssue::PathsNotStrings
+            | ValidationIssue::DescriptionNotAString => {}
+            ValidationIssue::NameNotKebabCase { segment } => {
+                map.serialize_entry("segment", segment)?;
+            }
+            ValidationIssue::NameSegmentTooLong { segment, length } => {
+                map.serialize_entry("segment", segment)?;
+                map.serialize_entry("length", length)?;
+            }
+            ValidationIssue::NameDirectoryMismatch { name, directory } => {
+                map.serialize_entry("name", name)?;
+                map.serialize_entry("directory", directory)?;
+            }
+            ValidationIssue::DescriptionTooLong { length }
+            | ValidationIssue::CompatibilityTooLong { length } => {
+                map.serialize_entry("length", length)?;
+            }
+            ValidationIssue::MetadataNotAString { key }
+            | ValidationIssue::MetadataRepeated { key } => {
+                map.serialize_entry("key", key)?;
+            }
+            ValidationIssue::FrontMatterUnparsed { reason } => {
+                map.serialize_entry("reason", reason)?;
+            }
+        }
+        map.serialize_entry("warning", &self.is_warning())?;
+        map.serialize_entry("message", &self.to_string())?;
+        map.end()
     }
 }
 

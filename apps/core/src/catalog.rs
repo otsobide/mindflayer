@@ -5,6 +5,7 @@ use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
 
+use serde::Serialize;
 use thiserror::Error;
 
 use crate::agent::Agent;
@@ -557,7 +558,10 @@ impl Catalog {
 ///
 /// It also removes the shape from Windows entirely, where a filename cannot
 /// contain `:` at all.
-#[derive(Debug, Clone, PartialEq, Eq)]
+///
+/// Serialized as what it read, each part by its name: the kind as a command
+/// line takes it, or none when it was not qualified.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct Reference {
     kind: Option<Kind>,
     name: String,
