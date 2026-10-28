@@ -357,6 +357,9 @@ pub enum Task {
     },
     /// `flayer gather list`.
     Shelf,
+    /// `flayer workspaces`: the workspaces this machine knows, the one in
+    /// use marked, to read.
+    Workspaces,
     /// `flayer gather git [--path <folder>] [--ref <ref>] <url>`.
     Gather {
         url: String,
@@ -497,6 +500,7 @@ impl Task {
                 lines
             }
             Task::Shelf => vec![words(&["flayer", "gather", "list"], &[])],
+            Task::Workspaces => vec![words(&["flayer", "workspaces"], &[])],
             Task::Gather {
                 url,
                 folder,
@@ -1293,6 +1297,9 @@ impl App {
             KeyCode::Char('q') => return (Mode::Browse, Step::Quit),
             KeyCode::Char('?') => return (Mode::Reading(Reader::help()), Step::Stay),
             KeyCode::Char('R') => return (Mode::Browse, Step::Run(Task::Refresh)),
+            // Whatever is on screen: which workspaces there are is the
+            // machine's to say, not the workspace's or the project's.
+            KeyCode::Char('w') => return (Mode::Browse, Step::Run(Task::Workspaces)),
             KeyCode::Char(key @ ('e' | 'r' | 'd')) => return self.on_item(key),
             KeyCode::Char('a') => return self.start_adding(),
             KeyCode::Char('t') => return self.start_settings(),
@@ -2072,6 +2079,7 @@ impl App {
                 Task::Show { .. }
                 | Task::Validate { .. }
                 | Task::Shelf
+                | Task::Workspaces
                 | Task::ApplyInstall { .. }
                 | Task::Install { .. }
                 | Task::Uninstall { .. }
@@ -2819,7 +2827,7 @@ impl Reader {
 
     /// Every key, and the command it runs.
     pub fn help() -> Self {
-        let rows: [(&str, &str, &[&str]); 19] = [
+        let rows: [(&str, &str, &[&str]); 20] = [
             (
                 "a",
                 "add a skill or a rule",
@@ -2902,6 +2910,11 @@ impl Reader {
                 &[],
             ),
             ("s", "what is on the shelf", &["flayer gather list"]),
+            (
+                "w",
+                "the workspaces this machine knows, the one in use marked",
+                &["flayer workspaces"],
+            ),
             ("i", "install skills and rules", &["flayer install"]),
             (
                 "m",
