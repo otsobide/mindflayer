@@ -70,6 +70,8 @@ fn a_variant_that_carries_an_error_takes_its_code() {
 /// its codes in `ALL`: one that never joined would give codes no uniqueness
 /// test sees. The compiler holds each listed type's variants to a code; only
 /// a type left out of the list goes unseen, so this is the test that finds it.
+/// It finds only what derives `Error`, as every public error type in core
+/// does: one written without the derive would go unseen here.
 #[test]
 fn every_public_error_type_in_core_is_listed() {
     let source = Path::new(env!("CARGO_MANIFEST_DIR")).join("src");
