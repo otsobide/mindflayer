@@ -2530,9 +2530,10 @@ How an install uses it:
   whole when either changes (`exclude::carry`): to where a relinked project
   is now, anchored again there, in the same repository or the one it moved
   into, read from the folder nearest the old place that is still there
-  ([an entry whose project moved](#an-entry-whose-project-moved)); and to a
-  copy's new id once `mind init --new-id` gives it one, before its settings
-  say so. A copy elsewhere in the same tree keeps its own lines under the old
+  ([an entry whose project moved](#an-entry-whose-project-moved)), and back
+  to the old place, reached the same way, when the entry cannot follow; and
+  to a copy's new id once `mind init --new-id` gives it one, before its
+  settings say so, and back when they cannot. A copy elsewhere in the same tree keeps its own lines under the old
   id, since those name its copies. A repository moved whole has its lines
   right already, its exclude file with it.
 - **Taken out after the copies.** An uninstall removes the copies, then the

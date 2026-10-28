@@ -633,6 +633,49 @@ fn a_whole_repository_moved_already_has_its_lines_where_they_go() {
 }
 
 #[test]
+fn lines_carried_back_toward_a_place_that_is_gone_are_anchored_there_again() {
+    let repo = repository();
+    let file = exclude_file(repo.path());
+    let old = project(repo.path(), "packages/app");
+    exclude::add(&old, OLD, &[skill("deploy")]).unwrap();
+    let before = fs::read(&file).unwrap();
+    let new = repo.path().join("apps/app");
+    fs::create_dir_all(new.parent().unwrap()).unwrap();
+    fs::rename(&old, &new).unwrap();
+    exclude::carry(&old, OLD, &new, OLD).unwrap();
+
+    // As a relink whose entry could not be written puts them back, with
+    // the project still where it went.
+    let followed = exclude::carry(&new, OLD, &old, OLD).unwrap();
+
+    assert_eq!(followed, exclude::Followed::Written { file: file.clone() });
+    assert_eq!(fs::read(&file).unwrap(), before);
+}
+
+#[test]
+fn lines_carried_back_into_another_repository_leave_the_one_they_went_to() {
+    let first = repository();
+    let second = repository();
+    let old = project(first.path(), "app");
+    exclude::add(&old, OLD, &[skill("deploy")]).unwrap();
+    let before = fs::read(exclude_file(first.path())).unwrap();
+    let new = second.path().join("app");
+    fs::rename(&old, &new).unwrap();
+    exclude::carry(&old, OLD, &new, OLD).unwrap();
+
+    let followed = exclude::carry(&new, OLD, &old, OLD).unwrap();
+
+    assert_eq!(
+        followed,
+        exclude::Followed::Written {
+            file: exclude_file(first.path())
+        }
+    );
+    assert_eq!(fs::read(exclude_file(first.path())).unwrap(), before);
+    assert!(group(&exclude_file(second.path()), OLD).is_empty());
+}
+
+#[test]
 fn a_project_moved_out_of_git_loses_its_lines_and_says_nothing_keeps_its_copies_out() {
     let repo = repository();
     let outside = TempDir::new().unwrap();

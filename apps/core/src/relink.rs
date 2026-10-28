@@ -82,7 +82,10 @@ pub struct Relinked {
 /// at all ([`Ledger::relinked`]): a relink at the same moment, or an install
 /// into either, comes wholly before it or wholly after. A local project's
 /// exclude lines are carried first ([`exclude::carry`]), where the project
-/// is now, and back again if the entry cannot be written.
+/// is now, and back again if the entry cannot be written, anchored where it
+/// was, though nothing is there. A project moved out of every work tree
+/// had its lines taken out and written nowhere, so none come back: they
+/// named copies where nothing is.
 ///
 /// [`Ledger::relinked`]: crate::ledger::Ledger::relinked
 pub fn relink(
@@ -215,6 +218,8 @@ pub fn relink(
     let (was, entry, installations) = match written {
         Ok(written) => written,
         Err(error) => {
+            // Toward `old`, which is gone: `carry` reaches a place that is
+            // not there, from the nearest folder above it that is.
             if excluded.is_some() {
                 let _ = exclude::carry(&new, id.as_str(), &old, id.as_str());
             }

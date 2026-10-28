@@ -104,13 +104,15 @@ pub fn listed(project: &Path, key: &str) -> Result<Option<Listing>, ExcludeError
 /// Each is anchored again under `to` as it was under `from`, everything
 /// after the project's own route kept as written.
 ///
-/// `from` need not be there any more, as a project that moved is not: its
-/// exclude file is the one git reads for the folder nearest it that still
-/// is, and its route from there what it was. Added where they go before they
-/// are taken from where they were, so a copy is not offered to git between
-/// the two, and nothing is written when no line is the project's. Outside a
-/// work tree at `to`, the lines are taken out and none is written, which
-/// [`Followed::warning`] says.
+/// Neither need be there any more: `from` as a project that moved is not,
+/// and `to` as where it was, when the lines go back there because its
+/// entry could not follow it ([`crate::relink`]). The exclude file of a
+/// place that is gone is the one git reads for the folder nearest it that
+/// still is, and its route from there what it was. Added where they go
+/// before they are taken from where they were, so a copy is not offered to
+/// git between the two, and nothing is written when no line is the
+/// project's. Outside a work tree at `to`, the lines are taken out and none
+/// is written, which [`Followed::warning`] says.
 pub fn carry(
     from: &Path,
     from_key: &str,
@@ -133,7 +135,7 @@ pub fn carry(
         return Ok(Followed::Nothing);
     }
 
-    let Some(target) = locate(to)? else {
+    let Some(target) = locate_reaching(to)? else {
         source_file.remove(from_key, &lines)?;
         write(&source.file, &source_file)?;
         return Ok(Followed::Outside {
