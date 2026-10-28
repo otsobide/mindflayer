@@ -31,7 +31,10 @@
 //! Each type is given its codes with `codes!`, which writes `code()` as a
 //! match with no wildcard, so a new variant does not compile until it has
 //! one, and the list of the codes it gives from the same arms, so a code
-//! cannot be added without the uniqueness test seeing it. Writing the match
+//! cannot be added without the uniqueness test seeing it. Each arm names one
+//! variant, which the macro holds to by what it takes: a wildcard or an
+//! or-pattern would give several variants one code, listed once, and the
+//! test that no two codes are alike would never see it. Writing the match
 //! by hand beside a list kept by hand was the other way, and a list can miss
 //! a code its match gives without anything failing.
 
@@ -83,13 +86,21 @@ use crate::workspace::{MisplacedTarget, ProjectWarning, WorkspaceError};
 /// });
 /// ```
 ///
+/// Each arm is `Self::` and one variant's name, with its fields in braces or
+/// parentheses when it has any: what an arm may say is spelled out here
+/// rather than taken as any pattern, so that `_` or `Self::A | Self::B`,
+/// which would give several variants one code and list it once, does not
+/// compile.
+///
 /// A struct, which is one condition, takes one code:
-/// `codes!(UnknownKind => "unknown_kind");`.
+/// `codes!(UnknownKind => "unknown_kind");`. An enum given one that way
+/// does not compile either.
 macro_rules! codes {
     ($error:ident {
-        $($variant:pat => $code:literal,)*
+        $(Self::$variant:ident $(($($tuple:tt)*))? $({$($named:tt)*})? => $code:literal,)*
     } $(carried {
-        $($carrier:pat => $carried:ident,)*
+        $(Self::$carrier:ident $(($($carrier_tuple:tt)*))? $({$($carrier_named:tt)*})?
+            => $carried:ident,)*
     })?) => {
         impl $error {
             /// The word for what went wrong, unique among every code core
@@ -97,8 +108,11 @@ macro_rules! codes {
             /// on, where the message may be reworded.
             pub fn code(&self) -> &'static str {
                 match self {
-                    $($variant => $code,)*
-                    $($($carrier => $carried.code(),)*)?
+                    $(Self::$variant $(($($tuple)*))? $({$($named)*})? => $code,)*
+                    $($(
+                        Self::$carrier $(($($carrier_tuple)*))? $({$($carrier_named)*})?
+                            => $carried.code(),
+                    )*)?
                 }
             }
 
@@ -114,6 +128,9 @@ macro_rules! codes {
             /// gives and never changed once given: what a front end acts
             /// on, where the message may be reworded.
             pub fn code(&self) -> &'static str {
+                // A pattern only a struct matches, so that an enum given
+                // one code for all its variants does not compile.
+                let $error { .. } = self;
                 $code
             }
 

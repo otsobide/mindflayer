@@ -217,7 +217,9 @@ These are easy to break from a single file without noticing.
 - **Every error has a stable code.** Each public error type in core, and
   `ValidationIssue`, is given `code()` with `code::codes!`, which writes it
   as a match with no wildcard, so a new variant does not compile without
-  one, and lists the codes it gives in `CODES` from the same arms. A code is
+  one, and lists the codes it gives in `CODES` from the same arms. Each arm
+  names one variant, and the macro refuses a wildcard or an or-pattern,
+  which would give several one code and list it once. A code is
   unique across core, not only its type, never renamed nor moved to
   another condition, and named for the condition in snake_case. A variant
   that only carries another error of core's, adding where or what came of

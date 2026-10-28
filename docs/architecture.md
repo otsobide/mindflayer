@@ -1406,9 +1406,14 @@ error type in core has a `code()`, a snake_case word for the condition
 Each type is given its codes with `code::codes!`, which writes `code()` as a
 match with no wildcard, so a new variant does not compile until it has one,
 and the list of the codes it gives (`CODES`) from the same arms, so no code
-is given without being listed. `code::ALL` gathers every type's list, by
-the module it is defined in, and a test holds no two codes in it alike; a
-second reads core's source for every public type that derives `Error`, and
+is given without being listed. Each arm is `Self::` and one variant, with
+its fields in braces or parentheses: the macro takes no other pattern, so a
+wildcard or an or-pattern, which would give several variants one code and
+list it once, does not compile, and neither does an enum given the one
+code a struct takes. Every code listed is then one variant's own.
+`code::ALL` gathers every type's list, by the module it is defined in, and
+a test holds no two codes in it alike, which holds every variant to a code
+of its own; a second reads core's source for every public type that derives `Error`, and
 finds a new one that never joined `ALL`. A match written by hand beside a
 list kept by hand was the other way, and nothing fails when such a list
 misses a code. Building one value of every variant in a test, with a match
