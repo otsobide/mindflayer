@@ -52,6 +52,7 @@ use crate::agent::{Agent, AgentHomes};
 use crate::agents_md::{self, Misplaced};
 use crate::artifact::{issue_list, name_issues, Artifact, ArtifactError, Declared};
 use crate::catalog::{report_order, spelled};
+use crate::code::codes;
 use crate::exclude::{self, ExcludeError, Excluded};
 use crate::hash;
 use crate::install;
@@ -212,6 +213,13 @@ pub enum Warning {
         error: String,
     },
 }
+
+codes!(Warning {
+    Self::ClaudeOnly { .. } => "claude_only_rule",
+    Self::Foreign { .. } => "claude_rule_foreign",
+    Self::Edited { .. } => "claude_rule_edited",
+    Self::Failed { .. } => "claude_rule_failed",
+});
 
 /// Render `rules` into `project`'s `.claude/rules/mindflayer`, each `mode`
 /// takes as one file holding the rule as written, and take away each file
@@ -757,6 +765,20 @@ pub enum ClaudeRulesError {
         source: io::Error,
     },
 }
+
+codes!(ClaudeRulesError {
+    Self::Route { .. } => "claude_rules_route_unusable",
+    Self::Twice { .. } => "claude_rules_route_twice",
+    Self::NotARule { .. } => "claude_rules_not_a_rule",
+    Self::WorkspaceRoot { .. } => "claude_rules_workspace_root",
+    Self::AboveProjects { .. } => "claude_rules_above_projects",
+    Self::UserScope { .. } => "claude_rules_user_scope",
+    Self::LinkedOut { .. } => "claude_rules_linked_out",
+    Self::Read { .. } => "claude_rules_read_failed",
+} carried {
+    Self::Rule(error) => error,
+    Self::Exclude(error) => error,
+});
 
 impl From<Misplaced> for ClaudeRulesError {
     fn from(misplaced: Misplaced) -> Self {

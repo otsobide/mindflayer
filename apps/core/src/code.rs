@@ -94,8 +94,13 @@ pub(crate) use codes;
 
 use crate::activate::{ActivateError, UnknownShell};
 use crate::agent::UnknownAgent;
+use crate::agents_md::{self, AgentsMdError};
 use crate::artifact::{ArtifactError, ValidationIssue};
 use crate::catalog::DiscoveryFailure;
+use crate::claude_md::{self, ClaudeMdError, Fallback};
+use crate::claude_rules::{self, ClaudeRulesError};
+use crate::config_entry::{EntryError, FileError};
+use crate::exclude::{self, ExcludeError};
 use crate::frontmatter::FrontMatterError;
 use crate::kind::UnknownKind;
 use crate::ledger::LedgerError;
@@ -114,9 +119,21 @@ pub const ALL: &[(&str, &[&str])] = &[
     ("activate::ActivateError", ActivateError::CODES),
     ("activate::UnknownShell", UnknownShell::CODES),
     ("agent::UnknownAgent", UnknownAgent::CODES),
+    ("agents_md::AgentsMdError", AgentsMdError::CODES),
+    ("agents_md::Malformed", agents_md::Malformed::CODES),
+    ("agents_md::Warning", agents_md::Warning::CODES),
     ("artifact::ArtifactError", ArtifactError::CODES),
     ("artifact::ValidationIssue", ValidationIssue::CODES),
     ("catalog::DiscoveryFailure", DiscoveryFailure::CODES),
+    ("claude_md::ClaudeMdError", ClaudeMdError::CODES),
+    ("claude_md::Fallback", Fallback::CODES),
+    ("claude_md::Warning", claude_md::Warning::CODES),
+    ("claude_rules::ClaudeRulesError", ClaudeRulesError::CODES),
+    ("claude_rules::Warning", claude_rules::Warning::CODES),
+    ("config_entry::EntryError", EntryError::CODES),
+    ("config_entry::file::FileError", FileError::CODES),
+    ("exclude::ExcludeError", ExcludeError::CODES),
+    ("exclude::Malformed", exclude::Malformed::CODES),
     ("frontmatter::FrontMatterError", FrontMatterError::CODES),
     ("kind::UnknownKind", UnknownKind::CODES),
     ("ledger::LedgerError", LedgerError::CODES),
