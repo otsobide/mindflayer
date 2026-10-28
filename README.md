@@ -331,8 +331,9 @@ mind install <NAME> [--from ORIGIN] [--force]
                            # put a skill or a rule in: the workspace's own, a
                            # loaded workspace's, or the shelf's; --force
                            # writes over a copy changed since it was installed
-mind uninstall <NAME> [--force]
-                           # take one Mindflayer installed back out
+mind uninstall <NAME>|--orphaned [--force]
+                           # take one Mindflayer installed back out, or every
+                           # one nothing offers any more
 mind update [NAME...] [--force] [--yes]
                            # bring what was installed up to date with where
                            # it came from, and put back copies gone; without
@@ -361,6 +362,9 @@ flayer which               # the workspace a command here would use, and why
 flayer add|edit|rename|remove|templates [-p PROJECT] ...
                            # the same as mind's: the workspace's own by
                            # default, one of its projects with -p
+flayer remove <NAME> --everywhere [--yes]
+                           # one of its own, out of every project it was
+                           # installed into first; without --yes, the same
 flayer list|show|validate [-p PROJECT] ...
                            # the workspace's own and every project's, or one;
                            # validate checks the shelf too
@@ -385,7 +389,7 @@ flayer install             # a screen for putting skills and rules into its
 flayer install (-p PROJECT)...|--all-projects <NAME> [--from ORIGIN] [--force]
                            # one, into the projects named or every one,
                            # without the screen
-flayer uninstall (-p PROJECT)...|--all-projects <NAME> [--force]
+flayer uninstall (-p PROJECT)...|--all-projects <NAME>|--orphaned [--force]
 flayer update (-p PROJECT)...|--all [NAME...] [--force] [--yes]
                            # mind update, for the projects named or every one
 flayer agents|share|targets -p PROJECT ...
@@ -1042,7 +1046,7 @@ installed:
 | `outdated` | the same, but where it came from offers something newer: [`update`](#keeping-projects-up-to-date) brings it up to date. |
 | `edited` | a copy it put there holds something else now, edited by hand or with `mind edit`, or a skill renamed with `mind rename`; still Mindflayer's install, but no install or update writes over it and no uninstall takes it out without `--force`. |
 | `missing` | a copy it put there is gone, deleted by hand or by a `git clean`, or no longer reads; `update` puts every copy back. Here Claude's copy of `code-review` was deleted. |
-| `orphaned` | where it came from no longer offers it, deleted from the library or from a workspace that stopped being loaded; nothing can bring it up to date or put a copy back, so it stays as it is until it is uninstalled. |
+| `orphaned` | where it came from no longer offers it, deleted from the library or from a workspace that stopped being loaded; nothing can bring it up to date or put a copy back, so it stays as it is until it is uninstalled, by name or with every other one by `uninstall --orphaned`. |
 | `foreign` | somebody else's, in a folder an agent reads; Mindflayer never overwrites or deletes it. Here `notes`, kept in `.claude/skills` by hand. |
 | `authored` | the project's own, in a folder it authors in, such as `skills/`. |
 
@@ -1233,6 +1237,64 @@ changes an artifact works on the workspace's own the same way it works on a
 project's: `flayer edit`, `flayer rename`, `flayer remove`, and `-p <project>`
 for one of its projects instead.
 
+### Removing one everywhere
+
+Removing one of the workspace's own takes it out of the library, and only
+there: what was installed from it stays in each project, `orphaned`, since
+nothing offers it any more. `flayer remove` says so, in the dry run and once
+it is done:
+
+```
+$ flayer remove commit-style
+warning: commit-style is installed in collapse and tanukeys, which removing it alone would leave orphaned there; --everywhere takes it out of them too
+error: nothing removed: this deletes /home/you/Projects/.mindflayer/library/skills/commit-style and the 1 file in it; add --yes to go ahead
+```
+
+`--everywhere` takes it out of every project the workspace links first, as
+`flayer uninstall` would, and then out of the library. Without `--yes` it
+says what each project holds of it and how that stands, and writes nothing.
+Here a copy in `tanukeys` was changed since it was installed:
+
+```
+$ flayer remove commit-style --everywhere
+would remove commit-style from collapse, where it is current
+would leave commit-style in tanukeys, where it is edited, at .agents/skills/commit-style
+would remove skill commit-style from /home/you/Projects/.mindflayer/library/skills/commit-style and the 1 file in it
+nothing removed: add --yes to go ahead
+$ flayer remove commit-style --everywhere --yes
+removed commit-style from collapse
+left commit-style in tanukeys, where it is edited, at .agents/skills/commit-style
+removed skill commit-style from /home/you/Projects/.mindflayer/library/skills/commit-style
+note: nothing offers commit-style in tanukeys any more; `flayer uninstall -p tanukeys commit-style --force` takes it out
+```
+
+A copy that is current, outdated or missing one of its copies is
+uninstalled. An edited one is left, every copy of it, as an uninstall leaves
+it unforced: it is somebody's work, still Mindflayer's install, and offered
+by nothing once the library copy is gone. Somebody's own skill of that name,
+which Mindflayer never installed, is left too, and said as `foreign`. Only
+the projects the workspace links are looked at. A rule goes the same way,
+out of every project's `AGENTS.md`, and `d` on the `◆` row of [the
+TUI](#the-tui) asks with a second yes, `e`, for everywhere.
+
+What is orphaned already, by a removal without `--everywhere` or a workspace
+that stopped being loaded, `uninstall --orphaned` takes out: of the projects
+named, of every one with `--all-projects`, or of the one `mind` runs in. An
+edited one stays until `--force`:
+
+```
+$ flayer remove commit-style --yes
+removed skill commit-style from /home/you/Projects/.mindflayer/library/skills/commit-style
+warning: commit-style is still installed in collapse and tanukeys, orphaned now that nothing offers it; `flayer uninstall --orphaned --all-projects` takes out what nothing offers
+$ flayer uninstall --orphaned --all-projects
+removed commit-style from collapse
+warning: commit-style in tanukeys was changed since it was installed, at .agents/skills/commit-style, so it was left alone; --force takes it out
+```
+
+A copy from a loaded workspace that cannot be opened is not taken for
+orphaned, though `status` says it is: what that workspace offers cannot be
+told until it is back.
+
 ## The TUI
 
 `flayer` on its own opens a screen over the whole workspace: its own artifacts
@@ -1270,7 +1332,7 @@ Every key runs a command you could have typed, through the same parser:
 | `enter` | show an artifact | `mind -C <project> show <kind:name>` |
 | `e` | edit it: the TUI steps aside for your editor | `mind -C <project> edit <kind:name>` |
 | `r` | rename it | `mind -C <project> rename <kind:name> <new>` |
-| `d` | delete it, once you say yes | `mind -C <project> remove --yes <kind:name>` |
+| `d` | delete it, once you say yes; on the `◆` row, `e` says yes and takes it out of every project too | `mind -C <project> remove --yes <kind:name>`; on the `◆` row, `flayer remove --yes <kind:name>`, or with `e`, `flayer remove --everywhere --yes <kind:name>` |
 | `m` | tick and untick every project under the workspace | `mind -C <path> init`, `flayer link <path>...`, `flayer unlink <path>...` |
 | `u` | bring what is installed in the project up to date, or only the artifact under the cursor; on the `◆` row, in every project | `mind -C <project> update --yes [<kind:name>]`; on the `◆` row, `flayer update --all --yes [<kind:name>]` |
 | `l` | link a project | `flayer link <path>` |
