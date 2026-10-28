@@ -3524,10 +3524,14 @@ and each value goes one of three ways. After the option that takes it,
 joined to it by `=` when it starts with a dash (`--path=-odd`); as a `-C` or
 a `-p` that starts with one, behind a `./`, which names the same directory
 and the same project by its path; or among the positionals, which go behind
-a `--` whenever one of them starts with a dash. A test holds every variant to
-it: fed values that start with a dash, the flags the grammar knows among
-them and a couple of hundred more made from a fixed seed, each line is read
-as the same line with a plain value is: the same commands, the same options,
+a `--` whenever one of them starts with a dash. So a task names each project
+it gives `-p` as `FlayerWorkspace::naming` does, by its entry or a path from
+the root, never by the project's name, which behind a `./` would be read as
+a path instead: a `-p=-odd` would keep it a name, and change the line the
+TUI has always shown for such a project. A test holds every variant to it:
+fed values that start with a dash, the flags the grammar knows among them
+and a couple of hundred more made from a fixed seed, each line is read as
+the same line with a plain value is: the same commands, the same options,
 and under each option or positional the value as given wherever the plain
 one was, behind its `./` under a `-C` or a `-p`. Compared option by option
 rather than as one bag of values, since a line holds a value in several

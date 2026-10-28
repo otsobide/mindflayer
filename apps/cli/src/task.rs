@@ -208,6 +208,14 @@ pub enum Task {
     /// ([`FlayerWorkspace::naming`]), from the place `from` names when it
     /// names one.
     ///
+    /// Each of `projects` is what `naming` gives, an entry or a path from
+    /// the root, never a project's name, though `-p` takes one: a value
+    /// that starts with a dash reaches `-p` behind a `./` (`directory`),
+    /// which names the same directory, and so picks the same project by its
+    /// path, but is no longer a name `pick` would match. `-p=-odd`, which
+    /// would keep it a name, was the alternative, and it would change the
+    /// line the TUI has always run and shown for such a project.
+    ///
     /// [`FlayerWorkspace::naming`]: mindflayer_core::FlayerWorkspace::naming
     Install {
         projects: Vec<String>,
@@ -216,7 +224,8 @@ pub enum Task {
         from: Option<String>,
     },
     /// `flayer uninstall -p <project>... <kind:name>`: one artifact taken
-    /// back out of each project named, whichever place its copy came from.
+    /// back out of each project named, whichever place its copy came from,
+    /// each named as an install's are, by what `naming` gives.
     Uninstall {
         projects: Vec<String>,
         kind: Kind,
@@ -225,7 +234,8 @@ pub enum Task {
     /// `flayer adopt -p <project> --yes <kind:name>`: somebody's skill in
     /// the project's agents' folders brought into the workspace's library,
     /// its copies recorded as installed from there: asked about before it
-    /// gets here, which is what the `--yes` says.
+    /// gets here, which is what the `--yes` says. The project is named as an
+    /// install's are, by what `naming` gives.
     Adopt {
         project: String,
         kind: Kind,
