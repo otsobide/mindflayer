@@ -1368,12 +1368,13 @@ pub(crate) fn install_held(
     // nothing written, rather than putting copies one machine has in every
     // teammate's way. Taken back out if the copies then fail, from where
     // nothing is left: a line naming an empty place would keep whatever
-    // somebody writes there later out of git without a word.
+    // somebody writes there later out of git without a word. Only the
+    // copies git tracks nothing in, as an adopted one often does.
     let excluded = match local(project) {
         Some(key) => Some(exclude::add(
             project.root(),
             key,
-            &entries(project, &copies),
+            &entries(project, &untracked(project, &copies)),
         )?),
         None => None,
     };
@@ -1572,6 +1573,30 @@ pub(crate) fn entries(project: &MindProject, copies: &[PathBuf]) -> Vec<exclude:
         .iter()
         .filter_map(|copy| paths::relative_to(copy, project.root()))
         .map(exclude::Entry::directory)
+        .collect()
+}
+
+/// Those of `copies` git tracks nothing inside, which is what a local
+/// project keeps out of git: a copy not there yet among them.
+///
+/// A line for a copy git tracks would keep none of its files out, since an
+/// ignore rule leaves alone what is in the index already, and would hide
+/// every file added to it later from `git status`, where a teammate would
+/// never see it to commit: one a team committed, or one a project that was
+/// shared kept when it turned local.
+/// Mindflayer runs no git command and leaves the index as it is, so such a
+/// copy stays the team's in git, written over by an update as a tracked
+/// file is, for the change to show. An index that cannot be read takes
+/// nothing for tracked: the exclude edit that follows reads the same
+/// repository, and is refused, as it was, if that cannot be read either.
+pub(crate) fn untracked(project: &MindProject, copies: &[PathBuf]) -> Vec<PathBuf> {
+    copies
+        .iter()
+        .filter(|copy| {
+            paths::relative_to(copy, project.root())
+                .is_none_or(|inside| !exclude::tracks(project.root(), &inside).unwrap_or(false))
+        })
+        .cloned()
         .collect()
 }
 
