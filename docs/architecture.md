@@ -1461,6 +1461,22 @@ one, and the snapshot every front end reads holds them wherever it says what
 went wrong ([the read model](#the-read-model)), each a `code::Said`, the code
 beside its message; the CLI's warnings and failures carry them from #63.
 
+**The CLI's errors have codes too**, since what a command could not do
+reaches the panel beside what core could not: `CliError::code`, given by the
+same `codes!`, which core exports for it. A variant that carries one of
+core's errors takes its code, as one of core's does. One that says a
+condition core names in words of the CLI's, with the command that would put
+it right (`not_managed`, `unknown_project`, `not_installed`), echoes the code
+core gives it, listed after `echoed`, which `code()` gives and `CODES` leaves
+out, so the panel meets one code for one condition whichever way it was
+reached. The rest are the CLI's own (`install_no_projects`,
+`not_a_terminal`), and so are a refusal's ([every change is a command
+line](#every-change-is-a-command-line)). `mindflayer_cli::CODES` lists them
+as `code::ALL` lists core's, and a test holds none of them to be given
+twice, there or in core, and each echoed one to be one core gives. A code
+the CLI took of its own for a condition core names was the other way, and
+would have the panel tell one condition apart from itself.
+
 ## The read model
 
 Every front end reads a workspace through one value, `view::Snapshot`, its
