@@ -39,8 +39,8 @@ use install::{install_named, uninstall_named, uninstall_orphans};
 use known::{forget_command, workspaces_command};
 use migrate::{migrate_all, migrate_here, migrate_library, migrate_one, Asked};
 use project::{
-    init_project, init_workspace, link_here, link_projects, scan_workspace, unlink_here,
-    unlink_projects,
+    init_project, init_workspace, link_here, link_projects, relink_project, renew_here,
+    scan_workspace, unlink_here, unlink_projects,
 };
 use read::{
     everywhere, everywhere_and_the_shelf, list, list_workspace, one_project, show, validate,
@@ -87,11 +87,13 @@ pub(crate) fn run_with(cli: &Cli, lookup: &Lookup, watch: &Watch) -> Result<Outc
             lookup,
             watch,
         ),
+        Command::Init { new_id: true, .. } => renew_here(&directory, lookup),
         Command::Init {
             agents,
             shared,
             skills,
             rules,
+            new_id: false,
         } => init_project(
             &directory,
             agents,
@@ -389,6 +391,7 @@ fn run_flayer(
 
         FlayerCommand::Link { projects } => link_projects(directory, projects, lookup),
         FlayerCommand::Unlink { projects } => unlink_projects(directory, projects, lookup),
+        FlayerCommand::Relink { old, new } => relink_project(directory, old, new, lookup),
 
         FlayerCommand::Load { workspaces } => {
             load_command(directory, directory, workspaces, lookup)

@@ -8,14 +8,18 @@
 use std::fmt::Write as _;
 use std::path::{Path, PathBuf};
 
+use mindflayer_core::relink;
 use mindflayer_core::scan::MAX_LISTED;
 use mindflayer_core::{
     known, scan, Agent, Directories, FlayerWorkspace, Initialization, Kind, MindProject,
     Registration, Scan, Share, WorkspaceError,
 };
 
-use super::{all_or_nothing, project_here, targets, workspace_for, workspace_here};
-use crate::render::{as_stored, json, printable, table};
+use super::gather::scrubbed;
+use super::{
+    all_or_nothing, consulted, project_here, targets, typed, workspace_for, workspace_here,
+};
+use crate::render::{as_stored, json, plural, printable, table};
 use crate::{CliError, Failure, Lookup, Outcome};
 
 /// `mind init`: the directory made a mind project, marked by its settings,
@@ -85,6 +89,78 @@ pub(crate) fn init_workspace(
         stdout,
         stderr,
     })
+}
+
+/// `mind init --new-id`: the project here given an id of its own, and the
+/// workspace consulted about it told, when it links the project.
+///
+/// The project at the directory itself rather than one found walking up, as
+/// `init` makes one there: renewing a project somebody is standing below
+/// would give the wrong one a new id. A workspace that cannot be read is a
+/// warning after the id is given, as it is after a change to the settings,
+/// whose ledger learns the new id the next time it is written.
+pub(crate) fn renew_here(directory: &Path, lookup: &Lookup) -> Result<Outcome, Failure> {
+    let project = MindProject::open(directory).map_err(CliError::from)?;
+    let (workspace, unread) = match consulted(&project, lookup) {
+        Ok(workspace) => (workspace, None),
+        Err(error @ CliError::Chosen { .. }) => return Err(error.into()),
+        Err(error) => (None, Some(format!("warning: {error}"))),
+    };
+    let renewed = relink::new_id(workspace.as_ref(), &project).map_err(CliError::from)?;
+    let mut outcome = Outcome::plain(format!(
+        "gave {} a new id, {} (it was {})\n",
+        printable(&renewed.name),
+        renewed.id,
+        renewed.was
+    ));
+    outcome.stderr.extend(
+        renewed
+            .excluded
+            .as_ref()
+            .and_then(|followed| followed.warning())
+            .map(|warning| format!("note: {warning}")),
+    );
+    if let Some(warning) = unread {
+        outcome.stderr.push(warning);
+        outcome.ok = false;
+    }
+    Ok(scrubbed(&renewed.scrub).before(outcome))
+}
+
+/// `flayer relink`: the entry for `old` pointed at `new`, where the project
+/// it was moved, with every record the workspace keeps of it.
+pub(crate) fn relink_project(
+    directory: &Path,
+    old: &Path,
+    new: &Path,
+    lookup: &Lookup,
+) -> Result<Outcome, Failure> {
+    let mut workspace = workspace_here(directory, lookup)?;
+    let old = typed(directory, old)?;
+    let new = typed(directory, new)?;
+    let relinked = relink::relink(&mut workspace, &old, &new).map_err(CliError::from)?;
+    let mut stdout = format!(
+        "relinked {} as {}, from {}\n",
+        printable(&relinked.name),
+        as_stored(&relinked.entry),
+        as_stored(&relinked.was)
+    );
+    if relinked.installations > 0 {
+        let _ = writeln!(
+            stdout,
+            "  {} kept with it",
+            plural(relinked.installations, "install")
+        );
+    }
+    let mut outcome = Outcome::plain(stdout);
+    outcome.stderr.extend(
+        relinked
+            .excluded
+            .as_ref()
+            .and_then(|followed| followed.warning())
+            .map(|warning| format!("note: {warning}")),
+    );
+    Ok(scrubbed(&relinked.scrub).before(outcome))
 }
 
 /// What `init` was asked to put where, at either level.
@@ -261,15 +337,18 @@ fn scanned(scan: &Scan, warnings: Vec<String>) -> Outcome {
             .found
             .iter()
             .map(|found| {
-                let what = match (found.linked, found.mind) {
-                    (true, _) => "",
-                    (false, true) => "mind project",
-                    (false, false) => "git repository, not a mind project yet",
+                let what = match (found.linked, found.mind, &found.moved) {
+                    (true, _, _) => String::new(),
+                    (false, true, Some(old)) => {
+                        format!("moved: {} -> {}", printable(old), printable(&found.route))
+                    }
+                    (false, true, None) => String::from("mind project"),
+                    (false, false, _) => String::from("git repository, not a mind project yet"),
                 };
                 vec![
                     printable(&found.route),
                     String::from(if found.linked { "linked" } else { "not linked" }),
-                    what.to_owned(),
+                    what,
                 ]
             })
             .collect();
@@ -278,7 +357,14 @@ fn scanned(scan: &Scan, warnings: Vec<String>) -> Outcome {
         // Only the advice that applies: a hint about a case the listing does
         // not contain is one more line to read past.
         let mut hints = Vec::new();
-        if scan.found.iter().any(|found| !found.linked && found.mind) {
+        if scan.found.iter().any(|found| found.moved.is_some()) {
+            hints.push("follow one that moved with `flayer relink <old> <new>`");
+        }
+        if scan
+            .found
+            .iter()
+            .any(|found| !found.linked && found.mind && found.moved.is_none())
+        {
             hints.push("link one with `flayer link <path>`");
         }
         if scan.found.iter().any(|found| !found.linked && !found.mind) {
