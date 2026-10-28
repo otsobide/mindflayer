@@ -29,7 +29,7 @@
 //! reads, an edited copy stays recorded and reads as edited (D-04); in a
 //! folder no agent the project names is sent copies to, no install writes
 //! again and no listing reads, so a record kept there would call the
-//! installation partial or edited for good, and the next install, which
+//! installation missing or edited for good, and the next install, which
 //! records its copies afresh, would drop it all the same.
 
 use std::fs;

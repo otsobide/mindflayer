@@ -63,7 +63,7 @@ impl Standing {
     /// Whether the project holds it, which is what a checkbox shows:
     /// anything it holds by that name, but not an installation a copy of
     /// which has gone. Its box opens empty, for marking it to put every copy
-    /// back, which a `git clean -X` in a local project makes the common way
+    /// back, which a `git clean -dX` in a local project makes the common way
     /// back; held, it could only be marked to be taken out. One with a copy
     /// left is taken out with `flayer uninstall`.
     pub fn present(self) -> bool {
@@ -93,6 +93,64 @@ pub(crate) enum Found {
 pub(crate) struct Looked {
     pub path: PathBuf,
     pub found: Found,
+}
+
+/// One installation the ledger records, as it is found: what
+/// [`super::standings`] says of each, kept whole for what acts on it, as an
+/// update does ([`crate::update`]).
+#[derive(Debug, Clone)]
+pub(crate) struct Surveyed {
+    pub record: InstallRecord,
+    /// Where what it installed is offered now ([`super::offered_for`]).
+    pub offered: Vec<Offer>,
+    /// Each copy it records, as it is found.
+    pub copies: Vec<Looked>,
+    pub standing: Standing,
+}
+
+impl Surveyed {
+    /// Where each of its copies found as `found` is.
+    pub(crate) fn found(&self, found: Found) -> Vec<PathBuf> {
+        self.copies
+            .iter()
+            .filter(|copy| copy.found == found)
+            .map(|copy| copy.path.clone())
+            .collect()
+    }
+
+    /// The place it is offered from now that an install would bring it up
+    /// to date from: none when nothing offers it, and every place that
+    /// does, by its origin, when that cannot be told.
+    ///
+    /// One place, but for a record from before origins were kept, which
+    /// may have come from the workspace's own or from any workspace it
+    /// loads ([`super::offered_for`]). Then the one holding what an
+    /// untouched copy holds is the one it came from; with no such copy to
+    /// tell by, or a rule, whose records always had an origin, it is not
+    /// guessed: which of two goes into the project's one folder of that
+    /// name is not something to guess, as an install with no `--from` says.
+    pub(crate) fn source(
+        &self,
+        workspace: &FlayerWorkspace,
+    ) -> Result<Option<&Offer>, Vec<String>> {
+        match &self.offered[..] {
+            [] => Ok(None),
+            [one] => Ok(Some(one)),
+            several => {
+                let untouched = self.found(Found::Untouched);
+                several
+                    .iter()
+                    .find(|offer| {
+                        self.record.kind == Kind::Skill
+                            && untouched
+                                .first()
+                                .is_some_and(|copy| holds(workspace, offer, copy))
+                    })
+                    .map(Some)
+                    .ok_or_else(|| several.iter().map(Offer::origin).collect())
+            }
+        }
+    }
 }
 
 /// Each copy of `record`, a skill's in `project`, as it is found: by the
@@ -145,7 +203,18 @@ pub(crate) fn of_skill(
     offered: &[&Offer],
 ) -> Standing {
     let looked = skill_copies(workspace, project, record, offered);
-    standing(&looked, !offered.is_empty(), |copy| {
+    skill_standing(workspace, &looked, offered)
+}
+
+/// How a skill's installation stands from how its copies were `looked` at
+/// ([`skill_copies`]), given `offered`, where what it installed is offered
+/// now.
+pub(crate) fn skill_standing(
+    workspace: &FlayerWorkspace,
+    looked: &[Looked],
+    offered: &[&Offer],
+) -> Standing {
+    standing(looked, !offered.is_empty(), |copy| {
         offered.iter().any(|offer| holds(workspace, offer, copy))
     })
 }
@@ -248,7 +317,19 @@ pub(crate) fn of_rule(
     offered: &[&Offer],
 ) -> Standing {
     let looked = rule_copies(workspace, project, record, block, offered);
-    standing(&looked, !offered.is_empty(), |_| {
+    rule_standing(workspace, record, &looked, offered)
+}
+
+/// How the installation `record`, a rule's, stands from how its copies were
+/// `looked` at ([`rule_copies`]), given `offered`, where what it installed
+/// is offered now: [`of_rule`], for a caller that keeps the copies too.
+pub(crate) fn rule_standing(
+    workspace: &FlayerWorkspace,
+    record: &InstallRecord,
+    looked: &[Looked],
+    offered: &[&Offer],
+) -> Standing {
+    standing(looked, !offered.is_empty(), |_| {
         offered.iter().any(|offer| {
             let bytes = fs::read(offer.source(workspace)).ok();
             match &record.content_hash {

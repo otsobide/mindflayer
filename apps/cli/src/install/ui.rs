@@ -134,6 +134,10 @@ fn row(entry: &super::state::Row) -> ListItem<'_> {
             "  (a copy gone since it was installed)",
             Style::default().fg(Color::DarkGray),
         )),
+        None if entry.outdated() => spans.push(Span::styled(
+            "  (outdated; flayer update refreshes it)",
+            Style::default().fg(Color::Yellow),
+        )),
         None => {}
     }
 

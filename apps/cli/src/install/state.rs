@@ -71,6 +71,13 @@ impl Row {
         self.candidate.standing == Standing::Edited
     }
 
+    /// Mindflayer installed it, and the place it came from offers something
+    /// else by now: its box is held as any install's is, since the screen
+    /// marks what goes in and out, and `flayer update` brings it up to date.
+    pub fn outdated(&self) -> bool {
+        self.candidate.standing == Standing::Outdated
+    }
+
     /// Mindflayer installed it, and a copy has gone since: its box opens
     /// empty, as core says ([`Standing::present`]), and marking it puts every
     /// copy back.

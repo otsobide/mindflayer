@@ -282,8 +282,9 @@ fn an_installed_rule_that_is_renamed_still_holds_what_was_installed_and_says_so(
         "{}",
         outcome.stdout
     );
+    // Orphaned, since nothing offers it by its new route.
     let status = mind(&project, &["status"]).unwrap().stdout;
-    assert!(status.contains("git/no-push  installed"), "{status}");
+    assert!(status.contains("git/no-push  orphaned"), "{status}");
     let removed = mind(&project, &["uninstall", "git/no-push"]).unwrap();
     assert!(removed.ok, "{:?}", removed.stderr);
     assert_eq!(removed.stdout, "removed rule git/no-push from collapse\n");

@@ -333,6 +333,10 @@ mind install <NAME> [--from ORIGIN] [--force]
                            # writes over a copy changed since it was installed
 mind uninstall <NAME> [--force]
                            # take one Mindflayer installed back out
+mind update [NAME...] [--force] [--yes]
+                           # bring what was installed up to date with where
+                           # it came from, and put back copies gone; without
+                           # --yes, say what would change
 mind agents [add|remove] <AGENT>... [--yes]
                            # which agents work here, carrying what is
                            # installed along; without --yes, say what would
@@ -361,9 +365,9 @@ flayer list|show|validate [-p PROJECT] ...
                            # the workspace's own and every project's, or one;
                            # validate checks the shelf too
 flayer status [-p PROJECT] [--json]
-                           # what every project holds, or one: installed,
-                           # partial, edited, foreign or authored, for which
-                           # agents, and from where
+                           # what every project holds, or one: current,
+                           # outdated, edited, missing, orphaned, foreign or
+                           # authored, for which agents, and from where
 flayer scan [DIR...] [--depth N] [--json]
                            # the repositories under it, or under each DIR,
                            # and which are linked
@@ -381,6 +385,8 @@ flayer install             # a screen for putting skills and rules into its
 flayer install -p PROJECT <NAME> [--from ORIGIN] [--force]
                            # one, without the screen
 flayer uninstall -p PROJECT <NAME> [--force]
+flayer update (-p PROJECT)...|--all [NAME...] [--force] [--yes]
+                           # mind update, for the projects named or every one
 flayer agents|share|targets -p PROJECT ...
                            # mind's agents, share and targets, for one of its
                            # projects
@@ -487,7 +493,7 @@ project's settings name it by:
 ```
 $ flayer scan ~/Work --depth 2 --json
 {
-  "version": 1,
+  "version": 2,
   "data": {
     "roots": [
       "/home/you/Work"
@@ -825,10 +831,13 @@ it tells: a copy edited by hand or with `mind edit`, a file added to it, or a
 rule's section of `AGENTS.md` rewritten. Only `--force` on [the command
 line](#without-the-screen) writes over it or takes it out.
 
-An install with a copy gone since, deleted by hand or by a `git clean -X`,
+An install with a copy gone since, deleted by hand or by a `git clean`,
 opens unticked and marked `(a copy gone since it was installed)`: ticking it
 puts every copy back. One that still has a copy left is taken out on [the
-command line](#without-the-screen), with `uninstall`.
+command line](#without-the-screen), with `uninstall`. One whose skill or rule
+has changed where it came from since stays ticked, marked `(outdated; flayer
+update refreshes it)`: [updating](#keeping-projects-up-to-date) brings it up
+to date.
 
 Two shelves can offer `commit-style`, but a project has one directory of that
 name, so ticking one unticks the other rather than letting both apply and the
@@ -944,8 +953,9 @@ line always says which.
 
 What it records is where the workspace is, in the `loaded` list of your
 `flayer.toml`, and its skills and rules are **read from there every time**:
-edit one in `skills-equipo` and the next `mf install` of it updates the copy
-in `api`, with nothing to load again. `flayer gather list` and the install
+edit one in `skills-equipo` and the next `mf update -p api`, or `mf install`
+of it, [updates the copy](#keeping-projects-up-to-date) in `api`, with
+nothing to load again. `flayer gather list` and the install
 screen show what it offers beside the shelf's, as coming from `load:<path>`,
 which is also what `--from` takes, as do the path you gave `load`, from
 wherever you type it, and the workspace's name. Only a loaded workspace's own
@@ -972,21 +982,24 @@ there, `commit-style` and `code-review` into `collapse` and `commit-style` into
 ```
 $ cd ~/Projects
 $ flayer status
-collapse  code-review   partial    codex,opencode         load:../src/mindflayer/examples
-collapse  commit-style  installed  claude,codex,opencode  load:../src/mindflayer/examples
-collapse  deploy        authored   -
-collapse  notes         foreign    claude,opencode
-tanukeys  commit-style  installed  -                      load:../src/mindflayer/examples
+collapse  code-review   missing   codex,opencode         load:../src/mindflayer/examples
+collapse  commit-style  current   claude,codex,opencode  load:../src/mindflayer/examples
+collapse  deploy        authored  -
+collapse  notes         foreign   claude,opencode
+tanukeys  commit-style  current   -                      load:../src/mindflayer/examples
 hint: tanukeys is marked by a mind.toml, which `mind migrate` moves to a settings.toml
 ```
 
-Each artifact is in one of five states:
+Each artifact is in one of seven states, the first five for what Mindflayer
+installed:
 
 | State | Means |
 |---|---|
-| `installed` | Mindflayer put every copy there, and every one it put there is still there. |
-| `partial` | a copy it put there is gone, deleted by hand or by `git clean -X`, or no longer reads; installing it again puts every copy back. Here Claude's copy of `code-review` was deleted. |
-| `edited` | a copy it put there holds something else now, edited by hand or with `mind edit`, or a skill renamed with `mind rename`; still Mindflayer's install, but no install writes over it and no uninstall takes it out without `--force`. |
+| `current` | Mindflayer put every copy there, every one is still there as it was put, and where it came from offers the same. |
+| `outdated` | the same, but where it came from offers something newer: [`update`](#keeping-projects-up-to-date) brings it up to date. |
+| `edited` | a copy it put there holds something else now, edited by hand or with `mind edit`, or a skill renamed with `mind rename`; still Mindflayer's install, but no install or update writes over it and no uninstall takes it out without `--force`. |
+| `missing` | a copy it put there is gone, deleted by hand or by a `git clean`, or no longer reads; `update` puts every copy back. Here Claude's copy of `code-review` was deleted. |
+| `orphaned` | where it came from no longer offers it, deleted from the library or from a workspace that stopped being loaded; nothing can bring it up to date or put a copy back, so it stays as it is until it is uninstalled. |
 | `foreign` | somebody else's, in a folder an agent reads; Mindflayer never overwrites or deletes it. Here `notes`, kept in `.claude/skills` by hand. |
 | `authored` | the project's own, in a folder it authors in, such as `skills/`. |
 
@@ -1012,8 +1025,8 @@ read nowhere is said, as for `collapse` given `git/commits` and
 
 ```
 $ mind status
-git/commits     installed  claude,codex,opencode  workspace
-style/comments  installed  claude                 workspace
+git/commits     current  claude,codex,opencode  workspace
+style/comments  current  claude                 workspace
 warning: codex and opencode do not read rule `style/comments` in collapse
 ```
 
@@ -1028,12 +1041,14 @@ which `missed` in the JSON says.
 `--json` prints the same report in the envelope every reading command's
 `--json` will share: the data, the warnings that would have gone to stderr,
 and a version, which moves if a field ever goes or changes meaning. The names
-in it are a contract, spelled as a command line spells them:
+in it are a contract, spelled as a command line spells them; the version is 2
+since `installed` became `current`, `outdated` or `orphaned`, and `partial`
+became `missing`:
 
 ```
 $ flayer status -p tanukeys --json
 {
-  "version": 1,
+  "version": 2,
   "data": {
     "projects": [
       {
@@ -1049,7 +1064,7 @@ $ flayer status -p tanukeys --json
           {
             "kind": "skill",
             "name": "commit-style",
-            "state": "installed",
+            "state": "current",
             "agents": [],
             "origin": "load:../src/mindflayer/examples"
           }
@@ -1061,6 +1076,74 @@ $ flayer status -p tanukeys --json
 }
 hint: tanukeys is marked by a mind.toml, which `mind migrate` moves to a settings.toml
 ```
+
+## Keeping projects up to date
+
+What was installed stays what it was when it went in, so a skill or a rule
+changed where it is kept (the workspace's own, a workspace it loads, or the
+shelf once a gather brings something newer) leaves every project it went into
+behind it, and `status` says `outdated`. `flayer update` brings them up to
+date from where each was installed from, every copy at once, and puts back
+any copy that has gone, kept out of git again in a local project: one deleted
+by hand, or an `AGENTS.md` Mindflayer made, which `git clean -X` takes. A
+`git clean -dX` takes a local project's `.mind` along with its copies, so run
+`mind init` there again first, with the agents and share mode it had, and the
+update puts every copy back. Without `--yes` it says what it would do. Say a
+pull of `~/src/mindflayer` has changed the examples' `commit-style`, and
+somebody has written into `tanukeys`'s copy of it, with the rest as
+[above](#what-each-project-has):
+
+```
+$ flayer status
+collapse  code-review   missing   codex,opencode         load:../src/mindflayer/examples
+collapse  commit-style  outdated  claude,codex,opencode  load:../src/mindflayer/examples
+collapse  deploy        authored  -
+collapse  notes         foreign   claude,opencode
+tanukeys  commit-style  edited    -                      load:../src/mindflayer/examples
+hint: tanukeys is marked by a mind.toml, which `mind migrate` moves to a settings.toml
+$ flayer update --all
+would put back code-review in collapse at .claude/skills/code-review, from load:../src/mindflayer/examples
+would update commit-style in collapse, from load:../src/mindflayer/examples
+nothing changed: add --yes to go ahead
+warning: commit-style in tanukeys was changed since it was installed, at skills/commit-style, so it would be left alone; --force writes over it
+$ flayer update --all --yes
+put back code-review in collapse at .claude/skills/code-review, from load:../src/mindflayer/examples
+updated commit-style in collapse, from load:../src/mindflayer/examples
+warning: commit-style in tanukeys was changed since it was installed, at skills/commit-style, so it was left alone; --force writes over it
+```
+
+A copy somebody changed is never written over unforced, and neither is any
+other copy of it, so the agents reading two folders never read two versions
+of one skill. `--force` writes over it, saying where the change was:
+
+```
+$ flayer update -p tanukeys --force --yes
+updated commit-style in tanukeys, writing over the change at skills/commit-style, from load:../src/mindflayer/examples
+```
+
+`-p` names a project, once for each, and `--all` every one the workspace
+links; names after them update only those (`commit-style`, or
+`rule:git/commits` when a skill and a rule share one), and one that names
+nothing installed is a warning. `mind update` does the same in the project you
+are in, and `u` in [the TUI](#the-tui) on a project, or on one artifact of
+it. A project's rules are written into its `AGENTS.md` together, so updating
+one brings its other outdated rules along, and says so, line by line. What
+was installed from somewhere that no longer offers it is `orphaned`: there is
+nothing to update it from, so it is said and left as it is, never a failure,
+until it is uninstalled:
+
+```
+$ flayer unload ~/src/mindflayer/examples
+unloaded ../src/mindflayer/examples
+  from the workspace at /home/you/Projects
+$ cd collapse && mind update
+nothing to update in collapse
+note: code-review in collapse is no longer offered by load:../src/mindflayer/examples, so it would be left as it is; uninstalling it takes it out
+note: commit-style in collapse is no longer offered by load:../src/mindflayer/examples, so it would be left as it is; uninstalling it takes it out
+```
+
+An update copies what the shelf holds now: what a gathered source offers
+moves when it is gathered again.
 
 ## The workspace's own skills and rules
 
@@ -1116,13 +1199,13 @@ what the one under the cursor holds.
 ```
  mindflayer  Projects  · found above · 3 on the shelf  · /home/you/Projects
 ┏ Projects (3) ━━━━━━━━━━━━━━━━┓┌ collapse ──────────────────────────────────────────────────────────────┐
-┃  ◆ Projects  2               ┃│>   skill commit-style       installed CC CX OC  How this repo writes co│
-┃> collapse  2                 ┃│    rule  git/no-force-push  authored            Never force-push a shar│
+┃  ◆ Projects  2               ┃│>   skill commit-style       current  CC CX OC  How this repo writes com│
+┃> collapse  2                 ┃│    rule  git/no-force-push  authored           Never force-push a share│
 ┃  tanukeys  1  ✗ 1            ┃│                                                                        │
 ┃  ! old-api                   ┃│                                                                        │
 ┃                              ┃│                                                                        │
 ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛└────────────────────────────────────────────────────────────────────────┘
-q quit  ? keys  → open  a add  m minds  l link  u unlink  v validate  g gather  L load  s shelf  i install
+q quit  ? keys  → open  a add  u update  m minds  l link  U unlink  v validate  g gather  L load  s shelf
 every change is a command, printed when you quit; ? lists them
 ```
 
@@ -1146,8 +1229,9 @@ Every key runs a command you could have typed, through the same parser:
 | `r` | rename it | `mind -C <project> rename <kind:name> <new>` |
 | `d` | delete it, once you say yes | `mind -C <project> remove --yes <kind:name>` |
 | `m` | tick and untick every project under the workspace | `mind -C <path> init`, `flayer link <path>...`, `flayer unlink <path>...` |
+| `u` | bring what is installed in the project up to date, or only the artifact under the cursor; on the `◆` row, in every project | `mind -C <project> update --yes [<kind:name>]`; on the `◆` row, `flayer update --all --yes [<kind:name>]` |
 | `l` | link a project | `flayer link <path>` |
-| `u` | unlink the project | `flayer unlink <path>` |
+| `U` | unlink the project | `flayer unlink <path>` |
 | `t` | toggle the project's agents and share mode, then apply | `mind -C <project> agents --yes <agent>...`, `mind -C <project> share --yes local\|shared` |
 | `T` | type the folders the project installs skills in, or clear them for where its agents read | `mind -C <project> targets set --yes skills <dir>...`, `mind -C <project> targets reset --yes skills` |
 | `v` | validate everything | `flayer validate` |
@@ -1197,7 +1281,7 @@ form lists what `flayer scan` finds under the workspace, or under the folders
 `flayer minds` was given (mind projects, and git repositories that are not one
 yet), and picking a repository asks before running `mind init` in it, because
 that writes into it. A project whose directory has gone is listed with a `!`,
-where `u` drops it; an artifact `validate` would reject is marked `✗`, with the
+where `U` drops it; an artifact `validate` would reject is marked `✗`, with the
 reason underneath.
 
 ## Where a project keeps its artifacts
@@ -1431,12 +1515,12 @@ sees:
 
 ```
 $ mind status
-commit-style  installed  -  workspace
+commit-style  current  -  workspace
 warning: claude, codex and opencode read none of the folders collapse installs skills in (.skills), so none of them sees what is installed there until pointed at one
 $ rm -r .claude/skills .agents/skills
 $ ln -s ../.skills .claude/skills && ln -s ../.skills .agents/skills
 $ mind status
-commit-style  installed  claude,codex,opencode  workspace
+commit-style  current  claude,codex,opencode  workspace
 ```
 
 Every Mindflayer that reads a `settings.toml` reads `targets` too, so
@@ -1662,8 +1746,8 @@ $ mind rename commit-style commits
 renamed skill commit-style to commits at /home/you/Projects/app/.claude/skills/commits
   it was installed by `flayer install`, and stays so under its new name; renamed, it is left alone by `flayer install` and `flayer uninstall` unless they are forced
 $ mind status
-commit-style  installed  codex,opencode   workspace
-commits       edited     claude,opencode  workspace
+commit-style  current  codex,opencode   workspace
+commits       edited   claude,opencode  workspace
 $ mind remove commits --yes
 removed skill commits from /home/you/Projects/app/.claude/skills/commits
   it had been installed, and is uninstalled with it; `flayer install` can put it back

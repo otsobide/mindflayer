@@ -86,8 +86,9 @@ under `apps/` with its own `Makefile`:
   (`reapply`), what each project holds, from where and for which agents
   (`status`), creating and changing artifacts, and moving a workspace's own
   into its library and a project from its `mind.toml` or `settings.json` to a
-  `settings.toml` (`migrate`). Its only I/O is files, and it never reads the
-  environment.
+  `settings.toml` (`migrate`), and bringing what was installed up to date
+  with where it came from (`update`). Its only I/O is files, and it never
+  reads the environment.
 - `apps/cli` (`mindflayer-cli`): the binaries `mind` (`src/main.rs`) and
   `flayer` (`src/bin/flayer.rs`), and the TUI. `src/lib.rs` only re-exports
   the public API. The parsers are in `src/parse.rs`. `src/commands.rs`
@@ -96,7 +97,7 @@ under `apps/` with its own `Makefile`:
   scan), `workspace` (load, unload), `activate` (activate, which),
   `artifact` (add, edit, rename, remove, templates), `read` (list, show,
   validate), `status`, `settings` (agents, share, targets), `gather`,
-  `install` and `migrate` (migrate, at both levels). `src/render.rs` holds
+  `install`, `update` and `migrate` (each at both levels). `src/render.rs` holds
   `Outcome`, `Failure`, the table helpers and the envelope every `--json`
   prints (`json`),
   `src/error.rs` holds `CliError`, and `src/homes.rs` decides the default
@@ -180,7 +181,7 @@ These are easy to break from a single file without noticing.
   text, stderr lines, ok), so tests assert on the exact text a user sees.
 - **Reading commands print JSON in one envelope, and its names are a
   contract.** A reading command's `--json` prints `render::json`'s
-  `{"version": 1, "data": ..., "warnings": [...]}`, never a shape of its own,
+  `{"version": 2, "data": ..., "warnings": [...]}`, never a shape of its own,
   with what it would have said on stderr as `warning:` lines in `warnings`
   and the exit status its text has. `data` is a type core builds and sorts,
   deriving `Serialize` with its fields named in snake_case; a kind, an agent
@@ -215,8 +216,8 @@ These are easy to break from a single file without noticing.
     installed along with them.
   - Creation uses `create_new` or `create_dir`.
   - `rename` rewrites only the `name:` line (`frontmatter::with_key`).
-  - `remove`, `migrate` at either level, `agents`, `share` and `targets` are
-    dry runs without `--yes`.
+  - `remove`, `migrate` at either level, `agents`, `share`, `targets` and
+    `update` are dry runs without `--yes`.
     A migration of the library moves nothing a project holds, refuses as a
     whole, and keeps the marker it rewrites as `flayer.toml.v<version>`
     (`create_new`). A project's (`migrate::project`) writes its
@@ -325,8 +326,14 @@ These are easy to break from a single file without noticing.
   nothing records; a render keeps an edited section of the block as it holds
   it. A record with no hash counts as current only while its copy matches its
   offer byte for byte, and as edited otherwise; the first install over a match
-  stores its hash. An uninstall removes the copies its record names and
-  nothing else. No copy holds a skill's top-level `.claude-plugin`
+  stores its hash. An update (`update::apply`) writes an `Outdated` or
+  `Missing` installation again from the place its record says it came from,
+  through the install's own body (`install::install_held`), and a project's
+  rules in one render that keeps an orphaned rule as it is
+  (`install::rules::update_held`); it leaves an `Edited` one, every copy of
+  it, unless forced, and says an `Orphaned` one without failing. An
+  uninstall removes the copies its record names and nothing else. No copy
+  holds a skill's top-level `.claude-plugin`
   (`install::LeftOut`), and none lands inside an agent's own folder
   (`InstallError::UserScope`). A v3 project is listed from its agents' folders
   too, where an unrecorded copy outside the folder it authors in is
@@ -430,10 +437,13 @@ These are easy to break from a single file without noticing.
   clones to rewrite, `migrate::library`, from its plan to its rewrite of
   the marker, `migrate::project`, for a move from a `mind.toml`, from before
   it reads the project again until its ledger is written (a move from a
-  `settings.json` moves no copy, and takes none), and `reapply::apply`,
+  `settings.json` moves no copy, and takes none), `reapply::apply`,
   from before it reads a
   project's settings until their change and every copy it carries along are
-  written. A new
+  written, and `update::apply`, from the plan it makes again until its last
+  installation is written, through `install::install_held` (the body
+  `install_with` hands to once it holds the lock) and
+  `install::rules::update_held`, which take none of their own. A new
   writer takes it the same way, inside core; `config_entry::ConfigFile`,
   `agents_md::render`, `claude_rules::render`, `claude_md::render` and
   `MindProject::change_settings` take none, since

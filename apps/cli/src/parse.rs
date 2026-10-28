@@ -203,9 +203,10 @@ pub enum Command {
         target: Option<String>,
     },
 
-    /// Say what this project holds: whether each artifact was installed,
-    /// is partly gone, is somebody's or is the project's own, which agents
-    /// read it, and where what was installed came from.
+    /// Say what this project holds: whether what Mindflayer installed is
+    /// current, outdated, edited, missing or orphaned, what is somebody's
+    /// and what is the project's own, which agents read each, and where
+    /// what was installed came from.
     Status {
         /// Print it as JSON, in the envelope every reading command's --json
         /// shares.
@@ -263,6 +264,29 @@ pub enum Command {
         /// otherwise left alone with every other copy.
         #[arg(long)]
         force: bool,
+    },
+
+    /// Bring what Mindflayer installed into this project up to date with
+    /// where it came from, and put back the copies that have gone.
+    ///
+    /// A copy changed since it was installed is left alone, with every
+    /// other copy of it, and said. Without --yes nothing changes, and the
+    /// command says what would.
+    Update {
+        /// Only these, each by its name, or `kind:name` when one name is
+        /// both [default: everything installed].
+        #[arg(value_name = "NAME")]
+        names: Vec<String>,
+
+        /// Write over a copy changed since it was installed, which is
+        /// otherwise left alone.
+        #[arg(long)]
+        force: bool,
+
+        /// Make the change. Without this nothing changes, and the command
+        /// says what would.
+        #[arg(short, long)]
+        yes: bool,
     },
 
     /// Change which agents work in this project, and carry what is
@@ -532,9 +556,10 @@ pub enum FlayerCommand {
         project: Option<String>,
     },
 
-    /// Say what every managed project holds: whether each artifact was
-    /// installed, is partly gone, is somebody's or is the project's own,
-    /// which agents read it, and where what was installed came from.
+    /// Say what every managed project holds: whether what Mindflayer
+    /// installed is current, outdated, edited, missing or orphaned, what is
+    /// somebody's and what is the project's own, which agents read each,
+    /// and where what was installed came from.
     Status {
         /// Only this project.
         #[arg(short, long, value_name = "PROJECT")]
@@ -659,6 +684,38 @@ pub enum FlayerCommand {
         /// otherwise left alone with every other copy.
         #[arg(long)]
         force: bool,
+    },
+
+    /// Bring what Mindflayer installed into projects up to date with where
+    /// it came from, and put back the copies that have gone, as `mind
+    /// update` does in one.
+    ///
+    /// A copy changed since it was installed is left alone, with every
+    /// other copy of it, and said. Without --yes nothing changes, and the
+    /// command says what would.
+    Update {
+        /// A project to update, by name or path; once for each.
+        #[arg(short = 'p', long = "project", value_name = "PROJECT")]
+        projects: Vec<String>,
+
+        /// Every project the workspace links.
+        #[arg(long, conflicts_with = "projects")]
+        all: bool,
+
+        /// Only these, each by its name, or `kind:name` when one name is
+        /// both [default: everything installed].
+        #[arg(value_name = "NAME")]
+        names: Vec<String>,
+
+        /// Write over a copy changed since it was installed, which is
+        /// otherwise left alone.
+        #[arg(long)]
+        force: bool,
+
+        /// Make the change. Without this nothing changes, and the command
+        /// says what would.
+        #[arg(short, long)]
+        yes: bool,
     },
 
     /// Change which agents work in a project, and carry what is installed

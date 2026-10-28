@@ -127,10 +127,15 @@ impl From<ArtifactError> for Failure {
 /// not when one is added, which a reader passes over. What a command puts in
 /// `data` is held to the same rule: every name in it is a contract, which is
 /// why core spells each kind, agent and state as a command line takes it.
-pub const ENVELOPE_VERSION: u32 = 1;
+///
+/// 2 since `status` dropped two states for the five an installation stands
+/// in (D-04): `installed` is `current`, `outdated` or `orphaned` now, and
+/// `partial` is `missing`, so a script reading version 1 would meet a state
+/// it never knew and miss two it did.
+pub const ENVELOPE_VERSION: u32 = 2;
 
 /// What every reading command's `--json` prints:
-/// `{"version": 1, "data": ..., "warnings": [...]}`.
+/// `{"version": 2, "data": ..., "warnings": [...]}`.
 ///
 /// One shape for every command, so a script reads each the same way, and the
 /// warnings inside it beside the data rather than on stderr alone: failures

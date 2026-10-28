@@ -213,7 +213,8 @@ fn unmarking_an_installed_skill_removes_it() {
 fn an_installed_skill_whose_copies_are_gone_opens_unmarked_and_marking_it_puts_them_back() {
     let (dir, workspace, ledger) = shelved(&["collapse"], &["deploy"]);
     installed(dir.path(), &workspace, &ledger);
-    // What a `git clean -X` does to a local project's copies.
+    // What a `git clean -dX` does to a local project's copies; it takes the
+    // project's `.mind` too, which this leaves.
     let copies = copies(&dir.path().join("collapse"), "deploy");
     for copy in &copies {
         fs::remove_dir_all(copy).unwrap();
@@ -273,6 +274,26 @@ fn a_skill_written_by_hand_is_shown_but_not_touched() {
     assert!(after.contains("left alone"), "and it says why:\n{after}");
     let kept = fs::read_to_string(written.join("SKILL.md")).unwrap();
     assert!(kept.contains("Written by a person"));
+}
+
+#[test]
+fn a_skill_offered_changed_since_it_was_installed_is_marked_outdated_and_stays_ticked() {
+    let dir = workspace_with_own();
+    flayer(dir.path(), &["install", "-p", "alpha", "commit-style"]).unwrap();
+    let manifest = own_directory_for(dir.path(), Kind::Skill).join("commit-style/SKILL.md");
+    let since = fs::read_to_string(&manifest).unwrap() + "Since.\n";
+    fs::write(&manifest, since).unwrap();
+    let workspace = FlayerWorkspace::open(dir.path()).unwrap();
+    let ledger = workspace.ledger_for_reading().unwrap();
+
+    let screen = screen_for(&workspace, &ledger);
+
+    let drawn = rendered(&screen);
+    assert!(
+        drawn.contains("[x] commit-style  (outdated; flayer update refreshes it)"),
+        "{drawn}"
+    );
+    assert_eq!(screen.counts(), (0, 0));
 }
 
 #[test]

@@ -174,7 +174,7 @@ pub struct Envelope {
 pub fn enveloped<T: serde::de::DeserializeOwned>(outcome: &Outcome) -> (T, Vec<String>) {
     let envelope: Envelope = serde_json::from_str(&outcome.stdout)
         .unwrap_or_else(|error| panic!("not the envelope: {error}\n{}", outcome.stdout));
-    assert_eq!(envelope.version, 1, "{}", outcome.stdout);
+    assert_eq!(envelope.version, 2, "{}", outcome.stdout);
     let data = serde_json::from_value(envelope.data)
         .unwrap_or_else(|error| panic!("not the data asked for: {error}\n{}", outcome.stdout));
     (data, envelope.warnings)

@@ -378,6 +378,14 @@ pub enum Task {
         share: Option<Share>,
         edit_tracked: bool,
     },
+    /// `… update --yes [<kind:name>]`: what is installed in a project, or
+    /// the one artifact named, brought up to date and put back where a copy
+    /// has gone; `flayer update --all --yes [<kind:name>]` for the
+    /// workspace's own row, in every project it links.
+    Update {
+        holder: Holder,
+        reference: Option<String>,
+    },
     /// Open the install screen, which is what `flayer install` opens.
     OpenInstall,
     /// Carry out what the install screen marked.
@@ -519,6 +527,18 @@ impl Task {
                 }
                 None => vec![at(holder, &["targets", "reset", "--yes"], &[kind.folder()])],
             },
+            // Never forced: an edit is somebody's work, and the screen
+            // leaves it to a command line that says `--force`, as the install
+            // screen does.
+            Task::Update { holder, reference } => {
+                let named: Vec<&str> = reference.iter().map(String::as_str).collect();
+                match holder {
+                    Holder::Workspace => {
+                        vec![words(&["flayer", "update", "--all", "--yes"], &named)]
+                    }
+                    _ => vec![at(holder, &["update", "--yes"], &named)],
+                }
+            }
             Task::OpenInstall | Task::ApplyInstall => vec![words(&["flayer", "install"], &[])],
             Task::Refresh => Vec::new(),
         }
@@ -547,6 +567,7 @@ impl Task {
                 | Task::Minds { .. }
                 | Task::Settings { .. }
                 | Task::Targets { .. }
+                | Task::Update { .. }
                 | Task::ApplyInstall
         )
     }
@@ -1196,7 +1217,7 @@ impl App {
             _ => {}
         }
         // What only a workspace has: its registry, its shelf, its installs.
-        if let KeyCode::Char(key @ ('l' | 'u' | 'g' | 's' | 'i' | 'm' | 'L')) = key.code {
+        if let KeyCode::Char(key @ ('l' | 'u' | 'U' | 'g' | 's' | 'i' | 'm' | 'L')) = key.code {
             return match self.scope() {
                 Scope::Workspace => self.in_workspace(key),
                 Scope::Project => self.on_its_own(key),
@@ -1212,7 +1233,8 @@ impl App {
         match key {
             'l' => (Mode::Linking(LinkForm::default()), Step::Stay),
             'L' => (Mode::Loading(LoadForm::default()), Step::Stay),
-            'u' => self.start_unlinking(),
+            'u' => self.start_updating(),
+            'U' => self.start_unlinking(),
             'g' => (Mode::Gathering(GatherForm::default()), Step::Stay),
             's' => (Mode::Browse, Step::Run(Task::Shelf)),
             'm' => match self.workspace() {
@@ -1405,6 +1427,34 @@ impl App {
                 (Mode::Browse, Step::Stay)
             }
         }
+    }
+
+    /// `u`: bring what is installed in the project under the cursor up to
+    /// date, or only the artifact under it in the artifacts column; on the
+    /// workspace's own row, in every project it links, which is where its
+    /// own reach once installed. No question first: an update writes over
+    /// nothing somebody changed, and its lines are shown in full after.
+    fn start_updating(&mut self) -> (Mode, Step) {
+        let Some(member) = self.member() else {
+            self.message = Some(Message::info("link a project first; l links one"));
+            return (Mode::Browse, Step::Stay);
+        };
+        if !member.own && member.holdings.is_err() {
+            self.message = Some(Message::info(format!(
+                "{} cannot be opened, so nothing in it can be updated",
+                member.name
+            )));
+            return (Mode::Browse, Step::Stay);
+        }
+        let reference = match (self.focus, self.current_item()) {
+            (Focus::Items, Some(item)) => Some(item.reference()),
+            _ => None,
+        };
+        let task = Task::Update {
+            holder: member.holder(),
+            reference,
+        };
+        (Mode::Browse, Step::Run(task))
     }
 
     fn start_unlinking(&mut self) -> (Mode, Step) {
@@ -1897,6 +1947,7 @@ impl App {
                 | Task::Validate { .. }
                 | Task::Shelf
                 | Task::ApplyInstall
+                | Task::Update { .. }
                 | Task::Minds { .. },
                 _,
             )
@@ -2623,7 +2674,7 @@ impl Reader {
 
     /// Every key, and the command it runs.
     pub fn help() -> Self {
-        let rows: [(&str, &str, &[&str]); 18] = [
+        let rows: [(&str, &str, &[&str]); 19] = [
             (
                 "a",
                 "add a skill or a rule",
@@ -2657,7 +2708,15 @@ impl Reader {
                     "mind -C <path> init, first, for a repository that is not one yet",
                 ],
             ),
-            ("u", "unlink the project", &["flayer unlink <path>"]),
+            (
+                "u",
+                "update what is installed in the project, or the artifact under the cursor",
+                &[
+                    "mind -C <project> update --yes [<kind:name>]",
+                    "flayer update --all --yes [<kind:name>], on the workspace's own",
+                ],
+            ),
+            ("U", "unlink the project", &["flayer unlink <path>"]),
             (
                 "t",
                 "the project's agents and sharing, toggled",

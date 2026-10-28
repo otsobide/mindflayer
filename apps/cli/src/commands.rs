@@ -13,6 +13,7 @@ pub(crate) mod project;
 pub(crate) mod read;
 pub(crate) mod settings;
 pub(crate) mod status;
+pub(crate) mod update;
 pub(crate) mod workspace;
 
 use std::path::{Path, PathBuf};
@@ -40,6 +41,7 @@ use read::{
 };
 use settings::{agents_change, change_here, change_of, targets_change};
 use status::{status_here, status_of_project, status_of_workspace};
+use update::update_projects;
 use workspace::{load_command, unload_command};
 
 /// Run `mind`.
@@ -190,6 +192,19 @@ pub(crate) fn run_with(cli: &Cli, lookup: &Lookup, watch: &Watch) -> Result<Outc
             let project = project_here(&directory)?;
             let workspace = managing(&project, lookup)?;
             uninstall_named(&workspace, &project, name, &lookup.agents, *force)
+        }
+        Command::Update { names, force, yes } => {
+            let project = project_here(&directory)?;
+            let workspace = managing_unmade(&project, lookup)?;
+            update_projects(
+                &workspace,
+                &[project],
+                names,
+                *force,
+                *yes,
+                &lookup.agents,
+                Vec::new(),
+            )
         }
         Command::Agents { change, named } => {
             let (change, yes) = agents_change(change.as_ref(), named);
@@ -420,6 +435,42 @@ fn run_flayer(
                 &lookup.agents,
                 *force,
             )
+        }
+
+        // Resolved as a read, on the default workspace before it is made
+        // too, as `migrate` is: one made for the occasion links no project
+        // to update. Each project named, or every one linked, each that
+        // would not open said beside the rest, as `status` says one.
+        FlayerCommand::Update {
+            projects,
+            all,
+            names,
+            force,
+            yes,
+        } => {
+            if projects.is_empty() && !*all {
+                return Err(CliError::UpdateWhere.into());
+            }
+            reading_workspace(directory, lookup, |workspace| {
+                let (asked, warnings) = if *all {
+                    managed(workspace)
+                } else {
+                    let asked = projects
+                        .iter()
+                        .map(|project| workspace.pick(project))
+                        .collect::<Result<Vec<_>, _>>()?;
+                    (asked, Vec::new())
+                };
+                update_projects(
+                    workspace,
+                    &asked,
+                    names,
+                    *force,
+                    *yes,
+                    &lookup.agents,
+                    warnings,
+                )
+            })
         }
 
         // Resolved as a read, on the default workspace before it is made
@@ -716,6 +767,16 @@ fn workspace_for(project: &MindProject, lookup: &Lookup) -> Result<FlayerWorkspa
 /// what is installed there.
 fn managing(project: &MindProject, lookup: &Lookup) -> Result<FlayerWorkspace, CliError> {
     resolve::managing(&lookup.inputs(project.root(), Intent::Write), project)?
+        .ok_or_else(|| CliError::NoWorkspaceAbove(project.root().to_path_buf()))
+}
+
+/// [`managing`], resolved as a read: the default workspace in home is never
+/// made for the occasion. For `mind update`, which changes only what the
+/// workspace records, so one made now would link no project and refuse it
+/// all the same, having written a marker into somebody's home on the way,
+/// even for a dry run.
+fn managing_unmade(project: &MindProject, lookup: &Lookup) -> Result<FlayerWorkspace, CliError> {
+    resolve::managing(&lookup.inputs(project.root(), Intent::Read), project)?
         .ok_or_else(|| CliError::NoWorkspaceAbove(project.root().to_path_buf()))
 }
 

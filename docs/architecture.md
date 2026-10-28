@@ -455,7 +455,11 @@ one by being installed.
 `mind migrate` moves the project you are in from its `mind.toml` to
 settings, and `flayer migrate -p` one the workspace links, or
 `--all-projects` every one ([moving a project to its
-settings](#moving-a-project-to-its-settings)).
+settings](#moving-a-project-to-its-settings)). `mind update` brings what is
+installed in the project you are in up to date, and `flayer update` what is
+installed in each project `-p` names, or with `--all` in every one, needing
+one or the other, as a change of more than one place says which ([bringing
+what was installed up to date](#bringing-what-was-installed-up-to-date)).
 Reads look everywhere; a change needs one place, and without `-p` that place
 is the workspace.
 
@@ -1246,7 +1250,7 @@ A reading command's `--json` prints what it read inside one envelope,
 whatever the command (`render::json`):
 
 ```json
-{"version": 1, "data": ..., "warnings": [...]}
+{"version": 2, "data": ..., "warnings": [...]}
 ```
 
 `status` was the first to take it ([what each project
@@ -1265,7 +1269,7 @@ and for the panel's backend when it reads through the CLI.
 - **Its names are a contract.** Every type in `data` derives `Serialize` in
   core, each field by its snake_case name, and `Kind`, `Agent` and `State`
   are serialized by the word a command line takes for them (`skill`,
-  `opencode`, `partial`), written by hand rather than derived: a derive
+  `opencode`, `missing`), written by hand rather than derived: a derive
   spells the variant, so `Agent::OpenCode` would print `open_code`, a name no
   command line or settings file holds, and a rename would change it. A path
   is text, whatever bytes it holds, so one unprintable path cannot fail the
@@ -1274,6 +1278,10 @@ and for the panel's backend when it reads through the CLI.
   passes over a key it does not know. A test reads each report back into
   structs of its own that refuse any field they do not name
   (`common::enveloped`), so a change shows there before it reaches a script.
+  It moved once, to 2, when `status` took the five states an installation
+  stands in ([what each project has](#what-each-project-has)): `installed`
+  and `partial`, which a version 1 script knew, went, and a value a script
+  never met came in their place, which is a field changing what it holds.
 - **Pretty-printed**, two spaces a level, since a person reads it as often as
   a script does, and `jq` takes either.
 - **The envelope is the CLI's**, in `render.rs` beside the table helpers: how
@@ -1852,22 +1860,25 @@ its name:
 - **Current**: every copy holds what was written, and the offer holds it
   still.
 - **Outdated**: every copy holds what was written, and the offer has moved
-  on. An install brings it up to date.
+  on. An update brings it up to date, as an install of it does ([bringing
+  what was installed up to date](#bringing-what-was-installed-up-to-date)).
 - **Edited**: a copy holds anything else: a hand edit, `mind edit`, a
   skill's rename, which rewrites its `name` line, a file added, or a link
   where a file was, which the hash refuses and no install writes. A rule's
   rename moves its file as it is, and is no edit: the copy holds what was
   installed, orphaned while nothing offers it by its new route.
 - **Missing**: a copy the record names is not where it was put, and an
-  install puts it back. Every copy gone is still missing rather than absent:
+  update puts it back, as an install of it does. Every copy gone is still missing rather than absent:
   the ledger records it, and `flayer uninstall` forgets it. The install
   screen opens its box empty all the same (`Standing::present`), saying a
   copy is gone, so marking it puts every copy back, as it did when every
-  copy gone read as absent: a `git clean -X` takes every copy of a local
-  project at once. Held, the box could only be marked to be taken out, so
-  one with a copy left is taken out with `flayer uninstall`.
+  copy gone read as absent: a `git clean -dX` takes every copy of a local
+  project at once (and its `.mind` with them, an open question). Held, the
+  box could only be marked to be taken out, so one with a copy left is
+  taken out with `flayer uninstall`.
 - **Orphaned**: the place it came from no longer offers it. No offer carries
-  it onto the install screen, so `standings` is where it is said.
+  it onto the install screen, so `standings` is where it is said, and
+  `status` and an update say it from there.
 
 When more than one holds, edited is said first, then orphaned, missing,
 outdated: an edit is what a change must not undo, an offer gone leaves
@@ -1888,7 +1899,9 @@ somebody's, and wherever the record has its copies, since an install records
 its copies afresh and one in a folder it no longer writes would be left with
 no record. Forcing reaches only what the ledger records: a copy nothing
 records stays out of reach whatever is asked. The install screen never
-forces, and holds an edited row's box as it holds a foreign one's.
+forces, and holds an edited row's box as it holds a foreign one's. An
+update leaves an edited installation as an install does, every copy of it,
+and says so, unless forced.
 
 A rule's copy from before a project had settings, in the folder its
 `mind.toml` named, is not one of the copies told in a project marked by
@@ -1904,6 +1917,88 @@ while its copy matches, edited otherwise, and edited when nothing offers it
 any more. An untouched copy whose offer has moved on then reads the same as
 an edit, and taking it for one is the safe mistake. The first install over a
 copy that matches stores its hash, and from then on it is told as any other.
+
+### Bringing what was installed up to date
+
+`flayer update` and `mind update` (`update::plan`, `update::apply`) act on
+the standings: each installation outdated or missing is written again from
+the place its record says it came from, as that place offers it now
+(`Surveyed::source`), and nothing else is. A current one has nothing to
+change. An edited one is left, every copy of it, as an install leaves it,
+and said (`Step::Leave`) unless the update is forced, when it is written
+over and the copies it wrote over are said (`Step::WriteOver`). An orphaned
+one has nothing to be written from, edited or not, so it is said and left
+as the project holds it (`Step::Orphaned`): a note, never a failure, since
+nothing could have been done for it, and `uninstall` is what takes it out.
+A record from before origins were kept may stand for an offer of the
+workspace's own or of any workspace it loads; the one holding what an
+untouched copy holds is where it came from, and with none left to tell by
+it is not guessed (`Step::Unsure`), as an install with no `--from` does not
+guess between two.
+
+- **Written as an install writes.** Each skill, and each rule copied into a
+  project a `mind.toml` marks, goes through the install's own body
+  (`install::install_held`), so its copies are staged and put in place
+  together, its record and hash written afresh, and a local project's
+  exclude entries written before a copy lands. A copy a local project lost
+  comes back kept out of git as it was: one deleted by hand, or the
+  `AGENTS.md` it made, which a `git clean -X` takes, since it is a file in a
+  folder git tracks. Every other copy is in a folder of its own, which only
+  `git clean -dX` goes into, and that takes the project's `.mind` too, so
+  the project has to be marked again before an update can find it (open
+  questions). Under the lock the body looks again at everything an install
+  refuses, so a copy edited between the plan and the write is left all the
+  same.
+- **One lock, a plan made under it.** `apply` opens the ledger to write,
+  takes the workspace's lock, reads each project again and makes the plan
+  again under it, then writes every installation, as `reapply` and
+  `migrate` hold it from plan to write. The lock is not re-entrant, so the
+  install it writes with is the body `install_with` hands to once it holds
+  the lock, rather than `install_with` itself. A workspace with no ledger
+  file is given none: it records nothing to update.
+- **Failures are said where they happened.** A project that cannot be read
+  again refuses the whole update before anything is written. After that,
+  each installation is written whole or not at all, and one that fails
+  says so in its own `done`, beside the rest, which go ahead; the same
+  update run again finishes what is left.
+- **A project's rules come together.** The block in `AGENTS.md` is one file
+  written whole, so a project's rules are brought up to date by one render
+  (`rules::update_held`), which gives each rule as its offer holds it now.
+  Updating one rule therefore brings each other outdated or missing rule
+  of the project along, and the plan names each, so the lines say what was
+  written; leaving them behind would mean reading each back from the block,
+  as a render reads back only an edit it keeps. That render keeps a rule no
+  longer offered as the project holds it, as an uninstall of another rule
+  does, rather than refusing the rest for it, and writes over only the
+  edits of the rules the update was forced to write over. Every other rule
+  somebody edited, named or not, is kept whole (`Change::leaves`): each
+  copy as the project holds it, the one not edited too, and its record as
+  it was. A rule has two copies where Claude reads no block, its section
+  and its file for Claude, and keeping only the edited one, as an install's
+  render does, would write the other from the offer and leave Claude and
+  the agents reading the block with two versions of one rule.
+- **Names narrow it.** Only the installations the names given name are
+  planned, by kind and name as `install` takes them, every one when none is
+  given; a name that matches nothing installed in any project asked is
+  said, as a typo usually is.
+- **A dry run without `--yes`**, which reads the ledger without making it,
+  as every dry run does, and says the same lines with the same exit status:
+  an edited copy left alone is a warning either way, as an install refused
+  over it is, since what was asked for is not all done.
+- **Nothing is gathered.** An update copies what the shelf holds now; a
+  gather is what moves the shelf, and refreshing a source is its own
+  command (#100).
+
+The CLI lays it out (`commands/update.rs`): a line for each installation
+written, `updated`, `put back ... at`, or `updated ..., writing over the
+change at`, then, for a project's rules, what the render said of the rules
+it wrote (`Rendered::warnings_of_update`), but no edit it kept, which the
+update says itself. `flayer update` takes `-p` once for each project or
+`--all`, refusing neither given, and `mind update` the project it is in,
+through the workspace that manages it, as `mind install` does. Both resolve
+it as a read, so neither makes the default workspace in home, not even with
+`--yes`: one made for the occasion links no project, and the update would be
+refused all the same.
 
 ### Built where no agent looks
 
@@ -2322,7 +2417,7 @@ unrecorded in a folder it drops; `targets reset` is the same the other way.
   is in a folder no agent the project names is sent copies to, which no
   install writes again. Deleting it on a guess was turned down, and so was
   keeping it recorded, which would name a copy in a folder no listing of the
-  project reads, call the installation partial or edited for good, and leave
+  project reads, call the installation missing or edited for good, and leave
   it to the next install, which records its copies afresh, to drop all the
   same. Which
   folder a copy is in is told by the folder on disk, as `install::targets`
@@ -2450,72 +2545,90 @@ never wrote.
 Each artifact a project holds is one entry, as discovery lists it: every copy
 of one name together ([read where its agents
 read](#a-project-marked-by-its-settings-is-read-where-its-agents-read)). Its
-state is one of five (`status::State`):
+state is one of seven (`status::State`), the first five an installation's
+[standing](#an-edited-copy-is-left-alone), told by the same core function an
+install refuses by and an update acts on (`install::standings`), so the
+report, a refusal and an update never disagree:
 
-- **installed**: the ledger records every copy, and every copy it records is
-  found where it was put.
-- **partial**: the ledger records a copy discovery does not find where it was
-  put: deleted since, by hand or by a `git clean -X`, which the ignored copies
-  of a local project are exposed to, or left so it no longer reads, which
-  discovery says beside the report. The next install puts every copy back,
-  since it writes each target.
+- **current**: the ledger records every copy, every copy it records is found
+  where it was put holding what was written there, and the place it came
+  from offers that still.
+- **outdated**: the same, but the place it came from offers something else
+  by now. An update brings it up to date ([bringing what was installed up
+  to date](#bringing-what-was-installed-up-to-date)).
 - **edited**: the ledger records a copy that holds something other than was
-  written there, by its hash: an install's standing of
-  [edited](#an-edited-copy-is-left-alone), told by the same core function
-  an install refuses by (`install::standings`), so the report and a refusal
-  never disagree. A rule is edited in its section of the block or in its
-  file for Claude. Still Mindflayer's install, left alone by every install
-  and uninstall unless forced.
+  written there, by its hash. A rule is edited in its section of the block
+  or in its file for Claude. Still Mindflayer's install, left alone by every
+  install, update and uninstall unless forced.
+- **missing**: the ledger records a copy discovery does not find where it
+  was put: deleted since, by hand or by a `git clean`, which the ignored
+  copies of a local project are exposed to, or left so it no longer reads,
+  which discovery says beside the report. An update puts every copy back,
+  since it writes each target.
+- **orphaned**: the place it came from no longer offers it, so nothing can
+  bring it up to date or put a copy of it back; `uninstall` takes it out.
 - **foreign**: unrecorded, in an agent's folder outside any the project
   authors in: somebody's, never Mindflayer's to change.
 - **authored**: unrecorded, in a folder the project authors in: its own work.
 
-The state is discovery's answer (`Artifact::provenance`) with the record of
-the install laid over it: installed only when every copy is recorded, and
-partial when the record names one that is not found, even beside a copy the
-project authors of that name. That copy sits where the install wrote nothing,
-or it would be the install's, so the next install puts the gone one back all
-the same, and calling the entry authored would leave an agent reading none
-of it unsaid. Not beside a foreign copy, which is said first: the next
-install of the name is refused over it. Nor beside an edited one, said next,
-for the same reason unless the install is forced. The record is
+They took over from `installed`, now current, outdated or orphaned, and
+`partial`, now missing, which is a name a script read changing what it
+holds, so the JSON envelope moved to version 2 ([JSON, in one
+envelope](#json-in-one-envelope)). Keeping `installed` and adding the
+standing beside it, a field that would have moved no version, was turned
+down: two words for one entry, which the table and the TUI would each have
+had to choose between.
+
+The state is discovery's answer (`Artifact::provenance`) with the standing
+of the install laid over it, in the order a standing is said in (edited,
+orphaned, missing, outdated): one of the five only when every copy is
+recorded, and missing when the record names one that is not found, even
+beside a copy the project authors of that name. That copy sits where the
+install wrote nothing, or it would be the install's, so the next update puts
+the gone one back all the same, and calling the entry authored would leave
+an agent reading none of it unsaid. Not beside a foreign copy, which is said
+first: the next install of the name is refused over it. Nor beside an edited
+one, said next, for the same reason unless the update is forced, nor an
+orphaned one, which nothing can put back. The record is
 matched to the entry by the path of a copy it wrote, as discovery marks a copy
 installed, never by name, so an install of a name into one folder neither
 claims nor lends its origin to what somebody keeps under that name in another.
 A recorded copy is missing when discovery did not find it, rather than when
 nothing is at its path: a folder whose `SKILL.md` was deleted, or no longer
-parses, loads in no agent, and the next install replaces it as it replaces
-one that was deleted, where asking the disk would have called it installed
-and reaching nobody.
+parses, loads in no agent, where asking the disk would have called it
+current and reaching nobody. Its standing calls it edited, since it no longer
+holds what was written, and the report says edited over missing, as it does
+for any edit. A copy still holding what was written where discovery no
+longer looks is the other way round: missing in the report, and current to
+an update ([an open question](#open-questions)).
 
-An install nothing of which is found is still in the report, partial and
-reaching no agent, so that what was installed is said once its every copy has
-gone. Unless the project holds something else by that name: that is then the
+An install nothing of which is found is still in the report, missing, or
+orphaned when nothing offers it any more, and reaching no agent, so that
+what was installed is said once its every copy has gone. Unless the project holds something else by that name: that is then the
 name's one entry, said as what is there, since a row is one name, as in every
 listing, and the name is somebody's now ([an open
 question](#open-questions)).
 
 Beside its state, each entry names the agents among the project's that read
-one of its copies (`Artifact::agents`), which for a partial install are fewer
-than it was installed for, and where what was installed came from, the
-record's origin, as `--from` takes it. Each project names its own agents too,
-from its settings, so a front end can lay its rows out by agent; a project a
-`mind.toml` marks names none, and reaches none as far as a report can say.
-Whether an install is outdated or orphaned, which `install::standings` tells
-already, is #48's to say here, with the states it adds taking over from
-installed, and from partial for a copy that is missing.
+one of its copies (`Artifact::agents`), which for an install with a copy
+missing are fewer than it was installed for, and where what was installed
+came from, the record's origin, as `--from` takes it. Each project names its
+own agents too, from its settings, so a front end can lay its rows out by
+agent; a project a `mind.toml` marks names none, and reaches none as far as
+a report can say.
 
 The rules a project marked by its settings received are no copies discovery
 finds, but sections of the block in its `AGENTS.md` and Claude's files, so
 each is listed from its record and the block, an installed view
 ([D-23](#d-23-what-a-project-received-is-an-installed-view)): catalog
 discovery parses no block, since a section is never authored in place but
-rendered from a rule kept elsewhere. A rule is installed while every target
-its record names is found, its route among the block's sections and its file
-for Claude where it was written, and partial while one is not, as a skill's
-copies are; one recorded with none has nothing missing. It is edited, over
-partial, while its section or its file holds something other than was
-rendered there. It reaches Codex and
+rendered from a rule kept elsewhere. A rule is missing while a target its
+record names is not found, its route among the block's sections or its file
+for Claude where it was written, as a skill's copies are, and otherwise
+stands as core stands it; one recorded with none has nothing missing. It is
+edited, over missing, while its section or its file holds something other
+than was rendered there, and orphaned while nothing offers it. It reaches
+Codex and
 OpenCode through the block, and Claude through its own file, or through the
 block where the render gave it none: a render gives Claude every rule as a
 file while Claude reads no block, so a rule in the block with no file of its
@@ -2533,15 +2646,16 @@ and OpenCode read nowhere because its block could not be written. Of each
 rule rather than of its kind, as `unreached` says a skill's: a skill reaches
 the agents that read the folders its kind goes to, the same for every skill,
 while a rule reaches the ones what it states, and where its block may go, let
-it. Only one installed whole, from the rows as the report lists them: one
-partly gone is partial already, which says so.
+it. Only one installed whole, current, outdated or orphaned, from the rows
+as the report lists them: one partly gone is missing already, which says
+so.
 
 Each project also names, in `unreached`, every kind it installs only in
 folders some of its agents do not read, with those agents: what a project's
 `targets` can leave ([a project's own targets](#a-projects-own-targets)),
 and nothing under the standard folders, which each agent reads. It is a
 warning beside the report, with a non-zero exit, as anything that hides an
-install from an agent is: a partial install says one copy is gone, and this
+install from an agent is: a missing install says one copy is gone, and this
 says every copy is where an agent does not look. A folder the settings name
 in `targets` that no install uses is a failure beside the report too
 (`StatusFailure::Target`), since the report reads the installs as going
@@ -2784,6 +2898,25 @@ and its pane gets a strip saying so in `status`'s words
 (`ProjectStatus::unreached`, and each folder no install may use), beside the
 strip of what could not be read. Both strips are as tall as their lines once
 wrapped, so the end of a sentence, which says what to do, is not cut off.
+
+### Bringing a project up to date
+
+`u` runs `update --yes` for the project under the cursor (`mind -C
+<project> update --yes`), for the one artifact under it from the artifacts
+column (`... update --yes <kind:name>`), and on the workspace's own row for
+every project it links (`flayer update --all --yes`, with the artifact's
+name when one is under the cursor), and shows what it said in full, as the
+toggles do. It asks nothing first, unlike unlinking: an update writes over
+nothing somebody changed, since the screen never forces, and what it leaves
+is in the lines it shows. A project that cannot be opened is said in place
+of running anything. `u` was unlinking's key until #48 gave it to the
+update, the key that runs most often, so unlinking moved to `U`, which a
+stray press reaches less easily and which still asks first.
+
+The install screen marks a row whose offer has moved on since it was
+installed `(outdated; flayer update refreshes it)`, held as any install's
+row is: the screen marks what goes in and out, and the update is what
+brings one up to date.
 
 ## The local server
 
@@ -4154,7 +4287,10 @@ skills ([which kind a name is](#which-kind-a-name-is)).
   Claude where it is, and its record as it was. Taking one rule out is no
   reason to take another, and refusing would leave two rules no longer
   offered each keeping the other in, with nothing else that drops a rule's
-  record.
+  record. An update goes past it the same way (`rules::update_held`),
+  saying it is orphaned rather than refusing to bring the rest up to date
+  ([bringing what was installed up to
+  date](#bringing-what-was-installed-up-to-date)).
 - **Refused before anything is written.** What can refuse is asked first:
   a block that cannot be read or holds somebody's section, a place no rule
   is written (`agents_md::misplaced`), an `AGENTS.md` linked out of the
@@ -4695,7 +4831,11 @@ other, and none of them makes a reader wait for the workspace.
   reads the project's settings until it has written them and carried the
   installs along (`reapply::apply`): the settings are the project's, but
   what changing them moves is the workspace's, and two changes at once in
-  one workspace would otherwise each keep only their own. Two workspaces
+  one workspace would otherwise each keep only their own. An update holds
+  it from the plan it makes again until its last installation is written
+  (`update::apply`), writing each through the body an install hands to once
+  it holds the lock (`install::install_held`), since asking for the lock
+  again, as `install_with` does, would wait for itself. Two workspaces
   linking one project are kept apart by neither's lock
   ([open questions](#open-questions)).
 - **Opening the ledger takes no lock**, though it is when a ledger is made or
@@ -4973,9 +5113,15 @@ move to settings, still drops the record of an edited copy it leaves in a
 folder no agent the project names is sent copies to: no install writes
 there again, and no listing reads it ([when a project's agents, targets or
 share mode
-change](#when-a-projects-agents-targets-or-share-mode-change)). Bringing an
-outdated or missing copy up to date in one command, and saying the
-outdated and orphaned in `status`, are #48's.
+change](#when-a-projects-agents-targets-or-share-mode-change)).
+
+#48 acts on them: `flayer update` and `mind update` write every outdated or
+missing installation again from where it came from, leave an edited one,
+every copy of it, unless `--force`, and say an orphaned one without failing
+([bringing what was installed up to
+date](#bringing-what-was-installed-up-to-date)); and `status` says all five,
+`current`, `outdated`, `missing` and `orphaned` taking over from `installed`
+and `partial` ([what each project has](#what-each-project-has)).
 
 ### D-05: A workspace's library lives in `.mindflayer`
 
@@ -5819,7 +5965,8 @@ just listed.
   each installation's standing (`install::standings`) hashes every copy its
   record names again, and compares one of them with the offer it came from,
   reading both, so that an outdated install can be told from a current one,
-  which only #48 says. Telling an edit alone would need no offer but for a
+  as `status` and an update both say. Telling an edit alone would need no
+  offer but for a
   record with no hash; the price was taken so that a report and a refusal
   are told by one function.
 - **A screen that lists what it cannot change.** The TUI's project rows
@@ -5838,7 +5985,7 @@ just listed.
   the next install of it is refused as foreign when what is there sits where
   it would write, and `flayer uninstall` forgets the record without touching
   what is there. While a copy of the install is left, the entry holds it and
-  says partial, even over the project's own copy. A second entry of the same
+  says missing, even over the project's own copy. A second entry of the same
   name would say it, at the price of the one name a row the screen and every
   listing keep to.
 - **Errors outside the envelope.** A command that fails says why as text on
@@ -5894,22 +6041,52 @@ just listed.
   the file reads as edited, and is left, until a render finds it holding
   its rule as written again. Recording both hashes for the moment between
   would close that, at the price of a target that holds two.
-- **A rule whose offer has gone.** Every render gives each rule from the
-  offer it was installed from, so one no longer offered there (deleted from
-  the library, a load gone) refuses every render of the project's rules
-  until it is put back or uninstalled ([installing
-  rules](#installing-rules)). Rendering it from its section as the block
-  holds it, or from its file for Claude, would let the rest change
-  meanwhile, at the price of a rule no offer stands behind, which reads as
-  orphaned (`Standing::Orphaned`).
+- **A rule whose offer has gone.** Every render an install runs gives each
+  rule from the offer it was installed from, so one no longer offered there
+  (deleted from the library, a load gone) refuses every install of another
+  rule into the project until it is put back or uninstalled ([installing
+  rules](#installing-rules)). An update's render, and an uninstall's, keep
+  it instead, as the project holds it, which reads as orphaned
+  (`Standing::Orphaned`) and is said ([bringing what was installed up to
+  date](#bringing-what-was-installed-up-to-date)); an install's render
+  doing the same would let the rest change there too, at the price of an
+  install that quietly carries a rule no offer stands behind.
 - **Every render brings every rule up to date.** A render gives each rule
   as its offer holds it now, so installing one rule updates the sections of
   the others too, where installing a skill touches no other skill. The
   block is one file written whole, and rendering only one rule would mean
   reading the others back from it, as a render now reads back a section
-  somebody edited, and keeps it. Whether it should leave an outdated rule as
-  it was too, until it is updated by name, is for #48 to choose, with the
-  update it adds.
+  somebody edited, and keeps it. #48 chose to keep that for an update: one
+  rule named brings the project's other outdated or missing rules along,
+  and its plan names each, so what is written is what is said. An install
+  of a rule still brings them along unsaid, and keeps only the copy of a
+  rule somebody edited, writing its other copy from the offer, where an
+  update keeps every copy of it. Holding an install's render to the same
+  would spare its agents two versions of one rule too.
+- **A copy recorded where nothing reads it.** Status calls an installation
+  missing when discovery does not find one of its copies, and an update
+  writes it when its standing says a copy is gone. A copy that is still
+  there holding what was written, but where discovery no longer reads it (a
+  folder dropped from the project's settings by hand, which `mind agents`
+  would have carried along), reads as missing in status and as current to
+  an update, which writes nothing. Telling such a copy as missing in the
+  standing too would make the update rewrite every target, as an install
+  does, and record the copies afresh.
+- **A `git clean -dX` takes a local project's settings.** A local project
+  keeps its whole `.mind` out of git (`MIND_IGNORE`), so the `-dX` that
+  takes its copies, each in a folder `git clean -X` does not go into, takes
+  its settings with them, and the project is no project any more: an
+  update finds nothing to put back, and `flayer update --all` says the
+  workspace's entry would not open. `mind init` again, with the agents,
+  share mode and folders it had, marks it once more, and the next update
+  puts every copy back from the ledger, which knows the project by its
+  route; the new settings come with a new id, so the copies are kept out
+  of git under a new group, and the old id's group is left in the exclude
+  file naming the same places, which nothing takes out. Keeping the
+  settings out of the ignored folder would show them in `git status`,
+  which is what a local project is for avoiding; keeping a copy of them in
+  the workspace, beside its entry, would let a command mark the project
+  again as it was, its id included.
 - **Rules after a change of agents or share mode.** `reapply` carries a
   project's skills along when its agents, targets or share mode change, but
   not its rules: those are rendered again by the next install or uninstall

@@ -350,7 +350,7 @@ fn holdings(app: &App, workspace: &Workspace, frame: &mut Frame, area: Rect) {
                 Line::from(printable(error)),
                 Line::from(""),
                 Line::from(Span::styled(
-                    "u unlinks it; nothing on disk is touched",
+                    "U unlinks it; nothing on disk is touched",
                     dim(),
                 )),
             ];
@@ -523,15 +523,17 @@ fn item_row<'a>(item: &'a Item, agents: &[Agent], width: usize, room: usize) -> 
     ListItem::new(lines)
 }
 
-/// What a state looks like: green for what Mindflayer installed whole,
-/// yellow for an install partly gone, which the next install puts back,
-/// cyan for one somebody edited, which no install writes over unless forced,
-/// and magenta for somebody's, which no key of Mindflayer's changes.
+/// What a state looks like: green for what Mindflayer installed whole and
+/// current, yellow for one an update brings up to date or puts back, cyan
+/// for one somebody edited, which nothing writes over unless forced, red for
+/// one nothing offers any more, and magenta for somebody's, which no key of
+/// Mindflayer's changes.
 fn state_style(state: State) -> Style {
     match state {
-        State::Installed => Style::default().fg(Color::Green),
-        State::Partial => warn(),
+        State::Current => Style::default().fg(Color::Green),
+        State::Outdated | State::Missing => warn(),
         State::Edited => Style::default().fg(Color::Cyan),
+        State::Orphaned => Style::default().fg(Color::Red),
         State::Foreign => Style::default().fg(Color::Magenta),
         State::Authored => Style::default(),
     }
@@ -623,11 +625,14 @@ fn footer(app: &App, frame: &mut Frame, area: Rect) {
     // Only the keys that do something here: a project on its own has no
     // registry, shelf or installs to offer keys for.
     let keys = match (app.focus, app.scope()) {
-        (Focus::Items, _) => {
+        (Focus::Items, Scope::Workspace) => {
+            "q quit  ? keys  enter show  e edit  r rename  d delete  u update  a add  ← back  v validate"
+        }
+        (Focus::Items, Scope::Project) => {
             "q quit  ? keys  enter show  e edit  r rename  d delete  a add  ← back  v validate"
         }
         (Focus::Projects, Scope::Workspace) => {
-            "q quit  ? keys  → open  a add  m minds  l link  u unlink  v validate  g gather  L load  s shelf  i install  t agents  T targets"
+            "q quit  ? keys  → open  a add  u update  m minds  l link  U unlink  v validate  g gather  L load  s shelf  i install  t agents  T targets"
         }
         (Focus::Projects, Scope::Project) => {
             "q quit  ? keys  → open  a add  v validate  l link it to the workspace above  L load  t agents  T targets"
