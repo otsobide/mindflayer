@@ -162,7 +162,10 @@ These are easy to break from a single file without noticing.
   (`Rendered::warnings_of`). Where an agent reads
   (`Agent::reads`) is kept apart from where it is sent a copy: OpenCode reads
   `.claude/skills` and is sent nothing there. Which folders a project is read
-  from is core's too (`Catalog::folders`).
+  from is core's too (`Catalog::folders`), and so are the names at a
+  project's root that show an agent works there (`Agent::reads_at_root`) and
+  the order `flayer scan --suggest` ranks what it finds in (`scan::Order`),
+  which the minds screen and the link form show without sorting.
 - **Two binaries, one parser.** `flayer <cmd>` is `mind flayer <cmd>`, and
   both reach the same function. `mind add` and `flayer add` (with or without
   `-p`) are one implementation given a different holder
@@ -638,7 +641,8 @@ These are easy to break from a single file without noticing.
   which starts in `docs/agents.md`. Either way the compiler's exhaustive
   matches are the checklist: the target table's `standard`, and `read` behind
   `Agent::reads`, match every kind and agent with no wildcard, so neither
-  compiles until it says where it goes and where it reads.
+  compiles until it says where it goes and where it reads; `at_root`, behind
+  `Agent::reads_at_root`, matches every agent the same way.
   "Adding an agent" also lists what no match covers: `Agent::ALL`, and an
   agent home's field, option and place in `common::PINNED` and `CLEARED`.
 
