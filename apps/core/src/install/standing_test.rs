@@ -73,3 +73,20 @@ fn an_installation_with_a_copy_gone_is_not_shown_as_held() {
         assert!(standing.present(), "{standing:?}");
     }
 }
+
+#[test]
+fn a_standing_is_said_in_the_word_status_says_it_in() {
+    use crate::status::State;
+
+    for (standing, state) in [
+        (Standing::Current, State::Current),
+        (Standing::Outdated, State::Outdated),
+        (Standing::Edited, State::Edited),
+        (Standing::Missing, State::Missing),
+        (Standing::Orphaned, State::Orphaned),
+        (Standing::Foreign, State::Foreign),
+    ] {
+        assert_eq!(standing.slug(), state.slug());
+    }
+    assert_eq!(Standing::Absent.slug(), "absent");
+}

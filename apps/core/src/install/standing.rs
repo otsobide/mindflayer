@@ -75,6 +75,21 @@ impl Standing {
     pub fn ours(self) -> bool {
         !matches!(self, Standing::Foreign | Standing::Edited)
     }
+
+    /// The word it is said in: what `status` says of an installation that
+    /// stands so (`State::slug`), and `absent` for none, so a line about one
+    /// copy reads as the report about every copy does.
+    pub const fn slug(self) -> &'static str {
+        match self {
+            Standing::Absent => "absent",
+            Standing::Current => "current",
+            Standing::Outdated => "outdated",
+            Standing::Edited => "edited",
+            Standing::Missing => "missing",
+            Standing::Orphaned => "orphaned",
+            Standing::Foreign => "foreign",
+        }
+    }
 }
 
 /// How one copy an installation recorded is found.
