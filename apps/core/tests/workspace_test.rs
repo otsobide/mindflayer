@@ -361,6 +361,34 @@ fn unlink_removes_only_the_entry_it_was_given() {
 }
 
 #[test]
+fn unlinking_the_first_entry_leaves_the_rest_laid_out_as_they_were() {
+    let (_dir, mut workspace, projects) = workspace_with(3);
+    for project in &projects {
+        workspace.link(project).unwrap();
+    }
+
+    workspace.unlink(projects[0].root()).unwrap();
+    assert!(
+        config_text(&workspace).contains("projects = [\"beta\", \"gamma\"]\n"),
+        "{}",
+        config_text(&workspace)
+    );
+
+    let text = config_text(&workspace).replace(
+        "projects = [\"beta\", \"gamma\"]",
+        "projects = [\n    \"beta\",\n    \"gamma\",\n]",
+    );
+    fs::write(workspace.config_path(), text).unwrap();
+    let mut workspace = FlayerWorkspace::open(workspace.root()).unwrap();
+    workspace.unlink(projects[1].root()).unwrap();
+    assert!(
+        config_text(&workspace).contains("projects = [\n    \"gamma\",\n]\n"),
+        "{}",
+        config_text(&workspace)
+    );
+}
+
+#[test]
 fn unlink_says_so_when_the_project_was_never_registered() {
     let (_dir, mut workspace, projects) = workspace_with(1);
 

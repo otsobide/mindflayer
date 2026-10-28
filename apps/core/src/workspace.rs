@@ -1974,7 +1974,24 @@ fn remove_pointing_at(array: &mut toml_edit::Array, root: &Path, target: &Path) 
         match array.get(index).and_then(|value| value.as_str()) {
             Some(entry) if points_at(root, Path::new(entry), target) => {
                 removed.push(PathBuf::from(entry));
-                array.remove(index);
+                let gone = array.remove(index);
+                // What came before an entry is the layout of the place it
+                // held, which the entry after it moves into: so dropping the
+                // first of `["a", "b"]` leaves `["b"]` rather than `[ "b"]`,
+                // and a list laid out a line each keeps its first line's.
+                if let Some(next) = array.get_mut(index) {
+                    let decor = next.decor_mut();
+                    match gone.decor().prefix() {
+                        Some(place) => decor.set_prefix(place.clone()),
+                        None => {
+                            let suffix = decor.suffix().cloned();
+                            decor.clear();
+                            if let Some(suffix) = suffix {
+                                decor.set_suffix(suffix);
+                            }
+                        }
+                    }
+                }
             }
             _ => index += 1,
         }
