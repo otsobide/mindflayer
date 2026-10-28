@@ -115,12 +115,15 @@ variable counts as unset. `--home` still says only where the default lives.
 ### Several flayers
 
 A flayer can be made anywhere and switched to for a whole shell, the way a
-Python virtualenv is. `flayer init DIR` makes one in `DIR`, and `flayer
-activate DIR` prints the shell code that activates it, for `eval` to run:
+Python virtualenv is. `flayer init DIR` makes one in `DIR`, which the
+workspace in your home remembers ([the flayers this machine
+knows](#the-flayers-this-machine-knows)), and `flayer activate DIR` prints the
+shell code that activates it, for `eval` to run:
 
 ```
 $ flayer init ~/flayers/writing
 initialized flayer workspace `writing` in /home/you/flayers/writing/.mindflayer
+  remembered as flayers/writing by the default workspace
 $ cd ~/Projects/collapse
 $ flayer which
 Projects at /home/you/Projects, found walking up from /home/you/Projects/collapse
@@ -167,6 +170,48 @@ code, so `eval` runs nothing and the shell is left as it was:
 $ eval "$(flayer activate ~/notes)"
 error: /home/you/notes: not a flayer workspace (no .mindflayer/flayer.toml)
 ```
+
+### The flayers this machine knows
+
+The workspace in your home keeps a list of the other flayers on this machine,
+so they can all be seen in one place and one picked to activate. `flayer init`
+adds each one it makes, once the workspace in your home is made, and `flayer
+workspaces` lists them, with a `*` before the one a command run where you are
+would use:
+
+```
+$ cd ~/Projects/collapse
+$ flayer workspaces
+  you       /home/you                  no projects; the default one
+  writing   /home/you/flayers/writing  no projects
+* Projects  /home/you/Projects         3 projects, 1 stale; not remembered
+
+  `flayer init <path>` remembers the one in use, and changes nothing else in it
+$ flayer init ~/Projects
+flayer workspace `Projects` already initialized in /home/you/Projects/.mindflayer
+  remembered as Projects by the default workspace
+```
+
+Each one says how many projects it links, and how many of those are stale. A
+flayer made before the workspace in your home was, or by an older Mindflayer,
+is not on the list until `flayer init` runs on it again, which changes nothing
+else in it; the one in use is listed all the same, marked as not remembered.
+Activating a flayer does not remember it, since activating writes nothing. One
+that has gone is listed as `cannot be opened`, with a warning, and `flayer
+workspaces forget` takes it off the list, under every spelling it was
+remembered by, leaving the flayer itself, if it is still there, as it is:
+
+```
+$ flayer workspaces forget ~/flayers/writing
+forgot flayers/writing
+```
+
+The list is a `known` array in `~/.mindflayer/flayer.toml`, which you can read
+and edit by hand, and which an older Mindflayer reads past and keeps. Listing
+never makes the workspace in your home; until something does, it knows no
+flayer, and with `--home ""` there is none to know them. `--json` prints the
+list in the envelope every reading command's `--json` shares, and `w` shows it
+in [the TUI](#the-tui).
 
 ## The two kinds
 
@@ -359,6 +404,10 @@ flayer init [PATH] [--skills DIR] [--rules DIR]
 flayer activate [DIR] [--shell SHELL]
                            # the code that activates a workspace: eval "$(...)"
 flayer which               # the workspace a command here would use, and why
+flayer workspaces [--json] # the flayers this machine knows, the one in use
+                           # marked
+flayer workspaces forget <path>
+                           # take one off that list
 flayer add|edit|rename|remove|templates [-p PROJECT] ...
                            # the same as mind's: the workspace's own by
                            # default, one of its projects with -p
@@ -1366,6 +1415,7 @@ Every key runs a command you could have typed, through the same parser:
 | `g` | gather from a git repository, showing how far it has got; `esc` stops it, until it starts placing | `flayer gather git <url>` |
 | `L` | load another workspace's own skills and rules; enter on a loaded one unloads it | `flayer load <path>`, `flayer unload <path>` |
 | `s` | what is on the shelf | `flayer gather list` |
+| `w` | the flayers this machine knows, the one in use marked | `flayer workspaces` |
 | `i` | install skills and rules from the workspace's own, a loaded workspace, or the shelf; `tab` switches between them, and `v` turns the screen round to every project for one of them | `flayer install` opens it; `a` runs `flayer install -p <project>... --from <origin> <kind:name>` and `flayer uninstall -p <project>... <kind:name>` |
 | `R` | read the disk again | nothing: it changes nothing |
 
