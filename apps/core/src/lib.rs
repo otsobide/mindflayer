@@ -58,6 +58,7 @@ pub use frontmatter::{Document, FrontMatterError};
 pub use gather::{gather, GatherError, Report, Request, Source, DEFAULT_SUBDIRECTORY};
 pub use install::{install, survey, uninstall, Candidate, InstallError, Standing};
 pub use kind::{Kind, Layout, UnknownKind};
+pub use known::{Known, KnownWorkspace};
 pub use ledger::{Ledger, LedgerError, SourceKind, LEDGER_FILE};
 pub use lifecycle::{LifecycleError, Target};
 pub use lock::{LockError, WorkspaceLock};

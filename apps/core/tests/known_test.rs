@@ -225,3 +225,235 @@ fn linking_into_the_default_keeps_what_it_knows() {
     assert!(text.contains("known = [\"flayers/writing\"]"), "{text}");
     assert!(text.contains("projects = [\"collapse\"]"), "{text}");
 }
+
+// ---------------------------------------------------------------------------
+// The list
+// ---------------------------------------------------------------------------
+
+/// Each listed workspace as `(name, path, default, remembered, in use)`.
+fn listed(known: &known::Known) -> Vec<(Option<&str>, &Path, bool, bool, bool)> {
+    known
+        .workspaces
+        .iter()
+        .map(|listed| {
+            (
+                listed.name.as_deref(),
+                listed.path.as_path(),
+                listed.default,
+                listed.remembered,
+                listed.in_use,
+            )
+        })
+        .collect()
+}
+
+#[test]
+fn the_default_comes_first_then_what_it_remembers_in_order() {
+    let (_dir, home, writing) = home_and_writing();
+    let (notes, _) = FlayerWorkspace::init(home.join("notes")).unwrap();
+    known::remember(Some(&home), &writing).unwrap();
+    known::remember(Some(&home), &notes).unwrap();
+
+    let (known, failures) = known::known(Some(&home), None);
+
+    assert!(failures.is_empty(), "{failures:?}");
+    assert_eq!(
+        listed(&known),
+        [
+            (Some("home"), home.as_path(), true, false, false),
+            (Some("writing"), writing.root(), false, true, false),
+            (Some("notes"), notes.root(), false, true, false),
+        ]
+    );
+}
+
+#[test]
+fn the_workspace_in_use_is_marked_where_it_is_listed() {
+    let (_dir, home, writing) = home_and_writing();
+    known::remember(Some(&home), &writing).unwrap();
+
+    let (known, _) = known::known(Some(&home), Some(&writing));
+
+    assert_eq!(
+        listed(&known),
+        [
+            (Some("home"), home.as_path(), true, false, false),
+            (Some("writing"), writing.root(), false, true, true),
+        ]
+    );
+}
+
+#[test]
+fn one_in_use_that_nothing_remembers_is_listed_last() {
+    let (dir, home, writing) = home_and_writing();
+    known::remember(Some(&home), &writing).unwrap();
+    let (elsewhere, _) = FlayerWorkspace::init(dir.path().join("elsewhere")).unwrap();
+
+    let (known, _) = known::known(Some(&home), Some(&elsewhere));
+
+    assert_eq!(
+        listed(&known),
+        [
+            (Some("home"), home.as_path(), true, false, false),
+            (Some("writing"), writing.root(), false, true, false),
+            (Some("elsewhere"), elsewhere.root(), false, false, true),
+        ]
+    );
+}
+
+#[test]
+fn a_remembered_workspace_that_has_gone_is_listed_with_why_and_a_failure() {
+    let (_dir, home, writing) = home_and_writing();
+    known::remember(Some(&home), &writing).unwrap();
+    fs::remove_dir_all(writing.root()).unwrap();
+
+    let (known, failures) = known::known(Some(&home), None);
+
+    let gone = &known.workspaces[1];
+    assert_eq!(gone.name, None);
+    assert_eq!(gone.path, writing.root());
+    assert!(gone.remembered);
+    let why = format!(
+        "{}: not a flayer workspace (no .mindflayer/flayer.toml)",
+        writing.root().display()
+    );
+    assert_eq!(gone.stale.as_deref(), Some(why.as_str()));
+    assert_eq!(failures.len(), 1);
+    assert_eq!(failures[0].to_string(), why);
+}
+
+#[test]
+fn two_spellings_of_one_workspace_are_listed_once() {
+    let (_dir, home, writing) = home_and_writing();
+    known::remember(Some(&home), &writing).unwrap();
+    let path = home.join(FLAYER_DIR).join(FLAYER_CONFIG);
+    let absolute = writing.root().to_string_lossy().into_owned();
+    let text = marker(&home).replace(
+        "known = [\"flayers/writing\"]",
+        &format!("known = [\"flayers/writing\", \"{absolute}\", \".\"]"),
+    );
+    fs::write(&path, text).unwrap();
+
+    let (known, _) = known::known(Some(&home), None);
+
+    // `.` is the default itself, which is listed once, as remembered too.
+    assert_eq!(
+        listed(&known),
+        [
+            (Some("home"), home.as_path(), true, true, false),
+            (Some("writing"), writing.root(), false, true, false),
+        ]
+    );
+}
+
+#[test]
+fn each_workspace_counts_its_projects_and_the_stale_ones() {
+    let (_dir, home, writing) = home_and_writing();
+    known::remember(Some(&home), &writing).unwrap();
+    let mut writing = FlayerWorkspace::open(writing.root()).unwrap();
+    for name in ["essays", "letters", "gone"] {
+        let (project, _) = MindProject::init(writing.root().join(name)).unwrap();
+        writing.link(&project).unwrap();
+    }
+    fs::remove_dir_all(writing.root().join("gone")).unwrap();
+
+    let (known, failures) = known::known(Some(&home), None);
+
+    assert!(
+        failures.is_empty(),
+        "a stale project is the count's, not a failure"
+    );
+    assert_eq!(
+        (
+            known.workspaces[0].projects,
+            known.workspaces[0].stale_projects
+        ),
+        (0, 0)
+    );
+    assert_eq!(
+        (
+            known.workspaces[1].projects,
+            known.workspaces[1].stale_projects
+        ),
+        (3, 1)
+    );
+}
+
+#[test]
+fn without_a_default_only_the_one_in_use_is_listed() {
+    let (_dir, _home, writing) = home_and_writing();
+
+    let (nothing, _) = known::known(None, None);
+    let (in_use, _) = known::known(None, Some(&writing));
+
+    assert!(nothing.workspaces.is_empty());
+    assert_eq!(
+        listed(&in_use),
+        [(Some("writing"), writing.root(), false, false, true)]
+    );
+}
+
+#[test]
+fn listing_never_makes_the_default_nor_marks_it_unmade() {
+    let dir = TempDir::new().unwrap();
+    let home = dir.path().join("home");
+    fs::create_dir(&home).unwrap();
+    let unmade = FlayerWorkspace::unmade(&home).unwrap();
+
+    let (known, failures) = known::known(Some(&home), Some(&unmade));
+
+    assert!(known.workspaces.is_empty());
+    assert!(failures.is_empty());
+    assert!(!home.join(FLAYER_DIR).exists(), "the default was made");
+}
+
+#[test]
+fn a_default_that_will_not_open_is_listed_as_stale() {
+    let (_dir, home, writing) = home_and_writing();
+    known::remember(Some(&home), &writing).unwrap();
+    let newer = marker(&home).replace("version = 2", "version = 99");
+    fs::write(home.join(FLAYER_DIR).join(FLAYER_CONFIG), newer).unwrap();
+
+    let (known, failures) = known::known(Some(&home), None);
+
+    assert_eq!(known.workspaces.len(), 1, "what it knows cannot be read");
+    assert!(known.workspaces[0].default);
+    assert!(known.workspaces[0].stale.is_some());
+    assert!(matches!(failures[..], [WorkspaceError::Version { .. }]));
+}
+
+#[test]
+fn the_list_serializes_each_field_by_its_name() {
+    let (_dir, home, writing) = home_and_writing();
+    known::remember(Some(&home), &writing).unwrap();
+
+    let (known, _) = known::known(Some(&home), Some(&writing));
+
+    assert_eq!(
+        serde_json::to_value(&known).unwrap(),
+        serde_json::json!({
+            "workspaces": [
+                {
+                    "name": "home",
+                    "path": home.to_string_lossy(),
+                    "default": true,
+                    "remembered": false,
+                    "in_use": false,
+                    "projects": 0,
+                    "stale_projects": 0,
+                    "stale": null,
+                },
+                {
+                    "name": "writing",
+                    "path": writing.root().to_string_lossy(),
+                    "default": false,
+                    "remembered": true,
+                    "in_use": true,
+                    "projects": 0,
+                    "stale_projects": 0,
+                    "stale": null,
+                },
+            ]
+        })
+    );
+}

@@ -26,10 +26,166 @@
 
 use std::path::{Path, PathBuf};
 
+use serde::Serialize;
+
+use crate::paths;
 use crate::workspace::{
     absolute, same_directory, FlayerWorkspace, Registration, WorkspaceError, FLAYER_CONFIG,
     FLAYER_DIR,
 };
+
+/// Every workspace this machine knows, as `flayer workspaces` lists them.
+///
+/// What it serializes to is a contract, as a status report's is: each field
+/// by its name.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize)]
+pub struct Known {
+    /// The default workspace first, once it is made; then each one its
+    /// `known` names, in the order it names them; then the one in use, when
+    /// it is none of those. Each directory once, however many spellings
+    /// point at it, as every report lists a project once.
+    pub workspaces: Vec<KnownWorkspace>,
+}
+
+/// One workspace this machine knows.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct KnownWorkspace {
+    /// What its marker calls it; none for one that would not open, which has
+    /// no marker to read.
+    pub name: Option<String>,
+    /// Where it is.
+    #[serde(serialize_with = "paths::lossy")]
+    pub path: PathBuf,
+    /// The default workspace, in home: listed for being the default,
+    /// whatever its own `known` says.
+    pub default: bool,
+    /// Whether the default workspace's `known` names it, which is what
+    /// `flayer workspaces forget` takes out. False for the default itself,
+    /// and for the one in use when nothing remembers it.
+    pub remembered: bool,
+    /// The one in use where the list was asked for, as `resolve` chose it.
+    pub in_use: bool,
+    /// How many projects it links, each directory once, stale ones among
+    /// them: its own count, which says which of several flayers is which.
+    pub projects: usize,
+    /// How many of those would not open.
+    pub stale_projects: usize,
+    /// Why it would not open, when it would not: listed rather than left
+    /// out, since a workspace that has gone is the one somebody has to find
+    /// to forget it.
+    pub stale: Option<String>,
+}
+
+impl KnownWorkspace {
+    /// A workspace that opened, with its projects counted.
+    fn of(workspace: &FlayerWorkspace) -> Self {
+        let mut roots: Vec<PathBuf> = Vec::new();
+        let mut stale_projects = 0;
+        for member in workspace.members() {
+            if roots.iter().any(|root| same_directory(root, &member.root)) {
+                continue;
+            }
+            if member.project.is_err() {
+                stale_projects += 1;
+            }
+            roots.push(member.root);
+        }
+        Self {
+            name: Some(workspace.name().to_owned()),
+            path: workspace.root().to_path_buf(),
+            default: false,
+            remembered: false,
+            in_use: false,
+            projects: roots.len(),
+            stale_projects,
+            stale: None,
+        }
+    }
+
+    /// One at `path` that would not open, and why.
+    fn gone(path: PathBuf, error: &WorkspaceError) -> Self {
+        Self {
+            name: None,
+            path,
+            default: false,
+            remembered: false,
+            in_use: false,
+            projects: 0,
+            stale_projects: 0,
+            stale: Some(error.to_string()),
+        }
+    }
+}
+
+/// Every workspace the default one at `home` knows, itself first, with
+/// `in_use` marked, or listed after them when nothing remembers it; and
+/// each that would not open, as a failure beside the list.
+///
+/// A read: the default workspace is opened only once it is made, and never
+/// made for the occasion, and nothing is written. One that has gone is
+/// listed with why rather than raised, so the rest are still shown. An
+/// `in_use` that is not made, the default before anything has made it, is
+/// no workspace to mark.
+pub fn known(
+    home: Option<&Path>,
+    in_use: Option<&FlayerWorkspace>,
+) -> (Known, Vec<WorkspaceError>) {
+    let mut workspaces: Vec<KnownWorkspace> = Vec::new();
+    let mut failures = Vec::new();
+    match made_default(home) {
+        Ok(Some(default)) => {
+            workspaces.push(KnownWorkspace {
+                default: true,
+                ..KnownWorkspace::of(&default)
+            });
+            for entry in default.remembered() {
+                if let Some(listed) = workspaces
+                    .iter_mut()
+                    .find(|listed| same_directory(&listed.path, &entry.root))
+                {
+                    listed.remembered = true;
+                    continue;
+                }
+                let listed = match entry.workspace {
+                    Ok(workspace) => KnownWorkspace::of(&workspace),
+                    Err(error) => {
+                        let gone = KnownWorkspace::gone(entry.root, &error);
+                        failures.push(error);
+                        gone
+                    }
+                };
+                workspaces.push(KnownWorkspace {
+                    remembered: true,
+                    ..listed
+                });
+            }
+        }
+        Ok(None) => {}
+        // Its marker is there but will not open, newer or malformed: listed
+        // as the default that would not, since what it knows cannot be read.
+        Err(error) => {
+            let path = home.map(Path::to_path_buf).unwrap_or_default();
+            workspaces.push(KnownWorkspace {
+                default: true,
+                ..KnownWorkspace::gone(absolute(&path).unwrap_or(path), &error)
+            });
+            failures.push(error);
+        }
+    }
+    if let Some(in_use) = in_use.filter(|workspace| workspace.is_made()) {
+        match workspaces
+            .iter_mut()
+            .find(|listed| same_directory(&listed.path, in_use.root()))
+        {
+            Some(listed) => listed.in_use = true,
+            None => workspaces.push(KnownWorkspace {
+                in_use: true,
+                ..KnownWorkspace::of(in_use)
+            }),
+        }
+    }
+    (Known { workspaces }, failures)
+}
 
 /// The default workspace at `home`, when there is one and it is made.
 ///

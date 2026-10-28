@@ -1600,8 +1600,19 @@ impl FlayerWorkspace {
     /// Only one level deep: what a loaded workspace loads itself is not
     /// followed, so two workspaces loading each other is not a loop.
     pub fn loads(&self) -> Vec<Loaded> {
-        self.config
-            .loaded
+        self.opened(&self.config.loaded)
+    }
+
+    /// Every `known` entry, in marker order, with the workspace it opens or
+    /// the reason it does not, as [`loads`](Self::loads) has them: what
+    /// [`crate::known::known`] lists, a workspace that has gone included.
+    pub(crate) fn remembered(&self) -> Vec<Loaded> {
+        self.opened(&self.config.known)
+    }
+
+    /// Each of `entries`, resolved against the root, with the workspace there.
+    fn opened(&self, entries: &[PathBuf]) -> Vec<Loaded> {
+        entries
             .iter()
             .map(|entry| {
                 let root = paths::normalize(&self.root.join(entry));
@@ -1926,7 +1937,8 @@ pub struct Member {
     pub project: Result<MindProject, WorkspaceError>,
 }
 
-/// One entry in a workspace's `loaded` list, and what it opens.
+/// One entry in a workspace's `loaded` list, or in the default workspace's
+/// `known`, and what it opens.
 #[derive(Debug)]
 pub struct Loaded {
     /// The entry as the marker spells it.
