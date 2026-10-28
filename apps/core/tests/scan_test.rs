@@ -4,7 +4,7 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use mindflayer_core::scan::{Request, DEFAULT_DEPTH, MAX_LISTED};
+use mindflayer_core::scan::{Reason, Request, DEFAULT_DEPTH, MAX_LISTED};
 use mindflayer_core::{
     scan, Agent, Directories, FlayerWorkspace, Found, MindProject, ScanFailure, Share,
     FLAYER_CONFIG, FLAYER_DIR, MIND_DIR, SETTINGS_FILE,
@@ -446,4 +446,157 @@ fn a_project_whose_settings_will_not_open_is_found_without_an_id_and_said() {
         scan.failures
     );
     assert_eq!(scan.failures[0].path(), settings);
+}
+
+/// Each one found by its route, with its reason and the agent files it
+/// holds.
+fn reasons(found: &[Found]) -> Vec<(&str, Reason, Vec<&str>)> {
+    found
+        .iter()
+        .map(|found| {
+            (
+                found.route.as_str(),
+                found.reason,
+                found.agent_files.iter().map(String::as_str).collect(),
+            )
+        })
+        .collect()
+}
+
+#[test]
+fn each_one_found_says_why_it_is_worth_linking() {
+    let dir = TempDir::new().unwrap();
+    let (workspace, _) = FlayerWorkspace::init(dir.path()).unwrap();
+    fs::create_dir(dir.path().join("current")).unwrap();
+    MindProject::init_asked(
+        dir.path().join("current"),
+        &Agent::ALL,
+        Share::Local,
+        &Directories::default(),
+    )
+    .unwrap();
+    fs::create_dir(dir.path().join("older")).unwrap();
+    MindProject::init(dir.path().join("older")).unwrap();
+    let unread = dir.path().join("unread").join(MIND_DIR).join(SETTINGS_FILE);
+    fs::create_dir_all(unread.parent().unwrap()).unwrap();
+    fs::write(&unread, "{ not toml\n").unwrap();
+    let instructed = dir.path().join("instructed");
+    git_repository(&instructed);
+    fs::write(instructed.join("AGENTS.md"), "# Agents\n").unwrap();
+    fs::create_dir(instructed.join(".claude")).unwrap();
+    let configured = dir.path().join("configured");
+    git_repository(&configured);
+    fs::write(configured.join("opencode.json"), "{}\n").unwrap();
+    git_repository(&dir.path().join("plain"));
+
+    let scan = scan(&workspace, &Request::default());
+
+    assert_eq!(
+        reasons(&scan.found),
+        vec![
+            ("configured", Reason::Agents, vec!["opencode.json"]),
+            ("current", Reason::Id, vec![]),
+            ("instructed", Reason::Agents, vec![".claude", "AGENTS.md"]),
+            ("older", Reason::Mind, vec![]),
+            ("plain", Reason::Git, vec![]),
+            ("unread", Reason::Mind, vec![]),
+        ]
+    );
+    assert_eq!(scan.failures.len(), 1, "{:?}", scan.failures);
+}
+
+#[test]
+fn every_name_an_agent_reads_at_the_root_is_an_agent_file() {
+    let dir = TempDir::new().unwrap();
+    let (workspace, _) = FlayerWorkspace::init(dir.path()).unwrap();
+    // A repository for each agent, named for it so they are found in report
+    // order, holding every name that agent reads at the root.
+    for agent in Agent::ALL {
+        let repository = dir.path().join(agent.name());
+        git_repository(&repository);
+        for name in agent.reads_at_root() {
+            fs::write(repository.join(name), "").unwrap();
+        }
+    }
+
+    let scan = scan(&workspace, &Request::default());
+
+    assert_eq!(scan.found.len(), Agent::ALL.len());
+    for (found, agent) in scan.found.iter().zip(Agent::ALL) {
+        let names: Vec<String> = agent
+            .reads_at_root()
+            .iter()
+            .map(|name| name.display().to_string())
+            .collect();
+        assert_eq!(found.agent_files, names, "{agent}");
+        assert_eq!(found.reason, Reason::Agents, "{agent}");
+    }
+}
+
+#[test]
+fn only_what_sits_at_a_repositorys_root_counts_as_an_agent_file() {
+    let dir = TempDir::new().unwrap();
+    let (workspace, _) = FlayerWorkspace::init(dir.path()).unwrap();
+    let repository = dir.path().join("repo");
+    git_repository(&repository);
+    fs::create_dir_all(repository.join("docs/.claude")).unwrap();
+    fs::write(repository.join("docs/AGENTS.md"), "").unwrap();
+    // Not one of the names: `.claude.md` is not `.claude`.
+    fs::write(repository.join(".claude.md"), "").unwrap();
+
+    let scan = scan(&workspace, &Request::default());
+
+    assert_eq!(reasons(&scan.found), vec![("repo", Reason::Git, vec![])]);
+}
+
+#[test]
+fn agent_files_alone_do_not_make_a_folder_a_candidate() {
+    let dir = TempDir::new().unwrap();
+    let (workspace, _) = FlayerWorkspace::init(dir.path()).unwrap();
+    let notes = dir.path().join("notes");
+    fs::create_dir_all(notes.join(".claude")).unwrap();
+    fs::write(notes.join("CLAUDE.md"), "").unwrap();
+    git_repository(&notes.join("inside"));
+
+    let scan = scan(&workspace, &Request::default());
+
+    // Neither a project nor a repository, so still walked through.
+    assert_eq!(routes(&scan.found), vec!["notes/inside"]);
+}
+
+#[test]
+fn a_mind_project_lists_the_agent_files_it_holds_beside_its_reason() {
+    let dir = TempDir::new().unwrap();
+    let (workspace, _) = FlayerWorkspace::init(dir.path()).unwrap();
+    let alpha = dir.path().join("alpha");
+    fs::create_dir(&alpha).unwrap();
+    MindProject::init_asked(&alpha, &Agent::ALL, Share::Local, &Directories::default()).unwrap();
+    fs::create_dir_all(alpha.join(".agents/skills")).unwrap();
+    fs::write(alpha.join("CLAUDE.md"), "").unwrap();
+
+    let scan = scan(&workspace, &Request::default());
+
+    assert_eq!(
+        reasons(&scan.found),
+        vec![("alpha", Reason::Id, vec![".agents", "CLAUDE.md"])]
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn an_agent_file_that_is_a_link_counts_without_being_followed() {
+    let dir = TempDir::new().unwrap();
+    let (workspace, _) = FlayerWorkspace::init(dir.path()).unwrap();
+    let repository = dir.path().join("repo");
+    git_repository(&repository);
+    // Pointing nowhere: what it is called is what counts.
+    std::os::unix::fs::symlink("AGENTS.md", repository.join("CLAUDE.md")).unwrap();
+
+    let scan = scan(&workspace, &Request::default());
+
+    assert_eq!(
+        reasons(&scan.found),
+        vec![("repo", Reason::Agents, vec!["CLAUDE.md"])]
+    );
+    assert!(scan.failures.is_empty(), "{:?}", scan.failures);
 }

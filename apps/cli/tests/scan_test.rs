@@ -197,6 +197,8 @@ struct Found {
     mind: bool,
     linked: bool,
     moved: Option<String>,
+    reason: String,
+    agent_files: Vec<String>,
 }
 
 #[test]
@@ -204,6 +206,7 @@ fn scan_json_is_the_envelope_with_each_one_found_and_its_id() {
     let dir = workspace_with_two();
     flayer(dir.path(), &["unlink", "beta"]).unwrap();
     fs::create_dir_all(dir.path().join("gamma/.git")).unwrap();
+    fs::write(dir.path().join("gamma/AGENTS.md"), "# Agents\n").unwrap();
 
     let outcome = flayer(dir.path(), &["scan", "--json", "--depth", "2"]).unwrap();
 
@@ -228,6 +231,8 @@ fn scan_json_is_the_envelope_with_each_one_found_and_its_id() {
         bool,
         bool,
         Option<&'a str>,
+        &'a str,
+        Vec<&'a str>,
     );
     let found: Vec<Seen> = report
         .found
@@ -240,6 +245,8 @@ fn scan_json_is_the_envelope_with_each_one_found_and_its_id() {
                 found.mind,
                 found.linked,
                 found.moved.as_deref(),
+                found.reason.as_str(),
+                found.agent_files.iter().map(String::as_str).collect(),
             )
         })
         .collect();
@@ -248,9 +255,36 @@ fn scan_json_is_the_envelope_with_each_one_found_and_its_id() {
     assert_eq!(
         found,
         vec![
-            (alpha.as_str(), "alpha", id("alpha"), true, true, None),
-            (beta.as_str(), "beta", id("beta"), true, false, None),
-            (gamma.as_str(), "gamma", None, false, false, None),
+            (
+                alpha.as_str(),
+                "alpha",
+                id("alpha"),
+                true,
+                true,
+                None,
+                "id",
+                vec![]
+            ),
+            (
+                beta.as_str(),
+                "beta",
+                id("beta"),
+                true,
+                false,
+                None,
+                "id",
+                vec![]
+            ),
+            (
+                gamma.as_str(),
+                "gamma",
+                None,
+                false,
+                false,
+                None,
+                "agents",
+                vec!["AGENTS.md"]
+            ),
         ]
     );
     assert!(id("alpha").is_some());
