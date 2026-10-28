@@ -84,7 +84,7 @@ fn a_skill_that_cannot_be_read_is_a_warning_and_a_non_zero_exit() {
 
     assert!(outcome.stdout.contains("good"));
     assert_eq!(outcome.stderr.len(), 1);
-    assert!(outcome.stderr[0].contains("front matter"));
+    assert!(outcome.stderr[0].text.contains("front matter"));
     assert!(!outcome.ok);
 }
 
@@ -106,9 +106,9 @@ fn a_skill_with_nested_metadata_is_still_listed_with_a_warning() {
         outcome.stdout
     );
     assert_eq!(outcome.stderr.len(), 1, "{:?}", outcome.stderr);
-    assert!(outcome.stderr[0].starts_with("warning: "));
+    assert!(outcome.stderr[0].text.starts_with("warning: "));
     assert!(
-        outcome.stderr[0].ends_with(
+        outcome.stderr[0].text.ends_with(
             "SKILL.md: `metadata` entry `owner` is not a string, so it is ignored, and left in the file as written"
         ),
         "{}",
@@ -180,7 +180,8 @@ fn a_gathered_name_cannot_put_a_carriage_return_on_the_terminal() {
     let validated = flayer(dir.path(), &["validate"]).unwrap();
 
     assert!(!gathered.stderr.is_empty());
-    for line in gathered.stderr.iter().chain([&validated.stdout]) {
+    let said = gathered.stderr.iter().map(|line| &line.text);
+    for line in said.chain([&validated.stdout]) {
         assert!(!line.contains('\r'), "{line:?}");
     }
     assert!(

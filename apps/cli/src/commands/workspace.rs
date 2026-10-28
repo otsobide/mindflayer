@@ -13,7 +13,7 @@ use mindflayer_core::{
 
 use super::{all_or_nothing, reading, targets};
 use crate::render::{as_stored, plural, printable, table};
-use crate::{CliError, Failure, Lookup, Outcome};
+use crate::{CliError, Failure, Lookup, Outcome, Warning};
 
 /// `load`, at either level: the paths are typed from `directory`, and the
 /// workspace they go into is resolved from `start` (the directory itself
@@ -232,10 +232,10 @@ fn offering(workspace: &FlayerWorkspace, entry: &str) -> String {
 }
 
 /// What the workspaces `workspace` loads could not offer, as `warning:` lines.
-pub(crate) fn load_warnings(workspace: &FlayerWorkspace) -> Vec<String> {
+pub(crate) fn load_warnings(workspace: &FlayerWorkspace) -> Vec<Warning> {
     mindflayer_core::install::offered_by_loads(workspace)
         .failures
         .iter()
-        .map(|failure| format!("warning: {failure}"))
+        .map(|failure| Warning::coded(failure.code(), format!("warning: {failure}")))
         .collect()
 }

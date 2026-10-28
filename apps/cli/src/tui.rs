@@ -395,18 +395,21 @@ pub fn execute(words: &[String], base: &Path, lookup: &Lookup, watch: &Watch) ->
         _ => return Done::failed(command, "not a `mind` or `flayer` command"),
     };
 
+    // The text alone: a screen shows each line as a terminal would, and a
+    // code beside it is for a front end that acts on one, which this does
+    // not.
     match result {
         Ok(outcome) => Done {
             command,
             stdout: outcome.stdout,
-            stderr: outcome.stderr,
+            stderr: outcome.stderr.into_iter().map(|line| line.text).collect(),
             error: None,
             ok: outcome.ok,
         },
         Err(failure) => Done {
             command,
             stdout: String::new(),
-            stderr: failure.warnings,
+            stderr: failure.warnings.into_iter().map(|line| line.text).collect(),
             error: Some(failure.error.to_string()),
             ok: false,
         },

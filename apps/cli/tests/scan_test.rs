@@ -167,7 +167,7 @@ fn scan_of_a_folder_that_is_not_there_warns_and_still_reports_the_rest() {
     assert_eq!(outcome.stdout, "alpha  linked\nbeta   linked\n");
     assert_eq!(outcome.stderr.len(), 1, "{:?}", outcome.stderr);
     assert!(
-        outcome.stderr[0].starts_with(&format!(
+        outcome.stderr[0].text.starts_with(&format!(
             "warning: {}: cannot be listed",
             dir.path().join("wrok").display()
         )),

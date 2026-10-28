@@ -1277,6 +1277,20 @@ The CLI prints those on stderr as warnings and exits non-zero: visible, but not
 in the way of the answer. Asked for JSON, it puts them in the envelope beside
 the data instead ([JSON, in one envelope](#json-in-one-envelope)).
 
+Each line it says beside a report is a `render::Warning`, an `Outcome`'s and a
+`Failure`'s alike: the text a terminal shows, word for word, and beside it the
+code of what it says ([a code for what went wrong](#a-code-for-what-went-wrong)),
+taken from the value the line renders, core's error or failure or the CLI's
+own. The panel acts on a warning by its code, and a front end running a
+command line hands it the code with the text. A hint or a note has none, nor
+does a line the CLI words from what it found rather than from something that
+went wrong; a line built from text core handed over has none either, until
+core hands it over with its code, as a render's warnings come (`code::Said`).
+Kept on the line rather than in a list beside the lines, which every line
+pushed would have to keep in step with, and compared with a string by its text
+alone, so a test of what a terminal shows reads as it did. The TUI keeps the
+text alone: it shows a line as a terminal would.
+
 The distinction the code draws is between a problem and an absence. A project
 with no skills folder yet is not a failure, it is a project nobody has added a
 skill to. A skills folder that exists and cannot be listed is a
@@ -1459,7 +1473,9 @@ variant is missing from it but not from the list beside it.
 Nothing prints a code yet. A member's `error` was the first type to hold
 one, and the snapshot every front end reads holds them wherever it says what
 went wrong ([the read model](#the-read-model)), each a `code::Said`, the code
-beside its message; the CLI's warnings and failures carry them from #63.
+beside its message; the CLI's warnings and failures carry them beside their
+text ([failures are collected, not raised](#failures-are-collected-not-raised)),
+which the panel's backend hands on (#67).
 
 **The CLI's errors have codes too**, since what a command could not do
 reaches the panel beside what core could not: `CliError::code`, given by the

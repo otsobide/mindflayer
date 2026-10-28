@@ -12,10 +12,15 @@ use super::consulted;
 use super::read::looked_in;
 use super::settings::spoken;
 use crate::render::{json, printable, table};
-use crate::{CliError, Failure, Lookup, Outcome};
+use crate::{CliError, Failure, Lookup, Outcome, Warning};
 
 /// What the state column says of an entry that would not open.
 const STALE: &str = "stale";
+
+/// What a report has to say beside it, without the `warning: ` a table
+/// puts before it, and the code of what it says when that has one: what
+/// could not be read does, and what a project's agents do not see does not.
+type Said = (Option<&'static str>, String);
 
 /// `flayer status`: every project the workspace links, against its ledger,
 /// which core reads without making it; as JSON when `as_json`.
@@ -78,7 +83,7 @@ pub(crate) fn status_here(
     let (workspace, unread) = match consulted(&project, lookup) {
         Ok(workspace) => (workspace, None),
         Err(error @ CliError::Chosen { .. }) => return Err(error.into()),
-        Err(error) => (None, Some(error.to_string())),
+        Err(error) => (None, Some((Some(error.code()), error.to_string()))),
     };
     if let Some(workspace) = workspace
         .as_ref()
@@ -87,13 +92,13 @@ pub(crate) fn status_here(
         return Ok(status_of_project(workspace, project, as_json));
     }
     let (status, failures) = Status::of_project(&project, None);
-    let mut warnings: Vec<String> = unread.iter().cloned().collect();
+    let mut warnings: Vec<Said> = unread.iter().cloned().collect();
     warnings.extend(said(&status, &failures));
     let mut outcome = report(&status, warnings, Layout::one(as_json), || vec![project]);
     // Not when the workspace could not be read: the warning says why
     // nothing reads as installed, and that none links the project is not
     // known.
-    outcome.stderr.extend(match (workspace, unread) {
+    let hint = match (workspace, unread) {
         (Some(workspace), _) => Some(format!(
             "hint: the workspace at {} does not link this project, so nothing in it reads as installed; \
              `mind link` links it",
@@ -103,7 +108,8 @@ pub(crate) fn status_here(
             "hint: no workspace links this project, so nothing in it reads as installed",
         )),
         (None, Some(_)) => None,
-    });
+    };
+    outcome.stderr.extend(hint.map(Warning::from));
     Ok(outcome)
 }
 
@@ -145,8 +151,11 @@ impl Layout {
 /// `targets reset`, ends the first; the second is what a rule about some
 /// files is, or a local project's tracked `AGENTS.md` keeps from Codex and
 /// OpenCode, which sharing the project or `edit_tracked` ends.
-fn said(status: &Status, failures: &[StatusFailure]) -> Vec<String> {
-    let mut said: Vec<String> = failures.iter().map(ToString::to_string).collect();
+fn said(status: &Status, failures: &[StatusFailure]) -> Vec<Said> {
+    let mut said: Vec<Said> = failures
+        .iter()
+        .map(|failure| (Some(failure.code()), failure.to_string()))
+        .collect();
     for project in &status.projects {
         let name = project
             .name
@@ -157,13 +166,13 @@ fn said(status: &Status, failures: &[StatusFailure]) -> Vec<String> {
             project
                 .unreached
                 .iter()
-                .map(|unreached| unread(&printable(name), unreached, false)),
+                .map(|unreached| (None, unread(&printable(name), unreached, false))),
         );
         said.extend(
             project
                 .missed
                 .iter()
-                .map(|missed| unseen(&printable(name), missed)),
+                .map(|missed| (None, unseen(&printable(name), missed))),
         );
     }
     said
@@ -232,16 +241,19 @@ pub(crate) fn unread(project: &str, unreached: &Unreached, would: bool) -> Strin
 /// nothing, to say where it looked.
 fn report(
     status: &Status,
-    warnings: Vec<String>,
+    warnings: Vec<Said>,
     layout: Layout,
     looked: impl FnOnce() -> Vec<MindProject>,
 ) -> Outcome {
     let mut outcome = match layout {
-        Layout::Json => json(status, warnings),
+        Layout::Json => json(status, warnings.into_iter().map(|(_, said)| said).collect()),
         Layout::Table { across } => {
-            let stderr: Vec<String> = warnings
-                .iter()
-                .map(|warning| format!("warning: {warning}"))
+            let stderr: Vec<Warning> = warnings
+                .into_iter()
+                .map(|(code, said)| Warning {
+                    text: format!("warning: {said}"),
+                    code,
+                })
                 .collect();
             let ok = stderr.is_empty();
             let stdout = rows(status, across).unwrap_or_else(|| {
@@ -263,7 +275,7 @@ fn report(
 /// has moved it. A hint rather than a warning, so the exit status is the
 /// report's: the project is read whole, and what the report says of it is
 /// true.
-fn older(status: &Status) -> Vec<String> {
+fn older(status: &Status) -> Vec<Warning> {
     status
         .projects
         .iter()
@@ -276,11 +288,14 @@ fn older(status: &Status) -> Vec<String> {
                 .as_deref()
                 .or(project.entry.as_deref())
                 .unwrap_or("?");
-            Some(format!(
-                "hint: {} is marked by a {marker}, which `mind migrate` moves to a {}",
-                printable(name),
-                MarkerFile::SettingsToml
-            ))
+            Some(
+                format!(
+                    "hint: {} is marked by a {marker}, which `mind migrate` moves to a {}",
+                    printable(name),
+                    MarkerFile::SettingsToml
+                )
+                .into(),
+            )
         })
         .collect()
 }

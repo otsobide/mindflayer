@@ -332,7 +332,8 @@ fn a_stale_entry_is_said_beside_what_the_rest_update() {
     );
     assert_eq!(planned.stderr.len(), 1, "{:?}", planned.stderr);
     assert!(
-        planned.stderr[0].starts_with("warning: ") && planned.stderr[0].contains("old-api"),
+        planned.stderr[0].text.starts_with("warning: ")
+            && planned.stderr[0].text.contains("old-api"),
         "{:?}",
         planned.stderr
     );
@@ -357,7 +358,8 @@ fn every_entry_stale_is_not_said_as_nothing_linked() {
     );
     assert_eq!(planned.stderr.len(), 1, "{:?}", planned.stderr);
     assert!(
-        planned.stderr[0].starts_with("warning: ") && planned.stderr[0].contains("old-api"),
+        planned.stderr[0].text.starts_with("warning: ")
+            && planned.stderr[0].text.contains("old-api"),
         "{:?}",
         planned.stderr
     );

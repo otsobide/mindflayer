@@ -378,7 +378,9 @@ fn which_says_the_default_workspace_is_not_made_yet_and_leaves_it_so() {
         )
     );
     assert!(
-        outcome.stderr[0].starts_with("hint: no workspace here or above"),
+        outcome.stderr[0]
+            .text
+            .starts_with("hint: no workspace here or above"),
         "{:?}",
         outcome.stderr
     );

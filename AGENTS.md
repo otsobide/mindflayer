@@ -204,6 +204,12 @@ These are easy to break from a single file without noticing.
   source is.
 - **Output is built, then printed.** Commands return an `Outcome` (stdout
   text, stderr lines, ok), so tests assert on the exact text a user sees.
+  Each stderr line, and each of a `Failure`'s warnings, is a
+  `render::Warning`: the text a terminal shows, word for word, and beside
+  it the code of what it says (`code()` of the core error, refusal or
+  failure it renders, or `CliError::code`), `None` for a hint or a note. A
+  line built from a value with a code takes that code; never a code spelled
+  by hand for a line built from text.
 - **Reading commands print JSON in one envelope, and its names are a
   contract.** A reading command's `--json` prints `render::json`'s
   `{"version": 2, "data": ..., "warnings": [...]}`, never a shape of its own,

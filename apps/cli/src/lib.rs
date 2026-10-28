@@ -33,4 +33,4 @@ pub use parse::{
     GatherCommand, Migrated, ShareMode, TargetsChange, WorkspacesCommand,
 };
 pub use progress::ProgressLine;
-pub use render::{Failure, Outcome};
+pub use render::{Failure, Outcome, Warning};

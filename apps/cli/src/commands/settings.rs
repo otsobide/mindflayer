@@ -18,7 +18,7 @@ use super::gather::scrubbed;
 use super::install::{cleared, shown};
 use super::status::unread;
 use crate::render::printable;
-use crate::{AgentNames, AgentsChange, CliError, Failure, Lookup, Outcome, TargetsChange};
+use crate::{AgentNames, AgentsChange, CliError, Failure, Lookup, Outcome, TargetsChange, Warning};
 
 /// The change an `agents` line asks for, and whether it said `--yes`,
 /// before or after `add` or `remove`.
@@ -78,7 +78,10 @@ pub(crate) fn change_here(
     let (workspace, unread) = match consulted(project, lookup) {
         Ok(workspace) => (workspace, None),
         Err(error @ CliError::Chosen { .. }) => return Err(error.into()),
-        Err(error) => (None, Some(format!("warning: {error}"))),
+        Err(error) => (
+            None,
+            Some(Warning::coded(error.code(), format!("warning: {error}"))),
+        ),
     };
     let mut result = change_project(workspace.as_ref(), project, change, yes, &lookup.agents);
     // Only beside a change made or laid out: a refusal changes nothing and
@@ -104,7 +107,7 @@ pub(crate) fn change_here(
         _ => None,
     };
     let unreadable = unread.is_some();
-    let said: Vec<String> = unread.into_iter().chain(hint).collect();
+    let said: Vec<Warning> = unread.into_iter().chain(hint.map(Warning::from)).collect();
     match &mut result {
         Ok(outcome) => {
             outcome.ok &= !unreadable;
@@ -180,7 +183,10 @@ fn change_project(
         outcome.stderr.extend(warnings);
     }
     for failure in &applied.failures {
-        outcome.stderr.push(format!("warning: {failure}"));
+        outcome.stderr.push(Warning::coded(
+            failure.code(),
+            format!("warning: {failure}"),
+        ));
         outcome.ok = false;
     }
     outcome.stderr.extend(outside(project, plan));
@@ -190,10 +196,10 @@ fn change_project(
 
 /// A note for each kind the project, as the change leaves it, installs only
 /// where some of its agents do not read.
-fn unreached(project: &MindProject, plan: &Plan, done: bool) -> Vec<String> {
+fn unreached(project: &MindProject, plan: &Plan, done: bool) -> Vec<Warning> {
     plan.unreached
         .iter()
-        .map(|unreached| format!("note: {}", unread(project.name(), unreached, !done)))
+        .map(|unreached| format!("note: {}", unread(project.name(), unreached, !done)).into())
         .collect()
 }
 
@@ -201,7 +207,7 @@ fn unreached(project: &MindProject, plan: &Plan, done: bool) -> Vec<String> {
 /// installation was not copied to, once the change is made: over somebody's
 /// skill, or for want of a copy to make it from. In a dry run each is a line
 /// of what would happen instead ([`moved`]).
-pub(crate) fn not_copied(project: &MindProject, retarget: &Retarget) -> Vec<String> {
+pub(crate) fn not_copied(project: &MindProject, retarget: &Retarget) -> Vec<Warning> {
     let into = project.name();
     let name = &retarget.name;
     retarget
@@ -210,14 +216,20 @@ pub(crate) fn not_copied(project: &MindProject, retarget: &Retarget) -> Vec<Stri
         .filter_map(|left| {
             let at = shown(project, &left.path);
             match &left.why {
-                Why::Foreign => Some(format!(
-                    "warning: {into} already has a {name} at {at} that Mindflayer did not put \
-                     there, so it was left alone, and {name} was not copied there"
-                )),
-                Why::Unsourced => Some(format!(
-                    "warning: {name} was not copied to {at}: no copy of it in {into} still holds \
-                     what was installed"
-                )),
+                Why::Foreign => Some(
+                    format!(
+                        "warning: {into} already has a {name} at {at} that Mindflayer did not \
+                         put there, so it was left alone, and {name} was not copied there"
+                    )
+                    .into(),
+                ),
+                Why::Unsourced => Some(
+                    format!(
+                        "warning: {name} was not copied to {at}: no copy of it in {into} still \
+                         holds what was installed"
+                    )
+                    .into(),
+                ),
                 Why::Edited | Why::Uncompared(_) => None,
             }
         })
@@ -451,13 +463,13 @@ pub(crate) fn moved(
 
 /// What a local project outside every git work tree is told, as an install
 /// there tells it: a note, since nothing went wrong.
-fn outside(project: &MindProject, plan: &Plan) -> Option<String> {
+fn outside(project: &MindProject, plan: &Plan) -> Option<Warning> {
     outside_note(project, plan.outside)
 }
 
 /// The note [`outside`] gives, for a plan that says it keeps something out
 /// of git where nothing can (`outside`).
-pub(crate) fn outside_note(project: &MindProject, outside: bool) -> Option<String> {
+pub(crate) fn outside_note(project: &MindProject, outside: bool) -> Option<Warning> {
     outside
         .then(|| {
             Excluded::Outside {
@@ -466,7 +478,7 @@ pub(crate) fn outside_note(project: &MindProject, outside: bool) -> Option<Strin
             .warning()
         })
         .flatten()
-        .map(|note| format!("note: {note}"))
+        .map(|note| format!("note: {note}").into())
 }
 
 /// Agents as `--agents` takes them, comma-separated, so the line holds no

@@ -28,7 +28,8 @@ use mindflayer_core::{
 
 use crate::homes::Lookup;
 use crate::{
-    tui, Cli, CliError, Command, Failure, FlayerCli, FlayerCommand, Outcome, WorkspacesCommand,
+    tui, Cli, CliError, Command, Failure, FlayerCli, FlayerCommand, Outcome, Warning,
+    WorkspacesCommand,
 };
 use activate::{activate_command, which_command};
 use adopt::adopt_from;
@@ -754,7 +755,7 @@ fn reading(
 ) -> Result<Outcome, Failure> {
     let mut result = read(workspace);
     if !workspace.is_made() {
-        let hint = unmade_hint(workspace);
+        let hint = Warning::from(unmade_hint(workspace));
         match &mut result {
             Ok(outcome) => outcome.stderr.push(hint),
             Err(failure) => failure.warnings.push(hint),
@@ -797,7 +798,7 @@ fn all_or_nothing(mut refused: Vec<CliError>) -> Option<Failure> {
         error: Box::new(first),
         warnings: refused
             .iter()
-            .map(|error| format!("error: {error}"))
+            .map(|error| Warning::coded(error.code(), format!("error: {error}")))
             .collect(),
     })
 }
@@ -809,11 +810,11 @@ fn all_or_nothing(mut refused: Vec<CliError>) -> Option<Failure> {
 /// so a project that happens to sit inside it is not in scope until it is
 /// linked; otherwise `flayer list` would answer a different question
 /// depending on which directory it was run from.
-fn managed(workspace: &FlayerWorkspace) -> (Vec<MindProject>, Vec<String>) {
+fn managed(workspace: &FlayerWorkspace) -> (Vec<MindProject>, Vec<Warning>) {
     let (projects, failures) = workspace.projects();
     let warnings = failures
         .iter()
-        .map(|failure| format!("warning: {failure}"))
+        .map(|failure| Warning::coded(failure.code(), format!("warning: {failure}")))
         .collect();
     (projects, warnings)
 }
@@ -852,7 +853,7 @@ fn named_projects(
     workspace: &FlayerWorkspace,
     projects: &[String],
     all: bool,
-) -> Result<(Vec<MindProject>, Vec<String>), CliError> {
+) -> Result<(Vec<MindProject>, Vec<Warning>), CliError> {
     if all {
         return Ok(managed(workspace));
     }
@@ -892,7 +893,7 @@ fn assigning(
 /// entry that would not open, `unread`, beside it, as `flayer update --all`
 /// says it. Not a failure while every entry opens, since nothing asked of
 /// it went wrong.
-fn none_linked(done: &str, unread: Vec<String>) -> Outcome {
+fn none_linked(done: &str, unread: Vec<Warning>) -> Outcome {
     let why = if unread.is_empty() {
         "no project is linked"
     } else {
@@ -908,7 +909,7 @@ fn none_linked(done: &str, unread: Vec<String>) -> Outcome {
 /// `result`, with `unread`, the entries a command given every project could
 /// not open, said after what it says: beside an outcome, failing it, and
 /// before the error of a failure, among its warnings.
-fn beside_all(result: Result<Outcome, Failure>, unread: Vec<String>) -> Result<Outcome, Failure> {
+fn beside_all(result: Result<Outcome, Failure>, unread: Vec<Warning>) -> Result<Outcome, Failure> {
     match result {
         Ok(mut outcome) => {
             outcome.ok &= unread.is_empty();
@@ -974,7 +975,10 @@ fn consulting(
     let (workspace, unread) = match consulted(project, lookup) {
         Ok(workspace) => (workspace, None),
         Err(error @ CliError::Chosen { .. }) => return Err(error.into()),
-        Err(error) => (None, Some(format!("warning: {error}"))),
+        Err(error) => (
+            None,
+            Some(Warning::coded(error.code(), format!("warning: {error}"))),
+        ),
     };
     let mut result = change(workspace.as_ref());
     if let Some(warning) = unread {

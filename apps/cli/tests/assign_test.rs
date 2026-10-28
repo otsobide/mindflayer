@@ -337,7 +337,9 @@ fn every_project_of_a_default_workspace_nothing_has_made_is_none_and_makes_nothi
         );
         assert_eq!(outcome.stderr.len(), 1, "{:?}", outcome.stderr);
         assert!(
-            outcome.stderr[0].starts_with("hint: no workspace here or above"),
+            outcome.stderr[0]
+                .text
+                .starts_with("hint: no workspace here or above"),
             "{:?}",
             outcome.stderr
         );

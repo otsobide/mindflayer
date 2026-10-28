@@ -4,7 +4,7 @@
 //! `printable` and padded by `table` whichever command or screen it comes
 //! from, and a new command cannot quietly grow a second way of doing either.
 
-use std::fmt::Write as _;
+use std::fmt::{self, Write as _};
 use std::io;
 use std::path::Path;
 use std::process::ExitCode;
@@ -23,7 +23,7 @@ pub struct Outcome {
     /// The report itself.
     pub stdout: String,
     /// Problems worth reporting that did not stop the command.
-    pub stderr: Vec<String>,
+    pub stderr: Vec<Warning>,
     /// Whether everything the command looked at was in order.
     pub ok: bool,
 }
@@ -64,6 +64,68 @@ impl Outcome {
     }
 }
 
+/// One line a command says beside what it reports, on stderr: a warning, a
+/// note, a hint, or an error about one part of what it did; and the code of
+/// what it says, when what it says has one.
+///
+/// The text is what a terminal shows, word for word, `warning: ` and all.
+/// The code rides beside it for the panel, which acts on a condition by its
+/// code rather than by matching English that is reworded whenever it is
+/// made clearer: the code core gives what went wrong ([`mindflayer_core::code`]),
+/// or the CLI's own ([`CliError::code`]). A line with none says something no
+/// code is given to: a hint, a note, or what the CLI makes of what it found
+/// rather than something that went wrong. Kept beside the text rather than
+/// in a list of its own beside the lines, which every line pushed would have
+/// to keep in step with.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Warning {
+    pub text: String,
+    pub code: Option<&'static str>,
+}
+
+impl Warning {
+    /// A line saying what `code` names.
+    pub(crate) fn coded(code: &'static str, text: impl Into<String>) -> Self {
+        Self {
+            text: text.into(),
+            code: Some(code),
+        }
+    }
+}
+
+/// A line no code is given to.
+impl From<String> for Warning {
+    fn from(text: String) -> Self {
+        Self { text, code: None }
+    }
+}
+
+impl fmt::Display for Warning {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(&self.text)
+    }
+}
+
+/// By its text alone, which is what a test of what a terminal shows asks
+/// about; one about the code asks for the code.
+impl PartialEq<str> for Warning {
+    fn eq(&self, text: &str) -> bool {
+        self.text == text
+    }
+}
+
+impl PartialEq<&str> for Warning {
+    fn eq(&self, text: &&str) -> bool {
+        self.text == *text
+    }
+}
+
+impl PartialEq<String> for Warning {
+    fn eq(&self, text: &String) -> bool {
+        self.text == *text
+    }
+}
+
 /// A command that could not run, and whatever it had already found out.
 ///
 /// The warnings travel with the error rather than being dropped, because they
@@ -79,7 +141,7 @@ pub struct Failure {
     /// that on every return.
     pub error: Box<CliError>,
     /// What it had already noticed before it stopped.
-    pub warnings: Vec<String>,
+    pub warnings: Vec<Warning>,
 }
 
 impl Failure {

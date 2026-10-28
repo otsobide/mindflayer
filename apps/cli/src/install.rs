@@ -22,7 +22,7 @@ use ratatui::DefaultTerminal;
 
 use crate::commands::workspace::load_warnings;
 use crate::tui::state::{transcript, Done};
-use crate::{tui, CliError, Failure, Lookup, Outcome};
+use crate::{tui, CliError, Failure, Lookup, Outcome, Warning};
 use state::{Screen, Step, Target};
 
 /// Build the screen for a workspace, run it, and carry out what it asked for.
@@ -83,7 +83,7 @@ pub fn finish(
     screen: &Screen,
     step: Step,
     lookup: &Lookup,
-    mut warnings: Vec<String>,
+    mut warnings: Vec<Warning>,
 ) -> Outcome {
     let applied = step == Step::Apply;
     let mut outcome = if applied {
@@ -142,11 +142,11 @@ pub fn apply(workspace: &FlayerWorkspace, screen: &Screen, lookup: &Lookup) -> O
 }
 
 /// The projects a workspace manages, and what could not be opened.
-pub fn registered(workspace: &FlayerWorkspace) -> (Vec<MindProject>, Vec<String>) {
+pub fn registered(workspace: &FlayerWorkspace) -> (Vec<MindProject>, Vec<Warning>) {
     let (projects, failures) = workspace.projects();
     let warnings = failures
         .iter()
-        .map(|failure| format!("warning: {failure}"))
+        .map(|failure| Warning::coded(failure.code(), format!("warning: {failure}")))
         .collect();
     (projects, warnings)
 }

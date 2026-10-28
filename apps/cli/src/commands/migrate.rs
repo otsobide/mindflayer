@@ -15,7 +15,7 @@ use super::consulted;
 use super::gather::scrubbed;
 use super::install::{cleared, shown};
 use super::settings::{agents, moved, not_copied, outside_note};
-use crate::{CliError, Failure, Lookup, Outcome};
+use crate::{CliError, Failure, Lookup, Outcome, Warning};
 
 /// `flayer migrate --library`: what moving the workspace's own into its
 /// library would do, or, with `yes`, doing it.
@@ -58,6 +58,7 @@ pub(crate) fn migrate_library(workspace: &FlayerWorkspace, yes: bool) -> Result<
                         one.to.display(),
                         one.from.display()
                     )
+                    .into()
                 })
                 .collect();
             Err(Failure {
@@ -209,9 +210,11 @@ pub(crate) fn migrate_here(
     match result {
         Ok(outcome) => {
             let mut outcome = finished(outcome, project, asked);
-            outcome.stderr.extend(hint);
+            outcome.stderr.extend(hint.map(Warning::from));
             if let Some(error) = unread {
-                outcome.stderr.push(format!("warning: {error}"));
+                outcome
+                    .stderr
+                    .push(Warning::coded(error.code(), format!("warning: {error}")));
                 outcome.ok = false;
             }
             Ok(outcome)
@@ -255,7 +258,9 @@ pub(crate) fn migrate_all(
         let project = match member.project {
             Ok(project) => project,
             Err(error) => {
-                outcome.stderr.push(format!("warning: {error}"));
+                outcome
+                    .stderr
+                    .push(Warning::coded(error.code(), format!("warning: {error}")));
                 outcome.ok = false;
                 continue;
             }
@@ -331,16 +336,22 @@ impl Stopped {
 
     /// As lines beside what other projects did, each error naming the
     /// project it is about.
-    fn lines(self, project: &MindProject) -> Vec<String> {
+    fn lines(self, project: &MindProject) -> Vec<Warning> {
         let at = project.root().display();
         match self {
             Stopped::Refused(refusals) => refusals
                 .into_iter()
-                .map(|refusal| format!("error: {at}: {}", CliError::Refused(refusal)))
+                .map(|refusal| {
+                    let refused = CliError::Refused(refusal);
+                    Warning::coded(refused.code(), format!("error: {at}: {refused}"))
+                })
                 .collect(),
             Stopped::Failed(failure) => {
                 let mut lines = failure.warnings;
-                lines.push(format!("error: {at}: {}", failure.error));
+                lines.push(Warning::coded(
+                    failure.error.code(),
+                    format!("error: {at}: {}", failure.error),
+                ));
                 lines
             }
         }
@@ -472,23 +483,27 @@ fn project_report(project: &MindProject, plan: &ProjectPlan, done: bool) -> Stri
 /// keeps a local project's copies out of git outside a work tree, and how
 /// to stop git tracking a `.mind` that a local project's `.gitignore` keeps
 /// none of out, which no ignore rule does and Mindflayer runs no git to do.
-fn beside(project: &MindProject, plan: &ProjectPlan) -> Vec<String> {
-    let mut said: Vec<String> = outside_note(project, plan.outside).into_iter().collect();
+fn beside(project: &MindProject, plan: &ProjectPlan) -> Vec<Warning> {
+    let mut said: Vec<Warning> = outside_note(project, plan.outside).into_iter().collect();
     if plan.tracked {
-        said.push(format!(
-            "hint: git tracks {}, and a .gitignore keeps out only what git does not track; \
-             `git rm -r --cached .mind` in {} stops that, and leaves the files where they are",
-            project.mind_dir().display(),
-            project.root().display()
-        ));
+        said.push(
+            format!(
+                "hint: git tracks {}, and a .gitignore keeps out only what git does not track; \
+                 `git rm -r --cached .mind` in {} stops that, and leaves the files where they \
+                 are",
+                project.mind_dir().display(),
+                project.root().display()
+            )
+            .into(),
+        );
     }
     said
 }
 
 /// What a project's move that failed says of something it could not put
 /// back.
-fn stranded(left: &Stranded) -> String {
-    match left {
+fn stranded(left: &Stranded) -> Warning {
+    let said = match left {
         Stranded::Copy(path) => format!(
             "warning: {} was copied and could not be taken back out; remove it yourself",
             path.display()
@@ -513,5 +528,6 @@ fn stranded(left: &Stranded) -> String {
              remove it yourself",
             path.display()
         ),
-    }
+    };
+    said.into()
 }
