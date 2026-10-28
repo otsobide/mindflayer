@@ -26,6 +26,7 @@ use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 use crate::agent::{Agent, AgentTarget, TargetTable};
+use crate::code::codes;
 use crate::gather::{self, Scrub};
 use crate::kind::{Kind, Layout};
 use crate::ledger::{Ledger, LedgerError, LEDGER_FILE};
@@ -2333,6 +2334,31 @@ pub enum WorkspaceError {
     #[error(transparent)]
     Lock(#[from] LockError),
 }
+
+codes!(WorkspaceError {
+    Self::Create { .. } => "create_failed",
+    Self::Read { .. } => "read_failed",
+    Self::Parse { .. } => "marker_unparsed",
+    Self::Malformed { .. } => "marker_malformed",
+    Self::NotAProject { .. } => "not_a_project",
+    Self::NotAWorkspace { .. } => "not_a_workspace",
+    Self::Version { .. } => "marker_too_new",
+    Self::Edit { .. } => "marker_edit_failed",
+    Self::NotRegistered { .. } => "not_registered",
+    Self::LoadsItself { .. } => "loads_itself",
+    Self::NotLoaded { .. } => "not_loaded",
+    Self::NotKnown { .. } => "not_known",
+    Self::NonUtf8Path { .. } => "path_not_utf8",
+    Self::OutsideProject { .. } => "folder_outside_project",
+    Self::InsideMind { .. } => "folder_inside_mind",
+    Self::NoDirectory { .. } => "no_folder",
+    Self::Target { .. } => "target_unusable",
+    Self::NoSettings { .. } => "no_settings",
+    Self::OutsideWorkspace { .. } => "folder_outside_workspace",
+    Self::OverlapsGathered { .. } => "folder_overlaps_gathered",
+} carried {
+    Self::Lock(error) => error,
+});
 
 impl WorkspaceError {
     /// The path the failure is about.

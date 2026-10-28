@@ -26,6 +26,7 @@ use rusqlite::backup::{Backup, StepResult};
 use rusqlite::{Connection, OpenFlags, OptionalExtension, Transaction, TransactionBehavior};
 use thiserror::Error;
 
+use crate::code::codes;
 use crate::kind::Kind;
 use crate::settings::ProjectId;
 use crate::url::{carries_credentials, redacted};
@@ -2244,6 +2245,17 @@ pub enum LedgerError {
         source: rusqlite::Error,
     },
 }
+
+codes!(LedgerError {
+    Self::Create { .. } => "ledger_create_failed",
+    Self::Open { .. } => "ledger_open_failed",
+    Self::Version { .. } => "ledger_too_new",
+    Self::Backup { .. } => "ledger_backup_failed",
+    Self::Unmade { .. } => "ledger_unmade",
+    Self::Query { .. } => "ledger_query_failed",
+} carried {
+    Self::Lock(error) => error,
+});
 
 impl LedgerError {
     /// The file the failure is about.
