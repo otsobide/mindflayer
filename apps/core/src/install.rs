@@ -692,6 +692,48 @@ pub(crate) fn surveyed_one(
     )))
 }
 
+/// Every installation of `kind` the ledger records in `project` that
+/// nothing offers any more where it came from, by name in name order: what
+/// `uninstall --orphaned` takes out. Orphaned, or edited and orphaned,
+/// which reads as edited, an edit being said first; an update leaves both
+/// alike, with nothing to write either from (`update::Step::Orphaned`), and
+/// taking out the edited one is the uninstall's to refuse unless forced.
+///
+/// Not one from a loaded workspace that cannot be opened now: what that
+/// offers cannot be told, so its copies read as orphaned only while it is
+/// away, and taking them out on that would take out what a drive mounted
+/// again tomorrow offers still. A record from before origins were kept may
+/// have come from any loaded workspace, so it waits while any is away.
+pub(crate) fn orphaned(
+    workspace: &FlayerWorkspace,
+    ledger: &Ledger,
+    project: &MindProject,
+    kind: Kind,
+) -> Result<Vec<String>, LedgerError> {
+    let away: Vec<String> = workspace
+        .loads()
+        .into_iter()
+        .filter(|loaded| loaded.workspace.is_err())
+        .map(|loaded| {
+            let entry = paths::to_config_string(&loaded.entry)
+                .unwrap_or_else(|| loaded.entry.display().to_string());
+            format!("{LOADED_PREFIX}{entry}")
+        })
+        .collect();
+    Ok(surveyed(workspace, ledger, project, kind)?
+        .into_iter()
+        .filter(|surveyed| surveyed.offered.is_empty())
+        .filter(
+            |surveyed| match (&surveyed.record.origin, surveyed.record.source_id) {
+                (Some(origin), _) => !away.contains(origin),
+                (None, Some(_)) => true,
+                (None, None) => away.is_empty(),
+            },
+        )
+        .map(|surveyed| surveyed.record.name)
+        .collect())
+}
+
 /// The block of `project`'s `AGENTS.md` that a rule's copies are told by;
 /// none for a skill, whose copies are folders.
 fn block_of(project: &MindProject, kind: Kind) -> Option<AgentsMd> {

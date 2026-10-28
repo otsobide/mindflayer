@@ -1,6 +1,8 @@
 //! One skill or rule put into several projects at once, or taken back out of
 //! them: what vision point 2 calls assigning, and what `flayer install` and
 //! `flayer uninstall` do given `-p` more than once or `--all-projects` (#49).
+//! And what nothing offers any more taken out of them, whatever its name:
+//! `uninstall --orphaned` (#50).
 //!
 //! Each project's part is a single install's, through the very functions one
 //! project's install goes through ([`install::offered_typed`] and
@@ -147,6 +149,80 @@ pub fn uninstall(
         })
         .collect();
     Ok(Assigned { parts, scrub })
+}
+
+/// One project's part of [`uninstall_orphaned`]: each installation in it
+/// that nothing offers any more where it came from, and what taking it out
+/// came to; or why the project could not be asked.
+pub type Orphans = Result<Vec<Orphan>, InstallError>;
+
+/// One installation nothing offers any more, and what taking it out came
+/// to.
+#[derive(Debug)]
+pub struct Orphan {
+    pub kind: Kind,
+    pub name: String,
+    pub removed: Result<Removed, InstallError>,
+}
+
+/// Take every installation in each of `projects` that nothing offers any
+/// more where it came from back out of it, as an uninstall of each from
+/// each does ([`install::uninstall_with`]): what removing one of the
+/// workspace's own from the workspace alone leaves behind, or unloading a
+/// workspace that offered it. `uninstall --orphaned`.
+///
+/// Which those are is [`install::orphaned`]'s to say: one changed since it
+/// was installed among them, which its uninstall leaves, every copy of it,
+/// unless `edits` forces it, as an update leaves it with nothing to write it
+/// from. A part for each project once, in the order asked, as [`uninstall`]
+/// gives them, each installation of it by kind and then by name, one that
+/// fails said beside the rest.
+///
+/// The ledger is opened to write only when there is one: with none,
+/// nothing is installed anywhere to be orphaned, and each project's part
+/// says so, empty, without a ledger made to say it.
+pub fn uninstall_orphaned(
+    workspace: &FlayerWorkspace,
+    projects: &[MindProject],
+    homes: &AgentHomes,
+    edits: Edits,
+) -> Result<Assigned<Orphans>, LedgerError> {
+    let (ledger, scrub) = if projects.is_empty() || !workspace.ledger_path().is_file() {
+        (workspace.ledger_for_reading()?, Scrub::default())
+    } else {
+        workspace.ledger_to_write()?
+    };
+    let parts = each(projects)
+        .into_iter()
+        .map(|project| Part {
+            project: project.clone(),
+            done: orphans(workspace, &ledger, project, homes, edits),
+        })
+        .collect();
+    Ok(Assigned { parts, scrub })
+}
+
+/// One project's part of [`uninstall_orphaned`].
+fn orphans(
+    workspace: &FlayerWorkspace,
+    ledger: &Ledger,
+    project: &MindProject,
+    homes: &AgentHomes,
+    edits: Edits,
+) -> Orphans {
+    let mut orphans = Vec::new();
+    for kind in Kind::ALL {
+        for name in install::orphaned(workspace, ledger, project, kind)? {
+            let removed =
+                install::uninstall_with(workspace, ledger, project, kind, &name, homes, edits);
+            orphans.push(Orphan {
+                kind,
+                name,
+                removed,
+            });
+        }
+    }
+    Ok(orphans)
 }
 
 /// The ledger opened to write, and what its scrub took out, for a batch of

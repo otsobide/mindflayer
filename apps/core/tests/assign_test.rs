@@ -1,7 +1,7 @@
 //! One artifact installed into several projects at once, or taken back out
 //! of them (#49): each project's part what one install there does, a project
 //! named twice reached once, and one that refuses said of it while the rest
-//! go ahead.
+//! go ahead. And what nothing offers any more taken out of them (#50).
 
 mod common;
 
@@ -204,5 +204,133 @@ fn a_batch_of_no_project_makes_no_ledger() {
     let parts = installing(&workspace, &[], "deploy");
 
     assert!(parts.is_empty());
+    assert!(!workspace.ledger_path().exists());
+}
+
+/// What `uninstall_orphaned` took out of each project, and what it left,
+/// by kind and name.
+fn orphans_taken(parts: &[Part<assign::Orphans>]) -> Vec<(String, Vec<(String, &'static str)>)> {
+    parts
+        .iter()
+        .map(|part| {
+            let orphans = part.done.as_ref().unwrap();
+            let said = orphans
+                .iter()
+                .map(|orphan| {
+                    let what = match &orphan.removed {
+                        Ok(Removed::Removed { .. }) => "removed",
+                        Ok(Removed::Edited { .. }) => "edited",
+                        other => panic!("{other:?}"),
+                    };
+                    (format!("{}:{}", orphan.kind.slug(), orphan.name), what)
+                })
+                .collect();
+            (part.project.name().to_owned(), said)
+        })
+        .collect()
+}
+
+fn orphans_out(
+    workspace: &FlayerWorkspace,
+    projects: &[MindProject],
+    edits: Edits,
+) -> Vec<Part<assign::Orphans>> {
+    assign::uninstall_orphaned(workspace, projects, &AgentHomes::default(), edits)
+        .unwrap()
+        .parts
+}
+
+#[test]
+fn what_nothing_offers_any_more_is_taken_out_and_the_rest_stays() {
+    let (_dir, workspace, projects) = given(&["alpha", "beta"]);
+    create(&workspace.own(), Kind::Skill, "ship", "Ship it too").unwrap();
+    installing(&workspace, &projects, "deploy");
+    installing(&workspace, &projects, "ship");
+    let library = workspace.own().directory_for(Kind::Skill).unwrap();
+    fs::remove_dir_all(library.join("deploy")).unwrap();
+
+    let parts = orphans_out(&workspace, &projects, Edits::Kept);
+
+    let removed = vec![(String::from("skill:deploy"), "removed")];
+    assert_eq!(
+        orphans_taken(&parts),
+        [
+            (String::from("alpha"), removed.clone()),
+            (String::from("beta"), removed)
+        ]
+    );
+    for project in &projects {
+        for copy in copies(project, "deploy") {
+            assert!(!copy.exists(), "{}", copy.display());
+        }
+        for copy in copies(project, "ship") {
+            assert!(copy.join("SKILL.md").is_file(), "{}", copy.display());
+        }
+    }
+    // Run again, there is nothing left to take out.
+    let again = orphans_out(&workspace, &projects, Edits::Kept);
+    assert!(orphans_taken(&again)
+        .iter()
+        .all(|(_, said)| said.is_empty()));
+}
+
+#[test]
+fn an_orphan_changed_since_it_was_installed_is_left_until_it_is_forced() {
+    let (_dir, workspace, projects) = given(&["alpha"]);
+    installing(&workspace, &projects, "deploy");
+    let edited = copies(&projects[0], "deploy")[1].join("SKILL.md");
+    fs::write(&edited, skill("deploy", "My way")).unwrap();
+    let library = workspace.own().directory_for(Kind::Skill).unwrap();
+    fs::remove_dir_all(library.join("deploy")).unwrap();
+
+    let kept = orphans_out(&workspace, &projects, Edits::Kept);
+    assert_eq!(
+        orphans_taken(&kept),
+        [(
+            String::from("alpha"),
+            vec![(String::from("skill:deploy"), "edited")]
+        )]
+    );
+    assert!(edited.is_file());
+
+    let forced = orphans_out(&workspace, &projects, Edits::Forced);
+    assert_eq!(
+        orphans_taken(&forced),
+        [(
+            String::from("alpha"),
+            vec![(String::from("skill:deploy"), "removed")]
+        )]
+    );
+    assert!(!edited.exists());
+}
+
+#[test]
+fn a_copy_from_a_loaded_workspace_that_cannot_be_opened_is_not_an_orphan() {
+    let (dir, mut workspace, projects) = given(&["alpha"]);
+    let team = dir.path().join("team");
+    fs::create_dir(&team).unwrap();
+    let (loaded, _) = FlayerWorkspace::init(&team).unwrap();
+    create(&loaded.own(), Kind::Skill, "review", "Review it").unwrap();
+    workspace.load(&loaded).unwrap();
+    let workspace = FlayerWorkspace::open(workspace.root()).unwrap();
+    installing(&workspace, &projects, "review");
+    // Away, as a drive unmounted is: what it offers cannot be told.
+    fs::rename(&team, dir.path().join("away")).unwrap();
+
+    let parts = orphans_out(&workspace, &projects, Edits::Kept);
+
+    assert_eq!(orphans_taken(&parts), [(String::from("alpha"), vec![])]);
+    for copy in copies(&projects[0], "review") {
+        assert!(copy.join("SKILL.md").is_file(), "{}", copy.display());
+    }
+}
+
+#[test]
+fn looking_for_orphans_where_nothing_was_ever_installed_makes_no_ledger() {
+    let (_dir, workspace, projects) = given(&["alpha"]);
+
+    let parts = orphans_out(&workspace, &projects, Edits::Kept);
+
+    assert_eq!(orphans_taken(&parts), [(String::from("alpha"), vec![])]);
     assert!(!workspace.ledger_path().exists());
 }
