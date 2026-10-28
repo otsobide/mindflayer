@@ -25,6 +25,7 @@ use mindflayer_core::{Kind, MindProject};
 use ratatui::crossterm::event::KeyCode;
 
 use crate::commands::install::named;
+use crate::tui::state::Task;
 
 /// Which column the keyboard is in, and so which way round the screen is.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -140,6 +141,12 @@ impl Row {
 #[derive(Debug)]
 pub struct Target {
     pub project: MindProject,
+    /// What picks it out of the workspace on a command line, as core says
+    /// ([`FlayerWorkspace::naming`]): the `-p` the lines its marks amount
+    /// to name it by.
+    ///
+    /// [`FlayerWorkspace::naming`]: mindflayer_core::FlayerWorkspace::naming
+    pub picked_by: String,
     /// Every kind's, each kind's together in the order [`Kind::ALL`] gives.
     pub rows: Vec<Row>,
     /// The row the cursor sits on, among those of the kind shown, remembered
@@ -179,9 +186,10 @@ impl Target {
         }
     }
 
-    pub fn new(project: MindProject, candidates: Vec<Candidate>) -> Self {
+    pub fn new(project: MindProject, picked_by: String, candidates: Vec<Candidate>) -> Self {
         Self {
             project,
+            picked_by,
             rows: candidates.into_iter().map(Row::new).collect(),
             cursor: 0,
         }
@@ -430,6 +438,76 @@ impl Screen {
     /// Whether anything at all is marked.
     pub fn idle(&self) -> bool {
         self.pending().is_empty()
+    }
+
+    /// Everything marked, as the command lines it amounts to: an install of
+    /// each offer into every project ticked to take it, and an uninstall of
+    /// each artifact from every project unticked, kind by kind, each line
+    /// where the first box it holds is found going down the projects.
+    ///
+    /// A line an offer rather than a line a box, since `flayer install` and
+    /// `flayer uninstall` take a `-p` for each project, which is how the
+    /// screen turned round marks one: either way round, one artifact's
+    /// ticks are one line. An install always says `--from`, though a name
+    /// one place offers needs none: the box is one offer, and its line
+    /// names that one, so it installs what was ticked or nothing when run
+    /// again after a second place starts to offer the name, and whether a
+    /// name needs it is core's to say ([`install::offered`]), not the
+    /// screen's to work out again. An uninstall is of the name, whichever
+    /// offer the copy came from, as the command takes it.
+    pub fn task(&self) -> Task {
+        let mut changes: Vec<Task> = Vec::new();
+        for kind in Kind::ALL {
+            for (target, row, what) in self.pending() {
+                let target = &self.targets[target];
+                let candidate = &target.rows[row].candidate;
+                if candidate.kind() != kind {
+                    continue;
+                }
+                let name = candidate.name();
+                let origin = candidate.origin();
+                let same = |change: &Task| match (what, change) {
+                    (
+                        Pending::Install,
+                        Task::Install {
+                            kind: of,
+                            name: called,
+                            from: Some(from),
+                            ..
+                        },
+                    ) => *of == kind && called == name && *from == origin,
+                    (
+                        Pending::Remove,
+                        Task::Uninstall {
+                            kind: of,
+                            name: called,
+                            ..
+                        },
+                    ) => *of == kind && called == name,
+                    _ => false,
+                };
+                let project = target.picked_by.clone();
+                match changes.iter_mut().find(|change| same(change)) {
+                    Some(Task::Install { projects, .. } | Task::Uninstall { projects, .. }) => {
+                        projects.push(project);
+                    }
+                    _ => changes.push(match what {
+                        Pending::Install => Task::Install {
+                            projects: vec![project],
+                            kind,
+                            name: name.to_owned(),
+                            from: Some(origin),
+                        },
+                        Pending::Remove => Task::Uninstall {
+                            projects: vec![project],
+                            kind,
+                            name: name.to_owned(),
+                        },
+                    }),
+                }
+            }
+        }
+        Task::ApplyInstall { changes }
     }
 
     /// Feed it a key.

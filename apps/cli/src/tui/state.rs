@@ -410,8 +410,10 @@ pub enum Task {
     },
     /// Open the install screen, which is what `flayer install` opens.
     OpenInstall,
-    /// Carry out what the install screen marked.
-    ApplyInstall,
+    /// What the install screen marked, as the `Install` and `Uninstall`
+    /// tasks it amounts to ([`InstallScreen::task`]), each run whatever came
+    /// of the ones before.
+    ApplyInstall { changes: Vec<Task> },
     /// Read the disk again.
     Refresh,
 }
@@ -423,9 +425,9 @@ impl Task {
     ///
     /// Not a description of the task: the task. The caller parses these with
     /// the real parsers and runs what comes out, so a line here that does not
-    /// parse is a task that cannot happen. The two install tasks are the
-    /// exception (the screen does that work, and `flayer install` is the
-    /// command that opens the same screen), and a refresh changes nothing.
+    /// parse is a task that cannot happen. Opening the install screen is the
+    /// exception, a read that builds the screen `flayer install` opens rather
+    /// than a line run, and a refresh changes nothing.
     pub fn commands(&self) -> Vec<Vec<String>> {
         match self {
             Task::InitWorkspace => vec![words(&["flayer", "init"], &[])],
@@ -593,7 +595,8 @@ impl Task {
                 let head: Vec<&str> = head.iter().map(String::as_str).collect();
                 vec![words(&head, &[&qualified(*kind, name)])]
             }
-            Task::OpenInstall | Task::ApplyInstall => vec![words(&["flayer", "install"], &[])],
+            Task::ApplyInstall { changes } => changes.iter().flat_map(Task::commands).collect(),
+            Task::OpenInstall => vec![words(&["flayer", "install"], &[])],
             Task::Refresh => Vec::new(),
         }
     }
@@ -624,7 +627,7 @@ impl Task {
                 | Task::Update { .. }
                 | Task::Install { .. }
                 | Task::Uninstall { .. }
-                | Task::ApplyInstall
+                | Task::ApplyInstall { .. }
         )
     }
 
@@ -637,6 +640,16 @@ impl Task {
     /// its own screen, and this one has to step aside for it.
     pub fn takes_terminal(&self) -> bool {
         matches!(self, Task::Edit { .. })
+    }
+
+    /// Whether each of its lines leans on the one before, so that one failing
+    /// is reason not to run the rest: `flayer link` after a failed `mind
+    /// init` would only fail again, less clearly. True of every task but the
+    /// install screen's batch, whose lines are boxes marked one by one, each
+    /// carried out or said whatever came of the others, as the screen did
+    /// before they were lines.
+    pub fn chained(&self) -> bool {
+        !matches!(self, Task::ApplyInstall { .. })
     }
 
     /// Whether it runs on a thread of its own while the screen goes on
@@ -652,7 +665,7 @@ impl Task {
         match self {
             Task::Refresh => String::from("reading the disk again"),
             Task::OpenInstall => String::from("opening the install screen"),
-            Task::ApplyInstall => String::from("installing and removing what was marked"),
+            Task::ApplyInstall { .. } => String::from("installing and removing what was marked"),
             _ => self
                 .commands()
                 .iter()
@@ -1972,8 +1985,12 @@ impl App {
                 }
                 (Mode::Browse, Step::Stay)
             }
-            // Kept open while it applies: the marks are what gets applied.
-            InstallStep::Apply => (Mode::Installing(screen), Step::Run(Task::ApplyInstall)),
+            // Kept open under the box saying what runs, as a form is: what
+            // runs is the lines its marks amount to, taken from it here.
+            InstallStep::Apply => {
+                let task = screen.task();
+                (Mode::Installing(screen), Step::Run(task))
+            }
         }
     }
 
@@ -2045,7 +2062,7 @@ impl App {
                 Task::Show { .. }
                 | Task::Validate { .. }
                 | Task::Shelf
-                | Task::ApplyInstall
+                | Task::ApplyInstall { .. }
                 | Task::Install { .. }
                 | Task::Uninstall { .. }
                 | Task::Update { .. }

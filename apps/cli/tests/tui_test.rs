@@ -963,9 +963,18 @@ fn a_gather_refused_for_a_token_in_its_url_shows_the_token_neither_while_it_runs
     assert!(!transcript.contains("ghp_t0ken"), "{transcript}");
 }
 
+/// Where the shelf `shelved` gathered offers its skills from, as the
+/// install screen says it.
+fn shelf_origin(workspace: &FlayerWorkspace, ledger: &Ledger) -> String {
+    screen_for(workspace, ledger).targets[0].rows[0]
+        .candidate
+        .origin()
+}
+
 #[test]
 fn the_install_screen_opens_inside_the_tui_and_applies_from_there() {
-    let (dir, _workspace, _ledger) = shelved(&["collapse"], &["deploy"]);
+    let (dir, workspace, ledger) = shelved(&["collapse"], &["deploy"]);
+    let origin = shelf_origin(&workspace, &ledger);
     let mut app = tui_in(dir.path());
 
     press_and_run(&mut app, KeyCode::Char('i'));
@@ -977,25 +986,35 @@ fn the_install_screen_opens_inside_the_tui_and_applies_from_there() {
     press_key(&mut app, KeyCode::Char('a'));
     let task = press_and_run(&mut app, KeyCode::Char('y'));
 
-    assert_eq!(task, Some(Task::ApplyInstall));
+    assert_eq!(
+        task,
+        Some(Task::ApplyInstall {
+            changes: vec![Task::Install {
+                projects: vec![String::from("collapse")],
+                kind: Kind::Skill,
+                name: String::from("deploy"),
+                from: Some(origin.clone()),
+            }]
+        })
+    );
     for copy in copies(&dir.path().join("collapse"), "deploy") {
         assert!(copy.join("SKILL.md").is_file(), "{}", copy.display());
     }
+    let said = format!("installed deploy into collapse, from {origin}");
     let Mode::Reading(reader) = &app.mode else {
         panic!("{:?}", app.mode);
     };
-    assert!(reader
-        .lines
-        .iter()
-        .any(|(_, line)| line == "collapse: installed deploy"));
-    assert!(app
-        .transcript()
-        .contains("$ flayer install\ncollapse: installed deploy"));
+    assert!(reader.lines.iter().any(|(_, line)| *line == said));
+    assert_eq!(
+        app.transcript(),
+        format!("$ flayer install -p collapse --from {origin} skill:deploy\n{said}\n")
+    );
 }
 
 #[test]
 fn the_install_screen_inside_the_tui_turns_round_by_artifact_and_applies_the_same_batch() {
-    let (dir, _workspace, _ledger) = shelved(&["collapse", "tanukeys"], &["deploy"]);
+    let (dir, workspace, ledger) = shelved(&["collapse", "tanukeys"], &["deploy"]);
+    let origin = shelf_origin(&workspace, &ledger);
     let mut app = tui_in(dir.path());
     press_and_run(&mut app, KeyCode::Char('i'));
 
@@ -1009,15 +1028,23 @@ fn the_install_screen_inside_the_tui_turns_round_by_artifact_and_applies_the_sam
     let task = press_and_run(&mut app, KeyCode::Char('y'));
 
     assert!(drawn.contains("Projects for deploy"), "{drawn}");
-    assert_eq!(task, Some(Task::ApplyInstall));
+    assert!(
+        matches!(&task, Some(Task::ApplyInstall { changes }) if changes.len() == 1),
+        "one artifact's ticks are one line: {task:?}"
+    );
     for project in ["collapse", "tanukeys"] {
         for copy in copies(&dir.path().join(project), "deploy") {
             assert!(copy.join("SKILL.md").is_file(), "{}", copy.display());
         }
     }
-    assert!(app
-        .transcript()
-        .contains("$ flayer install\ncollapse: installed deploy\ntanukeys: installed deploy"));
+    assert_eq!(
+        app.transcript(),
+        format!(
+            "$ flayer install -p collapse -p tanukeys --from {origin} skill:deploy\n\
+             installed deploy into collapse, from {origin}\n\
+             installed deploy into tanukeys, from {origin}\n"
+        )
+    );
 }
 
 #[test]
@@ -1048,13 +1075,24 @@ fn the_install_screen_inside_the_tui_installs_where_each_agent_of_a_v3_project_r
     press_key(&mut app, KeyCode::Char('a'));
     let task = press_and_run(&mut app, KeyCode::Char('y'));
 
-    assert_eq!(task, Some(Task::ApplyInstall));
+    assert!(
+        matches!(&task, Some(Task::ApplyInstall { changes }) if changes.len() == 1),
+        "{task:?}"
+    );
     let claude = fs::read(root.join(".claude/skills/deploy/SKILL.md")).unwrap();
     let agents = fs::read(root.join(".agents/skills/deploy/SKILL.md")).unwrap();
     assert_eq!(claude, agents);
-    assert!(app
-        .transcript()
-        .contains("$ flayer install\nalpha: installed deploy"));
+    // Opened again, now that it links `alpha`.
+    let workspace = FlayerWorkspace::open(dir.path()).unwrap();
+    let origin = shelf_origin(&workspace, &workspace.ledger_for_reading().unwrap());
+    assert!(
+        app.transcript().starts_with(&format!(
+            "$ flayer install -p alpha --from {origin} skill:deploy\n\
+             installed deploy into alpha, from {origin}\n"
+        )),
+        "{}",
+        app.transcript()
+    );
 }
 
 #[test]
@@ -1085,13 +1123,25 @@ fn a_rule_ticked_on_the_install_screen_inside_the_tui_is_installed_from_there() 
     assert!(rules.contains("[ ] git/commits"), "{rules}");
     assert!(ticked.contains("[x] git/commits  + install"), "{ticked}");
     assert!(ticked.contains("1 to install, 0 to remove"), "{ticked}");
-    assert_eq!(task, Some(Task::ApplyInstall));
+    assert_eq!(
+        task,
+        Some(Task::ApplyInstall {
+            changes: vec![Task::Install {
+                projects: vec![String::from("collapse")],
+                kind: Kind::Rule,
+                name: String::from("git/commits"),
+                from: Some(String::from("workspace")),
+            }]
+        })
+    );
     assert!(fs::read_to_string(dir.path().join("collapse/AGENTS.md"))
         .unwrap()
         .contains("<!-- mindflayer:rule git/commits -->\n# Commit one coherent step at a time\n"));
     assert!(
-        app.transcript()
-            .contains("$ flayer install\ncollapse: installed rule git/commits\n"),
+        app.transcript().starts_with(
+            "$ flayer install -p collapse --from workspace rule:git/commits\n\
+             installed rule git/commits into collapse, from workspace\n"
+        ),
         "{}",
         app.transcript()
     );
@@ -1172,7 +1222,10 @@ fn the_install_screen_scrubs_the_ledger_when_it_applies_and_not_when_it_opens() 
 
     let transcript = app.transcript();
     assert!(
-        transcript.starts_with("$ flayer install\ncollapse: installed deploy\n"),
+        transcript.starts_with(
+            "$ flayer install -p collapse --from https://example.com/acme/skills skill:deploy\n\
+             installed deploy into collapse, from https://example.com/acme/skills\n"
+        ),
         "{transcript}"
     );
     assert!(
@@ -1184,6 +1237,49 @@ fn the_install_screen_scrubs_the_ledger_when_it_applies_and_not_when_it_opens() 
     );
     assert!(!transcript.contains("ghp_t0ken"), "{transcript}");
     assert_eq!(stored(), "https://example.com/acme/skills");
+}
+
+#[test]
+fn a_line_of_the_install_screen_that_fails_does_not_keep_the_rest_from_running() {
+    let (dir, workspace, ledger) = shelved(&["collapse"], &["deploy"]);
+    let origin = shelf_origin(&workspace, &ledger);
+    flayer(
+        dir.path(),
+        &["add", "skill", "ours", "Of the workspace's own"],
+    )
+    .unwrap();
+    let mut app = tui_in(dir.path());
+    press_and_run(&mut app, KeyCode::Char('i'));
+    // The workspace's own first, then the shelf's.
+    for key in [
+        KeyCode::Right,
+        KeyCode::Char(' '),
+        KeyCode::Down,
+        KeyCode::Char(' '),
+        KeyCode::Char('a'),
+    ] {
+        press_key(&mut app, key);
+    }
+    // Gone once it was ticked, so its line is refused.
+    fs::remove_dir_all(own_directory_for(dir.path(), Kind::Skill).join("ours")).unwrap();
+
+    press_and_run(&mut app, KeyCode::Char('y'));
+
+    for copy in copies(&dir.path().join("collapse"), "deploy") {
+        assert!(copy.join("SKILL.md").is_file(), "{}", copy.display());
+    }
+    let transcript = app.transcript();
+    assert!(
+        transcript.starts_with("$ flayer install -p collapse --from workspace skill:ours\nerror: "),
+        "{transcript}"
+    );
+    assert!(
+        transcript.contains(&format!(
+            "$ flayer install -p collapse --from {origin} skill:deploy\n\
+             installed deploy into collapse, from {origin}\n"
+        )),
+        "{transcript}"
+    );
 }
 
 #[test]

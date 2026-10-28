@@ -203,7 +203,8 @@ pub fn build(
         for kind in Kind::ALL {
             candidates.extend(install::survey(workspace, ledger, &project, kind)?);
         }
-        let mut target = Target::new(project, candidates);
+        let picked_by = workspace.naming(&project);
+        let mut target = Target::new(project, picked_by, candidates);
         // Which of several offers of one name is the copy the project holds.
         let project = target.project.clone();
         target.settle(|candidate| install::is_current(workspace, ledger, &project, candidate));
