@@ -11,9 +11,10 @@ use std::fs;
 use std::io;
 use std::path::{Component, Path, PathBuf};
 
-use serde::Serialize;
+use serde::{Serialize, Serializer};
 use thiserror::Error;
 
+use crate::agent::Agent;
 use crate::install;
 use crate::ledger::LedgerError;
 use crate::paths;
@@ -52,17 +53,36 @@ pub struct Request {
     /// run in with it. None means the workspace root, where the TUI runs its
     /// lines.
     pub from: Option<PathBuf>,
+    /// How what it finds is ordered.
+    pub order: Order,
 }
 
-/// The workspace root, to [`DEFAULT_DEPTH`], spelled from there.
+/// The workspace root, to [`DEFAULT_DEPTH`], spelled from there, by route.
 impl Default for Request {
     fn default() -> Self {
         Request {
             roots: Vec::new(),
             depth: DEFAULT_DEPTH,
             from: None,
+            order: Order::Route,
         }
     }
+}
+
+/// How a scan orders what it found.
+///
+/// Here rather than in each front end, so `flayer scan --suggest` and the
+/// minds screen list one order: a screen that sorted its own rows could
+/// rank them differently from the command it says it shows.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum Order {
+    /// By route, linked or not: what is there.
+    #[default]
+    Route,
+    /// What is not linked first, by [`Reason`], best first, and by route
+    /// within one; then what is, by route: what is worth linking, before
+    /// what needs nothing.
+    Suggested,
 }
 
 /// A directory a workspace could manage.
@@ -95,6 +115,58 @@ pub struct Found {
     /// an id another directory holds too, which is a copy rather than a
     /// move.
     pub moved: Option<String>,
+    /// Why it is worth linking: the strongest of what it holds.
+    pub reason: Reason,
+    /// Each name at its root an agent reads something from
+    /// ([`Agent::reads_at_root`], of every agent), in name order: what makes
+    /// a repository's reason [`Reason::Agents`], and listed for a mind
+    /// project too, which can hold them as well. Looked at, never followed
+    /// or read: a link there counts as what it is called.
+    pub agent_files: Vec<String>,
+}
+
+/// Why a directory found is worth linking, the strongest of what it holds,
+/// best first.
+///
+/// What already makes it a project ranks above what only shows somebody
+/// works in it: a mind project is linked as it is, where a repository needs
+/// `mind init` first. Among projects, one its settings name by an id is
+/// followed when it moves (D-09); among repositories, one an agent reads
+/// something in is where skills and rules would be read.
+///
+/// Serialized as [`slug`](Reason::slug), a word a script compares, by hand
+/// rather than derived from the variant, which would tie the contract to a
+/// name chosen for Rust.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum Reason {
+    /// A mind project its settings name by an id.
+    Id,
+    /// A mind project with no id: a `mind.toml` marks it, or a marker that
+    /// would not open, which is a failure beside it.
+    Mind,
+    /// A git repository holding something an agent reads at its root.
+    Agents,
+    /// A git repository and nothing more.
+    Git,
+}
+
+impl Reason {
+    /// How a report names it: one lowercase word, which once printed is a
+    /// contract.
+    pub const fn slug(self) -> &'static str {
+        match self {
+            Reason::Id => "id",
+            Reason::Mind => "mind",
+            Reason::Agents => "agents",
+            Reason::Git => "git",
+        }
+    }
+}
+
+impl Serialize for Reason {
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        serializer.serialize_str(self.slug())
+    }
 }
 
 /// What a scan found.
@@ -106,7 +178,7 @@ pub struct Scan {
     pub roots: Vec<PathBuf>,
     /// How many levels below each root it looked.
     pub depth: usize,
-    /// Ordered by route.
+    /// In the [`Order`] the request asked for.
     pub found: Vec<Found>,
     /// Each entry where no project is any more whose id the ledger never
     /// learned, as it learns them only when it is written, so nothing found
@@ -156,6 +228,10 @@ pub fn scan(workspace: &FlayerWorkspace, request: &Request) -> Scan {
         roots.push(workspace.root().to_path_buf());
     }
     let from = request.from.as_deref().unwrap_or(workspace.root());
+    let names = agent_files();
+    let judged = |directory: &Path, failures: &mut Vec<ScanFailure>| {
+        judge(workspace, directory, from, &names, failures)
+    };
     let mut scan = Scan {
         roots: roots.clone(),
         depth: request.depth,
@@ -182,7 +258,7 @@ pub fn scan(workspace: &FlayerWorkspace, request: &Request) -> Scan {
                 continue;
             }
         }
-        if let Some(found) = judge(workspace, &root, from, &mut scan.failures) {
+        if let Some(found) = judged(&root, &mut scan.failures) {
             scan.found.push(found);
         }
         seen.insert(root.clone());
@@ -217,7 +293,7 @@ pub fn scan(workspace: &FlayerWorkspace, request: &Request) -> Scan {
             if !seen.insert(child.clone()) {
                 continue;
             }
-            if let Some(found) = judge(workspace, &child, from, &mut scan.failures) {
+            if let Some(found) = judged(&child, &mut scan.failures) {
                 scan.found.push(found);
                 continue;
             }
@@ -232,7 +308,15 @@ pub fn scan(workspace: &FlayerWorkspace, request: &Request) -> Scan {
     }
 
     follow(workspace, from, &mut scan);
-    scan.found.sort_by(|a, b| a.route.cmp(&b.route));
+    match request.order {
+        Order::Route => scan.found.sort_by(|a, b| a.route.cmp(&b.route)),
+        // A linked one by route alone: its reason is why it was worth
+        // linking, which says nothing once it is.
+        Order::Suggested => scan.found.sort_by(|a, b| {
+            let rank = |found: &Found| (found.linked, (!found.linked).then_some(found.reason));
+            rank(a).cmp(&rank(b)).then_with(|| a.route.cmp(&b.route))
+        }),
+    }
     scan.failures.sort_by(|a, b| a.path().cmp(b.path()));
     scan
 }
@@ -334,9 +418,21 @@ fn follow(workspace: &FlayerWorkspace, from: &Path, scan: &mut Scan) {
         .extend(duplicates.into_iter().map(ScanFailure::Duplicate));
 }
 
+/// Every name at a project's root any agent reads something from, each
+/// once, in name order.
+fn agent_files() -> Vec<PathBuf> {
+    let mut names: Vec<PathBuf> = Agent::ALL
+        .into_iter()
+        .flat_map(Agent::reads_at_root)
+        .collect();
+    names.sort();
+    names.dedup();
+    names
+}
+
 /// What a directory is to the workspace, if it is anything, with its route
-/// spelled from `from`, and a failure in `failures` when its marker would not
-/// open.
+/// spelled from `from`, which of `names` it holds, and a failure in
+/// `failures` when its marker would not open.
 ///
 /// A project whose marker would not open is listed all the same: its marker
 /// still says it is one, and `flayer link`, refusing it, says why again.
@@ -344,6 +440,7 @@ fn judge(
     workspace: &FlayerWorkspace,
     directory: &Path,
     from: &Path,
+    names: &[PathBuf],
     failures: &mut Vec<ScanFailure>,
 ) -> Option<Found> {
     let mind = MindProject::is_marked(directory);
@@ -363,6 +460,21 @@ fn judge(
     } else {
         None
     };
+    // Looked at without following, a few names in a directory already
+    // found, so the walk stays as bounded as it was: nothing below the
+    // directory is listed, and a link counts as there whatever it points
+    // at, which a scan never follows.
+    let agent_files: Vec<String> = names
+        .iter()
+        .filter(|name| fs::symlink_metadata(directory.join(name)).is_ok())
+        .filter_map(|name| name.to_str().map(str::to_owned))
+        .collect();
+    let reason = match (mind, &id) {
+        (true, Some(_)) => Reason::Id,
+        (true, None) => Reason::Mind,
+        (false, _) if !agent_files.is_empty() => Reason::Agents,
+        (false, _) => Reason::Git,
+    };
     Some(Found {
         path: directory.to_path_buf(),
         route: route(directory, from),
@@ -370,6 +482,8 @@ fn judge(
         mind,
         linked: workspace.is_linked(directory),
         moved: None,
+        reason,
+        agent_files,
     })
 }
 

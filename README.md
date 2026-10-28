@@ -423,9 +423,10 @@ flayer status [-p PROJECT] [--json]
                            # what every project holds, or one: current,
                            # outdated, edited, missing, orphaned, foreign or
                            # authored, for which agents, and from where
-flayer scan [DIR...] [--depth N] [--json]
+flayer scan [DIR...] [--depth N] [--suggest] [--json]
                            # the repositories under it, or under each DIR,
-                           # which are linked, and which moved
+                           # which are linked, and which moved; --suggest
+                           # lists what is most worth linking first
 flayer link <path>...      # register mind projects with it
 flayer unlink <path>...    # drop them
 flayer relink <old> <new>  # follow a project that moved, keeping what was
@@ -530,6 +531,30 @@ tanukeys  not linked  mind project
   a repository needs `mind -C <path> init` before it can be linked
 ```
 
+`--suggest` asks which to link first. It lists what is not linked before
+what is, ranked by what each holds, and says why on each row: a mind project
+whose settings give it an id, which the workspace can follow when it moves;
+then one without (marked by an older `mind.toml`, or by a marker that would
+not open); then a git repository holding something an agent reads at its
+root, named on the row; then any other repository. What counts as an agent's
+is what Claude Code, Codex and OpenCode read there: `AGENTS.md`,
+`AGENTS.override.md`, `CLAUDE.md`, `CLAUDE.local.md`, `.mcp.json`,
+`opencode.json`, `.claude`, `.agents`, `.codex` and `.opencode`
+([where each agent reads](docs/agents.md#what-says-an-agent-works-in-a-project)).
+It still links nothing and makes nothing a project: a suggestion is a line
+to type, or a row to tick on [the minds screen](#the-tui), which lists them
+in this order.
+
+```
+$ flayer scan --suggest
+tanukeys  not linked  mind project with an id
+notes     not linked  git repository with CLAUDE.md
+collapse  linked
+
+  link one with `flayer link <path>`
+  a repository needs `mind -C <path> init` before it can be linked
+```
+
 Name a folder, or several, and it looks under those instead; `--depth` says
 how many levels below each. Every path is spelled the way `flayer link` takes
 it from where you ran the scan, so a line of the report is a line to type: a
@@ -544,13 +569,19 @@ $ flayer scan ~/Work
   a repository needs `mind -C <path> init` before it can be linked
 ```
 
-Hidden folders, symlinks, `node_modules` and `target` are never entered, nor
-is a repository it finds, whose folders are its own, so a folder at the top of
-your home does not turn into a crawl of the disk; a scan that still lists too
-many folders stops and says so. `flayer minds ~/Work` opens [the minds
-screen](#the-tui) on what is there, and `--json` prints the report in the
-envelope [`status --json`](#what-each-project-has) uses, with the id each
-project's settings name it by:
+A scan is bounded so that a folder at the top of your home does not turn
+into a crawl of the disk. It goes three levels below each folder unless
+`--depth` says otherwise. Hidden folders, symlinks, `node_modules` and
+`target` are never entered, nor is a repository it finds, whose folders are
+its own. Agent files are looked for only at the top of each one it finds,
+by name: never opened, and never followed when they are links. However
+deep it goes, it stops after listing 4096 folders and says so.
+`flayer minds ~/Work` opens [the minds screen](#the-tui) on what is there,
+and `--json` prints the report in the envelope
+[`status --json`](#what-each-project-has) uses, with the id each project's
+settings name it by, the reason each is worth linking (`id`, `mind`,
+`agents` or `git`) and the agent files it holds. With `--suggest`, `found`
+is in the suggested order:
 
 ```
 $ flayer scan ~/Work --depth 2 --json
@@ -568,7 +599,9 @@ $ flayer scan ~/Work --depth 2 --json
         "id": null,
         "mind": false,
         "linked": false,
-        "moved": null
+        "moved": null,
+        "reason": "git",
+        "agent_files": []
       },
       {
         "path": "/home/you/Work/acme/web",
@@ -576,7 +609,9 @@ $ flayer scan ~/Work --depth 2 --json
         "id": "f4a29f5daaf5bc789c4b5d6b13174f48",
         "mind": true,
         "linked": false,
-        "moved": null
+        "moved": null,
+        "reason": "id",
+        "agent_files": []
       }
     ],
     "untraced": [],
@@ -1583,10 +1618,12 @@ the projects an older Mindflayer made, still marked by a `mind.toml` or a
 
 `m`, or `flayer minds` straight from the shell, opens a list of every
 project the workspace links and every repository under it that it does not,
-ticked where it does. `flayer minds ~/Work` looks for those under that folder
-instead, as `flayer scan ~/Work` does, and says below the list what it could
-not read. Tick and untick, then `a` applies all of it in one go, after saying
-which repositories `mind init` will write into. `link` and `unlink` are all or
+ticked where it does, in the order `flayer scan --suggest` gives: what is not
+linked first, most worth linking first, each saying why, then what is.
+`flayer minds ~/Work` looks for those under that folder instead, as
+`flayer scan ~/Work` does, and says below the list what it could not read.
+Tick and untick, then `a` applies all of it in one go, after saying which
+repositories `mind init` will write into. `link` and `unlink` are all or
 nothing: if one path is refused, none is changed.
 
 That is the rule it is built by: **nothing the TUI does is out of reach of a
@@ -1605,11 +1642,12 @@ Opened where there is no workspace and no default one either (`--home ""`), it
 offers to create one there, then goes straight to linking; with a default, it
 opens that one and says so. It stays empty, and marked not made yet, until the
 first change you make from it, which runs `flayer init` there first. The link
-form lists what `flayer scan` finds under the workspace, or under the folders
-`flayer minds` was given (mind projects, and git repositories that are not one
-yet), and picking a repository asks before running `mind init` in it, because
-that writes into it. A project whose directory has gone is listed with a `!`,
-where `U` drops it, or, when the scan found it [moved](#following-a-project-that-moved),
+form lists what `flayer scan --suggest` finds under the workspace, or under
+the folders `flayer minds` was given (mind projects, and git repositories that
+are not one yet), in its order and with its reasons, and picking a repository
+asks before running `mind init` in it, because that writes into it. A project
+whose directory has gone is listed with a `!`, where `U` drops it, or, when
+the scan found it [moved](#following-a-project-that-moved),
 `M` follows it; an artifact `validate` would reject is marked `✗`, with the
 reason underneath.
 

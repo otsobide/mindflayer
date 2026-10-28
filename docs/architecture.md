@@ -3310,10 +3310,11 @@ that is not a command line.
 
 The link form offers what `flayer scan` finds under the workspace, or under
 the folders `flayer minds` was given for the session it opened
-([Scanning](#scanning)). A git repository that is not a mind project yet can
-be picked, but making it one writes into it, so `mind init` is asked about,
-not assumed, and a typed path that turns out to be a plain directory is asked
-about the same way. Unlinking asks too, and says that nothing on disk is
+([Scanning](#scanning)), in the order `flayer scan --suggest` gives and with
+its reasons, so the row picked when it opens is the one most worth linking.
+A git repository that is not a mind project yet can be picked, but making it
+one writes into it, so `mind init` is asked about, not assumed, and a typed
+path that turns out to be a plain directory is asked about the same way. Unlinking asks too, and says that nothing on disk is
 deleted. Deleting one of the workspace's own asks with a second yes for
 removing it everywhere ([removing one of the workspace's own
 everywhere](#removing-one-of-the-workspaces-own-everywhere)), the line each
@@ -3322,12 +3323,23 @@ in it, so a typo is fixed where it was made rather than typed out again.
 
 ### The minds screen
 
-`m`, or `flayer minds`, lists every project the workspace links, ticked, and
-every one `flayer scan` finds under it that it does not, unticked, all in one
-list by path, because the question it answers is "which of these", not "which
-kind". `flayer minds DIR` finds those under the folders it names instead
-([Scanning](#scanning)). Ticking only marks. Applying turns the marks into
-lines like any other task: `mind -C <path> init` for each repository that is
+`m`, or `flayer minds`, lists every one `flayer scan` finds under the
+workspace that it does not link, unticked, then every project it links,
+ticked, in the order `flayer scan --suggest` gives: what is not linked first,
+most worth linking first, each row saying why ([which to link
+first](#which-to-link-first)). It was one list by path, on the grounds that
+the question was "which of these", not "which kind"; under a home that is
+dozens of repositories in name order, and the one worth linking is wherever
+its name puts it, so the screen shows core's ranking of those instead, and
+sorts none of them itself. The projects it links come from the marker
+rather than the scan, which may not reach them all, so the screen lists
+those by their entry, as the command lists the ones it found by route. A
+reason can name every agent file a repository holds, so one longer than the
+pane leaves room for is cut, ending in `…`, rather than pushing what
+applying would do to each row past the pane's edge; the command says it
+whole. `flayer minds DIR` finds those under the folders it
+names instead ([Scanning](#scanning)). Ticking only marks. Applying turns the
+marks into lines like any other task: `mind -C <path> init` for each repository that is
 not a project yet, then one `flayer link` and one `flayer unlink`, each with
 every path at once. So the screen needed `link` and `unlink` to take several
 paths, and they take them **all or nothing**: every path is checked before any
@@ -4297,7 +4309,9 @@ Record what it reads first, in docs/agents.md, verified or docs-only with a
 fallback. Then a variant on `Agent` and its name, and its arm for each kind in
 the table's `standard`, and in `read`, behind `Agent::reads`, which both match
 every pair with no wildcard: neither a new agent nor a new kind compiles until
-somebody has said where it goes and where it reads. The
+somebody has said where it goes and where it reads. Its arm in `at_root`,
+behind `Agent::reads_at_root`, says which files at a project's root it reads,
+for a suggestion to rank by ([which to link first](#which-to-link-first)). The
 compiler lists every match on `Agent`, since each is exhaustive, but not what
 is not a match:
 
@@ -5404,11 +5418,12 @@ the person's to say, never a guess.
 
 `flayer scan --json` prints the scan in [the envelope](#json-in-one-envelope),
 each field by its name (`roots`, `depth`, `found`, each with `path`, `route`,
-`id`, `mind`, `linked` and `moved`, `untraced` and `truncated`); its
-failures, and that it stopped early, are the envelope's warnings. `moved`
-and `untraced` came after the others, names added, so the envelope's
-version stayed. The table leaves the id out: the path already tells its
-rows apart, and the id is for a script to match a project by.
+`id`, `mind`, `linked`, `moved`, `reason` and `agent_files`, `untraced` and
+`truncated`); its failures, and that it stopped early, are the envelope's
+warnings. `moved` and `untraced` came after the others, and `reason` and
+`agent_files` after them, names added, so the envelope's version stayed.
+The table leaves the id out: the path already tells its rows apart, and the
+id is for a script to match a project by.
 
 `flayer minds DIR` opens the minds screen looking under the folders it is
 given rather than the workspace root, and the TUI keeps them and looks there
@@ -5419,6 +5434,52 @@ to show. What the scan could not read, and that it stopped early, the screen
 says in a strip below the list, in the words `flayer scan` warns with, so a
 folder typed wrong is said there too rather than drawn as one with nothing
 in it.
+
+### Which to link first
+
+A scan of a home lists dozens of repositories, most of which nobody wants
+managed, so `flayer scan --suggest` ranks them. What it finds carries its
+reason (`scan::Reason`), the strongest of what it holds, best first: a mind
+project its settings name by an id (`id`), which a workspace follows when it
+moves; one with no id (`mind`), which a `mind.toml` marks or whose marker
+would not open; a git repository holding something an agent reads at its
+root (`agents`); and any other repository (`git`). A project ranks above a
+repository because it is linked as it is, where a repository needs
+`mind init` first, a write into somebody's tree; a repository an agent works
+in ranks above one nobody does because that is where skills and rules would
+be read. Each goes out as that word, by hand rather than derived from the
+variant, as a kind or an agent does.
+
+What counts as an agent's is a name at the root, never what a file holds:
+`Agent::reads_at_root` gives, for each agent, the folder each place it reads
+a kind from sits in, taken from `Agent::reads` (`.claude` for
+`.claude/skills`), its instruction files, and the file
+[D-10](#d-10-an-mcp-server-is-one-owned-entry-per-agent) puts its project's
+MCP servers in, each resting on a fact in
+[docs/agents.md](agents.md#what-says-an-agent-works-in-a-project). It lives
+with the agent rather than in the scan or a front end, behind a match on
+every agent with no wildcard, so an agent added, or a folder an agent is
+found to read, reaches the ranking without anyone remembering it. The names
+are looked at with `symlink_metadata`, a few in each directory already
+found: nothing more is listed, so the walk stays inside the bounds above,
+and a link counts as what it is called without being followed. Every
+directory found lists the ones it holds (`agent_files`), a project too, so
+a script sees what made a repository's reason.
+
+The order is core's too: a `Request` names it (`scan::Order`), by route
+unless suggested, and a suggestion lists what is not linked first, best
+reason first and by route within one, then what is linked, by route, whose
+reason says why it was worth linking once and nothing now. The minds screen
+and the link form read their scan in that order and show what is not linked
+unsorted (the screen lists every project linked after it, by its entry),
+each found row with the words `flayer scan --suggest` uses (one helper in
+the CLI says them for the command and both screens), so the screen cannot
+rank differently from the command it shows. A project found moved says
+`moved` on the screens as in the command: its reason is its id, which ranks
+it first, but what it wants is a relink, and a row offering it as the
+project most worth linking would have it linked beside the entry it left
+stale. A suggestion links nothing, makes nothing a project, and reads as any
+scan does: no marker, no ledger and no workspace written.
 
 ## Writers at the same time
 
@@ -6941,10 +7002,23 @@ just listed.
   nothing keeps the folders, so the TUI's `m` and link form opened another
   time look under the workspace root again, and a default workspace in home
   offers the whole home, three levels down. Keeping them in `flayer.toml`
-  would be a format change, and whether it belongs with ranked suggestions
-  (#58) is open. Nor does the screen take a depth: `flayer minds` looks
+  would be a format change, which ranked suggestions (#58) did without: they
+  rank what a scan finds wherever it looks, so the screen puts what is worth
+  linking first even under a whole home, and keeping the folders is still
+  open. Nor does the screen take a depth: `flayer minds` looks
   `DEFAULT_DEPTH` levels down, and a project further down is linked by its
   path.
+- **What a suggestion counts.** An agent's files count by name at a
+  candidate's root: a `.claude` holding only somebody's local settings ranks
+  a repository as one holding skills does, and an `AGENTS.md` in a
+  subfolder counts for nothing. Reading what each holds, or looking deeper,
+  would rank better at the price of opening files in every repository under
+  a home. Nor do agent files make a folder a candidate: one that is neither
+  a project nor a repository, notes kept beside a `CLAUDE.md`, is walked
+  through and never offered, however much an agent reads there, since
+  offering it would offer a home directory for its `.claude` too. And the
+  ranking stops at the reason: within one, candidates go by route, not by
+  how many agent files each holds or how recently it changed.
 - **The shelf in other reports.** `flayer validate` reads the shelf; `flayer
   list` and `show` do not, because `gather list` is the shelf's listing. Seeing
   a gathered skill's contents before installing it means reading its folder.

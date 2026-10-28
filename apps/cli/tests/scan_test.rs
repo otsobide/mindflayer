@@ -197,6 +197,8 @@ struct Found {
     mind: bool,
     linked: bool,
     moved: Option<String>,
+    reason: String,
+    agent_files: Vec<String>,
 }
 
 #[test]
@@ -204,6 +206,7 @@ fn scan_json_is_the_envelope_with_each_one_found_and_its_id() {
     let dir = workspace_with_two();
     flayer(dir.path(), &["unlink", "beta"]).unwrap();
     fs::create_dir_all(dir.path().join("gamma/.git")).unwrap();
+    fs::write(dir.path().join("gamma/AGENTS.md"), "# Agents\n").unwrap();
 
     let outcome = flayer(dir.path(), &["scan", "--json", "--depth", "2"]).unwrap();
 
@@ -228,6 +231,8 @@ fn scan_json_is_the_envelope_with_each_one_found_and_its_id() {
         bool,
         bool,
         Option<&'a str>,
+        &'a str,
+        Vec<&'a str>,
     );
     let found: Vec<Seen> = report
         .found
@@ -240,6 +245,8 @@ fn scan_json_is_the_envelope_with_each_one_found_and_its_id() {
                 found.mind,
                 found.linked,
                 found.moved.as_deref(),
+                found.reason.as_str(),
+                found.agent_files.iter().map(String::as_str).collect(),
             )
         })
         .collect();
@@ -248,9 +255,36 @@ fn scan_json_is_the_envelope_with_each_one_found_and_its_id() {
     assert_eq!(
         found,
         vec![
-            (alpha.as_str(), "alpha", id("alpha"), true, true, None),
-            (beta.as_str(), "beta", id("beta"), true, false, None),
-            (gamma.as_str(), "gamma", None, false, false, None),
+            (
+                alpha.as_str(),
+                "alpha",
+                id("alpha"),
+                true,
+                true,
+                None,
+                "id",
+                vec![]
+            ),
+            (
+                beta.as_str(),
+                "beta",
+                id("beta"),
+                true,
+                false,
+                None,
+                "id",
+                vec![]
+            ),
+            (
+                gamma.as_str(),
+                "gamma",
+                None,
+                false,
+                false,
+                None,
+                "agents",
+                vec!["AGENTS.md"]
+            ),
         ]
     );
     assert!(id("alpha").is_some());
@@ -329,7 +363,168 @@ fn flayer_scan_looks_three_levels_down_unless_told() {
         Some(mindflayer_cli::FlayerCommand::Scan {
             ref roots,
             depth: DEFAULT_DEPTH,
+            suggest: false,
             json: false,
         }) if roots.is_empty()
+    ));
+}
+
+// ---------------------------------------------------------------------------
+// flayer scan --suggest
+// ---------------------------------------------------------------------------
+
+/// `workspace_with_two`, its `alpha` and `beta` linked, beside one of each
+/// that is not: `gamma`, a project with an id, `older`, one a `mind.toml`
+/// marks, `notes`, a repository holding an `AGENTS.md` and a `.claude`,
+/// and `scratch`, a repository and nothing more. Named so that no rank is
+/// their order by name.
+fn workspace_with_one_of_each() -> TempDir {
+    let dir = workspace_with_two();
+    let gamma = dir.path().join("gamma");
+    fs::create_dir(&gamma).unwrap();
+    new_project(&gamma);
+    let older = dir.path().join("older");
+    fs::create_dir(&older).unwrap();
+    older_project(&older);
+    let notes = dir.path().join("notes");
+    fs::create_dir_all(notes.join(".git")).unwrap();
+    fs::create_dir(notes.join(".claude")).unwrap();
+    fs::write(notes.join("AGENTS.md"), "# Agents\n").unwrap();
+    fs::create_dir_all(dir.path().join("scratch/.git")).unwrap();
+    dir
+}
+
+#[test]
+fn scan_suggest_lists_what_is_not_linked_first_each_with_why() {
+    let dir = workspace_with_one_of_each();
+
+    let outcome = flayer(dir.path(), &["scan", "--suggest"]).unwrap();
+
+    assert!(outcome.ok, "{:?}", outcome.stderr);
+    assert_eq!(
+        outcome.stdout,
+        "\
+gamma    not linked  mind project with an id
+older    not linked  mind project without an id
+notes    not linked  git repository with .claude, AGENTS.md
+scratch  not linked  git repository
+alpha    linked
+beta     linked
+
+  link one with `flayer link <path>`
+  a repository needs `mind -C <path> init` before it can be linked
+"
+    );
+}
+
+#[test]
+fn scan_without_suggest_keeps_its_order_by_route_and_its_words() {
+    let dir = workspace_with_one_of_each();
+
+    let outcome = flayer(dir.path(), &["scan"]).unwrap();
+
+    let lines: Vec<&str> = outcome.stdout.lines().take(6).collect();
+    assert_eq!(
+        lines,
+        vec![
+            "alpha    linked",
+            "beta     linked",
+            "gamma    not linked  mind project",
+            "notes    not linked  git repository, not a mind project yet",
+            "older    not linked  mind project",
+            "scratch  not linked  git repository, not a mind project yet",
+        ]
+    );
+}
+
+#[test]
+fn scan_suggest_json_is_the_envelope_in_the_order_suggested_with_each_reason() {
+    let dir = workspace_with_one_of_each();
+
+    let outcome = flayer(dir.path(), &["scan", "--suggest", "--json"]).unwrap();
+
+    assert!(outcome.ok, "{:?}", outcome.stderr);
+    let (report, warnings): (Report, _) = enveloped(&outcome);
+    assert!(warnings.is_empty(), "{warnings:?}");
+    let ranked: Vec<(&str, bool, &str, Vec<&str>)> = report
+        .found
+        .iter()
+        .map(|found| {
+            (
+                found.route.as_str(),
+                found.linked,
+                found.reason.as_str(),
+                found.agent_files.iter().map(String::as_str).collect(),
+            )
+        })
+        .collect();
+    assert_eq!(
+        ranked,
+        vec![
+            ("gamma", false, "id", vec![]),
+            ("older", false, "mind", vec![]),
+            ("notes", false, "agents", vec![".claude", "AGENTS.md"]),
+            ("scratch", false, "git", vec![]),
+            ("alpha", true, "id", vec![]),
+            ("beta", true, "id", vec![]),
+        ]
+    );
+}
+
+#[test]
+fn scan_suggest_links_nothing_and_writes_nothing() {
+    let dir = workspace_with_one_of_each();
+    let before = registry(dir.path());
+    let ledger = FlayerWorkspace::open(dir.path()).unwrap().ledger_path();
+    let had_ledger = ledger.exists();
+
+    flayer(dir.path(), &["scan", "--suggest"]).unwrap();
+    flayer(dir.path(), &["scan", "--suggest", "--json"]).unwrap();
+
+    assert_eq!(registry(dir.path()), before);
+    assert_eq!(ledger.exists(), had_ledger);
+    for name in ["notes", "scratch"] {
+        assert!(!dir.path().join(name).join(MIND_DIR).exists(), "{name}");
+    }
+}
+
+#[test]
+fn scan_suggest_of_a_folder_outside_the_workspace_reads_without_making_the_default() {
+    let home = TempDir::new().unwrap();
+    let work = TempDir::new().unwrap();
+    fs::create_dir_all(work.path().join("plain/.git")).unwrap();
+    let worked = work.path().join("worked");
+    fs::create_dir_all(worked.join(".git")).unwrap();
+    fs::write(worked.join("CLAUDE.md"), "").unwrap();
+
+    let outcome = flayer_at_home(
+        work.path(),
+        home.path(),
+        &["scan", "--suggest", work.path().to_str().unwrap()],
+    )
+    .unwrap();
+
+    assert!(outcome.ok, "{:?}", outcome.stderr);
+    assert_eq!(
+        outcome.stdout.lines().take(2).collect::<Vec<_>>(),
+        vec![
+            "worked  not linked  git repository with CLAUDE.md",
+            "plain   not linked  git repository",
+        ]
+    );
+    assert!(!home.path().join(FLAYER_DIR).exists());
+}
+
+#[test]
+fn flayer_scan_takes_suggest() {
+    let parsed = FlayerCli::try_parse_from(["flayer", "scan", "--suggest", "work"]).unwrap();
+
+    assert!(matches!(
+        parsed.command,
+        Some(mindflayer_cli::FlayerCommand::Scan {
+            ref roots,
+            suggest: true,
+            ..
+        }) if roots == &[std::path::PathBuf::from("work")]
     ));
 }

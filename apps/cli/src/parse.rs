@@ -692,6 +692,12 @@ pub enum FlayerCommand {
         #[arg(long, value_name = "N", default_value_t = DEFAULT_DEPTH)]
         depth: usize,
 
+        /// List what is not linked first, most worth linking first, each
+        /// with why: a mind project with an id, then one without, then a git
+        /// repository holding files an agent reads, then any other.
+        #[arg(long)]
+        suggest: bool,
+
         /// Print it as JSON, in the envelope every reading command's --json
         /// shares.
         #[arg(long)]
