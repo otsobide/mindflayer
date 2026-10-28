@@ -109,6 +109,14 @@ pub fn to_config_string(path: &Path) -> Option<String> {
     })
 }
 
+/// A route as a marker spells it, `/` separated, or as it displays when it
+/// is not UTF-8, which no marker holds but a report still has to say: a
+/// workspace's entry as `-p` and `flayer unlink` take it, or a folder a
+/// project's settings name.
+pub(crate) fn as_route(route: &Path) -> String {
+    to_config_string(route).unwrap_or_else(|| route.display().to_string())
+}
+
 /// A path as text in a report's JSON, whatever bytes it holds: a report that
 /// failed over one unprintable path would say nothing about the rest.
 pub(crate) fn lossy<S: Serializer>(path: &Path, serializer: S) -> Result<S::Ok, S::Error> {
