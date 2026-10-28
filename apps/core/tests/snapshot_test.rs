@@ -10,7 +10,7 @@ use std::path::{Path, PathBuf};
 
 use mindflayer_core::ledger::{Action, InstallRecord, Outcome, Target};
 use mindflayer_core::resolve::{Inputs, Intent, Reason};
-use mindflayer_core::view::{LoadedWorkspace, Project, Snapshot};
+use mindflayer_core::view::{Held, LoadedWorkspace, Project, Snapshot};
 use mindflayer_core::{
     hash, Agent, Directories, FlayerWorkspace, Kind, MindProject, Share, SourceKind, State,
     FLAYER_DIR,
@@ -502,10 +502,25 @@ fn read(fixture: &Fixture, name: &str) -> Project {
     Project::read(&project, Some(&workspace))
 }
 
+/// The one row `api` in [`fixture`] lists as `deploy`.
+fn deploy(fixture: &Fixture) -> Held {
+    let project = read(fixture, "api");
+    assert!(project.failures.is_empty(), "{:?}", project.failures);
+    let deploy: Vec<&Held> = project
+        .artifacts
+        .iter()
+        .filter(|held| held.name == "deploy")
+        .collect();
+    assert_eq!(deploy.len(), 1, "{deploy:?}");
+    deploy[0].clone()
+}
+
 /// A file that does not read is listed where it would have been, by the
 /// name its place gives it and in place of a copy of that name in an
 /// agent's folder, with why it does not read: the one most in need of
-/// opening. What no artifact can be named by is a failure of its holder.
+/// opening. Where it is is said on its own, so the copy that reads, whose
+/// standing the row keeps, is never taken for it. What no artifact can be
+/// named by is a failure of its holder.
 #[test]
 fn a_file_that_does_not_read_is_listed_by_its_place_with_why() {
     let fixture = fixture();
@@ -519,18 +534,33 @@ fn a_file_that_does_not_read_is_listed_by_its_place_with_why() {
         )],
     );
 
-    let project = read(&fixture, "api");
+    let beside = deploy(&fixture);
+    fs::remove_dir_all(api.join(".claude/skills/deploy")).unwrap();
+    let alone = deploy(&fixture);
 
-    let deploy: Vec<_> = project
-        .artifacts
-        .iter()
-        .filter(|held| held.name == "deploy")
-        .collect();
-    assert_eq!(deploy.len(), 1, "{deploy:?}");
-    let unread = deploy[0].unread.as_ref().expect("said why");
-    assert!(!unread.message.contains("SKILL.md"), "{}", unread.message);
-    assert_eq!(deploy[0].summary, None);
-    assert!(project.failures.is_empty(), "{:?}", project.failures);
+    // Where the copy is, by its own name, and the reason alone.
+    assert_eq!(
+        serde_json::to_value(&beside.unread).unwrap(),
+        serde_json::json!({
+            "path": "skills/deploy",
+            "code": "front_matter_missing",
+            "message": "the file does not start with a `---` front matter fence",
+        })
+    );
+    assert_eq!(beside.summary, None);
+    // How the name stands is the copy's that reads, somebody's in Claude's
+    // folder, and both are where it is held.
+    assert_eq!(beside.state, Some(State::Foreign));
+    assert_eq!(beside.agents, [Agent::Claude]);
+    assert_eq!(beside.targets, [".claude/skills/deploy", "skills/deploy"]);
+    // With no copy that reads, nothing stands, and it is held where it is.
+    assert_eq!(
+        alone.unread.as_ref().map(|unread| unread.path.as_str()),
+        Some("skills/deploy")
+    );
+    assert_eq!(alone.state, None);
+    assert_eq!(alone.agents, []);
+    assert_eq!(alone.targets, ["skills/deploy"]);
 }
 
 /// An install every copy of which has gone is still listed, missing, with

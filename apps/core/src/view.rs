@@ -211,8 +211,11 @@ pub struct Held {
     /// The one line a listing shows; none for one whose file does not read,
     /// and for an install nothing of which is found.
     pub summary: Option<String>,
-    /// How it stands in its project, as `status` says; none for the
-    /// library's own, which are no project's.
+    /// How its name stands in its project, as `status` says; none for the
+    /// library's own, which are no project's. Only a copy that reads has a
+    /// standing, so beside an [`unread`](Self::unread) one it is that of a
+    /// copy of the name elsewhere, in an agent's folder, and none when
+    /// there is no such copy.
     pub state: Option<State>,
     /// The agents among its project's that read a copy of it, in report
     /// order.
@@ -221,17 +224,34 @@ pub struct Held {
     #[serde(serialize_with = "crate::url::serialize_redacted_option")]
     pub origin: Option<String>,
     /// Where it is held, as routes from its holder, `/` separated, in path
-    /// order: each copy discovery found, and each place the ledger records
-    /// putting one, found or not.
+    /// order: each copy discovery found, the one whose file does not read
+    /// among them, and each place the ledger records putting one, found or
+    /// not.
     pub targets: Vec<String>,
     /// Everything `validate` says of it, warnings included, each saying
     /// whether it is one.
     pub issues: Vec<ValidationIssue>,
-    /// Why its file does not read, when it does not: by its code and the
-    /// reason alone, since where it is the artifact's place already says.
+    /// The copy whose file does not read, when one does not, and why.
     /// Listed all the same, by the name its place gives it, because a file
     /// that does not read is the one most in need of opening.
-    pub unread: Option<Said>,
+    pub unread: Option<Unread>,
+}
+
+/// A copy of an artifact whose file does not read, and why.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct Unread {
+    /// Where the copy is, as a route from its holder, `/` separated: its
+    /// place in the folder the holder keeps its kind in, the one place a
+    /// file that does not read is named by ([`lifecycle::identify`]). Said
+    /// on its own, as well as among [`Held::targets`], since a copy that
+    /// reads can sit beside it under the same name, elsewhere.
+    pub path: String,
+    pub code: &'static str,
+    /// The reason alone, without the path, which [`path`](Self::path)
+    /// says: written through [`redacted`](crate::url::redacted), as a
+    /// [`Said`]'s message is.
+    #[serde(serialize_with = "crate::url::serialize_redacted")]
+    pub message: String,
 }
 
 /// A workspace another one loads, and how much of its own it offers.
@@ -470,7 +490,10 @@ impl ProjectSettings {
 /// name its place gives it ([`lifecycle::identify`]), so it can be opened
 /// and fixed from a front end; and in place of a copy of that name in the
 /// project's agents' folders, since a row is named by its name alone and a
-/// change to that name reaches the project's own copy, this one. Only what
+/// change to that name reaches the project's own copy, this one. The row
+/// keeps the report's standing of the name, which only a copy that reads
+/// has, and adds this copy's place to where it is held, naming it in
+/// `unread` too, so that no reader takes the other copy for it. Only what
 /// cannot be pinned to an artifact, a folder that cannot be listed, is left
 /// a failure on its own. An install nothing of which is found is listed as
 /// the report lists it, from which it can be put back.
@@ -523,14 +546,25 @@ fn holdings(
             continue;
         };
         let row = row(kind, &name);
+        // Identified, so the project keeps a folder for the kind, and the
+        // file is in it.
+        let path = lifecycle::place(project, kind, &name).map_or_else(
+            || install::route(root, failure.path()),
+            |place| install::route(root, &place),
+        );
+        let mut targets = row.map(|(_, placed)| placed.clone()).unwrap_or_default();
+        targets.push(path.clone());
+        targets.sort();
+        targets.dedup();
         let unread = Held {
             summary: None,
             state: row.map(|(row, _)| row.state),
             agents: row.map(|(row, _)| row.agents.clone()).unwrap_or_default(),
             origin: row.and_then(|(row, _)| row.origin.clone()),
-            targets: row.map(|(_, placed)| placed.clone()).unwrap_or_default(),
+            targets,
             issues: Vec::new(),
-            unread: Some(Said {
+            unread: Some(Unread {
+                path,
                 code: failure.code(),
                 message: failure
                     .source()

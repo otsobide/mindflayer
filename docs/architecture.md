@@ -1478,8 +1478,10 @@ read, built and ordered in core from the read types the commands print:
 - each artifact a holder holds, with its kind, summary, state, the agents
   that read it, where it came from, where it is held (`targets`: every copy
   found and every place the ledger records putting one), everything
-  `validate` says of it, and why its file does not read, the rules a
-  project's `AGENTS.md` block holds among them
+  `validate` says of it, and which copy's file does not read and why
+  (`unread`, its own place named beside the reason, since its row keeps
+  how a readable copy of the name elsewhere stands, the report's), the
+  rules a project's `AGENTS.md` block holds among them
   ([D-23](#d-23-what-a-project-received-is-an-installed-view));
 - the workspaces it loads, each with how many of its own it offers; its
   shelf and the sources it is filled from; the workspaces this machine
