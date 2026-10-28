@@ -3527,11 +3527,15 @@ and the same project by its path; or among the positionals, which go behind
 a `--` whenever one of them starts with a dash. A test holds every variant to
 it: fed values that start with a dash, the flags the grammar knows among
 them and a couple of hundred more made from a fixed seed, each line is read
-as the same line with a plain value is, the same commands and the same
-options, holding the value as given. A property-test crate was the
-alternative, and one loop over every variant, with no new dependency, is
-all this asks of one. Shown, a line is quoted for a shell (`task::shell`), so
-one pasted from the transcript runs as one command of exactly its words.
+as the same line with a plain value is: the same commands, the same options,
+and under each option or positional the value as given wherever the plain
+one was, behind its `./` under a `-C` or a `-p`. Compared option by option
+rather than as one bag of values, since a line holds a value in several
+fields, and one field holding it would hide another that dropped its dash.
+A property-test crate was the alternative, and one loop over every variant,
+with no new dependency, is all this asks of one. Shown, a line is quoted for
+a shell (`task::shell`), so one pasted from the transcript runs as one
+command of exactly its words.
 
 A `-C` or a `-W` in those words is relative to the workspace root, which is
 how someone reading the transcript takes it, so it is resolved against the

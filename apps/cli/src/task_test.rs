@@ -479,59 +479,133 @@ impl Parsers {
         }
     }
 
-    /// `line` as the parser of the binary it names reads it.
-    fn parse(&mut self, line: &[String]) -> ArgMatches {
+    /// What `line` asks for, as the parser of the binary it names reads it
+    /// ([`read`]).
+    fn read(&mut self, line: &[String]) -> Read {
         let command = match line[0].as_str() {
             "mind" => &mut self.mind,
             "flayer" => &mut self.flayer,
             other => panic!("{line:?} runs `{other}`"),
         };
-        command
+        let matches = command
             .try_get_matches_from_mut(line)
-            .unwrap_or_else(|error| panic!("{line:?} does not parse: {error}"))
+            .unwrap_or_else(|error| panic!("{line:?} does not parse: {error}"));
+        read(&[command], &line[0], &matches)
     }
 }
 
-/// What `matches` says a line asked for, every value left out: each command
-/// in turn by its name, and under each, every argument the line gave, by its
-/// id, with how many values it took.
+/// What a line asked for ([`read`]): each command in turn by its name, and
+/// under it each argument given.
+type Read = Vec<(String, Vec<Given>)>;
+
+/// One argument a line gave.
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+struct Given {
+    id: String,
+    /// The short flag that gives it, when it is an option that has one: by
+    /// the flag rather than the id, since `flayer link` takes its
+    /// directories as `projects` too, behind no flag and no `./`.
+    short: Option<char>,
+    values: Vec<String>,
+}
+
+/// What `matches` says a line asked for, `commands` the command it was read
+/// by and each above it: each command in turn by its name, and under each,
+/// every argument the line gave, by its id, with the values it took, as
+/// given.
 ///
 /// Two lines alike in this asked the same command for the same options in
-/// the same places: one that read a value as an option would have one more,
-/// or a value fewer, and one that read it as a command would name another.
-fn shape(name: &str, matches: &ArgMatches) -> Vec<(String, Vec<(String, usize)>)> {
-    let mut given: Vec<(String, usize)> = matches
+/// the same places, each holding the same values: one that read a value as
+/// an option would have an argument more, or a value fewer, one that read
+/// it as a command would name another, and one that changed a value on its
+/// way, a dash dropped from `--from=-odd`, would hold another under that
+/// option's id, whatever the line's other fields hold.
+fn read(commands: &[&clap::Command], name: &str, matches: &ArgMatches) -> Read {
+    // The innermost first, and then those above it, where a global option
+    // such as `-C` is declared.
+    let short = |id: &str| {
+        commands
+            .iter()
+            .rev()
+            .find_map(|command| command.get_arguments().find(|arg| arg.get_id() == id))
+            .and_then(clap::Arg::get_short)
+    };
+    let mut given: Vec<Given> = matches
         .ids()
         .filter(|id| matches.value_source(id.as_str()) == Some(ValueSource::CommandLine))
-        .map(|id| {
-            let values = matches
+        .map(|id| Given {
+            id: id.as_str().to_owned(),
+            short: short(id.as_str()),
+            values: matches
                 .try_get_raw(id.as_str())
                 .ok()
                 .flatten()
-                .map_or(0, |raw| raw.len());
-            (id.as_str().to_owned(), values)
+                .map_or_else(Vec::new, |raw| {
+                    raw.map(|value| value.to_string_lossy().into_owned())
+                        .collect()
+                }),
         })
         .collect();
     given.sort();
-    let mut shape = vec![(name.to_owned(), given)];
+    let mut read = vec![(name.to_owned(), given)];
     if let Some((name, matches)) = matches.subcommand() {
-        shape.extend(self::shape(name, matches));
+        let inner = commands[commands.len() - 1]
+            .find_subcommand(name)
+            .unwrap_or_else(|| panic!("no command `{name}`"));
+        let mut commands = commands.to_vec();
+        commands.push(inner);
+        read.extend(self::read(&commands, name, matches));
     }
-    shape
+    read
 }
 
-/// Every value `matches` holds, at every level, as given.
-fn values(matches: &ArgMatches) -> Vec<String> {
-    let mut values: Vec<String> = matches
-        .ids()
-        .filter_map(|id| matches.try_get_raw(id.as_str()).ok().flatten())
-        .flatten()
-        .map(|raw| raw.to_string_lossy().into_owned())
-        .collect();
-    if let Some((_, matches)) = matches.subcommand() {
-        values.extend(self::values(matches));
-    }
-    values
+/// What the property below builds every task with in place of a value that
+/// starts with a dash, to find where each field's value lands: plain, and a
+/// word no fixed part of a line holds, as `plain`, which [`every`] puts
+/// beside the value in some lists, does.
+const GIVEN: &str = "given";
+
+/// The short flags whose value names a project's directory: `-C`, and the
+/// `-p` of an install, an uninstall and an adoption. A value that starts
+/// with a dash reaches them behind a `./`, which names the same directory
+/// and so the same project ([`directory`]).
+const DIRECTORIES: [char; 2] = ['C', 'p'];
+
+/// What a line built with `value` wherever [`GIVEN`] was is to be read as,
+/// given how the line built with [`GIVEN`] was read (`read`): the same
+/// commands, the same arguments under the same ids, and in each place
+/// [`GIVEN`] was, `value` as given, behind its `./` under an option that
+/// names a directory.
+fn holding(read: &Read, value: &str) -> Read {
+    read.iter()
+        .map(|(name, given)| {
+            let given = given
+                .iter()
+                .map(|given| {
+                    let directory = given
+                        .short
+                        .is_some_and(|short| DIRECTORIES.contains(&short));
+                    let values = given
+                        .values
+                        .iter()
+                        .map(|held| {
+                            let held = held.replace(GIVEN, value);
+                            if directory && held.starts_with('-') {
+                                format!("./{held}")
+                            } else {
+                                held
+                            }
+                        })
+                        .collect();
+                    Given {
+                        values,
+                        ..given.clone()
+                    }
+                })
+                .collect();
+            (name.clone(), given)
+        })
+        .collect()
 }
 
 #[test]
@@ -555,44 +629,39 @@ fn every_variant_s_lines_parse_with_cli_or_flayer_cli() {
 #[test]
 fn no_value_starting_with_a_dash_is_read_as_an_option_or_a_command() {
     let mut parsers = Parsers::new();
-    // Each plain line's shape, and whether it holds the plain value, once.
-    let plain: Vec<Vec<_>> = every("plain")
+    // How each line built with a plain value is read, once.
+    let plain: Vec<Vec<(Vec<String>, Read)>> = every(GIVEN)
         .iter()
         .map(|task| {
             task.commands()
-                .iter()
+                .into_iter()
                 .map(|line| {
-                    let matches = parsers.parse(line);
-                    let holds = values(&matches).iter().any(|held| held.ends_with("plain"));
-                    (line.clone(), shape(&line[0], &matches), holds)
+                    let read = parsers.read(&line);
+                    (line, read)
                 })
                 .collect()
         })
         .collect();
+    // Held to something: a field the property never reaches would pass it
+    // whatever its line did with a value.
+    let reached = plain
+        .iter()
+        .flatten()
+        .flat_map(|(_, read)| read.iter().flat_map(|(_, given)| given))
+        .flat_map(|given| &given.values)
+        .filter(|value| value.contains(GIVEN))
+        .count();
+    assert!(reached > 0);
     for value in hostile() {
-        let mut spelled = vec![value.clone(), format!("./{value}")];
-        spelled.extend(Kind::ALL.map(|kind| qualified(kind, &value)));
         for (task, expected) in every(&value).iter().zip(&plain) {
             let lines = task.commands();
             assert_eq!(lines.len(), expected.len(), "{task:?}");
-            for (line, (plainly, shaped, holds)) in lines.iter().zip(expected) {
-                let matches = parsers.parse(line);
-
+            for (line, (plainly, read)) in lines.iter().zip(expected) {
                 assert_eq!(
-                    &shape(&line[0], &matches),
-                    shaped,
-                    "{line:?} is not read as {plainly:?} is"
+                    parsers.read(line),
+                    holding(read, &value),
+                    "{line:?} is not read as {plainly:?} is, holding {value:?}"
                 );
-                // And it arrived as the value it is, wherever the plain one
-                // did: as given, as a directory `./` keeps from being read as
-                // a flag, or as a name its kind qualifies.
-                if *holds {
-                    let held = values(&matches);
-                    assert!(
-                        held.iter().any(|held| spelled.contains(held)),
-                        "{line:?} holds {held:?}"
-                    );
-                }
             }
         }
     }

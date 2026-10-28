@@ -20,7 +20,9 @@
 //! `./` that names the same directory (`directory`); or as a positional,
 //! behind a `--` whenever one of them starts with a dash (`words`). A test
 //! feeds every variant values that start with a dash, and finds each line
-//! read as the same line with a plain value is, holding the value as given.
+//! read as the same line with a plain value is, each option and positional
+//! holding the value as given wherever the plain one was, behind its `./`
+//! under a `-C` or a `-p`.
 //! Shown, a line is quoted so that, pasted into a shell, it runs as one
 //! command of exactly these words ([`shell`]).
 
