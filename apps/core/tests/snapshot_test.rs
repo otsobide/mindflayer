@@ -7,13 +7,17 @@ mod common;
 use std::collections::BTreeMap;
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::slice;
 
+use mindflayer_core::assign;
+use mindflayer_core::install::Edits;
 use mindflayer_core::ledger::{Action, InstallRecord, Outcome, Target};
+use mindflayer_core::reapply::{self, Change};
 use mindflayer_core::resolve::{Inputs, Intent, Reason};
 use mindflayer_core::view::{Held, LoadedWorkspace, Project, Snapshot};
 use mindflayer_core::{
-    hash, Agent, Directories, FlayerWorkspace, Kind, MindProject, Share, SourceKind, State,
-    FLAYER_DIR,
+    create, hash, Agent, AgentHomes, Directories, FlayerWorkspace, Kind, MindProject, Reference,
+    Share, SourceKind, State, FLAYER_DIR,
 };
 use tempfile::TempDir;
 
@@ -25,14 +29,16 @@ const AT: i64 = 1_790_000_000;
 
 /// A workspace `hub` in a temporary folder, as a front end finds one:
 ///
-/// - its library holds `review`, which it offers;
+/// - its library holds `review` and the rule `commits`, which it offers;
 /// - it links `api`, marked by its settings for Claude and Codex and shared,
-///   which authors `deploy` and received `review` from the library, both
-///   copies there as they were written;
+///   which also name the folders its skills go in, the ones its agents
+///   read; `api` authors `deploy`, received `review` from the library, both
+///   copies there as they were written, and received the rule `commits`
+///   (D-23) as an install writes it;
 /// - it links `gone`, whose directory has gone since;
 /// - it loads `team`, beside it, which offers `notes`;
-/// - its shelf holds `lint`, gathered from one source, and its log one
-///   gather.
+/// - its shelf holds `lint`, gathered from one source, and its log the
+///   install of `commits` and one gather.
 struct Fixture {
     dir: TempDir,
     hub: PathBuf,
@@ -58,6 +64,23 @@ fn fixture() -> Fixture {
         &directories,
     )
     .unwrap();
+    workspace.link(&api).unwrap();
+    // The folders the standard table sends skills to, in an order of its
+    // own: settings that say where, which change nothing else.
+    reapply::apply(
+        Some(&workspace),
+        &api,
+        &Change::Targets {
+            kind: Kind::Skill,
+            folders: Some(vec![
+                PathBuf::from(".claude/skills"),
+                PathBuf::from(".agents/skills"),
+            ]),
+        },
+        &AgentHomes::default(),
+    )
+    .unwrap();
+    let api = MindProject::open(api.root()).unwrap();
     common::write_files(
         api.root(),
         &[
@@ -72,7 +95,27 @@ fn fixture() -> Fixture {
             ),
         ],
     );
-    workspace.link(&api).unwrap();
+    create(&workspace.own(), Kind::Rule, "commits", "Write them well").unwrap();
+    let parts = assign::install(
+        &workspace,
+        slice::from_ref(&api),
+        &Reference::parse("rule:commits"),
+        None,
+        workspace.root(),
+        &AgentHomes::default(),
+        Edits::Kept,
+    )
+    .unwrap()
+    .parts;
+    for part in parts {
+        assert!(
+            part.done
+                .as_ref()
+                .is_ok_and(|offered| offered.installed.is_ok()),
+            "{:?}",
+            part.done
+        );
+    }
     let (gone, _) = MindProject::init(hub.join("gone")).unwrap();
     workspace.link(&gone).unwrap();
     fs::remove_dir_all(gone.root()).unwrap();
@@ -225,6 +268,19 @@ const EXPECTED: &str = r#"{
         ],
         "issues": [],
         "unread": null
+      },
+      {
+        "kind": "rule",
+        "name": "commits",
+        "summary": "Write them well",
+        "state": null,
+        "agents": [],
+        "origin": null,
+        "targets": [
+          ".mindflayer/library/rules/commits.md"
+        ],
+        "issues": [],
+        "unread": null
       }
     ],
     "templates": [
@@ -254,7 +310,15 @@ const EXPECTED: &str = r#"{
         ],
         "share": "shared",
         "edit_tracked": false,
-        "targets": []
+        "targets": [
+          {
+            "kind": "skill",
+            "folders": [
+              ".claude/skills",
+              ".agents/skills"
+            ]
+          }
+        ]
       },
       "stale": null,
       "directories": [
@@ -294,6 +358,22 @@ const EXPECTED: &str = r#"{
           "targets": [
             ".agents/skills/review",
             ".claude/skills/review"
+          ],
+          "issues": [],
+          "unread": null
+        },
+        {
+          "kind": "rule",
+          "name": "commits",
+          "summary": null,
+          "state": "current",
+          "agents": [
+            "claude",
+            "codex"
+          ],
+          "origin": "workspace",
+          "targets": [
+            "AGENTS.md"
           ],
           "issues": [],
           "unread": null
@@ -388,6 +468,13 @@ const EXPECTED: &str = r#"{
       "target": "https://github.com/acme/skills",
       "outcome": "ok",
       "detail": "1 added, 0 updated, 0 unchanged, 0 failed"
+    },
+    {
+      "at": 1790000000,
+      "action": "install",
+      "target": "api",
+      "outcome": "ok",
+      "detail": "commits into api"
     }
   ],
   "warnings": []
@@ -487,7 +574,7 @@ fn no_url_in_a_snapshot_carries_userinfo_even_from_rows_written_before_the_scrub
     assert!(!json.contains("ghp_t0ken"), "{json}");
     assert!(!json.contains("me:"), "{json}");
     assert!(json.contains("https://github.com/acme/skills"), "{json}");
-    assert_eq!(snapshot.history.len(), 2, "{:?}", snapshot.history);
+    assert_eq!(snapshot.history.len(), 3, "{:?}", snapshot.history);
     assert_eq!(
         fs::read(workspace.ledger_path()).unwrap(),
         ledger,
