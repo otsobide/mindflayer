@@ -2,8 +2,9 @@
 //!
 //! Kept apart from the drawing and from the terminal so a test can drive it
 //! the way a person does. Nothing here touches a file: pressing space marks a
-//! box, and marking a box is a statement of intent that is carried out in one
-//! batch when the screen is done with.
+//! box, and marking a box is a statement of intent, carried out when the
+//! screen is done with as the command lines every mark amounts to
+//! ([`Screen::task`]).
 //!
 //! Every kind is offered, in one column filtered to one kind at a time:
 //! `tab` shows the next. A filter rather than a column a kind, so the screen
@@ -232,25 +233,6 @@ impl Target {
                 self.cursor = first;
             }
         }
-    }
-
-    /// Make the box at `index` say `checked` as a space on it would, other
-    /// offers of its kind and name included, saying whether it now does: a
-    /// foreign row's box cannot be changed.
-    ///
-    /// For marks made on another screen of the same projects, carried here
-    /// when the shelf changed under them.
-    pub fn mark(&mut self, index: usize, checked: bool) -> bool {
-        if self
-            .rows
-            .get(index)
-            .is_some_and(|row| row.checked != checked)
-        {
-            toggle(self, index);
-        }
-        self.rows
-            .get(index)
-            .is_some_and(|row| row.checked == checked)
     }
 
     /// How many of this project's boxes disagree with how they started.

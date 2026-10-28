@@ -788,6 +788,27 @@ pub enum Step {
 // What came of it
 // ---------------------------------------------------------------------------
 
+/// Commands that ran, as a shell session would show them: each line after a
+/// `$`, then what it printed, its warnings and its error, if it had one.
+///
+/// What the TUI prints when it closes, and what the install screen `flayer
+/// install` opens prints once it is applied, so the lines either ran can be
+/// read off and run again.
+pub fn transcript(dones: &[Done]) -> String {
+    let mut text = String::new();
+    for done in dones {
+        let _ = writeln!(text, "$ {}", done.command);
+        text.push_str(&done.stdout);
+        for line in &done.stderr {
+            let _ = writeln!(text, "{line}");
+        }
+        if let Some(error) = &done.error {
+            let _ = writeln!(text, "error: {error}");
+        }
+    }
+    text
+}
+
 /// One command the TUI ran, and what it said.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Done {
@@ -1202,21 +1223,10 @@ impl App {
     }
 
     /// Every command that changed something, as a shell session would show
-    /// it. Printed when the TUI closes, so what it did outlives the screen and
-    /// can be done again without it.
+    /// it ([`transcript`]). Printed when the TUI closes, so what it did
+    /// outlives the screen and can be done again without it.
     pub fn transcript(&self) -> String {
-        let mut text = String::new();
-        for done in &self.done {
-            let _ = writeln!(text, "$ {}", done.command);
-            text.push_str(&done.stdout);
-            for line in &done.stderr {
-                let _ = writeln!(text, "{line}");
-            }
-            if let Some(error) = &done.error {
-                let _ = writeln!(text, "error: {error}");
-            }
-        }
-        text
+        transcript(&self.done)
     }
 
     // -----------------------------------------------------------------------

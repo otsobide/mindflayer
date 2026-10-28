@@ -613,13 +613,12 @@ fn switching_to_a_loaded_copy_of_an_installed_skill_replaces_it() {
         .map(|(_, _, what)| what)
         .collect();
     assert_eq!(pending, [Pending::Install]);
-    let outcome =
-        install_screen::apply(&workspace, &ledger, &screen, &AgentHomes::default()).unwrap();
+    let outcome = install_screen::apply(&workspace, &screen, &Lookup::default());
 
-    assert!(
-        outcome.stdout.contains("installed deploy"),
-        "{}",
-        outcome.stdout
+    assert_eq!(
+        outcome.stdout,
+        "$ flayer install -p collapse --from load:../team skill:deploy\n\
+         updated deploy in collapse, from load:../team\n"
     );
     for copy in copies(&target.join("collapse"), "deploy") {
         let copied = fs::read_to_string(copy.join("SKILL.md")).unwrap();
@@ -647,22 +646,16 @@ fn a_loaded_skill_that_vanished_does_not_stop_the_rest_of_the_install_screen() {
     );
     fs::remove_dir_all(own_directory_for(&team, Kind::Skill).join("deploy")).unwrap();
 
-    let outcome =
-        install_screen::apply(&workspace, &ledger, &screen, &AgentHomes::default()).unwrap();
+    let outcome = install_screen::apply(&workspace, &screen, &Lookup::default());
 
     assert!(!outcome.ok);
-    assert!(
-        outcome.stdout.contains("collapse: installed review"),
-        "{}",
-        outcome.stdout
-    );
-    assert!(
-        outcome
-            .stderr
-            .iter()
-            .any(|warning| warning.contains("deploy")),
-        "{:?}",
-        outcome.stderr
+    assert_eq!(
+        outcome.stdout,
+        "$ flayer install -p collapse --from load:../team skill:deploy\n\
+         error: nothing called `deploy` can be installed from load:../team: gather it, load a \
+         workspace that has it with `flayer load`, or add it to the workspace with `flayer add`\n\
+         $ flayer install -p collapse --from load:../team skill:review\n\
+         installed review into collapse, from load:../team\n"
     );
 }
 

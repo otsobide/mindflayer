@@ -140,22 +140,20 @@ fn q_leaves_without_doing_anything() {
 fn applying_installs_what_was_marked_and_reports_it() {
     let (dir, workspace, ledger) = shelved(&["collapse"], &["deploy"]);
     let mut screen = screen_for(&workspace, &ledger);
+    let origin = screen.targets[0].rows[0].candidate.origin();
     press(&mut screen, &[KeyCode::Right, KeyCode::Char(' ')]);
 
-    let outcome =
-        install_screen::apply(&workspace, &ledger, &screen, &AgentHomes::default()).unwrap();
+    let outcome = install_screen::apply(&workspace, &screen, &Lookup::default());
 
-    assert!(outcome.ok, "{:?}", outcome.stderr);
-    assert!(
-        outcome.stdout.contains("collapse: installed deploy"),
-        "{}",
-        outcome.stdout
+    // The line it ran, and what that said, as the TUI's transcript says it.
+    assert_eq!(
+        outcome.stdout,
+        format!(
+            "$ flayer install -p collapse --from {origin} skill:deploy\n\
+             installed deploy into collapse, from {origin}\n"
+        )
     );
-    assert!(
-        outcome.stdout.contains("1 installed, 0 removed"),
-        "{}",
-        outcome.stdout
-    );
+    assert!(outcome.ok && outcome.stderr.is_empty(), "{outcome:?}");
     for copy in copies(&dir.path().join("collapse"), "deploy") {
         assert!(copy.join("SKILL.md").is_file(), "{}", copy.display());
     }
@@ -166,7 +164,7 @@ fn an_installed_skill_opens_already_marked_next_time() {
     let (_dir, workspace, ledger) = shelved(&["collapse"], &["deploy"]);
     let mut screen = screen_for(&workspace, &ledger);
     press(&mut screen, &[KeyCode::Right, KeyCode::Char(' ')]);
-    install_screen::apply(&workspace, &ledger, &screen, &AgentHomes::default()).unwrap();
+    install_screen::apply(&workspace, &screen, &Lookup::default());
 
     let reopened = screen_for(&workspace, &ledger);
 
@@ -191,18 +189,11 @@ fn unmarking_an_installed_skill_removes_it() {
     press(&mut again, &[KeyCode::Right, KeyCode::Char(' ')]);
     assert_eq!(again.counts(), (0, 1));
     assert!(rendered(&again).contains("- remove"));
-    let outcome =
-        install_screen::apply(&workspace, &ledger, &again, &AgentHomes::default()).unwrap();
+    let outcome = install_screen::apply(&workspace, &again, &Lookup::default());
 
-    assert!(
-        outcome.stdout.contains("collapse: removed deploy"),
-        "{}",
-        outcome.stdout
-    );
-    assert!(
-        outcome.stdout.contains("0 installed, 1 removed"),
-        "{}",
-        outcome.stdout
+    assert_eq!(
+        outcome.stdout,
+        "$ flayer uninstall -p collapse skill:deploy\nremoved deploy from collapse\n"
     );
     for copy in copies(&dir.path().join("collapse"), "deploy") {
         assert!(!copy.exists(), "{}", copy.display());
@@ -234,12 +225,13 @@ fn an_installed_skill_whose_copies_are_gone_opens_unmarked_and_marking_it_puts_t
 
     press(&mut screen, &[KeyCode::Right, KeyCode::Char(' ')]);
     assert_eq!(screen.counts(), (1, 0));
-    let outcome =
-        install_screen::apply(&workspace, &ledger, &screen, &AgentHomes::default()).unwrap();
+    let outcome = install_screen::apply(&workspace, &screen, &Lookup::default());
 
-    assert!(outcome.ok, "{:?}", outcome.stderr);
+    assert!(outcome.ok, "{}", outcome.stdout);
     assert!(
-        outcome.stdout.contains("1 installed, 0 removed"),
+        outcome
+            .stdout
+            .contains("\ninstalled deploy into collapse, from "),
         "{}",
         outcome.stdout
     );
@@ -416,14 +408,12 @@ fn applying_says_what_an_interrupted_install_left_in_a_project() {
     let mut screen = screen_for(&workspace, &ledger);
     press(&mut screen, &[KeyCode::Right, KeyCode::Char(' ')]);
 
-    let outcome =
-        install_screen::apply(&workspace, &ledger, &screen, &AgentHomes::default()).unwrap();
+    let outcome = install_screen::apply(&workspace, &screen, &Lookup::default());
 
-    assert!(outcome.ok, "{:?}", outcome.stderr);
+    assert!(outcome.ok, "{}", outcome.stdout);
     assert!(
-        outcome.stdout.contains(
-            "collapse: installed deploy\n  \
-             cleared .mind/tmp/4242-00000000deadbeef, left by an install that did not finish\n"
+        outcome.stdout.ends_with(
+            "\n  cleared .mind/tmp/4242-00000000deadbeef, left by an install that did not finish\n"
         ),
         "{}",
         outcome.stdout
@@ -443,23 +433,20 @@ fn applying_says_what_an_install_that_failed_had_cleared() {
     fs::create_dir_all(skills.parent().unwrap()).unwrap();
     fs::write(&skills, "not a folder").unwrap();
 
-    let outcome =
-        install_screen::apply(&workspace, &ledger, &screen, &AgentHomes::default()).unwrap();
+    let outcome = install_screen::apply(&workspace, &screen, &Lookup::default());
 
     assert!(!outcome.ok);
+    // Said before the error, being what it did, as the command says it.
+    let said: Vec<&str> = outcome.stdout.lines().skip(1).collect();
     assert_eq!(
-        outcome.stdout,
-        "collapse: cleared .mind/tmp/4242-00000000deadbeef, left by an install that did not finish\n\
-         \n0 installed, 0 removed\n"
+        said[0], "cleared .mind/tmp/4242-00000000deadbeef, left by an install that did not finish",
+        "{}",
+        outcome.stdout
     );
     assert!(
-        outcome
-            .stderr
-            .iter()
-            .any(|line| line.starts_with("warning: collapse: ")
-                && line.contains("cannot be written")),
-        "{:?}",
-        outcome.stderr
+        said[1].starts_with("error: ") && said[1].contains("cannot be written"),
+        "{}",
+        outcome.stdout
     );
 }
 
@@ -651,7 +638,7 @@ fn installing_in_only(dir: &Path) {
 }
 
 #[test]
-fn the_screen_says_each_target_no_install_may_use_once_a_project() {
+fn the_screen_says_each_target_no_install_may_use_with_each_line_that_installs_the_kind() {
     let (dir, _, _) = shelved(&["beta"], &["deploy", "lint"]);
     installing_in(dir.path(), r#"".skills", ".mind/skills""#);
     let workspace = FlayerWorkspace::locate(dir.path()).unwrap().unwrap();
@@ -668,18 +655,22 @@ fn the_screen_says_each_target_no_install_may_use_once_a_project() {
             KeyCode::Char(' '),
         ],
     );
-    let outcome =
-        install_screen::apply(&workspace, &ledger, &screen, &AgentHomes::default()).unwrap();
+    let outcome = install_screen::apply(&workspace, &screen, &Lookup::default());
 
-    let said: Vec<&String> = outcome
-        .stderr
-        .iter()
+    // A line each, as `flayer install` says it of each install it is given.
+    let said: Vec<&str> = outcome
+        .stdout
+        .lines()
         .filter(|line| line.contains(".mind/skills is no folder to install skills in"))
         .collect();
-    assert_eq!(said.len(), 1, "{:?}", outcome.stderr);
+    assert_eq!(said.len(), 2, "{}", outcome.stdout);
     assert!(!outcome.ok);
-    assert!(outcome.stdout.contains("alpha: installed deploy"));
-    assert!(outcome.stdout.contains("alpha: installed lint"));
+    assert!(outcome
+        .stdout
+        .contains("\ninstalled deploy into alpha, from "));
+    assert!(outcome
+        .stdout
+        .contains("\ninstalled lint into alpha, from "));
     assert!(dir.path().join("alpha/.skills/lint/SKILL.md").is_file());
 }
 
@@ -731,12 +722,13 @@ fn the_screen_installs_into_every_folder_a_project_marked_by_its_settings_has_ag
     assert!(rendered(&screen).contains("[ ] deploy"));
 
     press(&mut screen, &[KeyCode::Right, KeyCode::Char(' ')]);
-    let outcome =
-        install_screen::apply(&workspace, &ledger, &screen, &AgentHomes::default()).unwrap();
+    let outcome = install_screen::apply(&workspace, &screen, &Lookup::default());
 
-    assert!(outcome.ok, "{:?}", outcome.stderr);
+    assert!(outcome.ok, "{}", outcome.stdout);
     assert!(
-        outcome.stdout.contains("alpha: installed deploy"),
+        outcome
+            .stdout
+            .contains("\ninstalled deploy into alpha, from "),
         "{}",
         outcome.stdout
     );
@@ -750,12 +742,10 @@ fn the_screen_installs_into_every_folder_a_project_marked_by_its_settings_has_ag
 
     // Unticked, both go.
     press(&mut reopened, &[KeyCode::Right, KeyCode::Char(' ')]);
-    let outcome =
-        install_screen::apply(&workspace, &ledger, &reopened, &AgentHomes::default()).unwrap();
-    assert!(
-        outcome.stdout.contains("alpha: removed deploy"),
-        "{}",
-        outcome.stdout
+    let outcome = install_screen::apply(&workspace, &reopened, &Lookup::default());
+    assert_eq!(
+        outcome.stdout,
+        "$ flayer uninstall -p alpha skill:deploy\nremoved deploy from alpha\n"
     );
     assert!(!root.join(".claude/skills/deploy").exists());
     assert!(!root.join(".agents/skills/deploy").exists());
@@ -822,14 +812,18 @@ fn opening_the_screen_scrubs_nothing_and_applying_scrubs_first_and_says_so_witho
 
     assert_eq!(tainted(&workspace), 1, "opening the screen is a read");
     press(&mut screen, &[KeyCode::Right, KeyCode::Char(' ')]);
-    let outcome = install_screen::commit(&workspace, &screen, &AgentHomes::default()).unwrap();
+    let outcome = install_screen::apply(&workspace, &screen, &Lookup::default());
 
-    assert!(outcome.ok, "{:?}", outcome.stderr);
-    assert_eq!(outcome.stderr, [SCRUBBED]);
-    assert!(
-        outcome.stdout.starts_with("collapse: installed deploy\n"),
-        "{}",
-        outcome.stdout
+    // Said by the line that scrubbed it, after what it did, as the command
+    // says it from the shell.
+    assert!(outcome.ok, "{}", outcome.stdout);
+    assert_eq!(
+        outcome.stdout,
+        format!(
+            "$ flayer install -p collapse --from https://example.com/acme/skills skill:deploy\n\
+             installed deploy into collapse, from https://example.com/acme/skills\n\
+             {SCRUBBED}\n"
+        )
     );
     assert_eq!(tainted(&workspace), 0);
 }
@@ -882,9 +876,17 @@ fn a_mark_on_a_source_the_scrub_makes_one_with_another_installs_from_the_one_kep
 
     // The row the scrub drops, whose source is gone by the time it installs.
     mark_from(&mut screen, "deploy", "older");
-    let outcome = install_screen::commit(&workspace, &screen, &AgentHomes::default()).unwrap();
+    let outcome = install_screen::apply(&workspace, &screen, &Lookup::default());
 
-    assert!(outcome.ok, "{:?}", outcome.stderr);
+    // By the origin both rows showed, which the one kept still has.
+    assert!(
+        outcome
+            .stdout
+            .starts_with("$ flayer install -p collapse --from https://example.com/acme/skills"),
+        "{}",
+        outcome.stdout
+    );
+    assert!(outcome.ok, "{}", outcome.stdout);
     for copy in copies(&dir.path().join("collapse"), "deploy") {
         assert!(copy.join("SKILL.md").is_file(), "{}", copy.display());
     }
@@ -914,16 +916,20 @@ fn a_mark_on_what_only_the_source_the_scrub_drops_had_is_said_and_left_undone() 
     let mut screen = install_screen::open(&workspace, projects).unwrap();
 
     mark_from(&mut screen, "lint", "older");
-    let outcome = install_screen::commit(&workspace, &screen, &AgentHomes::default()).unwrap();
+    let outcome = install_screen::apply(&workspace, &screen, &Lookup::default());
 
+    // Refused as not offered by the line that asks for it, once its scrub
+    // took the source that offered it out, as the command refuses it.
     assert!(!outcome.ok);
     assert_eq!(
-        outcome.stderr,
-        [
-            SCRUBBED,
-            "warning: collapse: lint from https://example.com/acme/skills is no longer on the \
-             shelf once the ledger was scrubbed, so it was left as it was"
-        ]
+        outcome.stdout,
+        format!(
+            "$ flayer install -p collapse --from https://example.com/acme/skills skill:lint\n\
+             {SCRUBBED}\n\
+             error: nothing called `lint` can be installed from https://example.com/acme/skills: \
+             gather it, load a workspace that has it with `flayer load`, or add it to the \
+             workspace with `flayer add`\n"
+        )
     );
     for copy in copies(&dir.path().join("collapse"), "lint") {
         assert!(!copy.exists(), "{}", copy.display());
@@ -1087,12 +1093,12 @@ fn a_rule_ticked_on_the_screen_is_installed_and_unticked_is_taken_out() {
     );
     assert_eq!(screen.counts(), (1, 0));
 
-    let outcome =
-        install_screen::apply(&workspace, &ledger, &screen, &AgentHomes::default()).unwrap();
+    let outcome = install_screen::apply(&workspace, &screen, &Lookup::default());
 
     assert_eq!(
         outcome.stdout,
-        "collapse: installed rule git/commits\n\n1 installed, 0 removed\n"
+        "$ flayer install -p collapse --from workspace rule:git/commits\n\
+         installed rule git/commits into collapse, from workspace\n"
     );
     assert!(outcome.ok && outcome.stderr.is_empty(), "{outcome:?}");
     assert_eq!(
@@ -1105,12 +1111,12 @@ fn a_rule_ticked_on_the_screen_is_installed_and_unticked_is_taken_out() {
     press(&mut again, &[KeyCode::Tab]);
     assert!(rendered(&again).contains("[x] git/commits"));
     press(&mut again, &[KeyCode::Right, KeyCode::Char(' ')]);
-    let outcome =
-        install_screen::apply(&workspace, &ledger, &again, &AgentHomes::default()).unwrap();
+    let outcome = install_screen::apply(&workspace, &again, &Lookup::default());
 
     assert_eq!(
         outcome.stdout,
-        "collapse: removed rule git/commits\n\n0 installed, 1 removed\n"
+        "$ flayer uninstall -p collapse rule:git/commits\n\
+         removed rule git/commits from collapse\n"
     );
     assert!(!collapse.join("AGENTS.md").exists());
 }
@@ -1133,12 +1139,21 @@ fn a_skill_and_a_rule_of_one_name_each_keep_a_box_of_their_own() {
 
     assert_eq!(screen.counts(), (2, 0));
     assert_eq!(screen.message, None, "neither displaced the other");
-    let outcome =
-        install_screen::apply(&workspace, &ledger, &screen, &AgentHomes::default()).unwrap();
+    let outcome = install_screen::apply(&workspace, &screen, &Lookup::default());
+    let lines: Vec<&str> = outcome
+        .stdout
+        .lines()
+        .filter(|line| line.starts_with("$ "))
+        .collect();
+    assert_eq!(lines.len(), 2, "{}", outcome.stdout);
+    assert!(lines[0].ends_with(" skill:deploy"), "{}", outcome.stdout);
     assert_eq!(
-        outcome.stdout,
-        "collapse: installed deploy\ncollapse: installed rule deploy\n\n2 installed, 0 removed\n"
+        lines[1],
+        "$ flayer install -p collapse --from workspace rule:deploy"
     );
+    assert!(outcome
+        .stdout
+        .ends_with("\ninstalled rule deploy into collapse, from workspace\n"));
 }
 
 #[test]
@@ -1167,7 +1182,7 @@ fn a_project_offered_no_rules_is_told_where_rules_come_from() {
 }
 
 #[test]
-fn a_rule_reaching_claude_alone_is_said_of_its_project_when_applied() {
+fn a_rule_reaching_claude_alone_is_said_when_applied() {
     let (dir, workspace, ledger) = shelved(&["collapse"], &["deploy"]);
     let rules = own_directory_for(dir.path(), Kind::Rule).join("style");
     fs::create_dir_all(&rules).unwrap();
@@ -1182,25 +1197,22 @@ fn a_rule_reaching_claude_alone_is_said_of_its_project_when_applied() {
         &[KeyCode::Tab, KeyCode::Right, KeyCode::Char(' ')],
     );
 
-    let outcome =
-        install_screen::apply(&workspace, &ledger, &screen, &AgentHomes::default()).unwrap();
+    let outcome = install_screen::apply(&workspace, &screen, &Lookup::default());
 
+    // Said as an install into the project alone says it, which needs no
+    // `collapse: ` to say whose it is.
     assert_eq!(
         outcome.stdout,
-        "collapse: installed rule style/comments\n\n1 installed, 0 removed\n"
-    );
-    assert_eq!(
-        outcome.stderr,
-        [
-            "warning: collapse: rule `style/comments` states `paths`, so it reaches claude only: \
-          codex and opencode read no .claude/rules"
-        ]
+        "$ flayer install -p collapse --from workspace rule:style/comments\n\
+         installed rule style/comments into collapse, from workspace\n\
+         warning: rule `style/comments` states `paths`, so it reaches claude only: codex and \
+         opencode read no .claude/rules\n"
     );
     assert!(!outcome.ok);
 }
 
 #[test]
-fn what_is_true_of_a_projects_rules_as_a_whole_is_said_once_when_several_are_applied() {
+fn what_is_true_of_a_projects_rules_as_a_whole_is_said_by_each_line_that_renders_them() {
     let (dir, workspace, ledger) = with_a_rule(&["collapse"]);
     let collapse = dir.path().join("collapse");
     let rules = own_directory_for(dir.path(), Kind::Rule).join("review");
@@ -1209,8 +1221,8 @@ fn what_is_true_of_a_projects_rules_as_a_whole_is_said_once_when_several_are_app
     fs::write(collapse.join("AGENTS.md"), "# Working here\n").unwrap();
     indexed(&collapse);
     let tracked = format!(
-        "warning: collapse: {}: git tracks it, and the project is local without edit_tracked, \
-         so no rules are written there, and codex and opencode read none of them",
+        "warning: {}: git tracks it, and the project is local without edit_tracked, so no \
+         rules are written there, and codex and opencode read none of them",
         collapse.join("AGENTS.md").display()
     );
     let mut screen = screen_for(&workspace, &ledger);
@@ -1226,15 +1238,21 @@ fn what_is_true_of_a_projects_rules_as_a_whole_is_said_once_when_several_are_app
     );
     assert_eq!(screen.counts(), (2, 0));
 
-    let outcome =
-        install_screen::apply(&workspace, &ledger, &screen, &AgentHomes::default()).unwrap();
+    let outcome = install_screen::apply(&workspace, &screen, &Lookup::default());
 
+    // Each rule's line renders them all, and says so, as each command would
+    // from the shell.
     assert_eq!(
         outcome.stdout,
-        "collapse: installed rule git/commits\ncollapse: installed rule review/tone\n\n\
-         2 installed, 0 removed\n"
+        format!(
+            "$ flayer install -p collapse --from workspace rule:git/commits\n\
+             installed rule git/commits into collapse, from workspace\n\
+             {tracked}\n\
+             $ flayer install -p collapse --from workspace rule:review/tone\n\
+             installed rule review/tone into collapse, from workspace\n\
+             {tracked}\n"
+        )
     );
-    assert_eq!(outcome.stderr, std::slice::from_ref(&tracked));
     assert!(!outcome.ok);
 
     let mut again = screen_for(&workspace, &ledger);
@@ -1242,15 +1260,17 @@ fn what_is_true_of_a_projects_rules_as_a_whole_is_said_once_when_several_are_app
         &mut again,
         &[KeyCode::Tab, KeyCode::Right, KeyCode::Char(' ')],
     );
-    let outcome =
-        install_screen::apply(&workspace, &ledger, &again, &AgentHomes::default()).unwrap();
+    let outcome = install_screen::apply(&workspace, &again, &Lookup::default());
 
     // One rule is left, which codex and opencode still miss.
     assert_eq!(
         outcome.stdout,
-        "collapse: removed rule git/commits\n\n0 installed, 1 removed\n"
+        format!(
+            "$ flayer uninstall -p collapse rule:git/commits\n\
+             removed rule git/commits from collapse\n\
+             {tracked}\n"
+        )
     );
-    assert_eq!(outcome.stderr, [tracked]);
 }
 
 // ---------------------------------------------------------------------------
@@ -1321,14 +1341,19 @@ fn ticking_projects_for_one_artifact_marks_each_projects_box_and_applies_as_one_
     assert!(back.contains("tanukeys  (1)"), "{back}");
     assert!(back.contains("[x] deploy  + install"), "{back}");
 
-    let outcome =
-        install_screen::apply(&workspace, &ledger, &screen, &AgentHomes::default()).unwrap();
+    let outcome = install_screen::apply(&workspace, &screen, &Lookup::default());
 
+    // One line for the artifact, with a `-p` for each project ticked.
+    let origin = screen.targets[0].rows[0].candidate.origin();
     assert_eq!(
         outcome.stdout,
-        "collapse: installed deploy\ntanukeys: installed deploy\n\n2 installed, 0 removed\n"
+        format!(
+            "$ flayer install -p collapse -p tanukeys --from {origin} skill:deploy\n\
+             installed deploy into collapse, from {origin}\n\
+             installed deploy into tanukeys, from {origin}\n"
+        )
     );
-    assert!(outcome.ok, "{:?}", outcome.stderr);
+    assert!(outcome.ok, "{}", outcome.stdout);
     for project in ["collapse", "tanukeys"] {
         for copy in copies(&dir.path().join(project), "deploy") {
             assert!(copy.join("SKILL.md").is_file(), "{}", copy.display());
@@ -1350,7 +1375,7 @@ fn unticking_a_project_for_one_artifact_takes_it_out_of_that_project_alone() {
             KeyCode::Char(' '),
         ],
     );
-    install_screen::apply(&workspace, &ledger, &screen, &AgentHomes::default()).unwrap();
+    install_screen::apply(&workspace, &screen, &Lookup::default());
 
     let mut again = screen_for(&workspace, &ledger);
     press(
@@ -1361,11 +1386,10 @@ fn unticking_a_project_for_one_artifact_takes_it_out_of_that_project_alone() {
     let drawn = rendered(&again);
     assert!(drawn.contains("[ ] collapse  - remove"), "{drawn}");
     assert!(drawn.contains("[x] tanukeys"), "{drawn}");
-    let outcome =
-        install_screen::apply(&workspace, &ledger, &again, &AgentHomes::default()).unwrap();
+    let outcome = install_screen::apply(&workspace, &again, &Lookup::default());
     assert_eq!(
         outcome.stdout,
-        "collapse: removed deploy\n\n0 installed, 1 removed\n"
+        "$ flayer uninstall -p collapse skill:deploy\nremoved deploy from collapse\n"
     );
     assert!(copies(&dir.path().join("collapse"), "deploy")
         .iter()

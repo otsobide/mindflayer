@@ -423,7 +423,7 @@ fn run_flayer(
             // opened the way a read is: on the default workspace before it
             // is made too, which manages nothing to install into.
             (None, true) => reading_workspace(directory, lookup, |workspace| {
-                crate::install::run(workspace, &lookup.agents)
+                crate::install::run(workspace, lookup)
             }),
             (Some(name), false) => assigning(directory, lookup, *all_projects, |workspace| {
                 let (asked, unread) = named_projects(workspace, projects, *all_projects)?;

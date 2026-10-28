@@ -311,8 +311,8 @@ pub(crate) fn named(kind: Kind, name: &str) -> String {
 /// What rendering a project's rules for a change of the rule `changed` has
 /// to say ([`Rendered::warnings_of`] and [`Rendered::notes`]), as `warning:`
 /// and `note:` lines: each warning said of `project` when one is given, as
-/// the install screen says every line of the project it is about. A note
-/// names its project already.
+/// it is among other projects' lines, where a warning that names a rule or
+/// a file would not say whose it is. A note names its project already.
 pub(crate) fn render_said(
     rendered: &Rendered,
     changed: &str,
@@ -335,7 +335,7 @@ pub(crate) fn render_said(
 
 /// A warning for each folder `project`'s settings name for one of `kinds`
 /// that no install uses.
-pub(crate) fn misplaced(project: &MindProject, kinds: &[Kind]) -> Vec<String> {
+fn misplaced(project: &MindProject, kinds: &[Kind]) -> Vec<String> {
     project
         .misplaced_targets()
         .iter()
@@ -347,7 +347,7 @@ pub(crate) fn misplaced(project: &MindProject, kinds: &[Kind]) -> Vec<String> {
 /// A line for each thing interrupted installs had left in `project` that
 /// installing cleared: on stdout, under what the install did, because it is
 /// part of what the install did rather than something wrong with it.
-pub(crate) fn swept(project: &MindProject, swept: &[std::path::PathBuf]) -> String {
+fn swept(project: &MindProject, swept: &[std::path::PathBuf]) -> String {
     cleared(project, swept)
         .iter()
         .map(|line| format!("  {line}\n"))

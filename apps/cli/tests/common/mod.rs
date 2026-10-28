@@ -590,7 +590,7 @@ pub fn workspace_with_candidates() -> TempDir {
 pub fn installed(dir: &Path, workspace: &FlayerWorkspace, ledger: &Ledger) {
     let mut screen = screen_for(workspace, ledger);
     press(&mut screen, &[KeyCode::Right, KeyCode::Char(' ')]);
-    install_screen::apply(workspace, ledger, &screen, &AgentHomes::default()).unwrap();
+    install_screen::apply(workspace, &screen, &Lookup::default());
     for copy in copies(&dir.join("collapse"), "deploy") {
         assert!(copy.join("SKILL.md").is_file(), "{}", copy.display());
     }
