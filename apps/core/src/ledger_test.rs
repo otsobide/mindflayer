@@ -1936,3 +1936,46 @@ fn an_action_log_entry_is_serialized_without_the_credentials_its_urls_carry() {
         "{serialized}"
     );
 }
+
+/// Every source is listed, one nothing was gathered from included, by URL,
+/// then branch, then folder, and none with the credentials an older build
+/// stored in it.
+#[test]
+fn every_source_is_listed_in_url_order_without_credentials() {
+    let ledger = Ledger::in_memory().unwrap();
+    ledger
+        .source_for(SourceKind::Git, "https://h/b", None, "skills")
+        .unwrap();
+    ledger
+        .source_for(SourceKind::Git, "https://h/a", Some("main"), "skills")
+        .unwrap();
+    ledger
+        .source_for(SourceKind::Git, "https://h/a", None, "skills")
+        .unwrap();
+    // What a Mindflayer from before the refusal could have stored.
+    ledger
+        .connection
+        .execute(
+            "INSERT INTO sources (kind, url, reference, subdirectory, directory, first_seen, last_seen)
+             VALUES ('git', 'https://me:t0ken@h/aa', NULL, 'skills', 'h-aa', 0, 0)",
+            [],
+        )
+        .unwrap();
+
+    let listed: Vec<(String, Option<String>)> = ledger
+        .sources()
+        .unwrap()
+        .into_iter()
+        .map(|source| (source.url, source.reference))
+        .collect();
+
+    assert_eq!(
+        listed,
+        [
+            (String::from("https://h/a"), None),
+            (String::from("https://h/a"), Some(String::from("main"))),
+            (String::from("https://h/aa"), None),
+            (String::from("https://h/b"), None),
+        ]
+    );
+}
