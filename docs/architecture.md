@@ -460,6 +460,16 @@ installed in the project you are in up to date, and `flayer update` what is
 installed in each project `-p` names, or with `--all` in every one, needing
 one or the other, as a change of more than one place says which ([bringing
 what was installed up to date](#bringing-what-was-installed-up-to-date)).
+`flayer install` and `uninstall` take `-p` once for each project too, or
+`--all-projects` for every one, and need one or the other ([one artifact
+into many projects](#one-artifact-into-many-projects)); `uninstall
+--orphaned`, at either level, takes out what nothing offers any more in
+place of one name ([taking out what nothing
+offers](#taking-out-what-nothing-offers)). `flayer remove --everywhere`
+takes one of the workspace's own out of every project it links before the
+library, and has no `mind` form, nor a `-p`: a project's own was installed
+nowhere ([removing one of the workspace's own
+everywhere](#removing-one-of-the-workspaces-own-everywhere)).
 Reads look everywhere; a change needs one place, and without `-p` that place
 is the workspace.
 
@@ -1551,16 +1561,19 @@ record, since a scrub says what it found only the first time and a change that
 dropped it would leave it unsaid for good. `rename` opens the ledger once for
 each name and tells what both scrubs found once (`Scrub::absorb`): the second
 finds only the clones the first could not rewrite. So does the install screen,
-in both screens, when what it marked is applied (`install::commit`) rather
-than as it opens, which is a read ([A read leaves the ledger as it finds
-it](#a-read-leaves-the-ledger-as-it-finds-it)). A scrub can make two sources
+in both screens, when what it marked is applied rather than as it opens,
+which is a read ([A read leaves the ledger as it finds
+it](#a-read-leaves-the-ledger-as-it-finds-it)): applying runs the `install`
+and `uninstall` lines its marks amount to, and the first of them opens the
+ledger to write, scrubbing it, as from the shell. A scrub can make two sources
 one row, and a mark on the row that went would install from folders the scrub
-removed, or copy the files and then fail to record them. So once a scrub has
-taken out a source, the screen is built again from the scrubbed ledger and
-each mark is made again on the row offering the same name from the same place,
-as the row it became one with does; a mark on what only the row that went had
-gathered is a warning and is not carried out. Scrubbing as the screen opened
-would have spared that, and is rejected: opening it is a read. An edit writes
+removed, or copy the files and then fail to record them. Each install line
+names its offer by its origin (`--from`), which is shown without credentials
+before a scrub as after it, so once a scrub has taken out a source the line
+finds the row it became one with, through the lookup any `--from` goes
+through; a line for what only the row that went had gathered is refused as
+not offered, said under that line. Scrubbing as the screen opened would have
+spared that, and is rejected: opening it is a read. An edit writes
 nothing to the ledger, since it keeps the record as it was, so `finish_edit`
 only reads it (`ledger_for_reading`) and scrubs nothing.
 
@@ -2096,7 +2109,13 @@ at none, because it came from nowhere but the workspace.
 without the screen, through `install::offered_typed`: the one candidate of that
 name, or an error naming every place that offers it when there is more than
 one; `--from` then says which, because which of two lands in the project's one
-folder of that name is not something to guess.
+folder of that name is not something to guess. It takes an origin as printed,
+and looser spellings of one: a source's address without its branch, a loaded
+workspace's name. The origin as printed wins (`install::offered`), so
+`<url>`, one address gathered at its default branch, is that offer and not
+also `<url>#main`'s, whose address it is: refused as offered twice, the
+first would have no `--from` of its own, and the line the install screen runs
+for its box would be refused.
 
 ### Which kind a name is
 
@@ -2129,6 +2148,108 @@ before the first's absence.
 A line about installing says a rule as `rule <route>`, as `add` and `remove`
 say one, and a skill by its name alone, as every such line did before: a
 route reads like a path, and one name can be both.
+
+### One artifact into many projects
+
+`flayer install <name>` takes `-p` once for each project, or
+`--all-projects` for every one the workspace links, and `flayer uninstall`
+takes them the same way: vision point 2's assigning, from the command line.
+Core's `assign::install` and `assign::uninstall` are the batch, and each
+project's part of it is the install or uninstall that project would have
+alone (`install::offered_typed`, then `install::install_with`, or
+`install::uninstall_typed`), so a project reached this way is held to every
+rule it is held to reached alone, and a front end asking for many decides
+nothing that one install would not.
+
+- **Each project once, in the order asked.** Two spellings of one directory
+  are one project (`same_directory`), as an update takes them.
+- **A part for each, beside the rest.** A project offered nothing of the
+  name, one whose install fails and one whose copy is somebody's each say so
+  in their own part, and the others go ahead. Each project's copies and
+  record are written together or not at all by its own install, so nothing
+  one project's part does depends on another's.
+- **The ledger opened once, the lock taken by each install.** The batch
+  opens the ledger to write, scrubbing it, once, and only that refuses it as
+  a whole; a batch of no project opens nothing. Each project's install takes
+  the workspace's lock as it does alone, in the lines the install screen
+  runs as anywhere, rather than the batch holding it across them: nothing
+  spans two projects, so holding it once would keep every other writer
+  waiting for all of them, and would need a body of each install, rules'
+  included, that runs under a lock it does not take, as an update has
+  (`install::install_held`), to guard nothing a project's own install does
+  not.
+- **The front end names the projects.** `-p` picks each as everywhere
+  (`FlayerWorkspace::pick`), and one the workspace does not link refuses
+  the line before anything is installed anywhere: a typo in one name is no
+  reason to change the rest without it. `--all-projects` is every entry
+  that opens, with a warning for each that does not, as `flayer update
+  --all` takes them, and resolves the workspace as update does, as a read:
+  a default workspace nobody has made links no project, and making it for
+  a command that then does nothing would leave a marker in the home for
+  nothing. The flag is `flayer migrate`'s `--all-projects` rather than
+  update's `--all`, which beside an artifact's name would read as every
+  artifact.
+
+The CLI says each project's part as an install into it alone says it
+(`commands/install.rs`), in the order asked, so each line names its project
+already, but for what rendering the project's rules warns of: that names a
+rule or a file and not the project, which alone goes without saying, so
+among several it is said after `<project>: `. One refused ends in
+`error: <project>: ...`, and the command exits non-zero when any part did
+not go through, while the others' lines stand, since what they did was done.
+Two things are said once rather than once a project: what the loaded
+workspaces could not offer, after every part, and a refusal every part
+shares, such as a name nothing offers, which is the command's error. An
+uninstall from several passes over a project that has nothing of the name,
+which is as it was asked to be and what most projects answer when every one
+is asked; when none of them has it, that is the typo it is for one project,
+and refused as one. A batch of one project, named or the only one linked, is
+said exactly as one install was before.
+
+### Taking out what nothing offers
+
+An orphaned installation, one whose origin no longer offers it, stays as the
+project holds it: no update can write it, and no install screen offers it
+to untick. `uninstall --orphaned` takes every one out of the projects asked,
+`flayer`'s by `-p` or `--all-projects` as an uninstall by name takes them and
+`mind`'s the one it runs in, through core's `assign::uninstall_orphaned`,
+which is the batch above with `install::orphaned` choosing each project's
+names rather than the command line.
+
+- **What nothing offers, edited or not.** `install::orphaned` takes each
+  installation whose record `offered_for` matches to nothing, which is the
+  orphaned standing and the edited one that is orphaned beneath it, an edit
+  being said first; an update leaves both alike (`Step::Orphaned`). Each is
+  uninstalled as by name (`install::uninstall_with`), so the edited one is
+  refused unless forced, every copy of it, and said with `--force` as the
+  way out, as an uninstall by name says it.
+- **Not one from a loaded workspace that is away.** A loaded workspace that
+  cannot be opened offers nothing, so what was installed from it reads as
+  orphaned, as `status` says, while it is unmounted or moved. Taking it out
+  on that would take out what that workspace offers still once it is back,
+  so a record naming its origin is passed over while it cannot be opened,
+  and one from before origins were kept while any loaded workspace cannot
+  be, since it may be that one's. What the loaded workspaces could not
+  offer is said after the rest, as an install says it, so what was passed
+  over has its reason beside it.
+- **Nor one whose artifact cannot be read.** A skill whose front matter no
+  longer parses, or a folder that cannot be listed, offers nothing, so what
+  was installed from it reads as orphaned too, as `status` says; but it is
+  still there, somebody's to mend, and failures are collected, never a
+  reason to take out what they are about. So a record is passed over while
+  the place it came from, the workspace's own (`install::own_failures`) or
+  a loaded workspace's (`LoadFailure::Artifact`), has a failure about the
+  artifact's place or a folder it sits in (`install::orphaned`, by
+  `lifecycle::place`, since what cannot be read cannot say its name). The
+  workspace's own failures are said first, before the loaded workspaces',
+  as the own is offered first.
+- **None is no failure.** A project with nothing orphaned is as it was
+  asked to be, so it says nothing, and every project asked having none is
+  said in one line, exit zero; a project that cannot be surveyed, or an
+  uninstall that fails, is an error of its project while the rest stand.
+- **No ledger is made to say so.** The ledger is opened to write only when
+  there is one, as an update opens it: with none, nothing was installed to
+  be orphaned.
 
 ### What no copy holds
 
@@ -2241,8 +2362,8 @@ What a load offers is every kind, and what it cannot offer (a workspace that
 has gone, an artifact that cannot be read, a name that is refused) is
 collected by `install::offered_by_loads` and said as `warning:` lines wherever
 offers are shown or used, so what `flayer load`, `gather list` and the TUI
-count is what can be installed. The install screen reports a row it could not
-apply and carries on with the rest.
+count is what can be installed. The install screen's line for a row it could
+not apply says why, and the lines after it run all the same.
 Two spellings of one loaded directory are one source; `load_all`,
 `unload_all` and `unlink_all` rewrite the marker once, for all of the paths or
 none.
@@ -2491,23 +2612,71 @@ unrecorded in a folder it drops; `targets reset` is the same the other way.
 ### The screen, and why it is three files
 
 `flayer install` is a two-column screen: projects on the left, and on the
-right what can be installed, as seen from the project under the cursor. It is
-split so that only one of its three parts needs a terminal:
+right what can be installed, as seen from the project under the cursor, or,
+turned round, the other way about. It is split so that only one of its three
+parts needs a terminal:
 
-- `install/state.rs`: what a key does. Marking a box is a statement of intent
-  and touches nothing; it is a plain state machine a test drives by pressing
-  the keys a person would.
+- `install/state.rs`: what a key does, and the command lines what was
+  marked amounts to. Marking a box is a statement of intent and touches
+  nothing; it is a plain state machine a test drives by pressing the keys a
+  person would.
 - `install/ui.rs`: what the screen looks like. Rendered into an in-memory
   terminal by the tests, so the exact text a user sees is asserted on, the same
   way every other command's output is.
-- `install.rs`: the loop that reads a real keyboard, and the batch that
-  carries out what was marked. The loop is the only part with no test, and it
+- `install.rs`: the loop that reads a real keyboard, and running the lines
+  what was marked amounts to. The loop is the only part with no test, and it
   holds nothing but the loop for that reason.
 
-Everything marked is applied in one batch, and what that batch did is printed
-afterwards as an ordinary `Outcome`, so a report from the screen reads like a
-report from any other command, warnings on stderr and a non-zero exit when
-something was left alone.
+What is marked is applied as the command lines it amounts to
+(`Screen::task`), kind by kind: a
+`flayer install -p <project>... --from <origin> <kind:name>` for each offer
+ticked, with a `-p` for each project ticked to take it, and a
+`flayer uninstall -p <project>... <kind:name>` for each artifact unticked,
+which takes it out whichever offer its copy came from. They are the TUI's `Install` and `Uninstall` tasks, which the TUI
+runs as it runs any task, and which `flayer install` runs the same way
+(`install::apply`): each line parsed and run from the workspace root by
+`tui::execute`, with the screen's `Lookup`, so its agent homes and the
+workspace it was opened on reach every line; and what each said is printed
+afterwards as the TUI's transcript prints it (`state::transcript`), the line
+and then what it said, with a non-zero exit when any did not go through. So
+the report shows exactly what ran, and a session with the screen in it can be
+run again without it. Every line is run whatever came of the ones before
+(`Task::chained`), since each is boxes marked one by one, where a task's
+lines otherwise stop at the first that fails. Inside a line, a project
+refused is said as its own and the others' boxes are carried out, as the
+command does for several `-p`; but a `-p` that picks nothing by the time
+the line runs, a project unlinked from another terminal since the screen
+opened or one whose marker no longer reads, refuses its whole line, before
+anything is done for the other projects on it, as it does typed ([one
+artifact into many projects](#one-artifact-into-many-projects)). The
+screen's picture of the workspace has gone stale under it, and every line
+naming that project says so. A line a project and an artifact would have
+kept the others going, and is rejected: one artifact's ticks are one line,
+which is what the transcript is read for, and a workspace changed under
+the screen is no reason to change the rest without asking again.
+
+- **`--from` on every install line**, though a name offered from one place
+  needs none: the box is one offer, so its line installs that one or nothing
+  when run again after another place starts offering the name, and whether a
+  name needs `--from` is core's to say (`install::offered`), not the
+  screen's to work out again.
+- **`-p` as core says** (`FlayerWorkspace::naming`): a project's entry, or
+  `./<entry>` when another project declares the entry as its name, which
+  `pick` would otherwise refuse as naming two.
+- **What a line warns of is the command's.** A line says what the command
+  says typed by hand: a project's `AGENTS.md` git tracks, say, is said by
+  each rule's line that renders the project's rules, where the screen, when
+  it carried out its marks itself, said it once. That was the alternative,
+  rejected: a second front end to installing, row by row through core with a
+  report of its own, which said what the commands say a second way and left
+  the transcript a `flayer install` nobody could run again.
+- **What the lines said goes to stdout**, warnings and errors included, each
+  under its line, as the TUI prints a session: on stderr, a warning would be
+  cut off from the line it is about. `flayer install` puts on stderr only
+  what its screen says itself (`install::finish`): a project that would not
+  open, and what the loaded workspaces could not offer, which every install
+  line says as it does typed by hand, so the screen says it only when no
+  install line ran, rather than once more than the lines did.
 
 The right column holds every kind's offers, filtered to one kind at a time:
 `tab` shows the next (`Screen::kind`), skills first, and a project's marks of
@@ -2526,6 +2695,28 @@ Mindflayer's touches, and an install edited since, which the screen never
 forces ([an edited copy is left alone](#an-edited-copy-is-left-alone)); every
 offer of the name stands as its one installation, so none of them can be
 marked over it either.
+
+`v` turns the screen round by artifact: every offer of the kind shown on the
+left (`Screen::artifacts`, each kind, name and origin once,
+`Row::same_offer`), and every project on the right, ticked where it holds
+the one under the cursor. Not a second set of marks: each box is still a
+project's row, found by its offer (`Target::row_of`), so ticking one goes
+through the same `toggle`, unticking another place's offer of the name as it
+does the right way round, and what is applied is the one batch, however it
+was marked. Turning keeps the box under the cursor, and the keyboard on the
+same side. A project with nowhere to put the kind is offered none of it, so
+turned round it has no box and says why, as it says so in place of its
+offers the right way round. The key is `v` rather than `tab`, which the view
+would have taken before rules could be installed: `tab` shows the next kind,
+which means the same either way round. Either way round, one artifact's
+ticks are one `flayer install` line and one `flayer uninstall` line, a `-p`
+for each project, since each takes several ([one artifact into many
+projects](#one-artifact-into-many-projects)).
+
+The line of keys is cut short at the terminal's edge rather than wrapped, so
+a long one never pushes what is waiting, or why a key did nothing, off the
+bottom, and the keys are two spaces apart, as the TUI's are, so the longest
+fits 80 columns.
 
 `try_init` rather than `init`, here and in the TUI: these are the commands that
 need a terminal, and being run without one deserves a sentence rather than a
@@ -2776,9 +2967,13 @@ activation that chose its workspace (`tui::execute`), as they were given to
 `mind`, `mind tui`) is refused if it ever reaches that path, rather than drawn
 inside this one.
 
-The exceptions are named, not hidden: the install screen is embedded as it is,
-and applying it is the batch `flayer install` applies; re-reading the disk is
-not a command, because it changes nothing.
+The exceptions are named, not hidden: opening the install screen builds the
+screen `flayer install` opens, as a read, rather than running a line, and
+re-reading the disk is not a command, because it changes nothing. Applying
+the install screen is no exception: its marks are the `install` and
+`uninstall` lines they amount to (`Task::ApplyInstall`, [the
+screen](#the-screen-and-why-it-is-three-files)), run as every other line is,
+so the transcript says what it ran in words that run again.
 
 ### Split three ways, like the install screen
 
@@ -2849,7 +3044,10 @@ the folders `flayer minds` was given for the session it opened
 be picked, but making it one writes into it, so `mind init` is asked about,
 not assumed, and a typed path that turns out to be a plain directory is asked
 about the same way. Unlinking asks too, and says that nothing on disk is
-deleted. A command that fails from a form leaves the form open with the reason
+deleted. Deleting one of the workspace's own asks with a second yes for
+removing it everywhere ([removing one of the workspace's own
+everywhere](#removing-one-of-the-workspaces-own-everywhere)), the line each
+answer runs shown under the question. A command that fails from a form leaves the form open with the reason
 in it, so a typo is fixed where it was made rather than typed out again.
 
 ### The minds screen
@@ -3530,8 +3728,8 @@ answers from an empty ledger in memory, which says what a ledger nothing was
 ever written to would. So `flayer gather list`, the TUI's shelf count and the
 install screen leave a workspace that has never gathered or installed anything
 without one. The install screen is a read until something on it is applied;
-applying opens the ledger to write (`ledger_to_write`, through
-`install::commit`), which makes it, and never the stand-in, whose records
+applying runs lines that open the ledger to write (`ledger_to_write`,
+through `assign`), which makes it, and never the stand-in, whose records
 would be gone when it was dropped. Nor does a read scrub an existing ledger of
 what an older build stored with a credential, which waits for the next
 command that writes ([A URL is kept without its
@@ -3805,10 +4003,10 @@ rendering a project's rules takes them to refuse a block of them there ([how
 a rule reaches the agents](#how-a-rule-reaches-the-agents)). They are
 decided once per command line, with the workspace to use, into the same
 `Lookup` (`Lookup::given`), which the TUI keeps and hands to every line it
-runs (`tui::execute`) and to its install screen: a line the TUI runs carries
-none of the four options, so deciding them again would read the environment
-the TUI was opened in, and a test that drives the TUI would reach the real
-folders. Nothing reads what is in them yet.
+runs (`tui::execute`), its install screen's among them: a line the TUI runs
+carries none of the four options, so deciding them again would read the
+environment the TUI was opened in, and a test that drives the TUI would reach
+the real folders. Nothing reads what is in them yet.
 
 ## How a rule reaches the agents
 
@@ -4596,7 +4794,76 @@ through a temporary file; if the second fails, the folder moves back.
 way `git clean` refuses without `-f`. It is the one command here that cannot be
 taken back, so it is asked for twice: once by naming what, once by saying yes.
 The TUI asks with a question and then runs the command with `--yes`, so the
-transcript shows the yes that was given.
+transcript shows the yes that was given. A `flayer remove` without `--yes`
+resolves its workspace as a read, as the dry runs of `update` and `migrate`
+do, so a dry run in a home nothing has made a workspace in leaves none
+behind.
+
+### Removing one of the workspace's own everywhere
+
+One of the workspace's own reaches a project by being installed there, so
+removing it from the library alone leaves every copy installed from it with
+a record nothing offers any more: orphaned, never updated again, and taken
+out only by an uninstall somebody remembers to run. `flayer remove`
+therefore names, beside a removal of one of the workspace's own, each
+project that has a copy of it, in the dry run with what `--everywhere` would
+do about it and after the removal with what takes them out now ([taking out
+what nothing offers](#taking-out-what-nothing-offers)), and a warning, since
+the copies left were not asked about. A removal that fails names none of
+them: it may have left the library copy whole, offering it still, or a
+skill's folder half deleted, offering nothing, and saying them orphaned, or
+sending somebody to `--everywhere` against a folder no longer found, would
+each be wrong half the time. `flayer remove --everywhere` is that
+done for you: core's `everywhere::plan` says what it would do, reading the
+ledger without making it, and `everywhere::apply` does it.
+
+- **The copies first, then the library.** Each project the workspace links
+  is surveyed for the artifact's name (`install::surveyed_one`), and each
+  copy nobody has changed since it was installed is uninstalled as `flayer
+  uninstall` would (`install::uninstall_with`, never forced): current,
+  outdated, missing one of its copies, or orphaned already. The library copy
+  goes last (`lifecycle::remove`), because a record from before hashes were
+  kept is told from an edit only against its offer, which the library copy
+  is.
+- **D-04 decides what stays.** An edited copy is somebody's work: left, every
+  copy of it, with its record, and from then on offered by nothing, which a
+  note says with the uninstall that takes it out once somebody has looked.
+  Somebody's own of that name, which nothing records (`install::somebodys`),
+  is never Mindflayer's to take out, and is listed as foreign so it is not
+  taken for a copy left behind.
+- **Only what came from the library.** A record naming the workspace's own as
+  its origin came from it. One installed from a loaded workspace or the
+  shelf under the same name stays, offered still by where it came from. One
+  from before origins were kept may have come from the workspace's own or
+  from any loaded workspace, and counts as the library's only while no
+  loaded workspace offers its name (`offered_for` matched against the
+  library alone and against everything else): taking out what may be
+  another workspace's would be a guess. The library copy is matched by its
+  place rather than found among the offers, so one whose front matter no
+  longer reads still finds what was installed from it.
+- **Only the projects it links.** A project another workspace links, or none,
+  keeps what was installed there, since the ledger that could say so is not
+  this one; a project linked but unreadable is a warning, as for `update
+  --all`.
+- **The library copy goes whatever the projects came to.** A copy whose
+  uninstall fails is an error of its project, said beside the rest, and the
+  library copy is removed all the same: what is left is orphaned, as a copy
+  left because it was edited is, and `uninstall --orphaned` finishes it.
+  Keeping the library copy back would ask for the whole removal again to
+  finish one project, and would make a failed project and an edited one two
+  different leftovers of one command.
+- **Each project's uninstall takes the lock for itself,** as `flayer
+  uninstall --all-projects` does ([one artifact into many
+  projects](#one-artifact-into-many-projects)), and looks again under it at
+  what the plan saw: a copy edited between the two is left all the same,
+  and said as left.
+- **A rule goes the same way.** Its uninstall renders the project's block
+  without it, or takes its copy out of a project a `mind.toml` marks.
+
+The TUI's confirmation for `d` on one of the workspace's own offers a second
+yes, `e`, which runs `flayer remove --everywhere --yes`, and shows the line
+each key runs; on a project's own, which was installed nowhere, it keeps the
+one yes.
 
 ### A record must not outlive the copy it is about
 
@@ -4875,7 +5142,7 @@ How the lock behaves, and why:
   Ten seconds is longer than anything but a gather takes, and short enough
   that a command kept waiting by a process that has stopped answering says
   so rather than looks hung. The error is collected like any other: the CLI
-  prints it, and the install screen prints it for the row it was applying
+  prints it, and the install screen prints it under the line it was running
   and goes on to the next.
 - **Who holds it, in a file of its own.** The writer holding the lock writes
   its process id to `.mindflayer/lock.pid`, and takes it away while it still
@@ -5470,13 +5737,9 @@ just listed.
 - **Forcing from the install screen.** An edited install's box is held on
   the screen, and only `--force` on the command line writes over or takes
   out its copies. A key that marks a row to be forced, confirmed as the
-  batch is, would let the screen do what the command line does, most simply
-  once it applies its batch as command lines (#51).
-- **Replaying the install screen.** One install at a time has a command now,
-  but what the screen applies is a batch, and its transcript line is
-  `flayer install` rather than the `install` and `uninstall` lines it amounts
-  to. Printing the batch as those lines would make a session with the screen in
-  it as repeatable as one without.
+  batch is, would let the screen do what the command line does: the line
+  its marks amount to would say `--force`, for the projects forced apart
+  from the rest.
 - **Gathering still stages beside.** `copy::replace` builds a shelf copy as a
   hidden sibling, `.<name>.mindflayer-new`, under names taken from the skill,
   so a gather stopped halfway leaves its staging on the shelf. Two gathers no
@@ -5491,11 +5754,35 @@ just listed.
   a removal as all or nothing as an install, at the price an install already
   pays: a target on another filesystem than the project's `.mind/tmp` could
   no longer be removed, where today it can.
-- **A batch takes turns row by row.** The install screen's batch calls core
-  once for each row, and each call takes the workspace's lock for itself:
-  another writer can come between two rows, and with the workspace busy every
-  row waits the whole ten seconds before it is passed over. Holding the lock
-  across the batch needs core to apply the batch, which is where #78 plans it.
+- **Removing everywhere is not one change.** `flayer remove --everywhere`
+  uninstalls project by project, each taking the lock for itself, and then
+  removes the library copy whatever they came to, so a project whose
+  uninstall failed, or a writer that came between two of them, leaves an
+  orphan behind for `uninstall --orphaned`. Holding the lock across the
+  projects and the library would make it one change, at the price of a body
+  of each uninstall, rules' render included, that runs under a lock it does
+  not take, as an update has.
+- **A batch takes turns line by line.** The install screen's lines run one
+  after another, and each install in them takes the workspace's lock for
+  itself, project by project, as `flayer install` given several projects
+  does ([one artifact into many
+  projects](#one-artifact-into-many-projects)): another writer can come
+  between two, and with the workspace busy each waits the whole ten seconds
+  before it is refused. Holding the lock across the screen's batch needs
+  core to apply it as one, which is where #78 plans it, and would want the
+  transcript to say it in a line that runs it again as one.
+- **One origin for two folders of one repository.** A source is one URL,
+  branch and folder, but its origin (`Offer::origin`) says only the first
+  two, so one repository gathered at one branch from two folders that each
+  hold a `deploy` offers it twice under one origin: `gather list` prints
+  the same line for each, `--from` names neither, and the install screen's
+  line for either box is refused as offered twice, where the screen, when it
+  installed what it marked itself, installed the one ticked. What it then
+  recorded named the source by id, but the origin it recorded named both,
+  which is what a record's offer is found by (`install::offered_for`). An
+  origin that says a folder other than the kind's own would name each, and
+  would change what a record holds, so it needs a ledger step that writes
+  the folder into the origins older records keep.
 - **Changes to an artifact take no lock.** `add`, `edit`, `rename` and
   `remove` write into a project or the workspace's own folders and then see
   to a record ([A record must not outlive the copy it is
@@ -5559,8 +5846,9 @@ just listed.
   writes makes the default workspace before it finds out whether there is
   anything to do in it. Outside every workspace, `mind install` and `mind
   uninstall` in a project nothing manages, `flayer install -p` and `flayer
-  uninstall -p`, and `unlink` at either level leave a `~/.mindflayer` behind
-  and then refuse, since a workspace just made manages nothing. `flayer edit`,
+  uninstall -p` (not with `--all-projects`, which resolves as a read), and
+  `unlink` at either level leave a `~/.mindflayer` behind and then refuse,
+  since a workspace just made manages nothing. `flayer edit`,
   `rename` and `remove` make it to change its own artifacts, `remove`'s dry
   run included. Each could resolve with `Intent::Read` first and make it only
   when it is about to write; whether each should is a choice per command, and

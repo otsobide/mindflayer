@@ -336,11 +336,14 @@ pub enum Task {
         to: String,
     },
     /// `… remove --yes <kind:name>`: asked about before it gets here, which is
-    /// what the `--yes` says.
+    /// what the `--yes` says. `flayer remove --everywhere --yes <kind:name>`
+    /// when `everywhere`, one of the workspace's own taken out of every
+    /// project it links first.
     Remove {
         holder: Holder,
         kind: Kind,
         name: String,
+        everywhere: bool,
     },
     /// `flayer validate`, everything; `mind validate`, one project.
     Validate { holder: Holder },
@@ -386,10 +389,31 @@ pub enum Task {
         holder: Holder,
         reference: Option<String>,
     },
+    /// `flayer install -p <project>... [--from <origin>] <kind:name>`: one
+    /// offer into each project named, by what picks it out
+    /// ([`FlayerWorkspace::naming`]), from the place `from` names when it
+    /// names one.
+    ///
+    /// [`FlayerWorkspace::naming`]: mindflayer_core::FlayerWorkspace::naming
+    Install {
+        projects: Vec<String>,
+        kind: Kind,
+        name: String,
+        from: Option<String>,
+    },
+    /// `flayer uninstall -p <project>... <kind:name>`: one artifact taken
+    /// back out of each project named, whichever place its copy came from.
+    Uninstall {
+        projects: Vec<String>,
+        kind: Kind,
+        name: String,
+    },
     /// Open the install screen, which is what `flayer install` opens.
     OpenInstall,
-    /// Carry out what the install screen marked.
-    ApplyInstall,
+    /// What the install screen marked, as the `Install` and `Uninstall`
+    /// tasks it amounts to ([`InstallScreen::task`]), each run whatever came
+    /// of the ones before.
+    ApplyInstall { changes: Vec<Task> },
     /// Read the disk again.
     Refresh,
 }
@@ -401,9 +425,9 @@ impl Task {
     ///
     /// Not a description of the task: the task. The caller parses these with
     /// the real parsers and runs what comes out, so a line here that does not
-    /// parse is a task that cannot happen. The two install tasks are the
-    /// exception (the screen does that work, and `flayer install` is the
-    /// command that opens the same screen), and a refresh changes nothing.
+    /// parse is a task that cannot happen. Opening the install screen is the
+    /// exception, a read that builds the screen `flayer install` opens rather
+    /// than a line run, and a refresh changes nothing.
     pub fn commands(&self) -> Vec<Vec<String>> {
         match self {
             Task::InitWorkspace => vec![words(&["flayer", "init"], &[])],
@@ -445,8 +469,18 @@ impl Task {
                 from,
                 to,
             } => vec![at(holder, &["rename"], &[&qualified(*kind, from), to])],
-            Task::Remove { holder, kind, name } => {
-                vec![at(holder, &["remove", "--yes"], &[&qualified(*kind, name)])]
+            Task::Remove {
+                holder,
+                kind,
+                name,
+                everywhere,
+            } => {
+                let command: &[&str] = if *everywhere {
+                    &["remove", "--everywhere", "--yes"]
+                } else {
+                    &["remove", "--yes"]
+                };
+                vec![at(holder, command, &[&qualified(*kind, name)])]
             }
             Task::Validate { holder } => vec![at(holder, &["validate"], &[])],
             Task::Minds { init, link, unlink } => {
@@ -539,7 +573,30 @@ impl Task {
                     _ => vec![at(holder, &["update", "--yes"], &named)],
                 }
             }
-            Task::OpenInstall | Task::ApplyInstall => vec![words(&["flayer", "install"], &[])],
+            Task::Install {
+                projects,
+                kind,
+                name,
+                from,
+            } => {
+                let mut head = picking(&["flayer", "install"], projects);
+                if let Some(from) = from {
+                    head.extend(option("--from", from));
+                }
+                let head: Vec<&str> = head.iter().map(String::as_str).collect();
+                vec![words(&head, &[&qualified(*kind, name)])]
+            }
+            Task::Uninstall {
+                projects,
+                kind,
+                name,
+            } => {
+                let head = picking(&["flayer", "uninstall"], projects);
+                let head: Vec<&str> = head.iter().map(String::as_str).collect();
+                vec![words(&head, &[&qualified(*kind, name)])]
+            }
+            Task::ApplyInstall { changes } => changes.iter().flat_map(Task::commands).collect(),
+            Task::OpenInstall => vec![words(&["flayer", "install"], &[])],
             Task::Refresh => Vec::new(),
         }
     }
@@ -568,7 +625,9 @@ impl Task {
                 | Task::Settings { .. }
                 | Task::Targets { .. }
                 | Task::Update { .. }
-                | Task::ApplyInstall
+                | Task::Install { .. }
+                | Task::Uninstall { .. }
+                | Task::ApplyInstall { .. }
         )
     }
 
@@ -581,6 +640,16 @@ impl Task {
     /// its own screen, and this one has to step aside for it.
     pub fn takes_terminal(&self) -> bool {
         matches!(self, Task::Edit { .. })
+    }
+
+    /// Whether each of its lines leans on the one before, so that one failing
+    /// is reason not to run the rest: `flayer link` after a failed `mind
+    /// init` would only fail again, less clearly. True of every task but the
+    /// install screen's batch, whose lines are boxes marked one by one, each
+    /// carried out or said whatever came of the others, as the screen did
+    /// before they were lines.
+    pub fn chained(&self) -> bool {
+        !matches!(self, Task::ApplyInstall { .. })
     }
 
     /// Whether it runs on a thread of its own while the screen goes on
@@ -596,7 +665,7 @@ impl Task {
         match self {
             Task::Refresh => String::from("reading the disk again"),
             Task::OpenInstall => String::from("opening the install screen"),
-            Task::ApplyInstall => String::from("installing and removing what was marked"),
+            Task::ApplyInstall { .. } => String::from("installing and removing what was marked"),
             _ => self
                 .commands()
                 .iter()
@@ -627,6 +696,17 @@ fn at(holder: &Holder, command: &[&str], positionals: &[&str]) -> Vec<String> {
     let mut head: Vec<&str> = start.iter().map(String::as_str).collect();
     head.extend_from_slice(command);
     words(&head, positionals)
+}
+
+/// `head`, then a `-p` for each of `projects`, each kept from being read as a
+/// flag as a `-C` is.
+fn picking(head: &[&str], projects: &[String]) -> Vec<String> {
+    let mut line: Vec<String> = head.iter().map(|word| (*word).to_owned()).collect();
+    for project in projects {
+        line.push(String::from("-p"));
+        line.push(directory(project));
+    }
+    line
 }
 
 /// `skill:deploy`: a name that says which kind it names.
@@ -707,6 +787,27 @@ pub enum Step {
 // ---------------------------------------------------------------------------
 // What came of it
 // ---------------------------------------------------------------------------
+
+/// Commands that ran, as a shell session would show them: each line after a
+/// `$`, then what it printed, its warnings and its error, if it had one.
+///
+/// What the TUI prints when it closes, and what the install screen `flayer
+/// install` opens prints once it is applied, so the lines either ran can be
+/// read off and run again.
+pub fn transcript(dones: &[Done]) -> String {
+    let mut text = String::new();
+    for done in dones {
+        let _ = writeln!(text, "$ {}", done.command);
+        text.push_str(&done.stdout);
+        for line in &done.stderr {
+            let _ = writeln!(text, "{line}");
+        }
+        if let Some(error) = &done.error {
+            let _ = writeln!(text, "error: {error}");
+        }
+    }
+    text
+}
 
 /// One command the TUI ran, and what it said.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -1122,21 +1223,10 @@ impl App {
     }
 
     /// Every command that changed something, as a shell session would show
-    /// it. Printed when the TUI closes, so what it did outlives the screen and
-    /// can be done again without it.
+    /// it ([`transcript`]). Printed when the TUI closes, so what it did
+    /// outlives the screen and can be done again without it.
     pub fn transcript(&self) -> String {
-        let mut text = String::new();
-        for done in &self.done {
-            let _ = writeln!(text, "$ {}", done.command);
-            text.push_str(&done.stdout);
-            for line in &done.stderr {
-                let _ = writeln!(text, "{line}");
-            }
-            if let Some(error) = &done.error {
-                let _ = writeln!(text, "error: {error}");
-            }
-        }
-        text
+        transcript(&self.done)
     }
 
     // -----------------------------------------------------------------------
@@ -1355,13 +1445,42 @@ impl App {
                     Layout::Directory { .. } => "Its folder goes, and everything in it.",
                     Layout::Files { .. } => "The file goes.",
                 };
+                let mut question = vec![
+                    format!("Delete {kind} {name}?"),
+                    String::new(),
+                    what.to_owned(),
+                ];
+                // One of the workspace's own may have been installed into
+                // its projects, where removing it alone leaves each copy
+                // orphaned: a second yes takes them out first, as
+                // `--everywhere` does. A project's own was installed
+                // nowhere, so it has only the one.
+                let also = (holder == Holder::Workspace).then(|| {
+                    question.push(String::new());
+                    question.push(String::from(
+                        "Everywhere takes it out of every project it was installed into first, \
+                         but for a copy changed since.",
+                    ));
+                    Also {
+                        key: 'e',
+                        label: "everywhere",
+                        task: Task::Remove {
+                            holder: holder.clone(),
+                            kind,
+                            name: name.clone(),
+                            everywhere: true,
+                        },
+                    }
+                });
                 let confirm = Confirm {
-                    question: vec![
-                        format!("Delete {kind} {name}?"),
-                        String::new(),
-                        what.to_owned(),
-                    ],
-                    task: Task::Remove { holder, kind, name },
+                    question,
+                    task: Task::Remove {
+                        holder,
+                        kind,
+                        name,
+                        everywhere: false,
+                    },
+                    also,
                     back: Box::new(Mode::Browse),
                 };
                 (Mode::Confirming(confirm), Step::Stay)
@@ -1477,6 +1596,7 @@ impl App {
             task: Task::Unlink {
                 entry: member.entry.clone(),
             },
+            also: None,
             back: Box::new(Mode::Browse),
         };
         (Mode::Confirming(confirm), Step::Stay)
@@ -1781,6 +1901,7 @@ impl App {
                                 ),
                             ],
                             task,
+                            also: None,
                             back: Box::new(Mode::Loading(form)),
                         };
                         (Mode::Confirming(confirm), Step::Stay)
@@ -1851,6 +1972,7 @@ impl App {
                     let confirm = Confirm {
                         question: screen.question(),
                         task,
+                        also: None,
                         back: Box::new(Mode::Minds(screen)),
                     };
                     (Mode::Confirming(confirm), Step::Stay)
@@ -1873,8 +1995,12 @@ impl App {
                 }
                 (Mode::Browse, Step::Stay)
             }
-            // Kept open while it applies: the marks are what gets applied.
-            InstallStep::Apply => (Mode::Installing(screen), Step::Run(Task::ApplyInstall)),
+            // Kept open under the box saying what runs, as a form is: what
+            // runs is the lines its marks amount to, taken from it here.
+            InstallStep::Apply => {
+                let task = screen.task();
+                (Mode::Installing(screen), Step::Run(task))
+            }
         }
     }
 
@@ -1946,7 +2072,9 @@ impl App {
                 Task::Show { .. }
                 | Task::Validate { .. }
                 | Task::Shelf
-                | Task::ApplyInstall
+                | Task::ApplyInstall { .. }
+                | Task::Install { .. }
+                | Task::Uninstall { .. }
                 | Task::Update { .. }
                 | Task::Minds { .. },
                 _,
@@ -2163,6 +2291,10 @@ fn confirming(confirm: Confirm, key: KeyEvent) -> (Mode, Step) {
         // the form that led here.
         KeyCode::Char('y') | KeyCode::Enter => (*confirm.back, Step::Run(confirm.task)),
         KeyCode::Char('n') | KeyCode::Esc => (*confirm.back, Step::Stay),
+        KeyCode::Char(key) if confirm.also.as_ref().is_some_and(|also| also.key == key) => {
+            let task = confirm.also.map(|also| also.task);
+            (*confirm.back, task.map_or(Step::Stay, Step::Run))
+        }
         _ => (Mode::Confirming(confirm), Step::Stay),
     }
 }
@@ -2611,8 +2743,20 @@ pub struct Confirm {
     pub question: Vec<String>,
     /// What yes runs.
     pub task: Task,
-    /// Where either answer goes back to.
+    /// A second yes, under a key of its own, that runs something more: the
+    /// same question answered "and everywhere else too".
+    pub also: Option<Also>,
+    /// Where any answer goes back to.
     pub back: Box<Mode>,
+}
+
+/// A second yes a [`Confirm`] offers: the key that gives it, the word the
+/// keys line calls it, and what it runs.
+#[derive(Debug)]
+pub struct Also {
+    pub key: char,
+    pub label: &'static str,
+    pub task: Task,
 }
 
 impl Confirm {
@@ -2627,6 +2771,7 @@ impl Confirm {
                 ),
             ],
             task: Task::InitAndLink { path },
+            also: None,
             back: Box::new(back),
         }
     }
@@ -2697,8 +2842,11 @@ impl Reader {
             ),
             (
                 "d",
-                "delete it, once you say yes",
-                &["mind -C <project> remove --yes <kind:name>"],
+                "delete it, once you say yes; on the ◆ row, e takes it out of every project too",
+                &[
+                    "mind -C <project> remove --yes <kind:name>",
+                    "flayer remove --everywhere --yes <kind:name>, with e on the workspace's own",
+                ],
             ),
             (
                 "l",

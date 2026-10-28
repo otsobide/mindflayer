@@ -28,8 +28,8 @@ use mindflayer_core::gather::Watch;
 use mindflayer_core::resolve::{self, resolve, Intent, Reason, Resolved};
 use mindflayer_core::workspace::Member as Registered;
 use mindflayer_core::{
-    lifecycle, paths, scan, template, AgentHomes, Catalog, FlayerWorkspace, Kind, MarkerFile,
-    MindProject, ProjectStatus, WorkspaceError,
+    lifecycle, paths, scan, template, Catalog, FlayerWorkspace, Kind, MarkerFile, MindProject,
+    ProjectStatus, WorkspaceError,
 };
 use ratatui::crossterm::event::{self, Event, KeyEventKind};
 use ratatui::crossterm::terminal::{self, EnterAlternateScreen};
@@ -37,9 +37,8 @@ use ratatui::DefaultTerminal;
 
 use crate::commands::project::scan_warnings;
 use crate::commands::status::{unread, unseen};
-use crate::commands::workspace::{load_warnings, same_directory};
+use crate::commands::workspace::same_directory;
 use crate::commands::{consulted, run_flayer_with, run_with};
-use crate::install::state::Screen as InstallScreen;
 use crate::render::as_stored;
 use crate::{install, Cli, CliError, Command, Failure, FlayerCli, FlayerCommand, Lookup, Outcome};
 use state::{
@@ -256,10 +255,11 @@ fn start(app: &mut App, task: Task) {
     });
     let runner = runner(app);
     let lines = app.lines(&task);
+    let chained = task.chained();
     let base = app.base().to_path_buf();
     let lookup = app.lookup.clone();
     thread::spawn(move || {
-        let dones = run_all(&runner, &lines, &base, &lookup, &reporting);
+        let dones = run_all(&runner, &lines, &base, &lookup, &reporting, chained);
         // Nobody to tell is a screen already closed, which needs no answer.
         let _ = send.send(Update::Finished(dones));
     });
@@ -286,12 +286,6 @@ pub fn perform(task: &Task, app: &App) -> Performed {
             &base,
             app.workspace().is_some_and(|workspace| !workspace.made),
         ),
-        Task::ApplyInstall => match &app.mode {
-            Mode::Installing(screen) => {
-                Performed::Ran(vec![apply_install(&base, screen, &app.lookup.agents)])
-            }
-            _ => Performed::Ran(Vec::new()),
-        },
         // Asked about rather than failed: `flayer link` would refuse it, and
         // `mind init` is what would make it work.
         Task::Link { path } if needs_init(&base.join(path)) => {
@@ -303,6 +297,7 @@ pub fn perform(task: &Task, app: &App) -> Performed {
             &base,
             &app.lookup,
             &Watch::new(),
+            task.chained(),
         )),
     }
 }
@@ -321,22 +316,23 @@ fn needs_init(directory: &Path) -> bool {
         )
 }
 
-/// Run command lines in order, stopping at the first that fails: each leans
-/// on the one before, and `flayer link` after a failed `mind init` would only
-/// fail again, less clearly.
+/// Run command lines in order, stopping at the first that fails when they
+/// are `chained` ([`Task::chained`]), and running every one when they stand
+/// alone.
 fn run_all(
     runner: &Runner,
     lines: &[Vec<String>],
     base: &Path,
     lookup: &Lookup,
     watch: &Watch,
+    chained: bool,
 ) -> Vec<Done> {
     let mut dones = Vec::new();
     for words in lines {
         let done = runner.run(words, base, lookup, watch);
         let failed = done.error.is_some();
         dones.push(done);
-        if failed {
+        if failed && chained {
             break;
         }
     }
@@ -445,14 +441,16 @@ fn draws_mind(command: Option<&Command>) -> bool {
 }
 
 /// Build the install screen for the workspace at `base`, which is the one on
-/// screen and the one applying opens: the default workspace too when nothing
-/// has made it yet (`unmade`), with nothing to install into.
+/// screen, and the root the lines it amounts to run from once it is applied:
+/// the default workspace too when nothing has made it yet (`unmade`), with
+/// nothing to install into.
 ///
 /// Opened there exactly rather than found by walking up from it, as `flayer
 /// install` would: before the default is made there is no marker at `base`
 /// to stop the walk, which would carry on to any workspace above home. Built
 /// from the ledger as it is, as `flayer install` builds it, so opening the
-/// screen makes nothing and scrubs nothing.
+/// screen makes nothing and scrubs nothing: the first line applying it runs
+/// opens the ledger to write, as that command does from the shell.
 fn open_install(base: &Path, unmade: bool) -> Performed {
     let workspace = if unmade {
         FlayerWorkspace::unmade(base)
@@ -470,37 +468,6 @@ fn open_install(base: &Path, unmade: bool) -> Performed {
             String::from("flayer install"),
             error.to_string(),
         )]),
-    }
-}
-
-/// Carry out what the install screen marked, the way `flayer install` does:
-/// through [`install::commit`], which scrubs the ledger first, with the
-/// agents' own folders the TUI was opened with, as every line it runs has.
-fn apply_install(base: &Path, screen: &InstallScreen, homes: &AgentHomes) -> Done {
-    let command = String::from("flayer install");
-    let applied = FlayerWorkspace::open(base)
-        .map_err(Failure::from)
-        .and_then(|workspace| {
-            let mut outcome = install::commit(&workspace, screen, homes)?;
-            let warnings = load_warnings(&workspace);
-            outcome.ok = outcome.ok && warnings.is_empty();
-            outcome.stderr.extend(warnings);
-            Ok(outcome)
-        });
-    match applied {
-        Ok(outcome) => Done {
-            command,
-            stdout: outcome.stdout,
-            stderr: outcome.stderr,
-            error: None,
-            ok: outcome.ok,
-        },
-        // What the scrub said goes with an error too: it happened all the
-        // same, and says so only this once.
-        Err(failure) => Done {
-            stderr: failure.warnings,
-            ..Done::failed(command, failure.error.to_string())
-        },
     }
 }
 

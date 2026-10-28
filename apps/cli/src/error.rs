@@ -8,6 +8,7 @@ use std::io;
 use std::path::{Path, PathBuf};
 
 use mindflayer_core::activate::{self, ActivateError, WORKSPACE_VARIABLE};
+use mindflayer_core::everywhere::EverywhereError;
 use mindflayer_core::gather::GatherError;
 use mindflayer_core::ledger::LedgerError;
 use mindflayer_core::{
@@ -61,6 +62,8 @@ pub enum CliError {
     Create(#[from] CreateError),
     #[error(transparent)]
     Lifecycle(#[from] LifecycleError),
+    #[error(transparent)]
+    Everywhere(#[from] EverywhereError),
     #[error(transparent)]
     Template(#[from] TemplateError),
     #[error(transparent)]
@@ -121,12 +124,16 @@ pub enum CliError {
         wanted: String,
         matches: Vec<String>,
     },
-    #[error("say which project to install into (`flayer install -p <project> <name>`), or run `flayer install` alone for the screen")]
+    #[error("say which projects to install into: -p <project> for each, or --all-projects for every one the workspace links; or run `flayer install` alone for the screen")]
     InstallWhere,
     #[error("say which skill or rule to install (`flayer install -p <project> <name>`), or run `flayer install` alone for the screen")]
     InstallWhat,
+    #[error("say which projects to take it out of: -p <project> for each, or --all-projects for every one the workspace links")]
+    UninstallWhere,
     #[error("{project} has no {name} installed, so there is nothing to take out")]
     NotInstalled { name: String, project: String },
+    #[error("no project asked has {name} installed, so there is nothing to take out")]
+    NotInstalledAnywhere { name: String },
     #[error("`{command}` needs a terminal to draw on, and this is not one: {source}")]
     NoTerminal {
         command: &'static str,
@@ -181,7 +188,7 @@ fn known_projects(known: &[String]) -> String {
 }
 
 /// What `mind remove` would delete, as a sentence.
-fn deleting(path: &Path, kind: &Kind, files: &usize) -> String {
+pub(crate) fn deleting(path: &Path, kind: &Kind, files: &usize) -> String {
     match kind.layout() {
         mindflayer_core::Layout::Directory { .. } => {
             format!(

@@ -86,9 +86,12 @@ under `apps/` with its own `Makefile`:
   (`reapply`), what each project holds, from where and for which agents
   (`status`), creating and changing artifacts, and moving a workspace's own
   into its library and a project from its `mind.toml` or `settings.json` to a
-  `settings.toml` (`migrate`), and bringing what was installed up to date
-  with where it came from (`update`). Its only I/O is files, and it never
-  reads the environment.
+  `settings.toml` (`migrate`), bringing what was installed up to date with
+  where it came from (`update`), installing one artifact into several
+  projects at once, or taking it, or whatever nothing offers any more, out
+  of them (`assign`), and removing one of the workspace's own from every
+  project it links before the library (`everywhere`). Its only I/O is
+  files, and it never reads the environment.
 - `apps/cli` (`mindflayer-cli`): the binaries `mind` (`src/main.rs`) and
   `flayer` (`src/bin/flayer.rs`), and the TUI. `src/lib.rs` only re-exports
   the public API. The parsers are in `src/parse.rs`. `src/commands.rs`
@@ -170,7 +173,11 @@ These are easy to break from a single file without noticing.
   TUI gains it by producing that command's words. Never add a TUI-only code
   path. A gather's lines run on a thread of their own (`Task::runs_apart`),
   still through the same parsers: the thread changes where they run, not
-  what they are.
+  what they are. The install screen applies the same way, in the TUI or
+  opened by `flayer install` (`install::apply`): its marks are the
+  `flayer install` and `flayer uninstall` lines they amount to
+  (`Screen::task`), each run whatever came of the others
+  (`Task::chained`), so its transcript runs again.
 - **A gather is watched, and stops only before it places.** Its `Request`
   carries a `gather::Watch`, core's progress callback and cancel flag; no gix
   type reaches a front end. A cancel is honoured until the shelf starts to
@@ -216,8 +223,8 @@ These are easy to break from a single file without noticing.
     installed along with them.
   - Creation uses `create_new` or `create_dir`.
   - `rename` rewrites only the `name:` line (`frontmatter::with_key`).
-  - `remove`, `migrate` at either level, `agents`, `share`, `targets` and
-    `update` are dry runs without `--yes`.
+  - `remove` (`flayer remove --everywhere` too), `migrate` at either level,
+    `agents`, `share`, `targets` and `update` are dry runs without `--yes`.
     A migration of the library moves nothing a project holds, refuses as a
     whole, and keeps the marker it rewrites as `flayer.toml.v<version>`
     (`create_new`). A project's (`migrate::project`) writes its
@@ -360,6 +367,10 @@ These are easy to break from a single file without noticing.
   `reapply::retarget`, and holds a record from before hashes to its offer
   (D-04). Being made once, it is refused when the workspace `mind migrate`
   consults cannot be read, never made as if that one recorded nothing.
+  Removing one of the workspace's own everywhere (`everywhere::apply`) and
+  `uninstall --orphaned` (`assign::uninstall_orphaned`) take copies out only
+  through `install::uninstall_with`, the first never forced, so an edited
+  copy and somebody's are left as an uninstall leaves them.
   `install::disown` and `install::carry` are private to core, so no front end
   drops or moves a record on its own. A front end adds through
   `lifecycle::add`, never `create` or `create_from`, which leave a stale
@@ -426,9 +437,9 @@ These are easy to break from a single file without noticing.
     `FlayerWorkspace::ledger_to_write`, which scrubs what an older build
     stored first and hands back what it took out to be said; one that only
     reads opens it with `ledger_for_reading`, which scrubs nothing. The
-    install screen is a read until it applies, so it scrubs then
-    (`install::commit`). Anything new that keeps or prints a URL goes through
-    `url::redacted` too.
+    install screen is a read until it applies, and the lines it then runs
+    scrub as any `install` does. Anything new that keeps or prints a URL goes
+    through `url::redacted` too.
 - **Writers take turns; readers never wait.** Core's writers hold the
   workspace's `.mindflayer/lock` (`FlayerWorkspace::lock`) while they change
   it: `edit_array`, `install::install` and `uninstall`,
@@ -447,8 +458,10 @@ These are easy to break from a single file without noticing.
   writer takes it the same way, inside core; `config_entry::ConfigFile`,
   `agents_md::render`, `claude_rules::render`, `claude_md::render` and
   `MindProject::change_settings` take none, since
-  the writers that call them hold it. A second workspace linking the same
-  project is kept out by neither lock, an open question in
+  the writers that call them hold it, and `assign::install` and
+  `uninstall` none across their batch, leaving it to each project's
+  install, in the install screen's lines too. A second workspace linking
+  the same project is kept out by neither lock, an open question in
   `docs/architecture.md`.
   Opening the ledger takes no lock: a schema migration keeps itself apart
   in its own transaction. The lock is not re-entrant: a writer never calls

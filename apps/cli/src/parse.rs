@@ -258,7 +258,13 @@ pub enum Command {
     /// Take a skill or a rule Mindflayer installed back out of this project.
     Uninstall {
         /// Its name, or `kind:name` when one name is both.
-        name: String,
+        #[arg(required_unless_present = "orphaned")]
+        name: Option<String>,
+
+        /// Every installation nothing offers any more where it came from,
+        /// instead of one by name.
+        #[arg(long, conflicts_with = "name")]
+        orphaned: bool,
 
         /// Take out a copy changed since it was installed too, which is
         /// otherwise left alone with every other copy.
@@ -502,6 +508,9 @@ pub enum FlayerCommand {
     },
 
     /// Delete one of the workspace's own artifacts, or a project's.
+    ///
+    /// One of the workspace's own installed into its projects leaves its
+    /// copies there orphaned; --everywhere takes them out first.
     #[command(alias = "rm")]
     Remove {
         /// Its name, or `kind:name`.
@@ -510,6 +519,12 @@ pub enum FlayerCommand {
         /// A project this workspace manages, instead of the workspace itself.
         #[arg(short, long, value_name = "PROJECT")]
         project: Option<String>,
+
+        /// Uninstall it from every project this workspace links first,
+        /// leaving a copy changed since it was installed, and somebody's own
+        /// of that name.
+        #[arg(long, conflicts_with = "project")]
+        everywhere: bool,
 
         /// Delete it. Without this nothing is deleted, and the command says
         /// what would be.
@@ -649,11 +664,15 @@ pub enum FlayerCommand {
     /// workspace's own, a loaded workspace's, or its shelf's.
     ///
     /// On its own it opens a screen for all of them at once. Given a name and
-    /// a project, it installs that one without one.
+    /// projects, it installs that one into each, without the screen.
     Install {
-        /// The project to install into.
-        #[arg(short, long, value_name = "PROJECT")]
-        project: Option<String>,
+        /// A project to install into, by name or path; once for each.
+        #[arg(short = 'p', long = "project", value_name = "PROJECT")]
+        projects: Vec<String>,
+
+        /// Every project the workspace links.
+        #[arg(long, conflicts_with = "projects")]
+        all_projects: bool,
 
         /// Its name: a skill's, or a rule's route like `git/commits`;
         /// `skill:<name>` or `rule:<route>` when one name is both [default:
@@ -671,14 +690,24 @@ pub enum FlayerCommand {
         force: bool,
     },
 
-    /// Take a skill or a rule Mindflayer installed back out of a project.
+    /// Take a skill or a rule Mindflayer installed back out of projects.
     Uninstall {
-        /// The project to take it out of.
-        #[arg(short, long, value_name = "PROJECT")]
-        project: String,
+        /// A project to take it out of, by name or path; once for each.
+        #[arg(short = 'p', long = "project", value_name = "PROJECT")]
+        projects: Vec<String>,
+
+        /// Every project the workspace links that has it.
+        #[arg(long, conflicts_with = "projects")]
+        all_projects: bool,
 
         /// Its name, or `kind:name` when one name is both.
-        name: String,
+        #[arg(required_unless_present = "orphaned")]
+        name: Option<String>,
+
+        /// Every installation nothing offers any more where it came from,
+        /// instead of one by name.
+        #[arg(long, conflicts_with = "name")]
+        orphaned: bool,
 
         /// Take out a copy changed since it was installed too, which is
         /// otherwise left alone with every other copy.
