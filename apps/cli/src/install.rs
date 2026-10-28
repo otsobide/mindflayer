@@ -35,17 +35,18 @@ use state::{Screen, Step, Target};
 /// agents' own folders the command line was given, and use the workspace it
 /// chose.
 pub fn run(workspace: &FlayerWorkspace, lookup: &Lookup) -> Result<Outcome, Failure> {
-    let (projects, mut warnings) = registered(workspace);
-    warnings.extend(load_warnings(workspace));
+    let (projects, warnings) = registered(workspace);
     let screen = open(workspace, projects)?;
 
     if screen.targets.is_empty() {
+        let mut stderr = warnings;
+        stderr.extend(load_warnings(workspace));
         return Ok(Outcome {
             stdout: format!(
                 "{} manages no projects yet\n  link one with `flayer link <path>`\n",
                 workspace.name()
             ),
-            stderr: warnings,
+            stderr,
             ok: true,
         });
     }
@@ -61,17 +62,46 @@ pub fn run(workspace: &FlayerWorkspace, lookup: &Lookup) -> Result<Outcome, Fail
     ratatui::restore();
 
     let (screen, step) = outcome.map_err(|source| CliError::Screen { source })?;
-    let mut outcome = match step {
-        Step::Apply => apply(workspace, &screen, lookup),
-        _ => Outcome {
+    Ok(finish(workspace, &screen, step, lookup, warnings))
+}
+
+/// What `flayer install` says once its screen is left with `step`: what
+/// applying ran ([`apply`]), or that nothing was, after `warnings`, the
+/// projects that would not open, and what the loaded workspaces could not
+/// offer, on stderr, failing it.
+///
+/// What the loaded workspaces could not offer is said by every install line
+/// itself, as `flayer install -p` says it typed by hand, so it is the
+/// screen's to say only when no install line ran: said here as well, it
+/// would be said once more than the lines that said it. An uninstall line
+/// does not say it, since what it takes out is read off the ledger rather
+/// than offered. What the lines said stays under each, on stdout, as the
+/// TUI prints a session, warnings and errors included: on stderr, a warning
+/// would be cut off from the line it is about.
+pub fn finish(
+    workspace: &FlayerWorkspace,
+    screen: &Screen,
+    step: Step,
+    lookup: &Lookup,
+    mut warnings: Vec<String>,
+) -> Outcome {
+    let applied = step == Step::Apply;
+    let mut outcome = if applied {
+        apply(workspace, screen, lookup)
+    } else {
+        Outcome {
             stdout: String::from("nothing applied\n"),
             stderr: Vec::new(),
             ok: true,
-        },
+        }
     };
+    let (installs, _) = screen.counts();
+    if !applied || installs == 0 {
+        warnings.extend(load_warnings(workspace));
+    }
     outcome.ok = outcome.ok && warnings.is_empty();
     outcome.stderr.splice(0..0, warnings);
-    Ok(outcome)
+    outcome
 }
 
 /// Build the screen from the ledger as it is, as a read: without making the

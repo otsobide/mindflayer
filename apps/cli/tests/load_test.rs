@@ -659,6 +659,99 @@ fn a_loaded_skill_that_vanished_does_not_stop_the_rest_of_the_install_screen() {
     );
 }
 
+/// `target_and_team` with a skill of the target's own, `review`, loading
+/// `team`, which has gone since: what the screen and its lines say of a
+/// loaded workspace that cannot be opened.
+fn loading_what_has_gone() -> (TempDir, PathBuf, FlayerWorkspace) {
+    let (dir, target, team) = target_and_team();
+    flayer(&target, &["add", "skill", "review", "Review it"]).unwrap();
+    flayer(&target, &["load", "../team"]).unwrap();
+    fs::remove_dir_all(&team).unwrap();
+    let workspace = FlayerWorkspace::open(&target).unwrap();
+    (dir, target, workspace)
+}
+
+/// How many times `outcome` says anything of a workspace that is not one,
+/// stdout and stderr together.
+fn said_gone(outcome: &Outcome) -> usize {
+    outcome.stdout.matches("not a flayer workspace").count()
+        + outcome
+            .stderr
+            .iter()
+            .filter(|line| line.contains("not a flayer workspace"))
+            .count()
+}
+
+#[test]
+fn a_loaded_workspace_that_has_gone_is_said_once_by_the_install_line_and_not_again() {
+    let (_dir, _target, workspace) = loading_what_has_gone();
+    let ledger = workspace.ledger().unwrap();
+    let mut screen = screen_for(&workspace, &ledger);
+    press(&mut screen, &[KeyCode::Right, KeyCode::Char(' ')]);
+
+    let outcome = install_screen::finish(
+        &workspace,
+        &screen,
+        Step::Apply,
+        &Lookup::default(),
+        Vec::new(),
+    );
+
+    // Under the line that said it, as `flayer install -p` says it typed.
+    assert!(
+        outcome.stdout.starts_with(
+            "$ flayer install -p collapse --from workspace skill:review\n\
+             installed review into collapse, from workspace\n\
+             warning: "
+        ),
+        "{}",
+        outcome.stdout
+    );
+    assert_eq!(said_gone(&outcome), 1, "{outcome:?}");
+    assert!(outcome.stderr.is_empty(), "{:?}", outcome.stderr);
+    assert!(!outcome.ok);
+}
+
+#[test]
+fn a_loaded_workspace_that_has_gone_is_the_screens_to_say_when_no_line_installs() {
+    let (_dir, target, workspace) = loading_what_has_gone();
+    flayer(
+        &target,
+        &["install", "-p", "collapse", "review", "--from", "workspace"],
+    )
+    .unwrap();
+    let ledger = workspace.ledger().unwrap();
+    let left = screen_for(&workspace, &ledger);
+    let mut unticked = screen_for(&workspace, &ledger);
+    press(&mut unticked, &[KeyCode::Right, KeyCode::Char(' ')]);
+
+    let quit = install_screen::finish(
+        &workspace,
+        &left,
+        Step::Quit,
+        &Lookup::default(),
+        Vec::new(),
+    );
+    let removed = install_screen::finish(
+        &workspace,
+        &unticked,
+        Step::Apply,
+        &Lookup::default(),
+        Vec::new(),
+    );
+
+    assert_eq!(quit.stdout, "nothing applied\n");
+    assert_eq!(
+        removed.stdout,
+        "$ flayer uninstall -p collapse skill:review\nremoved review from collapse\n"
+    );
+    for outcome in [quit, removed] {
+        assert_eq!(said_gone(&outcome), 1, "{outcome:?}");
+        assert!(outcome.stderr[0].starts_with("warning: "), "{outcome:?}");
+        assert!(!outcome.ok);
+    }
+}
+
 #[test]
 fn ticking_the_installed_copy_off_and_on_again_changes_nothing() {
     let (_dir, target, _team) = target_and_team();

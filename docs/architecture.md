@@ -2659,6 +2659,13 @@ lines otherwise stop at the first that fails.
   rejected: a second front end to installing, row by row through core with a
   report of its own, which said what the commands say a second way and left
   the transcript a `flayer install` nobody could run again.
+- **What the lines said goes to stdout**, warnings and errors included, each
+  under its line, as the TUI prints a session: on stderr, a warning would be
+  cut off from the line it is about. `flayer install` puts on stderr only
+  what its screen says itself (`install::finish`): a project that would not
+  open, and what the loaded workspaces could not offer, which every install
+  line says as it does typed by hand, so the screen says it only when no
+  install line ran, rather than once more than the lines did.
 
 The right column holds every kind's offers, filtered to one kind at a time:
 `tab` shows the next (`Screen::kind`), skills first, and a project's marks of

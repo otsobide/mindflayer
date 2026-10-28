@@ -820,7 +820,9 @@ $ flayer uninstall -p collapse rule:git/commits
 removed rule git/commits from collapse
 ```
 
-One that fails says why where it ran, and the rest run all the same.
+One that fails says why where it ran, and the rest run all the same. All of
+it is on stdout, warnings and errors included, each under the line it is
+about.
 
 Each project keeps its own ticks, so one pass across the list is one plan for
 the whole workspace. The number beside a project is how many of its boxes you
