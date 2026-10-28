@@ -10,7 +10,7 @@ use std::path::{Path, PathBuf};
 
 use mindflayer_core::ledger::{Action, InstallRecord, Outcome, Target};
 use mindflayer_core::resolve::{Inputs, Intent, Reason};
-use mindflayer_core::view::{Project, Snapshot};
+use mindflayer_core::view::{LoadedWorkspace, Project, Snapshot};
 use mindflayer_core::{
     hash, Agent, Directories, FlayerWorkspace, Kind, MindProject, Share, SourceKind, State,
     FLAYER_DIR,
@@ -556,4 +556,19 @@ fn an_install_nothing_of_which_is_found_says_where_it_went() {
         review.targets,
         [".agents/skills/review", ".claude/skills/review"]
     );
+}
+
+/// What a workspace loads is listed on its own as the snapshot lists it,
+/// for a front end showing a project that workspace does not link.
+#[test]
+fn what_a_workspace_loads_is_listed_on_its_own_as_the_snapshot_lists_it() {
+    let fixture = fixture();
+    let workspace = FlayerWorkspace::open(&fixture.hub).unwrap();
+
+    let snapshot = Snapshot::read(&naming(&fixture.hub, None))
+        .unwrap()
+        .unwrap();
+
+    assert_eq!(LoadedWorkspace::of(&workspace), snapshot.loaded);
+    assert_eq!(snapshot.loaded[0].offers, 1);
 }

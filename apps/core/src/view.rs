@@ -609,6 +609,15 @@ fn answered<T: Default>(read: Result<T, LedgerError>, warnings: &mut Vec<Said>) 
     })
 }
 
+impl LoadedWorkspace {
+    /// Every workspace `workspace` loads, as a snapshot lists them: for a
+    /// front end showing a project no workspace links, what `mind load` has
+    /// put into the one above it.
+    pub fn of(workspace: &FlayerWorkspace) -> Vec<LoadedWorkspace> {
+        loaded(workspace, &install::offered_by_loads(workspace).offers)
+    }
+}
+
 /// Every workspace `workspace` loads, with how many of `offers`, what the
 /// loads offer, each comes with.
 fn loaded(workspace: &FlayerWorkspace, offers: &[Offer]) -> Vec<LoadedWorkspace> {
