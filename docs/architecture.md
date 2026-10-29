@@ -128,8 +128,10 @@ steps read as and draws them on stderr, `task.rs` holds the work a front end
 asks for as the command lines it is ([every change is a command
 line](#every-change-is-a-command-line)), `admit.rs` holds a task sent from
 outside to the path policy and `backend.rs` is the panel's backend ([what a
-browser may name](#what-a-browser-may-name)), and `lib.rs` only says what is
-public.
+browser may name](#what-a-browser-may-name)), which `commands/ui.rs` serves
+([launching it](#launching-it-flayer-ui)), and `lib.rs` only says what is
+public. The backend, `ui` and the server they need are behind the crate's
+`ui` feature, on by default.
 
 The split is by family. One file holding the parser, every command and the
 rendering was where every change to a command met every other, so pieces of
@@ -3652,19 +3654,21 @@ takes, until #112 brings to the server the progress and the cancel only a
 screen has now; and `show`, which prints an artifact whole, read through any
 link on the way, as a terminal's user may ask of their own disk, where a
 front end without one reads a file at a time, held to its holder
-([what a browser may name](#what-a-browser-may-name)). `ui` joins it when
-#68 makes it a command. The TUI has a
-terminal, so of the list it refuses only the screens. The list is of
-commands as the parsers read them, not as they are spelled, so `mind flayer
-minds` is refused as `flayer minds` is, and it is a match over every command
-with no wildcard, so a new command does not compile until it says whether
-it is refused. A task is refused for the first of its lines that is
-(`Task::refusal`), whichever variant it is, and each refusal has a code of
-its own (`opens_screen`, `opens_editor`, `prints_shell_code`,
-`gather_unwatched`, `show_unheld`), held to the rules core's codes are ([a code for what
-went wrong](#a-code-for-what-went-wrong)). A list of tasks was the
-alternative, and it would leave out a line no task builds: a front end that
-runs lines it is sent would run one the list never named.
+([what a browser may name](#what-a-browser-may-name)). And `ui`, which
+serves the panel until Ctrl-C, so a front end that ran it as a line would
+wait on it for good. The TUI has a terminal, so of the list it refuses only
+the screens, and `ui`, since the screen takes Ctrl-C as a key and nothing
+would stop it. The list is of commands as the parsers read them, not as they
+are spelled, so `mind flayer minds` is refused as `flayer minds` is, and it
+is a match over every command with no wildcard, so a new command does not
+compile until it says whether it is refused. A task is refused for the first
+of its lines that is (`Task::refusal`), whichever variant it is, and each
+refusal has a code of its own (`opens_screen`, `opens_editor`,
+`prints_shell_code`, `gather_unwatched`, `show_unheld`, `serves_panel`),
+held to the rules core's codes are ([a code for what went
+wrong](#a-code-for-what-went-wrong)). A list of tasks was the alternative,
+and it would leave out a line no task builds: a front end that runs lines it
+is sent would run one the list never named.
 
 The exceptions are named, not hidden: opening the install screen builds the
 screen `flayer install` opens, as a read, rather than running a line, and
@@ -3852,8 +3856,8 @@ choice is made seeing where the project went.
 `apps/server` (`mindflayer-server`) is the transport under the web panel
 ([D-17](#d-17-the-next-front-end-is-a-local-web-panel)): a library crate that
 binds a port, checks who is asking, carries JSON between the browser and a
-front end, and serves the panel's files. No binary runs it yet. `flayer ui`
-(#68) will, over the CLI's backend ([what a browser may
+front end, and serves the panel's files. `flayer ui` runs it, over the
+CLI's backend ([launching it](#launching-it-flayer-ui), [what a browser may
 name](#what-a-browser-may-name)). The token keeps out a process that
 connects without it, and [the guards](#what-keeps-other-pages-out) keep out
 other pages in the same browser: one on another port of 127.0.0.1, which the
@@ -4264,6 +4268,74 @@ segment is never looked up and gets `index.html`, as one of the panel's routes
 may. A release build only looks names up in a table, and the check keeps the
 two answering alike.
 
+### Launching it: `flayer ui`
+
+`flayer ui` serves the panel from the binary until Ctrl-C, and `mind ui` is
+the same command reached from a project. The workspace is resolved once, as
+the command starts, from its `-C`, `--home`, `-W` and agent homes
+(`PanelBackend::launch`), so one that cannot be used fails the command as
+any would, before anything listens, and nothing the browser sends later
+changes it. The server binds 127.0.0.1 on a port the system picks, or the
+one `--port` names, and a port somebody holds fails the command
+(`panel_unbound`) rather than move to another.
+
+The link goes to stdout as soon as the server listens, the one line there,
+so a script reads it, and stderr says which workspace is served, on which
+address, and that Ctrl-C stops it. That is where `ui` parts from the rule
+that a command builds its output and hands it back to be printed
+(`Outcome`), as the TUI's screen does: the link cannot wait for the command
+to end, which it does only when it is stopped. Then the link is opened with
+the `webbrowser` crate, the way each platform starts its browser, unless
+`--no-open`; one that cannot be opened is a warning, since the link is there
+to open by hand. It is opened on the blocking pool once the server is serving, not
+before: `webbrowser` waits on a text browser until it is closed, which would
+otherwise wait in turn on a server that never started.
+
+Ctrl-C is listened for before the link is out, through the platform's own
+listener, a Unix signal or the Windows console's Ctrl-C, rather than
+`tokio::signal::ctrl_c`, which installs its handler only once it is first
+awaited. The first stops the server taking connections and lets every
+request under way be answered, a run above all, so a change is not cut off
+half way; the second stops at once, for whoever would rather have that than
+wait. What comes back once it stops is what the TUI hands back when it
+closes: every line the panel ran for a task that changes something
+(`Task::writes`), with what each said, laid out by the TUI's function
+(`PanelBackend::transcript`), so a session in the browser can be read and
+run again from a shell. The server's own transcript, the one the panel
+shows, holds reads as well, and goes with the server.
+
+The runtime is tokio's with one thread: every query goes to the blocking pool
+and every run to the server's writer thread, so it only moves bytes. `--dev`
+serves the panel through its dev server ([through the panel's dev
+server](#through-the-panels-dev-server)): the server takes requests from
+`http://127.0.0.1:5173` too, the link points there, and the port is 7878,
+where `make web/dev`'s proxy looks, unless `--port` names another. The note
+on stderr says the server's own address, which the link then does not.
+
+All of it is behind the CLI crate's `ui` feature, on by default so the one
+binary somebody installs has the panel
+([D-17](#d-17-the-next-front-end-is-a-local-web-panel)): the server, axum,
+rust-embed, tokio's signal handling and `webbrowser`. `cargo build -p
+mindflayer-cli --no-default-features` builds the commands and the TUI
+without them, and `ui` is then no command; `tests/crate_test.rs` holds that
+build to no server, axum, embed or `webbrowser`, and `make cli/build` builds
+it first. hyper and tokio stay, which gix's HTTP transport brings to core.
+What the feature costs, measured for D-17 on Linux x86_64 with 16 cores, in
+the release profile, with no panel built unless said:
+
+| | without `ui` | with `ui` |
+|---|---|---|
+| `mind`, as built | 24.9 MB | 27.3 MB (+2.3 MB, +9%) |
+| `mind`, stripped | 19.5 MB | 21.1 MB (+1.6 MB, +8%) |
+| `mind`, the panel embedded | | about 28.2 MB |
+| clean build, wall clock | 1 min 22 s | 1 min 29 s (+7 s, +8%) |
+| clean build, CPU | 12 min 20 s | 13 min 37 s (+10%) |
+
+Turning the feature on in a target that holds the build without it takes
+38 s, most of it compiling tokio again with its signal driver, and gix and
+core above it, since a feature of a crate is one for every crate that uses
+it.
+
 ## The web panel
 
 `apps/web` is the panel [D-19](#d-19-the-panel-is-built-on-nuxt-ui) chose:
@@ -4378,10 +4450,12 @@ A test fails on such a path, and `make web/build` writes the files again; no
 test run writes them, or it would mend a stale one before the test saw it.
 
 `make web/dev` serves the panel from Vite on 127.0.0.1:5173 and proxies
-`/api`, and the launch link's `/?token=`, to `flayer ui --dev --port 7878`
-(#68). Through the proxy the token is traded for its cookie where the panel
-runs. `changeOrigin`, so the Host the server checks is its own address; the
-Origin stays the dev server's, which `--dev` accepts.
+`/api`, and the launch link's `/?token=`, to `flayer ui --dev`, which listens
+on 7878 unless `--port` names another and prints a link to the dev server.
+Through the proxy the token is traded for its cookie where the panel runs.
+`changeOrigin`, so the Host the server checks is its own address; the Origin
+stays the dev server's, which `--dev` accepts ([through the panel's dev
+server](#through-the-panels-dev-server)).
 
 ## Which workspace a command uses
 
@@ -6684,8 +6758,10 @@ while Tauri 3 is alpha, though a `Transport` interface in the frontend keeps a
 later Tauri shell cheap; and a separate server binary or daemon, the re-exec
 wrapper [the line between core and a front
 end](#where-the-line-between-core-and-a-front-end-falls) already rejects. #68
-measures the feature's binary size and compile time, and makes it opt-in if the
-cost is too high. Unblocks #65, #68 and #69.
+measured the feature's binary size and compile time ([launching
+it](#launching-it-flayer-ui)), about 2.3 MB on a release binary of 25 and 7 s
+on a clean release build of 82, and it stays on by default. Unblocks #65, #68
+and #69.
 
 ### D-18: The panel writes by running commands
 
@@ -7562,10 +7638,6 @@ just listed.
   first is what the CSP refuses. The choice is in a cookie the server
   receives with the page's request, but acting on it would need the server
   to rewrite the page as it sends it.
-- **The panel's transcript ends with the server.** The TUI prints its
-  transcript when it closes; the server keeps the panel's in memory and drops
-  it when it stops. Whether `flayer ui` prints it on the way out, as the TUI
-  does, is for #68 to choose.
 - **A style nonce for the panel.** The policy allows no inline style, so a
   `<style>` element that a library writes into the page at run time is
   blocked, as theming and colour-mode helpers often do; style the panel's
@@ -7687,7 +7759,13 @@ just listed.
   worded from what it found (a gathered name that is not one folder name, an
   update that cannot tell where a copy came from), carry a code of the CLI's:
   each would join `mindflayer_cli::CODES` once the panel acts on it.
-- **A command `ui` will be.** The list of what a front end with no terminal
-  does not run is to refuse `ui` too, a server started from the panel's own,
-  and `ui` is no command yet: #68 adds it, and `Refusal::of_flayer`, a match
-  over every command, does not compile until it says where `ui` goes.
+- **A run left behind by Ctrl-C.** The first Ctrl-C to `flayer ui` waits
+  for every request under way, but a run whose client stopped waiting is no
+  request any more: it goes on on the server's writer thread, which nothing
+  waits for, and the process can end under it, as it does under any run at
+  a second Ctrl-C. The server could hand the front end that thread to join
+  once it stops, at the price of a Ctrl-C that waits for a run nobody
+  watches.
+- **Ctrl-C off Unix.** `ui_test` stops the panel with SIGINT, sent by
+  `kill`, so it runs on Unix only. On Windows `ui` listens for the console's
+  Ctrl-C (`tokio::signal::windows::ctrl_c`), which no test sends yet (#154).
