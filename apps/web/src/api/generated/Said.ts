@@ -10,7 +10,7 @@
  * only these two are meant to leave core. Its fields are public for a
  * front end that reads the snapshot as Rust rather than as JSON, the TUI.
  */
-export type Said = { code: string, 
+export type Said = { code: string, hint?: string, 
 /**
  * Written through [`redacted`](crate::url::redacted), as every URL
  * is: an error can quote one, a source's among them, and what built
