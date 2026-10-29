@@ -24,10 +24,12 @@
 //!   and a folder not linked yet by an absolute, normalized path outside
 //!   every `.mindflayer`, shown verbatim.
 //! - **A task no front end without a terminal runs is refused**
-//!   ([`Task::refusal`]): a screen, an editor, a shell's code, a gather.
+//!   ([`Task::refusal`]): a screen, an editor, a shell's code, a gather, and
+//!   `show`, which prints an artifact whole through any link.
 //! - **A file reaches the browser only as text inside JSON**, held to its
 //!   holder once its links are followed, and never larger than core's cap
-//!   ([`Contents`]).
+//!   ([`Contents`]): the one way a file's contents leave, since `show` is
+//!   refused.
 //!
 //! Every refusal has a code, as every error does, and nothing of a refused
 //! task runs.

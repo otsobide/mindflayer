@@ -719,7 +719,7 @@ fn line(line: &str) -> Vec<String> {
 }
 
 #[test]
-fn a_front_end_with_no_terminal_refuses_what_draws_edits_activates_or_gathers() {
+fn a_front_end_with_no_terminal_refuses_what_draws_edits_activates_gathers_or_shows() {
     for (said, refusal) in [
         ("mind", Refusal::Screen),
         ("mind tui", Refusal::Screen),
@@ -743,6 +743,10 @@ fn a_front_end_with_no_terminal_refuses_what_draws_edits_activates_or_gathers() 
             "flayer gather git https://example.com/skills.git",
             Refusal::Unwatched,
         ),
+        ("mind show deploy", Refusal::Unheld),
+        ("mind -C alpha show --json rule:style", Refusal::Unheld),
+        ("flayer show -p alpha deploy", Refusal::Unheld),
+        ("mind flayer show deploy", Refusal::Unheld),
     ] {
         assert_eq!(refused(&line(said)), Some(refusal), "{said}");
     }
@@ -781,6 +785,7 @@ fn a_task_is_refused_for_the_first_of_its_lines_that_is() {
             Task::OpenInstall => Some(Refusal::Screen),
             Task::Edit { .. } => Some(Refusal::Editor),
             Task::Gather { .. } => Some(Refusal::Unwatched),
+            Task::Show { .. } => Some(Refusal::Unheld),
             _ => None,
         };
 
@@ -816,6 +821,7 @@ fn a_refusal_says_why_by_a_code_of_its_own() {
         Refusal::Editor,
         Refusal::Shell,
         Refusal::Unwatched,
+        Refusal::Unheld,
     ]
     .iter()
     .map(Refusal::code)

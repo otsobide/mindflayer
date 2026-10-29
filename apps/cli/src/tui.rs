@@ -379,7 +379,8 @@ pub fn execute(words: &[String], base: &Path, lookup: &Lookup, watch: &Watch) ->
 /// Why a command that draws is not run from here: what the TUI refuses of
 /// the list every front end shares ([`Refusal`]), the one refusal a front
 /// end with a terminal has. The rest it runs: an editor, given the terminal
-/// ([`Task::takes_terminal`]), and a gather, watched.
+/// ([`Task::takes_terminal`]), a gather, watched, and `show`, printed for
+/// whoever sits at it.
 const SCREEN_IN_A_SCREEN: &str = "opens a screen of its own, so it is not run from inside this one";
 
 /// Build the install screen for the workspace at `base`, which is the one on

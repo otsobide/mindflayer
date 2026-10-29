@@ -614,6 +614,16 @@ pub enum Refusal {
         "fetches over the network for as long as that takes, which only the TUI or a shell shows, and stops"
     )]
     Unwatched,
+    /// `show`, which prints an artifact whole, read through every link on
+    /// the way (a rule shared by a link is still a rule): at a terminal, to
+    /// the person whose disk it is, but anywhere else to somebody who may
+    /// not be. A front end without one reads one file at a time instead,
+    /// held to its holder and a cap (`contents::Contents`), so that whether
+    /// a file may leave is decided in one place.
+    #[error(
+        "prints an artifact whole, read through any link on the way, where a front end without a terminal reads one file at a time, held to its holder"
+    )]
+    Unheld,
 }
 
 codes!(Refusal {
@@ -621,6 +631,7 @@ codes!(Refusal {
     Self::Editor => "opens_editor",
     Self::Shell => "prints_shell_code",
     Self::Unwatched => "gather_unwatched",
+    Self::Unheld => "show_unheld",
 });
 
 impl Refusal {
@@ -634,6 +645,7 @@ impl Refusal {
         match command {
             None | Some(Command::Tui) => Some(Refusal::Screen),
             Some(Command::Edit { .. }) => Some(Refusal::Editor),
+            Some(Command::Show { .. }) => Some(Refusal::Unheld),
             Some(Command::Flayer { command }) => Refusal::of_flayer(command.as_ref()),
             Some(
                 Command::Init { .. }
@@ -642,7 +654,6 @@ impl Refusal {
                 | Command::Remove { .. }
                 | Command::Templates { .. }
                 | Command::List { .. }
-                | Command::Show { .. }
                 | Command::Validate { .. }
                 | Command::Status { .. }
                 | Command::Link
@@ -678,6 +689,7 @@ impl Refusal {
             }) if projects.is_empty() => Some(Refusal::Screen),
             Some(FlayerCommand::Edit { .. }) => Some(Refusal::Editor),
             Some(FlayerCommand::Activate { .. }) => Some(Refusal::Shell),
+            Some(FlayerCommand::Show { .. }) => Some(Refusal::Unheld),
             Some(FlayerCommand::Gather(GatherCommand::Git { .. })) => Some(Refusal::Unwatched),
             Some(
                 FlayerCommand::Init { .. }
@@ -688,7 +700,6 @@ impl Refusal {
                 | FlayerCommand::Remove { .. }
                 | FlayerCommand::Templates { .. }
                 | FlayerCommand::List { .. }
-                | FlayerCommand::Show { .. }
                 | FlayerCommand::Validate { .. }
                 | FlayerCommand::Status { .. }
                 | FlayerCommand::Link { .. }

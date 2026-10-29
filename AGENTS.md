@@ -523,7 +523,8 @@ These are easy to break from a single file without noticing.
     `contents::CAP`, binary or larger reported by its size alone, and never
     served as itself (`contents::Contents`); its links are judged by
     `copy::followed`, the check `copy::tree` makes, so one leading out of its
-    holder is refused.
+    holder is refused. It is the only way: `show`, which prints an artifact
+    whole through any link, is on the `Refusal` list (`show_unheld`).
   - An installed name must be one folder name for a skill
     (`install::is_folder_name`), and for a rule a route held to the name
     rules, which never climbs out (`install::is_installable_name`).

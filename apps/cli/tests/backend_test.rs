@@ -131,7 +131,7 @@ fn a_task_shaped_to_escape_is_refused_with_a_code_and_nothing_runs() {
         ),
         (
             "a holder from beside",
-            json!({"type": "show", "holder": {"type": "elsewhere", "entry": "../alpha"}, "reference": "alpha"}),
+            json!({"type": "validate", "holder": {"type": "elsewhere", "entry": "../alpha"}}),
             "not_registered",
         ),
         // Relative paths.
@@ -462,6 +462,43 @@ fn a_file_that_links_out_of_its_holder_is_not_served_as_content() {
     let refusal = contents(&backend, "notes.md").unwrap_err();
 
     assert_eq!(refusal.code, "contents_outside");
+}
+
+/// `show` prints an artifact whole, read through its links, which is what
+/// a terminal's user asked for and not what a browser may: the file goes to
+/// the browser only through the contents query, which refuses it.
+#[cfg(unix)]
+#[test]
+fn a_rule_that_links_out_of_its_project_is_not_shown_to_the_browser() {
+    let (dir, backend, _skill) = contents_fixture();
+    let secret = dir.path().join("secret.txt");
+    fs::write(&secret, "TOP SECRET KEY\n").unwrap();
+    let rules = directory_for(&dir.path().join("alpha"), Kind::Rule);
+    fs::create_dir_all(&rules).unwrap();
+    std::os::unix::fs::symlink(&secret, rules.join("leak.md")).unwrap();
+    let show = json!({
+        "type": "show",
+        "holder": {"type": "project", "entry": "alpha"},
+        "reference": "rule:leak",
+    });
+
+    for refusal in [
+        backend.preview(&task(show.clone())).unwrap_err(),
+        backend.run(task(show.clone())).unwrap_err(),
+    ] {
+        assert_eq!(refusal.code, "show_unheld");
+        assert!(!refusal.message.contains("TOP SECRET"), "{refusal:?}");
+    }
+    let asked = backend.query(query(json!({
+        "type": "contents",
+        "holder": {"type": "project", "entry": "alpha"},
+        "reference": "rule:leak",
+        "file": "leak.md",
+    })));
+    assert_eq!(
+        asked.map_err(|refusal| refusal.code),
+        Err("contents_outside")
+    );
 }
 
 #[test]

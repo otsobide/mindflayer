@@ -3647,9 +3647,13 @@ That refusal is one part of a list every front end shares (`task::Refusal`):
 what a front end with no terminal of its own, the panel's server, does not
 run. A screen of its own; `edit` in every form, which hands the terminal to
 an editor, until #81 gives it one that takes the contents; `activate`, which
-prints code for a shell; and `gather git`, the network for as long as it
+prints code for a shell; `gather git`, the network for as long as it
 takes, until #112 brings to the server the progress and the cancel only a
-screen has now. `ui` joins it when #68 makes it a command. The TUI has a
+screen has now; and `show`, which prints an artifact whole, read through any
+link on the way, as a terminal's user may ask of their own disk, where a
+front end without one reads a file at a time, held to its holder
+([what a browser may name](#what-a-browser-may-name)). `ui` joins it when
+#68 makes it a command. The TUI has a
 terminal, so of the list it refuses only the screens. The list is of
 commands as the parsers read them, not as they are spelled, so `mind flayer
 minds` is refused as `flayer minds` is, and it is a match over every command
@@ -3657,7 +3661,7 @@ with no wildcard, so a new command does not compile until it says whether
 it is refused. A task is refused for the first of its lines that is
 (`Task::refusal`), whichever variant it is, and each refusal has a code of
 its own (`opens_screen`, `opens_editor`, `prints_shell_code`,
-`gather_unwatched`), held to the rules core's codes are ([a code for what
+`gather_unwatched`, `show_unheld`), held to the rules core's codes are ([a code for what
 went wrong](#a-code-for-what-went-wrong)). A list of tasks was the
 alternative, and it would leave out a line no task builds: a front end that
 runs lines it is sent would run one the list never named.
@@ -4159,6 +4163,14 @@ what type of file it is, and no artifact file is ever served as itself, so
 an HTML page or an SVG holding a script reaches the panel as text to show.
 Should some mistake put it on a page, the CSP runs no inline script and
 `nosniff` holds the answer to `application/json`.
+
+It is the one way a file's contents reach the browser. `show` would be a
+second: it prints an artifact whole, read through every link on the way,
+since a rule shared by a link is still a rule, with no cap. So it is on the
+list of what no front end without a terminal runs (`show_unheld`), rather
+than held to its holder for the terminal too, which would stop it showing a
+rule a team shares by a link: at a terminal its reader is the person whose
+disk it is.
 
 The CLI's suite (`backend_test`) drives `PanelBackend` through the trait with
 the JSON a browser would send, malicious shapes in a table, and binds no
@@ -7570,6 +7582,13 @@ just listed.
   would close the first, as `ConfigFile` narrows its own window, at the
   price of code per platform; the second is a race with somebody who can
   already write where the command acts.
+- **A listing reads an artifact through its links.** The snapshot lists a
+  rule with its summary, its first line when it has no front matter, read
+  through any link as the catalog follows one, so a rule linked out of its
+  project hands the panel one line of what it leads to, as `mind list`
+  prints it. Its whole file the panel never gets (`show_unheld`,
+  `contents_outside`). Holding the catalog to each holder would close it, at
+  the price of a rule shared by a link no longer being listed at all.
 - **A task with no fields takes any field.** serde passes over the fields of
   an object read as a variant of an internally tagged enum that has none,
   since there is nothing to hold it to, so `{"type": "shelf", "home":
