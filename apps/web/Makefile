@@ -72,8 +72,8 @@ fmt: $(INSTALLED) ## Fix what the linter can fix, its style above all
 # a fresh clone type-checks, and never edited by hand.
 GENERATED := src/api/generated
 
-# Cargo alone, so it runs where Node does not, CI's runners among them until
-# #71. Emptied first, since ts-rs writes and never deletes: a type Rust no
+# Cargo alone, so it runs where Node does not, CI's `types drift (web)`
+# among them. Emptied first, since ts-rs writes and never deletes: a type Rust no
 # longer hands over would leave its file behind. The export tests and the
 # ones holding each type to what serde writes are all named for it, and run
 # alone. The CLI's export writes core's types it names again, as core's
