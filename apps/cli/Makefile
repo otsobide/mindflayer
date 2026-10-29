@@ -12,7 +12,8 @@ build: ## Build mindflayer-cli (binaries: mind, flayer), first without the panel
 # without it would ship a `ui` that serves only a page saying so. Built
 # where Node and pnpm run, as nothing else here needs them, and otherwise
 # taken from apps/web/dist as it is, with a warning (`make
-# web/build/if-node`). PNPM reaches the panel's Makefile.
+# web/build/if-node`), which is how CI's `build (cli)` embeds the panel
+# `test (web)` built. PNPM reaches the panel's Makefile.
 release: ## Release build for a Rust target triple (TARGET=aarch64-apple-darwin), the panel built first where Node is
 ifndef TARGET
 	$(error TARGET is required, e.g. make release TARGET=aarch64-apple-darwin)

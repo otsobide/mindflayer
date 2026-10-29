@@ -342,12 +342,16 @@ jobs:
       - name: Build mindflayer-core
         run: make core/build
 
+  # The binaries ship the panel, so they wait for its tests as well as their
+  # own, and embed the panel `test (web)` built rather than one built again
+  # here: the one that passed is the one a binary ships.
   build-cli:
     name: build (cli)
-    needs: [test-cli, test-cross]
+    needs: [test-cli, test-web, test-cross]
     if: >-
       always() &&
       needs.test-cli.result == 'success' &&
+      needs.test-web.result == 'success' &&
       (needs.test-cross.result == 'success' || needs.test-cross.result == 'skipped')
     runs-on: ubuntu-latest
     steps:
@@ -368,8 +372,34 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-cargo-
 
+      # Where the server embeds the panel from, before anything compiles it.
+      - name: Download the built panel
+        uses: actions/download-artifact@v7
+        with:
+          name: panel
+          path: apps/web/dist
+
       - name: Build mindflayer-cli
         run: make cli/build
+
+      # The runner's own triple, so the release built for it can be run.
+      - name: Name the runner's target
+        run: |
+          echo "TARGET=$(rustc -vV | sed -n 's/^host: //p')" >> "$GITHUB_ENV"
+
+      # A release, since only a release embeds the panel; a debug build reads
+      # the folder as each request comes in. This runner has Node and no
+      # pnpm, so `make cli/release` says the panel is not built here and
+      # embeds the one downloaded above.
+      - name: Build mindflayer-cli for release, the panel embedded
+        run: make cli/release TARGET="$TARGET"
+
+      # With the folder gone, so a binary reading it could not pass: the
+      # release has to serve the panel from itself.
+      - name: Check the release serves the panel with no apps/web/dist
+        run: |
+          rm -rf apps/web/dist
+          make cli/release/check TARGET="$TARGET"
 
   build-server:
     name: build (server)
