@@ -1806,8 +1806,8 @@ everything the session ran.
 
 The panel is built into the binaries by a cargo feature, `ui`, which is on by
 default. `cargo build -p mindflayer-cli --no-default-features` leaves it out,
-and with it the server and everything it is built from; `ui` is then no
-command.
+and with it the server and what only the panel needs (axum, the embedded
+files, the browser opener); `ui` is then no command.
 
 ## Where a project keeps its artifacts
 
