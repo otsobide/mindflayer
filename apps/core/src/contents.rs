@@ -16,10 +16,10 @@
 //!   where they are.
 //! - **Held to its holder once its links are followed**, by the check a copy
 //!   makes of every link it meets ([`copy::followed`]): a file, or a folder
-//!   on the way to it, that leads out of the project or the workspace it
-//!   belongs to is refused, never read. Before that, the file is named by a
-//!   route of plain names from the artifact, so a `..` never gets as far as
-//!   the disk.
+//!   on the way to it, that leads out of the project it belongs to, or for
+//!   the workspace's own out of the folder it keeps that kind in, is
+//!   refused, never read. Before that, the file is named by a route of plain
+//!   names from the artifact, so a `..` never gets as far as the disk.
 //! - **No bigger than [`CAP`]**: one larger is said to be too large, with its
 //!   size, and never read whole, so a browser cannot make the server read a
 //!   disk image into memory by naming one.
@@ -140,30 +140,55 @@ impl Contents {
     /// `file` of the artifact `reference` names among `workspace`'s own: the
     /// library a snapshot lists, of the kinds it keeps apart from a project
     /// at its root ([`FlayerWorkspace::own_kinds`]).
+    ///
+    /// Held to the folder the workspace keeps the artifact's kind in, not to
+    /// its root as an install from it is: the default workspace's root is a
+    /// home, where every secret its user keeps would count as inside it.
     pub fn of_library(
         workspace: &FlayerWorkspace,
         reference: &str,
         file: &str,
     ) -> Result<Contents, ContentsError> {
-        read(&workspace.own(), &workspace.own_kinds(), reference, file)
+        read(
+            &workspace.own(),
+            &workspace.own_kinds(),
+            Within::Kept,
+            reference,
+            file,
+        )
     }
 
     /// `file` of the artifact `reference` names in `project`, wherever a
     /// snapshot lists it from: authored, an install's copy, or somebody's in
     /// one of its agents' folders.
+    ///
+    /// Held to the project's root, as an install from it holds a copy: a
+    /// project is a repository, and a skill in it may link to a file
+    /// elsewhere in it.
     pub fn of_project(
         project: &MindProject,
         reference: &str,
         file: &str,
     ) -> Result<Contents, ContentsError> {
-        read(project, &Kind::ALL, reference, file)
+        read(project, &Kind::ALL, Within::Root, reference, file)
     }
 }
 
-/// `file` of the one artifact of `kinds` that `reference` names in `holder`.
+/// What a file is held to once its links are followed.
+#[derive(Clone, Copy)]
+enum Within {
+    /// The holder's root.
+    Root,
+    /// The folder the holder keeps the artifact's kind in.
+    Kept,
+}
+
+/// `file` of the one artifact of `kinds` that `reference` names in `holder`,
+/// held `within` it.
 fn read(
     holder: &MindProject,
     kinds: &[Kind],
+    within: Within,
     reference: &str,
     file: &str,
 ) -> Result<Contents, ContentsError> {
@@ -174,8 +199,16 @@ fn read(
         artifact: format!("{}{}{name}", kind.slug(), crate::catalog::QUALIFIER),
     })?;
 
-    let bound = fs::canonicalize(holder.root()).map_err(|source| ContentsError::Unreadable {
-        path: holder.root().to_path_buf(),
+    // A `Kept` read never falls back to the root in fact: every kind has a
+    // folder in the workspace's own (`FlayerWorkspace::own`), and the
+    // artifact was found in its kind's.
+    let bound = match within {
+        Within::Root => None,
+        Within::Kept => holder.directory_for(kind),
+    }
+    .unwrap_or_else(|| holder.root().to_path_buf());
+    let bound = fs::canonicalize(&bound).map_err(|source| ContentsError::Unreadable {
+        path: bound,
         source,
     })?;
     let (resolved, inside) =

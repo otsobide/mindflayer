@@ -316,6 +316,32 @@ fn the_workspaces_own_are_read_from_its_library() {
     );
 }
 
+/// The default workspace's root is a home: a library file that links to
+/// a secret kept there leads out of the library, though not out of the
+/// root.
+#[cfg(unix)]
+#[test]
+fn a_workspaces_own_file_that_links_out_of_its_library_is_refused() {
+    let dir = TempDir::new().unwrap();
+    let (workspace, _) = FlayerWorkspace::init(dir.path()).unwrap();
+    let skill = workspace
+        .own()
+        .directory_for(Kind::Skill)
+        .unwrap()
+        .join("deploy");
+    fs::create_dir_all(&skill).unwrap();
+    fs::write(skill.join("SKILL.md"), SKILL).unwrap();
+    let ssh = dir.path().join(".ssh");
+    fs::create_dir_all(&ssh).unwrap();
+    fs::write(ssh.join("id_ed25519"), "PRIVATE KEY\n").unwrap();
+    std::os::unix::fs::symlink(ssh.join("id_ed25519"), skill.join("key.md")).unwrap();
+
+    let error = Contents::of_library(&workspace, "deploy", "key.md").unwrap_err();
+
+    assert_eq!(error.code(), "contents_outside");
+    assert!(error.to_string().contains("id_ed25519"), "{error}");
+}
+
 #[test]
 fn what_is_withheld_says_why_in_one_word() {
     assert_eq!(

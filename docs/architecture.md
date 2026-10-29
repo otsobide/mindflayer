@@ -4156,7 +4156,12 @@ names from the artifact's folder, or a rule's own file name
 `copy::followed`, the check `copy::tree` makes of each link it meets, so a
 `SKILL.md`, an asset or a folder on the way that leads out of its holder is
 refused (`contents_outside`), and the file is read through the path the
-check resolved, not the one asked for. UTF-8 text with no NUL, no larger
+check resolved, not the one asked for. A project's holds it to its root, as
+an install from it holds a copy, since a skill may link to a file elsewhere
+in its repository. The workspace's own holds it to the folder it keeps that
+kind in, not to its root as an install from it does: the default
+workspace's root is a home, where a link to `~/.ssh` would count as inside
+it. UTF-8 text with no NUL, no larger
 than a mebibyte (`contents::CAP`), comes back as a string inside JSON;
 anything else is reported with its size, `binary` or `too_large`, and its
 bytes stay where they are, one over the cap never read whole. No answer says
