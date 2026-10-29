@@ -106,23 +106,43 @@ describe('a project\'s page', () => {
 
   it('names the commands that would give it a kind it holds none of', async () => {
     const snapshot = fixture('workspace')
+    const workspace = snapshot.workspace.path
 
     const { page } = await render('/project?entry=docs', snapshot)
 
-    const rules = page.get('[data-testid="kind-rule"]')
-    expect(rules.get('[data-testid="kind-empty"]').text()).toContain(project(snapshot, 'docs').path)
-    expect(texts(rules, 'code')).toContain('$ mind install rule:<NAME>')
-    expect(texts(rules, 'code')).toContain('$ mind add rule <NAME> <DESCRIPTION>')
+    expect(texts(page.get('[data-testid="kind-rule"]'), 'code')).toEqual([
+      `$ flayer -W ${workspace} install -p docs rule:<NAME>`,
+      `$ flayer -W ${workspace} add -p docs rule <NAME> <DESCRIPTION>`
+    ])
+  })
+
+  it('names the workspace and the entry for a project linked from beside it, which a walk up from it never meets', async () => {
+    const snapshot = fixture('workspace')
+    const workspace = snapshot.workspace.path
+    const docs = project(snapshot, 'docs')
+    docs.entry = '../out/docs'
+    docs.path = '/home/you/out/docs'
+
+    const { page } = await render('/project?entry=../out/docs', snapshot)
+
+    expect(texts(page.get('[data-testid="kind-rule"]'), 'code')).toEqual([
+      `$ flayer -W ${workspace} install -p ../out/docs rule:<NAME>`,
+      `$ flayer -W ${workspace} add -p ../out/docs rule <NAME> <DESCRIPTION>`
+    ])
   })
 
   it('says why a stale entry opens nothing, and how to follow it or let it go', async () => {
     const snapshot = fixture('workspace')
+    const workspace = snapshot.workspace.path
 
     const { page } = await render('/project?entry=gone', snapshot)
 
     const stale = page.get('[data-testid="stale"]')
     expect(stale.text()).toContain(project(snapshot, 'gone').stale!.message)
-    expect(texts(stale, 'code')).toEqual(['$ flayer relink gone <PATH>', '$ flayer unlink gone'])
+    expect(texts(stale, 'code')).toEqual([
+      `$ flayer -W ${workspace} relink gone <PATH>`,
+      `$ flayer -W ${workspace} unlink gone`
+    ])
     expect(page.find('[data-testid="kind-skill"]').exists()).toBe(false)
   })
 })

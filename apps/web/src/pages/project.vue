@@ -8,7 +8,7 @@ import type { Snapshot } from '@/api/generated/Snapshot'
 import { useSnapshot } from '@/api/snapshot'
 import AgentBadges from '@/components/AgentBadges.vue'
 import AppHeader from '@/components/AppHeader.vue'
-import CommandHint from '@/components/CommandHint.vue'
+import CommandHint, { flayer } from '@/components/CommandHint.vue'
 import HealthBadge from '@/components/HealthBadge.vue'
 import SnapshotGate from '@/components/SnapshotGate.vue'
 import StateBadge from '@/components/StateBadge.vue'
@@ -35,6 +35,11 @@ const title = computed(() => project.value?.name ?? entry.value ?? 'Project')
 /** Its artifacts of `kind`, in the snapshot's order: grouped, never sorted here. */
 function ofKind(project: Project, kind: Kind): Held[] {
   return project.artifacts.filter(held => held.kind === kind)
+}
+
+/** What names it to a command, `-p`, `relink` and `unlink`: its entry. */
+function named(project: Project): string {
+  return project.entry ?? project.path
 }
 
 function count(project: Project, kind: Kind): number {
@@ -174,8 +179,8 @@ function spelled(words: string[]): string {
             />
             <CommandHint
               :commands="[
-                { line: `flayer relink ${project.entry ?? project.path} <PATH>`, does: 'follow it to where it moved' },
-                { line: `flayer unlink ${project.entry ?? project.path}`, does: 'or let it go' }
+                { line: flayer(snapshot.workspace, `relink ${named(project)} <PATH>`), does: 'follow it to where it moved' },
+                { line: flayer(snapshot.workspace, `unlink ${named(project)}`), does: 'or let it go' }
               ]"
             />
           </div>
@@ -257,12 +262,12 @@ function spelled(words: string[]): string {
                 data-testid="kind-empty"
               >
                 <p class="text-muted">
-                  No {{ kind }} here yet. From <code class="break-all font-mono text-xs">{{ project.path }}</code>:
+                  No {{ kind }} here yet.
                 </p>
                 <CommandHint
                   :commands="[
-                    { line: `mind install ${kind}:<NAME>`, does: 'one the workspace offers' },
-                    { line: `mind add ${kind} <NAME> <DESCRIPTION>`, does: 'one of its own' }
+                    { line: flayer(snapshot.workspace, `install -p ${named(project)} ${kind}:<NAME>`), does: 'one the workspace offers' },
+                    { line: flayer(snapshot.workspace, `add -p ${named(project)} ${kind} <NAME> <DESCRIPTION>`), does: 'one of its own' }
                   ]"
                 />
               </div>

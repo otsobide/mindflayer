@@ -151,14 +151,15 @@ describe('filtering the projects', () => {
 })
 
 describe('a workspace that links nothing', () => {
-  it('names the commands that would link a project', async () => {
+  it('names the commands that would link a project, the workspace made first', async () => {
     const { page } = await render('/projects', fixture('unmade'))
 
     expect(page.find('[data-testid="table"]').exists()).toBe(false)
     expect(texts(page, '[data-testid="no-projects"] code')).toEqual([
+      '$ flayer init /home/you',
       '$ mind init',
-      '$ flayer link <PATH>',
-      '$ flayer scan --suggest'
+      '$ flayer -W /home/you link <PATH>',
+      '$ flayer -W /home/you scan --suggest'
     ])
   })
 })

@@ -1825,7 +1825,11 @@ stands, which of the project's agents read it (one that does not is crossed
 out), where it came from, where its copies are, and what `validate` says of
 it or why its file does not read. What some of its agents never read is a
 warning above. A stale entry names `flayer relink` and `flayer unlink`, and a
-kind the project holds none of names `mind install` and `mind add`.
+kind the project holds none of names `flayer install -p` and `flayer add -p`.
+Every command the panel names says `-W` and the workspace's path, so it acts
+on the workspace the panel shows wherever you type it, for a project linked
+from outside that workspace too; a workspace not made yet names `flayer init`
+first, since `-W` never makes the one it names.
 
 Every page works from the keyboard and says every state in words, never by
 colour alone. So far the panel only shows: changing things from it comes with

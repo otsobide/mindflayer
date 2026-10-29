@@ -4603,7 +4603,15 @@ and says why when the server refused.
 - **The commands are the empty states.** Whatever is empty names the
   command that would fill it, as somebody would type it, since every change
   is a command ([D-18](#d-18-the-panel-writes-by-running-commands)):
-  the panel runs none of them until M5.
+  the panel runs none of them until M5. Each is a `flayer` line naming the
+  workspace with `-W` and its path, and a project with `-p` and its entry,
+  rather than a `mind` line typed from the project's folder: which workspace
+  `mind` consults there depends on the shell's own `-W`, activation and
+  home and on what is above the project ([the read
+  model](#the-read-model)), so for a project linked from beside the
+  workspace, or a panel launched with `-W` or on an activated workspace, it
+  would act on another one or none. A workspace not made yet names `flayer
+  init` first, since `-W` never makes the one it names.
 
 ### Its fixtures come from Rust
 
@@ -7191,12 +7199,12 @@ just listed.
   collation, which no command shares: `flayer list` keeps the registry's
   order. Core naming an order for text, as it names one for healths, would
   make the two agree the day a command sorts by name.
-- **The commands an empty state names are not quoted.** A project's page
-  names `flayer relink` and `flayer unlink` with its entry as the registry
-  spells it, and one a shell would split, a space in it, is shown
-  unquoted: quoting is the CLI's (`task::shell`), and the panel has no line
-  of the CLI's to show until the previews of M5 (#76) turn a task into its
-  lines.
+- **The commands an empty state names are not quoted.** Each names the
+  workspace's path after `-W`, and a project's page its entry, as the
+  registry spells it, after `-p`, `relink` or `unlink`; one a shell would
+  split, a space in it, is shown unquoted: quoting is the CLI's
+  (`task::shell`), and the panel has no line of the CLI's to show until the
+  previews of M5 (#76) turn a task into its lines.
 - **The server's replies are spelled twice.** A preview's `{lines}`, a
   run's `{lines, outcome}` and a refusal's `{error, code}` are built with
   `json!` in the server's `api.rs` and spelled again in the panel's

@@ -70,6 +70,6 @@ describe('a kind core adds', () => {
 
     unmount()
     const docs = await render('/project?entry=docs', withAKindMore())
-    expect(texts(docs.page, '[data-testid="kind-mcp"] code')).toContain('$ mind install mcp:<NAME>')
+    expect(texts(docs.page, '[data-testid="kind-mcp"] code')).toContain('$ flayer -W /home/you/Projects install -p docs mcp:<NAME>')
   })
 })

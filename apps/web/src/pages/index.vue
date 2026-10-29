@@ -4,7 +4,7 @@ import type { Snapshot } from '@/api/generated/Snapshot'
 import type { State } from '@/api/generated/State'
 import type { Tally } from '@/api/generated/Tally'
 import AppHeader from '@/components/AppHeader.vue'
-import CommandHint, { type Command } from '@/components/CommandHint.vue'
+import CommandHint, { type Command, flayer, making } from '@/components/CommandHint.vue'
 import SnapshotGate from '@/components/SnapshotGate.vue'
 import StatCard from '@/components/StatCard.vue'
 import WarningsPanel from '@/components/WarningsPanel.vue'
@@ -22,24 +22,26 @@ function inState(tally: Tally, state: State): number {
 /**
  * The commands that would fill what is empty: projects to link, the
  * library's own, the shelf. Emptiness is what the snapshot lists and
- * counts, as it says them.
+ * counts, as it says them. Each names the workspace, which a workspace not
+ * made yet is made for first.
  */
 function starting(snapshot: Snapshot): Command[] {
+  const { workspace } = snapshot
   const commands: Command[] = []
   if (snapshot.projects.length === 0) {
     commands.push(
       { line: 'mind init', does: 'in a repository: make it a project' },
-      { line: 'flayer link <PATH>', does: 'link that project here' },
-      { line: 'flayer scan --suggest', does: 'the repositories most worth linking' }
+      { line: flayer(workspace, 'link <PATH>'), does: 'link that project here' },
+      { line: flayer(workspace, 'scan --suggest'), does: 'the repositories most worth linking' }
     )
   }
   if (snapshot.summary.library.total === 0) {
-    commands.push({ line: 'flayer add <KIND> <NAME> <DESCRIPTION>', does: 'a skill or a rule of the workspace\'s own' })
+    commands.push({ line: flayer(workspace, 'add <KIND> <NAME> <DESCRIPTION>'), does: 'a skill or a rule of the workspace\'s own' })
   }
   if (snapshot.summary.shelf.total === 0) {
-    commands.push({ line: 'flayer gather git <URL>', does: 'skills from a repository, onto the shelf' })
+    commands.push({ line: flayer(workspace, 'gather git <URL>'), does: 'skills from a repository, onto the shelf' })
   }
-  return commands
+  return commands.length === 0 ? commands : [...making(workspace), ...commands]
 }
 
 // The two states the overview counts on their own: the installs an update

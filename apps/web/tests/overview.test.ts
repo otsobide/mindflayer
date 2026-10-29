@@ -118,12 +118,14 @@ describe('an empty workspace', () => {
     const { page } = await render('/', fixture('unmade'))
 
     expect(page.get('[data-testid="unmade"]').text()).toContain('Not made yet')
+    // `-W` never makes the workspace it names, so `flayer init` does first.
     expect(texts(page, '[data-testid="start"] code')).toEqual([
+      '$ flayer init /home/you',
       '$ mind init',
-      '$ flayer link <PATH>',
-      '$ flayer scan --suggest',
-      '$ flayer add <KIND> <NAME> <DESCRIPTION>',
-      '$ flayer gather git <URL>'
+      '$ flayer -W /home/you link <PATH>',
+      '$ flayer -W /home/you scan --suggest',
+      '$ flayer -W /home/you add <KIND> <NAME> <DESCRIPTION>',
+      '$ flayer -W /home/you gather git <URL>'
     ])
   })
 
@@ -131,6 +133,15 @@ describe('an empty workspace', () => {
     const { page } = await render('/', fixture('workspace'))
 
     expect(page.find('[data-testid="start"]').exists()).toBe(false)
+  })
+
+  it('names the workspace in a command for what a made one lacks, wherever it is typed', async () => {
+    const snapshot = fixture('workspace')
+    snapshot.summary.shelf.total = 0
+
+    const { page } = await render('/', snapshot)
+
+    expect(texts(page, '[data-testid="start"] code')).toEqual(['$ flayer -W /home/you/Projects gather git <URL>'])
   })
 })
 
