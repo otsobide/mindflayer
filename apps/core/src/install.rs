@@ -267,12 +267,9 @@ impl Offer {
     /// the ledger hands none back.
     pub fn origin(&self) -> String {
         match self {
-            Offer::Shelf(gathered) => match &gathered.source.reference {
-                Some(reference) => format!("{}#{reference}", gathered.source.url),
-                None => gathered.source.url.clone(),
-            },
+            Offer::Shelf(gathered) => gathered.source.origin(),
             Offer::Workspace { .. } => String::from(WORKSPACE_ORIGIN),
-            Offer::Loaded { entry, .. } => format!("{LOADED_PREFIX}{entry}"),
+            Offer::Loaded { entry, .. } => loaded_origin(entry),
         }
     }
 
@@ -309,6 +306,14 @@ impl Offer {
 /// What a loaded workspace's origin starts with.
 pub const LOADED_PREFIX: &str = "load:";
 
+/// The origin of what the workspace loaded as `entry` offers, the entry as
+/// its marker spells it: written once, for an offer and for a listing of
+/// the loads alike ([`crate::view::LoadedWorkspace`]), so what a listing
+/// says `--from` takes is what an install from that load records.
+pub fn loaded_origin(entry: &str) -> String {
+    format!("{LOADED_PREFIX}{entry}")
+}
+
 /// `from` as `--from` should match it: when it is a path, typed relative to
 /// `base` (bare or after `load:`) to a workspace `workspace` loads, that
 /// workspace's origin; otherwise `from` as it is, and always for the word
@@ -327,10 +332,7 @@ pub fn resolve_from(workspace: &FlayerWorkspace, base: &Path, from: &str) -> Str
         .into_iter()
         .find(|loaded| paths::normalize(&loaded.root) == path || same_place(&loaded.root, &path))
         .and_then(|loaded| paths::to_config_string(&loaded.entry))
-        .map_or_else(
-            || from.to_owned(),
-            |entry| format!("{LOADED_PREFIX}{entry}"),
-        )
+        .map_or_else(|| from.to_owned(), |entry| loaded_origin(&entry))
 }
 
 /// Whether a declared name is one plain folder name, and so safe to join onto
@@ -930,7 +932,7 @@ fn places(workspace: &FlayerWorkspace, loads: &[Loaded], record: &InstallRecord)
 fn load_origin(loaded: &Loaded) -> String {
     let entry = paths::to_config_string(&loaded.entry)
         .unwrap_or_else(|| loaded.entry.display().to_string());
-    format!("{LOADED_PREFIX}{entry}")
+    loaded_origin(&entry)
 }
 
 /// The block of `project`'s `AGENTS.md` that a rule's copies are told by;
