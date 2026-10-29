@@ -1311,11 +1311,14 @@ warning: /home/you/Projects/collapse/skills/broken/SKILL.md: the file does not s
   project says where it authors each kind, its settings and templates, and
   every artifact it holds: its state, the agents that read it, where it came
   from, where each copy is, what `validate` says of it, and for a file that
-  does not read, `unread`, with why. `mind list --json` reads the project
-  against the workspace that links it, as `mind status` does, to say how
-  each stands; when that workspace cannot be read, the project is read
-  alone and its `failures` say why, with no warning the text does not say.
-  `list rules --json` holds rules alone.
+  does not read, `unread`, with why. Its `tally` counts them, by kind and by
+  state, and its `health` says how it stands as a whole, in the words the
+  [control panel](#control-panel) sorts by: `ok`, `attention`, `broken` or
+  `stale`. `mind list --json` reads the project against the workspace that
+  links it, as `mind status` does, to say how each stands; when that
+  workspace cannot be read, the project is read alone and its `failures`
+  say why, with no warning the text does not say. `list rules --json` holds
+  rules alone.
 - `show`: each artifact the name matches, with its file, what its front
   matter declares and its `body`.
 - `validate`: each artifact checked, its `issues` (each with its `code`,
@@ -1813,12 +1816,12 @@ commands that would change that.
 and share mode, how many of each kind it holds, its health, and why an entry
 that opens nothing does not. The health is one word for the whole project:
 `ok`; `attention` when something asks for a command (an install outdated,
-edited, missing or orphaned, something one of its agents never reads, copies
-of one name that disagree, a warning from `validate`); `broken` when
-something does not read or does not pass `validate`; and `stale`. Click a
-column to sort by it, type to filter by name or path, or show one health
-alone. The address keeps all of it, so a link or a reload opens the table as
-you left it.
+edited, missing or orphaned, something one of its agents never reads, a
+folder its targets name that no install uses, copies of one name that
+disagree, a warning from `validate`); `broken` when something does not read
+or does not pass `validate`; and `stale`. Click a column to sort by it, type
+to filter by name or path, or show one health alone. The address keeps all
+of it, so a link or a reload opens the table as you left it.
 
 **A project's page** groups what it holds by kind. Each artifact says how it
 stands, which of the project's agents read it (one that does not is crossed
