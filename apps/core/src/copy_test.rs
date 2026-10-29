@@ -373,3 +373,49 @@ fn replacing_beside_still_leaves_nothing_behind() {
 
     assert_eq!(names(&skills), ["deploy"]);
 }
+
+#[cfg(unix)]
+#[test]
+fn a_link_is_followed_to_where_it_leads_and_judged_there() {
+    let (dir, from, _, _) = fixture();
+    let bounds = [fs::canonicalize(&from).unwrap()];
+    fs::write(dir.path().join("private.env"), "SECRET").unwrap();
+    std::os::unix::fs::symlink(dir.path().join("private.env"), from.join("out.env")).unwrap();
+    std::os::unix::fs::symlink(from.join("SKILL.md"), from.join("in.md")).unwrap();
+
+    let (outside, inside) = followed(&from.join("out.env"), &bounds).unwrap();
+    assert_eq!(
+        outside,
+        fs::canonicalize(dir.path().join("private.env")).unwrap()
+    );
+    assert!(!inside);
+    assert_eq!(
+        followed(&from.join("in.md"), &bounds).unwrap(),
+        (fs::canonicalize(from.join("SKILL.md")).unwrap(), true)
+    );
+}
+
+#[test]
+fn a_neighbour_whose_name_starts_with_a_bound_is_not_inside_it() {
+    let (dir, from, _, _) = fixture();
+    let neighbour = dir.path().join("source").join("deploy-old");
+    fs::create_dir_all(&neighbour).unwrap();
+    fs::write(neighbour.join("SKILL.md"), "older").unwrap();
+
+    let (_, inside) = followed(
+        &neighbour.join("SKILL.md"),
+        &[fs::canonicalize(&from).unwrap()],
+    )
+    .unwrap();
+
+    assert!(!inside);
+}
+
+#[test]
+fn nothing_there_is_no_answer_but_an_error() {
+    let (_dir, from, _, _) = fixture();
+
+    let error = followed(&from.join("missing.md"), std::slice::from_ref(&from)).unwrap_err();
+
+    assert_eq!(error.kind(), io::ErrorKind::NotFound);
+}

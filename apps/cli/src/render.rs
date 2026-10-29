@@ -77,7 +77,11 @@ impl Outcome {
 /// rather than something that went wrong. Kept beside the text rather than
 /// in a list of its own beside the lines, which every line pushed would have
 /// to keep in step with.
-#[derive(Debug, Clone, PartialEq, Eq)]
+///
+/// Serialized as it is, `{"text": ..., "code": ...}`, in what a run of the
+/// panel's backend says (`backend::Run`): the line a terminal shows, and
+/// the code beside it.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct Warning {
     pub text: String,
     pub code: Option<&'static str>,
@@ -197,30 +201,72 @@ impl From<ArtifactError> for Failure {
 pub const ENVELOPE_VERSION: u32 = 2;
 
 /// What every reading command's `--json` prints:
-/// `{"version": 2, "data": ..., "warnings": [...]}`.
+/// `{"version": 2, "data": ..., "warnings": [...], "coded_warnings": [...]}`.
 ///
 /// One shape for every command, so a script reads each the same way, and the
 /// warnings inside it beside the data rather than on stderr alone: failures
-/// are collected, not raised, in JSON as in text.
+/// are collected, not raised, in JSON as in text. On stderr as well, as the
+/// text says them, for whoever pipes the JSON into `jq` at a terminal.
+///
+/// `coded_warnings` says each of `warnings` again, in the same order, with
+/// its code beside it ([`Warning::code`]), for a reader that acts on a
+/// condition rather than on English that is reworded whenever it is made
+/// clearer. A name of its own rather than objects in `warnings`, whose
+/// strings a version 2 script reads: changing what a field holds moves the
+/// version, and adding one does not ([`ENVELOPE_VERSION`]). A list of codes
+/// beside the strings, a reader pairing them by place, was the other way,
+/// rejected as a [`Warning`] keeps its code on the line rather than in a
+/// list beside the lines.
 #[derive(Serialize)]
 struct Envelope<'a, T: Serialize> {
     version: u32,
     data: &'a T,
-    warnings: Vec<String>,
+    warnings: Vec<&'a str>,
+    coded_warnings: Vec<Coded<'a>>,
 }
 
-/// `data` in the envelope, with what the command would have said on stderr
-/// as `warning:` lines in its `warnings`, without the prefix, and the exit
-/// status the text would have had.
+/// One warning in the envelope's `coded_warnings`: its code, none for a line
+/// no code is given to, and what it says, as `warnings` says it.
+#[derive(Serialize)]
+struct Coded<'a> {
+    code: Option<&'static str>,
+    message: &'a str,
+}
+
+/// What every warning line starts with on stderr, which the envelope leaves
+/// out: inside `warnings`, every line is one.
+const WARNING: &str = "warning: ";
+
+/// `data` in the envelope, with `warnings`, each a line as stderr shows it,
+/// in its `warnings` without the prefix and in its `coded_warnings` with its
+/// code, and on stderr too, as the text says them; failing when there is
+/// any, as the text would.
+///
+/// On stderr as well as in the envelope, as #64 asked: the envelope is a
+/// script's, which reads every warning there and never needs stderr, and
+/// stderr is the terminal's, where somebody piping the JSON into `jq` would
+/// otherwise see the answer and nothing of what could not be read. Left
+/// off stderr, as #36 first had it, was the other way, rejected for that.
 ///
 /// Pretty-printed, two spaces a level, since a person reads it as often as a
 /// script does, and `jq` takes either.
-pub(crate) fn json<T: Serialize>(data: &T, warnings: Vec<String>) -> Outcome {
-    let ok = warnings.is_empty();
+pub(crate) fn json<T: Serialize>(data: &T, warnings: &[Warning]) -> Outcome {
+    let said: Vec<&str> = warnings
+        .iter()
+        .map(|warning| warning.text.strip_prefix(WARNING).unwrap_or(&warning.text))
+        .collect();
     let envelope = Envelope {
         version: ENVELOPE_VERSION,
         data,
-        warnings,
+        coded_warnings: warnings
+            .iter()
+            .zip(&said)
+            .map(|(warning, message)| Coded {
+                code: warning.code,
+                message,
+            })
+            .collect(),
+        warnings: said,
     };
     // A report is strings, numbers and lists of them, and maps keyed by
     // field names, and every path in one is serialized as text whatever
@@ -229,8 +275,40 @@ pub(crate) fn json<T: Serialize>(data: &T, warnings: Vec<String>) -> Outcome {
     stdout.push('\n');
     Outcome {
         stdout,
-        stderr: Vec::new(),
-        ok,
+        stderr: warnings.to_vec(),
+        ok: warnings.is_empty(),
+    }
+}
+
+/// `text`, what a reading command made to print, as JSON: `data` in the
+/// envelope in place of its stdout, each of its `warning:` lines in the
+/// envelope, and its stderr left as it is, those lines among the rest, a
+/// hint or a note, as [`json`] leaves them for whoever reads the terminal.
+///
+/// Its exit status is the text's, kept rather than worked out again from
+/// the warnings, since a report can fail with none: `validate` fails for an
+/// artifact that does not pass. Built from the text's outcome, rather than
+/// beside it, so that a warning a command adds on the way out (a workspace
+/// it consulted that could not be read) reaches the envelope as it reaches
+/// stderr.
+pub(crate) fn as_json<T: Serialize>(data: &T, text: Outcome) -> Outcome {
+    let warnings: Vec<Warning> = text
+        .stderr
+        .iter()
+        .filter(|line| line.text.starts_with(WARNING))
+        .cloned()
+        .collect();
+    let mut outcome = json(data, &warnings);
+    outcome.stderr = text.stderr;
+    outcome.ok = text.ok;
+    outcome
+}
+
+/// `text`, or, when `--json` asked for `data`, [`as_json`] of it.
+pub(crate) fn json_or_text<T: Serialize>(data: Option<T>, text: Outcome) -> Outcome {
+    match data {
+        Some(data) => as_json(&data, text),
+        None => text,
     }
 }
 

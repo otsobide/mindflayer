@@ -66,8 +66,8 @@ fn copy_tree(
         let target = to.join(entry.file_name());
         let kind = entry.file_type()?;
         if kind.is_symlink() {
-            let pointed = fs::canonicalize(&source)?;
-            if !bounds.iter().any(|bound| pointed.starts_with(bound)) {
+            let (pointed, inside) = followed(&source, bounds)?;
+            if !inside {
                 return Err(io::Error::other(format!(
                     "{} links to {}, outside {}, so it is not copied",
                     source.display(),
@@ -94,6 +94,21 @@ fn copy_tree(
     }
     path.pop();
     Ok(())
+}
+
+/// `path` with every link on the way to it followed, and whether that lies
+/// inside one of `bounds`, each a path with its own links followed already
+/// (`fs::canonicalize`).
+///
+/// The one check made before anything a link leads to is read: a copy makes
+/// it of each link it meets ([`tree`]), and a read of an artifact's file for
+/// the panel makes it of the file ([`crate::contents`]), so neither follows
+/// a link the other would refuse. By components, as `Path::starts_with`
+/// compares, so `/work/app-old` is not inside `/work/app`.
+pub fn followed(path: &Path, bounds: &[PathBuf]) -> Result<(PathBuf, bool), io::Error> {
+    let resolved = fs::canonicalize(path)?;
+    let inside = bounds.iter().any(|bound| resolved.starts_with(bound));
+    Ok((resolved, inside))
 }
 
 /// Replace `to` with `from`, saying whether anything actually changed.

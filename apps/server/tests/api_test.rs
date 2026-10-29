@@ -5,7 +5,7 @@ mod common;
 
 use common::*;
 use std::io::{Read, Write};
-use std::net::{Ipv4Addr, TcpStream};
+use std::net::{Ipv4Addr, SocketAddr, TcpListener, TcpStream};
 
 #[tokio::test]
 async fn a_query_reaches_the_backend_and_its_answer_comes_back() {
@@ -51,6 +51,27 @@ async fn a_query_the_backend_cannot_read_gets_a_json_error() {
     assert!(reply.json()["error"].is_string());
 }
 
+/// A query the backend read and will not answer, as its front end's rules
+/// say: a 422, the code beside the message for the panel to act on.
+#[tokio::test]
+async fn a_query_the_backend_refuses_says_why_with_its_code() {
+    let (server, _) = launch();
+
+    let reply = post(
+        &server,
+        "/api/query",
+        Auth::Bearer(server.token()),
+        json!({ "echo": "/etc/passwd", "refuse": true }),
+    )
+    .await;
+
+    assert_eq!(reply.status, StatusCode::UNPROCESSABLE_ENTITY);
+    assert_eq!(
+        reply.json(),
+        json!({ "error": "/etc/passwd is refused", "code": "fake_refused" })
+    );
+}
+
 #[tokio::test]
 async fn a_preview_shows_a_tasks_lines_and_runs_nothing() {
     let (server, runs) = launch();
@@ -65,6 +86,26 @@ async fn a_preview_shows_a_tasks_lines_and_runs_nothing() {
 
     assert_eq!(reply.status, StatusCode::OK);
     assert_eq!(reply.json(), json!({ "lines": ["fake run link beta"] }));
+    assert!(runs.lock().unwrap().is_empty());
+}
+
+#[tokio::test]
+async fn a_preview_the_backend_refuses_says_why_with_its_code() {
+    let (server, runs) = launch();
+
+    let reply = post(
+        &server,
+        "/api/commands/preview",
+        Auth::Bearer(server.token()),
+        json!({ "name": "edit", "refuse": true }),
+    )
+    .await;
+
+    assert_eq!(reply.status, StatusCode::UNPROCESSABLE_ENTITY);
+    assert_eq!(
+        reply.json(),
+        json!({ "error": "edit is refused", "code": "fake_refused" })
+    );
     assert!(runs.lock().unwrap().is_empty());
 }
 
@@ -137,5 +178,43 @@ async fn the_server_answers_on_loopback_on_a_port_the_system_chose() {
     assert!(
         response.ends_with(r#"{"echo":"over the wire"}"#),
         "{response}"
+    );
+}
+
+/// What the panel's dev server needs, whose proxy names the port in its
+/// settings. The port was free a moment ago: another process could take it
+/// in between, which would fail this test rather than pass it wrongly.
+#[test]
+fn the_server_listens_on_the_port_it_is_given() {
+    let free = TcpListener::bind((Ipv4Addr::LOCALHOST, 0))
+        .unwrap()
+        .local_addr()
+        .unwrap()
+        .port();
+
+    let server = Server::new(Fake::default()).port(free).bind().unwrap();
+
+    assert_eq!(
+        server.address(),
+        SocketAddr::from((Ipv4Addr::LOCALHOST, free))
+    );
+    assert_eq!(
+        server.url(),
+        format!("http://127.0.0.1:{free}/?token={}", server.token())
+    );
+}
+
+/// Another port would be one the client that asked for this one never
+/// finds.
+#[test]
+fn a_port_somebody_holds_is_an_error_rather_than_another_port() {
+    let held = TcpListener::bind((Ipv4Addr::LOCALHOST, 0)).unwrap();
+    let port = held.local_addr().unwrap().port();
+
+    let error = Server::new(Fake::default()).port(port).bind().err();
+
+    assert_eq!(
+        error.map(|error| error.kind()),
+        Some(std::io::ErrorKind::AddrInUse)
     );
 }

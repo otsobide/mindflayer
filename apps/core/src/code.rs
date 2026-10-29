@@ -53,6 +53,7 @@ use crate::catalog::DiscoveryFailure;
 use crate::claude_md::{self, ClaudeMdError, Fallback};
 use crate::claude_rules::{self, ClaudeRulesError};
 use crate::config_entry::{EntryError, FileError};
+use crate::contents::ContentsError;
 use crate::create::CreateError;
 use crate::everywhere::EverywhereError;
 use crate::exclude::{self, ExcludeError};
@@ -65,6 +66,7 @@ use crate::ledger::LedgerError;
 use crate::lifecycle::LifecycleError;
 use crate::lock::LockError;
 use crate::migrate::{MigrateError, ProjectFailure, Refusal};
+use crate::policy::PolicyError;
 use crate::reapply::{ReapplyError, ReapplyFailure};
 use crate::relink::{Duplicate, RelinkError};
 use crate::resolve::ResolveError;
@@ -199,6 +201,7 @@ pub const ALL: &[(&str, &[&str])] = &[
     ("claude_rules::Warning", claude_rules::Warning::CODES),
     ("config_entry::EntryError", EntryError::CODES),
     ("config_entry::file::FileError", FileError::CODES),
+    ("contents::ContentsError", ContentsError::CODES),
     ("create::CreateError", CreateError::CODES),
     ("everywhere::EverywhereError", EverywhereError::CODES),
     ("exclude::ExcludeError", ExcludeError::CODES),
@@ -221,6 +224,7 @@ pub const ALL: &[(&str, &[&str])] = &[
     ("migrate::MigrateError", MigrateError::CODES),
     ("migrate::Refusal", Refusal::CODES),
     ("migrate::project::ProjectFailure", ProjectFailure::CODES),
+    ("policy::PolicyError", PolicyError::CODES),
     ("reapply::ReapplyError", ReapplyError::CODES),
     ("reapply::ReapplyFailure", ReapplyFailure::CODES),
     ("relink::Duplicate", Duplicate::CODES),

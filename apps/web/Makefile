@@ -21,8 +21,15 @@ install: ## Install exactly what the lockfile pins
 	$(PNPM) install --frozen-lockfile
 	@touch $(INSTALLED)
 
+# The server embeds dist/ as it compiles, and one compiled while dist/ was
+# missing embeds nothing and never looks again, since rust-embed resolves the
+# folder once. Touching the file that embeds it is a change cargo sees, so
+# the server's next compile takes the panel in. A build script watching the
+# folder was the alternative, and it would recompile the server on every
+# build while the folder is missing, as it is wherever Node is not.
 build: $(INSTALLED) ## Check the types, then build the panel into dist/, which the server embeds
 	$(PNPM) run build
+	@touch ../server/src/panel.rs
 
 test: $(INSTALLED) ## Run the panel's tests (vitest)
 	$(PNPM) run test

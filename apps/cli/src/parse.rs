@@ -191,25 +191,45 @@ pub enum Command {
     },
 
     /// List the templates `mind add --template` can start from here.
-    Templates,
+    Templates {
+        /// Print it as JSON, in the envelope every reading command's --json
+        /// shares.
+        #[arg(long)]
+        json: bool,
+    },
 
     /// List this project's artifacts.
     #[command(alias = "ls")]
     List {
         /// Only this kind: `skills` or `rules` [default: every kind].
         kind: Option<Kind>,
+
+        /// Print it as JSON, in the envelope every reading command's --json
+        /// shares.
+        #[arg(long)]
+        json: bool,
     },
 
     /// Show one artifact in full.
     Show {
         /// Its name, or `kind:name` when one name belongs to two kinds.
         reference: String,
+
+        /// Print it as JSON, in the envelope every reading command's --json
+        /// shares.
+        #[arg(long)]
+        json: bool,
     },
 
     /// Check this project's artifacts against what an agent requires.
     Validate {
         /// A kind (`rules`), or one artifact by name [default: everything].
         target: Option<String>,
+
+        /// Print it as JSON, in the envelope every reading command's --json
+        /// shares.
+        #[arg(long)]
+        json: bool,
     },
 
     /// Say what this project holds: whether what Mindflayer installed is
@@ -364,6 +384,11 @@ pub enum Command {
 
     /// Open the TUI on this project. What `mind` does on its own.
     Tui,
+
+    /// Open the control panel in a browser, over the workspace a command run
+    /// here would use: what `flayer ui` does.
+    #[cfg(feature = "ui")]
+    Ui(UiOptions),
 
     /// Act on the flayer workspace instead. Also reachable as `flayer <cmd>`.
     ///
@@ -562,6 +587,11 @@ pub enum FlayerCommand {
         /// A project this workspace manages, instead of the workspace itself.
         #[arg(short, long, value_name = "PROJECT")]
         project: Option<String>,
+
+        /// Print it as JSON, in the envelope every reading command's --json
+        /// shares.
+        #[arg(long)]
+        json: bool,
     },
 
     /// List the workspace's own artifacts and every managed project's.
@@ -573,6 +603,11 @@ pub enum FlayerCommand {
         /// Only this project.
         #[arg(short, long, value_name = "PROJECT")]
         project: Option<String>,
+
+        /// Print it as JSON, in the envelope every reading command's --json
+        /// shares.
+        #[arg(long)]
+        json: bool,
     },
 
     /// Show one artifact in full, wherever in the workspace it is.
@@ -583,6 +618,11 @@ pub enum FlayerCommand {
         /// Only this project.
         #[arg(short, long, value_name = "PROJECT")]
         project: Option<String>,
+
+        /// Print it as JSON, in the envelope every reading command's --json
+        /// shares.
+        #[arg(long)]
+        json: bool,
     },
 
     /// Check the workspace's own artifacts, every managed project's, and what
@@ -594,6 +634,11 @@ pub enum FlayerCommand {
         /// Only this project.
         #[arg(short, long, value_name = "PROJECT")]
         project: Option<String>,
+
+        /// Print it as JSON, in the envelope every reading command's --json
+        /// shares.
+        #[arg(long)]
+        json: bool,
     },
 
     /// Say what every managed project holds: whether what Mindflayer
@@ -913,6 +958,38 @@ pub enum FlayerCommand {
     /// What `flayer` does on its own. Everything it changes, it changes by
     /// running one of these commands, and it prints them when it closes.
     Tui,
+
+    /// Open the control panel in a browser, served on 127.0.0.1 until
+    /// Ctrl-C.
+    ///
+    /// It prints the link that opens it, which carries the token that lets
+    /// the browser in, and opens it. Everything the panel changes, it
+    /// changes by running one of these commands, each shown before it runs.
+    #[cfg(feature = "ui")]
+    Ui(UiOptions),
+}
+
+/// How `ui` serves the panel.
+#[cfg(feature = "ui")]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Args)]
+pub struct UiOptions {
+    /// The port to listen on, on 127.0.0.1 [default: one the system picks;
+    /// 7878 with --dev, where the dev server's proxy looks].
+    //
+    // An option rather than a number defaulting to 0, so that --dev can
+    // tell a port nobody named from one somebody did.
+    #[arg(long, value_name = "PORT")]
+    pub port: Option<u16>,
+
+    /// Print the link without opening a browser.
+    #[arg(long)]
+    pub no_open: bool,
+
+    /// Serve the panel through its dev server (`make web/dev`, on
+    /// 127.0.0.1:5173): take requests from its pages too, and open the panel
+    /// there.
+    #[arg(long)]
+    pub dev: bool,
 }
 
 /// What `workspaces` does to the list besides showing it.
@@ -1081,7 +1158,12 @@ pub enum GatherCommand {
     /// List what can be installed from the shelf and from loaded workspaces,
     /// and where each artifact comes from.
     #[command(alias = "ls")]
-    List,
+    List {
+        /// Print it as JSON, in the envelope every reading command's --json
+        /// shares.
+        #[arg(long)]
+        json: bool,
+    },
 }
 
 /// What `--shell` takes, from core's list rather than spelled again here, as

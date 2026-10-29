@@ -571,7 +571,15 @@ impl Task {
     /// Asked of the lines rather than of the variant, so the one list of
     /// commands decides, whatever task a line came from.
     pub fn refusal(&self) -> Option<Refusal> {
-        self.commands().iter().find_map(|line| refused(line))
+        self.refused_line().map(|(_, refusal)| refusal)
+    }
+
+    /// [`refusal`](Self::refusal), with the line it is the refusal of: for
+    /// a front end that says which command it will not run.
+    pub fn refused_line(&self) -> Option<(Vec<String>, Refusal)> {
+        self.commands()
+            .into_iter()
+            .find_map(|line| refused(&line).map(|refusal| (line, refusal)))
     }
 }
 
@@ -582,7 +590,8 @@ impl Task {
 /// One list, of commands as the parsers read them rather than of tasks, so
 /// a line refused for one front end is refused for every one, whichever
 /// task it came from or none. The TUI has a terminal, and refuses only the
-/// lines that would draw a screen inside its own ([`Refusal::Screen`]).
+/// lines that would draw a screen inside its own ([`Refusal::Screen`]) or
+/// hold it until a Ctrl-C it keeps for itself ([`Refusal::Panel`]).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Error)]
 pub enum Refusal {
     /// The TUI (`mind` or `flayer` alone, or either's `tui`), the minds
@@ -606,6 +615,22 @@ pub enum Refusal {
         "fetches over the network for as long as that takes, which only the TUI or a shell shows, and stops"
     )]
     Unwatched,
+    /// `show`, which prints an artifact whole, read through every link on
+    /// the way (a rule shared by a link is still a rule): at a terminal, to
+    /// the person whose disk it is, but anywhere else to somebody who may
+    /// not be. A front end without one reads one file at a time instead,
+    /// held to its holder and a cap (`contents::Contents`), so that whether
+    /// a file may leave is decided in one place.
+    #[error(
+        "prints an artifact whole, read through any link on the way, where a front end without a terminal reads one file at a time, held to its holder"
+    )]
+    Unheld,
+    /// `ui`, from either binary: it serves the panel until Ctrl-C stops it,
+    /// which would hold a front end that ran it as one of its lines for good,
+    /// the panel's own writer or the TUI, whose screen keeps Ctrl-C for
+    /// itself.
+    #[error("serves the panel until Ctrl-C stops it, from the terminal it was started in")]
+    Panel,
 }
 
 codes!(Refusal {
@@ -613,6 +638,8 @@ codes!(Refusal {
     Self::Editor => "opens_editor",
     Self::Shell => "prints_shell_code",
     Self::Unwatched => "gather_unwatched",
+    Self::Unheld => "show_unheld",
+    Self::Panel => "serves_panel",
 });
 
 impl Refusal {
@@ -626,15 +653,17 @@ impl Refusal {
         match command {
             None | Some(Command::Tui) => Some(Refusal::Screen),
             Some(Command::Edit { .. }) => Some(Refusal::Editor),
+            Some(Command::Show { .. }) => Some(Refusal::Unheld),
+            #[cfg(feature = "ui")]
+            Some(Command::Ui(_)) => Some(Refusal::Panel),
             Some(Command::Flayer { command }) => Refusal::of_flayer(command.as_ref()),
             Some(
                 Command::Init { .. }
                 | Command::Add { .. }
                 | Command::Rename { .. }
                 | Command::Remove { .. }
-                | Command::Templates
+                | Command::Templates { .. }
                 | Command::List { .. }
-                | Command::Show { .. }
                 | Command::Validate { .. }
                 | Command::Status { .. }
                 | Command::Link
@@ -670,7 +699,10 @@ impl Refusal {
             }) if projects.is_empty() => Some(Refusal::Screen),
             Some(FlayerCommand::Edit { .. }) => Some(Refusal::Editor),
             Some(FlayerCommand::Activate { .. }) => Some(Refusal::Shell),
+            Some(FlayerCommand::Show { .. }) => Some(Refusal::Unheld),
             Some(FlayerCommand::Gather(GatherCommand::Git { .. })) => Some(Refusal::Unwatched),
+            #[cfg(feature = "ui")]
+            Some(FlayerCommand::Ui(_)) => Some(Refusal::Panel),
             Some(
                 FlayerCommand::Init { .. }
                 | FlayerCommand::Which
@@ -680,7 +712,6 @@ impl Refusal {
                 | FlayerCommand::Remove { .. }
                 | FlayerCommand::Templates { .. }
                 | FlayerCommand::List { .. }
-                | FlayerCommand::Show { .. }
                 | FlayerCommand::Validate { .. }
                 | FlayerCommand::Status { .. }
                 | FlayerCommand::Link { .. }
@@ -689,7 +720,7 @@ impl Refusal {
                 | FlayerCommand::Load { .. }
                 | FlayerCommand::Unload { .. }
                 | FlayerCommand::Scan { .. }
-                | FlayerCommand::Gather(GatherCommand::List)
+                | FlayerCommand::Gather(GatherCommand::List { .. })
                 | FlayerCommand::Install { .. }
                 | FlayerCommand::Uninstall { .. }
                 | FlayerCommand::Update { .. }

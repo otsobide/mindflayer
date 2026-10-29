@@ -349,3 +349,69 @@ async fn no_answer_grants_another_origin_anything() {
         assert!(granted.is_empty(), "{origin}: {granted:?}");
     }
 }
+
+/// Where `make web/dev` serves the panel from while it is worked on.
+const DEV_SERVER: &str = "http://127.0.0.1:5173";
+
+/// What the dev server's proxy forwards: the panel's change, with the
+/// browser's Origin, the dev server's, and Host naming this server, as
+/// `changeOrigin` makes it.
+#[tokio::test]
+async fn through_its_dev_server_the_panel_changes_things_and_nothing_else_does() {
+    let server = Server::new(Fake::default())
+        .dev_server(DEV_SERVER)
+        .bind()
+        .unwrap();
+    let port = server.address().port();
+
+    let proxied = from_the_panel(&server, &[set("origin", DEV_SERVER)]);
+    let reply = deliver(&server, proxied).await;
+    assert_eq!(reply.status, StatusCode::OK, "{}", reply.text());
+
+    // Its own pages still: the panel built into the binary.
+    let own = from_the_panel(
+        &server,
+        &[set("origin", format!("http://127.0.0.1:{port}"))],
+    );
+    assert_eq!(deliver(&server, own).await.status, StatusCode::OK);
+
+    for (case, changes) in [
+        ("another port", vec![set("origin", "http://127.0.0.1:5174")]),
+        ("another name", vec![set("origin", "http://localhost:5173")]),
+        (
+            "naming the dev server in Host",
+            vec![set("host", "127.0.0.1:5173"), set("origin", DEV_SERVER)],
+        ),
+    ] {
+        let reply = deliver(&server, from_the_panel(&server, &changes)).await;
+        assert_eq!(reply.status, StatusCode::FORBIDDEN, "{case}");
+    }
+
+    assert_eq!(
+        server.url(),
+        format!("{DEV_SERVER}/?token={}", server.token())
+    );
+}
+
+/// Only when the front end names it: otherwise the dev server is one more
+/// page on another port of loopback.
+#[tokio::test]
+async fn without_being_told_of_it_the_server_refuses_the_dev_servers_pages() {
+    let (server, runs) = launch();
+
+    let reply = deliver(
+        &server,
+        from_the_panel(&server, &[set("origin", DEV_SERVER)]),
+    )
+    .await;
+
+    assert_eq!(reply.status, StatusCode::FORBIDDEN);
+    assert_eq!(
+        reply.json()["error"],
+        format!(
+            "this server takes requests only from its own pages, at http://{}",
+            server.address()
+        )
+    );
+    assert!(runs.lock().unwrap().is_empty());
+}

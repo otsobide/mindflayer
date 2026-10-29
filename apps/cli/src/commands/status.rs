@@ -232,7 +232,7 @@ pub(crate) fn unread(project: &str, unreached: &Unreached, would: bool) -> Strin
 }
 
 /// The report laid out, with what could not be read (`warnings`) said: on
-/// stderr beside a table, inside the envelope beside JSON. Then a hint for
+/// stderr, and inside the envelope too beside JSON. Then a hint for
 /// each project an older marker marks ([`older`]), on stderr in JSON too, as
 /// [`status_here`]'s hint is: advice for whoever reads the terminal, which
 /// the data says as each project's `marker`.
@@ -245,16 +245,16 @@ fn report(
     layout: Layout,
     looked: impl FnOnce() -> Vec<MindProject>,
 ) -> Outcome {
+    let stderr: Vec<Warning> = warnings
+        .into_iter()
+        .map(|(code, said)| Warning {
+            text: format!("warning: {said}"),
+            code,
+        })
+        .collect();
     let mut outcome = match layout {
-        Layout::Json => json(status, warnings.into_iter().map(|(_, said)| said).collect()),
+        Layout::Json => json(status, &stderr),
         Layout::Table { across } => {
-            let stderr: Vec<Warning> = warnings
-                .into_iter()
-                .map(|(code, said)| Warning {
-                    text: format!("warning: {said}"),
-                    code,
-                })
-                .collect();
             let ok = stderr.is_empty();
             let stdout = rows(status, across).unwrap_or_else(|| {
                 let mut text = String::from("nothing found\n");

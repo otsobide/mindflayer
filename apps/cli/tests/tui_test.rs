@@ -3745,3 +3745,30 @@ fn the_keys_help_names_the_workspaces_list_and_its_command() {
         .unwrap_or_else(|| panic!("{lines:?}"));
     assert_eq!(lines[at + 1].trim(), "flayer workspaces");
 }
+
+/// A line that serves the panel would hold the screen until a Ctrl-C the
+/// screen takes as a key, so it is refused, from either binary, and nothing
+/// listens. Each says `--no-open`, so a refusal that broke would serve
+/// rather than open the developer's browser.
+#[cfg(feature = "ui")]
+#[test]
+fn a_line_that_serves_the_panel_is_not_run_from_the_screen() {
+    let dir = workspace_with_two();
+
+    for said in [
+        &["flayer", "ui", "--no-open"][..],
+        &["mind", "ui", "--no-open"],
+    ] {
+        let words: Vec<String> = said.iter().map(|word| (*word).to_owned()).collect();
+        let done = tui::execute(&words, dir.path(), &Lookup::default(), &Watch::new());
+
+        assert_eq!(
+            done,
+            Done::failed(
+                said.join(" "),
+                "serves the panel until Ctrl-C, which this screen keeps for itself, \
+                 so it is not run from inside it"
+            )
+        );
+    }
+}

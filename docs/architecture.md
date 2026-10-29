@@ -94,8 +94,8 @@ TUI](#the-tui).
 
 The local server is a crate of its own, and it holds no rules either: it
 carries JSON between the browser and whichever front end implements its
-`Backend`, and depends on neither core nor the CLI. See [the local
-server](#the-local-server). Nor does the panel it serves: it asks through the
+`Backend`, the CLI's for the panel, and depends on neither core nor the CLI.
+See [the local server](#the-local-server). Nor does the panel it serves: it asks through the
 server and draws the answers. See [the web panel](#the-web-panel).
 
 The line is there so that when a second front end arrives, it cannot disagree
@@ -126,8 +126,12 @@ each agent's own folder are, and gathers them with what `-W` and
 `$MINDFLAYER_WORKSPACE` say (`Lookup`), `progress.rs` says what a gather's
 steps read as and draws them on stderr, `task.rs` holds the work a front end
 asks for as the command lines it is ([every change is a command
-line](#every-change-is-a-command-line)), and `lib.rs` only says what is
-public.
+line](#every-change-is-a-command-line)), `admit.rs` holds a task sent from
+outside to the path policy and `backend.rs` is the panel's backend ([what a
+browser may name](#what-a-browser-may-name)), which `commands/ui.rs` serves
+([launching it](#launching-it-flayer-ui)), and `lib.rs` only says what is
+public. The backend, `ui` and the server they need are behind the crate's
+`ui` feature, on by default.
 
 The split is by family. One file holding the parser, every command and the
 rendering was where every change to a command met every other, so pieces of
@@ -1277,7 +1281,8 @@ the same way: listed, and said.
 
 The CLI prints those on stderr as warnings and exits non-zero: visible, but not
 in the way of the answer. Asked for JSON, it puts them in the envelope beside
-the data instead ([JSON, in one envelope](#json-in-one-envelope)).
+the data too, each with its code ([JSON, in one
+envelope](#json-in-one-envelope)).
 
 Each line it says beside a report is a `render::Warning`, an `Outcome`'s and a
 `Failure`'s alike: the text a terminal shows, word for word, and beside it the
@@ -1304,24 +1309,86 @@ A reading command's `--json` prints what it read inside one envelope,
 whatever the command (`render::json`):
 
 ```json
-{"version": 2, "data": ..., "warnings": [...]}
+{"version": 2, "data": ..., "warnings": [...], "coded_warnings": [...]}
 ```
 
 `status` was the first to take it ([what each project
 has](#what-each-project-has)), and every later reading command takes the same
-one rather than a shape of its own: `scan --json` ([Scanning](#scanning)) and
+one rather than a shape of its own: `scan --json` ([Scanning](#scanning)),
 `workspaces --json` ([the workspaces this machine
-knows](#the-workspaces-this-machine-knows)). One shape is one parser for a
-script, and for the panel's backend when it reads through the CLI.
+knows](#the-workspaces-this-machine-knows)), and, since #64, `list`, `show`,
+`validate`, `templates` and `gather list`, so that what a front end shows of
+a workspace's holders, their templates and its offers a script or an agent
+can print: not yet the whole snapshot (an open question below). One shape
+is one parser for a script, and for the panel's backend when it reads
+through the CLI.
 
-- **The warnings are inside it.** Failures are collected, not raised, in JSON
-  as in text: what a table would say on stderr as `warning:` lines goes into
-  `warnings`, without the prefix, and stderr is left without them, so a
-  script reading stdout misses nothing. The exit status is the text's. A
-  hint, advice for whoever reads the terminal, stays on stderr. An error that
-  stops a command is still text on stderr, `--json` or not: every error has
-  a code since #61 ([a code for what went wrong](#a-code-for-what-went-wrong)),
-  but none is printed yet.
+- **The warnings are inside it, with their codes, and on stderr too.**
+  Failures are collected, not raised, in JSON as in text: what a table says
+  on stderr as `warning:` lines goes into `warnings`, without the prefix,
+  so a script reading stdout misses nothing. `coded_warnings` says the
+  same lines again, in the same order, each as its `code` and its
+  `message`, the code `null` for a line none is given to ([a code for what
+  went wrong](#a-code-for-what-went-wrong)). A name of its own rather than
+  objects in `warnings`, whose strings a version 2 script reads: changing
+  what a field holds moves the version, and adding one does not. Codes in a
+  list beside the strings, paired by place, was the other way, rejected for
+  the reason a `Warning` keeps its code on the line: two lists every writer
+  has to keep in step. The exit status is the text's. Every warning is
+  still said on stderr, as the text says it, since #64 asked for it: the
+  envelope is a script's, which reads each warning there and need not read
+  stderr, and stderr is the terminal's, where somebody piping the JSON into
+  `jq` would otherwise see the answer and nothing of what could not be
+  read. Leaving them off stderr, as #36 first did so that a script reading
+  both channels would read each once, was rejected for that, and for every
+  command's JSON at once, `status`, `scan` and `workspaces` among them,
+  since one rule (`render::json`) says them all. A hint, advice for whoever
+  reads the terminal, stays on stderr alone. An error that stops a command
+  is still text on stderr, `--json` or not: every error has a code since
+  #61, but an error's is not printed yet.
+- **Laid out from the text's own outcome.** A command whose JSON reads what
+  its text reads builds its text, warnings and all, and `render::as_json`
+  lays that outcome out as JSON: `data` in place of stdout, each `warning:`
+  line said in the envelope, stderr left as the text has it, and the exit
+  status kept, since a report can fail with no warning at all
+  (`validate`, for an artifact that does not pass). Built from the outcome
+  rather than beside it, so that a warning a command adds on the way out,
+  a workspace it consulted that could not be read, reaches the envelope as
+  it reaches stderr; and the warnings and the exit status cannot differ
+  from the text's, as two reads of them could.
+- **What each command puts in `data`** is core's, built from what the
+  command read:
+  - `list`: the snapshot's holders, a `view::Listing`: the library, for
+    `flayer list` without `-p`, and every entry the workspace links, or the
+    one project, each as the snapshot holds it, read for the kinds asked
+    ([the read model](#the-read-model)). Its warnings and exit status are
+    the listing's, read as the text reads it, and its data a read of the
+    snapshot's beside it, since how each stands is the snapshot's to say
+    and the listing never opens the ledger. `mind list --json` reads the
+    project against the workspace `mind status` reads it against, the one
+    `mind` consults, when that one links it: alone, a copy that workspace
+    installed would stand as somebody's. It is the one JSON that reads what
+    its text does not, so what that read finds wrong is no warning and no
+    refusal, which would give the JSON an exit status the text does not
+    have: a workspace found that cannot be read, or one `-W` or the
+    activation names that is no workspace, leaves the project read alone,
+    why said among its `failures`, as a ledger that will not open is.
+    `mind status` warns or refuses there instead, its report being what
+    that workspace installed.
+  - `show`: `reading::Shown` for each artifact the name matches: where it
+    is, what its front matter declares that `show` prints, and its body.
+    The text is laid out from the same values, the file read once.
+  - `validate`: `reading::Validation`, each artifact checked with its
+    issues and whether it is invalid, and the counts its verdict follows
+    (`invalid`, `unreadable`, `differing`), which the text takes too, so
+    the two come to one verdict. Not the snapshot's rows: `flayer validate`
+    reads the shelf, which the snapshot holds as what the ledger records
+    rather than as artifacts read and checked, and neither `show` nor
+    `validate` reads the ledger, so neither says how a copy stands, which
+    read without it would call an installed copy somebody's.
+  - `templates`: core's `Template`s, the list the snapshot holds of each
+    holder; `gather list`: the `Offer`s it lists, what can be installed
+    from a loaded workspace or the shelf, which the snapshot only counts.
 - **Its names are a contract.** Every type in `data` derives `Serialize` in
   core, each field by its snake_case name, and `Kind`, `Agent` and `State`
   are serialized by the word a command line takes for them (`skill`,
@@ -1336,9 +1403,11 @@ script, and for the panel's backend when it reads through the CLI.
   holds, so one unprintable path cannot fail the report. A name once printed
   stays: a field that goes or changes what it holds moves
   `ENVELOPE_VERSION`, and one added does not, since a reader passes over a
-  key it does not know. A test reads each report back into
-  structs of its own that refuse any field they do not name
-  (`common::enveloped`), so a change shows there before it reaches a script.
+  key it does not know; `list --json` prints the snapshot's own types, so a
+  change to a holder that moves `view::FORMAT` moves it too. A test reads
+  each report back into structs of its own that refuse any field they do
+  not name (`common::enveloped`), and holds `coded_warnings` to say what
+  `warnings` says, so a change shows there before it reaches a script.
   It moved once, to 2, when `status` took the five states an installation
   stands in ([what each project has](#what-each-project-has)): `installed`
   and `partial`, which a version 1 script knew, went, and a value a script
@@ -1378,6 +1447,11 @@ type derives `Serialize` from the start:
   through `url::redacted`). `Resolved` does not: it only pairs a workspace
   with its reason, which the snapshot says beside the workspace's name and
   path.
+- **Printed by a command since #64**: a `Template` by `templates --json`,
+  an `Offer` by `gather list --json`, and three new to it: what `list
+  --json` prints of the snapshot (`view::Listing`), and what `show` and
+  `validate` say of each artifact (`reading::Shown`, `reading::Validation`
+  and its `Checked`).
 - **Not yet**, being older than the rule and handed to no front end so far:
   the ledger's record of an install (`InstallRecord`), and what an update or
   a change of agents would do (`update::Plan`, `reapply::Plan`). Each
@@ -1478,12 +1552,18 @@ variants it would build, many around an `io::Error`, or a parser's or
 SQLite's error a test has no plain way to make, and for a match that says a
 variant is missing from it but not from the list beside it.
 
-Nothing prints a code yet. A member's `error` was the first type to hold
-one, and the snapshot every front end reads holds them wherever it says what
-went wrong ([the read model](#the-read-model)), each a `code::Said`, the code
-beside its message; the CLI's warnings and failures carry them beside their
-text ([failures are collected, not raised](#failures-are-collected-not-raised)),
-which the panel's backend hands on (#67).
+A member's `error` was the first type to hold one, and the snapshot every
+front end reads holds them wherever it says what went wrong ([the read
+model](#the-read-model)), each a `code::Said`, the code beside its message;
+the CLI's warnings and failures carry them beside their text ([failures are
+collected, not raised](#failures-are-collected-not-raised)), which the
+panel's backend hands on, each line a run says on stderr with its code and
+what stopped it with its own (`backend::Run`). A warning's is printed too,
+in the JSON envelope's `coded_warnings` ([JSON, in one
+envelope](#json-in-one-envelope)); an error's, which stops a command, is
+not printed, and reaches only the panel. So does a refusal of the panel's
+backend, in the server's reply ([what a browser may
+name](#what-a-browser-may-name)).
 
 **The CLI's errors have codes too**, since what a command could not do
 reaches the panel beside what core could not: `CliError::code`, given by the
@@ -1584,6 +1664,15 @@ no workspace links.
 - **What went wrong is a `code::Said`**, its code and its message, public
   down to its fields, since the TUI reads the snapshot as Rust rather than as
   JSON.
+
+`list --json` prints a part of it, a `view::Listing`: its holders, the
+library and the projects or one of them, each read for the kinds asked, so
+that what a script prints of a project is what a front end draws of it, and
+a test of the panel compares like with like ([JSON, in one
+envelope](#json-in-one-envelope)). Read for those kinds rather than whole
+and cut down after, since the listing reads only them: a folder of a kind
+not asked for is no failure of its reply. Of every kind, it is the
+snapshot's library and projects, which a test holds it to.
 
 What a front end reads beside the snapshot is what no snapshot holds: a scan,
 and which workspace `mind` consults from each project, which depends on the
@@ -3502,8 +3591,8 @@ Two things follow, and both are deliberate:
   are left out, because they changed nothing.
 
 `Task` is not the TUI's own, though the TUI is where it was born: it lives in
-`task.rs`, shared by every front end that runs commands, the TUI now and the
-panel's backend next ([D-18](#d-18-the-panel-writes-by-running-commands)).
+`task.rs`, shared by every front end that runs commands, the TUI and the
+panel's backend ([D-18](#d-18-the-panel-writes-by-running-commands)).
 One type, so a line is spelled one way whichever front end asked for it; a
 second front end building its own lines would be a second place for one to be
 spelled wrong.
@@ -3549,7 +3638,8 @@ how someone reading the transcript takes it, so it is resolved against the
 root rather than against wherever the process started. What the screen was
 opened with is passed along rather than spelled: its home, and the `-W` or
 activation that chose its workspace (`tui::execute`), as they were given to
-`flayer` itself. A command that opens a screen of its own (`flayer`, `flayer
+`flayer` itself. That is `commands::run_line`'s, which the panel's backend
+runs its lines through too, so the two front ends resolve a line one way. A command that opens a screen of its own (`flayer`, `flayer
 tui`, `flayer minds`, `flayer install` with neither a name nor a project,
 `mind`, `mind tui`) is refused if it ever reaches that path, rather than drawn
 inside this one. Half an install (`flayer install -p alpha`) opens none, and
@@ -3559,20 +3649,26 @@ That refusal is one part of a list every front end shares (`task::Refusal`):
 what a front end with no terminal of its own, the panel's server, does not
 run. A screen of its own; `edit` in every form, which hands the terminal to
 an editor, until #81 gives it one that takes the contents; `activate`, which
-prints code for a shell; and `gather git`, the network for as long as it
+prints code for a shell; `gather git`, the network for as long as it
 takes, until #112 brings to the server the progress and the cancel only a
-screen has now. `ui` joins it when #68 makes it a command. The TUI has a
-terminal, so of the list it refuses only the screens. The list is of
-commands as the parsers read them, not as they are spelled, so `mind flayer
-minds` is refused as `flayer minds` is, and it is a match over every command
-with no wildcard, so a new command does not compile until it says whether
-it is refused. A task is refused for the first of its lines that is
-(`Task::refusal`), whichever variant it is, and each refusal has a code of
-its own (`opens_screen`, `opens_editor`, `prints_shell_code`,
-`gather_unwatched`), held to the rules core's codes are ([a code for what
-went wrong](#a-code-for-what-went-wrong)). A list of tasks was the
-alternative, and it would leave out a line no task builds: a front end that
-runs lines it is sent would run one the list never named.
+screen has now; and `show`, which prints an artifact whole, read through any
+link on the way, as a terminal's user may ask of their own disk, where a
+front end without one reads a file at a time, held to its holder
+([what a browser may name](#what-a-browser-may-name)). And `ui`, which
+serves the panel until Ctrl-C, so a front end that ran it as a line would
+wait on it for good. The TUI has a terminal, so of the list it refuses only
+the screens, and `ui`, since the screen takes Ctrl-C as a key and nothing
+would stop it. The list is of commands as the parsers read them, not as they
+are spelled, so `mind flayer minds` is refused as `flayer minds` is, and it
+is a match over every command with no wildcard, so a new command does not
+compile until it says whether it is refused. A task is refused for the first
+of its lines that is (`Task::refusal`), whichever variant it is, and each
+refusal has a code of its own (`opens_screen`, `opens_editor`,
+`prints_shell_code`, `gather_unwatched`, `show_unheld`, `serves_panel`),
+held to the rules core's codes are ([a code for what went
+wrong](#a-code-for-what-went-wrong)). A list of tasks was the alternative,
+and it would leave out a line no task builds: a front end that runs lines it
+is sent would run one the list never named.
 
 The exceptions are named, not hidden: opening the install screen builds the
 screen `flayer install` opens, as a read, rather than running a line, and
@@ -3760,8 +3856,9 @@ choice is made seeing where the project went.
 `apps/server` (`mindflayer-server`) is the transport under the web panel
 ([D-17](#d-17-the-next-front-end-is-a-local-web-panel)): a library crate that
 binds a port, checks who is asking, carries JSON between the browser and a
-front end, and serves the panel's files. No binary runs it yet. `flayer ui`
-(#68) will, over the CLI's backend (#67). The token keeps out a process that
+front end, and serves the panel's files. `flayer ui` runs it, over the
+CLI's backend ([launching it](#launching-it-flayer-ui), [what a browser may
+name](#what-a-browser-may-name)). The token keeps out a process that
 connects without it, and [the guards](#what-keeps-other-pages-out) keep out
 other pages in the same browser: one on another port of 127.0.0.1, which the
 browser counts as the same site, or one whose DNS name has been rebound to
@@ -3788,7 +3885,9 @@ The panel's whole API is four endpoints, which are
 
 Any other path under `/api` is a JSON 404, and every refusal, a body the
 backend cannot read included, is `{"error": "..."}`, so a script never has to
-parse the panel's page to learn that it typed a path wrong.
+parse the panel's page to learn that it typed a path wrong. One the backend
+refuses, having read it, is a 422 with the backend's code beside it,
+`{"error": "...", "code": "..."}`.
 
 ### Generic over a backend
 
@@ -3807,6 +3906,16 @@ has a shape of its own and one type standing for all of them would be an enum
 whose only job is to serialize untagged. `preview` takes the task by
 reference, so a task need not be `Clone` to be both shown and run.
 `watched_paths` is for live updates (#74); nothing reads it yet.
+
+Each of `query`, `preview` and `run` may refuse what it was asked with a
+`Refusal`, a code and a message, which is how a rule of the front end's
+reaches the browser without the server knowing it: a value the path policy
+does not let a browser name, or a task no front end without a terminal
+runs. A struct of the server's own rather than a fourth associated type,
+since the server builds the reply from it (a 422 of `{"error", "code"}`)
+and knows nothing more of it, and its code a `&'static str`, as a code is a
+fixed word. An answer of the backend's own shape that says it refused was
+the alternative, and a preview, whose answer is lines, has no room for one.
 
 ### Threads
 
@@ -3828,8 +3937,10 @@ waiting on the same thread.
   reading while it waits.
 
 A run's lines are worked out on the writer thread just before it, against the
-disk the run itself meets after every write before it, and the entry is in the
-transcript before the reply leaves, so a client that asks for the transcript
+disk the run itself meets after every write before it; a task whose lines
+the backend refuses there is never handed over to run, and leaves the
+transcript as it was, since it is no run to replay. The entry of one that
+ran is in the transcript before the reply leaves, so a client that asks for the transcript
 after its reply always finds its own run there. A client that stops waiting
 does not take its task back: it was queued, and it runs. An outcome that will
 not serialize is still a run, so it is recorded, and replied, as
@@ -3843,10 +3954,14 @@ in memory only, for as long as the server runs.
 
 ### Who it answers
 
-It binds 127.0.0.1 on port 0, with no option for another address: the panel
-is for the person at this machine, and beyond loopback the token would travel
-in clear text. Port 0 lets the system pick a free port rather than the server
-failing on a taken one.
+It binds 127.0.0.1, with no option for another address: the panel is for
+the person at this machine, and beyond loopback the token would travel in
+clear text. The port is 0, which lets the system pick a free one rather than
+the server failing on a taken one, unless the front end names one
+(`Server::port`). That is for a client that must know the port before the
+server starts, the panel's dev server, whose proxy names it in its settings,
+and a port somebody holds is then an error, not another port that client
+would never find.
 
 Every process on the machine can reach that port, so the address says nothing
 about who is asking. A 256-bit token, issued fresh at each launch, does. The
@@ -3913,8 +4028,9 @@ in `src/auth.rs`):
    `localhost` that asks `127.0.0.1` is another origin to the browser, and
    `null`, from a sandboxed frame or a file, is no origin of the server's.
    Its absence proves nothing, since a browser leaves it off a same-origin GET
-   and a script off everything. `flayer ui --dev` (#68) is to accept exactly
-   one more, the panel's dev server's (an [open question](#open-questions)).
+   and a script off everything. A front end may name exactly one more, the
+   panel's dev server's ([through the dev
+   server](#through-the-panels-dev-server)).
 3. **The token**, under `/api` only: a 401 without it.
 4. **A change by cookie** (any method but GET and HEAD, on a request whose
    token came as the cookie) must carry `Sec-Fetch-Site: same-origin` (or a
@@ -3972,6 +4088,133 @@ uses is theirs, and on a shared machine may be another user's (an
 opened again; a cookie it adds under another path is no worse, because the
 gate takes the token from whichever `mf_<port>` holds it.
 
+### Through the panel's dev server
+
+While the panel itself is worked on, its dev server serves it (`make
+web/dev`) and proxies `/api` and the launch link to the server. A change
+through that proxy still says the browser's Origin, the dev server's
+(`http://127.0.0.1:5173`), which the Origin check refuses like every origin
+but the server's own. So a front end may name that one origin to the server
+(`Server::dev_server`), and only then is it taken: one exact origin, in any
+case as a scheme and a name are, never a pattern, since every other port of
+loopback is a page these checks are for. Host stays checked as it is: the
+proxy sets `changeOrigin`, so it names the server rather than the dev
+server. Fetch Metadata needs nothing, since the browser sees a same-origin
+request to the dev server, and neither does the gate while the dev server is
+opened as 127.0.0.1, where the launch link's cookie reaches it whatever its
+port; opened as `localhost`, it has no cookie to forward.
+
+The launch link then points at the dev server, where the panel is served
+(`Listening::url`): its token is traded for the cookie through the proxy,
+and the redirect lands on the dev server's page. What the widening lets in
+is whatever answers on that port, which is no more than before: a server
+there that the browser visits receives the cookie anyway, the hostile server
+of the [open questions](#open-questions), and could send the token as Bearer
+without the dev server's Origin.
+
+### What a browser may name
+
+The token and the guards decide who may ask; the backend decides what may be
+asked. The CLI implements `Backend` in `backend.rs` (`PanelBackend`), and
+treats every query and every task as a stranger's, because a request that
+got past the guards came from a page holding the cookie, and a page on
+another port of loopback holds it too ([what keeps other pages
+out](#what-keeps-other-pages-out)). Which values a request may name, and what
+of a file it may read, are rules, so they are core's (`policy`, `contents`);
+the backend walks a task asking them (`admit::Admission`), one arm per
+variant with no wildcard, so a new task does not compile until it says what
+of it a browser may name.
+
+- **One workspace, pinned at launch.** `PanelBackend::launch` resolves the
+  workspace once, from where the panel was launched and the launch's
+  `Lookup`, as a read resolves it, and names it with `-W` to every line it
+  runs. Before the default one is made it is named by nothing, and the
+  first change makes it, by a `flayer init` of its own, as the TUI does. Any
+  other gone since launch is refused, never made again by a change. So no
+  line reaches another workspace because the disk changed after launch.
+- **No `-C`, `--home`, `-W` or agent home from the browser.** A task has no
+  field for any of them, and no value it holds is read as an option ([every
+  change is a command line](#every-change-is-a-command-line)). Each line
+  runs through `commands::run_line`, the function the TUI's lines run
+  through, from the workspace's root, with the home and agent homes the
+  launch decided.
+- **A project by its entry** (`policy::linked`). A holder, and each project
+  an install, an uninstall or an adoption names, is an entry of the
+  registry, spelled as the marker spells it and the snapshot lists it: not a
+  name, which two projects can declare, nor a path the browser joined. The
+  backend puts the folder the entry resolves to, absolute, in the line's one
+  `-C` (or its `-p`), and decides itself whether the line says `-W .`, so
+  that read again from the root it consults this workspace, as the TUI
+  decides for its rows: the browser's `project` or `elsewhere` is not
+  taken. An entry `unlink`, `unload` or `relink` is given must be one the
+  marker holds (`not_registered`, `not_loaded`, the workspace's own codes
+  for the condition), and goes to the command as spelled, which is how those
+  take one.
+- **A folder not linked yet by a path that reads the same from anywhere**
+  (`policy::path`). What `link`, `load`, `init` and the minds screen's marks
+  name must be absolute (`path_relative`, or `path_url` for a `file:///etc`),
+  spelled exactly as normalizing it would spell it, with no `.` or `..` part
+  and no doubled or trailing separator (`path_unnormalized`), and outside
+  every `.mindflayer`, as spelled and once its links are followed, as far
+  as it exists, so a new folder under a link into one is refused too
+  (`path_in_mindflayer`): a workspace's folder holds its marker,
+  its ledger, its library and the clones it gathered, none of them a project
+  to make or a workspace to load. The path goes to the command verbatim, so
+  the preview shows the folder the command acts on. A mark to unlink, or
+  what `mind unload` takes out, must be one an entry points at too.
+- **What no front end without a terminal runs** is refused by
+  `Task::refusal`, naming the line ([every change is a command
+  line](#every-change-is-a-command-line)).
+
+Values that name nothing on the disk, a skill's name, a description, a
+template, an origin for `--from`, go to the command as they were sent: the
+command holds each to its own rules, and the rule that no value is read as a
+flag keeps each a value.
+
+Each refusal has a code, core's or the CLI's, and the server sends it as a
+422. Nothing of a refused task runs: the server asks for its lines on the
+writer thread first and never hands a refused task over, and the backend's
+run plans the task again rather than trusting that it was asked, so it meets
+the disk as it is. What does run comes back line by line
+(`backend::Outcome`), each with its stdout, its stderr with each line's
+code, and the code of what stopped it, a line the parsers did not take among
+them (`line_unparsed`).
+
+Reads are held the same way. A snapshot is of the pinned workspace. A file
+(`Query::Contents`) is asked of the workspace's own or of a linked project by
+its entry, its artifact by a reference, and the file by its route of plain
+names from the artifact's folder, or a rule's own file name
+(`contents_route_unfit`), so a `..` never reaches the disk; core's
+`contents::Contents` reads it. Its links are followed and judged by
+`copy::followed`, the check `copy::tree` makes of each link it meets, so a
+`SKILL.md`, an asset or a folder on the way that leads out of its holder is
+refused (`contents_outside`), and the file is read through the path the
+check resolved, not the one asked for. A project's holds it to its root, as
+an install from it holds a copy, since a skill may link to a file elsewhere
+in its repository. The workspace's own holds it to the folder it keeps that
+kind in, not to its root as an install from it does: the default
+workspace's root is a home, where a link to `~/.ssh` would count as inside
+it. UTF-8 text with no NUL, no larger
+than a mebibyte (`contents::CAP`), comes back as a string inside JSON;
+anything else is reported with its size, `binary` or `too_large`, and its
+bytes stay where they are, one over the cap never read whole. No answer says
+what type of file it is, and no artifact file is ever served as itself, so
+an HTML page or an SVG holding a script reaches the panel as text to show.
+Should some mistake put it on a page, the CSP runs no inline script and
+`nosniff` holds the answer to `application/json`.
+
+It is the one way a file's contents reach the browser. `show` would be a
+second: it prints an artifact whole, read through every link on the way,
+since a rule shared by a link is still a rule, with no cap. So it is on the
+list of what no front end without a terminal runs (`show_unheld`), rather
+than held to its holder for the terminal too, which would stop it showing a
+rule a team shares by a link: at a terminal its reader is the person whose
+disk it is.
+
+The CLI's suite (`backend_test`) drives `PanelBackend` through the trait with
+the JSON a browser would send, malicious shapes in a table, and binds no
+port; the server's own suites cover the transport over a fake backend.
+
 ### The log
 
 The server prints nothing of its own accord. A front end that wants a log hands
@@ -3994,6 +4237,18 @@ machine without Node where nothing built the panel; the server then answers
 every page with a 503 saying `panel not built: run make web/build`, the
 target that writes the folder.
 
+So the panel is built before a binary that ships it: `make cli/release` and
+`make install` build it first, the two targets outside `apps/web` that need
+Node. A release build embeds each file as it compiles, as `include_bytes!`,
+so cargo sees a later build of the panel and compiles the server again; a
+debug build reads the folder at run time, and sees one at once. Either,
+compiled while the folder was missing, embeds nothing and never looks again,
+since rust-embed resolves the folder once; so `make web/build` touches
+`src/panel.rs`, the file that embeds it, a change cargo sees. A build script
+watching the folder was the alternative, and it would compile the server
+again on every build while the folder is missing, as it is wherever Node is
+not, CI's runners among them until #71.
+
 Files under `assets/` are named by Vite for their contents, so they are sent
 as immutable, to be kept for a year; everything else, `index.html` above all,
 is `no-cache`, so a rebuild shows on the next load. A path outside `/api` that
@@ -4012,6 +4267,80 @@ which no browser sends, is a 404, and one with a drive letter or an empty
 segment is never looked up and gets `index.html`, as one of the panel's routes
 may. A release build only looks names up in a table, and the check keeps the
 two answering alike.
+
+### Launching it: `flayer ui`
+
+`flayer ui` serves the panel from the binary until Ctrl-C, and `mind ui` is
+the same command reached from a project. The workspace is resolved once, as
+the command starts, from its `-C`, `--home`, `-W` and agent homes
+(`PanelBackend::launch`), so one that cannot be used fails the command as
+any would, before anything listens, and nothing the browser sends later
+changes it. The server binds 127.0.0.1 on a port the system picks, or the
+one `--port` names, and a port somebody holds fails the command
+(`panel_unbound`) rather than move to another.
+
+The link goes to stdout as soon as the server listens, the first line there
+and the only one until the transcript follows it once it stops, so a script
+reads it, and stderr says which workspace is served, on which address, and
+that Ctrl-C stops it. That is where `ui` parts from the rule
+that a command builds its output and hands it back to be printed
+(`Outcome`), as the TUI's screen does: the link cannot wait for the command
+to end, which it does only when it is stopped. Then the link is opened with
+the `webbrowser` crate, the way each platform starts its browser, unless
+`--no-open`; one that cannot be opened is a warning, since the link is there
+to open by hand. It is opened on the blocking pool once the server is serving, not
+before: `webbrowser` waits on a text browser until it is closed, which would
+otherwise wait in turn on a server that never started.
+
+Ctrl-C is listened for before the link is out, through the platform's own
+listener, a Unix signal or the Windows console's Ctrl-C, rather than
+`tokio::signal::ctrl_c`, which installs its handler only once it is first
+awaited. The first stops the server taking connections and lets every
+request under way be answered, a run above all, so a change is not cut off
+half way; the second stops at once, for whoever would rather have that than
+wait. What comes back once it stops is what the TUI hands back when it
+closes: every line the panel ran for a task that changes something
+(`Task::writes`), with what each said, laid out by the TUI's function
+(`PanelBackend::transcript`), so a session in the browser can be read and
+run again from a shell. The server's own transcript, the one the panel
+shows, holds reads as well, and goes with the server.
+
+The runtime is tokio's with one thread: every query goes to the blocking pool
+and every run to the server's writer thread, so it only moves bytes. `--dev`
+serves the panel through its dev server ([through the panel's dev
+server](#through-the-panels-dev-server)): the server takes requests from
+`http://127.0.0.1:5173` too, the link points there, and the port is 7878,
+where `make web/dev`'s proxy looks, unless `--port` names another. The note
+on stderr says the server's own address, which the link then does not. A
+port held there is said with other advice than without `--dev`: stop what
+holds it, or name another both in the proxy's `SERVER` and with `--port`.
+Not another with `--port` alone, nor 0, as without it: the proxy reaches only
+the port `SERVER` names (`unbound_hint`).
+
+All of it is behind the CLI crate's `ui` feature, on by default so the one
+binary somebody installs has the panel
+([D-17](#d-17-the-next-front-end-is-a-local-web-panel)): the server, axum,
+rust-embed, tokio's signal handling and `webbrowser`. `cargo build -p
+mindflayer-cli --no-default-features` builds the commands and the TUI
+without them, and `ui` is then no command; `tests/crate_test.rs` holds that
+build to no server, axum, embed or `webbrowser`, `make cli/build` builds
+it first, and `make cli/test` runs its unit tests, one of which finds no
+`ui` there. hyper and tokio stay, which gix's HTTP transport brings to core.
+What the feature costs, measured for D-17 on Linux x86_64 with 16 cores, in
+the release profile, with no panel built unless said:
+
+| | without `ui` | with `ui` |
+|---|---|---|
+| `mind`, as built | 24.9 MB | 27.3 MB (+2.3 MB, +9%) |
+| `mind`, stripped | 19.5 MB | 21.1 MB (+1.6 MB, +8%) |
+| `mind`, the panel embedded | | about 28.2 MB |
+| clean build, wall clock | 1 min 22 s | 1 min 29 s (+7 s, +8%) |
+| clean build, CPU | 12 min 20 s | 13 min 37 s (+10%) |
+
+Turning the feature on in a target that holds the build without it takes
+38 s, most of it compiling tokio again with its signal driver, and gix and
+core above it, since a feature of a crate is one for every crate that uses
+it.
 
 ## The web panel
 
@@ -4127,10 +4456,12 @@ A test fails on such a path, and `make web/build` writes the files again; no
 test run writes them, or it would mend a stale one before the test saw it.
 
 `make web/dev` serves the panel from Vite on 127.0.0.1:5173 and proxies
-`/api`, and the launch link's `/?token=`, to `flayer ui --dev --port 7878`
-(#68). Through the proxy the token is traded for its cookie where the panel
-runs. `changeOrigin`, so the Host the server checks is its own address; the
-Origin stays the dev server's, which `--dev` accepts.
+`/api`, and the launch link's `/?token=`, to `flayer ui --dev`, which listens
+on 7878 unless `--port` names another and prints a link to the dev server.
+Through the proxy the token is traded for its cookie where the panel runs.
+`changeOrigin`, so the Host the server checks is its own address; the Origin
+stays the dev server's, which `--dev` accepts ([through the panel's dev
+server](#through-the-panels-dev-server)).
 
 ## Which workspace a command uses
 
@@ -6433,8 +6764,10 @@ while Tauri 3 is alpha, though a `Transport` interface in the frontend keeps a
 later Tauri shell cheap; and a separate server binary or daemon, the re-exec
 wrapper [the line between core and a front
 end](#where-the-line-between-core-and-a-front-end-falls) already rejects. #68
-measures the feature's binary size and compile time, and makes it opt-in if the
-cost is too high. Unblocks #65, #68 and #69.
+measured the feature's binary size and compile time ([launching
+it](#launching-it-flayer-ui)), about 2.3 MB on a release binary of 25 and 7 s
+on a clean release build of 82, and it stays on by default. Unblocks #65, #68
+and #69.
 
 ### D-18: The panel writes by running commands
 
@@ -6446,7 +6779,8 @@ front end, so the three cannot disagree, and gives the panel a transcript the
 user can replay. Four things come first: the remaining CLI-side orchestration
 moves into core (#23, #54), CLI warnings carry core error codes (#63), batch
 rules for assignment are planned in core (#78) rather than reimplemented in
-TypeScript, and every Task from the browser passes a path policy (#67).
+TypeScript, and every Task from the browser passes a path policy (#67, [what
+a browser may name](#what-a-browser-may-name)).
 Rejected: a core service layer the server calls directly, which duplicates
 every command's entry point; and shelling out to the `flayer` binary, which
 needs the argument forwarding already rejected for the two binaries. Unblocks
@@ -6542,6 +6876,28 @@ just listed.
 
 ## Open questions
 
+- **What of the snapshot no command prints.** #64 asked that whatever the
+  panel shows, a script or an agent can print. `list --json` prints the
+  snapshot's holders, `templates --json` their templates, `gather list
+  --json` what the shelf and the loaded workspaces offer and `workspaces
+  --json` the workspaces this machine knows, but no `--json` prints the
+  rest of it: the workspace it is of and why that one (`workspace`), the
+  workspaces it loads, each with what it offers or why it cannot
+  (`loaded`, which the TUI draws), the sources the shelf is filled from
+  (`sources`), the latest actions (`history`), or what it says belongs to
+  no holder (`warnings`). Which command prints each, a `--json` of its
+  own, a history command, or the snapshot whole, is left for the issues
+  whose views show them (#72 onward, #73 for the shelf, the sources and an
+  activity feed), so that each is printed as the view that needs it reads
+  it.
+- **`list --json` reads twice.** Its warnings and exit status are those of
+  the listing, read as the text reads it, and its data a read of the
+  snapshot's beside it, so a file changed between the two can be a warning
+  and a row that reads, or the other way round. Working the warnings out of
+  the snapshot's read would make it one read, at the price of an exit
+  status the text does not have: the snapshot also says what the listing
+  never reads, a template that will not read or a ledger that will not
+  open.
 - **A copy nobody linked.** `flayer relink` refuses a copy it can see: the
   entry still holding the id, or another project the workspace links
   holding it. A copy somewhere on disk nobody linked is beyond what it
@@ -6595,7 +6951,8 @@ just listed.
   an install that happened between two of them.
 - **Which workspace a project's lines consult is not in the snapshot.** The
   TUI asks it beside the snapshot, from its own lookup, to know when a row's
-  lines need `-W .`, and the panel's lines will need the same (#76).
+  lines need `-W .`, and the panel's backend asks it the same way for each
+  holder it admits (`admit::Admission`).
   Carrying it in the snapshot would make what the snapshot says depend on
   the front end's `-W` and activation, where now only the list of known
   workspaces depends on its home.
@@ -7276,14 +7633,6 @@ just listed.
   Mindflayer made holding nothing, and the file stays, with any folder made for
   it. Removing them needs a record that Mindflayer made them, which the
   ledger's MCP rows (#93) could carry.
-- **A panel built after the server.** A release build embeds what
-  `apps/web/dist` held when `mindflayer-server` last compiled, and a debug
-  build reads the folder at run time only if it existed then, because
-  rust-embed resolves the folder's real path when it compiles. Neither sees a
-  panel built later until the crate compiles again. A build script that reruns
-  when the folder changes would, at the price of rerunning on every build
-  while the folder is missing, since cargo counts a missing path as changed.
-  #68, which puts the panel into the binaries, settles the build order.
 - **The palette in two places.** `src/theme.ts` names the palette for Nuxt
   UI, and `main.css` spells it out as the variables Nuxt UI's colours plugin
   would have written at run time. The build test holds the two to each
@@ -7295,10 +7644,6 @@ just listed.
   first is what the CSP refuses. The choice is in a cookie the server
   receives with the page's request, but acting on it would need the server
   to rewrite the page as it sends it.
-- **The panel's transcript ends with the server.** The TUI prints its
-  transcript when it closes; the server keeps the panel's in memory and drops
-  it when it stops. Whether `flayer ui` prints it on the way out, as the TUI
-  does, is for #68 to choose.
 - **A style nonce for the panel.** The policy allows no inline style, so a
   `<style>` element that a library writes into the page at run time is
   blocked, as theming and colour-mode helpers often do; style the panel's
@@ -7328,23 +7673,35 @@ just listed.
   Windows answer the whole block, macOS only 127.0.0.1 until an alias is
   added. Either changes the launch #15 validated (127.0.0.1, and a cookie
   named per port), so it is the owner's to choose, or to accept as it is.
-- **The panel's dev server.** #68 gives `flayer ui` a `--dev` flag that also
-  accepts the Vite origin, and #69 has Vite proxy `/api` to `flayer ui --dev
-  --port 7878`. Through that proxy a change arrives with the browser's Origin,
-  the dev server's (`http://127.0.0.1:5173`, say), which the Origin check
-  refuses like every origin but the server's own. The widening meant for it is
-  one exact origin, handed to the server by the front end and accepted only
-  under `--dev`, never a pattern. Host stays checked as it is, so the proxy
-  sets `changeOrigin` and names the server in Host rather than the dev server.
-  Fetch Metadata needs nothing, since the browser sees a same-origin request
-  to the dev server. Nor does the gate while the dev server is opened as
-  127.0.0.1, where the launch link's cookie reaches it whatever its port;
-  opened as `localhost`, it has no cookie to forward.
 - **A run that panics.** A backend that panics while running a task has no
   outcome to record, so the task is not in the transcript, though it may have
   changed something before it stopped. The CLI's commands collect their
   failures rather than panic, so this is a bug's path, but the transcript then
   cannot say what the bug left behind.
+- **A link made between a check and what follows it.** A file the panel
+  reads is read through the path its links resolved to when they were
+  judged, so a link put in its place afterwards is not followed; a folder on
+  that path made a link in the moment between is. A path the policy judged
+  outside every `.mindflayer` can likewise be made a link into one before
+  the command runs. Opening each folder on the way without following links
+  would close the first, as `ConfigFile` narrows its own window, at the
+  price of code per platform; the second is a race with somebody who can
+  already write where the command acts.
+- **A listing reads an artifact through its links.** The snapshot lists a
+  rule with its summary, its first line when it has no front matter, read
+  through any link as the catalog follows one, so a rule linked out of its
+  project hands the panel one line of what it leads to, as `mind list`
+  prints it. Its whole file the panel never gets (`show_unheld`,
+  `contents_outside`). Holding the catalog to each holder would close it, at
+  the price of a rule shared by a link no longer being listed at all.
+- **A task with no fields takes any field.** serde passes over the fields of
+  an object read as a variant of an internally tagged enum that has none,
+  since there is nothing to hold it to, so `{"type": "shelf", "home":
+  "/etc"}` reads as `shelf`, where #63 promises a field a task does not have
+  is refused. Nothing reads such a field, so no line changes. Making those
+  variants empty struct variants, as `Query::Snapshot {}` is, would refuse
+  it, at the price of spelling every one with braces wherever it is built or
+  matched.
 - **Names outside ASCII.** The specification allows "unicode lowercase
   alphanumeric characters" in a name, while listing `a-z` and `0-9`, and its
   reference validator accepts more than ASCII. Mindflayer holds names to ASCII,
@@ -7408,7 +7765,13 @@ just listed.
   worded from what it found (a gathered name that is not one folder name, an
   update that cannot tell where a copy came from), carry a code of the CLI's:
   each would join `mindflayer_cli::CODES` once the panel acts on it.
-- **A command `ui` will be.** The list of what a front end with no terminal
-  does not run is to refuse `ui` too, a server started from the panel's own,
-  and `ui` is no command yet: #68 adds it, and `Refusal::of_flayer`, a match
-  over every command, does not compile until it says where `ui` goes.
+- **A run left behind by Ctrl-C.** The first Ctrl-C to `flayer ui` waits
+  for every request under way, but a run whose client stopped waiting is no
+  request any more: it goes on on the server's writer thread, which nothing
+  waits for, and the process can end under it, as it does under any run at
+  a second Ctrl-C. The server could hand the front end that thread to join
+  once it stops, at the price of a Ctrl-C that waits for a run nobody
+  watches.
+- **Ctrl-C off Unix.** `ui_test` stops the panel with SIGINT, sent by
+  `kill`, so it runs on Unix only. On Windows `ui` listens for the console's
+  Ctrl-C (`tokio::signal::windows::ctrl_c`), which no test sends yet (#154).

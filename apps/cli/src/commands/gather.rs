@@ -5,11 +5,12 @@ use std::fmt::Write as _;
 use std::path::Path;
 
 use mindflayer_core::gather::{self, Report, Request, Scrub, Watch};
+use mindflayer_core::install::{offered_by_loads, Offer};
 use mindflayer_core::url::redacted;
 use mindflayer_core::{FlayerWorkspace, Kind};
 
 use super::{reading_workspace, workspace_here};
-use crate::render::{indent, plural, printable, table};
+use crate::render::{indent, json_or_text, plural, printable, table};
 use crate::{CliError, Failure, GatherCommand, Lookup, Outcome, Warning};
 
 /// Collect artifacts onto the workspace shelf, or say what is already on it.
@@ -44,15 +45,20 @@ pub(crate) fn run_gather(
                 }),
             }
         }
-        GatherCommand::List => reading_workspace(directory, lookup, shelf),
+        GatherCommand::List { json } => {
+            let mut found = None;
+            let text =
+                reading_workspace(directory, lookup, |workspace| shelf(workspace, &mut found))?;
+            Ok(json_or_text(found.filter(|_| *json), text))
+        }
     }
 }
 
 /// `flayer gather list`: what can be installed from elsewhere, from a
-/// ledger read without being made. A workspace that has gathered nothing
-/// has no database, and listing that is no reason to create one.
-fn shelf(workspace: &FlayerWorkspace) -> Result<Outcome, Failure> {
-    use mindflayer_core::install::{offered_by_loads, Offer};
+/// ledger read without being made, with each offer kept in `found`, for
+/// `--json` to print in place of the text. A workspace that has gathered
+/// nothing has no database, and listing that is no reason to create one.
+fn shelf(workspace: &FlayerWorkspace, found: &mut Option<Vec<Offer>>) -> Result<Outcome, Failure> {
     let ledger = workspace.ledger_for_reading().map_err(CliError::from)?;
     // What the workspaces it loads offer first, as the install screen
     // orders them; what they cannot offer is a warning beside the rest, not
@@ -81,11 +87,9 @@ fn shelf(workspace: &FlayerWorkspace) -> Result<Outcome, Failure> {
         }
     }
     let ok = stderr.is_empty();
-    Ok(Outcome {
-        stdout: shelf_listing(&offers, workspace.loads().is_empty()),
-        stderr,
-        ok,
-    })
+    let stdout = shelf_listing(&offers, workspace.loads().is_empty());
+    *found = Some(offers);
+    Ok(Outcome { stdout, stderr, ok })
 }
 
 /// What a scrub of the ledger has to tell, for a command that writes to it.
@@ -238,7 +242,7 @@ fn gathered(url: &str, report: &Report) -> Outcome {
 ///
 /// Empty, it says how to fill it, and suggests loading only when nothing is
 /// loaded yet; `flayer load` on its own lists what is.
-fn shelf_listing(shelf: &[mindflayer_core::install::Offer], nothing_loaded: bool) -> String {
+fn shelf_listing(shelf: &[Offer], nothing_loaded: bool) -> String {
     if shelf.is_empty() {
         return if nothing_loaded {
             String::from(

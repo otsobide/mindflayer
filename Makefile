@@ -97,8 +97,10 @@ BINS := mind flayer
 # alias:binary pairs, linked by dev/link and removed by dev/unlink.
 ALIASES := mf:flayer
 
+# The panel first, as for a release: the copies embed it as they compile.
 .PHONY: install
-install: ## Install `mind` and `flayer` as copies in cargo's bin directory
+install: ## Install `mind` and `flayer` as copies in cargo's bin directory, the panel built first
+	$(MAKE) -C apps/web build
 	cargo install --path apps/cli --locked
 
 .PHONY: dev/link

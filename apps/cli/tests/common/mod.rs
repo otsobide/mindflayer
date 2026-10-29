@@ -101,26 +101,65 @@ pub const CLEARED: [&str; 5] = [
 /// same process. The home is a directory rather than empty because, with
 /// `HOME` empty, the standard library falls back to the account's real one.
 pub fn spawn(binary: &str, dir: &Path, args: &[&str], env: &[(&str, &str)]) -> Spawned {
+    let home = TempDir::new().unwrap();
+    let output = command(binary, dir, args, env, home.path())
+        .output()
+        .expect("run the binary");
+    Spawned {
+        stdout: String::from_utf8_lossy(&output.stdout).into_owned(),
+        stderr: String::from_utf8_lossy(&output.stderr).into_owned(),
+        ok: output.status.success(),
+    }
+}
+
+/// [`spawn`], left running with its stdout and stderr piped: for a command
+/// that goes on until it is stopped, `ui`, whose output is read as it goes.
+pub fn start(binary: &str, dir: &Path, args: &[&str], env: &[(&str, &str)]) -> Started {
+    let home = TempDir::new().unwrap();
+    let child = command(binary, dir, args, env, home.path())
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
+        .spawn()
+        .expect("start the binary");
+    Started { child, _home: home }
+}
+
+/// The command [`spawn`] and [`start`] run: `binary` from `dir`, with `env`
+/// the only variables of [`CLEARED`] it sees and `home` as its home.
+fn command(
+    binary: &str,
+    dir: &Path,
+    args: &[&str],
+    env: &[(&str, &str)],
+    home: &Path,
+) -> std::process::Command {
     let program = match binary {
         "mind" => env!("CARGO_BIN_EXE_mind"),
         "flayer" => env!("CARGO_BIN_EXE_flayer"),
         _ => panic!("no binary called {binary}"),
     };
-    let home = TempDir::new().unwrap();
     let mut command = std::process::Command::new(program);
     command.current_dir(dir).args(args);
     for variable in CLEARED {
         command.env_remove(variable);
     }
-    command
-        .env("HOME", home.path())
-        .env("USERPROFILE", home.path());
+    command.env("HOME", home).env("USERPROFILE", home);
     command.envs(env.iter().copied());
-    let output = command.output().expect("run the binary");
-    Spawned {
-        stdout: String::from_utf8_lossy(&output.stdout).into_owned(),
-        stderr: String::from_utf8_lossy(&output.stderr).into_owned(),
-        ok: output.status.success(),
+    command
+}
+
+/// A binary [`start`] left running, killed if the test is done with it
+/// before it stops, so a failed assertion leaves no server behind.
+pub struct Started {
+    pub child: std::process::Child,
+    /// Its home, kept for as long as it runs.
+    _home: TempDir,
+}
+
+impl Drop for Started {
+    fn drop(&mut self) {
+        let _ = self.child.kill();
+        let _ = self.child.wait();
     }
 }
 
@@ -167,17 +206,61 @@ pub struct Envelope {
     pub version: u32,
     pub data: serde_json::Value,
     pub warnings: Vec<String>,
+    pub coded_warnings: Vec<Coded>,
+}
+
+/// One of an envelope's `coded_warnings`.
+#[derive(Debug, PartialEq, Eq, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Coded {
+    pub code: Option<String>,
+    pub message: String,
 }
 
 /// The envelope a `--json` outcome printed, its version held to the one this
 /// suite was written against, and its data read as `T`.
+///
+/// Its `coded_warnings` are held to say what its `warnings` say, in the same
+/// order, so every test of a report checks that the two agree.
 pub fn enveloped<T: serde::de::DeserializeOwned>(outcome: &Outcome) -> (T, Vec<String>) {
-    let envelope: Envelope = serde_json::from_str(&outcome.stdout)
-        .unwrap_or_else(|error| panic!("not the envelope: {error}\n{}", outcome.stdout));
-    assert_eq!(envelope.version, 2, "{}", outcome.stdout);
+    let envelope = envelope(outcome);
     let data = serde_json::from_value(envelope.data)
         .unwrap_or_else(|error| panic!("not the data asked for: {error}\n{}", outcome.stdout));
     (data, envelope.warnings)
+}
+
+/// The code of each warning a `--json` outcome printed, in order, as its
+/// `coded_warnings` say: none for one no code is given to.
+pub fn warning_codes(outcome: &Outcome) -> Vec<Option<String>> {
+    envelope(outcome)
+        .coded_warnings
+        .into_iter()
+        .map(|coded| coded.code)
+        .collect()
+}
+
+/// The envelope a `--json` outcome printed, as [`enveloped`] holds it.
+fn envelope(outcome: &Outcome) -> Envelope {
+    let envelope: Envelope = serde_json::from_str(&outcome.stdout)
+        .unwrap_or_else(|error| panic!("not the envelope: {error}\n{}", outcome.stdout));
+    assert_eq!(envelope.version, 2, "{}", outcome.stdout);
+    let messages: Vec<&str> = envelope
+        .coded_warnings
+        .iter()
+        .map(|coded| coded.message.as_str())
+        .collect();
+    assert_eq!(messages, envelope.warnings, "{}", outcome.stdout);
+    envelope
+}
+
+/// The code of each line an outcome said on stderr, in order: what
+/// [`warning_codes`] reads back from the JSON of the same report.
+pub fn stderr_codes(outcome: &Outcome) -> Vec<Option<String>> {
+    outcome
+        .stderr
+        .iter()
+        .map(|line| line.code.map(str::to_owned))
+        .collect()
 }
 
 /// Write a skill into an already initialized mind project.

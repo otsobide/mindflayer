@@ -5,9 +5,10 @@ carries a `.mind` directory beside its **skills** and **rules**, and a
 workspace above it carries a `.mindflayer` that orchestrates several such
 projects at once.
 
-One shared Rust engine (`mindflayer-core`) behind every front end. The first
-front end is the CLI (`mind` for a project, `flayer` for a workspace), and the
-layout leaves room for a desktop app later without moving the engine.
+One shared Rust engine (`mindflayer-core`) behind every front end: the CLI
+(`mind` for a project, `flayer` for a workspace), the TUI it opens, and a
+[control panel](#control-panel) in your browser, served by the same binary.
+The layout leaves room for a desktop app later without moving the engine.
 
 > **MVP scope.** Mindflayer is being built incrementally. Today it creates the
 > two kinds of directory, registers projects with a workspace, keeps skills and
@@ -15,7 +16,8 @@ layout leaves room for a desktop app later without moving the engine.
 > repositories onto the workspace's shelf, installs them into the projects it
 > manages, and creates, edits, renames and removes skills and rules. It does
 > every one of those at both levels, from the command line and from a TUI that
-> runs the same commands.
+> runs the same commands. A control panel in the browser, `flayer ui`, runs
+> them through its API too; so far its page is the frame the views will fill.
 
 ## The two levels
 
@@ -262,7 +264,12 @@ workspace, `mf link` registers projects with it, and `mf` on its own opens
 They are **symlinks**, not copies, so every later `make build` updates the
 binaries you are running without reinstalling anything. `make dev/unlink` takes
 them back off. If you only want to use the tools rather than work on them,
-`make install` puts real copies in the same place.
+`make install` puts real copies in the same place. It builds [the control
+panel](#control-panel) into them first, so it needs Node 24 and pnpm as well
+([developing the panel](#developing-the-panel) has which pnpm, and `PNPM` for
+one corepack has not put on your PATH). `cargo install --path apps/cli
+--locked` makes the copies without either, and their `flayer ui` serves only a
+page saying the panel was not built.
 
 That place is `~/.cargo/bin`, which is on your PATH if `rustup` put it there
 and is **not** if your Rust came from a system package. `make dev/link` says so
@@ -365,10 +372,11 @@ mind edit <NAME> [--editor CMD]
                            # open it in $VISUAL or $EDITOR, then check it
 mind rename <NAME> <NEW>   # folder and declared name together; `mv` for short
 mind remove <NAME> --yes   # delete it; without --yes, say what would go; `rm`
-mind templates             # what `add --template` can start from here
-mind list [KIND]           # this project's artifacts; `mind list rules` filters
-mind show <NAME>           # one artifact; `rule:deploy` when a name is ambiguous
-mind validate [KIND|NAME]  # check a kind, one artifact, or everything
+mind templates [--json]    # what `add --template` can start from here
+mind list [KIND] [--json]  # this project's artifacts; `mind list rules` filters
+mind show <NAME> [--json]  # one artifact; `rule:deploy` when a name is ambiguous
+mind validate [KIND|NAME] [--json]
+                           # check a kind, one artifact, or everything
 mind status [--json]       # what it holds, from where, for which agents
 mind link / mind unlink    # this project, into or out of the workspace above
 mind load / mind unload <path>...
@@ -401,6 +409,9 @@ mind migrate [--agents AGENTS] [--local|--shared] [--yes]
                            # agents read
 
 flayer                     # the TUI: everything below, a key each
+flayer ui [--port PORT] [--no-open] [--dev]
+                           # the control panel, in a browser, until Ctrl-C;
+                           # mind ui is the same
 flayer init [PATH] [--skills DIR] [--rules DIR]
                            # create a .mindflayer here, or in PATH
 flayer activate [DIR] [--shell SHELL]
@@ -416,7 +427,7 @@ flayer add|edit|rename|remove|templates [-p PROJECT] ...
 flayer remove <NAME> --everywhere [--yes]
                            # one of its own, out of every project it was
                            # installed into first; without --yes, the same
-flayer list|show|validate [-p PROJECT] ...
+flayer list|show|validate [-p PROJECT] [--json] ...
                            # the workspace's own and every project's, or one;
                            # validate checks the shelf too
 flayer status [-p PROJECT] [--json]
@@ -437,7 +448,8 @@ flayer load <path>...      # offer another workspace's own skills and rules,
 flayer unload <path>...    # stop offering them
 
 flayer gather git <URL>    # collect skills from a repository onto the shelf
-flayer gather list         # what is on the shelf or loaded, and where from
+flayer gather list [--json]
+                           # what is on the shelf or loaded, and where from
 flayer install             # a screen for putting skills and rules into its
                            # projects
 flayer install (-p PROJECT)...|--all-projects <NAME> [--from ORIGIN] [--force]
@@ -617,7 +629,8 @@ $ flayer scan ~/Work --depth 2 --json
     "untraced": [],
     "truncated": false
   },
-  "warnings": []
+  "warnings": [],
+  "coded_warnings": []
 }
 ```
 
@@ -1202,8 +1215,9 @@ the JSON says the same; and one given a rule some of its agents read nowhere,
 which `missed` in the JSON says.
 
 `--json` prints the same report in the envelope every reading command's
-`--json` will share: the data, the warnings that would have gone to stderr,
-and a version, which moves if a field ever goes or changes meaning. The names
+`--json` shares ([machine-readable output](#machine-readable-output)): the
+data, the warnings the text says on stderr, each again with its code, and a
+version, which moves if a field ever goes or changes meaning. The names
 in it are a contract, spelled as a command line spells them; the version is 2
 since `installed` became `current`, `outdated` or `orphaned`, and `partial`
 became `missing`:
@@ -1235,10 +1249,100 @@ $ flayer status -p tanukeys --json
       }
     ]
   },
-  "warnings": []
+  "warnings": [],
+  "coded_warnings": []
 }
 hint: tanukeys is marked by a mind.toml, which `mind migrate` moves to a settings.toml
 ```
+
+## Machine-readable output
+
+The commands that report what is there take `--json`, at either level:
+`list`, `show`, `validate`, `templates` and `status`, and `flayer
+workspaces`, `flayer scan` and `flayer gather list`. Each prints what it
+read in one envelope, the same for every command, so a script or an agent
+reads them all one way, and reads what a workspace holds, its own
+artifacts and each project's, their templates and what it can install from
+elsewhere, as every front end reads them. What it loads, the sources its
+shelf is filled from and its history have no `--json` yet. Say `collapse`
+holds the rule `git/no-force-push`, and a skill folder whose `SKILL.md` has
+lost its front matter:
+
+```
+$ mind validate --json
+{
+  "version": 2,
+  "data": {
+    "artifacts": [
+      {
+        "kind": "rule",
+        "name": "git/no-force-push",
+        "path": "/home/you/Projects/collapse/rules/git/no-force-push.md",
+        "project": "/home/you/Projects/collapse",
+        "issues": [],
+        "invalid": false,
+        "copies_differ": false
+      }
+    ],
+    "invalid": 0,
+    "unreadable": 1,
+    "differing": 0
+  },
+  "warnings": [
+    "/home/you/Projects/collapse/skills/broken/SKILL.md: the file does not start with a `---` front matter fence"
+  ],
+  "coded_warnings": [
+    {
+      "code": "front_matter_missing",
+      "message": "/home/you/Projects/collapse/skills/broken/SKILL.md: the file does not start with a `---` front matter fence"
+    }
+  ]
+}
+warning: /home/you/Projects/collapse/skills/broken/SKILL.md: the file does not start with a `---` front matter fence
+```
+
+`data` is what the command's text lists:
+
+- `list`: each holder as every front end reads it, `library` for the
+  workspace's own (`null` for one project's listing) and `projects` for
+  every entry the workspace links, a stale one saying why in `stale`. A
+  project says where it authors each kind, its settings and templates, and
+  every artifact it holds: its state, the agents that read it, where it came
+  from, where each copy is, what `validate` says of it, and for a file that
+  does not read, `unread`, with why. `mind list --json` reads the project
+  against the workspace that links it, as `mind status` does, to say how
+  each stands; when that workspace cannot be read, the project is read
+  alone and its `failures` say why, with no warning the text does not say.
+  `list rules --json` holds rules alone.
+- `show`: each artifact the name matches, with its file, what its front
+  matter declares and its `body`.
+- `validate`: each artifact checked, its `issues` (each with its `code`,
+  whether it is only a `warning`, and its `message`) and whether it is
+  `invalid`, and the counts the verdict follows.
+- `templates`: each template, its `origin` the folder or file it is, `null`
+  for one built in.
+- `gather list`: what can be installed from elsewhere, each with the `place`
+  it comes from (`loaded` or `shelf`) and its `origin`, as `--from` takes it.
+- `status`, `workspaces` and `scan`: the reports shown in [what each project
+  has](#what-each-project-has), [the flayers this machine
+  knows](#the-flayers-this-machine-knows) and [commands](#commands).
+
+`warnings` holds what the text says on stderr as `warning:` lines, without
+the prefix, and `coded_warnings` the same lines, in the same order, each
+beside its `code`: a word for what went wrong that rewording the message
+never changes, `null` for a line none is given to. Each is still said on
+stderr too, as above, as the text says it, so piping the JSON into `jq`
+leaves them on the terminal; a script reads them in the envelope and need
+not read stderr, where a `hint:`, advice for whoever reads the terminal, is
+said too and the envelope leaves it out. The exit status is the text's:
+non-zero when something could not be read, as above, and for `validate`
+when something does not pass. An error that stops a command is still a line
+on stderr, with nothing on stdout.
+
+The names in it are a contract. `version` is 2, and version 2 only grows
+additively: a field added leaves it at 2, so a script written for it passes
+over a name it does not know, and only a field dropped, renamed or holding
+something else would move it.
 
 ## Following a project that moved
 
@@ -1650,6 +1754,60 @@ whose directory has gone is listed with a `!`, where `U` drops it, or, when
 the scan found it [moved](#following-a-project-that-moved),
 `M` follows it; an artifact `validate` would reject is marked `✗`, with the
 reason underneath.
+
+## Control panel
+
+`flayer ui` serves a control panel for the workspace from the binary itself,
+and opens it in your browser. It runs until Ctrl-C:
+
+```
+$ flayer ui
+http://127.0.0.1:40185/?token=bf6934705762815d0a708aceb59cb5f9f4fd65466d0f726e0b7a8d3749053513
+note: serving the workspace at /home/you/Projects on 127.0.0.1:40185 until Ctrl-C
+```
+
+The link is the first line on stdout, and the only one while it serves, for
+a script to read; what it prints once it stops (below) follows it there.
+`--no-open` prints it without opening a browser, and a browser that cannot
+be opened, as on a machine with no display, is a warning, not a failure.
+`mind ui` is the same command from inside a project. Either serves the
+workspace a command run there would use, decided once as it starts, from
+`-C`, `--home`, `-W` and the agent homes: nothing the browser sends changes
+which one.
+
+It listens on 127.0.0.1 only, on a port the system picks, or the one `--port`
+names. The link carries a token made for this launch, which the browser
+trades for a cookie on its first request, so the token leaves the address
+bar. A request without it gets a 401, and a page on another site, or on
+another port of your machine, cannot use the cookie to change anything
+([what keeps other pages
+out](docs/architecture.md#what-keeps-other-pages-out)).
+
+**Everything the panel changes, it changes by running a command**, as the
+TUI does. It sends a task; the server turns it into the command lines you
+could have typed, shows them before they run, and runs them through the same
+parser, one at a time. A command that would open a screen, an editor or a
+shell is refused, and so is a path outside what the workspace allows, each
+with a reason and a code. The first Ctrl-C lets whatever is running finish,
+a second stops at once, and on the way out it prints every command that
+changed something, with what each said, as the TUI does when it closes:
+
+```
+$ flayer install -p /home/you/Projects/collapse skill:commit-style
+installed commit-style into collapse, from workspace
+```
+
+So far the panel is the frame its views will fill, which come with the
+[next milestone](https://github.com/otsobide/mindflayer/milestones). The API
+under it is already there for a script holding the token as a Bearer token:
+`POST /api/query` for a read, `POST /api/commands/preview` for the lines a
+task is, `POST /api/commands` to run them, and `GET /api/transcript` for
+everything the session ran.
+
+The panel is built into the binaries by a cargo feature, `ui`, which is on by
+default. `cargo build -p mindflayer-cli --no-default-features` leaves it out,
+and with it the server and what only the panel needs (axum, the embedded
+files, the browser opener); `ui` is then no command.
 
 ## Where a project keeps its artifacts
 
@@ -2320,13 +2478,14 @@ adding a directory rather than reshaping the tree:
 ```
 apps/core    mindflayer-core     projects, workspaces, artifacts.
                                  No I/O beyond files, and git when gathering.
-apps/cli     mindflayer-cli      the `mind` and `flayer` binaries, and the TUI.
-                                 Parsing and rendering only; all of it goes
-                                 through one parser.
-apps/server  mindflayer-server   the local server behind the web panel, still
-                                 unused by the binaries. Transport only: it
-                                 moves JSON between the browser and a front
-                                 end, and holds no rules.
+apps/cli     mindflayer-cli      the `mind` and `flayer` binaries, the TUI,
+                                 and the panel's backend. Parsing and
+                                 rendering only; all of it goes through one
+                                 parser.
+apps/server  mindflayer-server   the local server behind the web panel, which
+                                 `flayer ui` runs. Transport only: it moves
+                                 JSON between the browser and a front end,
+                                 and holds no rules.
 apps/web     mindflayer-web      the web panel the server embeds: Vue and
                                  Nuxt UI, built with Vite. It asks through
                                  the server and draws; no rules here either.
@@ -2362,7 +2521,8 @@ and `--workspace ""`, and the few that run the binaries clear
 `$MINDFLAYER_HOME` and `$MINDFLAYER_WORKSPACE` and give them a home of their
 own. Nor do they touch your agents' folders, which no command reads yet, and
 the commands they run themselves give every agent-home option empty. The server's suites never leave 127.0.0.1, and run
-against a fake front end rather than the CLI.
+against a fake front end rather than the CLI. The CLI's `ui` suite starts
+`flayer ui` on 127.0.0.1 with `--no-open`, so no test opens a browser.
 
 ```bash
 cargo test -p mindflayer-cli --test tui_test          # one area
@@ -2428,19 +2588,19 @@ suites still need no Node; the panel joins it once CI installs Node
 `apps/web/tests/<area>.test.ts`.
 
 `make web/build` writes `apps/web/dist`, which the server embeds as it
-compiles. A server compiled before any build answers every page with one
-saying to run it, and goes on doing so after the build until
-`mindflayer-server` compiles again: which is built first is an [open
-question](docs/architecture.md#open-questions) until
-[#68](https://github.com/otsobide/mindflayer/issues/68) settles it.
+compiles, and marks the server to compile again, so the next build of the
+binaries takes the panel in. One built before the panel answers every page
+with one saying to run it. `make install` and `make cli/release` build the
+panel first, so those two need Node as well.
 `make web/e2e` has no browser suite to run yet, and says so
 ([#75](https://github.com/otsobide/mindflayer/issues/75)).
 
 `make web/dev` serves the panel on `http://127.0.0.1:5173` and reloads it as
-you edit. It passes `/api` on to `flayer ui --dev --port 7878`, the command
-[#68](https://github.com/otsobide/mindflayer/issues/68) adds, and the launch
-link too: open the link that command prints with its port changed to 5173,
-and the token is traded for its cookie where the panel runs.
+you edit. It passes `/api`, and the launch link, on to `flayer ui --dev`,
+run beside it, which listens on port 7878, where the dev server's proxy
+looks, takes requests from the dev server's pages, and prints and opens a
+link to the dev server: the token is traded for its cookie where the panel
+runs.
 
 Three rules keep the panel working under the server's content security
 policy, which lets nothing in from another host and nothing inline:

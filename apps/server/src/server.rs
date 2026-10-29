@@ -24,6 +24,8 @@ pub struct Server<B: Backend> {
     backend: B,
     panel: Panel,
     log: Option<Sink>,
+    port: u16,
+    dev_server: Option<String>,
 }
 
 impl<B: Backend> Server<B> {
@@ -33,6 +35,8 @@ impl<B: Backend> Server<B> {
             backend,
             panel: Panel::default(),
             log: None,
+            port: 0,
+            dev_server: None,
         }
     }
 
@@ -49,26 +53,58 @@ impl<B: Backend> Server<B> {
         self
     }
 
+    /// Listen on `port` rather than on one the system picks; 0 still asks
+    /// for any.
+    ///
+    /// For a client that must know the port before the server starts, as
+    /// the panel's dev server does, whose proxy names it in its settings.
+    /// A port somebody else holds makes [`bind`](Self::bind) fail rather
+    /// than take another, where that client would never find it.
+    pub fn port(mut self, port: u16) -> Self {
+        self.port = port;
+        self
+    }
+
+    /// Serve the panel through its dev server, at `origin` as a browser
+    /// writes one (`http://127.0.0.1:5173`): take requests from that page
+    /// as from the server's own, and give the launch link there.
+    ///
+    /// For working on the panel itself. The dev server serves its files as
+    /// they are edited, and proxies `/api` and the launch link here, naming
+    /// this server in Host; but a change still says the browser's Origin,
+    /// the dev server's, which the check that keeps other pages out refuses
+    /// from any page but the server's own. So one exact origin is added,
+    /// only when a front end asks for it. The link points there because the
+    /// panel is served there: its token is traded for the cookie through
+    /// the proxy, and the redirect lands on the dev server's page.
+    pub fn dev_server(mut self, origin: impl Into<String>) -> Self {
+        self.dev_server = Some(origin.into());
+        self
+    }
+
     /// Take a port and issue the launch's token.
     ///
     /// 127.0.0.1 and nothing else, not even as an option: the panel is for
     /// the person at this machine, and every address beyond loopback is a
-    /// network where the token would travel in clear text. Port 0, so the
-    /// system picks one that is free rather than the server failing on a
-    /// port somebody else took.
+    /// network where the token would travel in clear text. Port 0 unless the
+    /// front end named one ([`port`](Self::port)), so the system picks one
+    /// that is free rather than the server failing on a port somebody else
+    /// took.
     ///
     /// Synchronous, and std's listener rather than tokio's, so that a front
     /// end can learn the port and print the link before it has a runtime.
     pub fn bind(self) -> io::Result<Listening> {
-        let listener = TcpListener::bind((Ipv4Addr::LOCALHOST, 0))?;
+        let listener = TcpListener::bind((Ipv4Addr::LOCALHOST, self.port))?;
         let address = listener.local_addr()?;
         let token = Token::issue();
+        let dev_server = self.dev_server.clone();
         let router = route(self, &token, address.port())?;
         Ok(Listening {
             listener,
             address,
             token,
             router,
+            dev_server,
         })
     }
 }
@@ -79,6 +115,8 @@ pub struct Listening {
     address: SocketAddr,
     token: Token,
     router: Router,
+    /// Where the panel is served from instead, when that is a dev server.
+    dev_server: Option<String>,
 }
 
 impl Listening {
@@ -93,16 +131,16 @@ impl Listening {
         self.token.as_str()
     }
 
-    /// The link that opens the panel: `http://127.0.0.1:<port>/?token=...`.
-    /// The first request trades the token for a cookie and drops it from the
-    /// address bar.
+    /// The link that opens the panel: `http://127.0.0.1:<port>/?token=...`,
+    /// or the same at the dev server's origin when the panel is served
+    /// there ([`Server::dev_server`]). The first request trades the token
+    /// for a cookie and drops it from the address bar.
     pub fn url(&self) -> String {
-        format!(
-            "http://{}/?{}={}",
-            self.address,
-            auth::PARAMETER,
-            self.token.as_str()
-        )
+        let origin = match &self.dev_server {
+            Some(dev_server) => dev_server.clone(),
+            None => format!("http://{}", self.address),
+        };
+        format!("{origin}/?{}={}", auth::PARAMETER, self.token.as_str())
     }
 
     /// The name of the cookie the token is kept in on this port.
@@ -171,7 +209,7 @@ fn route<B: Backend>(server: Server<B>, token: &Token, port: u16) -> io::Result<
         // Outside the exchange, so nothing is answered to a request that
         // names another host, not even the launch link.
         .layer(middleware::from_fn_with_state(
-            Arc::new(Hosts::new(port)),
+            Arc::new(Hosts::new(port).dev_server(server.dev_server)),
             guard::same_origin,
         ))
         // Outside the guard, so its refusals carry them too.

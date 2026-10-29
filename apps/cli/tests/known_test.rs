@@ -372,8 +372,10 @@ fn json_prints_the_list_in_the_envelope_with_its_warnings() {
             },
         ]
     );
+    // On stderr, as the text says it, for whoever reads the terminal, and in
+    // the envelope for a script.
+    assert_eq!(outcome.stderr, [format!("warning: {gone}")]);
     assert_eq!(warnings, [gone]);
-    assert!(outcome.stderr.is_empty(), "the warnings are the envelope's");
     assert!(!outcome.ok, "the exit is the text's");
 }
 
