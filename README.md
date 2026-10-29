@@ -1311,11 +1311,16 @@ warning: /home/you/Projects/collapse/skills/broken/SKILL.md: the file does not s
   project says where it authors each kind, its settings and templates, and
   every artifact it holds: its state, the agents that read it, where it came
   from, where each copy is, what `validate` says of it, and for a file that
-  does not read, `unread`, with why. `mind list --json` reads the project
-  against the workspace that links it, as `mind status` does, to say how
-  each stands; when that workspace cannot be read, the project is read
-  alone and its `failures` say why, with no warning the text does not say.
-  `list rules --json` holds rules alone.
+  does not read, `unread`, with why. Its `tally` counts them, by kind and by
+  state, and its `health` says how it stands as a whole, in the words the
+  [control panel](#control-panel) sorts by: `ok`, `attention`, `broken` or
+  `stale`. `mind list --json` reads the project against the workspace that
+  links it, as `mind status` does, to say how each stands; when that
+  workspace cannot be read, the project is read alone and its `failures`
+  say why, with no warning the text does not say. `list rules --json` holds
+  rules alone, and its `tally` and `health` are of what it holds: a skill
+  that does not read leaves a project `ok` there, which `list --json` calls
+  `broken`.
 - `show`: each artifact the name matches, with its file, what its front
   matter declares and its `body`.
 - `validate`: each artifact checked, its `issues` (each with its `code`,
@@ -1799,12 +1804,46 @@ $ flayer install -p /home/you/Projects/collapse skill:commit-style
 installed commit-style into collapse, from workspace
 ```
 
-So far the panel is the frame its views will fill, which come with the
-[next milestone](https://github.com/otsobide/mindflayer/milestones). The API
-under it is already there for a script holding the token as a Bearer token:
-`POST /api/query` for a read, `POST /api/commands/preview` for the lines a
-task is, `POST /api/commands` to run them, and `GET /api/transcript` for
-everything the session ran.
+**The overview** says which skills and rules your projects have at a
+glance. It names the workspace, where it is and how it was chosen, and counts
+what it holds: the projects it links and the entries that open none, each
+folder once, the artifacts of each kind in its projects and in its library,
+the installs that are outdated or edited, and what is on the shelf. A count
+worth a look links to the projects it is about. Below, everything that could
+not be read is listed under the project or the load it is about. A workspace
+with nothing linked, nothing of its own or nothing gathered names the
+commands that would change that.
+
+**Projects** lists every entry the workspace links: its name, path, agents
+and share mode, how many of each kind it holds, its health, and why an entry
+that opens nothing does not. The health is one word for the whole project:
+`ok`; `attention` when something asks for a command (an install outdated,
+edited, missing or orphaned, something one of its agents never reads, a
+folder its targets name that no install uses, copies of one name that
+disagree, a warning from `validate`); `broken` when something does not read
+or does not pass `validate`; and `stale`. Click a column to sort by it, type
+to filter by name or path, or show one health alone. The address keeps all
+of it, so a link or a reload opens the table as you left it.
+
+**A project's page** groups what it holds by kind. Each artifact says how it
+stands, which of the project's agents read it (one that does not is crossed
+out), where it came from, where its copies are, and what `validate` says of
+it or why its file does not read. What some of its agents never read is a
+warning above. A stale entry names `flayer relink` and `flayer unlink`, and a
+kind the project holds none of names `flayer install -p` and `flayer add -p`.
+Every command the panel names says `-W` and the workspace's path, so it acts
+on the workspace the panel shows wherever you type it, for a project linked
+from outside that workspace too; a workspace not made yet names `flayer init`
+first, since `-W` never makes the one it names.
+
+Every page works from the keyboard and says every state in words, never by
+colour alone. So far the panel only shows: changing things from it comes with
+the [next milestone](https://github.com/otsobide/mindflayer/milestones). The
+API under it is there for a script holding the token as a Bearer token:
+`POST /api/query` for a read (`{"type": "snapshot"}` answers what the panel
+draws), `POST /api/commands/preview` for the lines a task is, `POST
+/api/commands` to run them, and `GET /api/transcript` for everything the
+session ran.
 
 The panel is built into the binaries by a cargo feature, `ui`, which is on by
 default. `cargo build -p mindflayer-cli --no-default-features` leaves it out,

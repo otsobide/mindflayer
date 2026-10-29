@@ -19,6 +19,7 @@ use crate::settings::{ProjectId, Share};
 use crate::status::State;
 use crate::template::{Origin, Template};
 use crate::url::redacted;
+use crate::view::Health;
 use crate::workspace::MarkerFile;
 
 /// The words a union of them says, as [`union`] or [`lines`] wrote it.
@@ -91,6 +92,7 @@ fn every_word_type_says_in_typescript_the_words_serde_writes() {
     says_what_serde_writes(&Kind::ALL);
     says_what_serde_writes(&Agent::ALL);
     says_what_serde_writes(&State::ALL);
+    says_what_serde_writes(&Health::ALL);
     says_what_serde_writes(&Share::ALL);
     says_what_serde_writes(&[
         Reason::Explicit,

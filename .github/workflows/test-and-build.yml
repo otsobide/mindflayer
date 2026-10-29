@@ -120,7 +120,10 @@ jobs:
   # committed, is `test (web)`'s vue-tsc, and the two together hold the
   # panel to what Rust writes. A job of its own rather than a step of
   # `test (cli)`, so a drift is a check that says so by its name, apart from
-  # a test that failed, and is required on its own.
+  # a test that failed, and is required on its own. The snapshots the
+  # panel's tests render from are written from Rust and committed the same
+  # way, so they drift the same way and are checked here too, under the
+  # name the rulesets already require.
   types-drift:
     name: types drift (web)
     needs: test-core
@@ -145,6 +148,9 @@ jobs:
 
       - name: Check the panel's types are the ones Rust writes
         run: make web/types/check
+
+      - name: Check the panel's fixtures are the ones Rust writes
+        run: make web/fixtures/check
 
   # The server depends on no mindflayer crate, core included, so nothing here
   # needs core's tests to pass first. It waits for them anyway: core is the

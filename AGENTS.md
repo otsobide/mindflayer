@@ -50,6 +50,8 @@ make web/lint             # ESLint, its style included; make web/fmt fixes that
 make web/build            # vue-tsc, then apps/web/dist, which the server embeds
 make web/types            # write the types from Rust into src/api/generated, then vue-tsc
 make web/types/check      # cargo and git only (CI): fail when they are not the ones committed
+make web/fixtures         # write the snapshots the views' tests render, from Rust (cargo only)
+make web/fixtures/check   # cargo and git only (CI): fail when they are not the ones committed
 make web/typecheck        # vue-tsc alone
 make web/test PNPM='npx --yes pnpm@12.15.0'
 pnpm --dir apps/web exec vitest run tests/shell.test.ts      # one suite
@@ -62,7 +64,10 @@ lint` are Rust only, so a change to the panel runs `make web/lint` too; only
 `make lint`'s em dash check (`make lint/em-dash`) reads every tracked file,
 the panel's included. A change to a type core or the CLI hands
 the panel runs `make web/types` and commits what it writes: CI's `types
-drift (web)` runs `make web/types/check`, which needs no Node. The other way
+drift (web)` runs `make web/types/check`, which needs no Node. A change to
+what the snapshot holds runs `make web/fixtures` too, and commits the
+snapshots it writes into `apps/web/tests/fixtures`, which the same job
+checks with `make web/fixtures/check`. The other way
 round, `make install` and `make cli/release` build the panel before the
 binaries that embed it where Node and pnpm run, and warn otherwise (`make
 web/build/if-node`), and `make web/build` touches
@@ -109,8 +114,9 @@ under `apps/` with its own `Makefile`:
   (`everywhere`), and bringing a skill somebody keeps in a project's agents'
   folders into the library, its copies recorded as installed from there
   (`adopt`), the stable code each of its errors gives (`code`), the
-  snapshot every front end reads a workspace through, and the part of it
-  `list --json` prints (`view`), one file of an artifact read as text for
+  snapshot every front end reads a workspace through, with what it counts
+  and each project's health, and the part of it `list --json` prints
+  (`view`), one file of an artifact read as text for
   the panel (`contents`), which paths and entries a request from outside
   may name (`policy`), and what `show` and `validate` say of each
   artifact (`reading`). Its only I/O is files, and it never reads the
@@ -160,10 +166,16 @@ under `apps/` with its own `Makefile`:
   with pnpm. `src/main.ts` mounts what `src/panel.ts` installs (router,
   Pinia, Vue Query, Nuxt UI, the transport), which the shell test installs
   too. `src/api/transport.ts` is the `Transport` interface and `useTransport`,
-  and `src/api/http.ts` its HTTP implementation. `src/pages/` holds one page
-  per route (file routes), `src/components/` the frame (`AppSidebar`,
-  `AppHeader`, `AppLogo`), `src/stores/` Pinia's UI state, `src/query.ts`
-  the Vue Query client, `src/theme.ts` the palette, `src/color-mode.ts` the
+  and `src/api/http.ts` its HTTP implementation, `src/api/snapshot.ts` the
+  one query of the snapshot every view reads. `src/pages/` holds one page
+  per route (file routes): the overview (`index`), the projects
+  (`projects`) and a project's page (`project`, which `src/routes.ts`
+  names by its entry in the query). `src/components/` holds the frame
+  (`AppSidebar`, `AppHeader`, `AppLogo`) and the views' pieces: the badges
+  of a state, a health and the agents, a count, the warnings panel, the
+  commands an empty state names, and `SnapshotGate`, which draws a page
+  once the snapshot is answered. `src/stores/` holds Pinia's UI state,
+  `src/query.ts` the Vue Query client, `src/theme.ts` the palette, `src/color-mode.ts` the
   colour mode, and `src/overrides/` what replaces two pieces of the
   libraries for the CSP. `src/*.d.ts` are written by the Vite plugins and
   committed, and so is `src/api/generated/`, written from Rust by `make
@@ -757,7 +769,15 @@ These are easy to break from a single file without noticing.
   `EventSource`, `WebSocket` or `XMLHttpRequest` (an ESLint rule, tested in
   `tests/lint.test.ts`). Authentication is the transport's: relative URLs,
   the `HttpOnly` cookie, the `X-Mindflayer: 1` header. What the server
-  answers belongs in Vue Query; Pinia holds UI state only.
+  answers belongs in Vue Query; Pinia holds UI state only. A view lays
+  out, groups and filters what the snapshot lists: every count it shows is
+  one the snapshot carries (`summary`, a project's `tally`), every verdict
+  one core gave (a project's `health`), every order the snapshot's
+  (`kinds`, `states`, `healths`, the registry's). A count or a verdict a
+  view needs is added to `view::Snapshot` in core, never worked out from
+  the lists, and a kind core adds reaches every view with no change
+  (`tests/kinds.test.ts`). Every page passes axe (`tests/a11y.test.ts`),
+  works from the keyboard, and never says a state by colour alone.
 - **The panel's types are written from Rust, and are its contract.** Every
   type core and the CLI hand the panel, or take from it, derives
   `ts_rs::TS` beside serde's derive under the `ts` feature
@@ -781,7 +801,8 @@ These are easy to break from a single file without noticing.
   declared in `main.css` while Nuxt UI's colours plugin is a stub
   (`src/overrides/colors.ts`), and the colour mode switches by class
   (`src/color-mode.ts`). `tests/dist.test.ts` builds the panel and checks
-  it; `tests/shell.test.ts` fails on any `<style>` element added at run time.
+  it; `tests/shell.test.ts` and `tests/views.test.ts` fail on any `<style>`
+  element added at run time, and on an icon the bundle lacks.
 - **Activating prints, and writes nothing.** `flayer activate` prints core's
   code (`activate::script`), and nothing on stdout when it fails, so `eval`
   runs nothing. Nor does it remember the workspace in the default one's
@@ -859,7 +880,14 @@ These are easy to break from a single file without noticing.
   `make cli/test` runs the unit tests in that build too.
 - The panel's suites are `apps/web/tests/<area>.test.ts`, in Vitest. The
   components run in happy-dom, mounted through `createPanel` with a fake
-  `Transport` and a memory history, so they never reach a server.
+  `Transport` and a memory history, so they never reach a server. The
+  views' suites render the snapshots in `tests/fixtures`, never one drawn
+  by hand: `apps/cli/tests/fixtures_test.rs`, under the `ts` feature,
+  builds the workspaces by running the commands and writes what the
+  panel's backend answers (`make web/fixtures`), with the temporary folder
+  as `/home`, fixed ids and pinned times. `tests/panel.ts` reads them and
+  mounts the panel at an address, answering its queries with one; a test
+  about something no fixture holds changes its own copy.
   `dist.test.ts` builds the panel in a process of its own, into a temporary
   folder under `node_modules`, and leaves `dist/` alone. `licences.test.ts`
   reads every installed package's licence: a new one outside its list of
@@ -890,7 +918,7 @@ These are easy to break from a single file without noticing.
   lints, type-checks, tests and builds the panel, and uploads the build.
   `build (cli)` waits for it, embeds that build in a release, then removes
   `apps/web/dist` and runs `make cli/release/check`. `types drift (web)`
-  runs `make web/types/check`. Development targets Linux only for now: macOS
+  runs `make web/types/check` and `make web/fixtures/check`. Development targets Linux only for now: macOS
   and Windows (`test (macos)`, `test (windows)`, which set up Node too) run
   only by hand (`workflow_dispatch`) or on PRs labelled `full-matrix`, until
   the compatibility pass (#154) puts them back on pushes to `dev`/`main` and

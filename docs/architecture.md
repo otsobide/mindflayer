@@ -1604,10 +1604,16 @@ read, built and ordered in core from the read types the commands print:
 
 - the workspace: its name, its path, the rule that chose it (`reason`) and
   whether it is made;
-- every kind, agent and state core knows, from `Kind::ALL`, `Agent::ALL` and
-  `State::ALL`, so a kind added to core reaches a front end that lays its
-  columns out by them with no change of its own
-  ([D-21](#d-21-the-panels-views-follow-the-capabilities-they-show));
+- every kind, agent, state and health core knows, from `Kind::ALL`,
+  `Agent::ALL`, `State::ALL` and `view::Health::ALL`, so a kind added to
+  core reaches a front end that lays its columns out by them with no change
+  of its own
+  ([D-21](#d-21-the-panels-views-follow-the-capabilities-they-show)), and
+  a front end that sorts by one orders them as core does;
+- what it holds, counted (`summary`): the projects its registry links and
+  the entries that open none, each directory once however many entries
+  spell it, as `known` counts them, and a tally of what those projects,
+  its library and its shelf hold;
 - its library, the workspace's own, with where it keeps each kind and the
   templates `flayer add` finds;
 - each project its registry names, in marker order, a stale entry with why
@@ -1615,8 +1621,10 @@ read, built and ordered in core from the read types the commands print:
   own, since each entry is what `unlink` is given, as the TUI has always
   listed them (a report lists one directory once). A project says its entry,
   path, name, marker, id, agents and settings, where it authors each kind,
-  its templates, and what its agents miss (`unreached`, `missed`,
-  `misplaced`), as `status` says it;
+  its templates, what its agents miss (`unreached`, `missed`,
+  `misplaced`), as `status` says it, how many of its artifacts are of each
+  kind and stand in each state (`tally`), and how it stands as a whole
+  (`health`, below);
 - each artifact a holder holds, with its kind, summary, state, the agents
   that read it, where it came from, where it is held (`targets`: every copy
   found and every place the ledger records putting one), everything
@@ -1633,12 +1641,37 @@ read, built and ordered in core from the read types the commands print:
 One value rather than each front end putting its view together from the
 reports, as the TUI did until #62: which unreadable file is which artifact's,
 which install nothing of is found, how much a load offers counted across two
-spellings of it, are answers, and a second front end working them out would
-come to a second set of them. `Snapshot::read` resolves the workspace as a
+spellings of it, how many projects hold something outdated, are answers, and
+a second front end working them out would come to a second set of them. So
+the panel draws counts the snapshot carries rather than counting the lists
+beside them, which would be a rule written in TypeScript (#72). `Snapshot::read` resolves the workspace as a
 read does, whatever its inputs intend; `Snapshot::of` builds one for a front
 end that resolved the workspace itself, to scan it too. `view::Project::read`
 and `LoadedWorkspace::of` read the same way what the TUI shows of a project
 no workspace links.
+
+A project's health is the one word a front end sorts and filters its
+projects by, from nothing to do to nothing to open:
+
+- **ok**: nothing in it asks for anything.
+- **attention**: everything in it reads, and something asks for a command:
+  an install outdated, edited, missing or orphaned, which an update, a
+  forced one or an uninstall answers; a kind or a rule some of its agents
+  read nowhere; a folder its targets name that no install uses; copies of
+  one name that do not hold the same; or something `validate` only warns
+  of.
+- **broken**: something in it does not read, a file, a folder, the ledger
+  or its templates, or does not pass `validate`. Said over attention, since
+  what to do cannot be told of a file nobody can read.
+- **stale**: its entry opens no project.
+
+Somebody's copy (`foreign`) asks for nothing: it is never Mindflayer's to
+change, and only an install of its name, which refuses, meets it. Told in
+core, where a failure still says whether it is of something that does not
+read or of copies that read and disagree, which the `Said` a project keeps
+no longer tells. The panel weighing each project's lists itself was the
+other way, which would have put the rule in TypeScript, where nothing but a
+second copy of it could check it ([open questions](#open-questions)).
 
 - **A read, and nothing more.** The ledger is opened only through
   `ledger_for_reading`, the default workspace is never made for it, and no
@@ -1689,7 +1722,12 @@ a test of the panel compares like with like ([JSON, in one
 envelope](#json-in-one-envelope)). Read for those kinds rather than whole
 and cut down after, since the listing reads only them: a folder of a kind
 not asked for is no failure of its reply. Of every kind, it is the
-snapshot's library and projects, which a test holds it to.
+snapshot's library and projects, which a test holds it to. Of fewer, a
+project's `tally` and `health` are of what it read: its health is told
+from those kinds and from `misplaced`, which names every kind's folders as
+the snapshot does, so a skill that does not read leaves `ok` a project
+listed for its rules. Reading every kind for the health alone was the
+other way, which would weigh a failure the reply says nowhere.
 
 What a front end reads beside the snapshot is what no snapshot holds: a scan,
 and which workspace `mind` consults from each project, which depends on the
@@ -4369,8 +4407,9 @@ Vue 3.5 and Nuxt UI 4 on Vite 8, in TypeScript 6 checked by vue-tsc, laid out
 the way Nuxt UI's dashboard-vue template lays out a dashboard, with a page
 per file under `src/pages`. It holds no rules, any more than the server
 does: what a valid task is, or what a project has, is core's to say, and the
-panel asks. So far it is a frame, a sidebar and a header around an empty
-overview; the views come with the snapshot (#72 onward).
+panel asks. So far it shows and changes nothing: an overview, the projects
+and a project's page, drawn from the snapshot (#72), in a frame of a sidebar
+and a header ([its views](#its-views)).
 
 ### One way out: the transport
 
@@ -4510,6 +4549,100 @@ CLI and the server would depend on, was rejected with
 [D-17](#d-17-the-next-front-end-is-a-local-web-panel)'s B; the types stay
 where serde's are, and the feature only reads them.
 
+### Its views
+
+Three pages draw the snapshot ([the read model](#the-read-model)), each a
+file under `src/pages`:
+
+- **The overview** (`/`) names the workspace, where it is and why that one,
+  counts what it holds from the snapshot's `summary`, a card for every kind
+  in `kinds`, lists every failure the snapshot collected under what it is
+  about, and names the commands that would fill what is empty.
+- **The projects** (`/projects`) are a table of every entry in the
+  registry's order, with a column for every kind, sorted and filtered.
+- **A project's page** (`/project?entry=...`) groups what one holds by
+  kind, each artifact with its state, a badge in a slot for each of the
+  project's agents, its origin, its targets, what does not read and what
+  `validate` says, and what its agents never read above.
+
+Every page reads one Vue Query of the snapshot (`src/api/snapshot.ts`), so
+moving between them draws at once from what is cached, and asks again behind
+it: an answer is stale as soon as it comes, since nothing says yet when the
+workspace changed, so each page asks on opening, and so does the window when
+it comes back into focus. Once #74's events say when it changed, the panel
+will ask only then. `SnapshotGate` draws a page once the snapshot is
+answered, says it is waiting until then, and says why when the server
+refused.
+
+- **The panel lays out, groups and filters; it works nothing out.** Every
+  count it shows is one the snapshot carries, the `summary` and each
+  project's `tally` and `health`, rather than the length of a list it
+  draws, and every order is the snapshot's: the registry's for the rows,
+  `kinds` for the columns and groups, `healths` for a sort by health.
+  Grouping a project's artifacts by kind, or keeping the rows a filter
+  keeps, only chooses what to draw of what the snapshot lists. A sort by
+  name or path compares the words as the browser collates them, and one by
+  a kind's count compares numbers.
+- **A kind core adds reaches every view untouched**
+  ([D-21](#d-21-the-panels-views-follow-the-capabilities-they-show)): a
+  card, a column and a group each come from `kinds`, and a test adds one
+  the build does not have to a fixture and finds it on every page. The
+  colour and the icon of a state or a health are the panel's, kept for
+  each word it knows and plain for one it does not: the word itself, which
+  every badge says, is core's.
+- **The address is the state.** The table's text filter, its health, the
+  state the overview's counts link to, and its sort are the query of
+  `/projects`, so a link or a reload opens it as it was left. A project is
+  named by its entry in the query, never the path: an entry is a route from
+  the workspace, which can be `.` or `..`, and a browser resolves such a
+  segment in a path before the router sees it, escaped or not, which would
+  turn `/projects/..` into `/`. The server answers any path outside `/api`
+  with the page, so a reload of any of them is the panel's
+  ([The panel's files](#the-panels-files)).
+- **Usable from the keyboard, and never by colour alone.** Every control is
+  a link, a button (with `aria-pressed` for a filter and `aria-sort` on a
+  sorted column) or a field; every state and health is said as its word
+  beside its colour and icon, an agent that does not read an artifact keeps
+  its slot, crossed out, and says so in words, and a failure says its code.
+  The sidebar is a landmark of its own and each page the main one, so
+  nothing is outside a landmark. `tests/a11y.test.ts` runs axe on every
+  page, of both fixtures, with every WCAG A and AA rule and the best
+  practices but contrast, which happy-dom lays nothing out to measure.
+- **The commands are the empty states.** Whatever is empty names the
+  command that would fill it, as somebody would type it, since every change
+  is a command ([D-18](#d-18-the-panel-writes-by-running-commands)):
+  the panel runs none of them until M5. Each is a `flayer` line naming the
+  workspace with `-W` and its path, and a project with `-p` and its entry,
+  rather than a `mind` line typed from the project's folder: which workspace
+  `mind` consults there depends on the shell's own `-W`, activation and
+  home and on what is above the project ([the read
+  model](#the-read-model)), so for a project linked from beside the
+  workspace, or a panel launched with `-W` or on an activated workspace, it
+  would act on another one or none. A workspace not made yet names `flayer
+  init` first, since `-W` never makes the one it names.
+
+### Its fixtures come from Rust
+
+The views' tests render the snapshots in `apps/web/tests/fixtures`, which a
+test of the CLI writes (`apps/cli/tests/fixtures_test.rs`): it builds a
+workspace by running the commands, installing, editing a copy, changing
+the library, removing a linked folder, and reads it through the panel's
+backend as the server answers it, beside a home where nothing is made. So
+the panel's tests render what core says rather than what a person drew,
+and a field the snapshot adds, renames or fills differently reaches them.
+What differs between runs is pinned: the temporary folder reads as
+`/home`, each project's id is a fixed one, and every time the ledger keeps
+is set from one instant.
+
+They are kept as the types are ([its types come from
+Rust](#its-types-come-from-rust)): committed, so the panel's tests run
+without cargo; written under the `ts` feature, so a plain `cargo test`
+writes nothing; written again by `make web/fixtures`, which empties the
+folder first, with cargo alone; and checked by `make web/fixtures/check`,
+which fails when git sees them differ from the ones committed, in CI's
+`types drift (web)`. A fixture drawn by hand was the other way, which
+would pass its tests while the snapshot moved under it.
+
 ### Nothing the CSP refuses
 
 The server's CSP is `default-src 'self'` ([What keeps other pages
@@ -4571,6 +4704,9 @@ CI gives the panel jobs of its own:
   halves: what is committed is what Rust writes, and the panel compiles
   against what is committed. A job of its own rather than the step of `test
   (cli)` it was, so a drift is a check named for it, required on its own.
+  It runs `make web/fixtures/check` too, for the snapshots the views' tests
+  render, which drift the same way ([its fixtures come from
+  Rust](#its-fixtures-come-from-rust)).
 - **`build (cli)`** waits for `test (web)`, downloads that `dist/` before
   anything compiles, and builds the release for the runner's own triple,
   which embeds it. The runner has Node and no pnpm, so `make cli/release`
@@ -7051,12 +7187,32 @@ just listed.
   rest of it: the workspace it is of and why that one (`workspace`), the
   workspaces it loads, each with what it offers or why it cannot
   (`loaded`, which the TUI draws), the sources the shelf is filled from
-  (`sources`), the latest actions (`history`), or what it says belongs to
-  no holder (`warnings`). Which command prints each, a `--json` of its
+  (`sources`), the latest actions (`history`), what it says belongs to
+  no holder (`warnings`), or what the overview counts (`summary`). Which
+  command prints each, a `--json` of its
   own, a history command, or the snapshot whole, is left for the issues
   whose views show them (#72 onward, #73 for the shelf, the sources and an
   activity feed), so that each is printed as the view that needs it reads
   it.
+- **The TUI still counts a row's problems itself.** Its project rows show
+  how many of a project's artifacts do not read or have something
+  `validate` says, and its failures, counted in the CLI from the
+  snapshot's rows (`Member::problems`), from before the snapshot said a
+  project's `health`. Showing the health instead would make the two front
+  ends agree on which projects want looking at, at the price of a row that
+  no longer says how many things do.
+- **The panel sorts names and paths as the browser collates them.** The
+  projects table sorts every other column by what the snapshot says, its
+  counts and the order it lists healths in, but text by the browser's
+  collation, which no command shares: `flayer list` keeps the registry's
+  order. Core naming an order for text, as it names one for healths, would
+  make the two agree the day a command sorts by name.
+- **The commands an empty state names are not quoted.** Each names the
+  workspace's path after `-W`, and a project's page its entry, as the
+  registry spells it, after `-p`, `relink` or `unlink`; one a shell would
+  split, a space in it, is shown unquoted: quoting is the CLI's
+  (`task::shell`), and the panel has no line of the CLI's to show until the
+  previews of M5 (#76) turn a task into its lines.
 - **The server's replies are spelled twice.** A preview's `{lines}`, a
   run's `{lines, outcome}` and a refusal's `{error, code}` are built with
   `json!` in the server's `api.rs` and spelled again in the panel's

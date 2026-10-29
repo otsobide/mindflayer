@@ -1,5 +1,5 @@
 .DEFAULT_GOAL := build
-.PHONY: install build build/if-node test lint fmt types types/export types/check typecheck dev e2e clean
+.PHONY: install build build/if-node test lint fmt types types/export types/check fixtures fixtures/check typecheck dev e2e clean
 
 # pnpm at the version package.json's packageManager pins. Where it is not on
 # the PATH and corepack is not set up, name it some other way:
@@ -92,6 +92,26 @@ types/check: types/export ## Fail if the types written from Rust are not the one
 		&& test -z "$$(git ls-files --others --exclude-standard -- $(GENERATED))" \
 		|| { git ls-files --others --exclude-standard -- $(GENERATED); \
 			echo "error: the types Rust writes are not the ones committed: run make web/types and commit apps/web/$(GENERATED)" >&2; \
+			exit 1; }
+
+# The snapshots the panel's tests render from, written by a test of the
+# CLI's (tests/fixtures_test.rs) from workspaces it builds by running the
+# commands, read through the panel's backend: committed, so the tests run
+# without cargo, and written again by cargo alone, as the types are. Emptied
+# first, for the reason the types are. Under the `ts` feature, so a plain
+# `cargo test` writes none of them.
+FIXTURES := tests/fixtures
+
+fixtures: ## Write the snapshots the panel's tests render from into tests/fixtures (cargo only)
+	rm -rf $(FIXTURES)
+	cargo test -p mindflayer-cli --features ts --test fixtures_test
+
+# As types/check: a fixture that changed or went, or one new to git.
+fixtures/check: fixtures ## Fail if the snapshots written from Rust are not the ones committed (cargo and git only)
+	@git diff --exit-code --stat -- $(FIXTURES) \
+		&& test -z "$$(git ls-files --others --exclude-standard -- $(FIXTURES))" \
+		|| { git ls-files --others --exclude-standard -- $(FIXTURES); \
+			echo "error: the snapshots Rust writes are not the ones committed: run make web/fixtures and commit apps/web/$(FIXTURES)" >&2; \
 			exit 1; }
 
 typecheck: $(INSTALLED) ## Check the panel's types alone (vue-tsc)

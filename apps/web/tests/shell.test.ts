@@ -98,21 +98,17 @@ afterEach(() => {
 })
 
 describe('the shell', () => {
-  it('draws the sidebar and the header around an empty overview', async () => {
+  it('draws the sidebar and the header around the overview, which waits for the workspace', async () => {
     const page = await render('/')
 
     const sidebar = page.get('[data-testid="sidebar"]')
     expect(sidebar.text()).toContain('Mindflayer')
+    expect(sidebar.findAll('nav a').map(link => link.text())).toEqual(['Overview', 'Projects'])
     expect(sidebar.get('nav a[aria-current="page"]').text()).toBe('Overview')
     expect(sidebar.get('[data-testid="address"]').text()).toBe(window.location.host)
 
     expect(page.get('[data-testid="overview"] h1').text()).toBe('Overview')
-    expect(page.text()).toContain('Nothing to show yet')
-    // `flayer list` leaves the shelf out: `gather list` is its listing.
-    expect(page.findAll('[data-testid="commands"] code').map(code => code.text())).toEqual([
-      '$ flayer list',
-      '$ flayer gather list'
-    ])
+    expect(page.get('[data-testid="reading"]').text()).toBe('Reading the workspace')
   })
 
   it('answers a path it has no page for with one that says so', async () => {
@@ -164,12 +160,12 @@ describe('the shell', () => {
     expect(styles).toEqual([])
   })
 
-  it('asks the server nothing while it has no views', async () => {
+  it('asks the server for the snapshot, and for nothing else', async () => {
     const { calls, transport } = recording()
 
     await render('/', transport)
 
-    expect(calls).toEqual([])
+    expect(calls).toEqual(['query'])
   })
 
   it('draws every icon it names from the bundle', async () => {

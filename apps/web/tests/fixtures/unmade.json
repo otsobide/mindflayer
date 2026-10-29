@@ -1,0 +1,194 @@
+{
+  "agents": [
+    "claude",
+    "codex",
+    "opencode"
+  ],
+  "format": 1,
+  "healths": [
+    "ok",
+    "attention",
+    "broken",
+    "stale"
+  ],
+  "history": [],
+  "kinds": [
+    "skill",
+    "rule"
+  ],
+  "known": [],
+  "library": {
+    "artifacts": [],
+    "directories": [
+      {
+        "kind": "skill",
+        "path": ".mindflayer/library/skills"
+      },
+      {
+        "kind": "rule",
+        "path": ".mindflayer/library/rules"
+      }
+    ],
+    "failures": [],
+    "templates": [
+      {
+        "kind": "skill",
+        "name": "full",
+        "origin": null
+      }
+    ]
+  },
+  "loaded": [],
+  "projects": [],
+  "shelf": [],
+  "sources": [],
+  "states": [
+    "current",
+    "outdated",
+    "edited",
+    "missing",
+    "orphaned",
+    "foreign",
+    "authored"
+  ],
+  "summary": {
+    "held": {
+      "kinds": [
+        {
+          "count": 0,
+          "kind": "skill"
+        },
+        {
+          "count": 0,
+          "kind": "rule"
+        }
+      ],
+      "states": [
+        {
+          "count": 0,
+          "state": "current"
+        },
+        {
+          "count": 0,
+          "state": "outdated"
+        },
+        {
+          "count": 0,
+          "state": "edited"
+        },
+        {
+          "count": 0,
+          "state": "missing"
+        },
+        {
+          "count": 0,
+          "state": "orphaned"
+        },
+        {
+          "count": 0,
+          "state": "foreign"
+        },
+        {
+          "count": 0,
+          "state": "authored"
+        }
+      ],
+      "total": 0
+    },
+    "library": {
+      "kinds": [
+        {
+          "count": 0,
+          "kind": "skill"
+        },
+        {
+          "count": 0,
+          "kind": "rule"
+        }
+      ],
+      "states": [
+        {
+          "count": 0,
+          "state": "current"
+        },
+        {
+          "count": 0,
+          "state": "outdated"
+        },
+        {
+          "count": 0,
+          "state": "edited"
+        },
+        {
+          "count": 0,
+          "state": "missing"
+        },
+        {
+          "count": 0,
+          "state": "orphaned"
+        },
+        {
+          "count": 0,
+          "state": "foreign"
+        },
+        {
+          "count": 0,
+          "state": "authored"
+        }
+      ],
+      "total": 0
+    },
+    "projects": 0,
+    "shelf": {
+      "kinds": [
+        {
+          "count": 0,
+          "kind": "skill"
+        },
+        {
+          "count": 0,
+          "kind": "rule"
+        }
+      ],
+      "states": [
+        {
+          "count": 0,
+          "state": "current"
+        },
+        {
+          "count": 0,
+          "state": "outdated"
+        },
+        {
+          "count": 0,
+          "state": "edited"
+        },
+        {
+          "count": 0,
+          "state": "missing"
+        },
+        {
+          "count": 0,
+          "state": "orphaned"
+        },
+        {
+          "count": 0,
+          "state": "foreign"
+        },
+        {
+          "count": 0,
+          "state": "authored"
+        }
+      ],
+      "total": 0
+    },
+    "stale": 0
+  },
+  "warnings": [],
+  "workspace": {
+    "made": false,
+    "name": "you",
+    "path": "/home/you",
+    "reason": "home"
+  }
+}
