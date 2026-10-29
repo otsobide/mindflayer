@@ -167,12 +167,14 @@ pub(crate) fn run_with(cli: &Cli, lookup: &Lookup, watch: &Watch) -> Result<Outc
                 Ok(list(catalog, projects, level))
             })
         }
-        Command::Show { reference } => {
+        Command::Show { reference, json } => {
             let project = project_here(&directory)?;
             let reference = Reference::parse(reference);
-            one_project(project, wanted(reference.kind()), |catalog, _, level| {
-                show(catalog, &reference, level)
-            })
+            let mut found = None;
+            let text = one_project(project, wanted(reference.kind()), |catalog, _, level| {
+                show(catalog, &reference, level, &mut found)
+            })?;
+            Ok(json_or_text(found.filter(|_| *json), text))
         }
         Command::Validate { target, json } => {
             let project = project_here(&directory)?;
@@ -657,19 +659,25 @@ fn run_flayer(
                 }
             })
         }
-        FlayerCommand::Show { reference, project } => {
+        FlayerCommand::Show {
+            reference,
+            project,
+            json,
+        } => {
             let reference = Reference::parse(reference);
             let kinds = wanted(reference.kind());
+            let mut found = None;
             let read = |catalog: &Catalog, _: &[MindProject], level: Level| {
-                show(catalog, &reference, level)
+                show(catalog, &reference, level, &mut found)
             };
-            reading_workspace(directory, lookup, |workspace| match project {
+            let text = reading_workspace(directory, lookup, |workspace| match project {
                 Some(project) => one_project(workspace.pick(project)?, kinds, read),
                 None => {
                     let (projects, warnings) = managed(workspace);
                     everywhere(workspace, warnings, &projects, kinds, read)
                 }
-            })
+            })?;
+            Ok(json_or_text(found.filter(|_| *json), text))
         }
         // Read as `list` reads, on the default workspace before it is made
         // too, and from a ledger read without being made: a workspace that

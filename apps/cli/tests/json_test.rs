@@ -520,3 +520,154 @@ fn validate_as_json_names_what_it_could_not_find_as_the_text_does() {
 
     assert!(matches!(*failure.error, CliError::UnknownArtifact(ref name) if name == "absent"));
 }
+
+// ---------------------------------------------------------------------------
+// What `show --json` prints, field by field.
+// ---------------------------------------------------------------------------
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct Shown {
+    kind: String,
+    name: String,
+    path: String,
+    project: String,
+    file: String,
+    summary: Option<String>,
+    description: Option<String>,
+    allowed_tools: Option<Vec<String>>,
+    license: Option<String>,
+    compatibility: Option<String>,
+    metadata: Option<serde_json::Map<String, Value>>,
+    paths: Option<Vec<String>>,
+    body: String,
+}
+
+#[test]
+fn show_as_json_holds_what_the_text_shows() {
+    let dir = TempDir::new().unwrap();
+    new_project(dir.path());
+    write_skill(
+        dir.path(),
+        "deploy",
+        "---\nname: deploy\ndescription: Ship it\nallowed-tools: Bash, Read\nlicense: MIT\n\
+         compatibility: Requires git\nmetadata:\n  author: acme\n---\n\nRun the pipeline.\n",
+    );
+
+    let text = mind(dir.path(), &["show", "deploy"]).unwrap();
+    let json = mind(dir.path(), &["show", "deploy", "--json"]).unwrap();
+
+    let (shown, warnings): (Vec<Shown>, _) = enveloped(&json);
+    assert_eq!(shown.len(), 1);
+    let deploy = &shown[0];
+    let file = PathBuf::from(&deploy.file);
+    assert_eq!(
+        text.stdout,
+        format!(
+            "{}\n{}\n\n{}\n\nallowed-tools: {}\nlicense: {}\ncompatibility: {}\nmetadata:\n  author: {}\n\n{}\n",
+            deploy.name,
+            file.display(),
+            deploy.description.as_deref().unwrap(),
+            deploy.allowed_tools.as_ref().unwrap().join(", "),
+            deploy.license.as_deref().unwrap(),
+            deploy.compatibility.as_deref().unwrap(),
+            deploy.metadata.as_ref().unwrap()["author"].as_str().unwrap(),
+            deploy.body.trim(),
+        )
+    );
+    assert_eq!(deploy.kind, "skill");
+    assert_eq!(
+        file,
+        dir.path().join("skills").join("deploy").join("SKILL.md")
+    );
+    assert_eq!(deploy.paths, None);
+    assert!(warnings.is_empty());
+    assert!(json.ok && text.ok);
+}
+
+#[test]
+fn show_as_json_holds_every_artifact_of_the_name_the_text_shows() {
+    let dir = workspace_with_two();
+    write_skill(
+        &dir.path().join("beta"),
+        "alpha",
+        &skill_file("alpha", "The other one"),
+    );
+    write_rule(&dir.path().join("beta"), "alpha.md", "# A rule\n");
+
+    let text = flayer(dir.path(), &["show", "alpha"]).unwrap();
+    let json = flayer(dir.path(), &["show", "alpha", "--json"]).unwrap();
+
+    let (shown, _): (Vec<Shown>, _) = enveloped(&json);
+    let said: Vec<(&str, &str, &str)> = shown
+        .iter()
+        .map(|shown| {
+            let holder = Path::new(&shown.project).file_name().unwrap();
+            (
+                shown.kind.as_str(),
+                shown.name.as_str(),
+                holder.to_str().unwrap(),
+            )
+        })
+        .collect();
+    assert_eq!(
+        said,
+        [
+            ("skill", "alpha", "alpha"),
+            ("skill", "alpha", "beta"),
+            ("rule", "alpha", "beta"),
+        ]
+    );
+    assert_eq!(text.stdout.matches("\n---\n").count(), shown.len() - 1);
+    assert_eq!(shown[2].summary.as_deref(), Some("A rule"));
+    assert_eq!(shown[2].metadata, None);
+}
+
+#[test]
+fn mind_show_as_json_is_flayer_show_of_its_project() {
+    let dir = workspace_with_rows();
+
+    let here = mind(
+        &dir.path().join("alpha"),
+        &["show", "git/commits", "--json"],
+    )
+    .unwrap();
+    let named = flayer(
+        dir.path(),
+        &["show", "git/commits", "-p", "alpha", "--json"],
+    )
+    .unwrap();
+
+    assert_eq!(here, named);
+    let (shown, _): (Vec<Shown>, _) = enveloped(&here);
+    assert_eq!(shown[0].body, "# Commits\n\nSay why.\n");
+}
+
+/// A file that does not read beside the one shown is a warning, as the
+/// text says it, and fails the JSON as it fails the text.
+#[test]
+fn an_artifact_that_does_not_read_is_a_warning_beside_show_as_json() {
+    let dir = workspace_with_two();
+    let alpha = dir.path().join("alpha");
+    write_skill(&alpha, "broken", "no front matter\n");
+
+    let text = mind(&alpha, &["show", "alpha"]).unwrap();
+    let json = mind(&alpha, &["show", "alpha", "--json"]).unwrap();
+
+    let (shown, warnings): (Vec<Shown>, _) = enveloped(&json);
+    assert_eq!(shown.len(), 1);
+    assert_eq!(warnings, warned(&text));
+    assert_eq!(warning_codes(&json), stderr_codes(&text));
+    assert_eq!(warnings.len(), 1);
+    assert!(!text.ok);
+    assert_eq!(json.ok, text.ok);
+}
+
+#[test]
+fn show_as_json_names_what_it_could_not_find_as_the_text_does() {
+    let dir = workspace_with_two();
+
+    let failure = flayer(dir.path(), &["show", "absent", "--json"]).unwrap_err();
+
+    assert!(matches!(*failure.error, CliError::UnknownArtifact(ref name) if name == "absent"));
+}

@@ -209,6 +209,11 @@ pub enum Command {
     Show {
         /// Its name, or `kind:name` when one name belongs to two kinds.
         reference: String,
+
+        /// Print it as JSON, in the envelope every reading command's --json
+        /// shares.
+        #[arg(long)]
+        json: bool,
     },
 
     /// Check this project's artifacts against what an agent requires.
@@ -598,6 +603,11 @@ pub enum FlayerCommand {
         /// Only this project.
         #[arg(short, long, value_name = "PROJECT")]
         project: Option<String>,
+
+        /// Print it as JSON, in the envelope every reading command's --json
+        /// shares.
+        #[arg(long)]
+        json: bool,
     },
 
     /// Check the workspace's own artifacts, every managed project's, and what
