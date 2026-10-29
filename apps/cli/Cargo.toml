@@ -29,12 +29,20 @@ path = "src/bin/flayer.rs"
 name = "mindflayer_cli"
 path = "src/lib.rs"
 
+[features]
+default = ["ui"]
+# The control panel: the local server and the CLI's backend over it. On by
+# default, so the one binary somebody installs has it (D-17); without it,
+# `--no-default-features` builds the commands and the TUI and nothing that
+# serves HTTP.
+ui = ["dep:mindflayer-server"]
+
 [dependencies]
 mindflayer-core = { path = "../core" }
 # The local server behind the web panel, whose `Backend` the CLI implements
 # (`backend`): the front end depends on the transport, never the other way
-# (D-17). Unconditional until #68 puts it behind the `ui` feature.
-mindflayer-server = { path = "../server" }
+# (D-17).
+mindflayer-server = { path = "../server", optional = true }
 clap = { version = "4", features = ["derive"] }
 thiserror = "2"
 ratatui = "0.30.2"

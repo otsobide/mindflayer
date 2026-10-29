@@ -15,6 +15,7 @@
 //! is public: the two screens, and what is re-exported here.
 
 pub mod admit;
+#[cfg(feature = "ui")]
 pub mod backend;
 pub(crate) mod commands;
 pub(crate) mod error;

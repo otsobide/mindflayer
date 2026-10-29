@@ -3,6 +3,9 @@
 //! handed to the `Backend` trait. No port is bound: the server's own suites
 //! cover the transport, over a fake backend.
 
+// The backend is the panel's, which a build without the `ui` feature lacks.
+#![cfg(feature = "ui")]
+
 mod common;
 
 use std::collections::BTreeMap;

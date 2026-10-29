@@ -1,7 +1,11 @@
 .DEFAULT_GOAL := build
 .PHONY: build release test run fmt lint clean
 
-build: ## Build mindflayer-cli (binaries: mind, flayer)
+# Without the panel first, so a build that leaves out the default-on `ui`
+# feature is seen to build, and the binaries left in target/ are the default
+# build's: cargo puts those back even when nothing of them needs building.
+build: ## Build mindflayer-cli (binaries: mind, flayer), first without the panel
+	cargo build -p mindflayer-cli --no-default-features
 	cargo build -p mindflayer-cli
 
 release: ## Release build for a Rust target triple (TARGET=aarch64-apple-darwin)
