@@ -14,7 +14,7 @@ use mindflayer_core::install::Edits;
 use mindflayer_core::ledger::{Action, InstallRecord, Outcome, Target};
 use mindflayer_core::reapply::{self, Change};
 use mindflayer_core::resolve::{Inputs, Intent, Reason};
-use mindflayer_core::view::{Held, Listing, LoadedWorkspace, Project, Snapshot};
+use mindflayer_core::view::{Health, Held, Listing, LoadedWorkspace, Project, Snapshot};
 use mindflayer_core::{
     create, hash, Agent, AgentHomes, Directories, FlayerWorkspace, Kind, MindProject, Reference,
     Share, SourceKind, State, FLAYER_DIR,
@@ -244,6 +244,12 @@ const EXPECTED: &str = r#"{
     "foreign",
     "authored"
   ],
+  "healths": [
+    "ok",
+    "attention",
+    "broken",
+    "stale"
+  ],
   "library": {
     "directories": [
       {
@@ -321,6 +327,7 @@ const EXPECTED: &str = r#"{
         ]
       },
       "stale": null,
+      "health": "ok",
       "directories": [
         {
           "kind": "skill",
@@ -446,6 +453,7 @@ const EXPECTED: &str = r#"{
         "code": "not_a_project",
         "message": "<root>/hub/gone: not a mind project (no .mind/settings.toml, .mind/settings.json or .mind/mind.toml)"
       },
+      "health": "stale",
       "directories": [],
       "artifacts": [],
       "tally": {
@@ -759,6 +767,73 @@ fn an_install_nothing_of_which_is_found_says_where_it_went() {
         review.targets,
         [".agents/skills/review", ".claude/skills/review"]
     );
+}
+
+/// A project whose installs are as they were put, beside its own work,
+/// asks for nothing, and an entry that opens no project is stale: one word
+/// each, which a front end sorts and filters by.
+#[test]
+fn a_project_with_nothing_to_do_is_ok_and_one_that_opens_none_is_stale() {
+    let fixture = fixture();
+
+    let snapshot = Snapshot::read(&naming(&fixture.hub, None))
+        .unwrap()
+        .unwrap();
+
+    let healths: Vec<Health> = snapshot
+        .projects
+        .iter()
+        .map(|project| project.health)
+        .collect();
+    assert_eq!(healths, [Health::Ok, Health::Stale]);
+}
+
+/// An edited copy asks for attention, a forced update or an uninstall,
+/// and so does what `validate` only warns of; somebody's copy asks for
+/// nothing, since it is never Mindflayer's to change.
+#[test]
+fn an_edited_copy_asks_for_attention_and_somebody_s_asks_for_nothing() {
+    let fixture = fixture();
+    let api = fixture.hub.join("api");
+    common::write_files(
+        &api,
+        &[(
+            ".claude/skills/legacy/SKILL.md",
+            &skill("legacy", "Kept by hand"),
+        )],
+    );
+    let foreign = read(&fixture, "api");
+    fs::write(
+        api.join(".claude/skills/review/SKILL.md"),
+        skill("review", "Read it twice"),
+    )
+    .unwrap();
+    let edited = read(&fixture, "api");
+
+    assert!(foreign
+        .artifacts
+        .iter()
+        .any(|held| held.name == "legacy" && held.state == Some(State::Foreign)));
+    assert_eq!(foreign.health, Health::Ok);
+    assert_eq!(edited.health, Health::Attention);
+}
+
+/// A file that does not read breaks its project, over anything else it
+/// asks for: what to do cannot be told of a file nobody can read.
+#[test]
+fn a_file_that_does_not_read_breaks_its_project_over_an_edited_copy() {
+    let fixture = fixture();
+    let api = fixture.hub.join("api");
+    fs::write(
+        api.join(".claude/skills/review/SKILL.md"),
+        skill("review", "Read it twice"),
+    )
+    .unwrap();
+    fs::write(api.join("skills/deploy/SKILL.md"), "no front matter\n").unwrap();
+
+    let project = read(&fixture, "api");
+
+    assert_eq!(project.health, Health::Broken);
 }
 
 /// What a workspace loads is listed on its own as the snapshot lists it,

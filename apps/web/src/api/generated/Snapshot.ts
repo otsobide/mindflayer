@@ -2,6 +2,7 @@
 import type { Agent } from "./Agent";
 import type { Entry } from "./Entry";
 import type { Gathered } from "./Gathered";
+import type { Health } from "./Health";
 import type { Kind } from "./Kind";
 import type { KnownWorkspace } from "./KnownWorkspace";
 import type { Library } from "./Library";
@@ -38,6 +39,11 @@ agents: Array<Agent>,
  * Every state an artifact can stand in, in report order.
  */
 states: Array<State>, 
+/**
+ * Every health a project can be in, in report order: what a front end
+ * sorts and filters its projects by, so it orders none of its own.
+ */
+healths: Array<Health>, 
 /**
  * The workspace's own artifacts.
  */

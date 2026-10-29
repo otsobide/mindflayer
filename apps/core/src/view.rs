@@ -31,11 +31,11 @@ use std::error::Error as _;
 use std::path::{Path, PathBuf};
 use std::slice;
 
-use serde::Serialize;
+use serde::{Serialize, Serializer};
 
 use crate::agent::Agent;
 use crate::artifact::ValidationIssue;
-use crate::catalog::Catalog;
+use crate::catalog::{Catalog, DiscoveryFailure};
 use crate::code::Said;
 use crate::install::{self, LoadFailure, Offer};
 use crate::kind::Kind;
@@ -82,6 +82,9 @@ pub struct Snapshot {
     pub agents: Vec<Agent>,
     /// Every state an artifact can stand in, in report order.
     pub states: Vec<State>,
+    /// Every health a project can be in, in report order: what a front end
+    /// sorts and filters its projects by, so it orders none of its own.
+    pub healths: Vec<Health>,
     /// The workspace's own artifacts.
     pub library: Library,
     /// Every entry in its registry, in the order its marker lists them, a
@@ -161,6 +164,8 @@ pub struct Project {
     /// Why its entry opens no project, when it does not: listed rather than
     /// left out, since it is the one somebody has to find to unlink it.
     pub stale: Option<Said>,
+    /// How it stands as a whole, from everything below.
+    pub health: Health,
     /// Where it authors each kind, as a route from it.
     pub directories: Vec<Directory>,
     /// Everything it holds, authored, received or somebody's, by kind and
@@ -323,6 +328,103 @@ impl Tally {
     fn of_held(held: &[Held], kinds: &[Kind]) -> Tally {
         Tally::of(held.iter().map(|held| (held.kind, held.state)), kinds)
     }
+}
+
+/// How a project stands as a whole: the one word a front end sorts and
+/// filters its projects by, told here, so that no front end weighs what it
+/// draws on its own.
+///
+/// Declaration order is report order, from nothing to do to nothing to
+/// open.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum Health {
+    /// Nothing in it asks for anything: what was installed is where it was
+    /// put, as it was put there and as its origin still offers it, every
+    /// agent reads what it was given, and everything reads and passes
+    /// `validate` with no warning.
+    Ok,
+    /// Everything in it reads, and something asks for a command: an
+    /// install outdated, edited, missing or orphaned, a kind or a rule some
+    /// of its agents read nowhere, a folder its targets name that no
+    /// install uses, copies of one name that do not hold the same, or
+    /// something `validate` warns of.
+    Attention,
+    /// Something in it does not read, or does not pass `validate`: a file,
+    /// a folder that cannot be listed, the ledger, its templates.
+    Broken,
+    /// Its entry opens no project.
+    Stale,
+}
+
+impl Health {
+    /// Every health, in report order.
+    pub const ALL: [Health; 4] = [Health::Ok, Health::Attention, Health::Broken, Health::Stale];
+
+    /// How it is written in JSON.
+    pub const fn slug(self) -> &'static str {
+        match self {
+            Health::Ok => "ok",
+            Health::Attention => "attention",
+            Health::Broken => "broken",
+            Health::Stale => "stale",
+        }
+    }
+
+    /// How `project`, one that opened, stands, from what the snapshot says
+    /// of it, and whether any of its `failures` is of something that does
+    /// not read (`unreadable`), which a [`Said`] no longer tells.
+    ///
+    /// Something that does not read is said over something to do, since
+    /// what to do cannot be told of a file nobody can read. A copy that is
+    /// somebody's (`foreign`) asks for nothing: it is never Mindflayer's to
+    /// change, and only an install of its name, which refuses, meets it.
+    fn of(project: &Project, unreadable: bool) -> Health {
+        let broken = unreadable
+            || project.artifacts.iter().any(|held| {
+                held.unread.is_some() || held.issues.iter().any(|issue| !issue.is_warning())
+            });
+        if broken {
+            return Health::Broken;
+        }
+        // A failure left is of copies that read and do not agree.
+        let attention = !project.failures.is_empty()
+            || !project.unreached.is_empty()
+            || !project.missed.is_empty()
+            || !project.misplaced.is_empty()
+            || project
+                .artifacts
+                .iter()
+                .any(|held| held.state.is_some_and(asks_for_a_command) || !held.issues.is_empty());
+        if attention {
+            Health::Attention
+        } else {
+            Health::Ok
+        }
+    }
+}
+
+/// Whether an artifact standing in `state` asks for a command: an update,
+/// a forced one, or an uninstall. Matched with no wildcard, so a state
+/// added does not compile until it says.
+fn asks_for_a_command(state: State) -> bool {
+    match state {
+        State::Outdated | State::Edited | State::Missing | State::Orphaned => true,
+        State::Current | State::Foreign | State::Authored => false,
+    }
+}
+
+/// By its slug, for the reason a kind is: one spelling, which a renamed
+/// variant cannot change.
+impl Serialize for Health {
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        serializer.serialize_str(self.slug())
+    }
+}
+
+#[cfg(feature = "ts")]
+crate::typescript::words! {
+    /// How a project stands as a whole.
+    Health by slug { Ok, Attention, Broken, Stale }
 }
 
 /// A copy of an artifact whose file does not read, and why.
@@ -493,6 +595,7 @@ impl Snapshot {
             kinds: Kind::ALL.to_vec(),
             agents: Agent::ALL.to_vec(),
             states: State::ALL.to_vec(),
+            healths: Health::ALL.to_vec(),
             library: Library::of(workspace, &Kind::ALL),
             projects,
             loaded,
@@ -570,9 +673,17 @@ impl Project {
     ) -> Project {
         let (status, catalog, placed) = ProjectStatus::read_placed(project, kinds, workspace);
         let (artifacts, mut failures) = holdings(project, &catalog, Some((&status, &placed)));
+        // Told apart here, where the failures still say what they are: a
+        // file or a folder that does not read, or copies that do not agree.
+        let read = failures.len();
         let templates = templates(workspace, project, kinds, &mut failures);
+        let unreadable = failures.len() > read
+            || catalog
+                .failures()
+                .iter()
+                .any(DiscoveryFailure::is_unreadable);
         let settings = project.settings();
-        Project {
+        let project = Project {
             entry,
             path: project.root().to_path_buf(),
             name: Some(project.name().to_owned()),
@@ -581,6 +692,7 @@ impl Project {
             agents: status.agents,
             settings: settings.map(ProjectSettings::of),
             stale: None,
+            health: Health::Ok,
             directories: directories(project, kinds),
             tally: Tally::of_held(&artifacts, kinds),
             artifacts,
@@ -593,6 +705,10 @@ impl Project {
                 .map(|misplaced| Said::of(misplaced.code(), misplaced))
                 .collect(),
             failures,
+        };
+        Project {
+            health: Health::of(&project, unreadable),
+            ..project
         }
     }
 
@@ -607,6 +723,7 @@ impl Project {
             agents: Vec::new(),
             settings: None,
             stale: Some(Said::of(error.code(), error)),
+            health: Health::Stale,
             directories: Vec::new(),
             artifacts: Vec::new(),
             tally: Tally::of([], kinds),

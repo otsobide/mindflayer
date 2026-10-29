@@ -46,6 +46,7 @@ struct Project {
     agents: Vec<String>,
     settings: Option<Settings>,
     stale: Option<Said>,
+    health: String,
     directories: Vec<Directory>,
     artifacts: Vec<Held>,
     tally: Value,
