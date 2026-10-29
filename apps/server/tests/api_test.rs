@@ -5,7 +5,7 @@ mod common;
 
 use common::*;
 use std::io::{Read, Write};
-use std::net::{Ipv4Addr, TcpStream};
+use std::net::{Ipv4Addr, SocketAddr, TcpListener, TcpStream};
 
 #[tokio::test]
 async fn a_query_reaches_the_backend_and_its_answer_comes_back() {
@@ -178,5 +178,43 @@ async fn the_server_answers_on_loopback_on_a_port_the_system_chose() {
     assert!(
         response.ends_with(r#"{"echo":"over the wire"}"#),
         "{response}"
+    );
+}
+
+/// What the panel's dev server needs, whose proxy names the port in its
+/// settings. The port was free a moment ago: another process could take it
+/// in between, which would fail this test rather than pass it wrongly.
+#[test]
+fn the_server_listens_on_the_port_it_is_given() {
+    let free = TcpListener::bind((Ipv4Addr::LOCALHOST, 0))
+        .unwrap()
+        .local_addr()
+        .unwrap()
+        .port();
+
+    let server = Server::new(Fake::default()).port(free).bind().unwrap();
+
+    assert_eq!(
+        server.address(),
+        SocketAddr::from((Ipv4Addr::LOCALHOST, free))
+    );
+    assert_eq!(
+        server.url(),
+        format!("http://127.0.0.1:{free}/?token={}", server.token())
+    );
+}
+
+/// Another port would be one the client that asked for this one never
+/// finds.
+#[test]
+fn a_port_somebody_holds_is_an_error_rather_than_another_port() {
+    let held = TcpListener::bind((Ipv4Addr::LOCALHOST, 0)).unwrap();
+    let port = held.local_addr().unwrap().port();
+
+    let error = Server::new(Fake::default()).port(port).bind().err();
+
+    assert_eq!(
+        error.map(|error| error.kind()),
+        Some(std::io::ErrorKind::AddrInUse)
     );
 }

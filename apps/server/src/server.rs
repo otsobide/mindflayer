@@ -24,6 +24,7 @@ pub struct Server<B: Backend> {
     backend: B,
     panel: Panel,
     log: Option<Sink>,
+    port: u16,
 }
 
 impl<B: Backend> Server<B> {
@@ -33,6 +34,7 @@ impl<B: Backend> Server<B> {
             backend,
             panel: Panel::default(),
             log: None,
+            port: 0,
         }
     }
 
@@ -49,18 +51,31 @@ impl<B: Backend> Server<B> {
         self
     }
 
+    /// Listen on `port` rather than on one the system picks; 0 still asks
+    /// for any.
+    ///
+    /// For a client that must know the port before the server starts, as
+    /// the panel's dev server does, whose proxy names it in its settings.
+    /// A port somebody else holds makes [`bind`](Self::bind) fail rather
+    /// than take another, where that client would never find it.
+    pub fn port(mut self, port: u16) -> Self {
+        self.port = port;
+        self
+    }
+
     /// Take a port and issue the launch's token.
     ///
     /// 127.0.0.1 and nothing else, not even as an option: the panel is for
     /// the person at this machine, and every address beyond loopback is a
-    /// network where the token would travel in clear text. Port 0, so the
-    /// system picks one that is free rather than the server failing on a
-    /// port somebody else took.
+    /// network where the token would travel in clear text. Port 0 unless the
+    /// front end named one ([`port`](Self::port)), so the system picks one
+    /// that is free rather than the server failing on a port somebody else
+    /// took.
     ///
     /// Synchronous, and std's listener rather than tokio's, so that a front
     /// end can learn the port and print the link before it has a runtime.
     pub fn bind(self) -> io::Result<Listening> {
-        let listener = TcpListener::bind((Ipv4Addr::LOCALHOST, 0))?;
+        let listener = TcpListener::bind((Ipv4Addr::LOCALHOST, self.port))?;
         let address = listener.local_addr()?;
         let token = Token::issue();
         let router = route(self, &token, address.port())?;

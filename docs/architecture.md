@@ -3950,10 +3950,14 @@ in memory only, for as long as the server runs.
 
 ### Who it answers
 
-It binds 127.0.0.1 on port 0, with no option for another address: the panel
-is for the person at this machine, and beyond loopback the token would travel
-in clear text. Port 0 lets the system pick a free port rather than the server
-failing on a taken one.
+It binds 127.0.0.1, with no option for another address: the panel is for
+the person at this machine, and beyond loopback the token would travel in
+clear text. The port is 0, which lets the system pick a free one rather than
+the server failing on a taken one, unless the front end names one
+(`Server::port`). That is for a client that must know the port before the
+server starts, the panel's dev server, whose proxy names it in its settings,
+and a port somebody holds is then an error, not another port that client
+would never find.
 
 Every process on the machine can reach that port, so the address says nothing
 about who is asking. A 256-bit token, issued fresh at each launch, does. The
