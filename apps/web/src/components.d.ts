@@ -11,12 +11,21 @@ export {}
 /* prettier-ignore */
 declare module 'vue' {
   export interface GlobalComponents {
+    AgentBadges: typeof import('./components/AgentBadges.vue')['default']
     AppHeader: typeof import('./components/AppHeader.vue')['default']
     AppLogo: typeof import('./components/AppLogo.vue')['default']
     AppSidebar: typeof import('./components/AppSidebar.vue')['default']
+    CommandHint: typeof import('./components/CommandHint.vue')['default']
+    HealthBadge: typeof import('./components/HealthBadge.vue')['default']
     RouterLink: typeof import('vue-router')['RouterLink']
     RouterView: typeof import('vue-router')['RouterView']
+    SnapshotGate: typeof import('./components/SnapshotGate.vue')['default']
+    StateBadge: typeof import('./components/StateBadge.vue')['default']
+    UAlert: typeof import('./../node_modules/.pnpm/@nuxt+ui@4.12.0_e85c15649f14e1fe82b3b91186e361aa/node_modules/@nuxt/ui/dist/runtime/components/Alert.vue')['default']
     UApp: typeof import('./../node_modules/.pnpm/@nuxt+ui@4.12.0_e85c15649f14e1fe82b3b91186e361aa/node_modules/@nuxt/ui/dist/runtime/components/App.vue')['default']
+    UBadge: typeof import('./../node_modules/.pnpm/@nuxt+ui@4.12.0_e85c15649f14e1fe82b3b91186e361aa/node_modules/@nuxt/ui/dist/runtime/components/Badge.vue')['default']
+    UBreadcrumb: typeof import('./../node_modules/.pnpm/@nuxt+ui@4.12.0_e85c15649f14e1fe82b3b91186e361aa/node_modules/@nuxt/ui/dist/runtime/components/Breadcrumb.vue')['default']
+    UButton: typeof import('./../node_modules/.pnpm/@nuxt+ui@4.12.0_e85c15649f14e1fe82b3b91186e361aa/node_modules/@nuxt/ui/dist/runtime/components/Button.vue')['default']
     UColorModeButton: typeof import('./../node_modules/.pnpm/@nuxt+ui@4.12.0_e85c15649f14e1fe82b3b91186e361aa/node_modules/@nuxt/ui/dist/runtime/components/color-mode/ColorModeButton.vue')['default']
     UDashboardGroup: typeof import('./../node_modules/.pnpm/@nuxt+ui@4.12.0_e85c15649f14e1fe82b3b91186e361aa/node_modules/@nuxt/ui/dist/runtime/components/DashboardGroup.vue')['default']
     UDashboardNavbar: typeof import('./../node_modules/.pnpm/@nuxt+ui@4.12.0_e85c15649f14e1fe82b3b91186e361aa/node_modules/@nuxt/ui/dist/runtime/components/DashboardNavbar.vue')['default']
