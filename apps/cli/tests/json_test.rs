@@ -762,16 +762,90 @@ fn a_workspace_above_that_cannot_be_read_is_a_warning_beside_templates_as_json()
     assert_eq!(json.ok, text.ok);
 }
 
-/// An offer, as `gather list --json` prints one: the place that offers it
-/// and what that place holds of it. What each place holds is pinned by
-/// core's own tests; this reads what every one of them says.
+/// An offer, as `gather list --json` prints one: the place that offers it,
+/// by `place`, and what that place holds of it, every field of each named,
+/// as in every report this suite reads. `gather list` offers from a loaded
+/// workspace or the shelf, never the workspace's own, which `list` holds.
 #[derive(Debug, Deserialize)]
-struct Offer {
-    place: String,
+#[serde(tag = "place", rename_all = "snake_case", deny_unknown_fields)]
+enum Offer {
+    Loaded {
+        kind: String,
+        name: String,
+        summary: Option<String>,
+        path: String,
+        entry: String,
+        workspace: String,
+        origin: String,
+    },
+    Shelf {
+        kind: String,
+        name: String,
+        path: String,
+        summary: Option<String>,
+        revision: Option<String>,
+        gathered_at: i64,
+        source: Source,
+        origin: String,
+    },
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct Source {
     kind: String,
-    name: String,
-    summary: Option<String>,
-    origin: String,
+    url: String,
+    reference: Option<String>,
+    subdirectory: String,
+    revision: Option<String>,
+    directory: String,
+}
+
+impl Offer {
+    /// The `place` it was tagged with.
+    fn place(&self) -> &str {
+        match self {
+            Offer::Loaded { .. } => "loaded",
+            Offer::Shelf { .. } => "shelf",
+        }
+    }
+
+    /// What every place says of what it offers: its kind, name, summary
+    /// and origin.
+    fn said(&self) -> (&str, &str, Option<&str>, &str) {
+        match self {
+            Offer::Loaded {
+                kind,
+                name,
+                summary,
+                origin,
+                ..
+            }
+            | Offer::Shelf {
+                kind,
+                name,
+                summary,
+                origin,
+                ..
+            } => (kind, name, summary.as_deref(), origin),
+        }
+    }
+
+    fn kind(&self) -> &str {
+        self.said().0
+    }
+
+    fn name(&self) -> &str {
+        self.said().1
+    }
+
+    fn summary(&self) -> Option<&str> {
+        self.said().2
+    }
+
+    fn origin(&self) -> &str {
+        self.said().3
+    }
 }
 
 /// A workspace that loads `team`, beside it, which offers its own skill
@@ -801,17 +875,17 @@ fn gather_list_as_json_holds_the_offers_the_text_lists() {
     let (offers, warnings): (Vec<Offer>, _) = enveloped(&json);
     let listed: Vec<String> = offers
         .iter()
-        .map(|offer| format!("{} {}", offer.name, offer.origin))
+        .map(|offer| format!("{} {}", offer.name(), offer.origin()))
         .collect();
     assert_eq!(sorted(listed), rows(&text.stdout, 2));
     let places: Vec<(&str, &str)> = offers
         .iter()
-        .map(|offer| (offer.place.as_str(), offer.name.as_str()))
+        .map(|offer| (offer.place(), offer.name()))
         .collect();
     assert_eq!(places, [("loaded", "notes"), ("shelf", "deploy")]);
-    assert_eq!(offers[1].origin, source.path().to_string_lossy());
-    assert_eq!(offers[0].summary.as_deref(), Some("Take notes"));
-    assert!(offers.iter().all(|offer| offer.kind == "skill"));
+    assert_eq!(offers[1].origin(), source.path().to_string_lossy());
+    assert_eq!(offers[0].summary(), Some("Take notes"));
+    assert!(offers.iter().all(|offer| offer.kind() == "skill"));
     assert!(warnings.is_empty());
     assert!(json.ok && text.ok);
 }
