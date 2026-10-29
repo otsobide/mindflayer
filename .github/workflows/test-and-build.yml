@@ -112,6 +112,14 @@ jobs:
       - name: Test mindflayer-cli
         run: make cli/test
 
+      # The types the panel compiles against are written from core's and the
+      # CLI's, and committed: a change to what either hands the panel that
+      # did not write them again fails here. Cargo and git alone, so it runs
+      # before the runners have Node (#71), which checking the panel against
+      # them (`make web/types`) needs.
+      - name: Check the panel's types are the ones Rust writes
+        run: make web/types/check
+
   # The server depends on no mindflayer crate, core included, so nothing here
   # needs core's tests to pass first. It waits for them anyway: core is the
   # gate for everything downstream, and a red core stops the run before it
