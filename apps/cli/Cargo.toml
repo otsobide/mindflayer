@@ -31,11 +31,11 @@ path = "src/lib.rs"
 
 [features]
 default = ["ui"]
-# The control panel: the local server and the CLI's backend over it. On by
-# default, so the one binary somebody installs has it (D-17); without it,
-# `--no-default-features` builds the commands and the TUI and nothing that
-# serves HTTP.
-ui = ["dep:mindflayer-server"]
+# The control panel: the local server, the CLI's backend over it, a runtime
+# to serve it on and a browser to open it in. On by default, so the one
+# binary somebody installs has it (D-17); without it, `--no-default-features`
+# builds the commands and the TUI and nothing that serves HTTP.
+ui = ["dep:mindflayer-server", "dep:tokio", "dep:webbrowser"]
 
 [dependencies]
 mindflayer-core = { path = "../core" }
@@ -43,6 +43,13 @@ mindflayer-core = { path = "../core" }
 # (`backend`): the front end depends on the transport, never the other way
 # (D-17).
 mindflayer-server = { path = "../server", optional = true }
+# What `ui` serves the panel on: a runtime of one thread, since every query
+# and run goes off it anyway, and Ctrl-C to stop it. The version the server
+# builds.
+tokio = { version = "1", features = ["rt", "signal", "sync"], optional = true }
+# What `ui` opens the panel's link in: whichever browser the system has, the
+# way it starts one, on each platform.
+webbrowser = { version = "1", optional = true }
 clap = { version = "4", features = ["derive"] }
 thiserror = "2"
 ratatui = "0.30.2"

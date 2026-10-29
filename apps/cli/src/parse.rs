@@ -385,6 +385,11 @@ pub enum Command {
     /// Open the TUI on this project. What `mind` does on its own.
     Tui,
 
+    /// Open the control panel in a browser, over the workspace a command run
+    /// here would use: what `flayer ui` does.
+    #[cfg(feature = "ui")]
+    Ui(UiOptions),
+
     /// Act on the flayer workspace instead. Also reachable as `flayer <cmd>`.
     ///
     /// On its own it opens the TUI, as `flayer` on its own does.
@@ -953,6 +958,38 @@ pub enum FlayerCommand {
     /// What `flayer` does on its own. Everything it changes, it changes by
     /// running one of these commands, and it prints them when it closes.
     Tui,
+
+    /// Open the control panel in a browser, served on 127.0.0.1 until
+    /// Ctrl-C.
+    ///
+    /// It prints the link that opens it, which carries the token that lets
+    /// the browser in, and opens it. Everything the panel changes, it
+    /// changes by running one of these commands, each shown before it runs.
+    #[cfg(feature = "ui")]
+    Ui(UiOptions),
+}
+
+/// How `ui` serves the panel.
+#[cfg(feature = "ui")]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Args)]
+pub struct UiOptions {
+    /// The port to listen on, on 127.0.0.1 [default: one the system picks;
+    /// 7878 with --dev, where the dev server's proxy looks].
+    //
+    // An option rather than a number defaulting to 0, so that --dev can
+    // tell a port nobody named from one somebody did.
+    #[arg(long, value_name = "PORT")]
+    pub port: Option<u16>,
+
+    /// Print the link without opening a browser.
+    #[arg(long)]
+    pub no_open: bool,
+
+    /// Serve the panel through its dev server (`make web/dev`, on
+    /// 127.0.0.1:5173): take requests from its pages too, and open the panel
+    /// there.
+    #[arg(long)]
+    pub dev: bool,
 }
 
 /// What `workspaces` does to the list besides showing it.

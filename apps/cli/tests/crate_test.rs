@@ -6,9 +6,10 @@ use std::collections::BTreeSet;
 use std::process::Command;
 
 /// What only the panel brings: its server, the framework the server is
-/// written in, and the embed that carries the panel's files. Not hyper or
-/// tokio, which gix's HTTP transport brings to core already.
-const PANEL: [&str; 3] = ["mindflayer-server", "axum", "rust-embed"];
+/// written in, the embed that carries the panel's files, and what opens a
+/// browser on it. Not hyper or tokio, which gix's HTTP transport brings to
+/// core already.
+const PANEL: [&str; 4] = ["mindflayer-server", "axum", "rust-embed", "webbrowser"];
 
 #[test]
 fn without_the_ui_feature_nothing_of_the_panels_is_built() {
