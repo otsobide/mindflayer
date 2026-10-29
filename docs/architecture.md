@@ -4310,7 +4310,11 @@ serves the panel through its dev server ([through the panel's dev
 server](#through-the-panels-dev-server)): the server takes requests from
 `http://127.0.0.1:5173` too, the link points there, and the port is 7878,
 where `make web/dev`'s proxy looks, unless `--port` names another. The note
-on stderr says the server's own address, which the link then does not.
+on stderr says the server's own address, which the link then does not. A
+port held there is said with other advice than without `--dev`: stop what
+holds it, or name another both in the proxy's `SERVER` and with `--port`.
+Not another with `--port` alone, nor 0, as without it: the proxy reaches only
+the port `SERVER` names (`unbound_hint`).
 
 All of it is behind the CLI crate's `ui` feature, on by default so the one
 binary somebody installs has the panel

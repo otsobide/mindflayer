@@ -52,9 +52,11 @@ pub(crate) fn ui_command(
     if options.dev {
         server = server.dev_server(DEV_SERVER);
     }
-    let listening = server
-        .bind()
-        .map_err(|source| CliError::Unbound { port, source })?;
+    let listening = server.bind().map_err(|source| CliError::Unbound {
+        port,
+        dev: options.dev,
+        source,
+    })?;
     let url = listening.url();
     let address = listening.address();
     let unserved = |source| CliError::Unserved { source };
