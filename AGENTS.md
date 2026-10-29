@@ -25,7 +25,7 @@ lists everything.
 ```bash
 make test                 # every Rust suite; the panel's is make web/test
 make fmt/check            # CI runs this first
-make lint                 # no em dash in a tracked file, then clippy --workspace --all-targets
+make lint                 # no em dash in a tracked file, then clippy --workspace --all-targets, with the ts feature too
 make run ARGS="flayer list"
 make core/test            # one app: make <app>/<target>
 ```
@@ -48,7 +48,9 @@ PATH:
 make web/test             # vitest: apps/web/tests/<area>.test.ts
 make web/lint             # ESLint, its style included; make web/fmt fixes that
 make web/build            # vue-tsc, then apps/web/dist, which the server embeds
-make web/types            # vue-tsc alone
+make web/types            # write the types from Rust into src/api/generated, then vue-tsc
+make web/types/check      # cargo and git only (CI): fail when they are not the ones committed
+make web/typecheck        # vue-tsc alone
 make web/test PNPM='npx --yes pnpm@12.15.0'
 pnpm --dir apps/web exec vitest run tests/shell.test.ts      # one suite
 ```
@@ -57,10 +59,12 @@ pnpm --dir apps/web exec vitest run tests/shell.test.ts      # one suite
 in the root Makefile's `NODE_APPS`, outside the aggregates, until CI installs
 Node (#71). A change to the panel runs its own targets. The one exception is
 `make lint`'s em dash check (`make lint/em-dash`), which reads every tracked
-file, the panel's included. The other way round, `make install` and `make
-cli/release` build the panel before the binaries that embed it, so they need
-Node, and `make web/build` touches `apps/server/src/panel.rs` so the server
-compiles again and takes the panel in.
+file, the panel's included. A change to a type core or the CLI hands the
+panel runs `make web/types` and commits what it writes: CI runs `make
+web/types/check`, which needs no Node. The other way round, `make install`
+and `make cli/release` build the panel before the binaries that embed it, so
+they need Node, and `make web/build` touches `apps/server/src/panel.rs` so
+the server compiles again and takes the panel in.
 
 `make dev/link`, `make dev/unlink` and `make install` write into `~/.cargo/bin`
 (or `BINDIR`), outside the repository. Don't run them unless asked.
@@ -105,7 +109,9 @@ under `apps/` with its own `Makefile`:
   the panel (`contents`), which paths and entries a request from outside
   may name (`policy`), and what `show` and `validate` say of each
   artifact (`reading`). Its only I/O is files, and it never reads the
-  environment.
+  environment. Under its `ts` feature, `typescript` gives what it hands a
+  front end TypeScript (the roots its export writes, `words!`,
+  `CoreCode`).
 - `apps/cli` (`mindflayer-cli`): the binaries `mind` (`src/main.rs`) and
   `flayer` (`src/bin/flayer.rs`), and the TUI. `src/lib.rs` only re-exports
   the public API. The parsers are in `src/parse.rs`. `src/commands.rs`
@@ -134,7 +140,9 @@ under `apps/` with its own `Makefile`:
   `ui` and the server they need are behind the crate's `ui` feature, on by
   default: `--no-default-features` builds the rest without axum
   (`tests/crate_test.rs`), and `make cli/build` builds it that way first.
-  `src/tui/` and `src/install/` are the two screens.
+  Under its `ts` feature, `src/typescript.rs` lists the roots of the
+  panel's types the CLI gives (a query, a task, an outcome, the envelope)
+  and `Code`. `src/tui/` and `src/install/` are the two screens.
 - `apps/server` (`mindflayer-server`): the local server behind the web
   panel, a library `flayer ui` runs. `src/backend.rs` is the `Backend`
   trait, `src/server.rs` binds and routes, `src/auth.rs` holds the token's
@@ -153,7 +161,8 @@ under `apps/` with its own `Makefile`:
   the Vue Query client, `src/theme.ts` the palette, `src/color-mode.ts` the
   colour mode, and `src/overrides/` what replaces two pieces of the
   libraries for the CSP. `src/*.d.ts` are written by the Vite plugins and
-  committed.
+  committed, and so is `src/api/generated/`, written from Rust by `make
+  web/types`.
 
 Beside them, `examples/` is content and not an app: a flayer workspace whose
 own two skills and two rules anyone can `flayer load` to try Mindflayer
@@ -742,6 +751,21 @@ These are easy to break from a single file without noticing.
   `tests/lint.test.ts`). Authentication is the transport's: relative URLs,
   the `HttpOnly` cookie, the `X-Mindflayer: 1` header. What the server
   answers belongs in Vue Query; Pinia holds UI state only.
+- **The panel's types are written from Rust, and are its contract.** Every
+  type core and the CLI hand the panel, or take from it, derives
+  `ts_rs::TS` beside serde's derive under the `ts` feature
+  (`#[cfg_attr(feature = "ts", derive(ts_rs::TS))]`), so a plain build
+  compiles none of it and a plain `cargo test` writes nothing. A type serde
+  writes by hand says its TypeScript from what its serializer writes,
+  beside it, never from the variants: a word through `typescript::words!`,
+  from the function the serializer calls, anything else by hand or with
+  `ts(as)`, each held to serde by a test in `typescript_test.rs`. What is
+  exported is each crate's `typescript::roots`, into
+  `apps/web/src/api/generated` (`TS_RS_EXPORT_DIR`, `.cargo/config.toml`),
+  committed and never edited by hand: `make web/types` writes it again,
+  and `make web/types/check`, in CI, fails when it is not what Rust writes.
+  A type a view starts to read joins `roots`; the panel spells no shape of
+  core's or the CLI's in TypeScript of its own.
 - **The panel needs nothing the CSP refuses.** No URL naming another host,
   no inline `<script>` or `<style>`, no `data:` URL: fonts are Fontsource
   files, icons are bundled Lucide (`i-lucide-<name>` in a `.vue` file) drawn
@@ -832,6 +856,12 @@ These are easy to break from a single file without noticing.
   folder under `node_modules`, and leaves `dist/` alone. `licences.test.ts`
   reads every installed package's licence: a new one outside its list of
   GPL-3.0-compatible licences fails it.
+- The tests of the panel's types are core's and the CLI's
+  `src/typescript_test.rs`, compiled only with the `ts` feature, and named
+  so `--lib typescript` picks them out: each crate's export
+  (`export_bindings`), which writes into the panel, and every type serde
+  writes by hand held to what its TypeScript says. `make web/types` and
+  `make web/types/check` run them; `make test` does not.
 - Screens are tested without a terminal. Drive `state` with key events, or
   call `tui::step`, and render `ui` into `ratatui::backend::TestBackend`. Only
   the event loops in `tui.rs` and `install.rs` go untested, so keep logic out

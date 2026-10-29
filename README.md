@@ -2574,7 +2574,9 @@ provides. Without corepack, name any other way to run it in `PNPM`:
 make web/test          # vitest
 make web/lint          # ESLint, its style included; make web/fmt fixes that
 make web/build         # check the types, then build apps/web/dist
-make web/types         # check the types alone (vue-tsc)
+make web/types         # write the types from Rust, then check the panel's (vue-tsc)
+make web/types/check   # fail when the types from Rust are not the ones committed
+make web/typecheck     # check the panel's types alone (vue-tsc)
 make web/clean         # remove dist/ and the tools' caches
 
 make web/test PNPM='npx --yes pnpm@12.15.0'
@@ -2586,6 +2588,13 @@ when `node_modules` is missing or older than `package.json`, the lockfile or
 suites still need no Node; the panel joins it once CI installs Node
 ([#71](https://github.com/otsobide/mindflayer/issues/71)). Its tests are
 `apps/web/tests/<area>.test.ts`.
+
+What the panel reads and sends has its types written from the Rust that
+serializes it, into `apps/web/src/api/generated`, which is committed and
+never edited by hand. After changing a type core or the CLI hands the panel,
+`make web/types` writes them again and checks the panel against them; `make
+web/types/check` needs only cargo and git, and fails, as CI does, when what
+is committed is not what Rust writes.
 
 `make web/build` writes `apps/web/dist`, which the server embeds as it
 compiles, and marks the server to compile again, so the next build of the
