@@ -149,6 +149,61 @@ jobs:
       - name: Test mindflayer-server
         run: make server/test
 
+  # The panel needs no Rust, and no Rust job needs Node: none sets it up, and
+  # the server builds without the panel there (rust-embed's
+  # `allow_missing`). After core all the same, for the server's reason: a
+  # red core stops the run before it spends a runner here.
+  test-web:
+    name: test (web)
+    needs: test-core
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      # Before Node, whose cache asks pnpm where its store is. No version
+      # here: the action reads the one `packageManager` pins, so a bump of
+      # pnpm is one line in package.json, as it is for everybody else.
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          package_json_file: apps/web/package.json
+
+      - name: Install Node
+        uses: actions/setup-node@v6
+        with:
+          node-version-file: apps/web/.node-version
+          cache: pnpm
+          cache-dependency-path: apps/web/pnpm-lock.yaml
+
+      # Every target below would install on its own first; a step of its
+      # own says how long the install took, apart from the checks.
+      - name: Install the panel's dependencies
+        run: make web/install
+
+      - name: Lint the panel
+        run: make web/lint
+
+      - name: Check the panel's types
+        run: make web/typecheck
+
+      - name: Test the panel
+        run: make web/test
+
+      - name: Build the panel
+        run: make web/build
+
+      # For `build (cli)`, which embeds it in the release it builds, so the
+      # panel a binary ships is the one this job tested. Kept a week, long
+      # enough to run that job again, since nothing else reads it.
+      - name: Upload the built panel
+        uses: actions/upload-artifact@v6
+        with:
+          name: panel
+          path: apps/web/dist
+          if-no-files-found: error
+          retention-days: 7
+
   # The whole suite on the two platforms Linux cannot speak for. Linux runs on
   # every push and every pull request; these two run only when asked for, by
   # hand (workflow_dispatch) or with the `full-matrix` label on a PR.
