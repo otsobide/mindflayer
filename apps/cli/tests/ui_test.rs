@@ -349,16 +349,27 @@ fn a_port_somebody_holds_is_a_failure_and_no_link() {
 }
 
 /// Ctrl-C is SIGINT here, sent by `kill`, as a terminal sends it: the panel
-/// stops and exits as a command that went well does, having printed the
-/// link and nothing more on stdout, and on stderr where it served and how
-/// it would stop.
+/// stops and exits as a command that went well does. On stdout, after the
+/// link, what the TUI prints when it closes: every line that changed
+/// something, with what each said, and no read. On stderr, where it served
+/// and how it would stop.
 #[cfg(unix)]
 #[test]
-fn ctrl_c_stops_the_panel_and_it_exits_cleanly() {
+fn ctrl_c_stops_the_panel_which_prints_what_it_changed() {
     let dir = workspace_with_own();
     let home = TempDir::new().unwrap();
     let mut panel = serve("flayer", dir.path(), home.path());
-    panel.snapshot();
+    let (status, _) = panel.post("/api/commands", json!({"type": "shelf"}));
+    assert_eq!(status, 200);
+    let install = json!({
+        "type": "install",
+        "projects": ["alpha"],
+        "kind": "skill",
+        "name": "commit-style",
+        "from": null,
+    });
+    let (status, ran) = panel.post("/api/commands", install);
+    assert_eq!(status, 200, "{ran}");
 
     let pid = panel.started.child.id().to_string();
     let sent = std::process::Command::new("kill")
@@ -369,9 +380,19 @@ fn ctrl_c_stops_the_panel_and_it_exits_cleanly() {
     let exited = exit(&mut panel.started, Duration::from_secs(60));
 
     assert!(exited.success(), "{exited:?}");
+    let run = &ran["outcome"]["runs"][0];
+    let mut transcript = format!(
+        "$ {}\n{}",
+        run["command"].as_str().unwrap(),
+        run["stdout"].as_str().unwrap()
+    );
+    for line in run["stderr"].as_array().unwrap() {
+        transcript.push_str(&format!("{}\n", line["text"].as_str().unwrap()));
+    }
     let mut rest = String::new();
     panel.stdout.read_to_string(&mut rest).unwrap();
-    assert_eq!(rest, "");
+    assert_eq!(rest, transcript);
+    assert!(rest.starts_with("$ flayer install -p "), "{rest}");
     let mut said = String::new();
     let mut stderr = panel.started.child.stderr.take().unwrap();
     stderr.read_to_string(&mut said).unwrap();

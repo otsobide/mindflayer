@@ -2,10 +2,12 @@
 //! over the CLI's backend until Ctrl-C (D-17).
 //!
 //! A command as every other is, reached from both binaries through the one
-//! parser, with one difference it shares with the TUI: what it says is
-//! written as it runs rather than built and handed back. The link has to
-//! reach the person, and the browser, while the server is up, which is the
-//! whole time the command runs; what comes back once it stops is empty.
+//! parser, with one difference it shares with the TUI: the link is written
+//! as it runs rather than built and handed back, since it has to reach the
+//! person, and the browser, while the server is up, which is the whole time
+//! the command runs. What comes back once it stops is what the TUI hands
+//! back when it closes: every line that changed something, with what each
+//! said, so the session can be read and done again without the panel.
 
 use std::io::{self, Write};
 use std::net::SocketAddr;
@@ -43,6 +45,8 @@ pub(crate) fn ui_command(
 ) -> Result<Outcome, Failure> {
     let backend = PanelBackend::launch(directory, lookup)?;
     let root = backend.root().to_path_buf();
+    // A clone keeps what the server's ran, for the transcript.
+    let kept = backend.clone();
     let port = port(options);
     let mut server = Server::new(backend).port(port);
     if options.dev {
@@ -75,7 +79,7 @@ pub(crate) fn ui_command(
             serve(listening, interrupts).await
         })
         .map_err(unserved)?;
-    Ok(Outcome::plain(String::new()))
+    Ok(Outcome::plain(kept.transcript()))
 }
 
 /// The port to listen on: the one named, or else the dev server's proxy's
