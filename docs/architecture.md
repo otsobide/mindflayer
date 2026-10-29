@@ -1722,7 +1722,12 @@ a test of the panel compares like with like ([JSON, in one
 envelope](#json-in-one-envelope)). Read for those kinds rather than whole
 and cut down after, since the listing reads only them: a folder of a kind
 not asked for is no failure of its reply. Of every kind, it is the
-snapshot's library and projects, which a test holds it to.
+snapshot's library and projects, which a test holds it to. Of fewer, a
+project's `tally` and `health` are of what it read: its health is told
+from those kinds and from `misplaced`, which names every kind's folders as
+the snapshot does, so a skill that does not read leaves `ok` a project
+listed for its rules. Reading every kind for the health alone was the
+other way, which would weigh a failure the reply says nowhere.
 
 What a front end reads beside the snapshot is what no snapshot holds: a scan,
 and which workspace `mind` consults from each project, which depends on the

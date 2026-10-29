@@ -1318,7 +1318,9 @@ warning: /home/you/Projects/collapse/skills/broken/SKILL.md: the file does not s
   links it, as `mind status` does, to say how each stands; when that
   workspace cannot be read, the project is read alone and its `failures`
   say why, with no warning the text does not say. `list rules --json` holds
-  rules alone.
+  rules alone, and its `tally` and `health` are of what it holds: a skill
+  that does not read leaves a project `ok` there, which `list --json` calls
+  `broken`.
 - `show`: each artifact the name matches, with its file, what its front
   matter declares and its `body`.
 - `validate`: each artifact checked, its `issues` (each with its `code`,

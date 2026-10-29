@@ -1080,6 +1080,31 @@ fn a_listing_of_one_kind_holds_only_that_kind() {
     assert_eq!(names(&rules.projects[0].artifacts), ["commits"]);
 }
 
+/// A listing of one kind tells each project's health from what it read, as
+/// it counts the tally from it: a skill that does not read breaks the
+/// project the snapshot holds, and is nothing to a listing of its rules.
+#[test]
+fn a_listing_of_one_kind_tells_health_from_that_kind_alone() {
+    let fixture = fixture();
+    fs::write(
+        fixture.hub.join("api/skills/deploy/SKILL.md"),
+        "no front matter\n",
+    )
+    .unwrap();
+    let workspace = FlayerWorkspace::open(&fixture.hub).unwrap();
+
+    let snapshot = Snapshot::read(&naming(&fixture.hub, None))
+        .unwrap()
+        .unwrap();
+    let skills = Listing::of_workspace(&workspace, &[Kind::Skill]);
+    let rules = Listing::of_workspace(&workspace, &[Kind::Rule]);
+
+    assert_eq!(snapshot.projects[0].name.as_deref(), Some("api"));
+    assert_eq!(snapshot.projects[0].health, Health::Broken);
+    assert_eq!(skills.projects[0].health, Health::Broken);
+    assert_eq!(rules.projects[0].health, Health::Ok);
+}
+
 /// The name of each row, in order.
 fn names(held: &[Held]) -> Vec<&str> {
     held.iter().map(|held| held.name.as_str()).collect()

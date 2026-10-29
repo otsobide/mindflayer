@@ -223,7 +223,12 @@ pub struct Project {
     /// Why its entry opens no project, when it does not: listed rather than
     /// left out, since it is the one somebody has to find to unlink it.
     pub stale: Option<Said>,
-    /// How it stands as a whole, from everything below.
+    /// How it stands as a whole, from everything below. A [`Listing`] read
+    /// for some kinds tells it from what it read of them, as it counts the
+    /// tally, and from `misplaced`, which no listing narrows: a skill that
+    /// does not read leaves `ok` a project listed for its rules. Reading
+    /// every kind for the health alone was the other way, which would weigh
+    /// a failure the listing says nowhere.
     pub health: Health,
     /// Where it authors each kind, as a route from it.
     pub directories: Vec<Directory>,
