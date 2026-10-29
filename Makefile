@@ -42,9 +42,14 @@ fmt: ## Format all Rust code
 fmt/check: ## Fail if any Rust code is not formatted
 	cargo fmt --all --check
 
+# Twice: as everything builds, and with the `ts` feature, whose code (the
+# panel's types and the tests holding them to serde) nothing else lints.
+# Its own run rather than the one with the feature on, which would leave the
+# build without it, the one every binary ships as, unlinted.
 .PHONY: lint
-lint: lint/em-dash ## Run clippy across the workspace, once no em dash is found
+lint: lint/em-dash ## Run clippy across the workspace, then with the ts feature, once no em dash is found
 	cargo clippy --workspace --all-targets
+	cargo clippy --workspace --all-targets --features mindflayer-core/ts,mindflayer-cli/ts
 
 # The em dash reads as machine-written, so `lint` keeps it out of every
 # tracked file: docs, comments, messages and test expectations alike, the

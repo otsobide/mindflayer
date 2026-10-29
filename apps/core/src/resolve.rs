@@ -92,6 +92,13 @@ impl Serialize for Reason {
     }
 }
 
+#[cfg(feature = "ts")]
+crate::typescript::words! {
+    /// The rule that chose a workspace: named on the command line,
+    /// activated for the shell, found walking up, or the default in home.
+    Reason by slug { Explicit, Activated, Above, Home }
+}
+
 impl fmt::Display for Reason {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_str(match self {

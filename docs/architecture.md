@@ -1458,6 +1458,16 @@ type derives `Serialize` from the start:
   derives `Serialize` in the change that first hands it to one, under the
   same rule.
 
+Each one a crate's `typescript::roots` names (what the panel reads, and
+what `list`, `show` and `validate` print), and what it names, has
+TypeScript too, written from it under the `ts` feature ([its types come from
+Rust](#its-types-come-from-rust)): derived beside `Serialize` where serde's
+is derived, and said from what the serializer writes where it is written by
+hand, so the panel is told what serde writes, not what the Rust variants are
+called. The other reports a script reads, what `status`, `scan`,
+`workspaces` and `gather list` print, have none until a view reads them
+([open questions](#open-questions)).
+
 What each says is held to the rule above, and three more things:
 
 - **Each field is named as the type names it**, whether derived or written by
@@ -1645,7 +1655,10 @@ no workspace links.
   or changes what it holds, and not when one is added. A test pins the whole
   of a fixture's JSON, every key in its order, written out in the test
   rather than kept in a file a snapshot crate rewrites, so a change to it is
-  a change somebody reads in the diff.
+  a change somebody reads in the diff. The panel holds it to the same names
+  in TypeScript written from these types, which is the contract on its side
+  ([its types come from Rust](#its-types-come-from-rust)): a field that goes
+  is a panel that no longer compiles, rather than one that reads nothing.
 - **Every URL through `url::redacted`, where it is written**: a source's, an
   origin, the log's target and detail, and the message of every error it
   carries, which can quote one. The ledger hands back none with a
@@ -4391,6 +4404,104 @@ sidebar through a bare `useStorage`, so the cookies are vueuse's default
 storage (its `getDefaultStorage` handler). The browser sends them to
 whatever listens on 127.0.0.1, so they hold nothing about anybody's work.
 
+### Its types come from Rust
+
+What the panel sends and is answered with is said once, in Rust, and the
+panel compiles against TypeScript written from it (#70): the snapshot and
+everything it holds, a file's contents, what `list`, `show` and `validate`
+print, a query, a task, what a run produced, the envelope a reading
+command's `--json` prints, and every code core and the CLI give. That
+TypeScript is the contract, the panel's side of [the read
+model](#the-read-model): `apps/web/src/api/generated`, a file a type,
+written by ts-rs, committed so a fresh clone type-checks without cargo, and
+never edited by hand. The transport takes its `Query`, `Task` and `Outcome`
+from there, and says what each query is answered with by its `type`
+(`Answers`), so a query Rust adds leaves the panel not compiling until it
+names the answer. Only the server's own replies, `{lines}` for a preview,
+`{lines, outcome}` for a run and `{error, code}` for a refusal, are still
+spelled in `transport.ts` ([open questions](#open-questions)).
+
+- **Derived beside serde.** Each type derives `ts_rs::TS` beside its
+  `Serialize` or `Deserialize`, under a `ts` feature of core's and the
+  CLI's (`#[cfg_attr(feature = "ts", derive(ts_rs::TS))]`), so its
+  TypeScript is read off the attributes serde reads (`tag`, `content`,
+  `rename_all`, `skip`): a task's `{"type": "link", "path": ...}` is a union
+  of records told apart by `type` in both. Under a feature, so a plain
+  build compiles none of it and a plain `cargo test` writes nothing
+  anywhere: only `make web/types`, `make web/types/check` and the second
+  clippy run of `make lint` build with it. A `u64` or an `i64` is a
+  `number` rather than a `bigint` (`TS_RS_LARGE_INT`): a size or a time
+  never comes near what a double holds, and `JSON.parse` gives a number. A
+  path or a URL written through `serialize_with` is the text it is in
+  TypeScript already, so ts-rs's warning that it cannot read that
+  attribute, the one it would give here, is off (`no-serde-warnings`).
+  What holds it is a test rather than the warning, which only scrolls past
+  in a build: it serializes a field through each function a field names
+  and holds what serde writes to what ts-rs says of the field's type (a
+  path is a `string` whatever its bytes, a redacted URL a `string` or
+  `string | null`), and refuses a function it does not hold, read off the
+  source (`typescript::field_serializers`), core's and the CLI's, which
+  names none.
+- **What serde writes by hand is said from what it writes**, beside its
+  serializer, never derived from the Rust variants, for the reason the
+  serializer is written by hand ([the read types
+  serialize](#the-read-types-serialize)). A word (a kind, an agent, a
+  state, a share mode, the rule that chose a workspace, a marker's file) is
+  the union of its words, written by `typescript::words!` from the function
+  the serializer calls, on every variant, matched with no wildcard so a
+  variant added does not compile until it is in the union. Deriving each
+  with its variants renamed to their words was the other way, which spells
+  every word twice and ties the TypeScript to the variants again. A
+  `ValidationIssue` is a union of one record per code, `{ code:
+  "name_segment_too_long", segment: string, length: number, warning:
+  boolean, message: string }`, so the panel narrows an issue by comparing
+  its code: what each carries is one match (`ValidationIssue::carried`)
+  that the serializer writes from too, read on one issue of each code,
+  which a test holds to `CODES`. A template's origin, `string | null`, and
+  a skill's metadata, an object written in order, say what their
+  serializers write with `ts(as)`. A test holds each to what serde writes
+  (`typescript_test.rs`): every word, every issue's keys, the origin and
+  the metadata as JSON and as TypeScript, and every name a query, a task, a
+  holder or an agents line is read by.
+- **Codes are unions too**: `CoreCode`, from `code::ALL`, and `Code`, which
+  is it and the CLI's own (`CODES`), so a code the panel compares with is
+  one that is given. Not the type of a `Said`'s or a warning's `code`,
+  which stays a `string`: what a front end hands on holds the CLI's codes
+  beside core's, and no test holds every line a command says to a code
+  listed, which such a type would promise.
+- **One list of roots a crate** (`typescript::roots`), which its export
+  test writes, each root with every type it names, into
+  `TS_RS_EXPORT_DIR`, which `.cargo/config.toml` points at the panel,
+  relative to the repository, so both crates write into one folder. It
+  sets every variable ts-rs reads, and forces each, since cargo otherwise
+  leaves one the shell exports alone: a shell set up for another project
+  would have the export write somewhere else, once the folder was emptied,
+  or write other imports, integers or maps, drift CI would never see. One
+  list rather than `#[ts(export)]` on each root, so that the test finding
+  two types written to one file, which ts-rs would merge into one file or
+  write one over the other, walks what the export writes, both crates'
+  roots together. Cargo run from outside the repository reads no
+  `.cargo/config.toml`, so an export test that finds no folder named is
+  refused rather than writing ts-rs's default, `./bindings`, beside the
+  crate.
+- **Written again by cargo alone.** `make web/types`
+  empties the folder, since ts-rs writes and never deletes, runs the tests
+  named for it with the feature (`--lib typescript`: the exports and the
+  tests holding each type to serde), and checks the panel against what they
+  wrote with vue-tsc, which `make web/typecheck` runs alone. `make
+  web/types/check` writes them the same way and fails when git sees them
+  differ from the ones committed, a file new to git among them. It needs no
+  Node, so `test (cli)` runs it, and a change to what core or the CLI hands
+  the panel fails there unless it was written again; the vue-tsc half runs
+  where Node is, until CI has it (#71).
+
+OpenAPI, which #70 left out, would describe the server's routes as well as
+their bodies, at the price of a schema between the Rust and the TypeScript
+that ts-rs does without. A protocol crate holding the types, which both the
+CLI and the server would depend on, was rejected with
+[D-17](#d-17-the-next-front-end-is-a-local-web-panel)'s B; the types stay
+where serde's are, and the feature only reads them.
+
 ### Nothing the CSP refuses
 
 The server's CSP is `default-src 'self'` ([What keeps other pages
@@ -4434,7 +4545,9 @@ but `web` is in `NODE_APPS`, not `APPS`, so `make test` and `make build`
 leave it out until CI installs Node and pnpm (#71). In the aggregates, they
 would fail on every runner for want of pnpm, test-cross's macOS and Windows
 included, and say nothing about the code. The server builds without the
-panel meanwhile, through `allow_missing`.
+panel meanwhile, through `allow_missing`. The panel's types are the one part
+CI checks already: `make web/types/check` needs cargo and git and no Node
+([its types come from Rust](#its-types-come-from-rust)).
 
 Node is 24, the LTS line (`.node-version`), and pnpm is pinned through
 `packageManager`; `PNPM` names another way to run it, such as `npx`, where
@@ -6890,6 +7003,24 @@ just listed.
   whose views show them (#72 onward, #73 for the shelf, the sources and an
   activity feed), so that each is printed as the view that needs it reads
   it.
+- **The server's replies are spelled twice.** A preview's `{lines}`, a
+  run's `{lines, outcome}` and a refusal's `{error, code}` are built with
+  `json!` in the server's `api.rs` and spelled again in the panel's
+  `transport.ts`, outside what is written from Rust ([its types come from
+  Rust](#its-types-come-from-rust)): the server has no `ts` feature, and its
+  own tests hold what it answers. Structs of its own deriving `Serialize`,
+  and `TS` under a feature, would bring them under the drift check, at the
+  price of ts-rs in the one crate that depends on no mindflayer crate.
+- **What each query is answered with is the panel's to name.** `Answers`
+  pairs each query's `type` with the type it is answered with, and vue-tsc
+  holds it to name every query, but nothing holds the pairing to what the
+  backend answers, since `Backend::query` answers any JSON. A query type
+  that says its answer in Rust, written into the TypeScript with it, would.
+- **What no view reads has no TypeScript.** `status`, `scan` and
+  `workspaces` print a `Status`, a `Scan` and a `Known`, and `gather list`
+  its `Offer`s, which no root names, so the panel has no type for them yet.
+  Each joins a crate's `typescript::roots` when a view reads it, so that the
+  folder holds what the panel compiles against, and no more.
 - **`list --json` reads twice.** Its warnings and exit status are those of
   the listing, read as the text reads it, and its data a read of the
   snapshot's beside it, so a file changed between the two can be a warning

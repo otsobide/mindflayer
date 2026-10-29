@@ -249,6 +249,13 @@ impl Serialize for Share {
     }
 }
 
+#[cfg(feature = "ts")]
+crate::typescript::words! {
+    /// Whether what is installed into a project reaches the team, as the
+    /// settings file and `mind share` spell it.
+    Share by name { Local, Shared }
+}
+
 /// From its name, through [`Share::named`], as a command line's word is
 /// read, for the reason a [`Kind`] is read through its `FromStr`.
 impl<'de> Deserialize<'de> for Share {
@@ -342,6 +349,9 @@ impl Targets {
 /// derived from either, so that a copy of a project made with `cp -r` is the
 /// only way two projects share one.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+// Derived, though serde's is written by hand: ts-rs says a struct around
+// one value as that value, the `string` serde writes.
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 pub struct ProjectId(String);
 
 impl ProjectId {

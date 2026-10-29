@@ -26,6 +26,8 @@ pub(crate) mod progress;
 pub(crate) mod render;
 pub mod task;
 pub mod tui;
+#[cfg(feature = "ts")]
+pub mod typescript;
 
 pub use commands::read::WORKSPACE;
 pub use commands::{run, run_flayer_cli, run_flayer_cli_watched, run_watched};

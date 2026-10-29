@@ -40,6 +40,7 @@ use crate::{Cli, Command, FlayerCli, FlayerCommand, GatherCommand};
 /// with the agents beside the tag, since a variant holding a list has no
 /// field of its own for them to be named by.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[serde(
     tag = "type",
     content = "agents",
@@ -61,6 +62,7 @@ pub enum AgentsLine {
 /// "workspace"}`: the shape a task's own variants have, which a variant
 /// holding one string cannot take inside the object the tag is in.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[serde(
     tag = "type",
     content = "entry",
@@ -96,6 +98,7 @@ pub enum Holder {
 /// run without it. Each name is a contract once a front end sends it, as a
 /// report's is, so a test pins every one.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[serde(tag = "type", rename_all = "snake_case", deny_unknown_fields)]
 pub enum Task {
     /// `flayer init`, where the TUI was opened.

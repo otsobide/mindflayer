@@ -76,11 +76,18 @@ impl Serialize for SourceKind {
     }
 }
 
+#[cfg(feature = "ts")]
+crate::typescript::words! {
+    /// What kind of place a source is.
+    SourceKind by slug { Git }
+}
+
 /// A place artifacts have been gathered from.
 ///
 /// What it serializes to is a contract, as a status report's is: each field
 /// by its name, but the row id, and the URL only through [`redacted`].
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 pub struct Source {
     /// Its row id, which is what gathered artifacts point at.
     ///
@@ -114,6 +121,7 @@ pub struct Source {
 /// What it serializes to is a contract, as a status report's is: each field
 /// by its name.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 pub struct Gathered {
     pub kind: Kind,
     pub name: String,
@@ -257,6 +265,7 @@ pub enum Carried {
 /// before the scrub still holds one until a command that writes opens the
 /// ledger.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 pub struct Entry {
     /// When it happened, in seconds since the Unix epoch.
     pub at: i64,

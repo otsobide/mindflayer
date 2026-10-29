@@ -1,7 +1,7 @@
 /*
  * The one file allowed to use `fetch` and `EventSource` (see eslint.config.ts).
  */
-import { TransportError, type Preview, type Query, type Run, type Task, type Transport } from './transport'
+import { TransportError, type Answer, type Preview, type Query, type Run, type Task, type Transport } from './transport'
 
 /**
  * Sent with every request.
@@ -29,8 +29,8 @@ const HEADERS = {
  */
 export function httpTransport(): Transport {
   return {
-    query<Answer>(query: Query) {
-      return post<Answer>('/api/query', query)
+    query<Asked extends Query>(query: Asked) {
+      return post<Answer<Asked>>('/api/query', query)
     },
 
     send(task: Task, mode: 'preview' | 'run') {
@@ -54,7 +54,7 @@ export function httpTransport(): Transport {
   } as Transport
 }
 
-async function post<Answer>(path: string, body: unknown): Promise<Answer> {
+async function post<Reply>(path: string, body: unknown): Promise<Reply> {
   let response: Response
   try {
     response = await fetch(path, {
@@ -86,7 +86,7 @@ async function post<Answer>(path: string, body: unknown): Promise<Answer> {
   if (reply === undefined) {
     throw new TransportError(response.status, `the server answered ${response.status} with something that is not JSON`)
   }
-  return reply as Answer
+  return reply as Reply
 }
 
 /** What the server said was wrong, which it says as `{"error": "..."}`. */

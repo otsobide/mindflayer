@@ -96,6 +96,7 @@ pub struct ProjectStatus {
 /// One artifact a project received that some of its agents read nowhere,
 /// and those agents.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 pub struct Missed {
     pub kind: Kind,
     pub name: String,
@@ -114,6 +115,7 @@ pub struct Missed {
 /// some other way, by a setting of its own, is beyond what docs/agents.md
 /// says it reads, and is still said here.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 pub struct Unreached {
     pub kind: Kind,
     /// Every folder the kind is installed in, as a route from the project,
@@ -245,6 +247,12 @@ impl Serialize for State {
     fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
         serializer.serialize_str(self.slug())
     }
+}
+
+#[cfg(feature = "ts")]
+crate::typescript::words! {
+    /// How an artifact stands in a project, as `status` says it.
+    State by slug { Current, Outdated, Edited, Missing, Orphaned, Foreign, Authored }
 }
 
 /// What a report could not read on its way, collected rather than raised: one

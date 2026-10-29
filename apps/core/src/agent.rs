@@ -183,6 +183,12 @@ impl Serialize for Agent {
     }
 }
 
+#[cfg(feature = "ts")]
+crate::typescript::words! {
+    /// A coding agent, by the name `--agents` and a project's settings take.
+    Agent by name { Claude, Codex, OpenCode }
+}
+
 /// From its name, through [`FromStr`], for the reason a [`Kind`] is read
 /// through it.
 impl<'de> Deserialize<'de> for Agent {

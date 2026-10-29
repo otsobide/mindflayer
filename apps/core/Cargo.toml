@@ -41,6 +41,23 @@ rusqlite = { version = "0.40", default-features = false, features = ["bundled", 
 # implementation rather than one of our own. 0.11, the version the server's
 # rust-embed already builds, so the workspace gains no second sha2.
 sha2 = "0.11"
+# The read model's types in TypeScript, for the panel to compile against
+# (#70): derived beside the serde derive each type has, so that what the
+# panel is told a snapshot holds is what serde writes, read off the same
+# attributes (its default `serde-compat`). Only under `ts`, which nothing
+# builds by default, so a plain build compiles none of it and a plain
+# `cargo test` writes no file. `no-serde-warnings`, since the one serde
+# attribute it cannot read here is `serialize_with`, which writes a path or
+# a URL as the text it already is in TypeScript: a test holds each function
+# a field names to what ts-rs says of the type it takes, and refuses one it
+# does not hold, where the warning would only scroll past in a build. A type
+# written some other way says so with `ts(as)`, held to it by a test.
+ts-rs = { version = "12", optional = true, features = ["no-serde-warnings"] }
+
+[features]
+# The TypeScript types of what core hands a front end: `make web/types`
+# builds with it to write them into the panel, and nothing else does.
+ts = ["dep:ts-rs"]
 
 [dev-dependencies]
 # To pin what a report's types serialize to, name by name: what a front end

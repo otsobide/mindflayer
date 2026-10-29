@@ -846,6 +846,30 @@ impl Serialize for ValidationIssue {
     fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
         let mut map = serializer.serialize_map(None)?;
         map.serialize_entry("code", self.code())?;
+        for (name, carried) in self.carried() {
+            match carried {
+                Carried::Text(text) => map.serialize_entry(name, text)?,
+                Carried::Count(count) => map.serialize_entry(name, &count)?,
+            }
+        }
+        map.serialize_entry("warning", &self.is_warning())?;
+        map.serialize_entry("message", &self.to_string())?;
+        map.end()
+    }
+}
+
+/// One thing an issue carries beside its code, as its JSON holds it.
+enum Carried<'a> {
+    Text(&'a str),
+    Count(usize),
+}
+
+impl ValidationIssue {
+    /// What it carries beside its code, each by the name its variant gives
+    /// it, in the order written: what its JSON holds between its `code` and
+    /// its `warning`, and what its TypeScript says it holds, read off this
+    /// one match so the two cannot differ.
+    fn carried(&self) -> Vec<(&'static str, Carried<'_>)> {
         // Matched in full, so a new issue has to say what it carries.
         match self {
             ValidationIssue::NameEmpty
@@ -855,33 +879,112 @@ impl Serialize for ValidationIssue {
             | ValidationIssue::MetadataNotAMap
             | ValidationIssue::Empty
             | ValidationIssue::PathsNotStrings
-            | ValidationIssue::DescriptionNotAString => {}
+            | ValidationIssue::DescriptionNotAString => Vec::new(),
             ValidationIssue::NameNotKebabCase { segment } => {
-                map.serialize_entry("segment", segment)?;
+                vec![("segment", Carried::Text(segment))]
             }
-            ValidationIssue::NameSegmentTooLong { segment, length } => {
-                map.serialize_entry("segment", segment)?;
-                map.serialize_entry("length", length)?;
-            }
-            ValidationIssue::NameDirectoryMismatch { name, directory } => {
-                map.serialize_entry("name", name)?;
-                map.serialize_entry("directory", directory)?;
-            }
+            ValidationIssue::NameSegmentTooLong { segment, length } => vec![
+                ("segment", Carried::Text(segment)),
+                ("length", Carried::Count(*length)),
+            ],
+            ValidationIssue::NameDirectoryMismatch { name, directory } => vec![
+                ("name", Carried::Text(name)),
+                ("directory", Carried::Text(directory)),
+            ],
             ValidationIssue::DescriptionTooLong { length }
             | ValidationIssue::CompatibilityTooLong { length } => {
-                map.serialize_entry("length", length)?;
+                vec![("length", Carried::Count(*length))]
             }
             ValidationIssue::MetadataNotAString { key }
-            | ValidationIssue::MetadataRepeated { key } => {
-                map.serialize_entry("key", key)?;
-            }
+            | ValidationIssue::MetadataRepeated { key } => vec![("key", Carried::Text(key))],
             ValidationIssue::FrontMatterUnparsed { reason } => {
-                map.serialize_entry("reason", reason)?;
+                vec![("reason", Carried::Text(reason))]
             }
         }
-        map.serialize_entry("warning", &self.is_warning())?;
-        map.serialize_entry("message", &self.to_string())?;
-        map.end()
+    }
+}
+
+/// A union of objects, one an issue of each code, its code a literal, so
+/// the panel narrows an issue to what it carries by comparing its `code`:
+/// `{ code: "name_segment_too_long", segment: string, length: number,
+/// warning: boolean, message: string }`. What each carries is read off
+/// [`carried`](ValidationIssue::carried), the match the serializer writes
+/// from, on one issue of each code ([`ValidationIssue::every`]).
+#[cfg(feature = "ts")]
+impl ts_rs::TS for ValidationIssue {
+    type WithoutGenerics = Self;
+    type OptionInnerType = Self;
+
+    fn docs() -> Option<String> {
+        Some(crate::typescript::docs(&[
+            " Something that stops an artifact from being usable, or will: its code,",
+            " what it is about, whether it is only worth a warning, and its message.",
+        ]))
+    }
+
+    fn name(_: &ts_rs::Config) -> String {
+        "ValidationIssue".to_owned()
+    }
+
+    fn decl(config: &ts_rs::Config) -> String {
+        format!("type ValidationIssue ={};", Self::inline(config))
+    }
+
+    fn decl_concrete(config: &ts_rs::Config) -> String {
+        Self::decl(config)
+    }
+
+    fn inline(_: &ts_rs::Config) -> String {
+        crate::typescript::lines(ValidationIssue::every().iter().map(|issue| {
+            let mut fields = vec![format!("code: {:?}", issue.code())];
+            fields.extend(issue.carried().into_iter().map(|(name, carried)| {
+                let typed = match carried {
+                    Carried::Text(_) => "string",
+                    Carried::Count(_) => "number",
+                };
+                format!("{name}: {typed}")
+            }));
+            fields.push("warning: boolean".to_owned());
+            fields.push("message: string".to_owned());
+            format!("{{ {} }}", fields.join(", "))
+        }))
+    }
+
+    fn output_path() -> Option<PathBuf> {
+        Some("ValidationIssue.ts".into())
+    }
+}
+
+#[cfg(feature = "ts")]
+impl ValidationIssue {
+    /// One issue of each code, in the order [`CODES`](Self::CODES) lists
+    /// them, which a test holds it to: what the TypeScript is read off.
+    pub(crate) fn every() -> Vec<ValidationIssue> {
+        let text = String::new;
+        vec![
+            ValidationIssue::NameEmpty,
+            ValidationIssue::NameNotKebabCase { segment: text() },
+            ValidationIssue::NameSegmentTooLong {
+                segment: text(),
+                length: 0,
+            },
+            ValidationIssue::NameDirectoryMismatch {
+                name: text(),
+                directory: text(),
+            },
+            ValidationIssue::DescriptionEmpty,
+            ValidationIssue::DescriptionTooLong { length: 0 },
+            ValidationIssue::CompatibilityEmpty,
+            ValidationIssue::CompatibilityTooLong { length: 0 },
+            ValidationIssue::CompatibilityNotAString,
+            ValidationIssue::MetadataNotAMap,
+            ValidationIssue::MetadataNotAString { key: text() },
+            ValidationIssue::MetadataRepeated { key: text() },
+            ValidationIssue::Empty,
+            ValidationIssue::FrontMatterUnparsed { reason: text() },
+            ValidationIssue::PathsNotStrings,
+            ValidationIssue::DescriptionNotAString,
+        ]
     }
 }
 
