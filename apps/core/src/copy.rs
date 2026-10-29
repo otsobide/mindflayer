@@ -100,11 +100,11 @@ fn copy_tree(
 /// inside one of `bounds`, each a path with its own links followed already
 /// (`fs::canonicalize`).
 ///
-/// The one check made before anything a link leads to is read, so that
-/// whatever reads through a link is held to what a copy is held to: a copy
-/// makes it of each link it meets ([`tree`]). By components, as
-/// `Path::starts_with` compares, so `/work/app-old` is not inside
-/// `/work/app`.
+/// The one check made before anything a link leads to is read: a copy makes
+/// it of each link it meets ([`tree`]), and a read of an artifact's file for
+/// the panel makes it of the file ([`crate::contents`]), so neither follows
+/// a link the other would refuse. By components, as `Path::starts_with`
+/// compares, so `/work/app-old` is not inside `/work/app`.
 pub fn followed(path: &Path, bounds: &[PathBuf]) -> Result<(PathBuf, bool), io::Error> {
     let resolved = fs::canonicalize(path)?;
     let inside = bounds.iter().any(|bound| resolved.starts_with(bound));

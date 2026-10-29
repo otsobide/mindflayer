@@ -22,6 +22,7 @@ pub mod claude_md;
 pub mod claude_rules;
 pub mod code;
 pub mod config_entry;
+pub mod contents;
 pub mod copy;
 pub mod create;
 pub mod everywhere;
