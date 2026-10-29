@@ -1604,10 +1604,16 @@ read, built and ordered in core from the read types the commands print:
 
 - the workspace: its name, its path, the rule that chose it (`reason`) and
   whether it is made;
-- every kind, agent and state core knows, from `Kind::ALL`, `Agent::ALL` and
-  `State::ALL`, so a kind added to core reaches a front end that lays its
-  columns out by them with no change of its own
-  ([D-21](#d-21-the-panels-views-follow-the-capabilities-they-show));
+- every kind, agent, state and health core knows, from `Kind::ALL`,
+  `Agent::ALL`, `State::ALL` and `view::Health::ALL`, so a kind added to
+  core reaches a front end that lays its columns out by them with no change
+  of its own
+  ([D-21](#d-21-the-panels-views-follow-the-capabilities-they-show)), and
+  a front end that sorts by one orders them as core does;
+- what it holds, counted (`summary`): the projects its registry links and
+  the entries that open none, each directory once however many entries
+  spell it, as `known` counts them, and a tally of what those projects,
+  its library and its shelf hold;
 - its library, the workspace's own, with where it keeps each kind and the
   templates `flayer add` finds;
 - each project its registry names, in marker order, a stale entry with why
@@ -1615,8 +1621,10 @@ read, built and ordered in core from the read types the commands print:
   own, since each entry is what `unlink` is given, as the TUI has always
   listed them (a report lists one directory once). A project says its entry,
   path, name, marker, id, agents and settings, where it authors each kind,
-  its templates, and what its agents miss (`unreached`, `missed`,
-  `misplaced`), as `status` says it;
+  its templates, what its agents miss (`unreached`, `missed`,
+  `misplaced`), as `status` says it, how many of its artifacts are of each
+  kind and stand in each state (`tally`), and how it stands as a whole
+  (`health`, below);
 - each artifact a holder holds, with its kind, summary, state, the agents
   that read it, where it came from, where it is held (`targets`: every copy
   found and every place the ledger records putting one), everything
@@ -1633,12 +1641,37 @@ read, built and ordered in core from the read types the commands print:
 One value rather than each front end putting its view together from the
 reports, as the TUI did until #62: which unreadable file is which artifact's,
 which install nothing of is found, how much a load offers counted across two
-spellings of it, are answers, and a second front end working them out would
-come to a second set of them. `Snapshot::read` resolves the workspace as a
+spellings of it, how many projects hold something outdated, are answers, and
+a second front end working them out would come to a second set of them. So
+the panel draws counts the snapshot carries rather than counting the lists
+beside them, which would be a rule written in TypeScript (#72). `Snapshot::read` resolves the workspace as a
 read does, whatever its inputs intend; `Snapshot::of` builds one for a front
 end that resolved the workspace itself, to scan it too. `view::Project::read`
 and `LoadedWorkspace::of` read the same way what the TUI shows of a project
 no workspace links.
+
+A project's health is the one word a front end sorts and filters its
+projects by, from nothing to do to nothing to open:
+
+- **ok**: nothing in it asks for anything.
+- **attention**: everything in it reads, and something asks for a command:
+  an install outdated, edited, missing or orphaned, which an update, a
+  forced one or an uninstall answers; a kind or a rule some of its agents
+  read nowhere; a folder its targets name that no install uses; copies of
+  one name that do not hold the same; or something `validate` only warns
+  of.
+- **broken**: something in it does not read, a file, a folder, the ledger
+  or its templates, or does not pass `validate`. Said over attention, since
+  what to do cannot be told of a file nobody can read.
+- **stale**: its entry opens no project.
+
+Somebody's copy (`foreign`) asks for nothing: it is never Mindflayer's to
+change, and only an install of its name, which refuses, meets it. Told in
+core, where a failure still says whether it is of something that does not
+read or of copies that read and disagree, which the `Said` a project keeps
+no longer tells. The panel weighing each project's lists itself was the
+other way, which would have put the rule in TypeScript, where nothing but a
+second copy of it could check it ([open questions](#open-questions)).
 
 - **A read, and nothing more.** The ledger is opened only through
   `ledger_for_reading`, the default workspace is never made for it, and no
@@ -7051,12 +7084,20 @@ just listed.
   rest of it: the workspace it is of and why that one (`workspace`), the
   workspaces it loads, each with what it offers or why it cannot
   (`loaded`, which the TUI draws), the sources the shelf is filled from
-  (`sources`), the latest actions (`history`), or what it says belongs to
-  no holder (`warnings`). Which command prints each, a `--json` of its
+  (`sources`), the latest actions (`history`), what it says belongs to
+  no holder (`warnings`), or what the overview counts (`summary`). Which
+  command prints each, a `--json` of its
   own, a history command, or the snapshot whole, is left for the issues
   whose views show them (#72 onward, #73 for the shelf, the sources and an
   activity feed), so that each is printed as the view that needs it reads
   it.
+- **The TUI still counts a row's problems itself.** Its project rows show
+  how many of a project's artifacts do not read or have something
+  `validate` says, and its failures, counted in the CLI from the
+  snapshot's rows (`Member::problems`), from before the snapshot said a
+  project's `health`. Showing the health instead would make the two front
+  ends agree on which projects want looking at, at the price of a row that
+  no longer says how many things do.
 - **The server's replies are spelled twice.** A preview's `{lines}`, a
   run's `{lines, outcome}` and a refusal's `{error, code}` are built with
   `json!` in the server's `api.rs` and spelled again in the panel's
