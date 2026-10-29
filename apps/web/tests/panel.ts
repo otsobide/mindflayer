@@ -1,14 +1,15 @@
 /*
- * What the suites that draw the views share: the snapshots a test of the
- * CLI wrote, a transport that answers with one, and the panel mounted as a
- * browser would mount it.
+ * What the suites that draw the views share: the snapshots and the other
+ * answers a test of the CLI wrote, a transport that answers with them, and
+ * the panel mounted as a browser would mount it.
  */
 import { flushPromises, mount, type VueWrapper } from '@vue/test-utils'
 import { createMemoryHistory, type Router } from 'vue-router'
 import App from '@/App.vue'
 import type { Snapshot } from '@/api/generated/Snapshot'
-import type { Transport } from '@/api/transport'
+import { TransportError, type Query, type Transport } from '@/api/transport'
 import { createPanel } from '@/panel'
+import library from './fixtures/library.json'
 import unmade from './fixtures/unmade.json'
 import workspace from './fixtures/workspace.json'
 
@@ -31,13 +32,51 @@ export function fixture(name: Fixture): Snapshot {
   return structuredClone(FIXTURES[name]) as unknown as Snapshot
 }
 
-/** A transport answering every query with `snapshot`, and writing each down. */
-export function answering(snapshot: Snapshot) {
-  const queries: unknown[] = []
+/** A query, and what the server answers it with. */
+export interface Answered {
+  query: Query
+  answer: unknown
+}
+
+/**
+ * What the workspace fixture's server answers when each of its library's
+ * own is opened (tests/fixtures/library.json): the files of each, and each
+ * file of them, written as the snapshots are. Copied, so a test may change
+ * its copy.
+ */
+export function answers(): Answered[] {
+  return structuredClone(library) as unknown as Answered[]
+}
+
+/** `value` with every object's keys in one order, to compare as text. */
+function sorted(value: unknown): unknown {
+  if (Array.isArray(value)) {
+    return value.map(sorted)
+  }
+  if (typeof value === 'object' && value !== null) {
+    return Object.fromEntries(Object.entries(value).sort(([a], [b]) => a.localeCompare(b)).map(([key, each]) => [key, sorted(each)]))
+  }
+  return value
+}
+
+/**
+ * A transport answering the snapshot with `snapshot`, and any other query
+ * with the answer `answered` holds for it, refusing one it holds none for
+ * as the server refuses what it cannot answer; each query written down.
+ */
+export function answering(snapshot: Snapshot, answered: Answered[] = answers()) {
+  const queries: Query[] = []
   const transport = {
-    query: (query: unknown) => {
+    query: (query: Query) => {
       queries.push(query)
-      return Promise.resolve(structuredClone(snapshot))
+      if (query.type === 'snapshot') {
+        return Promise.resolve(structuredClone(snapshot))
+      }
+      const asked = JSON.stringify(sorted(query))
+      const found = answered.find(each => JSON.stringify(sorted(each.query)) === asked)
+      return found
+        ? Promise.resolve(structuredClone(found.answer))
+        : Promise.reject(new TransportError(422, `not_found: nothing answers ${asked}`))
     },
     send: () => new Promise(() => {}),
     subscribe: () => () => {}

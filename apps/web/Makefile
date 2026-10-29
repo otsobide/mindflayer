@@ -94,15 +94,16 @@ types/check: types/export ## Fail if the types written from Rust are not the one
 			echo "error: the types Rust writes are not the ones committed: run make web/types and commit apps/web/$(GENERATED)" >&2; \
 			exit 1; }
 
-# The snapshots the panel's tests render from, written by a test of the
-# CLI's (tests/fixtures_test.rs) from workspaces it builds by running the
+# The snapshots the panel's tests render from, and what opening each of the
+# library's own is answered with, written by a test of the CLI's
+# (tests/fixtures_test.rs) from workspaces it builds by running the
 # commands, read through the panel's backend: committed, so the tests run
 # without cargo, and written again by cargo alone, as the types are. Emptied
 # first, for the reason the types are. Under the `ts` feature, so a plain
 # `cargo test` writes none of them.
 FIXTURES := tests/fixtures
 
-fixtures: ## Write the snapshots the panel's tests render from into tests/fixtures (cargo only)
+fixtures: ## Write the snapshots and answers the panel's tests render from into tests/fixtures (cargo only)
 	rm -rf $(FIXTURES)
 	cargo test -p mindflayer-cli --features ts --test fixtures_test
 

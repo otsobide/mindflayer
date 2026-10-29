@@ -1,7 +1,8 @@
-//! The snapshots the panel's tests render from, written from the real thing:
-//! workspaces built by running the commands, read through the panel's
-//! backend as the server answers it, and written into the panel's
-//! `tests/fixtures` (`make web/fixtures`), committed beside its tests.
+//! The snapshots the panel's tests render from, and the answers to what its
+//! page of an artifact asks, written from the real thing: workspaces built
+//! by running the commands, read through the panel's backend as the server
+//! answers it, and written into the panel's `tests/fixtures` (`make
+//! web/fixtures`), committed beside its tests.
 //!
 //! Written rather than drawn by hand, so that a test of the panel renders
 //! what core says and nothing a person imagined it says: a field added,
@@ -24,6 +25,7 @@ use mindflayer_cli::backend::{PanelBackend, Query};
 use mindflayer_core::ledger::{Action, Outcome as Logged};
 use mindflayer_core::SourceKind;
 use mindflayer_server::Backend;
+use serde_json::{json, Value};
 
 /// Where the fixtures go: the panel's tests, beside this crate, whichever
 /// folder cargo was started in.
@@ -48,11 +50,45 @@ const AT: i64 = 1_792_850_400;
 const SOURCE: &str = "https://github.com/acme/skills";
 const REVISION: &str = "8d1c3f0a2b4e6d8f0a1c3e5b7d9f1a3c5e7b9d2f";
 
+/// What the library's `review` says, as somebody would write a skill: front
+/// matter beyond the two keys every skill has, and a body with something of
+/// everything markdown draws, a table, a fence, a link to a file of its own
+/// and one to another site among them.
+const REVIEW: &str = "---
+name: review
+description: Read a change before it lands
+license: MIT
+metadata:
+  owner: platform
+---
+
+# review
+
+Read the diff **before** it lands, and say what you would change.
+
+## Steps
+
+1. Run `scripts/diff.sh` to see what changed.
+2. Go through [the checklist](references/checklist.md).
+3. Leave one comment per finding, and *say why*.
+
+| check | why |
+| :--- | ---: |
+| tests | they pass |
+
+The long version is at <https://example.com/review>.
+
+```sh
+scripts/diff.sh main
+```
+";
+
 /// `you/Projects`, a workspace holding something of everything the panel
 /// shows, built as somebody would build it, a command at a time:
 ///
-/// - its library holds the skills `review` and `lint` and the rules
-///   `git/commits` and `style/comments`;
+/// - its library holds the skills `review`, with a script and a reference
+///   beside its `SKILL.md`, and `lint`, and the rules `git/commits` and
+///   `style/comments`;
 /// - `api`, for Claude and Codex and local, authors `deploy`, and received
 ///   `review` and `git/commits`, as they were written: nothing to do;
 /// - `web`, for Claude and OpenCode and shared, received `lint`, changed in
@@ -76,6 +112,18 @@ fn workspace(home: &Path) -> PathBuf {
     ] {
         flayer(&root, &["add", kind, name, description]).unwrap();
     }
+    // Before anything installs it, so every copy is of this one.
+    write_files(
+        &own_directory_for(&root, Kind::Skill).join("review"),
+        &[
+            ("SKILL.md", REVIEW),
+            ("scripts/diff.sh", "git diff \"$1\"...HEAD\n"),
+            (
+                "references/checklist.md",
+                "# Checklist\n\n- Does it say why?\n- Is it tested?\n",
+            ),
+        ],
+    );
 
     project(&root, "api", &["--agents", "claude,codex"]);
     mind(
@@ -216,6 +264,15 @@ fn answered(directory: &Path, lookup: &Lookup) -> String {
     serde_json::to_string_pretty(&snapshot).unwrap() + "\n"
 }
 
+/// `query`, as the panel sends it, with what `backend` answers.
+fn asked(backend: &PanelBackend, query: Value) -> Value {
+    let read: Query = serde_json::from_value(query.clone()).unwrap();
+    let answer = backend
+        .query(read)
+        .unwrap_or_else(|refusal| panic!("{query}: {}: {}", refusal.code, refusal.message));
+    json!({"query": query, "answer": answer})
+}
+
 /// `json` as it reads wherever it was made: `dir` as [`HOME`], each
 /// project's id as [`IDS`] says, `/` between the parts of a path.
 fn pinned(json: &str, dir: &Path, root: Option<&Path>) -> String {
@@ -254,6 +311,58 @@ fn write_the_snapshot_of_a_workspace_holding_something_of_everything() {
     let json = pinned(&json, dir.path(), Some(&root));
     assert!(!json.contains(&*dir.path().to_string_lossy()), "{json}");
     write("workspace", &json);
+}
+
+/// What opening each of the library's own asks, as the panel's page of one
+/// asks it, with what the backend answers: its files, then each file of
+/// them, the one it is read from among them, every query of every one, in
+/// the order the snapshot lists them.
+#[test]
+fn write_what_opening_each_of_the_librarys_own_is_answered_with() {
+    let dir = TempDir::new().unwrap();
+    let home = dir.path().join("you");
+    let root = workspace(&home);
+    let backend = PanelBackend::launch(&root, &Lookup::default()).unwrap();
+    let snapshot = backend.query(Query::Snapshot {}).unwrap();
+
+    let mut answers = Vec::new();
+    for held in snapshot["library"]["artifacts"].as_array().unwrap() {
+        let reference = format!(
+            "{}:{}",
+            held["kind"].as_str().unwrap(),
+            held["name"].as_str().unwrap()
+        );
+        let holder = json!({"type": "workspace"});
+        let files = asked(
+            &backend,
+            json!({"type": "files", "holder": holder, "reference": reference}),
+        );
+        let read: Vec<Value> = files["answer"]["entries"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter(|entry| entry["folder"] != true)
+            .map(|entry| {
+                asked(
+                    &backend,
+                    json!({
+                        "type": "contents",
+                        "holder": holder,
+                        "reference": reference,
+                        "file": entry["path"],
+                    }),
+                )
+            })
+            .collect();
+        answers.push(files);
+        answers.extend(read);
+    }
+
+    let json = serde_json::to_string_pretty(&answers).unwrap() + "\n";
+    let json = pinned(&json, dir.path(), Some(&root));
+    assert!(!json.contains(&*dir.path().to_string_lossy()), "{json}");
+    assert!(json.contains("references/checklist.md"), "{json}");
+    write("library", &json);
 }
 
 /// The default workspace in a home where nothing has made it: what the
