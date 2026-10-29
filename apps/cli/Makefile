@@ -18,8 +18,13 @@ endif
 	$(MAKE) -C ../web build
 	cargo build -p mindflayer-cli --release --locked --target $(TARGET)
 
-test: ## Run mindflayer-cli tests
+# Then the unit tests without the panel, among them the one only that build
+# compiles, that `ui` is no command there. Not the suites: compiling each
+# again would cost far more than what it could find. All of them rather
+# than that one by name, which a rename would leave matching nothing.
+test: ## Run mindflayer-cli tests, then its unit tests without the panel
 	cargo test -p mindflayer-cli
+	cargo test -p mindflayer-cli --no-default-features --lib
 
 run: ## Run the CLI (pass args via ARGS="list")
 	cargo run -p mindflayer-cli -- $(ARGS)

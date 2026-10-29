@@ -4322,8 +4322,9 @@ binary somebody installs has the panel
 rust-embed, tokio's signal handling and `webbrowser`. `cargo build -p
 mindflayer-cli --no-default-features` builds the commands and the TUI
 without them, and `ui` is then no command; `tests/crate_test.rs` holds that
-build to no server, axum, embed or `webbrowser`, and `make cli/build` builds
-it first. hyper and tokio stay, which gix's HTTP transport brings to core.
+build to no server, axum, embed or `webbrowser`, `make cli/build` builds
+it first, and `make cli/test` runs its unit tests, one of which finds no
+`ui` there. hyper and tokio stay, which gix's HTTP transport brings to core.
 What the feature costs, measured for D-17 on Linux x86_64 with 16 cores, in
 the release profile, with no panel built unless said:
 

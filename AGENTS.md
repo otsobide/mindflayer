@@ -823,7 +823,8 @@ These are easy to break from a single file without noticing.
   (`common::start`) and sends the panel's requests over loopback. No test
   opens a browser: every `ui` one starts passes `--no-open`, and the opener
   is a stand-in in `ui`'s unit tests. A suite or test about the panel is
-  `#[cfg(feature = "ui")]`, so a build without the feature leaves it out.
+  `#[cfg(feature = "ui")]`, so a build without the feature leaves it out;
+  `make cli/test` runs the unit tests in that build too.
 - The panel's suites are `apps/web/tests/<area>.test.ts`, in Vitest. The
   components run in happy-dom, mounted through `createPanel` with a fake
   `Transport` and a memory history, so they never reach a server.
