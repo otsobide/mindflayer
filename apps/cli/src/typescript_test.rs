@@ -110,3 +110,20 @@ fn a_holder_and_an_agents_line_say_where_they_keep_what_they_hold() {
         r#"{ "type": "named", "agents": Array<Agent> } | { "type": "removed", "agents": Array<Agent> }"#
     );
 }
+
+#[test]
+fn every_code_the_cli_gives_is_in_its_union_once_beside_core_s() {
+    let union = Code::inline(&Config::new());
+    let members: Vec<&str> = union
+        .split('\n')
+        .filter_map(|line| line.trim().strip_prefix("| "))
+        .collect();
+    let given: Vec<String> = CODES
+        .iter()
+        .flat_map(|(_, codes)| codes.iter())
+        .map(|code| format!("{code:?}"))
+        .collect();
+
+    assert_eq!(members.first(), Some(&"CoreCode"));
+    assert_eq!(members[1..], given);
+}
