@@ -16,7 +16,7 @@ use std::path::Path;
 use mindflayer_core::everywhere::{self, EverywhereError, Plan, Step};
 use mindflayer_core::install::{InstallError, Removed};
 use mindflayer_core::lifecycle::{self, Record};
-use mindflayer_core::template::{self, Origin};
+use mindflayer_core::template::{self, Origin, Template};
 use mindflayer_core::{
     paths, AgentHomes, FlayerWorkspace, Kind, MindProject, Reference, Standing, Target,
     WorkspaceError,
@@ -429,9 +429,14 @@ fn unread(outcome: &mut Outcome, unread: &[WorkspaceError]) {
     }
 }
 
+/// What `add --template` can start from in `holder`, with `workspace`'s:
+/// its name, its kind and where it is, a route from `holder` or `built in`;
+/// with the templates kept in `found`, for `--json` to print in place of
+/// the text.
 pub(crate) fn templates_of(
     workspace: Option<&FlayerWorkspace>,
     holder: &MindProject,
+    found: &mut Option<Vec<Template>>,
 ) -> Result<Outcome, Failure> {
     let templates = template::templates(workspace, holder).map_err(CliError::from)?;
     let rows: Vec<Vec<String>> = templates
@@ -451,6 +456,7 @@ pub(crate) fn templates_of(
             ]
         })
         .collect();
+    *found = Some(templates);
     Ok(Outcome::plain(table(&rows)))
 }
 

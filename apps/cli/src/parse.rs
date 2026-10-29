@@ -191,7 +191,12 @@ pub enum Command {
     },
 
     /// List the templates `mind add --template` can start from here.
-    Templates,
+    Templates {
+        /// Print it as JSON, in the envelope every reading command's --json
+        /// shares.
+        #[arg(long)]
+        json: bool,
+    },
 
     /// List this project's artifacts.
     #[command(alias = "ls")]
@@ -577,6 +582,11 @@ pub enum FlayerCommand {
         /// A project this workspace manages, instead of the workspace itself.
         #[arg(short, long, value_name = "PROJECT")]
         project: Option<String>,
+
+        /// Print it as JSON, in the envelope every reading command's --json
+        /// shares.
+        #[arg(long)]
+        json: bool,
     },
 
     /// List the workspace's own artifacts and every managed project's.
@@ -1111,7 +1121,12 @@ pub enum GatherCommand {
     /// List what can be installed from the shelf and from loaded workspaces,
     /// and where each artifact comes from.
     #[command(alias = "ls")]
-    List,
+    List {
+        /// Print it as JSON, in the envelope every reading command's --json
+        /// shares.
+        #[arg(long)]
+        json: bool,
+    },
 }
 
 /// What `--shell` takes, from core's list rather than spelled again here, as

@@ -152,11 +152,15 @@ pub(crate) fn run_with(cli: &Cli, lookup: &Lookup, watch: &Watch) -> Result<Outc
                 remove_from(workspace, &project, reference, *yes)
             })
         }
-        Command::Templates => {
+        // Laid out as JSON once the workspace consulted has said whether it
+        // could be read, which reaches the envelope as it reaches stderr.
+        Command::Templates { json } => {
             let project = project_here(&directory)?;
-            consulting(&project, lookup, |workspace| {
-                templates_of(workspace, &project)
-            })
+            let mut found = None;
+            let text = consulting(&project, lookup, |workspace| {
+                templates_of(workspace, &project, &mut found)
+            })?;
+            Ok(json_or_text(found.filter(|_| *json), text))
         }
         Command::List { kind, json } => {
             let project = project_here(&directory)?;
@@ -397,9 +401,17 @@ fn run_flayer(
                 removed_from(workspace, project.as_deref(), reference, false)
             }),
         },
-        FlayerCommand::Templates { project } => reading_workspace(directory, lookup, |workspace| {
-            templates_of(Some(workspace), &workspace.holder(project.as_deref())?)
-        }),
+        FlayerCommand::Templates { project, json } => {
+            let mut found = None;
+            let text = reading_workspace(directory, lookup, |workspace| {
+                templates_of(
+                    Some(workspace),
+                    &workspace.holder(project.as_deref())?,
+                    &mut found,
+                )
+            })?;
+            Ok(json_or_text(found.filter(|_| *json), text))
+        }
 
         FlayerCommand::Link { projects } => link_projects(directory, projects, lookup),
         FlayerCommand::Unlink { projects } => unlink_projects(directory, projects, lookup),

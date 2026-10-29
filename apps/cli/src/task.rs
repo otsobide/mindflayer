@@ -632,7 +632,7 @@ impl Refusal {
                 | Command::Add { .. }
                 | Command::Rename { .. }
                 | Command::Remove { .. }
-                | Command::Templates
+                | Command::Templates { .. }
                 | Command::List { .. }
                 | Command::Show { .. }
                 | Command::Validate { .. }
@@ -689,7 +689,7 @@ impl Refusal {
                 | FlayerCommand::Load { .. }
                 | FlayerCommand::Unload { .. }
                 | FlayerCommand::Scan { .. }
-                | FlayerCommand::Gather(GatherCommand::List)
+                | FlayerCommand::Gather(GatherCommand::List { .. })
                 | FlayerCommand::Install { .. }
                 | FlayerCommand::Uninstall { .. }
                 | FlayerCommand::Update { .. }

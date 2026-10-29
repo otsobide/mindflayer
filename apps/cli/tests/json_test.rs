@@ -1,6 +1,7 @@
-//! The reading commands' `--json`: `list`, at either level, read back into
-//! structs of this suite's own, each held to the entries the text lists, the
-//! warnings it says and the exit status it has.
+//! The reading commands' `--json`: `list`, `show`, `validate`, `templates`
+//! and `gather list`, read back into structs of this suite's own, each held
+//! to the entries the text lists, the warnings it says, with their codes,
+//! and the exit status it has.
 
 // Every field of the structs below is named so that one renamed or added is
 // refused, which is what they are for: not every test reads every one.
@@ -670,4 +671,150 @@ fn show_as_json_names_what_it_could_not_find_as_the_text_does() {
     let failure = flayer(dir.path(), &["show", "absent", "--json"]).unwrap_err();
 
     assert!(matches!(*failure.error, CliError::UnknownArtifact(ref name) if name == "absent"));
+}
+
+// ---------------------------------------------------------------------------
+// What `templates --json` and `gather list --json` print, field by field.
+// ---------------------------------------------------------------------------
+
+#[test]
+fn templates_as_json_holds_the_templates_the_text_lists() {
+    let dir = TempDir::new().unwrap();
+    new_project(dir.path());
+    for (route, contents) in [
+        (".mind/templates/runbook/SKILL.md", "---\n---\n"),
+        (".mind/templates/policy.md", "## Why\n"),
+    ] {
+        let path = dir.path().join(route);
+        fs::create_dir_all(path.parent().unwrap()).unwrap();
+        fs::write(path, contents).unwrap();
+    }
+
+    let text = mind(dir.path(), &["templates"]).unwrap();
+    let json = mind(dir.path(), &["templates", "--json"]).unwrap();
+
+    let (templates, warnings): (Vec<Template>, _) = enveloped(&json);
+    let listed: Vec<String> = templates
+        .iter()
+        .map(|template| format!("{} {}", template.name, template.kind))
+        .collect();
+    assert_eq!(sorted(listed.clone()), rows(&text.stdout, 2));
+    assert_eq!(listed, ["full skill", "runbook skill", "policy rule"]);
+    // Built in is in no folder; the rest are where they are, whole.
+    assert_eq!(templates[0].origin, None);
+    assert_eq!(
+        templates[2].origin.as_deref().map(PathBuf::from),
+        Some(dir.path().join(".mind/templates/policy.md"))
+    );
+    assert!(warnings.is_empty());
+    assert!(json.ok && text.ok);
+}
+
+#[test]
+fn flayer_templates_as_json_is_mind_templates_of_its_project() {
+    let dir = workspace_with_two();
+
+    let here = mind(&dir.path().join("alpha"), &["templates", "--json"]).unwrap();
+    let named = flayer(dir.path(), &["templates", "-p", "alpha", "--json"]).unwrap();
+
+    assert_eq!(here, named);
+}
+
+/// A workspace `mind templates` consults that cannot be read is a warning
+/// beside the templates, said in the envelope as it is said on stderr, and
+/// fails the JSON as it fails the text.
+#[test]
+fn a_workspace_above_that_cannot_be_read_is_a_warning_beside_templates_as_json() {
+    let dir = workspace_with_two();
+    let alpha = dir.path().join("alpha");
+    let marker = dir.path().join(FLAYER_DIR).join(FLAYER_CONFIG);
+    let mut written = fs::read_to_string(&marker).unwrap();
+    written.push_str("garbage = [\n");
+    fs::write(&marker, written).unwrap();
+
+    let text = mind(&alpha, &["templates"]).unwrap();
+    let json = mind(&alpha, &["templates", "--json"]).unwrap();
+
+    let (_, warnings): (Vec<Template>, _) = enveloped(&json);
+    assert_eq!(warnings, warned(&text));
+    assert_eq!(warnings.len(), 1);
+    assert_eq!(warning_codes(&json), stderr_codes(&text));
+    assert!(json.stderr.is_empty(), "{:?}", json.stderr);
+    assert!(!text.ok);
+    assert_eq!(json.ok, text.ok);
+}
+
+/// An offer, as `gather list --json` prints one: the place that offers it
+/// and what that place holds of it. What each place holds is pinned by
+/// core's own tests; this reads what every one of them says.
+#[derive(Debug, Deserialize)]
+struct Offer {
+    place: String,
+    kind: String,
+    name: String,
+    summary: Option<String>,
+    origin: String,
+}
+
+/// A workspace that loads `team`, beside it, which offers its own skill
+/// `notes`, and whose shelf holds `deploy`, gathered from a repository.
+fn workspace_offering() -> (TempDir, TempDir) {
+    let source = repository(&[("skills/deploy/SKILL.md", &skill_file("deploy", "Ship it"))]);
+    let dir = TempDir::new().unwrap();
+    let hub = dir.path().join("hub");
+    let team = dir.path().join("team");
+    flayer(&hub, &["init"]).unwrap();
+    flayer(&team, &["init"]).unwrap();
+    flayer(&team, &["add", "skill", "notes", "Take notes"]).unwrap();
+    flayer(&hub, &["load", "../team"]).unwrap();
+    let url = source.path().to_string_lossy().into_owned();
+    flayer(&hub, &["gather", "git", &url]).unwrap();
+    (dir, source)
+}
+
+#[test]
+fn gather_list_as_json_holds_the_offers_the_text_lists() {
+    let (dir, source) = workspace_offering();
+    let hub = dir.path().join("hub");
+
+    let text = flayer(&hub, &["gather", "list"]).unwrap();
+    let json = flayer(&hub, &["gather", "list", "--json"]).unwrap();
+
+    let (offers, warnings): (Vec<Offer>, _) = enveloped(&json);
+    let listed: Vec<String> = offers
+        .iter()
+        .map(|offer| format!("{} {}", offer.name, offer.origin))
+        .collect();
+    assert_eq!(sorted(listed), rows(&text.stdout, 2));
+    let places: Vec<(&str, &str)> = offers
+        .iter()
+        .map(|offer| (offer.place.as_str(), offer.name.as_str()))
+        .collect();
+    assert_eq!(places, [("loaded", "notes"), ("shelf", "deploy")]);
+    assert_eq!(offers[1].origin, source.path().to_string_lossy());
+    assert_eq!(offers[0].summary.as_deref(), Some("Take notes"));
+    assert!(offers.iter().all(|offer| offer.kind == "skill"));
+    assert!(warnings.is_empty());
+    assert!(json.ok && text.ok);
+}
+
+/// A loaded workspace that has gone is a warning beside what the rest
+/// offer, in the envelope as on stderr, and fails the JSON as the text.
+#[test]
+fn a_loaded_workspace_gone_is_a_warning_beside_gather_list_as_json() {
+    let (dir, _source) = workspace_offering();
+    let hub = dir.path().join("hub");
+    fs::remove_dir_all(dir.path().join("team")).unwrap();
+
+    let text = flayer(&hub, &["gather", "list"]).unwrap();
+    let json = flayer(&hub, &["gather", "list", "--json"]).unwrap();
+
+    let (offers, warnings): (Vec<Offer>, _) = enveloped(&json);
+    assert_eq!(offers.len(), 1);
+    assert_eq!(warnings, warned(&text));
+    assert_eq!(warnings.len(), 1, "{warnings:?}");
+    assert_eq!(warning_codes(&json), stderr_codes(&text));
+    assert!(warning_codes(&json)[0].is_some());
+    assert!(!text.ok);
+    assert_eq!(json.ok, text.ok);
 }
