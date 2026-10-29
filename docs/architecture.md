@@ -1277,7 +1277,8 @@ the same way: listed, and said.
 
 The CLI prints those on stderr as warnings and exits non-zero: visible, but not
 in the way of the answer. Asked for JSON, it puts them in the envelope beside
-the data instead ([JSON, in one envelope](#json-in-one-envelope)).
+the data too, each with its code ([JSON, in one
+envelope](#json-in-one-envelope)).
 
 Each line it says beside a report is a `render::Warning`, an `Outcome`'s and a
 `Failure`'s alike: the text a terminal shows, word for word, and beside it the
@@ -1304,24 +1305,86 @@ A reading command's `--json` prints what it read inside one envelope,
 whatever the command (`render::json`):
 
 ```json
-{"version": 2, "data": ..., "warnings": [...]}
+{"version": 2, "data": ..., "warnings": [...], "coded_warnings": [...]}
 ```
 
 `status` was the first to take it ([what each project
 has](#what-each-project-has)), and every later reading command takes the same
-one rather than a shape of its own: `scan --json` ([Scanning](#scanning)) and
+one rather than a shape of its own: `scan --json` ([Scanning](#scanning)),
 `workspaces --json` ([the workspaces this machine
-knows](#the-workspaces-this-machine-knows)). One shape is one parser for a
-script, and for the panel's backend when it reads through the CLI.
+knows](#the-workspaces-this-machine-knows)), and, since #64, `list`, `show`,
+`validate`, `templates` and `gather list`, so that what a front end shows of
+a workspace's holders, their templates and its offers a script or an agent
+can print: not yet the whole snapshot (an open question below). One shape
+is one parser for a script, and for the panel's backend when it reads
+through the CLI.
 
-- **The warnings are inside it.** Failures are collected, not raised, in JSON
-  as in text: what a table would say on stderr as `warning:` lines goes into
-  `warnings`, without the prefix, and stderr is left without them, so a
-  script reading stdout misses nothing. The exit status is the text's. A
-  hint, advice for whoever reads the terminal, stays on stderr. An error that
-  stops a command is still text on stderr, `--json` or not: every error has
-  a code since #61 ([a code for what went wrong](#a-code-for-what-went-wrong)),
-  but none is printed yet.
+- **The warnings are inside it, with their codes, and on stderr too.**
+  Failures are collected, not raised, in JSON as in text: what a table says
+  on stderr as `warning:` lines goes into `warnings`, without the prefix,
+  so a script reading stdout misses nothing. `coded_warnings` says the
+  same lines again, in the same order, each as its `code` and its
+  `message`, the code `null` for a line none is given to ([a code for what
+  went wrong](#a-code-for-what-went-wrong)). A name of its own rather than
+  objects in `warnings`, whose strings a version 2 script reads: changing
+  what a field holds moves the version, and adding one does not. Codes in a
+  list beside the strings, paired by place, was the other way, rejected for
+  the reason a `Warning` keeps its code on the line: two lists every writer
+  has to keep in step. The exit status is the text's. Every warning is
+  still said on stderr, as the text says it, since #64 asked for it: the
+  envelope is a script's, which reads each warning there and need not read
+  stderr, and stderr is the terminal's, where somebody piping the JSON into
+  `jq` would otherwise see the answer and nothing of what could not be
+  read. Leaving them off stderr, as #36 first did so that a script reading
+  both channels would read each once, was rejected for that, and for every
+  command's JSON at once, `status`, `scan` and `workspaces` among them,
+  since one rule (`render::json`) says them all. A hint, advice for whoever
+  reads the terminal, stays on stderr alone. An error that stops a command
+  is still text on stderr, `--json` or not: every error has a code since
+  #61, but an error's is not printed yet.
+- **Laid out from the text's own outcome.** A command whose JSON reads what
+  its text reads builds its text, warnings and all, and `render::as_json`
+  lays that outcome out as JSON: `data` in place of stdout, each `warning:`
+  line said in the envelope, stderr left as the text has it, and the exit
+  status kept, since a report can fail with no warning at all
+  (`validate`, for an artifact that does not pass). Built from the outcome
+  rather than beside it, so that a warning a command adds on the way out,
+  a workspace it consulted that could not be read, reaches the envelope as
+  it reaches stderr; and the warnings and the exit status cannot differ
+  from the text's, as two reads of them could.
+- **What each command puts in `data`** is core's, built from what the
+  command read:
+  - `list`: the snapshot's holders, a `view::Listing`: the library, for
+    `flayer list` without `-p`, and every entry the workspace links, or the
+    one project, each as the snapshot holds it, read for the kinds asked
+    ([the read model](#the-read-model)). Its warnings and exit status are
+    the listing's, read as the text reads it, and its data a read of the
+    snapshot's beside it, since how each stands is the snapshot's to say
+    and the listing never opens the ledger. `mind list --json` reads the
+    project against the workspace `mind status` reads it against, the one
+    `mind` consults, when that one links it: alone, a copy that workspace
+    installed would stand as somebody's. It is the one JSON that reads what
+    its text does not, so what that read finds wrong is no warning and no
+    refusal, which would give the JSON an exit status the text does not
+    have: a workspace found that cannot be read, or one `-W` or the
+    activation names that is no workspace, leaves the project read alone,
+    why said among its `failures`, as a ledger that will not open is.
+    `mind status` warns or refuses there instead, its report being what
+    that workspace installed.
+  - `show`: `reading::Shown` for each artifact the name matches: where it
+    is, what its front matter declares that `show` prints, and its body.
+    The text is laid out from the same values, the file read once.
+  - `validate`: `reading::Validation`, each artifact checked with its
+    issues and whether it is invalid, and the counts its verdict follows
+    (`invalid`, `unreadable`, `differing`), which the text takes too, so
+    the two come to one verdict. Not the snapshot's rows: `flayer validate`
+    reads the shelf, which the snapshot holds as what the ledger records
+    rather than as artifacts read and checked, and neither `show` nor
+    `validate` reads the ledger, so neither says how a copy stands, which
+    read without it would call an installed copy somebody's.
+  - `templates`: core's `Template`s, the list the snapshot holds of each
+    holder; `gather list`: the `Offer`s it lists, what can be installed
+    from a loaded workspace or the shelf, which the snapshot only counts.
 - **Its names are a contract.** Every type in `data` derives `Serialize` in
   core, each field by its snake_case name, and `Kind`, `Agent` and `State`
   are serialized by the word a command line takes for them (`skill`,
@@ -1336,9 +1399,11 @@ script, and for the panel's backend when it reads through the CLI.
   holds, so one unprintable path cannot fail the report. A name once printed
   stays: a field that goes or changes what it holds moves
   `ENVELOPE_VERSION`, and one added does not, since a reader passes over a
-  key it does not know. A test reads each report back into
-  structs of its own that refuse any field they do not name
-  (`common::enveloped`), so a change shows there before it reaches a script.
+  key it does not know; `list --json` prints the snapshot's own types, so a
+  change to a holder that moves `view::FORMAT` moves it too. A test reads
+  each report back into structs of its own that refuse any field they do
+  not name (`common::enveloped`), and holds `coded_warnings` to say what
+  `warnings` says, so a change shows there before it reaches a script.
   It moved once, to 2, when `status` took the five states an installation
   stands in ([what each project has](#what-each-project-has)): `installed`
   and `partial`, which a version 1 script knew, went, and a value a script
@@ -1378,6 +1443,11 @@ type derives `Serialize` from the start:
   through `url::redacted`). `Resolved` does not: it only pairs a workspace
   with its reason, which the snapshot says beside the workspace's name and
   path.
+- **Printed by a command since #64**: a `Template` by `templates --json`,
+  an `Offer` by `gather list --json`, and three new to it: what `list
+  --json` prints of the snapshot (`view::Listing`), and what `show` and
+  `validate` say of each artifact (`reading::Shown`, `reading::Validation`
+  and its `Checked`).
 - **Not yet**, being older than the rule and handed to no front end so far:
   the ledger's record of an install (`InstallRecord`), and what an update or
   a change of agents would do (`update::Plan`, `reapply::Plan`). Each
@@ -1478,12 +1548,14 @@ variants it would build, many around an `io::Error`, or a parser's or
 SQLite's error a test has no plain way to make, and for a match that says a
 variant is missing from it but not from the list beside it.
 
-Nothing prints a code yet. A member's `error` was the first type to hold
-one, and the snapshot every front end reads holds them wherever it says what
-went wrong ([the read model](#the-read-model)), each a `code::Said`, the code
-beside its message; the CLI's warnings and failures carry them beside their
-text ([failures are collected, not raised](#failures-are-collected-not-raised)),
-which the panel's backend hands on (#67).
+A member's `error` was the first type to hold one, and the snapshot every
+front end reads holds them wherever it says what went wrong ([the read
+model](#the-read-model)), each a `code::Said`, the code beside its message;
+the CLI's warnings and failures carry them beside their text ([failures are
+collected, not raised](#failures-are-collected-not-raised)), which the
+panel's backend hands on (#67). A warning's is printed, in the JSON
+envelope's `coded_warnings` ([JSON, in one envelope](#json-in-one-envelope));
+an error's, which stops a command, is not yet.
 
 **The CLI's errors have codes too**, since what a command could not do
 reaches the panel beside what core could not: `CliError::code`, given by the
@@ -1584,6 +1656,15 @@ no workspace links.
 - **What went wrong is a `code::Said`**, its code and its message, public
   down to its fields, since the TUI reads the snapshot as Rust rather than as
   JSON.
+
+`list --json` prints a part of it, a `view::Listing`: its holders, the
+library and the projects or one of them, each read for the kinds asked, so
+that what a script prints of a project is what a front end draws of it, and
+a test of the panel compares like with like ([JSON, in one
+envelope](#json-in-one-envelope)). Read for those kinds rather than whole
+and cut down after, since the listing reads only them: a folder of a kind
+not asked for is no failure of its reply. Of every kind, it is the
+snapshot's library and projects, which a test holds it to.
 
 What a front end reads beside the snapshot is what no snapshot holds: a scan,
 and which workspace `mind` consults from each project, which depends on the
@@ -6542,6 +6623,28 @@ just listed.
 
 ## Open questions
 
+- **What of the snapshot no command prints.** #64 asked that whatever the
+  panel shows, a script or an agent can print. `list --json` prints the
+  snapshot's holders, `templates --json` their templates, `gather list
+  --json` what the shelf and the loaded workspaces offer and `workspaces
+  --json` the workspaces this machine knows, but no `--json` prints the
+  rest of it: the workspace it is of and why that one (`workspace`), the
+  workspaces it loads, each with what it offers or why it cannot
+  (`loaded`, which the TUI draws), the sources the shelf is filled from
+  (`sources`), the latest actions (`history`), or what it says belongs to
+  no holder (`warnings`). Which command prints each, a `--json` of its
+  own, a history command, or the snapshot whole, is left for the issues
+  whose views show them (#72 onward, #73 for the shelf, the sources and an
+  activity feed), so that each is printed as the view that needs it reads
+  it.
+- **`list --json` reads twice.** Its warnings and exit status are those of
+  the listing, read as the text reads it, and its data a read of the
+  snapshot's beside it, so a file changed between the two can be a warning
+  and a row that reads, or the other way round. Working the warnings out of
+  the snapshot's read would make it one read, at the price of an exit
+  status the text does not have: the snapshot also says what the listing
+  never reads, a template that will not read or a ledger that will not
+  open.
 - **A copy nobody linked.** `flayer relink` refuses a copy it can see: the
   entry still holding the id, or another project the workspace links
   holding it. A copy somewhere on disk nobody linked is beyond what it

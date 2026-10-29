@@ -9,10 +9,14 @@ use std::borrow::Cow;
 use std::fmt::Write as _;
 use std::path::PathBuf;
 
-use mindflayer_core::{Artifact, Catalog, Declared, FlayerWorkspace, Kind, MindProject, Reference};
+use mindflayer_core::code::Said;
+use mindflayer_core::reading::{Shown, Validation};
+use mindflayer_core::view::Listing;
+use mindflayer_core::{Artifact, Catalog, FlayerWorkspace, Kind, MindProject, Reference};
 
-use crate::render::{plural, printable, table, verdict};
-use crate::{CliError, Failure, Outcome, Warning};
+use super::consulted;
+use crate::render::{as_json, plural, printable, table, verdict};
+use crate::{CliError, Failure, Lookup, Outcome, Warning};
 
 /// Which level a command reports at.
 ///
@@ -223,6 +227,44 @@ pub(crate) fn list(catalog: &Catalog, projects: &[MindProject], level: Level) ->
     (table(&rows), true)
 }
 
+/// `mind list --json`: the project here as a snapshot holds it, read for
+/// `kinds`, with the warnings and the exit status of `mind list`.
+///
+/// Against the workspace `mind status` reads it against, the one `mind`
+/// consults, when that one links it: how each stands is that workspace's
+/// to say, from its ledger, and read alone a copy it installed would stand
+/// as somebody's. The text reads no workspace, so none can fail it, and
+/// the JSON keeps to the text's warnings and exit status: one found that
+/// cannot be read, or one `-W` or the activation names that is no
+/// workspace, leaves the project read alone, why said among its
+/// `failures`, as a ledger that will not open is, rather than as a warning
+/// or a refusal the text never gives. `mind status` warns or refuses
+/// instead, being a report of what that workspace installed.
+pub(crate) fn listed_here(
+    project: MindProject,
+    kinds: Vec<Kind>,
+    lookup: &Lookup,
+) -> Result<Outcome, Failure> {
+    let (workspace, unconsulted) = match consulted(&project, lookup) {
+        Ok(workspace) => (workspace, None),
+        Err(error) => (
+            None,
+            Some(Said {
+                code: error.code(),
+                message: error.to_string(),
+            }),
+        ),
+    };
+    let mut listing = Listing::of_project(&project, workspace.as_ref(), &kinds);
+    for read in &mut listing.projects {
+        read.failures.extend(unconsulted.clone());
+    }
+    let text = one_project(project, kinds, |catalog, projects, level| {
+        Ok(list(catalog, projects, level))
+    })?;
+    Ok(as_json(&listing, text))
+}
+
 /// Where a reading command looked in each of `projects`, a line a folder,
 /// for a report that found nothing to say so.
 ///
@@ -407,20 +449,30 @@ fn summary(artifact: &Artifact) -> String {
     format!("{}…", kept.trim_end())
 }
 
-/// One artifact in full: where it is, what it declares, and its contents.
+/// One artifact in full: where it is, what it declares, and its contents;
+/// with each artifact shown kept in `found`, for `--json` to print in place
+/// of the text.
+///
+/// Laid out from what core read of each ([`Shown`]), the file read once,
+/// so the text and the JSON cannot show different things.
 pub(crate) fn show(
     catalog: &Catalog,
     reference: &Reference,
     level: Level,
+    found: &mut Option<Vec<Shown>>,
 ) -> Result<(String, bool), CliError> {
     let matches = catalog.find(reference);
     if matches.is_empty() {
         return Err(CliError::UnknownArtifact(reference.typed().to_owned()));
     }
     let qualify = Qualify::over(&matches, level);
+    let shown = matches
+        .iter()
+        .map(|artifact| Shown::of(artifact))
+        .collect::<Result<Vec<Shown>, _>>()?;
 
     let mut text = String::new();
-    for (index, artifact) in matches.iter().enumerate() {
+    for (index, (artifact, shown)) in matches.iter().zip(&shown).enumerate() {
         // One name can belong to two kinds, or to two projects. Both are
         // legal, so both are shown and the separator makes it obvious there
         // was more than one.
@@ -428,33 +480,33 @@ pub(crate) fn show(
             text.push_str("\n---\n\n");
         }
         let _ = writeln!(text, "{}", label(artifact, qualify, level));
-        let _ = writeln!(text, "{}", artifact.file().display());
+        let _ = writeln!(text, "{}", shown.file.display());
         let _ = writeln!(text);
 
         // Only what the artifact actually declares. A rule that declares
         // nothing, as most do, gets no metadata block rather than an empty one.
-        match artifact.declared() {
-            Declared::Skill(manifest) => {
-                let _ = writeln!(text, "{}", manifest.description);
+        match shown.kind {
+            Kind::Skill => {
+                let _ = writeln!(text, "{}", shown.description.as_deref().unwrap_or(""));
                 // One line per key, each made printable: a value is from a
                 // file somebody wrote, and a carriage return in one could pass
                 // for a key it does not declare.
                 let mut keys = String::new();
-                if let Some(tools) = &manifest.allowed_tools {
+                if let Some(tools) = &shown.allowed_tools {
                     let _ = writeln!(keys, "allowed-tools: {}", printable(&tools.join(", ")));
                 }
-                if let Some(license) = &manifest.license {
+                if let Some(license) = &shown.license {
                     let _ = writeln!(keys, "license: {}", printable(license));
                 }
-                if let Some(compatibility) = manifest.compatibility.stated() {
+                if let Some(compatibility) = &shown.compatibility {
                     let _ = writeln!(keys, "compatibility: {}", printable(compatibility));
                 }
                 // Only the entries that are strings: the rest are
                 // `validate`'s to report, and are still in the file for
                 // whoever reads it.
-                if !manifest.metadata.entries.is_empty() {
+                if let Some(metadata) = shown.metadata.as_ref().filter(|meta| !meta.is_empty()) {
                     keys.push_str("metadata:\n");
-                    for (key, value) in &manifest.metadata.entries {
+                    for (key, value) in metadata {
                         let _ = writeln!(keys, "  {}: {}", printable(key), printable(value));
                     }
                 }
@@ -465,14 +517,14 @@ pub(crate) fn show(
             }
             // Laid out as a skill's is, a part at a time, since either part
             // may be missing.
-            Declared::Rule(manifest) => {
+            Kind::Rule => {
                 let mut parts = Vec::new();
-                if let Some(description) = manifest.description.stated() {
+                if let Some(description) = &shown.description {
                     parts.push(format!("{description}\n"));
                 }
                 // One pattern a line rather than joined like `allowed-tools`:
                 // a brace expansion such as `*.{ts,tsx}` has commas of its own.
-                if let Some(paths) = manifest.paths.stated() {
+                if let Some(paths) = &shown.paths {
                     let mut keys = String::from("paths:\n");
                     for pattern in paths {
                         let _ = writeln!(keys, "  - {}", printable(pattern));
@@ -487,18 +539,24 @@ pub(crate) fn show(
         // Blank lines trimmed at both ends, not indentation: the body usually
         // opens with a blank line after the fence, and the line above is
         // already one.
-        let contents = artifact.contents()?;
-        let body = contents.trim_start_matches(['\n', '\r']).trim_end();
+        let body = shown.body.trim_start_matches(['\n', '\r']).trim_end();
         let _ = writeln!(text, "{body}");
     }
+    *found = Some(shown);
     Ok((text, true))
 }
 
-/// Every artifact's problems, or a line saying it has none.
+/// Every artifact's problems, or a line saying it has none, and whether
+/// all passes; with what was found kept in `found`, for `--json` to print
+/// in place of the text.
+///
+/// What it found is core's ([`Validation`]), the counts the verdict follows
+/// among it, so the text and the JSON cannot come to different verdicts.
 pub(crate) fn validate(
     catalog: &Catalog,
     selector: &Selector,
     level: Level,
+    found: &mut Option<Validation>,
 ) -> Result<(String, bool), CliError> {
     let artifacts: Vec<&Artifact> = match selector {
         Selector::One(reference) => {
@@ -512,47 +570,46 @@ pub(crate) fn validate(
         // filtering again here would be filtering twice.
         Selector::Everything | Selector::OneKind(_) => catalog.artifacts().iter().collect(),
     };
+    let validation = Validation::of(&artifacts, catalog.failures());
+    let reported = verdicts(&artifacts, &validation, level);
+    *found = Some(validation);
+    Ok(reported)
+}
 
+/// What [`validate`] says of `artifacts`, as `validation` found them.
+fn verdicts(artifacts: &[&Artifact], validation: &Validation, level: Level) -> (String, bool) {
     if artifacts.is_empty() {
-        return Ok((String::from("nothing to check\n"), true));
+        return (String::from("nothing to check\n"), true);
     }
-    let qualify = Qualify::over(&artifacts, level);
+    let qualify = Qualify::over(artifacts, level);
 
     let mut text = String::new();
-    let mut invalid = 0usize;
-    for artifact in &artifacts {
-        let label = label(artifact, qualify, level);
-        if verdict(&mut text, &label, &artifact.validate()) {
-            invalid += 1;
-        }
+    for (artifact, checked) in artifacts.iter().zip(&validation.artifacts) {
+        verdict(&mut text, &label(artifact, qualify, level), &checked.issues);
     }
 
     // Counting only what loaded would report "0 invalid" for a project whose
     // files could not be read at all, with the reason on stderr where a CI log
     // will not put it next to the verdict. Copies of one name that differ
     // were read, so they are counted apart, for the same reason.
-    let unreadable = catalog
-        .failures()
-        .iter()
-        .filter(|failure| failure.is_unreadable())
-        .count();
-    let differing = artifacts
-        .iter()
-        .filter(|artifact| artifact.copies_differ())
-        .count();
     let mut tally = String::new();
-    if unreadable > 0 {
-        let _ = write!(tally, ", {} unreadable", plural(unreadable, "file"));
+    if validation.unreadable > 0 {
+        let _ = write!(
+            tally,
+            ", {} unreadable",
+            plural(validation.unreadable, "file")
+        );
     }
-    if differing > 0 {
-        let _ = write!(tally, ", {differing} with copies that differ");
+    if validation.differing > 0 {
+        let _ = write!(tally, ", {} with copies that differ", validation.differing);
     }
     let _ = writeln!(
         text,
-        "\n{} checked, {invalid} invalid{tally}",
-        counted(&artifacts)
+        "\n{} checked, {} invalid{tally}",
+        counted(artifacts),
+        validation.invalid
     );
-    Ok((text, invalid == 0 && unreadable == 0 && differing == 0))
+    (text, validation.passes())
 }
 
 /// "2 skills", "2 skills and 1 rule": what was looked at, by kind.

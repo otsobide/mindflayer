@@ -22,11 +22,13 @@ use std::path::{Path, PathBuf};
 
 use mindflayer_core::gather::Watch;
 use mindflayer_core::resolve::{self, resolve, Intent};
+use mindflayer_core::view::Listing;
 use mindflayer_core::{
     paths, scan, Catalog, Change, FlayerWorkspace, MindProject, Reference, Share,
 };
 
 use crate::homes::Lookup;
+use crate::render::json_or_text;
 use crate::{
     tui, Cli, CliError, Command, Failure, FlayerCli, FlayerCommand, Outcome, Warning,
     WorkspacesCommand,
@@ -46,8 +48,8 @@ use project::{
     scan_workspace, unlink_here, unlink_projects,
 };
 use read::{
-    everywhere, everywhere_and_the_shelf, list, list_workspace, one_project, show, validate,
-    wanted, Level, Selector,
+    everywhere, everywhere_and_the_shelf, list, list_workspace, listed_here, one_project, show,
+    validate, wanted, Level, Selector,
 };
 use settings::{agents_change, change_here, change_of, targets_change};
 use status::{status_here, status_of_project, status_of_workspace};
@@ -150,31 +152,42 @@ pub(crate) fn run_with(cli: &Cli, lookup: &Lookup, watch: &Watch) -> Result<Outc
                 remove_from(workspace, &project, reference, *yes)
             })
         }
-        Command::Templates => {
+        // Laid out as JSON once the workspace consulted has said whether it
+        // could be read, which reaches the envelope as it reaches stderr.
+        Command::Templates { json } => {
             let project = project_here(&directory)?;
-            consulting(&project, lookup, |workspace| {
-                templates_of(workspace, &project)
-            })
+            let mut found = None;
+            let text = consulting(&project, lookup, |workspace| {
+                templates_of(workspace, &project, &mut found)
+            })?;
+            Ok(json_or_text(found.filter(|_| *json), text))
         }
-        Command::List { kind } => {
+        Command::List { kind, json } => {
             let project = project_here(&directory)?;
+            if *json {
+                return listed_here(project, wanted(*kind), lookup);
+            }
             one_project(project, wanted(*kind), |catalog, projects, level| {
                 Ok(list(catalog, projects, level))
             })
         }
-        Command::Show { reference } => {
+        Command::Show { reference, json } => {
             let project = project_here(&directory)?;
             let reference = Reference::parse(reference);
-            one_project(project, wanted(reference.kind()), |catalog, _, level| {
-                show(catalog, &reference, level)
-            })
+            let mut found = None;
+            let text = one_project(project, wanted(reference.kind()), |catalog, _, level| {
+                show(catalog, &reference, level, &mut found)
+            })?;
+            Ok(json_or_text(found.filter(|_| *json), text))
         }
-        Command::Validate { target } => {
+        Command::Validate { target, json } => {
             let project = project_here(&directory)?;
             let selector = Selector::parse(target.as_deref());
-            one_project(project, selector.kinds(), |catalog, _, level| {
-                validate(catalog, &selector, level)
-            })
+            let mut found = None;
+            let text = one_project(project, selector.kinds(), |catalog, _, level| {
+                validate(catalog, &selector, level, &mut found)
+            })?;
+            Ok(json_or_text(found.filter(|_| *json), text))
         }
         Command::Status { json } => status_here(project_here(&directory)?, lookup, *json),
         Command::Link => link_here(&directory, lookup),
@@ -388,9 +401,17 @@ fn run_flayer(
                 removed_from(workspace, project.as_deref(), reference, false)
             }),
         },
-        FlayerCommand::Templates { project } => reading_workspace(directory, lookup, |workspace| {
-            templates_of(Some(workspace), &workspace.holder(project.as_deref())?)
-        }),
+        FlayerCommand::Templates { project, json } => {
+            let mut found = None;
+            let text = reading_workspace(directory, lookup, |workspace| {
+                templates_of(
+                    Some(workspace),
+                    &workspace.holder(project.as_deref())?,
+                    &mut found,
+                )
+            })?;
+            Ok(json_or_text(found.filter(|_| *json), text))
+        }
 
         FlayerCommand::Link { projects } => link_projects(directory, projects, lookup),
         FlayerCommand::Unlink { projects } => unlink_projects(directory, projects, lookup),
@@ -616,40 +637,59 @@ fn run_flayer(
         }
         FlayerCommand::Tui => tui::run(directory, lookup),
 
-        FlayerCommand::List { kind, project } => {
+        // Under --json, what the snapshot holds of each holder listed, with
+        // the warnings and the exit status of the listing.
+        FlayerCommand::List {
+            kind,
+            project,
+            json,
+        } => {
+            let kinds = wanted(*kind);
             reading_workspace(directory, lookup, |workspace| match project {
-                Some(project) => one_project(
-                    workspace.pick(project)?,
-                    wanted(*kind),
-                    |catalog, projects, level| Ok(list(catalog, projects, level)),
-                ),
+                Some(project) => {
+                    let picked = workspace.pick(project)?;
+                    let listing =
+                        json.then(|| Listing::of_project(&picked, Some(workspace), &kinds));
+                    let text = one_project(picked, kinds, |catalog, projects, level| {
+                        Ok(list(catalog, projects, level))
+                    })?;
+                    Ok(json_or_text(listing, text))
+                }
                 None => {
+                    let listing = json.then(|| Listing::of_workspace(workspace, &kinds));
                     let (projects, warnings) = managed(workspace);
-                    everywhere(
+                    let text = everywhere(
                         workspace,
                         warnings,
                         &projects,
-                        wanted(*kind),
+                        kinds,
                         |catalog, projects, level| {
                             Ok(list_workspace(catalog, projects, workspace, level))
                         },
-                    )
+                    )?;
+                    Ok(json_or_text(listing, text))
                 }
             })
         }
-        FlayerCommand::Show { reference, project } => {
+        FlayerCommand::Show {
+            reference,
+            project,
+            json,
+        } => {
             let reference = Reference::parse(reference);
             let kinds = wanted(reference.kind());
+            let mut found = None;
             let read = |catalog: &Catalog, _: &[MindProject], level: Level| {
-                show(catalog, &reference, level)
+                show(catalog, &reference, level, &mut found)
             };
-            reading_workspace(directory, lookup, |workspace| match project {
+            let text = reading_workspace(directory, lookup, |workspace| match project {
                 Some(project) => one_project(workspace.pick(project)?, kinds, read),
                 None => {
                     let (projects, warnings) = managed(workspace);
                     everywhere(workspace, warnings, &projects, kinds, read)
                 }
-            })
+            })?;
+            Ok(json_or_text(found.filter(|_| *json), text))
         }
         // Read as `list` reads, on the default workspace before it is made
         // too, and from a ledger read without being made: a workspace that
@@ -665,19 +705,27 @@ fn run_flayer(
                 None => Ok(status_of_workspace(workspace, *json)),
             })
         }
-        FlayerCommand::Validate { target, project } => {
+        // Laid out as JSON once the read is done, the hint about a workspace
+        // not made yet among what it said, which stays on stderr.
+        FlayerCommand::Validate {
+            target,
+            project,
+            json,
+        } => {
             let selector = Selector::parse(target.as_deref());
             let kinds = selector.kinds();
+            let mut found = None;
             let read = |catalog: &Catalog, _: &[MindProject], level: Level| {
-                validate(catalog, &selector, level)
+                validate(catalog, &selector, level, &mut found)
             };
-            reading_workspace(directory, lookup, |workspace| match project {
+            let text = reading_workspace(directory, lookup, |workspace| match project {
                 Some(project) => one_project(workspace.pick(project)?, kinds, read),
                 None => {
                     let (projects, warnings) = managed(workspace);
                     everywhere_and_the_shelf(workspace, warnings, &projects, kinds, read)
                 }
-            })
+            })?;
+            Ok(json_or_text(found.filter(|_| *json), text))
         }
     }
 }

@@ -191,25 +191,45 @@ pub enum Command {
     },
 
     /// List the templates `mind add --template` can start from here.
-    Templates,
+    Templates {
+        /// Print it as JSON, in the envelope every reading command's --json
+        /// shares.
+        #[arg(long)]
+        json: bool,
+    },
 
     /// List this project's artifacts.
     #[command(alias = "ls")]
     List {
         /// Only this kind: `skills` or `rules` [default: every kind].
         kind: Option<Kind>,
+
+        /// Print it as JSON, in the envelope every reading command's --json
+        /// shares.
+        #[arg(long)]
+        json: bool,
     },
 
     /// Show one artifact in full.
     Show {
         /// Its name, or `kind:name` when one name belongs to two kinds.
         reference: String,
+
+        /// Print it as JSON, in the envelope every reading command's --json
+        /// shares.
+        #[arg(long)]
+        json: bool,
     },
 
     /// Check this project's artifacts against what an agent requires.
     Validate {
         /// A kind (`rules`), or one artifact by name [default: everything].
         target: Option<String>,
+
+        /// Print it as JSON, in the envelope every reading command's --json
+        /// shares.
+        #[arg(long)]
+        json: bool,
     },
 
     /// Say what this project holds: whether what Mindflayer installed is
@@ -562,6 +582,11 @@ pub enum FlayerCommand {
         /// A project this workspace manages, instead of the workspace itself.
         #[arg(short, long, value_name = "PROJECT")]
         project: Option<String>,
+
+        /// Print it as JSON, in the envelope every reading command's --json
+        /// shares.
+        #[arg(long)]
+        json: bool,
     },
 
     /// List the workspace's own artifacts and every managed project's.
@@ -573,6 +598,11 @@ pub enum FlayerCommand {
         /// Only this project.
         #[arg(short, long, value_name = "PROJECT")]
         project: Option<String>,
+
+        /// Print it as JSON, in the envelope every reading command's --json
+        /// shares.
+        #[arg(long)]
+        json: bool,
     },
 
     /// Show one artifact in full, wherever in the workspace it is.
@@ -583,6 +613,11 @@ pub enum FlayerCommand {
         /// Only this project.
         #[arg(short, long, value_name = "PROJECT")]
         project: Option<String>,
+
+        /// Print it as JSON, in the envelope every reading command's --json
+        /// shares.
+        #[arg(long)]
+        json: bool,
     },
 
     /// Check the workspace's own artifacts, every managed project's, and what
@@ -594,6 +629,11 @@ pub enum FlayerCommand {
         /// Only this project.
         #[arg(short, long, value_name = "PROJECT")]
         project: Option<String>,
+
+        /// Print it as JSON, in the envelope every reading command's --json
+        /// shares.
+        #[arg(long)]
+        json: bool,
     },
 
     /// Say what every managed project holds: whether what Mindflayer
@@ -1081,7 +1121,12 @@ pub enum GatherCommand {
     /// List what can be installed from the shelf and from loaded workspaces,
     /// and where each artifact comes from.
     #[command(alias = "ls")]
-    List,
+    List {
+        /// Print it as JSON, in the envelope every reading command's --json
+        /// shares.
+        #[arg(long)]
+        json: bool,
+    },
 }
 
 /// What `--shell` takes, from core's list rather than spelled again here, as

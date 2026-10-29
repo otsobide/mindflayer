@@ -365,10 +365,11 @@ mind edit <NAME> [--editor CMD]
                            # open it in $VISUAL or $EDITOR, then check it
 mind rename <NAME> <NEW>   # folder and declared name together; `mv` for short
 mind remove <NAME> --yes   # delete it; without --yes, say what would go; `rm`
-mind templates             # what `add --template` can start from here
-mind list [KIND]           # this project's artifacts; `mind list rules` filters
-mind show <NAME>           # one artifact; `rule:deploy` when a name is ambiguous
-mind validate [KIND|NAME]  # check a kind, one artifact, or everything
+mind templates [--json]    # what `add --template` can start from here
+mind list [KIND] [--json]  # this project's artifacts; `mind list rules` filters
+mind show <NAME> [--json]  # one artifact; `rule:deploy` when a name is ambiguous
+mind validate [KIND|NAME] [--json]
+                           # check a kind, one artifact, or everything
 mind status [--json]       # what it holds, from where, for which agents
 mind link / mind unlink    # this project, into or out of the workspace above
 mind load / mind unload <path>...
@@ -416,7 +417,7 @@ flayer add|edit|rename|remove|templates [-p PROJECT] ...
 flayer remove <NAME> --everywhere [--yes]
                            # one of its own, out of every project it was
                            # installed into first; without --yes, the same
-flayer list|show|validate [-p PROJECT] ...
+flayer list|show|validate [-p PROJECT] [--json] ...
                            # the workspace's own and every project's, or one;
                            # validate checks the shelf too
 flayer status [-p PROJECT] [--json]
@@ -437,7 +438,8 @@ flayer load <path>...      # offer another workspace's own skills and rules,
 flayer unload <path>...    # stop offering them
 
 flayer gather git <URL>    # collect skills from a repository onto the shelf
-flayer gather list         # what is on the shelf or loaded, and where from
+flayer gather list [--json]
+                           # what is on the shelf or loaded, and where from
 flayer install             # a screen for putting skills and rules into its
                            # projects
 flayer install (-p PROJECT)...|--all-projects <NAME> [--from ORIGIN] [--force]
@@ -617,7 +619,8 @@ $ flayer scan ~/Work --depth 2 --json
     "untraced": [],
     "truncated": false
   },
-  "warnings": []
+  "warnings": [],
+  "coded_warnings": []
 }
 ```
 
@@ -1202,8 +1205,9 @@ the JSON says the same; and one given a rule some of its agents read nowhere,
 which `missed` in the JSON says.
 
 `--json` prints the same report in the envelope every reading command's
-`--json` will share: the data, the warnings that would have gone to stderr,
-and a version, which moves if a field ever goes or changes meaning. The names
+`--json` shares ([machine-readable output](#machine-readable-output)): the
+data, the warnings the text says on stderr, each again with its code, and a
+version, which moves if a field ever goes or changes meaning. The names
 in it are a contract, spelled as a command line spells them; the version is 2
 since `installed` became `current`, `outdated` or `orphaned`, and `partial`
 became `missing`:
@@ -1235,10 +1239,100 @@ $ flayer status -p tanukeys --json
       }
     ]
   },
-  "warnings": []
+  "warnings": [],
+  "coded_warnings": []
 }
 hint: tanukeys is marked by a mind.toml, which `mind migrate` moves to a settings.toml
 ```
+
+## Machine-readable output
+
+The commands that report what is there take `--json`, at either level:
+`list`, `show`, `validate`, `templates` and `status`, and `flayer
+workspaces`, `flayer scan` and `flayer gather list`. Each prints what it
+read in one envelope, the same for every command, so a script or an agent
+reads them all one way, and reads what a workspace holds, its own
+artifacts and each project's, their templates and what it can install from
+elsewhere, as every front end reads them. What it loads, the sources its
+shelf is filled from and its history have no `--json` yet. Say `collapse`
+holds the rule `git/no-force-push`, and a skill folder whose `SKILL.md` has
+lost its front matter:
+
+```
+$ mind validate --json
+{
+  "version": 2,
+  "data": {
+    "artifacts": [
+      {
+        "kind": "rule",
+        "name": "git/no-force-push",
+        "path": "/home/you/Projects/collapse/rules/git/no-force-push.md",
+        "project": "/home/you/Projects/collapse",
+        "issues": [],
+        "invalid": false,
+        "copies_differ": false
+      }
+    ],
+    "invalid": 0,
+    "unreadable": 1,
+    "differing": 0
+  },
+  "warnings": [
+    "/home/you/Projects/collapse/skills/broken/SKILL.md: the file does not start with a `---` front matter fence"
+  ],
+  "coded_warnings": [
+    {
+      "code": "front_matter_missing",
+      "message": "/home/you/Projects/collapse/skills/broken/SKILL.md: the file does not start with a `---` front matter fence"
+    }
+  ]
+}
+warning: /home/you/Projects/collapse/skills/broken/SKILL.md: the file does not start with a `---` front matter fence
+```
+
+`data` is what the command's text lists:
+
+- `list`: each holder as every front end reads it, `library` for the
+  workspace's own (`null` for one project's listing) and `projects` for
+  every entry the workspace links, a stale one saying why in `stale`. A
+  project says where it authors each kind, its settings and templates, and
+  every artifact it holds: its state, the agents that read it, where it came
+  from, where each copy is, what `validate` says of it, and for a file that
+  does not read, `unread`, with why. `mind list --json` reads the project
+  against the workspace that links it, as `mind status` does, to say how
+  each stands; when that workspace cannot be read, the project is read
+  alone and its `failures` say why, with no warning the text does not say.
+  `list rules --json` holds rules alone.
+- `show`: each artifact the name matches, with its file, what its front
+  matter declares and its `body`.
+- `validate`: each artifact checked, its `issues` (each with its `code`,
+  whether it is only a `warning`, and its `message`) and whether it is
+  `invalid`, and the counts the verdict follows.
+- `templates`: each template, its `origin` the folder or file it is, `null`
+  for one built in.
+- `gather list`: what can be installed from elsewhere, each with the `place`
+  it comes from (`loaded` or `shelf`) and its `origin`, as `--from` takes it.
+- `status`, `workspaces` and `scan`: the reports shown in [what each project
+  has](#what-each-project-has), [the flayers this machine
+  knows](#the-flayers-this-machine-knows) and [commands](#commands).
+
+`warnings` holds what the text says on stderr as `warning:` lines, without
+the prefix, and `coded_warnings` the same lines, in the same order, each
+beside its `code`: a word for what went wrong that rewording the message
+never changes, `null` for a line none is given to. Each is still said on
+stderr too, as above, as the text says it, so piping the JSON into `jq`
+leaves them on the terminal; a script reads them in the envelope and need
+not read stderr, where a `hint:`, advice for whoever reads the terminal, is
+said too and the envelope leaves it out. The exit status is the text's:
+non-zero when something could not be read, as above, and for `validate`
+when something does not pass. An error that stops a command is still a line
+on stderr, with nothing on stdout.
+
+The names in it are a contract. `version` is 2, and version 2 only grows
+additively: a field added leaves it at 2, so a script written for it passes
+over a name it does not know, and only a field dropped, renamed or holding
+something else would move it.
 
 ## Following a project that moved
 

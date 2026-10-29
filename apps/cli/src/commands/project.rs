@@ -297,10 +297,17 @@ pub(crate) fn scan_workspace(
     as_json: bool,
 ) -> Outcome {
     let scan = scan(workspace, request);
+    let warnings: Vec<Warning> = scan_said(&scan)
+        .into_iter()
+        .map(|(code, said)| Warning {
+            text: format!("warning: {said}"),
+            code,
+        })
+        .collect();
     if as_json {
-        return json(&scan, scan_warnings(&scan));
+        return json(&scan, &warnings);
     }
-    scanned(&scan, scan_said(&scan), request.order == Order::Suggested)
+    scanned(&scan, warnings, request.order == Order::Suggested)
 }
 
 /// Why one found at `route` is worth linking, as `flayer scan --suggest`
@@ -333,8 +340,8 @@ fn moved_to(old: &str, route: &str) -> String {
 }
 
 /// What a scan could not read, and that it stopped early, each as a warning
-/// says it, without the prefix: on stderr beside a table, inside the
-/// envelope beside JSON, and in a strip of the minds screen, which says them
+/// says it, without the prefix: on stderr, and inside the envelope too
+/// beside JSON, and in a strip of the minds screen, which says them
 /// in these words rather than its own.
 pub(crate) fn scan_warnings(scan: &Scan) -> Vec<String> {
     scan_said(scan).into_iter().map(|(_, said)| said).collect()
@@ -364,7 +371,7 @@ fn scan_said(scan: &Scan) -> Vec<(Option<&'static str>, String)> {
 /// No column for a project's id: the path already tells the rows apart,
 /// and the id, 32 digits on every project's line, is for a script to match
 /// a project by, which reads it from the JSON.
-fn scanned(scan: &Scan, warnings: Vec<(Option<&'static str>, String)>, suggested: bool) -> Outcome {
+fn scanned(scan: &Scan, stderr: Vec<Warning>, suggested: bool) -> Outcome {
     let mut stdout = String::new();
     if scan.found.is_empty() {
         let roots: Vec<String> = scan
@@ -445,13 +452,6 @@ fn scanned(scan: &Scan, warnings: Vec<(Option<&'static str>, String)>, suggested
         }
     }
 
-    let stderr: Vec<Warning> = warnings
-        .into_iter()
-        .map(|(code, warning)| Warning {
-            text: format!("warning: {warning}"),
-            code,
-        })
-        .collect();
     let ok = stderr.is_empty();
     Outcome { stdout, stderr, ok }
 }

@@ -96,9 +96,11 @@ under `apps/` with its own `Makefile`:
   workspace's own from every project it links before the library
   (`everywhere`), and bringing a skill somebody keeps in a project's agents'
   folders into the library, its copies recorded as installed from there
-  (`adopt`), the stable code each of its errors gives (`code`), and the
-  snapshot every front end reads a workspace through (`view`). Its only
-  I/O is files, and it never reads the environment.
+  (`adopt`), the stable code each of its errors gives (`code`), the
+  snapshot every front end reads a workspace through, and the part of it
+  `list --json` prints (`view`), and what `show` and `validate` say of each
+  artifact (`reading`). Its only I/O is files, and it never reads the
+  environment.
 - `apps/cli` (`mindflayer-cli`): the binaries `mind` (`src/main.rs`) and
   `flayer` (`src/bin/flayer.rs`), and the TUI. `src/lib.rs` only re-exports
   the public API. The parsers are in `src/parse.rs`. `src/commands.rs`
@@ -110,7 +112,8 @@ under `apps/` with its own `Makefile`:
   share, targets), `gather`, `install`, `update` and `migrate` (each at both
   levels), and `adopt` (flayer adopt). `src/render.rs` holds `Outcome`,
   `Failure` and `Warning` (a stderr line, with its code beside it), the
-  table helpers and the envelope every `--json` prints (`json`),
+  table helpers and the envelope every `--json` prints (`json`, and
+  `as_json`, which lays a text outcome out in it),
   `src/error.rs` holds `CliError` and `CODES`, every code the CLI gives of
   its own, and `src/homes.rs` decides the default home and the agent
   homes, and gathers them with `-W` and `$MINDFLAYER_WORKSPACE` into a
@@ -214,10 +217,17 @@ These are easy to break from a single file without noticing.
   line built from a value with a code takes that code; never a code spelled
   by hand for a line built from text.
 - **Reading commands print JSON in one envelope, and its names are a
-  contract.** A reading command's `--json` prints `render::json`'s
-  `{"version": 2, "data": ..., "warnings": [...]}`, never a shape of its own,
-  with what it would have said on stderr as `warning:` lines in `warnings`
-  and the exit status its text has. `data` is a type core builds and sorts,
+  contract.** A reading command's `--json` (`list`, `show`, `validate`,
+  `templates` and `status` at both levels, `workspaces`, `scan` and `gather
+  list`) prints `render::json`'s `{"version": 2, "data": ..., "warnings":
+  [...], "coded_warnings": [...]}`, never a shape of its own, with what its
+  text says on stderr as `warning:` lines in `warnings`, the same lines
+  with their codes in `coded_warnings`, and the exit status its text has;
+  those lines are still said on stderr too, a `hint:` there alone. One that
+  reads as the text does lays out the text's own outcome
+  (`render::as_json`), so that every warning it says, one added on the way
+  out included, reaches the envelope, and its exit status is the text's by
+  construction. `data` is a type core builds and sorts,
   deriving `Serialize` with its fields named in snake_case; a kind, an agent
   or a state goes out as the word a command line takes for it
   (`Kind::slug`, `Agent::name`, `State::slug`, `Standing::slug`), serialized
@@ -264,8 +274,8 @@ These are easy to break from a single file without noticing.
   `code::ALL`; `code_test.rs` holds no two codes alike and finds a type
   that derives `Error` and never joined.
 - **Failures are collected, not raised.** One unreadable artifact or stale
-  registry entry is a `warning:` on stderr (in the envelope, under `--json`)
-  and a non-zero exit, never a reason to hide the rest. An absence (no
+  registry entry is a `warning:` on stderr (in the envelope too, under
+  `--json`) and a non-zero exit, never a reason to hide the rest. An absence (no
   `skills/` folder yet) is not a failure.
 - **Never overwrite what somebody wrote.**
   - New markers are written from string templates so their comments survive:
