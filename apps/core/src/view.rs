@@ -85,6 +85,8 @@ pub struct Snapshot {
     /// Every health a project can be in, in report order: what a front end
     /// sorts and filters its projects by, so it orders none of its own.
     pub healths: Vec<Health>,
+    /// What it holds, counted: what an overview shows of it.
+    pub summary: Summary,
     /// The workspace's own artifacts.
     pub library: Library,
     /// Every entry in its registry, in the order its marker lists them, a
@@ -106,6 +108,63 @@ pub struct Snapshot {
     /// projects holding one id, what a loaded workspace cannot offer, a
     /// ledger whose shelf or history would not read.
     pub warnings: Vec<Said>,
+}
+
+/// What a workspace holds, counted: the projects it links, those that open
+/// none, and the artifacts its projects, its library and its shelf hold.
+///
+/// Counted here rather than by a front end from the lists beside it, for
+/// the reason a [`Tally`] is, and because a count of projects is no list's
+/// length: two entries can spell one directory.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+pub struct Summary {
+    /// How many directories its registry names that open a project: each
+    /// once, however many entries spell it, as [`KnownWorkspace::projects`]
+    /// counts them.
+    pub projects: usize,
+    /// How many it names that open none, each once.
+    pub stale: usize,
+    /// What those projects hold together, each project once.
+    pub held: Tally,
+    /// What its library holds: its own, which stand in no state.
+    pub library: Tally,
+    /// What its shelf holds, which stands in no state either.
+    pub shelf: Tally,
+}
+
+impl Summary {
+    /// `projects`, every entry of a registry, each directory counted once,
+    /// with `library` and `shelf`.
+    fn of(projects: &[Project], library: &Library, shelf: &[Gathered]) -> Summary {
+        let mut once: Vec<&Project> = Vec::new();
+        for project in projects {
+            if !once
+                .iter()
+                .any(|counted| same_directory(&counted.path, &project.path))
+            {
+                once.push(project);
+            }
+        }
+        let (stale, opened): (Vec<&Project>, Vec<&Project>) = once
+            .into_iter()
+            .partition(|project| project.stale.is_some());
+        Summary {
+            projects: opened.len(),
+            stale: stale.len(),
+            held: Tally::of(
+                opened.iter().flat_map(|project| {
+                    project.artifacts.iter().map(|held| (held.kind, held.state))
+                }),
+                &Kind::ALL,
+            ),
+            library: Tally::of_held(&library.artifacts, &Kind::ALL),
+            shelf: Tally::of(
+                shelf.iter().map(|gathered| (gathered.kind, None)),
+                &Kind::ALL,
+            ),
+        }
+    }
 }
 
 /// The workspace a snapshot is of.
@@ -543,7 +602,7 @@ impl Snapshot {
                 Some((settings.id.clone(), member.root.clone()))
             })
             .collect();
-        let projects = members
+        let projects: Vec<Project> = members
             .into_iter()
             .map(|member| Project::of_member(member, workspace, &Kind::ALL))
             .collect();
@@ -583,6 +642,7 @@ impl Snapshot {
         // What could not be read of a workspace this machine knows is said
         // in its row, as `stale`.
         let (known, _) = known::known(home, Some(workspace));
+        let library = Library::of(workspace, &Kind::ALL);
 
         Snapshot {
             format: FORMAT,
@@ -596,7 +656,8 @@ impl Snapshot {
             agents: Agent::ALL.to_vec(),
             states: State::ALL.to_vec(),
             healths: Health::ALL.to_vec(),
-            library: Library::of(workspace, &Kind::ALL),
+            summary: Summary::of(&projects, &library, &shelf),
+            library,
             projects,
             loaded,
             shelf,

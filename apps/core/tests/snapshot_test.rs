@@ -250,6 +250,139 @@ const EXPECTED: &str = r#"{
     "broken",
     "stale"
   ],
+  "summary": {
+    "projects": 1,
+    "stale": 1,
+    "held": {
+      "total": 3,
+      "kinds": [
+        {
+          "kind": "skill",
+          "count": 2
+        },
+        {
+          "kind": "rule",
+          "count": 1
+        }
+      ],
+      "states": [
+        {
+          "state": "current",
+          "count": 2
+        },
+        {
+          "state": "outdated",
+          "count": 0
+        },
+        {
+          "state": "edited",
+          "count": 0
+        },
+        {
+          "state": "missing",
+          "count": 0
+        },
+        {
+          "state": "orphaned",
+          "count": 0
+        },
+        {
+          "state": "foreign",
+          "count": 0
+        },
+        {
+          "state": "authored",
+          "count": 1
+        }
+      ]
+    },
+    "library": {
+      "total": 2,
+      "kinds": [
+        {
+          "kind": "skill",
+          "count": 1
+        },
+        {
+          "kind": "rule",
+          "count": 1
+        }
+      ],
+      "states": [
+        {
+          "state": "current",
+          "count": 0
+        },
+        {
+          "state": "outdated",
+          "count": 0
+        },
+        {
+          "state": "edited",
+          "count": 0
+        },
+        {
+          "state": "missing",
+          "count": 0
+        },
+        {
+          "state": "orphaned",
+          "count": 0
+        },
+        {
+          "state": "foreign",
+          "count": 0
+        },
+        {
+          "state": "authored",
+          "count": 0
+        }
+      ]
+    },
+    "shelf": {
+      "total": 1,
+      "kinds": [
+        {
+          "kind": "skill",
+          "count": 1
+        },
+        {
+          "kind": "rule",
+          "count": 0
+        }
+      ],
+      "states": [
+        {
+          "state": "current",
+          "count": 0
+        },
+        {
+          "state": "outdated",
+          "count": 0
+        },
+        {
+          "state": "edited",
+          "count": 0
+        },
+        {
+          "state": "missing",
+          "count": 0
+        },
+        {
+          "state": "orphaned",
+          "count": 0
+        },
+        {
+          "state": "foreign",
+          "count": 0
+        },
+        {
+          "state": "authored",
+          "count": 0
+        }
+      ]
+    }
+  },
   "library": {
     "directories": [
       {
@@ -834,6 +967,31 @@ fn a_file_that_does_not_read_breaks_its_project_over_an_edited_copy() {
     let project = read(&fixture, "api");
 
     assert_eq!(project.health, Health::Broken);
+}
+
+/// The overview's counts are of directories, as `known` counts them: a
+/// second spelling of one is an entry of its own, which `unlink` is given,
+/// and one project all the same, whose artifacts count once.
+#[test]
+fn the_summary_counts_each_directory_once_however_many_entries_spell_it() {
+    let fixture = fixture();
+    let marker = fixture.hub.join(FLAYER_DIR).join("flayer.toml");
+    let text = fs::read_to_string(&marker).unwrap();
+    assert!(text.contains("\"gone\""), "{text}");
+    fs::write(&marker, text.replacen("\"gone\"", "\"gone\", \"./api\"", 1)).unwrap();
+
+    let snapshot = Snapshot::read(&naming(&fixture.hub, None))
+        .unwrap()
+        .unwrap();
+
+    assert_eq!(snapshot.projects.len(), 3);
+    assert_eq!(snapshot.summary.projects, 1);
+    assert_eq!(snapshot.summary.stale, 1);
+    assert_eq!(snapshot.summary.held.total, 3);
+    assert_eq!(
+        snapshot.summary.held.total,
+        snapshot.projects[0].tally.total
+    );
 }
 
 /// What a workspace loads is listed on its own as the snapshot lists it,

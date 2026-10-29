@@ -11,6 +11,7 @@ import type { Project } from "./Project";
 import type { Said } from "./Said";
 import type { Source } from "./Source";
 import type { State } from "./State";
+import type { Summary } from "./Summary";
 import type { Workspace } from "./Workspace";
 
 /**
@@ -44,6 +45,10 @@ states: Array<State>,
  * sorts and filters its projects by, so it orders none of its own.
  */
 healths: Array<Health>, 
+/**
+ * What it holds, counted: what an overview shows of it.
+ */
+summary: Summary, 
 /**
  * The workspace's own artifacts.
  */
