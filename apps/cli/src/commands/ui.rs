@@ -64,21 +64,29 @@ pub(crate) fn ui_command(
         .enable_all()
         .build()
         .map_err(unserved)?;
-    runtime
-        .block_on(async {
-            let interrupts = Interrupts::listen()?;
-            announce(
-                &url,
-                address,
-                &root,
-                options,
-                &mut io::stdout(),
-                &mut io::stderr(),
-                webbrowser::open,
-            )?;
-            serve(listening, interrupts).await
-        })
-        .map_err(unserved)?;
+    let served = runtime.block_on(async {
+        let interrupts = Interrupts::listen()?;
+        announce(
+            &url,
+            address,
+            &root,
+            options,
+            &mut io::stdout(),
+            &mut io::stderr(),
+        )?;
+        // Off the runtime, beside the server rather than before it: a text
+        // browser runs in the foreground until it is closed, and would
+        // otherwise wait for a server that never started.
+        let no_open = options.no_open;
+        tokio::task::spawn_blocking(move || {
+            open(&url, no_open, &mut io::stderr(), webbrowser::open);
+        });
+        serve(listening, interrupts).await
+    });
+    // Without waiting for a browser still open in the foreground, which the
+    // runtime would otherwise do before it let go.
+    runtime.shutdown_background();
+    served.map_err(unserved)?;
     Ok(Outcome::plain(kept.transcript()))
 }
 
@@ -90,14 +98,12 @@ fn port(options: &UiOptions) -> u16 {
         .unwrap_or(if options.dev { DEV_PORT } else { 0 })
 }
 
-/// Say where the panel is, and open it unless told not to.
+/// Say where the panel is.
 ///
 /// The link alone on stdout, so a script reads it as the one line there; on
 /// stderr, what is served, where, and how it stops: where, because through
 /// the dev server the link names the dev server, and the port it must reach
-/// is said nowhere else. A browser that cannot be opened is said rather
-/// than failed on: the link is there to open by hand, as on a machine with
-/// no display.
+/// is said nowhere else.
 fn announce(
     url: &str,
     address: SocketAddr,
@@ -105,7 +111,6 @@ fn announce(
     options: &UiOptions,
     out: &mut dyn Write,
     err: &mut dyn Write,
-    open: impl FnOnce(&str) -> io::Result<()>,
 ) -> io::Result<()> {
     writeln!(out, "{url}")?;
     out.flush()?;
@@ -120,15 +125,28 @@ fn announce(
         "note: serving the workspace at {} on {address}{through} until Ctrl-C",
         root.display()
     );
-    if !options.no_open {
-        if let Err(error) = open(url) {
-            let _ = writeln!(
-                err,
-                "warning: no browser could be opened ({error}); open the link above in one"
-            );
-        }
-    }
     Ok(())
+}
+
+/// Open the link with `opener`, unless told not to.
+///
+/// A browser that cannot be opened is said rather than failed on: the link
+/// is there to open by hand, as on a machine with no display.
+fn open(
+    url: &str,
+    no_open: bool,
+    err: &mut dyn Write,
+    opener: impl FnOnce(&str) -> io::Result<()>,
+) {
+    if no_open {
+        return;
+    }
+    if let Err(error) = opener(url) {
+        let _ = writeln!(
+            err,
+            "warning: no browser could be opened ({error}); open the link above in one"
+        );
+    }
 }
 
 /// Answer requests until the first Ctrl-C, then finish those under way; or,
