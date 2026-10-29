@@ -1,16 +1,26 @@
 <script setup lang="ts">
+import { computed } from 'vue'
+import { useRoute } from 'vue-router'
 import type { NavigationMenuItem } from '@nuxt/ui'
 import { storeToRefs } from 'pinia'
 import { useShell } from '@/stores/shell'
 import AppLogo from './AppLogo.vue'
 
 const { sidebarOpen, sidebarCollapsed } = storeToRefs(useShell())
+const route = useRoute()
 
-// One entry for now: the views arrive with the snapshot (#72 onward), each
-// as a page under src/pages and a line here.
-const links: NavigationMenuItem[] = [
-  { label: 'Overview', icon: 'i-lucide-layout-dashboard', to: '/' }
-]
+// A view is a page under src/pages and a line here. A project's page is
+// reached from the projects, so it lights their line: `/project` is no
+// child of `/projects` to the router (src/routes.ts says why).
+const links = computed<NavigationMenuItem[]>(() => [
+  { label: 'Overview', icon: 'i-lucide-layout-dashboard', to: '/' },
+  {
+    label: 'Projects',
+    icon: 'i-lucide-folder-git-2',
+    to: '/projects',
+    active: route.path === '/project' || undefined
+  }
+])
 
 // Which server this panel came from. Each `flayer ui` takes a port of its
 // own, so two open panels can belong to two different launches.
@@ -21,12 +31,16 @@ const address = window.location.host
   <!--
     An id of its own, or Nuxt UI keys the stored size and collapse on
     useId(), whose value moves whenever something that renders before the
-    sidebar asks for an id too, and the stored state with it.
+    sidebar asks for an id too, and the stored state with it. A landmark of
+    its own, so the logo and the server's address are in one: nothing on a
+    page is outside a landmark.
   -->
   <UDashboardSidebar
     id="default"
     v-model:open="sidebarOpen"
     v-model:collapsed="sidebarCollapsed"
+    role="complementary"
+    aria-label="Sidebar"
     collapsible
     resizable
     data-testid="sidebar"

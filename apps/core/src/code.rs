@@ -248,6 +248,7 @@ pub const ALL: &[(&str, &[&str])] = &[
 /// only these two are meant to leave core. Its fields are public for a
 /// front end that reads the snapshot as Rust rather than as JSON, the TUI.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 pub struct Said {
     pub code: &'static str,
     /// Written through [`redacted`](crate::url::redacted), as every URL

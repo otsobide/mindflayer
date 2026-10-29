@@ -31,11 +31,11 @@ use std::error::Error as _;
 use std::path::{Path, PathBuf};
 use std::slice;
 
-use serde::Serialize;
+use serde::{Serialize, Serializer};
 
 use crate::agent::Agent;
 use crate::artifact::ValidationIssue;
-use crate::catalog::Catalog;
+use crate::catalog::{Catalog, DiscoveryFailure};
 use crate::code::Said;
 use crate::install::{self, LoadFailure, Offer};
 use crate::kind::Kind;
@@ -68,6 +68,7 @@ pub const HISTORY: usize = 20;
 
 /// Everything a workspace holds, as every front end shows it.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 pub struct Snapshot {
     /// [`FORMAT`].
     pub format: u32,
@@ -81,6 +82,11 @@ pub struct Snapshot {
     pub agents: Vec<Agent>,
     /// Every state an artifact can stand in, in report order.
     pub states: Vec<State>,
+    /// Every health a project can be in, in report order: what a front end
+    /// sorts and filters its projects by, so it orders none of its own.
+    pub healths: Vec<Health>,
+    /// What it holds, counted: what an overview shows of it.
+    pub summary: Summary,
     /// The workspace's own artifacts.
     pub library: Library,
     /// Every entry in its registry, in the order its marker lists them, a
@@ -104,8 +110,66 @@ pub struct Snapshot {
     pub warnings: Vec<Said>,
 }
 
+/// What a workspace holds, counted: the projects it links, those that open
+/// none, and the artifacts its projects, its library and its shelf hold.
+///
+/// Counted here rather than by a front end from the lists beside it, for
+/// the reason a [`Tally`] is, and because a count of projects is no list's
+/// length: two entries can spell one directory.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+pub struct Summary {
+    /// How many directories its registry names that open a project: each
+    /// once, however many entries spell it, as [`KnownWorkspace::projects`]
+    /// counts them.
+    pub projects: usize,
+    /// How many it names that open none, each once.
+    pub stale: usize,
+    /// What those projects hold together, each project once.
+    pub held: Tally,
+    /// What its library holds: its own, which stand in no state.
+    pub library: Tally,
+    /// What its shelf holds, which stands in no state either.
+    pub shelf: Tally,
+}
+
+impl Summary {
+    /// `projects`, every entry of a registry, each directory counted once,
+    /// with `library` and `shelf`.
+    fn of(projects: &[Project], library: &Library, shelf: &[Gathered]) -> Summary {
+        let mut once: Vec<&Project> = Vec::new();
+        for project in projects {
+            if !once
+                .iter()
+                .any(|counted| same_directory(&counted.path, &project.path))
+            {
+                once.push(project);
+            }
+        }
+        let (stale, opened): (Vec<&Project>, Vec<&Project>) = once
+            .into_iter()
+            .partition(|project| project.stale.is_some());
+        Summary {
+            projects: opened.len(),
+            stale: stale.len(),
+            held: Tally::of(
+                opened.iter().flat_map(|project| {
+                    project.artifacts.iter().map(|held| (held.kind, held.state))
+                }),
+                &Kind::ALL,
+            ),
+            library: Tally::of_held(&library.artifacts, &Kind::ALL),
+            shelf: Tally::of(
+                shelf.iter().map(|gathered| (gathered.kind, None)),
+                &Kind::ALL,
+            ),
+        }
+    }
+}
+
 /// The workspace a snapshot is of.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 pub struct Workspace {
     pub name: String,
     #[serde(serialize_with = "paths::lossy")]
@@ -119,6 +183,7 @@ pub struct Workspace {
 
 /// The workspace's own artifacts, held as a project holds its own.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 pub struct Library {
     /// Where it keeps each kind, as a route from the workspace's root.
     pub directories: Vec<Directory>,
@@ -134,6 +199,7 @@ pub struct Library {
 
 /// One entry in a workspace's registry, and the project it opens.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 pub struct Project {
     /// The entry as the marker spells it, which `-p` and `unlink` take; none
     /// for a project no workspace links.
@@ -157,11 +223,20 @@ pub struct Project {
     /// Why its entry opens no project, when it does not: listed rather than
     /// left out, since it is the one somebody has to find to unlink it.
     pub stale: Option<Said>,
+    /// How it stands as a whole, from everything below. A [`Listing`] read
+    /// for some kinds tells it from what it read of them, as it counts the
+    /// tally, and from `misplaced`, which no listing narrows: a skill that
+    /// does not read leaves `ok` a project listed for its rules. Reading
+    /// every kind for the health alone was the other way, which would weigh
+    /// a failure the listing says nowhere.
+    pub health: Health,
     /// Where it authors each kind, as a route from it.
     pub directories: Vec<Directory>,
     /// Everything it holds, authored, received or somebody's, by kind and
     /// then name, the rules its `AGENTS.md` block holds among them (D-23).
     pub artifacts: Vec<Held>,
+    /// How many of them are of each kind, and stand in each state.
+    pub tally: Tally,
     /// What `mind add --template` can start from in it.
     pub templates: Vec<Template>,
     /// Each kind it installs only where some of its agents do not read, as
@@ -178,6 +253,7 @@ pub struct Project {
 
 /// What a project's settings say, as a change of them takes it.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 pub struct ProjectSettings {
     /// Its agents, in the order its settings name them, which a change
     /// keeps for the ones it keeps: not report order, which
@@ -192,6 +268,7 @@ pub struct ProjectSettings {
 
 /// The folders a project's settings install one kind in.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 pub struct KindTargets {
     pub kind: Kind,
     /// Each folder as the settings spell it, `/` separated.
@@ -200,6 +277,7 @@ pub struct KindTargets {
 
 /// Where a holder keeps one kind.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 pub struct Directory {
     pub kind: Kind,
     /// A route from the holder, `/` separated, or the path itself when no
@@ -209,6 +287,7 @@ pub struct Directory {
 
 /// One artifact a holder holds, and how it stands there.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 pub struct Held {
     pub kind: Kind,
     pub name: String,
@@ -241,8 +320,180 @@ pub struct Held {
     pub unread: Option<Unread>,
 }
 
+/// How many artifacts a holder holds of each kind, and how many of them
+/// stand in each state.
+///
+/// Counted here, from the rows it counts, rather than by each front end from
+/// the rows it draws: a count is an answer, as which row is which artifact's
+/// is, and the panel counting its own would be a second set of them.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+pub struct Tally {
+    /// How many, every kind together.
+    pub total: usize,
+    /// How many of each kind it was read for, in report order, one it holds
+    /// none of among them: what a front end lays a column a kind out by.
+    pub kinds: Vec<KindCount>,
+    /// How many stand in each state, every state in report order, one none
+    /// stands in among them. A row that stands in none, the library's own
+    /// or one whose only copy does not read, is in no count here.
+    pub states: Vec<StateCount>,
+}
+
+/// How many of one kind.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+pub struct KindCount {
+    pub kind: Kind,
+    pub count: usize,
+}
+
+/// How many stand in one state.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+pub struct StateCount {
+    pub state: State,
+    pub count: usize,
+}
+
+impl Tally {
+    /// `rows`, each a kind and the state it stands in, counted for `kinds`:
+    /// every one of them listed, in report order, whether any row is of it.
+    fn of(rows: impl IntoIterator<Item = (Kind, Option<State>)>, kinds: &[Kind]) -> Tally {
+        let mut tally = Tally {
+            total: 0,
+            kinds: Kind::ALL
+                .into_iter()
+                .filter(|kind| kinds.contains(kind))
+                .map(|kind| KindCount { kind, count: 0 })
+                .collect(),
+            states: State::ALL
+                .into_iter()
+                .map(|state| StateCount { state, count: 0 })
+                .collect(),
+        };
+        for (kind, state) in rows {
+            tally.total += 1;
+            if let Some(counted) = tally.kinds.iter_mut().find(|each| each.kind == kind) {
+                counted.count += 1;
+            }
+            if let Some(counted) = tally
+                .states
+                .iter_mut()
+                .find(|each| Some(each.state) == state)
+            {
+                counted.count += 1;
+            }
+        }
+        tally
+    }
+
+    /// What `held` holds, for `kinds`.
+    fn of_held(held: &[Held], kinds: &[Kind]) -> Tally {
+        Tally::of(held.iter().map(|held| (held.kind, held.state)), kinds)
+    }
+}
+
+/// How a project stands as a whole: the one word a front end sorts and
+/// filters its projects by, told here, so that no front end weighs what it
+/// draws on its own.
+///
+/// Declaration order is report order, from nothing to do to nothing to
+/// open.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum Health {
+    /// Nothing in it asks for anything: what was installed is where it was
+    /// put, as it was put there and as its origin still offers it, every
+    /// agent reads what it was given, and everything reads and passes
+    /// `validate` with no warning.
+    Ok,
+    /// Everything in it reads, and something asks for a command: an
+    /// install outdated, edited, missing or orphaned, a kind or a rule some
+    /// of its agents read nowhere, a folder its targets name that no
+    /// install uses, copies of one name that do not hold the same, or
+    /// something `validate` warns of.
+    Attention,
+    /// Something in it does not read, or does not pass `validate`: a file,
+    /// a folder that cannot be listed, the ledger, its templates.
+    Broken,
+    /// Its entry opens no project.
+    Stale,
+}
+
+impl Health {
+    /// Every health, in report order.
+    pub const ALL: [Health; 4] = [Health::Ok, Health::Attention, Health::Broken, Health::Stale];
+
+    /// How it is written in JSON.
+    pub const fn slug(self) -> &'static str {
+        match self {
+            Health::Ok => "ok",
+            Health::Attention => "attention",
+            Health::Broken => "broken",
+            Health::Stale => "stale",
+        }
+    }
+
+    /// How `project`, one that opened, stands, from what the snapshot says
+    /// of it, and whether any of its `failures` is of something that does
+    /// not read (`unreadable`), which a [`Said`] no longer tells.
+    ///
+    /// Something that does not read is said over something to do, since
+    /// what to do cannot be told of a file nobody can read. A copy that is
+    /// somebody's (`foreign`) asks for nothing: it is never Mindflayer's to
+    /// change, and only an install of its name, which refuses, meets it.
+    fn of(project: &Project, unreadable: bool) -> Health {
+        let broken = unreadable
+            || project.artifacts.iter().any(|held| {
+                held.unread.is_some() || held.issues.iter().any(|issue| !issue.is_warning())
+            });
+        if broken {
+            return Health::Broken;
+        }
+        // A failure left is of copies that read and do not agree.
+        let attention = !project.failures.is_empty()
+            || !project.unreached.is_empty()
+            || !project.missed.is_empty()
+            || !project.misplaced.is_empty()
+            || project
+                .artifacts
+                .iter()
+                .any(|held| held.state.is_some_and(asks_for_a_command) || !held.issues.is_empty());
+        if attention {
+            Health::Attention
+        } else {
+            Health::Ok
+        }
+    }
+}
+
+/// Whether an artifact standing in `state` asks for a command: an update,
+/// a forced one, or an uninstall. Matched with no wildcard, so a state
+/// added does not compile until it says.
+fn asks_for_a_command(state: State) -> bool {
+    match state {
+        State::Outdated | State::Edited | State::Missing | State::Orphaned => true,
+        State::Current | State::Foreign | State::Authored => false,
+    }
+}
+
+/// By its slug, for the reason a kind is: one spelling, which a renamed
+/// variant cannot change.
+impl Serialize for Health {
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        serializer.serialize_str(self.slug())
+    }
+}
+
+#[cfg(feature = "ts")]
+crate::typescript::words! {
+    /// How a project stands as a whole.
+    Health by slug { Ok, Attention, Broken, Stale }
+}
+
 /// A copy of an artifact whose file does not read, and why.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 pub struct Unread {
     /// Where the copy is, as a route from its holder, `/` separated: its
     /// place in the folder the holder keeps its kind in, the one place a
@@ -260,6 +511,7 @@ pub struct Unread {
 
 /// A workspace another one loads, and how much of its own it offers.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 pub struct LoadedWorkspace {
     /// The entry as the marker spells it: what `flayer unload` is given.
     pub entry: String,
@@ -286,6 +538,7 @@ pub struct LoadedWorkspace {
 /// down after: a folder of a kind not asked for is not listed, so it is no
 /// failure of the reply's either.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 pub struct Listing {
     /// The workspace's own, when the listing reads them: none for one
     /// project's listing.
@@ -354,7 +607,7 @@ impl Snapshot {
                 Some((settings.id.clone(), member.root.clone()))
             })
             .collect();
-        let projects = members
+        let projects: Vec<Project> = members
             .into_iter()
             .map(|member| Project::of_member(member, workspace, &Kind::ALL))
             .collect();
@@ -394,6 +647,7 @@ impl Snapshot {
         // What could not be read of a workspace this machine knows is said
         // in its row, as `stale`.
         let (known, _) = known::known(home, Some(workspace));
+        let library = Library::of(workspace, &Kind::ALL);
 
         Snapshot {
             format: FORMAT,
@@ -406,7 +660,9 @@ impl Snapshot {
             kinds: Kind::ALL.to_vec(),
             agents: Agent::ALL.to_vec(),
             states: State::ALL.to_vec(),
-            library: Library::of(workspace, &Kind::ALL),
+            healths: Health::ALL.to_vec(),
+            summary: Summary::of(&projects, &library, &shelf),
+            library,
             projects,
             loaded,
             shelf,
@@ -469,7 +725,7 @@ impl Project {
         let entry = paths::as_route(&member.entry);
         match member.project {
             Ok(project) => Project::opened(Some(entry), &project, Some(workspace), kinds),
-            Err(error) => Project::stale(entry, member.root, &error),
+            Err(error) => Project::stale(entry, member.root, &error, kinds),
         }
     }
 
@@ -483,9 +739,17 @@ impl Project {
     ) -> Project {
         let (status, catalog, placed) = ProjectStatus::read_placed(project, kinds, workspace);
         let (artifacts, mut failures) = holdings(project, &catalog, Some((&status, &placed)));
+        // Told apart here, where the failures still say what they are: a
+        // file or a folder that does not read, or copies that do not agree.
+        let read = failures.len();
         let templates = templates(workspace, project, kinds, &mut failures);
+        let unreadable = failures.len() > read
+            || catalog
+                .failures()
+                .iter()
+                .any(DiscoveryFailure::is_unreadable);
         let settings = project.settings();
-        Project {
+        let project = Project {
             entry,
             path: project.root().to_path_buf(),
             name: Some(project.name().to_owned()),
@@ -494,7 +758,9 @@ impl Project {
             agents: status.agents,
             settings: settings.map(ProjectSettings::of),
             stale: None,
+            health: Health::Ok,
             directories: directories(project, kinds),
+            tally: Tally::of_held(&artifacts, kinds),
             artifacts,
             templates,
             unreached: status.unreached,
@@ -505,10 +771,15 @@ impl Project {
                 .map(|misplaced| Said::of(misplaced.code(), misplaced))
                 .collect(),
             failures,
+        };
+        Project {
+            health: Health::of(&project, unreadable),
+            ..project
         }
     }
 
-    fn stale(entry: String, root: PathBuf, error: &WorkspaceError) -> Project {
+    /// An entry that opens no project, which holds none of `kinds`.
+    fn stale(entry: String, root: PathBuf, error: &WorkspaceError, kinds: &[Kind]) -> Project {
         Project {
             entry: Some(entry),
             path: root,
@@ -518,8 +789,10 @@ impl Project {
             agents: Vec::new(),
             settings: None,
             stale: Some(Said::of(error.code(), error)),
+            health: Health::Stale,
             directories: Vec::new(),
             artifacts: Vec::new(),
+            tally: Tally::of([], kinds),
             templates: Vec::new(),
             unreached: Vec::new(),
             missed: Vec::new(),

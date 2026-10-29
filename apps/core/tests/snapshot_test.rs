@@ -14,7 +14,7 @@ use mindflayer_core::install::Edits;
 use mindflayer_core::ledger::{Action, InstallRecord, Outcome, Target};
 use mindflayer_core::reapply::{self, Change};
 use mindflayer_core::resolve::{Inputs, Intent, Reason};
-use mindflayer_core::view::{Held, Listing, LoadedWorkspace, Project, Snapshot};
+use mindflayer_core::view::{Health, Held, Listing, LoadedWorkspace, Project, Snapshot};
 use mindflayer_core::{
     create, hash, Agent, AgentHomes, Directories, FlayerWorkspace, Kind, MindProject, Reference,
     Share, SourceKind, State, FLAYER_DIR,
@@ -244,6 +244,145 @@ const EXPECTED: &str = r#"{
     "foreign",
     "authored"
   ],
+  "healths": [
+    "ok",
+    "attention",
+    "broken",
+    "stale"
+  ],
+  "summary": {
+    "projects": 1,
+    "stale": 1,
+    "held": {
+      "total": 3,
+      "kinds": [
+        {
+          "kind": "skill",
+          "count": 2
+        },
+        {
+          "kind": "rule",
+          "count": 1
+        }
+      ],
+      "states": [
+        {
+          "state": "current",
+          "count": 2
+        },
+        {
+          "state": "outdated",
+          "count": 0
+        },
+        {
+          "state": "edited",
+          "count": 0
+        },
+        {
+          "state": "missing",
+          "count": 0
+        },
+        {
+          "state": "orphaned",
+          "count": 0
+        },
+        {
+          "state": "foreign",
+          "count": 0
+        },
+        {
+          "state": "authored",
+          "count": 1
+        }
+      ]
+    },
+    "library": {
+      "total": 2,
+      "kinds": [
+        {
+          "kind": "skill",
+          "count": 1
+        },
+        {
+          "kind": "rule",
+          "count": 1
+        }
+      ],
+      "states": [
+        {
+          "state": "current",
+          "count": 0
+        },
+        {
+          "state": "outdated",
+          "count": 0
+        },
+        {
+          "state": "edited",
+          "count": 0
+        },
+        {
+          "state": "missing",
+          "count": 0
+        },
+        {
+          "state": "orphaned",
+          "count": 0
+        },
+        {
+          "state": "foreign",
+          "count": 0
+        },
+        {
+          "state": "authored",
+          "count": 0
+        }
+      ]
+    },
+    "shelf": {
+      "total": 1,
+      "kinds": [
+        {
+          "kind": "skill",
+          "count": 1
+        },
+        {
+          "kind": "rule",
+          "count": 0
+        }
+      ],
+      "states": [
+        {
+          "state": "current",
+          "count": 0
+        },
+        {
+          "state": "outdated",
+          "count": 0
+        },
+        {
+          "state": "edited",
+          "count": 0
+        },
+        {
+          "state": "missing",
+          "count": 0
+        },
+        {
+          "state": "orphaned",
+          "count": 0
+        },
+        {
+          "state": "foreign",
+          "count": 0
+        },
+        {
+          "state": "authored",
+          "count": 0
+        }
+      ]
+    }
+  },
   "library": {
     "directories": [
       {
@@ -321,6 +460,7 @@ const EXPECTED: &str = r#"{
         ]
       },
       "stale": null,
+      "health": "ok",
       "directories": [
         {
           "kind": "skill",
@@ -379,6 +519,49 @@ const EXPECTED: &str = r#"{
           "unread": null
         }
       ],
+      "tally": {
+        "total": 3,
+        "kinds": [
+          {
+            "kind": "skill",
+            "count": 2
+          },
+          {
+            "kind": "rule",
+            "count": 1
+          }
+        ],
+        "states": [
+          {
+            "state": "current",
+            "count": 2
+          },
+          {
+            "state": "outdated",
+            "count": 0
+          },
+          {
+            "state": "edited",
+            "count": 0
+          },
+          {
+            "state": "missing",
+            "count": 0
+          },
+          {
+            "state": "orphaned",
+            "count": 0
+          },
+          {
+            "state": "foreign",
+            "count": 0
+          },
+          {
+            "state": "authored",
+            "count": 1
+          }
+        ]
+      },
       "templates": [
         {
           "name": "full",
@@ -403,8 +586,52 @@ const EXPECTED: &str = r#"{
         "code": "not_a_project",
         "message": "<root>/hub/gone: not a mind project (no .mind/settings.toml, .mind/settings.json or .mind/mind.toml)"
       },
+      "health": "stale",
       "directories": [],
       "artifacts": [],
+      "tally": {
+        "total": 0,
+        "kinds": [
+          {
+            "kind": "skill",
+            "count": 0
+          },
+          {
+            "kind": "rule",
+            "count": 0
+          }
+        ],
+        "states": [
+          {
+            "state": "current",
+            "count": 0
+          },
+          {
+            "state": "outdated",
+            "count": 0
+          },
+          {
+            "state": "edited",
+            "count": 0
+          },
+          {
+            "state": "missing",
+            "count": 0
+          },
+          {
+            "state": "orphaned",
+            "count": 0
+          },
+          {
+            "state": "foreign",
+            "count": 0
+          },
+          {
+            "state": "authored",
+            "count": 0
+          }
+        ]
+      },
       "templates": [],
       "unreached": [],
       "missed": [],
@@ -675,6 +902,98 @@ fn an_install_nothing_of_which_is_found_says_where_it_went() {
     );
 }
 
+/// A project whose installs are as they were put, beside its own work,
+/// asks for nothing, and an entry that opens no project is stale: one word
+/// each, which a front end sorts and filters by.
+#[test]
+fn a_project_with_nothing_to_do_is_ok_and_one_that_opens_none_is_stale() {
+    let fixture = fixture();
+
+    let snapshot = Snapshot::read(&naming(&fixture.hub, None))
+        .unwrap()
+        .unwrap();
+
+    let healths: Vec<Health> = snapshot
+        .projects
+        .iter()
+        .map(|project| project.health)
+        .collect();
+    assert_eq!(healths, [Health::Ok, Health::Stale]);
+}
+
+/// An edited copy asks for attention, a forced update or an uninstall,
+/// and so does what `validate` only warns of; somebody's copy asks for
+/// nothing, since it is never Mindflayer's to change.
+#[test]
+fn an_edited_copy_asks_for_attention_and_somebody_s_asks_for_nothing() {
+    let fixture = fixture();
+    let api = fixture.hub.join("api");
+    common::write_files(
+        &api,
+        &[(
+            ".claude/skills/legacy/SKILL.md",
+            &skill("legacy", "Kept by hand"),
+        )],
+    );
+    let foreign = read(&fixture, "api");
+    fs::write(
+        api.join(".claude/skills/review/SKILL.md"),
+        skill("review", "Read it twice"),
+    )
+    .unwrap();
+    let edited = read(&fixture, "api");
+
+    assert!(foreign
+        .artifacts
+        .iter()
+        .any(|held| held.name == "legacy" && held.state == Some(State::Foreign)));
+    assert_eq!(foreign.health, Health::Ok);
+    assert_eq!(edited.health, Health::Attention);
+}
+
+/// A file that does not read breaks its project, over anything else it
+/// asks for: what to do cannot be told of a file nobody can read.
+#[test]
+fn a_file_that_does_not_read_breaks_its_project_over_an_edited_copy() {
+    let fixture = fixture();
+    let api = fixture.hub.join("api");
+    fs::write(
+        api.join(".claude/skills/review/SKILL.md"),
+        skill("review", "Read it twice"),
+    )
+    .unwrap();
+    fs::write(api.join("skills/deploy/SKILL.md"), "no front matter\n").unwrap();
+
+    let project = read(&fixture, "api");
+
+    assert_eq!(project.health, Health::Broken);
+}
+
+/// The overview's counts are of directories, as `known` counts them: a
+/// second spelling of one is an entry of its own, which `unlink` is given,
+/// and one project all the same, whose artifacts count once.
+#[test]
+fn the_summary_counts_each_directory_once_however_many_entries_spell_it() {
+    let fixture = fixture();
+    let marker = fixture.hub.join(FLAYER_DIR).join("flayer.toml");
+    let text = fs::read_to_string(&marker).unwrap();
+    assert!(text.contains("\"gone\""), "{text}");
+    fs::write(&marker, text.replacen("\"gone\"", "\"gone\", \"./api\"", 1)).unwrap();
+
+    let snapshot = Snapshot::read(&naming(&fixture.hub, None))
+        .unwrap()
+        .unwrap();
+
+    assert_eq!(snapshot.projects.len(), 3);
+    assert_eq!(snapshot.summary.projects, 1);
+    assert_eq!(snapshot.summary.stale, 1);
+    assert_eq!(snapshot.summary.held.total, 3);
+    assert_eq!(
+        snapshot.summary.held.total,
+        snapshot.projects[0].tally.total
+    );
+}
+
 /// What a workspace loads is listed on its own as the snapshot lists it,
 /// for a front end showing a project that workspace does not link.
 #[test]
@@ -746,8 +1065,44 @@ fn a_listing_of_one_kind_holds_only_that_kind() {
             .directories
             .iter()
             .all(|folder| folder.kind == Kind::Rule));
+        // Counted for the kind read, which is the only one a count is of.
+        assert_eq!(listed.tally.total, of_rules.len());
+        assert_eq!(
+            listed
+                .tally
+                .kinds
+                .iter()
+                .map(|counted| (counted.kind, counted.count))
+                .collect::<Vec<_>>(),
+            [(Kind::Rule, of_rules.len())]
+        );
     }
     assert_eq!(names(&rules.projects[0].artifacts), ["commits"]);
+}
+
+/// A listing of one kind tells each project's health from what it read, as
+/// it counts the tally from it: a skill that does not read breaks the
+/// project the snapshot holds, and is nothing to a listing of its rules.
+#[test]
+fn a_listing_of_one_kind_tells_health_from_that_kind_alone() {
+    let fixture = fixture();
+    fs::write(
+        fixture.hub.join("api/skills/deploy/SKILL.md"),
+        "no front matter\n",
+    )
+    .unwrap();
+    let workspace = FlayerWorkspace::open(&fixture.hub).unwrap();
+
+    let snapshot = Snapshot::read(&naming(&fixture.hub, None))
+        .unwrap()
+        .unwrap();
+    let skills = Listing::of_workspace(&workspace, &[Kind::Skill]);
+    let rules = Listing::of_workspace(&workspace, &[Kind::Rule]);
+
+    assert_eq!(snapshot.projects[0].name.as_deref(), Some("api"));
+    assert_eq!(snapshot.projects[0].health, Health::Broken);
+    assert_eq!(skills.projects[0].health, Health::Broken);
+    assert_eq!(rules.projects[0].health, Health::Ok);
 }
 
 /// The name of each row, in order.

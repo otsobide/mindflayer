@@ -36,6 +36,11 @@ default = ["ui"]
 # binary somebody installs has it (D-17); without it, `--no-default-features`
 # builds the commands and the TUI and nothing that serves HTTP.
 ui = ["dep:mindflayer-server", "dep:tokio", "dep:webbrowser"]
+# The TypeScript types of what the panel sends the CLI's backend and is
+# answered with, and core's beside them (#70): `make web/types` builds with
+# it to write them into the panel, and nothing else does. With `ui`, whose
+# backend the panel's queries and outcomes are.
+ts = ["ui", "dep:ts-rs", "mindflayer-core/ts"]
 
 [dependencies]
 mindflayer-core = { path = "../core" }
@@ -58,6 +63,11 @@ ratatui = "0.30.2"
 # server already builds.
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+# What derives the panel's types, under `ts`, as core's are derived. Without
+# its warnings, as core takes it: the serde attribute it cannot read here is
+# an enum's `deny_unknown_fields`, which says what a task may hold when it is
+# read, not what one is.
+ts-rs = { version = "12", optional = true, features = ["no-serde-warnings"] }
 
 [dev-dependencies]
 # `dirwalk`, to ask in process what git would list as untracked in a project

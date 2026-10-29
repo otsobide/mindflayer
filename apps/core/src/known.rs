@@ -49,6 +49,7 @@ pub struct Known {
 
 /// One workspace this machine knows.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 pub struct KnownWorkspace {
     /// What its marker calls it; none for one that would not open, which has
     /// no marker to read.

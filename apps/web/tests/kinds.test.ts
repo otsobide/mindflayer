@@ -1,0 +1,75 @@
+import { afterEach, describe, expect, it } from 'vitest'
+import { flushPromises } from '@vue/test-utils'
+import type { Kind } from '@/api/generated/Kind'
+import type { Snapshot } from '@/api/generated/Snapshot'
+import { fixture, render, texts, unmount } from './panel'
+
+afterEach(unmount)
+
+/** A kind this build of core does not have, as one added to `Kind::ALL` would arrive. */
+const MCP = 'mcp' as Kind
+
+/**
+ * The workspace fixture as a core with one more kind would answer it: the
+ * kind among the snapshot's, every tally counting it, and `api` holding one.
+ * Nothing in the panel is told of it.
+ */
+function withAKindMore(): Snapshot {
+  const snapshot = fixture('workspace')
+  snapshot.kinds.push(MCP)
+  snapshot.summary.held.kinds.push({ kind: MCP, count: 1 })
+  snapshot.summary.library.kinds.push({ kind: MCP, count: 2 })
+  snapshot.summary.shelf.kinds.push({ kind: MCP, count: 0 })
+  for (const project of snapshot.projects) {
+    project.tally.kinds.push({ kind: MCP, count: project.entry === 'api' ? 1 : 0 })
+  }
+  snapshot.projects[0]!.artifacts.push({
+    kind: MCP,
+    name: 'github',
+    summary: 'Issues and pull requests',
+    state: 'current',
+    agents: ['claude'],
+    origin: 'workspace',
+    targets: ['.mcp.json'],
+    issues: [],
+    unread: null
+  })
+  return snapshot
+}
+
+describe('a kind core adds', () => {
+  it('gets a card on the overview, counted as the snapshot counts it', async () => {
+    const { page } = await render('/', withAKindMore())
+
+    const card = page.get('[data-testid="card-kind-mcp"]')
+    expect(card.get('[data-testid="count"]').text()).toBe('1')
+    expect(card.text()).toContain('2 in the library')
+    expect(page.get('[data-testid="card-shelf"]').text()).toContain('0 mcp')
+  })
+
+  it('gets a column in the projects table, which sorts by its count', async () => {
+    const { page } = await render('/projects', withAKindMore())
+
+    expect(page.get('[data-testid="column-mcp"]').text()).toBe('mcp')
+    expect(texts(page, '[data-testid="count-mcp"]')).toEqual(['1', '0', '0', '0'])
+
+    for (const order of [['web', 'docs', 'gone', 'api'], ['api', 'web', 'docs', 'gone']]) {
+      await page.get('[data-testid="sort-kind-mcp"]').trigger('click')
+      await flushPromises()
+      expect(texts(page, '[data-testid="name"]')).toEqual(order)
+    }
+  })
+
+  it('gets a group on a project\'s page, and the commands for one a project holds none of', async () => {
+    const { page } = await render('/project?entry=api', withAKindMore())
+
+    const group = page.get('[data-testid="kind-mcp"]')
+    expect(group.get('h2').text()).toBe('mcp 1')
+    expect(texts(group, '[data-testid="artifact"] th > div:first-child')).toEqual(['github'])
+    expect(texts(group, '[data-testid="targets"] li')).toEqual(['.mcp.json'])
+
+    unmount()
+    const docs = await render('/project?entry=docs', withAKindMore())
+    expect(texts(docs.page, '[data-testid="kind-mcp"] code')).toContain('$ flayer -W /home/you/Projects install -p docs mcp:<NAME>')
+  })
+})

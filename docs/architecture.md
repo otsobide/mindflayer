@@ -18,12 +18,16 @@ apps/web     mindflayer-web      the web panel, in Vue
 
 The layout exists because there would be more than two, and the server and
 the panel are the apps [D-17](#d-17-the-next-front-end-is-a-local-web-panel)
-adds. Both sit beside the CLI rather than around it. The panel is in
-`NODE_APPS` rather than `APPS` for now (see [the web panel](#the-web-panel)).
+adds. Both sit beside the CLI rather than around it. The panel is in `APPS`
+with the crates, first, so `make test` and `make build` need Node (see [in
+`make test`, and in CI](#in-make-test-and-in-ci)).
 
 `scripts/agent-probe/` is not an app, and nothing builds or tests it. It is
 the probe behind [docs/agents.md](agents.md), run by hand against the real
 agents with the operator's own login, which is why CI never runs it.
+`scripts/serves-panel.sh` is not one either: it is what `make
+cli/release/check` runs on a release CI built ([in `make test`, and in
+CI](#in-make-test-and-in-ci)).
 
 ### The examples are a workspace
 
@@ -1458,6 +1462,16 @@ type derives `Serialize` from the start:
   derives `Serialize` in the change that first hands it to one, under the
   same rule.
 
+Each one a crate's `typescript::roots` names (what the panel reads, and
+what `list`, `show` and `validate` print), and what it names, has
+TypeScript too, written from it under the `ts` feature ([its types come from
+Rust](#its-types-come-from-rust)): derived beside `Serialize` where serde's
+is derived, and said from what the serializer writes where it is written by
+hand, so the panel is told what serde writes, not what the Rust variants are
+called. The other reports a script reads, what `status`, `scan`,
+`workspaces` and `gather list` print, have none until a view reads them
+([open questions](#open-questions)).
+
 What each says is held to the rule above, and three more things:
 
 - **Each field is named as the type names it**, whether derived or written by
@@ -1590,10 +1604,16 @@ read, built and ordered in core from the read types the commands print:
 
 - the workspace: its name, its path, the rule that chose it (`reason`) and
   whether it is made;
-- every kind, agent and state core knows, from `Kind::ALL`, `Agent::ALL` and
-  `State::ALL`, so a kind added to core reaches a front end that lays its
-  columns out by them with no change of its own
-  ([D-21](#d-21-the-panels-views-follow-the-capabilities-they-show));
+- every kind, agent, state and health core knows, from `Kind::ALL`,
+  `Agent::ALL`, `State::ALL` and `view::Health::ALL`, so a kind added to
+  core reaches a front end that lays its columns out by them with no change
+  of its own
+  ([D-21](#d-21-the-panels-views-follow-the-capabilities-they-show)), and
+  a front end that sorts by one orders them as core does;
+- what it holds, counted (`summary`): the projects its registry links and
+  the entries that open none, each directory once however many entries
+  spell it, as `known` counts them, and a tally of what those projects,
+  its library and its shelf hold;
 - its library, the workspace's own, with where it keeps each kind and the
   templates `flayer add` finds;
 - each project its registry names, in marker order, a stale entry with why
@@ -1601,8 +1621,10 @@ read, built and ordered in core from the read types the commands print:
   own, since each entry is what `unlink` is given, as the TUI has always
   listed them (a report lists one directory once). A project says its entry,
   path, name, marker, id, agents and settings, where it authors each kind,
-  its templates, and what its agents miss (`unreached`, `missed`,
-  `misplaced`), as `status` says it;
+  its templates, what its agents miss (`unreached`, `missed`,
+  `misplaced`), as `status` says it, how many of its artifacts are of each
+  kind and stand in each state (`tally`), and how it stands as a whole
+  (`health`, below);
 - each artifact a holder holds, with its kind, summary, state, the agents
   that read it, where it came from, where it is held (`targets`: every copy
   found and every place the ledger records putting one), everything
@@ -1619,12 +1641,37 @@ read, built and ordered in core from the read types the commands print:
 One value rather than each front end putting its view together from the
 reports, as the TUI did until #62: which unreadable file is which artifact's,
 which install nothing of is found, how much a load offers counted across two
-spellings of it, are answers, and a second front end working them out would
-come to a second set of them. `Snapshot::read` resolves the workspace as a
+spellings of it, how many projects hold something outdated, are answers, and
+a second front end working them out would come to a second set of them. So
+the panel draws counts the snapshot carries rather than counting the lists
+beside them, which would be a rule written in TypeScript (#72). `Snapshot::read` resolves the workspace as a
 read does, whatever its inputs intend; `Snapshot::of` builds one for a front
 end that resolved the workspace itself, to scan it too. `view::Project::read`
 and `LoadedWorkspace::of` read the same way what the TUI shows of a project
 no workspace links.
+
+A project's health is the one word a front end sorts and filters its
+projects by, from nothing to do to nothing to open:
+
+- **ok**: nothing in it asks for anything.
+- **attention**: everything in it reads, and something asks for a command:
+  an install outdated, edited, missing or orphaned, which an update, a
+  forced one or an uninstall answers; a kind or a rule some of its agents
+  read nowhere; a folder its targets name that no install uses; copies of
+  one name that do not hold the same; or something `validate` only warns
+  of.
+- **broken**: something in it does not read, a file, a folder, the ledger
+  or its templates, or does not pass `validate`. Said over attention, since
+  what to do cannot be told of a file nobody can read.
+- **stale**: its entry opens no project.
+
+Somebody's copy (`foreign`) asks for nothing: it is never Mindflayer's to
+change, and only an install of its name, which refuses, meets it. Told in
+core, where a failure still says whether it is of something that does not
+read or of copies that read and disagree, which the `Said` a project keeps
+no longer tells. The panel weighing each project's lists itself was the
+other way, which would have put the rule in TypeScript, where nothing but a
+second copy of it could check it ([open questions](#open-questions)).
 
 - **A read, and nothing more.** The ledger is opened only through
   `ledger_for_reading`, the default workspace is never made for it, and no
@@ -1645,7 +1692,10 @@ no workspace links.
   or changes what it holds, and not when one is added. A test pins the whole
   of a fixture's JSON, every key in its order, written out in the test
   rather than kept in a file a snapshot crate rewrites, so a change to it is
-  a change somebody reads in the diff.
+  a change somebody reads in the diff. The panel holds it to the same names
+  in TypeScript written from these types, which is the contract on its side
+  ([its types come from Rust](#its-types-come-from-rust)): a field that goes
+  is a panel that no longer compiles, rather than one that reads nothing.
 - **Every URL through `url::redacted`, where it is written**: a source's, an
   origin, the log's target and detail, and the message of every error it
   carries, which can quote one. The ledger hands back none with a
@@ -1672,7 +1722,12 @@ a test of the panel compares like with like ([JSON, in one
 envelope](#json-in-one-envelope)). Read for those kinds rather than whole
 and cut down after, since the listing reads only them: a folder of a kind
 not asked for is no failure of its reply. Of every kind, it is the
-snapshot's library and projects, which a test holds it to.
+snapshot's library and projects, which a test holds it to. Of fewer, a
+project's `tally` and `health` are of what it read: its health is told
+from those kinds and from `misplaced`, which names every kind's folders as
+the snapshot does, so a skill that does not read leaves `ok` a project
+listed for its rules. Reading every kind for the health alone was the
+other way, which would weigh a failure the reply says nowhere.
 
 What a front end reads beside the snapshot is what no snapshot holds: a scan,
 and which workspace `mind` consults from each project, which depends on the
@@ -4238,16 +4293,19 @@ every page with a 503 saying `panel not built: run make web/build`, the
 target that writes the folder.
 
 So the panel is built before a binary that ships it: `make cli/release` and
-`make install` build it first, the two targets outside `apps/web` that need
-Node. A release build embeds each file as it compiles, as `include_bytes!`,
-so cargo sees a later build of the panel and compiles the server again; a
-debug build reads the folder at run time, and sees one at once. Either,
-compiled while the folder was missing, embeds nothing and never looks again,
-since rust-embed resolves the folder once; so `make web/build` touches
-`src/panel.rs`, the file that embeds it, a change cargo sees. A build script
+`make install` build it first where Node and pnpm run, and say what they
+embed instead where they do not ([in `make test`, and in
+CI](#in-make-test-and-in-ci)). A release build embeds each file as it
+compiles, as `include_bytes!`, so cargo sees a later build of the panel and
+compiles the server again; a debug build reads the folder at run time, and
+sees one at once. Either, compiled while the folder was missing, embeds
+nothing and never looks again, since rust-embed resolves the folder once; so
+`make web/build` touches `src/panel.rs`, the file that embeds it, a change
+cargo sees, and so does `make web/build/if-node` when it builds nothing and
+finds the folder filled from elsewhere, as CI fills it. A build script
 watching the folder was the alternative, and it would compile the server
 again on every build while the folder is missing, as it is wherever Node is
-not, CI's runners among them until #71.
+not, CI's Rust jobs among them.
 
 Files under `assets/` are named by Vite for their contents, so they are sent
 as immutable, to be kept for a year; everything else, `index.html` above all,
@@ -4349,8 +4407,9 @@ Vue 3.5 and Nuxt UI 4 on Vite 8, in TypeScript 6 checked by vue-tsc, laid out
 the way Nuxt UI's dashboard-vue template lays out a dashboard, with a page
 per file under `src/pages`. It holds no rules, any more than the server
 does: what a valid task is, or what a project has, is core's to say, and the
-panel asks. So far it is a frame, a sidebar and a header around an empty
-overview; the views come with the snapshot (#72 onward).
+panel asks. So far it shows and changes nothing: an overview, the projects
+and a project's page, drawn from the snapshot (#72), in a frame of a sidebar
+and a header ([its views](#its-views)).
 
 ### One way out: the transport
 
@@ -4391,6 +4450,199 @@ sidebar through a bare `useStorage`, so the cookies are vueuse's default
 storage (its `getDefaultStorage` handler). The browser sends them to
 whatever listens on 127.0.0.1, so they hold nothing about anybody's work.
 
+### Its types come from Rust
+
+What the panel sends and is answered with is said once, in Rust, and the
+panel compiles against TypeScript written from it (#70): the snapshot and
+everything it holds, a file's contents, what `list`, `show` and `validate`
+print, a query, a task, what a run produced, the envelope a reading
+command's `--json` prints, and every code core and the CLI give. That
+TypeScript is the contract, the panel's side of [the read
+model](#the-read-model): `apps/web/src/api/generated`, a file a type,
+written by ts-rs, committed so a fresh clone type-checks without cargo, and
+never edited by hand. The transport takes its `Query`, `Task` and `Outcome`
+from there, and says what each query is answered with by its `type`
+(`Answers`), so a query Rust adds leaves the panel not compiling until it
+names the answer. Only the server's own replies, `{lines}` for a preview,
+`{lines, outcome}` for a run and `{error, code}` for a refusal, are still
+spelled in `transport.ts` ([open questions](#open-questions)).
+
+- **Derived beside serde.** Each type derives `ts_rs::TS` beside its
+  `Serialize` or `Deserialize`, under a `ts` feature of core's and the
+  CLI's (`#[cfg_attr(feature = "ts", derive(ts_rs::TS))]`), so its
+  TypeScript is read off the attributes serde reads (`tag`, `content`,
+  `rename_all`, `skip`): a task's `{"type": "link", "path": ...}` is a union
+  of records told apart by `type` in both. Under a feature, so a plain
+  build compiles none of it and a plain `cargo test` writes nothing
+  anywhere: only `make web/types`, `make web/types/check` and the second
+  clippy run of `make lint` build with it. A `u64` or an `i64` is a
+  `number` rather than a `bigint` (`TS_RS_LARGE_INT`): a size or a time
+  never comes near what a double holds, and `JSON.parse` gives a number. A
+  path or a URL written through `serialize_with` is the text it is in
+  TypeScript already, so ts-rs's warning that it cannot read that
+  attribute, the one it would give here, is off (`no-serde-warnings`).
+  What holds it is a test rather than the warning, which only scrolls past
+  in a build: it serializes a field through each function a field names
+  and holds what serde writes to what ts-rs says of the field's type (a
+  path is a `string` whatever its bytes, a redacted URL a `string` or
+  `string | null`), and refuses a function it does not hold, read off the
+  source (`typescript::field_serializers`), core's and the CLI's, which
+  names none.
+- **What serde writes by hand is said from what it writes**, beside its
+  serializer, never derived from the Rust variants, for the reason the
+  serializer is written by hand ([the read types
+  serialize](#the-read-types-serialize)). A word (a kind, an agent, a
+  state, a share mode, the rule that chose a workspace, a marker's file) is
+  the union of its words, written by `typescript::words!` from the function
+  the serializer calls, on every variant, matched with no wildcard so a
+  variant added does not compile until it is in the union. Deriving each
+  with its variants renamed to their words was the other way, which spells
+  every word twice and ties the TypeScript to the variants again. A
+  `ValidationIssue` is a union of one record per code, `{ code:
+  "name_segment_too_long", segment: string, length: number, warning:
+  boolean, message: string }`, so the panel narrows an issue by comparing
+  its code: what each carries is one match (`ValidationIssue::carried`)
+  that the serializer writes from too, read on one issue of each code,
+  which a test holds to `CODES`. A template's origin, `string | null`, and
+  a skill's metadata, an object written in order, say what their
+  serializers write with `ts(as)`. A test holds each to what serde writes
+  (`typescript_test.rs`): every word, every issue's keys, the origin and
+  the metadata as JSON and as TypeScript, and every name a query, a task, a
+  holder or an agents line is read by.
+- **Codes are unions too**: `CoreCode`, from `code::ALL`, and `Code`, which
+  is it and the CLI's own (`CODES`), so a code the panel compares with is
+  one that is given. Not the type of a `Said`'s or a warning's `code`,
+  which stays a `string`: what a front end hands on holds the CLI's codes
+  beside core's, and no test holds every line a command says to a code
+  listed, which such a type would promise.
+- **One list of roots a crate** (`typescript::roots`), which its export
+  test writes, each root with every type it names, into
+  `TS_RS_EXPORT_DIR`, which `.cargo/config.toml` points at the panel,
+  relative to the repository, so both crates write into one folder. It
+  sets every variable ts-rs reads, and forces each, since cargo otherwise
+  leaves one the shell exports alone: a shell set up for another project
+  would have the export write somewhere else, once the folder was emptied,
+  or write other imports, integers or maps, drift CI would never see. One
+  list rather than `#[ts(export)]` on each root, so that the test finding
+  two types written to one file, which ts-rs would merge into one file or
+  write one over the other, walks what the export writes, both crates'
+  roots together. Cargo run from outside the repository reads no
+  `.cargo/config.toml`, so an export test that finds no folder named is
+  refused rather than writing ts-rs's default, `./bindings`, beside the
+  crate.
+- **Written again by cargo alone.** `make web/types`
+  empties the folder, since ts-rs writes and never deletes, runs the tests
+  named for it with the feature (`--lib typescript`: the exports and the
+  tests holding each type to serde), and checks the panel against what they
+  wrote with vue-tsc, which `make web/typecheck` runs alone. `make
+  web/types/check` writes them the same way and fails when git sees them
+  differ from the ones committed, a file new to git among them. It needs no
+  Node, so CI runs it in a job of its own, `types drift (web)`, and a change
+  to what core or the CLI hands the panel fails there unless it was written
+  again; the vue-tsc half is `test (web)`'s ([in `make test`, and in
+  CI](#in-make-test-and-in-ci)).
+
+OpenAPI, which #70 left out, would describe the server's routes as well as
+their bodies, at the price of a schema between the Rust and the TypeScript
+that ts-rs does without. A protocol crate holding the types, which both the
+CLI and the server would depend on, was rejected with
+[D-17](#d-17-the-next-front-end-is-a-local-web-panel)'s B; the types stay
+where serde's are, and the feature only reads them.
+
+### Its views
+
+Three pages draw the snapshot ([the read model](#the-read-model)), each a
+file under `src/pages`:
+
+- **The overview** (`/`) names the workspace, where it is and why that one,
+  counts what it holds from the snapshot's `summary`, a card for every kind
+  in `kinds`, lists every failure the snapshot collected under what it is
+  about, and names the commands that would fill what is empty.
+- **The projects** (`/projects`) are a table of every entry in the
+  registry's order, with a column for every kind, sorted and filtered.
+- **A project's page** (`/project?entry=...`) groups what one holds by
+  kind, each artifact with its state, a badge in a slot for each of the
+  project's agents, its origin, its targets, what does not read and what
+  `validate` says, and what its agents never read above.
+
+Every page reads one Vue Query of the snapshot (`src/api/snapshot.ts`), so
+moving between them draws at once from what is cached, and asks again behind
+it: an answer is stale as soon as it comes, since nothing says yet when the
+workspace changed, so each page asks on opening, and so does the window when
+it comes back into focus. Once #74's events say when it changed, the panel
+will ask only then. `SnapshotGate` draws a page once the snapshot is
+answered, says it is waiting until then, and says why when the server
+refused.
+
+- **The panel lays out, groups and filters; it works nothing out.** Every
+  count it shows is one the snapshot carries, the `summary` and each
+  project's `tally` and `health`, rather than the length of a list it
+  draws, and every order is the snapshot's: the registry's for the rows,
+  `kinds` for the columns and groups, `healths` for a sort by health.
+  Grouping a project's artifacts by kind, or keeping the rows a filter
+  keeps, only chooses what to draw of what the snapshot lists. A sort by
+  name or path compares the words as the browser collates them, and one by
+  a kind's count compares numbers.
+- **A kind core adds reaches every view untouched**
+  ([D-21](#d-21-the-panels-views-follow-the-capabilities-they-show)): a
+  card, a column and a group each come from `kinds`, and a test adds one
+  the build does not have to a fixture and finds it on every page. The
+  colour and the icon of a state or a health are the panel's, kept for
+  each word it knows and plain for one it does not: the word itself, which
+  every badge says, is core's.
+- **The address is the state.** The table's text filter, its health, the
+  state the overview's counts link to, and its sort are the query of
+  `/projects`, so a link or a reload opens it as it was left. A project is
+  named by its entry in the query, never the path: an entry is a route from
+  the workspace, which can be `.` or `..`, and a browser resolves such a
+  segment in a path before the router sees it, escaped or not, which would
+  turn `/projects/..` into `/`. The server answers any path outside `/api`
+  with the page, so a reload of any of them is the panel's
+  ([The panel's files](#the-panels-files)).
+- **Usable from the keyboard, and never by colour alone.** Every control is
+  a link, a button (with `aria-pressed` for a filter and `aria-sort` on a
+  sorted column) or a field; every state and health is said as its word
+  beside its colour and icon, an agent that does not read an artifact keeps
+  its slot, crossed out, and says so in words, and a failure says its code.
+  The sidebar is a landmark of its own and each page the main one, so
+  nothing is outside a landmark. `tests/a11y.test.ts` runs axe on every
+  page, of both fixtures, with every WCAG A and AA rule and the best
+  practices but contrast, which happy-dom lays nothing out to measure.
+- **The commands are the empty states.** Whatever is empty names the
+  command that would fill it, as somebody would type it, since every change
+  is a command ([D-18](#d-18-the-panel-writes-by-running-commands)):
+  the panel runs none of them until M5. Each is a `flayer` line naming the
+  workspace with `-W` and its path, and a project with `-p` and its entry,
+  rather than a `mind` line typed from the project's folder: which workspace
+  `mind` consults there depends on the shell's own `-W`, activation and
+  home and on what is above the project ([the read
+  model](#the-read-model)), so for a project linked from beside the
+  workspace, or a panel launched with `-W` or on an activated workspace, it
+  would act on another one or none. A workspace not made yet names `flayer
+  init` first, since `-W` never makes the one it names.
+
+### Its fixtures come from Rust
+
+The views' tests render the snapshots in `apps/web/tests/fixtures`, which a
+test of the CLI writes (`apps/cli/tests/fixtures_test.rs`): it builds a
+workspace by running the commands, installing, editing a copy, changing
+the library, removing a linked folder, and reads it through the panel's
+backend as the server answers it, beside a home where nothing is made. So
+the panel's tests render what core says rather than what a person drew,
+and a field the snapshot adds, renames or fills differently reaches them.
+What differs between runs is pinned: the temporary folder reads as
+`/home`, each project's id is a fixed one, and every time the ledger keeps
+is set from one instant.
+
+They are kept as the types are ([its types come from
+Rust](#its-types-come-from-rust)): committed, so the panel's tests run
+without cargo; written under the `ts` feature, so a plain `cargo test`
+writes nothing; written again by `make web/fixtures`, which empties the
+folder first, with cargo alone; and checked by `make web/fixtures/check`,
+which fails when git sees them differ from the ones committed, in CI's
+`types drift (web)`. A fixture drawn by hand was the other way, which
+would pass its tests while the snapshot moved under it.
+
 ### Nothing the CSP refuses
 
 The server's CSP is `default-src 'self'` ([What keeps other pages
@@ -4427,14 +4679,65 @@ variable missing, or Iconify's API or the injected palette back in the
 scripts. The shell test fails on any `<style>` element added while the panel
 starts and switches colour mode.
 
-### Out of `make test` until CI has Node
+### In `make test`, and in CI
 
-`make web/<target>` reaches the panel's `Makefile` as it reaches any app's,
-but `web` is in `NODE_APPS`, not `APPS`, so `make test` and `make build`
-leave it out until CI installs Node and pnpm (#71). In the aggregates, they
-would fail on every runner for want of pnpm, test-cross's macOS and Windows
-included, and say nothing about the code. The server builds without the
-panel meanwhile, through `allow_missing`.
+`web` is in the root `Makefile`'s `APPS` like any app, and first, so `make
+test` and `make build` run the panel's targets before the crates': a machine
+without Node is told at once by `make test` rather than after every Rust
+suite, and `make build` compiles the crates after the panel, so the server
+takes it in within the same run rather than the next. An app's own Rust
+targets need no Node, and the server builds without the panel through
+`allow_missing`, so CI's Rust jobs set none up. The panel had stayed out of
+the aggregates, in a `NODE_APPS` of its own, until CI had Node (#71):
+before, `make test` would have failed on every runner for want of pnpm, and
+said nothing about the code.
+
+CI gives the panel jobs of its own:
+
+- **`test (web)`** sets up pnpm at the version `packageManager` pins, which
+  pnpm/action-setup reads from `apps/web/package.json` so a bump stays one
+  line, then Node from `.node-version` with pnpm's store cached, and runs
+  `make web/lint`, `make web/typecheck`, `make web/test` and `make
+  web/build`. It uploads `dist/`.
+- **`types drift (web)`** runs `make web/types/check`, with cargo and git
+  and no Node. With `test (web)`'s vue-tsc it is `make web/types` in two
+  halves: what is committed is what Rust writes, and the panel compiles
+  against what is committed. A job of its own rather than the step of `test
+  (cli)` it was, so a drift is a check named for it, required on its own.
+  It runs `make web/fixtures/check` too, for the snapshots the views' tests
+  render, which drift the same way ([its fixtures come from
+  Rust](#its-fixtures-come-from-rust)).
+- **`build (cli)`** waits for `test (web)`, downloads that `dist/` before
+  anything compiles, and builds the release for the runner's own triple,
+  which embeds it. The runner has Node and no pnpm, so `make cli/release`
+  takes the downloaded panel rather than building another, and the panel a
+  binary ships is the one that passed. Then it removes `apps/web/dist` and
+  runs `make cli/release/check`, which starts the release's `flayer ui`
+  (`scripts/serves-panel.sh`) from a folder of its own, with a home of its
+  own and every agent home empty, reads the link, and fails unless `/`
+  answers with the panel's page, not the 503 a build without it answers,
+  and every file under `/assets/` the page names is served. The folder has
+  to be gone, since a debug build reads it as requests come in and would
+  pass; the script refuses to run while it is there rather than delete what
+  somebody built. A script rather than a test: only a release with the
+  panel embedded can pass it, and `cargo test` builds neither.
+- **test-cross**, the macOS and Windows jobs, sets up Node and pnpm as
+  `test (web)` does, since `make test` runs the panel's suite there, and
+  runs it with `-k`, so one app failing on a platform does not hide whether
+  the others pass there.
+
+The rulesets for `dev` and `main` require every check that runs on every
+pull request, the panel's two among them; AGENTS.md lists them by name.
+
+`make install` and `make cli/release` build the panel first through `make
+web/build/if-node`. Where Node and pnpm run it is `make web/build`, and a
+build that fails fails them. Where either is missing, a warning says what
+the binaries embed instead, the panel `dist/` already holds or none, and
+they build anyway, since a binary without the panel still has every
+command; failing there, as both did before #71, left `cargo install` the
+one way to the binaries without Node. Both tools are looked for, since pnpm
+runs the panel's tools on the `node` the PATH gives, and CI's runners have
+a Node and no pnpm.
 
 Node is 24, the LTS line (`.node-version`), and pnpm is pinned through
 `packageManager`; `PNPM` names another way to run it, such as `npx`, where
@@ -6884,12 +7187,50 @@ just listed.
   rest of it: the workspace it is of and why that one (`workspace`), the
   workspaces it loads, each with what it offers or why it cannot
   (`loaded`, which the TUI draws), the sources the shelf is filled from
-  (`sources`), the latest actions (`history`), or what it says belongs to
-  no holder (`warnings`). Which command prints each, a `--json` of its
+  (`sources`), the latest actions (`history`), what it says belongs to
+  no holder (`warnings`), or what the overview counts (`summary`). Which
+  command prints each, a `--json` of its
   own, a history command, or the snapshot whole, is left for the issues
   whose views show them (#72 onward, #73 for the shelf, the sources and an
   activity feed), so that each is printed as the view that needs it reads
   it.
+- **The TUI still counts a row's problems itself.** Its project rows show
+  how many of a project's artifacts do not read or have something
+  `validate` says, and its failures, counted in the CLI from the
+  snapshot's rows (`Member::problems`), from before the snapshot said a
+  project's `health`. Showing the health instead would make the two front
+  ends agree on which projects want looking at, at the price of a row that
+  no longer says how many things do.
+- **The panel sorts names and paths as the browser collates them.** The
+  projects table sorts every other column by what the snapshot says, its
+  counts and the order it lists healths in, but text by the browser's
+  collation, which no command shares: `flayer list` keeps the registry's
+  order. Core naming an order for text, as it names one for healths, would
+  make the two agree the day a command sorts by name.
+- **The commands an empty state names are not quoted.** Each names the
+  workspace's path after `-W`, and a project's page its entry, as the
+  registry spells it, after `-p`, `relink` or `unlink`; one a shell would
+  split, a space in it, is shown unquoted: quoting is the CLI's
+  (`task::shell`), and the panel has no line of the CLI's to show until the
+  previews of M5 (#76) turn a task into its lines.
+- **The server's replies are spelled twice.** A preview's `{lines}`, a
+  run's `{lines, outcome}` and a refusal's `{error, code}` are built with
+  `json!` in the server's `api.rs` and spelled again in the panel's
+  `transport.ts`, outside what is written from Rust ([its types come from
+  Rust](#its-types-come-from-rust)): the server has no `ts` feature, and its
+  own tests hold what it answers. Structs of its own deriving `Serialize`,
+  and `TS` under a feature, would bring them under the drift check, at the
+  price of ts-rs in the one crate that depends on no mindflayer crate.
+- **What each query is answered with is the panel's to name.** `Answers`
+  pairs each query's `type` with the type it is answered with, and vue-tsc
+  holds it to name every query, but nothing holds the pairing to what the
+  backend answers, since `Backend::query` answers any JSON. A query type
+  that says its answer in Rust, written into the TypeScript with it, would.
+- **What no view reads has no TypeScript.** `status`, `scan` and
+  `workspaces` print a `Status`, a `Scan` and a `Known`, and `gather list`
+  its `Offer`s, which no root names, so the panel has no type for them yet.
+  Each joins a crate's `typescript::roots` when a view reads it, so that the
+  folder holds what the panel compiles against, and no more.
 - **`list --json` reads twice.** Its warnings and exit status are those of
   the listing, read as the text reads it, and its data a read of the
   snapshot's beside it, so a file changed between the two can be a warning
@@ -7775,3 +8116,18 @@ just listed.
 - **Ctrl-C off Unix.** `ui_test` stops the panel with SIGINT, sent by
   `kill`, so it runs on Unix only. On Windows `ui` listens for the console's
   Ctrl-C (`tokio::signal::windows::ctrl_c`), which no test sends yet (#154).
+- **A release compiled from nothing on every run.** `build (cli)` builds the
+  release profile from scratch each time: every job shares one cargo cache
+  key, saved by the first job to finish, which builds no release. A key of
+  its own would keep the release's dependencies, at the price of a second
+  target folder in a cache GitHub caps per repository.
+- **The release check on one platform.** `make cli/release/check` runs on
+  Linux only: its script needs bash 4.4 and SIGINT, and the macOS and
+  Windows jobs build no release. The compatibility pass (#154) could take it
+  there, with the console's Ctrl-C on Windows.
+- **Which panel `build (cli)` embeds rests on the runner.** `make
+  cli/release` embeds the downloaded panel because the runner has no pnpm.
+  An image that gained one would have it build the panel again, from the
+  same lockfile, on whatever Node the image has, rather than embed the one
+  `test (web)` tested; a variable telling `make web/build/if-node` to take
+  `dist/` as it is would settle it, at the price of a knob only CI turns.

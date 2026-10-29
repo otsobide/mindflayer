@@ -8,6 +8,7 @@ const route = useRoute()
 <template>
   <UDashboardPanel
     id="not-found"
+    role="main"
     data-testid="not-found"
   >
     <template #header>

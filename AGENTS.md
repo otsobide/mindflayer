@@ -23,9 +23,9 @@ The root `Makefile` is what CI runs, so prefer it to raw cargo. `make help`
 lists everything.
 
 ```bash
-make test                 # every Rust suite; the panel's is make web/test
+make test                 # every suite, the panel's first: needs Node 24 and pnpm
 make fmt/check            # CI runs this first
-make lint                 # no em dash in a tracked file, then clippy --workspace --all-targets
+make lint                 # no em dash in a tracked file, then clippy --workspace --all-targets, with the ts feature too
 make run ARGS="flayer list"
 make core/test            # one app: make <app>/<target>
 ```
@@ -48,19 +48,33 @@ PATH:
 make web/test             # vitest: apps/web/tests/<area>.test.ts
 make web/lint             # ESLint, its style included; make web/fmt fixes that
 make web/build            # vue-tsc, then apps/web/dist, which the server embeds
-make web/types            # vue-tsc alone
+make web/types            # write the types from Rust into src/api/generated, then vue-tsc
+make web/types/check      # cargo and git only (CI): fail when they are not the ones committed
+make web/fixtures         # write the snapshots the views' tests render, from Rust (cargo only)
+make web/fixtures/check   # cargo and git only (CI): fail when they are not the ones committed
+make web/typecheck        # vue-tsc alone
 make web/test PNPM='npx --yes pnpm@12.15.0'
 pnpm --dir apps/web exec vitest run tests/shell.test.ts      # one suite
 ```
 
-`make test`, `make build`, `make fmt` and `make lint` are Rust only: `web` is
-in the root Makefile's `NODE_APPS`, outside the aggregates, until CI installs
-Node (#71). A change to the panel runs its own targets. The one exception is
-`make lint`'s em dash check (`make lint/em-dash`), which reads every tracked
-file, the panel's included. The other way round, `make install` and `make
-cli/release` build the panel before the binaries that embed it, so they need
-Node, and `make web/build` touches `apps/server/src/panel.rs` so the server
-compiles again and takes the panel in.
+`make test` and `make build` run the panel's targets first (`web` is in the
+root Makefile's `APPS`), so they need Node 24 and pnpm; an app's own Rust
+targets (`make cli/test`, `make cli/build`) do not. `make fmt` and `make
+lint` are Rust only, so a change to the panel runs `make web/lint` too; only
+`make lint`'s em dash check (`make lint/em-dash`) reads every tracked file,
+the panel's included. A change to a type core or the CLI hands
+the panel runs `make web/types` and commits what it writes: CI's `types
+drift (web)` runs `make web/types/check`, which needs no Node. A change to
+what the snapshot holds runs `make web/fixtures` too, and commits the
+snapshots it writes into `apps/web/tests/fixtures`, which the same job
+checks with `make web/fixtures/check`. The other way
+round, `make install` and `make cli/release` build the panel before the
+binaries that embed it where Node and pnpm run, and warn otherwise (`make
+web/build/if-node`), and `make web/build` touches
+`apps/server/src/panel.rs` so the server compiles again and takes the panel
+in. `make cli/release/check TARGET=<triple>` fails unless the release for
+that triple serves the panel from the binary once `apps/web/dist` is gone;
+CI runs it.
 
 `make dev/link`, `make dev/unlink` and `make install` write into `~/.cargo/bin`
 (or `BINDIR`), outside the repository. Don't run them unless asked.
@@ -100,12 +114,15 @@ under `apps/` with its own `Makefile`:
   (`everywhere`), and bringing a skill somebody keeps in a project's agents'
   folders into the library, its copies recorded as installed from there
   (`adopt`), the stable code each of its errors gives (`code`), the
-  snapshot every front end reads a workspace through, and the part of it
-  `list --json` prints (`view`), one file of an artifact read as text for
+  snapshot every front end reads a workspace through, with what it counts
+  and each project's health, and the part of it `list --json` prints
+  (`view`), one file of an artifact read as text for
   the panel (`contents`), which paths and entries a request from outside
   may name (`policy`), and what `show` and `validate` say of each
   artifact (`reading`). Its only I/O is files, and it never reads the
-  environment.
+  environment. Under its `ts` feature, `typescript` gives what it hands a
+  front end TypeScript (the roots its export writes, `words!`,
+  `CoreCode`).
 - `apps/cli` (`mindflayer-cli`): the binaries `mind` (`src/main.rs`) and
   `flayer` (`src/bin/flayer.rs`), and the TUI. `src/lib.rs` only re-exports
   the public API. The parsers are in `src/parse.rs`. `src/commands.rs`
@@ -134,7 +151,9 @@ under `apps/` with its own `Makefile`:
   `ui` and the server they need are behind the crate's `ui` feature, on by
   default: `--no-default-features` builds the rest without axum
   (`tests/crate_test.rs`), and `make cli/build` builds it that way first.
-  `src/tui/` and `src/install/` are the two screens.
+  Under its `ts` feature, `src/typescript.rs` lists the roots of the
+  panel's types the CLI gives (a query, a task, an outcome, the envelope)
+  and `Code`. `src/tui/` and `src/install/` are the two screens.
 - `apps/server` (`mindflayer-server`): the local server behind the web
   panel, a library `flayer ui` runs. `src/backend.rs` is the `Backend`
   trait, `src/server.rs` binds and routes, `src/auth.rs` holds the token's
@@ -147,13 +166,20 @@ under `apps/` with its own `Makefile`:
   with pnpm. `src/main.ts` mounts what `src/panel.ts` installs (router,
   Pinia, Vue Query, Nuxt UI, the transport), which the shell test installs
   too. `src/api/transport.ts` is the `Transport` interface and `useTransport`,
-  and `src/api/http.ts` its HTTP implementation. `src/pages/` holds one page
-  per route (file routes), `src/components/` the frame (`AppSidebar`,
-  `AppHeader`, `AppLogo`), `src/stores/` Pinia's UI state, `src/query.ts`
-  the Vue Query client, `src/theme.ts` the palette, `src/color-mode.ts` the
+  and `src/api/http.ts` its HTTP implementation, `src/api/snapshot.ts` the
+  one query of the snapshot every view reads. `src/pages/` holds one page
+  per route (file routes): the overview (`index`), the projects
+  (`projects`) and a project's page (`project`, which `src/routes.ts`
+  names by its entry in the query). `src/components/` holds the frame
+  (`AppSidebar`, `AppHeader`, `AppLogo`) and the views' pieces: the badges
+  of a state, a health and the agents, a count, the warnings panel, the
+  commands an empty state names, and `SnapshotGate`, which draws a page
+  once the snapshot is answered. `src/stores/` holds Pinia's UI state,
+  `src/query.ts` the Vue Query client, `src/theme.ts` the palette, `src/color-mode.ts` the
   colour mode, and `src/overrides/` what replaces two pieces of the
   libraries for the CSP. `src/*.d.ts` are written by the Vite plugins and
-  committed.
+  committed, and so is `src/api/generated/`, written from Rust by `make
+  web/types`.
 
 Beside them, `examples/` is content and not an app: a flayer workspace whose
 own two skills and two rules anyone can `flayer load` to try Mindflayer
@@ -164,7 +190,9 @@ means changing the README too.
 
 Outside `apps/`, `scripts/agent-probe/` holds the agent probe: `probe.sh`
 isolates a run and checks the real home is left alone, and `<agent>.sh` holds
-one agent's checks (only `claude.sh` so far).
+one agent's checks (only `claude.sh` so far). `scripts/serves-panel.sh` is
+what `make cli/release/check` runs: it starts a release's `flayer ui` with a
+home of its own and every agent home empty, and asks it for the panel.
 
 ## Invariants that hold the design together
 
@@ -741,7 +769,31 @@ These are easy to break from a single file without noticing.
   `EventSource`, `WebSocket` or `XMLHttpRequest` (an ESLint rule, tested in
   `tests/lint.test.ts`). Authentication is the transport's: relative URLs,
   the `HttpOnly` cookie, the `X-Mindflayer: 1` header. What the server
-  answers belongs in Vue Query; Pinia holds UI state only.
+  answers belongs in Vue Query; Pinia holds UI state only. A view lays
+  out, groups and filters what the snapshot lists: every count it shows is
+  one the snapshot carries (`summary`, a project's `tally`), every verdict
+  one core gave (a project's `health`), every order the snapshot's
+  (`kinds`, `states`, `healths`, the registry's). A count or a verdict a
+  view needs is added to `view::Snapshot` in core, never worked out from
+  the lists, and a kind core adds reaches every view with no change
+  (`tests/kinds.test.ts`). Every page passes axe (`tests/a11y.test.ts`),
+  works from the keyboard, and never says a state by colour alone.
+- **The panel's types are written from Rust, and are its contract.** Every
+  type core and the CLI hand the panel, or take from it, derives
+  `ts_rs::TS` beside serde's derive under the `ts` feature
+  (`#[cfg_attr(feature = "ts", derive(ts_rs::TS))]`), so a plain build
+  compiles none of it and a plain `cargo test` writes nothing. A type serde
+  writes by hand says its TypeScript from what its serializer writes,
+  beside it, never from the variants: a word through `typescript::words!`,
+  from the function the serializer calls, anything else by hand or with
+  `ts(as)`, each held to serde by a test in `typescript_test.rs`. What is
+  exported is each crate's `typescript::roots`, into
+  `apps/web/src/api/generated` (`TS_RS_EXPORT_DIR`, `.cargo/config.toml`),
+  committed and never edited by hand: `make web/types` writes it again,
+  and `make web/types/check`, CI's `types drift (web)`, fails when it is
+  not what Rust writes.
+  A type a view starts to read joins `roots`; the panel spells no shape of
+  core's or the CLI's in TypeScript of its own.
 - **The panel needs nothing the CSP refuses.** No URL naming another host,
   no inline `<script>` or `<style>`, no `data:` URL: fonts are Fontsource
   files, icons are bundled Lucide (`i-lucide-<name>` in a `.vue` file) drawn
@@ -749,7 +801,8 @@ These are easy to break from a single file without noticing.
   declared in `main.css` while Nuxt UI's colours plugin is a stub
   (`src/overrides/colors.ts`), and the colour mode switches by class
   (`src/color-mode.ts`). `tests/dist.test.ts` builds the panel and checks
-  it; `tests/shell.test.ts` fails on any `<style>` element added at run time.
+  it; `tests/shell.test.ts` and `tests/views.test.ts` fail on any `<style>`
+  element added at run time, and on an icon the bundle lacks.
 - **Activating prints, and writes nothing.** `flayer activate` prints core's
   code (`activate::script`), and nothing on stdout when it fails, so `eval`
   runs nothing. Nor does it remember the workspace in the default one's
@@ -827,11 +880,24 @@ These are easy to break from a single file without noticing.
   `make cli/test` runs the unit tests in that build too.
 - The panel's suites are `apps/web/tests/<area>.test.ts`, in Vitest. The
   components run in happy-dom, mounted through `createPanel` with a fake
-  `Transport` and a memory history, so they never reach a server.
+  `Transport` and a memory history, so they never reach a server. The
+  views' suites render the snapshots in `tests/fixtures`, never one drawn
+  by hand: `apps/cli/tests/fixtures_test.rs`, under the `ts` feature,
+  builds the workspaces by running the commands and writes what the
+  panel's backend answers (`make web/fixtures`), with the temporary folder
+  as `/home`, fixed ids and pinned times. `tests/panel.ts` reads them and
+  mounts the panel at an address, answering its queries with one; a test
+  about something no fixture holds changes its own copy.
   `dist.test.ts` builds the panel in a process of its own, into a temporary
   folder under `node_modules`, and leaves `dist/` alone. `licences.test.ts`
   reads every installed package's licence: a new one outside its list of
   GPL-3.0-compatible licences fails it.
+- The tests of the panel's types are core's and the CLI's
+  `src/typescript_test.rs`, compiled only with the `ts` feature, and named
+  so `--lib typescript` picks them out: each crate's export
+  (`export_bindings`), which writes into the panel, and every type serde
+  writes by hand held to what its TypeScript says. `make web/types` and
+  `make web/types/check` run them; `make test` does not.
 - Screens are tested without a terminal. Drive `state` with key events, or
   call `tui::step`, and render `ui` into `ratatui::backend::TestBackend`. Only
   the event loops in `tui.rs` and `install.rs` go untested, so keep logic out
@@ -846,12 +912,25 @@ These are easy to break from a single file without noticing.
 - Gitflow is enforced by required checks. PRs into `dev` come from
   `feature/*`, `hotfix/*` or `release/*` (or `main`, for a back-merge). PRs
   into `main` come only from `dev`. PRs are merged with merge commits.
-- CI runs `fmt and clippy`, then `test (core)`, then `test (cli)` and
-  `test (server)`, and builds each app after its tests pass. Development
-  targets Linux only for now: macOS and Windows run only by hand
-  (`workflow_dispatch`) or on PRs labelled `full-matrix`, until the
-  compatibility pass (#154) puts them back on pushes to `dev`/`main` and PRs
-  from `dev`, `main` or `release/*`.
+- CI runs `fmt and clippy`, then `test (core)`, then `test (cli)`, `test
+  (server)`, `test (web)` and `types drift (web)`, and builds each app after
+  its tests pass. `test (web)` is the one Linux job that sets up Node: it
+  lints, type-checks, tests and builds the panel, and uploads the build.
+  `build (cli)` waits for it, embeds that build in a release, then removes
+  `apps/web/dist` and runs `make cli/release/check`. `types drift (web)`
+  runs `make web/types/check` and `make web/fixtures/check`. Development targets Linux only for now: macOS
+  and Windows (`test (macos)`, `test (windows)`, which set up Node too) run
+  only by hand (`workflow_dispatch`) or on PRs labelled `full-matrix`, until
+  the compatibility pass (#154) puts them back on pushes to `dev`/`main` and
+  PRs from `dev`, `main` or `release/*`.
+- The rulesets for `dev` and `main` require every check that runs on every
+  pull request: `fmt and clippy`, `test (core)`, `test (cli)`, `test
+  (server)`, `test (web)`, `types drift (web)`, `build (core)`, `build
+  (cli)` and `build (server)`, and `gitflow branch name` for `dev` or
+  `release source branch` for `main`. `test (macos)` and `test (windows)`
+  are not required, since they run only when asked for. A check is required
+  by its job's display name, so renaming a job means changing both
+  rulesets.
 - Commit messages: `<area>: <imperative summary>`, where area is `core`,
   `cli`, `server`, `web`, `docs`, `build`, `ci` or `chore` (`core, cli:` when
   a change spans two apps).

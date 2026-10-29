@@ -23,7 +23,10 @@ export default withVueTs(
       // Written by the Vite plugins; checked by vue-tsc, not by hand.
       'src/auto-imports.d.ts',
       'src/components.d.ts',
-      'src/route-map.d.ts'
+      'src/route-map.d.ts',
+      // Written from Rust by ts-rs (make web/types), in its own style;
+      // checked by vue-tsc and against Rust, never edited by hand.
+      'src/api/generated/**'
     ]
   },
   pluginVue.configs['flat/recommended'],

@@ -61,6 +61,7 @@ use crate::{CliError, Lookup, Warning};
 /// "workspace"}, "reference": "skill:deploy", "file": "SKILL.md"}`. A field
 /// a query does not have is refused, as a task's is.
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[serde(tag = "type", rename_all = "snake_case", deny_unknown_fields)]
 pub enum Query {
     /// Everything the workspace holds ([`Snapshot`]).
@@ -82,6 +83,7 @@ pub enum Query {
 
 /// What running a task's lines produced.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 pub struct Outcome {
     /// Whether every line ran and found everything in order.
     pub ok: bool,
@@ -93,6 +95,7 @@ pub struct Outcome {
 /// What one command line produced, as a terminal would show it, with the
 /// code of everything that went wrong beside its words.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 pub struct Run {
     /// The line, as it would be typed into a shell ([`shell`]).
     pub command: String,
