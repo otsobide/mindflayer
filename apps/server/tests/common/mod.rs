@@ -8,7 +8,7 @@
 
 pub use axum::body::{Body, Bytes};
 pub use axum::http::{header, HeaderMap, Method, Request, StatusCode};
-pub use mindflayer_server::{Backend, Listening, Server};
+pub use mindflayer_server::{Backend, Listening, Refusal, Server};
 pub use serde_json::{json, Value};
 pub use std::sync::{Arc, Condvar, Mutex};
 
@@ -21,14 +21,19 @@ use tower::ServiceExt;
 // The fake backend
 // ---------------------------------------------------------------------------
 
-/// The fake's read: say back what was sent, so a test can tell it arrived.
+/// The fake's read: say back what was sent, so a test can tell it arrived,
+/// or refuse to.
 #[derive(Deserialize)]
 pub struct FakeQuery {
     pub echo: String,
+    #[serde(default)]
+    pub refuse: bool,
 }
 
 /// The fake's task: a name to run under, whether to wait at the fake's hold
-/// before finishing, and whether to finish with an outcome JSON cannot carry.
+/// before finishing, whether to finish with an outcome JSON cannot carry,
+/// and whether to refuse it, when its lines are asked for or only once it
+/// is handed over to run.
 #[derive(Deserialize)]
 pub struct FakeTask {
     pub name: String,
@@ -36,6 +41,19 @@ pub struct FakeTask {
     pub hold: bool,
     #[serde(default)]
     pub unwritable: bool,
+    #[serde(default)]
+    pub refuse: bool,
+    #[serde(default)]
+    pub refuse_run: bool,
+}
+
+/// What the fake refuses with: a code of its own, which a real backend's
+/// would be one of its front end's.
+pub fn refusal(what: &str) -> Refusal {
+    Refusal {
+        code: "fake_refused",
+        message: format!("{what} is refused"),
+    }
 }
 
 /// What running a fake task says.
@@ -74,15 +92,24 @@ impl Backend for Fake {
     type Task = FakeTask;
     type Outcome = FakeOutcome;
 
-    fn query(&self, query: FakeQuery) -> Value {
-        json!({ "echo": query.echo })
+    fn query(&self, query: FakeQuery) -> Result<Value, Refusal> {
+        if query.refuse {
+            return Err(refusal(&query.echo));
+        }
+        Ok(json!({ "echo": query.echo }))
     }
 
-    fn preview(&self, task: &FakeTask) -> Vec<String> {
-        vec![format!("fake run {}", task.name)]
+    fn preview(&self, task: &FakeTask) -> Result<Vec<String>, Refusal> {
+        if task.refuse {
+            return Err(refusal(&task.name));
+        }
+        Ok(vec![format!("fake run {}", task.name)])
     }
 
-    fn run(&self, task: FakeTask) -> FakeOutcome {
+    fn run(&self, task: FakeTask) -> Result<FakeOutcome, Refusal> {
+        if task.refuse || task.refuse_run {
+            return Err(refusal(&task.name));
+        }
         self.runs
             .lock()
             .unwrap()
@@ -91,11 +118,11 @@ impl Backend for Fake {
             self.hold.wait();
         }
         self.runs.lock().unwrap().push(format!("end {}", task.name));
-        FakeOutcome {
+        Ok(FakeOutcome {
             ran: task.name,
             thread: std::thread::current().name().map(str::to_owned),
             unwritable: task.unwritable.then_some(Unwritable),
-        }
+        })
     }
 
     fn watched_paths(&self) -> Vec<PathBuf> {

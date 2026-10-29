@@ -11,7 +11,7 @@ use serde_json::json;
 
 use crate::transcript::Transcript;
 use crate::writer::Writer;
-use crate::Backend;
+use crate::{Backend, Refusal};
 
 /// What every handler under `/api` shares.
 pub(crate) struct Api<B: Backend> {
@@ -35,7 +35,8 @@ pub(crate) async fn query<B: Backend>(
     };
     let backend = Arc::clone(&api.backend);
     match tokio::task::spawn_blocking(move || backend.query(query)).await {
-        Ok(answer) => Json(answer).into_response(),
+        Ok(Ok(answer)) => Json(answer).into_response(),
+        Ok(Err(refusal)) => refused_by(refusal),
         Err(_) => error(
             StatusCode::INTERNAL_SERVER_ERROR,
             "the backend failed while answering the query",
@@ -56,7 +57,8 @@ pub(crate) async fn preview<B: Backend>(
     };
     let backend = Arc::clone(&api.backend);
     match tokio::task::spawn_blocking(move || backend.preview(&task)).await {
-        Ok(lines) => Json(json!({ "lines": lines })).into_response(),
+        Ok(Ok(lines)) => Json(json!({ "lines": lines })).into_response(),
+        Ok(Err(refusal)) => refused_by(refusal),
         Err(_) => error(
             StatusCode::INTERNAL_SERVER_ERROR,
             "the backend failed while previewing the task",
@@ -65,7 +67,8 @@ pub(crate) async fn preview<B: Backend>(
 }
 
 /// `POST /api/commands`: run a task, once every task that arrived before it
-/// has run, and say what its lines were and what came of them.
+/// has run, and say what its lines were and what came of them; or, when the
+/// backend refused it, why nothing of it ran.
 pub(crate) async fn commands<B: Backend>(
     State(api): State<Arc<Api<B>>>,
     body: Result<Json<B::Task>, JsonRejection>,
@@ -75,7 +78,8 @@ pub(crate) async fn commands<B: Backend>(
         Err(rejection) => return refused(rejection),
     };
     match api.writer.run(task).await {
-        Ok(entry) => Json(entry).into_response(),
+        Ok(Ok(entry)) => Json(entry).into_response(),
+        Ok(Err(refusal)) => refused_by(refusal),
         Err(message) => error(StatusCode::INTERNAL_SERVER_ERROR, &message),
     }
 }
@@ -112,6 +116,17 @@ pub(crate) async fn not_allowed(method: Method, uri: Uri) -> Response {
 /// other error here rather than axum's plain text.
 pub(crate) fn refused(rejection: JsonRejection) -> Response {
     error(rejection.status(), &rejection.body_text())
+}
+
+/// What the backend refused, as `{"error": "...", "code": "..."}`: a 422,
+/// as a body it could not read is, since in both the request arrived whole
+/// and is not one to act on.
+pub(crate) fn refused_by(refusal: Refusal) -> Response {
+    (
+        StatusCode::UNPROCESSABLE_ENTITY,
+        Json(json!({ "error": refusal.message, "code": refusal.code })),
+    )
+        .into_response()
 }
 
 /// An error, as `{"error": "..."}`.

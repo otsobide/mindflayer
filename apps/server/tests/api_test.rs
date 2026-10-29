@@ -51,6 +51,27 @@ async fn a_query_the_backend_cannot_read_gets_a_json_error() {
     assert!(reply.json()["error"].is_string());
 }
 
+/// A query the backend read and will not answer, as its front end's rules
+/// say: a 422, the code beside the message for the panel to act on.
+#[tokio::test]
+async fn a_query_the_backend_refuses_says_why_with_its_code() {
+    let (server, _) = launch();
+
+    let reply = post(
+        &server,
+        "/api/query",
+        Auth::Bearer(server.token()),
+        json!({ "echo": "/etc/passwd", "refuse": true }),
+    )
+    .await;
+
+    assert_eq!(reply.status, StatusCode::UNPROCESSABLE_ENTITY);
+    assert_eq!(
+        reply.json(),
+        json!({ "error": "/etc/passwd is refused", "code": "fake_refused" })
+    );
+}
+
 #[tokio::test]
 async fn a_preview_shows_a_tasks_lines_and_runs_nothing() {
     let (server, runs) = launch();
@@ -65,6 +86,26 @@ async fn a_preview_shows_a_tasks_lines_and_runs_nothing() {
 
     assert_eq!(reply.status, StatusCode::OK);
     assert_eq!(reply.json(), json!({ "lines": ["fake run link beta"] }));
+    assert!(runs.lock().unwrap().is_empty());
+}
+
+#[tokio::test]
+async fn a_preview_the_backend_refuses_says_why_with_its_code() {
+    let (server, runs) = launch();
+
+    let reply = post(
+        &server,
+        "/api/commands/preview",
+        Auth::Bearer(server.token()),
+        json!({ "name": "edit", "refuse": true }),
+    )
+    .await;
+
+    assert_eq!(reply.status, StatusCode::UNPROCESSABLE_ENTITY);
+    assert_eq!(
+        reply.json(),
+        json!({ "error": "edit is refused", "code": "fake_refused" })
+    );
     assert!(runs.lock().unwrap().is_empty());
 }
 

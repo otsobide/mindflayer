@@ -46,6 +46,59 @@ async fn a_task_the_backend_cannot_read_runs_nothing() {
     assert!(runs.lock().unwrap().is_empty());
 }
 
+/// Refused when its lines are asked for, on the writer thread just before
+/// it would run: it is never handed over to run, and leaves the transcript,
+/// which is runs only, as it was.
+#[tokio::test]
+async fn a_task_the_backend_refuses_runs_nothing_and_is_no_run() {
+    let (server, runs) = launch();
+    let token = Auth::Bearer(server.token());
+
+    let reply = post(
+        &server,
+        "/api/commands",
+        token,
+        json!({ "name": "unlink -rf", "refuse": true }),
+    )
+    .await;
+
+    assert_eq!(reply.status, StatusCode::UNPROCESSABLE_ENTITY);
+    assert_eq!(
+        reply.json(),
+        json!({ "error": "unlink -rf is refused", "code": "fake_refused" })
+    );
+    assert!(runs.lock().unwrap().is_empty());
+    assert_eq!(
+        get(&server, "/api/transcript", token).await.json(),
+        json!([])
+    );
+}
+
+/// Refused by the run itself, its lines having passed: the backend's last
+/// word, which the reply and the transcript take as they take a refusal of
+/// its lines.
+#[tokio::test]
+async fn a_task_the_backend_refuses_when_it_is_run_is_no_run_either() {
+    let (server, runs) = launch();
+    let token = Auth::Bearer(server.token());
+
+    let reply = post(
+        &server,
+        "/api/commands",
+        token,
+        json!({ "name": "link gone", "refuse_run": true }),
+    )
+    .await;
+
+    assert_eq!(reply.status, StatusCode::UNPROCESSABLE_ENTITY);
+    assert_eq!(reply.json()["code"], "fake_refused");
+    assert!(runs.lock().unwrap().is_empty());
+    assert_eq!(
+        get(&server, "/api/transcript", token).await.json(),
+        json!([])
+    );
+}
+
 #[tokio::test]
 async fn a_run_whose_outcome_is_not_json_is_still_transcribed() {
     let (server, runs) = launch();
