@@ -264,7 +264,12 @@ workspace, `mf link` registers projects with it, and `mf` on its own opens
 They are **symlinks**, not copies, so every later `make build` updates the
 binaries you are running without reinstalling anything. `make dev/unlink` takes
 them back off. If you only want to use the tools rather than work on them,
-`make install` puts real copies in the same place.
+`make install` puts real copies in the same place. It builds [the control
+panel](#control-panel) into them first, so it needs Node 24 and pnpm as well
+([developing the panel](#developing-the-panel) has which pnpm, and `PNPM` for
+one corepack has not put on your PATH). `cargo install --path apps/cli
+--locked` makes the copies without either, and their `flayer ui` serves only a
+page saying the panel was not built.
 
 That place is `~/.cargo/bin`, which is on your PATH if `rustup` put it there
 and is **not** if your Rust came from a system package. `make dev/link` says so
