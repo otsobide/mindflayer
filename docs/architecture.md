@@ -4233,6 +4233,18 @@ machine without Node where nothing built the panel; the server then answers
 every page with a 503 saying `panel not built: run make web/build`, the
 target that writes the folder.
 
+So the panel is built before a binary that ships it: `make cli/release` and
+`make install` build it first, the two targets outside `apps/web` that need
+Node. A release build embeds each file as it compiles, as `include_bytes!`,
+so cargo sees a later build of the panel and compiles the server again; a
+debug build reads the folder at run time, and sees one at once. Either,
+compiled while the folder was missing, embeds nothing and never looks again,
+since rust-embed resolves the folder once; so `make web/build` touches
+`src/panel.rs`, the file that embeds it, a change cargo sees. A build script
+watching the folder was the alternative, and it would compile the server
+again on every build while the folder is missing, as it is wherever Node is
+not, CI's runners among them until #71.
+
 Files under `assets/` are named by Vite for their contents, so they are sent
 as immutable, to be kept for a year; everything else, `index.html` above all,
 is `no-cache`, so a rebuild shows on the next load. A path outside `/api` that
@@ -7539,14 +7551,6 @@ just listed.
   Mindflayer made holding nothing, and the file stays, with any folder made for
   it. Removing them needs a record that Mindflayer made them, which the
   ledger's MCP rows (#93) could carry.
-- **A panel built after the server.** A release build embeds what
-  `apps/web/dist` held when `mindflayer-server` last compiled, and a debug
-  build reads the folder at run time only if it existed then, because
-  rust-embed resolves the folder's real path when it compiles. Neither sees a
-  panel built later until the crate compiles again. A build script that reruns
-  when the folder changes would, at the price of rerunning on every build
-  while the folder is missing, since cargo counts a missing path as changed.
-  #68, which puts the panel into the binaries, settles the build order.
 - **The palette in two places.** `src/theme.ts` names the palette for Nuxt
   UI, and `main.css` spells it out as the variables Nuxt UI's colours plugin
   would have written at run time. The build test holds the two to each

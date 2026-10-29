@@ -57,7 +57,10 @@ pnpm --dir apps/web exec vitest run tests/shell.test.ts      # one suite
 in the root Makefile's `NODE_APPS`, outside the aggregates, until CI installs
 Node (#71). A change to the panel runs its own targets. The one exception is
 `make lint`'s em dash check (`make lint/em-dash`), which reads every tracked
-file, the panel's included.
+file, the panel's included. The other way round, `make install` and `make
+cli/release` build the panel before the binaries that embed it, so they need
+Node, and `make web/build` touches `apps/server/src/panel.rs` so the server
+compiles again and takes the panel in.
 
 `make dev/link`, `make dev/unlink` and `make install` write into `~/.cargo/bin`
 (or `BINDIR`), outside the repository. Don't run them unless asked.

@@ -2523,11 +2523,10 @@ suites still need no Node; the panel joins it once CI installs Node
 `apps/web/tests/<area>.test.ts`.
 
 `make web/build` writes `apps/web/dist`, which the server embeds as it
-compiles. A server compiled before any build answers every page with one
-saying to run it, and goes on doing so after the build until
-`mindflayer-server` compiles again: which is built first is an [open
-question](docs/architecture.md#open-questions) until
-[#68](https://github.com/otsobide/mindflayer/issues/68) settles it.
+compiles, and marks the server to compile again, so the next build of the
+binaries takes the panel in. One built before the panel answers every page
+with one saying to run it. `make install` and `make cli/release` build the
+panel first, so those two need Node as well.
 `make web/e2e` has no browser suite to run yet, and says so
 ([#75](https://github.com/otsobide/mindflayer/issues/75)).
 

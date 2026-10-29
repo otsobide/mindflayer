@@ -8,10 +8,14 @@ build: ## Build mindflayer-cli (binaries: mind, flayer), first without the panel
 	cargo build -p mindflayer-cli --no-default-features
 	cargo build -p mindflayer-cli
 
-release: ## Release build for a Rust target triple (TARGET=aarch64-apple-darwin)
+# The panel first, which the server embeds as it compiles: a release built
+# without it would ship a `ui` that serves only a page saying so. It needs
+# Node, as nothing else here does; PNPM reaches the panel's Makefile.
+release: ## Release build for a Rust target triple (TARGET=aarch64-apple-darwin), the panel built first
 ifndef TARGET
 	$(error TARGET is required, e.g. make release TARGET=aarch64-apple-darwin)
 endif
+	$(MAKE) -C ../web build
 	cargo build -p mindflayer-cli --release --locked --target $(TARGET)
 
 test: ## Run mindflayer-cli tests
