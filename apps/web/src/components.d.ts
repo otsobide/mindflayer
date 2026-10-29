@@ -33,7 +33,9 @@ declare module 'vue' {
     UDashboardSidebar: typeof import('./../node_modules/.pnpm/@nuxt+ui@4.12.0_e85c15649f14e1fe82b3b91186e361aa/node_modules/@nuxt/ui/dist/runtime/components/DashboardSidebar.vue')['default']
     UDashboardSidebarCollapse: typeof import('./../node_modules/.pnpm/@nuxt+ui@4.12.0_e85c15649f14e1fe82b3b91186e361aa/node_modules/@nuxt/ui/dist/runtime/components/DashboardSidebarCollapse.vue')['default']
     UEmpty: typeof import('./../node_modules/.pnpm/@nuxt+ui@4.12.0_e85c15649f14e1fe82b3b91186e361aa/node_modules/@nuxt/ui/dist/runtime/components/Empty.vue')['default']
+    UFieldGroup: typeof import('./../node_modules/.pnpm/@nuxt+ui@4.12.0_e85c15649f14e1fe82b3b91186e361aa/node_modules/@nuxt/ui/dist/runtime/components/FieldGroup.vue')['default']
     UIcon: typeof import('./../node_modules/.pnpm/@nuxt+ui@4.12.0_e85c15649f14e1fe82b3b91186e361aa/node_modules/@nuxt/ui/dist/runtime/vue/components/Icon.vue')['default']
+    UInput: typeof import('./../node_modules/.pnpm/@nuxt+ui@4.12.0_e85c15649f14e1fe82b3b91186e361aa/node_modules/@nuxt/ui/dist/runtime/components/Input.vue')['default']
     UNavigationMenu: typeof import('./../node_modules/.pnpm/@nuxt+ui@4.12.0_e85c15649f14e1fe82b3b91186e361aa/node_modules/@nuxt/ui/dist/runtime/components/NavigationMenu.vue')['default']
     UTooltip: typeof import('./../node_modules/.pnpm/@nuxt+ui@4.12.0_e85c15649f14e1fe82b3b91186e361aa/node_modules/@nuxt/ui/dist/runtime/components/Tooltip.vue')['default']
   }

@@ -163,4 +163,10 @@ describe('the address of a project\'s page', () => {
     expect(page.get('[data-testid="no-project"]').text()).toContain('links no project as nowhere')
     expect(page.get('[data-testid="no-project"] a').attributes('href')).toBe('/projects')
   })
+
+  it('lights the projects in the sidebar', async () => {
+    const { page } = await render('/project?entry=api', fixture('workspace'))
+
+    expect(page.get('[data-testid="sidebar"] nav a[aria-current="page"]').text()).toBe('Projects')
+  })
 })

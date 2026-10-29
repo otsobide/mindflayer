@@ -1,16 +1,26 @@
 <script setup lang="ts">
+import { computed } from 'vue'
+import { useRoute } from 'vue-router'
 import type { NavigationMenuItem } from '@nuxt/ui'
 import { storeToRefs } from 'pinia'
 import { useShell } from '@/stores/shell'
 import AppLogo from './AppLogo.vue'
 
 const { sidebarOpen, sidebarCollapsed } = storeToRefs(useShell())
+const route = useRoute()
 
-// One entry for now: the views arrive with the snapshot (#72 onward), each
-// as a page under src/pages and a line here.
-const links: NavigationMenuItem[] = [
-  { label: 'Overview', icon: 'i-lucide-layout-dashboard', to: '/' }
-]
+// A view is a page under src/pages and a line here. A project's page is
+// reached from the projects, so it lights their line: `/project` is no
+// child of `/projects` to the router (src/routes.ts says why).
+const links = computed<NavigationMenuItem[]>(() => [
+  { label: 'Overview', icon: 'i-lucide-layout-dashboard', to: '/' },
+  {
+    label: 'Projects',
+    icon: 'i-lucide-folder-git-2',
+    to: '/projects',
+    active: route.path === '/project' || undefined
+  }
+])
 
 // Which server this panel came from. Each `flayer ui` takes a port of its
 // own, so two open panels can belong to two different launches.

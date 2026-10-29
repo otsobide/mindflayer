@@ -24,6 +24,9 @@ async function violations(): Promise<string[]> {
 
 const PAGES: [string, Fixture][] = [
   ['/', 'workspace'],
+  ['/projects', 'workspace'],
+  ['/projects?q=nowhere', 'workspace'],
+  ['/projects', 'unmade'],
   ['/project?entry=api', 'workspace'],
   ['/project?entry=web', 'workspace'],
   ['/project?entry=docs', 'workspace'],
