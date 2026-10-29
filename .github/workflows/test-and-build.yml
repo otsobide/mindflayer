@@ -53,7 +53,8 @@ jobs:
   # -------------------------------------------------------------------------
   # Tests: one job per app. Job display names follow one convention,
   # `test (<app>)` and `build (<app>)`, so a check's name says what it does and
-  # which app it belongs to.
+  # which app it belongs to; `types drift (web)`, the one check that is
+  # neither, says it the same way.
   # -------------------------------------------------------------------------
   # Gate: the shared engine must pass before anything downstream runs.
   test-core:
@@ -112,11 +113,36 @@ jobs:
       - name: Test mindflayer-cli
         run: make cli/test
 
-      # The types the panel compiles against are written from core's and the
-      # CLI's, and committed: a change to what either hands the panel that
-      # did not write them again fails here. Cargo and git alone, so it runs
-      # before the runners have Node (#71), which checking the panel against
-      # them (`make web/types`) needs.
+  # The types the panel compiles against are written from core's and the
+  # CLI's, and committed: a change to what either hands the panel that did
+  # not write them again fails here. Cargo and git alone, so no Node: the
+  # other half of `make web/types`, the panel checked against what is
+  # committed, is `test (web)`'s vue-tsc, and the two together hold the
+  # panel to what Rust writes. A job of its own rather than a step of
+  # `test (cli)`, so a drift is a check that says so by its name, apart from
+  # a test that failed, and is required on its own.
+  types-drift:
+    name: types drift (web)
+    needs: test-core
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo
+        uses: actions/cache@v5
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-
+
       - name: Check the panel's types are the ones Rust writes
         run: make web/types/check
 
@@ -148,6 +174,61 @@ jobs:
 
       - name: Test mindflayer-server
         run: make server/test
+
+  # The panel needs no Rust, and no Rust job needs Node: none sets it up, and
+  # the server builds without the panel there (rust-embed's
+  # `allow_missing`). After core all the same, for the server's reason: a
+  # red core stops the run before it spends a runner here.
+  test-web:
+    name: test (web)
+    needs: test-core
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      # Before Node, whose cache asks pnpm where its store is. No version
+      # here: the action reads the one `packageManager` pins, so a bump of
+      # pnpm is one line in package.json, as it is for everybody else.
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          package_json_file: apps/web/package.json
+
+      - name: Install Node
+        uses: actions/setup-node@v6
+        with:
+          node-version-file: apps/web/.node-version
+          cache: pnpm
+          cache-dependency-path: apps/web/pnpm-lock.yaml
+
+      # Every target below would install on its own first; a step of its
+      # own says how long the install took, apart from the checks.
+      - name: Install the panel's dependencies
+        run: make web/install
+
+      - name: Lint the panel
+        run: make web/lint
+
+      - name: Check the panel's types
+        run: make web/typecheck
+
+      - name: Test the panel
+        run: make web/test
+
+      - name: Build the panel
+        run: make web/build
+
+      # For `build (cli)`, which embeds it in the release it builds, so the
+      # panel a binary ships is the one this job tested. Kept a week, long
+      # enough to run that job again, since nothing else reads it.
+      - name: Upload the built panel
+        uses: actions/upload-artifact@v6
+        with:
+          name: panel
+          path: apps/web/dist
+          if-no-files-found: error
+          retention-days: 7
 
   # The whole suite on the two platforms Linux cannot speak for. Linux runs on
   # every push and every pull request; these two run only when asked for, by
@@ -198,12 +279,30 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-cargo-cross-
 
+      # `make test` runs the panel's suite too, so the whole suite needs
+      # Node and pnpm here, set up as `test (web)` sets them up.
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          package_json_file: apps/web/package.json
+
+      - name: Install Node
+        uses: actions/setup-node@v6
+        with:
+          node-version-file: apps/web/.node-version
+          cache: pnpm
+          cache-dependency-path: apps/web/pnpm-lock.yaml
+
       # bash, not pwsh: the make targets are POSIX recipes, and Git Bash on
       # PATH is what makes GNU make pick sh.exe instead of cmd.exe. Harmless on
       # macOS, where bash is the default anyway.
+      #
+      # `-k`, as `fail-fast` is off above: one app failing on a platform must
+      # not hide whether the others pass there, and make stops at the first
+      # app that fails otherwise.
       - name: Run the suite
         shell: bash
-        run: make test
+        run: make -k test
 
   # -------------------------------------------------------------------------
   # Builds: each app builds only after its own tests pass, and never while the
@@ -244,12 +343,16 @@ jobs:
       - name: Build mindflayer-core
         run: make core/build
 
+  # The binaries ship the panel, so they wait for its tests as well as their
+  # own, and embed the panel `test (web)` built rather than one built again
+  # here: the one that passed is the one a binary ships.
   build-cli:
     name: build (cli)
-    needs: [test-cli, test-cross]
+    needs: [test-cli, test-web, test-cross]
     if: >-
       always() &&
       needs.test-cli.result == 'success' &&
+      needs.test-web.result == 'success' &&
       (needs.test-cross.result == 'success' || needs.test-cross.result == 'skipped')
     runs-on: ubuntu-latest
     steps:
@@ -270,8 +373,34 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-cargo-
 
+      # Where the server embeds the panel from, before anything compiles it.
+      - name: Download the built panel
+        uses: actions/download-artifact@v7
+        with:
+          name: panel
+          path: apps/web/dist
+
       - name: Build mindflayer-cli
         run: make cli/build
+
+      # The runner's own triple, so the release built for it can be run.
+      - name: Name the runner's target
+        run: |
+          echo "TARGET=$(rustc -vV | sed -n 's/^host: //p')" >> "$GITHUB_ENV"
+
+      # A release, since only a release embeds the panel; a debug build reads
+      # the folder as each request comes in. This runner has Node and no
+      # pnpm, so `make cli/release` says the panel is not built here and
+      # embeds the one downloaded above.
+      - name: Build mindflayer-cli for release, the panel embedded
+        run: make cli/release TARGET="$TARGET"
+
+      # With the folder gone, so a binary reading it could not pass: the
+      # release has to serve the panel from itself.
+      - name: Check the release serves the panel with no apps/web/dist
+        run: |
+          rm -rf apps/web/dist
+          make cli/release/check TARGET="$TARGET"
 
   build-server:
     name: build (server)

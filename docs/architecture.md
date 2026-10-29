@@ -18,12 +18,16 @@ apps/web     mindflayer-web      the web panel, in Vue
 
 The layout exists because there would be more than two, and the server and
 the panel are the apps [D-17](#d-17-the-next-front-end-is-a-local-web-panel)
-adds. Both sit beside the CLI rather than around it. The panel is in
-`NODE_APPS` rather than `APPS` for now (see [the web panel](#the-web-panel)).
+adds. Both sit beside the CLI rather than around it. The panel is in `APPS`
+with the crates, first, so `make test` and `make build` need Node (see [in
+`make test`, and in CI](#in-make-test-and-in-ci)).
 
 `scripts/agent-probe/` is not an app, and nothing builds or tests it. It is
 the probe behind [docs/agents.md](agents.md), run by hand against the real
 agents with the operator's own login, which is why CI never runs it.
+`scripts/serves-panel.sh` is not one either: it is what `make
+cli/release/check` runs on a release CI built ([in `make test`, and in
+CI](#in-make-test-and-in-ci)).
 
 ### The examples are a workspace
 
@@ -4251,16 +4255,19 @@ every page with a 503 saying `panel not built: run make web/build`, the
 target that writes the folder.
 
 So the panel is built before a binary that ships it: `make cli/release` and
-`make install` build it first, the two targets outside `apps/web` that need
-Node. A release build embeds each file as it compiles, as `include_bytes!`,
-so cargo sees a later build of the panel and compiles the server again; a
-debug build reads the folder at run time, and sees one at once. Either,
-compiled while the folder was missing, embeds nothing and never looks again,
-since rust-embed resolves the folder once; so `make web/build` touches
-`src/panel.rs`, the file that embeds it, a change cargo sees. A build script
+`make install` build it first where Node and pnpm run, and say what they
+embed instead where they do not ([in `make test`, and in
+CI](#in-make-test-and-in-ci)). A release build embeds each file as it
+compiles, as `include_bytes!`, so cargo sees a later build of the panel and
+compiles the server again; a debug build reads the folder at run time, and
+sees one at once. Either, compiled while the folder was missing, embeds
+nothing and never looks again, since rust-embed resolves the folder once; so
+`make web/build` touches `src/panel.rs`, the file that embeds it, a change
+cargo sees, and so does `make web/build/if-node` when it builds nothing and
+finds the folder filled from elsewhere, as CI fills it. A build script
 watching the folder was the alternative, and it would compile the server
 again on every build while the folder is missing, as it is wherever Node is
-not, CI's runners among them until #71.
+not, CI's Rust jobs among them.
 
 Files under `assets/` are named by Vite for their contents, so they are sent
 as immutable, to be kept for a year; everything else, `index.html` above all,
@@ -4491,9 +4498,10 @@ spelled in `transport.ts` ([open questions](#open-questions)).
   wrote with vue-tsc, which `make web/typecheck` runs alone. `make
   web/types/check` writes them the same way and fails when git sees them
   differ from the ones committed, a file new to git among them. It needs no
-  Node, so `test (cli)` runs it, and a change to what core or the CLI hands
-  the panel fails there unless it was written again; the vue-tsc half runs
-  where Node is, until CI has it (#71).
+  Node, so CI runs it in a job of its own, `types drift (web)`, and a change
+  to what core or the CLI hands the panel fails there unless it was written
+  again; the vue-tsc half is `test (web)`'s ([in `make test`, and in
+  CI](#in-make-test-and-in-ci)).
 
 OpenAPI, which #70 left out, would describe the server's routes as well as
 their bodies, at the price of a schema between the Rust and the TypeScript
@@ -4538,16 +4546,62 @@ variable missing, or Iconify's API or the injected palette back in the
 scripts. The shell test fails on any `<style>` element added while the panel
 starts and switches colour mode.
 
-### Out of `make test` until CI has Node
+### In `make test`, and in CI
 
-`make web/<target>` reaches the panel's `Makefile` as it reaches any app's,
-but `web` is in `NODE_APPS`, not `APPS`, so `make test` and `make build`
-leave it out until CI installs Node and pnpm (#71). In the aggregates, they
-would fail on every runner for want of pnpm, test-cross's macOS and Windows
-included, and say nothing about the code. The server builds without the
-panel meanwhile, through `allow_missing`. The panel's types are the one part
-CI checks already: `make web/types/check` needs cargo and git and no Node
-([its types come from Rust](#its-types-come-from-rust)).
+`web` is in the root `Makefile`'s `APPS` like any app, and first, so `make
+test` and `make build` run the panel's targets before the crates': a machine
+without Node is told at once by `make test` rather than after every Rust
+suite, and `make build` compiles the crates after the panel, so the server
+takes it in within the same run rather than the next. An app's own Rust
+targets need no Node, and the server builds without the panel through
+`allow_missing`, so CI's Rust jobs set none up. The panel had stayed out of
+the aggregates, in a `NODE_APPS` of its own, until CI had Node (#71):
+before, `make test` would have failed on every runner for want of pnpm, and
+said nothing about the code.
+
+CI gives the panel jobs of its own:
+
+- **`test (web)`** sets up pnpm at the version `packageManager` pins, which
+  pnpm/action-setup reads from `apps/web/package.json` so a bump stays one
+  line, then Node from `.node-version` with pnpm's store cached, and runs
+  `make web/lint`, `make web/typecheck`, `make web/test` and `make
+  web/build`. It uploads `dist/`.
+- **`types drift (web)`** runs `make web/types/check`, with cargo and git
+  and no Node. With `test (web)`'s vue-tsc it is `make web/types` in two
+  halves: what is committed is what Rust writes, and the panel compiles
+  against what is committed. A job of its own rather than the step of `test
+  (cli)` it was, so a drift is a check named for it, required on its own.
+- **`build (cli)`** waits for `test (web)`, downloads that `dist/` before
+  anything compiles, and builds the release for the runner's own triple,
+  which embeds it. The runner has Node and no pnpm, so `make cli/release`
+  takes the downloaded panel rather than building another, and the panel a
+  binary ships is the one that passed. Then it removes `apps/web/dist` and
+  runs `make cli/release/check`, which starts the release's `flayer ui`
+  (`scripts/serves-panel.sh`) from a folder of its own, with a home of its
+  own and every agent home empty, reads the link, and fails unless `/`
+  answers with the panel's page, not the 503 a build without it answers,
+  and every file under `/assets/` the page names is served. The folder has
+  to be gone, since a debug build reads it as requests come in and would
+  pass; the script refuses to run while it is there rather than delete what
+  somebody built. A script rather than a test: only a release with the
+  panel embedded can pass it, and `cargo test` builds neither.
+- **test-cross**, the macOS and Windows jobs, sets up Node and pnpm as
+  `test (web)` does, since `make test` runs the panel's suite there, and
+  runs it with `-k`, so one app failing on a platform does not hide whether
+  the others pass there.
+
+The rulesets for `dev` and `main` require every check that runs on every
+pull request, the panel's two among them; AGENTS.md lists them by name.
+
+`make install` and `make cli/release` build the panel first through `make
+web/build/if-node`. Where Node and pnpm run it is `make web/build`, and a
+build that fails fails them. Where either is missing, a warning says what
+the binaries embed instead, the panel `dist/` already holds or none, and
+they build anyway, since a binary without the panel still has every
+command; failing there, as both did before #71, left `cargo install` the
+one way to the binaries without Node. Both tools are looked for, since pnpm
+runs the panel's tools on the `node` the PATH gives, and CI's runners have
+a Node and no pnpm.
 
 Node is 24, the LTS line (`.node-version`), and pnpm is pinned through
 `packageManager`; `PNPM` names another way to run it, such as `npx`, where
@@ -7906,3 +7960,18 @@ just listed.
 - **Ctrl-C off Unix.** `ui_test` stops the panel with SIGINT, sent by
   `kill`, so it runs on Unix only. On Windows `ui` listens for the console's
   Ctrl-C (`tokio::signal::windows::ctrl_c`), which no test sends yet (#154).
+- **A release compiled from nothing on every run.** `build (cli)` builds the
+  release profile from scratch each time: every job shares one cargo cache
+  key, saved by the first job to finish, which builds no release. A key of
+  its own would keep the release's dependencies, at the price of a second
+  target folder in a cache GitHub caps per repository.
+- **The release check on one platform.** `make cli/release/check` runs on
+  Linux only: its script needs bash 4.4 and SIGINT, and the macOS and
+  Windows jobs build no release. The compatibility pass (#154) could take it
+  there, with the console's Ctrl-C on Windows.
+- **Which panel `build (cli)` embeds rests on the runner.** `make
+  cli/release` embeds the downloaded panel because the runner has no pnpm.
+  An image that gained one would have it build the panel again, from the
+  same lockfile, on whatever Node the image has, rather than embed the one
+  `test (web)` tested; a variable telling `make web/build/if-node` to take
+  `dist/` as it is would settle it, at the price of a knob only CI turns.

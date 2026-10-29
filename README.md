@@ -261,14 +261,16 @@ workspace, `mf link` registers projects with it, and `mf` on its own opens
 [the TUI](#the-tui). It is only a link that `dev/link` makes, never installed by
 `make install`, because `mf` is METAFONT wherever TeX is installed.
 
-They are **symlinks**, not copies, so every later `make build` updates the
-binaries you are running without reinstalling anything. `make dev/unlink` takes
-them back off. If you only want to use the tools rather than work on them,
-`make install` puts real copies in the same place. It builds [the control
-panel](#control-panel) into them first, so it needs Node 24 and pnpm as well
-([developing the panel](#developing-the-panel) has which pnpm, and `PNPM` for
-one corepack has not put on your PATH). `cargo install --path apps/cli
---locked` makes the copies without either, and their `flayer ui` serves only a
+They are **symlinks**, not copies, so every later build updates the binaries
+you are running without reinstalling anything: `make cli/build`, which needs
+only Rust, or `make build`, which builds the panel first and so needs Node 24
+and pnpm as well. `make dev/unlink` takes them back off. If you only want to
+use the tools rather than work on them, `make install` puts real copies in the
+same place. It builds [the control panel](#control-panel) into them first
+where Node 24 and pnpm run ([developing the panel](#developing-the-panel) has
+which pnpm, and `PNPM` for one corepack has not put on your PATH). Without
+them it warns and makes the copies anyway, with the panel `apps/web/dist`
+holds from an earlier build, or none, and then their `flayer ui` serves only a
 page saying the panel was not built.
 
 That place is `~/.cargo/bin`, which is on your PATH if `rustup` put it there
@@ -2502,8 +2504,8 @@ A root `Makefile` delegates to each app, and CI invokes the same targets.
 `apps/<app>/Makefile`:
 
 ```bash
-make test              # every Rust suite; the panel's is make web/test
-make build             # debug build of every crate
+make test              # every suite, the panel's first: needs Node 24 and pnpm
+make build             # the panel, then a debug build of every crate
 make fmt               # cargo fmt --all
 make lint              # no em dash in a tracked file, then clippy
 make run ARGS="list"   # run the CLI without installing it
@@ -2584,23 +2586,27 @@ make web/test PNPM='npx --yes pnpm@12.15.0'
 
 Every target that runs a tool first installs what `pnpm-lock.yaml` pins,
 when `node_modules` is missing or older than `package.json`, the lockfile or
-`pnpm-workspace.yaml`. `make test` leaves the panel out for now, so the Rust
-suites still need no Node; the panel joins it once CI installs Node
-([#71](https://github.com/otsobide/mindflayer/issues/71)). Its tests are
-`apps/web/tests/<area>.test.ts`.
+`pnpm-workspace.yaml`. `make test` and `make build` run the panel's targets
+first, so they need Node 24 and pnpm too; `make core/test`, `make cli/test`
+and `make server/test` do not, nor does `make cli/build`, since the server
+builds without the panel. Its tests are `apps/web/tests/<area>.test.ts`.
 
 What the panel reads and sends has its types written from the Rust that
 serializes it, into `apps/web/src/api/generated`, which is committed and
 never edited by hand. After changing a type core or the CLI hands the panel,
 `make web/types` writes them again and checks the panel against them; `make
-web/types/check` needs only cargo and git, and fails, as CI does, when what
-is committed is not what Rust writes.
+web/types/check` needs only cargo and git, and fails when what is committed
+is not what Rust writes, as CI's `types drift (web)` check does.
 
 `make web/build` writes `apps/web/dist`, which the server embeds as it
 compiles, and marks the server to compile again, so the next build of the
 binaries takes the panel in. One built before the panel answers every page
 with one saying to run it. `make install` and `make cli/release` build the
-panel first, so those two need Node as well.
+panel first where Node and pnpm run; without them they warn, and embed what
+`apps/web/dist` already holds, if anything. `make cli/release/check
+TARGET=<triple>` starts the release built for that triple, once
+`apps/web/dist` is gone, and fails unless it serves the panel from the binary
+itself, as CI checks on every run.
 `make web/e2e` has no browser suite to run yet, and says so
 ([#75](https://github.com/otsobide/mindflayer/issues/75)).
 
