@@ -66,6 +66,7 @@ use crate::ledger::LedgerError;
 use crate::lifecycle::LifecycleError;
 use crate::lock::LockError;
 use crate::migrate::{MigrateError, ProjectFailure, Refusal};
+use crate::policy::PolicyError;
 use crate::reapply::{ReapplyError, ReapplyFailure};
 use crate::relink::{Duplicate, RelinkError};
 use crate::resolve::ResolveError;
@@ -223,6 +224,7 @@ pub const ALL: &[(&str, &[&str])] = &[
     ("migrate::MigrateError", MigrateError::CODES),
     ("migrate::Refusal", Refusal::CODES),
     ("migrate::project::ProjectFailure", ProjectFailure::CODES),
+    ("policy::PolicyError", PolicyError::CODES),
     ("reapply::ReapplyError", ReapplyError::CODES),
     ("reapply::ReapplyFailure", ReapplyFailure::CODES),
     ("relink::Duplicate", Duplicate::CODES),

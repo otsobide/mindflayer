@@ -39,6 +39,7 @@ mod lines;
 pub mod lock;
 pub mod migrate;
 pub mod paths;
+pub mod policy;
 pub mod reading;
 pub mod reapply;
 pub mod relink;
