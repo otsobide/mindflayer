@@ -790,15 +790,15 @@ These are easy to break from a single file without noticing.
   except under `$CI`, where it fails the test: the `test (cli)` job
   installs zsh so that both shells run there.
 - The server's suites run against a fake backend with types of its own
-  (`common::Fake`), never the CLI's. The CLI's backend has a suite of its
-  own (`apps/cli/tests/backend_test.rs`), which drives `PanelBackend`
-  through the `Backend` trait with the JSON a browser sends, binding no
-  port. They bind 127.0.0.1 on port 0 and send
+  (`common::Fake`), never the CLI's. They bind 127.0.0.1 on port 0 and send
   requests through the router in process (`common::send`), or over loopback,
   and serve a fixture panel (`tests/panel`), so they need no Node. Every
   request names the server in Host, and `Auth::Cookie` sends what the panel's
   page would; a test of a guard changes one header of that
-  (`common::request`, then `common::deliver`).
+  (`common::request`, then `common::deliver`). The CLI's backend has a suite
+  of its own (`apps/cli/tests/backend_test.rs`), which drives `PanelBackend`
+  through the `Backend` trait with the JSON a browser sends, binding no
+  port.
 - The panel's suites are `apps/web/tests/<area>.test.ts`, in Vitest. The
   components run in happy-dom, mounted through `createPanel` with a fake
   `Transport` and a memory history, so they never reach a server.
