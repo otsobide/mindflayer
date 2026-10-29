@@ -6,6 +6,7 @@ import type { Kind } from '@/api/generated/Kind'
 import type { Project } from '@/api/generated/Project'
 import type { Snapshot } from '@/api/generated/Snapshot'
 import { useSnapshot } from '@/api/snapshot'
+import { first } from '@/address'
 import AgentBadges from '@/components/AgentBadges.vue'
 import AppHeader from '@/components/AppHeader.vue'
 import CommandHint, { flayer } from '@/components/CommandHint.vue'
@@ -17,10 +18,7 @@ import StateBadge from '@/components/StateBadge.vue'
 const route = useRoute()
 
 /** The entry the address names, as the registry spells it (see routes.ts). */
-const entry = computed(() => {
-  const value = route.query.entry
-  return (Array.isArray(value) ? value[0] : value) ?? undefined
-})
+const entry = computed(() => first(route.query.entry))
 
 /** The project at that entry, if the workspace links one there. */
 function find(snapshot: Snapshot): Project | undefined {

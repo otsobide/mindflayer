@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import { useRoute, useRouter, type LocationQueryValue } from 'vue-router'
+import { useRoute } from 'vue-router'
 import type { Kind } from '@/api/generated/Kind'
 import type { Project } from '@/api/generated/Project'
 import type { Snapshot } from '@/api/generated/Snapshot'
@@ -11,30 +11,14 @@ import CommandHint, { flayer, making } from '@/components/CommandHint.vue'
 import HealthBadge from '@/components/HealthBadge.vue'
 import SnapshotGate from '@/components/SnapshotGate.vue'
 import { useSnapshot } from '@/api/snapshot'
+import { first, useQueryChange } from '@/address'
 import { projectLink } from '@/routes'
 
 const route = useRoute()
-const router = useRouter()
+const change = useQueryChange()
 
-// What the table is filtered and sorted by lives in the address, so a link
-// to it, or a reload, opens it the same way: `?q=api&health=attention`,
-// `?state=outdated`, `?sort=kind:skill&order=desc`.
-
-function first(value: LocationQueryValue | LocationQueryValue[] | undefined): string | undefined {
-  const one = Array.isArray(value) ? value[0] : value
-  return one ?? undefined
-}
-
-/** The address with `changes` made to its query, an empty value left out. */
-function change(changes: Record<string, string | undefined>) {
-  const query = { ...route.query, ...changes }
-  for (const [key, value] of Object.entries(query)) {
-    if (value === undefined || value === '') {
-      delete query[key]
-    }
-  }
-  void router.replace({ query })
-}
+// What the table is filtered and sorted by (src/address.ts):
+// `?q=api&health=attention`, `?state=outdated`, `?sort=kind:skill&order=desc`.
 
 const text = computed({
   get: () => first(route.query.q) ?? '',
