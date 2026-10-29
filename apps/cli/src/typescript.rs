@@ -10,15 +10,18 @@
 use ts_rs::TypeVisitor;
 
 use crate::backend::{Outcome, Query};
+use crate::render::Envelope;
 use crate::task::Task;
 
 /// Every type the CLI hands the panel whole, or takes from it, each with
-/// every type it names: a query and a task, which the panel sends, and what
-/// a run produced, which it is answered with.
+/// every type it names: a query and a task, which the panel sends; what a
+/// run produced, which it is answered with; and the envelope a reading
+/// command's `--json` prints.
 pub fn roots(visitor: &mut impl TypeVisitor) {
     visitor.visit::<Query>();
     visitor.visit::<Task>();
     visitor.visit::<Outcome>();
+    visitor.visit::<Envelope<'static, ()>>();
 }
 
 #[cfg(test)]

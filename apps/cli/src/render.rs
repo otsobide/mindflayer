@@ -218,8 +218,12 @@ pub const ENVELOPE_VERSION: u32 = 2;
 /// beside the strings, a reader pairing them by place, was the other way,
 /// rejected as a [`Warning`] keeps its code on the line rather than in a
 /// list beside the lines.
+// No bound on `T` here, where serde's derive puts its own on what it
+// implements: ts-rs names a generic type with a stand-in for `T` that
+// serializes nothing, which such a bound would refuse.
 #[derive(Serialize)]
-struct Envelope<'a, T: Serialize> {
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+pub(crate) struct Envelope<'a, T> {
     version: u32,
     data: &'a T,
     warnings: Vec<&'a str>,
@@ -229,6 +233,7 @@ struct Envelope<'a, T: Serialize> {
 /// One warning in the envelope's `coded_warnings`: its code, none for a line
 /// no code is given to, and what it says, as `warnings` says it.
 #[derive(Serialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(rename = "CodedWarning"))]
 struct Coded<'a> {
     code: Option<&'static str>,
     message: &'a str,
