@@ -1,5 +1,5 @@
 .DEFAULT_GOAL := build
-.PHONY: build release test run fmt lint clean
+.PHONY: build release release/check test run fmt lint clean
 
 # Without the panel first, so a build that leaves out the default-on `ui`
 # feature is seen to build, and the binaries left in target/ are the default
@@ -19,6 +19,16 @@ ifndef TARGET
 endif
 	$(MAKE) -C ../web build/if-node
 	cargo build -p mindflayer-cli --release --locked --target $(TARGET)
+
+# That the release for TARGET serves the panel from the binary, once
+# apps/web/dist is gone, which the script refuses to run without. A script
+# rather than a test: only a release with the panel embedded can pass it,
+# and `cargo test` builds neither. CI runs it on the release it builds.
+release/check: ## Check the release for TARGET serves the panel from the binary (remove apps/web/dist first)
+ifndef TARGET
+	$(error TARGET is required, e.g. make release/check TARGET=x86_64-unknown-linux-gnu)
+endif
+	../../scripts/serves-panel.sh ../../target/$(TARGET)/release/flayer
 
 # Then the unit tests without the panel, among them the one only that build
 # compiles, that `ui` is no command there. Not the suites: compiling each
