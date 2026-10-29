@@ -4024,8 +4024,9 @@ in `src/auth.rs`):
    `localhost` that asks `127.0.0.1` is another origin to the browser, and
    `null`, from a sandboxed frame or a file, is no origin of the server's.
    Its absence proves nothing, since a browser leaves it off a same-origin GET
-   and a script off everything. `flayer ui --dev` (#68) is to accept exactly
-   one more, the panel's dev server's (an [open question](#open-questions)).
+   and a script off everything. A front end may name exactly one more, the
+   panel's dev server's ([through the dev
+   server](#through-the-panels-dev-server)).
 3. **The token**, under `/api` only: a 401 without it.
 4. **A change by cookie** (any method but GET and HEAD, on a request whose
    token came as the cookie) must carry `Sec-Fetch-Site: same-origin` (or a
@@ -4082,6 +4083,30 @@ uses is theirs, and on a shared machine may be another user's (an
 127.0.0.1, overwriting `mf_<port>` and locking the panel out until its link is
 opened again; a cookie it adds under another path is no worse, because the
 gate takes the token from whichever `mf_<port>` holds it.
+
+### Through the panel's dev server
+
+While the panel itself is worked on, its dev server serves it (`make
+web/dev`) and proxies `/api` and the launch link to the server. A change
+through that proxy still says the browser's Origin, the dev server's
+(`http://127.0.0.1:5173`), which the Origin check refuses like every origin
+but the server's own. So a front end may name that one origin to the server
+(`Server::dev_server`), and only then is it taken: one exact origin, in any
+case as a scheme and a name are, never a pattern, since every other port of
+loopback is a page these checks are for. Host stays checked as it is: the
+proxy sets `changeOrigin`, so it names the server rather than the dev
+server. Fetch Metadata needs nothing, since the browser sees a same-origin
+request to the dev server, and neither does the gate while the dev server is
+opened as 127.0.0.1, where the launch link's cookie reaches it whatever its
+port; opened as `localhost`, it has no cookie to forward.
+
+The launch link then points at the dev server, where the panel is served
+(`Listening::url`): its token is traded for the cookie through the proxy,
+and the redirect lands on the dev server's page. What the widening lets in
+is whatever answers on that port, which is no more than before: a server
+there that the browser visits receives the cookie anyway, the hostile server
+of the [open questions](#open-questions), and could send the token as Bearer
+without the dev server's Origin.
 
 ### What a browser may name
 
@@ -7566,18 +7591,6 @@ just listed.
   Windows answer the whole block, macOS only 127.0.0.1 until an alias is
   added. Either changes the launch #15 validated (127.0.0.1, and a cookie
   named per port), so it is the owner's to choose, or to accept as it is.
-- **The panel's dev server.** #68 gives `flayer ui` a `--dev` flag that also
-  accepts the Vite origin, and #69 has Vite proxy `/api` to `flayer ui --dev
-  --port 7878`. Through that proxy a change arrives with the browser's Origin,
-  the dev server's (`http://127.0.0.1:5173`, say), which the Origin check
-  refuses like every origin but the server's own. The widening meant for it is
-  one exact origin, handed to the server by the front end and accepted only
-  under `--dev`, never a pattern. Host stays checked as it is, so the proxy
-  sets `changeOrigin` and names the server in Host rather than the dev server.
-  Fetch Metadata needs nothing, since the browser sees a same-origin request
-  to the dev server. Nor does the gate while the dev server is opened as
-  127.0.0.1, where the launch link's cookie reaches it whatever its port;
-  opened as `localhost`, it has no cookie to forward.
 - **A run that panics.** A backend that panics while running a task has no
   outcome to record, so the task is not in the transcript, though it may have
   changed something before it stopped. The CLI's commands collect their
