@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { httpTransport } from '@/api/http'
-import { TransportError } from '@/api/transport'
+import { TransportError, type Task } from '@/api/transport'
 
 /** A request as `fetch` was handed it. */
 interface Sent {
@@ -18,6 +18,9 @@ function serve(reply: () => Response | Promise<Response>): Sent[] {
   return sent
 }
 
+/** A task to send: one install of one skill into one project. */
+const INSTALL: Task = { type: 'install', projects: ['app'], kind: 'skill', name: 'demo', from: null }
+
 function json(status: number, body: unknown): Response {
   return new Response(JSON.stringify(body), {
     status,
@@ -33,7 +36,7 @@ describe('the HTTP transport', () => {
   it('posts a query as JSON to a relative URL, with the cookie and the header', async () => {
     const sent = serve(() => json(200, { projects: [] }))
 
-    const answer = await httpTransport().query({ kind: 'snapshot' })
+    const answer = await httpTransport().query({ type: 'snapshot' })
 
     expect(answer).toEqual({ projects: [] })
     expect(sent).toHaveLength(1)
@@ -45,31 +48,32 @@ describe('the HTTP transport', () => {
       'Content-Type': 'application/json',
       'X-Mindflayer': '1'
     })
-    expect(JSON.parse(init.body as string)).toEqual({ kind: 'snapshot' })
+    expect(JSON.parse(init.body as string)).toEqual({ type: 'snapshot' })
   })
 
   it('previews a task without running it', async () => {
     const sent = serve(() => json(200, { lines: ['flayer install demo -p app'] }))
 
-    const preview = await httpTransport().send({ install: 'demo' }, 'preview')
+    const preview = await httpTransport().send(INSTALL, 'preview')
 
     expect(sent.map(request => request.url)).toEqual(['/api/commands/preview'])
     expect(preview.lines).toEqual(['flayer install demo -p app'])
   })
 
   it('runs a task and answers with its lines and outcome', async () => {
-    const sent = serve(() => json(200, { lines: ['flayer install demo -p app'], outcome: { ok: true } }))
+    const outcome = { ok: true, runs: [] }
+    const sent = serve(() => json(200, { lines: ['flayer install demo -p app'], outcome }))
 
-    const run = await httpTransport().send({ install: 'demo' }, 'run')
+    const run = await httpTransport().send(INSTALL, 'run')
 
     expect(sent.map(request => request.url)).toEqual(['/api/commands'])
-    expect(run).toEqual({ lines: ['flayer install demo -p app'], outcome: { ok: true } })
+    expect(run).toEqual({ lines: ['flayer install demo -p app'], outcome })
   })
 
   it('says what the server refused, from its error body', async () => {
     serve(() => json(404, { error: 'no such endpoint: POST /api/nothing' }))
 
-    const refused = await httpTransport().query({}).catch((error: unknown) => error)
+    const refused = await httpTransport().query({ type: 'snapshot' }).catch((error: unknown) => error)
 
     expect(refused).toBeInstanceOf(TransportError)
     expect(refused).toMatchObject({ status: 404, message: 'no such endpoint: POST /api/nothing' })
@@ -78,7 +82,7 @@ describe('the HTTP transport', () => {
   it('says how to get the token when the server asks for it', async () => {
     serve(() => json(401, { error: 'this needs the launch token' }))
 
-    const refused = await httpTransport().query({}).catch((error: unknown) => error) as TransportError
+    const refused = await httpTransport().query({ type: 'snapshot' }).catch((error: unknown) => error) as TransportError
 
     expect(refused.unauthorized).toBe(true)
     expect(refused.message).toBe('this browser does not hold the launch token: open the link `flayer ui` printed')
@@ -87,7 +91,7 @@ describe('the HTTP transport', () => {
   it('names the status when a refusal is not JSON', async () => {
     serve(() => new Response('Bad Gateway', { status: 502, statusText: 'Bad Gateway' }))
 
-    const refused = await httpTransport().query({}).catch((error: unknown) => error)
+    const refused = await httpTransport().query({ type: 'snapshot' }).catch((error: unknown) => error)
 
     expect(refused).toMatchObject({ status: 502, message: 'the server answered 502 Bad Gateway' })
   })
@@ -95,7 +99,7 @@ describe('the HTTP transport', () => {
   it('reports a server it cannot reach as status 0', async () => {
     serve(() => Promise.reject(new TypeError('Failed to fetch')))
 
-    const refused = await httpTransport().query({}).catch((error: unknown) => error)
+    const refused = await httpTransport().query({ type: 'snapshot' }).catch((error: unknown) => error)
 
     expect(refused).toBeInstanceOf(TransportError)
     expect(refused).toMatchObject({ status: 0 })
@@ -110,7 +114,7 @@ describe('the HTTP transport', () => {
       text: () => Promise.reject(new TypeError('terminated'))
     }) as unknown as Response)
 
-    const refused = await httpTransport().query({}).catch((error: unknown) => error)
+    const refused = await httpTransport().query({ type: 'snapshot' }).catch((error: unknown) => error)
 
     expect(refused).toBeInstanceOf(TransportError)
     expect(refused).toMatchObject({
@@ -122,7 +126,7 @@ describe('the HTTP transport', () => {
   it('refuses a success that is not JSON rather than answer nothing', async () => {
     serve(() => new Response('<!doctype html><title>Mindflayer</title>', { status: 200 }))
 
-    const refused = await httpTransport().send({ install: 'demo' }, 'run').catch((error: unknown) => error)
+    const refused = await httpTransport().send(INSTALL, 'run').catch((error: unknown) => error)
 
     expect(refused).toBeInstanceOf(TransportError)
     expect(refused).toMatchObject({ status: 200, message: 'the server answered 200 with something that is not JSON' })

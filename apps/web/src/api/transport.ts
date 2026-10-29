@@ -1,13 +1,29 @@
 import { inject, type InjectionKey } from 'vue'
+import type { Contents } from './generated/Contents'
+import type { Outcome } from './generated/Outcome'
+import type { Query } from './generated/Query'
+import type { Snapshot } from './generated/Snapshot'
+import type { Task } from './generated/Task'
+
+/*
+ * What the panel sends and is answered with is the backend's, generated
+ * from Rust into `generated/` (make web/types): a read for core to answer
+ * (`Query`), a change (`Task`) and what running one produced (`Outcome`).
+ */
+export type { Outcome, Query, Task }
 
 /**
- * A read for core to answer, such as the snapshot or a file's contents.
- * `unknown` until the types are generated from Rust (#70).
+ * What each query is answered with, by its `type`. Every query names its
+ * answer here: one Rust adds that is not named is an index `Answer` cannot
+ * take, so the panel does not compile until it is.
  */
-export type Query = unknown
+export interface Answers {
+  snapshot: Snapshot
+  contents: Contents
+}
 
-/** A change, as the backend's `Task`. `unknown` until #70, like `Query`. */
-export type Task = unknown
+/** What `query` is answered with. */
+export type Answer<Asked extends Query> = Answers[Asked['type']]
 
 /** The command lines a task is, as somebody would type them; nothing ran. */
 export interface Preview {
@@ -15,7 +31,7 @@ export interface Preview {
 }
 
 /** A task that ran: its lines, and what running them produced. */
-export interface Run<Outcome = unknown> {
+export interface Run {
   lines: string[]
   outcome: Outcome
 }
@@ -37,7 +53,7 @@ export type Unsubscribe = () => void
  */
 export interface Transport {
   /** Ask for a read. It changes nothing, so it may be asked again freely. */
-  query<Answer = unknown>(query: Query): Promise<Answer>
+  query<Asked extends Query>(query: Asked): Promise<Answer<Asked>>
 
   /**
    * Hand over a task: `preview` for the lines it would run, which the panel
@@ -45,7 +61,7 @@ export interface Transport {
    * for its outcome.
    */
   send(task: Task, mode: 'preview'): Promise<Preview>
-  send<Outcome = unknown>(task: Task, mode: 'run'): Promise<Run<Outcome>>
+  send(task: Task, mode: 'run'): Promise<Run>
 
   /**
    * Be told whenever what the panel shows may have changed (#74). Each event
