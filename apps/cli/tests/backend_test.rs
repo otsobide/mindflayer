@@ -434,6 +434,8 @@ fn a_query_sent_with_a_field_it_does_not_have_is_refused() {
         json!({"type": "snapshot", "home": "/etc"}),
         json!({"type": "contents", "holder": {"type": "workspace"}, "reference": "x", "file": "SKILL.md", "raw": true}),
         json!({"type": "contents", "holder": {"type": "workspace"}, "reference": "x"}),
+        json!({"type": "files", "holder": {"type": "workspace"}, "reference": "x", "file": "SKILL.md"}),
+        json!({"type": "files", "holder": {"type": "workspace"}}),
     ] {
         assert!(
             serde_json::from_value::<Query>(sent.clone()).is_err(),
@@ -609,6 +611,85 @@ fn contents_are_asked_of_a_linked_project_or_the_workspace_and_nothing_else() {
     assert_eq!(
         ask(json!({"type": "workspace"}), "alpha", "SKILL.md").map_err(|refusal| refusal.code),
         Err("not_found")
+    );
+}
+
+/// What a skill holds is listed by the route each file is asked for by, of
+/// a linked project or the workspace's own and nothing else, as a file is.
+#[test]
+fn an_artifacts_files_are_listed_by_the_route_each_is_read_by() {
+    let (dir, backend, skill) = contents_fixture();
+    fs::create_dir_all(skill.join("references")).unwrap();
+    fs::write(skill.join("references").join("guide.md"), "# Guide\n").unwrap();
+    let files = |holder: Value, reference: &str| {
+        backend.query(query(json!({
+            "type": "files", "holder": holder, "reference": reference,
+        })))
+    };
+
+    let listed = files(json!({"type": "project", "entry": "alpha"}), "skill:alpha").unwrap();
+
+    assert_eq!(listed["manifest"], "SKILL.md");
+    let routes: Vec<&Value> = listed["entries"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|entry| &entry["path"])
+        .collect();
+    assert_eq!(
+        routes,
+        [
+            &json!("SKILL.md"),
+            &json!("references"),
+            &json!("references/guide.md")
+        ]
+    );
+    let guide = contents(&backend, "references/guide.md").unwrap();
+    assert_eq!(guide["text"], "# Guide\n");
+    for entry in ["gamma", dir.path().join("alpha").to_str().unwrap()] {
+        assert_eq!(
+            files(json!({"type": "project", "entry": entry}), "alpha")
+                .map_err(|refusal| refusal.code),
+            Err("not_registered"),
+            "{entry}"
+        );
+    }
+    assert_eq!(
+        files(json!({"type": "workspace"}), "alpha").map_err(|refusal| refusal.code),
+        Err("not_found")
+    );
+}
+
+/// A link in a skill that leads out of its project is listed with why,
+/// and nothing of where it leads reaches the browser.
+#[cfg(unix)]
+#[test]
+fn a_link_out_of_its_holder_is_listed_with_why_and_never_followed() {
+    let (dir, backend, skill) = contents_fixture();
+    let secrets = dir.path().join("secrets");
+    fs::create_dir_all(&secrets).unwrap();
+    fs::write(secrets.join("token"), "TOP SECRET\n").unwrap();
+    std::os::unix::fs::symlink(&secrets, skill.join("secrets")).unwrap();
+
+    let listed = backend
+        .query(query(json!({
+            "type": "files",
+            "holder": {"type": "project", "entry": "alpha"},
+            "reference": "skill:alpha",
+        })))
+        .unwrap();
+
+    let entries = listed["entries"].as_array().unwrap();
+    let secrets = entries
+        .iter()
+        .find(|entry| entry["path"] == "secrets")
+        .unwrap();
+    assert_eq!(secrets["refused"]["code"], "contents_outside");
+    assert_eq!(secrets["size"], Value::Null);
+    let wire = serde_json::to_string(&listed).unwrap();
+    assert!(
+        !wire.contains("token") && !wire.contains("TOP SECRET"),
+        "{wire}"
     );
 }
 

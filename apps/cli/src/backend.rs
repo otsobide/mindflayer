@@ -29,7 +29,8 @@
 //! - **A file reaches the browser only as text inside JSON**, held to its
 //!   holder once its links are followed, and never larger than core's cap
 //!   ([`Contents`]): the one way a file's contents leave, since `show` is
-//!   refused.
+//!   refused. What an artifact holds is listed the same way ([`Files`]),
+//!   each file by the route a file is then asked for by.
 //!
 //! Every refusal has a code, as every error does, and nothing of a refused
 //! task runs.
@@ -39,12 +40,12 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, PoisonError};
 
 use mindflayer_core::code::Said;
-use mindflayer_core::contents::Contents;
+use mindflayer_core::contents::{Contents, Files};
 use mindflayer_core::gather::Watch;
 use mindflayer_core::policy;
 use mindflayer_core::resolve::{resolve, Intent, Reason, Resolved};
 use mindflayer_core::view::Snapshot;
-use mindflayer_core::{FlayerWorkspace, FLAYER_CONFIG, FLAYER_DIR};
+use mindflayer_core::{FlayerWorkspace, MindProject, FLAYER_CONFIG, FLAYER_DIR};
 use mindflayer_server::{Backend, Refusal};
 use serde::{Deserialize, Serialize};
 
@@ -57,9 +58,10 @@ use crate::{CliError, Lookup, Warning};
 /// A read the panel asks for.
 ///
 /// Tagged as a task is, by its name in snake_case beside its fields:
-/// `{"type": "snapshot"}`, `{"type": "contents", "holder": {"type":
-/// "workspace"}, "reference": "skill:deploy", "file": "SKILL.md"}`. A field
-/// a query does not have is refused, as a task's is.
+/// `{"type": "snapshot"}`, `{"type": "files", "holder": {"type":
+/// "workspace"}, "reference": "skill:deploy"}`, `{"type": "contents",
+/// "holder": {"type": "workspace"}, "reference": "skill:deploy", "file":
+/// "SKILL.md"}`. A field a query does not have is refused, as a task's is.
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[serde(tag = "type", rename_all = "snake_case", deny_unknown_fields)]
@@ -70,6 +72,9 @@ pub enum Query {
     /// read from an object holding any field at all: with braces there is
     /// something for `deny_unknown_fields` to hold the object to.
     Snapshot {},
+    /// Every file and folder of one artifact ([`Files`]), named as for
+    /// [`Contents`](Self::Contents), whose `file` each route it lists is.
+    Files { holder: Holder, reference: String },
     /// One file of one artifact, as text ([`Contents`]): `reference` names
     /// the artifact in `holder`, the workspace's own or a project by its
     /// entry, and `file` is its route from the artifact's folder, or a
@@ -264,21 +269,22 @@ impl Backend for PanelBackend {
                 let snapshot = Snapshot::of(&resolved, self.lookup.home.as_deref());
                 Ok(serde_json::to_value(snapshot).expect("a snapshot serializes"))
             }
+            Query::Files { holder, reference } => {
+                let files = match linked(&workspace, holder)? {
+                    None => Files::of_library(&workspace, &reference),
+                    Some(project) => Files::of_project(&project, &reference),
+                }
+                .map_err(|error| refused(error.code(), error))?;
+                Ok(serde_json::to_value(files).expect("a listing serializes"))
+            }
             Query::Contents {
                 holder,
                 reference,
                 file,
             } => {
-                let contents = match holder {
-                    Holder::Workspace => Contents::of_library(&workspace, &reference, &file),
-                    Holder::Project(entry) | Holder::Elsewhere(entry) => {
-                        let member = policy::linked(&workspace, &entry)
-                            .map_err(|error| refused(error.code(), error))?;
-                        let project = member
-                            .project
-                            .map_err(|error| refused(error.code(), error))?;
-                        Contents::of_project(&project, &reference, &file)
-                    }
+                let contents = match linked(&workspace, holder)? {
+                    None => Contents::of_library(&workspace, &reference, &file),
+                    Some(project) => Contents::of_project(&project, &reference, &file),
                 }
                 .map_err(|error| refused(error.code(), error))?;
                 Ok(serde_json::to_value(contents).expect("contents serialize"))
@@ -337,6 +343,23 @@ impl Backend for PanelBackend {
             paths.extend(workspace.loads().into_iter().map(|loaded| loaded.root));
         }
         paths
+    }
+}
+
+/// The project a query's `holder` names by its entry in `workspace`, or none
+/// for the workspace's own: a read of an artifact is held to one or the
+/// other, as a task's holder is ([`policy::linked`]).
+fn linked(workspace: &FlayerWorkspace, holder: Holder) -> Result<Option<MindProject>, Refusal> {
+    match holder {
+        Holder::Workspace => Ok(None),
+        Holder::Project(entry) | Holder::Elsewhere(entry) => {
+            let member =
+                policy::linked(workspace, &entry).map_err(|error| refused(error.code(), error))?;
+            member
+                .project
+                .map(Some)
+                .map_err(|error| refused(error.code(), error))
+        }
     }
 }
 
