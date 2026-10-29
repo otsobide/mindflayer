@@ -26,7 +26,8 @@ const links = computed<NavigationMenuItem[]>(() => [
     icon: 'i-lucide-library-big',
     to: '/library',
     active: route.path === '/artifact' || undefined
-  }
+  },
+  { label: 'Shelf', icon: 'i-lucide-package', to: '/shelf' }
 ])
 
 // Which server this panel came from. Each `flayer ui` takes a port of its

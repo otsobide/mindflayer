@@ -49,6 +49,15 @@ function withAKindMore(): Snapshot {
 }
 
 describe('a kind core adds', () => {
+  it('gets a filter of the shelf, counted as the snapshot counts it', async () => {
+    const { page } = await render('/shelf?kind=mcp', withAKindMore())
+
+    const filter = page.get('[data-testid="filter-kind-mcp"]')
+    expect(filter.attributes('aria-pressed')).toBe('true')
+    expect(filter.get('[data-testid="kind-count"]').text()).toBe('0')
+    expect(page.find('[data-testid="no-match"]').exists()).toBe(true)
+  })
+
   it('gets a page of the library, counted as the snapshot counts it', async () => {
     const { page } = await render('/library?kind=mcp', withAKindMore())
 

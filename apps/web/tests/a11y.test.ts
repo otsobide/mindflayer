@@ -43,6 +43,9 @@ const PAGES: [string, Fixture][] = [
   ['/artifact?kind=rule&name=git/commits', 'workspace'],
   ['/artifact?kind=rule&name=style/comments', 'workspace'],
   ['/artifact?kind=skill&name=nowhere', 'workspace'],
+  ['/shelf', 'workspace'],
+  ['/shelf?kind=rule', 'workspace'],
+  ['/shelf', 'unmade'],
   ['/nowhere', 'workspace']
 ]
 
