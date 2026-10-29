@@ -9,6 +9,13 @@ import type { Template } from "./Template";
  */
 export type Library = { 
 /**
+ * What `--from` takes for each of its own, and what a project's copy
+ * of one names as its [`origin`](Held::origin): so a front end finds
+ * the projects holding one of them by comparing the two, rather than
+ * by a word of its own that core could spell differently.
+ */
+origin: string, 
+/**
  * Where it keeps each kind, as a route from the workspace's root.
  */
 directories: Array<Directory>, 

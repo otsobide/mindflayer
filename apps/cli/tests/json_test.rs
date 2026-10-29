@@ -29,6 +29,7 @@ struct Listing {
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 struct Library {
+    origin: String,
     directories: Vec<Directory>,
     artifacts: Vec<Held>,
     templates: Vec<Template>,
@@ -204,6 +205,9 @@ fn flayer_list_as_json_holds_the_entries_the_text_lists() {
     assert_eq!(tidy.summary.as_deref(), Some("Tidy it"));
     let library = listing.library.as_ref().unwrap();
     assert_eq!(library.artifacts[0].state, None);
+    // What a copy installed from it names, so a script finds the projects
+    // holding one of its own by comparing the two.
+    assert_eq!(tidy.origin.as_deref(), Some(library.origin.as_str()));
 }
 
 #[test]

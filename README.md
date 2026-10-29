@@ -1306,8 +1306,9 @@ warning: /home/you/Projects/collapse/skills/broken/SKILL.md: the file does not s
 `data` is what the command's text lists:
 
 - `list`: each holder as every front end reads it, `library` for the
-  workspace's own (`null` for one project's listing) and `projects` for
-  every entry the workspace links, a stale one saying why in `stale`. A
+  workspace's own (`null` for one project's listing), with the `origin` a
+  copy installed from it names, and `projects` for every entry the
+  workspace links, a stale one saying why in `stale`. A
   project says where it authors each kind, its settings and templates, and
   every artifact it holds: its state, the agents that read it, where it came
   from, where each copy is, what `validate` says of it, and for a file that

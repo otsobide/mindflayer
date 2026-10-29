@@ -1614,8 +1614,10 @@ read, built and ordered in core from the read types the commands print:
   the entries that open none, each directory once however many entries
   spell it, as `known` counts them, and a tally of what those projects,
   its library and its shelf hold;
-- its library, the workspace's own, with where it keeps each kind and the
-  templates `flayer add` finds;
+- its library, the workspace's own, with where it keeps each kind, the
+  templates `flayer add` finds, and the `origin` a copy installed from it
+  names (`workspace`), so a front end finds the projects holding one of its
+  own by comparing two words core wrote, rather than one of its own;
 - each project its registry names, in marker order, a stale entry with why
   it opens none, and a second spelling of one directory as a project of its
   own, since each entry is what `unlink` is given, as the TUI has always
@@ -1636,7 +1638,17 @@ read, built and ordered in core from the read types the commands print:
 - the workspaces it loads, each with how many of its own it offers; its
   shelf and the sources it is filled from; the workspaces this machine
   knows; the latest actions, newest first (`view::HISTORY`); and the
-  warnings that belong to none of those.
+  warnings that belong to none of those. Each load, each thing on the shelf
+  (`view::Shelved`) and each source (`view::ShelfSource`) says its
+  `origin`, what `--from` takes for what it offers and what an install of
+  that records, each spelled by the one function that spells it for an
+  install (`ledger::Source::origin`, `install::loaded_origin`): a second
+  spelling of a load the first's, as its offers are. The shelf's rows and
+  the sources are the ledger's with the origin flattened beside them, the
+  names `gather list --json` prints an offer from the shelf by, rather than
+  a shape of the snapshot's own; working the origin out in the panel, from
+  the address and the branch, was the other way, which would have put the
+  rule for `--from` in TypeScript.
 
 One value rather than each front end putting its view together from the
 reports, as the TUI did until #62: which unreadable file is which artifact's,

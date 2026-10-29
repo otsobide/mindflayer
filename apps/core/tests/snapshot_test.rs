@@ -10,7 +10,7 @@ use std::path::{Path, PathBuf};
 use std::slice;
 
 use mindflayer_core::assign;
-use mindflayer_core::install::Edits;
+use mindflayer_core::install::{self, Edits};
 use mindflayer_core::ledger::{Action, InstallRecord, Outcome, Target};
 use mindflayer_core::reapply::{self, Change};
 use mindflayer_core::resolve::{Inputs, Intent, Reason};
@@ -384,6 +384,7 @@ const EXPECTED: &str = r#"{
     }
   },
   "library": {
+    "origin": "workspace",
     "directories": [
       {
         "kind": "skill",
@@ -645,6 +646,7 @@ const EXPECTED: &str = r#"{
       "path": "<root>/team",
       "name": "team",
       "offers": 1,
+      "origin": "load:../team",
       "error": null
     }
   ],
@@ -663,7 +665,8 @@ const EXPECTED: &str = r#"{
         "subdirectory": "skills",
         "revision": "4f9c2a7e1b3d5f60a8c4e2b6d0f1a3c5e7b9d1f3",
         "directory": "github.com-acme-skills"
-      }
+      },
+      "origin": "https://github.com/acme/skills"
     }
   ],
   "sources": [
@@ -673,7 +676,8 @@ const EXPECTED: &str = r#"{
       "reference": null,
       "subdirectory": "skills",
       "revision": "4f9c2a7e1b3d5f60a8c4e2b6d0f1a3c5e7b9d1f3",
-      "directory": "github.com-acme-skills"
+      "directory": "github.com-acme-skills",
+      "origin": "https://github.com/acme/skills"
     }
   ],
   "known": [
@@ -1007,6 +1011,76 @@ fn what_a_workspace_loads_is_listed_on_its_own_as_the_snapshot_lists_it() {
 
     assert_eq!(LoadedWorkspace::of(&workspace), snapshot.loaded);
     assert_eq!(snapshot.loaded[0].offers, 1);
+}
+
+/// Each origin a snapshot lists beside what is offered is what `--from`
+/// takes for it: given back to an install, it names that one offer, which
+/// says it with the same words. So a front end that prints it beside a
+/// command prints a line that runs.
+#[test]
+fn every_origin_a_snapshot_lists_names_its_offer_to_from() {
+    let fixture = fixture();
+    let workspace = FlayerWorkspace::open(&fixture.hub).unwrap();
+    let ledger = workspace.ledger_for_reading().unwrap();
+    let api = MindProject::open(fixture.hub.join("api")).unwrap();
+    let snapshot = Snapshot::read(&naming(&fixture.hub, None))
+        .unwrap()
+        .unwrap();
+    let offered = |name: &str, origin: &str| {
+        install::offered(&workspace, &ledger, &api, Kind::Skill, name, Some(origin))
+            .unwrap_or_else(|error| panic!("{name} from {origin}: {error}"))
+            .origin()
+    };
+
+    let [shelved] = snapshot.shelf.as_slice() else {
+        panic!("{:?}", snapshot.shelf)
+    };
+    assert_eq!(
+        offered(&shelved.gathered.name, &shelved.origin),
+        shelved.origin
+    );
+    assert_eq!(snapshot.sources[0].origin, shelved.origin);
+    assert_eq!(
+        offered("review", snapshot.library.origin),
+        snapshot.library.origin
+    );
+    let [team] = snapshot.loaded.as_slice() else {
+        panic!("{:?}", snapshot.loaded)
+    };
+    assert_eq!(offered("notes", &team.origin), team.origin);
+}
+
+/// A second spelling of one loaded workspace offers what the first does,
+/// under the first's origin, so it lists that origin too: its own would
+/// name nothing an install could find.
+#[test]
+fn a_second_spelling_of_a_load_lists_the_origin_its_offers_go_by() {
+    let fixture = fixture();
+    let marker = fixture.hub.join(FLAYER_DIR).join("flayer.toml");
+    let text = fs::read_to_string(&marker).unwrap();
+    assert!(text.contains("\"../team\""), "{text}");
+    fs::write(
+        &marker,
+        text.replacen("\"../team\"", "\"../team\", \"./../team\"", 1),
+    )
+    .unwrap();
+
+    let snapshot = Snapshot::read(&naming(&fixture.hub, None))
+        .unwrap()
+        .unwrap();
+
+    let origins: Vec<(&str, &str, usize)> = snapshot
+        .loaded
+        .iter()
+        .map(|loaded| (loaded.entry.as_str(), loaded.origin.as_str(), loaded.offers))
+        .collect();
+    assert_eq!(
+        origins,
+        [
+            ("../team", "load:../team", 1),
+            ("./../team", "load:../team", 1)
+        ]
+    );
 }
 
 /// A listing of every kind is the snapshot's holders, as they are: what a

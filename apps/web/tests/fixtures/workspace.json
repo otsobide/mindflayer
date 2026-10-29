@@ -137,6 +137,7 @@
       }
     ],
     "failures": [],
+    "origin": "workspace",
     "templates": [
       {
         "kind": "skill",
@@ -154,6 +155,7 @@
       },
       "name": null,
       "offers": 0,
+      "origin": "load:../team",
       "path": "/home/you/team"
     }
   ],
@@ -638,6 +640,7 @@
       "gathered_at": 1792850400,
       "kind": "skill",
       "name": "format",
+      "origin": "https://github.com/acme/skills",
       "path": ".mindflayer/skills/github.com-acme-skills/format",
       "revision": "8d1c3f0a2b4e6d8f0a1c3e5b7d9f1a3c5e7b9d2f",
       "source": {
@@ -654,6 +657,7 @@
       "gathered_at": 1792850400,
       "kind": "skill",
       "name": "triage",
+      "origin": "https://github.com/acme/skills",
       "path": ".mindflayer/skills/github.com-acme-skills/triage",
       "revision": "8d1c3f0a2b4e6d8f0a1c3e5b7d9f1a3c5e7b9d2f",
       "source": {
@@ -671,6 +675,7 @@
     {
       "directory": "github.com-acme-skills",
       "kind": "git",
+      "origin": "https://github.com/acme/skills",
       "reference": null,
       "revision": "8d1c3f0a2b4e6d8f0a1c3e5b7d9f1a3c5e7b9d2f",
       "subdirectory": "skills",

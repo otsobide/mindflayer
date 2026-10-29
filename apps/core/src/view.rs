@@ -96,9 +96,9 @@ pub struct Snapshot {
     /// Every workspace it loads, in the order its marker lists them.
     pub loaded: Vec<LoadedWorkspace>,
     /// Everything gathered onto its shelf, by kind, then name, then source.
-    pub shelf: Vec<Gathered>,
+    pub shelf: Vec<Shelved>,
     /// Every source the shelf is filled from, by URL.
-    pub sources: Vec<Source>,
+    pub sources: Vec<ShelfSource>,
     /// Every workspace this machine knows ([`crate::known`]), this one
     /// among them.
     pub known: Vec<KnownWorkspace>,
@@ -136,7 +136,7 @@ pub struct Summary {
 impl Summary {
     /// `projects`, every entry of a registry, each directory counted once,
     /// with `library` and `shelf`.
-    fn of(projects: &[Project], library: &Library, shelf: &[Gathered]) -> Summary {
+    fn of(projects: &[Project], library: &Library, shelf: &[Shelved]) -> Summary {
         let mut once: Vec<&Project> = Vec::new();
         for project in projects {
             if !once
@@ -160,7 +160,7 @@ impl Summary {
             ),
             library: Tally::of_held(&library.artifacts, &Kind::ALL),
             shelf: Tally::of(
-                shelf.iter().map(|gathered| (gathered.kind, None)),
+                shelf.iter().map(|shelved| (shelved.gathered.kind, None)),
                 &Kind::ALL,
             ),
         }
@@ -185,6 +185,11 @@ pub struct Workspace {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 pub struct Library {
+    /// What `--from` takes for each of its own, and what a project's copy
+    /// of one names as its [`origin`](Held::origin): so a front end finds
+    /// the projects holding one of them by comparing the two, rather than
+    /// by a word of its own that core could spell differently.
+    pub origin: &'static str,
     /// Where it keeps each kind, as a route from the workspace's root.
     pub directories: Vec<Directory>,
     /// Each of its own, by kind and then name: no project's, so none
@@ -524,8 +529,62 @@ pub struct LoadedWorkspace {
     /// install machinery offers, so the number is what an install shows. A
     /// second spelling of one workspace offers what the first does.
     pub offers: usize,
+    /// What `--from` takes for what it offers, and what an install of one
+    /// of them records as its origin: the first spelling's, for a second
+    /// spelling of one workspace, as its offers are.
+    pub origin: String,
     /// Why it would not open, when it would not.
     pub error: Option<Said>,
+}
+
+/// One artifact gathered onto the shelf, with what `--from` takes for it.
+///
+/// The ledger's row with its origin beside it, as `gather list --json`
+/// prints an offer from the shelf: the same names, so a script reading
+/// either reads one shape. Beside the row rather than in it, since an offer
+/// flattens the row beside an origin of its own.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+pub struct Shelved {
+    #[serde(flatten)]
+    #[cfg_attr(feature = "ts", ts(flatten))]
+    pub gathered: Gathered,
+    /// Where it came from, as `--from` takes it and an install of it
+    /// records it ([`Source::origin`]).
+    #[serde(serialize_with = "crate::url::serialize_redacted")]
+    pub origin: String,
+}
+
+impl Shelved {
+    fn of(gathered: Gathered) -> Shelved {
+        Shelved {
+            origin: gathered.source.origin(),
+            gathered,
+        }
+    }
+}
+
+/// A source the shelf is filled from, with what `--from` takes for what it
+/// supplied.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+pub struct ShelfSource {
+    #[serde(flatten)]
+    #[cfg_attr(feature = "ts", ts(flatten))]
+    pub source: Source,
+    /// [`Source::origin`], which every artifact it supplied is installed
+    /// from.
+    #[serde(serialize_with = "crate::url::serialize_redacted")]
+    pub origin: String,
+}
+
+impl ShelfSource {
+    fn of(source: Source) -> ShelfSource {
+        ShelfSource {
+            origin: source.origin(),
+            source,
+        }
+    }
 }
 
 /// The holders a listing reads, each as a snapshot holds it, read for the
@@ -632,17 +691,24 @@ impl Snapshot {
         // A ledger that will not open is said once, with nothing from it;
         // one that opens says each thing it could not answer, and answers
         // the rest, so a shelf is counted whatever the log says.
-        let (shelf, sources, history) = match workspace.ledger_for_reading() {
-            Ok(ledger) => (
-                answered(ledger.gathered(), &mut warnings),
-                answered(ledger.sources(), &mut warnings),
-                answered(ledger.history(HISTORY), &mut warnings),
-            ),
-            Err(error) => {
-                warnings.push(Said::of(error.code(), &error));
-                Default::default()
-            }
-        };
+        let (shelf, sources, history): (Vec<Shelved>, Vec<ShelfSource>, Vec<Entry>) =
+            match workspace.ledger_for_reading() {
+                Ok(ledger) => (
+                    answered(ledger.gathered(), &mut warnings)
+                        .into_iter()
+                        .map(Shelved::of)
+                        .collect(),
+                    answered(ledger.sources(), &mut warnings)
+                        .into_iter()
+                        .map(ShelfSource::of)
+                        .collect(),
+                    answered(ledger.history(HISTORY), &mut warnings),
+                ),
+                Err(error) => {
+                    warnings.push(Said::of(error.code(), &error));
+                    Default::default()
+                }
+            };
 
         // What could not be read of a workspace this machine knows is said
         // in its row, as `stale`.
@@ -689,6 +755,7 @@ impl Library {
         let (artifacts, mut failures) = holdings(&own, &catalog, None);
         let templates = templates(Some(workspace), &own, kinds, &mut failures);
         Library {
+            origin: install::WORKSPACE_ORIGIN,
             directories: directories(&own, kinds),
             artifacts,
             templates,
@@ -1025,6 +1092,7 @@ fn loaded(workspace: &FlayerWorkspace, offers: &[Offer]) -> Vec<LoadedWorkspace>
                             matches!(offer, Offer::Loaded { entry: from, .. } if *from == first)
                         })
                         .count(),
+                    origin: install::loaded_origin(&first),
                     error: None,
                 },
                 Err(error) => LoadedWorkspace {
@@ -1032,6 +1100,7 @@ fn loaded(workspace: &FlayerWorkspace, offers: &[Offer]) -> Vec<LoadedWorkspace>
                     path: loaded.root.clone(),
                     name: None,
                     offers: 0,
+                    origin: install::loaded_origin(&first),
                     error: Some(Said::of(error.code(), error)),
                 },
             }
