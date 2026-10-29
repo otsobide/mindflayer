@@ -21,7 +21,6 @@ use std::sync::mpsc;
 use std::thread;
 use std::time::Duration;
 
-use clap::Parser;
 use mindflayer_core::code::Said;
 use mindflayer_core::gather::Watch;
 use mindflayer_core::resolve::{self, resolve, Intent, Resolved};
@@ -36,9 +35,9 @@ use ratatui::DefaultTerminal;
 use crate::commands::project::scan_warnings;
 use crate::commands::status::{unread, unseen};
 use crate::commands::workspace::same_directory;
-use crate::commands::{consulted, run_flayer_with, run_with};
+use crate::commands::{consulted, run_line, Ran};
 use crate::task::{shell, Refusal, Task};
-use crate::{install, Cli, CliError, Failure, FlayerCli, Lookup, Outcome};
+use crate::{install, CliError, Failure, Lookup, Outcome};
 use state::{
     App, Choice, Done, Holdings, Item, LoadedSource, Member, Mode, Performed, Runner, Running,
     Scope, Step, Unlinked, Update, View, Workspace,
@@ -348,65 +347,26 @@ fn run_all(
 /// workspace falls back to the one on screen. With neither, each walks up
 /// from `base` first, as from the shell, which is why a change to the default
 /// before it is made makes it first ([`App::lines`]). A gather among them
-/// reports to `watch`, and stops when it is cancelled.
+/// reports to `watch`, and stops when it is cancelled. All of which is
+/// [`run_line`]'s, shared by every front end that runs lines.
 pub fn execute(words: &[String], base: &Path, lookup: &Lookup, watch: &Watch) -> Done {
     let command = shell(words);
-    let from = |directory: Option<PathBuf>| {
-        Some(directory.map_or_else(|| base.to_path_buf(), |directory| base.join(directory)))
-    };
-    // A line's own `-W` is the whole answer, as on a command line; empty
-    // stays empty rather than becoming the root, which joining would make it.
-    let looking = |named: Option<String>| match named {
-        Some(named) => Lookup {
-            flag: Some(if named.is_empty() {
-                PathBuf::new()
-            } else {
-                base.join(named)
-            }),
-            activated: None,
-            ..lookup.clone()
-        },
-        None => lookup.clone(),
-    };
-
-    let result = match words.first().map(String::as_str) {
-        Some("mind") => match Cli::try_parse_from(words) {
-            Err(error) => return Done::failed(command, error.to_string()),
-            Ok(cli) if Refusal::of_mind(cli.command.as_ref()) == Some(Refusal::Screen) => {
-                return Done::failed(command, SCREEN_IN_A_SCREEN);
-            }
-            Ok(mut cli) => {
-                cli.directory = from(cli.directory.take());
-                let lookup = looking(cli.workspace.take());
-                run_with(&cli, &lookup, watch)
-            }
-        },
-        Some("flayer") => match FlayerCli::try_parse_from(words) {
-            Err(error) => return Done::failed(command, error.to_string()),
-            Ok(cli) if Refusal::of_flayer(cli.command.as_ref()) == Some(Refusal::Screen) => {
-                return Done::failed(command, SCREEN_IN_A_SCREEN);
-            }
-            Ok(mut cli) => {
-                cli.directory = from(cli.directory.take());
-                let lookup = looking(cli.workspace.take());
-                run_flayer_with(&cli, &lookup, watch)
-            }
-        },
-        _ => return Done::failed(command, "not a `mind` or `flayer` command"),
-    };
-
     // The text alone: a screen shows each line as a terminal would, and a
     // code beside it is for a front end that acts on one, which this does
     // not.
-    match result {
-        Ok(outcome) => Done {
+    match run_line(words, base, lookup, watch, |refusal| {
+        refusal == Refusal::Screen
+    }) {
+        Ran::Refused(Refusal::Screen) => Done::failed(command, SCREEN_IN_A_SCREEN),
+        Ran::Refused(refusal) => Done::failed(command, refusal.to_string()),
+        Ran::Done(Ok(outcome)) => Done {
             command,
             stdout: outcome.stdout,
             stderr: outcome.stderr.into_iter().map(|line| line.text).collect(),
             error: None,
             ok: outcome.ok,
         },
-        Err(failure) => Done {
+        Ran::Done(Err(failure)) => Done {
             command,
             stdout: String::new(),
             stderr: failure.warnings.into_iter().map(|line| line.text).collect(),
@@ -419,7 +379,8 @@ pub fn execute(words: &[String], base: &Path, lookup: &Lookup, watch: &Watch) ->
 /// Why a command that draws is not run from here: what the TUI refuses of
 /// the list every front end shares ([`Refusal`]), the one refusal a front
 /// end with a terminal has. The rest it runs: an editor, given the terminal
-/// ([`Task::takes_terminal`]), and a gather, watched.
+/// ([`Task::takes_terminal`]), a gather, watched, and `show`, printed for
+/// whoever sits at it.
 const SCREEN_IN_A_SCREEN: &str = "opens a screen of its own, so it is not run from inside this one";
 
 /// Build the install screen for the workspace at `base`, which is the one on

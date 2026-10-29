@@ -98,7 +98,9 @@ under `apps/` with its own `Makefile`:
   folders into the library, its copies recorded as installed from there
   (`adopt`), the stable code each of its errors gives (`code`), the
   snapshot every front end reads a workspace through, and the part of it
-  `list --json` prints (`view`), and what `show` and `validate` say of each
+  `list --json` prints (`view`), one file of an artifact read as text for
+  the panel (`contents`), which paths and entries a request from outside
+  may name (`policy`), and what `show` and `validate` say of each
   artifact (`reading`). Its only I/O is files, and it never reads the
   environment.
 - `apps/cli` (`mindflayer-cli`): the binaries `mind` (`src/main.rs`) and
@@ -120,6 +122,11 @@ under `apps/` with its own `Makefile`:
   `Lookup`. `src/task.rs` holds `Task`, work a front end asks for as the
   command lines it is, every front end's rather than the TUI's alone, and
   `Refusal`, what a front end with no terminal does not run.
+  `commands::run_line` runs one line a front end built, for the TUI and the
+  panel alike. `src/admit.rs` holds a task sent from outside to the path
+  policy (`Admission`), and `src/backend.rs` is the panel's backend
+  (`PanelBackend`, the server's `Backend` with the CLI's `Query`, `Task`
+  and `Outcome`), which no binary runs yet (#68).
   `src/tui/` and `src/install/` are the two screens.
 - `apps/server` (`mindflayer-server`): the local server behind the web
   panel, a library no binary runs yet. `src/backend.rs` is the `Backend`
@@ -182,12 +189,13 @@ These are easy to break from a single file without noticing.
   `-p`) are one implementation given a different holder
   (`FlayerWorkspace::own` makes the workspace look like a `MindProject`).
 - **The TUI only runs commands.** A key produces a `Task` (`src/task.rs`,
-  shared by every front end that runs commands, the panel's backend next),
+  shared by every front end that runs commands, the panel's backend too),
   and `Task::commands` turns it into argument lines that a `Runner` hands to
-  `execute`, which parses them with `Cli`/`FlayerCli` and runs them through
-  `run_with`/`run_flayer_with` with the screen's `Lookup` and a
-  `gather::Watch`: what the binaries' `run_watched`/`run_flayer_cli_watched`
-  call once they have read the environment. A test's stand-in `Runner` is
+  `execute`, which runs each through `commands::run_line`: it parses them
+  with `Cli`/`FlayerCli` and runs them through `run_with`/`run_flayer_with`
+  with the screen's `Lookup` and a `gather::Watch`, what the binaries'
+  `run_watched`/`run_flayer_cli_watched` call once they have read the
+  environment. The panel's backend runs its lines through `run_line` too. A test's stand-in `Runner` is
   handed the same words. A new feature is written as a command first; the
   TUI gains it by producing that command's words. Never add a TUI-only code
   path. A gather's lines run on a thread of their own (`Task::runs_apart`),
@@ -501,6 +509,23 @@ These are easy to break from a single file without noticing.
     that takes it (`=` when it starts with a dash), behind `./` for a `-C`
     or `-p`, or after a `--` among positionals; a test feeds every variant
     values that start with a dash.
+  - A task or a query the panel sends names only what core's path policy
+    allows (`policy`), which `admit::Admission` asks of every value that
+    names something on the disk, in a match over every variant with no
+    wildcard: a project or a loaded workspace by its entry as the marker
+    spells it, which the backend turns into the absolute folder it resolves
+    to for the line's one `-C` or `-p`, and a folder not linked yet by an
+    absolute, normalized path outside every `.mindflayer`, verbatim. The
+    browser supplies no `-C`, `--home`, `-W` or agent home: the backend runs
+    every line with the launch's, against the workspace it was launched on,
+    named. A refused task runs nothing, and every refusal has a code.
+  - A file reaches the browser only as text inside JSON, no larger than
+    `contents::CAP`, binary or larger reported by its size alone, and never
+    served as itself (`contents::Contents`); its links are judged by
+    `copy::followed`, the check `copy::tree` makes, so one leading out of its
+    holder is refused: a project's root, or the folder the workspace keeps
+    its own of that kind in, whose root may be a home. It is the only way: `show`, which prints an artifact
+    whole through any link, is on the `Refusal` list (`show_unheld`).
   - An installed name must be one folder name for a skill
     (`install::is_folder_name`), and for a rule a route held to the name
     rules, which never climbs out (`install::is_installable_name`).
@@ -674,11 +699,14 @@ These are easy to break from a single file without noticing.
 - **The server holds no rules.** `apps/server` carries JSON between the
   browser and a `Backend`, whose `Query`, `Task` and `Outcome` are associated
   types, and depends on no mindflayer crate (`tests/crate_test.rs` checks it
-  with `cargo metadata`); a front end depends on it, as the CLI will (#67),
-  never the other way. A check, path rule or naming rule written there is one
-  the panel could disagree with the CLI about: it belongs in core, reached
-  through the backend. Queries and previews run on tokio's blocking pool, and
-  every run on the one writer thread, in the order it arrived. It binds
+  with `cargo metadata`); a front end depends on it, as the CLI does
+  (`backend.rs`), never the other way. A check, path rule or naming rule
+  written there is one the panel could disagree with the CLI about: it
+  belongs in core, reached through the backend, which says it as a
+  `Refusal`, a code and a message, sent as a 422; a task refused when its
+  lines are asked for is never run, nor kept in the transcript. Queries and
+  previews run on tokio's blocking pool, and every run on the one writer
+  thread, in the order it arrived. It binds
   127.0.0.1 only, answers only a Host naming it on its port as `127.0.0.1`,
   `localhost` or `[::1]`, refuses an Origin other than its own, answers under
   `/api` only a request that carries the launch token (in the cookie
@@ -768,7 +796,10 @@ These are easy to break from a single file without noticing.
   and serve a fixture panel (`tests/panel`), so they need no Node. Every
   request names the server in Host, and `Auth::Cookie` sends what the panel's
   page would; a test of a guard changes one header of that
-  (`common::request`, then `common::deliver`).
+  (`common::request`, then `common::deliver`). The CLI's backend has a suite
+  of its own (`apps/cli/tests/backend_test.rs`), which drives `PanelBackend`
+  through the `Backend` trait with the JSON a browser sends, binding no
+  port.
 - The panel's suites are `apps/web/tests/<area>.test.ts`, in Vitest. The
   components run in happy-dom, mounted through `createPanel` with a fake
   `Transport` and a memory history, so they never reach a server.

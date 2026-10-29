@@ -27,8 +27,11 @@ use mindflayer_core::{
     paths, scan, Catalog, Change, FlayerWorkspace, MindProject, Reference, Share,
 };
 
+use clap::Parser as _;
+
 use crate::homes::Lookup;
 use crate::render::json_or_text;
+use crate::task::Refusal;
 use crate::{
     tui, Cli, CliError, Command, Failure, FlayerCli, FlayerCommand, Outcome, Warning,
     WorkspacesCommand,
@@ -297,6 +300,86 @@ pub(crate) fn run_flayer_with(
         lookup,
         watch,
     )
+}
+
+/// What came of one command line a front end handed over to run.
+#[derive(Debug)]
+pub(crate) enum Ran {
+    /// A command of the list every front end shares ([`Refusal`]) that the
+    /// one running it does not run: nothing of it ran.
+    Refused(Refusal),
+    /// It ran, or could not, as a terminal would say: a line neither parser
+    /// takes among the second, in the parser's words.
+    Done(Result<Outcome, Failure>),
+}
+
+/// Run one command line, `words`, through the real parsers, as typed from
+/// `base`: what every front end that runs lines rather than reading them
+/// from a terminal, the TUI and the panel's backend, runs each one with.
+///
+/// A `-C` or a `-W` among the words is resolved against `base` rather than
+/// against wherever this process happened to start, as somebody reading
+/// the line takes it. Where to look for a workspace is otherwise `lookup`,
+/// the front end's own, passed along rather than looked up again, so no line
+/// reads the environment the front end was opened in. A gather among them
+/// reports to `watch`, and stops when it is cancelled. A command `refuses`
+/// says the front end does not run is refused before anything of it runs.
+///
+/// One function, so the two front ends cannot come to resolve one line two
+/// ways; each lays out what came of it as it shows lines.
+pub(crate) fn run_line(
+    words: &[String],
+    base: &Path,
+    lookup: &Lookup,
+    watch: &Watch,
+    refuses: impl Fn(Refusal) -> bool,
+) -> Ran {
+    let from = |directory: Option<PathBuf>| {
+        Some(directory.map_or_else(|| base.to_path_buf(), |directory| base.join(directory)))
+    };
+    // A line's own `-W` is the whole answer, as on a command line; empty
+    // stays empty rather than becoming the root, which joining would make it.
+    let looking = |named: Option<String>| match named {
+        Some(named) => Lookup {
+            flag: Some(if named.is_empty() {
+                PathBuf::new()
+            } else {
+                base.join(named)
+            }),
+            activated: None,
+            ..lookup.clone()
+        },
+        None => lookup.clone(),
+    };
+    let unparsed = |error: String| Ran::Done(Err(CliError::Unparsed(error).into()));
+
+    match words.first().map(String::as_str) {
+        Some("mind") => match Cli::try_parse_from(words) {
+            Err(error) => unparsed(error.to_string()),
+            Ok(cli) => match Refusal::of_mind(cli.command.as_ref()).filter(|r| refuses(*r)) {
+                Some(refusal) => Ran::Refused(refusal),
+                None => {
+                    let mut cli = cli;
+                    cli.directory = from(cli.directory.take());
+                    let lookup = looking(cli.workspace.take());
+                    Ran::Done(run_with(&cli, &lookup, watch))
+                }
+            },
+        },
+        Some("flayer") => match FlayerCli::try_parse_from(words) {
+            Err(error) => unparsed(error.to_string()),
+            Ok(cli) => match Refusal::of_flayer(cli.command.as_ref()).filter(|r| refuses(*r)) {
+                Some(refusal) => Ran::Refused(refusal),
+                None => {
+                    let mut cli = cli;
+                    cli.directory = from(cli.directory.take());
+                    let lookup = looking(cli.workspace.take());
+                    Ran::Done(run_flayer_with(&cli, &lookup, watch))
+                }
+            },
+        },
+        _ => unparsed(String::from("not a `mind` or `flayer` command")),
+    }
 }
 
 /// The workspace half, shared by `mind flayer <cmd>` and `flayer <cmd>`.

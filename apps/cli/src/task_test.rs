@@ -719,7 +719,7 @@ fn line(line: &str) -> Vec<String> {
 }
 
 #[test]
-fn a_front_end_with_no_terminal_refuses_what_draws_edits_activates_or_gathers() {
+fn a_front_end_with_no_terminal_refuses_what_draws_edits_activates_gathers_or_shows() {
     for (said, refusal) in [
         ("mind", Refusal::Screen),
         ("mind tui", Refusal::Screen),
@@ -743,6 +743,10 @@ fn a_front_end_with_no_terminal_refuses_what_draws_edits_activates_or_gathers() 
             "flayer gather git https://example.com/skills.git",
             Refusal::Unwatched,
         ),
+        ("mind show deploy", Refusal::Unheld),
+        ("mind -C alpha show --json rule:style", Refusal::Unheld),
+        ("flayer show -p alpha deploy", Refusal::Unheld),
+        ("mind flayer show deploy", Refusal::Unheld),
     ] {
         assert_eq!(refused(&line(said)), Some(refusal), "{said}");
     }
@@ -781,11 +785,33 @@ fn a_task_is_refused_for_the_first_of_its_lines_that_is() {
             Task::OpenInstall => Some(Refusal::Screen),
             Task::Edit { .. } => Some(Refusal::Editor),
             Task::Gather { .. } => Some(Refusal::Unwatched),
+            Task::Show { .. } => Some(Refusal::Unheld),
             _ => None,
         };
 
         assert_eq!(task.refusal(), expected, "{task:?}");
     }
+}
+
+/// So a front end can say which command it will not run, not only why.
+#[test]
+fn a_refused_task_names_the_line_it_is_refused_for() {
+    let batch = Task::ApplyInstall {
+        changes: vec![
+            Task::Uninstall {
+                projects: owned(&["alpha"]),
+                kind: Kind::Skill,
+                name: String::from("deploy"),
+            },
+            Task::OpenInstall,
+        ],
+    };
+
+    assert_eq!(
+        batch.refused_line(),
+        Some((line("flayer install"), Refusal::Screen))
+    );
+    assert_eq!(Task::Shelf.refused_line(), None);
 }
 
 #[test]
@@ -795,6 +821,7 @@ fn a_refusal_says_why_by_a_code_of_its_own() {
         Refusal::Editor,
         Refusal::Shell,
         Refusal::Unwatched,
+        Refusal::Unheld,
     ]
     .iter()
     .map(Refusal::code)

@@ -77,7 +77,11 @@ impl Outcome {
 /// rather than something that went wrong. Kept beside the text rather than
 /// in a list of its own beside the lines, which every line pushed would have
 /// to keep in step with.
-#[derive(Debug, Clone, PartialEq, Eq)]
+///
+/// Serialized as it is, `{"text": ..., "code": ...}`, in what a run of the
+/// panel's backend says (`backend::Run`): the line a terminal shows, and
+/// the code beside it.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct Warning {
     pub text: String,
     pub code: Option<&'static str>,

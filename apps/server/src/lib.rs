@@ -18,6 +18,6 @@ mod token;
 mod transcript;
 mod writer;
 
-pub use backend::Backend;
+pub use backend::{Backend, Refusal};
 pub use panel::Panel;
 pub use server::{Listening, Server};

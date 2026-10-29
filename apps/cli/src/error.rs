@@ -167,6 +167,11 @@ pub enum CliError {
         #[source]
         source: io::Error,
     },
+    /// A line a front end handed over that neither parser takes, in the
+    /// parser's words: a value that leaves out what a command needs, as an
+    /// `agents` line naming none.
+    #[error("{0}")]
+    Unparsed(String),
 }
 
 // A variant that carries core's error takes its code, as one of core's does;
@@ -195,6 +200,7 @@ codes!(CliError {
     Self::NoTerminal { .. } => "terminal_unusable",
     Self::NotATerminal => "not_a_terminal",
     Self::Screen { .. } => "screen_failed",
+    Self::Unparsed(_) => "line_unparsed",
 } carried {
     Self::Workspace(error) => error,
     Self::Chosen { source, .. } => source,

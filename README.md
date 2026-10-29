@@ -2414,9 +2414,10 @@ adding a directory rather than reshaping the tree:
 ```
 apps/core    mindflayer-core     projects, workspaces, artifacts.
                                  No I/O beyond files, and git when gathering.
-apps/cli     mindflayer-cli      the `mind` and `flayer` binaries, and the TUI.
-                                 Parsing and rendering only; all of it goes
-                                 through one parser.
+apps/cli     mindflayer-cli      the `mind` and `flayer` binaries, the TUI,
+                                 and the panel's backend. Parsing and
+                                 rendering only; all of it goes through one
+                                 parser.
 apps/server  mindflayer-server   the local server behind the web panel, still
                                  unused by the binaries. Transport only: it
                                  moves JSON between the browser and a front

@@ -9,12 +9,16 @@ use serde_json::json;
 use tokio::sync::oneshot;
 
 use crate::transcript::{Entry, Transcript};
-use crate::Backend;
+use crate::{Backend, Refusal};
+
+/// What came of a task: what it ran, or why the backend ran none of it;
+/// and, around that, why the thread could not say, when it could not.
+type Done = Result<Result<Entry, Refusal>, String>;
 
 /// A task waiting its turn, and where to say how it went.
 struct Write<T> {
     task: T,
-    reply: oneshot::Sender<Result<Entry, String>>,
+    reply: oneshot::Sender<Done>,
 }
 
 /// The queue in front of the thread that runs every task.
@@ -48,7 +52,8 @@ impl<T: Send + 'static> Writer<T> {
                     // outlives it so the tasks queued behind can still run.
                     let done = panic::catch_unwind(AssertUnwindSafe(|| perform(&*backend, task)))
                         .map_err(|_| String::from("the backend panicked while running the task"));
-                    if let Ok(entry) = &done {
+                    // A refused task ran nothing, so it is no run to replay.
+                    if let Ok(Ok(entry)) = &done {
                         transcript.record(entry.clone());
                     }
                     // Nobody may be waiting any more: a client that gives up
@@ -60,8 +65,8 @@ impl<T: Send + 'static> Writer<T> {
     }
 
     /// Queue a task behind every one that arrived before it, and wait for it
-    /// to have run.
-    pub(crate) async fn run(&self, task: T) -> Result<Entry, String> {
+    /// to have run, or to have been refused.
+    pub(crate) async fn run(&self, task: T) -> Done {
         let stopped = || String::from("the thread that runs tasks has stopped");
         let (reply, done) = oneshot::channel();
         self.queue
@@ -73,16 +78,17 @@ impl<T: Send + 'static> Writer<T> {
 
 /// Run one task: its lines first, worked out on this thread, so they are the
 /// lines of the disk the run itself meets, after every write before it.
+/// A task whose lines the backend refuses is never handed to it to run.
 ///
 /// An outcome that will not serialize is still a run that happened, so it is
 /// recorded as an error beside the lines that ran rather than raised: raised,
 /// it would leave the transcript a run short, and the client a bare 500 for
 /// lines that may well have changed the disk.
-fn perform<B: Backend>(backend: &B, task: B::Task) -> Entry {
-    let lines = backend.preview(&task);
-    let outcome = backend.run(task);
+fn perform<B: Backend>(backend: &B, task: B::Task) -> Result<Entry, Refusal> {
+    let lines = backend.preview(&task)?;
+    let outcome = backend.run(task)?;
     let outcome = serde_json::to_value(outcome).unwrap_or_else(
         |error| json!({ "error": format!("the backend's outcome is not JSON: {error}") }),
     );
-    Entry { lines, outcome }
+    Ok(Entry { lines, outcome })
 }
