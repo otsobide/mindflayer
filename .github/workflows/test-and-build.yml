@@ -53,7 +53,8 @@ jobs:
   # -------------------------------------------------------------------------
   # Tests: one job per app. Job display names follow one convention,
   # `test (<app>)` and `build (<app>)`, so a check's name says what it does and
-  # which app it belongs to.
+  # which app it belongs to; `types drift (web)`, the one check that is
+  # neither, says it the same way.
   # -------------------------------------------------------------------------
   # Gate: the shared engine must pass before anything downstream runs.
   test-core:
