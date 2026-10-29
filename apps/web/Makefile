@@ -1,5 +1,5 @@
 .DEFAULT_GOAL := build
-.PHONY: install build test lint fmt types types/export types/check typecheck dev e2e clean
+.PHONY: install build build/if-node test lint fmt types types/export types/check typecheck dev e2e clean
 
 # pnpm at the version package.json's packageManager pins. Where it is not on
 # the PATH and corepack is not set up, name it some other way:
@@ -30,6 +30,33 @@ install: ## Install exactly what the lockfile pins
 build: $(INSTALLED) ## Check the types, then build the panel into dist/, which the server embeds
 	$(PNPM) run build
 	@touch ../server/src/panel.rs
+
+# What a binary about to be built embeds, for `make install` and `make
+# cli/release`: the panel built now, where Node and pnpm run, and otherwise
+# what dist/ already holds, said in a warning, since the binary then ships a
+# panel built some other time, or only the page saying none was. `build`
+# alone made both fail without Node, though a binary without the panel
+# still has every command. Node and pnpm both: pnpm runs the tools on the
+# `node` the PATH gives, and CI's runners have a Node and no pnpm. Only a
+# missing tool is passed over: a build that fails fails this too. With no
+# build, the file that embeds dist/ is touched as `build` touches it, so a
+# server compiled while the folder was missing, then filled from elsewhere,
+# takes it in.
+build/if-node: ## Build the panel where Node and pnpm run, or warn what a binary built now embeds
+	@missing=; \
+	if ! command -v node >/dev/null 2>&1; then \
+		missing="Node is not on the PATH"; \
+	elif ! $(PNPM) --version >/dev/null 2>&1; then \
+		missing="pnpm does not run as \`$(PNPM)\`"; \
+	fi; \
+	if [ -z "$$missing" ]; then \
+		$(MAKE) build; \
+	elif [ -f dist/index.html ]; then \
+		echo "warning: $$missing, so the panel is not built: the binaries embed the one apps/web/dist holds, from when it was built" >&2; \
+		touch ../server/src/panel.rs; \
+	else \
+		echo "warning: $$missing, so the panel is not built: the binaries' \`flayer ui\` serves only a page saying so" >&2; \
+	fi
 
 test: $(INSTALLED) ## Run the panel's tests (vitest)
 	$(PNPM) run test

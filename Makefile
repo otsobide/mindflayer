@@ -102,10 +102,12 @@ BINS := mind flayer
 # alias:binary pairs, linked by dev/link and removed by dev/unlink.
 ALIASES := mf:flayer
 
-# The panel first, as for a release: the copies embed it as they compile.
+# The panel first, as for a release, where Node and pnpm run: the copies
+# embed it as they compile. Elsewhere a warning says what they embed instead
+# (`make web/build/if-node`).
 .PHONY: install
-install: ## Install `mind` and `flayer` as copies in cargo's bin directory, the panel built first
-	$(MAKE) -C apps/web build
+install: ## Install `mind` and `flayer` as copies in cargo's bin directory, the panel built first where Node is
+	$(MAKE) -C apps/web build/if-node
 	cargo install --path apps/cli --locked
 
 .PHONY: dev/link
