@@ -128,8 +128,10 @@ steps read as and draws them on stderr, `task.rs` holds the work a front end
 asks for as the command lines it is ([every change is a command
 line](#every-change-is-a-command-line)), `admit.rs` holds a task sent from
 outside to the path policy and `backend.rs` is the panel's backend ([what a
-browser may name](#what-a-browser-may-name)), and `lib.rs` only says what is
-public.
+browser may name](#what-a-browser-may-name)), which `commands/ui.rs` serves
+([launching it](#launching-it-flayer-ui)), and `lib.rs` only says what is
+public. The backend, `ui` and the server they need are behind the crate's
+`ui` feature, on by default.
 
 The split is by family. One file holding the parser, every command and the
 rendering was where every change to a command met every other, so pieces of
@@ -3652,19 +3654,21 @@ takes, until #112 brings to the server the progress and the cancel only a
 screen has now; and `show`, which prints an artifact whole, read through any
 link on the way, as a terminal's user may ask of their own disk, where a
 front end without one reads a file at a time, held to its holder
-([what a browser may name](#what-a-browser-may-name)). `ui` joins it when
-#68 makes it a command. The TUI has a
-terminal, so of the list it refuses only the screens. The list is of
-commands as the parsers read them, not as they are spelled, so `mind flayer
-minds` is refused as `flayer minds` is, and it is a match over every command
-with no wildcard, so a new command does not compile until it says whether
-it is refused. A task is refused for the first of its lines that is
-(`Task::refusal`), whichever variant it is, and each refusal has a code of
-its own (`opens_screen`, `opens_editor`, `prints_shell_code`,
-`gather_unwatched`, `show_unheld`), held to the rules core's codes are ([a code for what
-went wrong](#a-code-for-what-went-wrong)). A list of tasks was the
-alternative, and it would leave out a line no task builds: a front end that
-runs lines it is sent would run one the list never named.
+([what a browser may name](#what-a-browser-may-name)). And `ui`, which
+serves the panel until Ctrl-C, so a front end that ran it as a line would
+wait on it for good. The TUI has a terminal, so of the list it refuses only
+the screens, and `ui`, since the screen takes Ctrl-C as a key and nothing
+would stop it. The list is of commands as the parsers read them, not as they
+are spelled, so `mind flayer minds` is refused as `flayer minds` is, and it
+is a match over every command with no wildcard, so a new command does not
+compile until it says whether it is refused. A task is refused for the first
+of its lines that is (`Task::refusal`), whichever variant it is, and each
+refusal has a code of its own (`opens_screen`, `opens_editor`,
+`prints_shell_code`, `gather_unwatched`, `show_unheld`, `serves_panel`),
+held to the rules core's codes are ([a code for what went
+wrong](#a-code-for-what-went-wrong)). A list of tasks was the alternative,
+and it would leave out a line no task builds: a front end that runs lines it
+is sent would run one the list never named.
 
 The exceptions are named, not hidden: opening the install screen builds the
 screen `flayer install` opens, as a read, rather than running a line, and
@@ -3852,8 +3856,8 @@ choice is made seeing where the project went.
 `apps/server` (`mindflayer-server`) is the transport under the web panel
 ([D-17](#d-17-the-next-front-end-is-a-local-web-panel)): a library crate that
 binds a port, checks who is asking, carries JSON between the browser and a
-front end, and serves the panel's files. No binary runs it yet. `flayer ui`
-(#68) will, over the CLI's backend ([what a browser may
+front end, and serves the panel's files. `flayer ui` runs it, over the
+CLI's backend ([launching it](#launching-it-flayer-ui), [what a browser may
 name](#what-a-browser-may-name)). The token keeps out a process that
 connects without it, and [the guards](#what-keeps-other-pages-out) keep out
 other pages in the same browser: one on another port of 127.0.0.1, which the
@@ -3950,10 +3954,14 @@ in memory only, for as long as the server runs.
 
 ### Who it answers
 
-It binds 127.0.0.1 on port 0, with no option for another address: the panel
-is for the person at this machine, and beyond loopback the token would travel
-in clear text. Port 0 lets the system pick a free port rather than the server
-failing on a taken one.
+It binds 127.0.0.1, with no option for another address: the panel is for
+the person at this machine, and beyond loopback the token would travel in
+clear text. The port is 0, which lets the system pick a free one rather than
+the server failing on a taken one, unless the front end names one
+(`Server::port`). That is for a client that must know the port before the
+server starts, the panel's dev server, whose proxy names it in its settings,
+and a port somebody holds is then an error, not another port that client
+would never find.
 
 Every process on the machine can reach that port, so the address says nothing
 about who is asking. A 256-bit token, issued fresh at each launch, does. The
@@ -4020,8 +4028,9 @@ in `src/auth.rs`):
    `localhost` that asks `127.0.0.1` is another origin to the browser, and
    `null`, from a sandboxed frame or a file, is no origin of the server's.
    Its absence proves nothing, since a browser leaves it off a same-origin GET
-   and a script off everything. `flayer ui --dev` (#68) is to accept exactly
-   one more, the panel's dev server's (an [open question](#open-questions)).
+   and a script off everything. A front end may name exactly one more, the
+   panel's dev server's ([through the dev
+   server](#through-the-panels-dev-server)).
 3. **The token**, under `/api` only: a 401 without it.
 4. **A change by cookie** (any method but GET and HEAD, on a request whose
    token came as the cookie) must carry `Sec-Fetch-Site: same-origin` (or a
@@ -4078,6 +4087,30 @@ uses is theirs, and on a shared machine may be another user's (an
 127.0.0.1, overwriting `mf_<port>` and locking the panel out until its link is
 opened again; a cookie it adds under another path is no worse, because the
 gate takes the token from whichever `mf_<port>` holds it.
+
+### Through the panel's dev server
+
+While the panel itself is worked on, its dev server serves it (`make
+web/dev`) and proxies `/api` and the launch link to the server. A change
+through that proxy still says the browser's Origin, the dev server's
+(`http://127.0.0.1:5173`), which the Origin check refuses like every origin
+but the server's own. So a front end may name that one origin to the server
+(`Server::dev_server`), and only then is it taken: one exact origin, in any
+case as a scheme and a name are, never a pattern, since every other port of
+loopback is a page these checks are for. Host stays checked as it is: the
+proxy sets `changeOrigin`, so it names the server rather than the dev
+server. Fetch Metadata needs nothing, since the browser sees a same-origin
+request to the dev server, and neither does the gate while the dev server is
+opened as 127.0.0.1, where the launch link's cookie reaches it whatever its
+port; opened as `localhost`, it has no cookie to forward.
+
+The launch link then points at the dev server, where the panel is served
+(`Listening::url`): its token is traded for the cookie through the proxy,
+and the redirect lands on the dev server's page. What the widening lets in
+is whatever answers on that port, which is no more than before: a server
+there that the browser visits receives the cookie anyway, the hostile server
+of the [open questions](#open-questions), and could send the token as Bearer
+without the dev server's Origin.
 
 ### What a browser may name
 
@@ -4204,6 +4237,18 @@ machine without Node where nothing built the panel; the server then answers
 every page with a 503 saying `panel not built: run make web/build`, the
 target that writes the folder.
 
+So the panel is built before a binary that ships it: `make cli/release` and
+`make install` build it first, the two targets outside `apps/web` that need
+Node. A release build embeds each file as it compiles, as `include_bytes!`,
+so cargo sees a later build of the panel and compiles the server again; a
+debug build reads the folder at run time, and sees one at once. Either,
+compiled while the folder was missing, embeds nothing and never looks again,
+since rust-embed resolves the folder once; so `make web/build` touches
+`src/panel.rs`, the file that embeds it, a change cargo sees. A build script
+watching the folder was the alternative, and it would compile the server
+again on every build while the folder is missing, as it is wherever Node is
+not, CI's runners among them until #71.
+
 Files under `assets/` are named by Vite for their contents, so they are sent
 as immutable, to be kept for a year; everything else, `index.html` above all,
 is `no-cache`, so a rebuild shows on the next load. A path outside `/api` that
@@ -4222,6 +4267,80 @@ which no browser sends, is a 404, and one with a drive letter or an empty
 segment is never looked up and gets `index.html`, as one of the panel's routes
 may. A release build only looks names up in a table, and the check keeps the
 two answering alike.
+
+### Launching it: `flayer ui`
+
+`flayer ui` serves the panel from the binary until Ctrl-C, and `mind ui` is
+the same command reached from a project. The workspace is resolved once, as
+the command starts, from its `-C`, `--home`, `-W` and agent homes
+(`PanelBackend::launch`), so one that cannot be used fails the command as
+any would, before anything listens, and nothing the browser sends later
+changes it. The server binds 127.0.0.1 on a port the system picks, or the
+one `--port` names, and a port somebody holds fails the command
+(`panel_unbound`) rather than move to another.
+
+The link goes to stdout as soon as the server listens, the first line there
+and the only one until the transcript follows it once it stops, so a script
+reads it, and stderr says which workspace is served, on which address, and
+that Ctrl-C stops it. That is where `ui` parts from the rule
+that a command builds its output and hands it back to be printed
+(`Outcome`), as the TUI's screen does: the link cannot wait for the command
+to end, which it does only when it is stopped. Then the link is opened with
+the `webbrowser` crate, the way each platform starts its browser, unless
+`--no-open`; one that cannot be opened is a warning, since the link is there
+to open by hand. It is opened on the blocking pool once the server is serving, not
+before: `webbrowser` waits on a text browser until it is closed, which would
+otherwise wait in turn on a server that never started.
+
+Ctrl-C is listened for before the link is out, through the platform's own
+listener, a Unix signal or the Windows console's Ctrl-C, rather than
+`tokio::signal::ctrl_c`, which installs its handler only once it is first
+awaited. The first stops the server taking connections and lets every
+request under way be answered, a run above all, so a change is not cut off
+half way; the second stops at once, for whoever would rather have that than
+wait. What comes back once it stops is what the TUI hands back when it
+closes: every line the panel ran for a task that changes something
+(`Task::writes`), with what each said, laid out by the TUI's function
+(`PanelBackend::transcript`), so a session in the browser can be read and
+run again from a shell. The server's own transcript, the one the panel
+shows, holds reads as well, and goes with the server.
+
+The runtime is tokio's with one thread: every query goes to the blocking pool
+and every run to the server's writer thread, so it only moves bytes. `--dev`
+serves the panel through its dev server ([through the panel's dev
+server](#through-the-panels-dev-server)): the server takes requests from
+`http://127.0.0.1:5173` too, the link points there, and the port is 7878,
+where `make web/dev`'s proxy looks, unless `--port` names another. The note
+on stderr says the server's own address, which the link then does not. A
+port held there is said with other advice than without `--dev`: stop what
+holds it, or name another both in the proxy's `SERVER` and with `--port`.
+Not another with `--port` alone, nor 0, as without it: the proxy reaches only
+the port `SERVER` names (`unbound_hint`).
+
+All of it is behind the CLI crate's `ui` feature, on by default so the one
+binary somebody installs has the panel
+([D-17](#d-17-the-next-front-end-is-a-local-web-panel)): the server, axum,
+rust-embed, tokio's signal handling and `webbrowser`. `cargo build -p
+mindflayer-cli --no-default-features` builds the commands and the TUI
+without them, and `ui` is then no command; `tests/crate_test.rs` holds that
+build to no server, axum, embed or `webbrowser`, `make cli/build` builds
+it first, and `make cli/test` runs its unit tests, one of which finds no
+`ui` there. hyper and tokio stay, which gix's HTTP transport brings to core.
+What the feature costs, measured for D-17 on Linux x86_64 with 16 cores, in
+the release profile, with no panel built unless said:
+
+| | without `ui` | with `ui` |
+|---|---|---|
+| `mind`, as built | 24.9 MB | 27.3 MB (+2.3 MB, +9%) |
+| `mind`, stripped | 19.5 MB | 21.1 MB (+1.6 MB, +8%) |
+| `mind`, the panel embedded | | about 28.2 MB |
+| clean build, wall clock | 1 min 22 s | 1 min 29 s (+7 s, +8%) |
+| clean build, CPU | 12 min 20 s | 13 min 37 s (+10%) |
+
+Turning the feature on in a target that holds the build without it takes
+38 s, most of it compiling tokio again with its signal driver, and gix and
+core above it, since a feature of a crate is one for every crate that uses
+it.
 
 ## The web panel
 
@@ -4337,10 +4456,12 @@ A test fails on such a path, and `make web/build` writes the files again; no
 test run writes them, or it would mend a stale one before the test saw it.
 
 `make web/dev` serves the panel from Vite on 127.0.0.1:5173 and proxies
-`/api`, and the launch link's `/?token=`, to `flayer ui --dev --port 7878`
-(#68). Through the proxy the token is traded for its cookie where the panel
-runs. `changeOrigin`, so the Host the server checks is its own address; the
-Origin stays the dev server's, which `--dev` accepts.
+`/api`, and the launch link's `/?token=`, to `flayer ui --dev`, which listens
+on 7878 unless `--port` names another and prints a link to the dev server.
+Through the proxy the token is traded for its cookie where the panel runs.
+`changeOrigin`, so the Host the server checks is its own address; the Origin
+stays the dev server's, which `--dev` accepts ([through the panel's dev
+server](#through-the-panels-dev-server)).
 
 ## Which workspace a command uses
 
@@ -6643,8 +6764,10 @@ while Tauri 3 is alpha, though a `Transport` interface in the frontend keeps a
 later Tauri shell cheap; and a separate server binary or daemon, the re-exec
 wrapper [the line between core and a front
 end](#where-the-line-between-core-and-a-front-end-falls) already rejects. #68
-measures the feature's binary size and compile time, and makes it opt-in if the
-cost is too high. Unblocks #65, #68 and #69.
+measured the feature's binary size and compile time ([launching
+it](#launching-it-flayer-ui)), about 2.3 MB on a release binary of 25 and 7 s
+on a clean release build of 82, and it stays on by default. Unblocks #65, #68
+and #69.
 
 ### D-18: The panel writes by running commands
 
@@ -7510,14 +7633,6 @@ just listed.
   Mindflayer made holding nothing, and the file stays, with any folder made for
   it. Removing them needs a record that Mindflayer made them, which the
   ledger's MCP rows (#93) could carry.
-- **A panel built after the server.** A release build embeds what
-  `apps/web/dist` held when `mindflayer-server` last compiled, and a debug
-  build reads the folder at run time only if it existed then, because
-  rust-embed resolves the folder's real path when it compiles. Neither sees a
-  panel built later until the crate compiles again. A build script that reruns
-  when the folder changes would, at the price of rerunning on every build
-  while the folder is missing, since cargo counts a missing path as changed.
-  #68, which puts the panel into the binaries, settles the build order.
 - **The palette in two places.** `src/theme.ts` names the palette for Nuxt
   UI, and `main.css` spells it out as the variables Nuxt UI's colours plugin
   would have written at run time. The build test holds the two to each
@@ -7529,10 +7644,6 @@ just listed.
   first is what the CSP refuses. The choice is in a cookie the server
   receives with the page's request, but acting on it would need the server
   to rewrite the page as it sends it.
-- **The panel's transcript ends with the server.** The TUI prints its
-  transcript when it closes; the server keeps the panel's in memory and drops
-  it when it stops. Whether `flayer ui` prints it on the way out, as the TUI
-  does, is for #68 to choose.
 - **A style nonce for the panel.** The policy allows no inline style, so a
   `<style>` element that a library writes into the page at run time is
   blocked, as theming and colour-mode helpers often do; style the panel's
@@ -7562,18 +7673,6 @@ just listed.
   Windows answer the whole block, macOS only 127.0.0.1 until an alias is
   added. Either changes the launch #15 validated (127.0.0.1, and a cookie
   named per port), so it is the owner's to choose, or to accept as it is.
-- **The panel's dev server.** #68 gives `flayer ui` a `--dev` flag that also
-  accepts the Vite origin, and #69 has Vite proxy `/api` to `flayer ui --dev
-  --port 7878`. Through that proxy a change arrives with the browser's Origin,
-  the dev server's (`http://127.0.0.1:5173`, say), which the Origin check
-  refuses like every origin but the server's own. The widening meant for it is
-  one exact origin, handed to the server by the front end and accepted only
-  under `--dev`, never a pattern. Host stays checked as it is, so the proxy
-  sets `changeOrigin` and names the server in Host rather than the dev server.
-  Fetch Metadata needs nothing, since the browser sees a same-origin request
-  to the dev server. Nor does the gate while the dev server is opened as
-  127.0.0.1, where the launch link's cookie reaches it whatever its port;
-  opened as `localhost`, it has no cookie to forward.
 - **A run that panics.** A backend that panics while running a task has no
   outcome to record, so the task is not in the transcript, though it may have
   changed something before it stopped. The CLI's commands collect their
@@ -7666,7 +7765,13 @@ just listed.
   worded from what it found (a gathered name that is not one folder name, an
   update that cannot tell where a copy came from), carry a code of the CLI's:
   each would join `mindflayer_cli::CODES` once the panel acts on it.
-- **A command `ui` will be.** The list of what a front end with no terminal
-  does not run is to refuse `ui` too, a server started from the panel's own,
-  and `ui` is no command yet: #68 adds it, and `Refusal::of_flayer`, a match
-  over every command, does not compile until it says where `ui` goes.
+- **A run left behind by Ctrl-C.** The first Ctrl-C to `flayer ui` waits
+  for every request under way, but a run whose client stopped waiting is no
+  request any more: it goes on on the server's writer thread, which nothing
+  waits for, and the process can end under it, as it does under any run at
+  a second Ctrl-C. The server could hand the front end that thread to join
+  once it stops, at the price of a Ctrl-C that waits for a run nobody
+  watches.
+- **Ctrl-C off Unix.** `ui_test` stops the panel with SIGINT, sent by
+  `kill`, so it runs on Unix only. On Windows `ui` listens for the console's
+  Ctrl-C (`tokio::signal::windows::ctrl_c`), which no test sends yet (#154).

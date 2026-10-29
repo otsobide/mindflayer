@@ -34,6 +34,9 @@ use crate::api;
 /// need no change here.
 pub(crate) struct Hosts {
     names: [String; 3],
+    /// The origin of the panel's dev server, when the front end named one:
+    /// the one page outside the server whose changes it takes.
+    dev_server: Option<String>,
 }
 
 impl Hosts {
@@ -44,7 +47,15 @@ impl Hosts {
                 format!("localhost:{port}"),
                 format!("[::1]:{port}"),
             ],
+            dev_server: None,
         }
+    }
+
+    /// Take requests from the pages of the panel's dev server at `origin`
+    /// too, as [`Server::dev_server`](crate::Server::dev_server) asks.
+    pub(crate) fn dev_server(mut self, origin: Option<String>) -> Self {
+        self.dev_server = origin;
+        self
     }
 
     /// The name a request reached the server by, if it is one of the
@@ -69,6 +80,31 @@ impl Hosts {
     fn listed(&self) -> String {
         let [first, second, third] = &self.names;
         format!("{first}, {second} or {third}")
+    }
+
+    /// Whether a request that reached the server as `name` comes from one of
+    /// its pages, if it says where it comes from: its own ([`from_itself`]),
+    /// or the dev server's, when it has one.
+    ///
+    /// That origin exactly, in any case as a scheme and a name are, and
+    /// never a pattern: one more page is what working on the panel needs,
+    /// and every port of loopback that a pattern would let in is a page the
+    /// checks here are for.
+    pub(crate) fn sent_from(&self, name: &str, headers: &HeaderMap) -> bool {
+        from_itself(name, headers)
+            || self.dev_server.as_deref().is_some_and(|dev_server| {
+                single(headers, ORIGIN)
+                    .is_some_and(|origin| origin.eq_ignore_ascii_case(dev_server))
+            })
+    }
+
+    /// Where a page must be for the server to take its requests, for a
+    /// refusal to say.
+    fn pages(&self, name: &str) -> String {
+        match &self.dev_server {
+            Some(dev_server) => format!("http://{name} or {dev_server}"),
+            None => format!("http://{name}"),
+        }
     }
 }
 
@@ -114,10 +150,13 @@ pub(crate) async fn same_origin(
             &format!("this server answers only as {}", hosts.listed()),
         );
     };
-    if !from_itself(name, request.headers()) {
+    if !hosts.sent_from(name, request.headers()) {
         return forbidden(
             path,
-            &format!("this server takes requests only from its own pages, at http://{name}"),
+            &format!(
+                "this server takes requests only from its own pages, at {}",
+                hosts.pages(name)
+            ),
         );
     }
     next.run(request).await

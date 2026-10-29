@@ -101,26 +101,65 @@ pub const CLEARED: [&str; 5] = [
 /// same process. The home is a directory rather than empty because, with
 /// `HOME` empty, the standard library falls back to the account's real one.
 pub fn spawn(binary: &str, dir: &Path, args: &[&str], env: &[(&str, &str)]) -> Spawned {
+    let home = TempDir::new().unwrap();
+    let output = command(binary, dir, args, env, home.path())
+        .output()
+        .expect("run the binary");
+    Spawned {
+        stdout: String::from_utf8_lossy(&output.stdout).into_owned(),
+        stderr: String::from_utf8_lossy(&output.stderr).into_owned(),
+        ok: output.status.success(),
+    }
+}
+
+/// [`spawn`], left running with its stdout and stderr piped: for a command
+/// that goes on until it is stopped, `ui`, whose output is read as it goes.
+pub fn start(binary: &str, dir: &Path, args: &[&str], env: &[(&str, &str)]) -> Started {
+    let home = TempDir::new().unwrap();
+    let child = command(binary, dir, args, env, home.path())
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
+        .spawn()
+        .expect("start the binary");
+    Started { child, _home: home }
+}
+
+/// The command [`spawn`] and [`start`] run: `binary` from `dir`, with `env`
+/// the only variables of [`CLEARED`] it sees and `home` as its home.
+fn command(
+    binary: &str,
+    dir: &Path,
+    args: &[&str],
+    env: &[(&str, &str)],
+    home: &Path,
+) -> std::process::Command {
     let program = match binary {
         "mind" => env!("CARGO_BIN_EXE_mind"),
         "flayer" => env!("CARGO_BIN_EXE_flayer"),
         _ => panic!("no binary called {binary}"),
     };
-    let home = TempDir::new().unwrap();
     let mut command = std::process::Command::new(program);
     command.current_dir(dir).args(args);
     for variable in CLEARED {
         command.env_remove(variable);
     }
-    command
-        .env("HOME", home.path())
-        .env("USERPROFILE", home.path());
+    command.env("HOME", home).env("USERPROFILE", home);
     command.envs(env.iter().copied());
-    let output = command.output().expect("run the binary");
-    Spawned {
-        stdout: String::from_utf8_lossy(&output.stdout).into_owned(),
-        stderr: String::from_utf8_lossy(&output.stderr).into_owned(),
-        ok: output.status.success(),
+    command
+}
+
+/// A binary [`start`] left running, killed if the test is done with it
+/// before it stops, so a failed assertion leaves no server behind.
+pub struct Started {
+    pub child: std::process::Child,
+    /// Its home, kept for as long as it runs.
+    _home: TempDir,
+}
+
+impl Drop for Started {
+    fn drop(&mut self) {
+        let _ = self.child.kill();
+        let _ = self.child.wait();
     }
 }
 

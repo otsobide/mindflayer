@@ -36,6 +36,7 @@
 
 use std::fmt::Display;
 use std::path::{Path, PathBuf};
+use std::sync::{Arc, Mutex, PoisonError};
 
 use mindflayer_core::code::Said;
 use mindflayer_core::contents::Contents;
@@ -50,6 +51,7 @@ use serde::{Deserialize, Serialize};
 use crate::admit::Admission;
 use crate::commands::{run_line, Ran};
 use crate::task::{shell, Holder, Task};
+use crate::tui::state::{transcript, Done};
 use crate::{CliError, Lookup, Warning};
 
 /// A read the panel asks for.
@@ -118,6 +120,9 @@ pub struct PanelBackend {
     /// workspace, which decides whether a line needs `-W .` to be read again
     /// from the root.
     lookup: Lookup,
+    /// Every line it ran for a task that changes something, in the order
+    /// they ran ([`transcript`](Self::transcript)). Shared by its clones.
+    changed: Arc<Mutex<Vec<Run>>>,
 }
 
 impl PanelBackend {
@@ -132,7 +137,22 @@ impl PanelBackend {
             root: resolved.workspace.root().to_path_buf(),
             reason: resolved.reason,
             lookup: lookup.clone(),
+            changed: Arc::default(),
         })
+    }
+
+    /// Every line run so far for a task that changes something, with what
+    /// each said, as a shell session would show it: what `flayer ui` prints
+    /// once it stops, as the TUI prints its own when it closes, so what the
+    /// panel did outlives the server and can be done again without it.
+    ///
+    /// The TUI's transcript, laid out by the TUI's function, and kept by the
+    /// TUI's rule ([`Task::writes`]): a read changed nothing there is to do
+    /// again. Kept by every clone of the backend alike, so one kept back
+    /// while the server holds another reads what the server's ran.
+    pub fn transcript(&self) -> String {
+        let changed = self.changed.lock().unwrap_or_else(PoisonError::into_inner);
+        transcript(&changed.iter().map(Done::from).collect::<Vec<_>>())
     }
 
     /// The root of the workspace it acts on.
@@ -208,16 +228,18 @@ impl PanelBackend {
             lines,
             lookup: self.pinned(&workspace),
             chained: admitted.chained(),
+            writes: admitted.writes(),
         })
     }
 }
 
-/// What a task runs: its lines, what they run with, and whether one failing
-/// stops the rest.
+/// What a task runs: its lines, what they run with, whether one failing
+/// stops the rest, and whether they change something.
 struct Plan {
     lines: Vec<Vec<String>>,
     lookup: Lookup,
     chained: bool,
+    writes: bool,
 }
 
 impl Backend for PanelBackend {
@@ -291,6 +313,12 @@ impl Backend for PanelBackend {
                 break;
             }
         }
+        if plan.writes {
+            self.changed
+                .lock()
+                .unwrap_or_else(PoisonError::into_inner)
+                .extend(runs.iter().cloned());
+        }
         Ok(Outcome {
             ok: runs.iter().all(|run| run.ok),
             runs,
@@ -340,6 +368,21 @@ fn ran(words: &[String], ran: Ran) -> Run {
             }),
             ok: false,
         },
+    }
+}
+
+/// A line the panel ran, as the TUI keeps one it ran: its words for each
+/// line of stderr and for why it could not run, without the codes, which a
+/// transcript a person reads has no use for.
+impl From<&Run> for Done {
+    fn from(run: &Run) -> Self {
+        Done {
+            command: run.command.clone(),
+            stdout: run.stdout.clone(),
+            stderr: run.stderr.iter().map(|line| line.text.clone()).collect(),
+            error: run.error.as_ref().map(|error| error.message.clone()),
+            ok: run.ok,
+        }
     }
 }
 

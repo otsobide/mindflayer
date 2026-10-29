@@ -5,9 +5,10 @@ carries a `.mind` directory beside its **skills** and **rules**, and a
 workspace above it carries a `.mindflayer` that orchestrates several such
 projects at once.
 
-One shared Rust engine (`mindflayer-core`) behind every front end. The first
-front end is the CLI (`mind` for a project, `flayer` for a workspace), and the
-layout leaves room for a desktop app later without moving the engine.
+One shared Rust engine (`mindflayer-core`) behind every front end: the CLI
+(`mind` for a project, `flayer` for a workspace), the TUI it opens, and a
+[control panel](#control-panel) in your browser, served by the same binary.
+The layout leaves room for a desktop app later without moving the engine.
 
 > **MVP scope.** Mindflayer is being built incrementally. Today it creates the
 > two kinds of directory, registers projects with a workspace, keeps skills and
@@ -15,7 +16,8 @@ layout leaves room for a desktop app later without moving the engine.
 > repositories onto the workspace's shelf, installs them into the projects it
 > manages, and creates, edits, renames and removes skills and rules. It does
 > every one of those at both levels, from the command line and from a TUI that
-> runs the same commands.
+> runs the same commands. A control panel in the browser, `flayer ui`, runs
+> them through its API too; so far its page is the frame the views will fill.
 
 ## The two levels
 
@@ -262,7 +264,12 @@ workspace, `mf link` registers projects with it, and `mf` on its own opens
 They are **symlinks**, not copies, so every later `make build` updates the
 binaries you are running without reinstalling anything. `make dev/unlink` takes
 them back off. If you only want to use the tools rather than work on them,
-`make install` puts real copies in the same place.
+`make install` puts real copies in the same place. It builds [the control
+panel](#control-panel) into them first, so it needs Node 24 and pnpm as well
+([developing the panel](#developing-the-panel) has which pnpm, and `PNPM` for
+one corepack has not put on your PATH). `cargo install --path apps/cli
+--locked` makes the copies without either, and their `flayer ui` serves only a
+page saying the panel was not built.
 
 That place is `~/.cargo/bin`, which is on your PATH if `rustup` put it there
 and is **not** if your Rust came from a system package. `make dev/link` says so
@@ -402,6 +409,9 @@ mind migrate [--agents AGENTS] [--local|--shared] [--yes]
                            # agents read
 
 flayer                     # the TUI: everything below, a key each
+flayer ui [--port PORT] [--no-open] [--dev]
+                           # the control panel, in a browser, until Ctrl-C;
+                           # mind ui is the same
 flayer init [PATH] [--skills DIR] [--rules DIR]
                            # create a .mindflayer here, or in PATH
 flayer activate [DIR] [--shell SHELL]
@@ -1745,6 +1755,60 @@ the scan found it [moved](#following-a-project-that-moved),
 `M` follows it; an artifact `validate` would reject is marked `✗`, with the
 reason underneath.
 
+## Control panel
+
+`flayer ui` serves a control panel for the workspace from the binary itself,
+and opens it in your browser. It runs until Ctrl-C:
+
+```
+$ flayer ui
+http://127.0.0.1:40185/?token=bf6934705762815d0a708aceb59cb5f9f4fd65466d0f726e0b7a8d3749053513
+note: serving the workspace at /home/you/Projects on 127.0.0.1:40185 until Ctrl-C
+```
+
+The link is the first line on stdout, and the only one while it serves, for
+a script to read; what it prints once it stops (below) follows it there.
+`--no-open` prints it without opening a browser, and a browser that cannot
+be opened, as on a machine with no display, is a warning, not a failure.
+`mind ui` is the same command from inside a project. Either serves the
+workspace a command run there would use, decided once as it starts, from
+`-C`, `--home`, `-W` and the agent homes: nothing the browser sends changes
+which one.
+
+It listens on 127.0.0.1 only, on a port the system picks, or the one `--port`
+names. The link carries a token made for this launch, which the browser
+trades for a cookie on its first request, so the token leaves the address
+bar. A request without it gets a 401, and a page on another site, or on
+another port of your machine, cannot use the cookie to change anything
+([what keeps other pages
+out](docs/architecture.md#what-keeps-other-pages-out)).
+
+**Everything the panel changes, it changes by running a command**, as the
+TUI does. It sends a task; the server turns it into the command lines you
+could have typed, shows them before they run, and runs them through the same
+parser, one at a time. A command that would open a screen, an editor or a
+shell is refused, and so is a path outside what the workspace allows, each
+with a reason and a code. The first Ctrl-C lets whatever is running finish,
+a second stops at once, and on the way out it prints every command that
+changed something, with what each said, as the TUI does when it closes:
+
+```
+$ flayer install -p /home/you/Projects/collapse skill:commit-style
+installed commit-style into collapse, from workspace
+```
+
+So far the panel is the frame its views will fill, which come with the
+[next milestone](https://github.com/otsobide/mindflayer/milestones). The API
+under it is already there for a script holding the token as a Bearer token:
+`POST /api/query` for a read, `POST /api/commands/preview` for the lines a
+task is, `POST /api/commands` to run them, and `GET /api/transcript` for
+everything the session ran.
+
+The panel is built into the binaries by a cargo feature, `ui`, which is on by
+default. `cargo build -p mindflayer-cli --no-default-features` leaves it out,
+and with it the server and what only the panel needs (axum, the embedded
+files, the browser opener); `ui` is then no command.
+
 ## Where a project keeps its artifacts
 
 `.mind/settings.toml` is the marker and the configuration; the artifacts
@@ -2418,10 +2482,10 @@ apps/cli     mindflayer-cli      the `mind` and `flayer` binaries, the TUI,
                                  and the panel's backend. Parsing and
                                  rendering only; all of it goes through one
                                  parser.
-apps/server  mindflayer-server   the local server behind the web panel, still
-                                 unused by the binaries. Transport only: it
-                                 moves JSON between the browser and a front
-                                 end, and holds no rules.
+apps/server  mindflayer-server   the local server behind the web panel, which
+                                 `flayer ui` runs. Transport only: it moves
+                                 JSON between the browser and a front end,
+                                 and holds no rules.
 apps/web     mindflayer-web      the web panel the server embeds: Vue and
                                  Nuxt UI, built with Vite. It asks through
                                  the server and draws; no rules here either.
@@ -2457,7 +2521,8 @@ and `--workspace ""`, and the few that run the binaries clear
 `$MINDFLAYER_HOME` and `$MINDFLAYER_WORKSPACE` and give them a home of their
 own. Nor do they touch your agents' folders, which no command reads yet, and
 the commands they run themselves give every agent-home option empty. The server's suites never leave 127.0.0.1, and run
-against a fake front end rather than the CLI.
+against a fake front end rather than the CLI. The CLI's `ui` suite starts
+`flayer ui` on 127.0.0.1 with `--no-open`, so no test opens a browser.
 
 ```bash
 cargo test -p mindflayer-cli --test tui_test          # one area
@@ -2523,19 +2588,19 @@ suites still need no Node; the panel joins it once CI installs Node
 `apps/web/tests/<area>.test.ts`.
 
 `make web/build` writes `apps/web/dist`, which the server embeds as it
-compiles. A server compiled before any build answers every page with one
-saying to run it, and goes on doing so after the build until
-`mindflayer-server` compiles again: which is built first is an [open
-question](docs/architecture.md#open-questions) until
-[#68](https://github.com/otsobide/mindflayer/issues/68) settles it.
+compiles, and marks the server to compile again, so the next build of the
+binaries takes the panel in. One built before the panel answers every page
+with one saying to run it. `make install` and `make cli/release` build the
+panel first, so those two need Node as well.
 `make web/e2e` has no browser suite to run yet, and says so
 ([#75](https://github.com/otsobide/mindflayer/issues/75)).
 
 `make web/dev` serves the panel on `http://127.0.0.1:5173` and reloads it as
-you edit. It passes `/api` on to `flayer ui --dev --port 7878`, the command
-[#68](https://github.com/otsobide/mindflayer/issues/68) adds, and the launch
-link too: open the link that command prints with its port changed to 5173,
-and the token is traded for its cookie where the panel runs.
+you edit. It passes `/api`, and the launch link, on to `flayer ui --dev`,
+run beside it, which listens on port 7878, where the dev server's proxy
+looks, takes requests from the dev server's pages, and prints and opens a
+link to the dev server: the token is traded for its cookie where the panel
+runs.
 
 Three rules keep the panel working under the server's content security
 policy, which lets nothing in from another host and nothing inline:

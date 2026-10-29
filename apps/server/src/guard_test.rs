@@ -120,6 +120,56 @@ fn a_request_with_two_origins_is_from_neither() {
     assert!(!from_itself("127.0.0.1:4000", &both));
 }
 
+/// The dev server's origin, exactly, as the front end named it; and the
+/// server's own still, which the panel's built page is served from.
+#[test]
+fn the_dev_servers_origin_is_taken_when_named_and_nothing_like_it() {
+    let hosts = Hosts::new(4000).dev_server(Some(String::from("http://127.0.0.1:5173")));
+
+    for origin in [
+        "http://127.0.0.1:5173",
+        "HTTP://127.0.0.1:5173",
+        "http://127.0.0.1:4000",
+    ] {
+        assert!(
+            hosts.sent_from("127.0.0.1:4000", &origins(&[origin])),
+            "{origin:?}"
+        );
+    }
+    assert!(hosts.sent_from("127.0.0.1:4000", &origins(&[])));
+
+    for other in [
+        "http://127.0.0.1:5174",
+        "http://localhost:5173",
+        "https://127.0.0.1:5173",
+        "http://127.0.0.1:5173/",
+        "http://127.0.0.1:51730",
+        "null",
+        "",
+    ] {
+        assert!(
+            !hosts.sent_from("127.0.0.1:4000", &origins(&[other])),
+            "{other:?}"
+        );
+    }
+    let twice = origins(&["http://127.0.0.1:5173", "http://127.0.0.1:5173"]);
+    assert!(!hosts.sent_from("127.0.0.1:4000", &twice));
+}
+
+#[test]
+fn without_a_dev_server_its_origin_is_any_other_page() {
+    let hosts = Hosts::new(4000);
+
+    assert!(!hosts.sent_from("127.0.0.1:4000", &origins(&["http://127.0.0.1:5173"])));
+    assert_eq!(hosts.pages("127.0.0.1:4000"), "http://127.0.0.1:4000");
+    assert_eq!(
+        hosts
+            .dev_server(Some(String::from("http://127.0.0.1:5173")))
+            .pages("127.0.0.1:4000"),
+        "http://127.0.0.1:4000 or http://127.0.0.1:5173"
+    );
+}
+
 /// The headers the panel's page sends with a change, each of `changes` set
 /// to its value or, for `None`, taken out.
 fn panel(changes: &[(&'static str, Option<&str>)]) -> HeaderMap {

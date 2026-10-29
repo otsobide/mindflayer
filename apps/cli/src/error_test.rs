@@ -82,3 +82,36 @@ fn an_error_core_answered_keeps_its_code_in_the_cli_s_words() {
     );
     assert_eq!(CliError::InstallWhere.code(), "install_no_projects");
 }
+
+/// A held port is said with what to do about it, which `--dev` changes: the
+/// dev server's proxy reaches one port only, so another, or 0, is no way out
+/// unless the proxy is told it too.
+#[test]
+fn a_port_the_panel_cannot_take_is_said_with_what_to_do_about_it() {
+    let unbound = |port, dev| {
+        CliError::Unbound {
+            port,
+            dev,
+            source: io::Error::new(io::ErrorKind::AddrInUse, "address in use"),
+        }
+        .to_string()
+    };
+
+    assert_eq!(
+        unbound(9000, false),
+        "the panel cannot listen on 127.0.0.1:9000: address in use; name another with \
+         --port, or 0 for one the system picks"
+    );
+    assert_eq!(
+        unbound(7878, true),
+        "the panel cannot listen on 127.0.0.1:7878: address in use; the panel's dev \
+         server reaches only the port `SERVER` names in apps/web/vite.config.ts, so \
+         stop what holds it, or name another there and with --port"
+    );
+    for dev in [false, true] {
+        assert_eq!(
+            unbound(0, dev),
+            "the panel cannot listen on 127.0.0.1:0: address in use"
+        );
+    }
+}

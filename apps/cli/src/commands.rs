@@ -15,6 +15,8 @@ pub(crate) mod project;
 pub(crate) mod read;
 pub(crate) mod settings;
 pub(crate) mod status;
+#[cfg(feature = "ui")]
+pub(crate) mod ui;
 pub(crate) mod update;
 pub(crate) mod workspace;
 
@@ -265,6 +267,8 @@ pub(crate) fn run_with(cli: &Cli, lookup: &Lookup, watch: &Watch) -> Result<Outc
             lookup,
         ),
         Command::Tui => tui::run_project(&directory, lookup),
+        #[cfg(feature = "ui")]
+        Command::Ui(options) => ui::ui_command(&directory, options, lookup),
     }
 }
 
@@ -719,6 +723,8 @@ fn run_flayer(
             )
         }
         FlayerCommand::Tui => tui::run(directory, lookup),
+        #[cfg(feature = "ui")]
+        FlayerCommand::Ui(options) => ui::ui_command(directory, options, lookup),
 
         // Under --json, what the snapshot holds of each holder listed, with
         // the warnings and the exit status of the listing.

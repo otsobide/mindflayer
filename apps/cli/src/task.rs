@@ -590,7 +590,8 @@ impl Task {
 /// One list, of commands as the parsers read them rather than of tasks, so
 /// a line refused for one front end is refused for every one, whichever
 /// task it came from or none. The TUI has a terminal, and refuses only the
-/// lines that would draw a screen inside its own ([`Refusal::Screen`]).
+/// lines that would draw a screen inside its own ([`Refusal::Screen`]) or
+/// hold it until a Ctrl-C it keeps for itself ([`Refusal::Panel`]).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Error)]
 pub enum Refusal {
     /// The TUI (`mind` or `flayer` alone, or either's `tui`), the minds
@@ -624,6 +625,12 @@ pub enum Refusal {
         "prints an artifact whole, read through any link on the way, where a front end without a terminal reads one file at a time, held to its holder"
     )]
     Unheld,
+    /// `ui`, from either binary: it serves the panel until Ctrl-C stops it,
+    /// which would hold a front end that ran it as one of its lines for good,
+    /// the panel's own writer or the TUI, whose screen keeps Ctrl-C for
+    /// itself.
+    #[error("serves the panel until Ctrl-C stops it, from the terminal it was started in")]
+    Panel,
 }
 
 codes!(Refusal {
@@ -632,6 +639,7 @@ codes!(Refusal {
     Self::Shell => "prints_shell_code",
     Self::Unwatched => "gather_unwatched",
     Self::Unheld => "show_unheld",
+    Self::Panel => "serves_panel",
 });
 
 impl Refusal {
@@ -646,6 +654,8 @@ impl Refusal {
             None | Some(Command::Tui) => Some(Refusal::Screen),
             Some(Command::Edit { .. }) => Some(Refusal::Editor),
             Some(Command::Show { .. }) => Some(Refusal::Unheld),
+            #[cfg(feature = "ui")]
+            Some(Command::Ui(_)) => Some(Refusal::Panel),
             Some(Command::Flayer { command }) => Refusal::of_flayer(command.as_ref()),
             Some(
                 Command::Init { .. }
@@ -691,6 +701,8 @@ impl Refusal {
             Some(FlayerCommand::Activate { .. }) => Some(Refusal::Shell),
             Some(FlayerCommand::Show { .. }) => Some(Refusal::Unheld),
             Some(FlayerCommand::Gather(GatherCommand::Git { .. })) => Some(Refusal::Unwatched),
+            #[cfg(feature = "ui")]
+            Some(FlayerCommand::Ui(_)) => Some(Refusal::Panel),
             Some(
                 FlayerCommand::Init { .. }
                 | FlayerCommand::Which

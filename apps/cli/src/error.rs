@@ -172,6 +172,22 @@ pub enum CliError {
     /// `agents` line naming none.
     #[error("{0}")]
     Unparsed(String),
+    /// The port `ui` was to serve the panel on could not be taken: one
+    /// somebody else holds, say. `dev` is `--dev`'s, which changes what to
+    /// do about it ([`unbound_hint`]).
+    #[error("the panel cannot listen on 127.0.0.1:{port}: {source}{}", unbound_hint(*port, *dev))]
+    Unbound {
+        port: u16,
+        dev: bool,
+        #[source]
+        source: io::Error,
+    },
+    /// `ui` could not go on serving the panel, or start to.
+    #[error("the panel could not be served: {source}")]
+    Unserved {
+        #[source]
+        source: io::Error,
+    },
 }
 
 // A variant that carries core's error takes its code, as one of core's does;
@@ -201,6 +217,8 @@ codes!(CliError {
     Self::NotATerminal => "not_a_terminal",
     Self::Screen { .. } => "screen_failed",
     Self::Unparsed(_) => "line_unparsed",
+    Self::Unbound { .. } => "panel_unbound",
+    Self::Unserved { .. } => "panel_failed",
 } carried {
     Self::Workspace(error) => error,
     Self::Chosen { source, .. } => source,
@@ -247,6 +265,25 @@ impl From<ResolveError> for CliError {
                 CliError::AmbiguousProject { wanted, matches }
             }
         }
+    }
+}
+
+/// What to do about a port `ui` could not take.
+///
+/// Under `--dev` another port is no way out on its own, and 0 none at all:
+/// the dev server's proxy sends the panel's requests, and the launch link,
+/// to the one port `SERVER` names in apps/web/vite.config.ts, so a server on
+/// any other is one the panel never reaches.
+fn unbound_hint(port: u16, dev: bool) -> &'static str {
+    match (port, dev) {
+        // The system's own pick failing is nothing another port mends.
+        (0, _) => "",
+        (_, true) => {
+            "; the panel's dev server reaches only the port `SERVER` names in \
+             apps/web/vite.config.ts, so stop what holds it, or name another there \
+             and with --port"
+        }
+        (_, false) => "; name another with --port, or 0 for one the system picks",
     }
 }
 

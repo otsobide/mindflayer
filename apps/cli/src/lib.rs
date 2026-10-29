@@ -15,6 +15,7 @@
 //! is public: the two screens, and what is re-exported here.
 
 pub mod admit;
+#[cfg(feature = "ui")]
 pub mod backend;
 pub(crate) mod commands;
 pub(crate) mod error;
@@ -30,6 +31,8 @@ pub use commands::read::WORKSPACE;
 pub use commands::{run, run_flayer_cli, run_flayer_cli_watched, run_watched};
 pub use error::{CliError, CODES};
 pub use homes::{agent_homes, default_home, Lookup};
+#[cfg(feature = "ui")]
+pub use parse::UiOptions;
 pub use parse::{
     AgentHomeOptions, AgentNames, AgentsChange, Cli, Command, FlayerCli, FlayerCommand,
     GatherCommand, Migrated, ShareMode, TargetsChange, WorkspacesCommand,

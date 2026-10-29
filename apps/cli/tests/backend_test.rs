@@ -3,6 +3,9 @@
 //! handed to the `Backend` trait. No port is bound: the server's own suites
 //! cover the transport, over a fake backend.
 
+// The backend is the panel's, which a build without the `ui` feature lacks.
+#![cfg(feature = "ui")]
+
 mod common;
 
 use std::collections::BTreeMap;
@@ -363,6 +366,47 @@ fn a_line_that_fails_says_so_with_its_code() {
     let mut keys: Vec<&String> = json["runs"][0].as_object().unwrap().keys().collect();
     keys.sort_unstable();
     assert_eq!(keys, ["command", "error", "ok", "stderr", "stdout"]);
+}
+
+/// What `flayer ui` prints once it stops: every line of a task that changed
+/// something, failed ones included, with what each said, as the TUI's
+/// transcript lays it out; a read changed nothing, and is left out. Kept by
+/// a clone, as `ui` keeps one while the server holds the backend.
+#[test]
+fn the_transcript_holds_the_lines_that_changed_something_and_no_read() {
+    let dir = workspace_with_two();
+    let backend = backend(dir.path());
+    let kept = backend.clone();
+
+    backend.run(task(json!({"type": "shelf"}))).unwrap();
+    let added = backend
+        .run(task(add_to(json!({"type": "workspace"}))))
+        .unwrap();
+    let missing = backend
+        .run(task(json!({
+            "type": "remove",
+            "holder": {"type": "workspace"},
+            "kind": "skill",
+            "name": "missing",
+            "everywhere": false,
+        })))
+        .unwrap();
+
+    let added = &added.runs[0];
+    let missing = &missing.runs[0];
+    assert!(added.ok && !missing.ok);
+    let mut expected = format!("$ {}\n{}", added.command, added.stdout);
+    for line in &added.stderr {
+        expected.push_str(&format!("{}\n", line.text));
+    }
+    expected.push_str(&format!("$ {}\n", missing.command));
+    for line in &missing.stderr {
+        expected.push_str(&format!("{}\n", line.text));
+    }
+    let error = missing.error.as_ref().unwrap();
+    expected.push_str(&format!("error: {}\n", error.message));
+    assert_eq!(kept.transcript(), expected);
+    assert!(!expected.contains("gather list"));
 }
 
 #[test]

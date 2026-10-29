@@ -57,7 +57,10 @@ pnpm --dir apps/web exec vitest run tests/shell.test.ts      # one suite
 in the root Makefile's `NODE_APPS`, outside the aggregates, until CI installs
 Node (#71). A change to the panel runs its own targets. The one exception is
 `make lint`'s em dash check (`make lint/em-dash`), which reads every tracked
-file, the panel's included.
+file, the panel's included. The other way round, `make install` and `make
+cli/release` build the panel before the binaries that embed it, so they need
+Node, and `make web/build` touches `apps/server/src/panel.rs` so the server
+compiles again and takes the panel in.
 
 `make dev/link`, `make dev/unlink` and `make install` write into `~/.cargo/bin`
 (or `BINDIR`), outside the repository. Don't run them unless asked.
@@ -112,7 +115,8 @@ under `apps/` with its own `Makefile`:
   (workspaces, workspaces forget), `artifact` (add, edit, rename, remove,
   templates), `read` (list, show, validate), `status`, `settings` (agents,
   share, targets), `gather`, `install`, `update` and `migrate` (each at both
-  levels), and `adopt` (flayer adopt). `src/render.rs` holds `Outcome`,
+  levels), `adopt` (flayer adopt) and `ui` (the panel, at both levels).
+  `src/render.rs` holds `Outcome`,
   `Failure` and `Warning` (a stderr line, with its code beside it), the
   table helpers and the envelope every `--json` prints (`json`, and
   `as_json`, which lays a text outcome out in it),
@@ -126,10 +130,13 @@ under `apps/` with its own `Makefile`:
   panel alike. `src/admit.rs` holds a task sent from outside to the path
   policy (`Admission`), and `src/backend.rs` is the panel's backend
   (`PanelBackend`, the server's `Backend` with the CLI's `Query`, `Task`
-  and `Outcome`), which no binary runs yet (#68).
+  and `Outcome`), which `ui` serves (`src/commands/ui.rs`). The backend,
+  `ui` and the server they need are behind the crate's `ui` feature, on by
+  default: `--no-default-features` builds the rest without axum
+  (`tests/crate_test.rs`), and `make cli/build` builds it that way first.
   `src/tui/` and `src/install/` are the two screens.
 - `apps/server` (`mindflayer-server`): the local server behind the web
-  panel, a library no binary runs yet. `src/backend.rs` is the `Backend`
+  panel, a library `flayer ui` runs. `src/backend.rs` is the `Backend`
   trait, `src/server.rs` binds and routes, `src/auth.rs` holds the token's
   cookie and Bearer checks, `src/guard.rs` the Host, Origin and Fetch
   Metadata checks and the CSP, `src/api.rs` the JSON endpoints,
@@ -188,19 +195,24 @@ These are easy to break from a single file without noticing.
   both reach the same function. `mind add` and `flayer add` (with or without
   `-p`) are one implementation given a different holder
   (`FlayerWorkspace::own` makes the workspace look like a `MindProject`).
-- **The TUI only runs commands.** A key produces a `Task` (`src/task.rs`,
-  shared by every front end that runs commands, the panel's backend too),
+- **The TUI and the panel only run commands.** A key produces a `Task`
+  (`src/task.rs`, shared by every front end that runs commands),
   and `Task::commands` turns it into argument lines that a `Runner` hands to
   `execute`, which runs each through `commands::run_line`: it parses them
   with `Cli`/`FlayerCli` and runs them through `run_with`/`run_flayer_with`
   with the screen's `Lookup` and a `gather::Watch`, what the binaries'
   `run_watched`/`run_flayer_cli_watched` call once they have read the
-  environment. The panel's backend runs its lines through `run_line` too. A test's stand-in `Runner` is
-  handed the same words. A new feature is written as a command first; the
-  TUI gains it by producing that command's words. Never add a TUI-only code
-  path. A gather's lines run on a thread of their own (`Task::runs_apart`),
-  still through the same parsers: the thread changes where they run, not
-  what they are. The install screen applies the same way, in the TUI or
+  environment. A test's stand-in `Runner` is handed the same words. The
+  panel is the second front end built this way: the browser sends a task as
+  JSON, the backend holds it to the path policy (`admit::Admission`), shows
+  its lines before they run (`Backend::preview`) and runs them through
+  `run_line` on the server's one writer thread, with the `Lookup` `ui` was
+  launched with, the workspace pinned. A new feature is written as a command
+  first; the TUI and the panel gain it by producing that command's words.
+  Never add a TUI-only or panel-only code path, nor one where the backend
+  does the work itself rather than run a line. A gather's lines run on a
+  thread of their own (`Task::runs_apart`), still through the same parsers:
+  the thread changes where they run, not what they are. The install screen applies the same way, in the TUI or
   opened by `flayer install` (`install::apply`): its marks are the
   `flayer install` and `flayer uninstall` lines they amount to
   (`Screen::task`), each run whatever came of the others
@@ -209,7 +221,11 @@ These are easy to break from a single file without noticing.
   parsed command by a match with no wildcard (`Refusal::of_mind`,
   `of_flayer`), so a new command says whether it is refused before it
   compiles; a task is refused for its lines (`Task::refusal`). The TUI
-  refuses only its screens.
+  refuses only its screens and `ui`, which would hold it until a Ctrl-C the
+  screen keeps for itself. Each front end hands back, when it closes, every
+  line that changed something (`Task::writes`), laid out by one function
+  (`tui::state::transcript`): the TUI when it quits, `ui` when Ctrl-C stops
+  it.
 - **A gather is watched, and stops only before it places.** Its `Request`
   carries a `gather::Watch`, core's progress callback and cancel flag; no gix
   type reaches a front end. A cancel is honoured until the shelf starts to
@@ -218,6 +234,8 @@ These are easy to break from a single file without noticing.
   source is.
 - **Output is built, then printed.** Commands return an `Outcome` (stdout
   text, stderr lines, ok), so tests assert on the exact text a user sees.
+  The two that run until they are stopped write as they run, the TUI its
+  screen and `ui` its link and a note, and hand back their transcript.
   Each stderr line, and each of a `Failure`'s warnings, is a
   `render::Warning`: the text a terminal shows, word for word, and beside
   it the code of what it says (`code()` of the core error, refusal or
@@ -712,6 +730,8 @@ These are easy to break from a single file without noticing.
   `/api` only a request that carries the launch token (in the cookie
   `mf_<port>`, or as Bearer), and takes a change by cookie only with
   `Sec-Fetch-Site: same-origin`, `X-Mindflayer: 1` and `application/json`.
+  The one widening is the panel's dev server's origin, exactly, when a front
+  end names it (`Server::dev_server`, `flayer ui --dev`).
   Every answer carries the CSP and `nosniff`; there is no CORS layer, and the
   token is never logged.
 - **The panel holds no rules either, and talks only through its
@@ -799,7 +819,12 @@ These are easy to break from a single file without noticing.
   (`common::request`, then `common::deliver`). The CLI's backend has a suite
   of its own (`apps/cli/tests/backend_test.rs`), which drives `PanelBackend`
   through the `Backend` trait with the JSON a browser sends, binding no
-  port.
+  port; `apps/cli/tests/ui_test.rs` starts the binaries' `ui` on port 0
+  (`common::start`) and sends the panel's requests over loopback. No test
+  opens a browser: every `ui` one starts passes `--no-open`, and the opener
+  is a stand-in in `ui`'s unit tests. A suite or test about the panel is
+  `#[cfg(feature = "ui")]`, so a build without the feature leaves it out;
+  `make cli/test` runs the unit tests in that build too.
 - The panel's suites are `apps/web/tests/<area>.test.ts`, in Vitest. The
   components run in happy-dom, mounted through `createPanel` with a fake
   `Transport` and a memory history, so they never reach a server.
