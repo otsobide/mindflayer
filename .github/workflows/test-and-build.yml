@@ -278,12 +278,30 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-cargo-cross-
 
+      # `make test` runs the panel's suite too, so the whole suite needs
+      # Node and pnpm here, set up as `test (web)` sets them up.
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          package_json_file: apps/web/package.json
+
+      - name: Install Node
+        uses: actions/setup-node@v6
+        with:
+          node-version-file: apps/web/.node-version
+          cache: pnpm
+          cache-dependency-path: apps/web/pnpm-lock.yaml
+
       # bash, not pwsh: the make targets are POSIX recipes, and Git Bash on
       # PATH is what makes GNU make pick sh.exe instead of cmd.exe. Harmless on
       # macOS, where bash is the default anyway.
+      #
+      # `-k`, as `fail-fast` is off above: one app failing on a platform must
+      # not hide whether the others pass there, and make stops at the first
+      # app that fails otherwise.
       - name: Run the suite
         shell: bash
-        run: make test
+        run: make -k test
 
   # -------------------------------------------------------------------------
   # Builds: each app builds only after its own tests pass, and never while the
