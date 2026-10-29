@@ -9,11 +9,12 @@ use std::borrow::Cow;
 use std::fmt::Write as _;
 use std::path::PathBuf;
 
+use mindflayer_core::code::Said;
 use mindflayer_core::reading::{Shown, Validation};
 use mindflayer_core::view::Listing;
 use mindflayer_core::{Artifact, Catalog, FlayerWorkspace, Kind, MindProject, Reference};
 
-use super::consulting;
+use super::consulted;
 use crate::render::{as_json, plural, printable, table, verdict};
 use crate::{CliError, Failure, Lookup, Outcome, Warning};
 
@@ -232,25 +233,35 @@ pub(crate) fn list(catalog: &Catalog, projects: &[MindProject], level: Level) ->
 /// Against the workspace `mind status` reads it against, the one `mind`
 /// consults, when that one links it: how each stands is that workspace's
 /// to say, from its ledger, and read alone a copy it installed would stand
-/// as somebody's. Consulted as `mind status` consults it, so one found that
-/// cannot be read is a warning beside the listing, the project read alone,
-/// and one `-W` or the activation names that is no workspace refuses it:
-/// the one place the JSON reads what the text does not, and says so.
+/// as somebody's. The text reads no workspace, so none can fail it, and
+/// the JSON keeps to the text's warnings and exit status: one found that
+/// cannot be read, or one `-W` or the activation names that is no
+/// workspace, leaves the project read alone, why said among its
+/// `failures`, as a ledger that will not open is, rather than as a warning
+/// or a refusal the text never gives. `mind status` warns or refuses
+/// instead, being a report of what that workspace installed.
 pub(crate) fn listed_here(
     project: MindProject,
     kinds: Vec<Kind>,
     lookup: &Lookup,
 ) -> Result<Outcome, Failure> {
-    let mut listing = None;
-    let text = consulting(&project, lookup, |workspace| {
-        listing = Some(Listing::of_project(&project, workspace, &kinds));
-        one_project(
-            project.clone(),
-            kinds.clone(),
-            |catalog, projects, level| Ok(list(catalog, projects, level)),
-        )
+    let (workspace, unconsulted) = match consulted(&project, lookup) {
+        Ok(workspace) => (workspace, None),
+        Err(error) => (
+            None,
+            Some(Said {
+                code: error.code(),
+                message: error.to_string(),
+            }),
+        ),
+    };
+    let mut listing = Listing::of_project(&project, workspace.as_ref(), &kinds);
+    for read in &mut listing.projects {
+        read.failures.extend(unconsulted.clone());
+    }
+    let text = one_project(project, kinds, |catalog, projects, level| {
+        Ok(list(catalog, projects, level))
     })?;
-    let listing = listing.expect("a listing consulted reads the project");
     Ok(as_json(&listing, text))
 }
 

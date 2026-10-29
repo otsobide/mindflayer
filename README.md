@@ -1298,7 +1298,9 @@ warning: /home/you/Projects/collapse/skills/broken/SKILL.md: the file does not s
   from, where each copy is, what `validate` says of it, and for a file that
   does not read, `unread`, with why. `mind list --json` reads the project
   against the workspace that links it, as `mind status` does, to say how
-  each stands. `list rules --json` holds rules alone.
+  each stands; when that workspace cannot be read, the project is read
+  alone and its `failures` say why, with no warning the text does not say.
+  `list rules --json` holds rules alone.
 - `show`: each artifact the name matches, with its file, what its front
   matter declares and its `body`.
 - `validate`: each artifact checked, its `issues` (each with its `code`,

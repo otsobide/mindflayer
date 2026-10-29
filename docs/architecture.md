@@ -1362,9 +1362,13 @@ for a script, and for the panel's backend when it reads through the CLI.
     project against the workspace `mind status` reads it against, the one
     `mind` consults, when that one links it: alone, a copy that workspace
     installed would stand as somebody's. It is the one JSON that reads what
-    its text does not, so a workspace found that cannot be read is a
-    warning there as in `mind status`, and one `-W` names that is no
-    workspace refuses it.
+    its text does not, so what that read finds wrong is no warning and no
+    refusal, which would give the JSON an exit status the text does not
+    have: a workspace found that cannot be read, or one `-W` or the
+    activation names that is no workspace, leaves the project read alone,
+    why said among its `failures`, as a ledger that will not open is.
+    `mind status` warns or refuses there instead, its report being what
+    that workspace installed.
   - `show`: `reading::Shown` for each artifact the name matches: where it
     is, what its front matter declares that `show` prints, and its body.
     The text is laid out from the same values, the file read once.

@@ -333,11 +333,11 @@ fn the_hint_about_an_unmade_default_workspace_stays_on_stderr() {
 }
 
 /// `mind list --json` reads how each stands against the workspace `mind`
-/// consults, which the text never reads: one that cannot be read is a
-/// warning beside the listing, with the project read alone, as `mind
-/// status` says it.
+/// consults, which the text never reads, so one that cannot be read fails
+/// neither: the project is read alone, saying why among its `failures`,
+/// with the text's warnings, none, and its exit status.
 #[test]
-fn a_workspace_above_that_cannot_be_read_is_a_warning_beside_mind_list_as_json() {
+fn a_workspace_above_that_cannot_be_read_leaves_mind_list_as_json_as_the_text() {
     let dir = workspace_with_two();
     let alpha = dir.path().join("alpha");
     let marker = dir.path().join(FLAYER_DIR).join(FLAYER_CONFIG);
@@ -348,29 +348,43 @@ fn a_workspace_above_that_cannot_be_read_is_a_warning_beside_mind_list_as_json()
     let text = mind(&alpha, &["list"]).unwrap();
     let json = mind(&alpha, &["list", "--json"]).unwrap();
 
-    assert!(text.ok);
     let (listing, warnings): (Listing, _) = enveloped(&json);
     assert_eq!(entries(&listing), ["alpha skill alpha"]);
     assert_eq!(listing.projects[0].entry, None);
-    assert_eq!(warnings.len(), 1, "{warnings:?}");
-    assert!(warnings[0].contains(&marker.display().to_string()));
-    assert!(!json.ok);
+    let failures = &listing.projects[0].failures;
+    assert_eq!(failures.len(), 1, "{failures:?}");
+    assert!(failures[0].message.contains(&marker.display().to_string()));
+    assert!(warnings.is_empty(), "{warnings:?}");
+    assert_eq!(json.stderr, text.stderr);
+    assert!(text.ok && json.ok);
 }
 
+/// One `-W` names that is no workspace, which `mind list` never reads, is
+/// no refusal of its JSON either: why is among the project's `failures`.
 #[test]
-fn a_workspace_named_that_is_none_refuses_mind_list_as_json() {
+fn a_workspace_named_that_is_none_leaves_mind_list_as_json_as_the_text() {
     let dir = TempDir::new().unwrap();
     new_project(dir.path());
+    write_skill(dir.path(), "deploy", &skill_file("deploy", "Ship it"));
     let nowhere = TempDir::new().unwrap();
 
     let named = nowhere.path().to_string_lossy();
-    let failure = mind(dir.path(), &["list", "--json", "-W", &named]).unwrap_err();
+    let text = mind(dir.path(), &["list", "-W", &named]).unwrap();
+    let json = mind(dir.path(), &["list", "--json", "-W", &named]).unwrap();
 
+    let (listing, warnings): (Listing, _) = enveloped(&json);
+    assert_eq!(rows(&text.stdout, 1), ["deploy"]);
+    assert_eq!(listing.projects[0].artifacts[0].name, "deploy");
+    let failures = &listing.projects[0].failures;
+    assert_eq!(failures.len(), 1, "{failures:?}");
     assert!(
-        matches!(*failure.error, CliError::Chosen { .. }),
+        failures[0].message.contains(&*named),
         "{}",
-        failure.error
+        failures[0].message
     );
+    assert!(warnings.is_empty(), "{warnings:?}");
+    assert_eq!(json.stderr, text.stderr);
+    assert!(text.ok && json.ok);
 }
 
 // ---------------------------------------------------------------------------
