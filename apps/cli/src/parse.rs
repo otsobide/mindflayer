@@ -215,6 +215,11 @@ pub enum Command {
     Validate {
         /// A kind (`rules`), or one artifact by name [default: everything].
         target: Option<String>,
+
+        /// Print it as JSON, in the envelope every reading command's --json
+        /// shares.
+        #[arg(long)]
+        json: bool,
     },
 
     /// Say what this project holds: whether what Mindflayer installed is
@@ -604,6 +609,11 @@ pub enum FlayerCommand {
         /// Only this project.
         #[arg(short, long, value_name = "PROJECT")]
         project: Option<String>,
+
+        /// Print it as JSON, in the envelope every reading command's --json
+        /// shares.
+        #[arg(long)]
+        json: bool,
     },
 
     /// Say what every managed project holds: whether what Mindflayer

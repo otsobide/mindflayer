@@ -174,12 +174,14 @@ pub(crate) fn run_with(cli: &Cli, lookup: &Lookup, watch: &Watch) -> Result<Outc
                 show(catalog, &reference, level)
             })
         }
-        Command::Validate { target } => {
+        Command::Validate { target, json } => {
             let project = project_here(&directory)?;
             let selector = Selector::parse(target.as_deref());
-            one_project(project, selector.kinds(), |catalog, _, level| {
-                validate(catalog, &selector, level)
-            })
+            let mut found = None;
+            let text = one_project(project, selector.kinds(), |catalog, _, level| {
+                validate(catalog, &selector, level, &mut found)
+            })?;
+            Ok(json_or_text(found.filter(|_| *json), text))
         }
         Command::Status { json } => status_here(project_here(&directory)?, lookup, *json),
         Command::Link => link_here(&directory, lookup),
@@ -683,19 +685,27 @@ fn run_flayer(
                 None => Ok(status_of_workspace(workspace, *json)),
             })
         }
-        FlayerCommand::Validate { target, project } => {
+        // Laid out as JSON once the read is done, the hint about a workspace
+        // not made yet among what it said, which stays on stderr.
+        FlayerCommand::Validate {
+            target,
+            project,
+            json,
+        } => {
             let selector = Selector::parse(target.as_deref());
             let kinds = selector.kinds();
+            let mut found = None;
             let read = |catalog: &Catalog, _: &[MindProject], level: Level| {
-                validate(catalog, &selector, level)
+                validate(catalog, &selector, level, &mut found)
             };
-            reading_workspace(directory, lookup, |workspace| match project {
+            let text = reading_workspace(directory, lookup, |workspace| match project {
                 Some(project) => one_project(workspace.pick(project)?, kinds, read),
                 None => {
                     let (projects, warnings) = managed(workspace);
                     everywhere_and_the_shelf(workspace, warnings, &projects, kinds, read)
                 }
-            })
+            })?;
+            Ok(json_or_text(found.filter(|_| *json), text))
         }
     }
 }

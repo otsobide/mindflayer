@@ -9,6 +9,7 @@ use std::borrow::Cow;
 use std::fmt::Write as _;
 use std::path::PathBuf;
 
+use mindflayer_core::reading::Validation;
 use mindflayer_core::view::Listing;
 use mindflayer_core::{Artifact, Catalog, Declared, FlayerWorkspace, Kind, MindProject, Reference};
 
@@ -524,11 +525,17 @@ pub(crate) fn show(
     Ok((text, true))
 }
 
-/// Every artifact's problems, or a line saying it has none.
+/// Every artifact's problems, or a line saying it has none, and whether
+/// all passes; with what was found kept in `found`, for `--json` to print
+/// in place of the text.
+///
+/// What it found is core's ([`Validation`]), the counts the verdict follows
+/// among it, so the text and the JSON cannot come to different verdicts.
 pub(crate) fn validate(
     catalog: &Catalog,
     selector: &Selector,
     level: Level,
+    found: &mut Option<Validation>,
 ) -> Result<(String, bool), CliError> {
     let artifacts: Vec<&Artifact> = match selector {
         Selector::One(reference) => {
@@ -542,47 +549,46 @@ pub(crate) fn validate(
         // filtering again here would be filtering twice.
         Selector::Everything | Selector::OneKind(_) => catalog.artifacts().iter().collect(),
     };
+    let validation = Validation::of(&artifacts, catalog.failures());
+    let reported = verdicts(&artifacts, &validation, level);
+    *found = Some(validation);
+    Ok(reported)
+}
 
+/// What [`validate`] says of `artifacts`, as `validation` found them.
+fn verdicts(artifacts: &[&Artifact], validation: &Validation, level: Level) -> (String, bool) {
     if artifacts.is_empty() {
-        return Ok((String::from("nothing to check\n"), true));
+        return (String::from("nothing to check\n"), true);
     }
-    let qualify = Qualify::over(&artifacts, level);
+    let qualify = Qualify::over(artifacts, level);
 
     let mut text = String::new();
-    let mut invalid = 0usize;
-    for artifact in &artifacts {
-        let label = label(artifact, qualify, level);
-        if verdict(&mut text, &label, &artifact.validate()) {
-            invalid += 1;
-        }
+    for (artifact, checked) in artifacts.iter().zip(&validation.artifacts) {
+        verdict(&mut text, &label(artifact, qualify, level), &checked.issues);
     }
 
     // Counting only what loaded would report "0 invalid" for a project whose
     // files could not be read at all, with the reason on stderr where a CI log
     // will not put it next to the verdict. Copies of one name that differ
     // were read, so they are counted apart, for the same reason.
-    let unreadable = catalog
-        .failures()
-        .iter()
-        .filter(|failure| failure.is_unreadable())
-        .count();
-    let differing = artifacts
-        .iter()
-        .filter(|artifact| artifact.copies_differ())
-        .count();
     let mut tally = String::new();
-    if unreadable > 0 {
-        let _ = write!(tally, ", {} unreadable", plural(unreadable, "file"));
+    if validation.unreadable > 0 {
+        let _ = write!(
+            tally,
+            ", {} unreadable",
+            plural(validation.unreadable, "file")
+        );
     }
-    if differing > 0 {
-        let _ = write!(tally, ", {differing} with copies that differ");
+    if validation.differing > 0 {
+        let _ = write!(tally, ", {} with copies that differ", validation.differing);
     }
     let _ = writeln!(
         text,
-        "\n{} checked, {invalid} invalid{tally}",
-        counted(&artifacts)
+        "\n{} checked, {} invalid{tally}",
+        counted(artifacts),
+        validation.invalid
     );
-    Ok((text, invalid == 0 && unreadable == 0 && differing == 0))
+    (text, validation.passes())
 }
 
 /// "2 skills", "2 skills and 1 rule": what was looked at, by kind.

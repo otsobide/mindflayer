@@ -369,3 +369,154 @@ fn a_workspace_named_that_is_none_refuses_mind_list_as_json() {
         failure.error
     );
 }
+
+// ---------------------------------------------------------------------------
+// What `validate --json` prints, field by field.
+// ---------------------------------------------------------------------------
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct Validation {
+    artifacts: Vec<Checked>,
+    invalid: usize,
+    unreadable: usize,
+    differing: usize,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct Checked {
+    kind: String,
+    name: String,
+    path: String,
+    project: String,
+    issues: Vec<Value>,
+    invalid: bool,
+    copies_differ: bool,
+}
+
+/// The name of each artifact a `validate` table judges, in its order: every
+/// line naming one, without the kind or the holder a qualified label adds.
+fn judged(stdout: &str) -> Vec<String> {
+    stdout
+        .lines()
+        .take_while(|line| !line.is_empty())
+        .filter(|line| !line.starts_with(' '))
+        .map(|line| {
+            let (label, _) = line.rsplit_once(": ").unwrap();
+            let label = label.split(" (").next().unwrap();
+            let name = label
+                .split_once(':')
+                .map_or(label, |(kind, name)| match kind {
+                    "skill" | "rule" => name,
+                    _ => label,
+                });
+            name.to_owned()
+        })
+        .collect()
+}
+
+/// The name of each artifact a `validate --json` checked, in its order.
+fn checked(validation: &Validation) -> Vec<String> {
+    validation
+        .artifacts
+        .iter()
+        .map(|checked| checked.name.clone())
+        .collect()
+}
+
+#[test]
+fn validate_as_json_checks_the_entries_the_text_checks() {
+    let dir = workspace_with_rows();
+    write_skill(
+        &dir.path().join("beta"),
+        "deploy",
+        &skill_file("Deployment", "Ship it"),
+    );
+
+    let text = flayer(dir.path(), &["validate"]).unwrap();
+    let json = flayer(dir.path(), &["validate", "--json"]).unwrap();
+
+    let (validation, warnings): (Validation, _) = enveloped(&json);
+    assert_eq!(checked(&validation), judged(&text.stdout));
+    assert_eq!(
+        checked(&validation),
+        ["Deployment", "alpha", "beta", "tidy", "tidy", "git/commits"]
+    );
+    let kinds: Vec<&str> = validation
+        .artifacts
+        .iter()
+        .map(|checked| checked.kind.as_str())
+        .collect();
+    assert_eq!(kinds, ["skill", "skill", "skill", "skill", "skill", "rule"]);
+    assert!(text
+        .stdout
+        .ends_with("5 skills and 1 rule checked, 1 invalid\n"));
+    assert_eq!(validation.invalid, 1);
+    assert_eq!((validation.unreadable, validation.differing), (0, 0));
+    let deployment = &validation.artifacts[0];
+    assert!(deployment.invalid);
+    assert!(deployment.path.ends_with("deploy"), "{}", deployment.path);
+    assert_eq!(
+        deployment.issues[0]["code"],
+        Value::from("name_not_kebab_case")
+    );
+    // An artifact that does not pass fails the JSON as it fails the text,
+    // though nothing is said on stderr.
+    assert!(warnings.is_empty());
+    assert!(text.stderr.is_empty() && json.stderr.is_empty());
+    assert!(!text.ok);
+    assert_eq!(json.ok, text.ok);
+}
+
+#[test]
+fn mind_validate_as_json_is_flayer_validate_of_its_project() {
+    let dir = workspace_with_rows();
+
+    let here = mind(&dir.path().join("alpha"), &["validate", "rules", "--json"]).unwrap();
+    let named = flayer(dir.path(), &["validate", "rules", "-p", "alpha", "--json"]).unwrap();
+
+    assert_eq!(here, named);
+    let (validation, _): (Validation, _) = enveloped(&here);
+    assert_eq!(checked(&validation), ["git/commits"]);
+    assert!(here.ok);
+}
+
+/// A file that does not read is a warning, as stderr says it, counted as
+/// unreadable, and fails the JSON as it fails the text.
+#[test]
+fn an_artifact_that_does_not_read_is_a_warning_and_fails_validate_as_json_too() {
+    let dir = workspace_with_two();
+    let alpha = dir.path().join("alpha");
+    write_skill(&alpha, "broken", "no front matter\n");
+
+    let text = mind(&alpha, &["validate"]).unwrap();
+    let json = mind(&alpha, &["validate", "--json"]).unwrap();
+
+    let (validation, warnings): (Validation, _) = enveloped(&json);
+    assert_eq!(checked(&validation), judged(&text.stdout));
+    assert_eq!(warnings, warned(&text));
+    assert_eq!(
+        warning_codes(&json),
+        [Some(String::from("front_matter_missing"))]
+    );
+    assert_eq!(warning_codes(&json), stderr_codes(&text));
+    assert_eq!(validation.unreadable, 1);
+    assert!(
+        text.stdout.ends_with(", 1 file unreadable\n"),
+        "{}",
+        text.stdout
+    );
+    assert!(!text.ok);
+    assert_eq!(json.ok, text.ok);
+}
+
+#[test]
+fn validate_as_json_names_what_it_could_not_find_as_the_text_does() {
+    let dir = TempDir::new().unwrap();
+    new_project(dir.path());
+
+    let failure = mind(dir.path(), &["validate", "absent", "--json"]).unwrap_err();
+
+    assert!(matches!(*failure.error, CliError::UnknownArtifact(ref name) if name == "absent"));
+}
