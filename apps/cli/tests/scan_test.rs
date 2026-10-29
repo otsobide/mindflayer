@@ -302,10 +302,11 @@ fn scan_json_says_what_it_could_not_read_and_that_it_stopped_as_warnings() {
     }
 
     let outcome = flayer(dir.path(), &["scan", "--json", "wrok", "crowded"]).unwrap();
+    let text = flayer(dir.path(), &["scan", "wrok", "crowded"]).unwrap();
 
-    // Failed as the text would have, and nothing said beside the envelope.
+    // Failed as the text would have, and said on stderr as the text says it.
     assert!(!outcome.ok);
-    assert!(outcome.stderr.is_empty(), "{:?}", outcome.stderr);
+    assert_eq!(outcome.stderr, text.stderr);
     let (report, warnings): (Report, _) = enveloped(&outcome);
     assert!(report.truncated);
     assert!(report.found.is_empty(), "{:?}", report.found);

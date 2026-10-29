@@ -220,13 +220,14 @@ These are easy to break from a single file without noticing.
   contract.** A reading command's `--json` (`list`, `show`, `validate`,
   `templates` and `status` at both levels, `workspaces`, `scan` and `gather
   list`) prints `render::json`'s `{"version": 2, "data": ..., "warnings":
-  [...], "coded_warnings": [...]}`, never a shape of its own, with what it
-  would have said on stderr as `warning:` lines in `warnings`, the same
-  lines with their codes in `coded_warnings`, and the exit status its text
-  has; a `hint:` stays on stderr. One that reads as the text does lays out
-  the text's own outcome (`render::as_json`), so that every warning it
-  says, one added on the way out included, reaches the envelope, and its
-  exit status is the text's by construction. `data` is a type core builds and sorts,
+  [...], "coded_warnings": [...]}`, never a shape of its own, with what its
+  text says on stderr as `warning:` lines in `warnings`, the same lines
+  with their codes in `coded_warnings`, and the exit status its text has;
+  those lines are still said on stderr too, a `hint:` there alone. One that
+  reads as the text does lays out the text's own outcome
+  (`render::as_json`), so that every warning it says, one added on the way
+  out included, reaches the envelope, and its exit status is the text's by
+  construction. `data` is a type core builds and sorts,
   deriving `Serialize` with its fields named in snake_case; a kind, an agent
   or a state goes out as the word a command line takes for it
   (`Kind::slug`, `Agent::name`, `State::slug`, `Standing::slug`), serialized
@@ -273,8 +274,8 @@ These are easy to break from a single file without noticing.
   `code::ALL`; `code_test.rs` holds no two codes alike and finds a type
   that derives `Error` and never joined.
 - **Failures are collected, not raised.** One unreadable artifact or stale
-  registry entry is a `warning:` on stderr (in the envelope, under `--json`)
-  and a non-zero exit, never a reason to hide the rest. An absence (no
+  registry entry is a `warning:` on stderr (in the envelope too, under
+  `--json`) and a non-zero exit, never a reason to hide the rest. An absence (no
   `skills/` folder yet) is not a failure.
 - **Never overwrite what somebody wrote.**
   - New markers are written from string templates so their comments survive:

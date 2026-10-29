@@ -201,7 +201,8 @@ pub const ENVELOPE_VERSION: u32 = 2;
 ///
 /// One shape for every command, so a script reads each the same way, and the
 /// warnings inside it beside the data rather than on stderr alone: failures
-/// are collected, not raised, in JSON as in text.
+/// are collected, not raised, in JSON as in text. On stderr as well, as the
+/// text says them, for whoever pipes the JSON into `jq` at a terminal.
 ///
 /// `coded_warnings` says each of `warnings` again, in the same order, with
 /// its code beside it ([`Warning::code`]), for a reader that acts on a
@@ -232,9 +233,16 @@ struct Coded<'a> {
 /// out: inside `warnings`, every line is one.
 const WARNING: &str = "warning: ";
 
-/// `data` in the envelope, with `warnings`, each a line as stderr would show
-/// it, in its `warnings` without the prefix and in its `coded_warnings`
-/// with its code; failing when there is any, as the text would.
+/// `data` in the envelope, with `warnings`, each a line as stderr shows it,
+/// in its `warnings` without the prefix and in its `coded_warnings` with its
+/// code, and on stderr too, as the text says them; failing when there is
+/// any, as the text would.
+///
+/// On stderr as well as in the envelope, as #64 asked: the envelope is a
+/// script's, which reads every warning there and never needs stderr, and
+/// stderr is the terminal's, where somebody piping the JSON into `jq` would
+/// otherwise see the answer and nothing of what could not be read. Left
+/// off stderr, as #36 first had it, was the other way, rejected for that.
 ///
 /// Pretty-printed, two spaces a level, since a person reads it as often as a
 /// script does, and `jq` takes either.
@@ -263,15 +271,15 @@ pub(crate) fn json<T: Serialize>(data: &T, warnings: &[Warning]) -> Outcome {
     stdout.push('\n');
     Outcome {
         stdout,
-        stderr: Vec::new(),
+        stderr: warnings.to_vec(),
         ok: warnings.is_empty(),
     }
 }
 
 /// `text`, what a reading command made to print, as JSON: `data` in the
 /// envelope in place of its stdout, each of its `warning:` lines in the
-/// envelope rather than on stderr, and the rest of what it said there, a
-/// hint or a note, left there, as advice for whoever reads the terminal.
+/// envelope, and its stderr left as it is, those lines among the rest, a
+/// hint or a note, as [`json`] leaves them for whoever reads the terminal.
 ///
 /// Its exit status is the text's, kept rather than worked out again from
 /// the warnings, since a report can fail with none: `validate` fails for an
@@ -280,12 +288,14 @@ pub(crate) fn json<T: Serialize>(data: &T, warnings: &[Warning]) -> Outcome {
 /// it consulted that could not be read) reaches the envelope as it reaches
 /// stderr.
 pub(crate) fn as_json<T: Serialize>(data: &T, text: Outcome) -> Outcome {
-    let (warnings, rest): (Vec<Warning>, Vec<Warning>) = text
+    let warnings: Vec<Warning> = text
         .stderr
-        .into_iter()
-        .partition(|line| line.text.starts_with(WARNING));
+        .iter()
+        .filter(|line| line.text.starts_with(WARNING))
+        .cloned()
+        .collect();
     let mut outcome = json(data, &warnings);
-    outcome.stderr = rest;
+    outcome.stderr = text.stderr;
     outcome.ok = text.ok;
     outcome
 }

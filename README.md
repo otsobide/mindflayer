@@ -1206,8 +1206,8 @@ which `missed` in the JSON says.
 
 `--json` prints the same report in the envelope every reading command's
 `--json` shares ([machine-readable output](#machine-readable-output)): the
-data, the warnings that would have gone to stderr, each again with its code,
-and a version, which moves if a field ever goes or changes meaning. The names
+data, the warnings the text says on stderr, each again with its code, and a
+version, which moves if a field ever goes or changes meaning. The names
 in it are a contract, spelled as a command line spells them; the version is 2
 since `installed` became `current`, `outdated` or `orphaned`, and `partial`
 became `missing`:
@@ -1285,6 +1285,7 @@ $ mind validate --json
     }
   ]
 }
+warning: /home/you/Projects/collapse/skills/broken/SKILL.md: the file does not start with a `---` front matter fence
 ```
 
 `data` is what the command's text lists:
@@ -1311,15 +1312,17 @@ $ mind validate --json
   has](#what-each-project-has), [the flayers this machine
   knows](#the-flayers-this-machine-knows) and [commands](#commands).
 
-`warnings` holds what the text would have said on stderr as `warning:`
-lines, without the prefix, and `coded_warnings` the same lines, in the same
-order, each beside its `code`: a word for what went wrong that rewording the
-message never changes, `null` for a line none is given to. None of them is
-said on stderr as well, so a script reading stdout misses nothing; a `hint:`
-is advice for whoever reads the terminal, and stays there. The exit status
-is the text's: non-zero when something could not be read, as above, and for
-`validate` when something does not pass. An error that stops a command is
-still a line on stderr, with nothing on stdout.
+`warnings` holds what the text says on stderr as `warning:` lines, without
+the prefix, and `coded_warnings` the same lines, in the same order, each
+beside its `code`: a word for what went wrong that rewording the message
+never changes, `null` for a line none is given to. Each is still said on
+stderr too, as above, as the text says it, so piping the JSON into `jq`
+leaves them on the terminal; a script reads them in the envelope and need
+not read stderr, where a `hint:`, advice for whoever reads the terminal, is
+said too and the envelope leaves it out. The exit status is the text's:
+non-zero when something could not be read, as above, and for `validate`
+when something does not pass. An error that stops a command is still a line
+on stderr, with nothing on stdout.
 
 The names in it are a contract. `version` is 2, and version 2 only grows
 additively: a field added leaves it at 2, so a script written for it passes

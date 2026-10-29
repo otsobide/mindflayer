@@ -340,8 +340,8 @@ fn moved_to(old: &str, route: &str) -> String {
 }
 
 /// What a scan could not read, and that it stopped early, each as a warning
-/// says it, without the prefix: on stderr beside a table, inside the
-/// envelope beside JSON, and in a strip of the minds screen, which says them
+/// says it, without the prefix: on stderr, and inside the envelope too
+/// beside JSON, and in a strip of the minds screen, which says them
 /// in these words rather than its own.
 pub(crate) fn scan_warnings(scan: &Scan) -> Vec<String> {
     scan_said(scan).into_iter().map(|(_, said)| said).collect()

@@ -1,7 +1,7 @@
 //! The reading commands' `--json`: `list`, `show`, `validate`, `templates`
 //! and `gather list`, read back into structs of this suite's own, each held
 //! to the entries the text lists, the warnings it says, with their codes,
-//! and the exit status it has.
+//! and on stderr as it says them, and the exit status it has.
 
 // Every field of the structs below is named so that one renamed or added is
 // refused, which is what they are for: not every test reads every one.
@@ -250,8 +250,9 @@ fn mind_list_as_json_is_flayer_list_of_its_project() {
 }
 
 /// A file that does not read is a warning in the envelope, with the code
-/// stderr gives it, and fails the JSON as it fails the text; the snapshot
-/// lists it all the same, by its place, saying why.
+/// stderr gives it, and on stderr as the text says it, and fails the JSON
+/// as it fails the text; the snapshot lists it all the same, by its place,
+/// saying why.
 #[test]
 fn an_artifact_that_does_not_read_is_a_warning_and_fails_list_as_json_too() {
     let dir = workspace_with_two();
@@ -277,7 +278,7 @@ fn an_artifact_that_does_not_read_is_a_warning_and_fails_list_as_json_too() {
             warning_codes(&json),
             [Some(String::from("front_matter_missing"))]
         );
-        assert!(json.stderr.is_empty(), "{:?}", json.stderr);
+        assert_eq!(json.stderr, text.stderr);
         assert!(!text.ok);
         assert_eq!(json.ok, text.ok);
         let broken = listing
@@ -305,6 +306,7 @@ fn a_stale_entry_is_a_warning_and_a_project_saying_why_in_list_as_json() {
     let (listing, warnings): (Listing, _) = enveloped(&json);
     assert_eq!(warnings, warned(&text));
     assert_eq!(warning_codes(&json), stderr_codes(&text));
+    assert_eq!(json.stderr, text.stderr);
     assert_eq!(listing.projects.len(), 2);
     let stale = listing.projects[1].stale.as_ref().expect("stale");
     assert_eq!(listing.projects[1].entry.as_deref(), Some("beta"));
@@ -502,6 +504,7 @@ fn an_artifact_that_does_not_read_is_a_warning_and_fails_validate_as_json_too() 
         [Some(String::from("front_matter_missing"))]
     );
     assert_eq!(warning_codes(&json), stderr_codes(&text));
+    assert_eq!(json.stderr, text.stderr);
     assert_eq!(validation.unreadable, 1);
     assert!(
         text.stdout.ends_with(", 1 file unreadable\n"),
@@ -659,6 +662,7 @@ fn an_artifact_that_does_not_read_is_a_warning_beside_show_as_json() {
     assert_eq!(shown.len(), 1);
     assert_eq!(warnings, warned(&text));
     assert_eq!(warning_codes(&json), stderr_codes(&text));
+    assert_eq!(json.stderr, text.stderr);
     assert_eq!(warnings.len(), 1);
     assert!(!text.ok);
     assert_eq!(json.ok, text.ok);
@@ -721,8 +725,8 @@ fn flayer_templates_as_json_is_mind_templates_of_its_project() {
 }
 
 /// A workspace `mind templates` consults that cannot be read is a warning
-/// beside the templates, said in the envelope as it is said on stderr, and
-/// fails the JSON as it fails the text.
+/// beside the templates, said in the envelope and on stderr as the text
+/// says it there, and fails the JSON as it fails the text.
 #[test]
 fn a_workspace_above_that_cannot_be_read_is_a_warning_beside_templates_as_json() {
     let dir = workspace_with_two();
@@ -739,7 +743,7 @@ fn a_workspace_above_that_cannot_be_read_is_a_warning_beside_templates_as_json()
     assert_eq!(warnings, warned(&text));
     assert_eq!(warnings.len(), 1);
     assert_eq!(warning_codes(&json), stderr_codes(&text));
-    assert!(json.stderr.is_empty(), "{:?}", json.stderr);
+    assert_eq!(json.stderr, text.stderr);
     assert!(!text.ok);
     assert_eq!(json.ok, text.ok);
 }
@@ -815,6 +819,7 @@ fn a_loaded_workspace_gone_is_a_warning_beside_gather_list_as_json() {
     assert_eq!(warnings.len(), 1, "{warnings:?}");
     assert_eq!(warning_codes(&json), stderr_codes(&text));
     assert!(warning_codes(&json)[0].is_some());
+    assert_eq!(json.stderr, text.stderr);
     assert!(!text.ok);
     assert_eq!(json.ok, text.ok);
 }

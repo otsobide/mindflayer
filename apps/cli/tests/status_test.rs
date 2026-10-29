@@ -277,7 +277,7 @@ fn a_workspace_above_that_cannot_be_read_is_a_warning_beside_the_report() {
     let (report, warnings): (Report, _) = enveloped(&json);
     assert_eq!(words(&report), ["alpha review authored -"]);
     assert_eq!(warnings, [&outcome.stderr[0].text["warning: ".len()..]]);
-    assert!(json.stderr.is_empty(), "{:?}", json.stderr);
+    assert_eq!(json.stderr, outcome.stderr);
     assert!(!json.ok);
 }
 
@@ -525,7 +525,7 @@ fn a_stale_entry_in_json_says_why_in_its_data_and_its_warnings() {
     // The rest are there all the same, and the exit says something was not.
     assert_eq!(report.projects.len(), 3);
     assert_eq!(report.projects[0].artifacts.len(), 4);
-    assert_eq!(outcome.stderr, [LEGACY]);
+    assert_eq!(outcome.stderr, text.stderr);
     assert!(!outcome.ok);
 }
 

@@ -232,7 +232,7 @@ pub(crate) fn unread(project: &str, unreached: &Unreached, would: bool) -> Strin
 }
 
 /// The report laid out, with what could not be read (`warnings`) said: on
-/// stderr beside a table, inside the envelope beside JSON. Then a hint for
+/// stderr, and inside the envelope too beside JSON. Then a hint for
 /// each project an older marker marks ([`older`]), on stderr in JSON too, as
 /// [`status_here`]'s hint is: advice for whoever reads the terminal, which
 /// the data says as each project's `marker`.

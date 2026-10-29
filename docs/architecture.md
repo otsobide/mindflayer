@@ -1277,7 +1277,7 @@ the same way: listed, and said.
 
 The CLI prints those on stderr as warnings and exits non-zero: visible, but not
 in the way of the answer. Asked for JSON, it puts them in the envelope beside
-the data instead, each with its code ([JSON, in one
+the data too, each with its code ([JSON, in one
 envelope](#json-in-one-envelope)).
 
 Each line it says beside a report is a `render::Warning`, an `Outcome`'s and a
@@ -1317,30 +1317,34 @@ knows](#the-workspaces-this-machine-knows)), and, since #64, `list`, `show`,
 shows of a workspace a script or an agent can print. One shape is one parser
 for a script, and for the panel's backend when it reads through the CLI.
 
-- **The warnings are inside it, with their codes.** Failures are collected,
-  not raised, in JSON as in text: what a table would say on stderr as
-  `warning:` lines goes into `warnings`, without the prefix, and stderr is
-  left without them, so a script reading stdout misses nothing and one
-  reading both reads each once. `coded_warnings` says the same lines again,
-  in the same order, each as its `code` and its `message`, the code `null`
-  for a line none is given to ([a code for what went
-  wrong](#a-code-for-what-went-wrong)). A name of its own rather than
+- **The warnings are inside it, with their codes, and on stderr too.**
+  Failures are collected, not raised, in JSON as in text: what a table says
+  on stderr as `warning:` lines goes into `warnings`, without the prefix,
+  so a script reading stdout misses nothing. `coded_warnings` says the
+  same lines again, in the same order, each as its `code` and its
+  `message`, the code `null` for a line none is given to ([a code for what
+  went wrong](#a-code-for-what-went-wrong)). A name of its own rather than
   objects in `warnings`, whose strings a version 2 script reads: changing
   what a field holds moves the version, and adding one does not. Codes in a
   list beside the strings, paired by place, was the other way, rejected for
   the reason a `Warning` keeps its code on the line: two lists every writer
-  has to keep in step. The exit status is the text's. A hint, advice for
-  whoever reads the terminal, stays on stderr. An error that stops a
-  command is still text on stderr, `--json` or not: every error has a code
-  since #61, but an error's is not printed yet. #64 asked for the warnings
-  on stderr as well; leaving them out, as #36 did, keeps one rule for every
-  command's JSON, which a change of it would have to move for all of them
-  together (an open question below).
+  has to keep in step. The exit status is the text's. Every warning is
+  still said on stderr, as the text says it, since #64 asked for it: the
+  envelope is a script's, which reads each warning there and need not read
+  stderr, and stderr is the terminal's, where somebody piping the JSON into
+  `jq` would otherwise see the answer and nothing of what could not be
+  read. Leaving them off stderr, as #36 first did so that a script reading
+  both channels would read each once, was rejected for that, and for every
+  command's JSON at once, `status`, `scan` and `workspaces` among them,
+  since one rule (`render::json`) says them all. A hint, advice for whoever
+  reads the terminal, stays on stderr alone. An error that stops a command
+  is still text on stderr, `--json` or not: every error has a code since
+  #61, but an error's is not printed yet.
 - **Laid out from the text's own outcome.** A command whose JSON reads what
   its text reads builds its text, warnings and all, and `render::as_json`
   lays that outcome out as JSON: `data` in place of stdout, each `warning:`
-  line moved into the envelope, every other line left on stderr, and the
-  exit status kept, since a report can fail with no warning at all
+  line said in the envelope, stderr left as the text has it, and the exit
+  status kept, since a report can fail with no warning at all
   (`validate`, for an artifact that does not pass). Built from the outcome
   rather than beside it, so that a warning a command adds on the way out,
   a workspace it consulted that could not be read, reaches the envelope as
@@ -6613,13 +6617,6 @@ just listed.
 
 ## Open questions
 
-- **Warnings on stderr under `--json`.** A reading command's JSON says its
-  warnings in the envelope alone, as #36 made it, though #64 asked for them
-  on stderr as well, so that somebody piping the JSON into `jq` still sees
-  them on the terminal. Saying them in both would leave a script that reads
-  both channels reading each warning twice, and would move every command's
-  JSON at once, `status`, `scan` and `workspaces` among them, which is the
-  owner's to choose.
 - **`list --json` reads twice.** Its warnings and exit status are those of
   the listing, read as the text reads it, and its data a read of the
   snapshot's beside it, so a file changed between the two can be a warning
