@@ -10,6 +10,7 @@ import AgentBadges from '@/components/AgentBadges.vue'
 import AppHeader from '@/components/AppHeader.vue'
 import CommandHint, { flayer } from '@/components/CommandHint.vue'
 import HealthBadge from '@/components/HealthBadge.vue'
+import IssueList from '@/components/IssueList.vue'
 import SnapshotGate from '@/components/SnapshotGate.vue'
 import StateBadge from '@/components/StateBadge.vue'
 
@@ -380,51 +381,7 @@ function spelled(words: string[]): string {
                         class="max-w-96 px-3 py-2 text-xs"
                         data-testid="issues"
                       >
-                        <ul
-                          v-if="held.unread || held.issues.length"
-                          class="flex flex-col gap-1"
-                        >
-                          <li
-                            v-if="held.unread"
-                            class="flex items-start gap-1.5"
-                            data-testid="unread"
-                          >
-                            <UIcon
-                              name="i-lucide-file-x"
-                              class="mt-px size-3.5 shrink-0 text-error"
-                              aria-hidden="true"
-                            />
-                            <span>
-                              <span class="font-mono text-error">does not read:</span>
-                              {{ held.unread.message }}
-                              <code class="block font-mono text-dimmed">{{ held.unread.path }}</code>
-                            </span>
-                          </li>
-                          <li
-                            v-for="issue in held.issues"
-                            :key="`${issue.code}:${issue.message}`"
-                            class="flex items-start gap-1.5"
-                            data-testid="issue"
-                          >
-                            <UIcon
-                              :name="issue.warning ? 'i-lucide-triangle-alert' : 'i-lucide-circle-x'"
-                              class="mt-px size-3.5 shrink-0"
-                              :class="issue.warning ? 'text-warning' : 'text-error'"
-                              aria-hidden="true"
-                            />
-                            <span>
-                              <span
-                                class="font-mono"
-                                :class="issue.warning ? 'text-warning' : 'text-error'"
-                              >{{ issue.warning ? 'warning:' : 'invalid:' }}</span>
-                              {{ issue.message }}
-                            </span>
-                          </li>
-                        </ul>
-                        <span
-                          v-else
-                          class="font-mono text-dimmed"
-                        >none</span>
+                        <IssueList :held="held" />
                       </td>
                     </tr>
                   </tbody>
