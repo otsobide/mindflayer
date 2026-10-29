@@ -593,6 +593,26 @@ fn the_default_workspace_is_made_by_the_first_change_and_said_first() {
     assert!(workspace.is_linked(&fresh));
 }
 
+/// Its own making is one `flayer init`, not a second in front of it.
+#[test]
+fn the_default_workspace_asked_to_be_made_is_made_by_one_line() {
+    let dir = TempDir::new().unwrap();
+    let home = dir.path().join("home");
+    fs::create_dir_all(&home).unwrap();
+    let backend = PanelBackend::launch(&home, &Lookup::at_home(Some(&home))).unwrap();
+    let init = json!({"type": "init_workspace"});
+
+    assert_eq!(
+        backend.preview(&task(init.clone())).unwrap(),
+        [String::from("flayer init")]
+    );
+    let outcome: Outcome = backend.run(task(init)).unwrap();
+
+    assert!(outcome.ok, "{outcome:?}");
+    assert_eq!(outcome.runs.len(), 1, "{outcome:?}");
+    assert!(FlayerWorkspace::open(&home).is_ok());
+}
+
 /// Pinned to the one it was launched on: a workspace that has gone since is
 /// refused, never made again by the first change.
 #[test]

@@ -193,9 +193,16 @@ impl PanelBackend {
         let mut lines = admitted.commands();
         // As the TUI does: a change to the default before it is made makes
         // it first, by a line of its own, rather than leave the change to
-        // find a workspace above home while it walks up from the root.
-        if !workspace.is_made() && admitted.writes() && !lines.is_empty() {
-            lines.splice(0..0, Task::InitWorkspace.commands());
+        // find a workspace above home while it walks up from the root. Not
+        // in front of a task that makes it already: the TUI offers that one
+        // only with nothing made, but a browser may send it at any time.
+        let init = Task::InitWorkspace.commands();
+        if !workspace.is_made()
+            && admitted.writes()
+            && !lines.is_empty()
+            && !lines.starts_with(&init)
+        {
+            lines.splice(0..0, init);
         }
         Ok(Plan {
             lines,
