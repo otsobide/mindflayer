@@ -4122,8 +4122,9 @@ of it a browser may name.
   name must be absolute (`path_relative`, or `path_url` for a `file:///etc`),
   spelled exactly as normalizing it would spell it, with no `.` or `..` part
   and no doubled or trailing separator (`path_unnormalized`), and outside
-  every `.mindflayer`, as spelled and, when it exists, once its links are
-  followed (`path_in_mindflayer`): a workspace's folder holds its marker,
+  every `.mindflayer`, as spelled and once its links are followed, as far
+  as it exists, so a new folder under a link into one is refused too
+  (`path_in_mindflayer`): a workspace's folder holds its marker,
   its ledger, its library and the clones it gathered, none of them a project
   to make or a workspace to load. The path goes to the command verbatim, so
   the preview shows the folder the command acts on. A mark to unlink, or

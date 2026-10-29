@@ -27,12 +27,12 @@
 //! a rule about which paths may be named is one a second front end would
 //! otherwise write again, and could write differently.
 
-use std::fs;
 use std::path::{Component, Path, PathBuf};
 
 use thiserror::Error;
 
 use crate::code::codes;
+use crate::install;
 use crate::paths;
 use crate::workspace::{FlayerWorkspace, Loaded, Member, WorkspaceError, FLAYER_DIR};
 
@@ -65,12 +65,14 @@ codes!(PolicyError {
 
 /// `given`, as a path a request may name: absolute, spelled exactly as
 /// [`paths::normalize`] would spell it, and outside every `.mindflayer`,
-/// both as given and, when it leads anywhere, once its links are followed.
+/// both as given and once its links are followed.
 ///
 /// Spelled as given is spelled normalized, rather than normalized for it, so
 /// the path a preview shows is the one the command is given, character for
-/// character. A path that does not exist yet passes on its spelling alone:
-/// `mind init` makes a project in a folder that may be new.
+/// character. A path that does not exist yet is followed as far as it does
+/// exist, the rest appended ([`install::resolved`]): `mind init` makes a
+/// project in a folder that may be new, and one new under a link into a
+/// `.mindflayer` would be made inside it.
 pub fn path(given: &str) -> Result<PathBuf, PolicyError> {
     let path = Path::new(given);
     if !path.is_absolute() {
@@ -93,7 +95,7 @@ pub fn path(given: &str) -> Result<PathBuf, PolicyError> {
             normal: normal.display().to_string(),
         });
     }
-    let followed = fs::canonicalize(path).ok();
+    let followed = install::resolved(path);
     if [Some(path), followed.as_deref()]
         .into_iter()
         .flatten()

@@ -107,6 +107,21 @@ fn a_path_that_leads_into_a_mindflayer_through_a_link_is_refused() {
     assert_eq!(code(path(link.to_str().unwrap())), "path_in_mindflayer");
 }
 
+/// Followed as far as it exists: `mind init` would make the new folder
+/// through the link, inside the workspace's own.
+#[cfg(unix)]
+#[test]
+fn a_new_folder_under_a_link_into_a_mindflayer_is_refused() {
+    let (dir, workspace) = fixture();
+    let link = dir.path().join("innocent");
+    std::os::unix::fs::symlink(workspace.flayer_dir(), &link).unwrap();
+
+    for parts in [&["new"][..], &["new", "deeper"]] {
+        let given = spelled_under(&link, parts);
+        assert_eq!(code(path(&given)), "path_in_mindflayer", "{given}");
+    }
+}
+
 #[test]
 fn a_linked_project_is_named_by_its_entry_as_the_marker_spells_it() {
     let (dir, workspace) = fixture();
