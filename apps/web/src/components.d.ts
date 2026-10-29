@@ -17,6 +17,7 @@ declare module 'vue' {
     AppSidebar: typeof import('./components/AppSidebar.vue')['default']
     CommandHint: typeof import('./components/CommandHint.vue')['default']
     HealthBadge: typeof import('./components/HealthBadge.vue')['default']
+    MarkdownBody: typeof import('./components/MarkdownBody.vue')['default']
     RouterLink: typeof import('vue-router')['RouterLink']
     RouterView: typeof import('vue-router')['RouterView']
     SnapshotGate: typeof import('./components/SnapshotGate.vue')['default']
