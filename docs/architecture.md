@@ -4566,10 +4566,13 @@ file under `src/pages`:
   `validate` says, and what its agents never read above.
 
 Every page reads one Vue Query of the snapshot (`src/api/snapshot.ts`), so
-moving between them draws at once from what is cached, and asks again only
-when the answer is stale or #74's events say it changed. `SnapshotGate`
-draws a page once the snapshot is answered, says it is waiting until then,
-and says why when the server refused.
+moving between them draws at once from what is cached, and asks again behind
+it: an answer is stale as soon as it comes, since nothing says yet when the
+workspace changed, so each page asks on opening, and so does the window when
+it comes back into focus. Once #74's events say when it changed, the panel
+will ask only then. `SnapshotGate` draws a page once the snapshot is
+answered, says it is waiting until then, and says why when the server
+refused.
 
 - **The panel lays out, groups and filters; it works nothing out.** Every
   count it shows is one the snapshot carries, the `summary` and each
