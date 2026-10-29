@@ -23,7 +23,7 @@ The root `Makefile` is what CI runs, so prefer it to raw cargo. `make help`
 lists everything.
 
 ```bash
-make test                 # every Rust suite; the panel's is make web/test
+make test                 # every suite, the panel's first: needs Node 24 and pnpm
 make fmt/check            # CI runs this first
 make lint                 # no em dash in a tracked file, then clippy --workspace --all-targets, with the ts feature too
 make run ARGS="flayer list"
@@ -55,16 +55,21 @@ make web/test PNPM='npx --yes pnpm@12.15.0'
 pnpm --dir apps/web exec vitest run tests/shell.test.ts      # one suite
 ```
 
-`make test`, `make build`, `make fmt` and `make lint` are Rust only: `web` is
-in the root Makefile's `NODE_APPS`, outside the aggregates, until CI installs
-Node (#71). A change to the panel runs its own targets. The one exception is
-`make lint`'s em dash check (`make lint/em-dash`), which reads every tracked
-file, the panel's included. A change to a type core or the CLI hands the
-panel runs `make web/types` and commits what it writes: CI runs `make
-web/types/check`, which needs no Node. The other way round, `make install`
-and `make cli/release` build the panel before the binaries that embed it, so
-they need Node, and `make web/build` touches `apps/server/src/panel.rs` so
-the server compiles again and takes the panel in.
+`make test` and `make build` run the panel's targets first (`web` is in the
+root Makefile's `APPS`), so they need Node 24 and pnpm; an app's own Rust
+targets (`make cli/test`, `make cli/build`) do not. `make fmt` and `make
+lint` are Rust only, so a change to the panel runs `make web/lint` too; only
+`make lint`'s em dash check (`make lint/em-dash`) reads every tracked file,
+the panel's included. A change to a type core or the CLI hands
+the panel runs `make web/types` and commits what it writes: CI's `types
+drift (web)` runs `make web/types/check`, which needs no Node. The other way
+round, `make install` and `make cli/release` build the panel before the
+binaries that embed it where Node and pnpm run, and warn otherwise (`make
+web/build/if-node`), and `make web/build` touches
+`apps/server/src/panel.rs` so the server compiles again and takes the panel
+in. `make cli/release/check TARGET=<triple>` fails unless the release for
+that triple serves the panel from the binary once `apps/web/dist` is gone;
+CI runs it.
 
 `make dev/link`, `make dev/unlink` and `make install` write into `~/.cargo/bin`
 (or `BINDIR`), outside the repository. Don't run them unless asked.
@@ -173,7 +178,9 @@ means changing the README too.
 
 Outside `apps/`, `scripts/agent-probe/` holds the agent probe: `probe.sh`
 isolates a run and checks the real home is left alone, and `<agent>.sh` holds
-one agent's checks (only `claude.sh` so far).
+one agent's checks (only `claude.sh` so far). `scripts/serves-panel.sh` is
+what `make cli/release/check` runs: it starts a release's `flayer ui` with a
+home of its own and every agent home empty, and asks it for the panel.
 
 ## Invariants that hold the design together
 
@@ -763,7 +770,8 @@ These are easy to break from a single file without noticing.
   exported is each crate's `typescript::roots`, into
   `apps/web/src/api/generated` (`TS_RS_EXPORT_DIR`, `.cargo/config.toml`),
   committed and never edited by hand: `make web/types` writes it again,
-  and `make web/types/check`, in CI, fails when it is not what Rust writes.
+  and `make web/types/check`, CI's `types drift (web)`, fails when it is
+  not what Rust writes.
   A type a view starts to read joins `roots`; the panel spells no shape of
   core's or the CLI's in TypeScript of its own.
 - **The panel needs nothing the CSP refuses.** No URL naming another host,
@@ -876,12 +884,25 @@ These are easy to break from a single file without noticing.
 - Gitflow is enforced by required checks. PRs into `dev` come from
   `feature/*`, `hotfix/*` or `release/*` (or `main`, for a back-merge). PRs
   into `main` come only from `dev`. PRs are merged with merge commits.
-- CI runs `fmt and clippy`, then `test (core)`, then `test (cli)` and
-  `test (server)`, and builds each app after its tests pass. Development
-  targets Linux only for now: macOS and Windows run only by hand
-  (`workflow_dispatch`) or on PRs labelled `full-matrix`, until the
-  compatibility pass (#154) puts them back on pushes to `dev`/`main` and PRs
-  from `dev`, `main` or `release/*`.
+- CI runs `fmt and clippy`, then `test (core)`, then `test (cli)`, `test
+  (server)`, `test (web)` and `types drift (web)`, and builds each app after
+  its tests pass. `test (web)` is the one Linux job that sets up Node: it
+  lints, type-checks, tests and builds the panel, and uploads the build.
+  `build (cli)` waits for it, embeds that build in a release, then removes
+  `apps/web/dist` and runs `make cli/release/check`. `types drift (web)`
+  runs `make web/types/check`. Development targets Linux only for now: macOS
+  and Windows (`test (macos)`, `test (windows)`, which set up Node too) run
+  only by hand (`workflow_dispatch`) or on PRs labelled `full-matrix`, until
+  the compatibility pass (#154) puts them back on pushes to `dev`/`main` and
+  PRs from `dev`, `main` or `release/*`.
+- The rulesets for `dev` and `main` require every check that runs on every
+  pull request: `fmt and clippy`, `test (core)`, `test (cli)`, `test
+  (server)`, `test (web)`, `types drift (web)`, `build (core)`, `build
+  (cli)` and `build (server)`, and `gitflow branch name` for `dev` or
+  `release source branch` for `main`. `test (macos)` and `test (windows)`
+  are not required, since they run only when asked for. A check is required
+  by its job's display name, so renaming a job means changing both
+  rulesets.
 - Commit messages: `<area>: <imperative summary>`, where area is `core`,
   `cli`, `server`, `web`, `docs`, `build`, `ci` or `chore` (`core, cli:` when
   a change spans two apps).
