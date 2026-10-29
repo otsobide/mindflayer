@@ -1458,12 +1458,15 @@ type derives `Serialize` from the start:
   derives `Serialize` in the change that first hands it to one, under the
   same rule.
 
-Each one the panel or a script is handed whole, and what it names, has
+Each one a crate's `typescript::roots` names (what the panel reads, and
+what `list`, `show` and `validate` print), and what it names, has
 TypeScript too, written from it under the `ts` feature ([its types come from
 Rust](#its-types-come-from-rust)): derived beside `Serialize` where serde's
 is derived, and said from what the serializer writes where it is written by
 hand, so the panel is told what serde writes, not what the Rust variants are
-called.
+called. The other reports a script reads, what `status`, `scan`,
+`workspaces` and `gather list` print, have none until a view reads them
+([open questions](#open-questions)).
 
 What each says is held to the rule above, and three more things:
 
