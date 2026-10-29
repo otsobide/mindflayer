@@ -4472,7 +4472,11 @@ spelled in `transport.ts` ([open questions](#open-questions)).
 - **One list of roots a crate** (`typescript::roots`), which its export
   test writes, each root with every type it names, into
   `TS_RS_EXPORT_DIR`, which `.cargo/config.toml` points at the panel,
-  relative to the repository, so both crates write into one folder. One
+  relative to the repository, so both crates write into one folder. It
+  sets every variable ts-rs reads, and forces each, since cargo otherwise
+  leaves one the shell exports alone: a shell set up for another project
+  would have the export write somewhere else, once the folder was emptied,
+  or write other imports, integers or maps, drift CI would never see. One
   list rather than `#[ts(export)]` on each root, so that the test finding
   two types written to one file, which ts-rs would merge into one file or
   write one over the other, walks what the export writes, both crates'
