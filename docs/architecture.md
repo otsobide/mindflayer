@@ -4402,8 +4402,9 @@ Vue 3.5 and Nuxt UI 4 on Vite 8, in TypeScript 6 checked by vue-tsc, laid out
 the way Nuxt UI's dashboard-vue template lays out a dashboard, with a page
 per file under `src/pages`. It holds no rules, any more than the server
 does: what a valid task is, or what a project has, is core's to say, and the
-panel asks. So far it is a frame, a sidebar and a header around an empty
-overview; the views come with the snapshot (#72 onward).
+panel asks. So far it shows and changes nothing: an overview, the projects
+and a project's page, drawn from the snapshot (#72), in a frame of a sidebar
+and a header ([its views](#its-views)).
 
 ### One way out: the transport
 
@@ -4543,6 +4544,89 @@ CLI and the server would depend on, was rejected with
 [D-17](#d-17-the-next-front-end-is-a-local-web-panel)'s B; the types stay
 where serde's are, and the feature only reads them.
 
+### Its views
+
+Three pages draw the snapshot ([the read model](#the-read-model)), each a
+file under `src/pages`:
+
+- **The overview** (`/`) names the workspace, where it is and why that one,
+  counts what it holds from the snapshot's `summary`, a card for every kind
+  in `kinds`, lists every failure the snapshot collected under what it is
+  about, and names the commands that would fill what is empty.
+- **The projects** (`/projects`) are a table of every entry in the
+  registry's order, with a column for every kind, sorted and filtered.
+- **A project's page** (`/project?entry=...`) groups what one holds by
+  kind, each artifact with its state, a badge in a slot for each of the
+  project's agents, its origin, its targets, what does not read and what
+  `validate` says, and what its agents never read above.
+
+Every page reads one Vue Query of the snapshot (`src/api/snapshot.ts`), so
+moving between them draws at once from what is cached, and asks again only
+when the answer is stale or #74's events say it changed. `SnapshotGate`
+draws a page once the snapshot is answered, says it is waiting until then,
+and says why when the server refused.
+
+- **The panel lays out, groups and filters; it works nothing out.** Every
+  count it shows is one the snapshot carries, the `summary` and each
+  project's `tally` and `health`, rather than the length of a list it
+  draws, and every order is the snapshot's: the registry's for the rows,
+  `kinds` for the columns and groups, `healths` for a sort by health.
+  Grouping a project's artifacts by kind, or keeping the rows a filter
+  keeps, only chooses what to draw of what the snapshot lists. A sort by
+  name or path compares the words as the browser collates them, and one by
+  a kind's count compares numbers.
+- **A kind core adds reaches every view untouched**
+  ([D-21](#d-21-the-panels-views-follow-the-capabilities-they-show)): a
+  card, a column and a group each come from `kinds`, and a test adds one
+  the build does not have to a fixture and finds it on every page. The
+  colour and the icon of a state or a health are the panel's, kept for
+  each word it knows and plain for one it does not: the word itself, which
+  every badge says, is core's.
+- **The address is the state.** The table's text filter, its health, the
+  state the overview's counts link to, and its sort are the query of
+  `/projects`, so a link or a reload opens it as it was left. A project is
+  named by its entry in the query, never the path: an entry is a route from
+  the workspace, which can be `.` or `..`, and a browser resolves such a
+  segment in a path before the router sees it, escaped or not, which would
+  turn `/projects/..` into `/`. The server answers any path outside `/api`
+  with the page, so a reload of any of them is the panel's
+  ([The panel's files](#the-panels-files)).
+- **Usable from the keyboard, and never by colour alone.** Every control is
+  a link, a button (with `aria-pressed` for a filter and `aria-sort` on a
+  sorted column) or a field; every state and health is said as its word
+  beside its colour and icon, an agent that does not read an artifact keeps
+  its slot, crossed out, and says so in words, and a failure says its code.
+  The sidebar is a landmark of its own and each page the main one, so
+  nothing is outside a landmark. `tests/a11y.test.ts` runs axe on every
+  page, of both fixtures, with every WCAG A and AA rule and the best
+  practices but contrast, which happy-dom lays nothing out to measure.
+- **The commands are the empty states.** Whatever is empty names the
+  command that would fill it, as somebody would type it, since every change
+  is a command ([D-18](#d-18-the-panel-writes-by-running-commands)):
+  the panel runs none of them until M5.
+
+### Its fixtures come from Rust
+
+The views' tests render the snapshots in `apps/web/tests/fixtures`, which a
+test of the CLI writes (`apps/cli/tests/fixtures_test.rs`): it builds a
+workspace by running the commands, installing, editing a copy, changing
+the library, removing a linked folder, and reads it through the panel's
+backend as the server answers it, beside a home where nothing is made. So
+the panel's tests render what core says rather than what a person drew,
+and a field the snapshot adds, renames or fills differently reaches them.
+What differs between runs is pinned: the temporary folder reads as
+`/home`, each project's id is a fixed one, and every time the ledger keeps
+is set from one instant.
+
+They are kept as the types are ([its types come from
+Rust](#its-types-come-from-rust)): committed, so the panel's tests run
+without cargo; written under the `ts` feature, so a plain `cargo test`
+writes nothing; written again by `make web/fixtures`, which empties the
+folder first, with cargo alone; and checked by `make web/fixtures/check`,
+which fails when git sees them differ from the ones committed, in CI's
+`types drift (web)`. A fixture drawn by hand was the other way, which
+would pass its tests while the snapshot moved under it.
+
 ### Nothing the CSP refuses
 
 The server's CSP is `default-src 'self'` ([What keeps other pages
@@ -4604,6 +4688,9 @@ CI gives the panel jobs of its own:
   halves: what is committed is what Rust writes, and the panel compiles
   against what is committed. A job of its own rather than the step of `test
   (cli)` it was, so a drift is a check named for it, required on its own.
+  It runs `make web/fixtures/check` too, for the snapshots the views' tests
+  render, which drift the same way ([its fixtures come from
+  Rust](#its-fixtures-come-from-rust)).
 - **`build (cli)`** waits for `test (web)`, downloads that `dist/` before
   anything compiles, and builds the release for the runner's own triple,
   which embeds it. The runner has Node and no pnpm, so `make cli/release`
@@ -7098,6 +7185,18 @@ just listed.
   project's `health`. Showing the health instead would make the two front
   ends agree on which projects want looking at, at the price of a row that
   no longer says how many things do.
+- **The panel sorts names and paths as the browser collates them.** The
+  projects table sorts every other column by what the snapshot says, its
+  counts and the order it lists healths in, but text by the browser's
+  collation, which no command shares: `flayer list` keeps the registry's
+  order. Core naming an order for text, as it names one for healths, would
+  make the two agree the day a command sorts by name.
+- **The commands an empty state names are not quoted.** A project's page
+  names `flayer relink` and `flayer unlink` with its entry as the registry
+  spells it, and one a shell would split, a space in it, is shown
+  unquoted: quoting is the CLI's (`task::shell`), and the panel has no line
+  of the CLI's to show until the previews of M5 (#76) turn a task into its
+  lines.
 - **The server's replies are spelled twice.** A preview's `{lines}`, a
   run's `{lines, outcome}` and a refusal's `{error, code}` are built with
   `json!` in the server's `api.rs` and spelled again in the panel's
