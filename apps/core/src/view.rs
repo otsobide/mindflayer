@@ -6,7 +6,9 @@
 //! install nothing of is found, how many of its own a loaded workspace
 //! offers, are answers, and two front ends working them out would come to
 //! two of them. Core builds and orders it, from the same types the CLI
-//! prints, and a front end only chooses how to show it.
+//! prints, and a front end only chooses how to show it. A [`Listing`] is a
+//! part of it, its holders read for the kinds asked: what `list --json`
+//! prints, so a script reads a project as a front end draws it.
 //!
 //! - **A read, and nothing more.** No file is made or changed: the ledger is
 //!   opened only through [`FlayerWorkspace::ledger_for_reading`], the
@@ -55,7 +57,9 @@ use crate::workspace::{
 /// Its own rather than the CLI's envelope version: the snapshot is no
 /// command's report, and a front end reading it holds it to this number.
 /// It moves, as the envelope's does, when a field goes or changes what it
-/// holds, and not when one is added.
+/// holds, and not when one is added. A [`Listing`] is printed in the CLI's
+/// envelope, so a change that moves this moves that version too when it
+/// is to a holder or what it holds.
 pub const FORMAT: u32 = 1;
 
 /// How many of the latest actions a snapshot carries, newest first: enough
@@ -272,6 +276,53 @@ pub struct LoadedWorkspace {
     pub error: Option<Said>,
 }
 
+/// The holders a listing reads, each as a snapshot holds it, read for the
+/// kinds the listing asks for: what `list --json` prints.
+///
+/// A part of the snapshot rather than a shape of its own, so what a script
+/// prints of a project is what a front end draws of it, every name the
+/// same, and a test comparing the two compares like with like. Read for the
+/// kinds asked, as the listing reads them, rather than read whole and cut
+/// down after: a folder of a kind not asked for is not listed, so it is no
+/// failure of the reply's either.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct Listing {
+    /// The workspace's own, when the listing reads them: none for one
+    /// project's listing.
+    pub library: Option<Library>,
+    /// Every entry in the workspace's registry, as the snapshot lists them,
+    /// or the one project a listing is of.
+    pub projects: Vec<Project>,
+}
+
+impl Listing {
+    /// What `workspace` holds of `kinds`: its own, and every entry in its
+    /// registry, against its ledger.
+    pub fn of_workspace(workspace: &FlayerWorkspace, kinds: &[Kind]) -> Listing {
+        Listing {
+            library: Some(Library::of(workspace, kinds)),
+            projects: workspace
+                .members()
+                .into_iter()
+                .map(|member| Project::of_member(member, workspace, kinds))
+                .collect(),
+        }
+    }
+
+    /// What `project` holds of `kinds`, read as [`Project::read`] reads it,
+    /// against what `workspace` records when that one links it.
+    pub fn of_project(
+        project: &MindProject,
+        workspace: Option<&FlayerWorkspace>,
+        kinds: &[Kind],
+    ) -> Listing {
+        Listing {
+            library: None,
+            projects: vec![Project::read_kinds(project, workspace, kinds)],
+        }
+    }
+}
+
 impl Snapshot {
     /// The workspace `inputs` resolve to, as a read resolves it whatever
     /// they intend, and everything it holds; none when no workspace
@@ -305,7 +356,7 @@ impl Snapshot {
             .collect();
         let projects = members
             .into_iter()
-            .map(|member| Project::of_member(member, workspace))
+            .map(|member| Project::of_member(member, workspace, &Kind::ALL))
             .collect();
         warnings.extend(
             relink::duplicates(&ids)
@@ -355,7 +406,7 @@ impl Snapshot {
             kinds: Kind::ALL.to_vec(),
             agents: Agent::ALL.to_vec(),
             states: State::ALL.to_vec(),
-            library: Library::of(workspace),
+            library: Library::of(workspace, &Kind::ALL),
             projects,
             loaded,
             shelf,
@@ -368,15 +419,21 @@ impl Snapshot {
 }
 
 impl Library {
-    /// `workspace`'s own, of the kinds it keeps apart from a project at its
-    /// root ([`FlayerWorkspace::own_kinds`]), with its templates.
-    fn of(workspace: &FlayerWorkspace) -> Library {
+    /// `workspace`'s own, of the kinds among `kinds` it keeps apart from a
+    /// project at its root ([`FlayerWorkspace::own_kinds`]), with its
+    /// templates and its folders of those kinds.
+    fn of(workspace: &FlayerWorkspace, kinds: &[Kind]) -> Library {
         let own = workspace.own();
-        let catalog = Catalog::discover_kinds(slice::from_ref(&own), &workspace.own_kinds());
+        let own_kinds: Vec<Kind> = workspace
+            .own_kinds()
+            .into_iter()
+            .filter(|kind| kinds.contains(kind))
+            .collect();
+        let catalog = Catalog::discover_kinds(slice::from_ref(&own), &own_kinds);
         let (artifacts, mut failures) = holdings(&own, &catalog, None);
-        let templates = templates(Some(workspace), &own, &mut failures);
+        let templates = templates(Some(workspace), &own, kinds, &mut failures);
         Library {
-            directories: directories(&own),
+            directories: directories(&own, kinds),
             artifacts,
             templates,
             failures,
@@ -390,30 +447,43 @@ impl Project {
     /// front end showing a project no workspace links, `workspace` being the
     /// one above it, if any, as `mind` would consult it.
     pub fn read(project: &MindProject, workspace: Option<&FlayerWorkspace>) -> Project {
+        Project::read_kinds(project, workspace, &Kind::ALL)
+    }
+
+    /// [`read`](Self::read), for `kinds` alone.
+    fn read_kinds(
+        project: &MindProject,
+        workspace: Option<&FlayerWorkspace>,
+        kinds: &[Kind],
+    ) -> Project {
         let entry = workspace
             .and_then(|workspace| workspace.linked_as(project.root()))
             .map(paths::as_route);
-        Project::opened(entry, project, workspace)
+        Project::opened(entry, project, workspace, kinds)
     }
 
     /// One entry of `workspace`'s registry, named as that entry spells it
-    /// rather than as the first entry pointing at the same directory does.
-    fn of_member(member: Member, workspace: &FlayerWorkspace) -> Project {
+    /// rather than as the first entry pointing at the same directory does,
+    /// read for `kinds`.
+    fn of_member(member: Member, workspace: &FlayerWorkspace, kinds: &[Kind]) -> Project {
         let entry = paths::as_route(&member.entry);
         match member.project {
-            Ok(project) => Project::opened(Some(entry), &project, Some(workspace)),
+            Ok(project) => Project::opened(Some(entry), &project, Some(workspace), kinds),
             Err(error) => Project::stale(entry, member.root, &error),
         }
     }
 
+    /// `project` read for `kinds`: what it holds of them, the folders and
+    /// the templates it has of them, and what of them its agents miss.
     fn opened(
         entry: Option<String>,
         project: &MindProject,
         workspace: Option<&FlayerWorkspace>,
+        kinds: &[Kind],
     ) -> Project {
-        let (status, catalog, placed) = ProjectStatus::read_placed(project, &Kind::ALL, workspace);
+        let (status, catalog, placed) = ProjectStatus::read_placed(project, kinds, workspace);
         let (artifacts, mut failures) = holdings(project, &catalog, Some((&status, &placed)));
-        let templates = templates(workspace, project, &mut failures);
+        let templates = templates(workspace, project, kinds, &mut failures);
         let settings = project.settings();
         Project {
             entry,
@@ -424,7 +494,7 @@ impl Project {
             agents: status.agents,
             settings: settings.map(ProjectSettings::of),
             stale: None,
-            directories: directories(project),
+            directories: directories(project, kinds),
             artifacts,
             templates,
             unreached: status.unreached,
@@ -608,23 +678,27 @@ fn holdings(
 }
 
 /// What `mind add --template` can start from in `project`, with
-/// `workspace`'s; one that cannot be read among `failures`.
+/// `workspace`'s, of `kinds`; one that cannot be read among `failures`.
 fn templates(
     workspace: Option<&FlayerWorkspace>,
     project: &MindProject,
+    kinds: &[Kind],
     failures: &mut Vec<Said>,
 ) -> Vec<Template> {
-    template::templates(workspace, project).unwrap_or_else(|error| {
+    let mut templates = template::templates(workspace, project).unwrap_or_else(|error| {
         failures.push(Said::of(error.code(), &error));
         Vec::new()
-    })
+    });
+    templates.retain(|template| kinds.contains(&template.kind));
+    templates
 }
 
-/// Where `project` keeps each kind, as a route from it; a kind it keeps no
-/// folder for is left out.
-fn directories(project: &MindProject) -> Vec<Directory> {
+/// Where `project` keeps each of `kinds`, as a route from it, in report
+/// order; a kind it keeps no folder for is left out.
+fn directories(project: &MindProject, kinds: &[Kind]) -> Vec<Directory> {
     Kind::ALL
         .into_iter()
+        .filter(|kind| kinds.contains(kind))
         .filter_map(|kind| {
             let directory = project.directory_for(kind)?;
             Some(Directory {

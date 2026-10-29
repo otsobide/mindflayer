@@ -14,7 +14,7 @@ use mindflayer_core::install::Edits;
 use mindflayer_core::ledger::{Action, InstallRecord, Outcome, Target};
 use mindflayer_core::reapply::{self, Change};
 use mindflayer_core::resolve::{Inputs, Intent, Reason};
-use mindflayer_core::view::{Held, LoadedWorkspace, Project, Snapshot};
+use mindflayer_core::view::{Held, Listing, LoadedWorkspace, Project, Snapshot};
 use mindflayer_core::{
     create, hash, Agent, AgentHomes, Directories, FlayerWorkspace, Kind, MindProject, Reference,
     Share, SourceKind, State, FLAYER_DIR,
@@ -688,4 +688,69 @@ fn what_a_workspace_loads_is_listed_on_its_own_as_the_snapshot_lists_it() {
 
     assert_eq!(LoadedWorkspace::of(&workspace), snapshot.loaded);
     assert_eq!(snapshot.loaded[0].offers, 1);
+}
+
+/// A listing of every kind is the snapshot's holders, as they are: what a
+/// script prints of a project is what a front end draws of it.
+#[test]
+fn a_listing_of_every_kind_holds_what_the_snapshot_holds() {
+    let fixture = fixture();
+    let workspace = FlayerWorkspace::open(&fixture.hub).unwrap();
+    let api = MindProject::open(fixture.hub.join("api")).unwrap();
+
+    let snapshot = Snapshot::read(&naming(&fixture.hub, None))
+        .unwrap()
+        .unwrap();
+    let listing = Listing::of_workspace(&workspace, &Kind::ALL);
+    let one = Listing::of_project(&api, Some(&workspace), &Kind::ALL);
+
+    assert_eq!(listing.library.as_ref(), Some(&snapshot.library));
+    assert_eq!(listing.projects, snapshot.projects);
+    assert_eq!(one.library, None);
+    assert_eq!(one.projects, [read(&fixture, "api")]);
+}
+
+/// A listing of one kind reads that kind alone: each holder's rows of it,
+/// as the snapshot has them, and its folders and templates of it.
+#[test]
+fn a_listing_of_one_kind_holds_only_that_kind() {
+    let fixture = fixture();
+    let workspace = FlayerWorkspace::open(&fixture.hub).unwrap();
+
+    let snapshot = Snapshot::read(&naming(&fixture.hub, None))
+        .unwrap()
+        .unwrap();
+    let rules = Listing::of_workspace(&workspace, &[Kind::Rule]);
+
+    let library = rules.library.unwrap();
+    assert_eq!(names(&library.artifacts), ["commits"]);
+    assert!(library
+        .directories
+        .iter()
+        .all(|folder| folder.kind == Kind::Rule));
+    assert!(library
+        .templates
+        .iter()
+        .all(|template| template.kind == Kind::Rule));
+    assert_eq!(rules.projects.len(), snapshot.projects.len());
+    for (listed, whole) in rules.projects.iter().zip(&snapshot.projects) {
+        let of_rules: Vec<Held> = whole
+            .artifacts
+            .iter()
+            .filter(|held| held.kind == Kind::Rule)
+            .cloned()
+            .collect();
+        assert_eq!(listed.artifacts, of_rules);
+        assert_eq!(listed.stale, whole.stale);
+        assert!(listed
+            .directories
+            .iter()
+            .all(|folder| folder.kind == Kind::Rule));
+    }
+    assert_eq!(names(&rules.projects[0].artifacts), ["commits"]);
+}
+
+/// The name of each row, in order.
+fn names(held: &[Held]) -> Vec<&str> {
+    held.iter().map(|held| held.name.as_str()).collect()
 }
