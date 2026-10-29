@@ -48,6 +48,7 @@ struct Project {
     stale: Option<Said>,
     directories: Vec<Directory>,
     artifacts: Vec<Held>,
+    tally: Value,
     templates: Vec<Template>,
     unreached: Vec<Value>,
     missed: Vec<Value>,

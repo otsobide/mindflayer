@@ -7,6 +7,7 @@ import type { Missed } from "./Missed";
 import type { ProjectId } from "./ProjectId";
 import type { ProjectSettings } from "./ProjectSettings";
 import type { Said } from "./Said";
+import type { Tally } from "./Tally";
 import type { Template } from "./Template";
 import type { Unreached } from "./Unreached";
 
@@ -60,6 +61,10 @@ directories: Array<Directory>,
  * then name, the rules its `AGENTS.md` block holds among them (D-23).
  */
 artifacts: Array<Held>, 
+/**
+ * How many of them are of each kind, and stand in each state.
+ */
+tally: Tally, 
 /**
  * What `mind add --template` can start from in it.
  */

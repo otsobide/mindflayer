@@ -379,6 +379,49 @@ const EXPECTED: &str = r#"{
           "unread": null
         }
       ],
+      "tally": {
+        "total": 3,
+        "kinds": [
+          {
+            "kind": "skill",
+            "count": 2
+          },
+          {
+            "kind": "rule",
+            "count": 1
+          }
+        ],
+        "states": [
+          {
+            "state": "current",
+            "count": 2
+          },
+          {
+            "state": "outdated",
+            "count": 0
+          },
+          {
+            "state": "edited",
+            "count": 0
+          },
+          {
+            "state": "missing",
+            "count": 0
+          },
+          {
+            "state": "orphaned",
+            "count": 0
+          },
+          {
+            "state": "foreign",
+            "count": 0
+          },
+          {
+            "state": "authored",
+            "count": 1
+          }
+        ]
+      },
       "templates": [
         {
           "name": "full",
@@ -405,6 +448,49 @@ const EXPECTED: &str = r#"{
       },
       "directories": [],
       "artifacts": [],
+      "tally": {
+        "total": 0,
+        "kinds": [
+          {
+            "kind": "skill",
+            "count": 0
+          },
+          {
+            "kind": "rule",
+            "count": 0
+          }
+        ],
+        "states": [
+          {
+            "state": "current",
+            "count": 0
+          },
+          {
+            "state": "outdated",
+            "count": 0
+          },
+          {
+            "state": "edited",
+            "count": 0
+          },
+          {
+            "state": "missing",
+            "count": 0
+          },
+          {
+            "state": "orphaned",
+            "count": 0
+          },
+          {
+            "state": "foreign",
+            "count": 0
+          },
+          {
+            "state": "authored",
+            "count": 0
+          }
+        ]
+      },
       "templates": [],
       "unreached": [],
       "missed": [],
@@ -746,6 +832,17 @@ fn a_listing_of_one_kind_holds_only_that_kind() {
             .directories
             .iter()
             .all(|folder| folder.kind == Kind::Rule));
+        // Counted for the kind read, which is the only one a count is of.
+        assert_eq!(listed.tally.total, of_rules.len());
+        assert_eq!(
+            listed
+                .tally
+                .kinds
+                .iter()
+                .map(|counted| (counted.kind, counted.count))
+                .collect::<Vec<_>>(),
+            [(Kind::Rule, of_rules.len())]
+        );
     }
     assert_eq!(names(&rules.projects[0].artifacts), ["commits"]);
 }

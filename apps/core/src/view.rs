@@ -166,6 +166,8 @@ pub struct Project {
     /// Everything it holds, authored, received or somebody's, by kind and
     /// then name, the rules its `AGENTS.md` block holds among them (D-23).
     pub artifacts: Vec<Held>,
+    /// How many of them are of each kind, and stand in each state.
+    pub tally: Tally,
     /// What `mind add --template` can start from in it.
     pub templates: Vec<Template>,
     /// Each kind it installs only where some of its agents do not read, as
@@ -247,6 +249,80 @@ pub struct Held {
     /// Listed all the same, by the name its place gives it, because a file
     /// that does not read is the one most in need of opening.
     pub unread: Option<Unread>,
+}
+
+/// How many artifacts a holder holds of each kind, and how many of them
+/// stand in each state.
+///
+/// Counted here, from the rows it counts, rather than by each front end from
+/// the rows it draws: a count is an answer, as which row is which artifact's
+/// is, and the panel counting its own would be a second set of them.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+pub struct Tally {
+    /// How many, every kind together.
+    pub total: usize,
+    /// How many of each kind it was read for, in report order, one it holds
+    /// none of among them: what a front end lays a column a kind out by.
+    pub kinds: Vec<KindCount>,
+    /// How many stand in each state, every state in report order, one none
+    /// stands in among them. A row that stands in none, the library's own
+    /// or one whose only copy does not read, is in no count here.
+    pub states: Vec<StateCount>,
+}
+
+/// How many of one kind.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+pub struct KindCount {
+    pub kind: Kind,
+    pub count: usize,
+}
+
+/// How many stand in one state.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+pub struct StateCount {
+    pub state: State,
+    pub count: usize,
+}
+
+impl Tally {
+    /// `rows`, each a kind and the state it stands in, counted for `kinds`:
+    /// every one of them listed, in report order, whether any row is of it.
+    fn of(rows: impl IntoIterator<Item = (Kind, Option<State>)>, kinds: &[Kind]) -> Tally {
+        let mut tally = Tally {
+            total: 0,
+            kinds: Kind::ALL
+                .into_iter()
+                .filter(|kind| kinds.contains(kind))
+                .map(|kind| KindCount { kind, count: 0 })
+                .collect(),
+            states: State::ALL
+                .into_iter()
+                .map(|state| StateCount { state, count: 0 })
+                .collect(),
+        };
+        for (kind, state) in rows {
+            tally.total += 1;
+            if let Some(counted) = tally.kinds.iter_mut().find(|each| each.kind == kind) {
+                counted.count += 1;
+            }
+            if let Some(counted) = tally
+                .states
+                .iter_mut()
+                .find(|each| Some(each.state) == state)
+            {
+                counted.count += 1;
+            }
+        }
+        tally
+    }
+
+    /// What `held` holds, for `kinds`.
+    fn of_held(held: &[Held], kinds: &[Kind]) -> Tally {
+        Tally::of(held.iter().map(|held| (held.kind, held.state)), kinds)
+    }
 }
 
 /// A copy of an artifact whose file does not read, and why.
@@ -480,7 +556,7 @@ impl Project {
         let entry = paths::as_route(&member.entry);
         match member.project {
             Ok(project) => Project::opened(Some(entry), &project, Some(workspace), kinds),
-            Err(error) => Project::stale(entry, member.root, &error),
+            Err(error) => Project::stale(entry, member.root, &error, kinds),
         }
     }
 
@@ -506,6 +582,7 @@ impl Project {
             settings: settings.map(ProjectSettings::of),
             stale: None,
             directories: directories(project, kinds),
+            tally: Tally::of_held(&artifacts, kinds),
             artifacts,
             templates,
             unreached: status.unreached,
@@ -519,7 +596,8 @@ impl Project {
         }
     }
 
-    fn stale(entry: String, root: PathBuf, error: &WorkspaceError) -> Project {
+    /// An entry that opens no project, which holds none of `kinds`.
+    fn stale(entry: String, root: PathBuf, error: &WorkspaceError, kinds: &[Kind]) -> Project {
         Project {
             entry: Some(entry),
             path: root,
@@ -531,6 +609,7 @@ impl Project {
             stale: Some(Said::of(error.code(), error)),
             directories: Vec::new(),
             artifacts: Vec::new(),
+            tally: Tally::of([], kinds),
             templates: Vec::new(),
             unreached: Vec::new(),
             missed: Vec::new(),
