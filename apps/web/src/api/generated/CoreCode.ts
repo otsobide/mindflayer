@@ -108,6 +108,7 @@ export type CoreCode =
   | "contents_outside"
   | "contents_missing"
   | "contents_not_a_file"
+  | "contents_cycle"
   | "contents_unreadable"
   | "add_name_unfit"
   | "add_skill_nested"

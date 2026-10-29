@@ -24,11 +24,18 @@
 //!   size, and never read whole, so a browser cannot make the server read a
 //!   disk image into memory by naming one.
 //!
+//! What an artifact holds is listed the same way ([`Files`]): every file and
+//! folder by its route, a link judged by the same check before it is
+//! followed, one leading out of the holder or back into a folder above it
+//! listed with why and never followed, and no more than [`FILES_CAP`] of
+//! them, so a front end can show a skill's tree and ask for each file in it
+//! by the route it lists.
+//!
 //! Rules in core, as every rule about a path is: the server carries what this
 //! answers and the panel draws it, and neither could disagree with the other
 //! about what may be read.
 
-use std::ffi::OsStr;
+use std::ffi::{OsStr, OsString};
 use std::fs::{self, File};
 use std::io::{self, Read as _};
 use std::path::{Path, PathBuf};
@@ -38,7 +45,7 @@ use serde::{Serialize, Serializer};
 use thiserror::Error;
 
 use crate::catalog::{Catalog, Reference};
-use crate::code::codes;
+use crate::code::{codes, Said};
 use crate::copy;
 use crate::install;
 use crate::kind::{Kind, Layout};
@@ -71,6 +78,53 @@ pub struct Contents {
     pub text: Option<String>,
     /// Why there is no text, when there is none.
     pub withheld: Option<Withheld>,
+}
+
+/// The most entries a listing of an artifact's files holds: a thousand.
+///
+/// More than any skill the format describes holds (its `SKILL.md`, and the
+/// scripts, references and assets beside it), and few enough that an
+/// answer stays quick to build and to draw, whatever a folder somebody else
+/// wrote holds: a skill that vendors a dependency tree is said to be cut
+/// short rather than walked to its end.
+pub const FILES_CAP: usize = 1000;
+
+/// Every file and folder of an artifact, as a front end may list them.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+pub struct Files {
+    /// The artifact they belong to.
+    pub kind: Kind,
+    pub name: String,
+    /// The file it is read from, as [`Contents`] takes it: a skill's
+    /// `SKILL.md`, or a rule's own file name. Said rather than left to a
+    /// front end, which would otherwise spell where each kind keeps what
+    /// it says.
+    pub manifest: String,
+    /// Each file and folder it holds, a folder before what it holds and
+    /// each folder's in the order of their names: a rule's one file alone.
+    pub entries: Vec<Listed>,
+    /// Whether it holds more than [`FILES_CAP`], which `entries` stops at.
+    pub truncated: bool,
+}
+
+/// One file or folder of an artifact.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+pub struct Listed {
+    /// Its route from the artifact's folder, `/` separated, as [`Contents`]
+    /// takes it; a rule's own file name.
+    pub path: String,
+    /// Whether it is a folder, whose files are listed after it.
+    pub folder: bool,
+    /// How many bytes a file holds; none for a folder, and for one not
+    /// followed.
+    pub size: Option<u64>,
+    /// Why it is not followed, when it is not: a link leading out of the
+    /// holder, or back into a folder it is in, or something that does not
+    /// read. Listed all the same, since somebody looking for why a skill
+    /// misbehaves is looking for exactly that.
+    pub refused: Option<Said>,
 }
 
 /// Why a file's text is not handed over, though the file was found.
@@ -125,6 +179,8 @@ pub enum ContentsError {
     Missing { path: PathBuf },
     #[error("{path}: not a file")]
     NotAFile { path: PathBuf },
+    #[error("{path} leads back to {resolved}, a folder it is in, so it is not followed")]
+    Cycle { path: PathBuf, resolved: PathBuf },
     #[error("{path}: cannot be read: {source}")]
     Unreadable {
         path: PathBuf,
@@ -138,6 +194,7 @@ codes!(ContentsError {
     Self::Outside { .. } => "contents_outside",
     Self::Missing { .. } => "contents_missing",
     Self::NotAFile { .. } => "contents_not_a_file",
+    Self::Cycle { .. } => "contents_cycle",
     Self::Unreadable { .. } => "contents_unreadable",
 } carried {
     Self::Find(error) => error,
@@ -181,6 +238,28 @@ impl Contents {
     }
 }
 
+impl Files {
+    /// What the artifact `reference` names among `workspace`'s own holds,
+    /// held as [`Contents::of_library`] holds a file of it.
+    pub fn of_library(
+        workspace: &FlayerWorkspace,
+        reference: &str,
+    ) -> Result<Files, ContentsError> {
+        list(
+            &workspace.own(),
+            &workspace.own_kinds(),
+            Within::Kept,
+            reference,
+        )
+    }
+
+    /// What the artifact `reference` names in `project` holds, held as
+    /// [`Contents::of_project`] holds a file of it.
+    pub fn of_project(project: &MindProject, reference: &str) -> Result<Files, ContentsError> {
+        list(project, &Kind::ALL, Within::Root, reference)
+    }
+}
+
 /// What a file is held to once its links are followed.
 #[derive(Clone, Copy)]
 enum Within {
@@ -190,22 +269,27 @@ enum Within {
     Kept,
 }
 
-/// `file` of the one artifact of `kinds` that `reference` names in `holder`,
-/// held `within` it.
-fn read(
+/// The one artifact a reference names in a holder, and what it is held to.
+struct Located {
+    kind: Kind,
+    name: String,
+    /// The folder a skill is, or the file a rule is, as discovery found it.
+    at: PathBuf,
+    /// What every file of it must lie in once its links are followed, with
+    /// its own links followed already.
+    bound: PathBuf,
+}
+
+/// The one artifact of `kinds` that `reference` names in `holder`, held
+/// `within` it.
+fn locate(
     holder: &MindProject,
     kinds: &[Kind],
     within: Within,
     reference: &str,
-    file: &str,
-) -> Result<Contents, ContentsError> {
+) -> Result<Located, ContentsError> {
     let reference = Reference::parse(reference);
     let (kind, name, at) = artifact(holder, kinds, &reference)?;
-    let path = place(kind, &at, file).ok_or_else(|| ContentsError::Route {
-        file: file.to_owned(),
-        artifact: format!("{}{}{name}", kind.slug(), crate::catalog::QUALIFIER),
-    })?;
-
     // A `Kept` read never falls back to the root in fact: every kind has a
     // folder in the workspace's own (`FlayerWorkspace::own`), and the
     // artifact was found in its kind's.
@@ -218,21 +302,57 @@ fn read(
         path: bound,
         source,
     })?;
+    Ok(Located {
+        kind,
+        name,
+        at,
+        bound,
+    })
+}
+
+/// Where `path` leads once its links are followed, when that is inside
+/// `bound`: the check [`copy::tree`] makes of each link it meets.
+fn held(path: &Path, bound: &Path) -> Result<PathBuf, ContentsError> {
     let (resolved, inside) =
-        copy::followed(&path, slice::from_ref(&bound)).map_err(|source| match source.kind() {
-            io::ErrorKind::NotFound => ContentsError::Missing { path: path.clone() },
+        copy::followed(path, &[bound.to_path_buf()]).map_err(|source| match source.kind() {
+            io::ErrorKind::NotFound => ContentsError::Missing {
+                path: path.to_path_buf(),
+            },
             _ => ContentsError::Unreadable {
-                path: path.clone(),
+                path: path.to_path_buf(),
                 source,
             },
         })?;
     if !inside {
         return Err(ContentsError::Outside {
-            path,
+            path: path.to_path_buf(),
             resolved,
-            holder: bound,
+            holder: bound.to_path_buf(),
         });
     }
+    Ok(resolved)
+}
+
+/// `file` of the one artifact of `kinds` that `reference` names in `holder`,
+/// held `within` it.
+fn read(
+    holder: &MindProject,
+    kinds: &[Kind],
+    within: Within,
+    reference: &str,
+    file: &str,
+) -> Result<Contents, ContentsError> {
+    let Located {
+        kind,
+        name,
+        at,
+        bound,
+    } = locate(holder, kinds, within, reference)?;
+    let path = place(kind, &at, file).ok_or_else(|| ContentsError::Route {
+        file: file.to_owned(),
+        artifact: format!("{}{}{name}", kind.slug(), crate::catalog::QUALIFIER),
+    })?;
+    let resolved = held(&path, &bound)?;
 
     // The resolved path from here on, never the one asked for: a link put
     // in its place after the check would otherwise be followed by the read.
@@ -276,6 +396,198 @@ fn read(
         }),
         _ => Ok(withheld(size, Withheld::Binary)),
     }
+}
+
+/// Every file and folder of the one artifact of `kinds` that `reference`
+/// names in `holder`, held `within` it.
+///
+/// The artifact itself leading out of its holder is refused, as a file of
+/// it is; anything further down that does is listed with why, and never
+/// followed, so one bad link hides nothing else the folder holds.
+fn list(
+    holder: &MindProject,
+    kinds: &[Kind],
+    within: Within,
+    reference: &str,
+) -> Result<Files, ContentsError> {
+    let Located {
+        kind,
+        name,
+        at,
+        bound,
+    } = locate(holder, kinds, within, reference)?;
+    let resolved = held(&at, &bound)?;
+    let unreadable = |source| ContentsError::Unreadable {
+        path: at.clone(),
+        source,
+    };
+    let metadata = fs::metadata(&resolved).map_err(unreadable)?;
+    let mut walk = Walk {
+        bound,
+        entries: Vec::new(),
+        truncated: false,
+    };
+    let manifest = match kind.layout() {
+        Layout::Directory { manifest } => {
+            if !metadata.is_dir() {
+                return Err(ContentsError::NotAFile { path: at });
+            }
+            let names = names(&resolved).map_err(unreadable)?;
+            walk.folder(&at, &resolved, names, "", &mut vec![resolved.clone()]);
+            manifest.to_owned()
+        }
+        Layout::Files { .. } => {
+            // A rule was found as a file, so it has a name.
+            let file = at
+                .file_name()
+                .map(|name| name.to_string_lossy().into_owned())
+                .unwrap_or_default();
+            if !metadata.is_file() {
+                return Err(ContentsError::NotAFile { path: at });
+            }
+            walk.entries.push(Listed {
+                path: file.clone(),
+                folder: false,
+                size: Some(metadata.len()),
+                refused: None,
+            });
+            file
+        }
+    };
+    Ok(Files {
+        kind,
+        name,
+        manifest,
+        entries: walk.entries,
+        truncated: walk.truncated,
+    })
+}
+
+/// A listing of an artifact's folder, as it goes.
+struct Walk {
+    bound: PathBuf,
+    entries: Vec<Listed>,
+    truncated: bool,
+}
+
+impl Walk {
+    /// Each of `holds`, what the folder at `path` holds (read where it
+    /// leads, `resolved`), and what each folder among them holds after it,
+    /// each listed at its route below `route`. `inside` is every folder the
+    /// walk is in, with its links followed, so a link back into one is
+    /// listed rather than walked until the routes are too long.
+    fn folder(
+        &mut self,
+        path: &Path,
+        resolved: &Path,
+        holds: Vec<OsString>,
+        route: &str,
+        inside: &mut Vec<PathBuf>,
+    ) {
+        for name in holds {
+            if self.entries.len() == FILES_CAP {
+                self.truncated = true;
+                return;
+            }
+            let shown = name.to_string_lossy();
+            let route = if route.is_empty() {
+                shown.into_owned()
+            } else {
+                format!("{route}/{shown}")
+            };
+            let named = path.join(&name);
+            // The resolved folder from here on, never the one named: a link
+            // put in its place after it was checked is not followed.
+            let target = match held(&resolved.join(&name), &self.bound) {
+                Ok(target) => target,
+                Err(error) => {
+                    self.refuse(route, error);
+                    continue;
+                }
+            };
+            let metadata = match fs::metadata(&target) {
+                Ok(metadata) => metadata,
+                Err(source) => {
+                    self.refuse(
+                        route,
+                        ContentsError::Unreadable {
+                            path: named.clone(),
+                            source,
+                        },
+                    );
+                    continue;
+                }
+            };
+            if metadata.is_dir() {
+                if inside.iter().any(|walked| walked.starts_with(&target)) {
+                    self.refuse(
+                        route,
+                        ContentsError::Cycle {
+                            path: named.clone(),
+                            resolved: target,
+                        },
+                    );
+                    continue;
+                }
+                let names = match names(&target) {
+                    Ok(names) => names,
+                    Err(source) => {
+                        self.refuse(
+                            route,
+                            ContentsError::Unreadable {
+                                path: named.clone(),
+                                source,
+                            },
+                        );
+                        continue;
+                    }
+                };
+                self.entries.push(Listed {
+                    path: route.clone(),
+                    folder: true,
+                    size: None,
+                    refused: None,
+                });
+                inside.push(target.clone());
+                self.folder(&named, &target, names, &route, inside);
+                inside.pop();
+            } else if metadata.is_file() {
+                self.entries.push(Listed {
+                    path: route,
+                    folder: false,
+                    size: Some(metadata.len()),
+                    refused: None,
+                });
+            } else {
+                self.refuse(
+                    route,
+                    ContentsError::NotAFile {
+                        path: named.clone(),
+                    },
+                );
+            }
+        }
+    }
+
+    /// `route`, listed with why it is not followed.
+    fn refuse(&mut self, route: String, error: ContentsError) {
+        self.entries.push(Listed {
+            path: route,
+            folder: false,
+            size: None,
+            refused: Some(Said::of(error.code(), &error)),
+        });
+    }
+}
+
+/// What the folder at `path` holds, by name, in the order of the names: the
+/// order a listing is read in, the same on every platform.
+fn names(path: &Path) -> io::Result<Vec<OsString>> {
+    let mut names = fs::read_dir(path)?
+        .map(|entry| entry.map(|entry| entry.file_name()))
+        .collect::<io::Result<Vec<_>>>()?;
+    names.sort();
+    Ok(names)
 }
 
 /// The kind and name of the one artifact `reference` names in `holder`, and
