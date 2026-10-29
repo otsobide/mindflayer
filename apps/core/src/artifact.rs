@@ -846,6 +846,30 @@ impl Serialize for ValidationIssue {
     fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
         let mut map = serializer.serialize_map(None)?;
         map.serialize_entry("code", self.code())?;
+        for (name, carried) in self.carried() {
+            match carried {
+                Carried::Text(text) => map.serialize_entry(name, text)?,
+                Carried::Count(count) => map.serialize_entry(name, &count)?,
+            }
+        }
+        map.serialize_entry("warning", &self.is_warning())?;
+        map.serialize_entry("message", &self.to_string())?;
+        map.end()
+    }
+}
+
+/// One thing an issue carries beside its code, as its JSON holds it.
+enum Carried<'a> {
+    Text(&'a str),
+    Count(usize),
+}
+
+impl ValidationIssue {
+    /// What it carries beside its code, each by the name its variant gives
+    /// it, in the order written: what its JSON holds between its `code` and
+    /// its `warning`. A match of its own rather than inside the serializer,
+    /// so that what else says the shape of an issue reads it off this one.
+    fn carried(&self) -> Vec<(&'static str, Carried<'_>)> {
         // Matched in full, so a new issue has to say what it carries.
         match self {
             ValidationIssue::NameEmpty
@@ -855,33 +879,28 @@ impl Serialize for ValidationIssue {
             | ValidationIssue::MetadataNotAMap
             | ValidationIssue::Empty
             | ValidationIssue::PathsNotStrings
-            | ValidationIssue::DescriptionNotAString => {}
+            | ValidationIssue::DescriptionNotAString => Vec::new(),
             ValidationIssue::NameNotKebabCase { segment } => {
-                map.serialize_entry("segment", segment)?;
+                vec![("segment", Carried::Text(segment))]
             }
-            ValidationIssue::NameSegmentTooLong { segment, length } => {
-                map.serialize_entry("segment", segment)?;
-                map.serialize_entry("length", length)?;
-            }
-            ValidationIssue::NameDirectoryMismatch { name, directory } => {
-                map.serialize_entry("name", name)?;
-                map.serialize_entry("directory", directory)?;
-            }
+            ValidationIssue::NameSegmentTooLong { segment, length } => vec![
+                ("segment", Carried::Text(segment)),
+                ("length", Carried::Count(*length)),
+            ],
+            ValidationIssue::NameDirectoryMismatch { name, directory } => vec![
+                ("name", Carried::Text(name)),
+                ("directory", Carried::Text(directory)),
+            ],
             ValidationIssue::DescriptionTooLong { length }
             | ValidationIssue::CompatibilityTooLong { length } => {
-                map.serialize_entry("length", length)?;
+                vec![("length", Carried::Count(*length))]
             }
             ValidationIssue::MetadataNotAString { key }
-            | ValidationIssue::MetadataRepeated { key } => {
-                map.serialize_entry("key", key)?;
-            }
+            | ValidationIssue::MetadataRepeated { key } => vec![("key", Carried::Text(key))],
             ValidationIssue::FrontMatterUnparsed { reason } => {
-                map.serialize_entry("reason", reason)?;
+                vec![("reason", Carried::Text(reason))]
             }
         }
-        map.serialize_entry("warning", &self.is_warning())?;
-        map.serialize_entry("message", &self.to_string())?;
-        map.end()
     }
 }
 
