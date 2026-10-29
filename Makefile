@@ -81,8 +81,10 @@ clean: ## Remove build artifacts
 #
 # Two ways, for two situations. `install` is a copy: it is what you want if you
 # just want to use the tools. `dev/link` is a symlink to the debug build, so
-# every `make build` updates the binaries on your PATH without reinstalling
-# anything, which is what you want while working on them.
+# every build of the CLI updates the binaries on your PATH without
+# reinstalling anything, which is what you want while working on them:
+# `make cli/build` with Rust alone, since `make build` builds the panel first
+# and needs Node and pnpm.
 #
 # Both binaries, not just `mind`: `flayer` is a second entry point into the
 # same crate, and half an install is worse than none.
