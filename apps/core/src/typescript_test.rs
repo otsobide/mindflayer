@@ -3,7 +3,7 @@
 
 use std::collections::BTreeSet;
 use std::env;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use serde::Serialize;
 use serde_json::Value;
@@ -18,6 +18,7 @@ use crate::resolve::Reason;
 use crate::settings::{ProjectId, Share};
 use crate::status::State;
 use crate::template::{Origin, Template};
+use crate::url::redacted;
 use crate::workspace::MarkerFile;
 
 /// The words a union of them says, as [`union`] or [`lines`] wrote it.
@@ -219,6 +220,118 @@ fn a_skill_s_metadata_is_an_object_in_both() {
         serde_json::json!({"team": "infra"})
     );
     assert!(Shown::decl(&Config::new()).contains("metadata: { [key in string]: string } | null"));
+}
+
+/// Each function a field is written through, on a field of the type it
+/// takes, as every field it writes holds: ts-rs reads that type in place of
+/// the attribute, so what it says of the type is what the panel is told.
+/// `in_order`, which writes a skill's metadata, is `reading`'s own, and its
+/// field says what it writes with `ts(as)`, held by the test of the metadata.
+#[derive(Serialize, TS)]
+struct Written {
+    #[serde(serialize_with = "crate::paths::lossy")]
+    path: PathBuf,
+    #[serde(serialize_with = "crate::paths::lossy_all")]
+    paths: Vec<PathBuf>,
+    #[serde(serialize_with = "crate::url::serialize_redacted")]
+    url: String,
+    #[serde(serialize_with = "crate::url::serialize_redacted_option")]
+    detail: Option<String>,
+    #[serde(serialize_with = "crate::url::serialize_redacted_option")]
+    none: Option<String>,
+}
+
+/// Every function a field of core's names, each held to its TypeScript by
+/// the test of [`Written`]: one new joins it there first, or a field written
+/// as something its type is not would leave the panel told the type.
+const FIELD_SERIALIZERS: [&str; 5] = [
+    "in_order",
+    "paths::lossy",
+    "paths::lossy_all",
+    "url::serialize_redacted",
+    "url::serialize_redacted_option",
+];
+
+/// A path whose bytes are no UTF-8, where a path can be one: `lossy` writes
+/// it as text all the same, which is why its TypeScript is a `string`.
+fn unprintable_path() -> PathBuf {
+    #[cfg(unix)]
+    {
+        use std::ffi::OsStr;
+        use std::os::unix::ffi::OsStrExt;
+
+        PathBuf::from(OsStr::from_bytes(b"/work/skills/\xffdeploy"))
+    }
+    #[cfg(not(unix))]
+    {
+        PathBuf::from("/work/skills/deploy")
+    }
+}
+
+#[test]
+fn every_field_serializer_writes_what_typescript_says_of_its_field() {
+    let url = "https://user:secret@example.com/skills.git";
+    let detail = format!("cloned {url}");
+    let path = unprintable_path();
+    let written = Written {
+        path: path.clone(),
+        paths: vec![path.clone(), PathBuf::from("/work/rules")],
+        url: url.to_owned(),
+        detail: Some(detail.clone()),
+        none: None,
+    };
+
+    assert_eq!(
+        serde_json::to_value(&written).unwrap(),
+        serde_json::json!({
+            "path": path.to_string_lossy(),
+            "paths": [path.to_string_lossy(), "/work/rules"],
+            "url": redacted(url),
+            "detail": redacted(&detail),
+            "none": null,
+        })
+    );
+    assert_eq!(
+        Written::inline(&Config::new()),
+        "{ path: string, paths: Array<string>, url: string, detail: string | null, none: string | null, }"
+    );
+}
+
+#[test]
+fn every_field_serializer_in_core_is_one_held_to_its_typescript() {
+    let source = Path::new(env!("CARGO_MANIFEST_DIR")).join("src");
+    let named = field_serializers(&source).unwrap();
+
+    assert_eq!(
+        named,
+        FIELD_SERIALIZERS.map(str::to_owned).into(),
+        "a field written through a function the test of `Written` does not hold"
+    );
+}
+
+/// What finds them, which a test that found none would pass unseen: a
+/// `deserialize_with` names no serializer, and `with` names a module.
+#[test]
+fn field_serializers_are_read_off_every_attribute_that_names_one() {
+    let folder = tempfile::tempdir().unwrap();
+    std::fs::create_dir(folder.path().join("nested")).unwrap();
+    std::fs::write(
+        folder.path().join("nested/one.rs"),
+        "#[serde(default, deserialize_with = \"read\")]\n\
+         #[serde(serialize_with = \"crate::paths::lossy\")]\n\
+         #[serde(\n    with = \"humantime\"\n)]\n",
+    )
+    .unwrap();
+    std::fs::write(
+        folder.path().join("one_test.rs"),
+        "#[serde(serialize_with = \"only_a_test\")]\n",
+    )
+    .unwrap();
+
+    assert_eq!(
+        field_serializers(folder.path()).unwrap(),
+        BTreeSet::from(["humantime".to_owned(), "paths::lossy".to_owned()])
+    );
 }
 
 #[test]

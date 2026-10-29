@@ -10,7 +10,11 @@
 //! - **A word**, a kind, an agent or a state: the union of the words, from
 //!   the function its serializer calls ([`words!`]).
 //! - **A path or a URL**, written as text whatever it holds: a `string`,
-//!   which is what ts-rs says of a `PathBuf` and a `String` already.
+//!   which is what ts-rs says of a `PathBuf` and a `String` already. Each
+//!   field written through a function of its own (`serialize_with`) is one
+//!   ts-rs reads as its type, so a test holds each such function to what
+//!   ts-rs says of the type it takes, and [`field_serializers`] finds every
+//!   one a field names, for a test to refuse one it does not hold.
 //! - **Anything else**, an issue `validate` finds, a template's origin, a
 //!   skill's metadata: from what its serializer writes, beside it, each
 //!   held to its serializer by a test.
@@ -21,8 +25,10 @@
 //! test that finds two types written to one file walks what the export
 //! writes, and no other list.
 
-use std::collections::BTreeMap;
-use std::path::PathBuf;
+use std::collections::{BTreeMap, BTreeSet};
+use std::fs;
+use std::io;
+use std::path::{Path, PathBuf};
 
 use ts_rs::{Config, ExportError, TypeVisitor, TS};
 
@@ -241,6 +247,56 @@ impl TypeVisitor for Files {
         types.push(name.to_owned());
         T::visit_dependencies(self);
     }
+}
+
+/// Every function a field in the `.rs` files under `folder` is written
+/// through, as its attribute names it, `crate::` left off: `serialize_with`,
+/// or `with`, whose module's `serialize` writes it. Unit tests are left out,
+/// whose types no root names.
+///
+/// For a test to refuse one it does not hold to its TypeScript: ts-rs cannot
+/// read either attribute, and says of such a field what it says of its type,
+/// with no warning (`no-serde-warnings`), so a field written as something
+/// its type is not would pass the export unseen. Read off the source, since
+/// no trait says which fields serde writes some other way; `deserialize_with`
+/// is passed over, as what a field reads says nothing of what it writes.
+pub fn field_serializers(folder: &Path) -> io::Result<BTreeSet<String>> {
+    let mut named = BTreeSet::new();
+    let mut entries = fs::read_dir(folder)?
+        .map(|entry| entry.map(|entry| entry.path()))
+        .collect::<io::Result<Vec<_>>>()?;
+    entries.sort();
+    for path in entries {
+        if path.is_dir() {
+            named.extend(field_serializers(&path)?);
+            continue;
+        }
+        let name = path.file_name().and_then(|name| name.to_str());
+        if !name.is_some_and(|name| name.ends_with(".rs") && !name.ends_with("_test.rs")) {
+            continue;
+        }
+        let text = fs::read_to_string(&path)?;
+        for key in ["serialize_with", "with"] {
+            let opening = format!("{key} = \"");
+            for (at, _) in text.match_indices(&opening) {
+                // `deserialize_with` holds `serialize_with`, and both hold
+                // `with`: only the attribute's own name counts.
+                let before = text[..at].chars().next_back();
+                if before.is_some_and(|c| c.is_alphanumeric() || c == '_') {
+                    continue;
+                }
+                let rest = &text[at + opening.len()..];
+                let function = rest.split('"').next().unwrap_or_default();
+                named.insert(
+                    function
+                        .strip_prefix("crate::")
+                        .unwrap_or(function)
+                        .to_owned(),
+                );
+            }
+        }
+    }
+    Ok(named)
 }
 
 #[cfg(test)]
