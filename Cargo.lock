@@ -2679,6 +2679,7 @@ dependencies = [
  "tempfile",
  "thiserror 2.0.20",
  "tokio",
+ "ts-rs",
  "webbrowser",
 ]
 

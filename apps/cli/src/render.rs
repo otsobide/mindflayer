@@ -82,6 +82,7 @@ impl Outcome {
 /// panel's backend says (`backend::Run`): the line a terminal shows, and
 /// the code beside it.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 pub struct Warning {
     pub text: String,
     pub code: Option<&'static str>,
