@@ -21,12 +21,16 @@ const address = window.location.host
   <!--
     An id of its own, or Nuxt UI keys the stored size and collapse on
     useId(), whose value moves whenever something that renders before the
-    sidebar asks for an id too, and the stored state with it.
+    sidebar asks for an id too, and the stored state with it. A landmark of
+    its own, so the logo and the server's address are in one: nothing on a
+    page is outside a landmark.
   -->
   <UDashboardSidebar
     id="default"
     v-model:open="sidebarOpen"
     v-model:collapsed="sidebarCollapsed"
+    role="complementary"
+    aria-label="Sidebar"
     collapsible
     resizable
     data-testid="sidebar"

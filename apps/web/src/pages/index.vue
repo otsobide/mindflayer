@@ -12,6 +12,7 @@ const commands = [
 <template>
   <UDashboardPanel
     id="overview"
+    role="main"
     data-testid="overview"
   >
     <template #header>
