@@ -32,8 +32,11 @@ pub struct FakeQuery {
 
 /// The fake's task: a name to run under, whether to wait at the fake's hold
 /// before finishing, whether to finish with an outcome JSON cannot carry,
-/// and whether to refuse it, when its lines are asked for or only once it
-/// is handed over to run.
+/// and whether to refuse it, when its lines are asked for (`refuse`) or
+/// only once it is handed over to run (`refuse_run`).
+///
+/// A run takes no notice of `refuse`: one whose lines were refused and is
+/// handed over all the same runs, and the runs it leaves say so.
 #[derive(Deserialize)]
 pub struct FakeTask {
     pub name: String,
@@ -107,7 +110,7 @@ impl Backend for Fake {
     }
 
     fn run(&self, task: FakeTask) -> Result<FakeOutcome, Refusal> {
-        if task.refuse || task.refuse_run {
+        if task.refuse_run {
             return Err(refusal(&task.name));
         }
         self.runs
