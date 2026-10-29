@@ -2661,6 +2661,7 @@ dependencies = [
  "clap",
  "gix",
  "mindflayer-core",
+ "mindflayer-server",
  "ratatui",
  "rusqlite",
  "serde",

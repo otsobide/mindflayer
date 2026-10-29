@@ -31,6 +31,10 @@ path = "src/lib.rs"
 
 [dependencies]
 mindflayer-core = { path = "../core" }
+# The local server behind the web panel, whose `Backend` the CLI implements
+# (`backend`): the front end depends on the transport, never the other way
+# (D-17). Unconditional until #68 puts it behind the `ui` feature.
+mindflayer-server = { path = "../server" }
 clap = { version = "4", features = ["derive"] }
 thiserror = "2"
 ratatui = "0.30.2"
