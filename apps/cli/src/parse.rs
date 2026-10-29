@@ -198,6 +198,11 @@ pub enum Command {
     List {
         /// Only this kind: `skills` or `rules` [default: every kind].
         kind: Option<Kind>,
+
+        /// Print it as JSON, in the envelope every reading command's --json
+        /// shares.
+        #[arg(long)]
+        json: bool,
     },
 
     /// Show one artifact in full.
@@ -573,6 +578,11 @@ pub enum FlayerCommand {
         /// Only this project.
         #[arg(short, long, value_name = "PROJECT")]
         project: Option<String>,
+
+        /// Print it as JSON, in the envelope every reading command's --json
+        /// shares.
+        #[arg(long)]
+        json: bool,
     },
 
     /// Show one artifact in full, wherever in the workspace it is.

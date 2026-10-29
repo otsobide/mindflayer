@@ -268,6 +268,36 @@ pub(crate) fn json<T: Serialize>(data: &T, warnings: &[Warning]) -> Outcome {
     }
 }
 
+/// `text`, what a reading command made to print, as JSON: `data` in the
+/// envelope in place of its stdout, each of its `warning:` lines in the
+/// envelope rather than on stderr, and the rest of what it said there, a
+/// hint or a note, left there, as advice for whoever reads the terminal.
+///
+/// Its exit status is the text's, kept rather than worked out again from
+/// the warnings, since a report can fail with none: `validate` fails for an
+/// artifact that does not pass. Built from the text's outcome, rather than
+/// beside it, so that a warning a command adds on the way out (a workspace
+/// it consulted that could not be read) reaches the envelope as it reaches
+/// stderr.
+pub(crate) fn as_json<T: Serialize>(data: &T, text: Outcome) -> Outcome {
+    let (warnings, rest): (Vec<Warning>, Vec<Warning>) = text
+        .stderr
+        .into_iter()
+        .partition(|line| line.text.starts_with(WARNING));
+    let mut outcome = json(data, &warnings);
+    outcome.stderr = rest;
+    outcome.ok = text.ok;
+    outcome
+}
+
+/// `text`, or, when `--json` asked for `data`, [`as_json`] of it.
+pub(crate) fn json_or_text<T: Serialize>(data: Option<T>, text: Outcome) -> Outcome {
+    match data {
+        Some(data) => as_json(&data, text),
+        None => text,
+    }
+}
+
 /// Rows padded into columns, the last one left ragged.
 pub(crate) fn table(rows: &[Vec<String>]) -> String {
     let columns = rows.first().map_or(0, Vec::len);

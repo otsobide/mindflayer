@@ -9,10 +9,12 @@ use std::borrow::Cow;
 use std::fmt::Write as _;
 use std::path::PathBuf;
 
+use mindflayer_core::view::Listing;
 use mindflayer_core::{Artifact, Catalog, Declared, FlayerWorkspace, Kind, MindProject, Reference};
 
-use crate::render::{plural, printable, table, verdict};
-use crate::{CliError, Failure, Outcome, Warning};
+use super::consulting;
+use crate::render::{as_json, plural, printable, table, verdict};
+use crate::{CliError, Failure, Lookup, Outcome, Warning};
 
 /// Which level a command reports at.
 ///
@@ -221,6 +223,34 @@ pub(crate) fn list(catalog: &Catalog, projects: &[MindProject], level: Level) ->
         })
         .collect();
     (table(&rows), true)
+}
+
+/// `mind list --json`: the project here as a snapshot holds it, read for
+/// `kinds`, with the warnings and the exit status of `mind list`.
+///
+/// Against the workspace `mind status` reads it against, the one `mind`
+/// consults, when that one links it: how each stands is that workspace's
+/// to say, from its ledger, and read alone a copy it installed would stand
+/// as somebody's. Consulted as `mind status` consults it, so one found that
+/// cannot be read is a warning beside the listing, the project read alone,
+/// and one `-W` or the activation names that is no workspace refuses it:
+/// the one place the JSON reads what the text does not, and says so.
+pub(crate) fn listed_here(
+    project: MindProject,
+    kinds: Vec<Kind>,
+    lookup: &Lookup,
+) -> Result<Outcome, Failure> {
+    let mut listing = None;
+    let text = consulting(&project, lookup, |workspace| {
+        listing = Some(Listing::of_project(&project, workspace, &kinds));
+        one_project(
+            project.clone(),
+            kinds.clone(),
+            |catalog, projects, level| Ok(list(catalog, projects, level)),
+        )
+    })?;
+    let listing = listing.expect("a listing consulted reads the project");
+    Ok(as_json(&listing, text))
 }
 
 /// Where a reading command looked in each of `projects`, a line a folder,
