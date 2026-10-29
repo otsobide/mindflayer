@@ -1313,9 +1313,11 @@ has](#what-each-project-has)), and every later reading command takes the same
 one rather than a shape of its own: `scan --json` ([Scanning](#scanning)),
 `workspaces --json` ([the workspaces this machine
 knows](#the-workspaces-this-machine-knows)), and, since #64, `list`, `show`,
-`validate`, `templates` and `gather list`, so that whatever a front end
-shows of a workspace a script or an agent can print. One shape is one parser
-for a script, and for the panel's backend when it reads through the CLI.
+`validate`, `templates` and `gather list`, so that what a front end shows of
+a workspace's holders, their templates and its offers a script or an agent
+can print: not yet the whole snapshot (an open question below). One shape
+is one parser for a script, and for the panel's backend when it reads
+through the CLI.
 
 - **The warnings are inside it, with their codes, and on stderr too.**
   Failures are collected, not raised, in JSON as in text: what a table says
@@ -6621,6 +6623,20 @@ just listed.
 
 ## Open questions
 
+- **What of the snapshot no command prints.** #64 asked that whatever the
+  panel shows, a script or an agent can print. `list --json` prints the
+  snapshot's holders, `templates --json` their templates, `gather list
+  --json` what the shelf and the loaded workspaces offer and `workspaces
+  --json` the workspaces this machine knows, but no `--json` prints the
+  rest of it: the workspace it is of and why that one (`workspace`), the
+  workspaces it loads, each with what it offers or why it cannot
+  (`loaded`, which the TUI draws), the sources the shelf is filled from
+  (`sources`), the latest actions (`history`), or what it says belongs to
+  no holder (`warnings`). Which command prints each, a `--json` of its
+  own, a history command, or the snapshot whole, is left for the issues
+  whose views show them (#72 onward, #73 for the shelf, the sources and an
+  activity feed), so that each is printed as the view that needs it reads
+  it.
 - **`list --json` reads twice.** Its warnings and exit status are those of
   the listing, read as the text reads it, and its data a read of the
   snapshot's beside it, so a file changed between the two can be a warning

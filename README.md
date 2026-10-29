@@ -1251,9 +1251,12 @@ The commands that report what is there take `--json`, at either level:
 `list`, `show`, `validate`, `templates` and `status`, and `flayer
 workspaces`, `flayer scan` and `flayer gather list`. Each prints what it
 read in one envelope, the same for every command, so a script or an agent
-reads them all one way, and whatever the web panel shows of a workspace,
-one of them prints. Say `collapse` holds the rule `git/no-force-push`, and a skill
-folder whose `SKILL.md` has lost its front matter:
+reads them all one way, and reads what a workspace holds, its own
+artifacts and each project's, their templates and what it can install from
+elsewhere, as every front end reads them. What it loads, the sources its
+shelf is filled from and its history have no `--json` yet. Say `collapse`
+holds the rule `git/no-force-push`, and a skill folder whose `SKILL.md` has
+lost its front matter:
 
 ```
 $ mind validate --json
@@ -1290,7 +1293,7 @@ warning: /home/you/Projects/collapse/skills/broken/SKILL.md: the file does not s
 
 `data` is what the command's text lists:
 
-- `list`: each holder as the web panel shows it, `library` for the
+- `list`: each holder as every front end reads it, `library` for the
   workspace's own (`null` for one project's listing) and `projects` for
   every entry the workspace links, a stale one saying why in `stale`. A
   project says where it authors each kind, its settings and templates, and
