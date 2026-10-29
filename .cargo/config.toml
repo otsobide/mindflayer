@@ -4,9 +4,21 @@
 # to whichever crate's tests run, so both crates write into the one folder,
 # and only with `--features ts`: a plain `cargo test` compiles no export
 # test, so it writes nothing anywhere.
+#
+# Every variable ts-rs reads (`Config::from_env`) is set here, and forced:
+# cargo leaves one the shell already exports alone otherwise, and a shell
+# that exports one for another project would have the export write the
+# types somewhere else, once `make web/types` has emptied this folder, or
+# write them some other way, drift that CI never sees.
 [env]
-TS_RS_EXPORT_DIR = { value = "apps/web/src/api/generated", relative = true }
+TS_RS_EXPORT_DIR = { value = "apps/web/src/api/generated", relative = true, force = true }
 # A count is a `usize` or an `i64` in Rust, and never beyond what a double
 # holds exactly, so the panel reads it as the number `JSON.parse` gives
 # rather than as a `bigint` it never receives.
-TS_RS_LARGE_INT = "number"
+TS_RS_LARGE_INT = { value = "number", force = true }
+# Imports with no extension, as the panel's own are, which Vite resolves:
+# ts-rs reads an empty one as none.
+TS_RS_IMPORT_EXTENSION = { value = "", force = true }
+# A map as ts-rs 12 writes it, `{ [key in K]: V }`: anything but `1`,
+# `true`, `on` or `yes` leaves the older form off.
+TS_RS_USE_V11_HASHMAP = { value = "", force = true }
