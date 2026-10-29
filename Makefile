@@ -2,14 +2,14 @@
 
 # Every unit of the product lives under apps/. Adding one (a desktop shell)
 # means a directory with its own Makefile and a line here.
-APPS := core cli server
-
-# Apps built with a toolchain CI does not install yet. `make web/<target>`
-# reaches them like any other app, but they stay out of the aggregates below
-# until CI sets up Node and pnpm (#71): in there, `make test` would fail on
-# every runner for want of pnpm, test-cross's macOS and Windows above all,
-# and say nothing about the code.
-NODE_APPS := web
+#
+# The panel first, so `make build` compiles the crates after it: the server
+# takes it in as it compiles, and a panel built last would leave the
+# binaries of that same run without it, the server marked to compile again
+# only on the next. It also puts the one app that needs Node and pnpm first
+# in `make test`, so a machine without them is told at once rather than
+# after every Rust suite.
+APPS := web core cli server
 
 # ---------------------------------------------------------------------------
 # Per-app delegation: `make <app>/<target>` runs <target> in apps/<app>/Makefile
@@ -19,7 +19,7 @@ define APP_DELEGATE
 $(1)/%:
 	$$(MAKE) -C apps/$(1) $$*
 endef
-$(foreach app,$(APPS) $(NODE_APPS),$(eval $(call APP_DELEGATE,$(app))))
+$(foreach app,$(APPS),$(eval $(call APP_DELEGATE,$(app))))
 
 # ---------------------------------------------------------------------------
 # Global targets: CI invokes these, so they are the contract, not cargo.
@@ -29,10 +29,10 @@ $(foreach app,$(APPS) $(NODE_APPS),$(eval $(call APP_DELEGATE,$(app))))
 # app CI silently never runs.
 # ---------------------------------------------------------------------------
 .PHONY: test
-test: $(addsuffix /test,$(APPS)) ## Run every Rust test suite; the panel's is web/test
+test: $(addsuffix /test,$(APPS)) ## Run every test suite, the panel's first (Node 24 and pnpm)
 
 .PHONY: build
-build: $(addsuffix /build,$(APPS)) ## Build every crate (debug)
+build: $(addsuffix /build,$(APPS)) ## Build the panel, then every crate (debug)
 
 .PHONY: fmt
 fmt: ## Format all Rust code
@@ -155,4 +155,4 @@ help: ## Show this help
 	@echo "Mindflayer make targets:"
 	@grep -hE '^[a-zA-Z0-9_/-]+:.*?## ' $(MAKEFILE_LIST) \
 		| awk 'BEGIN{FS=":.*?## "}{printf "  \033[36m%-12s\033[0m %s\n", $$1, $$2}'
-	@printf "  \033[36m%-12s\033[0m %s\n" "<app>/<t>" "run target <t> in an app (apps: $(APPS) $(NODE_APPS))"
+	@printf "  \033[36m%-12s\033[0m %s\n" "<app>/<t>" "run target <t> in an app (apps: $(APPS))"
