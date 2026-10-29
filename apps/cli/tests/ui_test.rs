@@ -318,7 +318,9 @@ fn through_the_dev_server_the_link_is_its_own_and_its_changes_are_taken() {
 }
 
 /// A port somebody holds is said as a failure, and nothing is served: no
-/// link, and no other port in its place.
+/// link, and no other port in its place. Started rather than spawned, so a
+/// panel that served after all fails the test once the wait is up, and is
+/// killed, rather than hang it until a Ctrl-C.
 #[test]
 fn a_port_somebody_holds_is_a_failure_and_no_link() {
     let dir = workspace_with_own();
@@ -334,17 +336,18 @@ fn a_port_somebody_holds_is_a_failure_and_no_link() {
     ];
     args.extend(NO_AGENT_HOMES);
 
-    let ran = spawn("flayer", dir.path(), &args, &[]);
+    let mut started = start("flayer", dir.path(), &args, &[]);
+    let exited = exit(&mut started, Duration::from_secs(60));
 
-    assert!(!ran.ok);
-    assert_eq!(ran.stdout, "");
+    assert!(!exited.success(), "{exited:?}");
+    let stdout = std::io::read_to_string(started.child.stdout.take().unwrap()).unwrap();
+    let stderr = std::io::read_to_string(started.child.stderr.take().unwrap()).unwrap();
+    assert_eq!(stdout, "");
     let said = format!("error: the panel cannot listen on 127.0.0.1:{port}: ");
-    assert!(ran.stderr.starts_with(&said), "{}", ran.stderr);
+    assert!(stderr.starts_with(&said), "{stderr}");
     assert!(
-        ran.stderr
-            .ends_with("; name another with --port, or 0 for one the system picks\n"),
-        "{}",
-        ran.stderr
+        stderr.ends_with("; name another with --port, or 0 for one the system picks\n"),
+        "{stderr}"
     );
 }
 
@@ -407,7 +410,6 @@ fn ctrl_c_stops_the_panel_which_prints_what_it_changed() {
 }
 
 /// How a started binary exited, waited for until `limit` has passed.
-#[cfg(unix)]
 fn exit(started: &mut Started, limit: Duration) -> std::process::ExitStatus {
     let start = std::time::Instant::now();
     loop {
