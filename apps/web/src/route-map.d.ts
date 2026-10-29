@@ -45,6 +45,13 @@ declare module 'vue-router/auto-routes' {
       { path: ParamValue<false> },
       | never
     >,
+    '/library': RouteRecordInfo<
+      '/library',
+      '/library',
+      Record<never, never>,
+      Record<never, never>,
+      | never
+    >,
     '/project': RouteRecordInfo<
       '/project',
       '/project',
@@ -87,6 +94,14 @@ declare module 'vue-router/auto-routes' {
         | never
       pathParamNames:
         | 'path'
+    }
+    'src/pages/library.vue': {
+      routes:
+        | '/library'
+      views:
+        | never
+      pathParamNames:
+        | never
     }
     'src/pages/project.vue': {
       routes:

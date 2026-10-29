@@ -103,7 +103,7 @@ describe('the shell', () => {
 
     const sidebar = page.get('[data-testid="sidebar"]')
     expect(sidebar.text()).toContain('Mindflayer')
-    expect(sidebar.findAll('nav a').map(link => link.text())).toEqual(['Overview', 'Projects'])
+    expect(sidebar.findAll('nav a').map(link => link.text())).toEqual(['Overview', 'Projects', 'Library'])
     expect(sidebar.get('nav a[aria-current="page"]').text()).toBe('Overview')
     expect(sidebar.get('[data-testid="address"]').text()).toBe(window.location.host)
 

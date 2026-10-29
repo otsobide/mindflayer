@@ -33,6 +33,11 @@ const PAGES: [string, Fixture][] = [
   ['/project?entry=docs', 'workspace'],
   ['/project?entry=gone', 'workspace'],
   ['/project?entry=nowhere', 'workspace'],
+  ['/library', 'workspace'],
+  ['/library?kind=rule', 'workspace'],
+  ['/library?kind=rule&q=nowhere', 'workspace'],
+  ['/library?kind=agent', 'workspace'],
+  ['/library', 'unmade'],
   ['/nowhere', 'workspace']
 ]
 

@@ -57,7 +57,7 @@ function everyLook() {
 }
 
 describe('the views', () => {
-  it.each(['/', '/projects', '/projects?sort=name', '/projects?sort=name&order=desc', '/project?entry=api', '/project?entry=docs', '/project?entry=gone'])(
+  it.each(['/', '/projects', '/projects?sort=name', '/projects?sort=name&order=desc', '/project?entry=api', '/project?entry=docs', '/project?entry=gone', '/library', '/library?kind=rule'])(
     '%s draws every icon from the bundle and adds no style element',
     async (path) => {
       const { page } = await render(path, everyLook())
