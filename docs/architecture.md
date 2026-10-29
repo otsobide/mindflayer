@@ -4435,6 +4435,13 @@ spelled in `transport.ts` ([open questions](#open-questions)).
   path or a URL written through `serialize_with` is the text it is in
   TypeScript already, so ts-rs's warning that it cannot read that
   attribute, the one it would give here, is off (`no-serde-warnings`).
+  What holds it is a test rather than the warning, which only scrolls past
+  in a build: it serializes a field through each function a field names
+  and holds what serde writes to what ts-rs says of the field's type (a
+  path is a `string` whatever its bytes, a redacted URL a `string` or
+  `string | null`), and refuses a function it does not hold, read off the
+  source (`typescript::field_serializers`), core's and the CLI's, which
+  names none.
 - **What serde writes by hand is said from what it writes**, beside its
   serializer, never derived from the Rust variants, for the reason the
   serializer is written by hand ([the read types
