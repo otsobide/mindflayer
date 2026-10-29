@@ -20,6 +20,7 @@ declare module 'vue' {
     RouterLink: typeof import('vue-router')['RouterLink']
     RouterView: typeof import('vue-router')['RouterView']
     SnapshotGate: typeof import('./components/SnapshotGate.vue')['default']
+    StatCard: typeof import('./components/StatCard.vue')['default']
     StateBadge: typeof import('./components/StateBadge.vue')['default']
     UAlert: typeof import('./../node_modules/.pnpm/@nuxt+ui@4.12.0_e85c15649f14e1fe82b3b91186e361aa/node_modules/@nuxt/ui/dist/runtime/components/Alert.vue')['default']
     UApp: typeof import('./../node_modules/.pnpm/@nuxt+ui@4.12.0_e85c15649f14e1fe82b3b91186e361aa/node_modules/@nuxt/ui/dist/runtime/components/App.vue')['default']
@@ -38,5 +39,6 @@ declare module 'vue' {
     UInput: typeof import('./../node_modules/.pnpm/@nuxt+ui@4.12.0_e85c15649f14e1fe82b3b91186e361aa/node_modules/@nuxt/ui/dist/runtime/components/Input.vue')['default']
     UNavigationMenu: typeof import('./../node_modules/.pnpm/@nuxt+ui@4.12.0_e85c15649f14e1fe82b3b91186e361aa/node_modules/@nuxt/ui/dist/runtime/components/NavigationMenu.vue')['default']
     UTooltip: typeof import('./../node_modules/.pnpm/@nuxt+ui@4.12.0_e85c15649f14e1fe82b3b91186e361aa/node_modules/@nuxt/ui/dist/runtime/components/Tooltip.vue')['default']
+    WarningsPanel: typeof import('./components/WarningsPanel.vue')['default']
   }
 }
