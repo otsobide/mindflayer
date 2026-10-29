@@ -52,9 +52,12 @@ impl Serialize for Origin {
 /// What it serializes to is a contract, as a status report's is: each field
 /// by its name.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 pub struct Template {
     pub name: String,
     pub kind: Kind,
+    /// The folder or file it is, or none for one built in.
+    #[cfg_attr(feature = "ts", ts(as = "Option<String>"))]
     pub origin: Origin,
 }
 

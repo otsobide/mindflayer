@@ -56,6 +56,7 @@ pub const CAP: u64 = 1 << 20;
 
 /// One file of an artifact, as a front end may show it.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 pub struct Contents {
     /// The artifact it belongs to.
     pub kind: Kind,
@@ -98,6 +99,12 @@ impl Serialize for Withheld {
     fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
         serializer.serialize_str(self.slug())
     }
+}
+
+#[cfg(feature = "ts")]
+crate::typescript::words! {
+    /// Why a file's text is not handed over, though the file was found.
+    Withheld by slug { Binary, TooLarge }
 }
 
 /// Why a file was not read at all.

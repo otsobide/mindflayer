@@ -243,6 +243,12 @@ impl Serialize for MarkerFile {
     }
 }
 
+#[cfg(feature = "ts")]
+crate::typescript::words! {
+    /// The file inside `.mind` a project's marker is read from.
+    MarkerFile by name { MindToml, SettingsJson, SettingsToml }
+}
+
 /// What an `init` actually did.
 ///
 /// Initialising twice is not an error, and never overwrites the marker: the

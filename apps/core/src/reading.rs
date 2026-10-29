@@ -25,6 +25,7 @@ use crate::paths;
 /// One artifact in full, as `show` shows it: what it is, where it is, what
 /// its front matter declares that `show` prints, and the body after it.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 pub struct Shown {
     pub kind: Kind,
     pub name: String,
@@ -54,6 +55,10 @@ pub struct Shown {
     /// the order written: the rest are `validate`'s to report. None for a
     /// rule, which has no `metadata`.
     #[serde(serialize_with = "in_order")]
+    #[cfg_attr(
+        feature = "ts",
+        ts(as = "Option<std::collections::BTreeMap<String, String>>")
+    )]
     pub metadata: Option<Vec<(String, String)>>,
     /// The files a rule is about, as glob patterns, when it says.
     pub paths: Option<Vec<String>>,
@@ -112,6 +117,7 @@ fn in_order<S: Serializer>(
 /// What `validate` found: each artifact it checked, with what is wrong with
 /// it, and the counts its verdict follows.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 pub struct Validation {
     /// Each artifact checked, in the order the catalog lists them.
     pub artifacts: Vec<Checked>,
@@ -129,6 +135,7 @@ pub struct Validation {
 
 /// One artifact `validate` checked.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 pub struct Checked {
     pub kind: Kind,
     pub name: String,

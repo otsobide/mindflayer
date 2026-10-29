@@ -1,0 +1,12 @@
+# Where the TypeScript the panel reads is written from Rust (#70): the
+# export tests the `ts` feature compiles in core and the CLI write each type
+# there, as ts-rs reads these. Relative to the repository's root rather than
+# to whichever crate's tests run, so both crates write into the one folder,
+# and only with `--features ts`: a plain `cargo test` compiles no export
+# test, so it writes nothing anywhere.
+[env]
+TS_RS_EXPORT_DIR = { value = "apps/web/src/api/generated", relative = true }
+# A count is a `usize` or an `i64` in Rust, and never beyond what a double
+# holds exactly, so the panel reads it as the number `JSON.parse` gives
+# rather than as a `bigint` it never receives.
+TS_RS_LARGE_INT = "number"

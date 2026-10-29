@@ -68,6 +68,7 @@ pub const HISTORY: usize = 20;
 
 /// Everything a workspace holds, as every front end shows it.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 pub struct Snapshot {
     /// [`FORMAT`].
     pub format: u32,
@@ -106,6 +107,7 @@ pub struct Snapshot {
 
 /// The workspace a snapshot is of.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 pub struct Workspace {
     pub name: String,
     #[serde(serialize_with = "paths::lossy")]
@@ -119,6 +121,7 @@ pub struct Workspace {
 
 /// The workspace's own artifacts, held as a project holds its own.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 pub struct Library {
     /// Where it keeps each kind, as a route from the workspace's root.
     pub directories: Vec<Directory>,
@@ -134,6 +137,7 @@ pub struct Library {
 
 /// One entry in a workspace's registry, and the project it opens.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 pub struct Project {
     /// The entry as the marker spells it, which `-p` and `unlink` take; none
     /// for a project no workspace links.
@@ -178,6 +182,7 @@ pub struct Project {
 
 /// What a project's settings say, as a change of them takes it.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 pub struct ProjectSettings {
     /// Its agents, in the order its settings name them, which a change
     /// keeps for the ones it keeps: not report order, which
@@ -192,6 +197,7 @@ pub struct ProjectSettings {
 
 /// The folders a project's settings install one kind in.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 pub struct KindTargets {
     pub kind: Kind,
     /// Each folder as the settings spell it, `/` separated.
@@ -200,6 +206,7 @@ pub struct KindTargets {
 
 /// Where a holder keeps one kind.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 pub struct Directory {
     pub kind: Kind,
     /// A route from the holder, `/` separated, or the path itself when no
@@ -209,6 +216,7 @@ pub struct Directory {
 
 /// One artifact a holder holds, and how it stands there.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 pub struct Held {
     pub kind: Kind,
     pub name: String,
@@ -243,6 +251,7 @@ pub struct Held {
 
 /// A copy of an artifact whose file does not read, and why.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 pub struct Unread {
     /// Where the copy is, as a route from its holder, `/` separated: its
     /// place in the folder the holder keeps its kind in, the one place a
@@ -260,6 +269,7 @@ pub struct Unread {
 
 /// A workspace another one loads, and how much of its own it offers.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 pub struct LoadedWorkspace {
     /// The entry as the marker spells it: what `flayer unload` is given.
     pub entry: String,
@@ -286,6 +296,7 @@ pub struct LoadedWorkspace {
 /// down after: a folder of a kind not asked for is not listed, so it is no
 /// failure of the reply's either.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 pub struct Listing {
     /// The workspace's own, when the listing reads them: none for one
     /// project's listing.

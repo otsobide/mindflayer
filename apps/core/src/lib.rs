@@ -50,6 +50,8 @@ pub mod settings;
 pub mod skill;
 pub mod status;
 pub mod template;
+#[cfg(feature = "ts")]
+pub mod typescript;
 pub mod update;
 pub mod url;
 pub mod view;

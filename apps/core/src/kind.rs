@@ -83,6 +83,12 @@ impl Serialize for Kind {
     }
 }
 
+#[cfg(feature = "ts")]
+crate::typescript::words! {
+    /// A kind of artifact, by the word a command line takes for it.
+    Kind by slug { Skill, Rule }
+}
+
 /// From the word a command line takes, through [`FromStr`], so what a front
 /// end sends back (a task the panel asks to run) is read as a command line
 /// reads it, and a word one refuses the other refuses too.
