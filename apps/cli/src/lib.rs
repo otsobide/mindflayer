@@ -14,6 +14,7 @@
 //! with work on another in one long file. What the binaries and the tests use
 //! is public: the two screens, and what is re-exported here.
 
+pub mod admit;
 pub(crate) mod commands;
 pub(crate) mod error;
 pub(crate) mod homes;

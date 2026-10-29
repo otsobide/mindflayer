@@ -788,6 +788,27 @@ fn a_task_is_refused_for_the_first_of_its_lines_that_is() {
     }
 }
 
+/// So a front end can say which command it will not run, not only why.
+#[test]
+fn a_refused_task_names_the_line_it_is_refused_for() {
+    let batch = Task::ApplyInstall {
+        changes: vec![
+            Task::Uninstall {
+                projects: owned(&["alpha"]),
+                kind: Kind::Skill,
+                name: String::from("deploy"),
+            },
+            Task::OpenInstall,
+        ],
+    };
+
+    assert_eq!(
+        batch.refused_line(),
+        Some((line("flayer install"), Refusal::Screen))
+    );
+    assert_eq!(Task::Shelf.refused_line(), None);
+}
+
 #[test]
 fn a_refusal_says_why_by_a_code_of_its_own() {
     let codes: Vec<&str> = [

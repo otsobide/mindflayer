@@ -571,7 +571,15 @@ impl Task {
     /// Asked of the lines rather than of the variant, so the one list of
     /// commands decides, whatever task a line came from.
     pub fn refusal(&self) -> Option<Refusal> {
-        self.commands().iter().find_map(|line| refused(line))
+        self.refused_line().map(|(_, refusal)| refusal)
+    }
+
+    /// [`refusal`](Self::refusal), with the line it is the refusal of: for
+    /// a front end that says which command it will not run.
+    pub fn refused_line(&self) -> Option<(Vec<String>, Refusal)> {
+        self.commands()
+            .into_iter()
+            .find_map(|line| refused(&line).map(|refusal| (line, refusal)))
     }
 }
 
