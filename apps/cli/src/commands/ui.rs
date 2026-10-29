@@ -102,10 +102,11 @@ fn port(options: &UiOptions) -> u16 {
 
 /// Say where the panel is.
 ///
-/// The link alone on stdout, so a script reads it as the one line there; on
-/// stderr, what is served, where, and how it stops: where, because through
-/// the dev server the link names the dev server, and the port it must reach
-/// is said nowhere else.
+/// The link alone on stdout, so a script reads it as the first line there,
+/// and the only one until the transcript follows it once the panel stops;
+/// on stderr, what is served, where, and how it stops: where, because
+/// through the dev server the link names the dev server, and the port it
+/// must reach is said nowhere else.
 fn announce(
     url: &str,
     address: SocketAddr,

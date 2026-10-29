@@ -4279,9 +4279,10 @@ changes it. The server binds 127.0.0.1 on a port the system picks, or the
 one `--port` names, and a port somebody holds fails the command
 (`panel_unbound`) rather than move to another.
 
-The link goes to stdout as soon as the server listens, the one line there,
-so a script reads it, and stderr says which workspace is served, on which
-address, and that Ctrl-C stops it. That is where `ui` parts from the rule
+The link goes to stdout as soon as the server listens, the first line there
+and the only one until the transcript follows it once it stops, so a script
+reads it, and stderr says which workspace is served, on which address, and
+that Ctrl-C stops it. That is where `ui` parts from the rule
 that a command builds its output and hands it back to be printed
 (`Outcome`), as the TUI's screen does: the link cannot wait for the command
 to end, which it does only when it is stopped. Then the link is opened with

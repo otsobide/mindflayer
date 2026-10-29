@@ -1766,12 +1766,14 @@ http://127.0.0.1:40185/?token=bf6934705762815d0a708aceb59cb5f9f4fd65466d0f726e0b
 note: serving the workspace at /home/you/Projects on 127.0.0.1:40185 until Ctrl-C
 ```
 
-The link is the one line on stdout, for a script to read; `--no-open` prints
-it without opening a browser, and a browser that cannot be opened, as on a
-machine with no display, is a warning, not a failure. `mind ui` is the same
-command from inside a project. Either serves the workspace a command run
-there would use, decided once as it starts, from `-C`, `--home`, `-W` and the
-agent homes: nothing the browser sends changes which one.
+The link is the first line on stdout, and the only one while it serves, for
+a script to read; what it prints once it stops (below) follows it there.
+`--no-open` prints it without opening a browser, and a browser that cannot
+be opened, as on a machine with no display, is a warning, not a failure.
+`mind ui` is the same command from inside a project. Either serves the
+workspace a command run there would use, decided once as it starts, from
+`-C`, `--home`, `-W` and the agent homes: nothing the browser sends changes
+which one.
 
 It listens on 127.0.0.1 only, on a port the system picks, or the one `--port`
 names. The link carries a token made for this launch, which the browser
