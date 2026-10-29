@@ -38,6 +38,7 @@ mod lines;
 pub mod lock;
 pub mod migrate;
 pub mod paths;
+pub mod reading;
 pub mod reapply;
 pub mod relink;
 pub mod resolve;
