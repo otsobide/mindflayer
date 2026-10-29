@@ -26,19 +26,22 @@ use std::path::PathBuf;
 
 use ts_rs::{Config, ExportError, TypeVisitor, TS};
 
+use crate::code;
 use crate::contents::Contents;
 use crate::reading::{Shown, Validation};
 use crate::view::{Listing, Snapshot};
 
 /// Every type core hands a front end whole, each with every type it names:
-/// the snapshot and a file's contents, which the panel queries; and what
-/// `list`, `show` and `validate` print, which a script reads.
+/// the snapshot and a file's contents, which the panel queries; what `list`,
+/// `show` and `validate` print, which a script reads; and every code core
+/// gives, which a front end compares a code with.
 pub fn roots(visitor: &mut impl TypeVisitor) {
     visitor.visit::<Snapshot>();
     visitor.visit::<Listing>();
     visitor.visit::<Shown>();
     visitor.visit::<Validation>();
     visitor.visit::<Contents>();
+    visitor.visit::<CoreCode>();
 }
 
 /// `words` as the union TypeScript reads one of them as: `"skill" |
@@ -123,6 +126,51 @@ macro_rules! words {
 }
 
 pub(crate) use words;
+
+/// Every code core gives ([`code::ALL`]), as the union of them: what a
+/// front end compares the code of what went wrong with, so that a code the
+/// panel names is one core gives.
+///
+/// Not the type of a `Said`'s `code`, which stays a `string`: what a front
+/// end hands on holds its own codes beside core's, the CLI's among them.
+pub struct CoreCode;
+
+impl TS for CoreCode {
+    type WithoutGenerics = Self;
+    type OptionInnerType = Self;
+
+    fn docs() -> Option<String> {
+        Some(docs(&[
+            " Every code core gives, for what went wrong: unique across core, and",
+            " never renamed once given.",
+        ]))
+    }
+
+    fn name(_: &Config) -> String {
+        "CoreCode".to_owned()
+    }
+
+    fn decl(config: &Config) -> String {
+        format!("type CoreCode ={};", Self::inline(config))
+    }
+
+    fn decl_concrete(config: &Config) -> String {
+        Self::decl(config)
+    }
+
+    fn inline(_: &Config) -> String {
+        lines(
+            code::ALL
+                .iter()
+                .flat_map(|(_, codes)| codes.iter())
+                .map(|code| format!("{code:?}")),
+        )
+    }
+
+    fn output_path() -> Option<PathBuf> {
+        Some("CoreCode.ts".into())
+    }
+}
 
 /// What an export test hands [`roots`]: it writes each type it visits, with
 /// every type that one names, where and as the environment says

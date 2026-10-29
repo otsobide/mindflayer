@@ -231,3 +231,15 @@ fn a_project_id_is_the_string_it_holds_in_both() {
     );
     assert_eq!(ProjectId::decl(&Config::new()), "type ProjectId = string;");
 }
+
+#[test]
+fn every_code_core_gives_is_in_its_union_once() {
+    let given: Vec<&str> = code::ALL
+        .iter()
+        .flat_map(|(_, codes)| codes.iter().copied())
+        .collect();
+    let said = literals(&CoreCode::inline(&Config::new()));
+
+    assert_eq!(said.len(), given.len());
+    assert!(given.iter().all(|code| said.contains(*code)));
+}
