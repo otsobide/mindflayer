@@ -45,6 +45,13 @@ declare module 'vue-router/auto-routes' {
       { path: ParamValue<false> },
       | never
     >,
+    '/artifact': RouteRecordInfo<
+      '/artifact',
+      '/artifact',
+      Record<never, never>,
+      Record<never, never>,
+      | never
+    >,
     '/library': RouteRecordInfo<
       '/library',
       '/library',
@@ -94,6 +101,14 @@ declare module 'vue-router/auto-routes' {
         | never
       pathParamNames:
         | 'path'
+    }
+    'src/pages/artifact.vue': {
+      routes:
+        | '/artifact'
+      views:
+        | never
+      pathParamNames:
+        | never
     }
     'src/pages/library.vue': {
       routes:

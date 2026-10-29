@@ -16,6 +16,7 @@ declare module 'vue' {
     AppLogo: typeof import('./components/AppLogo.vue')['default']
     AppSidebar: typeof import('./components/AppSidebar.vue')['default']
     CommandHint: typeof import('./components/CommandHint.vue')['default']
+    FileTree: typeof import('./components/FileTree.vue')['default']
     HealthBadge: typeof import('./components/HealthBadge.vue')['default']
     IssueList: typeof import('./components/IssueList.vue')['default']
     MarkdownBody: typeof import('./components/MarkdownBody.vue')['default']

@@ -38,6 +38,11 @@ const PAGES: [string, Fixture][] = [
   ['/library?kind=rule&q=nowhere', 'workspace'],
   ['/library?kind=agent', 'workspace'],
   ['/library', 'unmade'],
+  ['/artifact?kind=skill&name=review', 'workspace'],
+  ['/artifact?kind=skill&name=review&file=references/checklist.md', 'workspace'],
+  ['/artifact?kind=rule&name=git/commits', 'workspace'],
+  ['/artifact?kind=rule&name=style/comments', 'workspace'],
+  ['/artifact?kind=skill&name=nowhere', 'workspace'],
   ['/nowhere', 'workspace']
 ]
 

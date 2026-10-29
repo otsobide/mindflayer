@@ -57,7 +57,7 @@ function everyLook() {
 }
 
 describe('the views', () => {
-  it.each(['/', '/projects', '/projects?sort=name', '/projects?sort=name&order=desc', '/project?entry=api', '/project?entry=docs', '/project?entry=gone', '/library', '/library?kind=rule'])(
+  it.each(['/', '/projects', '/projects?sort=name', '/projects?sort=name&order=desc', '/project?entry=api', '/project?entry=docs', '/project?entry=gone', '/library', '/library?kind=rule', '/artifact?kind=skill&name=review&file=SKILL.md', '/artifact?kind=rule&name=style/comments'])(
     '%s draws every icon from the bundle and adds no style element',
     async (path) => {
       const { page } = await render(path, everyLook())
