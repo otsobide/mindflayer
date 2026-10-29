@@ -197,30 +197,64 @@ impl From<ArtifactError> for Failure {
 pub const ENVELOPE_VERSION: u32 = 2;
 
 /// What every reading command's `--json` prints:
-/// `{"version": 2, "data": ..., "warnings": [...]}`.
+/// `{"version": 2, "data": ..., "warnings": [...], "coded_warnings": [...]}`.
 ///
 /// One shape for every command, so a script reads each the same way, and the
 /// warnings inside it beside the data rather than on stderr alone: failures
 /// are collected, not raised, in JSON as in text.
+///
+/// `coded_warnings` says each of `warnings` again, in the same order, with
+/// its code beside it ([`Warning::code`]), for a reader that acts on a
+/// condition rather than on English that is reworded whenever it is made
+/// clearer. A name of its own rather than objects in `warnings`, whose
+/// strings a version 2 script reads: changing what a field holds moves the
+/// version, and adding one does not ([`ENVELOPE_VERSION`]). A list of codes
+/// beside the strings, a reader pairing them by place, was the other way,
+/// rejected as a [`Warning`] keeps its code on the line rather than in a
+/// list beside the lines.
 #[derive(Serialize)]
 struct Envelope<'a, T: Serialize> {
     version: u32,
     data: &'a T,
-    warnings: Vec<String>,
+    warnings: Vec<&'a str>,
+    coded_warnings: Vec<Coded<'a>>,
 }
 
-/// `data` in the envelope, with what the command would have said on stderr
-/// as `warning:` lines in its `warnings`, without the prefix, and the exit
-/// status the text would have had.
+/// One warning in the envelope's `coded_warnings`: its code, none for a line
+/// no code is given to, and what it says, as `warnings` says it.
+#[derive(Serialize)]
+struct Coded<'a> {
+    code: Option<&'static str>,
+    message: &'a str,
+}
+
+/// What every warning line starts with on stderr, which the envelope leaves
+/// out: inside `warnings`, every line is one.
+const WARNING: &str = "warning: ";
+
+/// `data` in the envelope, with `warnings`, each a line as stderr would show
+/// it, in its `warnings` without the prefix and in its `coded_warnings`
+/// with its code; failing when there is any, as the text would.
 ///
 /// Pretty-printed, two spaces a level, since a person reads it as often as a
 /// script does, and `jq` takes either.
-pub(crate) fn json<T: Serialize>(data: &T, warnings: Vec<String>) -> Outcome {
-    let ok = warnings.is_empty();
+pub(crate) fn json<T: Serialize>(data: &T, warnings: &[Warning]) -> Outcome {
+    let said: Vec<&str> = warnings
+        .iter()
+        .map(|warning| warning.text.strip_prefix(WARNING).unwrap_or(&warning.text))
+        .collect();
     let envelope = Envelope {
         version: ENVELOPE_VERSION,
         data,
-        warnings,
+        coded_warnings: warnings
+            .iter()
+            .zip(&said)
+            .map(|(warning, message)| Coded {
+                code: warning.code,
+                message,
+            })
+            .collect(),
+        warnings: said,
     };
     // A report is strings, numbers and lists of them, and maps keyed by
     // field names, and every path in one is serialized as text whatever
@@ -230,7 +264,7 @@ pub(crate) fn json<T: Serialize>(data: &T, warnings: Vec<String>) -> Outcome {
     Outcome {
         stdout,
         stderr: Vec::new(),
-        ok,
+        ok: warnings.is_empty(),
     }
 }
 

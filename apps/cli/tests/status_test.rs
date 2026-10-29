@@ -529,6 +529,26 @@ fn a_stale_entry_in_json_says_why_in_its_data_and_its_warnings() {
     assert!(!outcome.ok);
 }
 
+/// The code a warning carries on stderr goes into the envelope beside what
+/// it says, and one no code is given to goes in as none, in the order the
+/// text says them.
+#[test]
+fn a_warning_in_json_carries_the_code_the_text_gives_it() {
+    let (dir, _root) = installing_in("\".skills\"");
+    let old = dir.path().join("old-api");
+    fs::create_dir(&old).unwrap();
+    new_project(&old);
+    flayer(dir.path(), &["link", "old-api"]).unwrap();
+    fs::remove_dir_all(&old).unwrap();
+
+    let text = flayer(dir.path(), &["status"]).unwrap();
+    let json = flayer(dir.path(), &["status", "--json"]).unwrap();
+
+    let codes = warning_codes(&json);
+    assert_eq!(codes, stderr_codes(&text));
+    assert_eq!(codes, [Some(String::from("not_a_project")), None]);
+}
+
 #[test]
 fn mind_status_as_json_reports_its_one_project() {
     let (_dir, projects) = workspace_with_everything();
