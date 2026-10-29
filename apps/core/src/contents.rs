@@ -42,15 +42,18 @@ use std::path::{Path, PathBuf};
 use std::slice;
 
 use serde::{Serialize, Serializer};
+use serde_yaml_ng::Value;
 use thiserror::Error;
 
 use crate::catalog::{Catalog, Reference};
 use crate::code::{codes, Said};
 use crate::copy;
+use crate::frontmatter;
 use crate::install;
 use crate::kind::{Kind, Layout};
 use crate::lifecycle::{self, LifecycleError};
 use crate::paths;
+use crate::rule::RuleManifest;
 use crate::workspace::{FlayerWorkspace, MindProject};
 
 /// The most a file may hold, in bytes, to have its text read: a mebibyte.
@@ -78,6 +81,43 @@ pub struct Contents {
     pub text: Option<String>,
     /// Why there is no text, when there is none.
     pub withheld: Option<Withheld>,
+    /// What it declares and says, cut as core reads it, when it is the file
+    /// the artifact is read from (a skill's `SKILL.md`, a rule's own file)
+    /// and its text was read; none for any other file, whose front matter
+    /// no agent reads as such.
+    pub manifest: Option<Manifest>,
+}
+
+/// The file an artifact is read from, cut at its front matter as core cuts
+/// it: what a front end shows as a table of what it declares above the
+/// markdown it renders.
+///
+/// Cut here rather than by a front end from [`Contents::text`], since where
+/// front matter ends, and whether a rule's fences hold any, are rules
+/// ([`frontmatter::split`], [`RuleManifest::read`]): a panel cutting it
+/// itself could show as declared what every agent reads as content.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+pub struct Manifest {
+    /// Each key at the top of its front matter, in the order written, every
+    /// one the format does not define among them; none when it has none
+    /// core reads: no fences, fences that never close, or a block that is
+    /// no YAML mapping.
+    pub front_matter: Option<Vec<Declaration>>,
+    /// What follows the front matter, as an agent reads it: the whole file
+    /// when no front matter is read.
+    pub body: String,
+}
+
+/// One key of an artifact's front matter, and what it is given.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+pub struct Declaration {
+    pub key: String,
+    /// A string as it is; anything else, a list or a mapping, a number or
+    /// nothing, as YAML writes it, so a value is shown whatever its shape
+    /// rather than only those the format defines.
+    pub value: String,
 }
 
 /// The most entries a listing of an artifact's files holds: a thousand.
@@ -371,6 +411,7 @@ fn read(
         size,
         text: None,
         withheld: Some(withheld),
+        manifest: None,
     };
     if metadata.len() > CAP {
         return Ok(withheld(metadata.len(), Withheld::TooLarge));
@@ -391,10 +432,79 @@ fn read(
             name,
             file: file.to_owned(),
             size,
+            manifest: is_manifest(kind, file).then(|| Manifest::of(kind, &text)),
             text: Some(text),
             withheld: None,
         }),
         _ => Ok(withheld(size, Withheld::Binary)),
+    }
+}
+
+/// Whether `file`, a route of an artifact of `kind`, is the one it is read
+/// from: a skill's manifest, or a rule's one file, the only route it has.
+fn is_manifest(kind: Kind, file: &str) -> bool {
+    match kind.layout() {
+        Layout::Directory { manifest } => file == manifest,
+        Layout::Files { .. } => true,
+    }
+}
+
+impl Manifest {
+    /// `text`, the file an artifact of `kind` is read from, cut as its
+    /// kind's reader cuts it: a skill wherever its fences close, since its
+    /// front matter is required and what does not read is `validate`'s to
+    /// say; a rule only where they hold a mapping, as [`RuleManifest::read`]
+    /// decides, since its front matter is optional and anything else is
+    /// content.
+    fn of(kind: Kind, text: &str) -> Manifest {
+        let cut = match kind {
+            Kind::Skill => frontmatter::split(text).ok(),
+            Kind::Rule => {
+                let (_, body) = RuleManifest::read(text);
+                // Its fences were taken off only when they hold a mapping.
+                frontmatter::split(text)
+                    .ok()
+                    .filter(|document| document.body.len() == body.len())
+            }
+        };
+        match cut {
+            Some(document) => Manifest {
+                front_matter: declarations(document.front_matter),
+                body: document.body.to_owned(),
+            },
+            None => Manifest {
+                front_matter: None,
+                body: text.to_owned(),
+            },
+        }
+    }
+}
+
+/// Each key at the top of `front_matter`, with its value, when it is a YAML
+/// mapping.
+fn declarations(front_matter: &str) -> Option<Vec<Declaration>> {
+    let Ok(Value::Mapping(mapping)) = serde_yaml_ng::from_str::<Value>(front_matter) else {
+        return None;
+    };
+    Some(
+        mapping
+            .iter()
+            .map(|(key, value)| Declaration {
+                key: written(key),
+                value: written(value),
+            })
+            .collect(),
+    )
+}
+
+/// A YAML value as somebody reads it: a string as it is, anything else as
+/// YAML writes it, without the line YAML ends it with.
+fn written(value: &Value) -> String {
+    match value {
+        Value::String(text) => text.clone(),
+        other => serde_yaml_ng::to_string(other)
+            .map(|text| text.trim_end().to_owned())
+            .unwrap_or_default(),
     }
 }
 

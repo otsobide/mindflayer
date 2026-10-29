@@ -52,6 +52,13 @@ fn a_skills_manifest_comes_back_as_its_text() {
             size: SKILL.len() as u64,
             text: Some(String::from(SKILL)),
             withheld: None,
+            manifest: Some(Manifest {
+                front_matter: Some(vec![
+                    declared("name", "deploy"),
+                    declared("description", "Ship it"),
+                ]),
+                body: String::from("\n# deploy\n"),
+            }),
         }
     );
 }
@@ -163,7 +170,11 @@ fn markup_comes_back_as_text_with_no_type_to_render_it_by() {
             .map(String::as_str)
             .collect();
         keys.sort_unstable();
-        assert_eq!(keys, ["file", "kind", "name", "size", "text", "withheld"]);
+        assert_eq!(
+            keys,
+            ["file", "kind", "manifest", "name", "size", "text", "withheld"]
+        );
+        assert_eq!(json["manifest"], serde_json::Value::Null, "{file}");
     }
 }
 
@@ -286,6 +297,14 @@ fn a_skill_whose_manifest_does_not_read_can_still_be_read_out() {
     let contents = Contents::of_project(&project, "broken", "SKILL.md").unwrap();
 
     assert_eq!(contents.text.as_deref(), Some("no front matter here\n"));
+    // Nothing declared, and all of it the body an agent would be handed.
+    assert_eq!(
+        contents.manifest,
+        Some(Manifest {
+            front_matter: None,
+            body: String::from("no front matter here\n"),
+        })
+    );
 }
 
 #[test]
@@ -312,6 +331,13 @@ fn the_workspaces_own_are_read_from_its_library() {
             "size": SKILL.len(),
             "text": SKILL,
             "withheld": null,
+            "manifest": {
+                "front_matter": [
+                    {"key": "name", "value": "deploy"},
+                    {"key": "description", "value": "Ship it"},
+                ],
+                "body": "\n# deploy\n",
+            },
         })
     );
 }
@@ -558,4 +584,117 @@ fn a_workspaces_own_is_listed_held_to_its_library() {
         refusals(&files),
         [("SKILL.md", None), ("ssh", Some("contents_outside"))]
     );
+}
+
+fn declared(key: &str, value: &str) -> Declaration {
+    Declaration {
+        key: key.to_owned(),
+        value: value.to_owned(),
+    }
+}
+
+/// Every key, in the order written, the ones the format does not define
+/// among them, each value a string whatever YAML read it as.
+#[test]
+fn a_skills_front_matter_is_every_key_in_order_each_value_as_written() {
+    let (_dir, project) = fixture();
+    fs::write(
+        skill_folder(&project, "deploy").join("SKILL.md"),
+        "---\nname: deploy\ndescription: Ship it\nx-team: ops\nallowed-tools: [Bash, Read]\n\
+         metadata:\n  owner: you\nversion: 2\nlicense:\n---\nBody\n",
+    )
+    .unwrap();
+
+    let contents = Contents::of_project(&project, "deploy", "SKILL.md").unwrap();
+
+    assert_eq!(
+        contents.manifest.unwrap(),
+        Manifest {
+            front_matter: Some(vec![
+                declared("name", "deploy"),
+                declared("description", "Ship it"),
+                declared("x-team", "ops"),
+                declared("allowed-tools", "- Bash\n- Read"),
+                declared("metadata", "owner: you"),
+                declared("version", "2"),
+                declared("license", "null"),
+            ]),
+            body: String::from("Body\n"),
+        }
+    );
+}
+
+/// A skill's fences are cut wherever they close, as `validate` reads them,
+/// though what is between them is no mapping to show.
+#[test]
+fn a_skills_front_matter_that_is_no_mapping_declares_nothing_and_is_cut_off() {
+    let (_dir, project) = fixture();
+    fs::write(
+        skill_folder(&project, "deploy").join("SKILL.md"),
+        "---\n- a list\n---\nBody\n",
+    )
+    .unwrap();
+
+    let manifest = Contents::of_project(&project, "deploy", "SKILL.md")
+        .unwrap()
+        .manifest
+        .unwrap();
+
+    assert_eq!(manifest.front_matter, None);
+    assert_eq!(manifest.body, "Body\n");
+}
+
+/// A rule's fences hold front matter only when they hold a mapping, as
+/// every reader of a rule decides: anything else is content, fences and
+/// all, which is what an agent reads.
+#[test]
+fn a_rules_front_matter_is_read_only_where_its_fences_hold_a_mapping() {
+    let (_dir, project) = fixture();
+    let rules = project.directory_for(Kind::Rule).unwrap().join("git");
+    fs::write(
+        rules.join("commits.md"),
+        "---\npaths: [\"src/**\"]\n---\nSay why.\n",
+    )
+    .unwrap();
+    fs::write(
+        rules.join("branches.md"),
+        "---\nA rule.\n---\nBranch from dev.\n",
+    )
+    .unwrap();
+
+    let scoped = Contents::of_project(&project, "git/commits", "commits.md").unwrap();
+    let prose = Contents::of_project(&project, "git/branches", "branches.md").unwrap();
+
+    assert_eq!(
+        scoped.manifest.unwrap(),
+        Manifest {
+            front_matter: Some(vec![declared("paths", "- src/**")]),
+            body: String::from("Say why.\n"),
+        }
+    );
+    assert_eq!(
+        prose.manifest.unwrap(),
+        Manifest {
+            front_matter: None,
+            body: String::from("---\nA rule.\n---\nBranch from dev.\n"),
+        }
+    );
+}
+
+/// Only the file an artifact is read from is cut: front matter in any other
+/// is content no agent reads as such.
+#[test]
+fn no_other_file_of_a_skill_is_cut() {
+    let (_dir, project) = fixture();
+    fs::write(
+        skill_folder(&project, "deploy")
+            .join("references")
+            .join("guide.md"),
+        "---\ntitle: Guide\n---\n",
+    )
+    .unwrap();
+
+    let guide = Contents::of_project(&project, "deploy", "references/guide.md").unwrap();
+
+    assert_eq!(guide.manifest, None);
 }

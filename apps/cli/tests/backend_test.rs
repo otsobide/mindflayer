@@ -469,6 +469,9 @@ fn a_skills_file_comes_back_as_text_inside_json() {
     assert_eq!(answer["text"], skill_file("alpha", "A skill"));
     assert_eq!(answer["withheld"], Value::Null);
     assert_eq!(answer["kind"], "skill");
+    // Cut where core cuts it, so the panel draws what it declares apart.
+    assert_eq!(answer["manifest"]["front_matter"][0]["key"], "name");
+    assert_eq!(answer["manifest"]["front_matter"][0]["value"], "alpha");
 }
 
 /// Markup a browser would render, or run, reaches it only as a string in
@@ -488,7 +491,12 @@ fn an_html_asset_or_an_svg_holding_a_script_is_not_served_as_content() {
         assert_eq!(answer["text"], markup, "{file}");
         let mut keys: Vec<&String> = answer.as_object().unwrap().keys().collect();
         keys.sort_unstable();
-        assert_eq!(keys, ["file", "kind", "name", "size", "text", "withheld"]);
+        assert_eq!(
+            keys,
+            ["file", "kind", "manifest", "name", "size", "text", "withheld"]
+        );
+        // No file but the one the skill is read from is cut into parts.
+        assert_eq!(answer["manifest"], Value::Null, "{file}");
         // What goes over the wire is a JSON object, the markup a string in it.
         let wire = serde_json::to_string(&answer).unwrap();
         assert!(wire.starts_with('{'), "{wire}");
